@@ -782,7 +782,7 @@ nouveau_video_buffer_create(struct pipe_context *pipe,
        screen->device->chipset < 0x40)
       return vl_video_buffer_create(pipe, templat);
 
-   assert(templat->chroma_format == PIPE_VIDEO_CHROMA_FORMAT_420);
+   assert(pipe_format_to_chroma_format(templat->buffer_format) == PIPE_VIDEO_CHROMA_FORMAT_420);
    width = align(templat->width, 64);
    height = align(templat->height, 64);
 
@@ -795,7 +795,6 @@ nouveau_video_buffer_create(struct pipe_context *pipe,
    buffer->base.get_sampler_view_planes = nouveau_video_buffer_sampler_view_planes;
    buffer->base.get_sampler_view_components = nouveau_video_buffer_sampler_view_components;
    buffer->base.get_surfaces = nouveau_video_buffer_surfaces;
-   buffer->base.chroma_format = templat->chroma_format;
    buffer->base.buffer_format = templat->buffer_format;
    buffer->base.width = width;
    buffer->base.height = height;

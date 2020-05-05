@@ -118,11 +118,17 @@ Value* VPLANEPS(Value* vA, Value* vB, Value* vC, Value*& vX, Value*& vY);
 uint32_t IMMED(Value* i);
 int32_t  S_IMMED(Value* i);
 
-CallInst*
-          CALL(Value* Callee, const std::initializer_list<Value*>& args, const llvm::Twine& name = "");
+CallInst* CALL(Value* Callee, const std::initializer_list<Value*>& args, const llvm::Twine& name = "");
 CallInst* CALL(Value* Callee)
 {
+#if LLVM_VERSION_MAJOR >= 11
+    // Not a great idea - we loose type info (Function) calling CALL
+    // and then we recast it here. Good for now, but needs to be
+    // more clean - optimally just always CALL a Function
+    return CALLA(FunctionCallee(cast<Function>(Callee)));
+#else
     return CALLA(Callee);
+#endif
 }
 CallInst* CALL(Value* Callee, Value* arg);
 CallInst* CALL2(Value* Callee, Value* arg1, Value* arg2);

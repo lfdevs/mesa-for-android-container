@@ -421,36 +421,40 @@ void anv_CmdBindPipeline(
 
    switch (pipelineBindPoint) {
    case VK_PIPELINE_BIND_POINT_COMPUTE: {
-      if (cmd_buffer->state.compute.base.pipeline == pipeline)
+      struct anv_compute_pipeline *compute_pipeline =
+         anv_pipeline_to_compute(pipeline);
+      if (cmd_buffer->state.compute.pipeline == compute_pipeline)
          return;
 
-      cmd_buffer->state.compute.base.pipeline = pipeline;
+      cmd_buffer->state.compute.pipeline = compute_pipeline;
       cmd_buffer->state.compute.pipeline_dirty = true;
-      const struct anv_pipeline_bind_map *bind_map =
-         &pipeline->shaders[MESA_SHADER_COMPUTE]->bind_map;
-      set_dirty_for_bind_map(cmd_buffer, MESA_SHADER_COMPUTE, bind_map);
+      set_dirty_for_bind_map(cmd_buffer, MESA_SHADER_COMPUTE,
+                             &compute_pipeline->cs->bind_map);
       break;
    }
 
-   case VK_PIPELINE_BIND_POINT_GRAPHICS:
-      if (cmd_buffer->state.gfx.base.pipeline == pipeline)
+   case VK_PIPELINE_BIND_POINT_GRAPHICS: {
+      struct anv_graphics_pipeline *gfx_pipeline =
+         anv_pipeline_to_graphics(pipeline);
+      if (cmd_buffer->state.gfx.pipeline == gfx_pipeline)
          return;
 
-      cmd_buffer->state.gfx.base.pipeline = pipeline;
-      cmd_buffer->state.gfx.vb_dirty |= pipeline->vb_used;
+      cmd_buffer->state.gfx.pipeline = gfx_pipeline;
+      cmd_buffer->state.gfx.vb_dirty |= gfx_pipeline->vb_used;
       cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_PIPELINE;
 
-      anv_foreach_stage(stage, pipeline->active_stages) {
+      anv_foreach_stage(stage, gfx_pipeline->active_stages) {
          set_dirty_for_bind_map(cmd_buffer, stage,
-                                &pipeline->shaders[stage]->bind_map);
+                                &gfx_pipeline->shaders[stage]->bind_map);
       }
 
       /* Apply the dynamic state from the pipeline */
       cmd_buffer->state.gfx.dirty |=
          anv_dynamic_state_copy(&cmd_buffer->state.gfx.dynamic,
-                                &pipeline->dynamic_state,
-                                pipeline->dynamic_state_mask);
+                                &gfx_pipeline->dynamic_state,
+                                gfx_pipeline->dynamic_state_mask);
       break;
+   }
 
    default:
       assert(!"invalid bind point");
@@ -614,22 +618,28 @@ anv_cmd_buffer_bind_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
    struct anv_descriptor_set_layout *set_layout =
       layout->set[set_index].layout;
 
-   VkShaderStageFlags stages = set_layout->shader_stages &
-      (bind_point == VK_PIPELINE_BIND_POINT_COMPUTE ?
-       VK_SHADER_STAGE_COMPUTE_BIT : VK_SHADER_STAGE_ALL_GRAPHICS);
+   VkShaderStageFlags stages = set_layout->shader_stages;
+   struct anv_cmd_pipeline_state *pipe_state;
+
+   switch (bind_point) {
+   case VK_PIPELINE_BIND_POINT_GRAPHICS:
+      stages &= VK_SHADER_STAGE_ALL_GRAPHICS;
+      pipe_state = &cmd_buffer->state.gfx.base;
+      break;
+
+   case VK_PIPELINE_BIND_POINT_COMPUTE:
+      stages &= VK_SHADER_STAGE_COMPUTE_BIT;
+      pipe_state = &cmd_buffer->state.compute.base;
+      break;
+
+   default:
+      unreachable("invalid bind point");
+   }
 
    VkShaderStageFlags dirty_stages = 0;
-   if (bind_point == VK_PIPELINE_BIND_POINT_COMPUTE) {
-      if (cmd_buffer->state.compute.base.descriptors[set_index] != set) {
-         cmd_buffer->state.compute.base.descriptors[set_index] = set;
-         dirty_stages |= stages;
-      }
-   } else {
-      assert(bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS);
-      if (cmd_buffer->state.gfx.base.descriptors[set_index] != set) {
-         cmd_buffer->state.gfx.base.descriptors[set_index] = set;
-         dirty_stages |= stages;
-      }
+   if (pipe_state->descriptors[set_index] != set) {
+      pipe_state->descriptors[set_index] = set;
+      dirty_stages |= stages;
    }
 
    /* If it's a push descriptor set, we have to flag things as dirty
@@ -820,18 +830,20 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_push_constants *data =
       &cmd_buffer->state.push_constants[MESA_SHADER_COMPUTE];
-   struct anv_pipeline *pipeline = cmd_buffer->state.compute.base.pipeline;
+   struct anv_compute_pipeline *pipeline = cmd_buffer->state.compute.pipeline;
    const struct brw_cs_prog_data *cs_prog_data = get_cs_prog_data(pipeline);
-   const struct anv_push_range *range =
-      &pipeline->shaders[MESA_SHADER_COMPUTE]->bind_map.push_ranges[0];
+   const struct anv_push_range *range = &pipeline->cs->bind_map.push_ranges[0];
 
-   if (cs_prog_data->push.total.size == 0)
+   const uint32_t threads = anv_cs_threads(pipeline);
+   const unsigned total_push_constants_size =
+      brw_cs_push_const_total_size(cs_prog_data, threads);
+   if (total_push_constants_size == 0)
       return (struct anv_state) { .offset = 0 };
 
    const unsigned push_constant_alignment =
       cmd_buffer->device->info.gen < 8 ? 32 : 64;
    const unsigned aligned_total_push_constants_size =
-      ALIGN(cs_prog_data->push.total.size, push_constant_alignment);
+      ALIGN(total_push_constants_size, push_constant_alignment);
    struct anv_state state =
       anv_cmd_buffer_alloc_dynamic_state(cmd_buffer,
                                          aligned_total_push_constants_size,
@@ -847,7 +859,7 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
    }
 
    if (cs_prog_data->push.per_thread.size > 0) {
-      for (unsigned t = 0; t < cs_prog_data->threads; t++) {
+      for (unsigned t = 0; t < threads; t++) {
          memcpy(dst, src, cs_prog_data->push.per_thread.size);
 
          uint32_t *subgroup_id = dst +
@@ -1100,9 +1112,7 @@ void anv_CmdPushDescriptorSetKHR(
       case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
       case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
          for (uint32_t j = 0; j < write->descriptorCount; j++) {
-            assert(write->pBufferInfo[j].buffer);
             ANV_FROM_HANDLE(anv_buffer, buffer, write->pBufferInfo[j].buffer);
-            assert(buffer);
 
             anv_descriptor_set_write_buffer(cmd_buffer->device, set,
                                             &cmd_buffer->surface_state_stream,

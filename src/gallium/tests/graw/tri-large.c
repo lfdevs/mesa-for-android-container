@@ -106,7 +106,7 @@ static void draw( void )
 {
    union pipe_color_union clear_color = { {1,0,1,1} };
 
-   info.ctx->clear(info.ctx, PIPE_CLEAR_COLOR, &clear_color, 0, 0);
+   info.ctx->clear(info.ctx, PIPE_CLEAR_COLOR, NULL, &clear_color, 0, 0);
    util_draw_arrays(info.ctx, PIPE_PRIM_TRIANGLES, 0, 3);
    info.ctx->flush(info.ctx, NULL, 0);
 

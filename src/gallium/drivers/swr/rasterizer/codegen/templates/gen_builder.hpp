@@ -1,5 +1,5 @@
 //============================================================================
-// Copyright (C) 2014-2017 Intel Corporation.   All Rights Reserved.
+// Copyright (C) 2014-2020 Intel Corporation.   All Rights Reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -46,6 +46,11 @@ ${func['decl']}
     %for arg in func['args']:
     argTypes.push_back(${arg}->getType());
     %endfor
+#if LLVM_VERSION_MAJOR >= 11
+    #define VEC_GET_NUM_ELEMS cast<VectorType>(a->getType())->getNumElements()
+#else
+    #define VEC_GET_NUM_ELEMS a->getType()->getVectorNumElements()
+#endif
     FunctionType* pFuncTy = FunctionType::get(${ func['returnType'] }, argTypes, false);
     %else:
     FunctionType* pFuncTy = FunctionType::get(${ func['returnType'] }, {}, false);

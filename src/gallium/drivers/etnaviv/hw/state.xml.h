@@ -8,17 +8,17 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- state.xml     (  26666 bytes, from 2019-08-19 14:35:07)
-- common.xml    (  35468 bytes, from 2019-01-07 09:52:31)
-- common_3d.xml (  14322 bytes, from 2019-08-19 14:35:07)
-- state_hi.xml  (  30232 bytes, from 2019-01-07 09:52:31)
-- copyright.xml (   1597 bytes, from 2019-01-07 09:52:31)
-- state_2d.xml  (  51552 bytes, from 2019-01-07 09:52:31)
-- state_3d.xml  (  83505 bytes, from 2019-08-19 14:46:17)
-- state_blt.xml (  14252 bytes, from 2019-08-19 14:35:07)
-- state_vg.xml  (   5975 bytes, from 2019-01-07 09:52:31)
+- state.xml     (  26877 bytes, from 2020-02-14 10:19:56)
+- common.xml    (  35468 bytes, from 2020-01-04 20:02:31)
+- common_3d.xml (  15058 bytes, from 2020-04-17 16:31:50)
+- state_hi.xml  (  34851 bytes, from 2020-04-17 16:25:34)
+- copyright.xml (   1597 bytes, from 2018-02-10 13:09:26)
+- state_2d.xml  (  51552 bytes, from 2018-02-10 13:09:26)
+- state_3d.xml  (  83771 bytes, from 2020-04-17 17:15:55)
+- state_blt.xml (  14252 bytes, from 2020-01-10 14:36:29)
+- state_vg.xml  (   5975 bytes, from 2018-02-10 13:09:26)
 
-Copyright (C) 2012-2019 by the following authors:
+Copyright (C) 2012-2020 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>
 - Christian Gmeiner <christian.gmeiner@gmail.com>
 - Lucas Stach <l.stach@pengutronix.de>
@@ -379,7 +379,7 @@ DEALINGS IN THE SOFTWARE.
 
 #define VIVS_GL_OCCLUSION_QUERY_CONTROL				0x00003830
 
-#define VIVS_GL_UNK03834					0x00003834
+#define VIVS_GL_VARYING_NUM_COMPONENTS2				0x00003834
 
 #define VIVS_GL_UNK03838					0x00003838
 

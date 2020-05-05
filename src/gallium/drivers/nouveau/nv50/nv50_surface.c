@@ -475,11 +475,11 @@ nv50_clear_texture(struct pipe_context *pipe,
 
       if (util_format_has_depth(desc)) {
          clear |= PIPE_CLEAR_DEPTH;
-         desc->unpack_z_float(&depth, 0, data, 0, 1, 1);
+         util_format_unpack_z_float(res->format, &depth, data, 1);
       }
       if (util_format_has_stencil(desc)) {
          clear |= PIPE_CLEAR_STENCIL;
-         desc->unpack_s_8uint(&stencil, 0, data, 0, 1, 1);
+         util_format_unpack_s_8uint(res->format, &stencil, data, 1);
       }
       pipe->clear_depth_stencil(pipe, sf, clear, depth, stencil,
                                 box->x, box->y, box->width, box->height, false);
@@ -524,7 +524,7 @@ nv50_clear_texture(struct pipe_context *pipe,
 }
 
 void
-nv50_clear(struct pipe_context *pipe, unsigned buffers,
+nv50_clear(struct pipe_context *pipe, unsigned buffers, const struct pipe_scissor_state *scissor_state,
            const union pipe_color_union *color,
            double depth, unsigned stencil)
 {

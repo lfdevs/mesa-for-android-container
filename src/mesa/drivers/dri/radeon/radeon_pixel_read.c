@@ -131,13 +131,13 @@ do_blit_readpixels(struct gl_context * ctx,
 
     aligned_rowstride = get_texture_image_row_stride(radeon, dst_format, dst_rowstride, 0, GL_TEXTURE_2D);
     dst_rowstride *= _mesa_get_format_bytes(dst_format);
-    if (_mesa_is_bufferobj(pack->BufferObj) && aligned_rowstride != dst_rowstride)
+    if (pack->BufferObj && aligned_rowstride != dst_rowstride)
         return GL_FALSE;
     dst_imagesize = get_texture_image_size(dst_format,
                                            aligned_rowstride,
                                            height, 1, 0);
 
-    if (!_mesa_is_bufferobj(pack->BufferObj))
+    if (!pack->BufferObj)
     {
         dst_buffer = radeon_bo_open(radeon->radeonScreen->bom, 0, dst_imagesize, 1024, RADEON_GEM_DOMAIN_GTT, 0);
         dst_offset = 0;
@@ -176,8 +176,8 @@ do_blit_readpixels(struct gl_context * ctx,
                           height,
                           flip_y))
     {
-        if (!_mesa_is_bufferobj(pack->BufferObj))
-        {
+       if (!pack->BufferObj)
+       {
             radeon_bo_map(dst_buffer, 0);
             copy_rows(pixels, dst_rowstride, dst_buffer->ptr,
                       aligned_rowstride, height, dst_rowstride);
@@ -188,7 +188,7 @@ do_blit_readpixels(struct gl_context * ctx,
         return GL_TRUE;
     }
 
-    if (!_mesa_is_bufferobj(pack->BufferObj))
+    if (!pack->BufferObj)
         radeon_bo_unref(dst_buffer);
 
     return GL_FALSE;

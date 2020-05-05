@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-inc_st_omx = [inc_common]
+inc_st_omx = [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux]
 dep_st_omx = [
   dep_omx, dep_x11_xcb, dep_xcb, dep_xcb_dri2, dep_xcb_dri3, dep_libdrm,
 ]
@@ -65,7 +65,7 @@ endif
 libomx_st = static_library(
   'omx_st',
   files_omx,
-  c_args : [c_vis_args],
+  c_args : [c_vis_args, '-fcommon'],
   include_directories : inc_st_omx,
   dependencies : dep_st_omx,
 )

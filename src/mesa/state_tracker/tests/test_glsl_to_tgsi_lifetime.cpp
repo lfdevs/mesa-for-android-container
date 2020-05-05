@@ -21,9 +21,9 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <tgsi/tgsi_ureg.h>
-#include <tgsi/tgsi_info.h>
-#include <mesa/program/prog_instruction.h>
+#include "tgsi/tgsi_ureg.h"
+#include "tgsi/tgsi_info.h"
+#include "mesa/program/prog_instruction.h"
 
 #include <gtest/gtest.h>
 #include <utility>

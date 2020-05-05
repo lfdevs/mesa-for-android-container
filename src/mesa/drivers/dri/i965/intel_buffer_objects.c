@@ -29,12 +29,12 @@
  * This provides core GL buffer object functionality.
  */
 
-#include "main/imports.h"
 #include "main/mtypes.h"
 #include "main/macros.h"
 #include "main/streaming-load-memcpy.h"
 #include "main/bufferobj.h"
 #include "x86/common_x86_asm.h"
+#include "util/u_memory.h"
 
 #include "brw_context.h"
 #include "brw_blorp.h"

@@ -44,7 +44,6 @@
  * big we throw out all of the cache data and let it get regenerated.
  */
 
-#include "main/imports.h"
 #include "main/streaming-load-memcpy.h"
 #include "x86/common_x86_asm.h"
 #include "intel_batchbuffer.h"
@@ -54,6 +53,7 @@
 #include "brw_cs.h"
 #include "brw_program.h"
 #include "compiler/brw_eu.h"
+#include "util/u_memory.h"
 
 #define FILE_DEBUG_FLAG DEBUG_STATE
 

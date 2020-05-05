@@ -76,7 +76,7 @@ lp_build_vec_type(struct gallivm_state *gallivm,struct lp_type type)
  * type and check for identity.
  */
 boolean
-lp_check_elem_type(struct lp_type type, LLVMTypeRef elem_type) 
+lp_check_elem_type(struct lp_type type, LLVMTypeRef elem_type)
 {
    LLVMTypeKind elem_kind;
 
@@ -113,12 +113,12 @@ lp_check_elem_type(struct lp_type type, LLVMTypeRef elem_type)
          return FALSE;
    }
 
-   return TRUE; 
+   return TRUE;
 }
 
 
 boolean
-lp_check_vec_type(struct lp_type type, LLVMTypeRef vec_type) 
+lp_check_vec_type(struct lp_type type, LLVMTypeRef vec_type)
 {
    LLVMTypeRef elem_type;
 
@@ -129,7 +129,7 @@ lp_check_vec_type(struct lp_type type, LLVMTypeRef vec_type)
    if (type.length == 1)
       return lp_check_elem_type(type, vec_type);
 
-   if(LLVMGetTypeKind(vec_type) != LLVMVectorTypeKind)
+   if(LLVMGetTypeKind(vec_type) != LLVMFixedVectorTypeKind)
       return FALSE;
 
    if(LLVMGetVectorSize(vec_type) != type.length)
@@ -142,7 +142,7 @@ lp_check_vec_type(struct lp_type type, LLVMTypeRef vec_type)
 
 
 boolean
-lp_check_value(struct lp_type type, LLVMValueRef val) 
+lp_check_value(struct lp_type type, LLVMValueRef val)
 {
    LLVMTypeRef vec_type;
 
@@ -259,7 +259,7 @@ lp_sizeof_llvm_type(LLVMTypeRef t)
       return 8 * sizeof(float);
    case LLVMDoubleTypeKind:
       return 8 * sizeof(double);
-   case LLVMVectorTypeKind:
+   case LLVMFixedVectorTypeKind:
       {
          LLVMTypeRef elem = LLVMGetElementType(t);
          unsigned len = LLVMGetVectorSize(t);
@@ -311,8 +311,12 @@ lp_typekind_name(LLVMTypeKind t)
       return "LLVMArrayTypeKind";
    case LLVMPointerTypeKind:
       return "LLVMPointerTypeKind";
-   case LLVMVectorTypeKind:
+   case LLVMFixedVectorTypeKind:
+   #if LLVM_VERSION_MAJOR >= 11
+      return "LLVMFixedVectorTypeKind";
+   #else
       return "LLVMVectorTypeKind";
+   #endif
    case LLVMMetadataTypeKind:
       return "LLVMMetadataTypeKind";
    default:
@@ -329,7 +333,7 @@ lp_dump_llvmtype(LLVMTypeRef t)
 {
    LLVMTypeKind k = LLVMGetTypeKind(t);
 
-   if (k == LLVMVectorTypeKind) {
+   if (k == LLVMFixedVectorTypeKind) {
       LLVMTypeRef te = LLVMGetElementType(t);
       LLVMTypeKind ke = LLVMGetTypeKind(te);
       unsigned len = LLVMGetVectorSize(t);

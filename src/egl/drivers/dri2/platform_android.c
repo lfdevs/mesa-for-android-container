@@ -432,6 +432,11 @@ droid_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
 
       window->query(window, NATIVE_WINDOW_WIDTH, &dri2_surf->base.Width);
       window->query(window, NATIVE_WINDOW_HEIGHT, &dri2_surf->base.Height);
+
+      uint32_t usage = strcmp(dri2_dpy->driver_name, "kms_swrast") == 0
+            ? GRALLOC_USAGE_SW_READ_OFTEN | GRALLOC_USAGE_SW_WRITE_OFTEN
+            : GRALLOC_USAGE_HW_RENDER;
+      native_window_set_usage(window, usage);
    }
 
    config = dri2_get_dri_config(dri2_conf, type,
@@ -1645,7 +1650,20 @@ dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *disp)
    disp->Extensions.ANDROID_framebuffer_target = EGL_TRUE;
    disp->Extensions.ANDROID_image_native_buffer = EGL_TRUE;
    disp->Extensions.ANDROID_recordable = EGL_TRUE;
-   disp->Extensions.EXT_buffer_age = EGL_TRUE;
+
+   /* Querying buffer age requires a buffer to be dequeued.  Without
+    * EGL_ANDROID_native_fence_sync, dequeue might call eglClientWaitSync and
+    * result in a deadlock (the lock is already held by eglQuerySurface).
+    */
+   if (disp->Extensions.ANDROID_native_fence_sync) {
+      disp->Extensions.EXT_buffer_age = EGL_TRUE;
+   } else {
+      /* disable KHR_partial_update that might have been enabled in
+       * dri2_setup_screen
+       */
+      disp->Extensions.KHR_partial_update = EGL_FALSE;
+   }
+
    disp->Extensions.KHR_image = EGL_TRUE;
 #if ANDROID_API_LEVEL >= 24
    if (dri2_dpy->mutable_render_buffer &&

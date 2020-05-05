@@ -84,12 +84,12 @@ iris_lost_context_state(struct iris_batch *batch)
       ice = container_of(batch, ice, batches[IRIS_BATCH_RENDER]);
       assert(&ice->batches[IRIS_BATCH_RENDER] == batch);
 
-      ice->vtbl.init_render_context(batch);
+      batch->screen->vtbl.init_render_context(batch);
    } else if (batch->name == IRIS_BATCH_COMPUTE) {
       ice = container_of(batch, ice, batches[IRIS_BATCH_COMPUTE]);
       assert(&ice->batches[IRIS_BATCH_COMPUTE] == batch);
 
-      ice->vtbl.init_compute_context(batch);
+      batch->screen->vtbl.init_compute_context(batch);
    } else {
       unreachable("unhandled batch reset");
    }
@@ -99,7 +99,7 @@ iris_lost_context_state(struct iris_batch *batch)
    memset(ice->state.last_grid, 0, sizeof(ice->state.last_grid));
    batch->last_surface_base_address = ~0ull;
    batch->last_aux_map_state = 0;
-   ice->vtbl.lost_genx_state(ice, batch);
+   batch->screen->vtbl.lost_genx_state(ice, batch);
 }
 
 static enum pipe_reset_status
@@ -190,11 +190,12 @@ static void
 iris_destroy_context(struct pipe_context *ctx)
 {
    struct iris_context *ice = (struct iris_context *)ctx;
+   struct iris_screen *screen = (struct iris_screen *)ctx->screen;
 
    if (ctx->stream_uploader)
       u_upload_destroy(ctx->stream_uploader);
 
-   ice->vtbl.destroy_state(ice);
+   screen->vtbl.destroy_state(ice);
    iris_destroy_program_cache(ice);
    iris_destroy_border_color_pool(ice);
    u_upload_destroy(ice->state.surface_uploader);
@@ -303,13 +304,13 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
       ice->state.sizes = _mesa_hash_table_u64_create(ice);
 
    for (int i = 0; i < IRIS_BATCH_COUNT; i++) {
-      iris_init_batch(&ice->batches[i], screen, &ice->vtbl, &ice->dbg,
+      iris_init_batch(&ice->batches[i], screen, &ice->dbg,
                       &ice->reset, ice->state.sizes,
                       ice->batches, (enum iris_batch_name) i, priority);
    }
 
-   ice->vtbl.init_render_context(&ice->batches[IRIS_BATCH_RENDER]);
-   ice->vtbl.init_compute_context(&ice->batches[IRIS_BATCH_COMPUTE]);
+   screen->vtbl.init_render_context(&ice->batches[IRIS_BATCH_RENDER]);
+   screen->vtbl.init_compute_context(&ice->batches[IRIS_BATCH_COMPUTE]);
 
    return ctx;
 }

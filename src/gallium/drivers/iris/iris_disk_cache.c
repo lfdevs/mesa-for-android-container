@@ -196,7 +196,7 @@ iris_disk_cache_retrieve(struct iris_context *ice,
        stage == MESA_SHADER_TESS_EVAL ||
        stage == MESA_SHADER_GEOMETRY) {
       struct brw_vue_prog_data *vue_prog_data = (void *) prog_data;
-      so_decls = ice->vtbl.create_so_decl_list(&ish->stream_output,
+      so_decls = screen->vtbl.create_so_decl_list(&ish->stream_output,
                                                &vue_prog_data->vue_map);
    }
 

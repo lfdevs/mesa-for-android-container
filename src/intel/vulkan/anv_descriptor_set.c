@@ -1166,6 +1166,7 @@ anv_descriptor_set_write_image_view(struct anv_device *device,
 
    void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset +
                     element * anv_descriptor_size(bind_layout);
+   memset(desc_map, 0, anv_descriptor_size(bind_layout));
 
    if (bind_layout->data & ANV_DESCRIPTOR_SAMPLED_IMAGE) {
       struct anv_sampled_image_descriptor desc_data[3];
@@ -1194,6 +1195,9 @@ anv_descriptor_set_write_image_view(struct anv_device *device,
              MAX2(1, bind_layout->max_plane_count) * sizeof(desc_data[0]));
    }
 
+   if (image_view == NULL)
+      return;
+
    if (bind_layout->data & ANV_DESCRIPTOR_STORAGE_IMAGE) {
       assert(!(bind_layout->data & ANV_DESCRIPTOR_IMAGE_PARAM));
       assert(image_view->n_planes == 1);
@@ -1215,7 +1219,7 @@ anv_descriptor_set_write_image_view(struct anv_device *device,
       anv_descriptor_set_write_image_param(desc_map, image_param);
    }
 
-   if (image_view && (bind_layout->data & ANV_DESCRIPTOR_TEXTURE_SWIZZLE)) {
+   if (bind_layout->data & ANV_DESCRIPTOR_TEXTURE_SWIZZLE) {
       assert(!(bind_layout->data & ANV_DESCRIPTOR_SAMPLED_IMAGE));
       assert(image_view);
       struct anv_texture_swizzle_descriptor desc_data[3];
@@ -1251,13 +1255,19 @@ anv_descriptor_set_write_buffer_view(struct anv_device *device,
 
    assert(type == bind_layout->type);
 
+   void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset +
+                    element * anv_descriptor_size(bind_layout);
+
+   if (buffer_view == NULL) {
+      *desc = (struct anv_descriptor) { .type = type, };
+      memset(desc_map, 0, anv_descriptor_size(bind_layout));
+      return;
+   }
+
    *desc = (struct anv_descriptor) {
       .type = type,
       .buffer_view = buffer_view,
    };
-
-   void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset +
-                    element * anv_descriptor_size(bind_layout);
 
    if (bind_layout->data & ANV_DESCRIPTOR_SAMPLED_IMAGE) {
       struct anv_sampled_image_descriptor desc_data = {
@@ -1301,8 +1311,24 @@ anv_descriptor_set_write_buffer(struct anv_device *device,
 
    assert(type == bind_layout->type);
 
+   void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset +
+                    element * anv_descriptor_size(bind_layout);
+
+   if (buffer == NULL) {
+      *desc = (struct anv_descriptor) { .type = type, };
+      memset(desc_map, 0, anv_descriptor_size(bind_layout));
+      return;
+   }
+
    struct anv_address bind_addr = anv_address_add(buffer->address, offset);
    uint64_t bind_range = anv_buffer_get_range(buffer, offset, range);
+
+   /* We report a bounds checking alignment of 32B for the sake of block
+    * messages which read an entire register worth at a time.
+    */
+   if (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
+       type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
+      bind_range = align_u64(bind_range, ANV_UBO_BOUNDS_CHECK_ALIGNMENT);
 
    if (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
        type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) {
@@ -1336,9 +1362,6 @@ anv_descriptor_set_write_buffer(struct anv_device *device,
          .buffer_view = bview,
       };
    }
-
-   void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset +
-                    element * anv_descriptor_size(bind_layout);
 
    if (bind_layout->data & ANV_DESCRIPTOR_ADDRESS_RANGE) {
       struct anv_address_range_descriptor desc_data = {
@@ -1414,9 +1437,7 @@ void anv_UpdateDescriptorSets(
       case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
       case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
          for (uint32_t j = 0; j < write->descriptorCount; j++) {
-            assert(write->pBufferInfo[j].buffer);
             ANV_FROM_HANDLE(anv_buffer, buffer, write->pBufferInfo[j].buffer);
-            assert(buffer);
 
             anv_descriptor_set_write_buffer(device, set,
                                             NULL,

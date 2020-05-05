@@ -38,8 +38,6 @@
  * performance bottleneck, though.
  */
 
-#include "main/imports.h"
-
 #include "intel_context.h"
 #include "intel_batchbuffer.h"
 #include "intel_reg.h"

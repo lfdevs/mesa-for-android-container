@@ -695,10 +695,6 @@ dri2_initialize_drm(_EGLDriver *drv, _EGLDisplay *disp)
    struct gbm_device *gbm;
    const char *err;
 
-   /* Not supported yet */
-   if (disp->Options.ForceSoftware)
-      return EGL_FALSE;
-
    dri2_dpy = calloc(1, sizeof *dri2_dpy);
    if (!dri2_dpy)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
@@ -732,7 +728,7 @@ dri2_initialize_drm(_EGLDriver *drv, _EGLDisplay *disp)
       goto cleanup;
    }
 
-   dev = _eglAddDevice(dri2_dpy->fd, false);
+   dev = _eglAddDevice(dri2_dpy->fd, disp->Options.ForceSoftware);
    if (!dev) {
       err = "DRI2: failed to find EGLDevice";
       goto cleanup;

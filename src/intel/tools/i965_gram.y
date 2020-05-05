@@ -616,6 +616,7 @@ instruction:
 	| syncinstruction
 	| ternaryinstruction
 	| sendinstruction
+	| illegalinstruction
 	;
 
 relocatableinstruction:
@@ -623,6 +624,15 @@ relocatableinstruction:
 	| branchinstruction
 	| breakinstruction
 	| loopinstruction
+	;
+
+illegalinstruction:
+	ILLEGAL execsize instoptions
+	{
+		brw_next_insn(p, $1);
+		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $2);
+		i965_asm_set_instruction_options(p, $3);
+	}
 	;
 
 /* Unary instruction */
@@ -1648,6 +1658,7 @@ srcarcoperandex_ud_typed:
 srcarcoperandex_typed:
 	flagreg
 	| maskreg
+	| statereg
 	;
 
 indirectsrcoperand:
@@ -1770,7 +1781,9 @@ addrreg:
 			error(&@2, "Address sub resgister number %d"
 				   "out of range\n", $2);
 
-		$$ = brw_address_reg($2);
+		$$.file = BRW_ARCHITECTURE_REGISTER_FILE;
+		$$.nr = BRW_ARF_ADDRESS;
+		$$.subnr = $2;
 	}
 	;
 
@@ -1853,8 +1866,9 @@ statereg:
 			error(&@2, "State sub register number %d"
 				   " out of range\n", $2);
 
-		$$ = brw_sr0_reg($2);
-		$$.nr = $1;
+		$$.file = BRW_ARCHITECTURE_REGISTER_FILE;
+		$$.nr = BRW_ARF_STATE;
+		$$.subnr = $2;
 	}
 	;
 

@@ -92,7 +92,10 @@ llvmpipe_bind_sampler_states(struct pipe_context *pipe,
       llvmpipe->num_samplers[shader] = j;
    }
 
-   if (shader == PIPE_SHADER_VERTEX || shader == PIPE_SHADER_GEOMETRY) {
+   if (shader == PIPE_SHADER_VERTEX ||
+       shader == PIPE_SHADER_GEOMETRY ||
+       shader == PIPE_SHADER_TESS_CTRL ||
+       shader == PIPE_SHADER_TESS_EVAL) {
       draw_set_samplers(llvmpipe->draw,
                         shader,
                         llvmpipe->samplers[shader],
@@ -146,7 +149,10 @@ llvmpipe_set_sampler_views(struct pipe_context *pipe,
       llvmpipe->num_sampler_views[shader] = j;
    }
 
-   if (shader == PIPE_SHADER_VERTEX || shader == PIPE_SHADER_GEOMETRY) {
+   if (shader == PIPE_SHADER_VERTEX ||
+       shader == PIPE_SHADER_GEOMETRY ||
+       shader == PIPE_SHADER_TESS_CTRL ||
+       shader == PIPE_SHADER_TESS_EVAL) {
       draw_set_sampler_views(llvmpipe->draw,
                              shader,
                              llvmpipe->sampler_views[shader],
@@ -360,6 +366,28 @@ llvmpipe_prepare_geometry_sampling(struct llvmpipe_context *lp,
    prepare_shader_sampling(lp, num, views, PIPE_SHADER_GEOMETRY);
 }
 
+/**
+ * Called whenever we're about to draw (no dirty flag, FIXME?).
+ */
+void
+llvmpipe_prepare_tess_ctrl_sampling(struct llvmpipe_context *lp,
+				    unsigned num,
+				    struct pipe_sampler_view **views)
+{
+   prepare_shader_sampling(lp, num, views, PIPE_SHADER_TESS_CTRL);
+}
+
+/**
+ * Called whenever we're about to draw (no dirty flag, FIXME?).
+ */
+void
+llvmpipe_prepare_tess_eval_sampling(struct llvmpipe_context *lp,
+				    unsigned num,
+				    struct pipe_sampler_view **views)
+{
+   prepare_shader_sampling(lp, num, views, PIPE_SHADER_TESS_EVAL);
+}
+
 static void
 prepare_shader_images(
    struct llvmpipe_context *lp,
@@ -470,6 +498,28 @@ llvmpipe_prepare_geometry_images(struct llvmpipe_context *lp,
                                  struct pipe_image_view *views)
 {
    prepare_shader_images(lp, num, views, PIPE_SHADER_GEOMETRY);
+}
+
+/**
+ * Called whenever we're about to draw (no dirty flag, FIXME?).
+ */
+void
+llvmpipe_prepare_tess_ctrl_images(struct llvmpipe_context *lp,
+                                  unsigned num,
+                                  struct pipe_image_view *views)
+{
+   prepare_shader_images(lp, num, views, PIPE_SHADER_TESS_CTRL);
+}
+
+/**
+ * Called whenever we're about to draw (no dirty flag, FIXME?).
+ */
+void
+llvmpipe_prepare_tess_eval_images(struct llvmpipe_context *lp,
+                                  unsigned num,
+                                  struct pipe_image_view *views)
+{
+   prepare_shader_images(lp, num, views, PIPE_SHADER_TESS_EVAL);
 }
 
 void

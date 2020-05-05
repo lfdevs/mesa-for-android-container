@@ -381,7 +381,8 @@ try_copy_propagate(const struct gen_device_info *devinfo,
       return false;
 
    if (has_source_modifiers &&
-       inst->opcode == SHADER_OPCODE_GEN4_SCRATCH_WRITE)
+       (inst->opcode == SHADER_OPCODE_GEN4_SCRATCH_WRITE ||
+        inst->opcode == VEC4_OPCODE_PICK_HIGH_32BIT))
       return false;
 
    unsigned composed_swizzle = brw_compose_swizzle(inst->src[arg].swizzle,
@@ -559,7 +560,8 @@ vec4_visitor::opt_copy_propagation(bool do_constant_prop)
    }
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTION_DATA_FLOW |
+                          DEPENDENCY_INSTRUCTION_DETAIL);
 
    return progress;
 }

@@ -107,7 +107,6 @@ panfrost_create_blend_state(struct pipe_context *pipe,
         so->base = *blend;
 
         /* TODO: The following features are not yet implemented */
-        assert(!blend->logicop_enable);
         assert(!blend->alpha_to_coverage);
         assert(!blend->alpha_to_one);
 
@@ -119,15 +118,17 @@ panfrost_create_blend_state(struct pipe_context *pipe,
 
                 /* Without indep blending, the first RT settings replicate */
 
-                unsigned g =
-                        blend->independent_blend_enable ? c : 0;
+                if (!blend->logicop_enable) {
+                        unsigned g =
+                                blend->independent_blend_enable ? c : 0;
 
-                rt->has_fixed_function =
-                        panfrost_make_fixed_blend_mode(
-                                &blend->rt[g],
-                                &rt->equation,
-                                &rt->constant_mask,
-                                blend->rt[g].colormask);
+                        rt->has_fixed_function =
+                                panfrost_make_fixed_blend_mode(
+                                        &blend->rt[g],
+                                        &rt->equation,
+                                        &rt->constant_mask,
+                                        blend->rt[g].colormask);
+                }
 
                 /* Regardless if that works, we also need to initialize
                  * the blend shaders */
@@ -143,20 +144,12 @@ panfrost_bind_blend_state(struct pipe_context *pipe,
                           void *cso)
 {
         struct panfrost_context *ctx = pan_context(pipe);
-        struct panfrost_screen *screen = pan_screen(ctx->base.screen);
         struct pipe_blend_state *blend = (struct pipe_blend_state *) cso;
         struct panfrost_blend_state *pblend = (struct panfrost_blend_state *) cso;
         ctx->blend = pblend;
 
         if (!blend)
                 return;
-
-        if (screen->quirks & MIDGARD_SFBD) {
-                SET_BIT(ctx->fragment_shader_core.unknown2_4, MALI_NO_DITHER, !blend->dither);
-        }
-
-        /* Shader itself is not dirty, but the shader core is */
-        ctx->dirty |= PAN_DIRTY_FS;
 }
 
 static void

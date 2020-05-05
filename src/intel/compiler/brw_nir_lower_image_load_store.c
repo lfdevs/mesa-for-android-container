@@ -27,60 +27,6 @@
 #include "compiler/nir/nir_builder.h"
 #include "compiler/nir/nir_format_convert.h"
 
-/* The higher compiler layers use the GL enums for image formats even if
- * they come in from SPIR-V or Vulkan.  We need to turn them into an ISL
- * enum before we can use them.
- */
-static enum isl_format
-isl_format_for_gl_format(uint32_t gl_format)
-{
-   switch (gl_format) {
-   case GL_R8:             return ISL_FORMAT_R8_UNORM;
-   case GL_R8_SNORM:       return ISL_FORMAT_R8_SNORM;
-   case GL_R8UI:           return ISL_FORMAT_R8_UINT;
-   case GL_R8I:            return ISL_FORMAT_R8_SINT;
-   case GL_RG8:            return ISL_FORMAT_R8G8_UNORM;
-   case GL_RG8_SNORM:      return ISL_FORMAT_R8G8_SNORM;
-   case GL_RG8UI:          return ISL_FORMAT_R8G8_UINT;
-   case GL_RG8I:           return ISL_FORMAT_R8G8_SINT;
-   case GL_RGBA8:          return ISL_FORMAT_R8G8B8A8_UNORM;
-   case GL_RGBA8_SNORM:    return ISL_FORMAT_R8G8B8A8_SNORM;
-   case GL_RGBA8UI:        return ISL_FORMAT_R8G8B8A8_UINT;
-   case GL_RGBA8I:         return ISL_FORMAT_R8G8B8A8_SINT;
-   case GL_R11F_G11F_B10F: return ISL_FORMAT_R11G11B10_FLOAT;
-   case GL_RGB10_A2:       return ISL_FORMAT_R10G10B10A2_UNORM;
-   case GL_RGB10_A2UI:     return ISL_FORMAT_R10G10B10A2_UINT;
-   case GL_R16:            return ISL_FORMAT_R16_UNORM;
-   case GL_R16_SNORM:      return ISL_FORMAT_R16_SNORM;
-   case GL_R16F:           return ISL_FORMAT_R16_FLOAT;
-   case GL_R16UI:          return ISL_FORMAT_R16_UINT;
-   case GL_R16I:           return ISL_FORMAT_R16_SINT;
-   case GL_RG16:           return ISL_FORMAT_R16G16_UNORM;
-   case GL_RG16_SNORM:     return ISL_FORMAT_R16G16_SNORM;
-   case GL_RG16F:          return ISL_FORMAT_R16G16_FLOAT;
-   case GL_RG16UI:         return ISL_FORMAT_R16G16_UINT;
-   case GL_RG16I:          return ISL_FORMAT_R16G16_SINT;
-   case GL_RGBA16:         return ISL_FORMAT_R16G16B16A16_UNORM;
-   case GL_RGBA16_SNORM:   return ISL_FORMAT_R16G16B16A16_SNORM;
-   case GL_RGBA16F:        return ISL_FORMAT_R16G16B16A16_FLOAT;
-   case GL_RGBA16UI:       return ISL_FORMAT_R16G16B16A16_UINT;
-   case GL_RGBA16I:        return ISL_FORMAT_R16G16B16A16_SINT;
-   case GL_R32F:           return ISL_FORMAT_R32_FLOAT;
-   case GL_R32UI:          return ISL_FORMAT_R32_UINT;
-   case GL_R32I:           return ISL_FORMAT_R32_SINT;
-   case GL_RG32F:          return ISL_FORMAT_R32G32_FLOAT;
-   case GL_RG32UI:         return ISL_FORMAT_R32G32_UINT;
-   case GL_RG32I:          return ISL_FORMAT_R32G32_SINT;
-   case GL_RGBA32F:        return ISL_FORMAT_R32G32B32A32_FLOAT;
-   case GL_RGBA32UI:       return ISL_FORMAT_R32G32B32A32_UINT;
-   case GL_RGBA32I:        return ISL_FORMAT_R32G32B32A32_SINT;
-   case GL_NONE:           return ISL_FORMAT_UNSUPPORTED;
-   default:
-      assert(!"Invalid image format");
-      return ISL_FORMAT_UNSUPPORTED;
-   }
-}
-
 static nir_ssa_def *
 _load_image_param(nir_builder *b, nir_deref_instr *deref, unsigned offset)
 {
@@ -422,7 +368,7 @@ lower_image_load_instr(nir_builder *b,
    nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
    nir_variable *var = nir_deref_instr_get_variable(deref);
    const enum isl_format image_fmt =
-      isl_format_for_gl_format(var->data.image.format);
+      isl_format_for_pipe_format(var->data.image.format);
 
    if (isl_has_matching_typed_storage_image_format(devinfo, image_fmt)) {
       const enum isl_format lower_fmt =
@@ -587,7 +533,7 @@ lower_image_store_instr(nir_builder *b,
       return false;
 
    const enum isl_format image_fmt =
-      isl_format_for_gl_format(var->data.image.format);
+      isl_format_for_pipe_format(var->data.image.format);
 
    if (isl_has_matching_typed_storage_image_format(devinfo, image_fmt)) {
       const enum isl_format lower_fmt =
@@ -703,7 +649,7 @@ lower_image_size_instr(nir_builder *b,
     * so we fall back and let the back-end emit a TXS for this.
     */
    const enum isl_format image_fmt =
-      isl_format_for_gl_format(var->data.image.format);
+      isl_format_for_pipe_format(var->data.image.format);
    if (isl_has_matching_typed_storage_image_format(devinfo, image_fmt))
       return false;
 
@@ -734,7 +680,8 @@ lower_image_size_instr(nir_builder *b,
 
 bool
 brw_nir_lower_image_load_store(nir_shader *shader,
-                               const struct gen_device_info *devinfo)
+                               const struct gen_device_info *devinfo,
+                               bool *uses_atomic_load_store)
 {
    bool progress = false;
 
@@ -772,6 +719,8 @@ brw_nir_lower_image_load_store(nir_shader *shader,
             case nir_intrinsic_image_deref_atomic_xor:
             case nir_intrinsic_image_deref_atomic_exchange:
             case nir_intrinsic_image_deref_atomic_comp_swap:
+               if (uses_atomic_load_store)
+                  *uses_atomic_load_store = true;
                if (lower_image_atomic_instr(&b, devinfo, intrin))
                   progress = true;
                break;

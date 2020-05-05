@@ -290,6 +290,7 @@ int main(int argc, char **argv)
 	const char *entry;
 	void *ptr;
 	bool from_spirv = false;
+	bool from_tgsi = false;
 	size_t size;
 
 	memset(&s, 0, sizeof(s));
@@ -406,7 +407,7 @@ int main(int argc, char **argv)
 		if (strcmp(ext, ".tgsi") == 0) {
 			if (num_files != 0)
 				errx(1, "in TGSI mode, only a single file may be specified");
-			s.from_tgsi = true;
+			from_tgsi = true;
 		} else if (strcmp(ext, ".spv") == 0) {
 			if (num_files != 0)
 				errx(1, "in SPIR-V mode, only a single file may be specified");
@@ -419,19 +420,19 @@ int main(int argc, char **argv)
 			entry = argv[n];
 			n++;
 		} else if (strcmp(ext, ".comp") == 0) {
-			if (s.from_tgsi || from_spirv)
+			if (from_tgsi || from_spirv)
 				errx(1, "cannot mix GLSL/TGSI/SPIRV");
 			if (num_files >= ARRAY_SIZE(filenames))
 				errx(1, "too many GLSL files");
 			stage = MESA_SHADER_COMPUTE;
 		} else if (strcmp(ext, ".frag") == 0) {
-			if (s.from_tgsi || from_spirv)
+			if (from_tgsi || from_spirv)
 				errx(1, "cannot mix GLSL/TGSI/SPIRV");
 			if (num_files >= ARRAY_SIZE(filenames))
 				errx(1, "too many GLSL files");
 			stage = MESA_SHADER_FRAGMENT;
 		} else if (strcmp(ext, ".vert") == 0) {
-			if (s.from_tgsi)
+			if (from_tgsi)
 				errx(1, "cannot mix GLSL and TGSI");
 			if (num_files >= ARRAY_SIZE(filenames))
 				errx(1, "too many GLSL files");
@@ -450,7 +451,7 @@ int main(int argc, char **argv)
 
 	compiler = ir3_compiler_create(NULL, gpu_id);
 
-	if (s.from_tgsi) {
+	if (from_tgsi) {
 		struct tgsi_token toks[65536];
 		const nir_shader_compiler_options *nir_options =
 			ir3_get_compiler_options(compiler);

@@ -190,6 +190,16 @@ drm_shim_ioctl_gem_close(int fd, unsigned long request, void *arg)
 }
 
 static int
+drm_shim_ioctl_syncobj_create(int fd, unsigned long request, void *arg)
+{
+   struct drm_syncobj_create *create = arg;
+
+   create->handle = 1; /* 0 is invalid */
+
+   return 0;
+}
+
+static int
 drm_shim_ioctl_stub(int fd, unsigned long request, void *arg)
 {
    return 0;
@@ -199,10 +209,11 @@ ioctl_fn_t core_ioctls[] = {
    [_IOC_NR(DRM_IOCTL_VERSION)] = drm_shim_ioctl_version,
    [_IOC_NR(DRM_IOCTL_GET_CAP)] = drm_shim_ioctl_get_cap,
    [_IOC_NR(DRM_IOCTL_GEM_CLOSE)] = drm_shim_ioctl_gem_close,
-   [_IOC_NR(DRM_IOCTL_SYNCOBJ_CREATE)] = drm_shim_ioctl_stub,
+   [_IOC_NR(DRM_IOCTL_SYNCOBJ_CREATE)] = drm_shim_ioctl_syncobj_create,
    [_IOC_NR(DRM_IOCTL_SYNCOBJ_DESTROY)] = drm_shim_ioctl_stub,
    [_IOC_NR(DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD)] = drm_shim_ioctl_stub,
    [_IOC_NR(DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE)] = drm_shim_ioctl_stub,
+   [_IOC_NR(DRM_IOCTL_SYNCOBJ_WAIT)] = drm_shim_ioctl_stub,
 };
 
 /**

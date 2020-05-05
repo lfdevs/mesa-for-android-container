@@ -41,7 +41,6 @@
 #include "main/extensions.h"
 #include "main/formats.h"
 #include "main/framebuffer.h"
-#include "main/imports.h"
 #include "main/macros.h"
 #include "main/mipmap.h"
 #include "main/mtypes.h"
@@ -60,6 +59,7 @@
 #include "drivers/common/driverfuncs.h"
 #include "drivers/common/meta.h"
 #include "vbo/vbo.h"
+#include "util/u_memory.h"
 
 
 #define OSMESA_RENDERBUFFER_CLASS 0x053
@@ -890,7 +890,7 @@ OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist)
          TNLcontext *tnl;
 
 	 if (!_swrast_CreateContext( ctx ) ||
-             !_vbo_CreateContext( ctx ) ||
+             !_vbo_CreateContext( ctx, false ) ||
              !_tnl_CreateContext( ctx ) ||
              !_swsetup_CreateContext( ctx )) {
             _mesa_destroy_visual(osmesa->gl_visual);
@@ -898,7 +898,7 @@ OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist)
             free(osmesa);
             return NULL;
          }
-	
+
 	 _swsetup_Wakeup( ctx );
 
          /* use default TCL pipeline */
@@ -1040,7 +1040,7 @@ OSMesaMakeCurrent( OSMesaContext osmesa, void *buffer, GLenum type,
 
    osmesa->DataType = type;
 
-   /* Set renderbuffer fields.  Set width/height = 0 to force 
+   /* Set renderbuffer fields.  Set width/height = 0 to force
     * osmesa_renderbuffer_storage() being called by _mesa_resize_framebuffer()
     */
    osmesa->srb->Buffer = buffer;

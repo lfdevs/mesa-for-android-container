@@ -56,6 +56,9 @@ struct intel_screen
    /** Bytes of aperture usage beyond which execbuf is likely to fail. */
    uint64_t aperture_threshold;
 
+   /** DRM fd associated with this screen. Not owned by this object. Do not close. */
+   int fd;
+
    bool no_hw;
    bool hw_has_swizzling;
    bool has_exec_fence; /**< I915_PARAM_HAS_EXEC_FENCE */

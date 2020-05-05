@@ -223,6 +223,7 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_SHAREABLE_SHADERS:
    case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
    case PIPE_CAP_CLEAR_TEXTURE:
+   case PIPE_CAP_CLEAR_SCISSORED:
    case PIPE_CAP_DRAW_PARAMETERS:
    case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
    case PIPE_CAP_MULTI_DRAW_INDIRECT:
@@ -258,6 +259,8 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_MAX_WINDOW_RECTANGLES: /* Enables EXT_window_rectangles */
    case PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED:
    case PIPE_CAP_VIEWPORT_SUBPIXEL_BITS:
+   case PIPE_CAP_VIEWPORT_SWIZZLE:
+   case PIPE_CAP_VIEWPORT_MASK:
    case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
    case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
    case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
@@ -406,6 +409,28 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
 
    case PIPE_CAP_OPENCL_INTEGER_FUNCTIONS:
    case PIPE_CAP_INTEGER_MULTIPLY_32X16:
+   case PIPE_CAP_DRAW_INFO_START_WITH_USER_INDICES:
+      return 0;
+   case PIPE_CAP_NIR_IMAGES_AS_DEREF:
+      return 1;
+
+   case PIPE_CAP_FRONTEND_NOOP:
+      /* Enables INTEL_blackhole_render */
+      return 0;
+
+   case PIPE_CAP_PACKED_STREAM_OUTPUT:
+      return 1;
+
+   case PIPE_CAP_VIEWPORT_TRANSFORM_LOWERED:
+   case PIPE_CAP_PSIZ_CLAMPED:
+   case PIPE_CAP_MAP_UNSYNCHRONIZED_THREAD_SAFE:
+      return 0;
+
+   case PIPE_CAP_GL_BEGIN_END_BUFFER_SIZE:
+      return 512 * 1024;
+
+   case PIPE_CAP_SYSTEM_SVM:
+   case PIPE_CAP_ALPHA_TO_COVERAGE_DITHER_CONTROL:
       return 0;
 
    default:

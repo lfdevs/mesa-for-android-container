@@ -31,11 +31,11 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
  *   Keith Whitwell <keithw@vmware.com>
  *
  */
- 
-#include <errno.h> 
+
+#include <errno.h>
 
 #include "main/glheader.h"
-#include "main/imports.h"
+
 
 #include "r200_context.h"
 #include "r200_sanity.h"
@@ -57,11 +57,11 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /* New (1.3) state mechanism.  3 commands (packet, scalar, vector) in
  * 1.3 cmdbuffers allow all previous state to be updated as well as
- * the tcl scalar and vector areas.  
+ * the tcl scalar and vector areas.
  */
-static struct { 
-   int start; 
-   int len; 
+static struct {
+   int start;
+   int len;
    const char *name;
 } packet[RADEON_MAX_STATE_PACKETS] = {
    { RADEON_PP_MISC,7,"RADEON_PP_MISC" },
@@ -115,15 +115,15 @@ static struct {
    { R200_SE_VTE_CNTL, 1, "R200_SE_VTE_CNTL" },
    { R200_SE_TCL_OUTPUT_VTX_COMP_SEL, 1, "R200_SE_TCL_OUTPUT_VTX_COMP_SEL" },
    { R200_PP_TAM_DEBUG3, 1, "R200_PP_TAM_DEBUG3" },
-   { R200_PP_CNTL_X, 1, "R200_PP_CNTL_X" }, 
-   { R200_RB3D_DEPTHXY_OFFSET, 1, "R200_RB3D_DEPTHXY_OFFSET" }, 
-   { R200_RE_AUX_SCISSOR_CNTL, 1, "R200_RE_AUX_SCISSOR_CNTL" }, 
-   { R200_RE_SCISSOR_TL_0, 2, "R200_RE_SCISSOR_TL_0" }, 
-   { R200_RE_SCISSOR_TL_1, 2, "R200_RE_SCISSOR_TL_1" }, 
-   { R200_RE_SCISSOR_TL_2, 2, "R200_RE_SCISSOR_TL_2" }, 
-   { R200_SE_VAP_CNTL_STATUS, 1, "R200_SE_VAP_CNTL_STATUS" }, 
-   { R200_SE_VTX_STATE_CNTL, 1, "R200_SE_VTX_STATE_CNTL" }, 
-   { R200_RE_POINTSIZE, 1, "R200_RE_POINTSIZE" }, 
+   { R200_PP_CNTL_X, 1, "R200_PP_CNTL_X" },
+   { R200_RB3D_DEPTHXY_OFFSET, 1, "R200_RB3D_DEPTHXY_OFFSET" },
+   { R200_RE_AUX_SCISSOR_CNTL, 1, "R200_RE_AUX_SCISSOR_CNTL" },
+   { R200_RE_SCISSOR_TL_0, 2, "R200_RE_SCISSOR_TL_0" },
+   { R200_RE_SCISSOR_TL_1, 2, "R200_RE_SCISSOR_TL_1" },
+   { R200_RE_SCISSOR_TL_2, 2, "R200_RE_SCISSOR_TL_2" },
+   { R200_SE_VAP_CNTL_STATUS, 1, "R200_SE_VAP_CNTL_STATUS" },
+   { R200_SE_VTX_STATE_CNTL, 1, "R200_SE_VTX_STATE_CNTL" },
+   { R200_RE_POINTSIZE, 1, "R200_RE_POINTSIZE" },
    { R200_SE_TCL_INPUT_VTX_VECTOR_ADDR_0, 4, "R200_SE_TCL_INPUT_VTX_VECTOR_ADDR_0" },
    { R200_PP_CUBIC_FACES_0, 1, "R200_PP_CUBIC_FACES_0" }, /* 61 */
    { R200_PP_CUBIC_OFFSET_F1_0, 5, "R200_PP_CUBIC_OFFSET_F1_0" }, /* 62 */
@@ -598,7 +598,7 @@ static struct reg_names vector_names[] = {
 #define TOUCHED 4
 
 struct reg {
-   int idx; 
+   int idx;
    struct reg_names *closest;
    int flags;
    union fi current;
@@ -681,14 +681,14 @@ static const char *get_reg_name( struct reg *reg )
 {
    static char tmp[80];
 
-   if (reg->idx == reg->closest->idx) 
+   if (reg->idx == reg->closest->idx)
       return reg->closest->name;
 
-   
+
    if (reg->flags & ISVEC) {
       if (reg->idx/4 != reg->closest->idx)
-	 sprintf(tmp, "%s+%d[%d]", 
-		 reg->closest->name, 
+	 sprintf(tmp, "%s+%d[%d]",
+		 reg->closest->name,
 		 (reg->idx/4) - reg->closest->idx,
 		 reg->idx%4);
       else
@@ -708,17 +708,17 @@ static int print_int_reg_assignment( struct reg *reg, int data )
 {
    int changed = (reg->current.i != data);
    int ever_seen = find_or_add_value( reg, data );
-   
+
    if (VERBOSE || (NORMAL && (changed || !ever_seen)))
        fprintf(stderr, "   %s <-- 0x%x", get_reg_name(reg), data);
-       
+
    if (NORMAL) {
-      if (!ever_seen) 
+      if (!ever_seen)
 	 fprintf(stderr, " *** BRAND NEW VALUE");
-      else if (changed) 
-	 fprintf(stderr, " *** CHANGED"); 
+      else if (changed)
+	 fprintf(stderr, " *** CHANGED");
    }
-   
+
    reg->current.i = data;
 
    if (VERBOSE || (NORMAL && (changed || !ever_seen)))
@@ -786,19 +786,19 @@ static void dump_state( void )
 {
    int i;
 
-   for (i = 0 ; i < ARRAY_SIZE(regs) ; i++) 
+   for (i = 0 ; i < ARRAY_SIZE(regs) ; i++)
       print_reg( &regs[i] );
 
-   for (i = 0 ; i < ARRAY_SIZE(scalars) ; i++) 
+   for (i = 0 ; i < ARRAY_SIZE(scalars) ; i++)
       print_reg( &scalars[i] );
 
-   for (i = 0 ; i < ARRAY_SIZE(vectors) ; i++) 
+   for (i = 0 ; i < ARRAY_SIZE(vectors) ; i++)
       print_reg( &vectors[i] );
 }
 
 
 
-static int radeon_emit_packets( 
+static int radeon_emit_packets(
    drm_radeon_cmd_header_t header,
    drm_radeon_cmd_buffer_t *cmdbuf )
 {
@@ -806,9 +806,9 @@ static int radeon_emit_packets(
    int sz = packet[id].len;
    int *data = (int *)cmdbuf->buf;
    int i;
-   
+
    if (sz * sizeof(int) > cmdbuf->bufsz) {
-      fprintf(stderr, "Packet overflows cmdbuf\n");      
+      fprintf(stderr, "Packet overflows cmdbuf\n");
       return -EINVAL;
    }
 
@@ -817,8 +817,8 @@ static int radeon_emit_packets(
       return -EINVAL;
    }
 
-   
-   if (VERBOSE) 
+
+   if (VERBOSE)
       fprintf(stderr, "Packet 0 reg %s nr %d\n", packet[id].name, sz );
 
    for ( i = 0 ; i < sz ; i++) {
@@ -834,7 +834,7 @@ static int radeon_emit_packets(
 }
 
 
-static int radeon_emit_scalars( 
+static int radeon_emit_scalars(
    drm_radeon_cmd_header_t header,
    drm_radeon_cmd_buffer_t *cmdbuf )
 {
@@ -855,14 +855,14 @@ static int radeon_emit_scalars(
 	 total_changed++;
       total++;
    }
-	 
+
    cmdbuf->buf += sz * sizeof(int);
    cmdbuf->bufsz -= sz * sizeof(int);
    return 0;
 }
 
 
-static int radeon_emit_scalars2( 
+static int radeon_emit_scalars2(
    drm_radeon_cmd_header_t header,
    drm_radeon_cmd_buffer_t *cmdbuf )
 {
@@ -887,7 +887,7 @@ static int radeon_emit_scalars2(
 	 total_changed++;
       total++;
    }
-	 
+
    cmdbuf->buf += sz * sizeof(int);
    cmdbuf->bufsz -= sz * sizeof(int);
    return 0;
@@ -896,7 +896,7 @@ static int radeon_emit_scalars2(
 /* Check: inf/nan/extreme-size?
  * Check: table start, end, nr, etc.
  */
-static int radeon_emit_vectors( 
+static int radeon_emit_vectors(
    drm_radeon_cmd_header_t header,
    drm_radeon_cmd_buffer_t *cmdbuf )
 {
@@ -926,14 +926,14 @@ static int radeon_emit_vectors(
 	 total_changed += 4;
       total += 4;
    }
-	 
+
 
    cmdbuf->buf += sz * sizeof(int);
    cmdbuf->bufsz -= sz * sizeof(int);
    return 0;
 }
 
-static int radeon_emit_veclinear( 
+static int radeon_emit_veclinear(
    drm_radeon_cmd_header_t header,
    drm_radeon_cmd_buffer_t *cmdbuf )
 {
@@ -1019,7 +1019,7 @@ static int print_vertex_format( int vfmt )
 	      (vfmt & R200_VTX_W1) ? "w1," : "",
 	      (vfmt & R200_VTX_N1) ? "n1," : "");
 
-   
+
       if (!find_or_add_value( &others[V_VTXFMT], vfmt ))
 	 fprintf(stderr, " *** NEW VALUE");
 
@@ -1052,7 +1052,7 @@ static char *primname[0x10] = {
 static int print_prim_and_flags( int prim )
 {
    int numverts;
-   
+
    if (NORMAL)
       fprintf(stderr, "   %s(%x): %s%s%s%s%s%s\n",
 	      "prim flags",
@@ -1065,7 +1065,7 @@ static int print_prim_and_flags( int prim )
 	      (prim & R200_VF_TCL_OUTPUT_VTX_ENABLE) ? "TCL_OUT_VTX," : "");
 
    numverts = prim>>16;
-   
+
    if (NORMAL)
       fprintf(stderr, "   prim: %s numverts %d\n", primname[prim&0xf], numverts);
 
@@ -1123,7 +1123,7 @@ static int print_prim_and_flags( int prim )
    default:
       fprintf(stderr, "Bad primitive\n");
       return -1;
-   }	
+   }
    return 0;
 }
 
@@ -1247,7 +1247,7 @@ static int radeon_emit_packet3( drm_radeon_cmd_buffer_t *cmdbuf )
       break;
    case R200_CP_CMD_HOSTDATA_BLT:
       if (NORMAL)
-	 fprintf(stderr, "PACKET3_CNTL_HOSTDATA_BLT, %d dwords\n", 
+	 fprintf(stderr, "PACKET3_CNTL_HOSTDATA_BLT, %d dwords\n",
 	      cmdsz);
       break;
    case R200_CP_CMD_POLYLINE:
@@ -1256,41 +1256,41 @@ static int radeon_emit_packet3( drm_radeon_cmd_buffer_t *cmdbuf )
       break;
    case R200_CP_CMD_POLYSCANLINES:
       if (NORMAL)
-	 fprintf(stderr, "PACKET3_CNTL_POLYSCANLINES, %d dwords\n", 
+	 fprintf(stderr, "PACKET3_CNTL_POLYSCANLINES, %d dwords\n",
 	      cmdsz);
       break;
    case R200_CP_CMD_PAINT_MULTI:
       if (NORMAL)
-	 fprintf(stderr, "PACKET3_CNTL_PAINT_MULTI, %d dwords\n", 
+	 fprintf(stderr, "PACKET3_CNTL_PAINT_MULTI, %d dwords\n",
 	      cmdsz);
       break;
    case R200_CP_CMD_BITBLT_MULTI:
       if (NORMAL)
-	 fprintf(stderr, "PACKET3_CNTL_BITBLT_MULTI, %d dwords\n", 
+	 fprintf(stderr, "PACKET3_CNTL_BITBLT_MULTI, %d dwords\n",
 	      cmdsz);
       break;
    case R200_CP_CMD_TRANS_BITBLT:
       if (NORMAL)
-	 fprintf(stderr, "PACKET3_CNTL_TRANS_BITBLT, %d dwords\n", 
+	 fprintf(stderr, "PACKET3_CNTL_TRANS_BITBLT, %d dwords\n",
 	      cmdsz);
       break;
    case R200_CP_CMD_3D_DRAW_VBUF_2:
       if (NORMAL)
-	 fprintf(stderr, "R200_CP_CMD_3D_DRAW_VBUF_2, %d dwords\n", 
+	 fprintf(stderr, "R200_CP_CMD_3D_DRAW_VBUF_2, %d dwords\n",
 	      cmdsz);
       if (print_prim_and_flags(cmd[1]))
 	 return -EINVAL;
       break;
    case R200_CP_CMD_3D_DRAW_IMMD_2:
       if (NORMAL)
-	 fprintf(stderr, "R200_CP_CMD_3D_DRAW_IMMD_2, %d dwords\n", 
+	 fprintf(stderr, "R200_CP_CMD_3D_DRAW_IMMD_2, %d dwords\n",
 	      cmdsz);
       if (print_prim_and_flags(cmd[1]))
 	 return -EINVAL;
       break;
    case R200_CP_CMD_3D_DRAW_INDX_2:
       if (NORMAL)
-	 fprintf(stderr, "R200_CP_CMD_3D_DRAW_INDX_2, %d dwords\n", 
+	 fprintf(stderr, "R200_CP_CMD_3D_DRAW_INDX_2, %d dwords\n",
 	      cmdsz);
       if (print_prim_and_flags(cmd[1]))
 	 return -EINVAL;
@@ -1299,7 +1299,7 @@ static int radeon_emit_packet3( drm_radeon_cmd_buffer_t *cmdbuf )
       fprintf(stderr, "UNKNOWN PACKET, %d dwords\n", cmdsz);
       break;
    }
-      
+
    cmdbuf->buf += cmdsz * 4;
    cmdbuf->bufsz -= cmdsz * 4;
    return 0;
@@ -1309,7 +1309,7 @@ static int radeon_emit_packet3( drm_radeon_cmd_buffer_t *cmdbuf )
 /* Check cliprects for bounds, then pass on to above:
  */
 static int radeon_emit_packet3_cliprect( drm_radeon_cmd_buffer_t *cmdbuf )
-{   
+{
    drm_clip_rect_t *boxes = (drm_clip_rect_t *)cmdbuf->boxes;
    int i = 0;
 
@@ -1356,13 +1356,13 @@ int r200SanityCmdBuffer( r200ContextPtr rmesa,
    cmdbuf.nbox = nbox;
 
    while ( cmdbuf.bufsz >= sizeof(header) ) {
-		
+
       header.i = *(int *)cmdbuf.buf;
       cmdbuf.buf += sizeof(header);
       cmdbuf.bufsz -= sizeof(header);
 
       switch (header.header.cmd_type) {
-      case RADEON_CMD_PACKET: 
+      case RADEON_CMD_PACKET:
 	 if (radeon_emit_packets( header, &cmdbuf )) {
 	    fprintf(stderr,"radeon_emit_packets failed\n");
 	    return -EINVAL;
@@ -1422,7 +1422,7 @@ int r200SanityCmdBuffer( r200ContextPtr rmesa,
 	 break;
 
       default:
-	 fprintf(stderr,"bad cmd_type %d at %p\n", 
+	 fprintf(stderr,"bad cmd_type %d at %p\n",
 		   header.header.cmd_type,
 		   cmdbuf.buf - sizeof(header));
 	 return -EINVAL;
@@ -1436,7 +1436,7 @@ int r200SanityCmdBuffer( r200ContextPtr rmesa,
       if (n == 10) {
 	 fprintf(stderr, "Bufs %d Total emitted %d real changes %d (%.2f%%)\n",
 		 bufs,
-		 total, total_changed, 
+		 total, total_changed,
 		 ((float)total_changed/(float)total*100.0));
 	 fprintf(stderr, "Total emitted per buf: %.2f\n",
 		 (float)total/(float)bufs);

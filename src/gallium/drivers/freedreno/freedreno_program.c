@@ -161,6 +161,10 @@ void fd_prog_init(struct pipe_context *pctx)
 
 	ctx->solid_prog.fs = assemble_tgsi(pctx, solid_fs, true);
 	ctx->solid_prog.vs = assemble_tgsi(pctx, solid_vs, false);
+
+	if (ctx->screen->gpu_id >= 500)
+		return;
+
 	ctx->blit_prog[0].vs = assemble_tgsi(pctx, blit_vs, false);
 	ctx->blit_prog[0].fs = fd_prog_blit(pctx, 1, false);
 
@@ -185,8 +189,16 @@ void fd_prog_fini(struct pipe_context *pctx)
 
 	pctx->delete_vs_state(pctx, ctx->solid_prog.vs);
 	pctx->delete_fs_state(pctx, ctx->solid_prog.fs);
+	if (ctx->screen->gpu_id >= 500)
+		return;
+
 	pctx->delete_vs_state(pctx, ctx->blit_prog[0].vs);
-	for (i = 0; i < ctx->screen->max_rts; i++)
+	pctx->delete_fs_state(pctx, ctx->blit_prog[0].fs);
+
+	if (ctx->screen->gpu_id < 300)
+		return;
+
+	for (i = 1; i < ctx->screen->max_rts; i++)
 		pctx->delete_fs_state(pctx, ctx->blit_prog[i].fs);
 	pctx->delete_fs_state(pctx, ctx->blit_z.fs);
 	pctx->delete_fs_state(pctx, ctx->blit_zs.fs);

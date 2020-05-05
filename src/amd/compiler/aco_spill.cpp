@@ -28,6 +28,7 @@
 #include "sid.h"
 
 #include <map>
+#include <set>
 #include <stack>
 
 /*
@@ -65,7 +66,7 @@ struct spill_ctx {
    spill_ctx(const RegisterDemand target_pressure, Program* program,
              std::vector<std::vector<RegisterDemand>> register_demand)
       : target_pressure(target_pressure), program(program),
-        register_demand(register_demand), renames(program->blocks.size()),
+        register_demand(std::move(register_demand)), renames(program->blocks.size()),
         spills_entry(program->blocks.size()), spills_exit(program->blocks.size()),
         processed(program->blocks.size(), false), wave_size(program->wave_size) {}
 
@@ -213,7 +214,7 @@ void next_uses_per_block(spill_ctx& ctx, unsigned block_idx, std::set<uint32_t>&
 
 }
 
-void compute_global_next_uses(spill_ctx& ctx, std::vector<std::set<Temp>>& live_out)
+void compute_global_next_uses(spill_ctx& ctx)
 {
    ctx.next_use_distances_start.resize(ctx.program->blocks.size());
    ctx.next_use_distances_end.resize(ctx.program->blocks.size());
@@ -660,15 +661,10 @@ RegisterDemand init_live_in_vars(spill_ctx& ctx, Block* block, unsigned block_id
 RegisterDemand get_demand_before(spill_ctx& ctx, unsigned block_idx, unsigned idx)
 {
    if (idx == 0) {
-      RegisterDemand demand_before = ctx.register_demand[block_idx][idx];
+      RegisterDemand demand = ctx.register_demand[block_idx][idx];
       aco_ptr<Instruction>& instr = ctx.program->blocks[block_idx].instructions[idx];
-      for (const Definition& def : instr->definitions)
-         demand_before -= def.getTemp();
-      for (const Operand& op : instr->operands) {
-         if (op.isFirstKill())
-            demand_before += op.getTemp();
-      }
-      return demand_before;
+      aco_ptr<Instruction> instr_before(nullptr);
+      return get_demand_before(demand, instr, instr_before);
    } else {
       return ctx.register_demand[block_idx][idx - 1];
    }
@@ -1769,7 +1765,7 @@ void spill(Program* program, live& live_vars, const struct radv_nir_compiler_opt
 
    /* initialize ctx */
    spill_ctx ctx(register_target, program, live_vars.register_demand);
-   compute_global_next_uses(ctx, live_vars.live_out);
+   compute_global_next_uses(ctx);
    get_rematerialize_info(ctx);
 
    /* create spills and reloads */

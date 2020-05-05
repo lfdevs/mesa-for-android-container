@@ -343,12 +343,14 @@ struct r600_pipe_shader_selector {
 	struct r600_pipe_shader *current;
 
 	struct tgsi_token       *tokens;
+        struct nir_shader       *nir;
 	struct pipe_stream_output_info  so;
 	struct tgsi_shader_info		info;
 
 	unsigned	num_shaders;
 
 	enum pipe_shader_type	type;
+        enum pipe_shader_ir ir_type;
 
 	/* geometry shader properties */
 	enum pipe_prim_type	gs_output_prim;
@@ -1055,7 +1057,8 @@ void eg_dump_debug_state(struct pipe_context *ctx, FILE *f,
 			 unsigned flags);
 
 struct r600_pipe_shader_selector *r600_create_shader_state_tokens(struct pipe_context *ctx,
-								  const struct tgsi_token *tokens,
+								  const void *tokens,
+								  enum pipe_shader_ir,
 								  unsigned pipe_shader_type);
 int r600_shader_select(struct pipe_context *ctx,
 		       struct r600_pipe_shader_selector* sel,

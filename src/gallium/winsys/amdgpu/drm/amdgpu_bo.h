@@ -96,6 +96,7 @@ struct amdgpu_winsys_bo {
    uint32_t unique_id;
    uint64_t va;
    enum radeon_bo_domain initial_domain;
+   enum radeon_bo_flag flags;
 
    /* how many command streams is this bo referenced in? */
    int num_cs_references;

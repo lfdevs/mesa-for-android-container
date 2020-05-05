@@ -72,8 +72,11 @@ static void print_instr_name(struct ir3_instruction *instr, bool flags)
 #endif
 	printf("%04u:", instr->name);
 	printf("%04u:", instr->ip);
-	printf("%03d:", instr->depth);
-	printf("%03u: ", instr->use_count);
+	if (instr->flags & IR3_INSTR_UNUSED) {
+		printf("XXX: ");
+	} else {
+		printf("%03u: ", instr->use_count);
+	}
 
 	if (flags) {
 		printf("\t");
@@ -122,6 +125,14 @@ static void print_instr_name(struct ir3_instruction *instr, bool flags)
 			printf(".p");
 		if (instr->flags & IR3_INSTR_S)
 			printf(".s");
+		if (instr->flags & IR3_INSTR_A1EN)
+			printf(".a1en");
+		if (instr->opc == OPC_LDC)
+			printf(".offset%d", instr->cat6.d);
+		if (instr->flags & IR3_INSTR_B) {
+			printf(".base%d",
+				   is_tex(instr) ? instr->cat5.tex_base : instr->cat6.base);
+		}
 		if (instr->flags & IR3_INSTR_S2EN)
 			printf(".s2en");
 	}
@@ -206,16 +217,22 @@ print_instr(struct ir3_instruction *instr, int lvl)
 	for (i = 0; i < instr->regs_count; i++) {
 		struct ir3_register *reg = instr->regs[i];
 
-		/* skip the samp/tex src if it has been lowered to immed: */
-		if ((i == 1) && is_tex(instr) && !(instr->flags & IR3_INSTR_S2EN))
-			continue;
-
 		printf(i ? ", " : "");
 		print_reg_name(reg);
 	}
 
-	if (is_tex(instr) && !(instr->flags & IR3_INSTR_S2EN))
-		printf(", s#%d, t#%d", instr->cat5.samp, instr->cat5.tex);
+	if (is_tex(instr) && !(instr->flags & IR3_INSTR_S2EN)) {
+		if (!!(instr->flags & IR3_INSTR_B)) {
+			if (!!(instr->flags & IR3_INSTR_A1EN)) {
+				printf(", s#%d", instr->cat5.samp);
+			} else {
+				printf(", s#%d, t#%d", instr->cat5.samp & 0xf,
+					   instr->cat5.samp >> 4);
+			}
+		} else {
+			printf(", s#%d, t#%d", instr->cat5.samp, instr->cat5.tex);
+		}
+	}
 
 	if (instr->address) {
 		printf(", address=_");
@@ -277,7 +294,10 @@ print_block(struct ir3_block *block, int lvl)
 {
 	tab(lvl); printf("block%u {\n", block_id(block));
 
-	if (block->predecessors->entries > 0) {
+	/* computerator (ir3 assembler) doesn't really use blocks for flow
+	 * control, so block->predecessors will be null.
+	 */
+	if (block->predecessors && block->predecessors->entries > 0) {
 		unsigned i = 0;
 		tab(lvl+1);
 		printf("pred: ");
@@ -323,7 +343,7 @@ ir3_print(struct ir3 *ir)
 		print_block(block, 0);
 
 	struct ir3_instruction *out;
-	foreach_output_n(out, i, ir) {
+	foreach_output_n (out, i, ir) {
 		printf("out%d: ", i);
 		print_instr(out, 0);
 	}

@@ -2165,6 +2165,11 @@ static void x86_init_func_common( struct x86_function *p )
    if(util_cpu_caps.has_sse4_1)
       p->caps |= X86_SSE4_1;
    p->csr = p->store;
+#if defined(PIPE_ARCH_X86)
+   emit_1i(p, 0xfb1e0ff3);
+#else
+   emit_1i(p, 0xfa1e0ff3);
+#endif
    DUMP_START();
 }
 

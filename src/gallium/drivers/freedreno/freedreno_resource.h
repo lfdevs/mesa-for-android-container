@@ -30,6 +30,7 @@
 #include "util/list.h"
 #include "util/u_range.h"
 #include "util/u_transfer_helper.h"
+#include "util/simple_mtx.h"
 
 #include "freedreno_batch.h"
 #include "freedreno_util.h"
@@ -49,6 +50,8 @@ struct fd_resource {
 	/* reference to the resource holding stencil data for a z32_s8 texture */
 	/* TODO rename to secondary or auxiliary? */
 	struct fd_resource *stencil;
+
+	simple_mtx_t lock;
 
 	/* bitmask of in-flight batches which reference this resource.  Note
 	 * that the batch doesn't hold reference to resources (but instead
@@ -70,6 +73,11 @@ struct fd_resource {
 
 	/* Sequence # incremented each time bo changes: */
 	uint16_t seqno;
+
+	/* bitmask of state this resource could potentially dirty when rebound,
+	 * see rebind_resource()
+	 */
+	enum fd_dirty_3d_state dirty;
 
 	/*
 	 * LRZ
@@ -111,6 +119,35 @@ pending(struct fd_resource *rsc, bool write)
 		return true;
 
 	return false;
+}
+
+static inline bool
+fd_resource_busy(struct fd_resource *rsc, unsigned op)
+{
+	return fd_bo_cpu_prep(rsc->bo, NULL, op | DRM_FREEDRENO_PREP_NOSYNC) != 0;
+}
+
+static inline void
+fd_resource_lock(struct fd_resource *rsc)
+{
+	simple_mtx_lock(&rsc->lock);
+}
+
+static inline void
+fd_resource_unlock(struct fd_resource *rsc)
+{
+	simple_mtx_unlock(&rsc->lock);
+}
+
+static inline void
+fd_resource_set_usage(struct pipe_resource *prsc, enum fd_dirty_3d_state usage)
+{
+	if (!prsc)
+		return;
+	struct fd_resource *rsc = fd_resource(prsc);
+	fd_resource_lock(rsc);
+	rsc->dirty |= usage;
+	fd_resource_unlock(rsc);
 }
 
 static inline bool
@@ -158,7 +195,9 @@ fd_resource_offset(struct fd_resource *rsc, unsigned level, unsigned layer)
 static inline uint32_t
 fd_resource_ubwc_offset(struct fd_resource *rsc, unsigned level, unsigned layer)
 {
-	return fdl_ubwc_offset(&rsc->layout, level, layer);
+	uint32_t offset = fdl_ubwc_offset(&rsc->layout, level, layer);
+	debug_assert(offset < fd_bo_size(rsc->bo));
+	return offset;
 }
 
 /* This might be a5xx specific, but higher mipmap levels are always linear: */

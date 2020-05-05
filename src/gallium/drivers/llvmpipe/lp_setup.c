@@ -409,23 +409,7 @@ lp_setup_try_clear_color_buffer(struct lp_setup_context *setup,
 
    LP_DBG(DEBUG_SETUP, "%s state %d\n", __FUNCTION__, setup->state);
 
-   if (util_format_is_pure_integer(format)) {
-      /*
-       * We expect int/uint clear values here, though some APIs
-       * might disagree (but in any case util_pack_color()
-       * couldn't handle it)...
-       */
-      if (util_format_is_pure_sint(format)) {
-         util_format_write_4i(format, color->i, 0, &uc, 0, 0, 0, 1, 1);
-      }
-      else {
-         assert(util_format_is_pure_uint(format));
-         util_format_write_4ui(format, color->ui, 0, &uc, 0, 0, 0, 1, 1);
-      }
-   }
-   else {
-      util_pack_color(color->f, format, &uc);
-   }
+   util_pack_color_union(format, &uc, color);
 
    if (setup->state == SETUP_ACTIVE) {
       struct lp_scene *scene = setup->scene;

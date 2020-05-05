@@ -208,7 +208,7 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
        !(texImage->TexObject->Target == GL_TEXTURE_2D ||
          texImage->TexObject->Target == GL_TEXTURE_RECTANGLE) ||
        pixels == NULL ||
-       _mesa_is_bufferobj(packing->BufferObj) ||
+       packing->BufferObj ||
        packing->Alignment > 4 ||
        packing->SkipPixels > 0 ||
        packing->SkipRows > 0 ||
@@ -322,13 +322,13 @@ intel_upload_tex(struct gl_context * ctx,
    bool ok;
 
    /* Check that there is actually data to store. */
-   if (pixels == NULL && !_mesa_is_bufferobj(packing->BufferObj))
+   if (pixels == NULL && !packing->BufferObj)
       return;
 
    bool tex_busy = mt &&
       (brw_batch_references(&brw->batch, mt->bo) || brw_bo_busy(mt->bo));
 
-   if (_mesa_is_bufferobj(packing->BufferObj) || tex_busy ||
+   if (packing->BufferObj || tex_busy ||
        mt->aux_usage == ISL_AUX_USAGE_CCS_E) {
       ok = intel_texsubimage_blorp(brw, dims, texImage,
                                    xoffset, yoffset, zoffset,
@@ -756,7 +756,7 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
        !(texImage->TexObject->Target == GL_TEXTURE_2D ||
          texImage->TexObject->Target == GL_TEXTURE_RECTANGLE) ||
        pixels == NULL ||
-       _mesa_is_bufferobj(packing->BufferObj) ||
+       packing->BufferObj ||
        packing->Alignment > 4 ||
        packing->SkipPixels > 0 ||
        packing->SkipRows > 0 ||
@@ -867,7 +867,7 @@ intel_get_tex_sub_image(struct gl_context *ctx,
 
    DBG("%s\n", __func__);
 
-   if (_mesa_is_bufferobj(ctx->Pack.BufferObj)) {
+   if (ctx->Pack.BufferObj) {
       if (intel_gettexsubimage_blorp(brw, texImage,
                                      xoffset, yoffset, zoffset,
                                      width, height, depth, format, type,

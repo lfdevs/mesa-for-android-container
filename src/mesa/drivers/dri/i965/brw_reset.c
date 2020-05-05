@@ -35,7 +35,6 @@ GLenum
 brw_get_graphics_reset_status(struct gl_context *ctx)
 {
    struct brw_context *brw = brw_context(ctx);
-   __DRIscreen *dri_screen = brw->screen->driScrnPriv;
    struct drm_i915_reset_stats stats = { .ctx_id = brw->hw_ctx };
 
    /* If hardware contexts are not being used (or
@@ -51,7 +50,7 @@ brw_get_graphics_reset_status(struct gl_context *ctx)
    if (brw->reset_count != 0)
       return GL_NO_ERROR;
 
-   if (drmIoctl(dri_screen->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats) != 0)
+   if (drmIoctl(brw->screen->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats) != 0)
       return GL_NO_ERROR;
 
    /* A reset was observed while a batch from this context was executing.
@@ -77,10 +76,9 @@ brw_get_graphics_reset_status(struct gl_context *ctx)
 void
 brw_check_for_reset(struct brw_context *brw)
 {
-   __DRIscreen *dri_screen = brw->screen->driScrnPriv;
    struct drm_i915_reset_stats stats = { .ctx_id = brw->hw_ctx };
 
-   if (drmIoctl(dri_screen->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats) != 0)
+   if (drmIoctl(brw->screen->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats) != 0)
       return;
 
    if (stats.batch_active > 0 || stats.batch_pending > 0)

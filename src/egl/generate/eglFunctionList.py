@@ -213,5 +213,8 @@ EGL_FUNCTIONS = (
     _eglFunc("eglGetDisplayDriverName",              "display"),
     _eglFunc("eglGetDisplayDriverConfig",            "display"),
 
+    # EGL_KHR_partial_update
+    _eglFunc("eglSetDamageRegionKHR",                "display"),
+
 )
 

@@ -227,7 +227,6 @@ translate_texture_filter(unsigned filter)
       return TEXTURE_FILTER_NEAREST;
    case PIPE_TEX_FILTER_LINEAR:
       return TEXTURE_FILTER_LINEAR;
-   /* What about anisotropic? */
    default:
       DBG("Unhandled texture filter: %i", filter);
       return ETNA_NO_MATCH;

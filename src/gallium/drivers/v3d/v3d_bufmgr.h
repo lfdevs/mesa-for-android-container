@@ -96,7 +96,7 @@ v3d_bo_unreference(struct v3d_bo **bo)
                 mtx_lock(&screen->bo_handles_mutex);
 
                 if (pipe_reference(&(*bo)->reference, NULL)) {
-                        util_hash_table_remove(screen->bo_handles,
+                        _mesa_hash_table_remove_key(screen->bo_handles,
                                                (void *)(uintptr_t)(*bo)->handle);
                         v3d_bo_last_unreference(*bo);
                 }

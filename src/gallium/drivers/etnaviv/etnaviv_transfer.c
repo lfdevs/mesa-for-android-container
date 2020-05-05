@@ -195,6 +195,7 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
                   struct pipe_transfer **out_transfer)
 {
    struct etna_context *ctx = etna_context(pctx);
+   struct etna_screen *screen = ctx->screen;
    struct etna_resource *rsc = etna_resource(prsc);
    struct etna_transfer *trans;
    struct pipe_transfer *ptrans;
@@ -247,7 +248,7 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
       rsc = etna_resource(rsc->texture);
    } else if (rsc->ts_bo ||
               (rsc->layout != ETNA_LAYOUT_LINEAR &&
-               etna_resource_hw_tileable(ctx->specs.use_blt, prsc) &&
+               etna_resource_hw_tileable(screen->specs.use_blt, prsc) &&
                /* HALIGN 4 resources are incompatible with the resolve engine,
                 * so fall back to using software to detile this resource. */
                rsc->halign != TEXTURE_HALIGN_FOUR)) {
@@ -279,7 +280,7 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
          return NULL;
       }
 
-      if (!ctx->specs.use_blt) {
+      if (!screen->specs.use_blt) {
          /* Need to align the transfer region to satisfy RS restrictions, as we
           * really want to hit the RS blit path here.
           */

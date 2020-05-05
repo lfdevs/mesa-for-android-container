@@ -65,7 +65,8 @@ struct disasm_info {
 };
 
 void
-dump_assembly(void *assembly, struct disasm_info *disasm);
+dump_assembly(void *assembly, struct disasm_info *disasm,
+              const unsigned *block_latency);
 
 struct disasm_info *
 disasm_initialize(const struct gen_device_info *devinfo,

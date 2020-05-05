@@ -30,7 +30,7 @@ files_libintel_dev = files(
 libintel_dev = static_library(
   ['intel_dev'],
   files_libintel_dev,
-  include_directories : [inc_common, inc_intel, inc_include],
+  include_directories : [inc_include, inc_src, inc_intel],
   c_args : [c_vis_args, no_override_init_args],
 )
 

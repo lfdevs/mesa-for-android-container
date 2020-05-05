@@ -100,6 +100,12 @@ template <typename SIMD_T, SWR_FORMAT Format>
 INLINE Float<SIMD_T> SIMDCALL Clamp(Float<SIMD_T> const& v, uint32_t Component)
 {
     Float<SIMD_T> vComp = v;
+    if (Component >= 4 || Component < 0)
+    {
+	// Component shouldn't out of <0;3> range
+	assert(false);
+	return vComp;
+    }
     if (FormatTraits<Format>::isNormalized(Component))
     {
         if (FormatTraits<Format>::GetType(Component) == SWR_TYPE_UNORM)

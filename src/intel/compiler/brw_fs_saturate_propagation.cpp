@@ -25,6 +25,8 @@
 #include "brw_fs_live_variables.h"
 #include "brw_cfg.h"
 
+using namespace brw;
+
 /** @file brw_fs_saturate_propagation.cpp
  *
  * Implements a pass that propagates the SAT modifier from a MOV.SAT into the
@@ -43,7 +45,7 @@
  */
 
 static bool
-opt_saturate_propagation_local(fs_visitor *v, bblock_t *block)
+opt_saturate_propagation_local(const fs_live_variables &live, bblock_t *block)
 {
    bool progress = false;
    int ip = block->end_ip + 1;
@@ -59,8 +61,8 @@ opt_saturate_propagation_local(fs_visitor *v, bblock_t *block)
           inst->src[0].abs)
          continue;
 
-      int src_var = v->live_intervals->var_from_reg(inst->src[0]);
-      int src_end_ip = v->live_intervals->end[src_var];
+      int src_var = live.var_from_reg(inst->src[0]);
+      int src_end_ip = live.end[src_var];
 
       bool interfered = false;
       foreach_inst_in_block_reverse_starting_from(fs_inst, scan_inst, inst) {
@@ -149,12 +151,11 @@ opt_saturate_propagation_local(fs_visitor *v, bblock_t *block)
 bool
 fs_visitor::opt_saturate_propagation()
 {
+   const fs_live_variables &live = live_analysis.require();
    bool progress = false;
 
-   calculate_live_intervals();
-
    foreach_block (block, cfg) {
-      progress = opt_saturate_propagation_local(this, block) || progress;
+      progress = opt_saturate_propagation_local(live, block) || progress;
    }
 
    /* Live intervals are still valid. */

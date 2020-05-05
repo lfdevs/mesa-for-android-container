@@ -57,7 +57,10 @@ llvmpipe_create_gs_state(struct pipe_context *pipe,
    }
 
    /* copy stream output info */
-   state->no_tokens = !templ->tokens;
+   if (templ->type == PIPE_SHADER_IR_TGSI)
+      state->no_tokens = !templ->tokens;
+   else
+      state->no_tokens = FALSE;
    memcpy(&state->stream_output, &templ->stream_output, sizeof state->stream_output);
 
    if (templ->tokens || templ->type == PIPE_SHADER_IR_NIR) {

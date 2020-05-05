@@ -32,12 +32,14 @@
 #include "GL/internal/dri_interface.h"
 #include "dri2_priv.h"
 
-struct attribute_test_vector {
-   const char *glx_string;
-   const char *dri_string;
-   int glx_attribute;
-   int dri_attribute;
-};
+namespace {
+   struct attribute_test_vector {
+      const char *glx_string;
+      const char *dri_string;
+      int glx_attribute;
+      int dri_attribute;
+   };
+}
 
 #define E(g, d) { # g, # d, g, d }
 

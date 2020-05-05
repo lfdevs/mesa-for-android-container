@@ -257,6 +257,7 @@ nvc0_layer_validate(struct nvc0_context *nvc0)
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct nvc0_program *last;
    bool prog_selects_layer = false;
+   bool layer_viewport_relative = false;
 
    if (nvc0->gmtyprog)
       last = nvc0->gmtyprog;
@@ -265,11 +266,17 @@ nvc0_layer_validate(struct nvc0_context *nvc0)
    else
       last = nvc0->vertprog;
 
-   if (last)
+   if (last) {
       prog_selects_layer = !!(last->hdr[13] & (1 << 9));
+      layer_viewport_relative = last->vp.layer_viewport_relative;
+   }
 
    BEGIN_NVC0(push, NVC0_3D(LAYER), 1);
    PUSH_DATA (push, prog_selects_layer ? NVC0_3D_LAYER_USE_GP : 0);
+   if (nvc0->screen->eng3d->oclass >= GM200_3D_CLASS) {
+      IMMED_NVC0(push, NVC0_3D(LAYER_VIEWPORT_RELATIVE),
+                 layer_viewport_relative);
+   }
 }
 
 void

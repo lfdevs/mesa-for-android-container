@@ -31,7 +31,7 @@
 
 #include <stdio.h>
 #include "glheader.h"
-#include "imports.h"
+
 #include "blend.h"
 #include "buffers.h"
 #include "context.h"
@@ -45,6 +45,7 @@
 #include "texobj.h"
 #include "glformats.h"
 #include "state.h"
+#include "util/u_memory.h"
 
 
 
@@ -502,6 +503,7 @@ _mesa_update_framebuffer_visual(struct gl_context *ctx,
    }
 
    compute_depth_max(fb);
+   _mesa_update_allow_draw_out_of_order(ctx);
 }
 
 

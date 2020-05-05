@@ -45,6 +45,8 @@ struct draw_context;
 struct draw_stage;
 struct draw_vertex_shader;
 struct draw_geometry_shader;
+struct draw_tess_ctrl_shader;
+struct draw_tess_eval_shader;
 struct draw_fragment_shader;
 struct tgsi_sampler;
 struct tgsi_image;
@@ -152,6 +154,12 @@ draw_total_vs_outputs(const struct draw_context *draw);
 uint
 draw_total_gs_outputs(const struct draw_context *draw);
 
+uint
+draw_total_tcs_outputs(const struct draw_context *draw);
+
+uint
+draw_total_tes_outputs(const struct draw_context *draw);
+
 void
 draw_texture_sampler(struct draw_context *draw,
                      enum pipe_shader_type shader_type,
@@ -242,6 +250,26 @@ void draw_bind_geometry_shader(struct draw_context *draw,
 void draw_delete_geometry_shader(struct draw_context *draw,
                                  struct draw_geometry_shader *dvs);
 
+/*
+ * Tess shader functions
+ */
+struct draw_tess_ctrl_shader *
+draw_create_tess_ctrl_shader(struct draw_context *draw,
+                            const struct pipe_shader_state *shader);
+void draw_bind_tess_ctrl_shader(struct draw_context *draw,
+                                struct draw_tess_ctrl_shader *dvs);
+void draw_delete_tess_ctrl_shader(struct draw_context *draw,
+                                  struct draw_tess_ctrl_shader *dvs);
+struct draw_tess_eval_shader *
+draw_create_tess_eval_shader(struct draw_context *draw,
+                            const struct pipe_shader_state *shader);
+void draw_bind_tess_eval_shader(struct draw_context *draw,
+                                struct draw_tess_eval_shader *dvs);
+void draw_delete_tess_eval_shader(struct draw_context *draw,
+                                  struct draw_tess_eval_shader *dvs);
+void draw_set_tess_state(struct draw_context *draw,
+                         const float default_outer_level[4],
+                         const float default_inner_level[2]);
 
 /*
  * Vertex data functions

@@ -40,7 +40,7 @@ anv_get_perf(const struct gen_device_info *devinfo, int fd)
    /* We need DRM_I915_PERF_PROP_HOLD_PREEMPTION support, only available in
     * perf revision 2.
     */
-   if (anv_gem_get_param(fd, I915_PARAM_PERF_REVISION) < 3)
+   if (perf->i915_perf_version < 3)
       goto err;
 
    return perf;
@@ -82,6 +82,16 @@ anv_device_perf_open(struct anv_device *device, uint64_t metric_id)
 
    properties[p++] = DRM_I915_PERF_PROP_HOLD_PREEMPTION;
    properties[p++] = true;
+
+   /* If global SSEU is available, pin it to the default. This will ensure on
+    * Gen11 for instance we use the full EU array. Initially when perf was
+    * enabled we would use only half on Gen11 because of functional
+    * requirements.
+    */
+   if (device->physical->perf->i915_perf_version >= 4) {
+      properties[p++] = DRM_I915_PERF_PROP_GLOBAL_SSEU;
+      properties[p++] = (uintptr_t) &device->physical->perf->sseu;
+   }
 
    memset(&param, 0, sizeof(param));
    param.flags = 0;

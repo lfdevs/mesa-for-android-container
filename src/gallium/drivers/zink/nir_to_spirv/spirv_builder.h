@@ -94,6 +94,9 @@ spirv_builder_emit_builtin(struct spirv_builder *b, SpvId target,
                            SpvBuiltIn builtin);
 
 void
+spirv_builder_emit_index(struct spirv_builder *b, SpvId target, int index);
+
+void
 spirv_builder_emit_descriptor_set(struct spirv_builder *b, SpvId target,
                                   uint32_t descriptor_set);
 

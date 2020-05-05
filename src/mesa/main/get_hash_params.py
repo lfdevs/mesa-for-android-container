@@ -382,6 +382,9 @@ descriptor=[
   [ "MAX_DEPTH_STENCIL_FRAMEBUFFER_SAMPLES_AMD", "CONTEXT_INT(Const.MaxDepthStencilFramebufferSamples), extra_AMD_framebuffer_multisample_advanced" ],
   [ "NUM_SUPPORTED_MULTISAMPLE_MODES_AMD", "CONTEXT_INT(Const.NumSupportedMultisampleModes), extra_AMD_framebuffer_multisample_advanced" ],
   [ "SUPPORTED_MULTISAMPLE_MODES_AMD", "LOC_CUSTOM, TYPE_INT_N, 0, extra_AMD_framebuffer_multisample_advanced" ],
+
+# GL_NV_alpha_to_coverage_dither_control
+  [ "ALPHA_TO_COVERAGE_DITHER_MODE_NV", "CONTEXT_ENUM(Multisample.SampleAlphaToCoverageDitherControl ), NO_EXTRA" ],
 ]},
 
 # GLES3 is not a typo.
@@ -668,6 +671,12 @@ descriptor=[
 
 # INTEL_conservative_rasterization
   [ "CONSERVATIVE_RASTERIZATION_INTEL", "CONTEXT_BOOL(IntelConservativeRasterization), extra_INTEL_conservative_rasterization" ],
+
+# GL_NV_viewport_swizzle
+  [ "VIEWPORT_SWIZZLE_X_NV", "LOC_CUSTOM, TYPE_ENUM, 0, extra_NV_viewport_swizzle" ],
+  [ "VIEWPORT_SWIZZLE_Y_NV", "LOC_CUSTOM, TYPE_ENUM, 0, extra_NV_viewport_swizzle" ],
+  [ "VIEWPORT_SWIZZLE_Z_NV", "LOC_CUSTOM, TYPE_ENUM, 0, extra_NV_viewport_swizzle" ],
+  [ "VIEWPORT_SWIZZLE_W_NV", "LOC_CUSTOM, TYPE_ENUM, 0, extra_NV_viewport_swizzle" ],
 ]},
 
 # Enums in OpenGL and ES 3.2

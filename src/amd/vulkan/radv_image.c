@@ -81,6 +81,14 @@ radv_use_tc_compat_htile_for_image(struct radv_device *device,
 	if (pCreateInfo->mipLevels > 1)
 		return false;
 
+	/* Do not enable TC-compatible HTILE if the image isn't readable by a
+	 * shader because no texture fetches will happen.
+	 */
+	if (!(pCreateInfo->usage & (VK_IMAGE_USAGE_SAMPLED_BIT |
+				    VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+				    VK_IMAGE_USAGE_TRANSFER_SRC_BIT)))
+		return false;
+
 	/* FIXME: for some reason TC compat with 2/4/8 samples breaks some cts
 	 * tests - disable for now. On GFX10 D32_SFLOAT is affected as well.
 	 */
@@ -429,11 +437,8 @@ radv_init_surface(struct radv_device *device,
 		unreachable("unhandled image type");
 	}
 
-	if (is_depth) {
+	if (is_depth)
 		surface->flags |= RADEON_SURF_ZBUFFER;
-		if (radv_use_tc_compat_htile_for_image(device, pCreateInfo, image_format))
-			surface->flags |= RADEON_SURF_TC_COMPATIBLE_HTILE;
-	}
 
 	if (is_stencil)
 		surface->flags |= RADEON_SURF_SBUFFER;
@@ -443,8 +448,6 @@ radv_init_surface(struct radv_device *device,
 	    vk_format_get_blocksizebits(image_format) == 128 &&
 	    vk_format_is_compressed(image_format))
 		surface->flags |= RADEON_SURF_NO_RENDER_TARGET;
-
-	surface->flags |= RADEON_SURF_OPTIMIZE_FOR_SPACE;
 
 	if (!radv_use_dcc_for_image(device, image, pCreateInfo, image_format))
 		surface->flags |= RADEON_SURF_DISABLE_DCC;
@@ -1323,7 +1326,8 @@ radv_image_can_enable_cmask(struct radv_image *image)
 static inline bool
 radv_image_can_enable_fmask(struct radv_image *image)
 {
-	return image->info.samples > 1 && vk_format_is_color(image->vk_format);
+	return image->info.samples > 1 &&
+	       image->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 }
 
 static inline bool
@@ -1344,6 +1348,8 @@ static void radv_image_disable_htile(struct radv_image *image)
 {
 	for (unsigned i = 0; i < image->plane_count; ++i)
 		image->planes[i].surface.htile_size = 0;
+
+	image->tc_compatible_htile = false;
 }
 
 VkResult
@@ -1415,7 +1421,8 @@ radv_image_create_layout(struct radv_device *device,
 			/* Otherwise, try to enable HTILE for depth surfaces. */
 			if (radv_image_can_enable_htile(image) &&
 			    !(device->instance->debug_flags & RADV_DEBUG_NO_HIZ)) {
-				image->tc_compatible_htile = image->planes[0].surface.flags & RADEON_SURF_TC_COMPATIBLE_HTILE;
+				if (!image->planes[0].surface.tc_compatible_htile_allowed)
+					image->tc_compatible_htile = false;
 				radv_image_alloc_htile(device, image);
 			} else {
 				radv_image_disable_htile(image);
@@ -1492,6 +1499,10 @@ radv_image_create(VkDevice _device,
 	if (!vk_format_is_depth_or_stencil(format) && !image->shareable) {
 		image->info.surf_index = &device->image_mrt_offset_counter;
 	}
+
+	image->tc_compatible_htile =
+		radv_use_tc_compat_htile_for_image(device, create_info->vk_info,
+		                                   image->vk_format);
 
 	for (unsigned plane = 0; plane < image->plane_count; ++plane) {
 		radv_init_surface(device, image, &image->planes[plane].surface, plane, pCreateInfo, format);
@@ -1743,29 +1754,28 @@ radv_image_view_init(struct radv_image_view *iview,
 	}
 }
 
-bool radv_layout_has_htile(const struct radv_image *image,
-                           VkImageLayout layout,
-			   bool in_render_loop,
-                           unsigned queue_mask)
-{
-	if (radv_image_is_tc_compat_htile(image))
-		return layout != VK_IMAGE_LAYOUT_GENERAL;
-
-	return radv_image_has_htile(image) &&
-	       (layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
-		layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR ||
-		layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR ||
-	        (layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-	         queue_mask == (1u << RADV_QUEUE_GENERAL)));
-}
-
 bool radv_layout_is_htile_compressed(const struct radv_image *image,
                                      VkImageLayout layout,
 				     bool in_render_loop,
                                      unsigned queue_mask)
 {
-	if (radv_image_is_tc_compat_htile(image))
+	if (radv_image_is_tc_compat_htile(image)) {
+		if (layout == VK_IMAGE_LAYOUT_GENERAL &&
+		    !in_render_loop &&
+		    !(image->usage & VK_IMAGE_USAGE_STORAGE_BIT)) {
+			/* It should be safe to enable TC-compat HTILE with
+			 * VK_IMAGE_LAYOUT_GENERAL if we are not in a render
+			 * loop and if the image doesn't have the storage bit
+			 * set. This improves performance for apps that use
+			 * GENERAL for the main depth pass because this allows
+			 * compression and this reduces the number of
+			 * decompressions from/to GENERAL.
+			 */
+			return true;
+		}
+
 		return layout != VK_IMAGE_LAYOUT_GENERAL;
+	}
 
 	return radv_image_has_htile(image) &&
 	       (layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||

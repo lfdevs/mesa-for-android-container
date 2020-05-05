@@ -52,6 +52,9 @@ tgsi_get_gl_frag_result_semantic(gl_frag_result frag_result,
                                  unsigned *semantic_name,
                                  unsigned *semantic_index);
 
+enum tgsi_semantic
+tgsi_get_sysval_semantic(unsigned sysval);
+
 static inline enum pipe_shader_type
 pipe_shader_type_from_mesa(gl_shader_stage stage)
 {

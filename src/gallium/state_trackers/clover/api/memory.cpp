@@ -29,15 +29,20 @@ using namespace clover;
 
 namespace {
    cl_mem_flags
-   validate_flags(cl_mem d_parent, cl_mem_flags d_flags) {
+   validate_flags(cl_mem d_parent, cl_mem_flags d_flags, bool svm) {
       const cl_mem_flags dev_access_flags =
          CL_MEM_READ_WRITE | CL_MEM_WRITE_ONLY | CL_MEM_READ_ONLY;
       const cl_mem_flags host_ptr_flags =
          CL_MEM_USE_HOST_PTR | CL_MEM_ALLOC_HOST_PTR | CL_MEM_COPY_HOST_PTR;
       const cl_mem_flags host_access_flags =
          CL_MEM_HOST_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_HOST_NO_ACCESS;
+      const cl_mem_flags svm_flags =
+         CL_MEM_SVM_FINE_GRAIN_BUFFER | CL_MEM_SVM_ATOMICS;
+
       const cl_mem_flags valid_flags =
-         dev_access_flags | host_access_flags | (d_parent ? 0 : host_ptr_flags);
+         dev_access_flags
+            | (svm || d_parent ? 0 : host_ptr_flags)
+            | (svm ? svm_flags : host_access_flags);
 
       if ((d_flags & ~valid_flags) ||
           util_bitcount(d_flags & dev_access_flags) > 1 ||
@@ -46,6 +51,10 @@ namespace {
 
       if ((d_flags & CL_MEM_USE_HOST_PTR) &&
           (d_flags & (CL_MEM_COPY_HOST_PTR | CL_MEM_ALLOC_HOST_PTR)))
+         throw error(CL_INVALID_VALUE);
+
+      if ((d_flags & CL_MEM_SVM_ATOMICS) &&
+          !(d_flags & CL_MEM_SVM_FINE_GRAIN_BUFFER))
          throw error(CL_INVALID_VALUE);
 
       if (d_parent) {
@@ -77,7 +86,7 @@ namespace {
 CLOVER_API cl_mem
 clCreateBuffer(cl_context d_ctx, cl_mem_flags d_flags, size_t size,
                void *host_ptr, cl_int *r_errcode) try {
-   const cl_mem_flags flags = validate_flags(NULL, d_flags);
+   const cl_mem_flags flags = validate_flags(NULL, d_flags, false);
    auto &ctx = obj(d_ctx);
 
    if (bool(host_ptr) != bool(flags & (CL_MEM_USE_HOST_PTR |
@@ -103,7 +112,7 @@ clCreateSubBuffer(cl_mem d_mem, cl_mem_flags d_flags,
                   cl_buffer_create_type op,
                   const void *op_info, cl_int *r_errcode) try {
    auto &parent = obj<root_buffer>(d_mem);
-   const cl_mem_flags flags = validate_flags(d_mem, d_flags);
+   const cl_mem_flags flags = validate_flags(d_mem, d_flags, false);
 
    if (op == CL_BUFFER_CREATE_TYPE_REGION) {
       auto reg = reinterpret_cast<const cl_buffer_region *>(op_info);
@@ -163,7 +172,7 @@ clCreateImage(cl_context d_ctx, cl_mem_flags d_flags,
                                          CL_MEM_COPY_HOST_PTR)))
       throw error(CL_INVALID_HOST_PTR);
 
-   const cl_mem_flags flags = validate_flags(desc->buffer, d_flags);
+   const cl_mem_flags flags = validate_flags(desc->buffer, d_flags, false);
 
    if (!supported_formats(ctx, desc->image_type).count(*format))
       throw error(CL_IMAGE_FORMAT_NOT_SUPPORTED);
@@ -249,7 +258,7 @@ clGetSupportedImageFormats(cl_context d_ctx, cl_mem_flags flags,
    auto &ctx = obj(d_ctx);
    auto formats = supported_formats(ctx, type);
 
-   validate_flags(NULL, flags);
+   validate_flags(NULL, flags, false);
 
    if (r_buf && !r_count)
       throw error(CL_INVALID_VALUE);
@@ -311,6 +320,16 @@ clGetMemObjectInfo(cl_mem d_mem, cl_mem_info param,
    case CL_MEM_OFFSET: {
       sub_buffer *sub = dynamic_cast<sub_buffer *>(&mem);
       buf.as_scalar<size_t>() = (sub ? sub->offset() : 0);
+      break;
+   }
+   case CL_MEM_USES_SVM_POINTER:
+   case CL_MEM_USES_SVM_POINTER_ARM: {
+      // with system SVM all host ptrs are SVM pointers
+      // TODO: once we support devices with lower levels of SVM, we have to
+      // check the ptr in more detail
+      const bool system_svm = all_of(std::mem_fn(&device::has_system_svm),
+                                     mem.context().devices());
+      buf.as_scalar<cl_bool>() = mem.host_ptr() && system_svm;
       break;
    }
    default:
@@ -425,4 +444,54 @@ clEnqueueFillImage(cl_command_queue command_queue, cl_mem image,
                    cl_event *event) {
    CLOVER_NOT_SUPPORTED_UNTIL("1.2");
    return CL_INVALID_VALUE;
+}
+
+CLOVER_API void *
+clSVMAlloc(cl_context d_ctx,
+           cl_svm_mem_flags flags,
+           size_t size,
+           unsigned int alignment) try {
+   auto &ctx = obj(d_ctx);
+   validate_flags(NULL, flags, true);
+
+   if (!size ||
+       size > fold(minimum(), cl_ulong(ULONG_MAX),
+                   map(std::mem_fn(&device::max_mem_alloc_size), ctx.devices())))
+      return nullptr;
+
+   if (!util_is_power_of_two_or_zero(alignment))
+      return nullptr;
+
+   if (!alignment)
+      alignment = 0x80; // sizeof(long16)
+
+   bool can_emulate = all_of(std::mem_fn(&device::has_system_svm), ctx.devices());
+   if (can_emulate) {
+      // we can ignore all the flags as it's not required to honor them.
+      void *ptr = nullptr;
+      if (alignment < sizeof(void*))
+         alignment = sizeof(void*);
+      posix_memalign(&ptr, alignment, size);
+      return ptr;
+   }
+
+   CLOVER_NOT_SUPPORTED_UNTIL("2.0");
+   return nullptr;
+
+} catch (error &e) {
+   return nullptr;
+}
+
+CLOVER_API void
+clSVMFree(cl_context d_ctx,
+          void *svm_pointer) try {
+   auto &ctx = obj(d_ctx);
+   bool can_emulate = all_of(std::mem_fn(&device::has_system_svm), ctx.devices());
+
+   if (can_emulate)
+      return free(svm_pointer);
+
+   CLOVER_NOT_SUPPORTED_UNTIL("2.0");
+
+} catch (error &e) {
 }

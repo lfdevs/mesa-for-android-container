@@ -141,6 +141,12 @@ swr_is_format_supported(struct pipe_screen *_screen,
          return false;
    }
 
+   if (bind & PIPE_BIND_VERTEX_BUFFER) {
+      if (mesa_to_swr_format(format) == (SWR_FORMAT)-1) {
+         return false;
+      }
+   }
+
    if (format_desc->layout == UTIL_FORMAT_LAYOUT_ASTC ||
        format_desc->layout == UTIL_FORMAT_LAYOUT_FXT1)
    {

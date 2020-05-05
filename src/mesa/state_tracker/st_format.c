@@ -1,9 +1,9 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2007 VMware, Inc.
  * Copyright (c) 2008-2010 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -11,11 +11,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -23,7 +23,7 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 
@@ -32,7 +32,7 @@
  * \author Brian Paul
  */
 
-#include "main/imports.h"
+
 #include "main/context.h"
 #include "main/enums.h"
 #include "main/formats.h"
@@ -229,8 +229,9 @@ static const struct format_mapping format_map[] = {
    },
    {
       { GL_R3_G3_B2, 0 },
-      { PIPE_FORMAT_B2G3R3_UNORM, PIPE_FORMAT_B5G6R5_UNORM,
-        PIPE_FORMAT_B5G5R5A1_UNORM, DEFAULT_RGB_FORMATS }
+      { PIPE_FORMAT_B2G3R3_UNORM, PIPE_FORMAT_R3G3B2_UNORM,
+        PIPE_FORMAT_B5G6R5_UNORM, PIPE_FORMAT_B5G5R5A1_UNORM,
+        DEFAULT_RGB_FORMATS }
    },
    {
       { GL_RGB4 },

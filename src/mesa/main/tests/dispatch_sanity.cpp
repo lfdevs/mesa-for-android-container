@@ -43,7 +43,7 @@
 
 #include "GL/gl.h"
 #include "GL/glext.h"
-#include "main/compiler.h"
+#include "util/compiler.h"
 #include "main/api_exec.h"
 #include "main/context.h"
 #include "main/remap.h"
@@ -110,7 +110,7 @@ DispatchSanity_test::SetUpCtx(gl_api api, unsigned int version)
                             &visual,
                             NULL, // share_list
                             &driver_functions);
-   _vbo_CreateContext(&ctx);
+   _vbo_CreateContext(&ctx, false);
 
    _mesa_override_extensions(&ctx);
    ctx.Version = version;
@@ -563,6 +563,9 @@ const struct function common_desktop_functions_possible[] = {
    { "glEGLImageTargetTexStorageEXT", 31, -1 },
    { "glEGLImageTargetTextureStorageEXT", 31, -1 },
 
+   /* GL_NV_copy_image */
+   { "glCopyImageSubDataNV", 31, -1 },
+
    /* GL 3.2 */
    { "glGetInteger64i_v", 32, -1 },
    { "glGetBufferParameteri64v", 32, -1 },
@@ -907,6 +910,10 @@ const struct function common_desktop_functions_possible[] = {
    { "glScissorIndexedv", 43, -1 },
    { "glDepthRangeArrayv", 43, -1 },
    { "glDepthRangeIndexed", 43, -1 },
+
+/* GL 4.4 */
+   /* GL_NV_alpha_to_coverage_dither_control */
+   { "glAlphaToCoverageDitherControlNV", 44, -1 },
 
 /* GL 4.5 */
    /* aliased versions checked above */
@@ -1431,6 +1438,9 @@ const struct function common_desktop_functions_possible[] = {
    { "glProgramUniform2ui64vARB", 40, -1 },
    { "glProgramUniform3ui64vARB", 40, -1 },
    { "glProgramUniform4ui64vARB", 40, -1 },
+
+   /* GL_NV_viewport_swizzle */
+   { "glViewportSwizzleNV", 11, -1 },
 
    { NULL, 0, -1 }
 };
@@ -2644,6 +2654,8 @@ const struct function gles3_functions_possible[] = {
    /* EXT_EGL_image_storage */
    { "glEGLImageTargetTexStorageEXT", 30, -1 },
 
+   { "glDrawElementsInstancedBaseVertex", 30, -1 },
+
    { NULL, 0, -1 }
 };
 
@@ -2766,6 +2778,9 @@ const struct function gles31_functions_possible[] = {
    { "glFramebufferSampleLocationsfvARB", 31, -1 },
    { "glNamedFramebufferSampleLocationsfvARB", 31, -1 },
    { "glEvaluateDepthValuesARB", 31, -1 },
+
+   /* GL_NV_viewport_swizzle */
+   { "glViewportSwizzleNV", 31, -1 },
 
    { NULL, 0, -1 },
  };

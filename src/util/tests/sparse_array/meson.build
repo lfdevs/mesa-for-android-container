@@ -24,7 +24,8 @@ test(
     'multi_threaded',
     'multi_threaded.c',
     dependencies : [idep_mesautil],
-    include_directories : inc_common,
+    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
   ),
   suite : ['util'],
+  timeout: 60,
 )

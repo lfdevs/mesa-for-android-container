@@ -244,7 +244,7 @@ want_depth_pma_fix(struct anv_cmd_buffer *cmd_buffer)
       return false;
 
    /* 3DSTATE_PS_EXTRA::PixelShaderValid */
-   struct anv_pipeline *pipeline = cmd_buffer->state.gfx.base.pipeline;
+   struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
    if (!anv_pipeline_has_stage(pipeline, MESA_SHADER_FRAGMENT))
       return false;
 
@@ -354,7 +354,7 @@ want_stencil_pma_fix(struct anv_cmd_buffer *cmd_buffer)
    assert(ds_iview && ds_iview->image->planes[0].aux_usage == ISL_AUX_USAGE_HIZ);
 
    /* 3DSTATE_PS_EXTRA::PixelShaderValid */
-   struct anv_pipeline *pipeline = cmd_buffer->state.gfx.base.pipeline;
+   struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
    if (!anv_pipeline_has_stage(pipeline, MESA_SHADER_FRAGMENT))
       return false;
 
@@ -409,7 +409,7 @@ want_stencil_pma_fix(struct anv_cmd_buffer *cmd_buffer)
 void
 genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
 {
-   struct anv_pipeline *pipeline = cmd_buffer->state.gfx.base.pipeline;
+   struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
    struct anv_dynamic_state *d = &cmd_buffer->state.gfx.dynamic;
 
    if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |

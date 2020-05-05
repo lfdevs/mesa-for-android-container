@@ -1,9 +1,9 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2007 VMware, Inc.
  * Copyright (c) 2008 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -11,11 +11,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -23,12 +23,12 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 #include "compiler/nir/nir.h"
 
-#include "main/imports.h"
+
 #include "main/context.h"
 #include "main/macros.h"
 #include "main/spirv_extensions.h"
@@ -39,6 +39,7 @@
 #include "pipe/p_screen.h"
 #include "tgsi/tgsi_from_mesa.h"
 #include "util/u_math.h"
+#include "util/u_memory.h"
 
 #include "st_context.h"
 #include "st_debug.h"
@@ -331,6 +332,19 @@ void st_init_limits(struct pipe_screen *screen,
        * because it can actually optimize SSBO access.
        */
       options->LowerBufferInterfaceBlocks = !prefer_nir;
+
+      if (sh == MESA_SHADER_VERTEX) {
+         if (screen->get_param(screen, PIPE_CAP_VIEWPORT_TRANSFORM_LOWERED))
+            options->LowerBuiltinVariablesXfb |= VARYING_BIT_POS;
+         if (screen->get_param(screen, PIPE_CAP_PSIZ_CLAMPED))
+            options->LowerBuiltinVariablesXfb |= VARYING_BIT_PSIZ;
+      }
+
+      /* Initialize lower precision shader compiler option based on
+       * the value of PIPE_SHADER_CAP_FP16.
+       */
+      options->LowerPrecision =
+         screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_FP16);
    }
 
    c->MaxUserAssignableUniformLocations =
@@ -542,6 +556,9 @@ void st_init_limits(struct pipe_screen *screen,
    c->AllowMappedBuffersDuringExecution =
       screen->get_param(screen, PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION);
 
+   c->BufferCreateMapUnsynchronizedThreadSafe =
+      screen->get_param(screen, PIPE_CAP_MAP_UNSYNCHRONIZED_THREAD_SAFE);
+
    c->UseSTD430AsDefaultPacking =
       screen->get_param(screen, PIPE_CAP_LOAD_CONSTBUF);
 
@@ -559,6 +576,15 @@ void st_init_limits(struct pipe_screen *screen,
    temp = screen->get_param(screen, PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES);
    if (temp > 0 && c->MaxCombinedShaderOutputResources > temp)
       c->MaxCombinedShaderOutputResources = temp;
+
+   c->VertexBufferOffsetIsInt32 =
+      screen->get_param(screen, PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET);
+
+   c->MultiDrawWithUserIndices =
+      screen->get_param(screen, PIPE_CAP_DRAW_INFO_START_WITH_USER_INDICES);
+
+   c->glBeginEndBufferSize =
+      screen->get_param(screen, PIPE_CAP_GL_BEGIN_END_BUFFER_SIZE);
 }
 
 
@@ -776,12 +802,15 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(INTEL_conservative_rasterization), PIPE_CAP_CONSERVATIVE_RASTER_INNER_COVERAGE },
       { o(INTEL_shader_atomic_float_minmax), PIPE_CAP_ATOMIC_FLOAT_MINMAX              },
       { o(MESA_tile_raster_order),           PIPE_CAP_TILE_RASTER_ORDER                },
+      { o(NV_alpha_to_coverage_dither_control), PIPE_CAP_ALPHA_TO_COVERAGE_DITHER_CONTROL },
       { o(NV_compute_shader_derivatives),    PIPE_CAP_COMPUTE_SHADER_DERIVATIVES       },
       { o(NV_conditional_render),            PIPE_CAP_CONDITIONAL_RENDER               },
       { o(NV_fill_rectangle),                PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE      },
       { o(NV_primitive_restart),             PIPE_CAP_PRIMITIVE_RESTART                },
       { o(NV_shader_atomic_float),           PIPE_CAP_TGSI_ATOMFADD                    },
       { o(NV_texture_barrier),               PIPE_CAP_TEXTURE_BARRIER                  },
+      { o(NV_viewport_array2),               PIPE_CAP_VIEWPORT_MASK                    },
+      { o(NV_viewport_swizzle),              PIPE_CAP_VIEWPORT_SWIZZLE                 },
       { o(NVX_gpu_memory_info),              PIPE_CAP_QUERY_MEMORY_INFO                },
       /* GL_NV_point_sprite is not supported by gallium because we don't
        * support the GL_POINT_SPRITE_R_MODE_NV option. */
@@ -790,6 +819,7 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(OES_texture_float_linear),         PIPE_CAP_TEXTURE_FLOAT_LINEAR             },
       { o(OES_texture_half_float_linear),    PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR        },
       { o(OES_texture_view),                 PIPE_CAP_SAMPLER_VIEW_TARGET              },
+      { o(INTEL_blackhole_render),           PIPE_CAP_FRONTEND_NOOP,                   },
    };
 
    /* Required: render target and sampler support */
@@ -1037,6 +1067,7 @@ void st_init_extensions(struct pipe_screen *screen,
    extensions->MESA_framebuffer_flip_y = GL_TRUE;
    extensions->MESA_pack_invert = GL_TRUE;
 
+   extensions->NV_copy_image = GL_TRUE;
    extensions->NV_fog_distance = GL_TRUE;
    extensions->NV_texture_env_combine4 = GL_TRUE;
    extensions->NV_texture_rectangle = GL_TRUE;
@@ -1415,6 +1446,9 @@ void st_init_extensions(struct pipe_screen *screen,
          consts->DisableVaryingPacking = GL_TRUE;
    }
 
+   if (!screen->get_param(screen, PIPE_CAP_PACKED_STREAM_OUTPUT))
+      consts->DisableTransformFeedbackPacking = GL_TRUE;
+
    unsigned max_fb_fetch_rts = screen->get_param(screen, PIPE_CAP_FBFETCH);
    bool coherent_fb_fetch =
       screen->get_param(screen, PIPE_CAP_FBFETCH_COHERENT);
@@ -1677,11 +1711,23 @@ void st_init_extensions(struct pipe_screen *screen,
       struct spirv_supported_capabilities *spirv_caps = &consts->SpirVCapabilities;
 
       spirv_caps->atomic_storage             = extensions->ARB_shader_atomic_counters;
+      spirv_caps->demote_to_helper_invocation = extensions->EXT_demote_to_helper_invocation;
       spirv_caps->draw_parameters            = extensions->ARB_shader_draw_parameters;
       spirv_caps->float64                    = extensions->ARB_gpu_shader_fp64;
       spirv_caps->geometry_streams           = extensions->ARB_gpu_shader5;
+      spirv_caps->image_ms_array             = extensions->ARB_shader_image_load_store &&
+                                               consts->MaxImageSamples > 1;
+      spirv_caps->image_read_without_format  = extensions->EXT_shader_image_load_formatted;
       spirv_caps->image_write_without_format = extensions->ARB_shader_image_load_store;
       spirv_caps->int64                      = extensions->ARB_gpu_shader_int64;
+      spirv_caps->post_depth_coverage        = extensions->ARB_post_depth_coverage;
+      spirv_caps->shader_clock               = extensions->ARB_shader_clock;
+      spirv_caps->shader_viewport_index_layer = extensions->ARB_shader_viewport_layer_array;
+      spirv_caps->stencil_export             = extensions->ARB_shader_stencil_export;
+      spirv_caps->storage_image_ms           = extensions->ARB_shader_image_load_store &&
+                                               consts->MaxImageSamples > 1;
+      spirv_caps->subgroup_ballot            = extensions->ARB_shader_ballot;
+      spirv_caps->subgroup_vote              = extensions->ARB_shader_group_vote;
       spirv_caps->tessellation               = extensions->ARB_tessellation_shader;
       spirv_caps->transform_feedback         = extensions->ARB_transform_feedback3;
       spirv_caps->variable_pointers          =
@@ -1691,4 +1737,6 @@ void st_init_extensions(struct pipe_screen *screen,
       consts->SpirVExtensions = CALLOC_STRUCT(spirv_supported_extensions);
       _mesa_fill_supported_spirv_extensions(consts->SpirVExtensions, spirv_caps);
    }
+
+   consts->AllowDrawOutOfOrder = options->allow_draw_out_of_order;
 }

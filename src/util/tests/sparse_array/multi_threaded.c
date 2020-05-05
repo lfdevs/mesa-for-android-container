@@ -72,6 +72,8 @@ run_test(unsigned run_idx)
       uint32_t *elem = util_sparse_array_get(&arr, i);
       assert(*elem == 0 || *elem == i);
    }
+
+   util_sparse_array_finish(&arr);
 }
 
 int

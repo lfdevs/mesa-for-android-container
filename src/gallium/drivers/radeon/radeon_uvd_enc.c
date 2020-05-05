@@ -25,109 +25,90 @@
  *
  **************************************************************************/
 
-#include <stdio.h>
-
-#include "pipe/p_video_codec.h"
-
-#include "util/u_video.h"
-#include "util/u_memory.h"
-
-#include "vl/vl_video_buffer.h"
-
-#include "radeonsi/si_pipe.h"
-#include "radeon_video.h"
 #include "radeon_uvd_enc.h"
 
-#define UVD_HEVC_LEVEL_1       30
-#define UVD_HEVC_LEVEL_2       60
-#define UVD_HEVC_LEVEL_2_1     63
-#define UVD_HEVC_LEVEL_3       90
-#define UVD_HEVC_LEVEL_3_1     93
-#define UVD_HEVC_LEVEL_4       120
-#define UVD_HEVC_LEVEL_4_1     123
-#define UVD_HEVC_LEVEL_5       150
-#define UVD_HEVC_LEVEL_5_1     153
-#define UVD_HEVC_LEVEL_5_2     156
-#define UVD_HEVC_LEVEL_6       180
-#define UVD_HEVC_LEVEL_6_1     183
-#define UVD_HEVC_LEVEL_6_2     186
+#include "pipe/p_video_codec.h"
+#include "radeon_video.h"
+#include "radeonsi/si_pipe.h"
+#include "util/u_memory.h"
+#include "util/u_video.h"
+#include "vl/vl_video_buffer.h"
 
-static void
-radeon_uvd_enc_get_param(struct radeon_uvd_encoder *enc,
-                         struct pipe_h265_enc_picture_desc *pic)
+#include <stdio.h>
+
+#define UVD_HEVC_LEVEL_1   30
+#define UVD_HEVC_LEVEL_2   60
+#define UVD_HEVC_LEVEL_2_1 63
+#define UVD_HEVC_LEVEL_3   90
+#define UVD_HEVC_LEVEL_3_1 93
+#define UVD_HEVC_LEVEL_4   120
+#define UVD_HEVC_LEVEL_4_1 123
+#define UVD_HEVC_LEVEL_5   150
+#define UVD_HEVC_LEVEL_5_1 153
+#define UVD_HEVC_LEVEL_5_2 156
+#define UVD_HEVC_LEVEL_6   180
+#define UVD_HEVC_LEVEL_6_1 183
+#define UVD_HEVC_LEVEL_6_2 186
+
+static void radeon_uvd_enc_get_param(struct radeon_uvd_encoder *enc,
+                                     struct pipe_h265_enc_picture_desc *pic)
 {
    enc->enc_pic.picture_type = pic->picture_type;
    enc->enc_pic.frame_num = pic->frame_num;
    enc->enc_pic.pic_order_cnt = pic->pic_order_cnt;
    enc->enc_pic.pic_order_cnt_type = pic->pic_order_cnt_type;
    enc->enc_pic.not_referenced = pic->not_referenced;
-   enc->enc_pic.is_iframe =
-      (pic->picture_type == PIPE_H265_ENC_PICTURE_TYPE_IDR)
-      || (pic->picture_type == PIPE_H265_ENC_PICTURE_TYPE_I);
+   enc->enc_pic.is_iframe = (pic->picture_type == PIPE_H265_ENC_PICTURE_TYPE_IDR) ||
+                            (pic->picture_type == PIPE_H265_ENC_PICTURE_TYPE_I);
    enc->enc_pic.crop_left = 0;
-   enc->enc_pic.crop_right =
-      (align(enc->base.width, 16) - enc->base.width) / 2;
+   enc->enc_pic.crop_right = (align(enc->base.width, 16) - enc->base.width) / 2;
    enc->enc_pic.crop_top = 0;
-   enc->enc_pic.crop_bottom =
-      (align(enc->base.height, 16) - enc->base.height) / 2;
+   enc->enc_pic.crop_bottom = (align(enc->base.height, 16) - enc->base.height) / 2;
    enc->enc_pic.general_tier_flag = pic->seq.general_tier_flag;
    enc->enc_pic.general_profile_idc = pic->seq.general_profile_idc;
    enc->enc_pic.general_level_idc = pic->seq.general_level_idc;
-   enc->enc_pic.max_poc =
-      MAX2(16, util_next_power_of_two(pic->seq.intra_period));
+   enc->enc_pic.max_poc = MAX2(16, util_next_power_of_two(pic->seq.intra_period));
    enc->enc_pic.log2_max_poc = 0;
    for (int i = enc->enc_pic.max_poc; i != 0; enc->enc_pic.log2_max_poc++)
       i = (i >> 1);
    enc->enc_pic.chroma_format_idc = pic->seq.chroma_format_idc;
-   enc->enc_pic.pic_width_in_luma_samples =
-      pic->seq.pic_width_in_luma_samples;
-   enc->enc_pic.pic_height_in_luma_samples =
-      pic->seq.pic_height_in_luma_samples;
+   enc->enc_pic.pic_width_in_luma_samples = pic->seq.pic_width_in_luma_samples;
+   enc->enc_pic.pic_height_in_luma_samples = pic->seq.pic_height_in_luma_samples;
    enc->enc_pic.log2_diff_max_min_luma_coding_block_size =
       pic->seq.log2_diff_max_min_luma_coding_block_size;
    enc->enc_pic.log2_min_transform_block_size_minus2 =
       pic->seq.log2_min_transform_block_size_minus2;
    enc->enc_pic.log2_diff_max_min_transform_block_size =
       pic->seq.log2_diff_max_min_transform_block_size;
-   enc->enc_pic.max_transform_hierarchy_depth_inter =
-      pic->seq.max_transform_hierarchy_depth_inter;
-   enc->enc_pic.max_transform_hierarchy_depth_intra =
-      pic->seq.max_transform_hierarchy_depth_intra;
-   enc->enc_pic.log2_parallel_merge_level_minus2 =
-      pic->pic.log2_parallel_merge_level_minus2;
+   enc->enc_pic.max_transform_hierarchy_depth_inter = pic->seq.max_transform_hierarchy_depth_inter;
+   enc->enc_pic.max_transform_hierarchy_depth_intra = pic->seq.max_transform_hierarchy_depth_intra;
+   enc->enc_pic.log2_parallel_merge_level_minus2 = pic->pic.log2_parallel_merge_level_minus2;
    enc->enc_pic.bit_depth_luma_minus8 = pic->seq.bit_depth_luma_minus8;
    enc->enc_pic.bit_depth_chroma_minus8 = pic->seq.bit_depth_chroma_minus8;
    enc->enc_pic.nal_unit_type = pic->pic.nal_unit_type;
    enc->enc_pic.max_num_merge_cand = pic->slice.max_num_merge_cand;
-   enc->enc_pic.sample_adaptive_offset_enabled_flag =
-      pic->seq.sample_adaptive_offset_enabled_flag;
-   enc->enc_pic.pcm_enabled_flag = 0;   /*HW not support PCM */
-   enc->enc_pic.sps_temporal_mvp_enabled_flag =
-      pic->seq.sps_temporal_mvp_enabled_flag;
+   enc->enc_pic.sample_adaptive_offset_enabled_flag = pic->seq.sample_adaptive_offset_enabled_flag;
+   enc->enc_pic.pcm_enabled_flag = 0; /*HW not support PCM */
+   enc->enc_pic.sps_temporal_mvp_enabled_flag = pic->seq.sps_temporal_mvp_enabled_flag;
 }
 
-static void
-flush(struct radeon_uvd_encoder *enc)
+static void flush(struct radeon_uvd_encoder *enc)
 {
    enc->ws->cs_flush(enc->cs, PIPE_FLUSH_ASYNC, NULL);
 }
 
-static void
-radeon_uvd_enc_flush(struct pipe_video_codec *encoder)
+static void radeon_uvd_enc_flush(struct pipe_video_codec *encoder)
 {
-   struct radeon_uvd_encoder *enc = (struct radeon_uvd_encoder *) encoder;
+   struct radeon_uvd_encoder *enc = (struct radeon_uvd_encoder *)encoder;
    flush(enc);
 }
 
-static void
-radeon_uvd_enc_cs_flush(void *ctx, unsigned flags,
-                        struct pipe_fence_handle **fence)
+static void radeon_uvd_enc_cs_flush(void *ctx, unsigned flags, struct pipe_fence_handle **fence)
 {
    // just ignored
 }
 
-static unsigned
-get_cpb_num(struct radeon_uvd_encoder *enc)
+static unsigned get_cpb_num(struct radeon_uvd_encoder *enc)
 {
    unsigned w = align(enc->base.width, 16) / 16;
    unsigned h = align(enc->base.height, 16) / 16;
@@ -176,16 +157,14 @@ get_cpb_num(struct radeon_uvd_encoder *enc)
    return MIN2(dpb / (w * h), 16);
 }
 
-static void
-radeon_uvd_enc_begin_frame(struct pipe_video_codec *encoder,
-                           struct pipe_video_buffer *source,
-                           struct pipe_picture_desc *picture)
+static void radeon_uvd_enc_begin_frame(struct pipe_video_codec *encoder,
+                                       struct pipe_video_buffer *source,
+                                       struct pipe_picture_desc *picture)
 {
-   struct radeon_uvd_encoder *enc = (struct radeon_uvd_encoder *) encoder;
-   struct vl_video_buffer *vid_buf = (struct vl_video_buffer *) source;
+   struct radeon_uvd_encoder *enc = (struct radeon_uvd_encoder *)encoder;
+   struct vl_video_buffer *vid_buf = (struct vl_video_buffer *)source;
 
-   radeon_uvd_enc_get_param(enc,
-                            (struct pipe_h265_enc_picture_desc *) picture);
+   radeon_uvd_enc_get_param(enc, (struct pipe_h265_enc_picture_desc *)picture);
 
    enc->get_buffer(vid_buf->resources[0], &enc->handle, &enc->luma);
    enc->get_buffer(vid_buf->resources[1], NULL, &enc->chroma);
@@ -196,8 +175,7 @@ radeon_uvd_enc_begin_frame(struct pipe_video_codec *encoder,
       struct rvid_buffer fb;
       enc->stream_handle = si_vid_alloc_stream_handle();
       enc->si = CALLOC_STRUCT(rvid_buffer);
-      si_vid_create_buffer(enc->screen, enc->si, 128 * 1024,
-                           PIPE_USAGE_STAGING);
+      si_vid_create_buffer(enc->screen, enc->si, 128 * 1024, PIPE_USAGE_STAGING);
       si_vid_create_buffer(enc->screen, &fb, 4096, PIPE_USAGE_STAGING);
       enc->fb = &fb;
       enc->begin(enc, picture);
@@ -206,12 +184,11 @@ radeon_uvd_enc_begin_frame(struct pipe_video_codec *encoder,
    }
 }
 
-static void
-radeon_uvd_enc_encode_bitstream(struct pipe_video_codec *encoder,
-                                struct pipe_video_buffer *source,
-                                struct pipe_resource *destination, void **fb)
+static void radeon_uvd_enc_encode_bitstream(struct pipe_video_codec *encoder,
+                                            struct pipe_video_buffer *source,
+                                            struct pipe_resource *destination, void **fb)
 {
-   struct radeon_uvd_encoder *enc = (struct radeon_uvd_encoder *) encoder;
+   struct radeon_uvd_encoder *enc = (struct radeon_uvd_encoder *)encoder;
    enc->get_buffer(destination, &enc->bs_handle, NULL);
    enc->bs_size = destination->width0;
 
@@ -226,19 +203,17 @@ radeon_uvd_enc_encode_bitstream(struct pipe_video_codec *encoder,
    enc->encode(enc);
 }
 
-static void
-radeon_uvd_enc_end_frame(struct pipe_video_codec *encoder,
-                         struct pipe_video_buffer *source,
-                         struct pipe_picture_desc *picture)
+static void radeon_uvd_enc_end_frame(struct pipe_video_codec *encoder,
+                                     struct pipe_video_buffer *source,
+                                     struct pipe_picture_desc *picture)
 {
-   struct radeon_uvd_encoder *enc = (struct radeon_uvd_encoder *) encoder;
+   struct radeon_uvd_encoder *enc = (struct radeon_uvd_encoder *)encoder;
    flush(enc);
 }
 
-static void
-radeon_uvd_enc_destroy(struct pipe_video_codec *encoder)
+static void radeon_uvd_enc_destroy(struct pipe_video_codec *encoder)
 {
-   struct radeon_uvd_encoder *enc = (struct radeon_uvd_encoder *) encoder;
+   struct radeon_uvd_encoder *enc = (struct radeon_uvd_encoder *)encoder;
 
    if (enc->stream_handle) {
       struct rvid_buffer fb;
@@ -255,18 +230,15 @@ radeon_uvd_enc_destroy(struct pipe_video_codec *encoder)
    FREE(enc);
 }
 
-static void
-radeon_uvd_enc_get_feedback(struct pipe_video_codec *encoder,
-                            void *feedback, unsigned *size)
+static void radeon_uvd_enc_get_feedback(struct pipe_video_codec *encoder, void *feedback,
+                                        unsigned *size)
 {
-   struct radeon_uvd_encoder *enc = (struct radeon_uvd_encoder *) encoder;
+   struct radeon_uvd_encoder *enc = (struct radeon_uvd_encoder *)encoder;
    struct rvid_buffer *fb = feedback;
 
    if (NULL != size) {
-      radeon_uvd_enc_feedback_t *fb_data =
-         (radeon_uvd_enc_feedback_t *) enc->ws->buffer_map(
-               fb->res->buf, enc->cs,
-               PIPE_TRANSFER_READ_WRITE | RADEON_TRANSFER_TEMPORARY);
+      radeon_uvd_enc_feedback_t *fb_data = (radeon_uvd_enc_feedback_t *)enc->ws->buffer_map(
+         fb->res->buf, enc->cs, PIPE_TRANSFER_READ_WRITE | RADEON_TRANSFER_TEMPORARY);
 
       if (!fb_data->status)
          *size = fb_data->bitstream_size;
@@ -279,16 +251,15 @@ radeon_uvd_enc_get_feedback(struct pipe_video_codec *encoder,
    FREE(fb);
 }
 
-struct pipe_video_codec *
-radeon_uvd_create_encoder(struct pipe_context *context,
-                          const struct pipe_video_codec *templ,
-                          struct radeon_winsys *ws,
-                          radeon_uvd_enc_get_buffer get_buffer)
+struct pipe_video_codec *radeon_uvd_create_encoder(struct pipe_context *context,
+                                                   const struct pipe_video_codec *templ,
+                                                   struct radeon_winsys *ws,
+                                                   radeon_uvd_enc_get_buffer get_buffer)
 {
-   struct si_screen *sscreen = (struct si_screen *) context->screen;
-   struct si_context *sctx = (struct si_context *) context;
+   struct si_screen *sscreen = (struct si_screen *)context->screen;
+   struct si_context *sctx = (struct si_context *)context;
    struct radeon_uvd_encoder *enc;
-   struct pipe_video_buffer *tmp_buf, templat = { };
+   struct pipe_video_buffer *tmp_buf, templat = {};
    struct radeon_surf *tmp_surf;
    unsigned cpb_size;
 
@@ -314,8 +285,7 @@ radeon_uvd_create_encoder(struct pipe_context *context,
    enc->bits_in_shifter = 0;
    enc->screen = context->screen;
    enc->ws = ws;
-   enc->cs =
-      ws->cs_create(sctx->ctx, RING_UVD_ENC, radeon_uvd_enc_cs_flush, enc, false);
+   enc->cs = ws->cs_create(sctx->ctx, RING_UVD_ENC, radeon_uvd_enc_cs_flush, enc, false);
 
    if (!enc->cs) {
       RVID_ERR("Can't get command submission context.\n");
@@ -327,7 +297,6 @@ radeon_uvd_create_encoder(struct pipe_context *context,
    enc->si = &si;
 
    templat.buffer_format = PIPE_FORMAT_NV12;
-   templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
    templat.width = enc->base.width;
    templat.height = enc->base.height;
    templat.interlaced = false;
@@ -342,21 +311,19 @@ radeon_uvd_create_encoder(struct pipe_context *context,
    if (!enc->cpb_num)
       goto error;
 
-   get_buffer(((struct vl_video_buffer *) tmp_buf)->resources[0], NULL,
-              &tmp_surf);
+   get_buffer(((struct vl_video_buffer *)tmp_buf)->resources[0], NULL, &tmp_surf);
 
-   cpb_size = (sscreen->info.chip_class < GFX9) ?
-      align(tmp_surf->u.legacy.level[0].nblk_x * tmp_surf->bpe, 128) *
-      align(tmp_surf->u.legacy.level[0].nblk_y, 32) :
-      align(tmp_surf->u.gfx9.surf_pitch * tmp_surf->bpe, 256) *
-      align(tmp_surf->u.gfx9.surf_height, 32);
+   cpb_size = (sscreen->info.chip_class < GFX9)
+                 ? align(tmp_surf->u.legacy.level[0].nblk_x * tmp_surf->bpe, 128) *
+                      align(tmp_surf->u.legacy.level[0].nblk_y, 32)
+                 : align(tmp_surf->u.gfx9.surf_pitch * tmp_surf->bpe, 256) *
+                      align(tmp_surf->u.gfx9.surf_height, 32);
 
    cpb_size = cpb_size * 3 / 2;
    cpb_size = cpb_size * enc->cpb_num;
    tmp_buf->destroy(tmp_buf);
 
-   if (!si_vid_create_buffer
-       (enc->screen, &enc->cpb, cpb_size, PIPE_USAGE_DEFAULT)) {
+   if (!si_vid_create_buffer(enc->screen, &enc->cpb, cpb_size, PIPE_USAGE_DEFAULT)) {
       RVID_ERR("Can't create CPB buffer.\n");
       goto error;
    }
@@ -365,7 +332,7 @@ radeon_uvd_create_encoder(struct pipe_context *context,
 
    return &enc->base;
 
- error:
+error:
    if (enc->cs)
       enc->ws->cs_destroy(enc->cs);
 
@@ -375,8 +342,7 @@ radeon_uvd_create_encoder(struct pipe_context *context,
    return NULL;
 }
 
-bool
-si_radeon_uvd_enc_supported(struct si_screen * sscreen)
+bool si_radeon_uvd_enc_supported(struct si_screen *sscreen)
 {
    return (sscreen->info.uvd_enc_supported);
 }

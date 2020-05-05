@@ -47,9 +47,9 @@ typedef struct {
 struct sanity_check_ctx
 {
    struct tgsi_iterate_context iter;
-   struct cso_hash *regs_decl;
-   struct cso_hash *regs_used;
-   struct cso_hash *regs_ind_used;
+   struct cso_hash regs_decl;
+   struct cso_hash regs_used;
+   struct cso_hash regs_ind_used;
 
    uint num_imms;
    uint num_instructions;
@@ -203,7 +203,7 @@ is_register_declared(
    const scan_register *reg)
 {
    void *data = cso_hash_find_data_from_template(
-      ctx->regs_decl, scan_register_key(reg),
+      &ctx->regs_decl, scan_register_key(reg),
       (void*)reg, sizeof(scan_register));
    return  data ? TRUE : FALSE;
 }
@@ -214,7 +214,7 @@ is_any_register_declared(
    uint file )
 {
    struct cso_hash_iter iter =
-      cso_hash_first_node(ctx->regs_decl);
+      cso_hash_first_node(&ctx->regs_decl);
 
    while (!cso_hash_iter_is_null(iter)) {
       scan_register *reg = (scan_register *)cso_hash_iter_data(iter);
@@ -232,7 +232,7 @@ is_register_used(
    scan_register *reg)
 {
    void *data = cso_hash_find_data_from_template(
-      ctx->regs_used, scan_register_key(reg),
+      &ctx->regs_used, scan_register_key(reg),
       reg, sizeof(scan_register));
    return  data ? TRUE : FALSE;
 }
@@ -243,7 +243,7 @@ is_ind_register_used(
    struct sanity_check_ctx *ctx,
    scan_register *reg)
 {
-   return cso_hash_contains(ctx->regs_ind_used, reg->file);
+   return cso_hash_contains(&ctx->regs_ind_used, reg->file);
 }
 
 static const char *file_names[TGSI_FILE_COUNT] =
@@ -280,7 +280,7 @@ check_register_usage(
       if (!is_any_register_declared( ctx, reg->file ))
          report_error( ctx, "%s: Undeclared %s register", file_names[reg->file], name );
       if (!is_ind_register_used(ctx, reg))
-         cso_hash_insert(ctx->regs_ind_used, reg->file, reg);
+         cso_hash_insert(&ctx->regs_ind_used, reg->file, reg);
       else
          FREE(reg);
    }
@@ -296,7 +296,7 @@ check_register_usage(
          }
       }
       if (!is_register_used( ctx, reg ))
-         cso_hash_insert(ctx->regs_used, scan_register_key(reg), reg);
+         cso_hash_insert(&ctx->regs_used, scan_register_key(reg), reg);
       else
          FREE(reg);
    }
@@ -381,7 +381,7 @@ check_and_declare(struct sanity_check_ctx *ctx,
    if (is_register_declared( ctx, reg))
       report_error( ctx, "%s[%u]: The same register declared more than once",
                     file_names[reg->file], reg->indices[0] );
-   cso_hash_insert(ctx->regs_decl,
+   cso_hash_insert(&ctx->regs_decl,
                    scan_register_key(reg),
                    reg);
 }
@@ -463,7 +463,7 @@ iter_immediate(
     */
    reg = MALLOC(sizeof(scan_register));
    fill_scan_register1d(reg, TGSI_FILE_IMMEDIATE, ctx->num_imms);
-   cso_hash_insert(ctx->regs_decl, scan_register_key(reg), reg);
+   cso_hash_insert(&ctx->regs_decl, scan_register_key(reg), reg);
    ctx->num_imms++;
 
    /* Check data type validity.
@@ -522,7 +522,7 @@ epilog(
     */
    {
       struct cso_hash_iter iter =
-         cso_hash_first_node(ctx->regs_decl);
+         cso_hash_first_node(&ctx->regs_decl);
 
       while (!cso_hash_iter_is_null(iter)) {
          scan_register *reg = (scan_register *)cso_hash_iter_data(iter);
@@ -552,7 +552,7 @@ regs_hash_destroy(struct cso_hash *hash)
       assert(reg->file < TGSI_FILE_COUNT);
       FREE(reg);
    }
-   cso_hash_delete(hash);
+   cso_hash_deinit(hash);
 }
 
 boolean
@@ -569,9 +569,9 @@ tgsi_sanity_check(
    ctx.iter.iterate_property = iter_property;
    ctx.iter.epilog = epilog;
 
-   ctx.regs_decl = cso_hash_create();
-   ctx.regs_used = cso_hash_create();
-   ctx.regs_ind_used = cso_hash_create();
+   cso_hash_init(&ctx.regs_decl);
+   cso_hash_init(&ctx.regs_used);
+   cso_hash_init(&ctx.regs_ind_used);
 
    ctx.num_imms = 0;
    ctx.num_instructions = 0;
@@ -583,9 +583,9 @@ tgsi_sanity_check(
    ctx.print = debug_get_option_print_sanity();
 
    retval = tgsi_iterate_shader( tokens, &ctx.iter );
-   regs_hash_destroy(ctx.regs_decl);
-   regs_hash_destroy(ctx.regs_used);
-   regs_hash_destroy(ctx.regs_ind_used);
+   regs_hash_destroy(&ctx.regs_decl);
+   regs_hash_destroy(&ctx.regs_used);
+   regs_hash_destroy(&ctx.regs_ind_used);
    if (retval == FALSE)
       return FALSE;
 

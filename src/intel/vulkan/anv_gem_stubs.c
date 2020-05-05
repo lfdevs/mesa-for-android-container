@@ -60,7 +60,7 @@ anv_gem_mmap(struct anv_device *device, uint32_t gem_handle,
  * this map is no longer valid.  Pair this with anv_gem_mmap().
  */
 void
-anv_gem_munmap(void *p, uint64_t size)
+anv_gem_munmap(struct anv_device *device, void *p, uint64_t size)
 {
    munmap(p, size);
 }

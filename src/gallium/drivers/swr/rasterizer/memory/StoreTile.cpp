@@ -33,20 +33,6 @@ PFN_STORE_TILES sStoreTilesTableColor[SWR_TILE_MODE_COUNT][NUM_SWR_FORMATS] = {}
 PFN_STORE_TILES sStoreTilesTableDepth[SWR_TILE_MODE_COUNT][NUM_SWR_FORMATS] = {};
 PFN_STORE_TILES sStoreTilesTableStencil[SWR_TILE_MODE_COUNT][NUM_SWR_FORMATS] = {};
 
-static void BUCKETS_START(UINT id)
-{
-#ifdef KNOB_ENABLE_RDTSC
-    gBucketMgr.StartBucket(id);
-#endif
-}
-
-static void BUCKETS_STOP(UINT id)
-{
-#ifdef KNOB_ENABLE_RDTSC
-    gBucketMgr.StopBucket(id);
-#endif
-}
-
 // on demand buckets for store tiles
 static std::mutex sBucketMutex;
 static std::vector<int32_t> sBuckets(NUM_SWR_FORMATS, -1);
@@ -61,6 +47,7 @@ static std::vector<int32_t> sBuckets(NUM_SWR_FORMATS, -1);
 void SwrStoreHotTileToSurface(
     HANDLE hWorkerPrivateData,
     SWR_SURFACE_STATE *pDstSurface,
+    BucketManager* pBucketMgr,
     SWR_FORMAT srcFormat,
     SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
     uint32_t x, uint32_t y, uint32_t renderTargetArrayIndex,
@@ -108,15 +95,20 @@ void SwrStoreHotTileToSurface(
         {
             const SWR_FORMAT_INFO& info = GetFormatInfo(pDstSurface->format);
             BUCKET_DESC desc{info.name, "", false, 0xffffffff};
-            sBuckets[pDstSurface->format] = gBucketMgr.RegisterBucket(desc);
+            sBuckets[pDstSurface->format] = pBucketMgr->RegisterBucket(desc);
         }
         sBucketMutex.unlock();
     }
 #endif
 
-    BUCKETS_START(sBuckets[pDstSurface->format]);
+#ifdef KNOB_ENABLE_RDTSC
+    pBucketMgr->StartBucket(sBuckets[pDstSurface->format]);
+#endif
     pfnStoreTiles(pSrcHotTile, pDstSurface, x, y, renderTargetArrayIndex);
-    BUCKETS_STOP(sBuckets[pDstSurface->format]);
+#ifdef KNOB_ENABLE_RDTSC
+    pBucketMgr->StopBucket(sBuckets[pDstSurface->format]);
+#endif
+
 }
 
 

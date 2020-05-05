@@ -1498,6 +1498,7 @@ generate_code(struct brw_codegen *p,
               const nir_shader *nir,
               struct brw_vue_prog_data *prog_data,
               const struct cfg_t *cfg,
+              const performance &perf,
               struct brw_compile_stats *stats)
 {
    const struct gen_device_info *devinfo = p->devinfo;
@@ -1911,7 +1912,10 @@ generate_code(struct brw_codegen *p,
          break;
 
       case SHADER_OPCODE_MEMORY_FENCE:
-         brw_memory_fence(p, dst, src[0], BRW_OPCODE_SEND, false, /* bti */ 0);
+         brw_memory_fence(p, dst, src[0], BRW_OPCODE_SEND,
+                          brw_message_target(inst->sfid),
+                          /* commit_enable */ false,
+                          /* bti */ 0);
          send_count++;
          break;
 
@@ -2061,8 +2065,7 @@ generate_code(struct brw_codegen *p,
           *
           * where they pack the four bytes from the low and high four DW.
           */
-         assert(_mesa_is_pow_two(dst.writemask) &&
-                dst.writemask != 0);
+         assert(util_is_power_of_two_nonzero(dst.writemask));
          unsigned offset = __builtin_ctz(dst.writemask);
 
          dst.type = BRW_REGISTER_TYPE_UB;
@@ -2218,13 +2221,13 @@ generate_code(struct brw_codegen *p,
 
       fprintf(stderr, "%s vec4 shader: %d instructions. %d loops. %u cycles. %d:%d "
                      "spills:fills, %u sends. Compacted %d to %d bytes (%.0f%%)\n",
-            stage_abbrev, before_size / 16, loop_count, cfg->cycle_count,
+            stage_abbrev, before_size / 16, loop_count, perf.latency,
             spill_count, fill_count, send_count, before_size, after_size,
             100.0f * (before_size - after_size) / before_size);
 
       /* overriding the shader makes disasm_info invalid */
       if (!brw_try_override_assembly(p, 0, sha1buf)) {
-         dump_assembly(p->store, disasm_info);
+         dump_assembly(p->store, disasm_info, perf.block_latency);
       } else {
          fprintf(stderr, "Successfully overrode shader with sha1 %s\n\n", sha1buf);
       }
@@ -2237,13 +2240,14 @@ generate_code(struct brw_codegen *p,
                               "%d:%d spills:fills, %u sends, "
                               "compacted %d to %d bytes.",
                               stage_abbrev, before_size / 16,
-                              loop_count, cfg->cycle_count, spill_count,
+                              loop_count, perf.latency, spill_count,
                               fill_count, send_count, before_size, after_size);
    if (stats) {
       stats->dispatch_width = 0;
       stats->instructions = before_size / 16;
+      stats->sends = send_count;
       stats->loops = loop_count;
-      stats->cycles = cfg->cycle_count;
+      stats->cycles = perf.latency;
       stats->spills = spill_count;
       stats->fills = fill_count;
    }
@@ -2256,13 +2260,14 @@ brw_vec4_generate_assembly(const struct brw_compiler *compiler,
                            const nir_shader *nir,
                            struct brw_vue_prog_data *prog_data,
                            const struct cfg_t *cfg,
+                           const performance &perf,
                            struct brw_compile_stats *stats)
 {
    struct brw_codegen *p = rzalloc(mem_ctx, struct brw_codegen);
    brw_init_codegen(compiler->devinfo, p, mem_ctx);
    brw_set_default_access_mode(p, BRW_ALIGN_16);
 
-   generate_code(p, compiler, log_data, nir, prog_data, cfg, stats);
+   generate_code(p, compiler, log_data, nir, prog_data, cfg, perf, stats);
 
    return brw_get_program(p, &prog_data->base.program_size);
 }

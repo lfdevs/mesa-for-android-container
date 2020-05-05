@@ -24,11 +24,12 @@
 
 #include <stdlib.h>
 #include <amdgpu.h>
-#include <amdgpu_drm.h>
+#include "drm-uapi/amdgpu_drm.h"
 #include <assert.h>
 #include <pthread.h>
 #include <errno.h>
 
+#include "util/u_memory.h"
 #include "ac_debug.h"
 #include "radv_radeon_winsys.h"
 #include "radv_amdgpu_cs.h"
@@ -1239,7 +1240,7 @@ static int radv_amdgpu_winsys_cs_submit(struct radeon_winsys_ctx *_ctx,
 	if (!cs->ws->use_ib_bos) {
 		ret = radv_amdgpu_winsys_cs_submit_sysmem(_ctx, queue_idx, sem_info, bo_list, cs_array,
 							   cs_count, initial_preamble_cs, continue_preamble_cs, _fence);
-	} else if (can_patch && cs->ws->batchchain) {
+	} else if (can_patch) {
 		ret = radv_amdgpu_winsys_cs_submit_chained(_ctx, queue_idx, sem_info, bo_list, cs_array,
 							    cs_count, initial_preamble_cs, continue_preamble_cs, _fence);
 	} else {

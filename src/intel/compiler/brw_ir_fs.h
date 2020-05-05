@@ -276,12 +276,11 @@ is_uniform(const fs_reg &reg)
 
 /**
  * Get the specified 8-component quarter of a register.
- * XXX - Maybe come up with a less misleading name for this (e.g. quarter())?
  */
 static inline fs_reg
-half(const fs_reg &reg, unsigned idx)
+quarter(const fs_reg &reg, unsigned idx)
 {
-   assert(idx < 2);
+   assert(idx < 4);
    return horiz_offset(reg, 8 * idx);
 }
 
@@ -298,8 +297,8 @@ subscript(fs_reg reg, brw_reg_type type, unsigned i)
       /* The stride is encoded inconsistently for fixed GRF and ARF registers
        * as the log2 of the actual vertical and horizontal strides.
        */
-      const int delta = _mesa_logbase2(type_sz(reg.type)) -
-                        _mesa_logbase2(type_sz(type));
+      const int delta = util_logbase2(type_sz(reg.type)) -
+                        util_logbase2(type_sz(type));
       reg.hstride += (reg.hstride ? delta : 0);
       reg.vstride += (reg.vstride ? delta : 0);
 
@@ -667,5 +666,8 @@ is_coalescing_payload(const brw::simple_allocator &alloc, const fs_inst *inst)
           inst->src[0].offset == 0 &&
           alloc.sizes[inst->src[0].nr] * REG_SIZE == inst->size_written;
 }
+
+bool
+has_bank_conflict(const gen_device_info *devinfo, const fs_inst *inst);
 
 #endif

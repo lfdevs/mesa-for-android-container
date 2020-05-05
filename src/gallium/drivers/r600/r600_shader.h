@@ -72,8 +72,8 @@ struct r600_shader {
 	unsigned                nhwatomic;
 	unsigned		nlds;
 	unsigned		nsys_inputs;
-	struct r600_shader_io	input[64];
-	struct r600_shader_io	output[64];
+	struct r600_shader_io	input[PIPE_MAX_SHADER_INPUTS];
+	struct r600_shader_io	output[PIPE_MAX_SHADER_OUTPUTS];
 	struct r600_shader_atomic atomics[8];
 	unsigned                nhwatomic_ranges;
 	boolean			uses_kill;
@@ -189,7 +189,11 @@ struct r600_pipe_shader {
  TGSI_INTERPOLATE_LOC_CENTER/SAMPLE/COUNT. Other input values return -1. */
 int eg_get_interpolator_index(unsigned interpolate, unsigned location);
 
-int r600_get_lds_unique_index(unsigned semantic_name, unsigned index);
+int r600_get_lds_unique_index(unsigned semantic_name, unsigned index, bool texcoord_semantics);
+
+int generate_gs_copy_shader(struct r600_context *rctx,
+                            struct r600_pipe_shader *gs,
+                            struct pipe_stream_output_info *so);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -29,7 +29,7 @@
 #define H_ETNAVIV_SCREEN
 
 #include "etnaviv_internal.h"
-#include "etnaviv_query_pm.h"
+#include "etnaviv_perfmon.h"
 
 #include "os/os_thread.h"
 #include "pipe/p_screen.h"

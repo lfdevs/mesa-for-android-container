@@ -87,7 +87,79 @@ CXX_SOURCES = \
 	sb/sb_shader.cpp \
 	sb/sb_shader.h \
 	sb/sb_ssa_builder.cpp \
-	sb/sb_valtable.cpp
+	sb/sb_valtable.cpp \
+	sfn/sfn_alu_defines.cpp \
+	sfn/sfn_alu_defines.h \
+	sfn/sfn_callstack.cpp \
+	sfn/sfn_callstack.h \
+	sfn/sfn_conditionaljumptracker.cpp \
+	sfn/sfn_conditionaljumptracker.h \
+	sfn/sfn_defines.h \
+	sfn/sfn_debug.cpp \
+	sfn/sfn_debug.h \
+	sfn/sfn_emitaluinstruction.cpp \
+	sfn/sfn_emitaluinstruction.h \
+	sfn/sfn_emitinstruction.cpp \
+	sfn/sfn_emitinstruction.h \
+	sfn/sfn_emitssboinstruction.cpp \
+	sfn/sfn_emitssboinstruction.h \
+	sfn/sfn_emittexinstruction.cpp \
+	sfn/sfn_emittexinstruction.h \
+	sfn/sfn_emitinstruction.h \
+	sfn/sfn_instruction_alu.cpp \
+	sfn/sfn_instruction_alu.h \
+	sfn/sfn_instruction_base.cpp \
+	sfn/sfn_instruction_base.h \
+	sfn/sfn_instruction_block.cpp \
+	sfn/sfn_instruction_block.h \
+	sfn/sfn_instruction_cf.cpp \
+	sfn/sfn_instruction_cf.h \
+	sfn/sfn_instruction_export.cpp \
+	sfn/sfn_instruction_export.h \
+	sfn/sfn_instruction_fetch.cpp \
+	sfn/sfn_instruction_fetch.h \
+	sfn/sfn_instruction_lds.cpp \
+	sfn/sfn_instruction_lds.h \
+	sfn/sfn_instruction_gds.cpp \
+	sfn/sfn_instruction_gds.h \
+	sfn/sfn_instruction_misc.cpp \
+	sfn/sfn_instruction_misc.h \
+	sfn/sfn_instruction_tex.cpp \
+	sfn/sfn_instruction_tex.h \
+	sfn/sfn_ir_to_assembly.cpp \
+	sfn/sfn_ir_to_assembly.h \
+	sfn/sfn_liverange.cpp \
+	sfn/sfn_liverange.h \
+	sfn/sfn_nir.cpp \
+	sfn/sfn_nir.h \
+	sfn/sfn_nir_lower_fs_out_to_vector.cpp \
+	sfn/sfn_nir_lower_fs_out_to_vector.h \
+	sfn/sfn_nir_lower_tess_io.cpp \
+	sfn/sfn_nir_vectorize_vs_inputs.c \
+	sfn/sfn_shader_base.cpp \
+	sfn/sfn_shader_base.h \
+	sfn/sfn_shader_compute.cpp \
+	sfn/sfn_shader_compute.h \
+	sfn/sfn_shader_fragment.cpp \
+	sfn/sfn_shader_fragment.h \
+	sfn/sfn_shader_geometry.cpp \
+	sfn/sfn_shader_geometry.h \
+	sfn/sfn_shader_tcs.cpp \
+        sfn/sfn_shader_tcs.h \
+        sfn/sfn_shader_tess_eval.cpp \
+        sfn/sfn_shader_tess_eval.h \
+	sfn/sfn_shader_vertex.cpp \
+	sfn/sfn_shader_vertex.h \
+	sfn/sfn_shaderio.cpp \
+	sfn/sfn_shaderio.h \
+	sfn/sfn_value.cpp \
+	sfn/sfn_value.h \
+	sfn/sfn_value_gpr.cpp \
+	sfn/sfn_value_gpr.h \
+	sfn/sfn_valuepool.cpp \
+	sfn/sfn_valuepool.h \
+	sfn/sfn_vertexstageexport.cpp \
+        sfn/sfn_vertexstageexport.h
 
 R600_GENERATED_FILES = \
 	egd_tables.h

@@ -40,9 +40,14 @@
 
 namespace aco {
 
-struct output_state {
-   uint8_t mask[VARYING_SLOT_VAR31 + 1];
-   Temp outputs[VARYING_SLOT_VAR31 + 1][4];
+struct shader_io_state {
+   uint8_t mask[VARYING_SLOT_MAX];
+   Temp temps[VARYING_SLOT_MAX * 4u];
+
+   shader_io_state() {
+      memset(mask, 0, sizeof(mask));
+      std::fill_n(temps, VARYING_SLOT_MAX * 4u, Temp(0, RegClass::v1));
+   }
 };
 
 struct isel_context {
@@ -86,17 +91,26 @@ struct isel_context {
    /* GS inputs */
    Temp gs_wave_id;
 
-   /* gathered information */
-   uint64_t input_masks[MESA_SHADER_COMPUTE];
-   uint64_t output_masks[MESA_SHADER_COMPUTE];
-
    /* VS output information */
    bool export_clip_dists;
    unsigned num_clip_distances;
    unsigned num_cull_distances;
 
-   /* VS, FS or GS output information */
-   output_state outputs;
+   /* tessellation information */
+   unsigned tcs_tess_lvl_out_loc;
+   unsigned tcs_tess_lvl_in_loc;
+   uint64_t tcs_temp_only_inputs;
+   uint32_t tcs_num_inputs;
+   uint32_t tcs_num_outputs;
+   uint32_t tcs_num_patch_outputs;
+   uint32_t tcs_num_patches;
+   bool tcs_in_out_eq = false;
+
+   /* I/O information */
+   shader_io_state inputs;
+   shader_io_state outputs;
+   uint8_t output_drv_loc_to_var_slot[MESA_SHADER_COMPUTE][VARYING_SLOT_MAX];
+   uint8_t output_tcs_patch_drv_loc_to_var_slot[VARYING_SLOT_MAX];
 };
 
 Temp get_arg(isel_context *ctx, struct ac_arg arg)
@@ -140,8 +154,7 @@ unsigned get_interp_input(nir_intrinsic_op intrin, enum glsl_interp_mode interp)
 bool
 sanitize_if(nir_function_impl *impl, bool *divergent, nir_if *nif)
 {
-   if (!divergent[nif->condition.ssa->index])
-      return false;
+   //TODO: skip this if the condition is uniform and there are no divergent breaks/continues?
 
    nir_block *then_block = nir_if_last_then_block(nif);
    nir_block *else_block = nir_if_last_else_block(nif);
@@ -211,6 +224,14 @@ sanitize_cf_list(nir_function_impl *impl, bool *divergent, struct exec_list *cf_
    return progress;
 }
 
+RegClass get_reg_class(isel_context *ctx, RegType type, unsigned components, unsigned bitsize)
+{
+   if (bitsize == 1)
+      return RegClass(RegType::sgpr, ctx->program->lane_mask.size() * components);
+   else
+      return RegClass::get(type, components * bitsize / 8u);
+}
+
 void init_context(isel_context *ctx, nir_shader *shader)
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
@@ -246,9 +267,6 @@ void init_context(isel_context *ctx, nir_shader *shader)
             switch(instr->type) {
             case nir_instr_type_alu: {
                nir_alu_instr *alu_instr = nir_instr_as_alu(instr);
-               unsigned size =  alu_instr->dest.dest.ssa.num_components;
-               if (alu_instr->dest.dest.ssa.bit_size == 64)
-                  size *= 2;
                RegType type = RegType::sgpr;
                switch(alu_instr->op) {
                   case nir_op_fmul:
@@ -275,10 +293,15 @@ void init_context(isel_context *ctx, nir_shader *shader)
                   case nir_op_fround_even:
                   case nir_op_fsin:
                   case nir_op_fcos:
+                  case nir_op_f2f16:
+                  case nir_op_f2f16_rtz:
+                  case nir_op_f2f16_rtne:
                   case nir_op_f2f32:
                   case nir_op_f2f64:
+                  case nir_op_u2f16:
                   case nir_op_u2f32:
                   case nir_op_u2f64:
+                  case nir_op_i2f16:
                   case nir_op_i2f32:
                   case nir_op_i2f64:
                   case nir_op_pack_half_2x16:
@@ -298,82 +321,45 @@ void init_context(isel_context *ctx, nir_shader *shader)
                   case nir_op_cube_face_coord:
                      type = RegType::vgpr;
                      break;
-                  case nir_op_flt:
-                  case nir_op_fge:
-                  case nir_op_feq:
-                  case nir_op_fne:
-                  case nir_op_ilt:
-                  case nir_op_ige:
-                  case nir_op_ult:
-                  case nir_op_uge:
-                  case nir_op_ieq:
-                  case nir_op_ine:
-                  case nir_op_i2b1:
-                     size = lane_mask_size;
-                     break;
+                  case nir_op_f2i16:
+                  case nir_op_f2u16:
+                  case nir_op_f2i32:
+                  case nir_op_f2u32:
                   case nir_op_f2i64:
                   case nir_op_f2u64:
                   case nir_op_b2i32:
+                  case nir_op_b2b32:
+                  case nir_op_b2f16:
                   case nir_op_b2f32:
-                  case nir_op_f2i32:
-                  case nir_op_f2u32:
+                  case nir_op_mov:
                      type = ctx->divergent_vals[alu_instr->dest.dest.ssa.index] ? RegType::vgpr : RegType::sgpr;
                      break;
                   case nir_op_bcsel:
-                     if (alu_instr->dest.dest.ssa.bit_size == 1) {
-                        size = lane_mask_size;
-                     } else {
-                        if (ctx->divergent_vals[alu_instr->dest.dest.ssa.index]) {
-                           type = RegType::vgpr;
-                        } else {
-                           if (allocated[alu_instr->src[1].src.ssa->index].type() == RegType::vgpr ||
-                               allocated[alu_instr->src[2].src.ssa->index].type() == RegType::vgpr) {
-                              type = RegType::vgpr;
-                           }
-                        }
-                        if (alu_instr->src[1].src.ssa->num_components == 1 && alu_instr->src[2].src.ssa->num_components == 1) {
-                           assert(allocated[alu_instr->src[1].src.ssa->index].size() == allocated[alu_instr->src[2].src.ssa->index].size());
-                           size = allocated[alu_instr->src[1].src.ssa->index].size();
-                        }
-                     }
-                     break;
-                  case nir_op_mov:
-                     if (alu_instr->dest.dest.ssa.bit_size == 1) {
-                        size = lane_mask_size;
-                     } else {
-                        type = ctx->divergent_vals[alu_instr->dest.dest.ssa.index] ? RegType::vgpr : RegType::sgpr;
-                     }
-                     break;
+                     type = ctx->divergent_vals[alu_instr->dest.dest.ssa.index] ? RegType::vgpr : RegType::sgpr;
+                     /* fallthrough */
                   default:
-                     if (alu_instr->dest.dest.ssa.bit_size == 1) {
-                        size = lane_mask_size;
-                     } else {
-                        for (unsigned i = 0; i < nir_op_infos[alu_instr->op].num_inputs; i++) {
-                           if (allocated[alu_instr->src[i].src.ssa->index].type() == RegType::vgpr)
-                              type = RegType::vgpr;
-                        }
+                     for (unsigned i = 0; i < nir_op_infos[alu_instr->op].num_inputs; i++) {
+                        if (allocated[alu_instr->src[i].src.ssa->index].type() == RegType::vgpr)
+                           type = RegType::vgpr;
                      }
                      break;
                }
-               allocated[alu_instr->dest.dest.ssa.index] = Temp(0, RegClass(type, size));
+
+               RegClass rc = get_reg_class(ctx, type, alu_instr->dest.dest.ssa.num_components, alu_instr->dest.dest.ssa.bit_size);
+               allocated[alu_instr->dest.dest.ssa.index] = Temp(0, rc);
                break;
             }
             case nir_instr_type_load_const: {
-               unsigned size = nir_instr_as_load_const(instr)->def.num_components;
-               if (nir_instr_as_load_const(instr)->def.bit_size == 64)
-                  size *= 2;
-               else if (nir_instr_as_load_const(instr)->def.bit_size == 1)
-                  size *= lane_mask_size;
-               allocated[nir_instr_as_load_const(instr)->def.index] = Temp(0, RegClass(RegType::sgpr, size));
+               unsigned num_components = nir_instr_as_load_const(instr)->def.num_components;
+               unsigned bit_size = nir_instr_as_load_const(instr)->def.bit_size;
+               RegClass rc = get_reg_class(ctx, RegType::sgpr, num_components, bit_size);
+               allocated[nir_instr_as_load_const(instr)->def.index] = Temp(0, rc);
                break;
             }
             case nir_instr_type_intrinsic: {
                nir_intrinsic_instr *intrinsic = nir_instr_as_intrinsic(instr);
                if (!nir_intrinsic_infos[intrinsic->intrinsic].has_dest)
                   break;
-               unsigned size =  intrinsic->dest.ssa.num_components;
-               if (intrinsic->dest.ssa.bit_size == 64)
-                  size *= 2;
                RegType type = RegType::sgpr;
                switch(intrinsic->intrinsic) {
                   case nir_intrinsic_load_push_constant:
@@ -389,18 +375,16 @@ void init_context(isel_context *ctx, nir_shader *shader)
                   case nir_intrinsic_read_first_invocation:
                   case nir_intrinsic_read_invocation:
                   case nir_intrinsic_first_invocation:
-                     type = RegType::sgpr;
-                     if (intrinsic->dest.ssa.bit_size == 1)
-                        size = lane_mask_size;
-                     break;
                   case nir_intrinsic_ballot:
                      type = RegType::sgpr;
                      break;
                   case nir_intrinsic_load_sample_id:
                   case nir_intrinsic_load_sample_mask_in:
                   case nir_intrinsic_load_input:
+                  case nir_intrinsic_load_output:
                   case nir_intrinsic_load_input_vertex:
                   case nir_intrinsic_load_per_vertex_input:
+                  case nir_intrinsic_load_per_vertex_output:
                   case nir_intrinsic_load_vertex_id:
                   case nir_intrinsic_load_vertex_id_zero_base:
                   case nir_intrinsic_load_barycentric_sample:
@@ -416,6 +400,7 @@ void init_context(isel_context *ctx, nir_shader *shader)
                   case nir_intrinsic_load_local_invocation_id:
                   case nir_intrinsic_load_local_invocation_index:
                   case nir_intrinsic_load_subgroup_invocation:
+                  case nir_intrinsic_load_tess_coord:
                   case nir_intrinsic_write_invocation_amd:
                   case nir_intrinsic_mbcnt_amd:
                   case nir_intrinsic_load_instance_id:
@@ -474,46 +459,16 @@ void init_context(isel_context *ctx, nir_shader *shader)
                   case nir_intrinsic_masked_swizzle_amd:
                   case nir_intrinsic_inclusive_scan:
                   case nir_intrinsic_exclusive_scan:
-                     if (intrinsic->dest.ssa.bit_size == 1) {
-                        size = lane_mask_size;
-                        type = RegType::sgpr;
-                     } else if (!ctx->divergent_vals[intrinsic->dest.ssa.index]) {
-                        type = RegType::sgpr;
-                     } else {
-                        type = RegType::vgpr;
-                     }
-                     break;
-                  case nir_intrinsic_load_view_index:
-                     type = ctx->stage == fragment_fs ? RegType::vgpr : RegType::sgpr;
-                     break;
-                  case nir_intrinsic_load_front_face:
-                  case nir_intrinsic_load_helper_invocation:
-                  case nir_intrinsic_is_helper_invocation:
-                     type = RegType::sgpr;
-                     size = lane_mask_size;
-                     break;
                   case nir_intrinsic_reduce:
-                     if (intrinsic->dest.ssa.bit_size == 1) {
-                        size = lane_mask_size;
-                        type = RegType::sgpr;
-                     } else if (!ctx->divergent_vals[intrinsic->dest.ssa.index]) {
-                        type = RegType::sgpr;
-                     } else {
-                        type = RegType::vgpr;
-                     }
-                     break;
                   case nir_intrinsic_load_ubo:
                   case nir_intrinsic_load_ssbo:
                   case nir_intrinsic_load_global:
                   case nir_intrinsic_vulkan_resource_index:
+                  case nir_intrinsic_load_shared:
                      type = ctx->divergent_vals[intrinsic->dest.ssa.index] ? RegType::vgpr : RegType::sgpr;
                      break;
-                  /* due to copy propagation, the swizzled imov is removed if num dest components == 1 */
-                  case nir_intrinsic_load_shared:
-                     if (ctx->divergent_vals[intrinsic->dest.ssa.index])
-                        type = RegType::vgpr;
-                     else
-                        type = RegType::sgpr;
+                  case nir_intrinsic_load_view_index:
+                     type = ctx->stage == fragment_fs ? RegType::vgpr : RegType::sgpr;
                      break;
                   default:
                      for (unsigned i = 0; i < nir_intrinsic_infos[intrinsic->intrinsic].num_srcs; i++) {
@@ -522,7 +477,8 @@ void init_context(isel_context *ctx, nir_shader *shader)
                      }
                      break;
                }
-               allocated[intrinsic->dest.ssa.index] = Temp(0, RegClass(type, size));
+               RegClass rc = get_reg_class(ctx, type, intrinsic->dest.ssa.num_components, intrinsic->dest.ssa.bit_size);
+               allocated[intrinsic->dest.ssa.index] = Temp(0, rc);
 
                switch(intrinsic->intrinsic) {
                   case nir_intrinsic_load_barycentric_sample:
@@ -583,12 +539,10 @@ void init_context(isel_context *ctx, nir_shader *shader)
                break;
             }
             case nir_instr_type_ssa_undef: {
-               unsigned size = nir_instr_as_ssa_undef(instr)->def.num_components;
-               if (nir_instr_as_ssa_undef(instr)->def.bit_size == 64)
-                  size *= 2;
-               else if (nir_instr_as_ssa_undef(instr)->def.bit_size == 1)
-                  size *= lane_mask_size;
-               allocated[nir_instr_as_ssa_undef(instr)->def.index] = Temp(0, RegClass(RegType::sgpr, size));
+               unsigned num_components = nir_instr_as_ssa_undef(instr)->def.num_components;
+               unsigned bit_size = nir_instr_as_ssa_undef(instr)->def.bit_size;
+               RegClass rc = get_reg_class(ctx, RegType::sgpr, num_components, bit_size);
+               allocated[nir_instr_as_ssa_undef(instr)->def.index] = Temp(0, rc);
                break;
             }
             case nir_instr_type_phi: {
@@ -616,8 +570,7 @@ void init_context(isel_context *ctx, nir_shader *shader)
                   }
                }
 
-               size *= phi->dest.ssa.bit_size == 64 ? 2 : 1;
-               RegClass rc = RegClass(type, size);
+               RegClass rc = get_reg_class(ctx, type, phi->dest.ssa.num_components, phi->dest.ssa.bit_size);
                if (rc != allocated[phi->dest.ssa.index].regClass()) {
                   done = false;
                } else {
@@ -745,9 +698,17 @@ mem_vectorize_callback(unsigned align, unsigned bit_size,
       return false;
 
    switch (low->intrinsic) {
-   case nir_intrinsic_load_ubo:
-   case nir_intrinsic_load_ssbo:
+   case nir_intrinsic_load_global:
+   case nir_intrinsic_store_global:
+      return align % 4 == 0;
    case nir_intrinsic_store_ssbo:
+      if (low->src[0].ssa->bit_size < 32 || high->src[0].ssa->bit_size < 32)
+         return false;
+      return align % 4 == 0;
+   case nir_intrinsic_load_ssbo:
+      if (low->dest.ssa.bit_size < 32 || high->dest.ssa.bit_size < 32)
+         return false;
+   case nir_intrinsic_load_ubo:
    case nir_intrinsic_load_push_constant:
       return align % 4 == 0;
    case nir_intrinsic_load_deref:
@@ -779,10 +740,11 @@ setup_vs_output_info(isel_context *ctx, nir_shader *nir,
    if (outinfo->writes_pointsize || outinfo->writes_viewport_index || outinfo->writes_layer)
       pos_written |= 1 << 1;
 
-   uint64_t mask = ctx->output_masks[nir->info.stage];
+   uint64_t mask = nir->info.outputs_written;
    while (mask) {
       int idx = u_bit_scan64(&mask);
-      if (idx >= VARYING_SLOT_VAR0 || idx == VARYING_SLOT_LAYER || idx == VARYING_SLOT_PRIMITIVE_ID ||
+      if (idx >= VARYING_SLOT_VAR0 || idx == VARYING_SLOT_LAYER ||
+          idx == VARYING_SLOT_PRIMITIVE_ID || idx == VARYING_SLOT_VIEWPORT ||
           ((idx == VARYING_SLOT_CLIP_DIST0 || idx == VARYING_SLOT_CLIP_DIST1) && export_clip_dists)) {
          if (outinfo->vs_output_param_offset[idx] == AC_EXP_PARAM_UNDEFINED)
             outinfo->vs_output_param_offset[idx] = outinfo->param_exports++;
@@ -823,27 +785,122 @@ setup_vs_variables(isel_context *ctx, nir_shader *nir)
    }
    nir_foreach_variable(variable, &nir->outputs)
    {
-      if (ctx->stage == vertex_geometry_gs)
-         variable->data.driver_location = util_bitcount64(ctx->output_masks[nir->info.stage] & ((1ull << variable->data.location) - 1ull)) * 4;
-      else if (ctx->stage == vertex_es)
-         //TODO: make this more compact
-         variable->data.driver_location = shader_io_get_unique_index((gl_varying_slot)variable->data.location) * 4;
-      else
+      if (ctx->stage == vertex_vs || ctx->stage == ngg_vertex_gs)
          variable->data.driver_location = variable->data.location * 4;
+
+      assert(variable->data.location >= 0 && variable->data.location <= UINT8_MAX);
+      ctx->output_drv_loc_to_var_slot[MESA_SHADER_VERTEX][variable->data.driver_location / 4] = variable->data.location;
    }
 
-   if (ctx->stage == vertex_vs) {
+   if (ctx->stage == vertex_vs || ctx->stage == ngg_vertex_gs) {
       radv_vs_output_info *outinfo = &ctx->program->info->vs.outinfo;
       setup_vs_output_info(ctx, nir, outinfo->export_prim_id,
                            ctx->options->key.vs_common_out.export_clip_dists, outinfo);
-   } else if (ctx->stage == vertex_geometry_gs || ctx->stage == vertex_es) {
-      /* TODO: radv_nir_shader_info_pass() already sets this but it's larger
-       * than it needs to be in order to set it better, we have to improve
-       * radv_nir_shader_info_pass() because gfx9_get_gs_info() uses
-       * esgs_itemsize and has to be done before compilation
-       */
-      /* radv_es_output_info *outinfo = &ctx->program->info->vs.es_info;
-      outinfo->esgs_itemsize = util_bitcount64(ctx->output_masks[nir->info.stage]) * 16u; */
+   } else if (ctx->stage == vertex_ls) {
+      ctx->tcs_num_inputs = ctx->program->info->vs.num_linked_outputs;
+   }
+
+   if (ctx->stage == ngg_vertex_gs && ctx->args->options->key.vs_common_out.export_prim_id) {
+      /* We need to store the primitive IDs in LDS */
+      unsigned lds_size = ctx->program->info->ngg_info.esgs_ring_size;
+      ctx->program->config->lds_size = (lds_size + ctx->program->lds_alloc_granule - 1) /
+                                       ctx->program->lds_alloc_granule;
+   }
+}
+
+void setup_gs_variables(isel_context *ctx, nir_shader *nir)
+{
+   if (ctx->stage == vertex_geometry_gs || ctx->stage == tess_eval_geometry_gs)
+      ctx->program->config->lds_size = ctx->program->info->gs_ring_info.lds_size; /* Already in units of the alloc granularity */
+
+   nir_foreach_variable(variable, &nir->outputs) {
+      variable->data.driver_location = variable->data.location * 4;
+   }
+
+   if (ctx->stage == vertex_geometry_gs)
+      ctx->program->info->gs.es_type = MESA_SHADER_VERTEX;
+   else if (ctx->stage == tess_eval_geometry_gs)
+      ctx->program->info->gs.es_type = MESA_SHADER_TESS_EVAL;
+}
+
+void
+setup_tcs_info(isel_context *ctx, nir_shader *nir)
+{
+   /* When the number of TCS input and output vertices are the same (typically 3):
+    * - There is an equal amount of LS and HS invocations
+    * - In case of merged LSHS shaders, the LS and HS halves of the shader
+    *   always process the exact same vertex. We can use this knowledge to optimize them.
+    */
+   ctx->tcs_in_out_eq =
+      ctx->stage == vertex_tess_control_hs &&
+      ctx->args->options->key.tcs.input_vertices == nir->info.tess.tcs_vertices_out;
+
+   if (ctx->tcs_in_out_eq) {
+      ctx->tcs_temp_only_inputs = ~nir->info.tess.tcs_cross_invocation_inputs_read &
+                                    ~nir->info.inputs_read_indirectly &
+                                    nir->info.inputs_read;
+   }
+
+   ctx->tcs_num_inputs = ctx->program->info->tcs.num_linked_inputs;
+   ctx->tcs_num_outputs = ctx->program->info->tcs.num_linked_outputs;
+   ctx->tcs_num_patch_outputs = ctx->program->info->tcs.num_linked_patch_outputs;
+
+   ctx->tcs_num_patches = get_tcs_num_patches(
+                             ctx->args->options->key.tcs.input_vertices,
+                             nir->info.tess.tcs_vertices_out,
+                             ctx->tcs_num_inputs,
+                             ctx->tcs_num_outputs,
+                             ctx->tcs_num_patch_outputs,
+                             ctx->args->options->tess_offchip_block_dw_size,
+                             ctx->args->options->chip_class,
+                             ctx->args->options->family);
+   unsigned lds_size = calculate_tess_lds_size(
+                             ctx->args->options->key.tcs.input_vertices,
+                             nir->info.tess.tcs_vertices_out,
+                             ctx->tcs_num_inputs,
+                             ctx->tcs_num_patches,
+                             ctx->tcs_num_outputs,
+                             ctx->tcs_num_patch_outputs);
+
+   ctx->args->shader_info->tcs.num_patches = ctx->tcs_num_patches;
+   ctx->args->shader_info->tcs.lds_size = lds_size;
+   ctx->program->config->lds_size = (lds_size + ctx->program->lds_alloc_granule - 1) /
+                                    ctx->program->lds_alloc_granule;
+}
+
+void
+setup_tcs_variables(isel_context *ctx, nir_shader *nir)
+{
+   nir_foreach_variable(variable, &nir->outputs) {
+      assert(variable->data.location >= 0 && variable->data.location <= UINT8_MAX);
+
+      if (variable->data.location == VARYING_SLOT_TESS_LEVEL_OUTER)
+         ctx->tcs_tess_lvl_out_loc = variable->data.driver_location * 4u;
+      else if (variable->data.location == VARYING_SLOT_TESS_LEVEL_INNER)
+         ctx->tcs_tess_lvl_in_loc = variable->data.driver_location * 4u;
+
+      if (variable->data.patch)
+         ctx->output_tcs_patch_drv_loc_to_var_slot[variable->data.driver_location / 4] = variable->data.location;
+      else
+         ctx->output_drv_loc_to_var_slot[MESA_SHADER_TESS_CTRL][variable->data.driver_location / 4] = variable->data.location;
+   }
+}
+
+void
+setup_tes_variables(isel_context *ctx, nir_shader *nir)
+{
+   ctx->tcs_num_patches = ctx->args->options->key.tes.num_patches;
+   ctx->tcs_num_outputs = ctx->program->info->tes.num_linked_inputs;
+
+   nir_foreach_variable(variable, &nir->outputs) {
+      if (ctx->stage == tess_eval_vs || ctx->stage == ngg_tess_eval_gs)
+         variable->data.driver_location = variable->data.location * 4;
+   }
+
+   if (ctx->stage == tess_eval_vs || ctx->stage == ngg_tess_eval_gs) {
+      radv_vs_output_info *outinfo = &ctx->program->info->tes.outinfo;
+      setup_vs_output_info(ctx, nir, outinfo->export_prim_id,
+                           ctx->options->key.vs_common_out.export_clip_dists, outinfo);
    }
 }
 
@@ -869,22 +926,15 @@ setup_variables(isel_context *ctx, nir_shader *nir)
       break;
    }
    case MESA_SHADER_GEOMETRY: {
-      assert(ctx->stage == vertex_geometry_gs || ctx->stage == geometry_gs);
-      if (ctx->stage == vertex_geometry_gs) {
-         nir_foreach_variable(variable, &nir->inputs) {
-            variable->data.driver_location = util_bitcount64(ctx->input_masks[nir->info.stage] & ((1ull << variable->data.location) - 1ull)) * 4;
-         }
-      } else {
-         //TODO: make this more compact
-         nir_foreach_variable(variable, &nir->inputs) {
-            variable->data.driver_location = shader_io_get_unique_index((gl_varying_slot)variable->data.location) * 4;
-         }
-      }
-      nir_foreach_variable(variable, &nir->outputs) {
-         variable->data.driver_location = variable->data.location * 4;
-      }
-      if (ctx->stage == vertex_geometry_gs)
-         ctx->program->info->gs.es_type = MESA_SHADER_VERTEX; /* tesselation shaders are not yet supported */
+      setup_gs_variables(ctx, nir);
+      break;
+   }
+   case MESA_SHADER_TESS_CTRL: {
+      setup_tcs_variables(ctx, nir);
+      break;
+   }
+   case MESA_SHADER_TESS_EVAL: {
+      setup_tes_variables(ctx, nir);
       break;
    }
    default:
@@ -892,48 +942,32 @@ setup_variables(isel_context *ctx, nir_shader *nir)
    }
 }
 
-void
-get_io_masks(isel_context *ctx, unsigned shader_count, struct nir_shader *const *shaders)
+unsigned
+lower_bit_size_callback(const nir_alu_instr *alu, void *_)
 {
-   for (unsigned i = 0; i < shader_count; i++) {
-      nir_shader *nir = shaders[i];
-      if (nir->info.stage == MESA_SHADER_COMPUTE)
-         continue;
+   if (nir_op_is_vec(alu->op))
+      return 0;
 
-      uint64_t output_mask = 0;
-      nir_foreach_variable(variable, &nir->outputs) {
-         const glsl_type *type = variable->type;
-         if (nir_is_per_vertex_io(variable, nir->info.stage))
-            type = type->fields.array;
-         unsigned slots = type->count_attribute_slots(false);
-         if (variable->data.compact) {
-            unsigned component_count = variable->data.location_frac + type->length;
-            slots = (component_count + 3) / 4;
-         }
-         output_mask |= ((1ull << slots) - 1) << variable->data.location;
-      }
+   unsigned bit_size = alu->dest.dest.ssa.bit_size;
+   if (nir_alu_instr_is_comparison(alu))
+      bit_size = nir_src_bit_size(alu->src[0].src);
 
-      uint64_t input_mask = 0;
-      nir_foreach_variable(variable, &nir->inputs) {
-         const glsl_type *type = variable->type;
-         if (nir_is_per_vertex_io(variable, nir->info.stage))
-            type = type->fields.array;
-         unsigned slots = type->count_attribute_slots(false);
-         if (variable->data.compact) {
-            unsigned component_count = variable->data.location_frac + type->length;
-            slots = (component_count + 3) / 4;
-         }
-         input_mask |= ((1ull << slots) - 1) << variable->data.location;
-      }
+   if (bit_size >= 32 || bit_size == 1)
+      return 0;
 
-      ctx->output_masks[nir->info.stage] |= output_mask;
-      if (i + 1 < shader_count)
-         ctx->input_masks[shaders[i + 1]->info.stage] |= output_mask;
+   if (alu->op == nir_op_bcsel)
+      return 0;
 
-      ctx->input_masks[nir->info.stage] |= input_mask;
-      if (i)
-         ctx->output_masks[shaders[i - 1]->info.stage] |= input_mask;
-   }
+   const nir_op_info *info = &nir_op_infos[alu->op];
+
+   if (info->is_conversion)
+      return 0;
+
+   bool is_integer = info->output_type & (nir_type_uint | nir_type_int);
+   for (unsigned i = 0; is_integer && (i < info->num_inputs); i++)
+      is_integer = info->input_types[i] & (nir_type_uint | nir_type_int);
+
+   return is_integer ? 32 : 0;
 }
 
 void
@@ -953,18 +987,23 @@ setup_nir(isel_context *ctx, nir_shader *nir)
    setup_variables(ctx, nir);
 
    /* optimize and lower memory operations */
+   if (nir_lower_explicit_io(nir, nir_var_mem_global, nir_address_format_64bit_global)) {
+      nir_opt_constant_folding(nir);
+      nir_opt_cse(nir);
+   }
+
    bool lower_to_scalar = false;
    bool lower_pack = false;
    if (nir_opt_load_store_vectorize(nir,
                                     (nir_variable_mode)(nir_var_mem_ssbo | nir_var_mem_ubo |
-                                                        nir_var_mem_push_const | nir_var_mem_shared),
+                                                        nir_var_mem_push_const | nir_var_mem_shared |
+                                                        nir_var_mem_global),
                                     mem_vectorize_callback)) {
       lower_to_scalar = true;
       lower_pack = true;
    }
    if (nir->info.stage != MESA_SHADER_COMPUTE)
       nir_lower_io(nir, (nir_variable_mode)(nir_var_shader_in | nir_var_shader_out), type_size, (nir_lower_io_options)0);
-   nir_lower_explicit_io(nir, nir_var_mem_global, nir_address_format_64bit_global);
 
    if (lower_to_scalar)
       nir_lower_alu_to_scalar(nir, NULL, NULL);
@@ -974,6 +1013,9 @@ setup_nir(isel_context *ctx, nir_shader *nir)
    /* lower ALU operations */
    // TODO: implement logic64 in aco, it's more effective for sgprs
    nir_lower_int64(nir, nir->options->lower_int64_options);
+
+   if (nir_lower_bit_size(nir, lower_bit_size_callback, NULL))
+      nir_copy_prop(nir); /* allow nir_opt_idiv_const() to optimize lowered divisions */
 
    nir_opt_idiv_const(nir, 32);
    nir_lower_idiv(nir, nir_lower_idiv_precise);
@@ -1018,6 +1060,24 @@ setup_nir(isel_context *ctx, nir_shader *nir)
    nir_index_ssa_defs(func);
 }
 
+void
+setup_xnack(Program *program)
+{
+   switch (program->family) {
+   /* GFX8 APUs */
+   case CHIP_CARRIZO:
+   case CHIP_STONEY:
+   /* GFX9 APUS */
+   case CHIP_RAVEN:
+   case CHIP_RAVEN2:
+   case CHIP_RENOIR:
+      program->xnack_enabled = true;
+      break;
+   default:
+      break;
+   }
+}
+
 isel_context
 setup_isel_context(Program* program,
                    unsigned shader_count,
@@ -1053,10 +1113,12 @@ setup_isel_context(Program* program,
    }
    bool gfx9_plus = args->options->chip_class >= GFX9;
    bool ngg = args->shader_info->is_ngg && args->options->chip_class >= GFX10;
-   if (program->stage == sw_vs && args->shader_info->vs.as_es)
+   if (program->stage == sw_vs && args->shader_info->vs.as_es && !ngg)
       program->stage |= hw_es;
-   else if (program->stage == sw_vs && !args->shader_info->vs.as_ls)
+   else if (program->stage == sw_vs && !args->shader_info->vs.as_ls && !ngg)
       program->stage |= hw_vs;
+   else if (program->stage == sw_vs && ngg)
+      program->stage |= hw_ngg_gs; /* GFX10/NGG: VS without GS uses the HW GS stage */
    else if (program->stage == sw_gs)
       program->stage |= hw_gs;
    else if (program->stage == sw_fs)
@@ -1067,6 +1129,20 @@ setup_isel_context(Program* program,
       program->stage |= hw_vs;
    else if (program->stage == (sw_vs | sw_gs) && gfx9_plus && !ngg)
       program->stage |= hw_gs;
+   else if (program->stage == sw_vs && args->shader_info->vs.as_ls)
+      program->stage |= hw_ls; /* GFX6-8: VS is a Local Shader, when tessellation is used */
+   else if (program->stage == sw_tcs)
+      program->stage |= hw_hs; /* GFX6-8: TCS is a Hull Shader */
+   else if (program->stage == (sw_vs | sw_tcs))
+      program->stage |= hw_hs; /* GFX9-10: VS+TCS merged into a Hull Shader */
+   else if (program->stage == sw_tes && !args->shader_info->tes.as_es && !ngg)
+      program->stage |= hw_vs; /* GFX6-9: TES without GS uses the HW VS stage (and GFX10/legacy) */
+   else if (program->stage == sw_tes && !args->shader_info->tes.as_es && ngg)
+      program->stage |= hw_ngg_gs; /* GFX10/NGG: TES without GS uses the HW GS stage */
+   else if (program->stage == sw_tes && args->shader_info->tes.as_es && !ngg)
+      program->stage |= hw_es; /* GFX6-8: TES is an Export Shader */
+   else if (program->stage == (sw_tes | sw_gs) && gfx9_plus && !ngg)
+      program->stage |= hw_gs; /* GFX9: TES+GS merged into a GS (and GFX10/legacy) */
    else
       unreachable("Shader stage not implemented");
 
@@ -1079,6 +1155,9 @@ setup_isel_context(Program* program,
 
    program->lds_alloc_granule = args->options->chip_class >= GFX7 ? 512 : 256;
    program->lds_limit = args->options->chip_class >= GFX7 ? 65536 : 32768;
+   /* apparently gfx702 also has 16-bank LDS but I can't find a family for that */
+   program->has_16bank_lds = args->options->family == CHIP_KABINI || args->options->family == CHIP_STONEY;
+
    program->vgpr_limit = 256;
    program->vgpr_alloc_granule = 3;
 
@@ -1100,20 +1179,51 @@ setup_isel_context(Program* program,
       program->sgpr_limit = 104;
    }
 
-   /* TODO: we don't have to allocate VCC if we don't need it */
-   program->needs_vcc = true;
-
-   calc_min_waves(program);
-   program->vgpr_limit = get_addr_vgpr_from_waves(program, program->min_waves);
-   program->sgpr_limit = get_addr_sgpr_from_waves(program, program->min_waves);
-
    isel_context ctx = {};
    ctx.program = program;
    ctx.args = args;
    ctx.options = args->options;
    ctx.stage = program->stage;
 
-   get_io_masks(&ctx, shader_count, shaders);
+   /* TODO: Check if we need to adjust min_waves for unknown workgroup sizes. */
+   if (program->stage & (hw_vs | hw_fs)) {
+      /* PS and legacy VS have separate waves, no workgroups */
+      program->workgroup_size = program->wave_size;
+   } else if (program->stage == compute_cs) {
+      /* CS sets the workgroup size explicitly */
+      unsigned* bsize = program->info->cs.block_size;
+      program->workgroup_size = bsize[0] * bsize[1] * bsize[2];
+   } else if ((program->stage & hw_es) || program->stage == geometry_gs) {
+      /* Unmerged ESGS operate in workgroups if on-chip GS (LDS rings) are enabled on GFX7-8 (not implemented in Mesa)  */
+      program->workgroup_size = program->wave_size;
+   } else if (program->stage & hw_gs) {
+      /* If on-chip GS (LDS rings) are enabled on GFX9 or later, merged GS operates in workgroups */
+      assert(program->chip_class >= GFX9);
+      uint32_t es_verts_per_subgrp = G_028A44_ES_VERTS_PER_SUBGRP(program->info->gs_ring_info.vgt_gs_onchip_cntl);
+      uint32_t gs_instr_prims_in_subgrp = G_028A44_GS_INST_PRIMS_IN_SUBGRP(program->info->gs_ring_info.vgt_gs_onchip_cntl);
+      uint32_t workgroup_size = MAX2(es_verts_per_subgrp, gs_instr_prims_in_subgrp);
+      program->workgroup_size = MAX2(MIN2(workgroup_size, 256), 1);
+   } else if (program->stage == vertex_ls) {
+      /* Unmerged LS operates in workgroups */
+      program->workgroup_size = UINT_MAX; /* TODO: probably tcs_num_patches * tcs_vertices_in, but those are not plumbed to ACO for LS */
+   } else if (program->stage == tess_control_hs) {
+      /* Unmerged HS operates in workgroups, size is determined by the output vertices */
+      setup_tcs_info(&ctx, shaders[0]);
+      program->workgroup_size = ctx.tcs_num_patches * shaders[0]->info.tess.tcs_vertices_out;
+   } else if (program->stage == vertex_tess_control_hs) {
+      /* Merged LSHS operates in workgroups, but can still have a different number of LS and HS invocations */
+      setup_tcs_info(&ctx, shaders[1]);
+      program->workgroup_size = ctx.tcs_num_patches * MAX2(shaders[1]->info.tess.tcs_vertices_out, ctx.args->options->key.tcs.input_vertices);
+   } else if (program->stage & hw_ngg_gs) {
+      /* TODO: Calculate workgroup size of NGG shaders. */
+      program->workgroup_size = UINT_MAX;
+   } else {
+      unreachable("Unsupported shader stage.");
+   }
+
+   calc_min_waves(program);
+   program->vgpr_limit = get_addr_vgpr_from_waves(program, program->min_waves);
+   program->sgpr_limit = get_addr_sgpr_from_waves(program, program->min_waves);
 
    unsigned scratch_size = 0;
    if (program->stage == gs_copy_vs) {
@@ -1134,6 +1244,8 @@ setup_isel_context(Program* program,
    ctx.block = ctx.program->create_and_insert_block();
    ctx.block->loop_nest_depth = 0;
    ctx.block->kind = block_kind_top_level;
+
+   setup_xnack(program);
 
    return ctx;
 }

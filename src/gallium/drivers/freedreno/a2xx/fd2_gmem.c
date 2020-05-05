@@ -93,8 +93,9 @@ emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 	uint32_t offset =
 		fd_resource_offset(rsc, psurf->u.tex.level, psurf->u.tex.first_layer);
 	enum pipe_format format = fd_gmem_restore_format(psurf->format);
+	uint32_t pitch = slice->pitch >> fdl_cpp_shift(&rsc->layout);
 
-	assert((slice->pitch & 31) == 0);
+	assert((pitch & 31) == 0);
 	assert((offset & 0xfff) == 0);
 
 	if (!rsc->valid)
@@ -109,7 +110,7 @@ emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_COPY_CONTROL));
 	OUT_RING(ring, 0x00000000);             /* RB_COPY_CONTROL */
 	OUT_RELOCW(ring, rsc->bo, offset, 0, 0);     /* RB_COPY_DEST_BASE */
-	OUT_RING(ring, slice->pitch >> 5); /* RB_COPY_DEST_PITCH */
+	OUT_RING(ring, pitch >> 5); /* RB_COPY_DEST_PITCH */
 	OUT_RING(ring,                          /* RB_COPY_DEST_INFO */
 			A2XX_RB_COPY_DEST_INFO_FORMAT(fd2_pipe2color(format)) |
 			COND(!rsc->layout.tile_mode, A2XX_RB_COPY_DEST_INFO_LINEAR) |
@@ -245,7 +246,7 @@ emit_mem2gmem_surf(struct fd_batch *batch, uint32_t base,
 	OUT_RING(ring, A2XX_SQ_TEX_0_CLAMP_X(SQ_TEX_WRAP) |
 			A2XX_SQ_TEX_0_CLAMP_Y(SQ_TEX_WRAP) |
 			A2XX_SQ_TEX_0_CLAMP_Z(SQ_TEX_WRAP) |
-			A2XX_SQ_TEX_0_PITCH(slice->pitch));
+			A2XX_SQ_TEX_0_PITCH(slice->pitch >> fdl_cpp_shift(&rsc->layout)));
 	OUT_RELOC(ring, rsc->bo, offset,
 			A2XX_SQ_TEX_1_FORMAT(fd2_pipe2surface(format).format) |
 			A2XX_SQ_TEX_1_CLAMP_POLICY(SQ_TEX_CLAMP_POLICY_OGL), 0);
@@ -438,15 +439,16 @@ fd2_emit_sysmem_prep(struct fd_batch *batch)
 	struct fdl_slice *slice = fd_resource_slice(rsc, psurf->u.tex.level);
 	uint32_t offset =
 		fd_resource_offset(rsc, psurf->u.tex.level, psurf->u.tex.first_layer);
+	uint32_t pitch = slice->pitch >> fdl_cpp_shift(&rsc->layout);
 
-	assert((slice->pitch & 31) == 0);
+	assert((pitch & 31) == 0);
 	assert((offset & 0xfff) == 0);
 
 	fd2_emit_restore(ctx, ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_SURFACE_INFO));
-	OUT_RING(ring, A2XX_RB_SURFACE_INFO_SURFACE_PITCH(slice->pitch));
+	OUT_RING(ring, A2XX_RB_SURFACE_INFO_SURFACE_PITCH(pitch));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLOR_INFO));

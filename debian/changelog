@@ -1,3 +1,18 @@
+mesa (20.1.0~rc1-1) experimental; urgency=medium
+
+  * New upstream snapshot.
+  * fix-build-with-llvm-10.diff: Refreshed.
+  * signing-key: Add key from Eric Engeström.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 05 May 2020 12:47:17 +0300
+
+mesa (20.0.6-1) unstable; urgency=medium
+
+  * New upstream release.
+  * patches: Drop upstreamed patches, refresh llvm-10 build-fix.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 05 May 2020 10:37:18 +0300
+
 mesa (20.0.4-2) unstable; urgency=medium
 
   * fix-build-with-llvm-10.diff: Add a patch to fix build with Polly,

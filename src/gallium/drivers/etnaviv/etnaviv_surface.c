@@ -43,9 +43,10 @@ static struct etna_resource *
 etna_render_handle_incompatible(struct pipe_context *pctx, struct pipe_resource *prsc)
 {
    struct etna_context *ctx = etna_context(pctx);
+   struct etna_screen *screen = ctx->screen;
    struct etna_resource *res = etna_resource(prsc);
-   bool need_multitiled = ctx->specs.pixel_pipes > 1 && !ctx->specs.single_buffer;
-   bool want_supertiled = ctx->specs.can_supertile;
+   bool need_multitiled = screen->specs.pixel_pipes > 1 && !screen->specs.single_buffer;
+   bool want_supertiled = screen->specs.can_supertile;
 
    /* Resource is compatible if it is tiled and has multi tiling when required
     * TODO: LINEAR_PE feature means render to linear is possible ?
@@ -77,6 +78,7 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
                     const struct pipe_surface *templat)
 {
    struct etna_context *ctx = etna_context(pctx);
+   struct etna_screen *screen = ctx->screen;
    struct etna_resource *rsc = etna_render_handle_incompatible(pctx, prsc);
    struct etna_surface *surf = CALLOC_STRUCT(etna_surface);
 
@@ -100,13 +102,13 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
     * indicate the tile status module bypasses the memory
     * offset and MMU. */
 
-   if (VIV_FEATURE(ctx->screen, chipFeatures, FAST_CLEAR) &&
-       VIV_FEATURE(ctx->screen, chipMinorFeatures0, MC20) &&
+   if (VIV_FEATURE(screen, chipFeatures, FAST_CLEAR) &&
+       VIV_FEATURE(screen, chipMinorFeatures0, MC20) &&
        !rsc->ts_bo &&
        /* needs to be RS/BLT compatible for transfer_map/unmap */
        (rsc->levels[level].padded_width & ETNA_RS_WIDTH_MASK) == 0 &&
        (rsc->levels[level].padded_height & ETNA_RS_HEIGHT_MASK) == 0 &&
-       etna_resource_hw_tileable(ctx->specs.use_blt, prsc)) {
+       etna_resource_hw_tileable(screen->specs.use_blt, prsc)) {
       etna_screen_resource_alloc_ts(pctx->screen, rsc);
    }
 
@@ -129,7 +131,7 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
    struct etna_resource_level *lev = &rsc->levels[level];
 
    /* Setup template relocations for this surface */
-   for (unsigned pipe = 0; pipe < ctx->specs.pixel_pipes; ++pipe) {
+   for (unsigned pipe = 0; pipe < screen->specs.pixel_pipes; ++pipe) {
       surf->reloc[pipe].bo = rsc->bo;
       surf->reloc[pipe].offset = surf->surf.offset;
       surf->reloc[pipe].flags = 0;
@@ -154,7 +156,7 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
       surf->ts_reloc.offset = surf->surf.ts_offset;
       surf->ts_reloc.flags = 0;
 
-      if (!ctx->specs.use_blt) {
+      if (!screen->specs.use_blt) {
          /* This (ab)uses the RS as a plain buffer memset().
           * Currently uses a fixed row size of 64 bytes. Some benchmarking with
           * different sizes may be in order. */
@@ -169,13 +171,13 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
             .dither = {0xffffffff, 0xffffffff},
             .width = 16,
             .height = etna_align_up(surf->surf.ts_size / 0x40, 4),
-            .clear_value = {ctx->specs.ts_clear_value},
+            .clear_value = {screen->specs.ts_clear_value},
             .clear_mode = VIVS_RS_CLEAR_CONTROL_MODE_ENABLED1,
             .clear_bits = 0xffff
          });
       }
    } else {
-      if (!ctx->specs.use_blt)
+      if (!screen->specs.use_blt)
          etna_rs_gen_clear_surface(ctx, surf, surf->level->clear_value);
    }
 

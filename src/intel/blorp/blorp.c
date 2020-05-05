@@ -227,7 +227,8 @@ blorp_compile_vs(struct blorp_context *blorp, void *mem_ctx,
    brw_compute_vue_map(compiler->devinfo,
                        &vs_prog_data->base.vue_map,
                        nir->info.outputs_written,
-                       nir->info.separate_shader);
+                       nir->info.separate_shader,
+                       1);
 
    struct brw_vs_prog_key vs_key = { 0, };
 
@@ -285,14 +286,15 @@ blorp_ensure_sf_program(struct blorp_batch *batch,
    unsigned program_size;
 
    struct brw_vue_map vue_map;
-   brw_compute_vue_map(blorp->compiler->devinfo, &vue_map, slots_valid, false);
+   brw_compute_vue_map(blorp->compiler->devinfo, &vue_map, slots_valid, false, 1);
 
    struct brw_sf_prog_data prog_data_tmp;
    program = brw_compile_sf(blorp->compiler, mem_ctx, &key.key,
                             &prog_data_tmp, &vue_map, &program_size);
 
    bool result =
-      blorp->upload_shader(batch, &key, sizeof(key), program, program_size,
+      blorp->upload_shader(batch, MESA_SHADER_NONE,
+                           &key, sizeof(key), program, program_size,
                            (void *)&prog_data_tmp, sizeof(prog_data_tmp),
                            &params->sf_prog_kernel, &params->sf_prog_data);
 

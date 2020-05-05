@@ -60,7 +60,7 @@ struct NineUnknown
     const GUID **guids; /* for QueryInterface */
 
     /* for [GS]etPrivateData/FreePrivateData */
-    struct util_hash_table *pdata;
+    struct hash_table *pdata;
 
     void (*dtor)(void *data); /* top-level dtor */
 };

@@ -205,7 +205,6 @@ sp_find_cached_tile_tex(struct softpipe_tex_tile_cache *tc,
                         union tex_tile_address addr )
 {
    struct softpipe_tex_cached_tile *tile;
-   boolean zs = util_format_is_depth_or_stencil(tc->format);
 
    tile = tc->entries + tex_cache_pos( addr );
 
@@ -260,31 +259,13 @@ sp_find_cached_tile_tex(struct softpipe_tex_tile_cache *tc,
       /* Get tile from the transfer (view into texture), explicitly passing
        * the image format.
        */
-      if (!zs && util_format_is_pure_uint(tc->format)) {
-         pipe_get_tile_ui_format(tc->tex_trans, tc->tex_trans_map,
-                                 addr.bits.x * TEX_TILE_SIZE,
-                                 addr.bits.y * TEX_TILE_SIZE,
-                                 TEX_TILE_SIZE,
-                                 TEX_TILE_SIZE,
-                                 tc->format,
-                                 (unsigned *) tile->data.colorui);
-      } else if (!zs && util_format_is_pure_sint(tc->format)) {
-         pipe_get_tile_i_format(tc->tex_trans, tc->tex_trans_map,
-                                addr.bits.x * TEX_TILE_SIZE,
-                                addr.bits.y * TEX_TILE_SIZE,
-                                TEX_TILE_SIZE,
-                                TEX_TILE_SIZE,
-                                tc->format,
-                                (int *) tile->data.colori);
-      } else {
-         pipe_get_tile_rgba_format(tc->tex_trans, tc->tex_trans_map,
-                                   addr.bits.x * TEX_TILE_SIZE,
-                                   addr.bits.y * TEX_TILE_SIZE,
-                                   TEX_TILE_SIZE,
-                                   TEX_TILE_SIZE,
-                                   tc->format,
-                                   (float *) tile->data.color);
-      }
+      pipe_get_tile_rgba(tc->tex_trans, tc->tex_trans_map,
+                         addr.bits.x * TEX_TILE_SIZE,
+                         addr.bits.y * TEX_TILE_SIZE,
+                         TEX_TILE_SIZE,
+                         TEX_TILE_SIZE,
+                         tc->format,
+                         (float *) tile->data.color);
       tile->addr = addr;
    }
 

@@ -56,14 +56,12 @@ read_counter(struct etna_context *ctx, unsigned type)
    return 0;
 }
 
-static bool
+static void
 etna_sw_begin_query(struct etna_context *ctx, struct etna_query *q)
 {
    struct etna_sw_query *sq = etna_sw_query(q);
 
    sq->begin_value = read_counter(ctx, q->type);
-
-   return true;
 }
 
 static void

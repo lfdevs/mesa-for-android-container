@@ -165,6 +165,8 @@ vc4_tile_blit(struct pipe_context *pctx, const struct pipe_blit_info *info)
 void
 vc4_blitter_save(struct vc4_context *vc4)
 {
+        util_blitter_save_fragment_constant_buffer_slot(vc4->blitter,
+                                                        vc4->constbuf[PIPE_SHADER_FRAGMENT].cb);
         util_blitter_save_vertex_buffer_slot(vc4->blitter, vc4->vertexbuf.vb);
         util_blitter_save_vertex_elements(vc4->blitter, vc4->vtx);
         util_blitter_save_vertex_shader(vc4->blitter, vc4->prog.bind_vs);

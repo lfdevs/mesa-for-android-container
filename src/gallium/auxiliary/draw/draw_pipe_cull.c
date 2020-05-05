@@ -51,105 +51,12 @@ static inline struct cull_stage *cull_stage( struct draw_stage *stage )
    return (struct cull_stage *)stage;
 }
 
-static inline boolean
-cull_distance_is_out(float dist)
-{
-   return (dist < 0.0f) || util_is_inf_or_nan(dist);
-}
-
 /*
- * If the shader writes the culldistance then we can
- * perform distance based culling. Distance based
- * culling doesn't require a face and can be performed
- * on primitives without faces (e.g. points and lines)
- */
-static void cull_point( struct draw_stage *stage,
-                        struct prim_header *header )
-{
-   const unsigned num_written_culldistances =
-      draw_current_shader_num_written_culldistances(stage->draw);
-   const unsigned num_written_clipdistances =
-      draw_current_shader_num_written_clipdistances(stage->draw);
-   unsigned i;
-
-   debug_assert(num_written_culldistances);
-
-   for (i = 0; i < num_written_culldistances; ++i) {
-      unsigned cull_idx = (num_written_clipdistances + i) / 4;
-      unsigned out_idx =
-         draw_current_shader_ccdistance_output(stage->draw, cull_idx);
-      unsigned idx = (num_written_clipdistances + i) % 4;
-      float cull1 = header->v[0]->data[out_idx][idx];
-      boolean vert1_out = cull_distance_is_out(cull1);
-      if (vert1_out)
-         return;
-   }
-   stage->next->point( stage->next, header );
-}
-
-/*
- * If the shader writes the culldistance then we can
- * perform distance based culling. Distance based
- * culling doesn't require a face and can be performed
- * on primitives without faces (e.g. points and lines)
- */
-static void cull_line( struct draw_stage *stage,
-                       struct prim_header *header )
-{
-   const unsigned num_written_culldistances =
-      draw_current_shader_num_written_culldistances(stage->draw);
-   const unsigned num_written_clipdistances =
-      draw_current_shader_num_written_clipdistances(stage->draw);
-   unsigned i;
-
-   debug_assert(num_written_culldistances);
-
-   for (i = 0; i < num_written_culldistances; ++i) {
-      unsigned cull_idx = (num_written_clipdistances + i) / 4;
-      unsigned out_idx =
-         draw_current_shader_ccdistance_output(stage->draw, cull_idx);
-      unsigned idx = (num_written_clipdistances + i) % 4;
-      float cull1 = header->v[0]->data[out_idx][idx];
-      float cull2 = header->v[1]->data[out_idx][idx];
-      boolean vert1_out = cull_distance_is_out(cull1);
-      boolean vert2_out = cull_distance_is_out(cull2);
-      if (vert1_out && vert2_out)
-         return;
-   }
-   stage->next->line( stage->next, header );
-}
-
-/*
- * Triangles can be culled either using the cull distance
- * shader outputs or the regular face culling. If required
- * this function performs both, starting with distance culling.
+ * Triangles can be culled using regular face cull.
  */
 static void cull_tri( struct draw_stage *stage,
 		      struct prim_header *header )
 {
-   const unsigned num_written_culldistances =
-      draw_current_shader_num_written_culldistances(stage->draw);
-   const unsigned num_written_clipdistances =
-      draw_current_shader_num_written_clipdistances(stage->draw);
-   /* Do the distance culling */
-   if (num_written_culldistances) {
-      unsigned i;
-      for (i = 0; i < num_written_culldistances; ++i) {
-         unsigned cull_idx = (num_written_clipdistances + i) / 4;
-         unsigned out_idx =
-            draw_current_shader_ccdistance_output(stage->draw, cull_idx);
-         unsigned idx = (num_written_clipdistances + i) % 4;
-         float cull1 = header->v[0]->data[out_idx][idx];
-         float cull2 = header->v[1]->data[out_idx][idx];
-         float cull3 = header->v[2]->data[out_idx][idx];
-         boolean vert1_out = cull_distance_is_out(cull1);
-         boolean vert2_out = cull_distance_is_out(cull2);
-         boolean vert3_out = cull_distance_is_out(cull3);
-         if (vert1_out && vert2_out && vert3_out)
-            return;
-      }
-   }
-
    /* Do the regular face culling */
    {
       const unsigned pos = draw_current_shader_position_output(stage->draw);
@@ -195,36 +102,6 @@ static void cull_tri( struct draw_stage *stage,
    }
 }
 
-static void cull_first_point( struct draw_stage *stage,
-                              struct prim_header *header )
-{
-   const unsigned num_written_culldistances =
-      draw_current_shader_num_written_culldistances(stage->draw);
-
-   if (num_written_culldistances) {
-      stage->point = cull_point;
-      stage->point( stage, header );
-   } else {
-      stage->point = draw_pipe_passthrough_point;
-      stage->point( stage, header );
-   }
-}
-
-static void cull_first_line( struct draw_stage *stage,
-			    struct prim_header *header )
-{
-   const unsigned num_written_culldistances =
-      draw_current_shader_num_written_culldistances(stage->draw);
-
-   if (num_written_culldistances) {
-      stage->line = cull_line;
-      stage->line( stage, header );
-   } else {
-      stage->line = draw_pipe_passthrough_line;
-      stage->line( stage, header );
-   }
-}
-
 static void cull_first_tri( struct draw_stage *stage,
 			    struct prim_header *header )
 {
@@ -240,8 +117,6 @@ static void cull_first_tri( struct draw_stage *stage,
 
 static void cull_flush( struct draw_stage *stage, unsigned flags )
 {
-   stage->point = cull_first_point;
-   stage->line = cull_first_line;
    stage->tri = cull_first_tri;
    stage->next->flush( stage->next, flags );
 }
@@ -272,8 +147,8 @@ struct draw_stage *draw_cull_stage( struct draw_context *draw )
    cull->stage.draw = draw;
    cull->stage.name = "cull";
    cull->stage.next = NULL;
-   cull->stage.point = cull_first_point;
-   cull->stage.line = cull_first_line;
+   cull->stage.point = draw_pipe_passthrough_point;
+   cull->stage.line = draw_pipe_passthrough_line;
    cull->stage.tri = cull_first_tri;
    cull->stage.flush = cull_flush;
    cull->stage.reset_stipple_counter = cull_reset_stipple_counter;

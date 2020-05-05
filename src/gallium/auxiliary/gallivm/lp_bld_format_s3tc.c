@@ -890,32 +890,20 @@ lp_build_lerpdxta(struct gallivm_state *gallivm,
    return ainterp;
 }
 
-/**
- * Convert from <n x i128> s3tc dxt5 to <4n x i8> RGBA AoS
- * @param colors  is a <n x i32> vector with n x 2x16bit colors
- * @param codewords  is a <n x i32> vector containing the codewords
- * @param alphas  is a <n x i64> vector containing the alpha values
- * @param i  is a <n x i32> vector with the x pixel coordinate (0 to 3)
- * @param j  is a <n x i32> vector with the y pixel coordinate (0 to 3)
- */
 static LLVMValueRef
-s3tc_dxt5_full_to_rgba_aos(struct gallivm_state *gallivm,
-                           unsigned n,
-                           enum pipe_format format,
-                           LLVMValueRef colors,
-                           LLVMValueRef codewords,
-                           LLVMValueRef alpha_lo,
-                           LLVMValueRef alpha_hi,
-                           LLVMValueRef i,
-                           LLVMValueRef j)
+s3tc_dxt5_alpha_channel(struct gallivm_state *gallivm,
+                        bool is_signed,
+                        unsigned n,
+                        LLVMValueRef alpha_hi, LLVMValueRef alpha_lo,
+                        LLVMValueRef i, LLVMValueRef j)
 {
    LLVMBuilderRef builder = gallivm->builder;
-   LLVMValueRef rgba, tmp, alpha0, alpha1, alphac, alphac0, bit_pos, shift;
+   struct lp_type type, type8;
+   LLVMValueRef tmp, alpha0, alpha1, alphac, alphac0, bit_pos, shift;
    LLVMValueRef sel_mask, tmp_mask, alpha, alpha64, code_s;
    LLVMValueRef mask6, mask7, ainterp;
    LLVMTypeRef i64t = LLVMInt64TypeInContext(gallivm->context);
    LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
-   struct lp_type type, type8;
    struct lp_build_context bld32;
 
    memset(&type, 0, sizeof type);
@@ -924,21 +912,10 @@ s3tc_dxt5_full_to_rgba_aos(struct gallivm_state *gallivm,
 
    memset(&type8, 0, sizeof type8);
    type8.width = 8;
-   type8.length = n*4;
-
-   assert(lp_check_value(type, i));
-   assert(lp_check_value(type, j));
+   type8.length = n;
+   type8.sign = is_signed;
 
    lp_build_context_init(&bld32, gallivm, type);
-
-   assert(lp_check_value(type, i));
-   assert(lp_check_value(type, j));
-
-   rgba = s3tc_dxt1_to_rgba_aos(gallivm, n, format,
-                                colors, codewords, i, j);
-
-   rgba = LLVMBuildBitCast(builder, rgba, bld32.vec_type, "");
-
    /* this looks pretty complex for vectorization:
     * extract a0/a1 values
     * extract code
@@ -950,10 +927,19 @@ s3tc_dxt5_full_to_rgba_aos(struct gallivm_state *gallivm,
 
    alpha0 = LLVMBuildAnd(builder, alpha_lo,
                          lp_build_const_int_vec(gallivm, type, 0xff), "");
+   if (is_signed) {
+      alpha0 = LLVMBuildTrunc(builder, alpha0, lp_build_vec_type(gallivm, type8), "");
+      alpha0 = LLVMBuildSExt(builder, alpha0, lp_build_vec_type(gallivm, type), "");
+   }
+
    alpha1 = LLVMBuildLShr(builder, alpha_lo,
                           lp_build_const_int_vec(gallivm, type, 8), "");
    alpha1 = LLVMBuildAnd(builder, alpha1,
                          lp_build_const_int_vec(gallivm, type, 0xff), "");
+   if (is_signed) {
+      alpha1 = LLVMBuildTrunc(builder, alpha1, lp_build_vec_type(gallivm, type8), "");
+      alpha1 = LLVMBuildSExt(builder, alpha1, lp_build_vec_type(gallivm, type), "");
+   }
 
    /* pos = 3*(4j+i) */
    bit_pos = LLVMBuildShl(builder, j, lp_build_const_int_vec(gallivm, type, 2), "");
@@ -1034,9 +1020,65 @@ s3tc_dxt5_full_to_rgba_aos(struct gallivm_state *gallivm,
                             code_s, lp_build_const_int_vec(gallivm, type, 6));
    mask7 = lp_build_compare(gallivm, type, PIPE_FUNC_EQUAL,
                             code_s, lp_build_const_int_vec(gallivm, type, 7));
-   alpha = LLVMBuildAnd(builder, alpha, LLVMBuildNot(builder, mask6, ""), "");
-   alpha = LLVMBuildOr(builder, alpha, mask7, "");
+   if (is_signed) {
+      alpha = lp_build_select(&bld32, mask6, lp_build_const_int_vec(gallivm, type, -127), alpha);
+      alpha = lp_build_select(&bld32, mask7, lp_build_const_int_vec(gallivm, type, 127), alpha);
+   } else {
+      alpha = LLVMBuildAnd(builder, alpha, LLVMBuildNot(builder, mask6, ""), "");
+      alpha = LLVMBuildOr(builder, alpha, mask7, "");
+   }
+   /* There can be garbage in upper bits, mask them off for rgtc formats */
+   alpha = LLVMBuildAnd(builder, alpha, lp_build_const_int_vec(gallivm, type, 0xff), "");
 
+   return alpha;
+}
+
+/**
+ * Convert from <n x i128> s3tc dxt5 to <4n x i8> RGBA AoS
+ * @param colors  is a <n x i32> vector with n x 2x16bit colors
+ * @param codewords  is a <n x i32> vector containing the codewords
+ * @param alphas  is a <n x i64> vector containing the alpha values
+ * @param i  is a <n x i32> vector with the x pixel coordinate (0 to 3)
+ * @param j  is a <n x i32> vector with the y pixel coordinate (0 to 3)
+ */
+static LLVMValueRef
+s3tc_dxt5_full_to_rgba_aos(struct gallivm_state *gallivm,
+                           unsigned n,
+                           enum pipe_format format,
+                           LLVMValueRef colors,
+                           LLVMValueRef codewords,
+                           LLVMValueRef alpha_lo,
+                           LLVMValueRef alpha_hi,
+                           LLVMValueRef i,
+                           LLVMValueRef j)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMValueRef rgba, alpha;
+   struct lp_type type, type8;
+   struct lp_build_context bld32;
+
+   memset(&type, 0, sizeof type);
+   type.width = 32;
+   type.length = n;
+
+   memset(&type8, 0, sizeof type8);
+   type8.width = 8;
+   type8.length = n*4;
+
+   assert(lp_check_value(type, i));
+   assert(lp_check_value(type, j));
+
+   lp_build_context_init(&bld32, gallivm, type);
+
+   assert(lp_check_value(type, i));
+   assert(lp_check_value(type, j));
+
+   rgba = s3tc_dxt1_to_rgba_aos(gallivm, n, format,
+                                colors, codewords, i, j);
+
+   rgba = LLVMBuildBitCast(builder, rgba, bld32.vec_type, "");
+
+   alpha = s3tc_dxt5_alpha_channel(gallivm, false, n, alpha_hi, alpha_lo, i, j);
    alpha = LLVMBuildShl(builder, alpha, lp_build_const_int_vec(gallivm, type, 24), "");
    rgba = LLVMBuildOr(builder, alpha, rgba, "");
 
@@ -2262,5 +2304,356 @@ lp_build_fetch_s3tc_rgba_aos(struct gallivm_state *gallivm,
 
    /* always return just decompressed values - srgb conversion is done later */
 
+   return rgba;
+}
+
+/**
+ * Gather elements from scatter positions in memory into vectors.
+ * This is customised for fetching texels from s3tc textures.
+ * For SSE, typical value is length=4.
+ *
+ * @param length length of the offsets
+ * @param colors the stored colors of the blocks will be extracted into this.
+ * @param codewords the codewords of the blocks will be extracted into this.
+ * @param alpha_lo used for storing lower 32bit of alpha components for dxt3/5
+ * @param alpha_hi used for storing higher 32bit of alpha components for dxt3/5
+ * @param base_ptr base pointer, should be a i8 pointer type.
+ * @param offsets vector with offsets
+ */
+static void
+lp_build_gather_rgtc(struct gallivm_state *gallivm,
+                     unsigned length,
+                     const struct util_format_description *format_desc,
+                     LLVMValueRef *red_lo, LLVMValueRef *red_hi,
+                     LLVMValueRef *green_lo, LLVMValueRef *green_hi,
+                     LLVMValueRef base_ptr,
+                     LLVMValueRef offsets)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   unsigned block_bits = format_desc->block.bits;
+   unsigned i;
+   LLVMValueRef elems[8];
+   LLVMTypeRef type32 = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef type64 = LLVMInt64TypeInContext(gallivm->context);
+   LLVMTypeRef type32dxt;
+   struct lp_type lp_type32dxt;
+
+   memset(&lp_type32dxt, 0, sizeof lp_type32dxt);
+   lp_type32dxt.width = 32;
+   lp_type32dxt.length = block_bits / 32;
+   type32dxt = lp_build_vec_type(gallivm, lp_type32dxt);
+
+   assert(block_bits == 64 || block_bits == 128);
+   assert(length == 1 || length == 4 || length == 8);
+
+   for (i = 0; i < length; ++i) {
+      elems[i] = lp_build_gather_elem(gallivm, length,
+                                      block_bits, block_bits, TRUE,
+                                      base_ptr, offsets, i, FALSE);
+      elems[i] = LLVMBuildBitCast(builder, elems[i], type32dxt, "");
+   }
+   if (length == 1) {
+      LLVMValueRef elem = elems[0];
+
+      *red_lo = LLVMBuildExtractElement(builder, elem,
+                                        lp_build_const_int32(gallivm, 0), "");
+      *red_hi = LLVMBuildExtractElement(builder, elem,
+                                        lp_build_const_int32(gallivm, 1), "");
+
+      if (block_bits == 128) {
+         *green_lo = LLVMBuildExtractElement(builder, elem,
+                                             lp_build_const_int32(gallivm, 2), "");
+         *green_hi = LLVMBuildExtractElement(builder, elem,
+                                             lp_build_const_int32(gallivm, 3), "");
+      }
+   } else {
+      LLVMValueRef tmp[4];
+      struct lp_type lp_type32, lp_type64;
+      memset(&lp_type32, 0, sizeof lp_type32);
+      lp_type32.width = 32;
+      lp_type32.length = length;
+      lp_type32.sign = lp_type32dxt.sign;
+      memset(&lp_type64, 0, sizeof lp_type64);
+      lp_type64.width = 64;
+      lp_type64.length = length/2;
+      if (block_bits == 128) {
+         if (length == 8) {
+            for (i = 0; i < 4; ++i) {
+               tmp[0] = elems[i];
+               tmp[1] = elems[i+4];
+               elems[i] = lp_build_concat(gallivm, tmp, lp_type32dxt, 2);
+            }
+         }
+         lp_build_transpose_aos(gallivm, lp_type32, elems, tmp);
+         *green_lo = tmp[2];
+         *green_hi = tmp[3];
+         *red_lo = tmp[0];
+         *red_hi = tmp[1];
+      } else {
+         LLVMValueRef red01, red23;
+         LLVMTypeRef type64_vec = LLVMVectorType(type64, length/2);
+         LLVMTypeRef type32_vec = LLVMVectorType(type32, length);
+
+         for (i = 0; i < length; ++i) {
+            /* no-op shuffle */
+            elems[i] = LLVMBuildShuffleVector(builder, elems[i],
+                                              LLVMGetUndef(type32dxt),
+                                              lp_build_const_extend_shuffle(gallivm, 2, 4), "");
+         }
+         if (length == 8) {
+            struct lp_type lp_type32_4 = {0};
+            lp_type32_4.width = 32;
+            lp_type32_4.length = 4;
+            for (i = 0; i < 4; ++i) {
+               tmp[0] = elems[i];
+               tmp[1] = elems[i+4];
+               elems[i] = lp_build_concat(gallivm, tmp, lp_type32_4, 2);
+            }
+         }
+         red01 = lp_build_interleave2_half(gallivm, lp_type32, elems[0], elems[1], 0);
+         red23 = lp_build_interleave2_half(gallivm, lp_type32, elems[2], elems[3], 0);
+         red01 = LLVMBuildBitCast(builder, red01, type64_vec, "");
+         red23 = LLVMBuildBitCast(builder, red23, type64_vec, "");
+         *red_lo = lp_build_interleave2_half(gallivm, lp_type64, red01, red23, 0);
+         *red_hi = lp_build_interleave2_half(gallivm, lp_type64, red01, red23, 1);
+         *red_lo = LLVMBuildBitCast(builder, *red_lo, type32_vec, "");
+         *red_hi = LLVMBuildBitCast(builder, *red_hi, type32_vec, "");
+         *green_lo = NULL;
+         *green_hi = NULL;
+      }
+   }
+}
+
+static LLVMValueRef
+rgtc1_to_rgba_aos(struct gallivm_state *gallivm,
+                  unsigned n,
+                  enum pipe_format format,
+                  LLVMValueRef red_lo,
+                  LLVMValueRef red_hi,
+                  LLVMValueRef i,
+                  LLVMValueRef j)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   bool is_signed = (format == PIPE_FORMAT_RGTC1_SNORM);
+   LLVMValueRef red = s3tc_dxt5_alpha_channel(gallivm, is_signed, n, red_hi, red_lo, i, j);
+   LLVMValueRef rgba;
+   struct lp_type type, type8;
+   memset(&type, 0, sizeof type);
+   type.width = 32;
+   type.length = n;
+   memset(&type8, 0, sizeof type8);
+   type8.width = 8;
+   type8.length = n*4;
+   rgba = lp_build_const_int_vec(gallivm, type, is_signed ? (0x7f << 24) : (0xff << 24));
+   rgba = LLVMBuildOr(builder, rgba, red, "");
+   return LLVMBuildBitCast(builder, rgba, lp_build_vec_type(gallivm, type8), "");
+}
+
+static LLVMValueRef
+rgtc2_to_rgba_aos(struct gallivm_state *gallivm,
+                  unsigned n,
+                  enum pipe_format format,
+                  LLVMValueRef red_lo,
+                  LLVMValueRef red_hi,
+                  LLVMValueRef green_lo,
+                  LLVMValueRef green_hi,
+                  LLVMValueRef i,
+                  LLVMValueRef j)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   bool is_signed = (format == PIPE_FORMAT_RGTC2_SNORM);
+   LLVMValueRef red = s3tc_dxt5_alpha_channel(gallivm, is_signed, n, red_hi, red_lo, i, j);
+   LLVMValueRef green = s3tc_dxt5_alpha_channel(gallivm, is_signed, n, green_hi, green_lo, i, j);
+   LLVMValueRef rgba;
+   struct lp_type type, type8;
+   memset(&type, 0, sizeof type);
+   type.width = 32;
+   type.length = n;
+   memset(&type8, 0, sizeof type8);
+   type8.width = 8;
+   type8.length = n*4;
+   rgba = lp_build_const_int_vec(gallivm, type, is_signed ? (0x7f << 24) : (0xff << 24));
+   rgba = LLVMBuildOr(builder, rgba, red, "");
+   green = LLVMBuildShl(builder, green, lp_build_const_int_vec(gallivm, type, 8), "");
+   rgba = LLVMBuildOr(builder, rgba, green, "");
+   return LLVMBuildBitCast(builder, rgba, lp_build_vec_type(gallivm, type8), "");
+}
+
+static LLVMValueRef
+latc1_to_rgba_aos(struct gallivm_state *gallivm,
+                  unsigned n,
+                  enum pipe_format format,
+                  LLVMValueRef red_lo,
+                  LLVMValueRef red_hi,
+                  LLVMValueRef i,
+                  LLVMValueRef j)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   bool is_signed = (format == PIPE_FORMAT_LATC1_SNORM);
+   LLVMValueRef red = s3tc_dxt5_alpha_channel(gallivm, is_signed, n, red_hi, red_lo, i, j);
+   LLVMValueRef rgba, temp;
+   struct lp_type type, type8;
+   memset(&type, 0, sizeof type);
+   type.width = 32;
+   type.length = n;
+   memset(&type8, 0, sizeof type8);
+   type8.width = 8;
+   type8.length = n*4;
+   rgba = lp_build_const_int_vec(gallivm, type, is_signed ? (0x7f << 24) : (0xff << 24));
+   rgba = LLVMBuildOr(builder, rgba, red, "");
+   temp = LLVMBuildShl(builder, red, lp_build_const_int_vec(gallivm, type, 8), "");
+   rgba = LLVMBuildOr(builder, rgba, temp, "");
+   temp = LLVMBuildShl(builder, red, lp_build_const_int_vec(gallivm, type, 16), "");
+   rgba = LLVMBuildOr(builder, rgba, temp, "");
+   return LLVMBuildBitCast(builder, rgba, lp_build_vec_type(gallivm, type8), "");
+}
+
+static LLVMValueRef
+latc2_to_rgba_aos(struct gallivm_state *gallivm,
+                  unsigned n,
+                  enum pipe_format format,
+                  LLVMValueRef red_lo,
+                  LLVMValueRef red_hi,
+                  LLVMValueRef green_lo,
+                  LLVMValueRef green_hi,
+                  LLVMValueRef i,
+                  LLVMValueRef j)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   bool is_signed = (format == PIPE_FORMAT_LATC2_SNORM);
+   LLVMValueRef red = s3tc_dxt5_alpha_channel(gallivm, is_signed, n, red_hi, red_lo, i, j);
+   LLVMValueRef green = s3tc_dxt5_alpha_channel(gallivm, is_signed, n, green_hi, green_lo, i, j);
+   LLVMValueRef rgba, temp;
+   struct lp_type type, type8;
+   memset(&type, 0, sizeof type);
+   type.width = 32;
+   type.length = n;
+   memset(&type8, 0, sizeof type8);
+   type8.width = 8;
+   type8.length = n*4;
+
+   temp = LLVMBuildShl(builder, red, lp_build_const_int_vec(gallivm, type, 8), "");
+   rgba = LLVMBuildOr(builder, red, temp, "");
+   temp = LLVMBuildShl(builder, red, lp_build_const_int_vec(gallivm, type, 16), "");
+   rgba = LLVMBuildOr(builder, rgba, temp, "");
+   temp = LLVMBuildShl(builder, green, lp_build_const_int_vec(gallivm, type, 24), "");
+   rgba = LLVMBuildOr(builder, rgba, temp, "");
+   return LLVMBuildBitCast(builder, rgba, lp_build_vec_type(gallivm, type8), "");
+}
+
+/**
+ * @param n  number of pixels processed (usually n=4, but it should also work with n=1
+ *           and multiples of 4)
+ * @param base_ptr  base pointer (32bit or 64bit pointer depending on the architecture)
+ * @param offset <n x i32> vector with the relative offsets of the S3TC blocks
+ * @param i  is a <n x i32> vector with the x subpixel coordinate (0..3)
+ * @param j  is a <n x i32> vector with the y subpixel coordinate (0..3)
+ * @return  a <4*n x i8> vector with the pixel RGBA values in AoS
+ */
+LLVMValueRef
+lp_build_fetch_rgtc_rgba_aos(struct gallivm_state *gallivm,
+                             const struct util_format_description *format_desc,
+                             unsigned n,
+                             LLVMValueRef base_ptr,
+                             LLVMValueRef offset,
+                             LLVMValueRef i,
+                             LLVMValueRef j,
+                             LLVMValueRef cache)
+{
+   LLVMValueRef rgba;
+   LLVMTypeRef i8t = LLVMInt8TypeInContext(gallivm->context);
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMValueRef red_lo, red_hi, green_lo, green_hi;
+   assert(format_desc->layout == UTIL_FORMAT_LAYOUT_RGTC);
+   assert(format_desc->block.width == 4);
+   assert(format_desc->block.height == 4);
+
+   assert((n == 1) || (n % 4 == 0));
+
+   if (n > 4) {
+      unsigned count;
+      LLVMTypeRef i128_type = LLVMIntTypeInContext(gallivm->context, 128);
+      LLVMTypeRef i128_vectype =  LLVMVectorType(i128_type, n / 4);
+      LLVMTypeRef i8_vectype = LLVMVectorType(i8t, 4 * n);
+      LLVMTypeRef i324_vectype = LLVMVectorType(LLVMInt32TypeInContext(
+                                                   gallivm->context), 4);
+      LLVMValueRef offset4, i4, j4, rgba4[LP_MAX_VECTOR_LENGTH/16];
+      struct lp_type lp_324_vectype = lp_type_uint_vec(32, 128);
+
+      rgba = LLVMGetUndef(i128_vectype);
+
+      for (count = 0; count < n / 4; count++) {
+
+         i4 = lp_build_extract_range(gallivm, i, count * 4, 4);
+         j4 = lp_build_extract_range(gallivm, j, count * 4, 4);
+         offset4 = lp_build_extract_range(gallivm, offset, count * 4, 4);
+
+         lp_build_gather_rgtc(gallivm, 4, format_desc, &red_lo, &red_hi,
+                              &green_lo, &green_hi, base_ptr, offset4);
+
+         switch (format_desc->format) {
+         case PIPE_FORMAT_RGTC1_UNORM:
+         case PIPE_FORMAT_RGTC1_SNORM:
+            rgba4[count] = rgtc1_to_rgba_aos(gallivm, 4, format_desc->format,
+                                             red_lo, red_hi, i4, j4);
+            break;
+         case PIPE_FORMAT_RGTC2_UNORM:
+         case PIPE_FORMAT_RGTC2_SNORM:
+            rgba4[count] = rgtc2_to_rgba_aos(gallivm, 4, format_desc->format,
+                                             red_lo, red_hi, green_lo, green_hi, i4, j4);
+            break;
+         case PIPE_FORMAT_LATC1_UNORM:
+         case PIPE_FORMAT_LATC1_SNORM:
+            rgba4[count] = latc1_to_rgba_aos(gallivm, 4, format_desc->format,
+                                             red_lo, red_hi, i4, j4);
+            break;
+         case PIPE_FORMAT_LATC2_UNORM:
+         case PIPE_FORMAT_LATC2_SNORM:
+            rgba4[count] = latc2_to_rgba_aos(gallivm, 4, format_desc->format,
+                                             red_lo, red_hi, green_lo, green_hi, i4, j4);
+            break;
+         default:
+            assert(0);
+            rgba4[count] = LLVMGetUndef(LLVMVectorType(i8t, 4));
+            break;
+         }
+         /* shuffles typically give best results with dword elements...*/
+         rgba4[count] = LLVMBuildBitCast(builder, rgba4[count], i324_vectype, "");
+      }
+      rgba = lp_build_concat(gallivm, rgba4, lp_324_vectype, n / 4);
+      rgba = LLVMBuildBitCast(builder, rgba, i8_vectype, "");
+   } else {
+      LLVMValueRef red_lo, red_hi, green_lo, green_hi;
+
+      lp_build_gather_rgtc(gallivm, n, format_desc, &red_lo, &red_hi,
+                           &green_lo, &green_hi, base_ptr, offset);
+
+      switch (format_desc->format) {
+      case PIPE_FORMAT_RGTC1_UNORM:
+      case PIPE_FORMAT_RGTC1_SNORM:
+         rgba = rgtc1_to_rgba_aos(gallivm, n, format_desc->format,
+                                  red_lo, red_hi, i, j);
+         break;
+      case PIPE_FORMAT_RGTC2_UNORM:
+      case PIPE_FORMAT_RGTC2_SNORM:
+         rgba = rgtc2_to_rgba_aos(gallivm, n, format_desc->format,
+                                  red_lo, red_hi, green_lo, green_hi, i, j);
+         break;
+      case PIPE_FORMAT_LATC1_UNORM:
+      case PIPE_FORMAT_LATC1_SNORM:
+         rgba = latc1_to_rgba_aos(gallivm, n, format_desc->format,
+                                  red_lo, red_hi, i, j);
+         break;
+      case PIPE_FORMAT_LATC2_UNORM:
+      case PIPE_FORMAT_LATC2_SNORM:
+         rgba = latc2_to_rgba_aos(gallivm, n, format_desc->format,
+                                  red_lo, red_hi, green_lo, green_hi, i, j);
+         break;
+      default:
+         assert(0);
+         rgba = LLVMGetUndef(LLVMVectorType(i8t, 4*n));
+         break;
+      }
+   }
    return rgba;
 }

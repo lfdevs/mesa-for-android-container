@@ -102,7 +102,7 @@ vc4_screen_destroy(struct pipe_screen *pscreen)
 {
         struct vc4_screen *screen = vc4_screen(pscreen);
 
-        util_hash_table_destroy(screen->bo_handles);
+        _mesa_hash_table_destroy(screen->bo_handles, NULL);
         vc4_bufmgr_destroy(pscreen);
         slab_destroy_parent(&screen->transfer_pool);
         free(screen->ro);
@@ -412,6 +412,7 @@ vc4_screen_query_dmabuf_modifiers(struct pipe_screen *pscreen,
                                   int *count)
 {
         int m, i;
+        bool tex_will_lower;
         uint64_t available_modifiers[] = {
                 DRM_FORMAT_MOD_BROADCOM_VC4_T_TILED,
                 DRM_FORMAT_MOD_LINEAR,
@@ -426,6 +427,7 @@ vc4_screen_query_dmabuf_modifiers(struct pipe_screen *pscreen,
 
         *count = MIN2(max, num_modifiers);
         m = screen->has_tiling_ioctl ? 0 : 1;
+        tex_will_lower = !vc4_tex_format_supported(format);
         /* We support both modifiers (tiled and linear) for all sampler
          * formats, but if we don't have the DRM_VC4_GET_TILING ioctl
          * we shouldn't advertise the tiled formats.
@@ -433,20 +435,8 @@ vc4_screen_query_dmabuf_modifiers(struct pipe_screen *pscreen,
         for (i = 0; i < *count; i++) {
                 modifiers[i] = available_modifiers[m++];
                 if (external_only)
-                        external_only[i] = false;
+                        external_only[i] = tex_will_lower;
        }
-}
-
-#define PTR_TO_UINT(x) ((unsigned)((intptr_t)(x)))
-
-static unsigned handle_hash(void *key)
-{
-    return PTR_TO_UINT(key);
-}
-
-static int handle_compare(void *key1, void *key2)
-{
-    return PTR_TO_UINT(key1) != PTR_TO_UINT(key2);
 }
 
 static bool
@@ -525,7 +515,7 @@ vc4_screen_create(int fd, struct renderonly *ro)
 
         list_inithead(&screen->bo_cache.time_list);
         (void) mtx_init(&screen->bo_handles_mutex, mtx_plain);
-        screen->bo_handles = util_hash_table_create(handle_hash, handle_compare);
+        screen->bo_handles = util_hash_table_create_ptr_keys();
 
         screen->has_control_flow =
                 vc4_has_feature(screen, DRM_VC4_PARAM_SUPPORTS_BRANCHES);

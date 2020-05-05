@@ -61,6 +61,7 @@ llvmpipe_create_query(struct pipe_context *pipe,
 
    if (pq) {
       pq->type = type;
+      pq->index = index;
    }
 
    return (struct pipe_query *) pq;
@@ -150,20 +151,24 @@ llvmpipe_get_query_result(struct pipe_context *pipe,
       vresult->b = true;
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:
-      *result = pq->num_primitives_generated;
+      *result = pq->num_primitives_generated[0];
       break;
    case PIPE_QUERY_PRIMITIVES_EMITTED:
-      *result = pq->num_primitives_written;
+      *result = pq->num_primitives_written[0];
+      break;
+   case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
+      vresult->b = false;
+      for (unsigned s = 0; s < PIPE_MAX_VERTEX_STREAMS; s++)
+         vresult->b |= pq->num_primitives_generated[s] > pq->num_primitives_written[s];
       break;
    case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
-   case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
-      vresult->b = pq->num_primitives_generated > pq->num_primitives_written;
+      vresult->b = pq->num_primitives_generated[0] > pq->num_primitives_written[0];
       break;
    case PIPE_QUERY_SO_STATISTICS: {
       struct pipe_query_data_so_statistics *stats =
          (struct pipe_query_data_so_statistics *)vresult;
-      stats->num_primitives_written = pq->num_primitives_written;
-      stats->primitives_storage_needed = pq->num_primitives_generated;
+      stats->num_primitives_written = pq->num_primitives_written[0];
+      stats->primitives_storage_needed = pq->num_primitives_generated[0];
    }
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS: {
@@ -242,10 +247,10 @@ llvmpipe_get_query_result_resource(struct pipe_context *pipe,
          }
          break;
       case PIPE_QUERY_PRIMITIVES_GENERATED:
-         value = pq->num_primitives_generated;
+         value = pq->num_primitives_generated[0];
          break;
       case PIPE_QUERY_PRIMITIVES_EMITTED:
-         value = pq->num_primitives_written;
+         value = pq->num_primitives_written[0];
          break;
       case PIPE_QUERY_TIMESTAMP:
          for (i = 0; i < num_threads; i++) {
@@ -254,9 +259,13 @@ llvmpipe_get_query_result_resource(struct pipe_context *pipe,
             }
          }
          break;
-      case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
       case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
-         value = !!(pq->num_primitives_generated > pq->num_primitives_written);
+         value = 0;
+         for (unsigned s = 0; s < PIPE_MAX_VERTEX_STREAMS; s++)
+            value |= !!(pq->num_primitives_generated[s] > pq->num_primitives_written[s]);
+         break;
+      case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
+         value = !!(pq->num_primitives_generated[0] > pq->num_primitives_written[0]);
          break;
       case PIPE_QUERY_PIPELINE_STATISTICS:
          switch ((enum pipe_statistics_query_index)index) {
@@ -357,20 +366,25 @@ llvmpipe_begin_query(struct pipe_context *pipe, struct pipe_query *q)
 
    switch (pq->type) {
    case PIPE_QUERY_PRIMITIVES_EMITTED:
-      pq->num_primitives_written = llvmpipe->so_stats.num_primitives_written;
+      pq->num_primitives_written[0] = llvmpipe->so_stats[pq->index].num_primitives_written;
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:
-      pq->num_primitives_generated = llvmpipe->so_stats.primitives_storage_needed;
+      pq->num_primitives_generated[0] = llvmpipe->so_stats[pq->index].primitives_storage_needed;
       llvmpipe->active_primgen_queries++;
       break;
    case PIPE_QUERY_SO_STATISTICS:
-      pq->num_primitives_written = llvmpipe->so_stats.num_primitives_written;
-      pq->num_primitives_generated = llvmpipe->so_stats.primitives_storage_needed;
+      pq->num_primitives_written[0] = llvmpipe->so_stats[pq->index].num_primitives_written;
+      pq->num_primitives_generated[0] = llvmpipe->so_stats[pq->index].primitives_storage_needed;
+      break;
+   case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
+      for (unsigned s = 0; s < PIPE_MAX_VERTEX_STREAMS; s++) {
+         pq->num_primitives_written[s] = llvmpipe->so_stats[s].num_primitives_written;
+         pq->num_primitives_generated[s] = llvmpipe->so_stats[s].primitives_storage_needed;
+      }
       break;
    case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
-   case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
-      pq->num_primitives_written = llvmpipe->so_stats.num_primitives_written;
-      pq->num_primitives_generated = llvmpipe->so_stats.primitives_storage_needed;
+      pq->num_primitives_written[0] = llvmpipe->so_stats[pq->index].num_primitives_written;
+      pq->num_primitives_generated[0] = llvmpipe->so_stats[pq->index].primitives_storage_needed;
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS:
       /* reset our cache */
@@ -405,27 +419,34 @@ llvmpipe_end_query(struct pipe_context *pipe, struct pipe_query *q)
    switch (pq->type) {
 
    case PIPE_QUERY_PRIMITIVES_EMITTED:
-      pq->num_primitives_written =
-         llvmpipe->so_stats.num_primitives_written - pq->num_primitives_written;
+      pq->num_primitives_written[0] =
+         llvmpipe->so_stats[pq->index].num_primitives_written - pq->num_primitives_written[0];
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:
       assert(llvmpipe->active_primgen_queries);
       llvmpipe->active_primgen_queries--;
-      pq->num_primitives_generated =
-         llvmpipe->so_stats.primitives_storage_needed - pq->num_primitives_generated;
+      pq->num_primitives_generated[0] =
+         llvmpipe->so_stats[pq->index].primitives_storage_needed - pq->num_primitives_generated[0];
       break;
    case PIPE_QUERY_SO_STATISTICS:
-      pq->num_primitives_written =
-         llvmpipe->so_stats.num_primitives_written - pq->num_primitives_written;
-      pq->num_primitives_generated =
-         llvmpipe->so_stats.primitives_storage_needed - pq->num_primitives_generated;
+      pq->num_primitives_written[0] =
+         llvmpipe->so_stats[pq->index].num_primitives_written - pq->num_primitives_written[0];
+      pq->num_primitives_generated[0] =
+         llvmpipe->so_stats[pq->index].primitives_storage_needed - pq->num_primitives_generated[0];
+      break;
+   case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
+      for (unsigned s = 0; s < PIPE_MAX_VERTEX_STREAMS; s++) {
+         pq->num_primitives_written[s] =
+            llvmpipe->so_stats[s].num_primitives_written - pq->num_primitives_written[s];
+         pq->num_primitives_generated[s] =
+            llvmpipe->so_stats[s].primitives_storage_needed - pq->num_primitives_generated[s];
+      }
       break;
    case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
-   case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
-      pq->num_primitives_written =
-         llvmpipe->so_stats.num_primitives_written - pq->num_primitives_written;
-      pq->num_primitives_generated =
-         llvmpipe->so_stats.primitives_storage_needed - pq->num_primitives_generated;
+      pq->num_primitives_written[0] =
+         llvmpipe->so_stats[pq->index].num_primitives_written - pq->num_primitives_written[0];
+      pq->num_primitives_generated[0] =
+         llvmpipe->so_stats[pq->index].primitives_storage_needed - pq->num_primitives_generated[0];
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS:
       pq->stats.ia_vertices =
@@ -446,6 +467,10 @@ llvmpipe_end_query(struct pipe_context *pipe, struct pipe_query *q)
          llvmpipe->pipeline_statistics.ps_invocations - pq->stats.ps_invocations;
       pq->stats.cs_invocations =
          llvmpipe->pipeline_statistics.cs_invocations - pq->stats.cs_invocations;
+      pq->stats.hs_invocations =
+         llvmpipe->pipeline_statistics.hs_invocations - pq->stats.hs_invocations;
+      pq->stats.ds_invocations =
+         llvmpipe->pipeline_statistics.ds_invocations - pq->stats.ds_invocations;
       llvmpipe->active_statistics_queries--;
       break;
    case PIPE_QUERY_OCCLUSION_COUNTER:

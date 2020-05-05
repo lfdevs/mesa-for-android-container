@@ -113,8 +113,22 @@ align_u32(uint32_t v, uint32_t a)
 }
 
 static struct gen_device_info devinfo = {0};
-static uint32_t device = 0;
+static int device = 0;
 static struct aub_file aub_file;
+
+static void
+ensure_device_info(int fd)
+{
+   /* We can't do this at open time as we're not yet authenticated. */
+   if (device == 0) {
+      fail_if(!gen_get_device_info_from_fd(fd, &devinfo),
+              "failed to identify chipset.\n");
+      device = devinfo.chipset_id;
+   } else if (devinfo.gen == 0) {
+      fail_if(!gen_get_device_info_from_pci_id(device, &devinfo),
+              "failed to identify chipset.\n");
+   }
+}
 
 static void *
 relocate_bo(int fd, struct bo *bo, const struct drm_i915_gem_execbuffer2 *execbuffer2,
@@ -202,15 +216,7 @@ dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
    int batch_index;
    void *data;
 
-   /* We can't do this at open time as we're not yet authenticated. */
-   if (device == 0) {
-      fail_if(!gen_get_device_info_from_fd(fd, &devinfo),
-              "failed to identify chipset.\n");
-      device = devinfo.chipset_id;
-   } else if (devinfo.gen == 0) {
-      fail_if(!gen_get_device_info_from_pci_id(device, &devinfo),
-              "failed to identify chipset.\n");
-   }
+   ensure_device_info(fd);
 
    if (!aub_file.file) {
       aub_file_init(&aub_file, output_file,
@@ -338,23 +344,6 @@ remove_bo(int fd, int handle)
    bo->map = NULL;
 }
 
-static uint32_t
-dump_create_context(int fd, uint32_t *ctx_id)
-{
-   if (!aub_file.file) {
-      aub_file_init(&aub_file, output_file,
-                    verbose == 2 ? stdout : NULL,
-                    device, program_invocation_short_name);
-      aub_write_default_setup(&aub_file);
-
-      if (verbose)
-         printf("[running, output file %s, chipset id 0x%04x, gen %d]\n",
-                output_filename, device, devinfo.gen);
-   }
-
-   return aub_write_context_create(&aub_file, ctx_id);
-}
-
 __attribute__ ((visibility ("default"))) int
 close(int fd)
 {
@@ -364,8 +353,23 @@ close(int fd)
    return libc_close(fd);
 }
 
+static int
+get_pci_id(int fd, int *pci_id)
+{
+   struct drm_i915_getparam gparam;
+
+   if (device_override) {
+      *pci_id = device;
+      return 0;
+   }
+
+   gparam.param = I915_PARAM_CHIPSET_ID;
+   gparam.value = pci_id;
+   return libc_ioctl(fd, DRM_IOCTL_I915_GETPARAM, &gparam);
+}
+
 static void
-maybe_init(void)
+maybe_init(int fd)
 {
    static bool initialized = false;
    FILE *config;
@@ -412,6 +416,18 @@ maybe_init(void)
 
    bos = calloc(MAX_FD_COUNT * MAX_BO_COUNT, sizeof(bos[0]));
    fail_if(bos == NULL, "out of memory\n");
+
+   int ret = get_pci_id(fd, &device);
+   assert(ret == 0);
+
+   aub_file_init(&aub_file, output_file,
+                 verbose == 2 ? stdout : NULL,
+                 device, program_invocation_short_name);
+   aub_write_default_setup(&aub_file);
+
+   if (verbose)
+      printf("[running, output file %s, chipset id 0x%04x, gen %d]\n",
+             output_filename, device, devinfo.gen);
 }
 
 __attribute__ ((visibility ("default"))) int
@@ -435,27 +451,85 @@ ioctl(int fd, unsigned long request, ...)
    }
 
    if (fd == drm_fd) {
-      maybe_init();
+      maybe_init(fd);
 
       switch (request) {
+      case DRM_IOCTL_SYNCOBJ_WAIT:
+      case DRM_IOCTL_I915_GEM_WAIT: {
+         if (device_override)
+            return 0;
+         return libc_ioctl(fd, request, argp);
+      }
+
+      case DRM_IOCTL_I915_GET_RESET_STATS: {
+         if (device_override) {
+            struct drm_i915_reset_stats *stats = argp;
+
+            stats->reset_count = 0;
+            stats->batch_active = 0;
+            stats->batch_pending = 0;
+            return 0;
+         }
+         return libc_ioctl(fd, request, argp);
+      }
+
       case DRM_IOCTL_I915_GETPARAM: {
          struct drm_i915_getparam *getparam = argp;
 
-         if (device_override && getparam->param == I915_PARAM_CHIPSET_ID) {
-            *getparam->value = device;
-            return 0;
+         ensure_device_info(fd);
+
+         if (getparam->param == I915_PARAM_CHIPSET_ID)
+            return get_pci_id(fd, getparam->value);
+
+         if (device_override) {
+            switch (getparam->param) {
+            case I915_PARAM_CS_TIMESTAMP_FREQUENCY:
+               *getparam->value = devinfo.timestamp_frequency;
+               return 0;
+
+            case I915_PARAM_HAS_WAIT_TIMEOUT:
+            case I915_PARAM_HAS_EXECBUF2:
+            case I915_PARAM_MMAP_VERSION:
+            case I915_PARAM_HAS_EXEC_ASYNC:
+            case I915_PARAM_HAS_EXEC_FENCE:
+            case I915_PARAM_HAS_EXEC_FENCE_ARRAY:
+               *getparam->value = 1;
+               return 0;
+
+            case I915_PARAM_HAS_EXEC_SOFTPIN:
+               *getparam->value = devinfo.gen >= 8 && !devinfo.is_cherryview;
+               return 0;
+
+            default:
+               return -1;
+            }
          }
 
-         ret = libc_ioctl(fd, request, argp);
+         return libc_ioctl(fd, request, argp);
+      }
 
-         /* If the application looks up chipset_id
-          * (they typically do), we'll piggy-back on
-          * their ioctl and store the id for later
-          * use. */
-         if (ret == 0 && getparam->param == I915_PARAM_CHIPSET_ID)
-            device = *getparam->value;
+      case DRM_IOCTL_I915_GEM_CONTEXT_GETPARAM: {
+         struct drm_i915_gem_context_param *getparam = argp;
 
-         return ret;
+         ensure_device_info(fd);
+
+         if (device_override) {
+            switch (getparam->param) {
+            case I915_CONTEXT_PARAM_GTT_SIZE:
+               if (devinfo.is_elkhartlake)
+                  getparam->value = 1ull << 36;
+               else if (devinfo.gen >= 8 && !devinfo.is_cherryview)
+                  getparam->value = 1ull << 48;
+               else
+                  getparam->value = 1ull << 31;
+               return 0;
+
+            default:
+               return -1;
+            }
+         }
+
+         return libc_ioctl(fd, request, argp);
       }
 
       case DRM_IOCTL_I915_GEM_EXECBUFFER: {
@@ -487,7 +561,7 @@ ioctl(int fd, unsigned long request, ...)
          }
 
          if (ret == 0)
-            create->ctx_id = dump_create_context(fd, ctx_id);
+            create->ctx_id = aub_write_context_create(&aub_file, ctx_id);
 
          return ret;
       }
@@ -502,7 +576,7 @@ ioctl(int fd, unsigned long request, ...)
          }
 
          if (ret == 0)
-            create->ctx_id = dump_create_context(fd, ctx_id);
+            create->ctx_id = aub_write_context_create(&aub_file, ctx_id);
 
          return ret;
       }

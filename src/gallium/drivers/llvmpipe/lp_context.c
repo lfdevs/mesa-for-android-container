@@ -55,7 +55,7 @@
 static void llvmpipe_destroy( struct pipe_context *pipe )
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context( pipe );
-   uint i, j;
+   uint i;
 
    lp_print_counters();
 
@@ -80,21 +80,18 @@ static void llvmpipe_destroy( struct pipe_context *pipe )
 
    pipe_surface_reference(&llvmpipe->framebuffer.zsbuf, NULL);
 
-   for (i = 0; i < ARRAY_SIZE(llvmpipe->sampler_views[0]); i++) {
-      pipe_sampler_view_reference(&llvmpipe->sampler_views[PIPE_SHADER_FRAGMENT][i], NULL);
-   }
-
-   for (i = 0; i < ARRAY_SIZE(llvmpipe->sampler_views[0]); i++) {
-      pipe_sampler_view_reference(&llvmpipe->sampler_views[PIPE_SHADER_VERTEX][i], NULL);
-   }
-
-   for (i = 0; i < ARRAY_SIZE(llvmpipe->sampler_views[0]); i++) {
-      pipe_sampler_view_reference(&llvmpipe->sampler_views[PIPE_SHADER_GEOMETRY][i], NULL);
-   }
-
-   for (i = 0; i < ARRAY_SIZE(llvmpipe->constants); i++) {
-      for (j = 0; j < ARRAY_SIZE(llvmpipe->constants[i]); j++) {
-         pipe_resource_reference(&llvmpipe->constants[i][j].buffer, NULL);
+   for (enum pipe_shader_type s = PIPE_SHADER_VERTEX; s < PIPE_SHADER_TYPES; s++) {
+      for (i = 0; i < ARRAY_SIZE(llvmpipe->sampler_views[0]); i++) {
+         pipe_sampler_view_reference(&llvmpipe->sampler_views[s][i], NULL);
+      }
+      for (i = 0; i < LP_MAX_TGSI_SHADER_IMAGES; i++) {
+         pipe_resource_reference(&llvmpipe->images[s][i].resource, NULL);
+      }
+      for (i = 0; i < LP_MAX_TGSI_SHADER_BUFFERS; i++) {
+         pipe_resource_reference(&llvmpipe->ssbos[s][i].buffer, NULL);
+      }
+      for (i = 0; i < ARRAY_SIZE(llvmpipe->constants[s]); i++) {
+         pipe_resource_reference(&llvmpipe->constants[s][i].buffer, NULL);
       }
    }
 
@@ -176,6 +173,7 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
    llvmpipe_init_fs_funcs(llvmpipe);
    llvmpipe_init_vs_funcs(llvmpipe);
    llvmpipe_init_gs_funcs(llvmpipe);
+   llvmpipe_init_tess_funcs(llvmpipe);
    llvmpipe_init_rasterizer_funcs(llvmpipe);
    llvmpipe_init_context_resource_funcs( &llvmpipe->pipe );
    llvmpipe_init_surface_functions(llvmpipe);

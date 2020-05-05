@@ -203,7 +203,7 @@ image_view_type(enum pipe_texture_target target)
    case PIPE_TEXTURE_CUBE: return VK_IMAGE_VIEW_TYPE_CUBE;
    case PIPE_TEXTURE_CUBE_ARRAY: return VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
    case PIPE_TEXTURE_3D: return VK_IMAGE_VIEW_TYPE_3D;
-   case PIPE_TEXTURE_RECT: return VK_IMAGE_VIEW_TYPE_2D; /* not sure */
+   case PIPE_TEXTURE_RECT: return VK_IMAGE_VIEW_TYPE_2D;
    default:
       unreachable("unexpected target");
    }
@@ -484,7 +484,7 @@ get_render_pass(struct zink_context *ctx)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
    const struct pipe_framebuffer_state *fb = &ctx->fb_state;
-   struct zink_render_pass_state state;
+   struct zink_render_pass_state state = { 0 };
 
    for (int i = 0; i < fb->nr_cbufs; i++) {
       struct pipe_resource *res = fb->cbufs[i]->texture;
@@ -515,7 +515,7 @@ get_render_pass(struct zink_context *ctx)
 }
 
 static struct zink_framebuffer *
-get_framebuffer(struct zink_context *ctx)
+create_framebuffer(struct zink_context *ctx)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
 
@@ -536,16 +536,7 @@ get_framebuffer(struct zink_context *ctx)
    state.height = ctx->fb_state.height;
    state.layers = MAX2(ctx->fb_state.layers, 1);
 
-   struct hash_entry *entry = _mesa_hash_table_search(ctx->framebuffer_cache,
-                                                      &state);
-   if (!entry) {
-      struct zink_framebuffer *fb = zink_create_framebuffer(screen, &state);
-      entry = _mesa_hash_table_insert(ctx->framebuffer_cache, &state, fb);
-      if (!entry)
-         return NULL;
-   }
-
-   return entry->data;
+   return zink_create_framebuffer(screen, &state);
 }
 
 void
@@ -647,7 +638,11 @@ zink_set_framebuffer_state(struct pipe_context *pctx,
 
    util_copy_framebuffer_state(&ctx->fb_state, state);
 
-   struct zink_framebuffer *fb = get_framebuffer(ctx);
+   struct zink_framebuffer *fb = ctx->framebuffer;
+   /* explicitly unref previous fb to ensure it gets destroyed */
+   if (fb)
+      zink_framebuffer_reference(screen, &fb, NULL);
+   fb = create_framebuffer(ctx);
    zink_framebuffer_reference(screen, &ctx->framebuffer, fb);
    zink_render_pass_reference(screen, &ctx->gfx_pipeline_state.render_pass, fb->rp);
 
@@ -817,6 +812,7 @@ zink_resource_barrier(VkCommandBuffer cmdbuf, struct zink_resource *res,
 static void
 zink_clear(struct pipe_context *pctx,
            unsigned buffers,
+           const struct pipe_scissor_state *scissor_state,
            const union pipe_color_union *pcolor,
            double depth, unsigned stencil)
 {
@@ -910,20 +906,6 @@ static bool
 equals_render_pass_state(const void *a, const void *b)
 {
    return memcmp(a, b, sizeof(struct zink_render_pass_state)) == 0;
-}
-
-static uint32_t
-hash_framebuffer_state(const void *key)
-{
-   struct zink_framebuffer_state *s = (struct zink_framebuffer_state*)key;
-   return _mesa_hash_data(key, sizeof(struct zink_framebuffer_state) + sizeof(s->attachments) * s->num_attachments);
-}
-
-static bool
-equals_framebuffer_state(const void *a, const void *b)
-{
-   struct zink_framebuffer_state *s = (struct zink_framebuffer_state*)a;
-   return memcmp(a, b, sizeof(struct zink_framebuffer_state) + sizeof(s->attachments) * s->num_attachments) == 0;
 }
 
 static void
@@ -1127,7 +1109,8 @@ zink_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    cbai.commandBufferCount = 1;
 
    VkDescriptorPoolSize sizes[] = {
-      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, ZINK_BATCH_DESC_SIZE}
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         ZINK_BATCH_DESC_SIZE},
+      {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, ZINK_BATCH_DESC_SIZE}
    };
    VkDescriptorPoolCreateInfo dpci = {};
    dpci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1164,12 +1147,13 @@ zink_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    ctx->render_pass_cache = _mesa_hash_table_create(NULL,
                                                     hash_render_pass_state,
                                                     equals_render_pass_state);
-   ctx->framebuffer_cache = _mesa_hash_table_create(NULL,
-                                                    hash_framebuffer_state,
-                                                    equals_framebuffer_state);
+   if (!ctx->program_cache || !ctx->render_pass_cache)
+      goto fail;
 
-   if (!ctx->program_cache || !ctx->render_pass_cache ||
-       !ctx->framebuffer_cache)
+   const uint8_t data[] = { 0 };
+   ctx->dummy_buffer = pipe_buffer_create_with_data(&ctx->base,
+      PIPE_BIND_VERTEX_BUFFER, PIPE_USAGE_IMMUTABLE, sizeof(data), data);
+   if (!ctx->dummy_buffer)
       goto fail;
 
    ctx->dirty_program = true;

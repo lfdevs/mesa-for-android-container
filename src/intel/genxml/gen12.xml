@@ -1972,6 +1972,7 @@
     <field name="Per-Thread Scratch Space" start="160" end="163" type="uint"/>
     <field name="Scratch Space Base Pointer" start="170" end="223" type="address"/>
     <field name="Include Primitive ID" start="224" end="224" type="bool"/>
+    <field name="Patch Count Threshold" start="225" end="227" type="uint"/>
     <field name="Vertex URB Entry Read Offset" start="228" end="233" type="uint"/>
     <field name="Vertex URB Entry Read Length" start="235" end="240" type="uint"/>
     <field name="Dispatch Mode" start="241" end="242" type="uint" prefix="DISPATCH_MODE">
@@ -2058,6 +2059,22 @@
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <group count="32" start="32" size="32">
       <field name="Pattern Row" start="0" end="31" type="uint"/>
+    </group>
+  </instruction>
+
+  <instruction name="3DSTATE_PRIMITIVE_REPLICATION" bias="2" length="6">
+    <field name="DWord Length" start="0" end="7" type="uint" default="4"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="108"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Replication Count" start="32" end="35" type="uint"/>
+    <field name="Replica Mask" start="48" end="63" type="uint"/>
+    <group count="16" start="64" size="4">
+      <field name="Viewport Offset" start="0" end="3" type="uint"/>
+    </group>
+    <group count="16" start="128" size="4">
+      <field name="RTAI Offset" start="0" end="3" type="uint"/>
     </group>
   </instruction>
 
@@ -7031,6 +7048,16 @@
 
   <register name="CL_PRIMITIVES_COUNT" length="2" num="0x2340">
     <field name="CL Primitives Count Report" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="COMMON_SLICE_CHICKEN1" length="1" num="0x7010">
+    <field name="HIZ Plane Optimization disable bit" start="9" end="9" type="bool"/>
+    <field name="HIZ Plane Optimization disable bit Mask" start="25" end="25" type="bool"/>
+  </register>
+
+  <register name="HIZ_CHICKEN" length="1" num="0x7018">
+    <field name="HZ Depth Test LE/GE Optimization Disable" start="13" end="13" type="bool"/>
+    <field name="HZ Depth Test LE/GE Optimization Disable Mask" start="29" end="29" type="bool"/>
   </register>
 
   <register name="COMMON_SLICE_CHICKEN3" length="1" num="0x7304">

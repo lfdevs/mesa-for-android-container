@@ -27,6 +27,17 @@
 
 namespace clover {
    ///
+   /// Some helper functions for raw pointer operations
+   ///
+   template <class T>
+   static bool
+   ptr_is_aligned(const T *ptr, uintptr_t a) noexcept {
+      assert(a == (a & -a));
+      uintptr_t ptr_value = reinterpret_cast<uintptr_t>(ptr);
+      return (ptr_value & (a - 1)) == 0;
+   }
+
+   ///
    /// Base class for objects that support reference counting.
    ///
    class ref_counter {

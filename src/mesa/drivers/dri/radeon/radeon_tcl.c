@@ -33,7 +33,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "main/glheader.h"
-#include "main/imports.h"
 #include "main/mtypes.h"
 #include "main/light.h"
 #include "main/enums.h"
@@ -105,7 +104,7 @@ static GLboolean discrete_prim[0x10] = {
    0,
    0,
 };
-   
+
 
 #define LOCAL_VARS r100ContextPtr rmesa = R100_CONTEXT(ctx)
 #define ELT_TYPE  GLushort
@@ -146,7 +145,7 @@ static GLboolean discrete_prim[0x10] = {
 
 #define ALLOC_ELTS(nr)	radeonAllocElts( rmesa, nr )
 
-static GLushort *radeonAllocElts( r100ContextPtr rmesa, GLuint nr ) 
+static GLushort *radeonAllocElts( r100ContextPtr rmesa, GLuint nr )
 {
       if (rmesa->radeon.dma.flush)
 	 rmesa->radeon.dma.flush( &rmesa->radeon.glCtx );
@@ -166,19 +165,19 @@ static GLushort *radeonAllocElts( r100ContextPtr rmesa, GLuint nr )
  * discrete and there are no intervening state changes.  (Somewhat
  * duplicates changes to DrawArrays code)
  */
-static void radeonEmitPrim( struct gl_context *ctx, 
-		       GLenum prim, 
-		       GLuint hwprim, 
-		       GLuint start, 
-		       GLuint count)	
+static void radeonEmitPrim( struct gl_context *ctx,
+		       GLenum prim,
+		       GLuint hwprim,
+		       GLuint start,
+		       GLuint count)
 {
    r100ContextPtr rmesa = R100_CONTEXT( ctx );
    radeonTclPrimitive( ctx, prim, hwprim );
-   
+
    radeonEmitAOS( rmesa,
 		  rmesa->radeon.tcl.aos_count,
 		  start );
-   
+
    /* Why couldn't this packet have taken an offset param?
     */
    radeonEmitVbufPrim( rmesa,
@@ -230,7 +229,7 @@ static void radeonEmitPrim( struct gl_context *ctx,
 /*                          External entrypoints                     */
 /**********************************************************************/
 
-void radeonEmitPrimitive( struct gl_context *ctx, 
+void radeonEmitPrimitive( struct gl_context *ctx,
 			  GLuint first,
 			  GLuint last,
 			  GLuint flags )
@@ -238,7 +237,7 @@ void radeonEmitPrimitive( struct gl_context *ctx,
    tcl_render_tab_verts[flags&PRIM_MODE_MASK]( ctx, first, last, flags );
 }
 
-void radeonEmitEltPrimitive( struct gl_context *ctx, 
+void radeonEmitEltPrimitive( struct gl_context *ctx,
 			     GLuint first,
 			     GLuint last,
 			     GLuint flags )
@@ -246,7 +245,7 @@ void radeonEmitEltPrimitive( struct gl_context *ctx,
    tcl_render_tab_elts[flags&PRIM_MODE_MASK]( ctx, first, last, flags );
 }
 
-void radeonTclPrimitive( struct gl_context *ctx, 
+void radeonTclPrimitive( struct gl_context *ctx,
 			 GLenum prim,
 			 int hw_prim )
 {
@@ -267,7 +266,7 @@ void radeonTclPrimitive( struct gl_context *ctx,
    se_cntl = rmesa->hw.set.cmd[SET_SE_CNTL];
    se_cntl &= ~RADEON_FLAT_SHADE_VTX_LAST;
 
-   if (prim == GL_POLYGON && ctx->Light.ShadeModel == GL_FLAT) 
+   if (prim == GL_POLYGON && ctx->Light.ShadeModel == GL_FLAT)
       se_cntl |= RADEON_FLAT_SHADE_VTX_0;
    else
       se_cntl |= RADEON_FLAT_SHADE_VTX_LAST;
@@ -363,7 +362,7 @@ static GLboolean radeon_run_tcl_render( struct gl_context *ctx,
    GLuint i;
    GLuint emit_end;
 
-   /* TODO: separate this from the swtnl pipeline 
+   /* TODO: separate this from the swtnl pipeline
     */
    if (rmesa->radeon.TclFallback)
       return GL_TRUE;	/* fallback to software t&l */
@@ -427,7 +426,7 @@ static GLboolean radeon_run_tcl_render( struct gl_context *ctx,
 
 
 
-/* Initial state for tcl stage.  
+/* Initial state for tcl stage.
  */
 const struct tnl_pipeline_stage _radeon_tcl_stage =
 {
@@ -463,16 +462,16 @@ static void transition_to_swtnl( struct gl_context *ctx )
    radeonChooseVertexState( ctx );
    radeonChooseRenderState( ctx );
 
-   _tnl_validate_shine_tables( ctx ); 
+   _tnl_validate_shine_tables( ctx );
 
-   tnl->Driver.NotifyMaterialChange = 
+   tnl->Driver.NotifyMaterialChange =
       _tnl_validate_shine_tables;
 
    radeonReleaseArrays( ctx, ~0 );
 
    se_cntl = rmesa->hw.set.cmd[SET_SE_CNTL];
    se_cntl |= RADEON_FLAT_SHADE_VTX_LAST;
-	 
+
    if (se_cntl != rmesa->hw.set.cmd[SET_SE_CNTL]) {
       RADEON_STATECHANGE( rmesa, set );
       rmesa->hw.set.cmd[SET_SE_CNTL] = se_cntl;
@@ -501,14 +500,14 @@ static void transition_to_hwtnl( struct gl_context *ctx )
 
    tnl->Driver.NotifyMaterialChange = radeonUpdateMaterial;
 
-   if ( rmesa->radeon.dma.flush )			
-      rmesa->radeon.dma.flush( &rmesa->radeon.glCtx );	
+   if ( rmesa->radeon.dma.flush )
+      rmesa->radeon.dma.flush( &rmesa->radeon.glCtx );
 
    rmesa->radeon.dma.flush = NULL;
    rmesa->swtcl.vertex_format = 0;
-   
-   //   if (rmesa->swtcl.indexed_verts.buf) 
-   //      radeonReleaseDmaRegion( rmesa, &rmesa->swtcl.indexed_verts, 
+
+   //   if (rmesa->swtcl.indexed_verts.buf)
+   //      radeonReleaseDmaRegion( rmesa, &rmesa->swtcl.indexed_verts,
    //			      __func__ );
 
    if (RADEON_DEBUG & RADEON_FALLBACKS)

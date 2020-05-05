@@ -39,7 +39,7 @@ libxa_st = static_library(
     'xa_tracker.c', 'xa_yuv.c',
   )],
   c_args : [c_vis_args, '-pedantic'],
-  include_directories : inc_common,
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
 )
 
 install_headers('xa_composite.h', 'xa_context.h')

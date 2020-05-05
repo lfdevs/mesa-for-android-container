@@ -213,6 +213,10 @@ struct pipe_viewport_state
 {
    float scale[3];
    float translate[3];
+   enum pipe_viewport_swizzle swizzle_x:3;
+   enum pipe_viewport_swizzle swizzle_y:3;
+   enum pipe_viewport_swizzle swizzle_z:3;
+   enum pipe_viewport_swizzle swizzle_w:3;
 };
 
 
@@ -358,7 +362,9 @@ struct pipe_blend_state
    unsigned logicop_func:4;      /**< PIPE_LOGICOP_x */
    unsigned dither:1;
    unsigned alpha_to_coverage:1;
+   unsigned alpha_to_coverage_dither:1;
    unsigned alpha_to_one:1;
+   unsigned max_rt:3;            /* index of max rt, Ie. # of cbufs minus 1 */
    struct pipe_rt_blend_state rt[PIPE_MAX_COLOR_BUFS];
 };
 

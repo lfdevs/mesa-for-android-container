@@ -37,11 +37,11 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <errno.h>
 #include "main/glheader.h"
-#include "main/imports.h"
 #include "main/mtypes.h"
 #include "main/framebuffer.h"
 #include "main/renderbuffer.h"
 #include "main/fbobject.h"
+#include "util/u_memory.h"
 #include "swrast/s_renderbuffer.h"
 
 #include "radeon_chipset.h"
@@ -710,7 +710,7 @@ radeonCreateBuffer( __DRIscreen *driScrnPriv,
            MESA_FORMAT_X8R8G8B8_UNORM;
 #endif
     else
-        rgbFormat = 
+        rgbFormat =
 #if UTIL_ARCH_LITTLE_ENDIAN
            MESA_FORMAT_B8G8R8A8_UNORM;
 #else

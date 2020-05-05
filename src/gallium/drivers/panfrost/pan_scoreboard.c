@@ -25,6 +25,7 @@
 #include "pan_context.h"
 #include "pan_job.h"
 #include "pan_allocate.h"
+#include "panfrost-quirks.h"
 #include "util/bitset.h"
 
 /*
@@ -49,7 +50,8 @@
  *
  * More specifically, here are a set of rules:
  *
- * - A set value job must appear if and only if there is at least one tiler job.
+ * - A write value job must appear if and only if there is at least one tiler
+ *   job, and tiler jobs must depend on it.
  *
  * - Vertex jobs and tiler jobs are independent.
  *
@@ -57,8 +59,7 @@
  *   data from a vertex job, it depends on the vertex job. If it's getting data
  *   from software, this is null.
  *
- * - The first vertex job used as the input to tiling must depend on the set
- *   value job, if it is present.
+ * - Tiler jobs must depend on the write value job (chained or otherwise).
  *
  * - Tiler jobs must be strictly ordered. So each tiler job must depend on the
  *   previous job in the chain.
@@ -70,9 +71,9 @@
  *
  * Justification for each rule:
  *
- * - Set value jobs set up tiling, essentially. If tiling occurs, they are
- *   needed; if it does not, we cannot emit them since then tiling partially
- *   occurs and it's bad.
+ * - Write value jobs are used to write a zero into a magic tiling field, which
+ *   enables tiling to work. If tiling occurs, they are needed; if it does not,
+ *   we cannot emit them since then tiling partially occurs and it's bad.
  *
  * - The hardware has no notion of a "vertex/tiler job" (at least not our
  *   hardware -- other revs have fused jobs, but --- crap, this just got even
@@ -82,10 +83,6 @@
  * - Any job must depend on its data source, in fact, or risk a
  *   read-before-write hazard. Tiler jobs get their data from vertex jobs, ergo
  *   tiler jobs depend on the corresponding vertex job (if it's there).
- *
- * - In fact, tiling depends on the set value job, but tiler jobs depend on the
- *   corresponding vertex jobs and each other, so this rule ensures each tiler
- *   job automatically depends on the set value job.
  *
  * - The tiler is not thread-safe; this dependency prevents race conditions
  *   between two different jobs trying to write to the tiler outputs at the
@@ -100,170 +97,101 @@
  *
  */
 
-/* Coerce a panfrost_transfer to a header */
+/* Generates, uploads, and queues a a new job. All fields are written in order
+ * except for next_job accounting (TODO: Should we be clever and defer the
+ * upload of the header here until next job to keep the access pattern totally
+ * linear? Or is that just a micro op at this point?). Returns the generated
+ * index for dep management.
+ *
+ * Inject is used to inject a job at the front, for wallpapering. If you are
+ * not wallpapering and set this, dragons will eat you. */
 
-static inline struct mali_job_descriptor_header *
-job_descriptor_header(struct panfrost_transfer t)
+unsigned
+panfrost_new_job(
+                struct panfrost_batch *batch,
+                enum mali_job_type type,
+                bool barrier,
+                unsigned local_dep,
+                void *payload, size_t payload_size,
+                bool inject)
 {
-        return (struct mali_job_descriptor_header *) t.cpu;
-}
+        struct panfrost_device *dev = pan_device(batch->ctx->base.screen);
 
-static void
-panfrost_assign_index(
-        struct panfrost_batch *batch,
-        struct panfrost_transfer transfer)
-{
+        unsigned global_dep = 0;
+
+        if (type == JOB_TYPE_TILER) {
+                /* Tiler jobs must be chained, and on Midgard, the first tiler
+                 * job must depend on the write value job, whose index we
+                 * reserve now */
+
+                if (batch->tiler_dep)
+                        global_dep = batch->tiler_dep;
+                else if (!(dev->quirks & IS_BIFROST)) {
+                        batch->write_value_index = ++batch->job_index;
+                        global_dep = batch->write_value_index;
+                }
+        }
+
         /* Assign the index */
         unsigned index = ++batch->job_index;
-        job_descriptor_header(transfer)->job_index = index;
-}
 
-/* Helper to add a dependency to a job */
+        struct mali_job_descriptor_header job = {
+                .job_descriptor_size = 1,
+                .job_type = type,
+                .job_barrier = barrier,
+                .job_index = index,
+                .job_dependency_index_1 = local_dep,
+                .job_dependency_index_2 = global_dep,
+        };
 
-static void
-panfrost_add_dependency(
-        struct panfrost_transfer depender,
-        struct panfrost_transfer dependent)
-{
+        if (inject)
+                job.next_job = batch->first_job;
 
-        struct mali_job_descriptor_header *first =
-                job_descriptor_header(dependent);
+        struct panfrost_transfer transfer = panfrost_allocate_transient(batch, sizeof(job) + payload_size);
+        memcpy(transfer.cpu, &job, sizeof(job));
+        memcpy(transfer.cpu + sizeof(job), payload, payload_size);
 
-        struct mali_job_descriptor_header *second =
-                job_descriptor_header(depender);
+        if (inject) {
+                batch->first_job = transfer.gpu;
+                return index;
+        }
 
-        /* Look for an open slot */
+        /* Form a chain */
+        if (type == JOB_TYPE_TILER)
+                batch->tiler_dep = index;
 
-        if (!second->job_dependency_index_1)
-                second->job_dependency_index_1 = first->job_index;
-        else if (!second->job_dependency_index_2)
-                second->job_dependency_index_2 = first->job_index;
+        if (batch->prev_job)
+                batch->prev_job->next_job = transfer.gpu;
         else
-                unreachable("No available slot for new dependency");
+                batch->first_job = transfer.gpu;
+
+        batch->prev_job = (struct mali_job_descriptor_header *) transfer.cpu;
+        return index;
 }
 
-/* Queues a job WITHOUT updating pointers. Be careful. */
-
-static void
-panfrost_scoreboard_queue_job_internal(
-        struct panfrost_batch *batch,
-        struct panfrost_transfer job)
-{
-        panfrost_assign_index(batch, job);
-
-        /* Queue a pointer to the job */
-        util_dynarray_append(&batch->headers, void*, job.cpu);
-        util_dynarray_append(&batch->gpu_headers, mali_ptr, job.gpu);
-}
-
-
-/* Queues a compute job, with no special dependencies. This is a bit of a
- * misnomer -- internally, all job types are queued with this function, but
- * outside of this file, it's for pure compute jobs */
+/* Generates a write value job, used to initialize the tiler structures. Note
+ * this is called right before frame submission. */
 
 void
-panfrost_scoreboard_queue_compute_job(
-        struct panfrost_batch *batch,
-        struct panfrost_transfer job)
+panfrost_scoreboard_initialize_tiler(struct panfrost_batch *batch)
 {
-        panfrost_scoreboard_queue_job_internal(batch, job);
+        struct panfrost_device *dev = pan_device(batch->ctx->base.screen);
 
-        /* Update the linked list metadata as appropriate */
-        batch->last_job = job;
+        /* Check if we even need tiling */
+        if (dev->quirks & IS_BIFROST || !batch->tiler_dep)
+                return;
 
-        if (!batch->first_job.gpu)
-                batch->first_job = job;
-}
+        /* Okay, we do. Let's generate it. We'll need the job's polygon list
+         * regardless of size. */
 
-/* Queues a vertex job. There are no special dependencies yet, but if
- * tiling is required (anytime 'rasterize discard' is disabled), we have
- * some extra bookkeeping for later */
+        mali_ptr polygon_list = panfrost_batch_get_polygon_list(batch,
+                MALI_TILER_MINIMUM_HEADER_SIZE);
 
-void
-panfrost_scoreboard_queue_vertex_job(
-        struct panfrost_batch *batch,
-        struct panfrost_transfer vertex,
-        bool requires_tiling)
-{
-        panfrost_scoreboard_queue_compute_job(batch, vertex);
-
-        if (requires_tiling && !batch->first_vertex_for_tiler.gpu)
-                batch->first_vertex_for_tiler = vertex;
-}
-
-/* Queues a tiler job, respecting the dependency of each tiler job on the
- * previous */
-
-void
-panfrost_scoreboard_queue_tiler_job(
-        struct panfrost_batch *batch,
-        struct panfrost_transfer tiler)
-{
-        panfrost_scoreboard_queue_compute_job(batch, tiler);
-
-        if (!batch->first_tiler.gpu)
-                batch->first_tiler = tiler;
-
-        if (batch->last_tiler.gpu)
-                panfrost_add_dependency(tiler, batch->last_tiler);
-
-        batch->last_tiler = tiler;
-}
-
-/* Queues a fused (vertex/tiler) job, or a pair of vertex/tiler jobs if
- * fused jobs are not supported (the default until Bifrost rolls out) */
-
-void
-panfrost_scoreboard_queue_fused_job(
-        struct panfrost_batch *batch,
-        struct panfrost_transfer vertex,
-        struct panfrost_transfer tiler)
-{
-        panfrost_scoreboard_queue_vertex_job(batch, vertex, true);
-        panfrost_scoreboard_queue_tiler_job(batch, tiler);
-        panfrost_add_dependency(tiler, vertex);
-}
-
-/* Queues a fused (vertex/tiler) job prepended *before* the usual set, used for
- * wallpaper blits */
-
-void
-panfrost_scoreboard_queue_fused_job_prepend(
-        struct panfrost_batch *batch,
-        struct panfrost_transfer vertex,
-        struct panfrost_transfer tiler)
-{
-        /* Sanity check */
-        assert(batch->last_tiler.gpu);
-        assert(batch->first_tiler.gpu);
-
-        /* First, we add the vertex job directly to the queue, forcing it to
-         * the front */
-
-        panfrost_scoreboard_queue_job_internal(batch, vertex);
-        batch->first_job = vertex;
-        batch->first_vertex_for_tiler = vertex;
-
-        /* Similarly, we add the tiler job directly to the queue, forcing it to
-         * the front (second place), manually setting the tiler on vertex
-         * dependency (since this is pseudofused) and forcing a dependency of
-         * the now-second tiler on us (since all tiler jobs are linked in order
-         * and we're injecting ourselves at the front) */
-
-        panfrost_scoreboard_queue_job_internal(batch, tiler);
-        panfrost_add_dependency(tiler, vertex);
-        panfrost_add_dependency(batch->first_tiler, tiler);
-        batch->first_tiler = tiler;
-}
-
-/* Generates a write value job, used to initialize the tiler structures. */
-
-static struct panfrost_transfer
-panfrost_write_value_job(struct panfrost_batch *batch, mali_ptr polygon_list)
-{
         struct mali_job_descriptor_header job = {
                 .job_type = JOB_TYPE_WRITE_VALUE,
+                .job_index = batch->write_value_index,
                 .job_descriptor_size = 1,
+                .next_job = batch->first_job
         };
 
         struct mali_payload_write_value payload = {
@@ -275,224 +203,5 @@ panfrost_write_value_job(struct panfrost_batch *batch, mali_ptr polygon_list)
         memcpy(transfer.cpu, &job, sizeof(job));
         memcpy(transfer.cpu + sizeof(job), &payload, sizeof(payload));
 
-        return transfer;
-}
-
-/* If there are any tiler jobs, we need to initialize the tiler by writing
- * zeroes to a magic tiler structure. We do so via a WRITE_VALUE job linked to
- * the first vertex job feeding into tiling. */
-
-static void
-panfrost_scoreboard_initialize_tiler(struct panfrost_batch *batch)
-{
-        /* Check if we even need tiling */
-        if (!batch->last_tiler.gpu)
-                return;
-
-        /* Okay, we do. Let's generate it. We'll need the job's polygon list
-         * regardless of size. */
-
-        mali_ptr polygon_list = panfrost_batch_get_polygon_list(batch,
-                MALI_TILER_MINIMUM_HEADER_SIZE);
-
-        struct panfrost_transfer job =
-                panfrost_write_value_job(batch, polygon_list);
-
-        /* Queue it */
-        panfrost_scoreboard_queue_compute_job(batch, job);
-
-        /* Tiler jobs need us */
-        panfrost_add_dependency(batch->first_tiler, job);
-}
-
-/* Once all jobs have been added to a batch and we're ready to submit, we need
- * to order them to set each of the next_job fields, obeying the golden rule:
- * "A job's dependencies must appear earlier in the job chain than itself".
- * Fortunately, computing this job chain is a well-studied graph theory problem
- * known as "topological sorting", which has linear time algorithms. We let
- * each job represent a node, each dependency a directed edge, and the entire
- * set of jobs to be a dependency graph. This graph is inherently acyclic, as
- * otherwise there are unresolveable dependencies.
- *
- * We implement Kahn's algorithm here to compute the next_job chain:
- * https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm
- *
- * A few implementation notes: we represent S explicitly with a bitset, L
- * implicitly in the next_job fields. The indices of the bitset are off-by-one:
- * nodes are numbered [0, node_count - 1], whereas in reality job_index in the
- * hardware and dependencies are [1, node_count].
- *
- * We represent edge removal implicitly with another pair of bitsets, rather
- * than explicitly removing the edges, since we need to keep the dependencies
- * there for the hardware.
- */
-
-#define DESCRIPTOR_FOR_NODE(count) \
-        *(util_dynarray_element(&batch->headers, \
-                struct mali_job_descriptor_header*, count))
-
-#define GPU_ADDRESS_FOR_NODE(count) \
-        *(util_dynarray_element(&batch->gpu_headers, \
-                mali_ptr, count))
-
-void
-panfrost_scoreboard_link_batch(struct panfrost_batch *batch)
-{
-        /* Finalize the batch */
-        panfrost_scoreboard_initialize_tiler(batch);
-
-        /* Let no_incoming represent the set S described. */
-
-        unsigned node_count = batch->job_index;
-
-        size_t sz = BITSET_WORDS(node_count) * sizeof(BITSET_WORD);
-        BITSET_WORD *no_incoming = calloc(sz, 1);
-
-        /* Sets for edges being removed in dep 1 or 2 respectively */
-
-        BITSET_WORD *edge_removal_1 = calloc(sz, 1);
-        BITSET_WORD *edge_removal_2 = calloc(sz, 1);
-
-        /* We compute no_incoming by traversing the batch. Simultaneously, we
-         * would like to keep track of a parity-reversed version of the
-         * dependency graph. Dependency indices are 16-bit and in practice (for
-         * ES3.0, at least), we can guarantee a given node will be depended on
-         * by no more than one other nodes. P.f:
-         *
-         * Proposition: Given a node N of type T, no more than one other node
-         * depends on N.
-         *
-         * If type is WRITE_VALUE: The only dependency added against us is from
-         * the first tiler job, so there is 1 dependent.
-         *
-         * If type is VERTEX: If there is a tiler node, that tiler node depends
-         * on us; if there is not (transform feedback), nothing depends on us.
-         * Therefore there is at most 1 dependent.
-         *
-         * If type is TILER: If there is another TILER job in succession, that
-         * node depends on us. No other job type depends on us. Therefore there
-         * is at most 1 dependent.
-         *
-         * If type is FRAGMENT: This type cannot be in a primary chain, so it
-         * is irrelevant. Just for kicks, nobody would depend on us, so there
-         * are zero dependents, so it holds anyway.
-         *
-         * TODO: Revise this logic for ES3.1 and above. This result may not
-         * hold for COMPUTE/FUSED/GEOMETRY jobs; we might need to special case
-         * those. Can FBO dependencies be expressed within a chain?
-         * ---
-         *
-         * Point is, we only need to hold a single dependent, which is a pretty
-         * helpful result.
-         */
-
-        unsigned *dependents = calloc(node_count, sizeof(unsigned));
-
-        for (unsigned i = 0; i < node_count; ++i) {
-                struct mali_job_descriptor_header *node = DESCRIPTOR_FOR_NODE(i);
-
-                unsigned dep_1 = node->job_dependency_index_1;
-                unsigned dep_2 = node->job_dependency_index_2;
-
-                /* Record no_incoming info for this node */
-
-                if (!(dep_1 || dep_2))
-                        BITSET_SET(no_incoming, i);
-
-                /* Record this node as the dependent of each of its
-                 * dependencies */
-
-                if (dep_1) {
-                        assert(!dependents[dep_1 - 1]);
-                        dependents[dep_1 - 1] = i + 1;
-                }
-
-                if (dep_2) {
-                        assert(!dependents[dep_2 - 1]);
-                        dependents[dep_2 - 1] = i + 1;
-                }
-        }
-
-        /* No next_job fields are set at the beginning, so L is implciitly the
-         * empty set. As next_job fields are filled, L is implicitly set. Tail
-         * is the tail of L, however. */
-
-        struct mali_job_descriptor_header *tail = NULL;
-
-        /* We iterate, popping off elements of S. A simple foreach won't do,
-         * since we mutate S as we go (even adding elements) */
-
-        unsigned arr_size = BITSET_WORDS(node_count);
-
-        for (unsigned node_n_1 = __bitset_ffs(no_incoming, arr_size);
-             (node_n_1 != 0);
-             node_n_1 = __bitset_ffs(no_incoming, arr_size)) {
-
-                unsigned node_n = node_n_1 - 1;
-
-                /* We've got a node n, pop it off */
-                BITSET_CLEAR(no_incoming, node_n);
-
-                /* Add it to the list */
-                struct mali_job_descriptor_header *n =
-                        DESCRIPTOR_FOR_NODE(node_n);
-
-                mali_ptr addr = GPU_ADDRESS_FOR_NODE(node_n);
-
-                if (tail) {
-                        /* Link us to the last node */
-                        tail->next_job = addr;
-                } else {
-                        /* We are the first/last node */
-                        batch->first_job.cpu = (uint8_t *) n;
-                        batch->first_job.gpu = addr;
-                }
-
-                tail = n;
-
-                /* Grab the dependent, if there is one */
-                unsigned node_m_1 = dependents[node_n];
-
-                if (node_m_1) {
-                        unsigned node_m = node_m_1 - 1;
-
-                        struct mali_job_descriptor_header *m =
-                                DESCRIPTOR_FOR_NODE(node_m);
-
-                        /* Get the deps, accounting for removal */
-                        unsigned dep_1 = m->job_dependency_index_1;
-                        unsigned dep_2 = m->job_dependency_index_2;
-
-                        if (BITSET_TEST(edge_removal_1, node_m))
-                                dep_1 = 0;
-
-                        if (BITSET_TEST(edge_removal_2, node_m))
-                                dep_2 = 0;
-
-                        /* Pretend to remove edges */
-                        if (dep_1 == node_n_1) {
-                                BITSET_SET(edge_removal_1, node_m);
-                                dep_1 = 0;
-                        } else if (dep_2 == node_n_1) {
-                                BITSET_SET(edge_removal_2, node_m);
-                                dep_2 = 0;
-                        } else {
-                                /* This node has no relevant dependencies */
-                                assert(0);
-                        }
-
-                        /* Are there edges left? If not, add us to S */
-                        bool has_edges = dep_1 || dep_2;
-
-                        if (!has_edges)
-                                BITSET_SET(no_incoming, node_m);
-                }
-        }
-
-        /* Cleanup */
-        free(no_incoming);
-        free(dependents);
-        free(edge_removal_1);
-        free(edge_removal_2);
-
+        batch->first_job = transfer.gpu;
 }

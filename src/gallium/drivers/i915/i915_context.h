@@ -376,9 +376,11 @@ void i915_emit_hardware_state(struct i915_context *i915 );
  * i915_clear.c: 
  */
 void i915_clear_blitter(struct pipe_context *pipe, unsigned buffers,
+                        const struct pipe_scissor_state *scissor_state,
                         const union pipe_color_union *color,
                         double depth, unsigned stencil);
 void i915_clear_render(struct pipe_context *pipe, unsigned buffers,
+                       const struct pipe_scissor_state *scissor_state,
                        const union pipe_color_union *color,
                        double depth, unsigned stencil);
 void i915_clear_emit(struct pipe_context *pipe, unsigned buffers,

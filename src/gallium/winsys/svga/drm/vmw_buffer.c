@@ -63,6 +63,7 @@ struct vmw_gmr_buffer
    struct vmw_region *region;
    void *map;
    unsigned map_flags;
+   unsigned map_count;
 };
 
 
@@ -104,8 +105,12 @@ vmw_gmr_buffer_destroy(struct pb_buffer *_buf)
 {
    struct vmw_gmr_buffer *buf = vmw_gmr_buffer(_buf);
 
-   vmw_ioctl_region_unmap(buf->region);
-   
+   assert(buf->map_count == 0);
+   if (buf->map) {
+      assert(buf->mgr->vws->cache_maps);
+      vmw_ioctl_region_unmap(buf->region);
+   }
+
    vmw_ioctl_region_destroy(buf->region);
 
    FREE(buf);
@@ -126,7 +131,6 @@ vmw_gmr_buffer_map(struct pb_buffer *_buf,
    if (!buf->map)
       return NULL;
 
-
    if ((_buf->usage & VMW_BUFFER_USAGE_SYNC) &&
        !(flags & PB_USAGE_UNSYNCHRONIZED)) {
       ret = vmw_ioctl_syncforcpu(buf->region,
@@ -137,6 +141,7 @@ vmw_gmr_buffer_map(struct pb_buffer *_buf,
          return NULL;
    }
 
+   buf->map_count++;
    return buf->map;
 }
 
@@ -152,6 +157,12 @@ vmw_gmr_buffer_unmap(struct pb_buffer *_buf)
       vmw_ioctl_releasefromcpu(buf->region,
                                !(flags & PB_USAGE_CPU_WRITE),
                                FALSE);
+   }
+
+   assert(buf->map_count > 0);
+   if (!--buf->map_count && !buf->mgr->vws->cache_maps) {
+      vmw_ioctl_region_unmap(buf->region);
+      buf->map = NULL;
    }
 }
 
@@ -364,6 +375,8 @@ vmw_svga_winsys_buffer_map(struct svga_winsys_screen *sws,
                  (unsigned) PIPE_TRANSFER_DONTBLOCK);
    STATIC_ASSERT((unsigned) PB_USAGE_UNSYNCHRONIZED ==
                  (unsigned) PIPE_TRANSFER_UNSYNCHRONIZED);
+   STATIC_ASSERT((unsigned) PB_USAGE_PERSISTENT ==
+                 (unsigned) PIPE_TRANSFER_PERSISTENT);
 
    map = pb_map(vmw_pb_buffer(buf), flags & PB_USAGE_ALL, NULL);
 

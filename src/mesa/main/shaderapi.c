@@ -63,6 +63,7 @@
 #include "util/crc32.h"
 #include "util/os_file.h"
 #include "util/simple_list.h"
+#include "util/u_string.h"
 
 /**
  * Return mask of GLSL_x flags by examining the MESA_GLSL env var.
@@ -1249,6 +1250,29 @@ _mesa_compile_shader(struct gl_context *ctx, struct gl_shader *sh)
 }
 
 
+struct update_programs_in_pipeline_params
+{
+   struct gl_context *ctx;
+   struct gl_shader_program *shProg;
+};
+
+static void
+update_programs_in_pipeline(GLuint key, void *data, void *userData)
+{
+   struct update_programs_in_pipeline_params *params =
+      (struct update_programs_in_pipeline_params *) userData;
+   struct gl_pipeline_object *obj = (struct gl_pipeline_object *) data;
+
+   for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+      if (obj->CurrentProgram[stage] &&
+          obj->CurrentProgram[stage]->Id == params->shProg->Name) {
+         struct gl_program *prog = params->shProg->_LinkedShaders[stage]->Program;
+         _mesa_use_program(params->ctx, stage, params->shProg, prog, obj);
+      }
+   }
+}
+
+
 /**
  * Link a program's shaders.
  */
@@ -1279,7 +1303,7 @@ link_program(struct gl_context *ctx, struct gl_shader_program *shProg,
              ctx->_Shader->CurrentProgram[stage]->Id == shProg->Name) {
             programs_in_use |= 1 << stage;
          }
-   }
+      }
 
    ensure_builtin_types(ctx);
 
@@ -1296,7 +1320,7 @@ link_program(struct gl_context *ctx, struct gl_shader_program *shProg,
     *     the state of any program pipeline for all stages where the program
     *     is attached."
     */
-   if (shProg->data->LinkStatus && programs_in_use) {
+   if (shProg->data->LinkStatus) {
       while (programs_in_use) {
          const int stage = u_bit_scan(&programs_in_use);
 
@@ -1305,6 +1329,15 @@ link_program(struct gl_context *ctx, struct gl_shader_program *shProg,
             prog = shProg->_LinkedShaders[stage]->Program;
 
          _mesa_use_program(ctx, stage, shProg, prog, ctx->_Shader);
+      }
+
+      if (ctx->Pipeline.Objects) {
+         struct update_programs_in_pipeline_params params = {
+            .ctx = ctx,
+            .shProg = shProg
+         };
+         _mesa_HashWalk(ctx->Pipeline.Objects, update_programs_in_pipeline,
+                        &params);
       }
    }
 
@@ -2547,6 +2580,7 @@ _mesa_use_program(struct gl_context *ctx, gl_shader_stage stage,
                                      &shTarget->ReferencedPrograms[stage],
                                      shProg);
       _mesa_reference_program(ctx, target, prog);
+      _mesa_update_allow_draw_out_of_order(ctx);
       if (stage == MESA_SHADER_VERTEX)
          _mesa_update_vertex_processing_mode(ctx);
       return;

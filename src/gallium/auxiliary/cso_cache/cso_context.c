@@ -291,8 +291,9 @@ static void cso_init_vbuf(struct cso_context *cso, unsigned flags)
 {
    struct u_vbuf_caps caps;
    bool uses_user_vertex_buffers = !(flags & CSO_NO_USER_VERTEX_BUFFERS);
+   bool needs64b = !(flags & CSO_NO_64B_VERTEX_BUFFERS);
 
-   u_vbuf_get_caps(cso->pipe->screen, &caps);
+   u_vbuf_get_caps(cso->pipe->screen, &caps, needs64b);
 
    /* Enable u_vbuf if needed. */
    if (caps.fallback_always ||
@@ -756,6 +757,10 @@ cso_set_viewport_dims(struct cso_context *ctx,
    vp.translate[0] = 0.5f * width;
    vp.translate[1] = 0.5f * height;
    vp.translate[2] = 0.5f;
+   vp.swizzle_x = PIPE_VIEWPORT_SWIZZLE_POSITIVE_X;
+   vp.swizzle_y = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Y;
+   vp.swizzle_z = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Z;
+   vp.swizzle_w = PIPE_VIEWPORT_SWIZZLE_POSITIVE_W;
    cso_set_viewport(ctx, &vp);
 }
 
@@ -1001,34 +1006,31 @@ void cso_set_compute_shader_handle(struct cso_context *ctx, void *handle)
 
 static void
 cso_set_vertex_elements_direct(struct cso_context *ctx,
-                               unsigned count,
-                               const struct pipe_vertex_element *states)
+                               const struct cso_velems_state *velems)
 {
    unsigned key_size, hash_key;
    struct cso_hash_iter iter;
    void *handle;
-   struct cso_velems_state velems_state;
 
    /* Need to include the count into the stored state data too.
     * Otherwise first few count pipe_vertex_elements could be identical
     * even if count is different, and there's no guarantee the hash would
     * be different in that case neither.
     */
-   key_size = sizeof(struct pipe_vertex_element) * count + sizeof(unsigned);
-   velems_state.count = count;
-   memcpy(velems_state.velems, states,
-          sizeof(struct pipe_vertex_element) * count);
-   hash_key = cso_construct_key((void*)&velems_state, key_size);
+   key_size = sizeof(struct pipe_vertex_element) * velems->count +
+              sizeof(unsigned);
+   hash_key = cso_construct_key((void*)velems, key_size);
    iter = cso_find_state_template(ctx->cache, hash_key, CSO_VELEMENTS,
-                                  (void*)&velems_state, key_size);
+                                  (void*)velems, key_size);
 
    if (cso_hash_iter_is_null(iter)) {
       struct cso_velements *cso = MALLOC(sizeof(struct cso_velements));
       if (!cso)
          return;
 
-      memcpy(&cso->state, &velems_state, key_size);
-      cso->data = ctx->pipe->create_vertex_elements_state(ctx->pipe, count,
+      memcpy(&cso->state, velems, key_size);
+      cso->data = ctx->pipe->create_vertex_elements_state(ctx->pipe,
+                                                          velems->count,
                                                       &cso->state.velems[0]);
       cso->delete_state =
          (cso_state_callback) ctx->pipe->delete_vertex_elements_state;
@@ -1054,17 +1056,16 @@ cso_set_vertex_elements_direct(struct cso_context *ctx,
 
 enum pipe_error
 cso_set_vertex_elements(struct cso_context *ctx,
-                        unsigned count,
-                        const struct pipe_vertex_element *states)
+                        const struct cso_velems_state *velems)
 {
    struct u_vbuf *vbuf = ctx->vbuf_current;
 
    if (vbuf) {
-      u_vbuf_set_vertex_elements(vbuf, count, states);
+      u_vbuf_set_vertex_elements(vbuf, velems);
       return PIPE_OK;
    }
 
-   cso_set_vertex_elements_direct(ctx, count, states);
+   cso_set_vertex_elements_direct(ctx, velems);
    return PIPE_OK;
 }
 
@@ -1181,8 +1182,7 @@ cso_restore_vertex_buffer0(struct cso_context *ctx)
  */
 void
 cso_set_vertex_buffers_and_elements(struct cso_context *ctx,
-                                    unsigned velem_count,
-                                    const struct pipe_vertex_element *velems,
+                                    const struct cso_velems_state *velems,
                                     unsigned vb_count,
                                     unsigned unbind_trailing_vb_count,
                                     const struct pipe_vertex_buffer *vbuffers,
@@ -1207,7 +1207,7 @@ cso_set_vertex_buffers_and_elements(struct cso_context *ctx,
 
       if (vb_count)
          u_vbuf_set_vertex_buffers(vbuf, 0, vb_count, vbuffers);
-      u_vbuf_set_vertex_elements(vbuf, velem_count, velems);
+      u_vbuf_set_vertex_elements(vbuf, velems);
       return;
    }
 
@@ -1227,7 +1227,7 @@ cso_set_vertex_buffers_and_elements(struct cso_context *ctx,
 
    if (vb_count)
       cso_set_vertex_buffers_direct(ctx, 0, vb_count, vbuffers);
-   cso_set_vertex_elements_direct(ctx, velem_count, velems);
+   cso_set_vertex_elements_direct(ctx, velems);
 }
 
 void

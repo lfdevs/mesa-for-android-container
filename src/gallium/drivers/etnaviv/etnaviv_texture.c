@@ -47,6 +47,7 @@ etna_bind_sampler_states(struct pipe_context *pctx, enum pipe_shader_type shader
 {
    /* bind fragment sampler */
    struct etna_context *ctx = etna_context(pctx);
+   struct etna_screen *screen = ctx->screen;
    int offset;
 
    switch (shader) {
@@ -55,7 +56,7 @@ etna_bind_sampler_states(struct pipe_context *pctx, enum pipe_shader_type shader
       ctx->num_fragment_samplers = num_samplers;
       break;
    case PIPE_SHADER_VERTEX:
-      offset = ctx->specs.vertex_sampler_offset;
+      offset = screen->specs.vertex_sampler_offset;
       break;
    default:
       assert(!"Invalid shader");
@@ -266,8 +267,9 @@ static inline void
 etna_fragtex_set_sampler_views(struct etna_context *ctx, unsigned nr,
                                struct pipe_sampler_view **views)
 {
+   struct etna_screen *screen = ctx->screen;
    unsigned start = 0;
-   unsigned end = start + ctx->specs.fragment_sampler_count;
+   unsigned end = start + screen->specs.fragment_sampler_count;
 
    set_sampler_views(ctx, start, end, nr, views);
    ctx->num_fragment_sampler_views = nr;
@@ -278,8 +280,9 @@ static inline void
 etna_vertex_set_sampler_views(struct etna_context *ctx, unsigned nr,
                               struct pipe_sampler_view **views)
 {
-   unsigned start = ctx->specs.vertex_sampler_offset;
-   unsigned end = start + ctx->specs.vertex_sampler_count;
+   struct etna_screen *screen = ctx->screen;
+   unsigned start = screen->specs.vertex_sampler_offset;
+   unsigned end = start + screen->specs.vertex_sampler_count;
 
    set_sampler_views(ctx, start, end, nr, views);
 }
@@ -326,12 +329,13 @@ void
 etna_texture_init(struct pipe_context *pctx)
 {
    struct etna_context *ctx = etna_context(pctx);
+   struct etna_screen *screen = ctx->screen;
 
    pctx->bind_sampler_states = etna_bind_sampler_states;
    pctx->set_sampler_views = etna_set_sampler_views;
    pctx->texture_barrier = etna_texture_barrier;
 
-   if (ctx->specs.halti >= 5)
+   if (screen->specs.halti >= 5)
       etna_texture_desc_init(pctx);
    else
       etna_texture_state_init(pctx);

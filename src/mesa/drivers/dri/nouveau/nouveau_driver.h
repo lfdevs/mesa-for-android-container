@@ -27,7 +27,7 @@
 #ifndef __NOUVEAU_DRIVER_H__
 #define __NOUVEAU_DRIVER_H__
 
-#include "main/imports.h"
+
 #include "main/mtypes.h"
 #include "main/macros.h"
 #include "main/formats.h"

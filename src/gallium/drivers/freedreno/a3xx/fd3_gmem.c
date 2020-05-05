@@ -94,13 +94,13 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 			swap = rsc->layout.tile_mode ? WZYX : fd3_pipe2swap(pformat);
 
 			if (bin_w) {
-				stride = bin_w * rsc->layout.cpp;
+				stride = bin_w << fdl_cpp_shift(&rsc->layout);
 
 				if (bases) {
 					base = bases[i];
 				}
 			} else {
-				stride = slice->pitch * rsc->layout.cpp;
+				stride = slice->pitch;
 				tile_mode = rsc->layout.tile_mode;
 			}
 		} else if (i < nr_bufs && bases) {
@@ -345,7 +345,7 @@ emit_gmem2mem_surf(struct fd_batch *batch,
 				 A3XX_RB_COPY_CONTROL_DEPTH32_RESOLVE));
 
 	OUT_RELOCW(ring, rsc->bo, offset, 0, -1);    /* RB_COPY_DEST_BASE */
-	OUT_RING(ring, A3XX_RB_COPY_DEST_PITCH_PITCH(slice->pitch * rsc->layout.cpp));
+	OUT_RING(ring, A3XX_RB_COPY_DEST_PITCH_PITCH(slice->pitch));
 	OUT_RING(ring, A3XX_RB_COPY_DEST_INFO_TILE(rsc->layout.tile_mode) |
 			A3XX_RB_COPY_DEST_INFO_FORMAT(fd3_pipe2color(format)) |
 			A3XX_RB_COPY_DEST_INFO_COMPONENT_ENABLE(0xf) |
@@ -739,10 +739,9 @@ fd3_emit_sysmem_prep(struct fd_batch *batch)
 		struct pipe_surface *psurf = pfb->cbufs[i];
 		if (!psurf)
 			continue;
-		struct fdl_slice *slice =
-			fd_resource_slice(fd_resource(psurf->texture),
-				psurf->u.tex.level);
-		pitch = slice->pitch;
+		struct fd_resource *rsc = fd_resource(psurf->texture);
+		struct fdl_slice *slice = fd_resource_slice(rsc, psurf->u.tex.level);
+		pitch = slice->pitch / rsc->layout.cpp;
 	}
 
 	fd3_emit_restore(batch, ring);
@@ -1009,11 +1008,13 @@ fd3_emit_tile_renderprep(struct fd_batch *batch, const struct fd_tile *tile)
 	OUT_RING(ring, reg);
 	if (pfb->zsbuf) {
 		struct fd_resource *rsc = fd_resource(pfb->zsbuf->texture);
-		OUT_RING(ring, A3XX_RB_DEPTH_PITCH(rsc->layout.cpp * gmem->bin_w));
+		OUT_RING(ring, A3XX_RB_DEPTH_PITCH(gmem->bin_w <<
+						fdl_cpp_shift(&rsc->layout)));
 		if (rsc->stencil) {
 			OUT_PKT0(ring, REG_A3XX_RB_STENCIL_INFO, 2);
 			OUT_RING(ring, A3XX_RB_STENCIL_INFO_STENCIL_BASE(gmem->zsbuf_base[1]));
-			OUT_RING(ring, A3XX_RB_STENCIL_PITCH(rsc->stencil->layout.cpp * gmem->bin_w));
+			OUT_RING(ring, A3XX_RB_STENCIL_PITCH(gmem->bin_w <<
+							fdl_cpp_shift(&rsc->stencil->layout)));
 		}
 	} else {
 		OUT_RING(ring, 0x00000000);

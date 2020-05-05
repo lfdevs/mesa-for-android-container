@@ -32,19 +32,12 @@
 #include "freedreno_resource.h"
 #include "freedreno_util.h"
 
-
-static bool
-is_active(struct fd_acc_query *aq, enum fd_render_stage stage)
-{
-	return !!(aq->provider->active & stage);
-}
-
 static void
 fd_acc_destroy_query(struct fd_context *ctx, struct fd_query *q)
 {
 	struct fd_acc_query *aq = fd_acc_query(q);
 
-	DBG("%p: active=%d", q, q->active);
+	DBG("%p", q);
 
 	pipe_resource_reference(&aq->prsc, NULL);
 	list_del(&aq->node);
@@ -74,40 +67,63 @@ realloc_query_bo(struct fd_context *ctx, struct fd_acc_query *aq)
 	fd_bo_cpu_fini(rsc->bo);
 }
 
-static bool
-fd_acc_begin_query(struct fd_context *ctx, struct fd_query *q)
+static void
+fd_acc_query_pause(struct fd_acc_query *aq)
 {
-	struct fd_batch *batch = fd_context_batch(ctx);
-	struct fd_acc_query *aq = fd_acc_query(q);
 	const struct fd_acc_sample_provider *p = aq->provider;
 
-	DBG("%p: active=%d", q, q->active);
+	if (!aq->batch)
+		return;
+
+	p->pause(aq, aq->batch);
+	aq->batch = NULL;
+}
+
+static void
+fd_acc_query_resume(struct fd_acc_query *aq, struct fd_batch *batch)
+{
+	const struct fd_acc_sample_provider *p = aq->provider;
+
+	aq->batch = batch;
+	p->resume(aq, aq->batch);
+
+	mtx_lock(&batch->ctx->screen->lock);
+	fd_batch_resource_used(batch, fd_resource(aq->prsc), true);
+	mtx_unlock(&batch->ctx->screen->lock);
+}
+
+static void
+fd_acc_begin_query(struct fd_context *ctx, struct fd_query *q)
+{
+	struct fd_acc_query *aq = fd_acc_query(q);
+
+	DBG("%p", q);
 
 	/* ->begin_query() discards previous results, so realloc bo: */
 	realloc_query_bo(ctx, aq);
 
-	/* then resume query if needed to collect first sample: */
-	if (batch && is_active(aq, batch->stage))
-		p->resume(aq, batch);
+	/* Signal that we need to update the active queries on the next draw */
+	ctx->update_active_queries = true;
 
 	/* add to active list: */
 	assert(list_is_empty(&aq->node));
 	list_addtail(&aq->node, &ctx->acc_active_queries);
 
-	return true;
+	/* TIMESTAMP/GPU_FINISHED and don't do normal bracketing at draw time, we
+	 * need to just emit the capture at this moment.
+	 */
+	if (skip_begin_query(q->type))
+		fd_acc_query_resume(aq, fd_context_batch(ctx));
 }
 
 static void
 fd_acc_end_query(struct fd_context *ctx, struct fd_query *q)
 {
-	struct fd_batch *batch = fd_context_batch(ctx);
 	struct fd_acc_query *aq = fd_acc_query(q);
-	const struct fd_acc_sample_provider *p = aq->provider;
 
-	DBG("%p: active=%d", q, q->active);
+	DBG("%p", q);
 
-	if (batch && is_active(aq, batch->stage))
-		p->pause(aq, batch);
+	fd_acc_query_pause(aq);
 
 	/* remove from active list: */
 	list_delinit(&aq->node);
@@ -121,7 +137,7 @@ fd_acc_get_query_result(struct fd_context *ctx, struct fd_query *q,
 	const struct fd_acc_sample_provider *p = aq->provider;
 	struct fd_resource *rsc = fd_resource(aq->prsc);
 
-	DBG("%p: wait=%d, active=%d", q, wait, q->active);
+	DBG("%p: wait=%d", q, wait);
 
 	assert(list_is_empty(&aq->node));
 
@@ -210,23 +226,31 @@ fd_acc_create_query(struct fd_context *ctx, unsigned query_type,
 			ctx->acc_sample_providers[idx]);
 }
 
+/* Called at clear/draw/blit time to enable/disable the appropriate queries in
+ * the batch (and transfer active querying between batches in the case of
+ * batch reordering).
+ */
 void
 fd_acc_query_set_stage(struct fd_batch *batch, enum fd_render_stage stage)
 {
-	if (stage != batch->stage) {
+	struct fd_context *ctx = batch->ctx;
+
+	if (stage != batch->stage || ctx->update_active_queries) {
 		struct fd_acc_query *aq;
-		LIST_FOR_EACH_ENTRY(aq, &batch->ctx->acc_active_queries, node) {
-			const struct fd_acc_sample_provider *p = aq->provider;
+		LIST_FOR_EACH_ENTRY(aq, &ctx->acc_active_queries, node) {
+			bool batch_change = aq->batch != batch;
+			bool was_active = aq->batch != NULL;
+			bool now_active = stage != FD_STAGE_NULL &&
+				(ctx->active_queries || aq->provider->always);
 
-			bool was_active = is_active(aq, batch->stage);
-			bool now_active = is_active(aq, stage);
-
-			if (now_active && !was_active)
-				p->resume(aq, batch);
-			else if (was_active && !now_active)
-				p->pause(aq, batch);
+			if (was_active && (!now_active || batch_change))
+				fd_acc_query_pause(aq);
+			if (now_active && (!was_active || batch_change))
+				fd_acc_query_resume(aq, batch);
 		}
 	}
+
+	ctx->update_active_queries = false;
 }
 
 void

@@ -52,8 +52,7 @@ intrinsics = [
     ['VPSHUFB',     ['a', 'b'], 'a'],
     ['VPERMD',      ['a', 'idx'], 'a'],
     ['VPERMPS',     ['idx', 'a'], 'a'],
-    ['VCVTPD2PS',   ['a'], 'VectorType::get(mFP32Ty, a->getType()->getVectorNumElements())'],
-    ['VCVTPH2PS',   ['a'], 'VectorType::get(mFP32Ty, a->getType()->getVectorNumElements())'],
+    ['VCVTPD2PS',   ['a'], 'VectorType::get(mFP32Ty, VEC_GET_NUM_ELEMS)'],
     ['VCVTPS2PH',   ['a', 'round'], 'mSimdInt16Ty'],
     ['VHSUBPS',     ['a', 'b'], 'a'],
     ['VPTESTC',     ['a', 'b'], 'mInt32Ty'],
@@ -98,16 +97,25 @@ def parse_ir_builder(input_file):
     functions = []
 
     lines = input_file.readlines()
+    deprecated = None
 
     idx = 0
     while idx < len(lines) - 1:
         line = lines[idx].rstrip()
         idx += 1
 
+        if deprecated is None:
+            deprecated = re.search(r'LLVM_ATTRIBUTE_DEPRECATED', line)
+
         #match = re.search(r'\*Create', line)
         match = re.search(r'[\*\s]Create(\w*)\(', line)
         if match is not None:
             #print('Line: %s' % match.group(1))
+
+            # Skip function if LLVM_ATTRIBUTE_DEPRECATED found before
+            if deprecated is not None:
+                deprecated = None
+                continue
 
             if re.search(r'^\s*Create', line) is not None:
                 func_sig = lines[idx-2].rstrip() + line
@@ -168,6 +176,7 @@ def parse_ir_builder(input_file):
                         func_name == 'CreateMaskedLoad' or
                         func_name == 'CreateStore' or
                         func_name == 'CreateMaskedStore' or
+                        func_name == 'CreateFCmpHelper' or
                         func_name == 'CreateElementUnorderedAtomicMemCpy'):
                         ignore = True
 
@@ -249,7 +258,7 @@ def generate_meta_h(output_dir):
         # determine the return type of the intrinsic. It can either be:
         # - type of one of the input arguments
         # - snippet of code to set the return type
-        
+
         if ret in args:
             returnTy = ret + '->getType()'
         else:

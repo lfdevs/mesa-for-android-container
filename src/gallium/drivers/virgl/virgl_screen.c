@@ -759,6 +759,9 @@ virgl_is_format_supported( struct pipe_screen *screen,
    if (format_desc->layout == UTIL_FORMAT_LAYOUT_BPTC) {
       goto out_lookup;
    }
+   if (format_desc->layout == UTIL_FORMAT_LAYOUT_ETC) {
+      goto out_lookup;
+   }
 
    if (format == PIPE_FORMAT_R11G11B10_FLOAT) {
       goto out_lookup;

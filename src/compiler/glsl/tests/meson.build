@@ -25,7 +25,7 @@ if with_shader_cache
       'cache_test',
       'cache_test.c',
       c_args : [c_vis_args, c_msvc_compat_args, no_override_init_args],
-      include_directories : [inc_common, inc_glsl],
+      include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_glsl],
       link_with : [libglsl],
       dependencies : [dep_clock, dep_thread],
     ),
@@ -42,7 +42,7 @@ test(
      'lower_int64_test.cpp', 'opt_add_neg_to_sub_test.cpp',
      'varyings_test.cpp', ir_expression_operation_h],
     cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
-    include_directories : [inc_common, inc_glsl],
+    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_glsl],
     link_with : [libglsl, libglsl_standalone, libglsl_util],
     dependencies : [dep_clock, dep_thread, idep_gtest],
   ),
@@ -57,7 +57,7 @@ test(
      'uniform_initializer_utils.cpp', 'uniform_initializer_utils.h',
      ir_expression_operation_h],
     cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
-    include_directories : [inc_common, inc_glsl],
+    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_glsl],
     link_with : [libglsl, libglsl_util],
     dependencies : [dep_thread, idep_gtest],
   ),
@@ -70,7 +70,20 @@ test(
     'sampler_types_test',
     ['sampler_types_test.cpp', ir_expression_operation_h],
     cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
-    include_directories : [inc_common, inc_glsl],
+    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_glsl],
+    link_with : [libglsl, libglsl_util],
+    dependencies : [dep_thread, idep_gtest],
+  ),
+  suite : ['compiler', 'glsl'],
+)
+
+test(
+  'list_iterators',
+  executable(
+    'list_iterators',
+    ['list_iterators.cpp'],
+    cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
+    include_directories : [inc_include, inc_src, inc_glsl],
     link_with : [libglsl, libglsl_util],
     dependencies : [dep_thread, idep_gtest],
   ),
@@ -88,6 +101,7 @@ test(
     ),
   ],
   suite : ['compiler', 'glsl'],
+  timeout: 60,
 )
 
 test(
@@ -106,6 +120,14 @@ if with_tools.contains('glsl')
     glsl_compiler,
     args : ['--version', '110', '--dump-builder',
             join_paths(meson.current_source_dir(), 'standalone_dump-builder.frag'),
+           ],
+    suite : ['compiler', 'glsl'],
+  )
+  test(
+    'glsl lower-precision test',
+    prog_python,
+    args : [join_paths(meson.current_source_dir(), 'lower_precision_test.py'),
+            glsl_compiler
            ],
     suite : ['compiler', 'glsl'],
   )

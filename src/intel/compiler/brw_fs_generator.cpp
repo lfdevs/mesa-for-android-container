@@ -186,14 +186,12 @@ brw_reg_from_fs_reg(const struct gen_device_info *devinfo, fs_inst *inst,
 fs_generator::fs_generator(const struct brw_compiler *compiler, void *log_data,
                            void *mem_ctx,
                            struct brw_stage_prog_data *prog_data,
-                           struct shader_stats shader_stats,
                            bool runtime_check_aads_emit,
                            gl_shader_stage stage)
 
    : compiler(compiler), log_data(log_data),
      devinfo(compiler->devinfo),
      prog_data(prog_data),
-     shader_stats(shader_stats),
      runtime_check_aads_emit(runtime_check_aads_emit), debug_flag(false),
      stage(stage), mem_ctx(mem_ctx)
 {
@@ -589,7 +587,7 @@ fs_generator::generate_shuffle(fs_inst *inst,
          /* Take into account the component size and horizontal stride. */
          assert(src.vstride == src.hstride + src.width);
          brw_SHL(p, addr, group_idx,
-                 brw_imm_uw(_mesa_logbase2(type_sz(src.type)) +
+                 brw_imm_uw(util_logbase2(type_sz(src.type)) +
                             src.hstride - 1));
 
          /* Add on the register start offset */
@@ -1716,6 +1714,8 @@ fs_generator::enable_debug(const char *shader_name)
 
 int
 fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
+                            struct shader_stats shader_stats,
+                            const brw::performance &perf,
                             struct brw_compile_stats *stats)
 {
    /* align to 64 byte boundary. */
@@ -1733,7 +1733,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
     * effect is already counted in spill/fill counts.
     */
    int spill_count = 0, fill_count = 0;
-   int loop_count = 0, send_count = 0;
+   int loop_count = 0, send_count = 0, nop_count = 0;
    bool is_accum_used = false;
 
    struct disasm_info *disasm_info = disasm_initialize(devinfo, cfg);
@@ -1763,6 +1763,12 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
           inst->dst.component_size(inst->exec_size) > REG_SIZE) {
          brw_NOP(p);
          last_insn_offset = p->next_insn_offset;
+
+         /* In order to avoid spurious instruction count differences when the
+          * instruction schedule changes, keep track of the number of inserted
+          * NOPs.
+          */
+         nop_count++;
       }
 
       /* GEN:BUG:14010017096:
@@ -2211,22 +2217,50 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          generate_shader_time_add(inst, src[0], src[1], src[2]);
          break;
 
-      case SHADER_OPCODE_MEMORY_FENCE:
+      case SHADER_OPCODE_INTERLOCK:
+      case SHADER_OPCODE_MEMORY_FENCE: {
          assert(src[1].file == BRW_IMMEDIATE_VALUE);
          assert(src[2].file == BRW_IMMEDIATE_VALUE);
-         brw_memory_fence(p, dst, src[0], BRW_OPCODE_SEND, src[1].ud, src[2].ud);
+
+         const enum opcode send_op = inst->opcode == SHADER_OPCODE_INTERLOCK ?
+            BRW_OPCODE_SENDC : BRW_OPCODE_SEND;
+
+         brw_memory_fence(p, dst, src[0], send_op,
+                          brw_message_target(inst->sfid),
+                          /* commit_enable */ src[1].ud,
+                          /* bti */ src[2].ud);
          send_count++;
          break;
+      }
 
       case FS_OPCODE_SCHEDULING_FENCE:
-         if (unlikely(debug_flag))
-            disasm_info->use_tail = true;
-         break;
+         if (inst->sources == 0 && inst->sched.regdist == 0 &&
+                                   inst->sched.mode == TGL_SBID_NULL) {
+            if (unlikely(debug_flag))
+               disasm_info->use_tail = true;
+            break;
+         }
 
-      case SHADER_OPCODE_INTERLOCK:
-         assert(devinfo->gen >= 9);
-         /* The interlock is basically a memory fence issued via sendc */
-         brw_memory_fence(p, dst, src[0], BRW_OPCODE_SENDC, false, /* bti */ 0);
+         if (devinfo->gen >= 12) {
+            /* Use the available SWSB information to stall.  A single SYNC is
+             * sufficient since if there were multiple dependencies, the
+             * scoreboard algorithm already injected other SYNCs before this
+             * instruction.
+             */
+            brw_SYNC(p, TGL_SYNC_NOP);
+         } else {
+            for (unsigned i = 0; i < inst->sources; i++) {
+               /* Emit a MOV to force a stall until the instruction producing the
+                * registers finishes.
+                */
+               brw_MOV(p, retype(brw_null_reg(), BRW_REGISTER_TYPE_UW),
+                       retype(src[i], BRW_REGISTER_TYPE_UW));
+            }
+
+            if (inst->sources > 1)
+               multiple_instructions_emitted = true;
+         }
+
          break;
 
       case SHADER_OPCODE_FIND_LIVE_CHANNEL: {
@@ -2454,7 +2488,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
               "Compacted %d to %d bytes (%.0f%%)\n",
               shader_name, sha1buf,
               dispatch_width, before_size / 16,
-              loop_count, cfg->cycle_count,
+              loop_count, perf.latency,
               spill_count, fill_count, send_count,
               shader_stats.scheduler_mode,
               shader_stats.promoted_constants,
@@ -2463,7 +2497,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
 
       /* overriding the shader makes disasm_info invalid */
       if (!brw_try_override_assembly(p, start_offset, sha1buf)) {
-         dump_assembly(p->store, disasm_info);
+         dump_assembly(p->store, disasm_info, perf.block_latency);
       } else {
          fprintf(stderr, "Successfully overrode shader with sha1 %s\n\n", sha1buf);
       }
@@ -2478,17 +2512,18 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
                               "Promoted %u constants, "
                               "compacted %d to %d bytes.",
                               _mesa_shader_stage_to_abbrev(stage),
-                              dispatch_width, before_size / 16,
-                              loop_count, cfg->cycle_count,
+                              dispatch_width, before_size / 16 - nop_count,
+                              loop_count, perf.latency,
                               spill_count, fill_count, send_count,
                               shader_stats.scheduler_mode,
                               shader_stats.promoted_constants,
                               before_size, after_size);
    if (stats) {
       stats->dispatch_width = dispatch_width;
-      stats->instructions = before_size / 16;
+      stats->instructions = before_size / 16 - nop_count;
+      stats->sends = send_count;
       stats->loops = loop_count;
-      stats->cycles = cfg->cycle_count;
+      stats->cycles = perf.latency;
       stats->spills = spill_count;
       stats->fills = fill_count;
    }

@@ -47,11 +47,11 @@ enum fd_resource_status;
  * is active across IB's (or between tile IB and draw IB)
  */
 enum fd_render_stage {
-	FD_STAGE_NULL     = 0x01,
-	FD_STAGE_DRAW     = 0x02,
-	FD_STAGE_CLEAR    = 0x04,
+	FD_STAGE_NULL     = 0x00,
+	FD_STAGE_DRAW     = 0x01,
+	FD_STAGE_CLEAR    = 0x02,
 	/* used for driver internal draws (ie. util_blitter_blit()): */
-	FD_STAGE_BLIT     = 0x08,
+	FD_STAGE_BLIT     = 0x04,
 	FD_STAGE_ALL      = 0xff,
 };
 
@@ -129,8 +129,15 @@ struct fd_batch {
 	 */
 	const struct fd_gmem_stateobj *gmem_state;
 
-	unsigned num_draws;   /* number of draws in current batch */
+	unsigned num_draws;      /* number of draws in current batch */
 	unsigned num_vertices;   /* number of vertices in current batch */
+
+	/* Currently only used on a6xx, to calculate vsc prim/draw stream
+	 * sizes:
+	 */
+	unsigned num_bins_per_pipe;
+	unsigned prim_strm_bits;
+	unsigned draw_strm_bits;
 
 	/* Track the maximal bounds of the scissor of all the draws within a
 	 * batch.  Used at the tile rendering step (fd_gmem_render_tiles(),
@@ -240,6 +247,8 @@ struct fd_batch {
 	uint32_t tessparam_size;
 
 	struct fd_ringbuffer *tess_addrs_constobj;
+
+	struct list_head log_chunks;  /* list of unflushed log chunks in fifo order */
 };
 
 struct fd_batch * fd_batch_create(struct fd_context *ctx, bool nondraw);

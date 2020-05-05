@@ -2044,6 +2044,7 @@ void InitStoreTilesTableStencil(
 void SwrStoreHotTileToSurface(
         HANDLE hWorkerPrivateData,
         SWR_SURFACE_STATE *pDstSurface,
+	 BucketManager* pBucketMgr,
         SWR_FORMAT srcFormat,
         SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
         uint32_t x, uint32_t y, uint32_t renderTargetArrayIndex,

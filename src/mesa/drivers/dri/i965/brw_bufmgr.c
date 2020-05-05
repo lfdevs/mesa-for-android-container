@@ -136,6 +136,10 @@ struct bo_cache_bucket {
 };
 
 struct brw_bufmgr {
+   uint32_t refcount;
+
+   struct list_head link;
+
    int fd;
 
    mtx_t lock;
@@ -152,9 +156,16 @@ struct brw_bufmgr {
 
    bool has_llc:1;
    bool has_mmap_wc:1;
+   bool has_mmap_offset:1;
    bool bo_reuse:1;
 
    uint64_t initial_kflags;
+};
+
+static mtx_t global_bufmgr_list_mutex = _MTX_INITIALIZER_NP;
+static struct list_head global_bufmgr_list = {
+   .next = &global_bufmgr_list,
+   .prev = &global_bufmgr_list,
 };
 
 static int bo_set_tiling_internal(struct brw_bo *bo, uint32_t tiling_mode,
@@ -948,10 +959,71 @@ print_flags(unsigned flags)
 }
 
 static void *
-brw_bo_map_cpu(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
+brw_bo_gem_mmap_legacy(struct brw_context *brw, struct brw_bo *bo, bool wc)
 {
    struct brw_bufmgr *bufmgr = bo->bufmgr;
 
+   struct drm_i915_gem_mmap mmap_arg = {
+      .handle = bo->gem_handle,
+      .size = bo->size,
+      .flags = wc ? I915_MMAP_WC : 0,
+   };
+
+   int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_MMAP, &mmap_arg);
+   if (ret != 0) {
+      DBG("%s:%d: Error mapping buffer %d (%s): %s .\n",
+          __FILE__, __LINE__, bo->gem_handle, bo->name, strerror(errno));
+      return NULL;
+   }
+   void *map = (void *) (uintptr_t) mmap_arg.addr_ptr;
+
+   return map;
+}
+
+static void *
+brw_bo_gem_mmap_offset(struct brw_context *brw, struct brw_bo *bo, bool wc)
+{
+   struct brw_bufmgr *bufmgr = bo->bufmgr;
+
+   struct drm_i915_gem_mmap_offset mmap_arg = {
+      .handle = bo->gem_handle,
+      .flags = wc ? I915_MMAP_OFFSET_WC : I915_MMAP_OFFSET_WB,
+   };
+
+   /* Get the fake offset back */
+   int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_MMAP_OFFSET, &mmap_arg);
+   if (ret != 0) {
+      DBG("%s:%d: Error preparing buffer %d (%s): %s .\n",
+          __FILE__, __LINE__, bo->gem_handle, bo->name, strerror(errno));
+      return NULL;
+   }
+
+   /* And map it */
+   void *map = drm_mmap(0, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                        bufmgr->fd, mmap_arg.offset);
+   if (map == MAP_FAILED) {
+      DBG("%s:%d: Error mapping buffer %d (%s): %s .\n",
+          __FILE__, __LINE__, bo->gem_handle, bo->name, strerror(errno));
+      return NULL;
+   }
+
+   return map;
+}
+
+static void *
+brw_bo_gem_mmap(struct brw_context *brw, struct brw_bo *bo, bool wc)
+{
+   struct brw_bufmgr *bufmgr = bo->bufmgr;
+
+   if (bufmgr->has_mmap_offset)
+      return brw_bo_gem_mmap_offset(brw, bo, wc);
+   else
+      return brw_bo_gem_mmap_legacy(brw, bo, wc);
+}
+
+static void *
+brw_bo_map_cpu(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
+{
    /* We disallow CPU maps for writing to non-coherent buffers, as the
     * CPU map can become invalidated when a batch is flushed out, which
     * can happen at unpredictable times.  You should use WC maps instead.
@@ -961,17 +1033,7 @@ brw_bo_map_cpu(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
    if (!bo->map_cpu) {
       DBG("brw_bo_map_cpu: %d (%s)\n", bo->gem_handle, bo->name);
 
-      struct drm_i915_gem_mmap mmap_arg = {
-         .handle = bo->gem_handle,
-         .size = bo->size,
-      };
-      int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_MMAP, &mmap_arg);
-      if (ret != 0) {
-         DBG("%s:%d: Error mapping buffer %d (%s): %s .\n",
-             __FILE__, __LINE__, bo->gem_handle, bo->name, strerror(errno));
-         return NULL;
-      }
-      void *map = (void *) (uintptr_t) mmap_arg.addr_ptr;
+      void *map = brw_bo_gem_mmap(brw, bo, false);
       VG_DEFINED(map, bo->size);
 
       if (p_atomic_cmpxchg(&bo->map_cpu, NULL, map)) {
@@ -1022,20 +1084,7 @@ brw_bo_map_wc(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
 
    if (!bo->map_wc) {
       DBG("brw_bo_map_wc: %d (%s)\n", bo->gem_handle, bo->name);
-
-      struct drm_i915_gem_mmap mmap_arg = {
-         .handle = bo->gem_handle,
-         .size = bo->size,
-         .flags = I915_MMAP_WC,
-      };
-      int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_MMAP, &mmap_arg);
-      if (ret != 0) {
-         DBG("%s:%d: Error mapping buffer %d (%s): %s .\n",
-             __FILE__, __LINE__, bo->gem_handle, bo->name, strerror(errno));
-         return NULL;
-      }
-
-      void *map = (void *) (uintptr_t) mmap_arg.addr_ptr;
+      void *map = brw_bo_gem_mmap(brw, bo, true);
       VG_DEFINED(map, bo->size);
 
       if (p_atomic_cmpxchg(&bo->map_wc, NULL, map)) {
@@ -1279,8 +1328,19 @@ brw_bo_wait(struct brw_bo *bo, int64_t timeout_ns)
 }
 
 void
-brw_bufmgr_destroy(struct brw_bufmgr *bufmgr)
+brw_bufmgr_unref(struct brw_bufmgr *bufmgr)
 {
+   mtx_lock(&global_bufmgr_list_mutex);
+   if (p_atomic_dec_zero(&bufmgr->refcount)) {
+      list_del(&bufmgr->link);
+   } else {
+      bufmgr = NULL;
+   }
+   mtx_unlock(&global_bufmgr_list_mutex);
+
+   if (!bufmgr)
+      return;
+
    mtx_destroy(&bufmgr->lock);
 
    /* Free any cached buffer objects we were going to reuse */
@@ -1308,6 +1368,9 @@ brw_bufmgr_destroy(struct brw_bufmgr *bufmgr)
          util_vma_heap_finish(&bufmgr->vma_allocator[z]);
       }
    }
+
+   close(bufmgr->fd);
+   bufmgr->fd = -1;
 
    free(bufmgr);
 }
@@ -1651,14 +1714,21 @@ brw_using_softpin(struct brw_bufmgr *bufmgr)
    return bufmgr->initial_kflags & EXEC_OBJECT_PINNED;
 }
 
+static struct brw_bufmgr *
+brw_bufmgr_ref(struct brw_bufmgr *bufmgr)
+{
+   p_atomic_inc(&bufmgr->refcount);
+   return bufmgr;
+}
+
 /**
  * Initializes the GEM buffer manager, which uses the kernel to allocate, map,
  * and manage map buffer objections.
  *
  * \param fd File descriptor of the opened DRM device.
  */
-struct brw_bufmgr *
-brw_bufmgr_init(struct gen_device_info *devinfo, int fd, bool bo_reuse)
+static struct brw_bufmgr *
+brw_bufmgr_create(struct gen_device_info *devinfo, int fd, bool bo_reuse)
 {
    struct brw_bufmgr *bufmgr;
 
@@ -1675,9 +1745,16 @@ brw_bufmgr_init(struct gen_device_info *devinfo, int fd, bool bo_reuse)
     * Don't do this! Ensure that each library/bufmgr has its own device
     * fd so that its namespace does not clash with another.
     */
-   bufmgr->fd = fd;
+   bufmgr->fd = dup(fd);
+   if (bufmgr->fd < 0) {
+      free(bufmgr);
+      return NULL;
+   }
+
+   p_atomic_set(&bufmgr->refcount, 1);
 
    if (mtx_init(&bufmgr->lock, mtx_plain) != 0) {
+      close(bufmgr->fd);
       free(bufmgr);
       return NULL;
    }
@@ -1689,6 +1766,7 @@ brw_bufmgr_init(struct gen_device_info *devinfo, int fd, bool bo_reuse)
    bufmgr->has_llc = devinfo->has_llc;
    bufmgr->has_mmap_wc = gem_param(fd, I915_PARAM_MMAP_VERSION) > 0;
    bufmgr->bo_reuse = bo_reuse;
+   bufmgr->has_mmap_offset = gem_param(fd, I915_PARAM_MMAP_GTT_VERSION) >= 4;
 
    const uint64_t _4GB = 4ull << 30;
 
@@ -1719,6 +1797,7 @@ brw_bufmgr_init(struct gen_device_info *devinfo, int fd, bool bo_reuse)
           * might actually mean requiring 4.14.
           */
          fprintf(stderr, "i965 requires softpin (Kernel 4.5) on Gen10+.");
+         close(bufmgr->fd);
          free(bufmgr);
          return NULL;
       }
@@ -1732,4 +1811,42 @@ brw_bufmgr_init(struct gen_device_info *devinfo, int fd, bool bo_reuse)
       _mesa_hash_table_create(NULL, _mesa_hash_uint, _mesa_key_uint_equal);
 
    return bufmgr;
+}
+
+struct brw_bufmgr *
+brw_bufmgr_get_for_fd(struct gen_device_info *devinfo, int fd, bool bo_reuse)
+{
+   struct stat st;
+
+   if (fstat(fd, &st))
+      return NULL;
+
+   struct brw_bufmgr *bufmgr = NULL;
+
+   mtx_lock(&global_bufmgr_list_mutex);
+   list_for_each_entry(struct brw_bufmgr, iter_bufmgr, &global_bufmgr_list, link) {
+      struct stat iter_st;
+      if (fstat(iter_bufmgr->fd, &iter_st))
+         continue;
+
+      if (st.st_rdev == iter_st.st_rdev) {
+         assert(iter_bufmgr->bo_reuse == bo_reuse);
+         bufmgr = brw_bufmgr_ref(iter_bufmgr);
+         goto unlock;
+      }
+   }
+
+   bufmgr = brw_bufmgr_create(devinfo, fd, bo_reuse);
+   list_addtail(&bufmgr->link, &global_bufmgr_list);
+
+ unlock:
+   mtx_unlock(&global_bufmgr_list_mutex);
+
+   return bufmgr;
+}
+
+int
+brw_bufmgr_get_fd(struct brw_bufmgr *bufmgr)
+{
+   return bufmgr->fd;
 }

@@ -126,7 +126,7 @@ fd3_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 			.color_two_side = ctx->rasterizer->light_twoside,
 			.vclamp_color = ctx->rasterizer->clamp_vertex_color,
 			.fclamp_color = ctx->rasterizer->clamp_fragment_color,
-			.half_precision = ctx->in_blit &&
+			.half_precision = ctx->in_discard_blit &&
 					fd_half_precision(&ctx->batch->framebuffer),
 			.has_per_samp = (fd3_ctx->fsaturate || fd3_ctx->vsaturate),
 			.vsaturate_s = fd3_ctx->vsaturate_s,

@@ -52,7 +52,6 @@ void vid_dec_NeedTarget(vid_dec_PrivateType *priv)
    if (!priv->target) {
       memset(&templat, 0, sizeof(templat));
 
-      templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
       templat.width = priv->codec->width;
       templat.height = priv->codec->height;
       templat.buffer_format = pscreen->get_video_param(
@@ -132,7 +131,9 @@ void vid_dec_FillOutput(vid_dec_PrivateType *priv, struct pipe_video_buffer *buf
       if (!views[i]) continue;
       width = def->nFrameWidth;
       height = def->nFrameHeight;
-      vl_video_buffer_adjust_size(&width, &height, i, buf->chroma_format, buf->interlaced);
+      vl_video_buffer_adjust_size(&width, &height, i,
+                                  pipe_format_to_chroma_format(buf->buffer_format),
+                                  buf->interlaced);
       for (j = 0; j < views[i]->texture->array_size; ++j) {
          struct pipe_box box = {0, 0, j, width, height, 1};
          struct pipe_transfer *transfer;

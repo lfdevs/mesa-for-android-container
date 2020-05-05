@@ -25,35 +25,33 @@
 #ifndef SI_COMPUTE_H
 #define SI_COMPUTE_H
 
+#include "si_shader.h"
 #include "util/u_inlines.h"
 
-#include "si_shader.h"
-
 struct si_compute {
-	struct si_shader_selector sel;
-	struct si_shader shader;
+   struct si_shader_selector sel;
+   struct si_shader shader;
 
-	unsigned ir_type;
-	unsigned local_size;
-	unsigned private_size;
-	unsigned input_size;
+   unsigned ir_type;
+   unsigned local_size;
+   unsigned private_size;
+   unsigned input_size;
 
-	int max_global_buffers;
-	struct pipe_resource **global_buffers;
+   int max_global_buffers;
+   struct pipe_resource **global_buffers;
 
-	bool reads_variable_block_size;
-	unsigned num_cs_user_data_dwords;
+   bool reads_variable_block_size;
+   unsigned num_cs_user_data_dwords;
 };
 
 void si_destroy_compute(struct si_compute *program);
 
-static inline void
-si_compute_reference(struct si_compute **dst, struct si_compute *src)
+static inline void si_compute_reference(struct si_compute **dst, struct si_compute *src)
 {
-	if (pipe_reference(&(*dst)->sel.base.reference, &src->sel.base.reference))
-		si_destroy_compute(*dst);
+   if (pipe_reference(&(*dst)->sel.base.reference, &src->sel.base.reference))
+      si_destroy_compute(*dst);
 
-	*dst = src;
+   *dst = src;
 }
 
 #endif /* SI_COMPUTE_H */

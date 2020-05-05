@@ -78,17 +78,13 @@ emit_fetch_64bit(
 }
 
 static void
-emit_store_64bit_chan(struct lp_build_nir_context *bld_base,
-                      LLVMValueRef chan_ptr,
-                      LLVMValueRef chan_ptr2,
-                      LLVMValueRef value)
+emit_store_64bit_split(struct lp_build_nir_context *bld_base,
+                       LLVMValueRef value,
+                       LLVMValueRef split_values[2])
 {
-   struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
    struct gallivm_state *gallivm = bld_base->base.gallivm;
    LLVMBuilderRef builder = gallivm->builder;
-   struct lp_build_context *float_bld = &bld_base->base;
    unsigned i;
-   LLVMValueRef temp, temp2;
    LLVMValueRef shuffles[LP_MAX_VECTOR_WIDTH/32];
    LLVMValueRef shuffles2[LP_MAX_VECTOR_WIDTH/32];
    int len = bld_base->base.type.length * 2;
@@ -99,19 +95,32 @@ emit_store_64bit_chan(struct lp_build_nir_context *bld_base,
       shuffles2[i] = lp_build_const_int32(gallivm, (i * 2) + 1);
    }
 
-   temp = LLVMBuildShuffleVector(builder, value,
+   split_values[0] = LLVMBuildShuffleVector(builder, value,
                                  LLVMGetUndef(LLVMTypeOf(value)),
                                  LLVMConstVector(shuffles,
                                                  bld_base->base.type.length),
                                  "");
-   temp2 = LLVMBuildShuffleVector(builder, value,
+   split_values[1] = LLVMBuildShuffleVector(builder, value,
                                   LLVMGetUndef(LLVMTypeOf(value)),
                                   LLVMConstVector(shuffles2,
                                                   bld_base->base.type.length),
                                   "");
+}
 
-   lp_exec_mask_store(&bld->exec_mask, float_bld, temp, chan_ptr);
-   lp_exec_mask_store(&bld->exec_mask, float_bld, temp2, chan_ptr2);
+static void
+emit_store_64bit_chan(struct lp_build_nir_context *bld_base,
+                      LLVMValueRef chan_ptr,
+                      LLVMValueRef chan_ptr2,
+                      LLVMValueRef value)
+{
+   struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
+   struct lp_build_context *float_bld = &bld_base->base;
+   LLVMValueRef split_vals[2];
+
+   emit_store_64bit_split(bld_base, value, split_vals);
+
+   lp_exec_mask_store(&bld->exec_mask, float_bld, split_vals[0], chan_ptr);
+   lp_exec_mask_store(&bld->exec_mask, float_bld, split_vals[1], chan_ptr2);
 }
 
 static LLVMValueRef
@@ -280,6 +289,7 @@ static void emit_load_var(struct lp_build_nir_context *bld_base,
                            unsigned bit_size,
                            nir_variable *var,
                            unsigned vertex_index,
+                           LLVMValueRef indir_vertex_index,
                            unsigned const_index,
                            LLVMValueRef indir_index,
                            LLVMValueRef result[NIR_MAX_VEC_COMPONENTS])
@@ -288,7 +298,7 @@ static void emit_load_var(struct lp_build_nir_context *bld_base,
    struct gallivm_state *gallivm = bld_base->base.gallivm;
    int dmul = bit_size == 64 ? 2 : 1;
    switch (deref_mode) {
-   case nir_var_shader_in: {
+   case nir_var_shader_in:
       for (unsigned i = 0; i < num_components; i++) {
          int idx = (i * dmul) + var->data.location_frac;
          if (bld->gs_iface) {
@@ -302,6 +312,59 @@ static void emit_load_var(struct lp_build_nir_context *bld_base,
                LLVMValueRef swizzle_index_val = lp_build_const_int32(gallivm, idx + 1);
                result2 = bld->gs_iface->fetch_input(bld->gs_iface, &bld_base->base,
                                                     false, vertex_index_val, 0, attrib_index_val, swizzle_index_val);
+               result[i] = emit_fetch_64bit(bld_base, result[i], result2);
+            }
+         } else if (bld->tes_iface) {
+            LLVMValueRef vertex_index_val = lp_build_const_int32(gallivm, vertex_index);
+            LLVMValueRef attrib_index_val;
+            LLVMValueRef swizzle_index_val = lp_build_const_int32(gallivm, idx);
+            LLVMValueRef result2;
+
+            if (indir_index)
+               attrib_index_val = lp_build_add(&bld_base->uint_bld, indir_index, lp_build_const_int_vec(gallivm, bld_base->uint_bld.type, var->data.driver_location));
+            else
+               attrib_index_val = lp_build_const_int32(gallivm, const_index + var->data.driver_location);
+            if (var->data.patch) {
+               result[i] = bld->tes_iface->fetch_patch_input(bld->tes_iface, &bld_base->base,
+                                                             indir_index ? true : false, attrib_index_val, swizzle_index_val);
+               if (bit_size == 64) {
+                  LLVMValueRef swizzle_index_val = lp_build_const_int32(gallivm, idx + 1);
+                  result2 = bld->tes_iface->fetch_patch_input(bld->tes_iface, &bld_base->base,
+                                                              indir_index ? true : false, attrib_index_val, swizzle_index_val);
+                  result[i] = emit_fetch_64bit(bld_base, result[i], result2);
+               }
+            }
+            else {
+               result[i] = bld->tes_iface->fetch_vertex_input(bld->tes_iface, &bld_base->base,
+                                                              indir_vertex_index ? true : false,
+                                                              indir_vertex_index ? indir_vertex_index : vertex_index_val,
+                                                              indir_index ? true : false, attrib_index_val, swizzle_index_val);
+               if (bit_size == 64) {
+                  LLVMValueRef swizzle_index_val = lp_build_const_int32(gallivm, idx + 1);
+                  result2 = bld->tes_iface->fetch_vertex_input(bld->tes_iface, &bld_base->base,
+                                                               indir_vertex_index ? true : false,
+                                                               indir_vertex_index ? indir_vertex_index : vertex_index_val,
+                                                               indir_index ? true : false, attrib_index_val, swizzle_index_val);
+                  result[i] = emit_fetch_64bit(bld_base, result[i], result2);
+               }
+            }
+         } else if (bld->tcs_iface) {
+            LLVMValueRef vertex_index_val = lp_build_const_int32(gallivm, vertex_index);
+            LLVMValueRef attrib_index_val;
+            LLVMValueRef swizzle_index_val = lp_build_const_int32(gallivm, idx);
+
+            if (indir_index)
+               attrib_index_val = lp_build_add(&bld_base->uint_bld, indir_index, lp_build_const_int_vec(gallivm, bld_base->uint_bld.type, var->data.driver_location));
+            else
+               attrib_index_val = lp_build_const_int32(gallivm, const_index + var->data.driver_location);
+            result[i] = bld->tcs_iface->emit_fetch_input(bld->tcs_iface, &bld_base->base,
+                                                         indir_vertex_index ? true : false, indir_vertex_index ? indir_vertex_index : vertex_index_val,
+                                                         indir_index ? true : false, attrib_index_val, swizzle_index_val);
+            if (bit_size == 64) {
+               LLVMValueRef swizzle_index_val = lp_build_const_int32(gallivm, idx + 1);
+               LLVMValueRef result2 = bld->tcs_iface->emit_fetch_input(bld->tcs_iface, &bld_base->base,
+                                                                       indir_vertex_index ? true : false, indir_vertex_index ? indir_vertex_index : vertex_index_val,
+                                                                       indir_index ? true : false, attrib_index_val, swizzle_index_val);
                result[i] = emit_fetch_64bit(bld_base, result[i], result2);
             }
          } else {
@@ -350,7 +413,33 @@ static void emit_load_var(struct lp_build_nir_context *bld_base,
             }
          }
       }
-   }
+      break;
+   case nir_var_shader_out:
+      for (unsigned i = 0; i < num_components; i++) {
+         int idx = (i * dmul) + var->data.location_frac;
+         if (bld->tcs_iface) {
+            LLVMValueRef vertex_index_val = lp_build_const_int32(gallivm, vertex_index);
+            LLVMValueRef attrib_index_val;
+            LLVMValueRef swizzle_index_val = lp_build_const_int32(gallivm, idx);
+
+            if (indir_index)
+               attrib_index_val = lp_build_add(&bld_base->uint_bld, indir_index, lp_build_const_int_vec(gallivm, bld_base->uint_bld.type, var->data.driver_location));
+            else
+               attrib_index_val = lp_build_const_int32(gallivm, const_index + var->data.driver_location);
+
+            result[i] = bld->tcs_iface->emit_fetch_output(bld->tcs_iface, &bld_base->base,
+                                                         indir_vertex_index ? true : false, indir_vertex_index ? indir_vertex_index : vertex_index_val,
+                                                          indir_index ? true : false, attrib_index_val, swizzle_index_val, 0);
+            if (bit_size == 64) {
+               LLVMValueRef swizzle_index_val = lp_build_const_int32(gallivm, idx + 1);
+               LLVMValueRef result2 = bld->tcs_iface->emit_fetch_output(bld->tcs_iface, &bld_base->base,
+                                                                        indir_vertex_index ? true : false, indir_vertex_index ? indir_vertex_index : vertex_index_val,
+                                                                        indir_index ? true : false, attrib_index_val, swizzle_index_val, 0);
+               result[i] = emit_fetch_64bit(bld_base, result[i], result2);
+            }
+         }
+      }
+      break;
    default:
       break;
    }
@@ -383,19 +472,79 @@ static void emit_store_chan(struct lp_build_nir_context *bld_base,
    }
 }
 
+static void emit_store_tcs_chan(struct lp_build_nir_context *bld_base,
+                                unsigned bit_size,
+                                unsigned location,
+                                unsigned const_index,
+                                LLVMValueRef indir_vertex_index,
+                                LLVMValueRef indir_index,
+                                unsigned comp,
+                                unsigned chan,
+                                LLVMValueRef chan_val)
+{
+   struct gallivm_state *gallivm = bld_base->base.gallivm;
+   struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
+   LLVMBuilderRef builder = bld->bld_base.base.gallivm->builder;
+   unsigned swizzle = chan;
+   if (bit_size == 64) {
+      swizzle *= 2;
+      swizzle += comp;
+      if (swizzle >= 4) {
+         swizzle -= 4;
+         location++;
+      }
+   } else
+      swizzle += comp;
+   LLVMValueRef attrib_index_val;
+   LLVMValueRef swizzle_index_val = lp_build_const_int32(gallivm, swizzle);
+
+   if (indir_index)
+      attrib_index_val = lp_build_add(&bld_base->uint_bld, indir_index, lp_build_const_int_vec(gallivm, bld_base->uint_bld.type, location));
+   else
+      attrib_index_val = lp_build_const_int32(gallivm, const_index + location);
+   if (bit_size == 64) {
+      LLVMValueRef split_vals[2];
+      LLVMValueRef swizzle_index_val2 = lp_build_const_int32(gallivm, swizzle + 1);
+      emit_store_64bit_split(bld_base, chan_val, split_vals);
+      bld->tcs_iface->emit_store_output(bld->tcs_iface, &bld_base->base, 0,
+                                        indir_vertex_index ? true : false,
+                                        indir_vertex_index,
+                                        indir_index ? true : false,
+                                        attrib_index_val, swizzle_index_val,
+                                        split_vals[0], mask_vec(bld_base));
+      bld->tcs_iface->emit_store_output(bld->tcs_iface, &bld_base->base, 0,
+                                        indir_vertex_index ? true : false,
+                                        indir_vertex_index,
+                                        indir_index ? true : false,
+                                        attrib_index_val, swizzle_index_val2,
+                                        split_vals[1], mask_vec(bld_base));
+   } else {
+      chan_val = LLVMBuildBitCast(builder, chan_val, bld_base->base.vec_type, "");
+      bld->tcs_iface->emit_store_output(bld->tcs_iface, &bld_base->base, 0,
+                                        indir_vertex_index ? true : false,
+                                        indir_vertex_index,
+                                        indir_index ? true : false,
+                                        attrib_index_val, swizzle_index_val,
+                                        chan_val, mask_vec(bld_base));
+   }
+}
+
 static void emit_store_var(struct lp_build_nir_context *bld_base,
                            nir_variable_mode deref_mode,
-                           unsigned bit_size,
                            unsigned num_components,
+                           unsigned bit_size,
+                           nir_variable *var,
                            unsigned writemask,
+                           LLVMValueRef indir_vertex_index,
                            unsigned const_index,
-                           nir_variable *var, LLVMValueRef dst)
+                           LLVMValueRef indir_index,
+                           LLVMValueRef dst)
 {
    struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
    LLVMBuilderRef builder = bld->bld_base.base.gallivm->builder;
    switch (deref_mode) {
    case nir_var_shader_out: {
-      unsigned location = var->data.driver_location + const_index;
+      unsigned location = var->data.driver_location;
       unsigned comp = var->data.location_frac;
       if (bld_base->shader->info.stage == MESA_SHADER_FRAGMENT) {
          if (var->data.location == FRAG_RESULT_STENCIL)
@@ -403,10 +552,14 @@ static void emit_store_var(struct lp_build_nir_context *bld_base,
          else if (var->data.location == FRAG_RESULT_DEPTH)
             comp = 2;
       }
+
       for (unsigned chan = 0; chan < num_components; chan++) {
          if (writemask & (1u << chan)) {
             LLVMValueRef chan_val = (num_components == 1) ? dst : LLVMBuildExtractValue(builder, dst, chan, "");
-            emit_store_chan(bld_base, deref_mode, bit_size, location, comp, chan, chan_val);
+            if (bld->tcs_iface) {
+               emit_store_tcs_chan(bld_base, bit_size, location, const_index, indir_vertex_index, indir_index, comp, chan, chan_val);
+            } else
+               emit_store_chan(bld_base, deref_mode, bit_size, location + const_index, comp, chan, chan_val);
          }
       }
       break;
@@ -425,7 +578,7 @@ static LLVMValueRef emit_load_reg(struct lp_build_nir_context *bld_base,
    struct gallivm_state *gallivm = bld_base->base.gallivm;
    LLVMBuilderRef builder = gallivm->builder;
    int nc = reg->reg->num_components;
-   LLVMValueRef vals[NIR_MAX_VEC_COMPONENTS];
+   LLVMValueRef vals[NIR_MAX_VEC_COMPONENTS] = { NULL };
    struct lp_build_context *uint_bld = &bld_base->uint_bld;
    if (reg->reg->num_array_elems) {
       LLVMValueRef indirect_val = lp_build_const_int_vec(gallivm, uint_bld->type, reg->base_offset);
@@ -641,38 +794,6 @@ static void emit_atomic_global(struct lp_build_nir_context *bld_base,
    struct gallivm_state *gallivm = bld_base->base.gallivm;
    LLVMBuilderRef builder = gallivm->builder;
    struct lp_build_context *uint_bld = &bld_base->uint_bld;
-   LLVMAtomicRMWBinOp op;
-   switch (nir_op) {
-   case nir_intrinsic_global_atomic_add:
-      op = LLVMAtomicRMWBinOpAdd;
-      break;
-   case nir_intrinsic_global_atomic_exchange:
-      op = LLVMAtomicRMWBinOpXchg;
-      break;
-   case nir_intrinsic_global_atomic_and:
-      op = LLVMAtomicRMWBinOpAnd;
-      break;
-   case nir_intrinsic_global_atomic_or:
-      op = LLVMAtomicRMWBinOpOr;
-      break;
-   case nir_intrinsic_global_atomic_xor:
-      op = LLVMAtomicRMWBinOpXor;
-      break;
-   case nir_intrinsic_global_atomic_umin:
-      op = LLVMAtomicRMWBinOpUMin;
-      break;
-   case nir_intrinsic_global_atomic_umax:
-      op = LLVMAtomicRMWBinOpUMax;
-      break;
-   case nir_intrinsic_global_atomic_imin:
-      op = LLVMAtomicRMWBinOpMin;
-      break;
-   case nir_intrinsic_global_atomic_imax:
-      op = LLVMAtomicRMWBinOpMax;
-      break;
-   default:
-      break;
-   }
 
    LLVMValueRef atom_res = lp_build_alloca(gallivm,
                                            uint_bld->vec_type, "");
@@ -704,6 +825,39 @@ static void emit_atomic_global(struct lp_build_nir_context *bld_base,
                                       false);
       scalar = LLVMBuildExtractValue(gallivm->builder, scalar, 0, "");
    } else {
+      LLVMAtomicRMWBinOp op;
+      switch (nir_op) {
+      case nir_intrinsic_global_atomic_add:
+         op = LLVMAtomicRMWBinOpAdd;
+         break;
+      case nir_intrinsic_global_atomic_exchange:
+         op = LLVMAtomicRMWBinOpXchg;
+         break;
+      case nir_intrinsic_global_atomic_and:
+         op = LLVMAtomicRMWBinOpAnd;
+         break;
+      case nir_intrinsic_global_atomic_or:
+         op = LLVMAtomicRMWBinOpOr;
+         break;
+      case nir_intrinsic_global_atomic_xor:
+         op = LLVMAtomicRMWBinOpXor;
+         break;
+      case nir_intrinsic_global_atomic_umin:
+         op = LLVMAtomicRMWBinOpUMin;
+         break;
+      case nir_intrinsic_global_atomic_umax:
+         op = LLVMAtomicRMWBinOpUMax;
+         break;
+      case nir_intrinsic_global_atomic_imin:
+         op = LLVMAtomicRMWBinOpMin;
+         break;
+      case nir_intrinsic_global_atomic_imax:
+         op = LLVMAtomicRMWBinOpMax;
+         break;
+      default:
+         unreachable("unknown atomic op");
+      }
+
       scalar = LLVMBuildAtomicRMW(builder, op,
                                   addr_ptr, value_ptr,
                                   LLVMAtomicOrderingSequentiallyConsistent,
@@ -922,7 +1076,6 @@ static void emit_atomic_mem(struct lp_build_nir_context *bld_base,
    LLVMBuilderRef builder = bld->bld_base.base.gallivm->builder;
    LLVMValueRef ssbo_ptr;
    struct lp_build_context *uint_bld = &bld_base->uint_bld;
-   LLVMAtomicRMWBinOp op;
    LLVMValueRef ssbo_limit = NULL;
 
    if (index) {
@@ -932,47 +1085,6 @@ static void emit_atomic_mem(struct lp_build_nir_context *bld_base,
       ssbo_ptr = lp_build_array_get(gallivm, bld->ssbo_ptr, LLVMBuildExtractElement(builder, index, lp_build_const_int32(gallivm, 0), ""));
    } else
       ssbo_ptr = bld->shared_ptr;
-
-   switch (nir_op) {
-   case nir_intrinsic_shared_atomic_add:
-   case nir_intrinsic_ssbo_atomic_add:
-      op = LLVMAtomicRMWBinOpAdd;
-      break;
-   case nir_intrinsic_shared_atomic_exchange:
-   case nir_intrinsic_ssbo_atomic_exchange:
-      op = LLVMAtomicRMWBinOpXchg;
-      break;
-   case nir_intrinsic_shared_atomic_and:
-   case nir_intrinsic_ssbo_atomic_and:
-      op = LLVMAtomicRMWBinOpAnd;
-      break;
-   case nir_intrinsic_shared_atomic_or:
-   case nir_intrinsic_ssbo_atomic_or:
-      op = LLVMAtomicRMWBinOpOr;
-      break;
-   case nir_intrinsic_shared_atomic_xor:
-   case nir_intrinsic_ssbo_atomic_xor:
-      op = LLVMAtomicRMWBinOpXor;
-      break;
-   case nir_intrinsic_shared_atomic_umin:
-   case nir_intrinsic_ssbo_atomic_umin:
-      op = LLVMAtomicRMWBinOpUMin;
-      break;
-   case nir_intrinsic_shared_atomic_umax:
-   case nir_intrinsic_ssbo_atomic_umax:
-      op = LLVMAtomicRMWBinOpUMax;
-      break;
-   case nir_intrinsic_ssbo_atomic_imin:
-   case nir_intrinsic_shared_atomic_imin:
-      op = LLVMAtomicRMWBinOpMin;
-      break;
-   case nir_intrinsic_ssbo_atomic_imax:
-   case nir_intrinsic_shared_atomic_imax:
-      op = LLVMAtomicRMWBinOpMax;
-      break;
-   default:
-      break;
-   }
 
    offset = lp_build_shr_imm(uint_bld, offset, 2);
    LLVMValueRef atom_res = lp_build_alloca(gallivm,
@@ -1015,6 +1127,48 @@ static void emit_atomic_mem(struct lp_build_nir_context *bld_base,
                                       false);
       scalar = LLVMBuildExtractValue(gallivm->builder, scalar, 0, "");
    } else {
+      LLVMAtomicRMWBinOp op;
+
+      switch (nir_op) {
+      case nir_intrinsic_shared_atomic_add:
+      case nir_intrinsic_ssbo_atomic_add:
+         op = LLVMAtomicRMWBinOpAdd;
+         break;
+      case nir_intrinsic_shared_atomic_exchange:
+      case nir_intrinsic_ssbo_atomic_exchange:
+         op = LLVMAtomicRMWBinOpXchg;
+         break;
+      case nir_intrinsic_shared_atomic_and:
+      case nir_intrinsic_ssbo_atomic_and:
+         op = LLVMAtomicRMWBinOpAnd;
+         break;
+      case nir_intrinsic_shared_atomic_or:
+      case nir_intrinsic_ssbo_atomic_or:
+         op = LLVMAtomicRMWBinOpOr;
+         break;
+      case nir_intrinsic_shared_atomic_xor:
+      case nir_intrinsic_ssbo_atomic_xor:
+         op = LLVMAtomicRMWBinOpXor;
+         break;
+      case nir_intrinsic_shared_atomic_umin:
+      case nir_intrinsic_ssbo_atomic_umin:
+         op = LLVMAtomicRMWBinOpUMin;
+         break;
+      case nir_intrinsic_shared_atomic_umax:
+      case nir_intrinsic_ssbo_atomic_umax:
+         op = LLVMAtomicRMWBinOpUMax;
+         break;
+      case nir_intrinsic_ssbo_atomic_imin:
+      case nir_intrinsic_shared_atomic_imin:
+         op = LLVMAtomicRMWBinOpMin;
+         break;
+      case nir_intrinsic_ssbo_atomic_imax:
+      case nir_intrinsic_shared_atomic_imax:
+         op = LLVMAtomicRMWBinOpMax;
+         break;
+      default:
+         unreachable("unknown atomic op");
+      }
       scalar = LLVMBuildAtomicRMW(builder, op,
                                   scalar_ptr, value_ptr,
                                   LLVMAtomicOrderingSequentiallyConsistent,
@@ -1048,10 +1202,12 @@ static void emit_barrier(struct lp_build_nir_context *bld_base)
 static LLVMValueRef emit_get_buffer_size(struct lp_build_nir_context *bld_base,
                                          LLVMValueRef index)
 {
+   struct gallivm_state *gallivm = bld_base->base.gallivm;
    struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
    LLVMBuilderRef builder = bld->bld_base.base.gallivm->builder;
    struct lp_build_context *bld_broad = &bld_base->uint_bld;
-   LLVMValueRef size_ptr = lp_build_array_get(bld_base->base.gallivm, bld->ssbo_sizes_ptr, LLVMBuildExtractElement(builder, index, bld_broad->zero, ""));
+   LLVMValueRef size_ptr = lp_build_array_get(bld_base->base.gallivm, bld->ssbo_sizes_ptr,
+                                              LLVMBuildExtractElement(builder, index, lp_build_const_int32(gallivm, 0), ""));
    return lp_build_broadcast_scalar(bld_broad, size_ptr);
 }
 
@@ -1089,6 +1245,8 @@ static void init_var_slots(struct lp_build_nir_context *bld_base,
    struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
    unsigned slots = glsl_count_attribute_slots(var->type, false) * 4;
 
+   if (!bld->outputs)
+     return;
    for (unsigned comp = sc; comp < slots + sc; comp++) {
       unsigned this_loc = var->data.driver_location + (comp / 4);
       unsigned this_chan = comp % 4;
@@ -1181,7 +1339,10 @@ static void emit_sysval_intrin(struct lp_build_nir_context *bld_base,
          result[i] = lp_build_broadcast_scalar(&bld_base->uint_bld, LLVMBuildExtractElement(gallivm->builder, bld->system_values.grid_size, lp_build_const_int32(gallivm, i), ""));
       break;
    case nir_intrinsic_load_invocation_id:
-      result[0] = lp_build_broadcast_scalar(&bld_base->uint_bld, bld->system_values.invocation_id);
+      if (bld_base->shader->info.stage == MESA_SHADER_TESS_CTRL)
+         result[0] = bld->system_values.invocation_id;
+      else
+         result[0] = lp_build_broadcast_scalar(&bld_base->uint_bld, bld->system_values.invocation_id);
       break;
    case nir_intrinsic_load_front_face:
       result[0] = lp_build_broadcast_scalar(&bld_base->uint_bld, bld->system_values.front_facing);
@@ -1198,7 +1359,31 @@ static void emit_sysval_intrin(struct lp_build_nir_context *bld_base,
    case nir_intrinsic_load_work_dim:
       result[0] = lp_build_broadcast_scalar(&bld_base->uint_bld, bld->system_values.work_dim);
       break;
+   case nir_intrinsic_load_tess_coord:
+      for (unsigned i = 0; i < 3; i++) {
+	 result[i] = LLVMBuildExtractValue(gallivm->builder, bld->system_values.tess_coord, i, "");
+      }
+      break;
+   case nir_intrinsic_load_tess_level_outer:
+      for (unsigned i = 0; i < 4; i++)
+         result[i] = lp_build_broadcast_scalar(&bld_base->base, LLVMBuildExtractValue(gallivm->builder, bld->system_values.tess_outer, i, ""));
+      break;
+   case nir_intrinsic_load_tess_level_inner:
+      for (unsigned i = 0; i < 2; i++)
+         result[i] = lp_build_broadcast_scalar(&bld_base->base, LLVMBuildExtractValue(gallivm->builder, bld->system_values.tess_inner, i, ""));
+      break;
+   case nir_intrinsic_load_patch_vertices_in:
+      result[0] = bld->system_values.vertices_in;
+      break;
    }
+}
+
+static void emit_helper_invocation(struct lp_build_nir_context *bld_base,
+                                   LLVMValueRef *dst)
+{
+   struct gallivm_state *gallivm = bld_base->base.gallivm;
+   struct lp_build_context *uint_bld = &bld_base->uint_bld;
+   *dst = lp_build_cmp(uint_bld, PIPE_FUNC_NOTEQUAL, mask_vec(bld_base), lp_build_const_int_vec(gallivm, uint_bld->type, -1));
 }
 
 static void bgnloop(struct lp_build_nir_context *bld_base)
@@ -1318,7 +1503,7 @@ static void emit_vertex(struct lp_build_nir_context *bld_base, uint32_t stream_i
 
    assert(bld->gs_iface->emit_vertex);
    LLVMValueRef total_emitted_vertices_vec =
-      LLVMBuildLoad(builder, bld->total_emitted_vertices_vec_ptr, "");
+      LLVMBuildLoad(builder, bld->total_emitted_vertices_vec_ptr[stream_id], "");
    LLVMValueRef mask = mask_vec(bld_base);
    mask = clamp_mask_to_max_output_vertices(bld, mask,
                                             total_emitted_vertices_vec);
@@ -1327,56 +1512,57 @@ static void emit_vertex(struct lp_build_nir_context *bld_base, uint32_t stream_i
                               total_emitted_vertices_vec,
                               lp_build_const_int_vec(bld->bld_base.base.gallivm, bld->bld_base.base.type, stream_id));
 
-   increment_vec_ptr_by_mask(bld_base, bld->emitted_vertices_vec_ptr,
+   increment_vec_ptr_by_mask(bld_base, bld->emitted_vertices_vec_ptr[stream_id],
                              mask);
-   increment_vec_ptr_by_mask(bld_base, bld->total_emitted_vertices_vec_ptr,
+   increment_vec_ptr_by_mask(bld_base, bld->total_emitted_vertices_vec_ptr[stream_id],
                              mask);
 }
 
 static void
 end_primitive_masked(struct lp_build_nir_context * bld_base,
-                     LLVMValueRef mask)
+                     LLVMValueRef mask, uint32_t stream_id)
 {
    struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
    LLVMBuilderRef builder = bld->bld_base.base.gallivm->builder;
 
    struct lp_build_context *uint_bld = &bld_base->uint_bld;
    LLVMValueRef emitted_vertices_vec =
-      LLVMBuildLoad(builder, bld->emitted_vertices_vec_ptr, "");
+      LLVMBuildLoad(builder, bld->emitted_vertices_vec_ptr[stream_id], "");
    LLVMValueRef emitted_prims_vec =
-      LLVMBuildLoad(builder, bld->emitted_prims_vec_ptr, "");
+      LLVMBuildLoad(builder, bld->emitted_prims_vec_ptr[stream_id], "");
    LLVMValueRef total_emitted_vertices_vec =
-      LLVMBuildLoad(builder, bld->total_emitted_vertices_vec_ptr, "");
+      LLVMBuildLoad(builder, bld->total_emitted_vertices_vec_ptr[stream_id], "");
 
    LLVMValueRef emitted_mask = lp_build_cmp(uint_bld,
                                             PIPE_FUNC_NOTEQUAL,
                                             emitted_vertices_vec,
                                             uint_bld->zero);
    mask = LLVMBuildAnd(builder, mask, emitted_mask, "");
-   bld->gs_iface->end_primitive(bld->gs_iface, &bld->bld_base.base,
-                                total_emitted_vertices_vec,
-                                emitted_vertices_vec, emitted_prims_vec, mask_vec(bld_base));
-   increment_vec_ptr_by_mask(bld_base, bld->emitted_prims_vec_ptr,
+   if (stream_id == 0)
+      bld->gs_iface->end_primitive(bld->gs_iface, &bld->bld_base.base,
+                                   total_emitted_vertices_vec,
+                                   emitted_vertices_vec, emitted_prims_vec, mask_vec(bld_base));
+   increment_vec_ptr_by_mask(bld_base, bld->emitted_prims_vec_ptr[stream_id],
                              mask);
-   clear_uint_vec_ptr_from_mask(bld_base, bld->emitted_vertices_vec_ptr,
+   clear_uint_vec_ptr_from_mask(bld_base, bld->emitted_vertices_vec_ptr[stream_id],
                                 mask);
 }
 
 static void end_primitive(struct lp_build_nir_context *bld_base, uint32_t stream_id)
 {
-   struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
+   ASSERTED struct lp_build_nir_soa_context *bld = (struct lp_build_nir_soa_context *)bld_base;
 
    assert(bld->gs_iface->end_primitive);
 
    LLVMValueRef mask = mask_vec(bld_base);
-   end_primitive_masked(bld_base, mask);
+   end_primitive_masked(bld_base, mask, stream_id);
 }
 
 static void
 emit_prologue(struct lp_build_nir_soa_context *bld)
 {
    struct gallivm_state * gallivm = bld->bld_base.base.gallivm;
-   if (bld->indirects & nir_var_shader_in && !bld->gs_iface) {
+   if (bld->indirects & nir_var_shader_in && !bld->gs_iface && !bld->tcs_iface && !bld->tes_iface) {
       uint32_t num_inputs = util_bitcount64(bld->bld_base.shader->info.inputs_read);
       unsigned index, chan;
       LLVMTypeRef vec_type = bld->bld_base.base.vec_type;
@@ -1411,7 +1597,7 @@ static void emit_vote(struct lp_build_nir_context *bld_base, LLVMValueRef src, n
    LLVMValueRef outer_cond = LLVMBuildICmp(builder, LLVMIntNE, exec_mask, bld_base->uint_bld.zero, "");
 
    LLVMValueRef res_store = lp_build_alloca(gallivm, bld_base->int_bld.elem_type, "");
-   LLVMValueRef init_val;
+   LLVMValueRef init_val = NULL;
    if (instr->intrinsic == nir_intrinsic_vote_ieq) {
       /* for equal we unfortunately have to loop and find the first valid one. */
       lp_build_loop_begin(&loop_state, gallivm, lp_build_const_int32(gallivm, 0));
@@ -1425,7 +1611,6 @@ static void emit_vote(struct lp_build_nir_context *bld_base, LLVMValueRef src, n
       lp_build_endif(&ifthen);
       lp_build_loop_end_cond(&loop_state, lp_build_const_int32(gallivm, bld_base->uint_bld.type.length),
 			     NULL, LLVMIntUGE);
-      lp_build_print_value(gallivm, "init_val is ", LLVMBuildLoad(builder, res_store, ""));
       init_val = LLVMBuildLoad(builder, res_store, "");
    } else {
       LLVMBuildStore(builder, lp_build_const_int32(gallivm, instr->intrinsic == nir_intrinsic_vote_any ? 0 : -1), res_store);
@@ -1552,6 +1737,7 @@ void lp_build_nir_soa(struct gallivm_state *gallivm,
    bld.bld_base.image_op = emit_image_op;
    bld.bld_base.image_size = emit_image_size;
    bld.bld_base.vote = emit_vote;
+   bld.bld_base.helper_invocation = emit_helper_invocation;
 
    bld.mask = params->mask;
    bld.inputs = params->inputs;
@@ -1574,17 +1760,21 @@ void lp_build_nir_soa(struct gallivm_state *gallivm,
       bld.indirects |= nir_var_shader_in;
 
    bld.gs_iface = params->gs_iface;
+   bld.tcs_iface = params->tcs_iface;
+   bld.tes_iface = params->tes_iface;
    if (bld.gs_iface) {
       struct lp_build_context *uint_bld = &bld.bld_base.uint_bld;
 
       bld.max_output_vertices_vec = lp_build_const_int_vec(gallivm, bld.bld_base.int_bld.type,
                                                            shader->info.gs.vertices_out);
-      bld.emitted_prims_vec_ptr =
-         lp_build_alloca(gallivm, uint_bld->vec_type, "emitted_prims_ptr");
-      bld.emitted_vertices_vec_ptr =
-         lp_build_alloca(gallivm, uint_bld->vec_type, "emitted_vertices_ptr");
-      bld.total_emitted_vertices_vec_ptr =
-         lp_build_alloca(gallivm, uint_bld->vec_type, "total_emitted_vertices_ptr");
+      for (int i = 0; i < PIPE_MAX_VERTEX_STREAMS; i++) {
+         bld.emitted_prims_vec_ptr[i] =
+            lp_build_alloca(gallivm, uint_bld->vec_type, "emitted_prims_ptr");
+         bld.emitted_vertices_vec_ptr[i] =
+            lp_build_alloca(gallivm, uint_bld->vec_type, "emitted_vertices_ptr");
+         bld.total_emitted_vertices_vec_ptr[i] =
+            lp_build_alloca(gallivm, uint_bld->vec_type, "total_emitted_vertices_ptr");
+      }
    }
    lp_exec_mask_init(&bld.exec_mask, &bld.bld_base.int_bld);
 
@@ -1599,15 +1789,18 @@ void lp_build_nir_soa(struct gallivm_state *gallivm,
       LLVMBuilderRef builder = bld.bld_base.base.gallivm->builder;
       LLVMValueRef total_emitted_vertices_vec;
       LLVMValueRef emitted_prims_vec;
-      end_primitive_masked(&bld.bld_base, lp_build_mask_value(bld.mask));
-      total_emitted_vertices_vec =
-         LLVMBuildLoad(builder, bld.total_emitted_vertices_vec_ptr, "");
-      emitted_prims_vec =
-         LLVMBuildLoad(builder, bld.emitted_prims_vec_ptr, "");
 
-      bld.gs_iface->gs_epilogue(bld.gs_iface,
-                                 total_emitted_vertices_vec,
-                                 emitted_prims_vec);
+      end_primitive_masked(&bld.bld_base, lp_build_mask_value(bld.mask), 0);
+      for (int i = 0; i < PIPE_MAX_VERTEX_STREAMS; i++) {
+         total_emitted_vertices_vec =
+            LLVMBuildLoad(builder, bld.total_emitted_vertices_vec_ptr[i], "");
+
+         emitted_prims_vec =
+            LLVMBuildLoad(builder, bld.emitted_prims_vec_ptr[i], "");
+         bld.gs_iface->gs_epilogue(bld.gs_iface,
+                                   total_emitted_vertices_vec,
+                                   emitted_prims_vec, i);
+      }
    }
    lp_exec_mask_fini(&bld.exec_mask);
 }

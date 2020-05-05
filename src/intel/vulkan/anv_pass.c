@@ -86,7 +86,6 @@ anv_render_pass_compile(struct anv_render_pass *pass)
          struct anv_render_pass_attachment *pass_att =
             &pass->attachments[subpass_att->attachment];
 
-         assert(__builtin_popcount(subpass_att->usage) == 1);
          pass_att->usage |= subpass_att->usage;
          pass_att->last_subpass_idx = i;
 
@@ -116,8 +115,13 @@ anv_render_pass_compile(struct anv_render_pass *pass)
 
             subpass->has_color_resolve = true;
 
+            assert(color_att->attachment < pass->attachment_count);
+            struct anv_render_pass_attachment *color_pass_att =
+               &pass->attachments[color_att->attachment];
+
             assert(resolve_att->usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-            color_att->usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+            assert(color_att->usage == VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+            color_pass_att->usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
          }
       }
 
@@ -127,9 +131,17 @@ anv_render_pass_compile(struct anv_render_pass *pass)
          UNUSED struct anv_subpass_attachment *resolve_att =
             subpass->ds_resolve_attachment;
 
+         assert(ds_att->attachment < pass->attachment_count);
+         struct anv_render_pass_attachment *ds_pass_att =
+            &pass->attachments[ds_att->attachment];
+
          assert(resolve_att->usage == VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-         ds_att->usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+         assert(ds_att->usage == VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+         ds_pass_att->usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
       }
+
+      for (uint32_t j = 0; j < subpass->attachment_count; j++)
+         assert(__builtin_popcount(subpass->attachments[j].usage) == 1);
    }
 
    /* From the Vulkan 1.0.39 spec:

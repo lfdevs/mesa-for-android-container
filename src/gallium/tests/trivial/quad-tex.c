@@ -73,7 +73,7 @@ struct program
 	struct pipe_sampler_state sampler;
 	struct pipe_viewport_state viewport;
 	struct pipe_framebuffer_state framebuffer;
-	struct pipe_vertex_element velem[2];
+	struct cso_velems_state velem;
 
 	void *vs;
 	void *fs;
@@ -252,16 +252,18 @@ static void init_prog(struct program *p)
 	}
 
 	/* vertex elements state */
-	memset(p->velem, 0, sizeof(p->velem));
-	p->velem[0].src_offset = 0 * 4 * sizeof(float); /* offset 0, first element */
-	p->velem[0].instance_divisor = 0;
-	p->velem[0].vertex_buffer_index = 0;
-	p->velem[0].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
+	memset(&p->velem, 0, sizeof(p->velem));
+        p->velem.count = 2;
 
-	p->velem[1].src_offset = 1 * 4 * sizeof(float); /* offset 16, second element */
-	p->velem[1].instance_divisor = 0;
-	p->velem[1].vertex_buffer_index = 0;
-	p->velem[1].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
+	p->velem.velems[0].src_offset = 0 * 4 * sizeof(float); /* offset 0, first element */
+	p->velem.velems[0].instance_divisor = 0;
+	p->velem.velems[0].vertex_buffer_index = 0;
+	p->velem.velems[0].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
+
+	p->velem.velems[1].src_offset = 1 * 4 * sizeof(float); /* offset 16, second element */
+	p->velem.velems[1].instance_divisor = 0;
+	p->velem.velems[1].vertex_buffer_index = 0;
+	p->velem.velems[1].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
 
 	/* vertex shader */
 	{
@@ -307,7 +309,7 @@ static void draw(struct program *p)
 	cso_set_framebuffer(p->cso, &p->framebuffer);
 
 	/* clear the render target */
-	p->pipe->clear(p->pipe, PIPE_CLEAR_COLOR, &p->clear_color, 0, 0);
+	p->pipe->clear(p->pipe, PIPE_CLEAR_COLOR, NULL, &p->clear_color, 0, 0);
 
 	/* set misc state we care about */
 	cso_set_blend(p->cso, &p->blend);
@@ -326,7 +328,7 @@ static void draw(struct program *p)
 	cso_set_vertex_shader_handle(p->cso, p->vs);
 
 	/* vertex element data */
-	cso_set_vertex_elements(p->cso, 2, p->velem);
+	cso_set_vertex_elements(p->cso, &p->velem);
 
 	util_draw_vertex_buffer(p->pipe, p->cso,
 	                        p->vbuf, 0, 0,

@@ -426,6 +426,9 @@ dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
                 EGLint surface_type, const EGLint *attr_list,
                 const int *rgba_shifts, const unsigned int *rgba_sizes);
 
+EGLBoolean
+dri2_add_pbuffer_configs_for_visuals(_EGLDriver *drv, _EGLDisplay *disp);
+
 _EGLImage *
 dri2_create_image_khr(_EGLDriver *drv, _EGLDisplay *disp,
                       _EGLContext *ctx, EGLenum target,

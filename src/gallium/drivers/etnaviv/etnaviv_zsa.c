@@ -29,6 +29,7 @@
 #include "etnaviv_context.h"
 #include "etnaviv_screen.h"
 #include "etnaviv_translate.h"
+#include "util/u_half.h"
 #include "util/u_memory.h"
 
 #include "hw/common.xml.h"
@@ -38,6 +39,7 @@ etna_zsa_state_create(struct pipe_context *pctx,
                       const struct pipe_depth_stencil_alpha_state *so)
 {
    struct etna_context *ctx = etna_context(pctx);
+   struct etna_screen *screen = ctx->screen;
    struct etna_zsa_state *cs = CALLOC_STRUCT(etna_zsa_state);
 
    if (!cs)
@@ -92,6 +94,15 @@ etna_zsa_state_create(struct pipe_context *pctx,
    if (so->depth.enabled == false || so->depth.func == PIPE_FUNC_ALWAYS)
       early_z = false;
 
+   /* calculate extra_reference value */
+   uint32_t extra_reference = 0;
+
+   if (VIV_FEATURE(screen, chipMinorFeatures1, HALF_FLOAT))
+      extra_reference = util_float_to_half(CLAMP(so->alpha.ref_value, 0.0f, 1.0f));
+
+   cs->PE_STENCIL_CONFIG_EXT =
+      VIVS_PE_STENCIL_CONFIG_EXT_EXTRA_ALPHA_REF(extra_reference);
+
    /* compare funcs have 1 to 1 mapping */
    cs->PE_DEPTH_CONFIG =
       VIVS_PE_DEPTH_CONFIG_DEPTH_FUNC(so->depth.enabled ? so->depth.func
@@ -99,15 +110,15 @@ etna_zsa_state_create(struct pipe_context *pctx,
       COND(so->depth.writemask, VIVS_PE_DEPTH_CONFIG_WRITE_ENABLE) |
       COND(early_z, VIVS_PE_DEPTH_CONFIG_EARLY_Z) |
       /* this bit changed meaning with HALTI5: */
-      COND(disable_zs && ctx->specs.halti < 5, VIVS_PE_DEPTH_CONFIG_DISABLE_ZS);
+      COND(disable_zs && screen->specs.halti < 5, VIVS_PE_DEPTH_CONFIG_DISABLE_ZS);
    cs->PE_ALPHA_OP =
       COND(so->alpha.enabled, VIVS_PE_ALPHA_OP_ALPHA_TEST) |
       VIVS_PE_ALPHA_OP_ALPHA_FUNC(so->alpha.func) |
       VIVS_PE_ALPHA_OP_ALPHA_REF(etna_cfloat_to_uint8(so->alpha.ref_value));
 
    for (unsigned i = 0; i < 2; i++) {
-      const struct pipe_stencil_state *stencil_front = so->stencil[1].enabled ? &so->stencil[i] : &so->stencil[0];
-      const struct pipe_stencil_state *stencil_back = so->stencil[1].enabled ? &so->stencil[!i] : &so->stencil[0];
+      const struct pipe_stencil_state *stencil_front = (so->stencil[1].enabled && so->stencil[1].valuemask) ? &so->stencil[i] : &so->stencil[0];
+      const struct pipe_stencil_state *stencil_back = (so->stencil[1].enabled && so->stencil[1].valuemask) ? &so->stencil[!i] : &so->stencil[0];
       cs->PE_STENCIL_OP[i] =
          VIVS_PE_STENCIL_OP_FUNC_FRONT(stencil_front->func) |
          VIVS_PE_STENCIL_OP_FUNC_BACK(stencil_back->func) |

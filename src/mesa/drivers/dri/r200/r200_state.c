@@ -34,7 +34,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "main/glheader.h"
-#include "main/imports.h"
+
 #include "main/enums.h"
 #include "main/light.h"
 #include "main/framebuffer.h"

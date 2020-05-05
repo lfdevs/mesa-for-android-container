@@ -102,7 +102,7 @@ vc4_bo_unreference(struct vc4_bo **bo)
                 if (pipe_reference_described(&(*bo)->reference, NULL,
                                              (debug_reference_descriptor)
                                              vc4_bo_debug_describe)) {
-                        util_hash_table_remove(screen->bo_handles,
+                        _mesa_hash_table_remove_key(screen->bo_handles,
                                                (void *)(uintptr_t)(*bo)->handle);
                         vc4_bo_last_unreference(*bo);
                 }

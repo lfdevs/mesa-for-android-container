@@ -26,7 +26,6 @@
 #include "brw_cfg.h"
 #include "brw_nir.h"
 #include "brw_vec4_builder.h"
-#include "brw_vec4_live_variables.h"
 #include "brw_vec4_vs.h"
 #include "brw_dead_control_flow.h"
 #include "dev/gen_debug.h"
@@ -148,7 +147,7 @@ dst_reg::equals(const dst_reg &r) const
 }
 
 bool
-vec4_instruction::is_send_from_grf()
+vec4_instruction::is_send_from_grf() const
 {
    switch (opcode) {
    case SHADER_OPCODE_SHADER_TIME_ADD:
@@ -327,13 +326,13 @@ vec4_instruction::can_change_types() const
  * instruction -- the generate_* functions generate additional MOVs
  * for setup.
  */
-int
-vec4_visitor::implied_mrf_writes(vec4_instruction *inst)
+unsigned
+vec4_instruction::implied_mrf_writes() const
 {
-   if (inst->mlen == 0 || inst->is_send_from_grf())
+   if (mlen == 0 || is_send_from_grf())
       return 0;
 
-   switch (inst->opcode) {
+   switch (opcode) {
    case SHADER_OPCODE_RCP:
    case SHADER_OPCODE_RSQ:
    case SHADER_OPCODE_SQRT:
@@ -377,7 +376,7 @@ vec4_visitor::implied_mrf_writes(vec4_instruction *inst)
    case SHADER_OPCODE_TG4_OFFSET:
    case SHADER_OPCODE_SAMPLEINFO:
    case SHADER_OPCODE_GET_BUFFER_SIZE:
-      return inst->header_size;
+      return header_size;
    default:
       unreachable("not reached");
    }
@@ -497,7 +496,7 @@ vec4_visitor::opt_vector_float()
    }
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
 
    return progress;
 }
@@ -578,7 +577,7 @@ vec4_visitor::opt_reduce_swizzle()
    }
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTION_DETAIL);
 
    return progress;
 }
@@ -905,7 +904,8 @@ vec4_visitor::opt_algebraic()
    }
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTION_DATA_FLOW |
+                          DEPENDENCY_INSTRUCTION_DETAIL);
 
    return progress;
 }
@@ -1253,8 +1253,7 @@ vec4_visitor::opt_register_coalesce()
 {
    bool progress = false;
    int next_ip = 0;
-
-   calculate_live_intervals();
+   const vec4_live_variables &live = live_analysis.require();
 
    foreach_block_and_inst_safe (block, vec4_instruction, inst, cfg) {
       int ip = next_ip;
@@ -1296,7 +1295,7 @@ vec4_visitor::opt_register_coalesce()
       /* Can't coalesce this GRF if someone else was going to
        * read it later.
        */
-      if (var_range_end(var_from_reg(alloc, dst_reg(inst->src[0])), 8) > ip)
+      if (live.var_range_end(var_from_reg(alloc, dst_reg(inst->src[0])), 8) > ip)
 	 continue;
 
       /* We need to check interference with the final destination between this
@@ -1475,7 +1474,7 @@ vec4_visitor::opt_register_coalesce()
    }
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
 
    return progress;
 }
@@ -1524,6 +1523,9 @@ vec4_visitor::eliminate_find_live_channel()
          break;
       }
    }
+
+   if (progress)
+      invalidate_analysis(DEPENDENCY_INSTRUCTION_DETAIL);
 
    return progress;
 }
@@ -1599,19 +1601,19 @@ vec4_visitor::split_virtual_grfs()
          }
       }
    }
-   invalidate_live_intervals();
+   invalidate_analysis(DEPENDENCY_INSTRUCTION_DETAIL | DEPENDENCY_VARIABLES);
 }
 
 void
-vec4_visitor::dump_instruction(backend_instruction *be_inst)
+vec4_visitor::dump_instruction(const backend_instruction *be_inst) const
 {
    dump_instruction(be_inst, stderr);
 }
 
 void
-vec4_visitor::dump_instruction(backend_instruction *be_inst, FILE *file)
+vec4_visitor::dump_instruction(const backend_instruction *be_inst, FILE *file) const
 {
-   vec4_instruction *inst = (vec4_instruction *)be_inst;
+   const vec4_instruction *inst = (const vec4_instruction *)be_inst;
 
    if (inst->predicate) {
       fprintf(file, "(%cf%d.%d%s) ",
@@ -1902,7 +1904,7 @@ vec4_visitor::lower_minmax()
    }
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
 
    return progress;
 }
@@ -2038,7 +2040,8 @@ vec4_visitor::fixup_3src_null_dest()
    }
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTION_DETAIL |
+                          DEPENDENCY_VARIABLES);
 }
 
 void
@@ -2366,7 +2369,7 @@ vec4_visitor::lower_simd_width()
    }
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
 
    return progress;
 }
@@ -2523,7 +2526,7 @@ vec4_visitor::scalarize_df()
    }
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
 
    return progress;
 }
@@ -2566,7 +2569,7 @@ vec4_visitor::lower_64bit_mad_to_mul_add()
    }
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
 
    return progress;
 }
@@ -2661,6 +2664,13 @@ vec4_visitor::apply_logical_swizzle(struct brw_reg *hw_reg,
       hw_reg->swizzle = BRW_SWIZZLE4(swizzle0 * 2, swizzle0 * 2 + 1,
                                      swizzle1 * 2, swizzle1 * 2 + 1);
    }
+}
+
+void
+vec4_visitor::invalidate_analysis(brw::analysis_dependency_class c)
+{
+   backend_shader::invalidate_analysis(c);
+   live_analysis.invalidate(c);
 }
 
 bool
@@ -2978,8 +2988,8 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
       prog_data->base.base.dispatch_grf_start_reg = v.payload.num_regs;
 
       fs_generator g(compiler, log_data, mem_ctx,
-                     &prog_data->base.base, v.shader_stats,
-                     v.runtime_check_aads_emit, MESA_SHADER_VERTEX);
+                     &prog_data->base.base, v.runtime_check_aads_emit,
+                     MESA_SHADER_VERTEX);
       if (INTEL_DEBUG & DEBUG_VS) {
          const char *debug_name =
             ralloc_asprintf(mem_ctx, "%s vertex shader %s",
@@ -2989,7 +2999,8 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
 
          g.enable_debug(debug_name);
       }
-      g.generate_code(v.cfg, 8, stats);
+      g.generate_code(v.cfg, 8, v.shader_stats,
+                      v.performance_analysis.require(), stats);
       assembly = g.get_assembly();
    }
 
@@ -3007,7 +3018,9 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
 
       assembly = brw_vec4_generate_assembly(compiler, log_data, mem_ctx,
                                             shader, &prog_data->base,
-                                            v.cfg, stats);
+                                            v.cfg,
+                                            v.performance_analysis.require(),
+                                            stats);
    }
 
    return assembly;

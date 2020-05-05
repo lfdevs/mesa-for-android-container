@@ -123,10 +123,12 @@ enum vtn_value_type {
 
 enum vtn_branch_type {
    vtn_branch_type_none,
+   vtn_branch_type_if_merge,
    vtn_branch_type_switch_break,
    vtn_branch_type_switch_fallthrough,
    vtn_branch_type_loop_break,
    vtn_branch_type_loop_continue,
+   vtn_branch_type_loop_back_edge,
    vtn_branch_type_discard,
    vtn_branch_type_return,
 };
@@ -135,11 +137,14 @@ enum vtn_cf_node_type {
    vtn_cf_node_type_block,
    vtn_cf_node_type_if,
    vtn_cf_node_type_loop,
+   vtn_cf_node_type_case,
    vtn_cf_node_type_switch,
+   vtn_cf_node_type_function,
 };
 
 struct vtn_cf_node {
    struct list_head link;
+   struct vtn_cf_node *parent;
    enum vtn_cf_node_type type;
 };
 
@@ -153,6 +158,10 @@ struct vtn_loop {
     * and is where you go when you hit a continue.
     */
    struct list_head cont_body;
+
+   struct vtn_block *header_block;
+   struct vtn_block *cont_block;
+   struct vtn_block *break_block;
 
    SpvLoopControlMask control;
 };
@@ -168,16 +177,16 @@ struct vtn_if {
    enum vtn_branch_type else_type;
    struct list_head else_body;
 
+   struct vtn_block *merge_block;
+
    SpvSelectionControlMask control;
 };
 
 struct vtn_case {
-   struct list_head link;
+   struct vtn_cf_node node;
 
+   enum vtn_branch_type type;
    struct list_head body;
-
-   /* The block that starts this case */
-   struct vtn_block *start_block;
 
    /* The fallthrough case, if any */
    struct vtn_case *fallthrough;
@@ -198,6 +207,8 @@ struct vtn_switch {
    uint32_t selector;
 
    struct list_head cases;
+
+   struct vtn_block *break_block;
 };
 
 struct vtn_block {
@@ -214,6 +225,14 @@ struct vtn_block {
 
    enum vtn_branch_type branch_type;
 
+   /* The CF node for which this is a merge target
+    *
+    * The SPIR-V spec requires that any given block can be the merge target
+    * for at most one merge instruction.  If this block is a merge target,
+    * this points back to the block containing that merge instruction.
+    */
+   struct vtn_cf_node *merge_cf_node;
+
    /** Points to the loop that this block starts (if it starts a loop) */
    struct vtn_loop *loop;
 
@@ -225,7 +244,7 @@ struct vtn_block {
 };
 
 struct vtn_function {
-   struct exec_node node;
+   struct vtn_cf_node node;
 
    struct vtn_type *type;
 
@@ -241,6 +260,24 @@ struct vtn_function {
 
    SpvFunctionControlMask control;
 };
+
+#define VTN_DECL_CF_NODE_CAST(_type)               \
+static inline struct vtn_##_type *                 \
+vtn_cf_node_as_##_type(struct vtn_cf_node *node)   \
+{                                                  \
+   assert(node->type == vtn_cf_node_type_##_type); \
+   return (struct vtn_##_type *)node;              \
+}
+
+VTN_DECL_CF_NODE_CAST(block)
+VTN_DECL_CF_NODE_CAST(loop)
+VTN_DECL_CF_NODE_CAST(if)
+VTN_DECL_CF_NODE_CAST(case)
+VTN_DECL_CF_NODE_CAST(switch)
+VTN_DECL_CF_NODE_CAST(function)
+
+#define vtn_foreach_cf_node(node, cf_list) \
+   list_for_each_entry(struct vtn_cf_node, node, cf_list, link)
 
 typedef bool (*vtn_instruction_handler)(struct vtn_builder *, SpvOp,
                                         const uint32_t *, unsigned);
@@ -636,7 +673,7 @@ struct vtn_builder {
    bool variable_pointers;
 
    struct vtn_function *func;
-   struct exec_list functions;
+   struct list_head functions;
 
    /* Current function parameter index */
    unsigned func_param_idx;
@@ -776,20 +813,7 @@ struct vtn_ssa_value *vtn_create_ssa_value(struct vtn_builder *b,
 struct vtn_ssa_value *vtn_ssa_transpose(struct vtn_builder *b,
                                         struct vtn_ssa_value *src);
 
-nir_ssa_def *vtn_vector_extract(struct vtn_builder *b, nir_ssa_def *src,
-                                unsigned index);
-nir_ssa_def *vtn_vector_extract_dynamic(struct vtn_builder *b, nir_ssa_def *src,
-                                        nir_ssa_def *index);
-nir_ssa_def *vtn_vector_insert(struct vtn_builder *b, nir_ssa_def *src,
-                               nir_ssa_def *insert, unsigned index);
-nir_ssa_def *vtn_vector_insert_dynamic(struct vtn_builder *b, nir_ssa_def *src,
-                                       nir_ssa_def *insert, nir_ssa_def *index);
-
 nir_deref_instr *vtn_nir_deref(struct vtn_builder *b, uint32_t id);
-
-struct vtn_pointer *vtn_pointer_for_variable(struct vtn_builder *b,
-                                             struct vtn_variable *var,
-                                             struct vtn_type *ptr_type);
 
 nir_deref_instr *vtn_pointer_to_deref(struct vtn_builder *b,
                                       struct vtn_pointer *ptr);

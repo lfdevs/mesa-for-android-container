@@ -24,7 +24,8 @@ test(
     'fast_idiv_by_const_test',
     'fast_idiv_by_const_test.cpp',
     dependencies : [idep_gtest, idep_mesautil],
-    include_directories : inc_common,
+    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
   ),
   suite : ['util'],
+  timeout: 60,
 )

@@ -44,6 +44,8 @@
 #include "brw_cfg.h"
 #include "brw_fs_live_variables.h"
 
+using namespace brw;
+
 static bool
 is_nop_mov(const fs_inst *inst)
 {
@@ -95,17 +97,17 @@ is_coalesce_candidate(const fs_visitor *v, const fs_inst *inst)
 }
 
 static bool
-can_coalesce_vars(brw::fs_live_variables *live_intervals,
-                  const cfg_t *cfg, const fs_inst *inst,
+can_coalesce_vars(const fs_live_variables &live, const cfg_t *cfg,
+                  const bblock_t *block, const fs_inst *inst,
                   int dst_var, int src_var)
 {
-   if (!live_intervals->vars_interfere(src_var, dst_var))
+   if (!live.vars_interfere(src_var, dst_var))
       return true;
 
-   int dst_start = live_intervals->start[dst_var];
-   int dst_end = live_intervals->end[dst_var];
-   int src_start = live_intervals->start[src_var];
-   int src_end = live_intervals->end[src_var];
+   int dst_start = live.start[dst_var];
+   int dst_end = live.end[dst_var];
+   int src_start = live.start[src_var];
+   int src_end = live.end[src_var];
 
    /* Variables interfere and one line range isn't a subset of the other. */
    if ((dst_end > src_end && src_start < dst_start) ||
@@ -118,13 +120,15 @@ can_coalesce_vars(brw::fs_live_variables *live_intervals,
    int start_ip = MAX2(dst_start, src_start);
    int end_ip = MIN2(dst_end, src_end);
 
-   foreach_block(block, cfg) {
-      if (block->end_ip < start_ip)
+   foreach_block(scan_block, cfg) {
+      if (scan_block->end_ip < start_ip)
          continue;
 
-      int scan_ip = block->start_ip - 1;
+      int scan_ip = scan_block->start_ip - 1;
 
-      foreach_inst_in_block(fs_inst, scan_inst, block) {
+      bool seen_src_write = false;
+      bool seen_copy = false;
+      foreach_inst_in_block(fs_inst, scan_inst, scan_block) {
          scan_ip++;
 
          /* Ignore anything before the intersection of the live ranges */
@@ -132,17 +136,51 @@ can_coalesce_vars(brw::fs_live_variables *live_intervals,
             continue;
 
          /* Ignore the copying instruction itself */
-         if (scan_inst == inst)
+         if (scan_inst == inst) {
+            seen_copy = true;
             continue;
+         }
 
          if (scan_ip > end_ip)
             return true; /* registers do not interfere */
 
+         if (seen_src_write && !seen_copy) {
+            /* In order to satisfy the guarantee of register coalescing, we
+             * must ensure that the two registers always have the same value
+             * during the intersection of their live ranges.  One way to do
+             * this is to simply ensure that neither is ever written apart
+             * from the one copy which syncs up the two registers.  However,
+             * this can be overly conservative and only works in the case
+             * where the destination live range is entirely contained in the
+             * source live range.
+             *
+             * To handle the other case where the source is contained in the
+             * destination, we allow writes to the source register as long as
+             * they happen before the copy, in the same block as the copy, and
+             * the destination is never read between first such write and the
+             * copy.  This effectively moves the write from the copy up.
+             */
+            for (int j = 0; j < scan_inst->sources; j++) {
+               if (regions_overlap(scan_inst->src[j], scan_inst->size_read(j),
+                                   inst->dst, inst->size_written))
+                  return false; /* registers interfere */
+            }
+         }
+
+         /* The MOV being coalesced had better be the only instruction which
+          * writes to the coalesce destination in the intersection.
+          */
          if (regions_overlap(scan_inst->dst, scan_inst->size_written,
-                             inst->dst, inst->size_written) ||
-             regions_overlap(scan_inst->dst, scan_inst->size_written,
-                             inst->src[0], inst->size_read(0)))
+                             inst->dst, inst->size_written))
             return false; /* registers interfere */
+
+         /* See the big comment above */
+         if (regions_overlap(scan_inst->dst, scan_inst->size_written,
+                             inst->src[0], inst->size_read(0))) {
+            if (seen_copy || scan_block != block)
+               return false;
+            seen_src_write = true;
+         }
       }
    }
 
@@ -153,9 +191,7 @@ bool
 fs_visitor::register_coalesce()
 {
    bool progress = false;
-
-   calculate_live_intervals();
-
+   fs_live_variables &live = live_analysis.require();
    int src_size = 0;
    int channels_remaining = 0;
    unsigned src_reg = ~0u, dst_reg = ~0u;
@@ -225,11 +261,10 @@ fs_visitor::register_coalesce()
             break;
          }
 
-         dst_var[i] = live_intervals->var_from_vgrf[dst_reg] + dst_reg_offset[i];
-         src_var[i] = live_intervals->var_from_vgrf[src_reg] + i;
+         dst_var[i] = live.var_from_vgrf[dst_reg] + dst_reg_offset[i];
+         src_var[i] = live.var_from_vgrf[src_reg] + i;
 
-         if (!can_coalesce_vars(live_intervals, cfg, inst,
-                                dst_var[i], src_var[i])) {
+         if (!can_coalesce_vars(live, cfg, block, inst, dst_var[i], src_var[i])) {
             can_coalesce = false;
             src_reg = ~0u;
             break;
@@ -242,13 +277,26 @@ fs_visitor::register_coalesce()
       progress = true;
 
       for (int i = 0; i < src_size; i++) {
-         if (mov[i]) {
+         if (!mov[i])
+            continue;
+
+         if (mov[i]->conditional_mod == BRW_CONDITIONAL_NONE) {
             mov[i]->opcode = BRW_OPCODE_NOP;
-            mov[i]->conditional_mod = BRW_CONDITIONAL_NONE;
             mov[i]->dst = reg_undef;
             for (int j = 0; j < mov[i]->sources; j++) {
                mov[i]->src[j] = reg_undef;
             }
+         } else {
+            /* If we have a conditional modifier, rewrite the MOV to be a
+             * MOV.cmod from the coalesced register.  Hopefully, cmod
+             * propagation will clean this up and move it to the instruction
+             * that writes the register.  If not, this keeps things correct
+             * while still letting us coalesce.
+             */
+            assert(mov[i]->opcode == BRW_OPCODE_MOV);
+            assert(mov[i]->sources == 1);
+            mov[i]->src[0] = mov[i]->dst;
+            mov[i]->dst = retype(brw_null_reg(), mov[i]->dst.type);
          }
       }
 
@@ -271,12 +319,10 @@ fs_visitor::register_coalesce()
       }
 
       for (int i = 0; i < src_size; i++) {
-         live_intervals->start[dst_var[i]] =
-            MIN2(live_intervals->start[dst_var[i]],
-                 live_intervals->start[src_var[i]]);
-         live_intervals->end[dst_var[i]] =
-            MAX2(live_intervals->end[dst_var[i]],
-                 live_intervals->end[src_var[i]]);
+         live.start[dst_var[i]] = MIN2(live.start[dst_var[i]],
+                                       live.start[src_var[i]]);
+         live.end[dst_var[i]] = MAX2(live.end[dst_var[i]],
+                                     live.end[src_var[i]]);
       }
       src_reg = ~0u;
    }
@@ -288,7 +334,7 @@ fs_visitor::register_coalesce()
          }
       }
 
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
    }
 
    return progress;

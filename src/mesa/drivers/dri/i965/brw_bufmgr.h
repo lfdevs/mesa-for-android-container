@@ -270,7 +270,7 @@ void brw_bo_unreference(struct brw_bo *bo);
 #define MAP_PERSISTENT  GL_MAP_PERSISTENT_BIT
 #define MAP_COHERENT    GL_MAP_COHERENT_BIT
 /* internal */
-#define MAP_INTERNAL_MASK       (0xff << 24)
+#define MAP_INTERNAL_MASK       (0xffu << 24)
 #define MAP_RAW                 (0x01 << 24)
 
 /**
@@ -300,9 +300,9 @@ int brw_bo_subdata(struct brw_bo *bo, uint64_t offset,
 void brw_bo_wait_rendering(struct brw_bo *bo);
 
 /**
- * Tears down the buffer manager instance.
+ * Unref a buffer manager instance.
  */
-void brw_bufmgr_destroy(struct brw_bufmgr *bufmgr);
+void brw_bufmgr_unref(struct brw_bufmgr *bufmgr);
 
 /**
  * Get the current tiling (and resulting swizzling) mode for the bo.
@@ -343,8 +343,9 @@ int brw_bo_busy(struct brw_bo *bo);
 int brw_bo_madvise(struct brw_bo *bo, int madv);
 
 /* drm_bacon_bufmgr_gem.c */
-struct brw_bufmgr *brw_bufmgr_init(struct gen_device_info *devinfo, int fd,
-                                   bool bo_reuse);
+struct brw_bufmgr *brw_bufmgr_get_for_fd(struct gen_device_info *devinfo, int fd,
+                                         bool bo_reuse);
+
 struct brw_bo *brw_bo_gem_create_from_name(struct brw_bufmgr *bufmgr,
                                            const char *name,
                                            unsigned int handle);
@@ -358,6 +359,8 @@ int brw_hw_context_set_priority(struct brw_bufmgr *bufmgr,
                                 int priority);
 
 void brw_destroy_hw_context(struct brw_bufmgr *bufmgr, uint32_t ctx_id);
+
+int brw_bufmgr_get_fd(struct brw_bufmgr *bufmgr);
 
 int brw_bo_gem_export_to_prime(struct brw_bo *bo, int *prime_fd);
 struct brw_bo *brw_bo_gem_create_from_prime(struct brw_bufmgr *bufmgr,

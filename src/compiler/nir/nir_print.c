@@ -461,8 +461,10 @@ print_var_decl(nir_variable *var, print_state *state)
    const char *const samp = (var->data.sample) ? "sample " : "";
    const char *const patch = (var->data.patch) ? "patch " : "";
    const char *const inv = (var->data.invariant) ? "invariant " : "";
-   fprintf(fp, "%s%s%s%s%s %s ",
-           cent, samp, patch, inv, get_variable_mode_str(var->data.mode, false),
+   const char *const per_view = (var->data.per_view) ? "per_view " : "";
+   fprintf(fp, "%s%s%s%s%s%s %s ",
+           cent, samp, patch, inv, per_view,
+           get_variable_mode_str(var->data.mode, false),
            glsl_interp_mode_name(var->data.interpolation));
 
    enum gl_access_qualifier access = var->data.access;
@@ -475,52 +477,17 @@ print_var_decl(nir_variable *var, print_state *state)
    fprintf(fp, "%s%s%s%s%s%s", coher, volat, restr, ronly, wonly, reorder);
 
    if (glsl_get_base_type(glsl_without_array(var->type)) == GLSL_TYPE_IMAGE) {
-#define FORMAT_CASE(x) case x: fprintf(fp, #x " "); break
-      switch (var->data.image.format) {
-      FORMAT_CASE(GL_RGBA32F);
-      FORMAT_CASE(GL_RGBA32UI);
-      FORMAT_CASE(GL_RGBA32I);
-      FORMAT_CASE(GL_R32F);
-      FORMAT_CASE(GL_R32UI);
-      FORMAT_CASE(GL_R32I);
-      FORMAT_CASE(GL_RG32F);
-      FORMAT_CASE(GL_RG32UI);
-      FORMAT_CASE(GL_RG32I);
-      FORMAT_CASE(GL_R8);
-      FORMAT_CASE(GL_RG8);
-      FORMAT_CASE(GL_RGBA8);
-      FORMAT_CASE(GL_R8_SNORM);
-      FORMAT_CASE(GL_RG8_SNORM);
-      FORMAT_CASE(GL_RGBA8_SNORM);
-      FORMAT_CASE(GL_R16);
-      FORMAT_CASE(GL_RG16);
-      FORMAT_CASE(GL_RGBA16);
-      FORMAT_CASE(GL_R16_SNORM);
-      FORMAT_CASE(GL_RG16_SNORM);
-      FORMAT_CASE(GL_RGBA16_SNORM);
-      FORMAT_CASE(GL_R16F);
-      FORMAT_CASE(GL_RG16F);
-      FORMAT_CASE(GL_RGBA16F);
-      FORMAT_CASE(GL_R8UI);
-      FORMAT_CASE(GL_R8I);
-      FORMAT_CASE(GL_RG8UI);
-      FORMAT_CASE(GL_RG8I);
-      FORMAT_CASE(GL_RGBA8UI);
-      FORMAT_CASE(GL_RGBA8I);
-      FORMAT_CASE(GL_R16UI);
-      FORMAT_CASE(GL_R16I);
-      FORMAT_CASE(GL_RG16UI);
-      FORMAT_CASE(GL_RG16I);
-      FORMAT_CASE(GL_RGBA16UI);
-      FORMAT_CASE(GL_RGBA16I);
-      FORMAT_CASE(GL_R11F_G11F_B10F);
-      FORMAT_CASE(GL_RGB9_E5);
-      FORMAT_CASE(GL_RGB10_A2);
-      FORMAT_CASE(GL_RGB10_A2UI);
-      default: /* Including the normal GL_NONE */
-         break;
-      }
-#undef FORMAT_CASE
+      fprintf(fp, "%s ", util_format_short_name(var->data.image.format));
+   }
+
+   if (var->data.precision) {
+      const char *precisions[] = {
+         "",
+         "highp",
+         "mediump",
+         "lowp",
+      };
+      fprintf(fp, "%s ", precisions[var->data.precision]);
    }
 
    fprintf(fp, "%s %s", glsl_get_type_name(var->type),
@@ -603,6 +570,8 @@ print_var_decl(nir_variable *var, print_state *state)
       print_constant(var->constant_initializer, var->type, state);
       fprintf(fp, " }");
    }
+   if (var->pointer_initializer)
+      fprintf(fp, " = &%s", get_var_name(var->pointer_initializer, state));
 
    fprintf(fp, "\n");
    print_annotation(state, var);

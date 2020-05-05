@@ -60,7 +60,8 @@ void
 brw_compute_vue_map(const struct gen_device_info *devinfo,
                     struct brw_vue_map *vue_map,
                     uint64_t slots_valid,
-                    bool separate)
+                    bool separate,
+                    uint32_t pos_slots)
 {
    /* Keep using the packed/contiguous layout on old hardware - we only need
     * the SSO layout when using geometry/tessellation shaders or 32 FS input
@@ -133,10 +134,26 @@ brw_compute_vue_map(const struct gen_device_info *devinfo,
        */
       assign_vue_slot(vue_map, VARYING_SLOT_PSIZ, slot++);
       assign_vue_slot(vue_map, VARYING_SLOT_POS, slot++);
+
+      /* When using Primitive Replication, multiple slots are used for storing
+       * positions for each view.
+       */
+      assert(pos_slots >= 1);
+      if (pos_slots > 1) {
+         for (int i = 1; i < pos_slots; i++) {
+            vue_map->slot_to_varying[slot++] = VARYING_SLOT_POS;
+         }
+      }
+
       if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST0))
          assign_vue_slot(vue_map, VARYING_SLOT_CLIP_DIST0, slot++);
       if (slots_valid & BITFIELD64_BIT(VARYING_SLOT_CLIP_DIST1))
          assign_vue_slot(vue_map, VARYING_SLOT_CLIP_DIST1, slot++);
+
+      /* Vertex URB Formats table says: "Vertex Header shall be padded at the
+       * end so that the header ends on a 32-byte boundary".
+       */
+      slot += slot % 2;
 
       /* front and back colors need to be consecutive so that we can use
        * ATTRIBUTE_SWIZZLE_INPUTATTR_FACING to swizzle them when doing

@@ -22,7 +22,7 @@ libvirglcommon = static_library(
   'virglcommon',
   'virgl_resource_cache.c',
   c_args : c_vis_args,
-  include_directories : [inc_common, inc_gallium_drivers],
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_gallium_drivers],
 )
 
 dep_libvirglcommon = declare_dependency(

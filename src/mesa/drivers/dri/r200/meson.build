@@ -80,7 +80,7 @@ libr200 = static_library(
   'r200',
   files_r200,
   include_directories : [
-    inc_common, inc_dri_common, inc_util, include_directories('server'),
+    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_dri_common, inc_util, include_directories('server'),
   ],
   c_args : [c_vis_args, '-DRADEON_R200'],
   cpp_args : [cpp_vis_args],

@@ -33,7 +33,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "main/errors.h"
 #include "main/glheader.h"
-#include "main/imports.h"
+
 #include "main/enums.h"
 #include "main/api_arrayelt.h"
 #include "main/state.h"
@@ -164,12 +164,12 @@ static struct {
 /* =============================================================
  * State initialization
  */
-static int cmdpkt( r200ContextPtr rmesa, int id ) 
+static int cmdpkt( r200ContextPtr rmesa, int id )
 {
    return CP_PACKET0(packet[id].start, packet[id].len - 1);
 }
 
-static int cmdvec( int offset, int stride, int count ) 
+static int cmdvec( int offset, int stride, int count )
 {
    drm_radeon_cmd_header_t h;
    h.i = 0;
@@ -182,7 +182,7 @@ static int cmdvec( int offset, int stride, int count )
 
 /* warning: the count here is divided by 4 compared to other cmds
    (so it doesn't exceed the char size)! */
-static int cmdveclinear( int offset, int count ) 
+static int cmdveclinear( int offset, int count )
 {
    drm_radeon_cmd_header_t h;
    h.i = 0;
@@ -193,7 +193,7 @@ static int cmdveclinear( int offset, int count )
    return h.i;
 }
 
-static int cmdscl( int offset, int stride, int count ) 
+static int cmdscl( int offset, int stride, int count )
 {
    drm_radeon_cmd_header_t h;
    h.i = 0;
@@ -204,7 +204,7 @@ static int cmdscl( int offset, int stride, int count )
    return h.i;
 }
 
-static int cmdscl2( int offset, int stride, int count ) 
+static int cmdscl2( int offset, int stride, int count )
 {
    drm_radeon_cmd_header_t h;
    h.i = 0;
@@ -849,9 +849,9 @@ void r200InitState( r200ContextPtr rmesa )
 
    rmesa->hw.ptp.emit = ptp_emit;
 
-   rmesa->hw.mtl[0].cmd[MTL_CMD_0] = 
+   rmesa->hw.mtl[0].cmd[MTL_CMD_0] =
       cmdvec( R200_VS_MAT_0_EMISS, 1, 16 );
-   rmesa->hw.mtl[0].cmd[MTL_CMD_1] = 
+   rmesa->hw.mtl[0].cmd[MTL_CMD_1] =
       cmdscl2( R200_SS_MAT_0_SHININESS, 1, 1 );
    rmesa->hw.mtl[1].cmd[MTL_CMD_0] =
       cmdvec( R200_VS_MAT_1_EMISS, 1, 16 );
@@ -867,43 +867,43 @@ void r200InitState( r200ContextPtr rmesa )
    rmesa->hw.vpp[1].cmd[VPP_CMD_0] =
       cmdveclinear( R200_PVS_PARAM1, 96 );
 
-   rmesa->hw.grd.cmd[GRD_CMD_0] = 
+   rmesa->hw.grd.cmd[GRD_CMD_0] =
       cmdscl( R200_SS_VERT_GUARD_CLIP_ADJ_ADDR, 1, 4 );
-   rmesa->hw.fog.cmd[FOG_CMD_0] = 
+   rmesa->hw.fog.cmd[FOG_CMD_0] =
       cmdvec( R200_VS_FOG_PARAM_ADDR, 1, 4 );
-   rmesa->hw.glt.cmd[GLT_CMD_0] = 
+   rmesa->hw.glt.cmd[GLT_CMD_0] =
       cmdvec( R200_VS_GLOBAL_AMBIENT_ADDR, 1, 4 );
-   rmesa->hw.eye.cmd[EYE_CMD_0] = 
+   rmesa->hw.eye.cmd[EYE_CMD_0] =
       cmdvec( R200_VS_EYE_VECTOR_ADDR, 1, 4 );
 
-   rmesa->hw.mat[R200_MTX_MV].cmd[MAT_CMD_0] = 
+   rmesa->hw.mat[R200_MTX_MV].cmd[MAT_CMD_0] =
       cmdvec( R200_VS_MATRIX_0_MV, 1, 16);
-   rmesa->hw.mat[R200_MTX_IMV].cmd[MAT_CMD_0] = 
+   rmesa->hw.mat[R200_MTX_IMV].cmd[MAT_CMD_0] =
       cmdvec( R200_VS_MATRIX_1_INV_MV, 1, 16);
-   rmesa->hw.mat[R200_MTX_MVP].cmd[MAT_CMD_0] = 
+   rmesa->hw.mat[R200_MTX_MVP].cmd[MAT_CMD_0] =
       cmdvec( R200_VS_MATRIX_2_MVP, 1, 16);
-   rmesa->hw.mat[R200_MTX_TEX0].cmd[MAT_CMD_0] = 
+   rmesa->hw.mat[R200_MTX_TEX0].cmd[MAT_CMD_0] =
       cmdvec( R200_VS_MATRIX_3_TEX0, 1, 16);
-   rmesa->hw.mat[R200_MTX_TEX1].cmd[MAT_CMD_0] = 
+   rmesa->hw.mat[R200_MTX_TEX1].cmd[MAT_CMD_0] =
       cmdvec( R200_VS_MATRIX_4_TEX1, 1, 16);
-   rmesa->hw.mat[R200_MTX_TEX2].cmd[MAT_CMD_0] = 
+   rmesa->hw.mat[R200_MTX_TEX2].cmd[MAT_CMD_0] =
       cmdvec( R200_VS_MATRIX_5_TEX2, 1, 16);
-   rmesa->hw.mat[R200_MTX_TEX3].cmd[MAT_CMD_0] = 
+   rmesa->hw.mat[R200_MTX_TEX3].cmd[MAT_CMD_0] =
       cmdvec( R200_VS_MATRIX_6_TEX3, 1, 16);
-   rmesa->hw.mat[R200_MTX_TEX4].cmd[MAT_CMD_0] = 
+   rmesa->hw.mat[R200_MTX_TEX4].cmd[MAT_CMD_0] =
       cmdvec( R200_VS_MATRIX_7_TEX4, 1, 16);
-   rmesa->hw.mat[R200_MTX_TEX5].cmd[MAT_CMD_0] = 
+   rmesa->hw.mat[R200_MTX_TEX5].cmd[MAT_CMD_0] =
       cmdvec( R200_VS_MATRIX_8_TEX5, 1, 16);
 
    for (i = 0 ; i < 8; i++) {
-      rmesa->hw.lit[i].cmd[LIT_CMD_0] = 
+      rmesa->hw.lit[i].cmd[LIT_CMD_0] =
 	 cmdvec( R200_VS_LIGHT_AMBIENT_ADDR + i, 8, 24 );
-      rmesa->hw.lit[i].cmd[LIT_CMD_1] = 
+      rmesa->hw.lit[i].cmd[LIT_CMD_1] =
 	 cmdscl( R200_SS_LIGHT_DCD_ADDR + i, 8, 7 );
    }
 
    for (i = 0 ; i < 6; i++) {
-      rmesa->hw.ucp[i].cmd[UCP_CMD_0] = 
+      rmesa->hw.ucp[i].cmd[UCP_CMD_0] =
 	 cmdvec( R200_VS_UCP_ADDR + i, 1, 4 );
    }
 
@@ -937,11 +937,11 @@ void r200InitState( r200ContextPtr rmesa )
    rmesa->hw.ctx.cmd[CTX_RB3D_DEPTHOFFSET] =
       rmesa->radeon.radeonScreen->depthOffset + rmesa->radeon.radeonScreen->fbLocation;
 
-   rmesa->hw.ctx.cmd[CTX_RB3D_DEPTHPITCH] = 
+   rmesa->hw.ctx.cmd[CTX_RB3D_DEPTHPITCH] =
       ((rmesa->radeon.radeonScreen->depthPitch &
 	R200_DEPTHPITCH_MASK) |
        R200_DEPTH_ENDIAN_NO_SWAP);
-   
+
    if (rmesa->using_hyperz)
       rmesa->hw.ctx.cmd[CTX_RB3D_DEPTHPITCH] |= R200_DEPTH_HYPERZ;
 
@@ -959,7 +959,7 @@ void r200InitState( r200ContextPtr rmesa )
 	 rmesa->hw.ctx.cmd[CTX_RB3D_ZSTENCILCNTL] |= RADEON_Z_HIERARCHY_ENABLE;*/
    }
 
-   rmesa->hw.ctx.cmd[CTX_PP_CNTL] = (R200_ANTI_ALIAS_NONE 
+   rmesa->hw.ctx.cmd[CTX_PP_CNTL] = (R200_ANTI_ALIAS_NONE
  				     | R200_TEX_BLEND_0_ENABLE);
 
    switch ( driQueryOptioni( &rmesa->radeon.optionCache, "dither_mode" ) ) {
@@ -981,7 +981,7 @@ void r200InitState( r200ContextPtr rmesa )
    else
       rmesa->hw.ctx.cmd[CTX_RB3D_CNTL] |= rmesa->radeon.state.color.roundEnable;
 
-   rmesa->hw.prf.cmd[PRF_PP_TRI_PERF] = R200_TRI_CUTOFF_MASK - R200_TRI_CUTOFF_MASK * 
+   rmesa->hw.prf.cmd[PRF_PP_TRI_PERF] = R200_TRI_CUTOFF_MASK - R200_TRI_CUTOFF_MASK *
 			driQueryOptionf (&rmesa->radeon.optionCache,"texture_blend_quality");
    rmesa->hw.prf.cmd[PRF_PP_PERF_CNTL] = 0;
 
@@ -1003,13 +1003,13 @@ void r200InitState( r200ContextPtr rmesa )
 
    rmesa->hw.lin.cmd[LIN_RE_LINE_PATTERN] = ((1 << 16) | 0xffff);
 
-   rmesa->hw.lin.cmd[LIN_RE_LINE_STATE] = 
+   rmesa->hw.lin.cmd[LIN_RE_LINE_STATE] =
       ((0 << R200_LINE_CURRENT_PTR_SHIFT) |
        (1 << R200_LINE_CURRENT_COUNT_SHIFT));
 
    rmesa->hw.lin.cmd[LIN_SE_LINE_WIDTH] = (1 << 4);
 
-   rmesa->hw.msk.cmd[MSK_RB3D_STENCILREFMASK] = 
+   rmesa->hw.msk.cmd[MSK_RB3D_STENCILREFMASK] =
       ((0x00 << R200_STENCIL_REF_SHIFT) |
        (0xff << R200_STENCIL_MASK_SHIFT) |
        (0xff << R200_STENCIL_WRITEMASK_SHIFT));
@@ -1019,7 +1019,7 @@ void r200InitState( r200ContextPtr rmesa )
 
    rmesa->hw.tam.cmd[TAM_DEBUG3] = 0;
 
-   rmesa->hw.msc.cmd[MSC_RE_MISC] = 
+   rmesa->hw.msc.cmd[MSC_RE_MISC] =
       ((0 << R200_STIPPLE_X_OFFSET_SHIFT) |
        (0 << R200_STIPPLE_Y_OFFSET_SHIFT) |
        R200_STIPPLE_BIG_BIT_ORDER);
@@ -1055,7 +1055,7 @@ void r200InitState( r200ContextPtr rmesa )
    rmesa->hw.cst.cmd[CST_SE_TCL_INPUT_VTX_3] =
       (0x0A << R200_VTX_TEX_4_ADDR__SHIFT) |
       (0x0B << R200_VTX_TEX_5_ADDR__SHIFT);
-  
+
 
    rmesa->hw.vpt.cmd[VPT_SE_VPORT_XSCALE]  = 0x00000000;
    rmesa->hw.vpt.cmd[VPT_SE_VPORT_XOFFSET] = 0x00000000;
@@ -1066,7 +1066,7 @@ void r200InitState( r200ContextPtr rmesa )
 
    for ( i = 0 ; i < ctx->Const.MaxTextureUnits ; i++ ) {
       rmesa->hw.tex[i].cmd[TEX_PP_TXFILTER] = R200_BORDER_MODE_OGL;
-      rmesa->hw.tex[i].cmd[TEX_PP_TXFORMAT] = 
+      rmesa->hw.tex[i].cmd[TEX_PP_TXFORMAT] =
          ((i << R200_TXFORMAT_ST_ROUTE_SHIFT) |  /* <-- note i */
           (2 << R200_TXFORMAT_WIDTH_SHIFT) |
           (2 << R200_TXFORMAT_HEIGHT_SHIFT));
@@ -1123,11 +1123,11 @@ void r200InitState( r200ContextPtr rmesa )
    rmesa->hw.tf.cmd[TF_TFACTOR_4] = 0;
    rmesa->hw.tf.cmd[TF_TFACTOR_5] = 0;
 
-   rmesa->hw.vap.cmd[VAP_SE_VAP_CNTL] = 
-      (R200_VAP_TCL_ENABLE | 
+   rmesa->hw.vap.cmd[VAP_SE_VAP_CNTL] =
+      (R200_VAP_TCL_ENABLE |
        (0x9 << R200_VAP_VF_MAX_VTX_NUM__SHIFT));
 
-   rmesa->hw.vte.cmd[VTE_SE_VTE_CNTL] = 
+   rmesa->hw.vte.cmd[VTE_SE_VTE_CNTL] =
       (R200_VPORT_X_SCALE_ENA |
        R200_VPORT_Y_SCALE_ENA |
        R200_VPORT_Z_SCALE_ENA |
@@ -1135,50 +1135,50 @@ void r200InitState( r200ContextPtr rmesa )
        R200_VPORT_Y_OFFSET_ENA |
        R200_VPORT_Z_OFFSET_ENA |
 /* FIXME: Turn on for tex rect only */
-       R200_VTX_ST_DENORMALIZED |  
-       R200_VTX_W0_FMT); 
+       R200_VTX_ST_DENORMALIZED |
+       R200_VTX_W0_FMT);
 
 
    rmesa->hw.vtx.cmd[VTX_VTXFMT_0] = 0;
    rmesa->hw.vtx.cmd[VTX_VTXFMT_1] = 0;
-   rmesa->hw.vtx.cmd[VTX_TCL_OUTPUT_VTXFMT_0] = 
+   rmesa->hw.vtx.cmd[VTX_TCL_OUTPUT_VTXFMT_0] =
       ((R200_VTX_Z0 | R200_VTX_W0 |
-       (R200_VTX_FP_RGBA << R200_VTX_COLOR_0_SHIFT)));	
+       (R200_VTX_FP_RGBA << R200_VTX_COLOR_0_SHIFT)));
    rmesa->hw.vtx.cmd[VTX_TCL_OUTPUT_VTXFMT_1] = 0;
    rmesa->hw.vtx.cmd[VTX_TCL_OUTPUT_COMPSEL] = (R200_OUTPUT_XYZW);
    rmesa->hw.vtx.cmd[VTX_STATE_CNTL] = R200_VSC_UPDATE_USER_COLOR_0_ENABLE;
-						   
+
 
    /* Matrix selection */
-   rmesa->hw.msl.cmd[MSL_MATRIX_SELECT_0] = 
+   rmesa->hw.msl.cmd[MSL_MATRIX_SELECT_0] =
       (R200_MTX_MV << R200_MODELVIEW_0_SHIFT);
-   
-   rmesa->hw.msl.cmd[MSL_MATRIX_SELECT_1] = 
+
+   rmesa->hw.msl.cmd[MSL_MATRIX_SELECT_1] =
        (R200_MTX_IMV << R200_IT_MODELVIEW_0_SHIFT);
 
-   rmesa->hw.msl.cmd[MSL_MATRIX_SELECT_2] = 
+   rmesa->hw.msl.cmd[MSL_MATRIX_SELECT_2] =
       (R200_MTX_MVP << R200_MODELPROJECT_0_SHIFT);
 
-   rmesa->hw.msl.cmd[MSL_MATRIX_SELECT_3] = 
+   rmesa->hw.msl.cmd[MSL_MATRIX_SELECT_3] =
       ((R200_MTX_TEX0 << R200_TEXMAT_0_SHIFT) |
        (R200_MTX_TEX1 << R200_TEXMAT_1_SHIFT) |
        (R200_MTX_TEX2 << R200_TEXMAT_2_SHIFT) |
        (R200_MTX_TEX3 << R200_TEXMAT_3_SHIFT));
 
-   rmesa->hw.msl.cmd[MSL_MATRIX_SELECT_4] = 
+   rmesa->hw.msl.cmd[MSL_MATRIX_SELECT_4] =
       ((R200_MTX_TEX4 << R200_TEXMAT_4_SHIFT) |
        (R200_MTX_TEX5 << R200_TEXMAT_5_SHIFT));
 
 
    /* General TCL state */
-   rmesa->hw.tcl.cmd[TCL_LIGHT_MODEL_CTL_0] = 
+   rmesa->hw.tcl.cmd[TCL_LIGHT_MODEL_CTL_0] =
       (R200_SPECULAR_LIGHTS |
        R200_DIFFUSE_SPECULAR_COMBINE |
        R200_LOCAL_LIGHT_VEC_GL |
        R200_LM0_SOURCE_MATERIAL_0 << R200_FRONT_SHININESS_SOURCE_SHIFT |
        R200_LM0_SOURCE_MATERIAL_1 << R200_BACK_SHININESS_SOURCE_SHIFT);
 
-   rmesa->hw.tcl.cmd[TCL_LIGHT_MODEL_CTL_1] = 
+   rmesa->hw.tcl.cmd[TCL_LIGHT_MODEL_CTL_1] =
       ((R200_LM1_SOURCE_MATERIAL_0 << R200_FRONT_EMISSIVE_SOURCE_SHIFT) |
        (R200_LM1_SOURCE_MATERIAL_0 << R200_FRONT_AMBIENT_SOURCE_SHIFT) |
        (R200_LM1_SOURCE_MATERIAL_0 << R200_FRONT_DIFFUSE_SOURCE_SHIFT) |
@@ -1186,34 +1186,34 @@ void r200InitState( r200ContextPtr rmesa )
        (R200_LM1_SOURCE_MATERIAL_1 << R200_BACK_EMISSIVE_SOURCE_SHIFT) |
        (R200_LM1_SOURCE_MATERIAL_1 << R200_BACK_AMBIENT_SOURCE_SHIFT) |
        (R200_LM1_SOURCE_MATERIAL_1 << R200_BACK_DIFFUSE_SOURCE_SHIFT) |
-       (R200_LM1_SOURCE_MATERIAL_1 << R200_BACK_SPECULAR_SOURCE_SHIFT)); 
+       (R200_LM1_SOURCE_MATERIAL_1 << R200_BACK_SPECULAR_SOURCE_SHIFT));
 
    rmesa->hw.tcl.cmd[TCL_PER_LIGHT_CTL_0] = 0; /* filled in via callbacks */
    rmesa->hw.tcl.cmd[TCL_PER_LIGHT_CTL_1] = 0;
    rmesa->hw.tcl.cmd[TCL_PER_LIGHT_CTL_2] = 0;
    rmesa->hw.tcl.cmd[TCL_PER_LIGHT_CTL_3] = 0;
-   
-   rmesa->hw.tcl.cmd[TCL_UCP_VERT_BLEND_CTL] = 
+
+   rmesa->hw.tcl.cmd[TCL_UCP_VERT_BLEND_CTL] =
       (R200_UCP_IN_CLIP_SPACE |
        R200_CULL_FRONT_IS_CCW);
 
    /* Texgen/Texmat state */
    rmesa->hw.tcg.cmd[TCG_TEX_PROC_CTL_2] = 0x00ffffff;
-   rmesa->hw.tcg.cmd[TCG_TEX_PROC_CTL_3] = 
+   rmesa->hw.tcg.cmd[TCG_TEX_PROC_CTL_3] =
       ((0 << R200_TEXGEN_0_INPUT_TEX_SHIFT) |
        (1 << R200_TEXGEN_1_INPUT_TEX_SHIFT) |
        (2 << R200_TEXGEN_2_INPUT_TEX_SHIFT) |
        (3 << R200_TEXGEN_3_INPUT_TEX_SHIFT) |
        (4 << R200_TEXGEN_4_INPUT_TEX_SHIFT) |
-       (5 << R200_TEXGEN_5_INPUT_TEX_SHIFT)); 
-   rmesa->hw.tcg.cmd[TCG_TEX_PROC_CTL_0] = 0; 
-   rmesa->hw.tcg.cmd[TCG_TEX_PROC_CTL_1] =  
+       (5 << R200_TEXGEN_5_INPUT_TEX_SHIFT));
+   rmesa->hw.tcg.cmd[TCG_TEX_PROC_CTL_0] = 0;
+   rmesa->hw.tcg.cmd[TCG_TEX_PROC_CTL_1] =
       ((0 << R200_TEXGEN_0_INPUT_SHIFT) |
        (1 << R200_TEXGEN_1_INPUT_SHIFT) |
        (2 << R200_TEXGEN_2_INPUT_SHIFT) |
        (3 << R200_TEXGEN_3_INPUT_SHIFT) |
        (4 << R200_TEXGEN_4_INPUT_SHIFT) |
-       (5 << R200_TEXGEN_5_INPUT_SHIFT)); 
+       (5 << R200_TEXGEN_5_INPUT_SHIFT));
    rmesa->hw.tcg.cmd[TCG_TEX_CYL_WRAP_CTL] = 0;
 
 
@@ -1231,14 +1231,14 @@ void r200InitState( r200ContextPtr rmesa )
       ctx->Driver.Lightfv( ctx, p, GL_SPOT_CUTOFF, &l->SpotCutoff );
       ctx->Driver.Lightfv( ctx, p, GL_CONSTANT_ATTENUATION,
 			   &l->ConstantAttenuation );
-      ctx->Driver.Lightfv( ctx, p, GL_LINEAR_ATTENUATION, 
+      ctx->Driver.Lightfv( ctx, p, GL_LINEAR_ATTENUATION,
 			   &l->LinearAttenuation );
-      ctx->Driver.Lightfv( ctx, p, GL_QUADRATIC_ATTENUATION, 
+      ctx->Driver.Lightfv( ctx, p, GL_QUADRATIC_ATTENUATION,
 			   &l->QuadraticAttenuation );
       *(float *)&(rmesa->hw.lit[i].cmd[LIT_ATTEN_XXX]) = 0.0;
    }
 
-   ctx->Driver.LightModelfv( ctx, GL_LIGHT_MODEL_AMBIENT, 
+   ctx->Driver.LightModelfv( ctx, GL_LIGHT_MODEL_AMBIENT,
 			     ctx->Light.Model.Ambient );
 
    TNL_CONTEXT(ctx)->Driver.NotifyMaterialChange( ctx );
@@ -1253,7 +1253,7 @@ void r200InitState( r200ContextPtr rmesa )
    ctx->Driver.Fogfv( ctx, GL_FOG_END, &ctx->Fog.End );
    ctx->Driver.Fogfv( ctx, GL_FOG_COLOR, ctx->Fog.Color );
    ctx->Driver.Fogfv( ctx, GL_FOG_COORDINATE_SOURCE_EXT, NULL );
-   
+
    rmesa->hw.grd.cmd[GRD_VERT_GUARD_CLIP_ADJ] = IEEE_ONE;
    rmesa->hw.grd.cmd[GRD_VERT_GUARD_DISCARD_ADJ] = IEEE_ONE;
    rmesa->hw.grd.cmd[GRD_HORZ_GUARD_CLIP_ADJ] = IEEE_ONE;

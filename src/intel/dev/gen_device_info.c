@@ -1201,6 +1201,17 @@ update_from_topology(struct gen_device_info *devinfo,
       }
    }
 
+   if (devinfo->gen == 12 && devinfo->num_slices == 1) {
+      if (n_subslices >= 6) {
+         assert(n_subslices == 6);
+         devinfo->l3_banks = 8;
+      } else if (n_subslices > 2) {
+         devinfo->l3_banks = 6;
+      } else {
+         devinfo->l3_banks = 4;
+      }
+   }
+
    uint32_t eu_mask_len =
       topology->eu_stride * topology->max_subslices * topology->max_slices;
    assert(sizeof(devinfo->eu_masks) >= eu_mask_len);

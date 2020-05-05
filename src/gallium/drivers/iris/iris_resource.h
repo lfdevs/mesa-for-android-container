@@ -31,6 +31,7 @@
 
 struct iris_batch;
 struct iris_context;
+struct shader_info;
 
 #define IRIS_MAX_MIPLEVELS 15
 
@@ -462,6 +463,12 @@ void iris_resource_prepare_texture(struct iris_context *ice,
                                    enum isl_format view_format,
                                    uint32_t start_level, uint32_t num_levels,
                                    uint32_t start_layer, uint32_t num_layers);
+
+enum isl_aux_usage iris_image_view_aux_usage(struct iris_context *ice,
+                                             const struct pipe_image_view *pview,
+                                             const struct shader_info *info);
+enum isl_format iris_image_view_get_format(struct iris_context *ice,
+                                           const struct pipe_image_view *img);
 
 static inline bool
 iris_resource_unfinished_aux_import(struct iris_resource *res)

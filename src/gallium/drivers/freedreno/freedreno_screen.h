@@ -46,6 +46,8 @@ struct fd_bo;
 struct fd_screen {
 	struct pipe_screen base;
 
+	struct list_head context_list;
+
 	mtx_t lock;
 
 	/* it would be tempting to use pipe_reference here, but that
@@ -91,9 +93,9 @@ struct fd_screen {
 	 */
 	struct fd_pipe *pipe;
 
-	uint32_t (*fill_ubwc_buffer_sizes)(struct fd_resource *rsc);
 	uint32_t (*setup_slices)(struct fd_resource *rsc);
 	unsigned (*tile_mode)(const struct pipe_resource *prsc);
+	int (*layout_resource_for_modifier)(struct fd_resource *rsc, uint64_t modifier);
 
 	/* constant emit:  (note currently not used/needed for a2xx) */
 	void (*emit_const)(struct fd_ringbuffer *ring, gl_shader_stage type,

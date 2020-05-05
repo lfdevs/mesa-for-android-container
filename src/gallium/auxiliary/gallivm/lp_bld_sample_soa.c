@@ -195,9 +195,17 @@ lp_build_sample_texel_soa(struct lp_build_sample_context *bld,
       for (chan = 0; chan < 4; chan++) {
          unsigned chan_s;
          /* reverse-map channel... */
-         for (chan_s = 0; chan_s < 4; chan_s++) {
-            if (chan_s == format_desc->swizzle[chan]) {
+         if (util_format_has_stencil(format_desc)) {
+            if (chan == 0)
+               chan_s = 0;
+            else
                break;
+         }
+         else {
+            for (chan_s = 0; chan_s < 4; chan_s++) {
+               if (chan_s == format_desc->swizzle[chan]) {
+                  break;
+               }
             }
          }
          if (chan_s <= 3) {
@@ -2357,13 +2365,16 @@ lp_build_clamp_border_color(struct lp_build_sample_context *bld,
          max_clamp = vec4_bld.one;
       }
       else if (format_desc->layout == UTIL_FORMAT_LAYOUT_RGTC ||
-               format_desc->layout == UTIL_FORMAT_LAYOUT_ETC) {
+               format_desc->layout == UTIL_FORMAT_LAYOUT_ETC ||
+               format_desc->layout == UTIL_FORMAT_LAYOUT_BPTC) {
          switch (format_desc->format) {
          case PIPE_FORMAT_RGTC1_UNORM:
          case PIPE_FORMAT_RGTC2_UNORM:
          case PIPE_FORMAT_LATC1_UNORM:
          case PIPE_FORMAT_LATC2_UNORM:
          case PIPE_FORMAT_ETC1_RGB8:
+         case PIPE_FORMAT_BPTC_RGBA_UNORM:
+         case PIPE_FORMAT_BPTC_SRGBA:
             min_clamp = vec4_bld.zero;
             max_clamp = vec4_bld.one;
             break;
@@ -2373,6 +2384,12 @@ lp_build_clamp_border_color(struct lp_build_sample_context *bld,
          case PIPE_FORMAT_LATC2_SNORM:
             min_clamp = lp_build_const_vec(gallivm, vec4_type, -1.0F);
             max_clamp = vec4_bld.one;
+            break;
+         case PIPE_FORMAT_BPTC_RGB_FLOAT:
+            /* not sure if we should clamp to max half float? */
+            break;
+         case PIPE_FORMAT_BPTC_RGB_UFLOAT:
+            min_clamp = vec4_bld.zero;
             break;
          default:
             assert(0);

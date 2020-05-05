@@ -27,6 +27,8 @@
  */
 
 #include "pan_context.h"
+#include "pan_cmdstream.h"
+#include "pan_bo.h"
 #include "util/u_memory.h"
 #include "nir_serialize.h"
 
@@ -52,8 +54,6 @@ panfrost_create_compute_state(
         so->variant_count = 1;
         so->active_variant = 0;
 
-        v->tripipe = malloc(sizeof(struct mali_shader_meta));
-
         if (cso->ir_type == PIPE_SHADER_IR_NIR_SERIALIZED) {
                 struct blob_reader reader;
                 const struct pipe_binary_program_header *hdr = cso->prog;
@@ -63,9 +63,8 @@ panfrost_create_compute_state(
                 so->cbase.ir_type = PIPE_SHADER_IR_NIR;
         }
 
-        panfrost_shader_compile(ctx, v->tripipe,
-                        so->cbase.ir_type, so->cbase.prog,
-                        MESA_SHADER_COMPUTE, v, NULL);
+        panfrost_shader_compile(ctx, so->cbase.ir_type, so->cbase.prog,
+                                MESA_SHADER_COMPUTE, v, NULL);
 
         return so;
 }
@@ -102,14 +101,8 @@ panfrost_launch_grid(struct pipe_context *pipe,
 
         ctx->compute_grid = info;
 
-        struct mali_job_descriptor_header job = {
-                .job_type = JOB_TYPE_COMPUTE,
-                .job_descriptor_size = 1,
-                .job_barrier = 1
-        };
-
         /* TODO: Stub */
-        struct midgard_payload_vertex_tiler *payload = &ctx->payloads[PIPE_SHADER_COMPUTE];
+        struct midgard_payload_vertex_tiler payload;
 
         /* We implement OpenCL inputs as uniforms (or a UBO -- same thing), so
          * reuse the graphics path for this by lowering to Gallium */
@@ -124,38 +117,23 @@ panfrost_launch_grid(struct pipe_context *pipe,
         if (info->input)
                 pipe->set_constant_buffer(pipe, PIPE_SHADER_COMPUTE, 0, &ubuf);
 
-        panfrost_emit_for_draw(ctx, false);
+        panfrost_vt_init(ctx, PIPE_SHADER_COMPUTE, &payload.prefix, &payload.postfix);
 
-        /* Compute jobs have a "compute FBD". It's not a real framebuffer
-         * descriptor - there is no framebuffer - but it takes the place of
-         * one. As far as I can tell, it's actually the beginning of a
-         * single-render-target framebuffer descriptor with almost everything
-         * zeroed out.
-         */
-        struct mali_compute_fbd compute_fbd = {
-                .unknown1 = {
-                        0, 0x1F, 0, 0, 0, 0, 0, 0
-                }
-        };
-
-        payload->postfix.framebuffer =
-                panfrost_upload_transient(batch, &compute_fbd, sizeof(compute_fbd));
+        panfrost_emit_shader_meta(batch, PIPE_SHADER_COMPUTE, &payload.postfix);
+        panfrost_emit_const_buf(batch, PIPE_SHADER_COMPUTE, &payload.postfix);
+        panfrost_emit_shared_memory(batch, info, &payload);
 
         /* Invoke according to the grid info */
 
-        panfrost_pack_work_groups_compute(&payload->prefix,
-                        info->grid[0], info->grid[1], info->grid[2],
-                        info->block[0], info->block[1], info->block[2], false);
+        panfrost_pack_work_groups_compute(&payload.prefix,
+                                          info->grid[0], info->grid[1],
+                                          info->grid[2],
+                                          info->block[0], info->block[1],
+                                          info->block[2],
+                                          false);
 
-        /* Upload the payload */
-
-        struct panfrost_transfer transfer = panfrost_allocate_transient(batch, sizeof(job) + sizeof(*payload));
-        memcpy(transfer.cpu, &job, sizeof(job));
-        memcpy(transfer.cpu + sizeof(job), payload, sizeof(*payload));
-
-        /* Queue the job */
-        panfrost_scoreboard_queue_compute_job(batch, transfer);
-
+        panfrost_new_job(batch, JOB_TYPE_COMPUTE, true, 0, &payload,
+                         sizeof(payload), false);
         panfrost_flush_all_batches(ctx, true);
 }
 

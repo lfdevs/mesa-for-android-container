@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,14 +22,14 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 
-#include "main/imports.h"
 #include "main/mtypes.h"
 #include "main/macros.h"
 #include "main/bufferobj.h"
+#include "util/u_memory.h"
 
 #include "intel_blit.h"
 #include "intel_buffer_objects.h"
@@ -96,7 +96,7 @@ intel_bufferobj_free(struct gl_context * ctx, struct gl_buffer_object *obj)
     */
    _mesa_buffer_unmap_all_mappings(ctx, obj);
 
-   _mesa_align_free(intel_obj->sys_buffer);
+   align_free(intel_obj->sys_buffer);
 
    drm_intel_bo_unreference(intel_obj->buffer);
    _mesa_delete_buffer_object(ctx, obj);
@@ -133,7 +133,7 @@ intel_bufferobj_data(struct gl_context * ctx,
    if (intel_obj->buffer != NULL)
       release_buffer(intel_obj);
 
-   _mesa_align_free(intel_obj->sys_buffer);
+   align_free(intel_obj->sys_buffer);
    intel_obj->sys_buffer = NULL;
 
    if (size != 0) {
@@ -142,7 +142,7 @@ intel_bufferobj_data(struct gl_context * ctx,
        */
       if (target == GL_ARRAY_BUFFER || target == GL_ELEMENT_ARRAY_BUFFER) {
 	 intel_obj->sys_buffer =
-            _mesa_align_malloc(size, ctx->Const.MinMapBufferAlignment);
+            align_malloc(size, ctx->Const.MinMapBufferAlignment);
 	 if (intel_obj->sys_buffer != NULL) {
 	    if (data != NULL)
 	       memcpy(intel_obj->sys_buffer, data, size);
@@ -193,7 +193,7 @@ intel_bufferobj_subdata(struct gl_context * ctx,
 	 return;
       }
 
-      _mesa_align_free(intel_obj->sys_buffer);
+      align_free(intel_obj->sys_buffer);
       intel_obj->sys_buffer = NULL;
    }
 
@@ -301,7 +301,7 @@ intel_bufferobj_map_range(struct gl_context * ctx,
 	 return obj->Mappings[index].Pointer;
       }
 
-      _mesa_align_free(intel_obj->sys_buffer);
+      align_free(intel_obj->sys_buffer);
       intel_obj->sys_buffer = NULL;
    }
 
@@ -350,7 +350,7 @@ intel_bufferobj_map_range(struct gl_context * ctx,
 
       if (access & GL_MAP_FLUSH_EXPLICIT_BIT) {
          intel_obj->range_map_buffer[index] =
-            _mesa_align_malloc(length + extra, alignment);
+            align_malloc(length + extra, alignment);
          obj->Mappings[index].Pointer =
             intel_obj->range_map_buffer[index] + extra;
       } else {
@@ -445,7 +445,7 @@ intel_bufferobj_unmap(struct gl_context * ctx, struct gl_buffer_object *obj,
        * usage inside of a batchbuffer.
        */
       intel_batchbuffer_emit_mi_flush(intel);
-      _mesa_align_free(intel_obj->range_map_buffer[index]);
+      align_free(intel_obj->range_map_buffer[index]);
       intel_obj->range_map_buffer[index] = NULL;
    } else if (intel_obj->range_map_bo[index] != NULL) {
       const unsigned extra = obj->Mappings[index].Pointer -
@@ -490,7 +490,7 @@ intel_bufferobj_buffer(struct intel_context *intel,
 			   0, intel_obj->Base.Size,
 			   intel_obj->sys_buffer);
 
-      _mesa_align_free(intel_obj->sys_buffer);
+      align_free(intel_obj->sys_buffer);
       intel_obj->sys_buffer = NULL;
       intel_obj->offset = 0;
    }
@@ -677,7 +677,7 @@ intel_buffer_object_purgeable(struct gl_context * ctx,
       return intel_buffer_purgeable(intel_obj->buffer);
 
    if (option == GL_RELEASED_APPLE) {
-      _mesa_align_free(intel_obj->sys_buffer);
+      align_free(intel_obj->sys_buffer);
       intel_obj->sys_buffer = NULL;
 
       return GL_RELEASED_APPLE;

@@ -217,6 +217,7 @@ i915_clear_emit(struct pipe_context *pipe, unsigned buffers,
  */
 void
 i915_clear_blitter(struct pipe_context *pipe, unsigned buffers,
+                   const struct pipe_scissor_state *scissor_state,
                    const union pipe_color_union *color,
                    double depth, unsigned stencil)
 {
@@ -245,6 +246,7 @@ i915_clear_blitter(struct pipe_context *pipe, unsigned buffers,
 
 void
 i915_clear_render(struct pipe_context *pipe, unsigned buffers,
+                  const struct pipe_scissor_state *scissor_state,
                   const union pipe_color_union *color,
                   double depth, unsigned stencil)
 {

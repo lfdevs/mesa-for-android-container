@@ -34,7 +34,7 @@
 #include "cso_cache/cso_hash.h"
 
 struct translate_cache {
-   struct cso_hash *hash;
+   struct cso_hash hash;
 };
 
 struct translate_cache * translate_cache_create( void )
@@ -44,14 +44,14 @@ struct translate_cache * translate_cache_create( void )
       return NULL;
    }
 
-   cache->hash = cso_hash_create();
+   cso_hash_init(&cache->hash);
    return cache;
 }
 
 
 static inline void delete_translates(struct translate_cache *cache)
 {
-   struct cso_hash *hash = cache->hash;
+   struct cso_hash *hash = &cache->hash;
    struct cso_hash_iter iter = cso_hash_first_node(hash);
    while (!cso_hash_iter_is_null(iter)) {
       struct translate *state = (struct translate*)cso_hash_iter_data(iter);
@@ -65,7 +65,7 @@ static inline void delete_translates(struct translate_cache *cache)
 void translate_cache_destroy(struct translate_cache *cache)
 {
    delete_translates(cache);
-   cso_hash_delete(cache->hash);
+   cso_hash_deinit(&cache->hash);
    FREE(cache);
 }
 
@@ -92,14 +92,14 @@ struct translate * translate_cache_find(struct translate_cache *cache,
 {
    unsigned hash_key = create_key(key);
    struct translate *translate = (struct translate*)
-      cso_hash_find_data_from_template(cache->hash,
+      cso_hash_find_data_from_template(&cache->hash,
                                        hash_key,
                                        key, sizeof(*key));
 
    if (!translate) {
       /* create/insert */
       translate = translate_create(key);
-      cso_hash_insert(cache->hash, hash_key, translate);
+      cso_hash_insert(&cache->hash, hash_key, translate);
    }
 
    return translate;

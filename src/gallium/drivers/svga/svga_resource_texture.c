@@ -462,6 +462,10 @@ svga_texture_transfer_map_direct(struct svga_context *svga,
       unsigned offset, mip_width, mip_height;
       struct svga_winsys_context *swc = svga->swc;
 
+      if (swc->force_coherent) {
+         usage |= PIPE_TRANSFER_PERSISTENT | PIPE_TRANSFER_COHERENT;
+      }
+
       map = swc->surface_map(swc, surf, usage, &retry, &rebind);
       if (map == NULL && retry) {
          /*
@@ -708,15 +712,6 @@ svga_texture_surface_unmap(struct svga_context *svga,
          svga_context_flush(svga, NULL);
          ret = SVGA3D_BindGBSurface(swc, surf);
          assert(ret == PIPE_OK);
-      }
-      if (swc->force_coherent) {
-         ret = SVGA3D_UpdateGBSurface(swc, surf);
-         if (ret != PIPE_OK) {
-            /* flush and retry */
-            svga_context_flush(svga, NULL);
-            ret = SVGA3D_UpdateGBSurface(swc, surf);
-            assert(ret == PIPE_OK);
-         }
       }
    }
 }

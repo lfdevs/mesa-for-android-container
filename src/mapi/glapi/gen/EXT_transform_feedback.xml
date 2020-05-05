@@ -89,7 +89,7 @@
 
   <function name="DeleteTransformFeedbacks" es2="3.0">
     <param name="n" type="GLsizei"/>
-    <param name="ids" type="const GLuint *"/>
+    <param name="ids" type="const GLuint *" count="n"/>
   </function>
 
   <function name="GenTransformFeedbacks" es2="3.0">
@@ -108,7 +108,7 @@
   <function name="ResumeTransformFeedback" es2="3.0" no_error="true">
   </function>
 
-  <function name="DrawTransformFeedback" exec="dynamic" marshal="draw">
+  <function name="DrawTransformFeedback" marshal="draw">
     <param name="mode" type="GLenum"/>
     <param name="id" type="GLuint"/>
   </function>

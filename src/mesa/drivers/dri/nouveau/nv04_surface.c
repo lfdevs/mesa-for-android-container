@@ -208,8 +208,8 @@ nv04_surface_copy_swizzle(struct gl_context *ctx,
 	unsigned x, y;
 
         /* Swizzled surfaces must be POT  */
-	assert(_mesa_is_pow_two(dst->width) &&
-	       _mesa_is_pow_two(dst->height));
+	assert(util_is_power_of_two_or_zero(dst->width) &&
+	       util_is_power_of_two_or_zero(dst->height));
 
 	if (context_chipset(ctx) < 0x10) {
 		BEGIN_NV04(push, NV01_SUBC(SURF, OBJECT), 1);

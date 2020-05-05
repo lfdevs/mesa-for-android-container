@@ -234,12 +234,12 @@ namespace SwrJit
     /// @param pVecPassthru - SIMD wide vector of values to load when lane is inactive
     Value* Builder::GATHER_PTR(Value* pVecSrcPtr, Value* pVecMask, Value* pVecPassthru)
     {
-        return MASKED_GATHER(pVecSrcPtr, 4, pVecMask, pVecPassthru);
+        return MASKED_GATHER(pVecSrcPtr, AlignType(4), pVecMask, pVecPassthru);
     }
 
     void Builder::SCATTER_PTR(Value* pVecDstPtr, Value* pVecSrc, Value* pVecMask)
     {
-        MASKED_SCATTER(pVecSrc, pVecDstPtr, 4, pVecMask);
+        MASKED_SCATTER(pVecSrc, pVecDstPtr, AlignType(4), pVecMask);
     }
 
     void Builder::Gather4(const SWR_FORMAT format,
@@ -632,6 +632,7 @@ namespace SwrJit
                     break;
                 }
 
+                assert(vConstMask && "Invalid info.numComps value");
                 vGatherOutput[swizzleIndex] =
                     BITCAST(PSHUFB(BITCAST(vGatherInput, v32x8Ty), vConstMask), vGatherTy);
                 // after pshufb for x channel
@@ -651,11 +652,11 @@ namespace SwrJit
         Value* pDst, Value* vSrc, Value* vOffsets, Value* vMask, MEM_CLIENT usage)
     {
         AssertMemoryUsageParams(pDst, usage);
-//        if (vSrc->getType() != mSimdFP32Ty)
-//        {
-//            vSrc = BITCAST(vSrc, mSimdFP32Ty);
-//        }                                               
+#if LLVM_VERSION_MAJOR >= 11
+        SWR_ASSERT(cast<VectorType>(vSrc->getType())->getElementType()->isFloatTy());
+#else
         SWR_ASSERT(vSrc->getType()->getVectorElementType()->isFloatTy());
+#endif
         VSCATTERPS(pDst, vMask, vOffsets, vSrc, C(1));
         return;
 

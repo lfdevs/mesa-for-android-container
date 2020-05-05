@@ -22,7 +22,7 @@ libxvmc_st = static_library(
   'xvmc_st',
   files('attributes.c', 'block.c', 'context.c', 'surface.c', 'subpicture.c'),
   c_args : [c_vis_args],
-  include_directories : [inc_common],
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
   dependencies : [
     dep_xvmc, dep_x11_xcb, dep_xcb, dep_xcb_dri2, dep_xcb_dri3, dep_xv,
     dep_libdrm,

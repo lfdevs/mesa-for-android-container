@@ -50,7 +50,7 @@ lp_build_broadcast(struct gallivm_state *gallivm,
 {
    LLVMValueRef res;
 
-   if (LLVMGetTypeKind(vec_type) != LLVMVectorTypeKind) {
+   if (LLVMGetTypeKind(vec_type) != LLVMFixedVectorTypeKind) {
       /* scalar */
       assert(vec_type == LLVMTypeOf(scalar));
       res = scalar;

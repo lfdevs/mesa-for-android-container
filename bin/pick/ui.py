@@ -1,4 +1,4 @@
-# Copyright © 2020-2020 Intel Corporation
+# Copyright © 2019-2020 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -21,7 +21,6 @@
 """Urwid UI for pick script."""
 
 import asyncio
-import functools
 import itertools
 import textwrap
 import typing
@@ -68,24 +67,27 @@ class CommitWidget(urwid.Text):
     _selectable = True
 
     def __init__(self, ui: 'UI', commit: 'core.Commit'):
-        super().__init__(commit.description)
+        super().__init__(f'{commit.sha[:10]} {commit.description}')
         self.ui = ui
         self.commit = commit
 
     async def apply(self) -> None:
-        result, err = await self.commit.apply(self.ui)
-        if not result:
-            self.ui.chp_failed(self, err)
-        else:
-            self.ui.remove_commit(self)
+        async with self.ui.git_lock:
+            result, err = await self.commit.apply(self.ui)
+            if not result:
+                self.ui.chp_failed(self, err)
+            else:
+                self.ui.remove_commit(self)
 
     async def denominate(self) -> None:
-        await self.commit.denominate(self.ui)
-        self.ui.remove_commit(self)
+        async with self.ui.git_lock:
+            await self.commit.denominate(self.ui)
+            self.ui.remove_commit(self)
 
     async def backport(self) -> None:
-        await self.commit.backport(self.ui)
-        self.ui.remove_commit(self)
+        async with self.ui.git_lock:
+            await self.commit.backport(self.ui)
+            self.ui.remove_commit(self)
 
     def keypress(self, size: int, key: str) -> typing.Optional[str]:
         if key == 'c':
@@ -118,6 +120,7 @@ class UI:
 
     previous_commits: typing.List['core.Commit'] = attr.ib(factory=list, init=False)
     new_commits: typing.List['core.Commit'] = attr.ib(factory=list, init=False)
+    git_lock: asyncio.Lock = attr.ib(factory=asyncio.Lock, init=False)
 
     def _make_body(self) -> 'urwid.Columns':
         commits = urwid.ListBox(self.commit_list)
@@ -148,7 +151,7 @@ class UI:
     async def update(self) -> None:
         self.load()
         with open('VERSION', 'r') as f:
-            version = f.read().strip()[:4]
+            version = '.'.join(f.read().split('.')[:2])
         if self.previous_commits:
             sha = self.previous_commits[0].sha
         else:
@@ -174,6 +177,8 @@ class UI:
 
     async def feedback(self, text: str) -> None:
         self.feedback_box.append(urwid.AttrMap(urwid.Text(text), None))
+        latest_item_index = len(self.feedback_box) - 1
+        self.feedback_box.set_focus(latest_item_index)
 
     def remove_commit(self, commit: CommitWidget) -> None:
         for i, c in enumerate(self.commit_list):
@@ -208,7 +213,7 @@ class UI:
 
             await commit.apply(self)
 
-        q = urwid.Edit("Comit sha\n")
+        q = urwid.Edit("Commit sha\n")
         ok_btn = urwid.Button('Ok')
         urwid.connect_signal(ok_btn, 'click', lambda _: asyncio.ensure_future(apply_cb(q)))
         urwid.connect_signal(ok_btn, 'click', reset_cb)

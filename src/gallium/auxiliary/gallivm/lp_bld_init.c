@@ -46,7 +46,7 @@
 #endif
 #include <llvm-c/BitWriter.h>
 #if GALLIVM_HAVE_CORO
-#if LLVM_VERSION_MAJOR <= 8 && defined(PIPE_ARCH_AARCH64)
+#if LLVM_VERSION_MAJOR <= 8 && (defined(PIPE_ARCH_AARCH64) || defined (PIPE_ARCH_ARM) || defined(PIPE_ARCH_S390))
 #include <llvm-c/Transforms/IPO.h>
 #endif
 #include <llvm-c/Transforms/Coroutines.h>
@@ -137,7 +137,8 @@ create_pass_manager(struct gallivm_state *gallivm)
    }
 
 #if GALLIVM_HAVE_CORO
-#if LLVM_VERSION_MAJOR <= 8 && defined(PIPE_ARCH_AARCH64)
+#if LLVM_VERSION_MAJOR <= 8 && (defined(PIPE_ARCH_AARCH64) || defined (PIPE_ARCH_ARM) || defined(PIPE_ARCH_S390))
+   LLVMAddArgumentPromotionPass(gallivm->cgpassmgr);
    LLVMAddFunctionAttrsPass(gallivm->cgpassmgr);
 #endif
    LLVMAddCoroEarlyPass(gallivm->cgpassmgr);
@@ -434,15 +435,7 @@ lp_build_init(void)
    }
 #endif
 
-   /* AMD Bulldozer AVX's throughput is the same as SSE2; and because using
-    * 8-wide vector needs more floating ops than 4-wide (due to padding), it is
-    * actually more efficient to use 4-wide vectors on this processor.
-    *
-    * See also:
-    * - http://www.anandtech.com/show/4955/the-bulldozer-review-amd-fx8150-tested/2
-    */
-   if (util_cpu_caps.has_avx &&
-       util_cpu_caps.has_intel) {
+   if (util_cpu_caps.has_avx2 || util_cpu_caps.has_avx) {
       lp_native_vector_width = 256;
    } else {
       /* Leave it at 128, even when no SIMD extensions are available.
@@ -450,10 +443,11 @@ lp_build_init(void)
        */
       lp_native_vector_width = 128;
    }
- 
+
    lp_native_vector_width = debug_get_num_option("LP_NATIVE_VECTOR_WIDTH",
                                                  lp_native_vector_width);
 
+#if LLVM_VERSION_MAJOR < 4
    if (lp_native_vector_width <= 128) {
       /* Hide AVX support, as often LLVM AVX intrinsics are only guarded by
        * "util_cpu_caps.has_avx" predicate, and lack the
@@ -467,6 +461,7 @@ lp_build_init(void)
       util_cpu_caps.has_f16c = 0;
       util_cpu_caps.has_fma = 0;
    }
+#endif
 
 #ifdef PIPE_ARCH_PPC_64
    /* Set the NJ bit in VSCR to 0 so denormalized values are handled as
@@ -513,6 +508,7 @@ gallivm_create(const char *name, LLVMContextRef context)
       }
    }
 
+   assert(gallivm != NULL);
    return gallivm;
 }
 

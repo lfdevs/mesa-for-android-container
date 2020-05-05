@@ -23,7 +23,7 @@
  */
 
 #include "glheader.h"
-#include "imports.h"
+
 #include "blend.h"
 #include "bufferobj.h"
 #include "context.h"
@@ -1035,7 +1035,6 @@ read_pixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format,
    GET_CURRENT_CONTEXT(ctx);
 
    FLUSH_VERTICES(ctx, 0);
-   FLUSH_CURRENT(ctx, 0);
 
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glReadPixels(%d, %d, %s, %s, %p)\n",
@@ -1142,7 +1141,7 @@ read_pixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format,
    if (!no_error) {
       if (!_mesa_validate_pbo_access(2, &ctx->Pack, width, height, 1,
                                      format, type, bufSize, pixels)) {
-         if (_mesa_is_bufferobj(ctx->Pack.BufferObj)) {
+         if (ctx->Pack.BufferObj) {
             _mesa_error(ctx, GL_INVALID_OPERATION,
                         "glReadPixels(out of bounds PBO access)");
          } else {
@@ -1153,7 +1152,7 @@ read_pixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format,
          return;
       }
 
-      if (_mesa_is_bufferobj(ctx->Pack.BufferObj) &&
+      if (ctx->Pack.BufferObj &&
           _mesa_check_disallowed_mapping(ctx->Pack.BufferObj)) {
          /* buffer is mapped - that's an error */
          _mesa_error(ctx, GL_INVALID_OPERATION, "glReadPixels(PBO is mapped)");

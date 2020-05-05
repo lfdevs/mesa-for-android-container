@@ -24,7 +24,9 @@
 #include "r600_formats.h"
 #include "r600_opcodes.h"
 #include "r600_shader.h"
+#include "r600_dump.h"
 #include "r600d.h"
+#include "sfn/sfn_nir.h"
 
 #include "sb/sb_public.h"
 
@@ -33,6 +35,10 @@
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_scan.h"
 #include "tgsi/tgsi_dump.h"
+#include "tgsi/tgsi_from_mesa.h"
+#include "nir/tgsi_to_nir.h"
+#include "nir/nir_to_tgsi_info.h"
+#include "compiler/nir/nir.h"
 #include "util/u_bitcast.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
@@ -157,6 +163,8 @@ static int store_shader(struct pipe_context *ctx,
 	return 0;
 }
 
+extern const struct nir_shader_compiler_options r600_nir_options;
+static int nshader = 0;
 int r600_pipe_shader_create(struct pipe_context *ctx,
 			    struct r600_pipe_shader *shader,
 			    union r600_shader_key key)
@@ -164,27 +172,61 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 	struct r600_context *rctx = (struct r600_context *)ctx;
 	struct r600_pipe_shader_selector *sel = shader->selector;
 	int r;
-	bool dump = r600_can_dump_shader(&rctx->screen->b,
-					 tgsi_get_processor_type(sel->tokens));
-	unsigned use_sb = !(rctx->screen->b.debug_flags & DBG_NO_SB);
+	struct r600_screen *rscreen = (struct r600_screen *)ctx->screen;
+	
+	int processor = sel->ir_type == PIPE_SHADER_IR_TGSI ?
+		tgsi_get_processor_type(sel->tokens):
+		pipe_shader_type_from_mesa(sel->nir->info.stage);
+	
+	bool dump = r600_can_dump_shader(&rctx->screen->b, processor);
+	unsigned use_sb = !(rctx->screen->b.debug_flags & DBG_NO_SB) &&
+		!(rscreen->b.debug_flags & DBG_NIR);
 	unsigned sb_disasm;
 	unsigned export_shader;
-
+	
 	shader->shader.bc.isa = rctx->isa;
-
+	
+	if (!(rscreen->b.debug_flags & DBG_NIR)) {
+		assert(sel->ir_type == PIPE_SHADER_IR_TGSI);
+		r = r600_shader_from_tgsi(rctx, shader, key);
+		if (r) {
+			R600_ERR("translation from TGSI failed !\n");
+			goto error;
+		}
+	} else {
+		if (sel->ir_type == PIPE_SHADER_IR_TGSI)
+			sel->nir = tgsi_to_nir_noscreen(sel->tokens, &r600_nir_options);
+		nir_tgsi_scan_shader(sel->nir, &sel->info, true);
+		r = r600_shader_from_nir(rctx, shader, &key);
+		if (r) {
+			fprintf(stderr, "--Failed shader--------------------------------------------------\n");
+			
+			if (sel->ir_type == PIPE_SHADER_IR_TGSI) {
+				fprintf(stderr, "--TGSI--------------------------------------------------------\n");
+				tgsi_dump(sel->tokens, 0);
+			}
+			
+			if (rscreen->b.debug_flags & DBG_NIR) {
+				fprintf(stderr, "--NIR --------------------------------------------------------\n");
+				nir_print_shader(sel->nir, stderr);
+			}
+			
+			R600_ERR("translation from NIR failed !\n");
+			goto error;
+		}
+	}
+	
 	if (dump) {
-		fprintf(stderr, "--------------------------------------------------------------\n");
-		tgsi_dump(sel->tokens, 0);
-
+		if (sel->ir_type == PIPE_SHADER_IR_TGSI) {
+			fprintf(stderr, "--TGSI--------------------------------------------------------\n");
+			tgsi_dump(sel->tokens, 0);
+		}
+		
 		if (sel->so.num_outputs) {
 			r600_dump_streamout(&sel->so);
 		}
 	}
-	r = r600_shader_from_tgsi(rctx, shader, key);
-	if (r) {
-		R600_ERR("translation from TGSI failed !\n");
-		goto error;
-	}
+	
 	if (shader->shader.processor_type == PIPE_SHADER_VERTEX) {
 		/* only disable for vertex shaders in tess paths */
 		if (key.vs.as_ls)
@@ -216,13 +258,37 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 		r600_bytecode_disasm(&shader->shader.bc);
 		fprintf(stderr, "______________________________________________________________\n");
 	} else if ((dump && sb_disasm) || use_sb) {
-		r = r600_sb_bytecode_process(rctx, &shader->shader.bc, &shader->shader,
+                r = r600_sb_bytecode_process(rctx, &shader->shader.bc, &shader->shader,
 		                             dump, use_sb);
 		if (r) {
 			R600_ERR("r600_sb_bytecode_process failed !\n");
 			goto error;
 		}
 	}
+
+        if (dump) {
+           FILE *f;
+           char fname[1024];
+           snprintf(fname, 1024, "shader_from_%s_%d.cpp",
+                    (sel->ir_type == PIPE_SHADER_IR_TGSI ?
+                        (rscreen->b.debug_flags & DBG_NIR ? "tgsi-nir" : "tgsi")
+                      : "nir"), nshader);
+           f = fopen(fname, "w");
+           print_shader_info(f, nshader++, &shader->shader);
+           print_shader_info(stderr, nshader++, &shader->shader);
+           print_pipe_info(stderr, &sel->info);
+           if (sel->ir_type == PIPE_SHADER_IR_TGSI) {
+              fprintf(f, "/****TGSI**********************************\n");
+              tgsi_dump_to_file(sel->tokens, 0, f);
+           }
+
+           if (rscreen->b.debug_flags & DBG_NIR){
+              fprintf(f, "/****NIR **********************************\n");
+              nir_print_shader(sel->nir, f);
+           }
+           fprintf(f, "******************************************/\n");
+           fclose(f);
+        }
 
 	if (shader->gs_copy_shader) {
 		if (dump) {
@@ -301,7 +367,8 @@ error:
 void r600_pipe_shader_destroy(struct pipe_context *ctx UNUSED, struct r600_pipe_shader *shader)
 {
 	r600_resource_reference(&shader->bo, NULL);
-	r600_bytecode_clear(&shader->shader.bc);
+        if (shader->shader.bc.cf.next)
+		r600_bytecode_clear(&shader->shader.bc);
 	r600_release_command_buffer(&shader->command_buffer);
 }
 
@@ -636,7 +703,7 @@ static int r600_spi_sid(struct r600_shader_io * io)
 };
 
 /* we need this to get a common lds index for vs/tcs/tes input/outputs */
-int r600_get_lds_unique_index(unsigned semantic_name, unsigned index)
+int r600_get_lds_unique_index(unsigned semantic_name, unsigned index, bool texcoord_semantics)
 {
 	switch (semantic_name) {
 	case TGSI_SEMANTIC_POSITION:
@@ -648,7 +715,7 @@ int r600_get_lds_unique_index(unsigned semantic_name, unsigned index)
 		return 2 + index;
 	case TGSI_SEMANTIC_GENERIC:
 		if (index <= 63-4)
-			return 4 + index - 9;
+			return 4 + index - (texcoord_semantics ? 0 : 9);
 		else
 			/* same explanation as in the default statement,
 			 * the only user hitting this is st/nine.
@@ -1116,7 +1183,7 @@ static int tgsi_declaration(struct r600_shader_ctx *ctx)
 			break;
 		else if (d->Semantic.Name == TGSI_SEMANTIC_TESSINNER ||
 			 d->Semantic.Name == TGSI_SEMANTIC_TESSOUTER) {
-			int param = r600_get_lds_unique_index(d->Semantic.Name, 0);
+			int param = r600_get_lds_unique_index(d->Semantic.Name, 0, false);
 			int dreg = d->Semantic.Name == TGSI_SEMANTIC_TESSINNER ? 3 : 2;
 			unsigned temp_reg = r600_get_temp(ctx);
 
@@ -2022,11 +2089,11 @@ static int r600_get_byte_address(struct r600_shader_ctx *ctx, int temp_reg,
 			return r;
 
 		param = r600_get_lds_unique_index(name[first],
-						  index[first]);
+						  index[first], false);
 
 	} else {
 		param = r600_get_lds_unique_index(name[reg.Register.Index],
-						  index[reg.Register.Index]);
+						  index[reg.Register.Index], false);
 	}
 
 	/* add to base_addr - passed in temp_reg.x */
@@ -2469,9 +2536,9 @@ static void convert_edgeflag_to_int(struct r600_shader_ctx *ctx)
 	r600_bytecode_add_alu(ctx->bc, &alu);
 }
 
-static int generate_gs_copy_shader(struct r600_context *rctx,
-				   struct r600_pipe_shader *gs,
-				   struct pipe_stream_output_info *so)
+int generate_gs_copy_shader(struct r600_context *rctx,
+                            struct r600_pipe_shader *gs,
+                            struct pipe_stream_output_info *so)
 {
 	struct r600_shader_ctx ctx = {};
 	struct r600_shader *gs_shader = &gs->shader;
@@ -2969,7 +3036,8 @@ static int emit_lds_vs_writes(struct r600_shader_ctx *ctx)
 
 	for (i = 0; i < ctx->shader->noutput; i++) {
 		struct r600_bytecode_alu alu;
-		int param = r600_get_lds_unique_index(ctx->shader->output[i].name, ctx->shader->output[i].sid);
+		int param = r600_get_lds_unique_index(ctx->shader->output[i].name,
+						      ctx->shader->output[i].sid, false);
 
 		if (param) {
 			r = single_alu_op2(ctx, ALU_OP2_ADD_INT,
@@ -3103,7 +3171,7 @@ static int r600_tess_factor_read(struct r600_shader_ctx *ctx,
 	int dreg = ctx->shader->output[output_idx].gpr;
 	int r;
 
-	param = r600_get_lds_unique_index(name, 0);
+	param = r600_get_lds_unique_index(name, 0, false);
 	r = get_lds_offset0(ctx, 1, temp_reg, true);
 	if (r)
 		return r;

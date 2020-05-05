@@ -107,7 +107,7 @@ static void draw(void)
    clear_color.f[2] = 0.5;
    clear_color.f[3] = 1.0;
 
-   info.ctx->clear(info.ctx, PIPE_CLEAR_COLOR, &clear_color, 0, 0);
+   info.ctx->clear(info.ctx, PIPE_CLEAR_COLOR, NULL, &clear_color, 0, 0);
    util_draw_arrays(info.ctx, PIPE_PRIM_QUADS, 0, 4);
    info.ctx->flush(info.ctx, NULL, 0);
 

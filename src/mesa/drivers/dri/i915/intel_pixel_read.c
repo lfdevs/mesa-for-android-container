@@ -84,7 +84,7 @@ do_blit_readpixels(struct gl_context * ctx,
 
    DBG("%s\n", __func__);
 
-   assert(_mesa_is_bufferobj(pack->BufferObj));
+   assert(pack->BufferObj);
 
    struct gl_renderbuffer *rb = ctx->ReadBuffer->_ColorReadBuffer;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
@@ -166,7 +166,7 @@ intelReadPixels(struct gl_context * ctx,
 
    DBG("%s\n", __func__);
 
-   if (_mesa_is_bufferobj(pack->BufferObj)) {
+   if (pack->BufferObj) {
       /* Using PBOs, so try the BLT based path. */
       if (do_blit_readpixels(ctx, x, y, width, height, format, type, pack,
                              pixels)) {

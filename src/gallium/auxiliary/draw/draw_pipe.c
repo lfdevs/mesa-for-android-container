@@ -49,6 +49,7 @@ boolean draw_pipeline_init( struct draw_context *draw )
    draw->pipeline.clip      = draw_clip_stage( draw );
    draw->pipeline.flatshade = draw_flatshade_stage( draw );
    draw->pipeline.cull      = draw_cull_stage( draw );
+   draw->pipeline.user_cull = draw_user_cull_stage( draw );
    draw->pipeline.validate  = draw_validate_stage( draw );
    draw->pipeline.first     = draw->pipeline.validate;
 
@@ -61,6 +62,7 @@ boolean draw_pipeline_init( struct draw_context *draw )
        !draw->pipeline.clip ||
        !draw->pipeline.flatshade ||
        !draw->pipeline.cull ||
+       !draw->pipeline.user_cull ||
        !draw->pipeline.validate)
       return FALSE;
 
@@ -95,6 +97,8 @@ void draw_pipeline_destroy( struct draw_context *draw )
       draw->pipeline.flatshade->destroy( draw->pipeline.flatshade );
    if (draw->pipeline.cull)
       draw->pipeline.cull->destroy( draw->pipeline.cull );
+   if (draw->pipeline.user_cull)
+      draw->pipeline.user_cull->destroy( draw->pipeline.user_cull );
    if (draw->pipeline.validate)
       draw->pipeline.validate->destroy( draw->pipeline.validate );
    if (draw->pipeline.aaline)

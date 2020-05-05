@@ -97,13 +97,13 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 					psurf->u.tex.first_layer);
 
 			if (bin_w) {
-				stride = bin_w * rsc->layout.cpp;
+				stride = bin_w << fdl_cpp_shift(&rsc->layout);
 
 				if (bases) {
 					base = bases[i];
 				}
 			} else {
-				stride = slice->pitch * rsc->layout.cpp;
+				stride = slice->pitch;
 			}
 		} else if ((i < nr_bufs) && bases) {
 			base = bases[i];
@@ -175,7 +175,7 @@ emit_gmem2mem_surf(struct fd_batch *batch, bool stencil,
 			A4XX_RB_COPY_CONTROL_MODE(RB_COPY_RESOLVE) |
 			A4XX_RB_COPY_CONTROL_GMEM_BASE(base));
 	OUT_RELOCW(ring, rsc->bo, offset, 0, 0);   /* RB_COPY_DEST_BASE */
-	OUT_RING(ring, A4XX_RB_COPY_DEST_PITCH_PITCH(slice->pitch * rsc->layout.cpp));
+	OUT_RING(ring, A4XX_RB_COPY_DEST_PITCH_PITCH(slice->pitch));
 	OUT_RING(ring, A4XX_RB_COPY_DEST_INFO_TILE(TILE4_LINEAR) |
 			A4XX_RB_COPY_DEST_INFO_FORMAT(fd4_pipe2color(pformat)) |
 			A4XX_RB_COPY_DEST_INFO_COMPONENT_ENABLE(0xf) |

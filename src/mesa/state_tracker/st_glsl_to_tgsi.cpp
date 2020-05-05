@@ -1572,17 +1572,6 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
       emit_asm(ir, TGSI_OPCODE_DFRACEXP, undef_dst, result_dst, op[0]);
       break;
 
-   case ir_unop_noise: {
-      /* At some point, a motivated person could add a better
-       * implementation of noise.  Currently not even the nvidia
-       * binary drivers do anything more than this.  In any case, the
-       * place to do this is in the GL state tracker, not the poor
-       * driver.
-       */
-      emit_asm(ir, TGSI_OPCODE_MOV, result_dst, st_src_reg_for_float(0.5));
-      break;
-   }
-
    case ir_binop_add:
       emit_asm(ir, TGSI_OPCODE_ADD, result_dst, op[0], op[1]);
       break;
@@ -2395,6 +2384,11 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
    case ir_binop_avg:
    case ir_binop_avg_round:
    case ir_binop_mul_32x16:
+   case ir_unop_f162f:
+   case ir_unop_f2f16:
+   case ir_unop_f2fmp:
+   case ir_unop_f162b:
+   case ir_unop_b2f16:
       /* This operation is not supported, or should have already been handled.
        */
       assert(!"Invalid ir opcode in glsl_to_tgsi_visitor::visit()");
@@ -2410,7 +2404,7 @@ glsl_to_tgsi_visitor::visit(ir_swizzle *ir)
 {
    st_src_reg src;
    int i;
-   int swizzle[4];
+   int swizzle[4] = {0};
 
    /* Note that this is only swizzles in expressions, not those on the left
     * hand side of an assignment, which do write masking.  See ir_assignment
@@ -3768,7 +3762,7 @@ static void
 get_image_qualifiers(ir_dereference *ir, const glsl_type **type,
                      bool *memory_coherent, bool *memory_volatile,
                      bool *memory_restrict, bool *memory_read_only,
-                     unsigned *image_format)
+                     enum pipe_format *image_format)
 {
 
    switch (ir->ir_type) {
@@ -3826,7 +3820,7 @@ glsl_to_tgsi_visitor::visit_image_intrinsic(ir_call *ir)
    unsigned sampler_array_size = 1, sampler_base = 0;
    bool memory_coherent = false, memory_volatile = false,
         memory_restrict = false, memory_read_only = false;
-   unsigned image_format = 0;
+   enum pipe_format image_format = PIPE_FORMAT_NONE;
    const glsl_type *type = NULL;
 
    get_image_qualifiers(img, &type, &memory_coherent, &memory_volatile,
@@ -3982,8 +3976,7 @@ glsl_to_tgsi_visitor::visit_image_intrinsic(ir_call *ir)
    }
 
    inst->tex_target = type->sampler_index();
-   inst->image_format = st_mesa_format_to_pipe_format(st_context(ctx),
-         _mesa_get_shader_image_format(image_format));
+   inst->image_format = image_format;
    inst->read_only = memory_read_only;
 
    if (memory_coherent)
@@ -4301,14 +4294,13 @@ glsl_to_tgsi_visitor::visit(ir_texture *ir)
    enum tgsi_opcode opcode = TGSI_OPCODE_NOP;
    const glsl_type *sampler_type = ir->sampler->type;
    unsigned sampler_array_size = 1, sampler_base = 0;
-   bool is_cube_array = false, is_cube_shadow = false;
+   bool is_cube_array = false;
    ir_variable *var = ir->sampler->variable_referenced();
    unsigned i;
 
    /* if we are a cube array sampler or a cube shadow */
    if (sampler_type->sampler_dimensionality == GLSL_SAMPLER_DIM_CUBE) {
       is_cube_array = sampler_type->sampler_array;
-      is_cube_shadow = sampler_type->sampler_shadow;
    }
 
    if (ir->coordinate) {
@@ -4346,7 +4338,8 @@ glsl_to_tgsi_visitor::visit(ir_texture *ir)
       }
       break;
    case ir_txb:
-      if (is_cube_array || is_cube_shadow) {
+      if (is_cube_array ||
+         (sampler_type->sampler_shadow && sampler_type->coordinate_components() >= 3)) {
          opcode = TGSI_OPCODE_TXB2;
       }
       else {
@@ -4363,7 +4356,7 @@ glsl_to_tgsi_visitor::visit(ir_texture *ir)
       if (this->has_tex_txf_lz && ir->lod_info.lod->is_zero()) {
          opcode = TGSI_OPCODE_TEX_LZ;
       } else {
-         opcode = is_cube_array ? TGSI_OPCODE_TXL2 : TGSI_OPCODE_TXL;
+         opcode = (is_cube_array || (sampler_type->sampler_shadow && sampler_type->coordinate_components() >= 3)) ? TGSI_OPCODE_TXL2 : TGSI_OPCODE_TXL;
          ir->lod_info.lod->accept(this);
          lod_info = this->result;
       }
@@ -4501,11 +4494,21 @@ glsl_to_tgsi_visitor::visit(ir_texture *ir)
       ir->shadow_comparator->accept(this);
 
       if (is_cube_array) {
-         cube_sc = get_temp(glsl_type::float_type);
-         cube_sc_dst = st_dst_reg(cube_sc);
-         cube_sc_dst.writemask = WRITEMASK_X;
+         if (lod_info.file != PROGRAM_UNDEFINED) {
+            // If we have both a cube array *and* a bias/lod, stick the
+            // comparator into the .Y of the second argument.
+            st_src_reg tmp = get_temp(glsl_type::vec2_type);
+            cube_sc_dst = st_dst_reg(tmp);
+            cube_sc_dst.writemask = WRITEMASK_X;
+            emit_asm(ir, TGSI_OPCODE_MOV, cube_sc_dst, lod_info);
+            lod_info = tmp;
+            cube_sc_dst.writemask = WRITEMASK_Y;
+         } else {
+            cube_sc = get_temp(glsl_type::float_type);
+            cube_sc_dst = st_dst_reg(cube_sc);
+            cube_sc_dst.writemask = WRITEMASK_X;
+         }
          emit_asm(ir, TGSI_OPCODE_MOV, cube_sc_dst, this->result);
-         cube_sc_dst.writemask = WRITEMASK_X;
       }
       else {
          if ((sampler_type->sampler_dimensionality == GLSL_SAMPLER_DIM_2D &&
@@ -5798,97 +5801,6 @@ struct st_translate {
    bool tg4_component_in_swizzle;
 };
 
-/** Map Mesa's SYSTEM_VALUE_x to TGSI_SEMANTIC_x */
-enum tgsi_semantic
-_mesa_sysval_to_semantic(unsigned sysval)
-{
-   switch (sysval) {
-   /* Vertex shader */
-   case SYSTEM_VALUE_VERTEX_ID:
-      return TGSI_SEMANTIC_VERTEXID;
-   case SYSTEM_VALUE_INSTANCE_ID:
-      return TGSI_SEMANTIC_INSTANCEID;
-   case SYSTEM_VALUE_VERTEX_ID_ZERO_BASE:
-      return TGSI_SEMANTIC_VERTEXID_NOBASE;
-   case SYSTEM_VALUE_BASE_VERTEX:
-      return TGSI_SEMANTIC_BASEVERTEX;
-   case SYSTEM_VALUE_BASE_INSTANCE:
-      return TGSI_SEMANTIC_BASEINSTANCE;
-   case SYSTEM_VALUE_DRAW_ID:
-      return TGSI_SEMANTIC_DRAWID;
-
-   /* Geometry shader */
-   case SYSTEM_VALUE_INVOCATION_ID:
-      return TGSI_SEMANTIC_INVOCATIONID;
-
-   /* Fragment shader */
-   case SYSTEM_VALUE_FRAG_COORD:
-      return TGSI_SEMANTIC_POSITION;
-   case SYSTEM_VALUE_POINT_COORD:
-      return TGSI_SEMANTIC_PCOORD;
-   case SYSTEM_VALUE_FRONT_FACE:
-      return TGSI_SEMANTIC_FACE;
-   case SYSTEM_VALUE_SAMPLE_ID:
-      return TGSI_SEMANTIC_SAMPLEID;
-   case SYSTEM_VALUE_SAMPLE_POS:
-      return TGSI_SEMANTIC_SAMPLEPOS;
-   case SYSTEM_VALUE_SAMPLE_MASK_IN:
-      return TGSI_SEMANTIC_SAMPLEMASK;
-   case SYSTEM_VALUE_HELPER_INVOCATION:
-      return TGSI_SEMANTIC_HELPER_INVOCATION;
-
-   /* Tessellation shader */
-   case SYSTEM_VALUE_TESS_COORD:
-      return TGSI_SEMANTIC_TESSCOORD;
-   case SYSTEM_VALUE_VERTICES_IN:
-      return TGSI_SEMANTIC_VERTICESIN;
-   case SYSTEM_VALUE_PRIMITIVE_ID:
-      return TGSI_SEMANTIC_PRIMID;
-   case SYSTEM_VALUE_TESS_LEVEL_OUTER:
-      return TGSI_SEMANTIC_TESSOUTER;
-   case SYSTEM_VALUE_TESS_LEVEL_INNER:
-      return TGSI_SEMANTIC_TESSINNER;
-
-   /* Compute shader */
-   case SYSTEM_VALUE_LOCAL_INVOCATION_ID:
-      return TGSI_SEMANTIC_THREAD_ID;
-   case SYSTEM_VALUE_WORK_GROUP_ID:
-      return TGSI_SEMANTIC_BLOCK_ID;
-   case SYSTEM_VALUE_NUM_WORK_GROUPS:
-      return TGSI_SEMANTIC_GRID_SIZE;
-   case SYSTEM_VALUE_LOCAL_GROUP_SIZE:
-      return TGSI_SEMANTIC_BLOCK_SIZE;
-
-   /* ARB_shader_ballot */
-   case SYSTEM_VALUE_SUBGROUP_SIZE:
-      return TGSI_SEMANTIC_SUBGROUP_SIZE;
-   case SYSTEM_VALUE_SUBGROUP_INVOCATION:
-      return TGSI_SEMANTIC_SUBGROUP_INVOCATION;
-   case SYSTEM_VALUE_SUBGROUP_EQ_MASK:
-      return TGSI_SEMANTIC_SUBGROUP_EQ_MASK;
-   case SYSTEM_VALUE_SUBGROUP_GE_MASK:
-      return TGSI_SEMANTIC_SUBGROUP_GE_MASK;
-   case SYSTEM_VALUE_SUBGROUP_GT_MASK:
-      return TGSI_SEMANTIC_SUBGROUP_GT_MASK;
-   case SYSTEM_VALUE_SUBGROUP_LE_MASK:
-      return TGSI_SEMANTIC_SUBGROUP_LE_MASK;
-   case SYSTEM_VALUE_SUBGROUP_LT_MASK:
-      return TGSI_SEMANTIC_SUBGROUP_LT_MASK;
-
-   /* Unhandled */
-   case SYSTEM_VALUE_LOCAL_INVOCATION_INDEX:
-   case SYSTEM_VALUE_GLOBAL_INVOCATION_ID:
-   case SYSTEM_VALUE_VERTEX_CNT:
-   case SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL:
-   case SYSTEM_VALUE_BARYCENTRIC_PERSP_SAMPLE:
-   case SYSTEM_VALUE_BARYCENTRIC_PERSP_CENTROID:
-   case SYSTEM_VALUE_BARYCENTRIC_PERSP_SIZE:
-   default:
-      assert(!"Unexpected SYSTEM_VALUE_ enum");
-      return TGSI_SEMANTIC_COUNT;
-   }
-}
-
 /**
  * Map a glsl_to_tgsi constant/immediate to a TGSI immediate.
  */
@@ -6909,6 +6821,9 @@ st_translate_program(
       emit_compute_block_size(proginfo, ureg);
    }
 
+   if (program->shader->Program->info.layer_viewport_relative)
+      ureg_property(ureg, TGSI_PROPERTY_LAYER_VIEWPORT_RELATIVE, 1);
+
    /* Declare address register.
     */
    if (program->num_address_regs > 0) {
@@ -6924,7 +6839,7 @@ st_translate_program(
 
       for (i = 0; sysInputs; i++) {
          if (sysInputs & (1ull << i)) {
-            enum tgsi_semantic semName = _mesa_sysval_to_semantic(i);
+            enum tgsi_semantic semName = tgsi_get_sysval_semantic(i);
 
             t->systemValues[i] = ureg_DECL_system_value(ureg, semName, 0);
 
@@ -7421,6 +7336,14 @@ st_link_tgsi(struct gl_context *ctx, struct gl_shader_program *prog)
       st_set_prog_affected_state_flags(linked_prog);
 
       if (linked_prog) {
+         /* This is really conservative: */
+         linked_prog->info.writes_memory =
+            linked_prog->info.num_ssbos ||
+            linked_prog->info.num_images ||
+            ctx->Extensions.ARB_bindless_texture ||
+            (linked_prog->sh.LinkedTransformFeedback &&
+             linked_prog->sh.LinkedTransformFeedback->NumVarying);
+
          if (!ctx->Driver.ProgramStringNotify(ctx,
                                               _mesa_shader_stage_to_program(i),
                                               linked_prog)) {

@@ -39,9 +39,9 @@
 #include <GL/glxproto.h>
 
 #include "xm_api.h"
-#include "main/imports.h"
 #include "main/errors.h"
 #include "util/u_math.h"
+#include "util/u_memory.h"
 
 /* An "Atrribs/Attribs" typo was fixed in glxproto.h in Nov 2014.
  * This is in case we don't have the updated header.
@@ -49,7 +49,7 @@
 #if !defined(X_GLXCreateContextAttribsARB) && \
      defined(X_GLXCreateContextAtrribsARB)
 #define X_GLXCreateContextAttribsARB X_GLXCreateContextAtrribsARB
-#endif 
+#endif
 
 /* This indicates the client-side GLX API and GLX encoder version. */
 #define CLIENT_MAJOR_VERSION 1
@@ -432,7 +432,7 @@ get_visual( Display *dpy, int scr, unsigned int depth, int xclass )
          return NULL;
       }
    }
-   
+
    return vis;
 }
 
@@ -485,7 +485,7 @@ get_env_visual(Display *dpy, int scr, const char *varname)
 
 /*
  * Select an X visual which satisfies the RGBA flag and minimum depth.
- * Input:  dpy, 
+ * Input:  dpy,
  *         screen - X display and screen number
  *         min_depth - minimum visual depth
  *         preferred_class - preferred GLX visual class or DONT_CARE
@@ -1068,13 +1068,13 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
       if (stencil_size > 0)
          stencil_size = 8;
 
-      if (accumRedSize > 0 || 
-          accumGreenSize > 0 || 
+      if (accumRedSize > 0 ||
+          accumGreenSize > 0 ||
           accumBlueSize > 0 ||
           accumAlphaSize > 0) {
 
-         accumRedSize = 
-            accumGreenSize = 
+         accumRedSize =
+            accumGreenSize =
             accumBlueSize = default_accum_bits();
 
          accumAlphaSize = alpha_flag ? accumRedSize : 0;
@@ -1224,7 +1224,7 @@ glXMakeContextCurrent( Display *dpy, GLXDrawable draw,
 
       if (no_rast && current == ctx)
          return True;
-          
+
       /* Now make current! */
       if (XMesaMakeCurrent2(xmctx, drawBuffer, readBuffer)) {
          ctx->currentDpy = dpy;
@@ -1864,7 +1864,7 @@ glXGetVisualFromFBConfig( Display *dpy, GLXFBConfig config )
 {
    if (dpy && config) {
       XMesaVisual xmvis = (XMesaVisual) config;
-#if 0      
+#if 0
       return xmvis->vishandle;
 #else
       /* create a new vishandle - the cached one may be stale */

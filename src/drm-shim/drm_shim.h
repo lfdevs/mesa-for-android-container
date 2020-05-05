@@ -24,6 +24,8 @@
 #include "util/macros.h"
 #include "util/hash_table.h"
 
+#include <xf86drm.h>
+
 #ifdef __linux__
 #define DRM_MAJOR 226
 #endif
@@ -44,6 +46,7 @@ struct shim_device {
    /* Returned by drmGetVersion(). */
    const char *driver_name;
    int version_major, version_minor, version_patchlevel;
+   int bus_type;
 };
 
 extern struct shim_device shim_device;
@@ -82,3 +85,4 @@ uint64_t drm_shim_bo_get_mmap_offset(struct shim_fd *shim_fd,
 
 /* driver-specific hooks. */
 void drm_shim_driver_init(void);
+extern bool drm_shim_driver_prefers_new_render_node;

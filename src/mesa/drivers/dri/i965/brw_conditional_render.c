@@ -30,7 +30,6 @@
  * (GL_NV_conditional_render, GL_ARB_conditional_render_inverted) on Gen7+.
  */
 
-#include "main/imports.h"
 #include "main/condrender.h"
 
 #include "brw_context.h"

@@ -46,6 +46,7 @@ files_libgallium = files(
   'draw/draw_pipe_stipple.c',
   'draw/draw_pipe_twoside.c',
   'draw/draw_pipe_unfilled.c',
+  'draw/draw_pipe_user_cull.c',
   'draw/draw_pipe_util.c',
   'draw/draw_pipe_validate.c',
   'draw/draw_pipe_vbuf.c',
@@ -70,6 +71,8 @@ files_libgallium = files(
   'draw/draw_pt_vsplit_tmp.h',
   'draw/draw_so_emit_tmp.h',
   'draw/draw_split_tmp.h',
+  'draw/draw_tess.c',
+  'draw/draw_tess.h',
   'draw/draw_vbuf.h',
   'draw/draw_vertex.c',
   'draw/draw_vertex.h',
@@ -236,8 +239,6 @@ files_libgallium = files(
   'util/u_cache.h',
   'util/u_compute.c',
   'util/u_compute.h',
-  'util/u_debug_gallium.h',
-  'util/u_debug_gallium.c',
   'util/u_debug_describe.c',
   'util/u_debug_describe.h',
   'util/u_debug_flush.c',
@@ -246,7 +247,6 @@ files_libgallium = files(
   'util/u_debug_image.h',
   'util/u_debug_refcnt.c',
   'util/u_debug_refcnt.h',
-  'util/u_debug_stack.c',
   'util/u_debug_stack.h',
   'util/u_debug_symbol.c',
   'util/u_debug_symbol.h',
@@ -314,8 +314,6 @@ files_libgallium = files(
   'util/u_suballoc.h',
   'util/u_surface.c',
   'util/u_surface.h',
-  'util/u_surfaces.c',
-  'util/u_surfaces.h',
   'util/u_tests.c',
   'util/u_tests.h',
   'util/u_texture.c',
@@ -340,6 +338,16 @@ files_libgallium = files(
   'nir/nir_draw_helpers.c',
   'nir/nir_draw_helpers.h',
 )
+
+if with_platform_android
+  files_libgallium += files(
+    'util/u_debug_stack_android.cpp',
+  )
+else
+  files_libgallium += files(
+    'util/u_debug_stack.c',
+  )
+endif
 
 if dep_libdrm.found()
   files_libgallium += files(
@@ -423,6 +431,10 @@ if with_llvm
     'draw/draw_llvm_sample.c',
     'draw/draw_pt_fetch_shade_pipeline_llvm.c',
     'draw/draw_vs_llvm.c',
+    'tessellator/tessellator.cpp',
+    'tessellator/tessellator.hpp',
+    'tessellator/p_tessellator.cpp',
+    'tessellator/p_tessellator.h',
     'nir/nir_to_tgsi_info.c',
     'nir/nir_to_tgsi_info.h',
   )

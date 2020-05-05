@@ -49,7 +49,7 @@ libglcpp = static_library(
   'glcpp',
   [glcpp_lex, glcpp_parse, files('glcpp.h', 'pp.c')],
   dependencies : idep_mesautil,
-  include_directories : [inc_common],
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
   c_args : [c_vis_args, no_override_init_args, c_msvc_compat_args, _extra_args],
   cpp_args : [cpp_vis_args, cpp_msvc_compat_args, _extra_args],
   build_by_default : false,
@@ -59,7 +59,7 @@ libglcpp_standalone = static_library(
   'glcpp_standalone',
   'pp_standalone_scaffolding.c',
   link_with : libglcpp,
-  include_directories : [inc_common],
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
   c_args : [c_vis_args, no_override_init_args, c_msvc_compat_args, _extra_args],
   cpp_args : [cpp_vis_args, cpp_msvc_compat_args, _extra_args],
   build_by_default : false,
@@ -69,7 +69,7 @@ glcpp = executable(
   'glcpp',
   'glcpp.c',
   dependencies : [dep_m, idep_getopt],
-  include_directories : [inc_common],
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
   link_with : [libglcpp_standalone, libglsl_util],
   c_args : [c_vis_args, no_override_init_args, c_msvc_compat_args],
   build_by_default : false,
@@ -92,6 +92,7 @@ if with_any_opengl and with_tests and host_machine.system() != 'windows'
         '--@0@'.format(m),
       ],
       suite : ['compiler', 'glcpp'],
+      timeout: 60,
     )
   endforeach
 endif

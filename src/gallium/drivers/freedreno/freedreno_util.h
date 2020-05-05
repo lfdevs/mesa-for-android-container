@@ -69,10 +69,10 @@ enum fd_debug_flag {
 	FD_DBG_NOSCIS       = BITFIELD_BIT(4),
 	FD_DBG_DIRECT       = BITFIELD_BIT(5),
 	FD_DBG_NOBYPASS     = BITFIELD_BIT(6),
-	FD_DBG_FRAGHALF     = BITFIELD_BIT(7),
+	FD_DBG_LOG          = BITFIELD_BIT(7),
 	FD_DBG_NOBIN        = BITFIELD_BIT(8),
 	FD_DBG_NOGMEM       = BITFIELD_BIT(9),
-	FD_DBG_GLSL120      = BITFIELD_BIT(10),
+	/* BIT(10) */
 	FD_DBG_SHADERDB     = BITFIELD_BIT(11),
 	FD_DBG_FLUSH        = BITFIELD_BIT(12),
 	FD_DBG_DEQP         = BITFIELD_BIT(13),
@@ -88,6 +88,8 @@ enum fd_debug_flag {
 	FD_DBG_NOUBWC       = BITFIELD_BIT(23),
 	FD_DBG_NOLRZ        = BITFIELD_BIT(24),
 	FD_DBG_NOTILE       = BITFIELD_BIT(25),
+	FD_DBG_LAYOUT       = BITFIELD_BIT(26),
+	FD_DBG_NOFP16       = BITFIELD_BIT(27),
 };
 
 extern int fd_mesa_debug;

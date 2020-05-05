@@ -64,7 +64,8 @@ LOCAL_STATIC_LIBRARIES += \
 	libpanfrost_decode \
 	libpanfrost_encoder \
 	libpanfrost_midgard \
-	libpanfrost_shared
+	libpanfrost_shared \
+	libpanfrost_util \
 
 ifeq ($(USE_LIBBACKTRACE),true)
 	LOCAL_SHARED_LIBRARIES += libbacktrace

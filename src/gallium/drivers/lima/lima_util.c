@@ -28,12 +28,16 @@
 #include <pipe/p_defines.h>
 
 #include "util/u_debug.h"
+#include "util/u_memory.h"
 
 #include "lima_util.h"
 #include "lima_parser.h"
+#include "lima_screen.h"
 
-FILE *lima_dump_command_stream = NULL;
-int lima_dump_frame_count = 0;
+struct lima_dump {
+   FILE *fp;
+   int id;
+};
 
 bool lima_get_absolute_timeout(uint64_t *timeout)
 {
@@ -53,7 +57,8 @@ bool lima_get_absolute_timeout(uint64_t *timeout)
    return true;
 }
 
-void lima_dump_blob(FILE *fp, void *data, int size, bool is_float)
+static void
+lima_dump_blob(FILE *fp, void *data, int size, bool is_float)
 {
    fprintf(fp, "{\n");
    for (int i = 0; i * 4 < size; i++) {
@@ -74,79 +79,99 @@ void lima_dump_blob(FILE *fp, void *data, int size, bool is_float)
 }
 
 void
-lima_dump_vs_command_stream_print(void *data, int size, uint32_t start)
+lima_dump_vs_command_stream_print(struct lima_dump *dump, void *data,
+                                  int size, uint32_t start)
 {
-   if (lima_dump_command_stream)
-      lima_parse_vs(lima_dump_command_stream, (uint32_t *)data, size, start);
+   if (dump)
+      lima_parse_vs(dump->fp, (uint32_t *)data, size, start);
 }
 
 void
-lima_dump_plbu_command_stream_print(void *data, int size, uint32_t start)
+lima_dump_plbu_command_stream_print(struct lima_dump *dump, void *data,
+                                    int size, uint32_t start)
 {
-   if (lima_dump_command_stream)
-      lima_parse_plbu(lima_dump_command_stream, (uint32_t *)data, size, start);
+   if (dump)
+      lima_parse_plbu(dump->fp, (uint32_t *)data, size, start);
 }
 
 void
-lima_dump_rsw_command_stream_print(void *data, int size, uint32_t start)
+lima_dump_rsw_command_stream_print(struct lima_dump *dump, void *data,
+                                   int size, uint32_t start)
 {
-   if (lima_dump_command_stream)
-      lima_parse_render_state(lima_dump_command_stream, (uint32_t *)data, size, start);
+   if (dump)
+      lima_parse_render_state(dump->fp, (uint32_t *)data, size, start);
 }
 
 void
-lima_dump_texture_descriptor(void *data, int size, uint32_t start, uint32_t offset)
+lima_dump_texture_descriptor(struct lima_dump *dump, void *data,
+                             int size, uint32_t start, uint32_t offset)
 {
-   if (lima_dump_command_stream)
-      lima_parse_texture_descriptor(lima_dump_command_stream, (uint32_t *)data, size, start, offset);
+   if (dump)
+      lima_parse_texture_descriptor(dump->fp, (uint32_t *)data, size, start, offset);
+}
+
+struct lima_dump *
+lima_dump_create(void)
+{
+   static int dump_id = 0;
+
+   if (!(lima_debug & LIMA_DEBUG_DUMP))
+      return NULL;
+
+   struct lima_dump *ret = MALLOC_STRUCT(lima_dump);
+   if (!ret)
+      return NULL;
+
+   ret->id = dump_id++;
+
+   char buffer[PATH_MAX];
+   const char *dump_command = debug_get_option("LIMA_DUMP_FILE", "lima.dump");
+   snprintf(buffer, sizeof(buffer), "%s.staging.%04d", dump_command, ret->id);
+
+   ret->fp = fopen(buffer, "w");
+   if (!ret->fp) {
+      fprintf(stderr, "lima: failed to open command stream log file %s\n", buffer);
+      FREE(ret);
+      return NULL;
+   }
+
+   return ret;
 }
 
 void
-lima_dump_file_open(void)
+lima_dump_free(struct lima_dump *dump)
 {
-   if (lima_dump_command_stream)
+   static int frame_count = 0;
+
+   if (!dump)
       return;
 
-   char buffer[1024];
+   fclose(dump->fp);
+
+   /* we only know the frame count when flush, not on dump create, so first dump to a
+    * stage file, then move to the final file with frame count as surfix when flush.
+    */
+
+   char stage_name[PATH_MAX];
+   char final_name[PATH_MAX];
    const char *dump_command = debug_get_option("LIMA_DUMP_FILE", "lima.dump");
-   snprintf(buffer, sizeof(buffer), "%s.%04d", dump_command, lima_dump_frame_count);
+   snprintf(stage_name, sizeof(stage_name), "%s.staging.%04d", dump_command, dump->id);
+   snprintf(final_name, sizeof(final_name), "%s.%04d", dump_command, frame_count++);
 
-   printf("lima: dump command stream to file %s\n", buffer);
-   lima_dump_command_stream = fopen(buffer, "w");
-   if (!lima_dump_command_stream)
-      fprintf(stderr, "lima: failed to open command stream log file %s\n",
-              buffer);
+   if (rename(stage_name, final_name))
+      fprintf(stderr, "lima: failed to rename log %s to %s\n", stage_name, final_name);
+
+   FREE(dump);
 }
 
 void
-lima_dump_file_close(void)
+_lima_dump_command_stream_print(struct lima_dump *dump, void *data,
+                                int size, bool is_float, const char *fmt, ...)
 {
-   if (lima_dump_command_stream) {
-      fclose(lima_dump_command_stream);
-      lima_dump_command_stream = NULL;
-   }
-}
+   va_list ap;
+   va_start(ap, fmt);
+   vfprintf(dump->fp, fmt, ap);
+   va_end(ap);
 
-void
-lima_dump_file_next(void)
-{
-   if (lima_dump_command_stream) {
-      lima_dump_file_close();
-      lima_dump_frame_count++;
-      lima_dump_file_open();
-   }
-}
-
-void
-lima_dump_command_stream_print(void *data, int size, bool is_float,
-                               const char *fmt, ...)
-{
-   if (lima_dump_command_stream) {
-      va_list ap;
-      va_start(ap, fmt);
-      vfprintf(lima_dump_command_stream, fmt, ap);
-      va_end(ap);
-
-      lima_dump_blob(lima_dump_command_stream, data, size, is_float);
-   }
+   lima_dump_blob(dump->fp, data, size, is_float);
 }

@@ -30,7 +30,7 @@
 
 #include "amdgpu_bo.h"
 #include "util/u_memory.h"
-#include <amdgpu_drm.h>
+#include "drm-uapi/amdgpu_drm.h"
 
 struct amdgpu_ctx {
    struct amdgpu_winsys *ws;

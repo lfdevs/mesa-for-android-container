@@ -469,6 +469,9 @@ bool gpir_compile_nir(struct lima_vs_shader_state *prog, struct nir_shader *nir,
    /* increase for viewport uniforms */
    comp->constant_base += GPIR_VECTOR_SSA_NUM;
 
+   if (!gpir_optimize(comp))
+      goto err_out0;
+
    if (!gpir_pre_rsched_lower_prog(comp))
       goto err_out0;
 

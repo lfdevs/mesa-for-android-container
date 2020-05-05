@@ -8,15 +8,16 @@
 
 <category name="GL_ARB_draw_instanced" number="44">
 
-  <function name="DrawArraysInstancedARB" exec="dynamic" marshal="draw">
+  <function name="DrawArraysInstancedARB" marshal="draw"
+            marshal_sync="_mesa_glthread_has_non_vbo_vertices(ctx)">
     <param name="mode" type="GLenum"/>
     <param name="first" type="GLint"/>
     <param name="count" type="GLsizei"/>
     <param name="primcount" type="GLsizei"/>
   </function>
 
-  <function name="DrawElementsInstancedARB" exec="dynamic" marshal="draw"
-            marshal_fail="_mesa_glthread_is_non_vbo_draw_elements(ctx)">
+  <function name="DrawElementsInstancedARB" marshal="draw"
+            marshal_sync="_mesa_glthread_has_non_vbo_vertices_or_indices(ctx)">
     <param name="mode" type="GLenum"/>
     <param name="count" type="GLsizei"/>
     <param name="type" type="GLenum"/>

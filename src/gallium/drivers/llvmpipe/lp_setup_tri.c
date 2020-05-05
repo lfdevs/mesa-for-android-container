@@ -273,7 +273,7 @@ do_triangle_ccw(struct lp_setup_context *setup,
    const struct lp_setup_variant_key *key = &setup->setup.variant->key;
    struct lp_rast_triangle *tri;
    struct lp_rast_plane *plane;
-   const struct u_rect *scissor;
+   const struct u_rect *scissor = NULL;
    struct u_rect bbox, bboxpos;
    boolean s_planes[4];
    unsigned tri_bytes;

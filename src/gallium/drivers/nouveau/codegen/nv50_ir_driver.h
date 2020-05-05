@@ -177,6 +177,7 @@ struct nv50_ir_prog_info
       uint8_t globalAccess;      /* 1 for read, 2 for wr, 3 for rw */
       bool fp64;                 /* program uses fp64 math */
       bool mul_zero_wins;        /* program wants for x*0 = 0 */
+      bool layer_viewport_relative;
       bool nv50styleSurfaces;    /* generate gX[] access for raw buffers */
       uint16_t texBindBase;      /* base address for tex handles (nve4) */
       uint16_t fbtexBindBase;    /* base address for fbtex handle (nve4) */

@@ -438,7 +438,6 @@ struct pipe_video_codec *rvce_create_encoder(struct pipe_context *context,
 	}
 
 	templat.buffer_format = PIPE_FORMAT_NV12;
-	templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
 	templat.width = enc->base.width;
 	templat.height = enc->base.height;
 	templat.interlaced = false;

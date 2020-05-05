@@ -347,6 +347,7 @@ static INLINE void InitLoadTileDepthTable(PFN_LOAD_TILES(&table)[NUM_SWR_FORMATS
 void SwrLoadHotTile(
         HANDLE hWorkerPrivateData,
         const SWR_SURFACE_STATE *pSrcSurface,
+        BucketManager* pBucketMgr,
         SWR_FORMAT dstFormat,
         SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
         uint32_t x, uint32_t y, uint32_t renderTargetArrayIndex,

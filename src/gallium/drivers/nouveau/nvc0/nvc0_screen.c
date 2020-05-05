@@ -75,14 +75,12 @@ nvc0_screen_is_format_supported(struct pipe_screen *pscreen,
           sample_count > 1)
          return false;
 
-   /* Restrict ETC2 and ASTC formats here. These are only supported on GK20A.
+   /* Restrict ETC2 and ASTC formats here. These are only supported on GK20A
+    * and GM20B.
     */
    if ((desc->layout == UTIL_FORMAT_LAYOUT_ETC ||
         desc->layout == UTIL_FORMAT_LAYOUT_ASTC) &&
-       /* The claim is that this should work on GM107 but it doesn't. Need to
-        * test further and figure out if it's a nouveau issue or a HW one.
-       nouveau_screen(pscreen)->class_3d < GM107_3D_CLASS &&
-        */
+       nouveau_screen(pscreen)->device->chipset != 0x12b &&
        nouveau_screen(pscreen)->class_3d != NVEA_3D_CLASS)
       return false;
 
@@ -192,11 +190,16 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
        * COLOR, etc. here.
        */
       return 0x1f0 / 16;
+   case PIPE_CAP_MAX_VERTEX_BUFFERS:
+      return 16;
+   case PIPE_CAP_GL_BEGIN_END_BUFFER_SIZE:
+      return 512 * 1024; /* TODO: Investigate tuning this */
 
    /* supported caps */
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE:
    case PIPE_CAP_TEXTURE_SWIZZLE:
+   case PIPE_CAP_TEXTURE_SHADOW_MAP:
    case PIPE_CAP_NPOT_TEXTURES:
    case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
    case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
@@ -283,6 +286,15 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TGSI_ATOMINC_WRAP:
    case PIPE_CAP_DEMOTE_TO_HELPER_INVOCATION:
    case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
+   case PIPE_CAP_PREFER_IMM_ARRAYS_AS_CONSTBUF:
+   case PIPE_CAP_FLATSHADE:
+   case PIPE_CAP_ALPHA_TEST:
+   case PIPE_CAP_POINT_SIZE_FIXED:
+   case PIPE_CAP_TWO_SIDED_COLOR:
+   case PIPE_CAP_CLIP_PLANES:
+   case PIPE_CAP_TEXTURE_SHADOW_LOD:
+   case PIPE_CAP_PACKED_STREAM_OUTPUT:
+   case PIPE_CAP_DRAW_INFO_START_WITH_USER_INDICES:
       return 1;
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return nouveau_screen(pscreen)->vram_domain & NOUVEAU_BO_VRAM ? 1 : 0;
@@ -303,6 +315,8 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_POINTS_LINES:
    case PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE:
    case PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS:
+   case PIPE_CAP_VIEWPORT_SWIZZLE:
+   case PIPE_CAP_VIEWPORT_MASK:
       return class_3d >= GM200_3D_CLASS;
    case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_TRIANGLES:
       return class_3d >= GP100_3D_CLASS;
@@ -325,6 +339,7 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_VERTEXID_NOBASE:
    case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
    case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
+   case PIPE_CAP_TGSI_FS_POINT_IS_SYSVAL:
    case PIPE_CAP_GENERATE_MIPMAP:
    case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
    case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
@@ -366,6 +381,14 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_CS_DERIVED_SYSTEM_VALUES_SUPPORTED:
    case PIPE_CAP_FBFETCH_COHERENT:
    case PIPE_CAP_TGSI_SKIP_SHRINK_IO_ARRAYS:
+   case PIPE_CAP_TGSI_TG4_COMPONENT_IN_SWIZZLE:
+   case PIPE_CAP_OPENCL_INTEGER_FUNCTIONS: /* could be done */
+   case PIPE_CAP_INTEGER_MULTIPLY_32X16: /* could be done */
+   case PIPE_CAP_FRONTEND_NOOP:
+   case PIPE_CAP_GL_SPIRV:
+   case PIPE_CAP_SHADER_SAMPLES_IDENTICAL:
+   case PIPE_CAP_VIEWPORT_TRANSFORM_LOWERED:
+   case PIPE_CAP_PSIZ_CLAMPED:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:

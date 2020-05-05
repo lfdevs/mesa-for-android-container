@@ -27,6 +27,7 @@
 #include "util/u_inlines.h"
 #include "util/u_helpers.h"
 #include "util/u_debug.h"
+#include "util/u_framebuffer.h"
 
 #include "pipe/p_state.h"
 
@@ -40,53 +41,15 @@ lima_set_framebuffer_state(struct pipe_context *pctx,
 {
    struct lima_context *ctx = lima_context(pctx);
 
-   /* submit need framebuffer info, flush before change it */
-   lima_flush(ctx);
+   /* make sure there are always single job in this context */
+   if (lima_debug & LIMA_DEBUG_SINGLE_JOB)
+      lima_flush(ctx);
 
    struct lima_context_framebuffer *fb = &ctx->framebuffer;
 
-   fb->base.samples = framebuffer->samples;
+   util_copy_framebuffer_state(&fb->base, framebuffer);
 
-   fb->base.nr_cbufs = framebuffer->nr_cbufs;
-   pipe_surface_reference(&fb->base.cbufs[0], framebuffer->cbufs[0]);
-   pipe_surface_reference(&fb->base.zsbuf, framebuffer->zsbuf);
-
-   /* need align here? */
-   fb->base.width = framebuffer->width;
-   fb->base.height = framebuffer->height;
-
-   int width = align(framebuffer->width, 16) >> 4;
-   int height = align(framebuffer->height, 16) >> 4;
-   if (fb->tiled_w != width || fb->tiled_h != height) {
-      struct lima_screen *screen = lima_screen(ctx->base.screen);
-
-      fb->tiled_w = width;
-      fb->tiled_h = height;
-
-      fb->shift_h = 0;
-      fb->shift_w = 0;
-
-      int limit = screen->plb_max_blk;
-      while ((width * height) > limit) {
-         if (width >= height) {
-            width = (width + 1) >> 1;
-            fb->shift_w++;
-         } else {
-            height = (height + 1) >> 1;
-            fb->shift_h++;
-         }
-      }
-
-      fb->block_w = width;
-      fb->block_h = height;
-
-      fb->shift_min = MIN3(fb->shift_w, fb->shift_h, 2);
-
-      debug_printf("fb dim change tiled=%d/%d block=%d/%d shift=%d/%d/%d\n",
-                   fb->tiled_w, fb->tiled_h, fb->block_w, fb->block_h,
-                   fb->shift_w, fb->shift_h, fb->shift_min);
-   }
-
+   ctx->job = NULL;
    ctx->dirty |= LIMA_CONTEXT_DIRTY_FRAMEBUFFER;
 }
 

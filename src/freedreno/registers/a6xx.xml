@@ -7,233 +7,141 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 <import file="adreno/adreno_pm4.xml"/>
 
 <!-- these might be same as a5xx -->
-<enum name="a6xx_color_fmt">
-	<value value="0x02" name="RB6_A8_UNORM"/>
-	<value value="0x03" name="RB6_R8_UNORM"/>
-	<value value="0x04" name="RB6_R8_SNORM"/>
-	<value value="0x05" name="RB6_R8_UINT"/>
-	<value value="0x06" name="RB6_R8_SINT"/>
-	<value value="0x08" name="RB6_R4G4B4A4_UNORM"/>
-	<value value="0x0a" name="RB6_R5G5B5A1_UNORM"/>
-	<value value="0x0e" name="RB6_R5G6B5_UNORM"/>
-	<value value="0x0f" name="RB6_R8G8_UNORM"/>
-	<value value="0x10" name="RB6_R8G8_SNORM"/>
-	<value value="0x11" name="RB6_R8G8_UINT"/>
-	<value value="0x12" name="RB6_R8G8_SINT"/>
-	<value value="0x15" name="RB6_R16_UNORM"/>
-	<value value="0x16" name="RB6_R16_SNORM"/>
-	<value value="0x17" name="RB6_R16_FLOAT"/>
-	<value value="0x18" name="RB6_R16_UINT"/>
-	<value value="0x19" name="RB6_R16_SINT"/>
-	<value value="0x30" name="RB6_R8G8B8A8_UNORM"/>
-	<value value="0x31" name="RB6_R8G8B8X8_UNORM"/> <!-- 32 bpp format, samples 1 for alpha -->
-	<value value="0x32" name="RB6_R8G8B8A8_SNORM"/>
-	<value value="0x33" name="RB6_R8G8B8A8_UINT"/>
-	<value value="0x34" name="RB6_R8G8B8A8_SINT"/>
-	<value value="0x36" name="RB6_R10G10B10A2_FLOAT16"/>  <!-- float16 for 2d blit? -->
-	<value value="0x37" name="RB6_R10G10B10A2_UNORM"/>  <!-- GL_RGB10_A2 -->
-	<value value="0x3a" name="RB6_R10G10B10A2_UINT"/>   <!-- GL_RGB10_A2UI -->
-	<value value="0x42" name="RB6_R11G11B10_FLOAT"/>    <!-- GL_R11F_G11F_B10F -->
-	<value value="0x43" name="RB6_R16G16_UNORM"/>
-	<value value="0x44" name="RB6_R16G16_SNORM"/>
-	<value value="0x45" name="RB6_R16G16_FLOAT"/>
-	<value value="0x46" name="RB6_R16G16_UINT"/>
-	<value value="0x47" name="RB6_R16G16_SINT"/>
-	<value value="0x4a" name="RB6_R32_FLOAT"/>
-	<value value="0x4b" name="RB6_R32_UINT"/>
-	<value value="0x4c" name="RB6_R32_SINT"/>
-	<value value="0x60" name="RB6_R16G16B16A16_UNORM"/>
-	<value value="0x61" name="RB6_R16G16B16A16_SNORM"/>
-	<value value="0x62" name="RB6_R16G16B16A16_FLOAT"/>
-	<value value="0x63" name="RB6_R16G16B16A16_UINT"/>
-	<value value="0x64" name="RB6_R16G16B16A16_SINT"/>
-	<value value="0x67" name="RB6_R32G32_FLOAT"/>
-	<value value="0x68" name="RB6_R32G32_UINT"/>
-	<value value="0x69" name="RB6_R32G32_SINT"/>
-	<value value="0x82" name="RB6_R32G32B32A32_FLOAT"/>
-	<value value="0x83" name="RB6_R32G32B32A32_UINT"/>
-	<value value="0x84" name="RB6_R32G32B32A32_SINT"/>
-	<value value="0x91" name="RB6_Z24_UNORM_S8_UINT_AS_R8G8B8A8"/>
-	<value value="0xa0" name="RB6_Z24_UNORM_S8_UINT"/>
-</enum>
-
-<!-- these might be same as a5xx -->
 <enum name="a6xx_tile_mode">
 	<value name="TILE6_LINEAR" value="0"/>
 	<value name="TILE6_2" value="2"/>
 	<value name="TILE6_3" value="3"/>
 </enum>
 
-<!-- these might be same as a5xx -->
-<enum name="a6xx_vtx_fmt" prefix="chipset">
-	<value value="0x03" name="VFMT6_8_UNORM"/>
-	<value value="0x04" name="VFMT6_8_SNORM"/>
-	<value value="0x05" name="VFMT6_8_UINT"/>
-	<value value="0x06" name="VFMT6_8_SINT"/>
+<enum name="a6xx_format">
+	<value value="0x02" name="FMT6_A8_UNORM"/>
+	<value value="0x03" name="FMT6_8_UNORM"/>
+	<value value="0x04" name="FMT6_8_SNORM"/>
+	<value value="0x05" name="FMT6_8_UINT"/>
+	<value value="0x06" name="FMT6_8_SINT"/>
 
-	<value value="0x0f" name="VFMT6_8_8_UNORM"/>
-	<value value="0x10" name="VFMT6_8_8_SNORM"/>
-	<value value="0x11" name="VFMT6_8_8_UINT"/>
-	<value value="0x12" name="VFMT6_8_8_SINT"/>
+	<value value="0x08" name="FMT6_4_4_4_4_UNORM"/>
+	<value value="0x0a" name="FMT6_5_5_5_1_UNORM"/>
+	<value value="0x0c" name="FMT6_1_5_5_5_UNORM"/> <!-- read only -->
+	<value value="0x0e" name="FMT6_5_6_5_UNORM"/>
 
-	<value value="0x15" name="VFMT6_16_UNORM"/>
-	<value value="0x16" name="VFMT6_16_SNORM"/>
-	<value value="0x17" name="VFMT6_16_FLOAT"/>
-	<value value="0x18" name="VFMT6_16_UINT"/>
-	<value value="0x19" name="VFMT6_16_SINT"/>
+	<value value="0x0f" name="FMT6_8_8_UNORM"/>
+	<value value="0x10" name="FMT6_8_8_SNORM"/>
+	<value value="0x11" name="FMT6_8_8_UINT"/>
+	<value value="0x12" name="FMT6_8_8_SINT"/>
+	<value value="0x13" name="FMT6_L8_A8_UNORM"/>
 
-	<value value="0x21" name="VFMT6_8_8_8_UNORM"/>
-	<value value="0x22" name="VFMT6_8_8_8_SNORM"/>
-	<value value="0x23" name="VFMT6_8_8_8_UINT"/>
-	<value value="0x24" name="VFMT6_8_8_8_SINT"/>
+	<value value="0x15" name="FMT6_16_UNORM"/>
+	<value value="0x16" name="FMT6_16_SNORM"/>
+	<value value="0x17" name="FMT6_16_FLOAT"/>
+	<value value="0x18" name="FMT6_16_UINT"/>
+	<value value="0x19" name="FMT6_16_SINT"/>
 
-	<value value="0x30" name="VFMT6_8_8_8_8_UNORM"/>
-	<value value="0x32" name="VFMT6_8_8_8_8_SNORM"/>
-	<value value="0x33" name="VFMT6_8_8_8_8_UINT"/>
-	<value value="0x34" name="VFMT6_8_8_8_8_SINT"/>
+	<value value="0x21" name="FMT6_8_8_8_UNORM"/>
+	<value value="0x22" name="FMT6_8_8_8_SNORM"/>
+	<value value="0x23" name="FMT6_8_8_8_UINT"/>
+	<value value="0x24" name="FMT6_8_8_8_SINT"/>
 
-	<value value="0x36" name="VFMT6_10_10_10_2_UNORM"/>
-	<value value="0x39" name="VFMT6_10_10_10_2_SNORM"/>
-	<value value="0x3a" name="VFMT6_10_10_10_2_UINT"/>
-	<value value="0x3b" name="VFMT6_10_10_10_2_SINT"/>
+	<value value="0x30" name="FMT6_8_8_8_8_UNORM"/>
+	<value value="0x31" name="FMT6_8_8_8_X8_UNORM"/> <!-- samples 1 for alpha -->
+	<value value="0x32" name="FMT6_8_8_8_8_SNORM"/>
+	<value value="0x33" name="FMT6_8_8_8_8_UINT"/>
+	<value value="0x34" name="FMT6_8_8_8_8_SINT"/>
 
-	<value value="0x42" name="VFMT6_11_11_10_FLOAT"/>
+	<value value="0x35" name="FMT6_9_9_9_E5_FLOAT"/>
 
-	<value value="0x43" name="VFMT6_16_16_UNORM"/>
-	<value value="0x44" name="VFMT6_16_16_SNORM"/>
-	<value value="0x45" name="VFMT6_16_16_FLOAT"/>
-	<value value="0x46" name="VFMT6_16_16_UINT"/>
-	<value value="0x47" name="VFMT6_16_16_SINT"/>
+	<value value="0x36" name="FMT6_10_10_10_2_UNORM"/>
+	<value value="0x37" name="FMT6_10_10_10_2_UNORM_DEST"/>
+	<value value="0x39" name="FMT6_10_10_10_2_SNORM"/>
+	<value value="0x3a" name="FMT6_10_10_10_2_UINT"/>
+	<value value="0x3b" name="FMT6_10_10_10_2_SINT"/>
 
-	<value value="0x48" name="VFMT6_32_UNORM"/>
-	<value value="0x49" name="VFMT6_32_SNORM"/>
-	<value value="0x4a" name="VFMT6_32_FLOAT"/>
-	<value value="0x4b" name="VFMT6_32_UINT"/>
-	<value value="0x4c" name="VFMT6_32_SINT"/>
-	<value value="0x4d" name="VFMT6_32_FIXED"/>
+	<value value="0x42" name="FMT6_11_11_10_FLOAT"/>
 
-	<value value="0x58" name="VFMT6_16_16_16_UNORM"/>
-	<value value="0x59" name="VFMT6_16_16_16_SNORM"/>
-	<value value="0x5a" name="VFMT6_16_16_16_FLOAT"/>
-	<value value="0x5b" name="VFMT6_16_16_16_UINT"/>
-	<value value="0x5c" name="VFMT6_16_16_16_SINT"/>
+	<value value="0x43" name="FMT6_16_16_UNORM"/>
+	<value value="0x44" name="FMT6_16_16_SNORM"/>
+	<value value="0x45" name="FMT6_16_16_FLOAT"/>
+	<value value="0x46" name="FMT6_16_16_UINT"/>
+	<value value="0x47" name="FMT6_16_16_SINT"/>
 
-	<value value="0x60" name="VFMT6_16_16_16_16_UNORM"/>
-	<value value="0x61" name="VFMT6_16_16_16_16_SNORM"/>
-	<value value="0x62" name="VFMT6_16_16_16_16_FLOAT"/>
-	<value value="0x63" name="VFMT6_16_16_16_16_UINT"/>
-	<value value="0x64" name="VFMT6_16_16_16_16_SINT"/>
+	<value value="0x48" name="FMT6_32_UNORM"/>
+	<value value="0x49" name="FMT6_32_SNORM"/>
+	<value value="0x4a" name="FMT6_32_FLOAT"/>
+	<value value="0x4b" name="FMT6_32_UINT"/>
+	<value value="0x4c" name="FMT6_32_SINT"/>
+	<value value="0x4d" name="FMT6_32_FIXED"/>
 
-	<value value="0x65" name="VFMT6_32_32_UNORM"/>
-	<value value="0x66" name="VFMT6_32_32_SNORM"/>
-	<value value="0x67" name="VFMT6_32_32_FLOAT"/>
-	<value value="0x68" name="VFMT6_32_32_UINT"/>
-	<value value="0x69" name="VFMT6_32_32_SINT"/>
-	<value value="0x6a" name="VFMT6_32_32_FIXED"/>
+	<value value="0x58" name="FMT6_16_16_16_UNORM"/>
+	<value value="0x59" name="FMT6_16_16_16_SNORM"/>
+	<value value="0x5a" name="FMT6_16_16_16_FLOAT"/>
+	<value value="0x5b" name="FMT6_16_16_16_UINT"/>
+	<value value="0x5c" name="FMT6_16_16_16_SINT"/>
 
-	<value value="0x70" name="VFMT6_32_32_32_UNORM"/>
-	<value value="0x71" name="VFMT6_32_32_32_SNORM"/>
-	<value value="0x72" name="VFMT6_32_32_32_UINT"/>
-	<value value="0x73" name="VFMT6_32_32_32_SINT"/>
-	<value value="0x74" name="VFMT6_32_32_32_FLOAT"/>
-	<value value="0x75" name="VFMT6_32_32_32_FIXED"/>
+	<value value="0x60" name="FMT6_16_16_16_16_UNORM"/>
+	<value value="0x61" name="FMT6_16_16_16_16_SNORM"/>
+	<value value="0x62" name="FMT6_16_16_16_16_FLOAT"/>
+	<value value="0x63" name="FMT6_16_16_16_16_UINT"/>
+	<value value="0x64" name="FMT6_16_16_16_16_SINT"/>
 
-	<value value="0x80" name="VFMT6_32_32_32_32_UNORM"/>
-	<value value="0x81" name="VFMT6_32_32_32_32_SNORM"/>
-	<value value="0x82" name="VFMT6_32_32_32_32_FLOAT"/>
-	<value value="0x83" name="VFMT6_32_32_32_32_UINT"/>
-	<value value="0x84" name="VFMT6_32_32_32_32_SINT"/>
-	<value value="0x85" name="VFMT6_32_32_32_32_FIXED"/>
-</enum>
+	<value value="0x65" name="FMT6_32_32_UNORM"/>
+	<value value="0x66" name="FMT6_32_32_SNORM"/>
+	<value value="0x67" name="FMT6_32_32_FLOAT"/>
+	<value value="0x68" name="FMT6_32_32_UINT"/>
+	<value value="0x69" name="FMT6_32_32_SINT"/>
+	<value value="0x6a" name="FMT6_32_32_FIXED"/>
 
-<enum name="a6xx_tex_fmt">
-	<value value="0x02" name="TFMT6_A8_UNORM"/>
-	<value value="0x03" name="TFMT6_8_UNORM"/>
-	<value value="0x04" name="TFMT6_8_SNORM"/>
-	<value value="0x05" name="TFMT6_8_UINT"/>
-	<value value="0x06" name="TFMT6_8_SINT"/>
-	<value value="0x08" name="TFMT6_4_4_4_4_UNORM"/>
-	<value value="0x0a" name="TFMT6_5_5_5_1_UNORM"/>
-	<value value="0x0e" name="TFMT6_5_6_5_UNORM"/>
-	<value value="0x0f" name="TFMT6_8_8_UNORM"/>
-	<value value="0x10" name="TFMT6_8_8_SNORM"/>
-	<value value="0x11" name="TFMT6_8_8_UINT"/>
-	<value value="0x12" name="TFMT6_8_8_SINT"/>
-	<value value="0x13" name="TFMT6_L8_A8_UNORM"/>
-	<value value="0x15" name="TFMT6_16_UNORM"/>
-	<value value="0x16" name="TFMT6_16_SNORM"/>
-	<value value="0x17" name="TFMT6_16_FLOAT"/>
-	<value value="0x18" name="TFMT6_16_UINT"/>
-	<value value="0x19" name="TFMT6_16_SINT"/>
-	<value value="0x30" name="TFMT6_8_8_8_8_UNORM"/>
-	<value value="0x31" name="TFMT6_8_8_8_UNORM"/>
-	<value value="0x32" name="TFMT6_8_8_8_8_SNORM"/>
-	<value value="0x33" name="TFMT6_8_8_8_8_UINT"/>
-	<value value="0x34" name="TFMT6_8_8_8_8_SINT"/>
-	<value value="0x35" name="TFMT6_9_9_9_E5_FLOAT"/>
-	<value value="0x36" name="TFMT6_10_10_10_2_UNORM"/>
-	<value value="0x3a" name="TFMT6_10_10_10_2_UINT"/>
-	<value value="0x42" name="TFMT6_11_11_10_FLOAT"/>
-	<value value="0x43" name="TFMT6_16_16_UNORM"/>
-	<value value="0x44" name="TFMT6_16_16_SNORM"/>
-	<value value="0x45" name="TFMT6_16_16_FLOAT"/>
-	<value value="0x46" name="TFMT6_16_16_UINT"/>
-	<value value="0x47" name="TFMT6_16_16_SINT"/>
-	<value value="0x4a" name="TFMT6_32_FLOAT"/>
-	<value value="0x4b" name="TFMT6_32_UINT"/>
-	<value value="0x4c" name="TFMT6_32_SINT"/>
-	<value value="0x60" name="TFMT6_16_16_16_16_UNORM"/>
-	<value value="0x61" name="TFMT6_16_16_16_16_SNORM"/>
-	<value value="0x62" name="TFMT6_16_16_16_16_FLOAT"/>
-	<value value="0x63" name="TFMT6_16_16_16_16_UINT"/>
-	<value value="0x64" name="TFMT6_16_16_16_16_SINT"/>
-	<value value="0x67" name="TFMT6_32_32_FLOAT"/>
-	<value value="0x68" name="TFMT6_32_32_UINT"/>
-	<value value="0x69" name="TFMT6_32_32_SINT"/>
-	<value value="0x72" name="TFMT6_32_32_32_UINT"/>
-	<value value="0x73" name="TFMT6_32_32_32_SINT"/>
-	<value value="0x74" name="TFMT6_32_32_32_FLOAT"/>
-	<value value="0x82" name="TFMT6_32_32_32_32_FLOAT"/>
-	<value value="0x83" name="TFMT6_32_32_32_32_UINT"/>
-	<value value="0x84" name="TFMT6_32_32_32_32_SINT"/>
-	<value value="0x91" name="TFMT6_Z24_UNORM_S8_UINT"/>
-	<value value="0xa0" name="TFMT6_X8Z24_UNORM"/>
+	<value value="0x70" name="FMT6_32_32_32_UNORM"/>
+	<value value="0x71" name="FMT6_32_32_32_SNORM"/>
+	<value value="0x72" name="FMT6_32_32_32_UINT"/>
+	<value value="0x73" name="FMT6_32_32_32_SINT"/>
+	<value value="0x74" name="FMT6_32_32_32_FLOAT"/>
+	<value value="0x75" name="FMT6_32_32_32_FIXED"/>
 
-	<value value="0xab" name="TFMT6_ETC2_RG11_UNORM"/>
-	<value value="0xac" name="TFMT6_ETC2_RG11_SNORM"/>
-	<value value="0xad" name="TFMT6_ETC2_R11_UNORM"/>
-	<value value="0xae" name="TFMT6_ETC2_R11_SNORM"/>
-	<value value="0xaf" name="TFMT6_ETC1"/>
-	<value value="0xb0" name="TFMT6_ETC2_RGB8"/>
-	<value value="0xb1" name="TFMT6_ETC2_RGBA8"/>
-	<value value="0xb2" name="TFMT6_ETC2_RGB8A1"/>
-	<value value="0xb3" name="TFMT6_DXT1"/>
-	<value value="0xb4" name="TFMT6_DXT3"/>
-	<value value="0xb5" name="TFMT6_DXT5"/>
-	<value value="0xb7" name="TFMT6_RGTC1_UNORM"/>
-	<value value="0xb8" name="TFMT6_RGTC1_SNORM"/>
-	<value value="0xbb" name="TFMT6_RGTC2_UNORM"/>
-	<value value="0xbc" name="TFMT6_RGTC2_SNORM"/>
-	<value value="0xbe" name="TFMT6_BPTC_UFLOAT"/>
-	<value value="0xbf" name="TFMT6_BPTC_FLOAT"/>
-	<value value="0xc0" name="TFMT6_BPTC"/>
-	<value value="0xc1" name="TFMT6_ASTC_4x4"/>
-	<value value="0xc2" name="TFMT6_ASTC_5x4"/>
-	<value value="0xc3" name="TFMT6_ASTC_5x5"/>
-	<value value="0xc4" name="TFMT6_ASTC_6x5"/>
-	<value value="0xc5" name="TFMT6_ASTC_6x6"/>
-	<value value="0xc6" name="TFMT6_ASTC_8x5"/>
-	<value value="0xc7" name="TFMT6_ASTC_8x6"/>
-	<value value="0xc8" name="TFMT6_ASTC_8x8"/>
-	<value value="0xc9" name="TFMT6_ASTC_10x5"/>
-	<value value="0xca" name="TFMT6_ASTC_10x6"/>
-	<value value="0xcb" name="TFMT6_ASTC_10x8"/>
-	<value value="0xcc" name="TFMT6_ASTC_10x10"/>
-	<value value="0xcd" name="TFMT6_ASTC_12x10"/>
-	<value value="0xce" name="TFMT6_ASTC_12x12"/>
+	<value value="0x80" name="FMT6_32_32_32_32_UNORM"/>
+	<value value="0x81" name="FMT6_32_32_32_32_SNORM"/>
+	<value value="0x82" name="FMT6_32_32_32_32_FLOAT"/>
+	<value value="0x83" name="FMT6_32_32_32_32_UINT"/>
+	<value value="0x84" name="FMT6_32_32_32_32_SINT"/>
+	<value value="0x85" name="FMT6_32_32_32_32_FIXED"/>
+
+	<value value="0x91" name="FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8"/>
+	<value value="0xa0" name="FMT6_Z24_UNORM_S8_UINT"/>
+
+	<value value="0xab" name="FMT6_ETC2_RG11_UNORM"/>
+	<value value="0xac" name="FMT6_ETC2_RG11_SNORM"/>
+	<value value="0xad" name="FMT6_ETC2_R11_UNORM"/>
+	<value value="0xae" name="FMT6_ETC2_R11_SNORM"/>
+	<value value="0xaf" name="FMT6_ETC1"/>
+	<value value="0xb0" name="FMT6_ETC2_RGB8"/>
+	<value value="0xb1" name="FMT6_ETC2_RGBA8"/>
+	<value value="0xb2" name="FMT6_ETC2_RGB8A1"/>
+	<value value="0xb3" name="FMT6_DXT1"/>
+	<value value="0xb4" name="FMT6_DXT3"/>
+	<value value="0xb5" name="FMT6_DXT5"/>
+	<value value="0xb7" name="FMT6_RGTC1_UNORM"/>
+	<value value="0xb8" name="FMT6_RGTC1_SNORM"/>
+	<value value="0xbb" name="FMT6_RGTC2_UNORM"/>
+	<value value="0xbc" name="FMT6_RGTC2_SNORM"/>
+	<value value="0xbe" name="FMT6_BPTC_UFLOAT"/>
+	<value value="0xbf" name="FMT6_BPTC_FLOAT"/>
+	<value value="0xc0" name="FMT6_BPTC"/>
+	<value value="0xc1" name="FMT6_ASTC_4x4"/>
+	<value value="0xc2" name="FMT6_ASTC_5x4"/>
+	<value value="0xc3" name="FMT6_ASTC_5x5"/>
+	<value value="0xc4" name="FMT6_ASTC_6x5"/>
+	<value value="0xc5" name="FMT6_ASTC_6x6"/>
+	<value value="0xc6" name="FMT6_ASTC_8x5"/>
+	<value value="0xc7" name="FMT6_ASTC_8x6"/>
+	<value value="0xc8" name="FMT6_ASTC_8x8"/>
+	<value value="0xc9" name="FMT6_ASTC_10x5"/>
+	<value value="0xca" name="FMT6_ASTC_10x6"/>
+	<value value="0xcb" name="FMT6_ASTC_10x8"/>
+	<value value="0xcc" name="FMT6_ASTC_10x10"/>
+	<value value="0xcd" name="FMT6_ASTC_12x10"/>
+	<value value="0xce" name="FMT6_ASTC_12x12"/>
 
 	<!-- same as X8Z24_UNORM but for sampling stencil (integer, 2nd channel) -->
-	<value value="0xea" name="TFMT6_S8Z24_UINT"/>
+	<value value="0xea" name="FMT6_S8Z24_UINT"/>
 </enum>
 
 <enum name="a6xx_tex_fetchsize">
@@ -1014,14 +922,47 @@ to upconvert to 32b float internally?
 	<reg32 offset="0x0806" name="CP_RB_RPTR"/>
 	<reg32 offset="0x0807" name="CP_RB_WPTR"/>
 	<reg32 offset="0x0808" name="CP_SQE_CNTL"/>
+	<reg32 offset="0x0812" name="CP_CP2GMU_STATUS">
+		<bitfield name="IFPC" pos="0" type="boolean"/>
+	</reg32>
 	<reg32 offset="0x0821" name="CP_HW_FAULT"/>
 	<reg32 offset="0x0823" name="CP_INTERRUPT_STATUS"/>
 	<reg32 offset="0x0824" name="CP_PROTECT_STATUS"/>
 	<reg32 offset="0x0830" name="CP_SQE_INSTR_BASE_LO"/>
 	<reg32 offset="0x0831" name="CP_SQE_INSTR_BASE_HI"/>
 	<reg32 offset="0x0840" name="CP_MISC_CNTL"/>
-	<reg32 offset="0x08C1" name="CP_ROQ_THRESHOLDS_1"/>
-	<reg32 offset="0x08C2" name="CP_ROQ_THRESHOLDS_2"/>
+	<!-- all the threshold values seem to be in units of quad-dwords: -->
+	<reg32 offset="0x08C1" name="CP_ROQ_THRESHOLDS_1">
+		<doc>
+			b0..7 seems to contain the size of buffered by not yet processed
+			RB level cmdstream.. it's possible that it is a low threshold
+			and b8..15 is a high threshold?
+
+			b16..23 identifies where IB1 data starts (and RB data ends?)
+
+			b24..31 identifies where IB2 data starts (and IB1 data ends)
+		</doc>
+		<bitfield name="RB_LO" low="0" high="7" shr="2"/>
+		<bitfield name="RB_HI" low="8" high="15" shr="2"/>
+		<bitfield name="IB1_START" low="16" high="23" shr="2"/>
+		<bitfield name="IB2_START" low="24" high="31" shr="2"/>
+	</reg32>
+	<reg32 offset="0x08C2" name="CP_ROQ_THRESHOLDS_2">
+		<doc>
+			low bits identify where CP_SET_DRAW_STATE stateobj
+			processing starts (and IB2 data ends). I'm guessing
+			b8 is part of this since (from downstream kgsl):
+
+				/* ROQ sizes are twice as big on a640/a680 than on a630 */
+				if (adreno_is_a640(adreno_dev) || adreno_is_a680(adreno_dev)) {
+					kgsl_regwrite(device, A6XX_CP_ROQ_THRESHOLDS_2, 0x02000140);
+					kgsl_regwrite(device, A6XX_CP_ROQ_THRESHOLDS_1, 0x8040362C);
+				} ...
+		</doc>
+		<bitfield name="SDS_START" low="0" high="8" shr="2"/>
+		<!-- total ROQ size: -->
+		<bitfield name="ROQ_SIZE" low="16" high="31" shr="2"/>
+	</reg32>
 	<reg32 offset="0x08C3" name="CP_MEM_POOL_SIZE"/>
 	<reg32 offset="0x0841" name="CP_CHICKEN_DBG"/>
 	<reg32 offset="0x0842" name="CP_ADDR_MODE_CNTL"/>
@@ -1078,6 +1019,26 @@ to upconvert to 32b float internally?
 	<reg32 offset="0x092B" name="CP_IB2_BASE"/>
 	<reg32 offset="0x092C" name="CP_IB2_BASE_HI"/>
 	<reg32 offset="0x092D" name="CP_IB2_REM_SIZE"/>
+	<!-- SDS == CP_SET_DRAW_STATE: -->
+	<reg32 offset="0x092e" name="CP_SDS_BASE"/>
+	<reg32 offset="0x092f" name="CP_SDS_BASE_HI"/>
+	<reg32 offset="0x092e" name="CP_SDS_REM_SIZE"/>
+	<reg32 offset="0x0931" name="CP_BIN_SIZE_ADDRESS"/>
+	<reg32 offset="0x0932" name="CP_BIN_SIZE_ADDRESS_HI"/>
+	<reg32 offset="0x0934" name="CP_BIN_DATA_ADDR"/>
+	<reg32 offset="0x0935" name="CP_BIN_DATA_ADDR_HI"/>
+	<!--
+	There are probably similar registers for RB and SDS, teasing out SDS will
+	take a slightly better test case..
+	 -->
+	<reg32 offset="0x0949" name="CP_CSQ_IB1_STAT">
+		<doc>number of remaining dwords incl current dword being consumed?</doc>
+		<bitfield name="REM" low="16" high="31"/>
+	</reg32>
+	<reg32 offset="0x094a" name="CP_CSQ_IB2_STAT">
+		<doc>number of remaining dwords incl current dword being consumed?</doc>
+		<bitfield name="REM" low="16" high="31"/>
+	</reg32>
 	<reg32 offset="0x0980" name="CP_ALWAYS_ON_COUNTER_LO"/>
 	<reg32 offset="0x0981" name="CP_ALWAYS_ON_COUNTER_HI"/>
 	<reg32 offset="0x098D" name="CP_AHB_CNTL"/>
@@ -1111,7 +1072,9 @@ to upconvert to 32b float internally?
 		<bitfield high="1" low="1" name="CP_AHB_BUSY_CP_MASTER" />
 		<bitfield high="0" low="0" name="CP_AHB_BUSY_CX_MASTER"/>
 	</reg32>
-	<reg32 offset="0x0213" name="RBBM_STATUS3"/>
+	<reg32 offset="0x0213" name="RBBM_STATUS3">
+		<bitfield pos="24" name="SMMU_STALLED_ON_FAULT" type="boolean"/>
+	</reg32>
 	<reg32 offset="0x0215" name="RBBM_VBIF_GX_RESET_STATUS"/>
 	<reg32 offset="0x0400" name="RBBM_PERFCTR_CP_0_LO"/>
 	<reg32 offset="0x0401" name="RBBM_PERFCTR_CP_0_HI"/>
@@ -1778,9 +1741,9 @@ to upconvert to 32b float internally?
 		<bitfield name="WIDTH" low="0" high="7" shr="5" type="uint"/>
 		<bitfield name="HEIGHT" low="8" high="16" shr="4" type="uint"/>
 	</reg32>
-	<reg32 offset="0x0c03" name="VSC_SIZE_ADDRESS_LO"/>
-	<reg32 offset="0x0c04" name="VSC_SIZE_ADDRESS_HI"/>
-	<reg64 offset="0x0c03" name="VSC_SIZE_ADDRESS" type="waddress"/>
+	<reg32 offset="0x0c03" name="VSC_DRAW_STRM_SIZE_ADDRESS_LO"/>
+	<reg32 offset="0x0c04" name="VSC_DRAW_STRM_SIZE_ADDRESS_HI"/>
+	<reg64 offset="0x0c03" name="VSC_DRAW_STRM_SIZE_ADDRESS" type="waddress"/>
 	<reg32 offset="0x0c06" name="VSC_BIN_COUNT">
 		<bitfield name="NX" low="1" high="10" type="uint"/>
 		<bitfield name="NY" low="11" high="20" type="uint"/>
@@ -1802,33 +1765,23 @@ to upconvert to 32b float internally?
 		</reg32>
 	</array>
 	<!--
-	compared to a5xx and earlier, we just program the address of the first
-	visibility stream and hw adds (pipe_num * VSC_PIPE_DATA_PITCH)
+	HW binning primitive & draw streams, which enable draws and primitives
+	within a draw to be skipped in the main tile pass.  See:
+	https://github.com/freedreno/freedreno/wiki/Visibility-Stream-Format
 
-	TODO now there seem to be two buffers of VSC data (both referenced by
-	CP_SET_BIN_DATA packet.  Not sure what this new DATA2 one is, but seems
-	to have the larger pitch.
-
-	The "DATA2" buffer is probably actually the main visibility stream; it
-	is at least the larger of the two.
-
-	For VSC_DATA_PITCH, 0x20 actually seems to be sufficient (although blob
-	uses something somewhat larger) for many cases, although required value
-	can ramp up somewhat higher.  Values less than 0x20 trigger GPU hangs
-	even with small amount of geometry (so possibly 0x20 is minimum
-	alignment or something like that).  So far I can't seem to find any-
-	thing that needs values larger than 0x20
+	Compared to a5xx and earlier, we just program the address of the first
+	stream and hw adds (pipe_num * VSC_*_STRM_PITCH)
 	 -->
-	<reg32 offset="0x0c30" name="VSC_PIPE_DATA2_ADDRESS_LO"/>
-	<reg32 offset="0x0c31" name="VSC_PIPE_DATA2_ADDRESS_HI"/>
-	<reg64 offset="0x0c30" name="VSC_PIPE_DATA2_ADDRESS" type="waddress"/>
-	<reg32 offset="0x0c32" name="VSC_PIPE_DATA2_PITCH"/>
-	<reg32 offset="0x0c33" name="VSC_PIPE_DATA2_ARRAY_PITCH" shr="4" type="uint"/>
-	<reg32 offset="0x0c34" name="VSC_PIPE_DATA_ADDRESS_LO"/>
-	<reg32 offset="0x0c35" name="VSC_PIPE_DATA_ADDRESS_HI"/>
-	<reg64 offset="0x0c34" name="VSC_PIPE_DATA_ADDRESS" type="waddress"/>
-	<reg32 offset="0x0c36" name="VSC_PIPE_DATA_PITCH"/>
-	<reg32 offset="0x0c37" name="VSC_PIPE_DATA_ARRAY_PITCH" shr="4" type="uint"/>
+	<reg32 offset="0x0c30" name="VSC_PRIM_STRM_ADDRESS_LO"/>
+	<reg32 offset="0x0c31" name="VSC_PRIM_STRM_ADDRESS_HI"/>
+	<reg64 offset="0x0c30" name="VSC_PRIM_STRM_ADDRESS" type="waddress"/>
+	<reg32 offset="0x0c32" name="VSC_PRIM_STRM_PITCH"/>
+	<reg32 offset="0x0c33" name="VSC_PRIM_STRM_ARRAY_PITCH" shr="4" type="uint"/>
+	<reg32 offset="0x0c34" name="VSC_DRAW_STRM_ADDRESS_LO"/>
+	<reg32 offset="0x0c35" name="VSC_DRAW_STRM_ADDRESS_HI"/>
+	<reg64 offset="0x0c34" name="VSC_DRAW_STRM_ADDRESS" type="waddress"/>
+	<reg32 offset="0x0c36" name="VSC_DRAW_STRM_PITCH"/>
+	<reg32 offset="0x0c37" name="VSC_DRAW_STRM_ARRAY_PITCH" shr="4" type="uint"/>
 
 	<array offset="0x0c38" name="VSC_STATE" stride="1" length="32">
 		<doc>
@@ -1841,18 +1794,18 @@ to upconvert to 32b float internally?
 		<reg32 offset="0x0" name="REG"/>
 	</array>
 
-	<array offset="0x0c58" name="VSC_SIZE2" stride="1" length="32">
+	<array offset="0x0c58" name="VSC_PRIM_STRM_SIZE" stride="1" length="32">
 		<doc>
-			Has the size of data written to corresponding VSC_DATA2
+			Has the size of data written to corresponding VSC_PRIM_STRM
 			buffer.
 		</doc>
 		<reg32 offset="0x0" name="REG"/>
 	</array>
 
-	<array offset="0x0c78" name="VSC_SIZE" stride="1" length="32">
+	<array offset="0x0c78" name="VSC_DRAW_STRM_SIZE" stride="1" length="32">
 		<doc>
 			Has the size of data written to corresponding VSC pipe, ie.
-			same thing that is written out to VSC_SIZE_ADDRESS_LO/HI
+			same thing that is written out to VSC_DRAW_STRM_SIZE_ADDRESS_LO/HI
 		</doc>
 		<reg32 offset="0x0" name="REG"/>
 	</array>
@@ -1860,7 +1813,20 @@ to upconvert to 32b float internally?
 	<!-- always 0x03200000 ? -->
 	<reg32 offset="0x0e12" name="UCHE_UNKNOWN_0E12"/>
 
-	<reg32 offset="0x8000" name="GRAS_UNKNOWN_8000"/>
+	<reg32 offset="0x8000" name="GRAS_CL_CNTL">
+		<bitfield name="CLIP_DISABLE" pos="0" type="boolean"/>
+		<bitfield name="ZNEAR_CLIP_DISABLE" pos="1" type="boolean"/>
+		<bitfield name="ZFAR_CLIP_DISABLE" pos="2" type="boolean"/>
+		<!-- set with depthClampEnable, not clear what it does -->
+		<bitfield name="UNK5" pos="5" type="boolean"/>
+		<!-- controls near z clip behavior (set for vulkan) -->
+		<bitfield name="ZERO_GB_SCALE_Z" pos="6" type="boolean"/>
+		<!-- guess based on a3xx and meaning of bits 8 and 9
+		     if the guess is right then this is related to point sprite clipping -->
+		<bitfield name="VP_CLIP_CODE_IGNORE" pos="7" type="boolean"/>
+		<bitfield name="VP_XFORM_DISABLE" pos="8" type="boolean"/>
+		<bitfield name="PERSP_DIVISION_DISABLE" pos="9" type="boolean"/>
+	</reg32>
 	<reg32 offset="0x8001" name="GRAS_UNKNOWN_8001"/>
 	<reg32 offset="0x8002" name="GRAS_UNKNOWN_8002"/>
 	<reg32 offset="0x8003" name="GRAS_UNKNOWN_8003"/>
@@ -1872,10 +1838,8 @@ to upconvert to 32b float internally?
 	  <value value="0x3" name="LAYER_2D_ARRAY"/>
 	</enum>
 
-	<reg32 offset="0x8004" name="GRAS_LAYER_CNTL">
-		<bitfield name="LAYERED" pos="0" type="boolean"/>
-		<bitfield name="TYPE" low="1" high="2" type="a6xx_layer_type"/>
-	</reg32>
+	<!-- index of highest layer that can be written to via gl_Layer -->
+	<reg32 offset="0x8004" name="GRAS_MAX_LAYER_INDEX" type="uint"/>
 
 	<reg32 offset="0x8005" name="GRAS_CNTL">
 		<!-- see also RB_RENDER_CONTROL0 -->
@@ -1906,6 +1870,10 @@ to upconvert to 32b float internally?
 	<reg32 offset="0x8013" name="GRAS_CL_VPORT_YSCALE_0" type="float"/>
 	<reg32 offset="0x8014" name="GRAS_CL_VPORT_ZOFFSET_0" type="float"/>
 	<reg32 offset="0x8015" name="GRAS_CL_VPORT_ZSCALE_0" type="float"/>
+
+	<!-- not clear what it does, mirrors RB_Z_CLAMP_MIN -->
+	<reg32 offset="0x8070" name="GRAS_CL_Z_CLAMP_MIN" type="float"/>
+	<reg32 offset="0x8071" name="GRAS_CL_Z_CLAMP_MAX" type="float"/>
 
 	<reg32 offset="0x8090" name="GRAS_SU_CNTL">
 		<bitfield name="CULL_FRONT" pos="0" type="boolean"/>
@@ -1955,12 +1923,25 @@ to upconvert to 32b float internally?
 		<bitfield name="MSAA_DISABLE" pos="2" type="boolean"/>
 	</reg32>
 
-	<!-- always 0x0 -->
-	<reg32 offset="0x80a4" name="GRAS_UNKNOWN_80A4"/>
-	<!-- always 0x0 -->
-	<reg32 offset="0x80a5" name="GRAS_UNKNOWN_80A5"/>
-	<!-- always 0x0 -->
-	<reg32 offset="0x80a6" name="GRAS_UNKNOWN_80A6"/>
+	<bitset name="a6xx_sample_config" inline="yes">
+		<bitfield name="LOCATION_ENABLE" pos="1" type="boolean"/>
+	</bitset>
+
+	<bitset name="a6xx_sample_locations" inline="yes">
+		<bitfield name="SAMPLE_0_X" low="0" high="3" radix="4" type="fixed"/>
+		<bitfield name="SAMPLE_0_Y" low="4" high="7" radix="4" type="fixed"/>
+		<bitfield name="SAMPLE_1_X" low="8" high="11" radix="4" type="fixed"/>
+		<bitfield name="SAMPLE_1_Y" low="12" high="15" radix="4" type="fixed"/>
+		<bitfield name="SAMPLE_2_X" low="16" high="19" radix="4" type="fixed"/>
+		<bitfield name="SAMPLE_2_Y" low="20" high="23" radix="4" type="fixed"/>
+		<bitfield name="SAMPLE_3_X" low="24" high="27" radix="4" type="fixed"/>
+		<bitfield name="SAMPLE_3_Y" low="28" high="31" radix="4" type="fixed"/>
+	</bitset>
+
+	<reg32 offset="0x80a4" name="GRAS_SAMPLE_CONFIG" type="a6xx_sample_config"/>
+	<reg32 offset="0x80a5" name="GRAS_SAMPLE_LOCATION_0" type="a6xx_sample_locations"/>
+	<reg32 offset="0x80a6" name="GRAS_SAMPLE_LOCATION_1" type="a6xx_sample_locations"/>
+
 	<!-- always 0x0 -->
 	<reg32 offset="0x80af" name="GRAS_UNKNOWN_80AF"/>
 
@@ -1987,7 +1968,7 @@ to upconvert to 32b float internally?
 	</reg32>
 	<reg32 offset="0x8101" name="GRAS_UNKNOWN_8101"/>
 	<reg32 offset="0x8102" name="GRAS_2D_BLIT_INFO">
-		<bitfield name="COLOR_FORMAT" low="0" high="7" type="a6xx_color_fmt"/>
+		<bitfield name="COLOR_FORMAT" low="0" high="7" type="a6xx_format"/>
 	</reg32>
 	<reg32 offset="0x8103" name="GRAS_LRZ_BUFFER_BASE_LO"/>
 	<reg32 offset="0x8104" name="GRAS_LRZ_BUFFER_BASE_HI"/>
@@ -2018,7 +1999,7 @@ to upconvert to 32b float internally?
 	<bitset name="a6xx_2d_blit_cntl" inline="yes">
 		<bitfield name="ROTATE" low="0" high="2" type="a6xx_rotation"/>
 		<bitfield name="SOLID_COLOR" pos="7" type="boolean"/>
-		<bitfield name="COLOR_FORMAT" low="8" high="15" type="a6xx_color_fmt"/>
+		<bitfield name="COLOR_FORMAT" low="8" high="15" type="a6xx_format"/>
 		<bitfield name="SCISSOR" pos="16" type="boolean"/>
 
 		<bitfield name="UNK" low="17" high="18" type="uint"/>
@@ -2080,12 +2061,9 @@ to upconvert to 32b float internally?
 		<bitfield name="MSAA_DISABLE" pos="2" type="boolean"/>
 	</reg32>
 
-	<!-- always 0x0 ? -->
-	<reg32 offset="0x8804" name="RB_UNKNOWN_8804"/>
-	<!-- always 0x0 ? -->
-	<reg32 offset="0x8805" name="RB_UNKNOWN_8805"/>
-	<!-- always 0x0 ? -->
-	<reg32 offset="0x8806" name="RB_UNKNOWN_8806"/>
+	<reg32 offset="0x8804" name="RB_SAMPLE_CONFIG" type="a6xx_sample_config"/>
+	<reg32 offset="0x8805" name="RB_SAMPLE_LOCATION_0" type="a6xx_sample_locations"/>
+	<reg32 offset="0x8806" name="RB_SAMPLE_LOCATION_1" type="a6xx_sample_locations"/>
 
 	<!--
 	note: maybe not actually called RB_RENDER_CONTROLn (since RB_RENDER_CNTL
@@ -2192,7 +2170,7 @@ to upconvert to 32b float internally?
 			<bitfield name="ALPHA_DEST_FACTOR" low="24" high="28" type="adreno_rb_blend_factor"/>
 		</reg32>
 		<reg32 offset="0x2" name="BUF_INFO">
-			<bitfield name="COLOR_FORMAT" low="0" high="7" type="a6xx_color_fmt"/>
+			<bitfield name="COLOR_FORMAT" low="0" high="7" type="a6xx_format"/>
 			<bitfield name="COLOR_TILE_MODE" low="8" high="9" type="a6xx_tile_mode"/>
 			<bitfield name="COLOR_SWAP" low="13" high="14" type="a3xx_color_swap"/>
 		</reg32>
@@ -2240,6 +2218,7 @@ to upconvert to 32b float internally?
 		<bitfield name="Z_ENABLE" pos="0" type="boolean"/>
 		<bitfield name="Z_WRITE_ENABLE" pos="1" type="boolean"/>
 		<bitfield name="ZFUNC" low="2" high="4" type="adreno_compare_func"/>
+		<bitfield name="Z_CLAMP_ENABLE" pos="5" type="boolean"/>
 		<doc>Z_TEST_ENABLE bit is set for zfunc other than GL_ALWAYS or GL_NEVER</doc>
 		<bitfield name="Z_TEST_ENABLE" pos="6" type="boolean"/>
 	</reg32>
@@ -2317,6 +2296,10 @@ to upconvert to 32b float internally?
 		<bitfield name="ENABLE" pos="0" type="boolean"/>
 	</reg32>
 
+	<!-- clamps depth value for depth test/write -->
+	<reg32 offset="0x88c0" name="RB_Z_CLAMP_MIN" type="float"/>
+	<reg32 offset="0x88c1" name="RB_Z_CLAMP_MAX" type="float"/>
+
 	<reg32 offset="0x88d0" name="RB_UNKNOWN_88D0"/>
 	<reg32 offset="0x88d1" name="RB_BLIT_SCISSOR_TL" type="adreno_reg_xy"/>
 	<reg32 offset="0x88d2" name="RB_BLIT_SCISSOR_BR" type="adreno_reg_xy"/>
@@ -2330,7 +2313,7 @@ to upconvert to 32b float internally?
 		<bitfield name="TILE_MODE" low="0" high="1" type="a6xx_tile_mode"/>
 		<bitfield name="FLAGS" pos="2" type="boolean"/>
 		<bitfield name="SAMPLES" low="3" high="4" type="a3xx_msaa_samples"/>
-		<bitfield name="COLOR_FORMAT" low="7" high="14" type="a6xx_color_fmt"/>
+		<bitfield name="COLOR_FORMAT" low="7" high="14" type="a6xx_format"/>
 		<bitfield name="COLOR_SWAP" low="5" high="6" type="a3xx_color_swap"/>
 	</reg32>
 	<reg64 offset="0x88d8" name="RB_BLIT_DST" type="waddress"/>
@@ -2395,27 +2378,30 @@ to upconvert to 32b float internally?
 	<reg32 offset="0x8c01" name="RB_UNKNOWN_8C01"/>
 
 	<bitset name="a6xx_2d_surf_info" inline="yes">
-		<bitfield name="COLOR_FORMAT" low="0" high="7" type="a6xx_color_fmt"/>
+		<bitfield name="COLOR_FORMAT" low="0" high="7" type="a6xx_format"/>
 		<bitfield name="TILE_MODE" low="8" high="9" type="a6xx_tile_mode"/>
 		<bitfield name="COLOR_SWAP" low="10" high="11" type="a3xx_color_swap"/>
-		<!-- b12 seems to be set when UBWC "FLAGS" buffer enabled -->
 		<bitfield name="FLAGS" pos="12" type="boolean"/>
 		<bitfield name="SRGB" pos="13" type="boolean"/>
 		<!-- the rest is only for src -->
 		<bitfield name="SAMPLES" low="14" high="15" type="a3xx_msaa_samples"/>
 		<bitfield name="FILTER" pos="16" type="boolean"/>
 		<bitfield name="SAMPLES_AVERAGE" pos="18" type="boolean"/>
+		<bitfield name="UNK20" pos="20" type="boolean"/>
+		<bitfield name="UNK22" pos="22" type="boolean"/>
 	</bitset>
 
 	<reg32 offset="0x8c17" name="RB_2D_DST_INFO" type="a6xx_2d_surf_info"/>
 	<reg32 offset="0x8c18" name="RB_2D_DST_LO"/>
 	<reg32 offset="0x8c19" name="RB_2D_DST_HI"/>
+	<reg64 offset="0x8c18" name="RB_2D_DST" type="waddress"/>
 	<reg32 offset="0x8c1a" name="RB_2D_DST_SIZE">
 		<bitfield name="PITCH" low="0" high="15" shr="6" type="uint"/>
 	</reg32>
 
 	<reg32 offset="0x8c20" name="RB_2D_DST_FLAGS_LO"/>
 	<reg32 offset="0x8c21" name="RB_2D_DST_FLAGS_HI"/>
+	<reg64 offset="0x8c20" name="RB_2D_DST_FLAGS" type="waddress"/>
 	<reg32 offset="0x8c22" name="RB_2D_DST_FLAGS_PITCH">
 		<bitfield name="PITCH" low="0" high="10" shr="6" type="uint"/>
 		<bitfield name="ARRAY_PITCH" low="11" high="21" shr="7" type="uint"/>
@@ -2432,7 +2418,19 @@ to upconvert to 32b float internally?
 
 	<reg32 offset="0x8e04" name="RB_UNKNOWN_8E04"/>
 
-	<reg32 offset="0x8e07" name="RB_CCU_CNTL"/>  <!-- always 7c400004 or 10000000 -->
+	<reg32 offset="0x8e07" name="RB_CCU_CNTL">
+		<!-- offset into GMEM for something.
+			important for sysmem path
+			BLIT_OP_SCALE also writes to GMEM at this offset for GMEM store
+			blob values for GMEM path (note: close to GMEM size):
+			a618: 0x7c000 a630/a640: 0xf8000 a650: 0x114000
+			SYSMEM path values:
+			a618: 0x10000 a630/a640: 0x20000 a650: 0x30000
+		-->
+		<bitfield name="OFFSET" low="23" high="31" shr="12" type="uint"/>
+		<bitfield name="GMEM" pos="22" type="boolean"/> <!-- set for GMEM path -->
+		<bitfield name="UNK2" pos="2" type="boolean"/> <!-- sometimes set with GMEM? -->
+	</reg32>
 
 	<reg32 offset="0x9100" name="VPC_UNKNOWN_9100"/>
 
@@ -2551,7 +2549,10 @@ to upconvert to 32b float internally?
 
 	<reg32 offset="0x9304" name="VPC_CNTL_0">
 		<bitfield name="NUMNONPOSVAR" low="0" high="7" type="uint"/>
+		<!-- for fixed-function (i.e. no GS) gl_PrimitiveID in FS -->
+		<bitfield name="PRIMIDLOC" low="8" high="15" type="uint"/>
 		<bitfield name="VARYING" pos="16" type="boolean"/>
+		<bitfield name="UNKLOC" low="24" high="31" type="uint"/>
 	</reg32>
 
 	<reg32 offset="0x9305" name="VPC_SO_BUF_CNTL">
@@ -2599,7 +2600,11 @@ to upconvert to 32b float internally?
 
 	<!-- always 0x1 ? -->
 	<reg32 offset="0x9805" name="PC_UNKNOWN_9805"/>
-	<reg32 offset="0x9806" name="PC_UNKNOWN_9806"/>
+
+	<!-- probably a mirror of VFD_CONTROL_6 -->
+	<reg32 offset="0x9806" name="PC_PRIMID_CNTL">
+		<bitfield name="PRIMID_PASSTHRU" pos="0" type="boolean"/>
+	</reg32>
 
 	<reg32 offset="0x9980" name="PC_UNKNOWN_9980"/>
 	<reg32 offset="0x9981" name="PC_UNKNOWN_9981"/>
@@ -2619,7 +2624,7 @@ to upconvert to 32b float internally?
 			plus # of transform-feedback (streamout) varyings if using the
 			hw streamout (rather than stg instructions in shader)
 		</doc>
-		<bitfield name="STRIDE_IN_VPC" low="0" high="6" type="uint"/>
+		<bitfield name="STRIDE_IN_VPC" low="0" high="7" type="uint"/>
 		<bitfield name="PSIZE" pos="8" type="boolean"/>
 	</reg32>
 
@@ -2627,7 +2632,7 @@ to upconvert to 32b float internally?
 		<doc>
 		  geometry shader
 		</doc>
-		<bitfield name="STRIDE_IN_VPC" low="0" high="6" type="uint"/>
+		<bitfield name="STRIDE_IN_VPC" low="0" high="7" type="uint"/>
 		<bitfield name="PSIZE" pos="8" type="boolean"/>
 		<bitfield name="LAYER" pos="9" type="boolean"/>
 		<bitfield name="PRIMITIVE_ID" pos="11" type="boolean"/>
@@ -2641,7 +2646,7 @@ to upconvert to 32b float internally?
 			plus # of transform-feedback (streamout) varyings if using the
 			hw streamout (rather than stg instructions in shader)
 		</doc>
-		<bitfield name="STRIDE_IN_VPC" low="0" high="6" type="uint"/>
+		<bitfield name="STRIDE_IN_VPC" low="0" high="7" type="uint"/>
 		<bitfield name="PSIZE" pos="8" type="boolean"/>
 	</reg32>
 	<reg32 offset="0x9b04" name="PC_PRIMITIVE_CNTL_4">
@@ -2651,7 +2656,7 @@ to upconvert to 32b float internally?
 			plus # of transform-feedback (streamout) varyings if using the
 			hw streamout (rather than stg instructions in shader)
 		</doc>
-		<bitfield name="STRIDE_IN_VPC" low="0" high="6" type="uint"/>
+		<bitfield name="STRIDE_IN_VPC" low="0" high="7" type="uint"/>
 		<bitfield name="PSIZE" pos="8" type="boolean"/>
 	</reg32>
 
@@ -2676,11 +2681,22 @@ to upconvert to 32b float internally?
 	<reg32 offset="0x9e08" name="PC_TESSFACTOR_ADDR_LO"/>
 	<reg32 offset="0x9e09" name="PC_TESSFACTOR_ADDR_HI"/>
 
+	<!-- These match the contents of CP_SET_BIN_DATA (not written directly) -->
+	<reg32 offset="0x9e11" name="PC_VSTREAM_CONTROL">
+		<bitfield name="VSC_SIZE" low="16" high="21" type="uint"/>
+		<bitfield name="VSC_N" low="22" high="26" type="uint"/>
+	</reg32>
+	<reg32 offset="0x9e12" name="PC_BIN_DATA_ADDR2_LO"/>
+	<reg32 offset="0x9e13" name="PC_BIN_DATA_ADDR2_HI"/>
+	<reg32 offset="0x9e14" name="PC_BIN_DATA_ADDR_LO"/>
+	<reg32 offset="0x9e15" name="PC_BIN_DATA_ADDR_HI"/>
+
 	<!-- always 0x0 -->
 	<reg32 offset="0x9e72" name="PC_UNKNOWN_9E72"/>
 
 	<reg32 offset="0xa000" name="VFD_CONTROL_0">
-		<bitfield name="VTXCNT" low="0" high="5" type="uint"/>
+		<bitfield name="FETCH_CNT" low="0" high="5" type="uint"/>
+		<bitfield name="DECODE_CNT" low="8" high="13" type="uint"/>
 	</reg32>
 	<reg32 offset="0xa001" name="VFD_CONTROL_1">
 		<bitfield name="REGID4VTX" low="0" high="7" type="a3xx_regid"/>
@@ -2702,6 +2718,12 @@ to upconvert to 32b float internally?
 		<bitfield name="REGID_GSHEADER" low="0" high="7" type="a3xx_regid"/>
 	</reg32>
 	<reg32 offset="0xa006" name="VFD_CONTROL_6">
+		<!--
+			True if gl_PrimitiveID is read via the FS and there is
+			no matching write from the GS, and therefore it needs to
+			be passed through via fixed-function logic.
+		-->
+		<bitfield name="PRIMID_PASSTHRU" pos="0" type="boolean"/>
 	</reg32>
 
 	<reg32 offset="0xa007" name="VFD_MODE_CNTL">
@@ -2728,10 +2750,11 @@ to upconvert to 32b float internally?
 	</array>
 	<array offset="0xa090" name="VFD_DECODE" stride="2" length="32">
 		<reg32 offset="0x0" name="INSTR">
-			<!-- IDX appears to index into VFD_FETCH[] -->
+			<!-- IDX and byte OFFSET into VFD_FETCH -->
 			<bitfield name="IDX" low="0" high="4" type="uint"/>
+			<bitfield name="OFFSET" low="5" high="16"/>
 			<bitfield name="INSTANCED" pos="17" type="boolean"/>
-			<bitfield name="FORMAT" low="20" high="27" type="a6xx_vtx_fmt"/>
+			<bitfield name="FORMAT" low="20" high="27" type="a6xx_format"/>
 			<bitfield name="SWAP" low="28" high="29" type="a3xx_color_swap"/>
 			<bitfield name="UNK30" pos="30" type="boolean"/>
 			<bitfield name="FLOAT" pos="31" type="boolean"/>
@@ -2776,6 +2799,15 @@ to upconvert to 32b float internally?
 	</bitset>
 
 	<bitset name="a6xx_sp_xs_config" inline="yes">
+		<!--
+		Each of these are set if the given resource type is used
+		with the Vulkan/bindless binding model.
+		-->
+		<bitfield name="BINDLESS_TEX" pos="0" type="boolean"/>
+		<bitfield name="BINDLESS_SAMP" pos="1" type="boolean"/>
+		<bitfield name="BINDLESS_IBO" pos="2" type="boolean"/>
+		<bitfield name="BINDLESS_UBO" pos="3" type="boolean"/>
+
 		<bitfield name="ENABLED" pos="8" type="boolean"/>
 		<!--
 		number of textures and samplers.. these might be swapped, with GL I
@@ -2789,7 +2821,7 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xa800" name="SP_VS_CTRL_REG0" type="a6xx_sp_xs_ctrl_reg0"/>
 	<reg32 offset="0xa802" name="SP_PRIMITIVE_CNTL">
 		<!-- # of VS outputs including pos/psize -->
-		<bitfield name="VSOUT" low="0" high="4" type="uint"/>
+		<bitfield name="VSOUT" low="0" high="5" type="uint"/>
 	</reg32>
 	<array offset="0xa803" name="SP_VS_OUT" stride="1" length="16">
 		<reg32 offset="0x0" name="REG">
@@ -2865,7 +2897,7 @@ to upconvert to 32b float internally?
 
 	<reg32 offset="0xa873" name="SP_PRIMITIVE_CNTL_GS">
 		<!-- # of VS outputs including pos/psize -->
-		<bitfield name="GSOUT" low="0" high="4" type="uint"/>
+		<bitfield name="GSOUT" low="0" high="5" type="uint"/>
 		<bitfield name="FLAGS_REGID" low="6" high="13" type="a3xx_regid"/>
 	</reg32>
 
@@ -2959,7 +2991,7 @@ to upconvert to 32b float internally?
 
 	<array offset="0xa996" name="SP_FS_MRT" stride="1" length="8">
 		<reg32 offset="0" name="REG">
-			<bitfield name="COLOR_FORMAT" low="0" high="7" type="a6xx_color_fmt"/>
+			<bitfield name="COLOR_FORMAT" low="0" high="7" type="a6xx_format"/>
 			<bitfield name="COLOR_SINT" pos="8" type="boolean"/>
 			<bitfield name="COLOR_UINT" pos="9" type="boolean"/>
 		</reg32>
@@ -2983,8 +3015,19 @@ to upconvert to 32b float internally?
 			<!--
 			CMD seems always 0x4??  3d, textureProj, textureLod seem to
 			skip pre-fetch.. TODO test texelFetch
+                        CMD is 0x6 when the Vulkan mode is enabled, and
+                        TEX_ID/SAMP_ID refer to the descriptor sets while the
+                        indices come from SP_FS_BINDLESS_PREFETCH[n]
 			 -->
 			<bitfield name="CMD" low="27" high="31"/>
+		</reg32>
+	</array>
+
+	<!-- TODO confirm that this is actually an array -->
+	<array offset="0xa9a3" name="SP_FS_BINDLESS_PREFETCH" stride="1" length="4">
+		<reg32 offset="0" name="CMD">
+			<bitfield name="SAMP_ID" low="0" high="7" type="uint"/>
+			<bitfield name="TEX_ID" low="16" high="23" type="uint"/>
 		</reg32>
 	</array>
 
@@ -3009,6 +3052,10 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xa9e5" name="SP_FS_TEX_CONST_HI"/>
 	<reg32 offset="0xa9e6" name="SP_CS_TEX_CONST_LO"/>
 	<reg32 offset="0xa9e7" name="SP_CS_TEX_CONST_HI"/>
+
+	<array offset="0xa9e8" name="SP_CS_BINDLESS_BASE" stride="2" length="5">
+		<reg64 offset="0" name="ADDR" type="waddress"/>
+	</array>
 
 	<array offset="0xa98e" name="SP_FS_OUTPUT" stride="1" length="8">
 		<doc>per MRT</doc>
@@ -3037,6 +3084,10 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xab04" name="SP_FS_CONFIG" type="a6xx_sp_xs_config"/>
 	<reg32 offset="0xab05" name="SP_FS_INSTRLEN" type="uint"/>
 
+	<array offset="0xab10" name="SP_BINDLESS_BASE" stride="2" length="5">
+		<reg64 offset="0" name="ADDR" type="waddress"/>
+	</array>
+
 	<!--
 	Combined IBO state for 3d pipe, used for Image and SSBO write/atomic
 	instructions VS/HS/DS/GS/FS.  See SP_CS_IBO_* for compute shaders.
@@ -3054,7 +3105,7 @@ to upconvert to 32b float internally?
 		<bitfield name="UINT" pos="2" type="boolean"/>
 		<!-- looks like HW only cares about the base type of this format,
 		     which matches the ifmt? -->
-		<bitfield name="COLOR_FORMAT" low="3" high="10" type="a6xx_color_fmt"/>
+		<bitfield name="COLOR_FORMAT" low="3" high="10" type="a6xx_format"/>
 		<!-- set when ifmt is R2D_UNORM8_SRGB -->
 		<bitfield name="SRGB" pos="11" type="boolean"/>
 		<!-- some sort of channel mask, not sure what it is for -->
@@ -3070,6 +3121,12 @@ to upconvert to 32b float internally?
 	<!-- always 0x3f ? -->
 	<reg32 offset="0xae0f" name="SP_UNKNOWN_AE0F"/>
 
+	<!--
+	The downstream kernel calls the debug cluster of registers
+	"a6xx_sp_ps_tp_cluster" but this actually specifies the border
+	color base for compute shaders.
+	-->
+	<reg64 offset="0xb180" name="SP_PS_TP_BORDER_COLOR_BASE_ADDR" type="address"/>
 	<!-- always 0x0 ? -->
 	<reg32 offset="0xb182" name="SP_UNKNOWN_B182"/>
 	<reg32 offset="0xb183" name="SP_UNKNOWN_B183"/>
@@ -3088,8 +3145,9 @@ to upconvert to 32b float internally?
 	<reg64 offset="0xb302" name="SP_TP_BORDER_COLOR_BASE_ADDR" type="address"/>
 	<reg32 offset="0xb302" name="SP_TP_BORDER_COLOR_BASE_ADDR_LO"/>
 	<reg32 offset="0xb303" name="SP_TP_BORDER_COLOR_BASE_ADDR_HI"/>
-	<!-- always 0x0 ? -->
-	<reg32 offset="0xb304" name="SP_TP_UNKNOWN_B304"/>
+	<reg32 offset="0xb304" name="SP_TP_SAMPLE_CONFIG" type="a6xx_sample_config"/>
+	<reg32 offset="0xb305" name="SP_TP_SAMPLE_LOCATION_0" type="a6xx_sample_locations"/>
+	<reg32 offset="0xb306" name="SP_TP_SAMPLE_LOCATION_1" type="a6xx_sample_locations"/>
 
 	<reg32 offset="0xb309" name="SP_TP_UNKNOWN_B309"/>
 
@@ -3105,12 +3163,14 @@ to upconvert to 32b float internally?
 	</reg32>
 	<reg32 offset="0xb4c2" name="SP_PS_2D_SRC_LO"/>
 	<reg32 offset="0xb4c3" name="SP_PS_2D_SRC_HI"/>
+	<reg64 offset="0xb4c2" name="SP_PS_2D_SRC" type="waddress"/>
 	<reg32 offset="0xb4c4" name="SP_PS_2D_SRC_PITCH">
 	   <bitfield name="PITCH" low="9" high="24" shr="6" type="uint"/>
 	</reg32>
 
 	<reg32 offset="0xb4ca" name="SP_PS_2D_SRC_FLAGS_LO"/>
 	<reg32 offset="0xb4cb" name="SP_PS_2D_SRC_FLAGS_HI"/>
+	<reg64 offset="0xb4ca" name="SP_PS_2D_SRC_FLAGS" type="waddress"/>
 	<reg32 offset="0xb4cc" name="SP_PS_2D_SRC_FLAGS_PITCH">
 		<bitfield name="PITCH" low="0" high="10" shr="6" type="uint"/>
 		<bitfield name="ARRAY_PITCH" low="11" high="21" shr="7" type="uint"/>
@@ -3200,6 +3260,11 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xb99a" name="HLSQ_CS_KERNEL_GROUP_Y"/>
 	<reg32 offset="0xb99b" name="HLSQ_CS_KERNEL_GROUP_Z"/>
 
+	<!-- mirror of SP_CS_BINDLESS_BASE -->
+	<array offset="0xb9c0" name="HLSQ_CS_BINDLESS_BASE" stride="2" length="5">
+		<reg64 offset="0" name="ADDR" type="waddress"/>
+	</array>
+
 	<!-- probably: -->
 	<reg32 offset="0xbb08" name="HLSQ_UPDATE_CNTL"/>
 
@@ -3207,6 +3272,11 @@ to upconvert to 32b float internally?
 
 	<!-- always 0x0 ? -->
 	<reg32 offset="0xbb11" name="HLSQ_UNKNOWN_BB11"/>
+
+	<!-- mirror of SP_BINDLESS_BASE -->
+	<array offset="0xbb20" name="HLSQ_BINDLESS_BASE" stride="2" length="5">
+		<reg64 offset="0" name="ADDR" type="waddress"/>
+	</array>
 
 	<!-- always 0x80 ? -->
 	<reg32 offset="0xbe00" name="HLSQ_UNKNOWN_BE00"/>
@@ -3224,6 +3294,7 @@ to upconvert to 32b float internally?
 		<value name="A6XX_TEX_NEAREST" value="0"/>
 		<value name="A6XX_TEX_LINEAR" value="1"/>
 		<value name="A6XX_TEX_ANISO" value="2"/>
+		<value name="A6XX_TEX_CUBIC" value="3"/> <!-- a650 only -->
 	</enum>
 	<enum name="a6xx_tex_clamp"> <!-- same as a4xx? -->
 		<value name="A6XX_TEX_REPEAT" value="0"/>
@@ -3239,6 +3310,12 @@ to upconvert to 32b float internally?
 		<value name="A6XX_TEX_ANISO_8" value="3"/>
 		<value name="A6XX_TEX_ANISO_16" value="4"/>
 	</enum>
+	<enum name="a6xx_reduction_mode">
+		<value name="A6XX_REDUCTION_MODE_AVERAGE" value="0"/>
+		<value name="A6XX_REDUCTION_MODE_MIN" value="1"/>
+		<value name="A6XX_REDUCTION_MODE_MAX" value="2"/>
+	</enum>
+
 	<reg32 offset="0" name="0">
 		<bitfield name="MIPFILTER_LINEAR_NEAR" pos="0" type="boolean"/>
 		<bitfield name="XY_MAG" low="1" high="2" type="a6xx_tex_filter"/>
@@ -3258,7 +3335,8 @@ to upconvert to 32b float internally?
 		<bitfield name="MIN_LOD" low="20" high="31" type="ufixed" radix="8"/>
 	</reg32>
 	<reg32 offset="2" name="2">
-		<bitfield name="BCOLOR_OFFSET" low="0" high="31"/>
+		<bitfield name="REDUCTION_MODE" low="0" high="1" type="a6xx_reduction_mode"/>
+		<bitfield name="BCOLOR_OFFSET" low="7" high="31" shr="7"/>
 	</reg32>
 	<reg32 offset="3" name="3"/>
 </domain>
@@ -3288,7 +3366,7 @@ to upconvert to 32b float internally?
 		<bitfield name="SWIZ_W" low="13" high="15" type="a6xx_tex_swiz"/>
 		<bitfield name="MIPLVLS" low="16" high="19" type="uint"/>
 		<bitfield name="SAMPLES" low="20" high="21" type="a3xx_msaa_samples"/>
-		<bitfield name="FMT" low="22" high="29" type="a6xx_tex_fmt"/>
+		<bitfield name="FMT" low="22" high="29" type="a6xx_format"/>
 		<bitfield name="SWAP" low="30" high="31" type="a3xx_color_swap"/>
 	</reg32>
 	<reg32 offset="1" name="1">
@@ -3369,7 +3447,7 @@ with a better name.
 		used but if they are good chance position is same as TEX_CONST
 		 -->
 		<bitfield name="TILE_MODE" low="0" high="1" type="a6xx_tile_mode"/>
-		<bitfield name="FMT" low="22" high="29" type="a6xx_tex_fmt"/>
+		<bitfield name="FMT" low="22" high="29" type="a6xx_format"/>
 	</reg32>
 	<reg32 offset="1" name="1">
 		<bitfield name="WIDTH" low="0" high="14" type="uint"/>
@@ -3428,7 +3506,7 @@ with a better name.
 	</reg32>
 	<reg32 offset="1" name="1">
 		<bitfield name="BASE_HI" low="0" high="16"/>
-		<!-- size probably in high bits -->
+		<bitfield name="SIZE" low="17" high="31"/> <!-- size in vec4 (4xDWORD) units -->
 	</reg32>
 </domain>
 

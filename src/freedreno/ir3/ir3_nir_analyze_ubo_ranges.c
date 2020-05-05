@@ -25,14 +25,16 @@
 #include "ir3_compiler.h"
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_builder.h"
-#include "mesa/main/macros.h"
+#include "util/u_math.h"
 
 static inline struct ir3_ubo_range
 get_ubo_load_range(nir_intrinsic_instr *instr)
 {
 	struct ir3_ubo_range r;
 
-	const int offset = nir_src_as_uint(instr->src[1]);
+	int offset = nir_src_as_uint(instr->src[1]);
+	if (instr->intrinsic == nir_intrinsic_load_ubo_ir3)
+		offset *= 16;
 	const int bytes = nir_intrinsic_dest_components(instr) * 4;
 
 	r.start = ROUND_DOWN_TO(offset, 16 * 4);
@@ -41,37 +43,80 @@ get_ubo_load_range(nir_intrinsic_instr *instr)
 	return r;
 }
 
+static struct ir3_ubo_range *
+get_existing_range(nir_intrinsic_instr *instr,
+				   struct ir3_ubo_analysis_state *state,
+				   bool create_new)
+{
+	unsigned block, base = 0;
+	bool bindless;
+	if (nir_src_is_const(instr->src[0])) {
+		block = nir_src_as_uint(instr->src[0]);
+		bindless = false;
+	} else {
+		nir_intrinsic_instr *rsrc = ir3_bindless_resource(instr->src[0]);
+		if (rsrc && nir_src_is_const(rsrc->src[0])) {
+			block = nir_src_as_uint(rsrc->src[0]);
+			base = nir_intrinsic_desc_set(rsrc);
+			bindless = true;
+		} else {
+			return NULL;
+		}
+	}
+	for (int i = 0; i < IR3_MAX_UBO_PUSH_RANGES; i++) {
+		struct ir3_ubo_range *range = &state->range[i];
+		if (range->end < range->start) {
+			/* We don't have a matching range, but there are more available.
+			 */
+			if (create_new) {
+				range->block = block;
+				range->bindless_base = base;
+				range->bindless = bindless;
+				return range;
+			} else {
+				return NULL;
+			}
+		} else if (range->block == block && range->bindless_base == base &&
+				   range->bindless == bindless) {
+			return range;
+		}
+	}
+
+	return NULL;
+}
+
 static void
 gather_ubo_ranges(nir_shader *nir, nir_intrinsic_instr *instr,
 				  struct ir3_ubo_analysis_state *state)
 {
-	if (!nir_src_is_const(instr->src[0]))
+	struct ir3_ubo_range *old_r = get_existing_range(instr, state, true);
+	if (!old_r)
 		return;
 
 	if (!nir_src_is_const(instr->src[1])) {
-		if (nir_src_as_uint(instr->src[0]) == 0) {
+		if (!old_r->bindless && old_r->block == 0) {
 			/* If this is an indirect on UBO 0, we'll still lower it back to
 			 * load_uniform.  Set the range to cover all of UBO 0.
 			 */
-			state->range[0].end = align(nir->num_uniforms * 16, 16 * 4);
+			state->range[0].start = 0;
+			state->range[0].end = ALIGN(nir->num_uniforms * 16, 16 * 4);
 		}
 
 		return;
 	}
 
 	const struct ir3_ubo_range r = get_ubo_load_range(instr);
-	const uint32_t block = nir_src_as_uint(instr->src[0]);
 
 	/* if UBO lowering is disabled, we still want to lower block 0
 	 * (which is normal uniforms):
 	 */
-	if ((block > 0) && (ir3_shader_debug & IR3_DBG_NOUBOOPT))
+	if ((old_r->bindless || old_r->block != 0) && (ir3_shader_debug & IR3_DBG_NOUBOOPT))
 		return;
 
-	if (r.start < state->range[block].start)
-		state->range[block].start = r.start;
-	if (state->range[block].end < r.end)
-		state->range[block].end = r.end;
+	if (r.start < old_r->start)
+		old_r->start = r.start;
+	if (old_r->end < r.end)
+		old_r->end = r.end;
 }
 
 /* For indirect offset, it is common to see a pattern of multiple
@@ -142,12 +187,11 @@ lower_ubo_load_to_uniform(nir_intrinsic_instr *instr, nir_builder *b,
 	 * could probably with some effort determine a block stride in number of
 	 * registers.
 	 */
-	if (!nir_src_is_const(instr->src[0]))
+	struct ir3_ubo_range *range = get_existing_range(instr, state, false);
+	if (!range)
 		return;
 
-	const uint32_t block = nir_src_as_uint(instr->src[0]);
-
-	if (block > 0) {
+	if (range->bindless || range->block > 0) {
 		/* We don't lower dynamic array indexing either, but we definitely should.
 		 * We don't have a good way of determining the range of the dynamic
 		 * access, so for now just fall back to pulling.
@@ -159,8 +203,7 @@ lower_ubo_load_to_uniform(nir_intrinsic_instr *instr, nir_builder *b,
 		 * upload. Reject if we're now outside the range.
 		 */
 		const struct ir3_ubo_range r = get_ubo_load_range(instr);
-		if (!(state->range[block].start <= r.start &&
-			  r.end <= state->range[block].end))
+		if (!(range->start <= r.start && r.end <= range->end))
 			return;
 	}
 
@@ -172,22 +215,31 @@ lower_ubo_load_to_uniform(nir_intrinsic_instr *instr, nir_builder *b,
 	handle_partial_const(b, &ubo_offset, &const_offset);
 
 	/* UBO offset is in bytes, but uniform offset is in units of
-	 * dwords, so we need to divide by 4 (right-shift by 2).  And
+	 * dwords, so we need to divide by 4 (right-shift by 2). For ldc the
+	 * offset is in units of 16 bytes, so we need to multiply by 4. And
 	 * also the same for the constant part of the offset:
 	 */
-	nir_ssa_def *new_offset = ir3_nir_try_propagate_bit_shift(b, ubo_offset, -2);
+
+	const int shift = instr->intrinsic == nir_intrinsic_load_ubo_ir3 ? 2 : -2;
+	nir_ssa_def *new_offset = ir3_nir_try_propagate_bit_shift(b, ubo_offset, shift);
 	nir_ssa_def *uniform_offset = NULL;
 	if (new_offset) {
 		uniform_offset = new_offset;
 	} else {
-		uniform_offset = nir_ushr(b, ubo_offset, nir_imm_int(b, 2));
+		uniform_offset = shift > 0 ?
+			nir_ishl(b, ubo_offset, nir_imm_int(b,  shift)) :
+			nir_ushr(b, ubo_offset, nir_imm_int(b, -shift));
 	}
 
-	debug_assert(!(const_offset & 0x3));
-	const_offset >>= 2;
+	if (instr->intrinsic == nir_intrinsic_load_ubo_ir3) {
+		const_offset <<= 2;
+		const_offset += nir_intrinsic_base(instr);
+	} else {
+		debug_assert(!(const_offset & 0x3));
+		const_offset >>= 2;
+	}
 
-	const int range_offset =
-		(state->range[block].offset - state->range[block].start) / 4;
+	const int range_offset = (range->offset - range->start) / 4;
 	const_offset += range_offset;
 
 	nir_intrinsic_instr *uniform =
@@ -207,19 +259,31 @@ lower_ubo_load_to_uniform(nir_intrinsic_instr *instr, nir_builder *b,
 	state->lower_count++;
 }
 
+static bool
+instr_is_load_ubo(nir_instr *instr)
+{
+	if (instr->type != nir_instr_type_intrinsic)
+		return false;
+
+	nir_intrinsic_op op = nir_instr_as_intrinsic(instr)->intrinsic;
+	return op == nir_intrinsic_load_ubo || op == nir_intrinsic_load_ubo_ir3;
+}
+
 bool
 ir3_nir_analyze_ubo_ranges(nir_shader *nir, struct ir3_shader *shader)
 {
 	struct ir3_ubo_analysis_state *state = &shader->ubo_state;
 
 	memset(state, 0, sizeof(*state));
+	for (int i = 0; i < IR3_MAX_UBO_PUSH_RANGES; i++) {
+		state->range[i].start = UINT32_MAX;
+	}
 
-	nir_foreach_function(function, nir) {
+	nir_foreach_function (function, nir) {
 		if (function->impl) {
-			nir_foreach_block(block, function->impl) {
-				nir_foreach_instr(instr, block) {
-					if (instr->type == nir_instr_type_intrinsic &&
-						nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_load_ubo)
+			nir_foreach_block (block, function->impl) {
+				nir_foreach_instr (instr, block) {
+					if (instr_is_load_ubo(instr))
 						gather_ubo_ranges(nir, nir_instr_as_intrinsic(instr), state);
 				}
 			}
@@ -235,8 +299,14 @@ ir3_nir_analyze_ubo_ranges(nir_shader *nir, struct ir3_shader *shader)
 	 * first.
 	 */
 	const uint32_t max_upload = 16 * 1024;
-	uint32_t offset = 0;
+	uint32_t offset = shader->const_state.num_reserved_user_consts * 16;
+	state->num_enabled = ARRAY_SIZE(state->range);
 	for (uint32_t i = 0; i < ARRAY_SIZE(state->range); i++) {
+		if (state->range[i].start >= state->range[i].end) {
+			state->num_enabled = i;
+			break;
+		}
+
 		uint32_t range_size = state->range[i].end - state->range[i].start;
 
 		debug_assert(offset <= max_upload);
@@ -247,19 +317,16 @@ ir3_nir_analyze_ubo_ranges(nir_shader *nir, struct ir3_shader *shader)
 		}
 		offset += range_size;
 
-		if (state->range[i].start < state->range[i].end)
-			state->enabled |= 1 << i;
 	}
 	state->size = offset;
 
-	nir_foreach_function(function, nir) {
+	nir_foreach_function (function, nir) {
 		if (function->impl) {
 			nir_builder builder;
 			nir_builder_init(&builder, function->impl);
-			nir_foreach_block(block, function->impl) {
-				nir_foreach_instr_safe(instr, block) {
-					if (instr->type == nir_instr_type_intrinsic &&
-						nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_load_ubo)
+			nir_foreach_block (block, function->impl) {
+				nir_foreach_instr_safe (instr, block) {
+					if (instr_is_load_ubo(instr))
 						lower_ubo_load_to_uniform(nir_instr_as_intrinsic(instr), &builder, state);
 				}
 			}

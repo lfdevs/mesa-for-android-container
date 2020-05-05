@@ -21,7 +21,7 @@
 libmesa_st_test_common = static_library(
   'mesa_st_test_common',
   ['st_tests_common.cpp', ir_expression_operation_h],
-  include_directories : inc_common,
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
   dependencies : idep_gtest,
 )
 
@@ -30,7 +30,7 @@ test(
   executable(
     'st_format_test',
     ['st_format.c'],
-    include_directories : inc_common,
+    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
     link_with : [
       libmesa_st_test_common, libmesa_gallium, libglapi, libgallium,
     ],
@@ -44,7 +44,7 @@ test(
   executable(
     'st_renumerate_test',
     ['test_glsl_to_tgsi_lifetime.cpp', ir_expression_operation_h],
-    include_directories : inc_common,
+    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
     link_with : [
       libmesa_st_test_common, libmesa_gallium, libglapi, libgallium,
     ],
@@ -58,7 +58,7 @@ test(
   executable(
     'st_array_merge_test',
     ['test_glsl_to_tgsi_array_merge.cpp', ir_expression_operation_h],
-    include_directories : inc_common,
+    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
     link_with : [
       libmesa_st_test_common, libmesa_gallium, libglapi, libgallium,
     ],

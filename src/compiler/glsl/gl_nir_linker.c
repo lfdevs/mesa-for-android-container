@@ -29,10 +29,9 @@
 #include "main/shaderobj.h"
 #include "ir_uniform.h" /* for gl_uniform_storage */
 
-/* This file included general link methods, using NIR, instead of IR as
+/**
+ * This file included general link methods, using NIR, instead of IR as
  * the counter-part glsl/linker.cpp
- *
- * Also note that this is tailored for ARB_gl_spirv needs and particularities
  */
 
 /**
@@ -623,6 +622,9 @@ check_image_resources(struct gl_context *ctx, struct gl_shader_program *prog)
 bool
 gl_nir_link_glsl(struct gl_context *ctx, struct gl_shader_program *prog)
 {
+   if (!gl_nir_link_uniforms(ctx, prog, true))
+      return false;
+
    link_util_calculate_subroutine_compat(prog);
    link_util_check_uniform_resources(ctx, prog);
    link_util_check_subroutine_resources(prog);

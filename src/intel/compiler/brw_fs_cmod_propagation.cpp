@@ -48,6 +48,8 @@
  * exists and therefore remove the instruction.
  */
 
+using namespace brw;
+
 static bool
 cmod_propagate_cmp_to_add(const gen_device_info *devinfo, bblock_t *block,
                           fs_inst *inst)
@@ -326,17 +328,69 @@ opt_cmod_propagation_local(const gen_device_info *devinfo, bblock_t *block)
                }
             }
 
-            /* If the instruction generating inst's source also wrote the
-             * flag, and inst is doing a simple .nz comparison, then inst
-             * is redundant - the appropriate value is already in the flag
-             * register.  Delete inst.
+            /* Knowing following:
+             * - CMP writes to flag register the result of
+             *   applying cmod to the `src0 - src1`.
+             *   After that it stores the same value to dst.
+             *   Other instructions first store their result to
+             *   dst, and then store cmod(dst) to the flag
+             *   register.
+             * - inst is either CMP or MOV
+             * - inst->dst is null
+             * - inst->src[0] overlaps with scan_inst->dst
+             * - inst->src[1] is zero
+             * - scan_inst wrote to a flag register
+             *
+             * There can be three possible paths:
+             *
+             * - scan_inst is CMP:
+             *
+             *   Considering that src0 is either 0x0 (false),
+             *   or 0xffffffff (true), and src1 is 0x0:
+             *
+             *   - If inst's cmod is NZ, we can always remove
+             *     scan_inst: NZ is invariant for false and true. This
+             *     holds even if src0 is NaN: .nz is the only cmod,
+             *     that returns true for NaN.
+             *
+             *   - .g is invariant if src0 has a UD type
+             *
+             *   - .l is invariant if src0 has a D type
+             *
+             * - scan_inst and inst have the same cmod:
+             *
+             *   If scan_inst is anything than CMP, it already
+             *   wrote the appropriate value to the flag register.
+             *
+             * - else:
+             *
+             *   We can change cmod of scan_inst to that of inst,
+             *   and remove inst. It is valid as long as we make
+             *   sure that no instruction uses the flag register
+             *   between scan_inst and inst.
              */
-            if (inst->conditional_mod == BRW_CONDITIONAL_NZ &&
-                !inst->src[0].negate &&
+            if (!inst->src[0].negate &&
                 scan_inst->flags_written()) {
-               inst->remove(block);
-               progress = true;
-               break;
+               if (scan_inst->opcode == BRW_OPCODE_CMP) {
+                  if ((inst->conditional_mod == BRW_CONDITIONAL_NZ) ||
+                      (inst->conditional_mod == BRW_CONDITIONAL_G &&
+                       inst->src[0].type == BRW_REGISTER_TYPE_UD) ||
+                      (inst->conditional_mod == BRW_CONDITIONAL_L &&
+                       inst->src[0].type == BRW_REGISTER_TYPE_D)) {
+                     inst->remove(block);
+                     progress = true;
+                     break;
+                  }
+               } else if (scan_inst->conditional_mod == inst->conditional_mod) {
+                  inst->remove(block);
+                  progress = true;
+                  break;
+               } else if (!read_flag) {
+                  scan_inst->conditional_mod = inst->conditional_mod;
+                  inst->remove(block);
+                  progress = true;
+                  break;
+               }
             }
 
             /* The conditional mod of the CMP/CMPN instructions behaves
@@ -446,7 +500,7 @@ fs_visitor::opt_cmod_propagation()
    }
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
 
    return progress;
 }

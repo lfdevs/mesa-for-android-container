@@ -95,6 +95,8 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1;
 
    case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
+      if (!screen->feats.dualSrcBlend)
+         return 0;
       return screen->props.limits.maxFragmentDualSrcAttachments;
 
    case PIPE_CAP_POINT_SPRITE:
@@ -139,9 +141,8 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 0;
 #endif
 
+   case PIPE_CAP_TGSI_INSTANCEID:
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
-      return 1;
-
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
       return 1;
 
@@ -176,6 +177,12 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_CUBE_MAP_ARRAY:
       return screen->feats.imageCubeArray;
 
+   case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
+      return 1;
+
+   case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
+      return screen->props.limits.minTexelBufferOffsetAlignment;
+
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return 0; /* unsure */
 
@@ -205,6 +212,9 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return screen->props.limits.minTexelGatherOffset;
    case PIPE_CAP_MAX_TEXTURE_GATHER_OFFSET:
       return screen->props.limits.maxTexelGatherOffset;
+
+   case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
+      return 1;
 
    case PIPE_CAP_VENDOR_ID:
       return screen->props.vendorID;
@@ -376,9 +386,15 @@ zink_get_shader_param(struct pipe_screen *pscreen,
       }
 
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
-      /* this might be a bit simplistic... */
-      return MIN2(screen->props.limits.maxPerStageDescriptorSamplers,
-                  PIPE_MAX_SAMPLERS);
+      switch (shader) {
+      case PIPE_SHADER_VERTEX:
+      case PIPE_SHADER_FRAGMENT:
+         /* this might be a bit simplistic... */
+         return MIN2(screen->props.limits.maxPerStageDescriptorSamplers,
+                     PIPE_MAX_SAMPLERS);
+      default:
+         return 0; /* unsupported stage */
+      }
 
    case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
       return MIN2(screen->props.limits.maxUniformBufferRange, INT_MAX);

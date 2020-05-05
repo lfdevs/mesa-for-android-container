@@ -33,7 +33,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "main/glheader.h"
-#include "main/imports.h"
 #include "main/mtypes.h"
 #include "main/state.h"
 
@@ -280,7 +279,7 @@ static struct {
 
 
 /***********************************************************************
- *                         Initialization 
+ *                         Initialization
  ***********************************************************************/
 
 
@@ -370,8 +369,8 @@ void radeonEmitArrays( struct gl_context *ctx, GLuint inputs )
       rmesa->hw.tcl.cmd[TCL_OUTPUT_VTXFMT] = vtx;
    }
 
-   for (i = 0 ; i < RADEON_TCL_MAX_SETUP ; i++) 
-      if ((setup_tab[i].vertex_format & req) == req) 
+   for (i = 0 ; i < RADEON_TCL_MAX_SETUP ; i++)
+      if ((setup_tab[i].vertex_format & req) == req)
 	 break;
 
    if (rmesa->tcl.vertex_format == setup_tab[i].vertex_format &&
@@ -384,12 +383,12 @@ void radeonEmitArrays( struct gl_context *ctx, GLuint inputs )
    radeonAllocDmaRegion( &rmesa->radeon,
 			 &rmesa->radeon.tcl.aos[0].bo,
 			 &rmesa->radeon.tcl.aos[0].offset,
-			 VB->Count * setup_tab[i].vertex_size * 4, 
+			 VB->Count * setup_tab[i].vertex_size * 4,
 			 4);
 
    /* The vertex code expects Obj to be clean to element 3.  To fix
     * this, add more vertex code (for obj-2, obj-3) or preferably move
-    * to maos.  
+    * to maos.
     */
    if (VB->AttribPtr[_TNL_ATTRIB_POS]->size < 3 ||
        (VB->AttribPtr[_TNL_ATTRIB_POS]->size == 3 &&
@@ -422,7 +421,7 @@ void radeonEmitArrays( struct gl_context *ctx, GLuint inputs )
 
 
    radeon_bo_map(rmesa->radeon.tcl.aos[0].bo, 1);
-   setup_tab[i].emit( ctx, 0, VB->Count, 
+   setup_tab[i].emit( ctx, 0, VB->Count,
 		      rmesa->radeon.tcl.aos[0].bo->ptr + rmesa->radeon.tcl.aos[0].offset);
    radeon_bo_unmap(rmesa->radeon.tcl.aos[0].bo);
    //   rmesa->radeon.tcl.aos[0].size = setup_tab[i].vertex_size;

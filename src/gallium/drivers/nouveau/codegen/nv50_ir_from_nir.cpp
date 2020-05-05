@@ -30,6 +30,7 @@
 #include "codegen/nv50_ir_from_common.h"
 #include "codegen/nv50_ir_lowering_helper.h"
 #include "codegen/nv50_ir_util.h"
+#include "tgsi/tgsi_from_mesa.h"
 
 #if __cplusplus >= 201103L
 #include <unordered_map>
@@ -80,8 +81,6 @@ private:
    Value* convert(nir_load_const_instr*, uint8_t);
    LValues& convert(nir_register *);
    LValues& convert(nir_ssa_def *);
-
-   ImgFormat convertGLImgFormat(GLuint);
 
    Value* getSrc(nir_alu_src *, uint8_t component = 0);
    Value* getSrc(nir_register *, uint8_t);
@@ -875,256 +874,6 @@ vert_attrib_to_tgsi_semantic(gl_vert_attrib slot, unsigned *name, unsigned *inde
    }
 }
 
-static void
-varying_slot_to_tgsi_semantic(gl_varying_slot slot, unsigned *name, unsigned *index)
-{
-   assert(name && index);
-
-   if (slot >= VARYING_SLOT_TESS_MAX) {
-      ERROR("invalid varying slot %u\n", slot);
-      assert(false);
-      return;
-   }
-
-   if (slot >= VARYING_SLOT_PATCH0) {
-      *name = TGSI_SEMANTIC_PATCH;
-      *index = slot - VARYING_SLOT_PATCH0;
-      return;
-   }
-
-   if (slot >= VARYING_SLOT_VAR0) {
-      *name = TGSI_SEMANTIC_GENERIC;
-      *index = slot - VARYING_SLOT_VAR0;
-      return;
-   }
-
-   if (slot >= VARYING_SLOT_TEX0 && slot <= VARYING_SLOT_TEX7) {
-      *name = TGSI_SEMANTIC_TEXCOORD;
-      *index = slot - VARYING_SLOT_TEX0;
-      return;
-   }
-
-   switch (slot) {
-   case VARYING_SLOT_BFC0:
-      *name = TGSI_SEMANTIC_BCOLOR;
-      *index = 0;
-      break;
-   case VARYING_SLOT_BFC1:
-      *name = TGSI_SEMANTIC_BCOLOR;
-      *index = 1;
-      break;
-   case VARYING_SLOT_CLIP_DIST0:
-      *name = TGSI_SEMANTIC_CLIPDIST;
-      *index = 0;
-      break;
-   case VARYING_SLOT_CLIP_DIST1:
-      *name = TGSI_SEMANTIC_CLIPDIST;
-      *index = 1;
-      break;
-   case VARYING_SLOT_CLIP_VERTEX:
-      *name = TGSI_SEMANTIC_CLIPVERTEX;
-      *index = 0;
-      break;
-   case VARYING_SLOT_COL0:
-      *name = TGSI_SEMANTIC_COLOR;
-      *index = 0;
-      break;
-   case VARYING_SLOT_COL1:
-      *name = TGSI_SEMANTIC_COLOR;
-      *index = 1;
-      break;
-   case VARYING_SLOT_EDGE:
-      *name = TGSI_SEMANTIC_EDGEFLAG;
-      *index = 0;
-      break;
-   case VARYING_SLOT_FACE:
-      *name = TGSI_SEMANTIC_FACE;
-      *index = 0;
-      break;
-   case VARYING_SLOT_FOGC:
-      *name = TGSI_SEMANTIC_FOG;
-      *index = 0;
-      break;
-   case VARYING_SLOT_LAYER:
-      *name = TGSI_SEMANTIC_LAYER;
-      *index = 0;
-      break;
-   case VARYING_SLOT_PNTC:
-      *name = TGSI_SEMANTIC_PCOORD;
-      *index = 0;
-      break;
-   case VARYING_SLOT_POS:
-      *name = TGSI_SEMANTIC_POSITION;
-      *index = 0;
-      break;
-   case VARYING_SLOT_PRIMITIVE_ID:
-      *name = TGSI_SEMANTIC_PRIMID;
-      *index = 0;
-      break;
-   case VARYING_SLOT_PSIZ:
-      *name = TGSI_SEMANTIC_PSIZE;
-      *index = 0;
-      break;
-   case VARYING_SLOT_TESS_LEVEL_INNER:
-      *name = TGSI_SEMANTIC_TESSINNER;
-      *index = 0;
-      break;
-   case VARYING_SLOT_TESS_LEVEL_OUTER:
-      *name = TGSI_SEMANTIC_TESSOUTER;
-      *index = 0;
-      break;
-   case VARYING_SLOT_VIEWPORT:
-      *name = TGSI_SEMANTIC_VIEWPORT_INDEX;
-      *index = 0;
-      break;
-   default:
-      ERROR("unknown varying slot %u\n", slot);
-      assert(false);
-      break;
-   }
-}
-
-static void
-frag_result_to_tgsi_semantic(unsigned slot, unsigned *name, unsigned *index)
-{
-   if (slot >= FRAG_RESULT_DATA0) {
-      *name = TGSI_SEMANTIC_COLOR;
-      *index = slot - FRAG_RESULT_COLOR - 2; // intentional
-      return;
-   }
-
-   switch (slot) {
-   case FRAG_RESULT_COLOR:
-      *name = TGSI_SEMANTIC_COLOR;
-      *index = 0;
-      break;
-   case FRAG_RESULT_DEPTH:
-      *name = TGSI_SEMANTIC_POSITION;
-      *index = 0;
-      break;
-   case FRAG_RESULT_SAMPLE_MASK:
-      *name = TGSI_SEMANTIC_SAMPLEMASK;
-      *index = 0;
-      break;
-   default:
-      ERROR("unknown frag result slot %u\n", slot);
-      assert(false);
-      break;
-   }
-}
-
-// copy of _mesa_sysval_to_semantic
-static void
-system_val_to_tgsi_semantic(unsigned val, unsigned *name, unsigned *index)
-{
-   *index = 0;
-   switch (val) {
-   // Vertex shader
-   case SYSTEM_VALUE_VERTEX_ID:
-      *name = TGSI_SEMANTIC_VERTEXID;
-      break;
-   case SYSTEM_VALUE_INSTANCE_ID:
-      *name = TGSI_SEMANTIC_INSTANCEID;
-      break;
-   case SYSTEM_VALUE_VERTEX_ID_ZERO_BASE:
-      *name = TGSI_SEMANTIC_VERTEXID_NOBASE;
-      break;
-   case SYSTEM_VALUE_BASE_VERTEX:
-      *name = TGSI_SEMANTIC_BASEVERTEX;
-      break;
-   case SYSTEM_VALUE_BASE_INSTANCE:
-      *name = TGSI_SEMANTIC_BASEINSTANCE;
-      break;
-   case SYSTEM_VALUE_DRAW_ID:
-      *name = TGSI_SEMANTIC_DRAWID;
-      break;
-
-   // Geometry shader
-   case SYSTEM_VALUE_INVOCATION_ID:
-      *name = TGSI_SEMANTIC_INVOCATIONID;
-      break;
-
-   // Fragment shader
-   case SYSTEM_VALUE_FRAG_COORD:
-      *name = TGSI_SEMANTIC_POSITION;
-      break;
-   case SYSTEM_VALUE_FRONT_FACE:
-      *name = TGSI_SEMANTIC_FACE;
-      break;
-   case SYSTEM_VALUE_SAMPLE_ID:
-      *name = TGSI_SEMANTIC_SAMPLEID;
-      break;
-   case SYSTEM_VALUE_SAMPLE_POS:
-      *name = TGSI_SEMANTIC_SAMPLEPOS;
-      break;
-   case SYSTEM_VALUE_SAMPLE_MASK_IN:
-      *name = TGSI_SEMANTIC_SAMPLEMASK;
-      break;
-   case SYSTEM_VALUE_HELPER_INVOCATION:
-      *name = TGSI_SEMANTIC_HELPER_INVOCATION;
-      break;
-
-   // Tessellation shader
-   case SYSTEM_VALUE_TESS_COORD:
-      *name = TGSI_SEMANTIC_TESSCOORD;
-      break;
-   case SYSTEM_VALUE_VERTICES_IN:
-      *name = TGSI_SEMANTIC_VERTICESIN;
-      break;
-   case SYSTEM_VALUE_PRIMITIVE_ID:
-      *name = TGSI_SEMANTIC_PRIMID;
-      break;
-   case SYSTEM_VALUE_TESS_LEVEL_OUTER:
-      *name = TGSI_SEMANTIC_TESSOUTER;
-      break;
-   case SYSTEM_VALUE_TESS_LEVEL_INNER:
-      *name = TGSI_SEMANTIC_TESSINNER;
-      break;
-
-   // Compute shader
-   case SYSTEM_VALUE_LOCAL_INVOCATION_ID:
-      *name = TGSI_SEMANTIC_THREAD_ID;
-      break;
-   case SYSTEM_VALUE_WORK_GROUP_ID:
-      *name = TGSI_SEMANTIC_BLOCK_ID;
-      break;
-   case SYSTEM_VALUE_NUM_WORK_GROUPS:
-      *name = TGSI_SEMANTIC_GRID_SIZE;
-      break;
-   case SYSTEM_VALUE_LOCAL_GROUP_SIZE:
-      *name = TGSI_SEMANTIC_BLOCK_SIZE;
-      break;
-
-   // ARB_shader_ballot
-   case SYSTEM_VALUE_SUBGROUP_SIZE:
-      *name = TGSI_SEMANTIC_SUBGROUP_SIZE;
-      break;
-   case SYSTEM_VALUE_SUBGROUP_INVOCATION:
-      *name = TGSI_SEMANTIC_SUBGROUP_INVOCATION;
-      break;
-   case SYSTEM_VALUE_SUBGROUP_EQ_MASK:
-      *name = TGSI_SEMANTIC_SUBGROUP_EQ_MASK;
-      break;
-   case SYSTEM_VALUE_SUBGROUP_GE_MASK:
-      *name = TGSI_SEMANTIC_SUBGROUP_GE_MASK;
-      break;
-   case SYSTEM_VALUE_SUBGROUP_GT_MASK:
-      *name = TGSI_SEMANTIC_SUBGROUP_GT_MASK;
-      break;
-   case SYSTEM_VALUE_SUBGROUP_LE_MASK:
-      *name = TGSI_SEMANTIC_SUBGROUP_LE_MASK;
-      break;
-   case SYSTEM_VALUE_SUBGROUP_LT_MASK:
-      *name = TGSI_SEMANTIC_SUBGROUP_LT_MASK;
-      break;
-
-   default:
-      ERROR("unknown system value %u\n", val);
-      assert(false);
-      break;
-   }
-}
-
 void
 Converter::setInterpolate(nv50_ir_varying *var,
                           uint8_t mode,
@@ -1203,9 +952,8 @@ bool Converter::assignSlots() {
       if (!(nir->info.system_values_read & 1ull << i))
          continue;
 
-      system_val_to_tgsi_semantic(i, &name, &index);
-      info->sv[info->numSysVals].sn = name;
-      info->sv[info->numSysVals].si = index;
+      info->sv[info->numSysVals].sn = tgsi_get_sysval_semantic(i);
+      info->sv[info->numSysVals].si = 0;
       info->sv[info->numSysVals].input = 0; // TODO inferSysValDirection(sn);
 
       switch (i) {
@@ -1247,18 +995,21 @@ bool Converter::assignSlots() {
 
       switch(prog->getType()) {
       case Program::TYPE_FRAGMENT:
-         varying_slot_to_tgsi_semantic((gl_varying_slot)slot, &name, &index);
+         tgsi_get_gl_varying_semantic((gl_varying_slot)slot, true,
+                                      &name, &index);
          for (uint16_t i = 0; i < slots; ++i) {
             setInterpolate(&info->in[vary + i], var->data.interpolation,
                            var->data.centroid | var->data.sample, name);
          }
          break;
       case Program::TYPE_GEOMETRY:
-         varying_slot_to_tgsi_semantic((gl_varying_slot)slot, &name, &index);
+         tgsi_get_gl_varying_semantic((gl_varying_slot)slot, true,
+                                      &name, &index);
          break;
       case Program::TYPE_TESSELLATION_CONTROL:
       case Program::TYPE_TESSELLATION_EVAL:
-         varying_slot_to_tgsi_semantic((gl_varying_slot)slot, &name, &index);
+         tgsi_get_gl_varying_semantic((gl_varying_slot)slot, true,
+                                      &name, &index);
          if (var->data.patch && name == TGSI_SEMANTIC_PATCH)
             info->numPatchConstants = MAX2(info->numPatchConstants, index + slots);
          break;
@@ -1311,7 +1062,7 @@ bool Converter::assignSlots() {
 
       switch(prog->getType()) {
       case Program::TYPE_FRAGMENT:
-         frag_result_to_tgsi_semantic((gl_frag_result)slot, &name, &index);
+         tgsi_get_gl_frag_result_semantic((gl_frag_result)slot, &name, &index);
          switch (name) {
          case TGSI_SEMANTIC_COLOR:
             if (!var->data.fb_fetch_output)
@@ -1336,7 +1087,8 @@ bool Converter::assignSlots() {
       case Program::TYPE_TESSELLATION_CONTROL:
       case Program::TYPE_TESSELLATION_EVAL:
       case Program::TYPE_VERTEX:
-         varying_slot_to_tgsi_semantic((gl_varying_slot)slot, &name, &index);
+         tgsi_get_gl_varying_semantic((gl_varying_slot)slot, true,
+                                      &name, &index);
 
          if (var->data.patch && name != TGSI_SEMANTIC_TESSINNER &&
              name != TGSI_SEMANTIC_TESSOUTER)
@@ -1858,68 +1610,6 @@ Converter::convert(nir_intrinsic_op intr)
       assert(false);
       return SV_LAST;
    }
-}
-
-ImgFormat
-Converter::convertGLImgFormat(GLuint format)
-{
-#define FMT_CASE(a, b) \
-  case GL_ ## a: return nv50_ir::FMT_ ## b
-
-   switch (format) {
-   FMT_CASE(NONE, NONE);
-
-   FMT_CASE(RGBA32F, RGBA32F);
-   FMT_CASE(RGBA16F, RGBA16F);
-   FMT_CASE(RG32F, RG32F);
-   FMT_CASE(RG16F, RG16F);
-   FMT_CASE(R11F_G11F_B10F, R11G11B10F);
-   FMT_CASE(R32F, R32F);
-   FMT_CASE(R16F, R16F);
-
-   FMT_CASE(RGBA32UI, RGBA32UI);
-   FMT_CASE(RGBA16UI, RGBA16UI);
-   FMT_CASE(RGB10_A2UI, RGB10A2UI);
-   FMT_CASE(RGBA8UI, RGBA8UI);
-   FMT_CASE(RG32UI, RG32UI);
-   FMT_CASE(RG16UI, RG16UI);
-   FMT_CASE(RG8UI, RG8UI);
-   FMT_CASE(R32UI, R32UI);
-   FMT_CASE(R16UI, R16UI);
-   FMT_CASE(R8UI, R8UI);
-
-   FMT_CASE(RGBA32I, RGBA32I);
-   FMT_CASE(RGBA16I, RGBA16I);
-   FMT_CASE(RGBA8I, RGBA8I);
-   FMT_CASE(RG32I, RG32I);
-   FMT_CASE(RG16I, RG16I);
-   FMT_CASE(RG8I, RG8I);
-   FMT_CASE(R32I, R32I);
-   FMT_CASE(R16I, R16I);
-   FMT_CASE(R8I, R8I);
-
-   FMT_CASE(RGBA16, RGBA16);
-   FMT_CASE(RGB10_A2, RGB10A2);
-   FMT_CASE(RGBA8, RGBA8);
-   FMT_CASE(RG16, RG16);
-   FMT_CASE(RG8, RG8);
-   FMT_CASE(R16, R16);
-   FMT_CASE(R8, R8);
-
-   FMT_CASE(RGBA16_SNORM, RGBA16_SNORM);
-   FMT_CASE(RGBA8_SNORM, RGBA8_SNORM);
-   FMT_CASE(RG16_SNORM, RG16_SNORM);
-   FMT_CASE(RG8_SNORM, RG8_SNORM);
-   FMT_CASE(R16_SNORM, R16_SNORM);
-   FMT_CASE(R8_SNORM, R8_SNORM);
-
-   FMT_CASE(BGRA_INTEGER, BGRA8);
-   default:
-      ERROR("unknown format %x\n", format);
-      assert(false);
-      return nv50_ir::FMT_NONE;
-   }
-#undef FMT_CASE
 }
 
 bool
@@ -2502,7 +2192,7 @@ Converter::visit(nir_intrinsic_instr *insn)
 
       TexInstruction *texi = mkTex(getOperation(op), target.getEnum(), location, 0, defs, srcs);
       texi->tex.bindless = false;
-      texi->tex.format = &nv50_ir::TexInstruction::formatTable[convertGLImgFormat(nir_intrinsic_format(insn))];
+      texi->tex.format = nv50_ir::TexInstruction::translateImgFormat(nir_intrinsic_format(insn));
       texi->tex.mask = mask;
       texi->tex.bindless = true;
       texi->cache = convert(nir_intrinsic_access(insn));
@@ -2608,7 +2298,7 @@ Converter::visit(nir_intrinsic_instr *insn)
 
       TexInstruction *texi = mkTex(getOperation(op), target.getEnum(), location, 0, defs, srcs);
       texi->tex.bindless = false;
-      texi->tex.format = &nv50_ir::TexInstruction::formatTable[convertGLImgFormat(tex->data.image.format)];
+      texi->tex.format = nv50_ir::TexInstruction::translateImgFormat(tex->data.image.format);
       texi->tex.mask = mask;
       texi->cache = getCacheModeFromVar(tex);
       texi->setType(ty);

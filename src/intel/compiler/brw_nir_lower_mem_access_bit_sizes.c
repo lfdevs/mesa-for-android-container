@@ -81,14 +81,14 @@ lower_mem_load_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
       intrin->intrinsic == nir_intrinsic_load_scratch;
 
    assert(intrin->dest.is_ssa);
-   if (intrin->dest.ssa.bit_size == 32 &&
-       (!needs_scalar || intrin->num_components == 1))
-      return false;
-
    const unsigned bit_size = intrin->dest.ssa.bit_size;
    const unsigned num_components = intrin->dest.ssa.num_components;
    const unsigned bytes_read = num_components * (bit_size / 8);
    const unsigned align = nir_intrinsic_align(intrin);
+
+   if (bit_size == 32 && align >= 32 &&
+       (!needs_scalar || intrin->num_components == 1))
+      return false;
 
    nir_ssa_def *result;
    nir_src *offset_src = nir_get_io_offset_src(intrin);
@@ -167,7 +167,7 @@ lower_mem_store_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
    assert(writemask < (1 << num_components));
 
    if ((value->bit_size <= 32 && num_components == 1) ||
-       (value->bit_size == 32 &&
+       (value->bit_size == 32 && align >= 32 &&
         writemask == (1 << num_components) - 1 &&
         !needs_scalar))
       return false;

@@ -564,6 +564,9 @@ VkResult
 anv_queue_submit_simple_batch(struct anv_queue *queue,
                               struct anv_batch *batch)
 {
+   if (queue->device->no_hw)
+      return VK_SUCCESS;
+
    struct anv_device *device = queue->device;
    struct anv_queue_submit *submit = anv_queue_submit_alloc(device);
    if (!submit)
@@ -946,6 +949,9 @@ VkResult anv_QueueSubmit(
     VkFence                                     fence)
 {
    ANV_FROM_HANDLE(anv_queue, queue, _queue);
+
+   if (queue->device->no_hw)
+      return VK_SUCCESS;
 
    /* Query for device status prior to submitting.  Technically, we don't need
     * to do this.  However, if we have a client that's submitting piles of
@@ -1536,6 +1542,9 @@ VkResult anv_WaitForFences(
     uint64_t                                    timeout)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
+
+   if (device->no_hw)
+      return VK_SUCCESS;
 
    if (anv_device_is_lost(device))
       return VK_ERROR_DEVICE_LOST;
@@ -2281,6 +2290,9 @@ VkResult anv_WaitSemaphores(
     uint64_t                                    timeout)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
+
+   if (device->no_hw)
+      return VK_SUCCESS;
 
    struct anv_timeline **timelines =
       vk_alloc(&device->alloc,

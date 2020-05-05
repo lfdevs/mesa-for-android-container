@@ -214,6 +214,32 @@ pipe_bind_to_isl_usage(unsigned bindings)
    return usage;
 }
 
+enum isl_format
+iris_image_view_get_format(struct iris_context *ice,
+                           const struct pipe_image_view *img)
+{
+   struct iris_screen *screen = (struct iris_screen *)ice->ctx.screen;
+   const struct gen_device_info *devinfo = &screen->devinfo;
+
+   isl_surf_usage_flags_t usage = ISL_SURF_USAGE_STORAGE_BIT;
+   enum isl_format isl_fmt =
+      iris_format_for_usage(devinfo, img->format, usage).fmt;
+
+   if (img->shader_access & PIPE_IMAGE_ACCESS_READ) {
+      /* On Gen8, try to use typed surfaces reads (which support a
+       * limited number of formats), and if not possible, fall back
+       * to untyped reads.
+       */
+      if (devinfo->gen == 8 &&
+          !isl_has_matching_typed_storage_image_format(devinfo, isl_fmt))
+         return ISL_FORMAT_RAW;
+      else
+         return isl_lower_storage_image_format(devinfo, isl_fmt);
+   }
+
+   return isl_fmt;
+}
+
 struct pipe_resource *
 iris_resource_get_separate_stencil(struct pipe_resource *p_res)
 {
@@ -314,6 +340,8 @@ iris_resource_destroy(struct pipe_screen *screen,
    iris_resource_disable_aux(res);
 
    iris_bo_unreference(res->bo);
+   iris_pscreen_unref(res->base.screen);
+
    free(res);
 }
 
@@ -326,7 +354,7 @@ iris_alloc_resource(struct pipe_screen *pscreen,
       return NULL;
 
    res->base = *templ;
-   res->base.screen = pscreen;
+   res->base.screen = iris_pscreen_ref(pscreen);
    pipe_reference_init(&res->base.reference, 1);
 
    res->aux.possible_usages = 1 << ISL_AUX_USAGE_NONE;
@@ -480,8 +508,20 @@ iris_resource_configure_aux(struct iris_screen *screen,
       res->aux.possible_usages |=
          1 << (has_ccs ? ISL_AUX_USAGE_MCS_CCS : ISL_AUX_USAGE_MCS);
    } else if (has_hiz) {
-      res->aux.possible_usages |=
-         1 << (has_ccs ? ISL_AUX_USAGE_HIZ_CCS : ISL_AUX_USAGE_HIZ);
+      if (!has_ccs) {
+         res->aux.possible_usages |= 1 << ISL_AUX_USAGE_HIZ;
+      } else if (res->surf.samples == 1 &&
+                 (res->surf.usage & ISL_SURF_USAGE_TEXTURE_BIT)) {
+         /* If this resource is single-sampled and will be used as a texture,
+          * put the HiZ surface in write-through mode so that we can sample
+          * from it.
+          */
+         res->aux.possible_usages |= 1 << ISL_AUX_USAGE_HIZ_CCS_WT;
+      } else {
+         res->aux.possible_usages |= 1 << ISL_AUX_USAGE_HIZ_CCS;
+      }
+   } else if (has_ccs && isl_surf_usage_is_stencil(res->surf.usage)) {
+      res->aux.possible_usages |= 1 << ISL_AUX_USAGE_STC_CCS;
    } else if (has_ccs) {
       if (want_ccs_e_for_format(devinfo, res->surf.format))
          res->aux.possible_usages |= 1 << ISL_AUX_USAGE_CCS_E;
@@ -500,11 +540,8 @@ iris_resource_configure_aux(struct iris_screen *screen,
    if (!devinfo->has_sample_with_hiz || res->surf.samples > 1)
       res->aux.sampler_usages &= ~(1 << ISL_AUX_USAGE_HIZ);
 
-   /* We don't always support sampling with HIZ_CCS. But when we do, treat it
-    * as CCS_E.*/
+   /* ISL_AUX_USAGE_HIZ_CCS doesn't support sampling at all */
    res->aux.sampler_usages &= ~(1 << ISL_AUX_USAGE_HIZ_CCS);
-   if (isl_surf_supports_hiz_ccs_wt(devinfo, &res->surf, res->aux.usage))
-      res->aux.sampler_usages |= 1 << ISL_AUX_USAGE_CCS_E;
 
    enum isl_aux_state initial_state;
    *aux_size_B = 0;
@@ -517,6 +554,7 @@ iris_resource_configure_aux(struct iris_screen *screen,
       return !res->mod_info || res->mod_info->aux_usage == ISL_AUX_USAGE_NONE;
    case ISL_AUX_USAGE_HIZ:
    case ISL_AUX_USAGE_HIZ_CCS:
+   case ISL_AUX_USAGE_HIZ_CCS_WT:
       initial_state = ISL_AUX_STATE_AUX_INVALID;
       break;
    case ISL_AUX_USAGE_MCS:
@@ -534,6 +572,7 @@ iris_resource_configure_aux(struct iris_screen *screen,
       break;
    case ISL_AUX_USAGE_CCS_D:
    case ISL_AUX_USAGE_CCS_E:
+   case ISL_AUX_USAGE_STC_CCS:
       /* When CCS_E is used, we need to ensure that the CCS starts off in
        * a valid state.  From the Sky Lake PRM, "MCS Buffer for Render
        * Target(s)":
@@ -547,11 +586,13 @@ iris_resource_configure_aux(struct iris_screen *screen,
        * For CCS_D, do the same thing.  On Gen9+, this avoids having any
        * undefined bits in the aux buffer.
        */
-      if (imported)
+      if (imported) {
+         assert(res->aux.usage != ISL_AUX_USAGE_STC_CCS);
          initial_state =
             isl_drm_modifier_get_default_aux_state(res->mod_info->modifier);
-      else
+      } else {
          initial_state = ISL_AUX_STATE_PASS_THROUGH;
+      }
       *alloc_flags |= BO_ALLOC_ZEROED;
       break;
    case ISL_AUX_USAGE_MC:
@@ -629,20 +670,8 @@ iris_resource_init_aux_buf(struct iris_resource *res, uint32_t alloc_flags,
                 res->aux.surf.size_B);
       }
 
-      /* Bspec section titled : MCS/CCS Buffers for Render Target(s) states:
-       *    - If Software wants to enable Color Compression without Fast clear,
-       *      Software needs to initialize MCS with zeros.
-       *    - Lossless compression and CCS initialized to all F (using HW Fast
-       *      Clear or SW direct Clear)
-       *
-       * We think, the first bullet point above is referring to CCS aux
-       * surface. Since we initialize the MCS in the clear state, we also
-       * initialize the CCS in the clear state (via SW direct clear) to keep
-       * the two in sync.
-       */
       memset((char*)map + res->aux.extra_aux.offset,
-             isl_aux_usage_has_mcs(res->aux.usage) ? 0xFF : 0,
-             res->aux.extra_aux.surf.size_B);
+             0, res->aux.extra_aux.surf.size_B);
 
       /* Zero the indirect clear color to match ::fast_clear_color. */
       memset((char *)map + res->aux.clear_color_offset, 0,
@@ -772,6 +801,9 @@ iris_resource_create_for_buffer(struct pipe_screen *pscreen,
       return NULL;
    }
 
+   if (templ->bind & PIPE_BIND_SHARED)
+      iris_bo_make_external(res->bo);
+
    return &res->base;
 }
 
@@ -895,6 +927,9 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
       map_aux_addresses(screen, res);
    }
 
+   if (templ->bind & PIPE_BIND_SHARED)
+      iris_bo_make_external(res->bo);
+
    return &res->base;
 
 fail:
@@ -946,7 +981,7 @@ iris_resource_from_user_memory(struct pipe_screen *pscreen,
                                     user_memory, templ->width0,
                                     IRIS_MEMZONE_OTHER);
    if (!res->bo) {
-      free(res);
+      iris_resource_destroy(pscreen, &res->base);
       return NULL;
    }
 
@@ -989,7 +1024,7 @@ iris_resource_from_handle(struct pipe_screen *pscreen,
       unreachable("invalid winsys handle type");
    }
    if (!res->bo)
-      return NULL;
+      goto fail;
 
    res->offset = whandle->offset;
 
@@ -1278,7 +1313,7 @@ iris_invalidate_resource(struct pipe_context *ctx,
    /* Rebind the buffer, replacing any state referring to the old BO's
     * address, and marking state dirty so it's reemitted.
     */
-   ice->vtbl.rebind_buffer(ice, res);
+   screen->vtbl.rebind_buffer(ice, res);
 
    util_range_set_empty(&res->valid_buffer_range);
 
@@ -1795,13 +1830,16 @@ iris_transfer_map(struct pipe_context *ctx,
 
    if (resource->target != PIPE_BUFFER) {
       bool need_hiz_resolve = iris_resource_level_has_hiz(res, level);
+      bool need_stencil_resolve = res->aux.usage == ISL_AUX_USAGE_STC_CCS;
 
       need_color_resolve =
          (res->aux.usage == ISL_AUX_USAGE_CCS_D ||
           res->aux.usage == ISL_AUX_USAGE_CCS_E) &&
          iris_has_color_unresolved(res, level, 1, box->z, box->depth);
 
-      need_resolve = need_color_resolve || need_hiz_resolve;
+      need_resolve = need_color_resolve ||
+                     need_hiz_resolve ||
+                     need_stencil_resolve;
    }
 
    bool map_would_stall = false;

@@ -184,7 +184,7 @@ HOTTILE* HotTileMgr::GetHotTile(SWR_CONTEXT*                pContext,
 
             if (hotTile.state == HOTTILE_DIRTY)
             {
-                pContext->pfnStoreTile(GetPrivateState(pDC),
+                pContext->pfnStoreTile(pDC,
                                        hWorkerPrivateData,
                                        format,
                                        attachment,
@@ -194,7 +194,7 @@ HOTTILE* HotTileMgr::GetHotTile(SWR_CONTEXT*                pContext,
                                        hotTile.pBuffer);
             }
 
-            pContext->pfnLoadTile(GetPrivateState(pDC),
+            pContext->pfnLoadTile(pDC,
                                   hWorkerPrivateData,
                                   format,
                                   attachment,
@@ -370,7 +370,7 @@ void HotTileMgr::InitializeHotTiles(SWR_CONTEXT*  pContext,
         {
             RDTSC_BEGIN(pContext->pBucketMgr, BELoadTiles, pDC->drawId);
             // invalid hottile before draw requires a load from surface before we can draw to it
-            pContext->pfnLoadTile(GetPrivateState(pDC),
+            pContext->pfnLoadTile(pDC,
                                   hWorkerPrivateData,
                                   KNOB_COLOR_HOT_TILE_FORMAT,
                                   (SWR_RENDERTARGET_ATTACHMENT)(SWR_ATTACHMENT_COLOR0 + rtSlot),
@@ -401,7 +401,7 @@ void HotTileMgr::InitializeHotTiles(SWR_CONTEXT*  pContext,
         {
             RDTSC_BEGIN(pContext->pBucketMgr, BELoadTiles, pDC->drawId);
             // invalid hottile before draw requires a load from surface before we can draw to it
-            pContext->pfnLoadTile(GetPrivateState(pDC),
+            pContext->pfnLoadTile(pDC,
                                   hWorkerPrivateData,
                                   KNOB_DEPTH_HOT_TILE_FORMAT,
                                   SWR_ATTACHMENT_DEPTH,
@@ -431,7 +431,7 @@ void HotTileMgr::InitializeHotTiles(SWR_CONTEXT*  pContext,
         {
             RDTSC_BEGIN(pContext->pBucketMgr, BELoadTiles, pDC->drawId);
             // invalid hottile before draw requires a load from surface before we can draw to it
-            pContext->pfnLoadTile(GetPrivateState(pDC),
+            pContext->pfnLoadTile(pDC,
                                   hWorkerPrivateData,
                                   KNOB_STENCIL_HOT_TILE_FORMAT,
                                   SWR_ATTACHMENT_STENCIL,

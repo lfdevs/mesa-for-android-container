@@ -6,3 +6,4 @@ shr(8)          g34<1>UD        g3<0>UD         g1<0>.yUD       { align16 1Q };
 shr(8)          g3<1>.xUD       g3<4>.xUD       0x00000001UD    { align16 1Q };
 shr(8)          g28<1>UD        g3.5<0,1,0>UD   g4.1<0,1,0>UD   { align1 1Q };
 shr(16)         g48<1>UD        g3.5<0,1,0>UD   g4.1<0,1,0>UD   { align1 1H };
+shr(1)          g3<1>D          sr0<0,1,0>D     12D             { align1 1N };

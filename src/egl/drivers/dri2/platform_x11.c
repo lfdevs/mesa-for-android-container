@@ -339,7 +339,7 @@ dri2_x11_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
       }
    } else {
       if (type == EGL_PBUFFER_BIT) {
-         dri2_surf->depth = _eglGetConfigKey(conf, EGL_BUFFER_SIZE);
+         dri2_surf->depth = conf->BufferSize;
       }
       swrastCreateDrawable(dri2_dpy, dri2_surf);
    }

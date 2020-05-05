@@ -512,17 +512,6 @@ vc4_nir_blend_pipeline(struct vc4_compile *c, nir_builder *b, nir_ssa_def *src,
                                 nir_imm_int(b, ~colormask)));
 }
 
-static int
-vc4_nir_next_output_driver_location(nir_shader *s)
-{
-        int maxloc = -1;
-
-        nir_foreach_variable(var, &s->outputs)
-                maxloc = MAX2(maxloc, (int)var->data.driver_location);
-
-        return maxloc + 1;
-}
-
 static void
 vc4_nir_store_sample_mask(struct vc4_compile *c, nir_builder *b,
                           nir_ssa_def *val)
@@ -530,8 +519,7 @@ vc4_nir_store_sample_mask(struct vc4_compile *c, nir_builder *b,
         nir_variable *sample_mask = nir_variable_create(c->s, nir_var_shader_out,
                                                         glsl_uint_type(),
                                                         "sample_mask");
-        sample_mask->data.driver_location =
-                vc4_nir_next_output_driver_location(c->s);
+        sample_mask->data.driver_location = c->s->num_outputs++;
         sample_mask->data.location = FRAG_RESULT_SAMPLE_MASK;
 
         nir_intrinsic_instr *intr =

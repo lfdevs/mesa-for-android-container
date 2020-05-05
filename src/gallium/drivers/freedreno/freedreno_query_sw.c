@@ -108,7 +108,7 @@ is_draw_rate_query(struct fd_query *q)
 	}
 }
 
-static bool
+static void
 fd_sw_begin_query(struct fd_context *ctx, struct fd_query *q)
 {
 	struct fd_sw_query *sq = fd_sw_query(q);
@@ -118,7 +118,6 @@ fd_sw_begin_query(struct fd_context *ctx, struct fd_query *q)
 	} else if (is_draw_rate_query(q)) {
 		sq->begin_time = ctx->stats.draw_calls;
 	}
-	return true;
 }
 
 static void

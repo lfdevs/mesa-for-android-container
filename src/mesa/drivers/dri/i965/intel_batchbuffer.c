@@ -573,6 +573,8 @@ brw_new_batch(struct brw_context *brw)
     */
    if (INTEL_DEBUG & DEBUG_SHADER_TIME)
       brw_collect_and_report_shader_time(brw);
+
+   intel_batchbuffer_maybe_noop(brw);
 }
 
 /**
@@ -673,8 +675,7 @@ throttle(struct brw_context *brw)
    }
 
    if (brw->need_flush_throttle) {
-      __DRIscreen *dri_screen = brw->screen->driScrnPriv;
-      drmCommandNone(dri_screen->fd, DRM_I915_GEM_THROTTLE);
+      drmCommandNone(brw->screen->fd, DRM_I915_GEM_THROTTLE);
       brw->need_flush_throttle = false;
    }
 }
@@ -739,7 +740,6 @@ execbuffer(int fd,
 static int
 submit_batch(struct brw_context *brw, int in_fence_fd, int *out_fence_fd)
 {
-   __DRIscreen *dri_screen = brw->screen->driScrnPriv;
    struct intel_batchbuffer *batch = &brw->batch;
    int ret = 0;
 
@@ -806,7 +806,7 @@ submit_batch(struct brw_context *brw, int in_fence_fd, int *out_fence_fd)
          batch->exec_bos[index] = tmp_bo;
       }
 
-      ret = execbuffer(dri_screen->fd, batch, brw->hw_ctx,
+      ret = execbuffer(brw->screen->fd, batch, brw->hw_ctx,
                        4 * USED_BATCH(*batch),
                        in_fence_fd, out_fence_fd, flags);
 
@@ -889,6 +889,17 @@ _intel_batchbuffer_flush_fence(struct brw_context *brw,
    brw_new_batch(brw);
 
    return ret;
+}
+
+void
+intel_batchbuffer_maybe_noop(struct brw_context *brw)
+{
+   if (!brw->frontend_noop || USED_BATCH(brw->batch) != 0)
+      return;
+
+   BEGIN_BATCH(1);
+   OUT_BATCH(MI_BATCH_BUFFER_END);
+   ADVANCE_BATCH();
 }
 
 bool

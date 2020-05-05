@@ -48,6 +48,8 @@ delete_variant(struct ir3_shader_variant *v)
 		ir3_destroy(v->ir);
 	if (v->bo)
 		fd_bo_del(v->bo);
+	if (v->binning)
+		delete_variant(v->binning);
 	free(v);
 }
 
@@ -96,6 +98,9 @@ fixup_regfootprint(struct ir3_shader_variant *v, uint32_t gpu_id)
 	}
 
 	for (i = 0; i < v->outputs_count; i++) {
+		/* for ex, VS shaders with tess don't have normal varying outs: */
+		if (!VALIDREG(v->outputs[i].regid))
+			continue;
 		int32_t regid = v->outputs[i].regid + 3;
 		if (v->outputs[i].half) {
 			if (gpu_id < 500) {
@@ -297,6 +302,11 @@ ir3_shader_from_nir(struct ir3_compiler *compiler, nir_shader *nir)
 	NIR_PASS_V(nir, nir_lower_io, nir_var_all, ir3_glsl_type_size,
 			   (nir_lower_io_options)0);
 
+	if (compiler->gpu_id >= 600 &&
+			nir->info.stage == MESA_SHADER_FRAGMENT &&
+			!(ir3_shader_debug & IR3_DBG_NOFP16))
+		NIR_PASS_V(nir, nir_lower_mediump_outputs);
+
 	if (nir->info.stage == MESA_SHADER_FRAGMENT) {
 		/* NOTE: lower load_barycentric_at_sample first, since it
 		 * produces load_barycentric_at_offset:
@@ -381,7 +391,7 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
 	unsigned i;
 
 	struct ir3_instruction *instr;
-	foreach_input_n(instr, i, ir) {
+	foreach_input_n (instr, i, ir) {
 		reg = instr->regs[0];
 		regid = reg->num;
 		fprintf(out, "@in(%sr%d.%c)\tin%d",
@@ -396,14 +406,14 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
 	/* print pre-dispatch texture fetches: */
 	for (i = 0; i < so->num_sampler_prefetch; i++) {
 		const struct ir3_sampler_prefetch *fetch = &so->sampler_prefetch[i];
-		fprintf(out, "@tex(%sr%d.%c)\tsrc=%u, samp=%u, tex=%u, wrmask=%x, cmd=%u\n",
+		fprintf(out, "@tex(%sr%d.%c)\tsrc=%u, samp=%u, tex=%u, wrmask=0x%x, cmd=%u\n",
 				fetch->half_precision ? "h" : "",
 				fetch->dst >> 2, "xyzw"[fetch->dst & 0x3],
 				fetch->src, fetch->samp_id, fetch->tex_id,
 				fetch->wrmask, fetch->cmd);
 	}
 
-	foreach_output_n(instr, i, ir) {
+	foreach_output_n (instr, i, ir) {
 		reg = instr->regs[0];
 		regid = reg->num;
 		fprintf(out, "@out(%sr%d.%c)\tout%d",
@@ -450,17 +460,28 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
 	fprintf(out, "\n");
 
 	/* print generic shader info: */
-	fprintf(out, "; %s prog %d/%d: %u instructions, %d half, %d full\n",
+	fprintf(out, "; %s prog %d/%d: %u instr, %u nops, %u non-nops, %u mov, %u cov, %u dwords\n",
 			type, so->shader->id, so->id,
 			so->info.instrs_count,
+			so->info.nops_count,
+			so->info.instrs_count - so->info.nops_count,
+			so->info.mov_count, so->info.cov_count,
+			so->info.sizedwords);
+
+	fprintf(out, "; %s prog %d/%d: %u last-baryf, %d half, %d full, %u constlen\n",
+			type, so->shader->id, so->id,
+			so->info.last_baryf,
 			so->info.max_half_reg + 1,
-			so->info.max_reg + 1);
+			so->info.max_reg + 1,
+			so->constlen);
 
-	fprintf(out, "; %u constlen\n", so->constlen);
-
-	fprintf(out, "; %u (ss), %u (sy)\n", so->info.ss, so->info.sy);
-
-	fprintf(out, "; max_sun=%u\n", ir->max_sun);
+	fprintf(out, "; %s prog %d/%d: %u sstall, %u (ss), %u (sy), %d max_sun, %d loops\n",
+			type, so->shader->id, so->id,
+			so->info.sstall,
+			so->info.ss,
+			so->info.sy,
+			so->max_sun,
+			so->loops);
 
 	/* print shader type specific info: */
 	switch (so->type) {
@@ -488,13 +509,10 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
 			dump_output(out, so, FRAG_RESULT_DATA6, "data6");
 			dump_output(out, so, FRAG_RESULT_DATA7, "data7");
 		}
-		/* these two are hard-coded since we don't know how to
-		 * program them to anything but all 0's...
-		 */
-		if (so->frag_coord)
-			fprintf(out, "; fragcoord: r0.x\n");
-		if (so->frag_face)
-			fprintf(out, "; fragface: hr0.x\n");
+		dump_reg(out, "fragcoord",
+			ir3_find_sysval_regid(so, SYSTEM_VALUE_FRAG_COORD));
+		dump_reg(out, "fragface",
+			ir3_find_sysval_regid(so, SYSTEM_VALUE_FRONT_FACE));
 		break;
 	default:
 		/* TODO */

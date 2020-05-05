@@ -748,7 +748,10 @@ TEST_F(nir_load_store_vectorize_test, ssbo_store_large)
 TEST_F(nir_load_store_vectorize_test, ubo_load_adjacent_memory_barrier)
 {
    create_load(nir_var_mem_ubo, 0, 0, 0x1);
-   nir_builder_instr_insert(b, &nir_intrinsic_instr_create(b->shader, nir_intrinsic_memory_barrier)->instr);
+
+   nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_ACQ_REL,
+                             nir_var_mem_ssbo);
+
    create_load(nir_var_mem_ubo, 0, 4, 0x2);
 
    nir_validate_shader(b->shader, NULL);
@@ -762,7 +765,10 @@ TEST_F(nir_load_store_vectorize_test, ubo_load_adjacent_memory_barrier)
 TEST_F(nir_load_store_vectorize_test, ssbo_load_adjacent_memory_barrier)
 {
    create_load(nir_var_mem_ssbo, 0, 0, 0x1);
-   nir_builder_instr_insert(b, &nir_intrinsic_instr_create(b->shader, nir_intrinsic_memory_barrier)->instr);
+
+   nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_ACQ_REL,
+                             nir_var_mem_ssbo);
+
    create_load(nir_var_mem_ssbo, 0, 4, 0x2);
 
    nir_validate_shader(b->shader, NULL);
@@ -793,7 +799,10 @@ TEST_F(nir_load_store_vectorize_test, ssbo_load_adjacent_barrier)
 TEST_F(nir_load_store_vectorize_test, ssbo_load_adjacent_memory_barrier_shared)
 {
    create_load(nir_var_mem_ssbo, 0, 0, 0x1);
-   nir_builder_instr_insert(b, &nir_intrinsic_instr_create(b->shader, nir_intrinsic_memory_barrier_shared)->instr);
+
+   nir_scoped_memory_barrier(b, NIR_SCOPE_WORKGROUP, NIR_MEMORY_ACQ_REL,
+                             nir_var_mem_shared);
+
    create_load(nir_var_mem_ssbo, 0, 4, 0x2);
 
    nir_validate_shader(b->shader, NULL);
@@ -961,10 +970,10 @@ TEST_F(nir_load_store_vectorize_test, ssbo_store_adjacent_8_8_16)
    ASSERT_EQ(val->bit_size, 8);
    ASSERT_EQ(val->num_components, 4);
    nir_const_value *cv = nir_instr_as_load_const(val->parent_instr)->value;
-   ASSERT_EQ(nir_const_value_as_uint(cv[0], 32), 0x10);
-   ASSERT_EQ(nir_const_value_as_uint(cv[1], 32), 0x20);
-   ASSERT_EQ(nir_const_value_as_uint(cv[2], 32), 0x30);
-   ASSERT_EQ(nir_const_value_as_uint(cv[3], 32), 0x0);
+   ASSERT_EQ(nir_const_value_as_uint(cv[0], 8), 0x10);
+   ASSERT_EQ(nir_const_value_as_uint(cv[1], 8), 0x20);
+   ASSERT_EQ(nir_const_value_as_uint(cv[2], 8), 0x30);
+   ASSERT_EQ(nir_const_value_as_uint(cv[3], 8), 0x0);
 }
 
 TEST_F(nir_load_store_vectorize_test, ssbo_store_adjacent_32_32_64)

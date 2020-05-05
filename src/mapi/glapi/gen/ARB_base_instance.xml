@@ -8,8 +8,8 @@
 
 <category name="GL_ARB_base_instance" number="107">
 
-  <function name="DrawArraysInstancedBaseInstance" exec="dynamic" marshal="draw"
-            marshal_fail="_mesa_glthread_is_non_vbo_draw_elements(ctx)">
+  <function name="DrawArraysInstancedBaseInstance" marshal="draw"
+            marshal_sync="_mesa_glthread_has_non_vbo_vertices(ctx)">
     <param name="mode" type="GLenum"/>
     <param name="first" type="GLint"/>
     <param name="count" type="GLsizei"/>
@@ -17,8 +17,8 @@
     <param name="baseinstance" type="GLuint"/>
   </function>
 
-  <function name="DrawElementsInstancedBaseInstance" exec="dynamic" marshal="draw"
-            marshal_fail="_mesa_glthread_is_non_vbo_draw_elements(ctx)">
+  <function name="DrawElementsInstancedBaseInstance" marshal="draw"
+            marshal_sync="_mesa_glthread_has_non_vbo_vertices_or_indices(ctx)">
     <param name="mode" type="GLenum"/>
     <param name="count" type="GLsizei"/>
     <param name="type" type="GLenum"/>
@@ -27,8 +27,8 @@
     <param name="baseinstance" type="GLuint"/>
   </function>
 
-  <function name="DrawElementsInstancedBaseVertexBaseInstance" exec="dynamic" marshal="draw"
-            marshal_fail="_mesa_glthread_is_non_vbo_draw_elements(ctx)">
+  <function name="DrawElementsInstancedBaseVertexBaseInstance" marshal="draw"
+            marshal_sync="_mesa_glthread_has_non_vbo_vertices_or_indices(ctx)">
     <param name="mode" type="GLenum"/>
     <param name="count" type="GLsizei"/>
     <param name="type" type="GLenum"/>

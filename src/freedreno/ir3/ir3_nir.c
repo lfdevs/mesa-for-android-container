@@ -58,17 +58,16 @@ static const nir_shader_compiler_options options = {
 		.lower_bitfield_insert_to_shifts = true,
 		.lower_bitfield_extract_to_shifts = true,
 		.lower_pack_half_2x16 = true,
-		.lower_pack_half_2x16_split = true,
 		.lower_pack_snorm_4x8 = true,
 		.lower_pack_snorm_2x16 = true,
 		.lower_pack_unorm_4x8 = true,
 		.lower_pack_unorm_2x16 = true,
 		.lower_unpack_half_2x16 = true,
-		.lower_unpack_half_2x16_split = true,
 		.lower_unpack_snorm_4x8 = true,
 		.lower_unpack_snorm_2x16 = true,
 		.lower_unpack_unorm_4x8 = true,
 		.lower_unpack_unorm_2x16 = true,
+		.lower_pack_split = true,
 		.use_interpolated_input_intrinsics = true,
 		.lower_rotate = true,
 		.lower_to_scalar = true,
@@ -100,22 +99,22 @@ static const nir_shader_compiler_options options_a6xx = {
 		.lower_bitfield_insert_to_shifts = true,
 		.lower_bitfield_extract_to_shifts = true,
 		.lower_pack_half_2x16 = true,
-		.lower_pack_half_2x16_split = true,
 		.lower_pack_snorm_4x8 = true,
 		.lower_pack_snorm_2x16 = true,
 		.lower_pack_unorm_4x8 = true,
 		.lower_pack_unorm_2x16 = true,
 		.lower_unpack_half_2x16 = true,
-		.lower_unpack_half_2x16_split = true,
 		.lower_unpack_snorm_4x8 = true,
 		.lower_unpack_snorm_2x16 = true,
 		.lower_unpack_unorm_4x8 = true,
 		.lower_unpack_unorm_2x16 = true,
+		.lower_pack_split = true,
 		.use_interpolated_input_intrinsics = true,
 		.lower_rotate = true,
 		.vectorize_io = true,
 		.lower_to_scalar = true,
 		.has_imul24 = true,
+		.max_unroll_iterations = 32,
 };
 
 const nir_shader_compiler_options *
@@ -177,6 +176,7 @@ ir3_optimize_loop(nir_shader *s)
 		progress |= OPT(s, nir_opt_intrinsics);
 		progress |= OPT(s, nir_opt_algebraic);
 		progress |= OPT(s, nir_lower_alu);
+		progress |= OPT(s, nir_lower_pack);
 		progress |= OPT(s, nir_opt_constant_folding);
 
 		if (lower_flrp != 0) {
@@ -207,7 +207,6 @@ ir3_optimize_loop(nir_shader *s)
 		progress |= OPT(s, nir_opt_if, false);
 		progress |= OPT(s, nir_opt_remove_phis);
 		progress |= OPT(s, nir_opt_undef);
-
 	} while (progress);
 }
 
@@ -359,12 +358,12 @@ static void
 ir3_nir_scan_driver_consts(nir_shader *shader,
 		struct ir3_const_state *layout)
 {
-	nir_foreach_function(function, shader) {
+	nir_foreach_function (function, shader) {
 		if (!function->impl)
 			continue;
 
-		nir_foreach_block(block, function->impl) {
-			nir_foreach_instr(instr, block) {
+		nir_foreach_block (block, function->impl) {
+			nir_foreach_instr (instr, block) {
 				if (instr->type != nir_instr_type_intrinsic)
 					continue;
 
@@ -382,19 +381,19 @@ ir3_nir_scan_driver_consts(nir_shader *shader,
 						layout->ssbo_size.count;
 					layout->ssbo_size.count += 1; /* one const per */
 					break;
-				case nir_intrinsic_image_deref_atomic_add:
-				case nir_intrinsic_image_deref_atomic_imin:
-				case nir_intrinsic_image_deref_atomic_umin:
-				case nir_intrinsic_image_deref_atomic_imax:
-				case nir_intrinsic_image_deref_atomic_umax:
-				case nir_intrinsic_image_deref_atomic_and:
-				case nir_intrinsic_image_deref_atomic_or:
-				case nir_intrinsic_image_deref_atomic_xor:
-				case nir_intrinsic_image_deref_atomic_exchange:
-				case nir_intrinsic_image_deref_atomic_comp_swap:
-				case nir_intrinsic_image_deref_store:
-				case nir_intrinsic_image_deref_size:
-					idx = nir_intrinsic_get_var(intr, 0)->data.driver_location;
+				case nir_intrinsic_image_atomic_add:
+				case nir_intrinsic_image_atomic_imin:
+				case nir_intrinsic_image_atomic_umin:
+				case nir_intrinsic_image_atomic_imax:
+				case nir_intrinsic_image_atomic_umax:
+				case nir_intrinsic_image_atomic_and:
+				case nir_intrinsic_image_atomic_or:
+				case nir_intrinsic_image_atomic_xor:
+				case nir_intrinsic_image_atomic_exchange:
+				case nir_intrinsic_image_atomic_comp_swap:
+				case nir_intrinsic_image_store:
+				case nir_intrinsic_image_size:
+					idx = nir_src_as_uint(intr->src[0]);
 					if (layout->image_dims.mask & (1 << idx))
 						break;
 					layout->image_dims.mask |= (1 << idx);

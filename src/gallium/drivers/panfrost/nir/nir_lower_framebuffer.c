@@ -219,7 +219,7 @@ nir_shader_to_native(nir_builder *b,
       return nir_format_pack_11f11f10f(b, c_shader);
 
    default:
-      printf("%s\n", desc->name);
+      fprintf(stderr, "%s\n", desc->name);
       unreachable("Unknown format name");
    }
 }
@@ -267,7 +267,7 @@ nir_native_to_shader(nir_builder *b,
    }
 
    default:
-      printf("%s\n", desc->name);
+      fprintf(stderr, "%s\n", desc->name);
       unreachable("Unknown format name");
    }
 }

@@ -101,6 +101,7 @@ brw_dispatch_compute(struct gl_context *ctx, const GLuint *num_groups) {
 
    brw->compute.num_work_groups_bo = NULL;
    brw->compute.num_work_groups = num_groups;
+   brw->compute.group_size = NULL;
    ctx->NewDriverState |= BRW_NEW_CS_WORK_GROUPS;
 
    brw_dispatch_compute_common(ctx);
@@ -120,6 +121,22 @@ brw_dispatch_compute_indirect(struct gl_context *ctx, GLintptr indirect)
    brw->compute.num_work_groups_bo = bo;
    brw->compute.num_work_groups_offset = indirect;
    brw->compute.num_work_groups = indirect_group_counts;
+   brw->compute.group_size = NULL;
+   ctx->NewDriverState |= BRW_NEW_CS_WORK_GROUPS;
+
+   brw_dispatch_compute_common(ctx);
+}
+
+static void
+brw_dispatch_compute_group_size(struct gl_context *ctx,
+                                const GLuint *num_groups,
+                                const GLuint *group_size)
+{
+   struct brw_context *brw = brw_context(ctx);
+
+   brw->compute.num_work_groups_bo = NULL;
+   brw->compute.num_work_groups = num_groups;
+   brw->compute.group_size = group_size;
    ctx->NewDriverState |= BRW_NEW_CS_WORK_GROUPS;
 
    brw_dispatch_compute_common(ctx);
@@ -130,4 +147,5 @@ brw_init_compute_functions(struct dd_function_table *functions)
 {
    functions->DispatchCompute = brw_dispatch_compute;
    functions->DispatchComputeIndirect = brw_dispatch_compute_indirect;
+   functions->DispatchComputeGroupSize = brw_dispatch_compute_group_size;
 }

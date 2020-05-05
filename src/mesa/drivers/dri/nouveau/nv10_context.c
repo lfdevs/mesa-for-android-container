@@ -26,6 +26,7 @@
 
 #include <stdbool.h>
 #include "main/state.h"
+#include "util/u_memory.h"
 #include "nouveau_driver.h"
 #include "nouveau_context.h"
 #include "nouveau_fbo.h"

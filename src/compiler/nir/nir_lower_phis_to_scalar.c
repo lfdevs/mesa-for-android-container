@@ -65,9 +65,7 @@ is_phi_src_scalarizable(nir_phi_src *src,
        * are ok too.
        */
       return nir_op_infos[src_alu->op].output_size == 0 ||
-             src_alu->op == nir_op_vec2 ||
-             src_alu->op == nir_op_vec3 ||
-             src_alu->op == nir_op_vec4;
+             nir_op_is_vec(src_alu->op);
    }
 
    case nir_instr_type_phi:
@@ -212,13 +210,7 @@ lower_phis_to_scalar_block(nir_block *block,
        * will be redundant, but copy propagation should clean them up for
        * us.  No need to add the complexity here.
        */
-      nir_op vec_op;
-      switch (phi->dest.ssa.num_components) {
-      case 2: vec_op = nir_op_vec2; break;
-      case 3: vec_op = nir_op_vec3; break;
-      case 4: vec_op = nir_op_vec4; break;
-      default: unreachable("Invalid number of components");
-      }
+      nir_op vec_op = nir_op_vec(phi->dest.ssa.num_components);
 
       nir_alu_instr *vec = nir_alu_instr_create(state->mem_ctx, vec_op);
       nir_ssa_dest_init(&vec->instr, &vec->dest.dest,

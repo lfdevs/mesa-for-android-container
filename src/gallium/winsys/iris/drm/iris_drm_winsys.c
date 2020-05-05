@@ -25,7 +25,7 @@
 #include <fcntl.h>
 
 #include "iris_drm_public.h"
-#include "iris/iris_screen.h"
+extern struct pipe_screen *iris_screen_create(int fd, const struct pipe_screen_config *config);
 
 struct pipe_screen *
 iris_drm_screen_create(int fd, const struct pipe_screen_config *config)

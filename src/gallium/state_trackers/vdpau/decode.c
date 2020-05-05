@@ -600,7 +600,8 @@ vlVdpDecoderRender(VdpDecoder decoder,
    if (vlsurf->device != vldecoder->device)
       return VDP_STATUS_HANDLE_DEVICE_MISMATCH;
 
-   if (vlsurf->video_buffer != NULL && vlsurf->video_buffer->chroma_format != dec->chroma_format)
+   if (vlsurf->video_buffer != NULL &&
+       pipe_format_to_chroma_format(vlsurf->video_buffer->buffer_format) != dec->chroma_format)
       // TODO: Recreate decoder with correct chroma
       return VDP_STATUS_INVALID_CHROMA_TYPE;
 

@@ -776,7 +776,7 @@ static void show_fps(struct dri2_drawable *draw)
 
    if (draw->previous_time + interval * 1000000 <= current_time) {
       if (draw->previous_time) {
-         fprintf(stderr, "libGL: FPS = %.1f\n",
+         fprintf(stderr, "libGL: FPS = %.2f\n",
                  ((uint64_t)draw->frames * 1000000) /
                  (double)(current_time - draw->previous_time));
       }

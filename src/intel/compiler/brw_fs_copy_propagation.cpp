@@ -94,7 +94,7 @@ class fs_copy_prop_dataflow
 {
 public:
    fs_copy_prop_dataflow(void *mem_ctx, cfg_t *cfg,
-                         const fs_live_variables *live,
+                         const fs_live_variables &live,
                          exec_list *out_acp[ACP_HASH_SIZE]);
 
    void setup_initial_values();
@@ -104,7 +104,7 @@ public:
 
    void *mem_ctx;
    cfg_t *cfg;
-   const fs_live_variables *live;
+   const fs_live_variables &live;
 
    acp_entry **acp;
    int num_acp;
@@ -115,7 +115,7 @@ public:
 } /* anonymous namespace */
 
 fs_copy_prop_dataflow::fs_copy_prop_dataflow(void *mem_ctx, cfg_t *cfg,
-                                             const fs_live_variables *live,
+                                             const fs_live_variables &live,
                                              exec_list *out_acp[ACP_HASH_SIZE])
    : mem_ctx(mem_ctx), cfg(cfg), live(live)
 {
@@ -265,8 +265,8 @@ fs_copy_prop_dataflow::setup_initial_values()
       for (int i = 0; i < num_acp; i++) {
          BITSET_SET(bd[block->num].undef, i);
          for (unsigned off = 0; off < acp[i]->size_written; off += REG_SIZE) {
-            if (BITSET_TEST(live->block_data[block->num].defout,
-                            live->var_from_reg(byte_offset(acp[i]->dst, off))))
+            if (BITSET_TEST(live.block_data[block->num].defout,
+                            live.var_from_reg(byte_offset(acp[i]->dst, off))))
                BITSET_CLEAR(bd[block->num].undef, i);
          }
       }
@@ -823,7 +823,11 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
          if (i == 1) {
             inst->src[i] = val;
             progress = true;
-         } else if (i == 0 && inst->src[1].file != IMM) {
+         } else if (i == 0 && inst->src[1].file != IMM &&
+                    (inst->conditional_mod == BRW_CONDITIONAL_NONE ||
+                     /* Only GE and L are commutative. */
+                     inst->conditional_mod == BRW_CONDITIONAL_GE ||
+                     inst->conditional_mod == BRW_CONDITIONAL_L)) {
             inst->src[0] = inst->src[1];
             inst->src[1] = val;
 
@@ -1013,7 +1017,7 @@ fs_visitor::opt_copy_propagation()
    for (int i = 0; i < cfg->num_blocks; i++)
       out_acp[i] = new exec_list [ACP_HASH_SIZE];
 
-   calculate_live_intervals();
+   const fs_live_variables &live = live_analysis.require();
 
    /* First, walk through each block doing local copy propagation and getting
     * the set of copies available at the end of the block.
@@ -1035,15 +1039,15 @@ fs_visitor::opt_copy_propagation()
       for (unsigned a = 0; a < ACP_HASH_SIZE; a++) {
          foreach_in_list_safe(acp_entry, entry, &out_acp[block->num][a]) {
             assert(entry->dst.file == VGRF);
-            if (block->start_ip <= virtual_grf_start[entry->dst.nr] &&
-                virtual_grf_end[entry->dst.nr] <= block->end_ip)
+            if (block->start_ip <= live.vgrf_start[entry->dst.nr] &&
+                live.vgrf_end[entry->dst.nr] <= block->end_ip)
                entry->remove();
          }
       }
    }
 
    /* Do dataflow analysis for those available copies. */
-   fs_copy_prop_dataflow dataflow(copy_prop_ctx, cfg, live_intervals, out_acp);
+   fs_copy_prop_dataflow dataflow(copy_prop_ctx, cfg, live, out_acp);
 
    /* Next, re-run local copy propagation, this time with the set of copies
     * provided by the dataflow analysis available at the start of a block.
@@ -1067,7 +1071,8 @@ fs_visitor::opt_copy_propagation()
    ralloc_free(copy_prop_ctx);
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTION_DATA_FLOW |
+                          DEPENDENCY_INSTRUCTION_DETAIL);
 
    return progress;
 }

@@ -21,7 +21,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 #include <gtest/gtest.h>
-#include "main/compiler.h"
+#include "util/compiler.h"
 #include "main/mtypes.h"
 #include "main/macros.h"
 #include "ir.h"

@@ -159,6 +159,7 @@ draw(void)
 
    info.ctx->clear(info.ctx,
               PIPE_CLEAR_COLOR | PIPE_CLEAR_DEPTHSTENCIL,
+              NULL,
               &clear_color, 1.0, 0);
    util_draw_arrays(info.ctx, PIPE_PRIM_QUADS, 0, NUM_VERTS);
    info.ctx->flush(info.ctx, NULL, 0);

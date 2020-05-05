@@ -348,8 +348,8 @@ emit_blit(struct fd_ringbuffer *ring, const struct pipe_blit_info *info)
 	sswap = fd5_pipe2swap(info->src.format);
 	dswap = fd5_pipe2swap(info->dst.format);
 
-	spitch = sslice->pitch * src->layout.cpp;
-	dpitch = dslice->pitch * dst->layout.cpp;
+	spitch = sslice->pitch;
+	dpitch = dslice->pitch;
 
 	/* if dtile, then dswap ignored by hw, and likewise if stile then sswap
 	 * ignored by hw.. but in this case we have already rejected the blit

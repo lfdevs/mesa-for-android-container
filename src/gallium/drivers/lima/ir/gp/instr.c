@@ -34,6 +34,12 @@ gpir_instr *gpir_instr_create(gpir_block *block)
    if (unlikely(!instr))
       return NULL;
 
+   block->comp->num_instr++;
+   if (block->comp->num_instr > 512) {
+      gpir_error("shader exceeds limit of 512 instructions\n");
+      return NULL;
+   }
+
    instr->index = block->sched.instr_index++;
    instr->alu_num_slot_free = 6;
    instr->alu_non_cplx_slot_free = 5;

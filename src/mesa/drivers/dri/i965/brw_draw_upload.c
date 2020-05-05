@@ -400,30 +400,12 @@ brw_get_vertex_surface_type(struct brw_context *brw,
 
 static void
 copy_array_to_vbo_array(struct brw_context *brw,
-			struct brw_vertex_element *element,
+                        const uint8_t *const ptr, const int src_stride,
 			int min, int max,
 			struct brw_vertex_buffer *buffer,
 			GLuint dst_stride)
 {
-   const struct gl_vertex_buffer_binding *glbinding = element->glbinding;
-   const struct gl_array_attributes *glattrib = element->glattrib;
-   const struct gl_vertex_format *glformat = &glattrib->Format;
-   const int src_stride = glbinding->Stride;
-
-   /* If the source stride is zero, we just want to upload the current
-    * attribute once and set the buffer's stride to 0.  There's no need
-    * to replicate it out.
-    */
-   if (src_stride == 0) {
-      brw_upload_data(&brw->upload, glattrib->Ptr, glformat->_ElementSize,
-                      glformat->_ElementSize, &buffer->bo, &buffer->offset);
-
-      buffer->stride = 0;
-      buffer->size = glformat->_ElementSize;
-      return;
-   }
-
-   const unsigned char *src = glattrib->Ptr + min * src_stride;
+   const unsigned char *src = ptr + min * src_stride;
    int count = max - min + 1;
    GLuint size = count * dst_stride;
    uint8_t *dst = brw_upload_space(&brw->upload, size, dst_stride,
@@ -436,7 +418,7 @@ copy_array_to_vbo_array(struct brw_context *brw,
     *
     * In this case, let's the dst with undefined values
     */
-   if (src != NULL) {
+   if (ptr != NULL) {
       if (dst_stride == src_stride) {
          memcpy(dst, src, size);
       } else {
@@ -461,18 +443,14 @@ brw_prepare_vertices(struct brw_context *brw)
    /* BRW_NEW_VS_PROG_DATA */
    const struct brw_vs_prog_data *vs_prog_data =
       brw_vs_prog_data(brw->vs.base.prog_data);
-   GLbitfield64 vs_inputs =
+   const uint64_t vs_inputs64 =
       nir_get_single_slot_attribs_mask(vs_prog_data->inputs_read,
                                        vp->DualSlotInputs);
-   const unsigned char *ptr = NULL;
-   GLuint interleaved = 0;
+   assert((vs_inputs64 & ~(uint64_t)VERT_BIT_ALL) == 0);
+   unsigned vs_inputs = (unsigned)vs_inputs64;
    unsigned int min_index = brw->vb.min_index + brw->basevertex;
    unsigned int max_index = brw->vb.max_index + brw->basevertex;
-   unsigned i;
    int delta, j;
-
-   struct brw_vertex_element *upload[VERT_ATTRIB_MAX];
-   GLuint nr_uploads = 0;
 
    /* _NEW_POLYGON
     *
@@ -491,15 +469,14 @@ brw_prepare_vertices(struct brw_context *brw)
 
    /* Accumulate the list of enabled arrays. */
    brw->vb.nr_enabled = 0;
-   while (vs_inputs) {
-      const unsigned index = ffsll(vs_inputs) - 1;
-      assert(index < 64);
 
-      struct brw_vertex_element *input = &brw->vb.inputs[index];
-      input->is_dual_slot = (vp->DualSlotInputs & BITFIELD64_BIT(index)) != 0;
-      vs_inputs &= ~BITFIELD64_BIT(index);
+   unsigned mask = vs_inputs;
+   while (mask) {
+      const gl_vert_attrib attr = u_bit_scan(&mask);
+      struct brw_vertex_element *input = &brw->vb.inputs[attr];
       brw->vb.enabled[brw->vb.nr_enabled++] = input;
    }
+   assert(brw->vb.nr_enabled <= VERT_ATTRIB_MAX);
 
    if (brw->vb.nr_enabled == 0)
       return;
@@ -507,134 +484,84 @@ brw_prepare_vertices(struct brw_context *brw)
    if (brw->vb.nr_buffers)
       return;
 
-   /* The range of data in a given buffer represented as [min, max) */
-   struct intel_buffer_object *enabled_buffer[VERT_ATTRIB_MAX];
-   uint32_t buffer_range_start[VERT_ATTRIB_MAX];
-   uint32_t buffer_range_end[VERT_ATTRIB_MAX];
+   j = 0;
+   const struct gl_vertex_array_object *vao = ctx->Array._DrawVAO;
 
-   for (i = j = 0; i < brw->vb.nr_enabled; i++) {
-      struct brw_vertex_element *input = brw->vb.enabled[i];
-      const struct gl_vertex_buffer_binding *glbinding = input->glbinding;
-      const struct gl_array_attributes *glattrib = input->glattrib;
+   unsigned vbomask = vs_inputs & _mesa_draw_vbo_array_bits(ctx);
+   while (vbomask) {
+      const struct gl_vertex_buffer_binding *const glbinding =
+         _mesa_draw_buffer_binding(vao, ffs(vbomask) - 1);
+      const GLsizei stride = glbinding->Stride;
 
-      if (_mesa_is_bufferobj(glbinding->BufferObj)) {
-	 struct intel_buffer_object *intel_buffer =
-	    intel_buffer_object(glbinding->BufferObj);
+      assert(glbinding->BufferObj);
 
-         const uint32_t offset = _mesa_draw_binding_offset(glbinding) +
+      /* Accumulate the range of a single vertex, start with inverted range */
+      uint32_t vertex_range_start = ~(uint32_t)0;
+      uint32_t vertex_range_end = 0;
+
+      const unsigned boundmask = _mesa_draw_bound_attrib_bits(glbinding);
+      unsigned attrmask = vbomask & boundmask;
+      /* Mark the those attributes as processed */
+      vbomask ^= attrmask;
+      /* We can assume that we have an array for the binding */
+      assert(attrmask);
+      /* Walk attributes belonging to the binding */
+      while (attrmask) {
+         const gl_vert_attrib attr = u_bit_scan(&attrmask);
+         const struct gl_array_attributes *const glattrib =
+            _mesa_draw_array_attrib(vao, attr);
+         const uint32_t rel_offset =
             _mesa_draw_attributes_relative_offset(glattrib);
+         const uint32_t rel_end = rel_offset + glattrib->Format._ElementSize;
 
-         /* Start with the worst case */
-         uint32_t start = 0;
-         uint32_t range = intel_buffer->Base.Size;
-         if (glbinding->InstanceDivisor) {
-            if (brw->num_instances) {
-               start = offset + glbinding->Stride * brw->baseinstance;
-               range = (glbinding->Stride * ((brw->num_instances - 1) /
-                                            glbinding->InstanceDivisor) +
-                        glattrib->Format._ElementSize);
-            }
-         } else {
-            if (brw->vb.index_bounds_valid) {
-               start = offset + min_index * glbinding->Stride;
-               range = (glbinding->Stride * (max_index - min_index) +
-                        glattrib->Format._ElementSize);
-            }
-         }
+         vertex_range_start = MIN2(vertex_range_start, rel_offset);
+         vertex_range_end = MAX2(vertex_range_end, rel_end);
 
-	 /* If we have a VB set to be uploaded for this buffer object
-	  * already, reuse that VB state so that we emit fewer
-	  * relocations.
-	  */
-	 unsigned k;
-	 for (k = 0; k < i; k++) {
-            struct brw_vertex_element *other = brw->vb.enabled[k];
-            const struct gl_vertex_buffer_binding *obind = other->glbinding;
-            const struct gl_array_attributes *oattrib = other->glattrib;
-            const uint32_t ooffset = _mesa_draw_binding_offset(obind) +
-               _mesa_draw_attributes_relative_offset(oattrib);
-	    if (glbinding->BufferObj == obind->BufferObj &&
-		glbinding->Stride == obind->Stride &&
-		glbinding->InstanceDivisor == obind->InstanceDivisor &&
-                (offset - ooffset) < glbinding->Stride)
-	    {
-	       input->buffer = brw->vb.enabled[k]->buffer;
-               input->offset = offset - ooffset;
-
-               buffer_range_start[input->buffer] =
-                  MIN2(buffer_range_start[input->buffer], start);
-               buffer_range_end[input->buffer] =
-                  MAX2(buffer_range_end[input->buffer], start + range);
-	       break;
-	    }
-	 }
-	 if (k == i) {
-	    struct brw_vertex_buffer *buffer = &brw->vb.buffers[j];
-
-	    /* Named buffer object: Just reference its contents directly. */
-	    buffer->offset = offset;
-            buffer->stride = glbinding->Stride;
-            buffer->step_rate = glbinding->InstanceDivisor;
-            buffer->size = glbinding->BufferObj->Size - offset;
-
-            enabled_buffer[j] = intel_buffer;
-            buffer_range_start[j] = start;
-            buffer_range_end[j] = start + range;
-
-	    input->buffer = j++;
-	    input->offset = 0;
-	 }
-      } else {
-	 /* Queue the buffer object up to be uploaded in the next pass,
-	  * when we've decided if we're doing interleaved or not.
-	  */
-	 if (nr_uploads == 0) {
-            interleaved = glbinding->Stride;
-            ptr = glattrib->Ptr;
-	 }
-	 else if (interleaved != glbinding->Stride ||
-                  glbinding->InstanceDivisor != 0 ||
-                  glattrib->Ptr < ptr ||
-                  (uintptr_t)(glattrib->Ptr - ptr) +
-                  glattrib->Format._ElementSize > interleaved)
-	 {
-            /* If our stride is different from the first attribute's stride,
-             * or if we are using an instance divisor or if the first
-             * attribute's stride didn't cover our element, disable the
-             * interleaved upload optimization.  The second case can most
-             * commonly occur in cases where there is a single vertex and, for
-             * example, the data is stored on the application's stack.
-             *
-             * NOTE: This will also disable the optimization in cases where
-             * the data is in a different order than the array indices.
-             * Something like:
-             *
-             *     float data[...];
-             *     glVertexAttribPointer(0, 4, GL_FLOAT, 32, &data[4]);
-             *     glVertexAttribPointer(1, 4, GL_FLOAT, 32, &data[0]);
-             */
-	    interleaved = 0;
-	 }
-
-	 upload[nr_uploads++] = input;
+         struct brw_vertex_element *input = &brw->vb.inputs[attr];
+         input->glformat = &glattrib->Format;
+         input->buffer = j;
+         input->is_dual_slot = (vp->DualSlotInputs & BITFIELD64_BIT(attr)) != 0;
+         input->offset = rel_offset;
       }
-   }
+      assert(vertex_range_start <= vertex_range_end);
 
-   /* Now that we've set up all of the buffers, we walk through and reference
-    * each of them.  We do this late so that we get the right size in each
-    * buffer and don't reference too little data.
-    */
-   for (i = 0; i < j; i++) {
-      struct brw_vertex_buffer *buffer = &brw->vb.buffers[i];
-      if (buffer->bo)
-         continue;
+      struct intel_buffer_object *intel_buffer =
+         intel_buffer_object(glbinding->BufferObj);
+      struct brw_vertex_buffer *buffer = &brw->vb.buffers[j];
 
-      const uint32_t start = buffer_range_start[i];
-      const uint32_t range = buffer_range_end[i] - buffer_range_start[i];
+      const uint32_t offset = _mesa_draw_binding_offset(glbinding);
 
-      buffer->bo = intel_bufferobj_buffer(brw, enabled_buffer[i], start,
+      /* If nothing else is known take the buffer size and offset as a bound */
+      uint32_t start = vertex_range_start;
+      uint32_t range = intel_buffer->Base.Size - offset - vertex_range_start;
+      /* Check if we can get a more narrow range */
+      if (glbinding->InstanceDivisor) {
+         if (brw->num_instances) {
+            const uint32_t vertex_size = vertex_range_end - vertex_range_start;
+            start = vertex_range_start + stride * brw->baseinstance;
+            range = (stride * ((brw->num_instances - 1) /
+                               glbinding->InstanceDivisor) +
+                     vertex_size);
+         }
+      } else {
+         if (brw->vb.index_bounds_valid) {
+            const uint32_t vertex_size = vertex_range_end - vertex_range_start;
+            start = vertex_range_start + stride * min_index;
+            range = (stride * (max_index - min_index) +
+                     vertex_size);
+         }
+      }
+
+      buffer->offset = offset;
+      buffer->size = start + range;
+      buffer->stride = stride;
+      buffer->step_rate = glbinding->InstanceDivisor;
+
+      buffer->bo = intel_bufferobj_buffer(brw, intel_buffer, offset + start,
                                           range, false);
       brw_bo_reference(buffer->bo);
+
+      j++;
    }
 
    /* If we need to upload all the arrays, then we can trim those arrays to
@@ -643,43 +570,64 @@ brw_prepare_vertices(struct brw_context *brw)
     */
    brw->vb.start_vertex_bias = 0;
    delta = min_index;
-   if (nr_uploads == brw->vb.nr_enabled) {
+   if ((vs_inputs & _mesa_draw_vbo_array_bits(ctx)) == 0) {
       brw->vb.start_vertex_bias = -delta;
       delta = 0;
    }
 
-   /* Handle any arrays to be uploaded. */
-   if (nr_uploads > 1) {
-      if (interleaved) {
-	 struct brw_vertex_buffer *buffer = &brw->vb.buffers[j];
-	 /* All uploads are interleaved, so upload the arrays together as
-	  * interleaved.  First, upload the contents and set up upload[0].
-	  */
-	 copy_array_to_vbo_array(brw, upload[0], min_index, max_index,
-				 buffer, interleaved);
-	 buffer->offset -= delta * interleaved;
-         buffer->size += delta * interleaved;
-         buffer->step_rate = 0;
+   unsigned usermask = vs_inputs & _mesa_draw_user_array_bits(ctx);
+   while (usermask) {
+      const struct gl_vertex_buffer_binding *const glbinding =
+         _mesa_draw_buffer_binding(vao, ffs(usermask) - 1);
+      const GLsizei stride = glbinding->Stride;
 
-	 for (i = 0; i < nr_uploads; i++) {
-            const struct gl_array_attributes *glattrib = upload[i]->glattrib;
-	    /* Then, just point upload[i] at upload[0]'s buffer. */
-            upload[i]->offset = ((const unsigned char *)glattrib->Ptr - ptr);
-	    upload[i]->buffer = j;
-	 }
-	 j++;
+      assert(!glbinding->BufferObj);
+      assert(brw->vb.index_bounds_valid);
 
-	 nr_uploads = 0;
+      /* Accumulate the range of a single vertex, start with inverted range */
+      uint32_t vertex_range_start = ~(uint32_t)0;
+      uint32_t vertex_range_end = 0;
+
+      const unsigned boundmask = _mesa_draw_bound_attrib_bits(glbinding);
+      unsigned attrmask = usermask & boundmask;
+      /* Mark the those attributes as processed */
+      usermask ^= attrmask;
+      /* We can assume that we have an array for the binding */
+      assert(attrmask);
+      /* Walk attributes belonging to the binding */
+      while (attrmask) {
+         const gl_vert_attrib attr = u_bit_scan(&attrmask);
+         const struct gl_array_attributes *const glattrib =
+            _mesa_draw_array_attrib(vao, attr);
+         const uint32_t rel_offset =
+            _mesa_draw_attributes_relative_offset(glattrib);
+         const uint32_t rel_end = rel_offset + glattrib->Format._ElementSize;
+
+         vertex_range_start = MIN2(vertex_range_start, rel_offset);
+         vertex_range_end = MAX2(vertex_range_end, rel_end);
+
+         struct brw_vertex_element *input = &brw->vb.inputs[attr];
+         input->glformat = &glattrib->Format;
+         input->buffer = j;
+         input->is_dual_slot = (vp->DualSlotInputs & BITFIELD64_BIT(attr)) != 0;
+         input->offset = rel_offset;
       }
-   }
-   /* Upload non-interleaved arrays */
-   for (i = 0; i < nr_uploads; i++) {
+      assert(vertex_range_start <= vertex_range_end);
+
       struct brw_vertex_buffer *buffer = &brw->vb.buffers[j];
-      const struct gl_vertex_buffer_binding *glbinding = upload[i]->glbinding;
-      const struct gl_array_attributes *glattrib = upload[i]->glattrib;
-      if (glbinding->InstanceDivisor == 0) {
-         copy_array_to_vbo_array(brw, upload[i], min_index, max_index,
-                                 buffer, glattrib->Format._ElementSize);
+
+      const uint8_t *ptr = (const uint8_t*)_mesa_draw_binding_offset(glbinding);
+      ptr += vertex_range_start;
+      const uint32_t vertex_size = vertex_range_end - vertex_range_start;
+      if (glbinding->Stride == 0) {
+         /* If the source stride is zero, we just want to upload the current
+          * attribute once and set the buffer's stride to 0.  There's no need
+          * to replicate it out.
+          */
+         copy_array_to_vbo_array(brw, ptr, 0, 0, 0, buffer, vertex_size);
+      } else if (glbinding->InstanceDivisor == 0) {
+         copy_array_to_vbo_array(brw, ptr, stride, min_index,
+                                 max_index, buffer, vertex_size);
       } else {
          /* This is an instanced attribute, since its InstanceDivisor
           * is not zero. Therefore, its data will be stepped after the
@@ -687,16 +635,52 @@ brw_prepare_vertices(struct brw_context *brw)
           */
          uint32_t instanced_attr_max_index =
             (brw->num_instances - 1) / glbinding->InstanceDivisor;
-         copy_array_to_vbo_array(brw, upload[i], 0, instanced_attr_max_index,
-                                 buffer, glattrib->Format._ElementSize);
+         copy_array_to_vbo_array(brw, ptr, stride, 0,
+                                 instanced_attr_max_index, buffer, vertex_size);
       }
-      buffer->offset -= delta * buffer->stride;
-      buffer->size += delta * buffer->stride;
+      buffer->offset -= delta * buffer->stride + vertex_range_start;
+      buffer->size += delta * buffer->stride + vertex_range_start;
       buffer->step_rate = glbinding->InstanceDivisor;
-      upload[i]->buffer = j++;
-      upload[i]->offset = 0;
+
+      j++;
    }
 
+   /* Upload the current values */
+   unsigned curmask = vs_inputs & _mesa_draw_current_bits(ctx);
+   if (curmask) {
+      /* For each attribute, upload the maximum possible size. */
+      uint8_t data[VERT_ATTRIB_MAX * sizeof(GLdouble) * 4];
+      uint8_t *cursor = data;
+
+      do {
+         const gl_vert_attrib attr = u_bit_scan(&curmask);
+         const struct gl_array_attributes *const glattrib =
+            _mesa_draw_current_attrib(ctx, attr);
+         const unsigned size = glattrib->Format._ElementSize;
+         const unsigned alignment = align(size, sizeof(GLdouble));
+         memcpy(cursor, glattrib->Ptr, size);
+         if (alignment != size)
+            memset(cursor + size, 0, alignment - size);
+
+         struct brw_vertex_element *input = &brw->vb.inputs[attr];
+         input->glformat = &glattrib->Format;
+         input->buffer = j;
+         input->is_dual_slot = (vp->DualSlotInputs & BITFIELD64_BIT(attr)) != 0;
+         input->offset = cursor - data;
+
+         cursor += alignment;
+      } while (curmask);
+
+      struct brw_vertex_buffer *buffer = &brw->vb.buffers[j];
+      const unsigned size = cursor - data;
+      brw_upload_data(&brw->upload, data, size, size,
+                      &buffer->bo, &buffer->offset);
+      buffer->stride = 0;
+      buffer->size = size;
+      buffer->step_rate = 0;
+
+      j++;
+   }
    brw->vb.nr_buffers = j;
 }
 
@@ -736,14 +720,14 @@ brw_upload_indices(struct brw_context *brw)
    if (index_buffer == NULL)
       return;
 
-   ib_type_size = index_buffer->index_size;
+   ib_type_size = 1 << index_buffer->index_size_shift;
    ib_size = index_buffer->count ? ib_type_size * index_buffer->count :
                                    index_buffer->obj->Size;
    bufferobj = index_buffer->obj;
 
    /* Turn into a proper VBO:
     */
-   if (!_mesa_is_bufferobj(bufferobj)) {
+   if (!bufferobj) {
       /* Get new bufferobj, offset:
        */
       brw_upload_data(&brw->upload, index_buffer->ptr, ib_size, ib_type_size,
@@ -772,8 +756,9 @@ brw_upload_indices(struct brw_context *brw)
    if (brw->ib.bo != old_bo)
       brw->ctx.NewDriverState |= BRW_NEW_INDEX_BUFFER;
 
-   if (index_buffer->index_size != brw->ib.index_size) {
-      brw->ib.index_size = index_buffer->index_size;
+   unsigned index_size = 1 << index_buffer->index_size_shift;
+   if (index_size != brw->ib.index_size) {
+      brw->ib.index_size = index_size;
       brw->ctx.NewDriverState |= BRW_NEW_INDEX_BUFFER;
    }
 

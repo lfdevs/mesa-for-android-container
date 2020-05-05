@@ -36,10 +36,12 @@
 static unsigned
 get_const_idx(const struct etna_context *ctx, bool frag, unsigned samp_id)
 {
+   struct etna_screen *screen = ctx->screen;
+
    if (frag)
       return samp_id;
 
-   return samp_id + ctx->specs.vertex_sampler_offset;
+   return samp_id + screen->specs.vertex_sampler_offset;
 }
 
 static uint32_t
@@ -63,10 +65,11 @@ etna_uniforms_write(const struct etna_context *ctx,
                     const struct etna_shader_variant *sobj,
                     struct pipe_constant_buffer *cb)
 {
+   struct etna_screen *screen = ctx->screen;
    struct etna_cmd_stream *stream = ctx->stream;
    const struct etna_shader_uniform_info *uinfo = &sobj->uniforms;
    bool frag = (sobj == ctx->shader.fs);
-   uint32_t base = frag ? ctx->specs.ps_uniforms_offset : ctx->specs.vs_uniforms_offset;
+   uint32_t base = frag ? screen->specs.ps_uniforms_offset : screen->specs.vs_uniforms_offset;
    unsigned idx;
 
    if (!uinfo->imm_count)

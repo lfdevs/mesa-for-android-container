@@ -333,3 +333,58 @@ clEnqueueNativeKernel(cl_command_queue d_q, void (*func)(void *),
                       const cl_event *d_deps, cl_event *rd_ev) {
    return CL_INVALID_OPERATION;
 }
+
+CLOVER_API cl_int
+clSetKernelArgSVMPointer(cl_kernel d_kern,
+                         cl_uint arg_index,
+                         const void *arg_value) try {
+   obj(d_kern).args().at(arg_index).set_svm(arg_value);
+   return CL_SUCCESS;
+
+} catch (std::out_of_range &e) {
+   return CL_INVALID_ARG_INDEX;
+
+} catch (error &e) {
+   return e.get();
+}
+
+CLOVER_API cl_int
+clSetKernelExecInfo(cl_kernel d_kern,
+                    cl_kernel_exec_info param_name,
+                    size_t param_value_size,
+                    const void *param_value) try {
+   auto &kern = obj(d_kern);
+   const bool has_system_svm = all_of(std::mem_fn(&device::has_system_svm),
+                                      kern.program().context().devices());
+
+   if (!param_value)
+      return CL_INVALID_VALUE;
+
+   switch (param_name) {
+   case CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM:
+   case CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM_ARM: {
+      if (param_value_size != sizeof(cl_bool))
+         return CL_INVALID_VALUE;
+
+      cl_bool val = *static_cast<const cl_bool*>(param_value);
+      if (val == CL_TRUE && !has_system_svm)
+         return CL_INVALID_OPERATION;
+      else
+         return CL_SUCCESS;
+   }
+
+   case CL_KERNEL_EXEC_INFO_SVM_PTRS:
+   case CL_KERNEL_EXEC_INFO_SVM_PTRS_ARM:
+      if (has_system_svm)
+         return CL_SUCCESS;
+
+      CLOVER_NOT_SUPPORTED_UNTIL("2.0");
+      return CL_INVALID_VALUE;
+
+   default:
+      return CL_INVALID_VALUE;
+   }
+
+} catch (error &e) {
+   return e.get();
+}

@@ -32,8 +32,10 @@ LOCAL_SRC_FILES := $(C_SOURCES) $(CXX_SOURCES)
 
 LOCAL_C_INCLUDES += \
     $(MESA_TOP)/src/amd/common \
-    $(MESA_TOP)/src/amd/llvm
+    $(MESA_TOP)/src/amd/llvm \
+    $(MESA_TOP)/src/mesa
 
+LOCAL_STATIC_LIBRARIES := libmesa_nir
 LOCAL_SHARED_LIBRARIES := libdrm_radeon
 LOCAL_MODULE := libmesa_pipe_r600
 

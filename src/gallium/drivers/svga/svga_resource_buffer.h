@@ -289,6 +289,9 @@ svga_buffer_hw_storage_map(struct svga_context *svga,
       boolean rebind;
       void *map;
 
+      if (swc->force_coherent) {
+         flags |= PIPE_TRANSFER_PERSISTENT | PIPE_TRANSFER_COHERENT;
+      }
       map = swc->surface_map(swc, sbuf->handle, flags, retry, &rebind);
       if (map && rebind) {
          enum pipe_error ret;
@@ -329,15 +332,6 @@ svga_buffer_hw_storage_unmap(struct svga_context *svga,
             svga_context_flush(svga, NULL);
             ret = SVGA3D_BindGBSurface(swc, sbuf->handle);
             assert(ret == PIPE_OK);
-         }
-         if (swc->force_coherent) {
-            ret = SVGA3D_UpdateGBSurface(swc, sbuf->handle);
-            if (ret != PIPE_OK) {
-               /* flush and retry */
-               svga_context_flush(svga, NULL);
-               ret = SVGA3D_UpdateGBSurface(swc, sbuf->handle);
-               assert(ret == PIPE_OK);
-            }
          }
       }
    } else

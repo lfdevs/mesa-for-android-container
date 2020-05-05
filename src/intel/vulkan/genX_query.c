@@ -200,11 +200,13 @@ intel_perf_rpstart_offset(bool end)
    return 16 + (end ? sizeof(uint32_t) : 0);
 }
 
+#if GEN_GEN >= 8 && GEN_GEN <= 11
 static uint32_t
 intel_perf_counter(bool end)
 {
    return 24 + (end ? (2 * sizeof(uint64_t)) : 0);
 }
+#endif
 
 static uint32_t
 intel_perf_mi_rpc_offset(bool end)
@@ -394,9 +396,11 @@ VkResult genX(GetQueryPoolResults)(
                                            &device->info,
                                            &result,
                                            core_freq[0], core_freq[1]);
+#if GEN_GEN >= 8 && GEN_GEN <= 11
          gen_perf_query_mdapi_write_perfcntr(pData, stride, &device->info,
                                              query_data + intel_perf_counter(false),
                                              query_data + intel_perf_counter(true));
+#endif
          const uint64_t *marker = query_data + intel_perf_marker_offset();
          gen_perf_query_mdapi_write_marker(pData, stride, &device->info, *marker);
          break;

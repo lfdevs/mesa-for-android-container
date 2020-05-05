@@ -547,7 +547,6 @@ static OMX_ERRORTYPE vid_enc_SetConfig(OMX_HANDLETYPE handle, OMX_INDEXTYPE idx,
          struct pipe_video_buffer templat = {};
 
          templat.buffer_format = PIPE_FORMAT_NV12;
-         templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
          templat.width = priv->scale.xWidth;
          templat.height = priv->scale.xHeight;
          templat.interlaced = false;

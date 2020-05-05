@@ -43,12 +43,12 @@ struct fd6_context {
 	 * Compared to previous generations
 	 *   (1) we cannot specify individual buffers per VSC, instead
 	 *       just a pitch and base address
-	 *   (2) there is a second smaller buffer, for something.. we
-	 *       also stash VSC_BIN_SIZE at end of 2nd buffer.
+	 *   (2) there is a second smaller buffer.. we also stash
+	 *       VSC_BIN_SIZE at end of 2nd buffer.
 	 */
-	struct fd_bo *vsc_data, *vsc_data2;
+	struct fd_bo *vsc_draw_strm, *vsc_prim_strm;
 
-	unsigned vsc_data_pitch, vsc_data2_pitch;
+	unsigned vsc_draw_strm_pitch, vsc_prim_strm_pitch;
 
 	/* The 'control' mem BO is used for various housekeeping
 	 * functions.  See 'struct fd6_control'

@@ -49,7 +49,7 @@
 #define VL_VA_DRIVER(ctx) ((vlVaDriver *)ctx->pDriverData)
 #define VL_VA_PSCREEN(ctx) (VL_VA_DRIVER(ctx)->vscreen->pscreen)
 
-#define VL_VA_MAX_IMAGE_FORMATS 11
+#define VL_VA_MAX_IMAGE_FORMATS 12
 #define VL_VA_ENC_GOP_COEFF 16
 
 #define UINT_TO_PTR(x) ((void*)(uintptr_t)(x))
@@ -62,16 +62,6 @@
 #define SOF (10 + 255 * 3)
 #define SOS (8 + 4 * 2)
 #define MAX_MJPEG_SLICE_HEADER_SIZE (SOI + DQT + DHT + DRI + SOF + SOS)
-
-static inline unsigned handle_hash(void *key)
-{
-    return PTR_TO_UINT(key);
-}
-
-static inline int handle_compare(void *key1, void *key2)
-{
-    return PTR_TO_UINT(key1) != PTR_TO_UINT(key2);
-}
 
 static inline enum pipe_video_chroma_format
 ChromaToPipe(int format)
@@ -104,6 +94,7 @@ VaFourccToPipeFormat(unsigned format)
    case VA_FOURCC('Y','V','1','2'):
       return PIPE_FORMAT_YV12;
    case VA_FOURCC('Y','U','Y','V'):
+   case VA_FOURCC('Y','U','Y','2'):
       return PIPE_FORMAT_YUYV;
    case VA_FOURCC('U','Y','V','Y'):
       return PIPE_FORMAT_UYVY;

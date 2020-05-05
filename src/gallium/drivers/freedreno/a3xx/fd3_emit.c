@@ -322,7 +322,7 @@ fd3_emit_gmem_restore_tex(struct fd_ringbuffer *ring,
 		OUT_RING(ring, A3XX_TEX_CONST_1_FETCHSIZE(TFETCH_DISABLE) |
 				 A3XX_TEX_CONST_1_WIDTH(psurf[i]->width) |
 				 A3XX_TEX_CONST_1_HEIGHT(psurf[i]->height));
-		OUT_RING(ring, A3XX_TEX_CONST_2_PITCH(slice->pitch * rsc->layout.cpp) |
+		OUT_RING(ring, A3XX_TEX_CONST_2_PITCH(slice->pitch) |
 				 A3XX_TEX_CONST_2_INDX(BASETABLE_SZ * i));
 		OUT_RING(ring, 0x00000000);
 	}

@@ -57,7 +57,7 @@ libgallium_nine = shared_library(
   ],
   c_args : [c_vis_args, gallium_nine_c_args],
   cpp_args : [cpp_vis_args],
-  link_args : [ld_args_gc_sections, gallium_nine_ld_args],
+  link_args : [ld_args_build_id, ld_args_gc_sections, gallium_nine_ld_args],
   link_depends : gallium_nine_link_depends,
   link_with : gallium_nine_link_with,
   dependencies : [

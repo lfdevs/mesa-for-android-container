@@ -25,6 +25,7 @@
 #include "swr_context.h"
 #include "swr_screen.h"
 #include "swr_scratch.h"
+#include "swr_fence.h"
 #include "swr_fence_work.h"
 #include "api.h"
 
@@ -46,8 +47,10 @@ swr_copy_to_scratch_space(struct swr_context *ctx,
       space->current_size = max_size_in_flight;
 
       if (space->base) {
-         /* defer delete, use aligned-free */
+         /* defer delete, use aligned-free, fence finish enforces the defer
+          * delete will be on the *next* fence */
          struct swr_screen *screen = swr_screen(ctx->pipe.screen);
+         swr_fence_finish(ctx->pipe.screen, NULL, screen->flush_fence, 0);
          swr_fence_work_free(screen->flush_fence, space->base, true);
          space->base = NULL;
       }

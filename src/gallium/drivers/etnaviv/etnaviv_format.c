@@ -288,6 +288,9 @@ texture_use_int_filter(const struct pipe_sampler_view *so, bool tex_desc)
    if (util_format_is_srgb(so->format))
       return false;
 
+   if (util_format_description(so->format)->layout == UTIL_FORMAT_LAYOUT_ASTC)
+      return false;
+
    switch (so->format) {
    /* apparently D16 can't use int filter but D24 can */
    case PIPE_FORMAT_Z16_UNORM:

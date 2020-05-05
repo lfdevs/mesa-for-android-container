@@ -134,11 +134,30 @@ FormatYCBCRToPipe(VdpYCbCrFormat vdpau_format)
          return PIPE_FORMAT_R8G8B8A8_UNORM;
       case VDP_YCBCR_FORMAT_V8U8Y8A8:
          return PIPE_FORMAT_B8G8R8A8_UNORM;
+#ifdef VDP_YCBCR_FORMAT_P010
+      case VDP_YCBCR_FORMAT_P010:
+         return PIPE_FORMAT_P010;
+#endif
+#ifdef VDP_YCBCR_FORMAT_P016
+      case VDP_YCBCR_FORMAT_P016:
+         return PIPE_FORMAT_P016;
+#endif
       default:
-         assert(0);
+         /* NOTE: Can't be "unreachable", as it's quite reachable. */
+         assert(!"unexpected VdpYCbCrFormat");
+         /* fallthrough */
+#ifdef VDP_YCBCR_FORMAT_Y_UV_444
+      case VDP_YCBCR_FORMAT_Y_UV_444:
+#endif
+#ifdef VDP_YCBCR_FORMAT_Y_U_V_444
+      case VDP_YCBCR_FORMAT_Y_U_V_444:
+#endif
+#ifdef VDP_YCBCR_FORMAT_Y_U_V_444_16
+      case VDP_YCBCR_FORMAT_Y_U_V_444_16:
+#endif
+         return PIPE_FORMAT_NONE;
    }
 
-   return PIPE_FORMAT_NONE;
 }
 
 static inline VdpYCbCrFormat

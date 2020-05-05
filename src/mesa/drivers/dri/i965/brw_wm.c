@@ -602,7 +602,7 @@ brw_fs_precompile(struct gl_context *ctx, struct gl_program *prog)
    if (devinfo->gen < 6) {
       brw_compute_vue_map(&brw->screen->devinfo, &vue_map,
                           prog->info.inputs_read | VARYING_BIT_POS,
-                          false);
+                          false, 1);
    }
 
    bool success = brw_codegen_wm_prog(brw, bfp, &key, &vue_map);

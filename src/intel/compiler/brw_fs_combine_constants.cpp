@@ -360,7 +360,7 @@ fs_visitor::opt_combine_constants()
    table.len = 0;
    table.imm = ralloc_array(const_ctx, struct imm, table.size);
 
-   cfg->calculate_idom();
+   const brw::idom_tree &idom = idom_analysis.require();
    unsigned ip = -1;
 
    /* Make a pass through all instructions and count the number of times each
@@ -395,7 +395,7 @@ fs_visitor::opt_combine_constants()
          struct imm *imm = find_imm(&table, data, size);
 
          if (imm) {
-            bblock_t *intersection = cfg_t::intersect(block, imm->block);
+            bblock_t *intersection = idom.intersect(block, imm->block);
             if (intersection != imm->block)
                imm->inst = NULL;
             imm->block = intersection;
@@ -559,7 +559,7 @@ fs_visitor::opt_combine_constants()
    }
 
    ralloc_free(const_ctx);
-   invalidate_live_intervals();
+   invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
 
    return true;
 }

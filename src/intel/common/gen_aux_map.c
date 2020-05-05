@@ -78,6 +78,7 @@
 #include "gen_gem.h"
 
 #include "dev/gen_device_info.h"
+#include "isl/isl.h"
 
 #include "drm-uapi/i915_drm.h"
 #include "util/list.h"
@@ -281,78 +282,6 @@ get_u64_entry_ptr(struct gen_aux_map_context *ctx, uint64_t addr)
 }
 
 static uint8_t
-get_format_encoding(const struct isl_surf *isl_surf)
-{
-   switch(isl_surf->format) {
-   case ISL_FORMAT_R32G32B32A32_FLOAT: return 0x11;
-   case ISL_FORMAT_R32G32B32X32_FLOAT: return 0x11;
-   case ISL_FORMAT_R32G32B32A32_SINT: return 0x12;
-   case ISL_FORMAT_R32G32B32A32_UINT: return 0x13;
-   case ISL_FORMAT_R16G16B16A16_UNORM: return 0x14;
-   case ISL_FORMAT_R16G16B16A16_SNORM: return 0x15;
-   case ISL_FORMAT_R16G16B16A16_SINT: return 0x16;
-   case ISL_FORMAT_R16G16B16A16_UINT: return 0x17;
-   case ISL_FORMAT_R16G16B16A16_FLOAT: return 0x10;
-   case ISL_FORMAT_R16G16B16X16_FLOAT: return 0x10;
-   case ISL_FORMAT_R32G32_FLOAT: return 0x11;
-   case ISL_FORMAT_R32G32_SINT: return 0x12;
-   case ISL_FORMAT_R32G32_UINT: return 0x13;
-   case ISL_FORMAT_B8G8R8A8_UNORM: return 0xA;
-   case ISL_FORMAT_B8G8R8X8_UNORM: return 0xA;
-   case ISL_FORMAT_B8G8R8A8_UNORM_SRGB: return 0xA;
-   case ISL_FORMAT_B8G8R8X8_UNORM_SRGB: return 0xA;
-   case ISL_FORMAT_R10G10B10A2_UNORM: return 0x18;
-   case ISL_FORMAT_R10G10B10A2_UNORM_SRGB: return 0x18;
-   case ISL_FORMAT_R10G10B10_FLOAT_A2_UNORM: return 0x19;
-   case ISL_FORMAT_R10G10B10A2_UINT: return 0x1A;
-   case ISL_FORMAT_R8G8B8A8_UNORM: return 0xA;
-   case ISL_FORMAT_R8G8B8A8_UNORM_SRGB: return 0xA;
-   case ISL_FORMAT_R8G8B8A8_SNORM: return 0x1B;
-   case ISL_FORMAT_R8G8B8A8_SINT: return 0x1C;
-   case ISL_FORMAT_R8G8B8A8_UINT: return 0x1D;
-   case ISL_FORMAT_R16G16_UNORM: return 0x14;
-   case ISL_FORMAT_R16G16_SNORM: return 0x15;
-   case ISL_FORMAT_R16G16_SINT: return 0x16;
-   case ISL_FORMAT_R16G16_UINT: return 0x17;
-   case ISL_FORMAT_R16G16_FLOAT: return 0x10;
-   case ISL_FORMAT_B10G10R10A2_UNORM: return 0x18;
-   case ISL_FORMAT_B10G10R10A2_UNORM_SRGB: return 0x18;
-   case ISL_FORMAT_R11G11B10_FLOAT: return 0x1E;
-   case ISL_FORMAT_R32_SINT: return 0x12;
-   case ISL_FORMAT_R32_UINT: return 0x13;
-   case ISL_FORMAT_R32_FLOAT: return 0x11;
-   case ISL_FORMAT_R24_UNORM_X8_TYPELESS: return 0x11;
-   case ISL_FORMAT_B5G6R5_UNORM: return 0xA;
-   case ISL_FORMAT_B5G6R5_UNORM_SRGB: return 0xA;
-   case ISL_FORMAT_B5G5R5A1_UNORM: return 0xA;
-   case ISL_FORMAT_B5G5R5A1_UNORM_SRGB: return 0xA;
-   case ISL_FORMAT_B4G4R4A4_UNORM: return 0xA;
-   case ISL_FORMAT_B4G4R4A4_UNORM_SRGB: return 0xA;
-   case ISL_FORMAT_R8G8_UNORM: return 0xA;
-   case ISL_FORMAT_R8G8_SNORM: return 0x1B;
-   case ISL_FORMAT_R8G8_SINT: return 0x1C;
-   case ISL_FORMAT_R8G8_UINT: return 0x1D;
-   case ISL_FORMAT_R16_UNORM: return 0x14;
-   case ISL_FORMAT_R16_SNORM: return 0x15;
-   case ISL_FORMAT_R16_SINT: return 0x16;
-   case ISL_FORMAT_R16_UINT: return 0x17;
-   case ISL_FORMAT_R16_FLOAT: return 0x10;
-   case ISL_FORMAT_B5G5R5X1_UNORM: return 0xA;
-   case ISL_FORMAT_B5G5R5X1_UNORM_SRGB: return 0xA;
-   case ISL_FORMAT_A1B5G5R5_UNORM: return 0xA;
-   case ISL_FORMAT_A4B4G4R4_UNORM: return 0xA;
-   case ISL_FORMAT_R8_UNORM: return 0xA;
-   case ISL_FORMAT_R8_SNORM: return 0x1B;
-   case ISL_FORMAT_R8_SINT: return 0x1C;
-   case ISL_FORMAT_R8_UINT: return 0x1D;
-   case ISL_FORMAT_A8_UNORM: return 0xA;
-   default:
-      unreachable("Unsupported aux-map format!");
-      return 0;
-   }
-}
-
-static uint8_t
 get_bpp_encoding(uint16_t bpp)
 {
    switch (bpp) {
@@ -386,7 +315,7 @@ gen_aux_map_format_bits_for_isl_surf(const struct isl_surf *isl_surf)
    assert(isl_tiling_is_any_y(isl_surf->tiling));
 
    uint64_t format_bits =
-      ((uint64_t)get_format_encoding(isl_surf) << 58) |
+      ((uint64_t)isl_format_get_aux_map_encoding(isl_surf->format) << 58) |
       ((uint64_t)get_bpp_encoding(bpp) << 54) |
       GEN_AUX_MAP_ENTRY_Y_TILED_BIT;
 

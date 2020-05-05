@@ -181,7 +181,7 @@ static void virgl_hw_res_destroy(struct virgl_vtest_winsys *vtws,
       if (res->ptr)
          os_munmap(res->ptr, res->size);
    } else {
-      free(res->ptr);
+      align_free(res->ptr);
    }
 
    FREE(res);

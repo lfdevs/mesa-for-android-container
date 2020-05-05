@@ -65,7 +65,7 @@ enum pipe_error
 pb_validate_add_buffer(struct pb_validate *vl,
                        struct pb_buffer *buf,
                        enum pb_usage_flags flags,
-                       struct util_hash_table *ht,
+                       struct hash_table *ht,
                        boolean *already_present)
 {
    assert(buf);
@@ -118,7 +118,7 @@ pb_validate_add_buffer(struct pb_validate *vl,
    ++vl->used;
 
    if (ht)
-      util_hash_table_set(ht, buf, (void *) (uintptr_t) vl->used);
+      _mesa_hash_table_insert(ht, buf, (void *) (uintptr_t) vl->used);
 
    return PIPE_OK;
 }

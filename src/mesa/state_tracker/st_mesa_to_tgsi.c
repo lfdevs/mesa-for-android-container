@@ -37,6 +37,7 @@
 #include "pipe/p_shader_tokens.h"
 #include "pipe/p_state.h"
 #include "tgsi/tgsi_ureg.h"
+#include "tgsi/tgsi_from_mesa.h"
 #include "st_mesa_to_tgsi.h"
 #include "st_context.h"
 #include "program/prog_instruction.h"
@@ -140,8 +141,12 @@ src_register(struct st_translate *t,
          return t->constants[index];
 
    case PROGRAM_INPUT:
-      assert(t->inputMapping[index] < ARRAY_SIZE(t->inputs));
-      return t->inputs[t->inputMapping[index]];
+      if (t->inputMapping[index] < ARRAY_SIZE(t->inputs))
+         return t->inputs[t->inputMapping[index]];
+      else {
+         assert(t->procType == PIPE_SHADER_VERTEX);
+         return ureg_DECL_constant(t->ureg, 0);
+      }
 
    case PROGRAM_OUTPUT:
       assert(t->outputMapping[index] < ARRAY_SIZE(t->outputs));
@@ -954,7 +959,7 @@ st_translate_mesa_program(struct gl_context *ctx,
    GLbitfield64 sysInputs = program->info.system_values_read;
    for (i = 0; sysInputs; i++) {
       if (sysInputs & (1ull << i)) {
-         unsigned semName = _mesa_sysval_to_semantic(i);
+         unsigned semName = tgsi_get_sysval_semantic(i);
 
          t->systemValues[i] = ureg_DECL_system_value(ureg, semName, 0);
 

@@ -36,7 +36,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <errno.h>
 
 #include "main/glheader.h"
-#include "main/imports.h"
+
 #include "main/macros.h"
 #include "main/context.h"
 #include "swrast/swrast.h"

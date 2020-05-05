@@ -25,9 +25,9 @@
  *
  */
 
-#include "main/imports.h"
 #include "main/mtypes.h"
 #include "main/bufferobj.h"
+#include "util/u_memory.h"
 
 #include "radeon_common.h"
 #include "radeon_buffer_objects.h"

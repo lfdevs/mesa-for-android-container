@@ -122,6 +122,7 @@ struct draw_context
       struct draw_stage *flatshade;
       struct draw_stage *clip;
       struct draw_stage *cull;
+      struct draw_stage *user_cull;
       struct draw_stage *twoside;
       struct draw_stage *offset;
       struct draw_stage *unfilled;
@@ -157,7 +158,7 @@ struct draw_context
       unsigned prim;
       unsigned opt;     /**< bitmask of PT_x flags */
       unsigned eltSize; /* saved eltSize for flushing */
-
+      ubyte vertices_per_patch;
       boolean rebind_parameters;
 
       struct {
@@ -206,12 +207,20 @@ struct draw_context
          unsigned vs_constants_size[PIPE_MAX_CONSTANT_BUFFERS];
          const void *gs_constants[PIPE_MAX_CONSTANT_BUFFERS];
          unsigned gs_constants_size[PIPE_MAX_CONSTANT_BUFFERS];
+         const void *tcs_constants[PIPE_MAX_CONSTANT_BUFFERS];
+         unsigned tcs_constants_size[PIPE_MAX_CONSTANT_BUFFERS];
+         const void *tes_constants[PIPE_MAX_CONSTANT_BUFFERS];
+         unsigned tes_constants_size[PIPE_MAX_CONSTANT_BUFFERS];
 
          /** shader buffers (for vertex/geometry shader) */
          const void *vs_ssbos[PIPE_MAX_SHADER_BUFFERS];
          unsigned vs_ssbos_size[PIPE_MAX_SHADER_BUFFERS];
          const void *gs_ssbos[PIPE_MAX_SHADER_BUFFERS];
          unsigned gs_ssbos_size[PIPE_MAX_SHADER_BUFFERS];
+         const void *tcs_ssbos[PIPE_MAX_SHADER_BUFFERS];
+         unsigned tcs_ssbos_size[PIPE_MAX_SHADER_BUFFERS];
+         const void *tes_ssbos[PIPE_MAX_SHADER_BUFFERS];
+         unsigned tes_ssbos_size[PIPE_MAX_SHADER_BUFFERS];
 
          /* pointer to planes */
          float (*planes)[DRAW_TOTAL_CLIP_PLANES][4]; 
@@ -303,6 +312,34 @@ struct draw_context
 
    } gs;
 
+   /* Tessellation state */
+   struct {
+      struct draw_tess_ctrl_shader *tess_ctrl_shader;
+
+      /** Fields for TGSI interpreter / execution */
+      struct {
+         struct tgsi_exec_machine *machine;
+
+         struct tgsi_sampler *sampler;
+         struct tgsi_image *image;
+         struct tgsi_buffer *buffer;
+      } tgsi;
+   } tcs;
+
+   struct {
+      struct draw_tess_eval_shader *tess_eval_shader;
+      uint position_output;
+
+      /** Fields for TGSI interpreter / execution */
+      struct {
+         struct tgsi_exec_machine *machine;
+
+         struct tgsi_sampler *sampler;
+         struct tgsi_image *image;
+         struct tgsi_buffer *buffer;
+      } tgsi;
+   } tes;
+
    /** Fragment shader state */
    struct {
       struct draw_fragment_shader *fragment_shader;
@@ -349,6 +386,8 @@ struct draw_context
    struct pipe_query_data_pipeline_statistics statistics;
    boolean collect_statistics;
 
+   float default_outer_tess_level[4];
+   float default_inner_tess_level[2];
    bool collect_primgen;
 
    struct draw_assembler *ia;

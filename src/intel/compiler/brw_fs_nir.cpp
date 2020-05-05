@@ -101,11 +101,23 @@ fs_visitor::nir_setup_uniforms()
    uniforms = nir->num_uniforms / 4;
 
    if (stage == MESA_SHADER_COMPUTE) {
-      /* Add a uniform for the thread local id.  It must be the last uniform
-       * on the list.
-       */
+      /* Add uniforms for builtins after regular NIR uniforms. */
       assert(uniforms == prog_data->nr_params);
-      uint32_t *param = brw_stage_prog_data_add_params(prog_data, 1);
+
+      uint32_t *param;
+      if (brw_cs_prog_data(prog_data)->uses_variable_group_size) {
+         param = brw_stage_prog_data_add_params(prog_data, 3);
+         for (unsigned i = 0; i < 3; i++) {
+            param[i] = (BRW_PARAM_BUILTIN_WORK_GROUP_SIZE_X + i);
+            group_size[i] = fs_reg(UNIFORM, uniforms++, BRW_REGISTER_TYPE_UD);
+         }
+      }
+
+      /* Subgroup ID must be the last uniform on the list.  This will make
+       * easier later to split between cross thread and per thread
+       * uniforms.
+       */
+      param = brw_stage_prog_data_add_params(prog_data, 1);
       *param = BRW_PARAM_BUILTIN_SUBGROUP_ID;
       subgroup_id = fs_reg(UNIFORM, uniforms++, BRW_REGISTER_TYPE_UD);
    }
@@ -394,9 +406,6 @@ fs_visitor::nir_emit_if(nir_if *if_stmt)
     */
    nir_alu_instr *cond = nir_src_as_alu_instr(if_stmt->condition);
    if (cond != NULL && cond->op == nir_op_inot) {
-      assert(!cond->src[0].negate);
-      assert(!cond->src[0].abs);
-
       invert = true;
       cond_reg = get_nir_src(cond->src[0].src);
    } else {
@@ -532,15 +541,6 @@ fs_visitor::optimize_extract_to_float(nir_alu_instr *instr,
        src0->op != nir_op_extract_i8 && src0->op != nir_op_extract_i16)
       return false;
 
-   /* If either opcode has source modifiers, bail.
-    *
-    * TODO: We can potentially handle source modifiers if both of the opcodes
-    * we're combining are signed integers.
-    */
-   if (instr->src[0].abs || instr->src[0].negate ||
-       src0->src[0].abs || src0->src[0].negate)
-      return false;
-
    unsigned element = nir_src_as_uint(src0->src[1].src);
 
    /* Element type to extract.*/
@@ -554,8 +554,7 @@ fs_visitor::optimize_extract_to_float(nir_alu_instr *instr,
                      nir_src_bit_size(src0->src[0].src)));
    op0 = offset(op0, bld, src0->src[0].swizzle[0]);
 
-   set_saturate(instr->dest.saturate,
-                bld.MOV(result, subscript(op0, type, element)));
+   bld.MOV(result, subscript(op0, type, element));
    return true;
 }
 
@@ -727,13 +726,17 @@ fs_visitor::prepare_alu_destination_and_sources(const fs_builder &bld,
       (nir_alu_type)(nir_op_infos[instr->op].output_type |
                      nir_dest_bit_size(instr->dest.dest)));
 
+   assert(!instr->dest.saturate);
+
    for (unsigned i = 0; i < nir_op_infos[instr->op].num_inputs; i++) {
+      /* We don't lower to source modifiers so they should not exist. */
+      assert(!instr->src[i].abs);
+      assert(!instr->src[i].negate);
+
       op[i] = get_nir_src(instr->src[i].src);
       op[i].type = brw_type_for_nir_type(devinfo,
          (nir_alu_type)(nir_op_infos[instr->op].input_types[i] |
                         nir_src_bit_size(instr->src[i].src)));
-      op[i].abs = instr->src[i].abs;
-      op[i].negate = instr->src[i].negate;
    }
 
    /* Move and vecN instrutions may still be vectored.  Return the raw,
@@ -781,8 +784,7 @@ fs_visitor::resolve_inot_sources(const fs_builder &bld, nir_alu_instr *instr,
    for (unsigned i = 0; i < 2; i++) {
       nir_alu_instr *inot_instr = nir_src_as_alu_instr(instr->src[i].src);
 
-      if (inot_instr != NULL && inot_instr->op == nir_op_inot &&
-          !inot_instr->src[0].abs && !inot_instr->src[0].negate) {
+      if (inot_instr != NULL && inot_instr->op == nir_op_inot) {
          /* The source of the inot is now the source of instr. */
          prepare_alu_destination_and_sources(bld, inot_instr, &op[i], false);
 
@@ -851,8 +853,6 @@ fs_visitor::emit_fsign(const fs_builder &bld, const nir_alu_instr *instr,
       const nir_alu_instr *const fsign_instr =
          nir_src_as_alu_instr(instr->src[fsign_src].src);
 
-      assert(!fsign_instr->dest.saturate);
-
       /* op[fsign_src] has the nominal result of the fsign, and op[1 -
        * fsign_src] has the other multiply source.  This must be rearranged so
        * that op[0] is the source of the fsign op[1] is the other multiply
@@ -868,8 +868,6 @@ fs_visitor::emit_fsign(const fs_builder &bld, const nir_alu_instr *instr,
                         nir_src_bit_size(fsign_instr->src[0].src));
 
       op[0].type = brw_type_for_nir_type(devinfo, t);
-      op[0].abs = fsign_instr->src[0].abs;
-      op[0].negate = fsign_instr->src[0].negate;
 
       unsigned channel = 0;
       if (nir_op_infos[instr->op].output_size == 0) {
@@ -881,37 +879,9 @@ fs_visitor::emit_fsign(const fs_builder &bld, const nir_alu_instr *instr,
       }
 
       op[0] = offset(op[0], bld, fsign_instr->src[0].swizzle[channel]);
-
-      /* Resolve any source modifiers.  We could do slightly better on Gen8+
-       * if the only source modifier is negation, but *shrug*.
-       */
-      if (op[1].negate || op[1].abs) {
-         fs_reg tmp = bld.vgrf(op[1].type);
-
-         bld.MOV(tmp, op[1]);
-         op[1] = tmp;
-      }
-   } else {
-      assert(!instr->dest.saturate);
    }
 
-   if (op[0].abs) {
-      /* Straightforward since the source can be assumed to be either strictly
-       * >= 0 or strictly <= 0 depending on the setting of the negate flag.
-       */
-      set_condmod(BRW_CONDITIONAL_NZ, bld.MOV(result, op[0]));
-
-      if (instr->op == nir_op_fsign) {
-         inst = (op[0].negate)
-            ? bld.MOV(result, brw_imm_f(-1.0f))
-            : bld.MOV(result, brw_imm_f(1.0f));
-      } else {
-         op[1].negate = (op[0].negate != op[1].negate);
-         inst = bld.MOV(result, op[1]);
-      }
-
-      set_predicate(BRW_PREDICATE_NORMAL, inst);
-   } else if (type_sz(op[0].type) == 2) {
+   if (type_sz(op[0].type) == 2) {
       /* AND(val, 0x8000) gives the sign bit.
        *
        * Predicated OR ORs 1.0 (0x3c00) with the sign bit if val is not zero.
@@ -1017,8 +987,7 @@ can_fuse_fmul_fsign(nir_alu_instr *instr, unsigned fsign_src)
     * have already been taken (in nir_opt_algebraic) to ensure that.
     */
    return fsign_instr != NULL && fsign_instr->op == nir_op_fsign &&
-          is_used_once(fsign_instr) &&
-          !instr->src[fsign_src].abs && !instr->src[fsign_src].negate;
+          is_used_once(fsign_instr);
 }
 
 void
@@ -1060,7 +1029,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
             inst = bld.MOV(offset(temp, bld, i),
                            offset(op[i], bld, instr->src[i].swizzle[0]));
          }
-         inst->saturate = instr->dest.saturate;
       }
 
       /* In this case the source and destination registers were the same,
@@ -1083,7 +1051,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       if (optimize_extract_to_float(instr, result))
          return;
       inst = bld.MOV(result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_f2f16_rtne:
@@ -1110,7 +1077,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
        */
       assert(type_sz(op[0].type) < 8); /* brw_nir_lower_conversions */
       inst = bld.MOV(result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
    }
 
@@ -1158,7 +1124,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
          assert(type_sz(result.type) < 8); /* brw_nir_lower_conversions */
 
       inst = bld.MOV(result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_fsat:
@@ -1170,8 +1135,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
    case nir_op_ineg:
       op[0].negate = true;
       inst = bld.MOV(result, op[0]);
-      if (instr->op == nir_op_fneg)
-         inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_fabs:
@@ -1179,8 +1142,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       op[0].negate = false;
       op[0].abs = true;
       inst = bld.MOV(result, op[0]);
-      if (instr->op == nir_op_fabs)
-         inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_f2f32:
@@ -1195,7 +1156,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
          assert(type_sz(result.type) < 8); /* brw_nir_lower_conversions */
 
       inst = bld.MOV(result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_fsign:
@@ -1204,27 +1164,22 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
 
    case nir_op_frcp:
       inst = bld.emit(SHADER_OPCODE_RCP, result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_fexp2:
       inst = bld.emit(SHADER_OPCODE_EXP2, result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_flog2:
       inst = bld.emit(SHADER_OPCODE_LOG2, result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_fsin:
       inst = bld.emit(SHADER_OPCODE_SIN, result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_fcos:
       inst = bld.emit(SHADER_OPCODE_COS, result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_fddx:
@@ -1233,15 +1188,12 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       } else {
          inst = bld.emit(FS_OPCODE_DDX_COARSE, result, op[0]);
       }
-      inst->saturate = instr->dest.saturate;
       break;
    case nir_op_fddx_fine:
       inst = bld.emit(FS_OPCODE_DDX_FINE, result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
    case nir_op_fddx_coarse:
       inst = bld.emit(FS_OPCODE_DDX_COARSE, result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
    case nir_op_fddy:
       if (fs_key->high_quality_derivatives) {
@@ -1249,15 +1201,12 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       } else {
          inst = bld.emit(FS_OPCODE_DDY_COARSE, result, op[0]);
       }
-      inst->saturate = instr->dest.saturate;
       break;
    case nir_op_fddy_fine:
       inst = bld.emit(FS_OPCODE_DDY_FINE, result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
    case nir_op_fddy_coarse:
       inst = bld.emit(FS_OPCODE_DDY_COARSE, result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_fadd:
@@ -1270,7 +1219,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       /* fallthrough */
    case nir_op_iadd:
       inst = bld.ADD(result, op[0], op[1]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_iadd_sat:
@@ -1332,7 +1280,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       }
 
       inst = bld.MUL(result, op[0], op[1]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_imul_2x32_64:
@@ -1501,11 +1448,7 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
          if (inot_src_instr != NULL &&
              (inot_src_instr->op == nir_op_ior ||
               inot_src_instr->op == nir_op_ixor ||
-              inot_src_instr->op == nir_op_iand) &&
-             !inot_src_instr->src[0].abs &&
-             !inot_src_instr->src[0].negate &&
-             !inot_src_instr->src[1].abs &&
-             !inot_src_instr->src[1].negate) {
+              inot_src_instr->op == nir_op_iand)) {
             /* The sources of the source logical instruction are now the
              * sources of the instruction that will be generated.
              */
@@ -1594,35 +1537,15 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
    case nir_op_b32any_inequal4:
       unreachable("Lowered by nir_lower_alu_reductions");
 
-   case nir_op_fnoise1_1:
-   case nir_op_fnoise1_2:
-   case nir_op_fnoise1_3:
-   case nir_op_fnoise1_4:
-   case nir_op_fnoise2_1:
-   case nir_op_fnoise2_2:
-   case nir_op_fnoise2_3:
-   case nir_op_fnoise2_4:
-   case nir_op_fnoise3_1:
-   case nir_op_fnoise3_2:
-   case nir_op_fnoise3_3:
-   case nir_op_fnoise3_4:
-   case nir_op_fnoise4_1:
-   case nir_op_fnoise4_2:
-   case nir_op_fnoise4_3:
-   case nir_op_fnoise4_4:
-      unreachable("not reached: should be handled by lower_noise");
-
    case nir_op_ldexp:
       unreachable("not reached: should be handled by ldexp_to_arith()");
 
    case nir_op_fsqrt:
       inst = bld.emit(SHADER_OPCODE_SQRT, result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_frsq:
       inst = bld.emit(SHADER_OPCODE_RSQ, result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_i2b32:
@@ -1671,7 +1594,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
                        bld.ADD(result, result, brw_imm_f(1.0f)));
          inst = bld.MOV(result, result); /* for potential saturation */
       }
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_fceil: {
@@ -1680,16 +1602,13 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       bld.RNDD(temp, op[0]);
       temp.negate = true;
       inst = bld.MOV(result, temp);
-      inst->saturate = instr->dest.saturate;
       break;
    }
    case nir_op_ffloor:
       inst = bld.RNDD(result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
    case nir_op_ffract:
       inst = bld.FRC(result, op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
    case nir_op_fround_even:
       inst = bld.RNDE(result, op[0]);
@@ -1699,7 +1618,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
                        bld.ADD(result, result, brw_imm_f(1.0f)));
          inst = bld.MOV(result, result); /* for potential saturation */
       }
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_fquantize2f16: {
@@ -1726,7 +1644,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       /* Select that or zero based on normal status */
       inst = bld.SEL(result, zero, tmp32);
       inst->predicate = BRW_PREDICATE_NORMAL;
-      inst->saturate = instr->dest.saturate;
       break;
    }
 
@@ -1734,14 +1651,12 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
    case nir_op_umin:
    case nir_op_fmin:
       inst = bld.emit_minmax(result, op[0], op[1], BRW_CONDITIONAL_L);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_imax:
    case nir_op_umax:
    case nir_op_fmax:
       inst = bld.emit_minmax(result, op[0], op[1], BRW_CONDITIONAL_GE);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_pack_snorm_2x16:
@@ -1762,7 +1677,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
    case nir_op_unpack_half_2x16_split_x:
       inst = bld.emit(BRW_OPCODE_F16TO32, result,
                       subscript(op[0], BRW_REGISTER_TYPE_UW, 0));
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_unpack_half_2x16_split_y_flush_to_zero:
@@ -1771,7 +1685,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
    case nir_op_unpack_half_2x16_split_y:
       inst = bld.emit(BRW_OPCODE_F16TO32, result,
                       subscript(op[0], BRW_REGISTER_TYPE_UW, 1));
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_pack_64_2x32_split:
@@ -1799,7 +1712,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
 
    case nir_op_fpow:
       inst = bld.emit(SHADER_OPCODE_POW, result, op[0], op[1]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_bitfield_reverse:
@@ -1920,7 +1832,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       }
 
       inst = bld.MAD(result, op[2], op[1], op[0]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_flrp:
@@ -1932,7 +1843,6 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       }
 
       inst = bld.LRP(result, op[0], op[1], op[2]);
-      inst->saturate = instr->dest.saturate;
       break;
 
    case nir_op_b32csel:
@@ -3445,7 +3355,7 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
       fs_inst *mov = bld.MOV(dest, brw_imm_ud(~0));
       mov->predicate = BRW_PREDICATE_NORMAL;
       mov->predicate_inverse = true;
-      mov->flag_subreg = 1;
+      mov->flag_subreg = sample_mask_flag_subreg(this);
       break;
    }
 
@@ -3500,9 +3410,9 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
    case nir_intrinsic_discard:
    case nir_intrinsic_demote_if:
    case nir_intrinsic_discard_if: {
-      /* We track our discarded pixels in f0.1.  By predicating on it, we can
-       * update just the flag bits that aren't yet discarded.  If there's no
-       * condition, we emit a CMP of g0 != g0, so all currently executing
+      /* We track our discarded pixels in f0.1/f1.0.  By predicating on it, we
+       * can update just the flag bits that aren't yet discarded.  If there's
+       * no condition, we emit a CMP of g0 != g0, so all currently executing
        * channels will get turned off.
        */
       fs_inst *cmp = NULL;
@@ -3512,7 +3422,6 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
 
          if (alu != NULL &&
              alu->op != nir_op_bcsel &&
-             alu->op != nir_op_inot &&
              (devinfo->gen > 5 ||
               (alu->instr.pass_flags & BRW_NIR_BOOLEAN_MASK) != BRW_NIR_BOOLEAN_NEEDS_RESOLVE ||
               alu->op == nir_op_fne32 || alu->op == nir_op_feq32 ||
@@ -3562,7 +3471,7 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
       }
 
       cmp->predicate = BRW_PREDICATE_NORMAL;
-      cmp->flag_subreg = 1;
+      cmp->flag_subreg = sample_mask_flag_subreg(this);
 
       if (devinfo->gen >= 6) {
          /* Due to the way we implement discard, the jump will only happen
@@ -3572,7 +3481,9 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
          emit_discard_jump();
       }
 
-      limit_dispatch_width(16, "Fragment discard/demote not implemented in SIMD32 mode.\n");
+      if (devinfo->gen < 7)
+         limit_dispatch_width(
+            16, "Fragment discard/demote not implemented in SIMD32 mode.\n");
       break;
    }
 
@@ -3813,7 +3724,8 @@ fs_visitor::nir_emit_cs_intrinsic(const fs_builder &bld,
        * invocations are already executed lock-step.  Instead of an actual
        * barrier just emit a scheduling fence, that will generate no code.
        */
-      if (workgroup_size() <= dispatch_width) {
+      if (!cs_prog_data->uses_variable_group_size &&
+          workgroup_size() <= dispatch_width) {
          bld.exec_all().group(1, 0).emit(FS_OPCODE_SCHEDULING_FENCE);
          break;
       }
@@ -3889,15 +3801,17 @@ fs_visitor::nir_emit_cs_intrinsic(const fs_builder &bld,
       dest.type = brw_reg_type_from_bit_size(bit_size, BRW_REGISTER_TYPE_UD);
 
       /* Read the vector */
-      if (nir_intrinsic_align(instr) >= 4) {
-         assert(nir_dest_bit_size(instr->dest) == 32);
+      assert(nir_dest_bit_size(instr->dest) <= 32);
+      assert(nir_intrinsic_align(instr) > 0);
+      if (nir_dest_bit_size(instr->dest) == 32 &&
+          nir_intrinsic_align(instr) >= 4) {
+         assert(nir_dest_num_components(instr->dest) <= 4);
          srcs[SURFACE_LOGICAL_SRC_IMM_ARG] = brw_imm_ud(instr->num_components);
          fs_inst *inst =
             bld.emit(SHADER_OPCODE_UNTYPED_SURFACE_READ_LOGICAL,
                      dest, srcs, SURFACE_LOGICAL_NUM_SRCS);
          inst->size_written = instr->num_components * dispatch_width * 4;
       } else {
-         assert(nir_dest_bit_size(instr->dest) <= 32);
          assert(nir_dest_num_components(instr->dest) == 1);
          srcs[SURFACE_LOGICAL_SRC_IMM_ARG] = brw_imm_ud(bit_size);
 
@@ -3922,17 +3836,18 @@ fs_visitor::nir_emit_cs_intrinsic(const fs_builder &bld,
       fs_reg data = get_nir_src(instr->src[0]);
       data.type = brw_reg_type_from_bit_size(bit_size, BRW_REGISTER_TYPE_UD);
 
+      assert(nir_src_bit_size(instr->src[0]) <= 32);
       assert(nir_intrinsic_write_mask(instr) ==
              (1u << instr->num_components) - 1);
-      if (nir_intrinsic_align(instr) >= 4) {
-         assert(nir_src_bit_size(instr->src[0]) == 32);
+      assert(nir_intrinsic_align(instr) > 0);
+      if (nir_src_bit_size(instr->src[0]) == 32 &&
+          nir_intrinsic_align(instr) >= 4) {
          assert(nir_src_num_components(instr->src[0]) <= 4);
          srcs[SURFACE_LOGICAL_SRC_DATA] = data;
          srcs[SURFACE_LOGICAL_SRC_IMM_ARG] = brw_imm_ud(instr->num_components);
          bld.emit(SHADER_OPCODE_UNTYPED_SURFACE_WRITE_LOGICAL,
                   fs_reg(), srcs, SURFACE_LOGICAL_NUM_SRCS);
       } else {
-         assert(nir_src_bit_size(instr->src[0]) <= 32);
          assert(nir_src_num_components(instr->src[0]) == 1);
          srcs[SURFACE_LOGICAL_SRC_IMM_ARG] = brw_imm_ud(bit_size);
 
@@ -3941,6 +3856,14 @@ fs_visitor::nir_emit_cs_intrinsic(const fs_builder &bld,
 
          bld.emit(SHADER_OPCODE_BYTE_SCATTERED_WRITE_LOGICAL,
                   fs_reg(), srcs, SURFACE_LOGICAL_NUM_SRCS);
+      }
+      break;
+   }
+
+   case nir_intrinsic_load_local_group_size: {
+      for (unsigned i = 0; i < 3; i++) {
+         bld.MOV(retype(offset(dest, bld, i), BRW_REGISTER_TYPE_UD),
+            group_size[i]);
       }
       break;
    }
@@ -4062,27 +3985,6 @@ fs_visitor::get_nir_ssbo_intrinsic_index(const brw::fs_builder &bld,
    }
 
    return bld.emit_uniformize(surf_index);
-}
-
-static unsigned
-image_intrinsic_coord_components(nir_intrinsic_instr *instr)
-{
-   switch (nir_intrinsic_image_dim(instr)) {
-   case GLSL_SAMPLER_DIM_1D:
-      return 1 + nir_intrinsic_image_array(instr);
-   case GLSL_SAMPLER_DIM_2D:
-   case GLSL_SAMPLER_DIM_RECT:
-      return 2 + nir_intrinsic_image_array(instr);
-   case GLSL_SAMPLER_DIM_3D:
-   case GLSL_SAMPLER_DIM_CUBE:
-      return 3;
-   case GLSL_SAMPLER_DIM_BUF:
-      return 1;
-   case GLSL_SAMPLER_DIM_MS:
-      return 2 + nir_intrinsic_image_array(instr);
-   default:
-      unreachable("Invalid image dimension");
-   }
 }
 
 /**
@@ -4207,7 +4109,7 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
 
       srcs[SURFACE_LOGICAL_SRC_ADDRESS] = get_nir_src(instr->src[1]);
       srcs[SURFACE_LOGICAL_SRC_IMM_DIMS] =
-         brw_imm_ud(image_intrinsic_coord_components(instr));
+         brw_imm_ud(nir_image_intrinsic_coord_components(instr));
 
       /* Emit an image load, store or atomic op. */
       if (instr->intrinsic == nir_intrinsic_image_load ||
@@ -4330,19 +4232,52 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
    case nir_intrinsic_memory_barrier_shared:
    case nir_intrinsic_memory_barrier_buffer:
    case nir_intrinsic_memory_barrier_image:
-   case nir_intrinsic_memory_barrier: {
+   case nir_intrinsic_memory_barrier:
+   case nir_intrinsic_begin_invocation_interlock:
+   case nir_intrinsic_end_invocation_interlock: {
       bool l3_fence, slm_fence;
-      if (instr->intrinsic == nir_intrinsic_scoped_memory_barrier) {
+      const enum opcode opcode =
+         instr->intrinsic == nir_intrinsic_begin_invocation_interlock ?
+         SHADER_OPCODE_INTERLOCK : SHADER_OPCODE_MEMORY_FENCE;
+
+      switch (instr->intrinsic) {
+      case nir_intrinsic_scoped_memory_barrier: {
          nir_variable_mode modes = nir_intrinsic_memory_modes(instr);
          l3_fence = modes & (nir_var_shader_out |
                              nir_var_mem_ssbo |
                              nir_var_mem_global);
          slm_fence = modes & nir_var_mem_shared;
-      } else {
+         break;
+      }
+
+      case nir_intrinsic_begin_invocation_interlock:
+      case nir_intrinsic_end_invocation_interlock:
+         /* For beginInvocationInterlockARB(), we will generate a memory fence
+          * but with a different opcode so that generator can pick SENDC
+          * instead of SEND.
+          *
+          * For endInvocationInterlockARB(), we need to insert a memory fence which
+          * stalls in the shader until the memory transactions prior to that
+          * fence are complete.  This ensures that the shader does not end before
+          * any writes from its critical section have landed.  Otherwise, you can
+          * end up with a case where the next invocation on that pixel properly
+          * stalls for previous FS invocation on its pixel to complete but
+          * doesn't actually wait for the dataport memory transactions from that
+          * thread to land before submitting its own.
+          *
+          * Handling them here will allow the logic for IVB render cache (see
+          * below) to be reused.
+          */
+         l3_fence = true;
+         slm_fence = false;
+         break;
+
+      default:
          l3_fence = instr->intrinsic != nir_intrinsic_memory_barrier_shared;
          slm_fence = instr->intrinsic == nir_intrinsic_group_memory_barrier ||
                      instr->intrinsic == nir_intrinsic_memory_barrier ||
                      instr->intrinsic == nir_intrinsic_memory_barrier_shared;
+         break;
       }
 
       if (stage != MESA_SHADER_COMPUTE)
@@ -4354,7 +4289,8 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
        *
        * TODO: Check if applies for many HW threads sharing same Data Port.
        */
-      if (slm_fence && workgroup_size() <= dispatch_width)
+      if (!brw_cs_prog_data(prog_data)->uses_variable_group_size &&
+          slm_fence && workgroup_size() <= dispatch_width)
          slm_fence = false;
 
       /* Prior to Gen11, there's only L3 fence, so emit that instead. */
@@ -4363,37 +4299,74 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
          l3_fence = true;
       }
 
+      /* IVB does typed surface access through the render cache, so we need
+       * to flush it too.
+       */
+      const bool needs_render_fence =
+         devinfo->gen == 7 && !devinfo->is_haswell;
+
       /* Be conservative in Gen11+ and always stall in a fence.  Since there
        * are two different fences, and shader might want to synchronize
        * between them.
        *
-       * TODO: Improve NIR so that scope and visibility information for the
-       * barriers is available here to make a better decision.
-       *
-       * TODO: When emitting more than one fence, it might help emit all
-       * the fences first and then generate the stall moves.
+       * TODO: Use scope and visibility information for the barriers from NIR
+       * to make a better decision on whether we need to stall.
        */
-      const bool stall = devinfo->gen >= 11;
+      const bool stall = devinfo->gen >= 11 || needs_render_fence ||
+         instr->intrinsic == nir_intrinsic_end_invocation_interlock;
+
+      const bool commit_enable = stall ||
+         devinfo->gen >= 10; /* HSD ES # 1404612949 */
+
+      unsigned fence_regs_count = 0;
+      fs_reg fence_regs[2] = {};
 
       const fs_builder ubld = bld.group(8, 0);
-      const fs_reg tmp = ubld.vgrf(BRW_REGISTER_TYPE_UD, 2);
 
       if (l3_fence) {
-         ubld.emit(SHADER_OPCODE_MEMORY_FENCE, tmp,
-                   brw_vec8_grf(0, 0), brw_imm_ud(stall),
-                   /* bti */ brw_imm_ud(0))
-            ->size_written = 2 * REG_SIZE;
+         fs_inst *fence =
+            ubld.emit(opcode,
+                      ubld.vgrf(BRW_REGISTER_TYPE_UD),
+                      brw_vec8_grf(0, 0),
+                      brw_imm_ud(commit_enable),
+                      brw_imm_ud(/* bti */ 0));
+         fence->sfid = GEN7_SFID_DATAPORT_DATA_CACHE;
+
+         fence_regs[fence_regs_count++] = fence->dst;
+
+         if (needs_render_fence) {
+            fs_inst *render_fence =
+               ubld.emit(opcode,
+                         ubld.vgrf(BRW_REGISTER_TYPE_UD),
+                         brw_vec8_grf(0, 0),
+                         brw_imm_ud(commit_enable),
+                         brw_imm_ud(/* bti */ 0));
+            render_fence->sfid = GEN6_SFID_DATAPORT_RENDER_CACHE;
+
+            fence_regs[fence_regs_count++] = render_fence->dst;
+         }
       }
 
       if (slm_fence) {
-         ubld.emit(SHADER_OPCODE_MEMORY_FENCE, tmp,
-                   brw_vec8_grf(0, 0), brw_imm_ud(stall),
-                   brw_imm_ud(GEN7_BTI_SLM))
-            ->size_written = 2 * REG_SIZE;
+         assert(opcode == SHADER_OPCODE_MEMORY_FENCE);
+         fs_inst *fence =
+            ubld.emit(opcode,
+                      ubld.vgrf(BRW_REGISTER_TYPE_UD),
+                      brw_vec8_grf(0, 0),
+                      brw_imm_ud(commit_enable),
+                      brw_imm_ud(GEN7_BTI_SLM));
+         fence->sfid = GEN7_SFID_DATAPORT_DATA_CACHE;
+
+         fence_regs[fence_regs_count++] = fence->dst;
       }
 
-      if (!l3_fence && !slm_fence)
-         ubld.emit(FS_OPCODE_SCHEDULING_FENCE);
+      assert(fence_regs_count <= 2);
+
+      if (stall || fence_regs_count == 0) {
+         ubld.exec_all().group(1, 0).emit(
+            FS_OPCODE_SCHEDULING_FENCE, ubld.null_reg_ud(),
+            fence_regs, fence_regs_count);
+      }
 
       break;
    }
@@ -4576,8 +4549,11 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
    case nir_intrinsic_load_global: {
       assert(devinfo->gen >= 8);
 
-      if (nir_intrinsic_align(instr) >= 4) {
-         assert(nir_dest_bit_size(instr->dest) == 32);
+      assert(nir_dest_bit_size(instr->dest) <= 32);
+      assert(nir_intrinsic_align(instr) > 0);
+      if (nir_dest_bit_size(instr->dest) == 32 &&
+          nir_intrinsic_align(instr) >= 4) {
+         assert(nir_dest_num_components(instr->dest) <= 4);
          fs_inst *inst = bld.emit(SHADER_OPCODE_A64_UNTYPED_READ_LOGICAL,
                                   dest,
                                   get_nir_src(instr->src[0]), /* Address */
@@ -4587,7 +4563,6 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
                               inst->dst.component_size(inst->exec_size);
       } else {
          const unsigned bit_size = nir_dest_bit_size(instr->dest);
-         assert(bit_size <= 32);
          assert(nir_dest_num_components(instr->dest) == 1);
          fs_reg tmp = bld.vgrf(BRW_REGISTER_TYPE_UD);
          bld.emit(SHADER_OPCODE_A64_BYTE_SCATTERED_READ_LOGICAL,
@@ -4606,17 +4581,21 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       if (stage == MESA_SHADER_FRAGMENT)
          brw_wm_prog_data(prog_data)->has_side_effects = true;
 
-      if (nir_intrinsic_align(instr) >= 4) {
-         assert(nir_src_bit_size(instr->src[0]) == 32);
+      assert(nir_src_bit_size(instr->src[0]) <= 32);
+      assert(nir_intrinsic_write_mask(instr) ==
+             (1u << instr->num_components) - 1);
+      assert(nir_intrinsic_align(instr) > 0);
+      if (nir_src_bit_size(instr->src[0]) == 32 &&
+          nir_intrinsic_align(instr) >= 4) {
+         assert(nir_src_num_components(instr->src[0]) <= 4);
          bld.emit(SHADER_OPCODE_A64_UNTYPED_WRITE_LOGICAL,
                   fs_reg(),
                   get_nir_src(instr->src[1]), /* Address */
                   get_nir_src(instr->src[0]), /* Data */
                   brw_imm_ud(instr->num_components));
       } else {
-         const unsigned bit_size = nir_src_bit_size(instr->src[0]);
-         assert(bit_size <= 32);
          assert(nir_src_num_components(instr->src[0]) == 1);
+         const unsigned bit_size = nir_src_bit_size(instr->src[0]);
          brw_reg_type data_type =
             brw_reg_type_from_bit_size(bit_size, BRW_REGISTER_TYPE_UD);
          fs_reg tmp = bld.vgrf(BRW_REGISTER_TYPE_UD);
@@ -4661,15 +4640,17 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       dest.type = brw_reg_type_from_bit_size(bit_size, BRW_REGISTER_TYPE_UD);
 
       /* Read the vector */
-      if (nir_intrinsic_align(instr) >= 4) {
-         assert(nir_dest_bit_size(instr->dest) == 32);
+      assert(nir_dest_bit_size(instr->dest) <= 32);
+      assert(nir_intrinsic_align(instr) > 0);
+      if (nir_dest_bit_size(instr->dest) == 32 &&
+          nir_intrinsic_align(instr) >= 4) {
+         assert(nir_dest_num_components(instr->dest) <= 4);
          srcs[SURFACE_LOGICAL_SRC_IMM_ARG] = brw_imm_ud(instr->num_components);
          fs_inst *inst =
             bld.emit(SHADER_OPCODE_UNTYPED_SURFACE_READ_LOGICAL,
                      dest, srcs, SURFACE_LOGICAL_NUM_SRCS);
          inst->size_written = instr->num_components * dispatch_width * 4;
       } else {
-         assert(nir_dest_bit_size(instr->dest) <= 32);
          assert(nir_dest_num_components(instr->dest) == 1);
          srcs[SURFACE_LOGICAL_SRC_IMM_ARG] = brw_imm_ud(bit_size);
 
@@ -4697,17 +4678,18 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       fs_reg data = get_nir_src(instr->src[0]);
       data.type = brw_reg_type_from_bit_size(bit_size, BRW_REGISTER_TYPE_UD);
 
+      assert(nir_src_bit_size(instr->src[0]) <= 32);
       assert(nir_intrinsic_write_mask(instr) ==
              (1u << instr->num_components) - 1);
-      if (nir_intrinsic_align(instr) >= 4) {
-         assert(nir_src_bit_size(instr->src[0]) == 32);
+      assert(nir_intrinsic_align(instr) > 0);
+      if (nir_src_bit_size(instr->src[0]) == 32 &&
+          nir_intrinsic_align(instr) >= 4) {
          assert(nir_src_num_components(instr->src[0]) <= 4);
          srcs[SURFACE_LOGICAL_SRC_DATA] = data;
          srcs[SURFACE_LOGICAL_SRC_IMM_ARG] = brw_imm_ud(instr->num_components);
          bld.emit(SHADER_OPCODE_UNTYPED_SURFACE_WRITE_LOGICAL,
                   fs_reg(), srcs, SURFACE_LOGICAL_NUM_SRCS);
       } else {
-         assert(nir_src_bit_size(instr->src[0]) <= 32);
          assert(nir_src_num_components(instr->src[0]) == 1);
          srcs[SURFACE_LOGICAL_SRC_IMM_ARG] = brw_imm_ud(bit_size);
 
@@ -4836,9 +4818,11 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       dest.type = brw_reg_type_from_bit_size(bit_size, BRW_REGISTER_TYPE_UD);
 
       /* Read the vector */
-      if (nir_intrinsic_align(instr) >= 4) {
-         assert(nir_dest_bit_size(instr->dest) == 32);
-
+      assert(nir_dest_num_components(instr->dest) == 1);
+      assert(nir_dest_bit_size(instr->dest) <= 32);
+      assert(nir_intrinsic_align(instr) > 1);
+      if (nir_dest_bit_size(instr->dest) >= 4 &&
+          nir_intrinsic_align(instr) >= 4) {
          /* The offset for a DWORD scattered message is in dwords. */
          srcs[SURFACE_LOGICAL_SRC_ADDRESS] =
             swizzle_nir_scratch_addr(bld, nir_addr, true);
@@ -4846,8 +4830,6 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
          bld.emit(SHADER_OPCODE_DWORD_SCATTERED_READ_LOGICAL,
                   dest, srcs, SURFACE_LOGICAL_NUM_SRCS);
       } else {
-         assert(nir_dest_bit_size(instr->dest) <= 32);
-
          srcs[SURFACE_LOGICAL_SRC_ADDRESS] =
             swizzle_nir_scratch_addr(bld, nir_addr, false);
 
@@ -4880,10 +4862,12 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       fs_reg data = get_nir_src(instr->src[0]);
       data.type = brw_reg_type_from_bit_size(bit_size, BRW_REGISTER_TYPE_UD);
 
-      assert(nir_intrinsic_write_mask(instr) ==
-             (1u << instr->num_components) - 1);
-      if (nir_intrinsic_align(instr) >= 4) {
-         assert(nir_src_bit_size(instr->src[0]) == 32);
+      assert(nir_src_num_components(instr->src[0]) == 1);
+      assert(nir_src_bit_size(instr->src[0]) <= 32);
+      assert(nir_intrinsic_write_mask(instr) == 1);
+      assert(nir_intrinsic_align(instr) > 1);
+      if (nir_src_bit_size(instr->src[0]) == 32 &&
+          nir_intrinsic_align(instr) >= 4) {
          srcs[SURFACE_LOGICAL_SRC_DATA] = data;
 
          /* The offset for a DWORD scattered message is in dwords. */
@@ -4893,8 +4877,6 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
          bld.emit(SHADER_OPCODE_DWORD_SCATTERED_WRITE_LOGICAL,
                   fs_reg(), srcs, SURFACE_LOGICAL_NUM_SRCS);
       } else {
-         assert(nir_src_bit_size(instr->src[0]) <= 32);
-
          srcs[SURFACE_LOGICAL_SRC_DATA] = bld.vgrf(BRW_REGISTER_TYPE_UD);
          bld.MOV(srcs[SURFACE_LOGICAL_SRC_DATA], data);
 
@@ -5295,33 +5277,6 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       bld.emit_scan(brw_op, scan, dispatch_width, cond_mod);
 
       bld.MOV(retype(dest, src.type), scan);
-      break;
-   }
-
-   case nir_intrinsic_begin_invocation_interlock: {
-      const fs_builder ubld = bld.group(8, 0);
-      const fs_reg tmp = ubld.vgrf(BRW_REGISTER_TYPE_UD, 2);
-
-      ubld.emit(SHADER_OPCODE_INTERLOCK, tmp, brw_vec8_grf(0, 0))
-         ->size_written = 2 * REG_SIZE;
-      break;
-   }
-
-   case nir_intrinsic_end_invocation_interlock: {
-      /* For endInvocationInterlock(), we need to insert a memory fence which
-       * stalls in the shader until the memory transactions prior to that
-       * fence are complete.  This ensures that the shader does not end before
-       * any writes from its critical section have landed.  Otherwise, you can
-       * end up with a case where the next invocation on that pixel properly
-       * stalls for previous FS invocation on its pixel to complete but
-       * doesn't actually wait for the dataport memory transactions from that
-       * thread to land before submitting its own.
-       */
-      const fs_builder ubld = bld.group(8, 0);
-      const fs_reg tmp = ubld.vgrf(BRW_REGISTER_TYPE_UD, 2);
-      ubld.emit(SHADER_OPCODE_MEMORY_FENCE, tmp,
-                brw_vec8_grf(0, 0), brw_imm_ud(1), brw_imm_ud(0))
-         ->size_written = 2 * REG_SIZE;
       break;
    }
 

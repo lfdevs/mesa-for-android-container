@@ -26,12 +26,15 @@
  */
 
 #include "brw_cfg.h"
+#include "brw_shader.h"
 
 /** @file brw_cfg.cpp
  *
  * Walks the shader instructions generated and creates a set of basic
  * blocks with successor/predecessor edges connecting them.
  */
+
+using namespace brw;
 
 static bblock_t *
 pop_stack(exec_list *list)
@@ -60,7 +63,7 @@ push_stack(exec_list *list, void *mem_ctx, bblock_t *block)
 }
 
 bblock_t::bblock_t(cfg_t *cfg) :
-   cfg(cfg), idom(NULL), start_ip(0), end_ip(0), num(0), cycle_count(0)
+   cfg(cfg), start_ip(0), end_ip(0), num(0)
 {
    instructions.make_empty();
    parents.make_empty();
@@ -151,8 +154,10 @@ bblock_t::combine_with(bblock_t *that)
 }
 
 void
-bblock_t::dump(backend_shader *s) const
+bblock_t::dump() const
 {
+   const backend_shader *s = this->cfg->s;
+
    int ip = this->start_ip;
    foreach_inst_in_block(backend_instruction, inst, this) {
       fprintf(stderr, "%5d: ", ip);
@@ -161,14 +166,13 @@ bblock_t::dump(backend_shader *s) const
    }
 }
 
-cfg_t::cfg_t(exec_list *instructions)
+cfg_t::cfg_t(const backend_shader *s, exec_list *instructions) :
+   s(s)
 {
    mem_ctx = ralloc_context(NULL);
    block_list.make_empty();
    blocks = NULL;
    num_blocks = 0;
-   idom_dirty = true;
-   cycle_count = 0;
 
    bblock_t *cur = NULL;
    int ip = 0;
@@ -461,7 +465,6 @@ cfg_t::remove_block(bblock_t *block)
 
    this->blocks[this->num_blocks - 1]->num = this->num_blocks - 2;
    this->num_blocks--;
-   idom_dirty = true;
 }
 
 bblock_t *
@@ -498,14 +501,14 @@ cfg_t::make_block_array()
 }
 
 void
-cfg_t::dump(backend_shader *s)
+cfg_t::dump()
 {
-   if (idom_dirty)
-      calculate_idom();
+   const idom_tree *idom = (s ? &s->idom_analysis.require() : NULL);
 
    foreach_block (block, this) {
-      if (block->idom)
-         fprintf(stderr, "START B%d IDOM(B%d)", block->num, block->idom->num);
+      if (idom && idom->parent(block))
+         fprintf(stderr, "START B%d IDOM(B%d)", block->num,
+                 idom->parent(block)->num);
       else
          fprintf(stderr, "START B%d IDOM(none)", block->num);
 
@@ -516,7 +519,7 @@ cfg_t::dump(backend_shader *s)
       }
       fprintf(stderr, "\n");
       if (s != NULL)
-         block->dump(s);
+         block->dump();
       fprintf(stderr, "END B%d", block->num);
       foreach_list_typed(bblock_link, link, link, &block->children) {
          fprintf(stderr, " %c>B%d",
@@ -535,45 +538,44 @@ cfg_t::dump(backend_shader *s)
  * (less than 1000 nodes) that this algorithm is significantly faster than
  * others like Lengauer-Tarjan.
  */
-void
-cfg_t::calculate_idom()
+idom_tree::idom_tree(const backend_shader *s) :
+   num_parents(s->cfg->num_blocks),
+   parents(new bblock_t *[num_parents]())
 {
-   foreach_block(block, this) {
-      block->idom = NULL;
-   }
-   blocks[0]->idom = blocks[0];
-
    bool changed;
+
+   parents[0] = s->cfg->blocks[0];
+
    do {
       changed = false;
 
-      foreach_block(block, this) {
+      foreach_block(block, s->cfg) {
          if (block->num == 0)
             continue;
 
          bblock_t *new_idom = NULL;
-         foreach_list_typed(bblock_link, parent, link, &block->parents) {
-            if (parent->block->idom) {
-               if (new_idom == NULL) {
-                  new_idom = parent->block;
-               } else if (parent->block->idom != NULL) {
-                  new_idom = intersect(parent->block, new_idom);
-               }
+         foreach_list_typed(bblock_link, parent_link, link, &block->parents) {
+            if (parent(parent_link->block)) {
+               new_idom = (new_idom ? intersect(new_idom, parent_link->block) :
+                           parent_link->block);
             }
          }
 
-         if (block->idom != new_idom) {
-            block->idom = new_idom;
+         if (parent(block) != new_idom) {
+            parents[block->num] = new_idom;
             changed = true;
          }
       }
    } while (changed);
+}
 
-   idom_dirty = false;
+idom_tree::~idom_tree()
+{
+   delete[] parents;
 }
 
 bblock_t *
-cfg_t::intersect(bblock_t *b1, bblock_t *b2)
+idom_tree::intersect(bblock_t *b1, bblock_t *b2) const
 {
    /* Note, the comparisons here are the opposite of what the paper says
     * because we index blocks from beginning -> end (i.e. reverse post-order)
@@ -581,12 +583,21 @@ cfg_t::intersect(bblock_t *b1, bblock_t *b2)
     */
    while (b1->num != b2->num) {
       while (b1->num > b2->num)
-         b1 = b1->idom;
+         b1 = parent(b1);
       while (b2->num > b1->num)
-         b2 = b2->idom;
+         b2 = parent(b2);
    }
    assert(b1);
    return b1;
+}
+
+void
+idom_tree::dump() const
+{
+   printf("digraph DominanceTree {\n");
+   for (unsigned i = 0; i < num_parents; i++)
+      printf("\t%d -> %d\n", parents[i]->num, i);
+   printf("}\n");
 }
 
 void
@@ -598,18 +609,6 @@ cfg_t::dump_cfg()
 
       foreach_list_typed_safe (bblock_link, child, link, &block->children) {
          printf("\t%d -> %d\n", b, child->block->num);
-      }
-   }
-   printf("}\n");
-}
-
-void
-cfg_t::dump_domtree()
-{
-   printf("digraph DominanceTree {\n");
-   foreach_block(block, this) {
-      if (block->idom) {
-         printf("\t%d -> %d\n", block->idom->num, block->num);
       }
    }
    printf("}\n");

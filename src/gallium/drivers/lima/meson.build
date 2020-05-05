@@ -31,6 +31,7 @@ files_lima = files(
   'ir/gp/reduce_scheduler.c',
   'ir/gp/regalloc.c',
   'ir/gp/disasm.c',
+  'ir/gp/optimize.c',
 
   'ir/pp/ppir.h',
   'ir/pp/nir.c',
@@ -62,8 +63,8 @@ files_lima = files(
   'lima_query.c',
   'lima_bo.c',
   'lima_bo.h',
-  'lima_submit.c',
-  'lima_submit.h',
+  'lima_job.c',
+  'lima_job.h',
   'lima_parser.c',
   'lima_parser.h',
   'lima_util.c',
@@ -74,6 +75,7 @@ files_lima = files(
   'lima_fence.h',
   'lima_format.h',
   'lima_format.c',
+  'lima_gpu.h',
 )
 
 lima_nir_algebraic_c = custom_target(

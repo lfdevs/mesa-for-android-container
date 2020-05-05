@@ -186,6 +186,7 @@ nine_convert_blend_state(struct pipe_blend_state *blend_state, const DWORD *rs)
         nine_convert_blend_state_fixup(&blend, rs); /* for BOTH[INV]SRCALPHA */
     }
 
+    blend.max_rt = 0;
     blend.rt[0].colormask = rs[D3DRS_COLORWRITEENABLE];
 
     if (rs[D3DRS_COLORWRITEENABLE1] != rs[D3DRS_COLORWRITEENABLE] ||
@@ -198,6 +199,7 @@ nine_convert_blend_state(struct pipe_blend_state *blend_state, const DWORD *rs)
         blend.rt[1].colormask = rs[D3DRS_COLORWRITEENABLE1];
         blend.rt[2].colormask = rs[D3DRS_COLORWRITEENABLE2];
         blend.rt[3].colormask = rs[D3DRS_COLORWRITEENABLE3];
+        blend.max_rt = 3;
     }
 
     /* blend.force_srgb = !!rs[D3DRS_SRGBWRITEENABLE]; */

@@ -72,7 +72,7 @@ swr_screen(struct pipe_screen *pipe)
 SWR_FORMAT
 mesa_to_swr_format(enum pipe_format format);
 
-static void swr_print_info(const char *format, ...)
+INLINE void swr_print_info(const char *format, ...)
 {
    static bool print_info = debug_get_bool_option("SWR_PRINT_INFO", false);
    if(print_info) {

@@ -201,8 +201,7 @@ vec4_visitor::reg_allocate()
    if (0)
       return reg_allocate_trivial();
 
-   calculate_live_intervals();
-
+   const vec4_live_variables &live = live_analysis.require();
    int node_count = alloc.count;
    int first_payload_node = node_count;
    node_count += payload_reg_count;
@@ -215,7 +214,7 @@ vec4_visitor::reg_allocate()
       ra_set_node_class(g, i, compiler->vec4_reg_set.classes[size - 1]);
 
       for (unsigned j = 0; j < i; j++) {
-	 if (virtual_grf_interferes(i, j)) {
+	 if (live.vgrfs_interfere(i, j)) {
 	    ra_add_node_interference(g, i, j);
 	 }
       }
@@ -540,7 +539,7 @@ vec4_visitor::spill_reg(unsigned spill_reg_nr)
       }
    }
 
-   invalidate_live_intervals();
+   invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
 }
 
 } /* namespace brw */

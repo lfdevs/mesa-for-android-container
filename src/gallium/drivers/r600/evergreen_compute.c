@@ -441,8 +441,9 @@ static void *evergreen_create_compute_state(struct pipe_context *ctx,
 
 	shader->ir_type = cso->ir_type;
 
-	if (shader->ir_type == PIPE_SHADER_IR_TGSI) {
-		shader->sel = r600_create_shader_state_tokens(ctx, cso->prog, PIPE_SHADER_COMPUTE);
+	if (shader->ir_type == PIPE_SHADER_IR_TGSI ||
+	    shader->ir_type == PIPE_SHADER_IR_NIR) {
+		shader->sel = r600_create_shader_state_tokens(ctx, cso->prog, cso->ir_type, PIPE_SHADER_COMPUTE);
 		return shader;
 	}
 #ifdef HAVE_OPENCL
@@ -476,7 +477,8 @@ static void evergreen_delete_compute_state(struct pipe_context *ctx, void *state
 	if (!shader)
 		return;
 
-	if (shader->ir_type == PIPE_SHADER_IR_TGSI) {
+	if (shader->ir_type == PIPE_SHADER_IR_TGSI ||
+	    shader->ir_type == PIPE_SHADER_IR_NIR) {
 		r600_delete_shader_selector(ctx, shader->sel);
 	} else {
 #ifdef HAVE_OPENCL
@@ -500,12 +502,14 @@ static void evergreen_bind_compute_state(struct pipe_context *ctx, void *state)
 		return;
 	}
 
-	if (cstate->ir_type == PIPE_SHADER_IR_TGSI) {
+	if (cstate->ir_type == PIPE_SHADER_IR_TGSI ||
+	    cstate->ir_type == PIPE_SHADER_IR_NIR) {
 		bool compute_dirty;
-
-		r600_shader_select(ctx, cstate->sel, &compute_dirty);
+		cstate->sel->ir_type = cstate->ir_type;
+		if (r600_shader_select(ctx, cstate->sel, &compute_dirty))
+			R600_ERR("Failed to select compute shader\n");
 	}
-
+	
 	rctx->cs_shader_state.shader = (struct r600_pipe_compute *)state;
 }
 
@@ -604,9 +608,10 @@ static void evergreen_emit_dispatch(struct r600_context *rctx,
 	int grid_size = 1;
 	unsigned lds_size = shader->local_size / 4;
 
-	if (shader->ir_type != PIPE_SHADER_IR_TGSI)
+	if (shader->ir_type != PIPE_SHADER_IR_TGSI &&
+	    shader->ir_type != PIPE_SHADER_IR_NIR)
 		lds_size += shader->bc.nlds_dw;
-
+	
 	/* Calculate group_size/grid_size */
 	for (i = 0; i < 3; i++) {
 		group_size *= info->block[i];
@@ -734,8 +739,13 @@ static void compute_emit_cs(struct r600_context *rctx,
 		rctx->cmd_buf_is_compute = true;
 	}
 
-	if (rctx->cs_shader_state.shader->ir_type == PIPE_SHADER_IR_TGSI) {
-		r600_shader_select(&rctx->b.b, rctx->cs_shader_state.shader->sel, &compute_dirty);
+	if (rctx->cs_shader_state.shader->ir_type == PIPE_SHADER_IR_TGSI||
+	    rctx->cs_shader_state.shader->ir_type == PIPE_SHADER_IR_NIR) {
+		if (r600_shader_select(&rctx->b.b, rctx->cs_shader_state.shader->sel, &compute_dirty)) {
+			R600_ERR("Failed to select compute shader\n");
+			return;
+		}
+		
 		current = rctx->cs_shader_state.shader->sel->current;
 		if (compute_dirty) {
 			rctx->cs_shader_state.atom.num_dw = current->command_buffer.num_dw;
@@ -786,7 +796,8 @@ static void compute_emit_cs(struct r600_context *rctx,
 
 	/* emit config state */
 	if (rctx->b.chip_class == EVERGREEN) {
-		if (rctx->cs_shader_state.shader->ir_type == PIPE_SHADER_IR_TGSI) {
+		if (rctx->cs_shader_state.shader->ir_type == PIPE_SHADER_IR_TGSI||
+		    rctx->cs_shader_state.shader->ir_type == PIPE_SHADER_IR_NIR) {
 			radeon_set_config_reg_seq(cs, R_008C04_SQ_GPR_RESOURCE_MGMT_1, 3);
 			radeon_emit(cs, S_008C04_NUM_CLAUSE_TEMP_GPRS(rctx->r6xx_num_clause_temp_gprs));
 			radeon_emit(cs, 0);
@@ -799,7 +810,8 @@ static void compute_emit_cs(struct r600_context *rctx,
 	rctx->b.flags |= R600_CONTEXT_WAIT_3D_IDLE | R600_CONTEXT_FLUSH_AND_INV;
 	r600_flush_emit(rctx);
 
-	if (rctx->cs_shader_state.shader->ir_type != PIPE_SHADER_IR_TGSI) {
+	if (rctx->cs_shader_state.shader->ir_type != PIPE_SHADER_IR_TGSI &&
+	    rctx->cs_shader_state.shader->ir_type != PIPE_SHADER_IR_NIR) {
 
 		compute_setup_cbs(rctx);
 
@@ -855,7 +867,8 @@ static void compute_emit_cs(struct r600_context *rctx,
 		radeon_emit(cs, PKT3C(PKT3_DEALLOC_STATE, 0, 0));
 		radeon_emit(cs, 0);
 	}
-	if (rctx->cs_shader_state.shader->ir_type == PIPE_SHADER_IR_TGSI)
+	if (rctx->cs_shader_state.shader->ir_type == PIPE_SHADER_IR_TGSI ||
+	    rctx->cs_shader_state.shader->ir_type == PIPE_SHADER_IR_NIR)
 		evergreen_emit_atomic_buffer_save(rctx, true, combined_atomics, &atomic_used_mask);
 
 #if 0
@@ -882,7 +895,8 @@ void evergreen_emit_cs_shader(struct r600_context *rctx,
 	struct r600_resource *code_bo;
 	unsigned ngpr, nstack;
 
-	if (shader->ir_type == PIPE_SHADER_IR_TGSI) {
+	if (shader->ir_type == PIPE_SHADER_IR_TGSI ||
+	    shader->ir_type == PIPE_SHADER_IR_NIR) {
 		code_bo = shader->sel->current->bo;
 		va = shader->sel->current->bo->gpu_address;
 		ngpr = shader->sel->current->shader.bc.ngpr;
@@ -916,7 +930,8 @@ static void evergreen_launch_grid(struct pipe_context *ctx,
 	struct r600_pipe_compute *shader = rctx->cs_shader_state.shader;
 	boolean use_kill;
 
-	if (shader->ir_type != PIPE_SHADER_IR_TGSI) {
+	if (shader->ir_type != PIPE_SHADER_IR_TGSI &&
+	    shader->ir_type != PIPE_SHADER_IR_NIR) {
 		rctx->cs_shader_state.pc = info->pc;
 		/* Get the config information for this kernel. */
 		r600_shader_binary_read_config(&shader->binary, &shader->bc,

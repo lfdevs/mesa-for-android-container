@@ -28,53 +28,77 @@
 #ifndef BRW_VEC4_LIVE_VARIABLES_H
 #define BRW_VEC4_LIVE_VARIABLES_H
 
+#include "brw_ir_vec4.h"
+#include "brw_ir_analysis.h"
 #include "util/bitset.h"
-#include "brw_vec4.h"
+
+struct backend_shader;
 
 namespace brw {
 
-struct vec4_block_data {
-   /**
-    * Which variables are defined before being used in the block.
-    *
-    * Note that for our purposes, "defined" means unconditionally, completely
-    * defined.
-    */
-   BITSET_WORD *def;
-
-   /**
-    * Which variables are used before being defined in the block.
-    */
-   BITSET_WORD *use;
-
-   /** Which defs reach the entry point of the block. */
-   BITSET_WORD *livein;
-
-   /** Which defs reach the exit point of the block. */
-   BITSET_WORD *liveout;
-
-   BITSET_WORD flag_def[1];
-   BITSET_WORD flag_use[1];
-   BITSET_WORD flag_livein[1];
-   BITSET_WORD flag_liveout[1];
-};
-
 class vec4_live_variables {
 public:
-   DECLARE_RALLOC_CXX_OPERATORS(vec4_live_variables)
+   struct block_data {
+      /**
+       * Which variables are defined before being used in the block.
+       *
+       * Note that for our purposes, "defined" means unconditionally, completely
+       * defined.
+       */
+      BITSET_WORD *def;
 
-   vec4_live_variables(const simple_allocator &alloc, cfg_t *cfg);
+      /**
+       * Which variables are used before being defined in the block.
+       */
+      BITSET_WORD *use;
+
+      /** Which defs reach the entry point of the block. */
+      BITSET_WORD *livein;
+
+      /** Which defs reach the exit point of the block. */
+      BITSET_WORD *liveout;
+
+      BITSET_WORD flag_def[1];
+      BITSET_WORD flag_use[1];
+      BITSET_WORD flag_livein[1];
+      BITSET_WORD flag_liveout[1];
+   };
+
+   vec4_live_variables(const backend_shader *s);
    ~vec4_live_variables();
+
+   bool
+   validate(const backend_shader *s) const;
+
+   analysis_dependency_class
+   dependency_class() const
+   {
+      return (DEPENDENCY_INSTRUCTION_IDENTITY |
+              DEPENDENCY_INSTRUCTION_DATA_FLOW |
+              DEPENDENCY_VARIABLES);
+   }
 
    int num_vars;
    int bitset_words;
 
    /** Per-basic-block information on live variables */
-   struct vec4_block_data *block_data;
+   struct block_data *block_data;
+
+   /** @{
+    * Final computed live ranges for each variable.
+    */
+   int *start;
+   int *end;
+   /** @} */
+
+   int var_range_start(unsigned v, unsigned n) const;
+   int var_range_end(unsigned v, unsigned n) const;
+   bool vgrfs_interfere(int a, int b) const;
 
 protected:
    void setup_def_use();
    void compute_live_variables();
+   void compute_start_end();
 
    const simple_allocator &alloc;
    cfg_t *cfg;

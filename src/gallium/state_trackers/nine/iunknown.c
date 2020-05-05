@@ -59,7 +59,7 @@ NineUnknown_ctor( struct NineUnknown *This,
     This->guids = pParams->guids;
     This->dtor = pParams->dtor;
 
-    This->pdata = util_hash_table_create(ht_guid_hash, ht_guid_compare);
+    This->pdata = _mesa_hash_table_create(NULL, ht_guid_hash, ht_guid_compare);
     if (!This->pdata)
         return E_OUTOFMEMORY;
 
@@ -74,7 +74,7 @@ NineUnknown_dtor( struct NineUnknown *This )
 
     if (This->pdata) {
         util_hash_table_foreach(This->pdata, ht_guid_delete, NULL);
-        util_hash_table_destroy(This->pdata);
+        _mesa_hash_table_destroy(This->pdata, NULL);
     }
 
     FREE(This);
@@ -224,16 +224,9 @@ NineUnknown_SetPrivateData( struct NineUnknown *This,
     memcpy(header_data, user_data, header->size);
     memcpy(&header->guid, refguid, sizeof(header->guid));
 
-    err = util_hash_table_set(This->pdata, &header->guid, header);
-    if (err == PIPE_OK) {
-        if (header->unknown) { IUnknown_AddRef(*(IUnknown **)header_data); }
-        return D3D_OK;
-    }
-
-    FREE(header);
-    if (err == PIPE_ERROR_OUT_OF_MEMORY) { return E_OUTOFMEMORY; }
-
-    return D3DERR_DRIVERINTERNALERROR;
+    _mesa_hash_table_insert(This->pdata, &header->guid, header);
+    if (header->unknown) { IUnknown_AddRef(*(IUnknown **)header_data); }
+    return D3D_OK;
 }
 
 HRESULT NINE_WINAPI
@@ -289,7 +282,7 @@ NineUnknown_FreePrivateData( struct NineUnknown *This,
         return D3DERR_NOTFOUND;
 
     ht_guid_delete(NULL, header, NULL);
-    util_hash_table_remove(This->pdata, refguid);
+    _mesa_hash_table_remove_key(This->pdata, refguid);
 
     return D3D_OK;
 }

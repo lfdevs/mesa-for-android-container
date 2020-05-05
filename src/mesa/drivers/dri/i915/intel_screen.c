@@ -41,6 +41,7 @@
 
 #include "utils.h"
 #include "util/xmlpool.h"
+#include "util/u_memory.h"
 
 static const __DRIconfigOptionsExtension i915_config_options = {
    .base = { __DRI_CONFIG_OPTIONS, 1 },

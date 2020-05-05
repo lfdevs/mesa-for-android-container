@@ -211,29 +211,11 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 		if (list_is_empty(&block->instr_list) && (opc_cat(n->opc) >= 5))
 			ir3_NOP(block);
 
-		if (is_nop(n) && !list_is_empty(&block->instr_list)) {
-			struct ir3_instruction *last = list_last_entry(&block->instr_list,
-					struct ir3_instruction, node);
-			if (is_nop(last) && (last->repeat < 5)) {
-				last->repeat++;
-				last->flags |= n->flags;
-				continue;
-			}
-
-			/* NOTE: I think the nopN encoding works for a5xx and
-			 * probably a4xx, but not a3xx.  So far only tested on
-			 * a6xx.
-			 */
-			if ((ctx->compiler->gpu_id >= 600) && !n->flags && (last->nop < 3) &&
-					((opc_cat(last->opc) == 2) || (opc_cat(last->opc) == 3))) {
-				last->nop++;
-				continue;
-			}
-		}
-
 		if (ctx->compiler->samgq_workaround &&
 			ctx->type == MESA_SHADER_VERTEX && n->opc == OPC_SAMGQ) {
 			struct ir3_instruction *samgp;
+
+			list_delinit(&n->node);
 
 			for (i = 0; i < 4; i++) {
 				samgp = ir3_instr_clone(n);
@@ -241,7 +223,6 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 				if (i > 1)
 					samgp->flags |= IR3_INSTR_SY;
 			}
-			list_delinit(&n->node);
 		} else {
 			list_addtail(&n->node, &block->instr_list);
 		}
@@ -256,9 +237,8 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 		if (is_sfu(n))
 			regmask_set(&state->needs_ss, n->regs[0]);
 
-		if (is_tex(n) || (n->opc == OPC_META_TEX_PREFETCH)) {
+		if (is_tex_or_prefetch(n)) {
 			regmask_set(&state->needs_sy, n->regs[0]);
-			ctx->so->need_pixlod = true;
 			if (n->opc == OPC_META_TEX_PREFETCH)
 				has_tex_prefetch = true;
 		} else if (n->opc == OPC_RESINFO) {
@@ -293,7 +273,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 		 * their src register(s):
 		 */
 		if (is_tex(n) || is_sfu(n) || is_mem(n)) {
-			foreach_src(reg, n) {
+			foreach_src (reg, n) {
 				if (reg_gpr(reg))
 					regmask_set(&state->needs_ss_war, reg);
 			}
@@ -573,6 +553,160 @@ mark_xvergence_points(struct ir3 *ir)
 	}
 }
 
+/* Insert the branch/jump instructions for flow control between blocks.
+ * Initially this is done naively, without considering if the successor
+ * block immediately follows the current block (ie. so no jump required),
+ * but that is cleaned up in resolve_jumps().
+ *
+ * TODO what ensures that the last write to p0.x in a block is the
+ * branch condition?  Have we been getting lucky all this time?
+ */
+static void
+block_sched(struct ir3 *ir)
+{
+	foreach_block (block, &ir->block_list) {
+		if (block->successors[1]) {
+			/* if/else, conditional branches to "then" or "else": */
+			struct ir3_instruction *br;
+
+			debug_assert(block->condition);
+
+			/* create "else" branch first (since "then" block should
+			 * frequently/always end up being a fall-thru):
+			 */
+			br = ir3_BR(block, block->condition, 0);
+			br->cat0.inv = true;
+			br->cat0.target = block->successors[1];
+
+			/* "then" branch: */
+			br = ir3_BR(block, block->condition, 0);
+			br->cat0.target = block->successors[0];
+
+		} else if (block->successors[0]) {
+			/* otherwise unconditional jump to next block: */
+			struct ir3_instruction *jmp;
+
+			jmp = ir3_JUMP(block);
+			jmp->cat0.target = block->successors[0];
+		}
+	}
+}
+
+/* Here we workaround the fact that kill doesn't actually kill the thread as
+ * GL expects. The last instruction always needs to be an end instruction,
+ * which means that if we're stuck in a loop where kill is the only way out,
+ * then we may have to jump out to the end. kill may also have the d3d
+ * semantics of converting the thread to a helper thread, rather than setting
+ * the exec mask to 0, in which case the helper thread could get stuck in an
+ * infinite loop.
+ *
+ * We do this late, both to give the scheduler the opportunity to reschedule
+ * kill instructions earlier and to avoid having to create a separate basic
+ * block.
+ *
+ * TODO: Assuming that the wavefront doesn't stop as soon as all threads are
+ * killed, we might benefit by doing this more aggressively when the remaining
+ * part of the program after the kill is large, since that would let us
+ * skip over the instructions when there are no non-killed threads left.
+ */
+static void
+kill_sched(struct ir3 *ir, struct ir3_shader_variant *so)
+{
+	/* True if we know that this block will always eventually lead to the end
+	 * block:
+	 */
+	bool always_ends = true;
+	bool added = false;
+	struct ir3_block *last_block =
+		list_last_entry(&ir->block_list, struct ir3_block, node);
+
+	foreach_block_rev (block, &ir->block_list) {
+		for (unsigned i = 0; i < 2 && block->successors[i]; i++) {
+			if (block->successors[i]->start_ip <= block->end_ip)
+				always_ends = false;
+		}
+
+		if (always_ends)
+			continue;
+
+		foreach_instr_safe (instr, &block->instr_list) {
+			if (instr->opc != OPC_KILL)
+				continue;
+
+			struct ir3_instruction *br = ir3_instr_create(block, OPC_BR);
+			br->regs[1] = instr->regs[1];
+			br->cat0.target =
+				list_last_entry(&ir->block_list, struct ir3_block, node);
+
+			list_del(&br->node);
+			list_add(&br->node, &instr->node);
+
+			added = true;
+		}
+	}
+
+	if (added) {
+		/* I'm not entirely sure how the branchstack works, but we probably
+		 * need to add at least one entry for the divergence which is resolved
+		 * at the end:
+		 */
+		so->branchstack++;
+
+		/* We don't update predecessors/successors, so we have to do this
+		 * manually:
+		 */
+		mark_jp(last_block);
+	}
+}
+
+/* Insert nop's required to make this a legal/valid shader program: */
+static void
+nop_sched(struct ir3 *ir)
+{
+	foreach_block (block, &ir->block_list) {
+		struct ir3_instruction *last = NULL;
+		struct list_head instr_list;
+
+		/* remove all the instructions from the list, we'll be adding
+		 * them back in as we go
+		 */
+		list_replace(&block->instr_list, &instr_list);
+		list_inithead(&block->instr_list);
+
+		foreach_instr_safe (instr, &instr_list) {
+			unsigned delay = ir3_delay_calc(block, instr, false, true);
+
+			/* NOTE: I think the nopN encoding works for a5xx and
+			 * probably a4xx, but not a3xx.  So far only tested on
+			 * a6xx.
+			 */
+
+			if ((delay > 0) && (ir->compiler->gpu_id >= 600) && last &&
+					((opc_cat(last->opc) == 2) || (opc_cat(last->opc) == 3))) {
+				/* the previous cat2/cat3 instruction can encode at most 3 nop's: */
+				unsigned transfer = MIN2(delay, 3 - last->nop);
+				last->nop += transfer;
+				delay -= transfer;
+			}
+
+			if ((delay > 0) && last && (last->opc == OPC_NOP)) {
+				/* the previous nop can encode at most 5 repeats: */
+				unsigned transfer = MIN2(delay, 5 - last->repeat);
+				last->repeat += transfer;
+				delay -= transfer;
+			}
+
+			if (delay > 0) {
+				debug_assert(delay <= 6);
+				ir3_NOP(block)->repeat = delay - 1;
+			}
+
+			list_addtail(&instr->node, &block->instr_list);
+			last = instr;
+		}
+	}
+}
+
 void
 ir3_legalize(struct ir3 *ir, struct ir3_shader_variant *so, int *max_bary)
 {
@@ -589,6 +723,8 @@ ir3_legalize(struct ir3 *ir, struct ir3_shader_variant *so, int *max_bary)
 		block->data = rzalloc(ctx, struct ir3_legalize_block_data);
 	}
 
+	ir3_remove_nops(ir);
+
 	/* process each block: */
 	do {
 		progress = false;
@@ -598,6 +734,11 @@ ir3_legalize(struct ir3 *ir, struct ir3_shader_variant *so, int *max_bary)
 	} while (progress);
 
 	*max_bary = ctx->max_bary;
+
+	block_sched(ir);
+	if (so->type == MESA_SHADER_FRAGMENT)
+		kill_sched(ir, so);
+	nop_sched(ir);
 
 	do {
 		ir3_count_instructions(ir);

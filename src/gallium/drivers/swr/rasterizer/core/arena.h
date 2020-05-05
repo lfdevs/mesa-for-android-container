@@ -110,7 +110,7 @@ struct CachingAllocatorT : DefaultAllocator
 
             if (pBlock)
             {
-                SWR_ASSUME_ASSERT(pPrevBlock && pPrevBlock->pNext == pBlock);
+                assert(pPrevBlock && pPrevBlock->pNext == pBlock);
                 pPrevBlock->pNext = pBlock->pNext;
                 pBlock->pNext     = nullptr;
 

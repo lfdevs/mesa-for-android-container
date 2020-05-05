@@ -38,6 +38,8 @@
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_scan.h"
 #include "nir/nir_to_tgsi_info.h"
+#include "nir.h"
+
 static void
 vs_llvm_prepare(struct draw_vertex_shader *shader,
                 struct draw_context *draw)
@@ -76,6 +78,8 @@ vs_llvm_delete( struct draw_vertex_shader *dvs )
    }
 
    assert(shader->variants_cached == 0);
+   if (dvs->state.ir.nir)
+      ralloc_free(dvs->state.ir.nir);
    FREE((void*) dvs->state.tokens);
    FREE( dvs );
 }
@@ -92,9 +96,10 @@ draw_create_vs_llvm(struct draw_context *draw,
 
    /* due to some bugs in the feedback state tracker we have to check
       for ir.nir & PIPE_SHADER_IR_NIR here. */
-   if (state->ir.nir && state->type == PIPE_SHADER_IR_NIR)
+   if (state->ir.nir && state->type == PIPE_SHADER_IR_NIR) {
+      vs->base.state.ir.nir = state->ir.nir;
       nir_tgsi_scan_shader(state->ir.nir, &vs->base.info, true);
-   else {
+   } else {
       /* we make a private copy of the tokens */
       vs->base.state.tokens = tgsi_dup_tokens(state->tokens);
       if (!vs->base.state.tokens) {
@@ -113,7 +118,6 @@ draw_create_vs_llvm(struct draw_context *draw,
          vs->base.info.file_max[TGSI_FILE_IMAGE]+1);
 
    vs->base.state.type = state->type;
-   vs->base.state.ir.nir = state->ir.nir;
    vs->base.state.stream_output = state->stream_output;
    vs->base.draw = draw;
    vs->base.prepare = vs_llvm_prepare;

@@ -182,50 +182,6 @@ dri2_device_create_pbuffer_surface(_EGLDriver *drv, _EGLDisplay *disp,
                                      attrib_list);
 }
 
-static EGLBoolean
-device_add_configs_for_visuals(_EGLDriver *drv, _EGLDisplay *disp)
-{
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   static const struct {
-      const char *format_name;
-      int rgba_shifts[4];
-      unsigned int rgba_sizes[4];
-   } visuals[] = {
-      { "A2RGB10",  { 20, 10, 0, 30 }, { 10, 10, 10, 2 } },
-      { "X2RGB10",  { 20, 10, 0, -1 }, { 10, 10, 10, 0 } },
-      { "ARGB8888", { 16, 8, 0, 24 }, { 8, 8, 8, 8 } },
-      { "RGB888",   { 16, 8, 0, -1 }, { 8, 8, 8, 0 } },
-      { "RGB565",   { 11, 5, 0, -1 }, { 5, 6, 5, 0 } },
-   };
-   unsigned int format_count[ARRAY_SIZE(visuals)] = { 0 };
-   unsigned int config_count = 0;
-
-   for (unsigned i = 0; dri2_dpy->driver_configs[i] != NULL; i++) {
-      for (unsigned j = 0; j < ARRAY_SIZE(visuals); j++) {
-         struct dri2_egl_config *dri2_conf;
-
-         dri2_conf = dri2_add_config(disp, dri2_dpy->driver_configs[i],
-               config_count + 1, EGL_PBUFFER_BIT, NULL,
-               visuals[j].rgba_shifts, visuals[j].rgba_sizes);
-
-         if (dri2_conf) {
-            if (dri2_conf->base.ConfigID == config_count + 1)
-               config_count++;
-            format_count[j]++;
-         }
-      }
-   }
-
-   for (unsigned i = 0; i < ARRAY_SIZE(format_count); i++) {
-      if (!format_count[i]) {
-         _eglLog(_EGL_DEBUG, "No DRI config supports native format %s",
-               visuals[i].format_name);
-      }
-   }
-
-   return (config_count != 0);
-}
-
 static const struct dri2_egl_display_vtbl dri2_device_display_vtbl = {
    .create_pixmap_surface = dri2_fallback_create_pixmap_surface,
    .create_pbuffer_surface = dri2_device_create_pbuffer_surface,
@@ -395,7 +351,7 @@ dri2_initialize_device(_EGLDriver *drv, _EGLDisplay *disp)
 
    dri2_setup_screen(disp);
 
-   if (!device_add_configs_for_visuals(drv, disp)) {
+   if (!dri2_add_pbuffer_configs_for_visuals(drv, disp)) {
       err = "DRI2: failed to add configs";
       goto cleanup;
    }

@@ -29,7 +29,7 @@
 
 #include "draw_fs.h"
 #include "draw_gs.h"
-
+#include "draw_tess.h"
 #include "util/u_debug.h"
 #include "util/u_memory.h"
 #include "util/u_prim.h"
@@ -59,8 +59,14 @@ needs_primid(const struct draw_context *draw)
 {
    const struct draw_fragment_shader *fs = draw->fs.fragment_shader;
    const struct draw_geometry_shader *gs = draw->gs.geometry_shader;
+   const struct draw_tess_eval_shader *tes = draw->tes.tess_eval_shader;
    if (fs && fs->info.uses_primid) {
-      return !gs || !gs->info.uses_primid;
+      if (gs)
+         return !gs->info.uses_primid;
+      else if (tes)
+         return !tes->info.uses_primid;
+      else
+         return TRUE;
    }
    return FALSE;
 }

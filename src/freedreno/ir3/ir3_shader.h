@@ -68,13 +68,14 @@ enum ir3_driver_param {
 #define IR3_MAX_SHADER_BUFFERS   32
 #define IR3_MAX_SHADER_IMAGES    32
 #define IR3_MAX_SO_BUFFERS        4
+#define IR3_MAX_SO_STREAMS        4
 #define IR3_MAX_SO_OUTPUTS       64
-#define IR3_MAX_CONSTANT_BUFFERS 32
+#define IR3_MAX_UBO_PUSH_RANGES  32
 
 
 /**
  * Describes the layout of shader consts.  This includes:
- *   + Driver lowered UBO ranges
+ *   + User consts + driver lowered UBO ranges
  *   + SSBO sizes
  *   + Image sizes/dimensions
  *   + Driver params (ie. IR3_DP_*)
@@ -113,6 +114,7 @@ enum ir3_driver_param {
  */
 struct ir3_const_state {
 	unsigned num_ubos;
+	unsigned num_reserved_user_consts;
 	unsigned num_driver_params;   /* scalar */
 
 	struct {
@@ -202,6 +204,7 @@ struct ir3_stream_output_info {
  * encode the return type (in 3 bits) but it hasn't been verified yet.
  */
 #define IR3_SAMPLER_PREFETCH_CMD 0x4
+#define IR3_SAMPLER_BINDLESS_PREFETCH_CMD 0x6
 
 /**
  * Stream output for texture sampling pre-dispatches.
@@ -210,6 +213,8 @@ struct ir3_sampler_prefetch {
 	uint8_t src;
 	uint8_t samp_id;
 	uint8_t tex_id;
+	uint16_t samp_bindless_id;
+	uint16_t tex_bindless_id;
 	uint8_t dst;
 	uint8_t wrmask;
 	uint8_t half_precision;
@@ -561,6 +566,12 @@ struct ir3_shader_variant {
 	/* do we have one or more SSBO instructions: */
 	bool has_ssbo;
 
+	/* Which bindless resources are used, for filling out sp_xs_config */
+	bool bindless_tex;
+	bool bindless_samp;
+	bool bindless_ibo;
+	bool bindless_ubo;
+
 	/* do we need derivatives: */
 	bool need_pixlod;
 
@@ -608,13 +619,16 @@ ir3_shader_stage(struct ir3_shader_variant *v)
 }
 
 struct ir3_ubo_range {
-	uint32_t offset; /* start offset of this block in const register file */
+	uint32_t offset; /* start offset to push in the const register file */
+	uint32_t block; /* Which constant block */
 	uint32_t start, end; /* range of block that's actually used */
+	uint16_t bindless_base; /* For bindless, which base register is used */
+	bool bindless;
 };
 
 struct ir3_ubo_analysis_state {
-	struct ir3_ubo_range range[IR3_MAX_CONSTANT_BUFFERS];
-	uint32_t enabled;
+	struct ir3_ubo_range range[IR3_MAX_UBO_PUSH_RANGES];
+	uint32_t num_enabled;
 	uint32_t size;
 	uint32_t lower_count;
 	uint32_t cmdstream_size; /* for per-gen backend to stash required cmdstream size */
@@ -627,9 +641,6 @@ struct ir3_shader {
 	/* shader id (for debug): */
 	uint32_t id;
 	uint32_t variant_count;
-
-	/* so we know when we can disable TGSI related hacks: */
-	bool from_tgsi;
 
 	struct ir3_compiler *compiler;
 
@@ -688,7 +699,7 @@ ir3_find_output(const struct ir3_shader_variant *so, gl_varying_slot slot)
 	} else if (slot == VARYING_SLOT_COL1) {
 		slot = VARYING_SLOT_BFC1;
 	} else {
-		return 0;
+		return -1;
 	}
 
 	for (j = 0; j < so->outputs_count; j++)
@@ -697,7 +708,7 @@ ir3_find_output(const struct ir3_shader_variant *so, gl_varying_slot slot)
 
 	debug_assert(0);
 
-	return 0;
+	return -1;
 }
 
 static inline int
@@ -710,34 +721,70 @@ ir3_next_varying(const struct ir3_shader_variant *so, int i)
 }
 
 struct ir3_shader_linkage {
+	/* Maximum location either consumed by the fragment shader or produced by
+	 * the last geometry stage, i.e. the size required for each vertex in the
+	 * VPC in DWORD's.
+	 */
 	uint8_t max_loc;
+
+	/* Number of entries in var. */
 	uint8_t cnt;
+
+	/* Bitset of locations used, including ones which are only used by the FS.
+	 */
+	uint32_t varmask[4];
+
+	/* Map from VS output to location. */
 	struct {
 		uint8_t regid;
 		uint8_t compmask;
 		uint8_t loc;
 	} var[32];
+
+	/* location for fixed-function gl_PrimitiveID passthrough */
+	uint8_t primid_loc;
 };
 
 static inline void
-ir3_link_add(struct ir3_shader_linkage *l, uint8_t regid, uint8_t compmask, uint8_t loc)
+ir3_link_add(struct ir3_shader_linkage *l, uint8_t regid_, uint8_t compmask, uint8_t loc)
 {
-	int i = l->cnt++;
 
-	debug_assert(i < ARRAY_SIZE(l->var));
 
-	l->var[i].regid    = regid;
-	l->var[i].compmask = compmask;
-	l->var[i].loc      = loc;
+	for (int j = 0; j < util_last_bit(compmask); j++) {
+		uint8_t comploc = loc + j;
+		l->varmask[comploc / 32] |= 1 << (comploc % 32);
+	}
+
 	l->max_loc = MAX2(l->max_loc, loc + util_last_bit(compmask));
+
+	if (regid_ != regid(63, 0)) {
+		int i = l->cnt++;
+		debug_assert(i < ARRAY_SIZE(l->var));
+
+		l->var[i].regid    = regid_;
+		l->var[i].compmask = compmask;
+		l->var[i].loc      = loc;
+	}
 }
 
 static inline void
 ir3_link_shaders(struct ir3_shader_linkage *l,
 		const struct ir3_shader_variant *vs,
-		const struct ir3_shader_variant *fs)
+		const struct ir3_shader_variant *fs,
+		bool pack_vs_out)
 {
+	/* On older platforms, varmask isn't programmed at all, and it appears
+	 * that the hardware generates a mask of used VPC locations using the VS
+	 * output map, and hangs if a FS bary instruction references a location
+	 * not in the list. This means that we need to have a dummy entry in the
+	 * VS out map for things like gl_PointCoord which aren't written by the
+	 * VS. Furthermore we can't use r63.x, so just pick a random register to
+	 * use if there is no VS output.
+	 */
+	const unsigned default_regid = pack_vs_out ? regid(63, 0) : regid(0, 0);
 	int j = -1, k;
+
+	l->primid_loc = 0xff;
 
 	while (l->cnt < ARRAY_SIZE(l->var)) {
 		j = ir3_next_varying(fs, j);
@@ -750,7 +797,11 @@ ir3_link_shaders(struct ir3_shader_linkage *l,
 
 		k = ir3_find_output(vs, fs->inputs[j].slot);
 
-		ir3_link_add(l, vs->outputs[k].regid,
+		if (k < 0 && fs->inputs[j].slot == VARYING_SLOT_PRIMITIVE_ID) {
+			l->primid_loc = fs->inputs[j].inloc;
+		}
+
+		ir3_link_add(l, k >= 0 ? vs->outputs[k].regid : default_regid,
 			fs->inputs[j].compmask, fs->inputs[j].inloc);
 	}
 }

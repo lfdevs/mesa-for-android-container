@@ -95,7 +95,7 @@ intel_readpixels_tiled_memcpy(struct gl_context * ctx,
    if (!devinfo->has_llc ||
        !(type == GL_UNSIGNED_BYTE || type == GL_UNSIGNED_INT_8_8_8_8_REV) ||
        pixels == NULL ||
-       _mesa_is_bufferobj(pack->BufferObj) ||
+       pack->BufferObj ||
        pack->Alignment > 4 ||
        pack->SkipPixels > 0 ||
        pack->SkipRows > 0 ||
@@ -272,7 +272,7 @@ intelReadPixels(struct gl_context * ctx,
    intel_prepare_render(brw);
    brw->front_buffer_dirty = dirty;
 
-   if (_mesa_is_bufferobj(pack->BufferObj)) {
+   if (pack->BufferObj) {
       if (intel_readpixels_blorp(ctx, x, y, width, height,
                                  format, type, pixels, pack))
          return;

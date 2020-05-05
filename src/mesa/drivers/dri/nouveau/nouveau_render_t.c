@@ -158,16 +158,16 @@ get_max_vertices(struct gl_context *ctx, const struct _mesa_index_buffer *ib,
 		unsigned max_out;
 
 		if (ib) {
-			switch (ib->index_size) {
-			case 4:
+			switch (ib->index_size_shift) {
+			case 2:
 				max_out = MAX_OUT_I32;
 				break;
 
-			case 2:
+			case 1:
 				max_out = MAX_OUT_I16;
 				break;
 
-			case 1:
+			case 0:
 				max_out = MAX_OUT_I16;
 				break;
 

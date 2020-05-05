@@ -27,21 +27,6 @@
 ******************************************************************************/
 #include "LoadTile.h"
 
-
-static void BUCKETS_START(UINT id)
-{
-#ifdef KNOB_ENABLE_RDTSC
-    gBucketMgr.StartBucket(id);
-#endif
-}
-
-static void BUCKETS_STOP(UINT id)
-{
-#ifdef KNOB_ENABLE_RDTSC
-    gBucketMgr.StopBucket(id);
-#endif
-}
-
 // on demand buckets for load tiles
 static std::vector<int> sBuckets(NUM_SWR_FORMATS, -1);
 static std::mutex sBucketMutex;
@@ -56,6 +41,7 @@ static std::mutex sBucketMutex;
 void SwrLoadHotTile(
     HANDLE hWorkerPrivateData,
     const SWR_SURFACE_STATE *pSrcSurface,
+    BucketManager* pBucketMgr,
     SWR_FORMAT dstFormat,
     SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
     uint32_t x, uint32_t y, uint32_t renderTargetArrayIndex,
@@ -147,15 +133,19 @@ void SwrLoadHotTile(
         {
             const SWR_FORMAT_INFO& info = GetFormatInfo(pSrcSurface->format);
             BUCKET_DESC desc{ info.name, "", false, 0xffffffff };
-            sBuckets[pSrcSurface->format] = gBucketMgr.RegisterBucket(desc);
+            sBuckets[pSrcSurface->format] = pBucketMgr->RegisterBucket(desc);
         }
         sBucketMutex.unlock();
     }
 #endif
 
-    BUCKETS_START(sBuckets[pSrcSurface->format]);
+#ifdef KNOB_ENABLE_RDTSC
+    pBucketMgr->StartBucket(sBuckets[pSrcSurface->format]);
+#endif
     pfnLoadTiles(pSrcSurface, pDstHotTile, x, y, renderTargetArrayIndex);
-    BUCKETS_STOP(sBuckets[pSrcSurface->format]);
+#ifdef KNOB_ENABLE_RDTSC
+    pBucketMgr->StopBucket(sBuckets[pSrcSurface->format]);
+#endif
 }
 
 

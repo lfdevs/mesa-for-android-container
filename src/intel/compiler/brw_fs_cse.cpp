@@ -243,7 +243,7 @@ create_copy_instr(const fs_builder &bld, fs_inst *inst, fs_reg src, bool negate)
 }
 
 bool
-fs_visitor::opt_cse_local(bblock_t *block, int &ip)
+fs_visitor::opt_cse_local(const fs_live_variables &live, bblock_t *block, int &ip)
 {
    bool progress = false;
    exec_list aeb;
@@ -360,7 +360,7 @@ fs_visitor::opt_cse_local(bblock_t *block, int &ip)
             /* Kill any AEB entries using registers that don't get reused any
              * more -- a sure sign they'll fail operands_match().
              */
-            if (src_reg->file == VGRF && virtual_grf_end[src_reg->nr] < ip) {
+            if (src_reg->file == VGRF && live.vgrf_end[src_reg->nr] < ip) {
                entry->remove();
                ralloc_free(entry);
                break;
@@ -379,17 +379,16 @@ fs_visitor::opt_cse_local(bblock_t *block, int &ip)
 bool
 fs_visitor::opt_cse()
 {
+   const fs_live_variables &live = live_analysis.require();
    bool progress = false;
    int ip = 0;
 
-   calculate_live_intervals();
-
    foreach_block (block, cfg) {
-      progress = opt_cse_local(block, ip) || progress;
+      progress = opt_cse_local(live, block, ip) || progress;
    }
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
 
    return progress;
 }

@@ -32,6 +32,11 @@ scale_trig = [
         (('fcos', 'a'), ('fcos', ('fmul', 'a', 1.0 / (2.0 * pi)))),
 ]
 
+# GP has fsign op, so we can use cheaper lowering than one in generic opt_algebraic
+lower_ftrunc = [
+        (('ftrunc', 'a'), ('fmul', ('fsign', 'a'), ('ffloor', ('fmax', 'a', ('fneg', 'a')))))
+]
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--import-path', required=True)
@@ -47,6 +52,8 @@ def run():
 
     print(nir_algebraic.AlgebraicPass("lima_nir_scale_trig",
                                       scale_trig).render())
+    print(nir_algebraic.AlgebraicPass("lima_nir_lower_ftrunc",
+                                      lower_ftrunc).render())
 
 if __name__ == '__main__':
     main()

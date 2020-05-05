@@ -31,7 +31,7 @@
 #include "glheader.h"
 #include "enums.h"
 #include "hash.h"
-#include "imports.h"
+
 #include "context.h"
 #include "bufferobj.h"
 #include "fbobject.h"
@@ -51,10 +51,6 @@ buffer_object_purgeable(struct gl_context *ctx, GLuint name, GLenum option)
    if (!bufObj) {
       _mesa_error(ctx, GL_INVALID_VALUE,
                   "glObjectPurgeable(name = 0x%x)", name);
-      return 0;
-   }
-   if (!_mesa_is_bufferobj(bufObj)) {
-      _mesa_error(ctx, GL_INVALID_OPERATION, "glObjectPurgeable(buffer 0)" );
       return 0;
    }
 

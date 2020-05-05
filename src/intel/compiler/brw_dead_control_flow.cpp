@@ -29,6 +29,8 @@
 #include "brw_shader.h"
 #include "brw_cfg.h"
 
+using namespace brw;
+
 /* Look for and eliminate dead control flow:
  *
  *   - if/endif
@@ -113,7 +115,7 @@ dead_control_flow_eliminate(backend_shader *s)
    }
 
    if (progress)
-      s->invalidate_live_intervals();
+      s->invalidate_analysis(DEPENDENCY_BLOCKS | DEPENDENCY_INSTRUCTIONS);
 
    return progress;
 }

@@ -26,8 +26,6 @@
  *
  * Support for query buffer objects (GL_ARB_query_buffer_object) on Haswell+.
  */
-#include "main/imports.h"
-
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "intel_batchbuffer.h"

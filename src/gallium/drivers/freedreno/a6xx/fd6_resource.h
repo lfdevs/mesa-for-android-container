@@ -30,11 +30,10 @@
 
 #include "freedreno_resource.h"
 
-uint32_t fd6_fill_ubwc_buffer_sizes(struct fd_resource *rsc);
 void fd6_validate_format(struct fd_context *ctx, struct fd_resource *rsc,
 		enum pipe_format format);
-uint32_t fd6_setup_slices(struct fd_resource *rsc);
 void fd6_emit_flag_reference(struct fd_ringbuffer *ring, struct fd_resource *rsc,
 		int level, int layer);
+void fd6_resource_screen_init(struct pipe_screen *pscreen);
 
 #endif /* FD6_RESOURCE_H_ */

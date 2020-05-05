@@ -79,6 +79,8 @@ COMPILER_FILES = \
 	compiler/brw_interpolation_map.c \
 	compiler/brw_ir_allocator.h \
 	compiler/brw_ir_fs.h \
+	compiler/brw_ir_performance.h \
+	compiler/brw_ir_performance.cpp \
 	compiler/brw_ir_vec4.h \
 	compiler/brw_nir.h \
 	compiler/brw_nir.c \
@@ -173,6 +175,7 @@ GENXML_GENERATED_FILES = \
 ISL_FILES = \
 	isl/isl.c \
 	isl/isl.h \
+	isl/isl_aux_info.c \
 	isl/isl_drm.c \
 	isl/isl_format.c \
 	isl/isl_genX_priv.h \
@@ -356,8 +359,11 @@ GEN_PERF_XML_FILES = \
 GEN_PERF_FILES = \
 	perf/gen_perf.c \
 	perf/gen_perf.h \
+	perf/gen_perf_mdapi.c \
 	perf/gen_perf_mdapi.h \
-	perf/gen_perf_mdapi.c
+	perf/gen_perf_private.h \
+	perf/gen_perf_query.h \
+	perf/gen_perf_query.c
 
 GEN_PERF_GENERATED_FILES = \
 	perf/gen_perf_metrics.c \

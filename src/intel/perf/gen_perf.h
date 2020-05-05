@@ -38,6 +38,8 @@
 #include "compiler/glsl/list.h"
 #include "util/ralloc.h"
 
+#include "drm-uapi/i915_drm.h"
+
 struct gen_device_info;
 
 struct gen_perf_config;
@@ -189,7 +191,14 @@ struct gen_perf_query_info {
 };
 
 struct gen_perf_config {
+   /* Whether i915 has DRM_I915_QUERY_PERF_CONFIG support. */
    bool i915_query_supported;
+
+   /* Version of the i915-perf subsystem, refer to i915_drm.h. */
+   int i915_perf_version;
+
+   /* Powergating configuration for the running the query. */
+   struct drm_i915_gem_context_param_sseu sseu;
 
    struct gen_perf_query_info *queries;
    int n_queries;
@@ -241,9 +250,6 @@ struct gen_perf_config {
    } vtbl;
 };
 
-struct gen_perf_query_object;
-const struct gen_perf_query_info* gen_perf_query_info(const struct gen_perf_query_object *);
-
 void gen_perf_init_metrics(struct gen_perf_config *perf_cfg,
                            const struct gen_device_info *devinfo,
                            int drm_fd);
@@ -283,22 +289,6 @@ void gen_perf_query_result_accumulate(struct gen_perf_query_result *result,
                                       const uint32_t *end);
 void gen_perf_query_result_clear(struct gen_perf_query_result *result);
 
-struct gen_perf_context;
-struct gen_perf_context *gen_perf_new_context(void *parent);
-
-void gen_perf_init_context(struct gen_perf_context *perf_ctx,
-                           struct gen_perf_config *perf_cfg,
-                           void * ctx,  /* driver context (eg, brw_context) */
-                           void * bufmgr,  /* eg brw_bufmgr */
-                           const struct gen_device_info *devinfo,
-                           uint32_t hw_ctx,
-                           int drm_fd);
-
-struct gen_perf_config *gen_perf_config(struct gen_perf_context *ctx);
-
-int gen_perf_active_queries(struct gen_perf_context *perf_ctx,
-                            const struct gen_perf_query_info *query);
-
 static inline size_t
 gen_perf_query_counter_get_size(const struct gen_perf_query_counter *counter)
 {
@@ -324,32 +314,5 @@ gen_perf_new(void *ctx)
    struct gen_perf_config *perf = rzalloc(ctx, struct gen_perf_config);
    return perf;
 }
-
-struct gen_perf_query_object *
-gen_perf_new_query(struct gen_perf_context *, unsigned query_index);
-
-
-bool gen_perf_begin_query(struct gen_perf_context *perf_ctx,
-                          struct gen_perf_query_object *query);
-void gen_perf_end_query(struct gen_perf_context *perf_ctx,
-                        struct gen_perf_query_object *query);
-void gen_perf_wait_query(struct gen_perf_context *perf_ctx,
-                         struct gen_perf_query_object *query,
-                         void *current_batch);
-bool gen_perf_is_query_ready(struct gen_perf_context *perf_ctx,
-                             struct gen_perf_query_object *query,
-                             void *current_batch);
-void gen_perf_delete_query(struct gen_perf_context *perf_ctx,
-                           struct gen_perf_query_object *query);
-void gen_perf_get_query_data(struct gen_perf_context *perf_ctx,
-                             struct gen_perf_query_object *query,
-                             int data_size,
-                             unsigned *data,
-                             unsigned *bytes_written);
-
-void gen_perf_dump_query_count(struct gen_perf_context *perf_ctx);
-void gen_perf_dump_query(struct gen_perf_context *perf_ctx,
-                         struct gen_perf_query_object *obj,
-                         void *current_batch);
 
 #endif /* GEN_PERF_H */

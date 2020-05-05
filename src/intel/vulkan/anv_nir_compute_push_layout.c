@@ -22,18 +22,22 @@
  */
 
 #include "anv_nir.h"
+#include "nir_builder.h"
 #include "compiler/brw_nir.h"
 #include "util/mesa-sha1.h"
 
 void
 anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
+                            bool robust_buffer_access,
                             nir_shader *nir,
                             struct brw_stage_prog_data *prog_data,
                             struct anv_pipeline_bind_map *map,
                             void *mem_ctx)
 {
+   const struct brw_compiler *compiler = pdevice->compiler;
    memset(map->push_ranges, 0, sizeof(map->push_ranges));
 
+   bool has_const_ubo = false;
    unsigned push_start = UINT_MAX, push_end = 0;
    nir_foreach_function(function, nir) {
       if (!function->impl)
@@ -45,18 +49,47 @@ anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
                continue;
 
             nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-            if (intrin->intrinsic != nir_intrinsic_load_push_constant)
-               continue;
+            switch (intrin->intrinsic) {
+            case nir_intrinsic_load_ubo:
+               if (nir_src_is_const(intrin->src[0]) &&
+                   nir_src_is_const(intrin->src[1]))
+                  has_const_ubo = true;
+               break;
 
-            unsigned base = nir_intrinsic_base(intrin);
-            unsigned range = nir_intrinsic_range(intrin);
-            push_start = MIN2(push_start, base);
-            push_end = MAX2(push_end, base + range);
+            case nir_intrinsic_load_push_constant: {
+               unsigned base = nir_intrinsic_base(intrin);
+               unsigned range = nir_intrinsic_range(intrin);
+               push_start = MIN2(push_start, base);
+               push_end = MAX2(push_end, base + range);
+               break;
+            }
+
+            default:
+               break;
+            }
          }
       }
    }
 
    const bool has_push_intrinsic = push_start <= push_end;
+
+   const bool push_ubo_ranges =
+      (pdevice->info.gen >= 8 || pdevice->info.is_haswell) &&
+      has_const_ubo && nir->info.stage != MESA_SHADER_COMPUTE;
+
+   if (push_ubo_ranges && robust_buffer_access) {
+      /* We can't on-the-fly adjust our push ranges because doing so would
+       * mess up the layout in the shader.  When robustBufferAccess is
+       * enabled, we push a mask into the shader indicating which pushed
+       * registers are valid and we zero out the invalid ones at the top of
+       * the shader.
+       */
+      const uint32_t push_reg_mask_start =
+         offsetof(struct anv_push_constants, push_reg_mask);
+      const uint32_t push_reg_mask_end = push_reg_mask_start + sizeof(uint64_t);
+      push_start = MIN2(push_start, push_reg_mask_start);
+      push_end = MAX2(push_end, push_reg_mask_end);
+   }
 
    if (nir->info.stage == MESA_SHADER_COMPUTE) {
       /* For compute shaders, we always have to have the subgroup ID.  The
@@ -74,36 +107,12 @@ anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
     * push_end (no push constants is indicated by push_start = UINT_MAX).
     */
    push_start = MIN2(push_start, push_end);
-   push_start &= ~31u;
-
-   if (has_push_intrinsic) {
-      nir_foreach_function(function, nir) {
-         if (!function->impl)
-            continue;
-
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr(instr, block) {
-               if (instr->type != nir_instr_type_intrinsic)
-                  continue;
-
-               nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-               if (intrin->intrinsic != nir_intrinsic_load_push_constant)
-                  continue;
-
-               intrin->intrinsic = nir_intrinsic_load_uniform;
-               nir_intrinsic_set_base(intrin,
-                                      nir_intrinsic_base(intrin) -
-                                      push_start);
-            }
-         }
-      }
-   }
+   push_start = align_down_u32(push_start, 32);
 
    /* For vec4 our push data size needs to be aligned to a vec4 and for
     * scalar, it needs to be aligned to a DWORD.
     */
-   const unsigned align =
-      pdevice->compiler->scalar_stage[nir->info.stage] ? 4 : 16;
+   const unsigned align = compiler->scalar_stage[nir->info.stage] ? 4 : 16;
    nir->num_uniforms = ALIGN(push_end - push_start, align);
    prog_data->nr_params = nir->num_uniforms / 4;
    prog_data->param = rzalloc_array(mem_ctx, uint32_t, prog_data->nr_params);
@@ -114,10 +123,35 @@ anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
       .length = DIV_ROUND_UP(push_end - push_start, 32),
    };
 
-   if ((pdevice->info.gen >= 8 || pdevice->info.is_haswell) &&
-       nir->info.stage != MESA_SHADER_COMPUTE) {
-      brw_nir_analyze_ubo_ranges(pdevice->compiler, nir, NULL,
-                                 prog_data->ubo_ranges);
+   if (has_push_intrinsic) {
+      nir_foreach_function(function, nir) {
+         if (!function->impl)
+            continue;
+
+         nir_foreach_block(block, function->impl) {
+            nir_foreach_instr_safe(instr, block) {
+               if (instr->type != nir_instr_type_intrinsic)
+                  continue;
+
+               nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+               switch (intrin->intrinsic) {
+               case nir_intrinsic_load_push_constant:
+                  intrin->intrinsic = nir_intrinsic_load_uniform;
+                  nir_intrinsic_set_base(intrin,
+                                         nir_intrinsic_base(intrin) -
+                                         push_start);
+                  break;
+
+               default:
+                  break;
+               }
+            }
+         }
+      }
+   }
+
+   if (push_ubo_ranges) {
+      brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
 
       /* We can push at most 64 registers worth of data.  The back-end
        * compiler would do this fixup for us but we'd like to calculate
@@ -136,10 +170,25 @@ anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
       if (push_constant_range.length > 0)
          map->push_ranges[n++] = push_constant_range;
 
+      if (robust_buffer_access) {
+         const uint32_t push_reg_mask_offset =
+            offsetof(struct anv_push_constants, push_reg_mask);
+         assert(push_reg_mask_offset >= push_start);
+         prog_data->push_reg_mask_param =
+            (push_reg_mask_offset - push_start) / 4;
+      }
+
+      unsigned range_start_reg = push_constant_range.length;
+
       for (int i = 0; i < 4; i++) {
-         const struct brw_ubo_range *ubo_range = &prog_data->ubo_ranges[i];
+         struct brw_ubo_range *ubo_range = &prog_data->ubo_ranges[i];
          if (ubo_range->length == 0)
             continue;
+
+         if (n >= 4 || (n == 3 && compiler->constant_buffer_0_is_relative)) {
+            memset(ubo_range, 0, sizeof(*ubo_range));
+            continue;
+         }
 
          const struct anv_pipeline_binding *binding =
             &map->surface_to_descriptor[ubo_range->block];
@@ -151,6 +200,14 @@ anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
             .start = ubo_range->start,
             .length = ubo_range->length,
          };
+
+         /* We only bother to shader-zero pushed client UBOs */
+         if (binding->set < MAX_SETS && robust_buffer_access) {
+            prog_data->zero_push_reg |= BITFIELD64_RANGE(range_start_reg,
+                                                         ubo_range->length);
+         }
+
+         range_start_reg += ubo_range->length;
       }
    } else {
       /* For Ivy Bridge, the push constants packets have a different

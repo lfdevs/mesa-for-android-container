@@ -1,0 +1,69 @@
+# R600 shader from NIR
+
+This code is an attempt to implement a NIR backend for r600.
+
+## State
+
+piglits glsl-1.10 - 3.3 and gl-1.* gl-2.* and gl-3.* pass mostly like with TGSI, there are some fixes but
+also a few regressions.
+
+## Currently missing features w.r.t. TGSI:
+
+ - Tesselation shaders
+ - compute shader support
+ - image load/store
+ - work group shared values
+ - SSBO atomics
+
+## Needed optimizations:
+
+  - Register allocator and scheduler (Could the sb allocator and scheduler
+    be ported?)
+
+  - peepholes:
+    - compare + set predicate
+
+  - copy propagation:
+    - Moves from inputs are usually not required, they could be forwarded
+    - texture operations often move additional parameters in extra registers
+      but they are actually needed in the same registes they come from and
+      could just be swizzled into the right place
+      (lower in NIR like it is done in e.g. in ETNAVIV)
+
+
+## Problems
+
+- figure out what is wrong with the textcoord semantics: disabling it results in
+  varyings beyond the supporteed VAR31, and enabling it lets some shaders with
+  VAR0 fail.
+
+- UBOs have a strange behaviour: with
+  glsl-1.50/uniform_buffer/gs-mat4x3.shader_test
+  on TGSI we have
+     ADD TEMP[1].xyz = CONST[1][0].xyzz CONST[1][1].xyzz
+  with NIR we have
+     vec4 ssa_12 = intrinsic load_ubo(_r600) (0, 0)(0 , 4 ,0)
+     vec4 ssa_13 = intrinsic load_ubo(_r600) (0, 1)(0 , 4 ,0)
+     vec3 ssa_14 = fadd ssa_12.xyw, ssa_13.xyw
+  so why is the "w" component emitted?
+
+## Unknows
+
+- multi-function shaders, how to deal with them? fp64 seems to have lots
+  of them, one option is to inline them
+
+- can type information from variables be harvested?
+
+lowering passes in NIR:
+  - TESS IO address evaluation should be lowered
+
+## Work plan
+
+The idea is to create two conversions: a NIR to a new R600 IR that
+can be  used to run some finalizing optimizations (replacing the
+need for r600/sb) and the binary code generation.
+
+The implementation uses C++ to separate the code for the different
+shader types and the byte code generation backends. The initial attempt
+will use the already available r600_asm code
+

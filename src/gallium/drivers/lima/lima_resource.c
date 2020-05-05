@@ -31,6 +31,7 @@
 #include "util/u_transfer.h"
 #include "util/u_surface.h"
 #include "util/hash_table.h"
+#include "util/ralloc.h"
 #include "util/u_drm.h"
 #include "renderonly/renderonly.h"
 
@@ -44,6 +45,8 @@
 #include "lima_resource.h"
 #include "lima_bo.h"
 #include "lima_util.h"
+
+#include "pan_minmax_cache.h"
 #include "pan_tiling.h"
 
 static struct pipe_resource *
@@ -118,16 +121,14 @@ setup_miptree(struct lima_resource *res,
       res->levels[level].offset = size;
       res->levels[level].layer_stride = util_format_get_stride(pres->format, align(width, 16)) * align(height, 16);
 
-      /* The start address of each level <= 10 must be 64-aligned
-       * in order to be able to pass the addresses
-       * to the hardware.
-       * The start addresses of level 11 and level 12 are passed
-       * implicitely: they start at an offset of respectively
-       * 0x0400 and 0x0800 from the start address of level 10 */
-      if (level < 10)
+      if (util_format_is_compressed(pres->format))
+         res->levels[level].layer_stride /= 4;
+
+      /* The start address of each level except the last level
+       * must be 64-aligned in order to be able to pass the
+       * addresses to the hardware. */
+      if (level != pres->last_level)
          size += align(actual_level_size, 64);
-      else if (level != pres->last_level)
-         size += 0x0400;
       else
          size += actual_level_size;  /* Save some memory */
 
@@ -197,9 +198,6 @@ _lima_resource_create_with_modifiers(struct pipe_screen *pscreen,
    if (!has_user_modifiers && (templat->bind & PIPE_BIND_SHARED))
       should_tile = false;
 
-   if (drm_find_modifier(DRM_FORMAT_MOD_LINEAR, modifiers, count))
-      should_tile = false;
-
    if (has_user_modifiers &&
       !drm_find_modifier(DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED,
                          modifiers, count))
@@ -227,6 +225,9 @@ _lima_resource_create_with_modifiers(struct pipe_screen *pscreen,
    if (pres) {
       struct lima_resource *res = lima_resource(pres);
       res->tiled = should_tile;
+
+      if (templat->bind & PIPE_BIND_INDEX_BUFFER)
+         res->index_cache = CALLOC_STRUCT(panfrost_minmax_cache);
 
       debug_printf("%s: pres=%p width=%u height=%u depth=%u target=%d "
                    "bind=%x usage=%d tile=%d last_level=%d\n", __func__,
@@ -279,6 +280,9 @@ lima_resource_destroy(struct pipe_screen *pscreen, struct pipe_resource *pres)
    if (res->damage.region)
       FREE(res->damage.region);
 
+   if (res->index_cache)
+      FREE(res->index_cache);
+
    FREE(res);
 }
 
@@ -287,10 +291,20 @@ lima_resource_from_handle(struct pipe_screen *pscreen,
         const struct pipe_resource *templat,
         struct winsys_handle *handle, unsigned usage)
 {
-   struct lima_resource *res;
-   struct lima_screen *screen = lima_screen(pscreen);
+   if (templat->bind & (PIPE_BIND_SAMPLER_VIEW |
+                        PIPE_BIND_RENDER_TARGET |
+                        PIPE_BIND_DEPTH_STENCIL)) {
+      /* sampler hardware need offset alignment 64, while render hardware
+       * need offset alignment 8, but due to render target may be reloaded
+       * which uses the sampler, set alignment requrement to 64 for all
+       */
+      if (handle->offset & 0x3f) {
+         debug_error("import buffer offset not properly aligned\n");
+         return NULL;
+      }
+   }
 
-   res = CALLOC_STRUCT(lima_resource);
+   struct lima_resource *res = CALLOC_STRUCT(lima_resource);
    if (!res)
       return NULL;
 
@@ -298,33 +312,15 @@ lima_resource_from_handle(struct pipe_screen *pscreen,
    *pres = *templat;
    pres->screen = pscreen;
    pipe_reference_init(&pres->reference, 1);
-   res->levels[0].offset = 0;
+   res->levels[0].offset = handle->offset;
    res->levels[0].stride = handle->stride;
 
+   struct lima_screen *screen = lima_screen(pscreen);
    res->bo = lima_bo_import(screen, handle);
    if (!res->bo) {
       FREE(res);
       return NULL;
    }
-
-   /* check alignment for the buffer */
-   if (pres->bind & PIPE_BIND_RENDER_TARGET) {
-      unsigned width, height, stride, size;
-
-      width = align(pres->width0, 16);
-      height = align(pres->height0, 16);
-      stride = util_format_get_stride(pres->format, width);
-      size = util_format_get_2d_size(pres->format, stride, height);
-
-      if (res->levels[0].stride != stride || res->bo->size < size) {
-         debug_error("import buffer not properly aligned\n");
-         goto err_out;
-      }
-
-      res->levels[0].width = width;
-   }
-   else
-      res->levels[0].width = pres->width0;
 
    switch (handle->modifier) {
    case DRM_FORMAT_MOD_LINEAR:
@@ -344,6 +340,26 @@ lima_resource_from_handle(struct pipe_screen *pscreen,
                   (long long)handle->modifier);
       goto err_out;
    }
+
+   /* check alignment for the buffer */
+   if (res->tiled ||
+       (pres->bind & (PIPE_BIND_RENDER_TARGET | PIPE_BIND_DEPTH_STENCIL))) {
+      unsigned width, height, stride, size;
+
+      width = align(pres->width0, 16);
+      height = align(pres->height0, 16);
+      stride = util_format_get_stride(pres->format, width);
+      size = util_format_get_2d_size(pres->format, stride, height);
+
+      if (res->levels[0].stride != stride || res->bo->size < size) {
+         debug_error("import buffer not properly aligned\n");
+         goto err_out;
+      }
+
+      res->levels[0].width = width;
+   }
+   else
+      res->levels[0].width = pres->width0;
 
    return pres;
 
@@ -373,6 +389,7 @@ lima_resource_get_handle(struct pipe_screen *pscreen,
    if (!lima_bo_export(res->bo, handle))
       return false;
 
+   handle->offset = res->levels[0].offset;
    handle->stride = res->levels[0].stride;
    return true;
 }
@@ -504,36 +521,13 @@ lima_surface_create(struct pipe_context *pctx,
    surf->tiled_w = align(psurf->width, 16) >> 4;
    surf->tiled_h = align(psurf->height, 16) >> 4;
 
-   surf->reload = true;
-
-   struct lima_context *ctx = lima_context(pctx);
-   if (ctx->plb_pp_stream) {
-      struct lima_ctx_plb_pp_stream_key key = {
-         .tiled_w = surf->tiled_w,
-         .tiled_h = surf->tiled_h,
-      };
-
-      for (int i = 0; i < lima_ctx_num_plb; i++) {
-         key.plb_index = i;
-
-         struct hash_entry *entry =
-            _mesa_hash_table_search(ctx->plb_pp_stream, &key);
-         if (entry) {
-            struct lima_ctx_plb_pp_stream *s = entry->data;
-            s->refcnt++;
-         }
-         else {
-            struct lima_ctx_plb_pp_stream *s =
-               ralloc(ctx->plb_pp_stream, struct lima_ctx_plb_pp_stream);
-            s->key.plb_index = i;
-            s->key.tiled_w = surf->tiled_w;
-            s->key.tiled_h = surf->tiled_h;
-            s->refcnt = 1;
-            s->bo = NULL;
-            _mesa_hash_table_insert(ctx->plb_pp_stream, &s->key, s);
-         }
-      }
-   }
+   surf->reload = 0;
+   if (util_format_has_stencil(util_format_description(psurf->format)))
+      surf->reload |= PIPE_CLEAR_STENCIL;
+   if (util_format_has_depth(util_format_description(psurf->format)))
+      surf->reload |= PIPE_CLEAR_DEPTH;
+   if (!util_format_is_depth_or_stencil(psurf->format))
+      surf->reload |= PIPE_CLEAR_COLOR0;
 
    return &surf->base;
 }
@@ -542,29 +536,6 @@ static void
 lima_surface_destroy(struct pipe_context *pctx, struct pipe_surface *psurf)
 {
    struct lima_surface *surf = lima_surface(psurf);
-   /* psurf->context may be not equal with pctx (i.e. glxinfo) */
-   struct lima_context *ctx = lima_context(psurf->context);
-
-   if (ctx->plb_pp_stream) {
-      struct lima_ctx_plb_pp_stream_key key = {
-         .tiled_w = surf->tiled_w,
-         .tiled_h = surf->tiled_h,
-      };
-
-      for (int i = 0; i < lima_ctx_num_plb; i++) {
-         key.plb_index = i;
-
-         struct hash_entry *entry =
-            _mesa_hash_table_search(ctx->plb_pp_stream, &key);
-         struct lima_ctx_plb_pp_stream *s = entry->data;
-         if (--s->refcnt == 0) {
-            if (s->bo)
-               lima_bo_unreference(s->bo);
-            _mesa_hash_table_remove(ctx->plb_pp_stream, entry);
-            ralloc_free(s);
-         }
-      }
-   }
 
    pipe_resource_reference(&psurf->texture, NULL);
    FREE(surf);
@@ -594,8 +565,7 @@ lima_transfer_map(struct pipe_context *pctx,
     * range, so no need to sync */
    if (pres->usage != PIPE_USAGE_STREAM) {
       if (usage & PIPE_TRANSFER_READ_WRITE) {
-         if (lima_need_flush(ctx, bo, usage & PIPE_TRANSFER_WRITE))
-            lima_flush(ctx);
+         lima_flush_job_accessing_bo(ctx, bo, usage & PIPE_TRANSFER_WRITE);
 
          unsigned op = usage & PIPE_TRANSFER_WRITE ?
             LIMA_GEM_WAIT_WRITE : LIMA_GEM_WAIT_READ;
@@ -641,8 +611,16 @@ lima_transfer_map(struct pipe_context *pctx,
 
       return trans->staging;
    } else {
+      unsigned dpw = PIPE_TRANSFER_MAP_DIRECTLY | PIPE_TRANSFER_WRITE |
+                     PIPE_TRANSFER_PERSISTENT;
+      if ((usage & dpw) == dpw && res->index_cache)
+         return NULL;
+
       ptrans->stride = res->levels[level].stride;
       ptrans->layer_stride = res->levels[level].layer_stride;
+
+      if ((usage & PIPE_TRANSFER_WRITE) && (usage & PIPE_TRANSFER_MAP_DIRECTLY))
+         panfrost_minmax_cache_invalidate(res->index_cache, ptrans);
 
       return bo->map + res->levels[level].offset +
          box->z * res->levels[level].layer_stride +
@@ -661,22 +639,22 @@ lima_transfer_flush_region(struct pipe_context *pctx,
 }
 
 static void
-lima_transfer_unmap(struct pipe_context *pctx,
-                    struct pipe_transfer *ptrans)
+lima_transfer_unmap_inner(struct lima_context *ctx,
+                          struct pipe_transfer *ptrans)
 {
-   struct lima_context *ctx = lima_context(pctx);
-   struct lima_transfer *trans = lima_transfer(ptrans);
+
    struct lima_resource *res = lima_resource(ptrans->resource);
+   struct lima_transfer *trans = lima_transfer(ptrans);
    struct lima_bo *bo = res->bo;
    struct pipe_resource *pres;
 
    if (trans->staging) {
       pres = &res->base;
-      if (ptrans->usage & PIPE_TRANSFER_WRITE) {
+      if (trans->base.usage & PIPE_TRANSFER_WRITE) {
          unsigned i;
-         for (i = 0; i < ptrans->box.depth; i++)
+         for (i = 0; i < trans->base.box.depth; i++)
             panfrost_store_tiled_image(
-               bo->map + res->levels[ptrans->level].offset + (i + ptrans->box.z) * res->levels[ptrans->level].layer_stride,
+               bo->map + res->levels[trans->base.level].offset + (i + trans->base.box.z) * res->levels[trans->base.level].layer_stride,
                trans->staging + i * ptrans->stride * ptrans->box.height,
                ptrans->box.x, ptrans->box.y,
                ptrans->box.width, ptrans->box.height,
@@ -684,8 +662,21 @@ lima_transfer_unmap(struct pipe_context *pctx,
                ptrans->stride,
                pres->format);
       }
-      free(trans->staging);
    }
+}
+
+static void
+lima_transfer_unmap(struct pipe_context *pctx,
+                    struct pipe_transfer *ptrans)
+{
+   struct lima_context *ctx = lima_context(pctx);
+   struct lima_transfer *trans = lima_transfer(ptrans);
+   struct lima_resource *res = lima_resource(ptrans->resource);
+
+   lima_transfer_unmap_inner(ctx, ptrans);
+   if (trans->staging)
+      free(trans->staging);
+   panfrost_minmax_cache_invalidate(res->index_cache, ptrans);
 
    pipe_resource_reference(&ptrans->resource, NULL);
    slab_free(&ctx->transfer_pool, trans);
@@ -751,18 +742,59 @@ lima_flush_resource(struct pipe_context *pctx, struct pipe_resource *resource)
 
 }
 
+static void
+lima_texture_subdata(struct pipe_context *pctx,
+                     struct pipe_resource *prsc,
+                     unsigned level,
+                     unsigned usage,
+                     const struct pipe_box *box,
+                     const void *data,
+                     unsigned stride,
+                     unsigned layer_stride)
+{
+   struct lima_context *ctx = lima_context(pctx);
+   struct lima_resource *res = lima_resource(prsc);
+
+   if (!res->tiled) {
+      u_default_texture_subdata(pctx, prsc, level, usage, box,
+                                data, stride, layer_stride);
+      return;
+   }
+
+   assert(!(usage & PIPE_TRANSFER_READ));
+
+   struct lima_transfer t = {
+      .base = {
+         .resource = prsc,
+         .usage = PIPE_TRANSFER_WRITE,
+         .level = level,
+         .box = *box,
+         .stride = stride,
+         .layer_stride = layer_stride,
+      },
+      .staging = (void *)data,
+   };
+
+   lima_flush_job_accessing_bo(ctx, res->bo, true);
+   lima_bo_wait(res->bo, LIMA_GEM_WAIT_WRITE, PIPE_TIMEOUT_INFINITE);
+   if (!lima_bo_map(res->bo))
+      return;
+
+   lima_transfer_unmap_inner(ctx, &t.base);
+}
+
 void
 lima_resource_context_init(struct lima_context *ctx)
 {
    ctx->base.create_surface = lima_surface_create;
    ctx->base.surface_destroy = lima_surface_destroy;
 
-   /* TODO: optimize these functions to read/write data directly
-    * from/to target instead of creating a staging memory for tiled
-    * buffer indirectly
-    */
    ctx->base.buffer_subdata = u_default_buffer_subdata;
-   ctx->base.texture_subdata = u_default_texture_subdata;
+   ctx->base.texture_subdata = lima_texture_subdata;
+   /* TODO: optimize resource_copy_region to do copy directly
+    * between 2 tiled or tiled and linear resources instead of
+    * using staging buffer.
+    */
    ctx->base.resource_copy_region = util_resource_copy_region;
 
    ctx->base.blit = lima_blit;

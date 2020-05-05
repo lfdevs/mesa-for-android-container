@@ -67,9 +67,31 @@ anv_gem_close(struct anv_device *device, uint32_t gem_handle)
 /**
  * Wrapper around DRM_IOCTL_I915_GEM_MMAP. Returns MAP_FAILED on error.
  */
-void*
-anv_gem_mmap(struct anv_device *device, uint32_t gem_handle,
-             uint64_t offset, uint64_t size, uint32_t flags)
+static void*
+anv_gem_mmap_offset(struct anv_device *device, uint32_t gem_handle,
+                    uint64_t offset, uint64_t size, uint32_t flags)
+{
+   struct drm_i915_gem_mmap_offset gem_mmap = {
+      .handle = gem_handle,
+      .flags = (flags & I915_MMAP_WC) ?
+         I915_MMAP_OFFSET_WC : I915_MMAP_OFFSET_WB,
+   };
+   assert(offset == 0);
+
+   /* Get the fake offset back */
+   int ret = gen_ioctl(device->fd, DRM_IOCTL_I915_GEM_MMAP_OFFSET, &gem_mmap);
+   if (ret != 0)
+      return MAP_FAILED;
+
+   /* And map it */
+   void *map = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                    device->fd, gem_mmap.offset);
+   return map;
+}
+
+static void*
+anv_gem_mmap_legacy(struct anv_device *device, uint32_t gem_handle,
+                    uint64_t offset, uint64_t size, uint32_t flags)
 {
    struct drm_i915_gem_mmap gem_mmap = {
       .handle = gem_handle,
@@ -86,13 +108,27 @@ anv_gem_mmap(struct anv_device *device, uint32_t gem_handle,
    return (void *)(uintptr_t) gem_mmap.addr_ptr;
 }
 
+/**
+ * Wrapper around DRM_IOCTL_I915_GEM_MMAP. Returns MAP_FAILED on error.
+ */
+void*
+anv_gem_mmap(struct anv_device *device, uint32_t gem_handle,
+             uint64_t offset, uint64_t size, uint32_t flags)
+{
+   if (device->physical->has_mmap_offset)
+      return anv_gem_mmap_offset(device, gem_handle, offset, size, flags);
+   else
+      return anv_gem_mmap_legacy(device, gem_handle, offset, size, flags);
+}
+
 /* This is just a wrapper around munmap, but it also notifies valgrind that
  * this map is no longer valid.  Pair this with anv_gem_mmap().
  */
 void
-anv_gem_munmap(void *p, uint64_t size)
+anv_gem_munmap(struct anv_device *device, void *p, uint64_t size)
 {
-   VG(VALGRIND_FREELIKE_BLOCK(p, 0));
+   if (!device->physical->has_mmap_offset)
+      VG(VALGRIND_FREELIKE_BLOCK(p, 0));
    munmap(p, size);
 }
 

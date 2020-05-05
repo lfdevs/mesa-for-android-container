@@ -24,6 +24,8 @@
 #ifndef GEN_PERF_REGS_H
 #define GEN_PERF_REGS_H
 
+#define INTEL_MASK(high, low) (((1u<<((high)-(low)+1))-1)<<(low))
+
 /* GT core frequency counters */
 #define GEN7_RPSTAT1                       0xA01C
 #define  GEN7_RPSTAT1_CURR_GT_FREQ_SHIFT   7
@@ -50,5 +52,11 @@
 #define PS_INVOCATION_COUNT        0x2348
 #define CS_INVOCATION_COUNT        0x2290
 #define PS_DEPTH_COUNT             0x2350
+
+/* Stream-out counters */
+#define GEN6_SO_PRIM_STORAGE_NEEDED     0x2280
+#define GEN7_SO_PRIM_STORAGE_NEEDED(n)  (0x5240 + (n) * 8)
+#define GEN6_SO_NUM_PRIMS_WRITTEN       0x2288
+#define GEN7_SO_NUM_PRIMS_WRITTEN(n)    (0x5200 + (n) * 8)
 
 #endif /* GEN_PERF_REGS_H */

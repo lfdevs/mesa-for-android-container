@@ -40,7 +40,7 @@
 #include "state_tracker/st_api.h"
 #include "hud/hud_context.h"
 
-#include "stw_icd.h"
+#include "gldrv.h"
 #include "stw_device.h"
 #include "stw_winsys.h"
 #include "stw_framebuffer.h"

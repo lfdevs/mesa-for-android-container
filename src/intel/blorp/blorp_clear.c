@@ -100,7 +100,8 @@ blorp_params_get_clear_kernel(struct blorp_batch *batch,
                        &prog_data);
 
    bool result =
-      blorp->upload_shader(batch, &blorp_key, sizeof(blorp_key),
+      blorp->upload_shader(batch, MESA_SHADER_FRAGMENT,
+                           &blorp_key, sizeof(blorp_key),
                            program, prog_data.base.program_size,
                            &prog_data.base, sizeof(prog_data),
                            &params->wm_prog_kernel, &params->wm_prog_data);
@@ -192,7 +193,8 @@ blorp_params_get_layer_offset_vs(struct blorp_batch *batch,
       blorp_compile_vs(blorp, mem_ctx, b.shader, &vs_prog_data);
 
    bool result =
-      blorp->upload_shader(batch, &blorp_key, sizeof(blorp_key),
+      blorp->upload_shader(batch, MESA_SHADER_VERTEX,
+                           &blorp_key, sizeof(blorp_key),
                            program, vs_prog_data.base.base.program_size,
                            &vs_prog_data.base.base, sizeof(vs_prog_data),
                            &params->vs_prog_kernel, &params->vs_prog_data);
@@ -362,31 +364,10 @@ blorp_fast_clear(struct blorp_batch *batch,
    /* If a swizzle was provided, we need to swizzle the clear color so that
     * the hardware color format conversion will work properly.
     */
-   params.dst.clear_color = swizzle_color_value(params.dst.clear_color,
-                                                swizzle);
+   params.dst.clear_color =
+      isl_color_value_swizzle_inv(params.dst.clear_color, swizzle);
 
    batch->blorp->exec(batch, &params);
-}
-
-union isl_color_value
-swizzle_color_value(union isl_color_value src, struct isl_swizzle swizzle)
-{
-   union isl_color_value dst = { .u32 = { 0, } };
-
-   /* We assign colors in ABGR order so that the first one will be taken in
-    * RGBA precedence order.  According to the PRM docs for shader channel
-    * select, this matches Haswell hardware behavior.
-    */
-   if ((unsigned)(swizzle.a - ISL_CHANNEL_SELECT_RED) < 4)
-      dst.u32[swizzle.a - ISL_CHANNEL_SELECT_RED] = src.u32[3];
-   if ((unsigned)(swizzle.b - ISL_CHANNEL_SELECT_RED) < 4)
-      dst.u32[swizzle.b - ISL_CHANNEL_SELECT_RED] = src.u32[2];
-   if ((unsigned)(swizzle.g - ISL_CHANNEL_SELECT_RED) < 4)
-      dst.u32[swizzle.g - ISL_CHANNEL_SELECT_RED] = src.u32[1];
-   if ((unsigned)(swizzle.r - ISL_CHANNEL_SELECT_RED) < 4)
-      dst.u32[swizzle.r - ISL_CHANNEL_SELECT_RED] = src.u32[0];
-
-   return dst;
 }
 
 void
@@ -406,7 +387,7 @@ blorp_clear(struct blorp_batch *batch,
     * also ensures that they work on pre-Haswell hardware which can't swizlle
     * at all.
     */
-   clear_color = swizzle_color_value(clear_color, swizzle);
+   clear_color = isl_color_value_swizzle_inv(clear_color, swizzle);
    swizzle = ISL_SWIZZLE_IDENTITY;
 
    bool clear_rgb_as_red = false;
@@ -421,7 +402,7 @@ blorp_clear(struct blorp_batch *batch,
        * around it by swapping the colors around and using B4G4R4A4 instead.
        */
       const struct isl_swizzle ARGB = ISL_SWIZZLE(ALPHA, RED, GREEN, BLUE);
-      clear_color = swizzle_color_value(clear_color, ARGB);
+      clear_color = isl_color_value_swizzle_inv(clear_color, ARGB);
       format = ISL_FORMAT_B4G4R4A4_UNORM;
    } else if (isl_format_get_layout(format)->bpb % 3 == 0) {
       clear_rgb_as_red = true;
@@ -812,7 +793,7 @@ blorp_can_hiz_clear_depth(const struct gen_device_info *devinfo,
       if (x0 % align_px_w || y0 % align_px_h ||
           x1 % align_px_w || y1 % align_px_h)
          return false;
-   } else if (isl_surf_supports_hiz_ccs_wt(devinfo, surf, aux_usage)) {
+   } else if (aux_usage == ISL_AUX_USAGE_HIZ_CCS_WT) {
       /* We have to set the WM_HZ_OP::FullSurfaceDepthandStencilClear bit
        * whenever we clear an uninitialized HIZ buffer (as some drivers
        * currently do). However, this bit seems liable to clear 16x8 pixels in
@@ -902,7 +883,7 @@ blorp_hiz_clear_depth_stencil(struct blorp_batch *batch,
 
       if (clear_depth) {
          /* If we're clearing depth, we must have HiZ */
-         assert(depth && depth->aux_usage == ISL_AUX_USAGE_HIZ);
+         assert(depth && isl_aux_usage_has_hiz(depth->aux_usage));
 
          brw_blorp_surface_info_init(batch->blorp, &params.depth, depth,
                                      level, layer,
@@ -1177,7 +1158,8 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_batch *batch,
                        &prog_data);
 
    bool result =
-      blorp->upload_shader(batch, &blorp_key, sizeof(blorp_key),
+      blorp->upload_shader(batch, MESA_SHADER_FRAGMENT,
+                           &blorp_key, sizeof(blorp_key),
                            program, prog_data.base.program_size,
                            &prog_data.base, sizeof(prog_data),
                            &params->wm_prog_kernel, &params->wm_prog_data);

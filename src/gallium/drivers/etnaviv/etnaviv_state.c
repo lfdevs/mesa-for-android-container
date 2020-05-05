@@ -33,6 +33,8 @@
 #include "etnaviv_clear_blit.h"
 #include "etnaviv_context.h"
 #include "etnaviv_format.h"
+#include "etnaviv_rasterizer.h"
+#include "etnaviv_screen.h"
 #include "etnaviv_shader.h"
 #include "etnaviv_surface.h"
 #include "etnaviv_translate.h"
@@ -82,23 +84,27 @@ etna_set_constant_buffer(struct pipe_context *pctx,
       const struct pipe_constant_buffer *cb)
 {
    struct etna_context *ctx = etna_context(pctx);
+   struct etna_constbuf_state *so = &ctx->constant_buffer[shader];
 
    assert(index < ETNA_MAX_CONST_BUF);
 
-   util_copy_constant_buffer(&ctx->constant_buffer[shader][index], cb);
+   util_copy_constant_buffer(&so->cb[index], cb);
 
    /* Note that the state tracker can unbind constant buffers by
     * passing NULL here. */
-   if (unlikely(!cb || (!cb->buffer && !cb->user_buffer)))
+   if (unlikely(!cb || (!cb->buffer && !cb->user_buffer))) {
+      so->enabled_mask &= ~(1 << index);
       return;
+   }
 
    assert(index != 0 || cb->user_buffer != NULL);
 
    if (!cb->buffer) {
-      struct pipe_constant_buffer *cb = &ctx->constant_buffer[shader][index];
+      struct pipe_constant_buffer *cb = &so->cb[index];
       u_upload_data(pctx->const_uploader, 0, cb->buffer_size, 16, cb->user_buffer, &cb->buffer_offset, &cb->buffer);
    }
 
+   so->enabled_mask |= 1 << index;
    ctx->dirty |= ETNA_DIRTY_CONSTBUF;
 }
 
@@ -124,6 +130,7 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
       const struct pipe_framebuffer_state *fb)
 {
    struct etna_context *ctx = etna_context(pctx);
+   struct etna_screen *screen = ctx->screen;
    struct compiled_framebuffer_state *cs = &ctx->framebuffer;
    int nr_samples_color = -1;
    int nr_samples_depth = -1;
@@ -152,7 +159,7 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
          VIVS_PE_COLOR_FORMAT_COMPONENTS__MASK |
          VIVS_PE_COLOR_FORMAT_OVERWRITE |
          COND(color_supertiled, VIVS_PE_COLOR_FORMAT_SUPER_TILED) |
-         COND(color_supertiled && ctx->specs.halti >= 5, VIVS_PE_COLOR_FORMAT_SUPER_TILED_NEW);
+         COND(color_supertiled && screen->specs.halti >= 5, VIVS_PE_COLOR_FORMAT_SUPER_TILED_NEW);
       /* VIVS_PE_COLOR_FORMAT_COMPONENTS() and
        * VIVS_PE_COLOR_FORMAT_OVERWRITE comes from blend_state
        * but only if we set the bits above. */
@@ -168,13 +175,13 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
              cbuf->surf.offset, cbuf->surf.stride * 4);
       }
 
-      if (ctx->specs.pixel_pipes == 1) {
+      if (screen->specs.pixel_pipes == 1) {
          cs->PE_COLOR_ADDR = cbuf->reloc[0];
          cs->PE_COLOR_ADDR.flags = ETNA_RELOC_READ | ETNA_RELOC_WRITE;
       } else {
          /* Rendered textures must always be multi-tiled, or single-buffer mode must be supported */
-         assert((res->layout & ETNA_LAYOUT_BIT_MULTI) || ctx->specs.single_buffer);
-         for (int i = 0; i < ctx->specs.pixel_pipes; i++) {
+         assert((res->layout & ETNA_LAYOUT_BIT_MULTI) || screen->specs.single_buffer);
+         for (int i = 0; i < screen->specs.pixel_pipes; i++) {
             cs->PE_PIPE_COLOR_ADDR[i] = cbuf->reloc[i];
             cs->PE_PIPE_COLOR_ADDR[i].flags = ETNA_RELOC_READ | ETNA_RELOC_WRITE;
          }
@@ -195,7 +202,7 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
 
          if (cbuf->level->ts_compress_fmt >= 0) {
             /* overwrite bit breaks v1/v2 compression */
-            if (!ctx->specs.v4_compression)
+            if (!screen->specs.v4_compression)
                cs->PE_COLOR_FORMAT &= ~VIVS_PE_COLOR_FORMAT_OVERWRITE;
 
             ts_mem_config |=
@@ -211,7 +218,7 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
 
       cs->PS_CONTROL = COND(util_format_is_unorm(cbuf->base.format), VIVS_PS_CONTROL_SATURATE_RT0);
       cs->PS_CONTROL_EXT =
-         VIVS_PS_CONTROL_EXT_OUTPUT_MODE0(translate_output_mode(cbuf->base.format, ctx->specs.halti >= 5));
+         VIVS_PS_CONTROL_EXT_OUTPUT_MODE0(translate_output_mode(cbuf->base.format, screen->specs.halti >= 5));
    } else {
       /* Clearing VIVS_PE_COLOR_FORMAT_COMPONENTS__MASK and
        * VIVS_PE_COLOR_FORMAT_OVERWRITE prevents us from overwriting the
@@ -222,7 +229,7 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
       cs->TS_COLOR_SURFACE_BASE.bo = NULL;
 
       cs->PE_COLOR_ADDR = ctx->dummy_rt_reloc;
-      for (int i = 0; i < ctx->specs.pixel_pipes; i++)
+      for (int i = 0; i < screen->specs.pixel_pipes; i++)
          cs->PE_PIPE_COLOR_ADDR[i] = ctx->dummy_rt_reloc;
    }
 
@@ -244,16 +251,16 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
          COND(depth_supertiled, VIVS_PE_DEPTH_CONFIG_SUPER_TILED) |
          VIVS_PE_DEPTH_CONFIG_DEPTH_MODE_Z |
          VIVS_PE_DEPTH_CONFIG_UNK18 | /* something to do with clipping? */
-         COND(ctx->specs.halti >= 5, VIVS_PE_DEPTH_CONFIG_DISABLE_ZS) /* Needs to be enabled on GC7000, otherwise depth writes hang w/ TS - apparently it does something else now */
+         COND(screen->specs.halti >= 5, VIVS_PE_DEPTH_CONFIG_DISABLE_ZS) /* Needs to be enabled on GC7000, otherwise depth writes hang w/ TS - apparently it does something else now */
          ;
       /* VIVS_PE_DEPTH_CONFIG_ONLY_DEPTH */
       /* merged with depth_stencil_alpha */
 
-      if (ctx->specs.pixel_pipes == 1) {
+      if (screen->specs.pixel_pipes == 1) {
          cs->PE_DEPTH_ADDR = zsbuf->reloc[0];
          cs->PE_DEPTH_ADDR.flags = ETNA_RELOC_READ | ETNA_RELOC_WRITE;
       } else {
-         for (int i = 0; i < ctx->specs.pixel_pipes; i++) {
+         for (int i = 0; i < screen->specs.pixel_pipes; i++) {
             cs->PE_PIPE_DEPTH_ADDR[i] = zsbuf->reloc[i];
             cs->PE_PIPE_DEPTH_ADDR[i].flags = ETNA_RELOC_READ | ETNA_RELOC_WRITE;
          }
@@ -342,14 +349,6 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
       break;
    }
 
-   /* Scissor setup */
-   cs->SE_SCISSOR_LEFT = 0; /* affected by rasterizer and scissor state as well */
-   cs->SE_SCISSOR_TOP = 0;
-   cs->SE_SCISSOR_RIGHT = (fb->width << 16) + ETNA_SE_SCISSOR_MARGIN_RIGHT;
-   cs->SE_SCISSOR_BOTTOM = (fb->height << 16) + ETNA_SE_SCISSOR_MARGIN_BOTTOM;
-   cs->SE_CLIP_RIGHT = (fb->width << 16) + ETNA_SE_CLIP_MARGIN_RIGHT;
-   cs->SE_CLIP_BOTTOM = (fb->height << 16) + ETNA_SE_CLIP_MARGIN_BOTTOM;
-
    cs->TS_MEM_CONFIG = ts_mem_config;
    cs->PE_MEM_CONFIG = pe_mem_config;
 
@@ -358,7 +357,7 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
     * single buffer when this feature is available.
     * note: the blob will use 2 in some situations, figure out why?
     */
-   pe_logic_op |= VIVS_PE_LOGIC_OP_SINGLE_BUFFER(ctx->specs.single_buffer ? 3 : 0);
+   pe_logic_op |= VIVS_PE_LOGIC_OP_SINGLE_BUFFER(screen->specs.single_buffer ? 3 : 0);
    cs->PE_LOGIC_OP = pe_logic_op;
 
    /* keep copy of original structure */
@@ -378,19 +377,10 @@ etna_set_scissor_states(struct pipe_context *pctx, unsigned start_slot,
       unsigned num_scissors, const struct pipe_scissor_state *ss)
 {
    struct etna_context *ctx = etna_context(pctx);
-   struct compiled_scissor_state *cs = &ctx->scissor;
    assert(ss->minx <= ss->maxx);
    assert(ss->miny <= ss->maxy);
 
-   /* note that this state is only used when rasterizer_state->scissor is on */
-   ctx->scissor_s = *ss;
-   cs->SE_SCISSOR_LEFT = (ss->minx << 16);
-   cs->SE_SCISSOR_TOP = (ss->miny << 16);
-   cs->SE_SCISSOR_RIGHT = (ss->maxx << 16) + ETNA_SE_SCISSOR_MARGIN_RIGHT;
-   cs->SE_SCISSOR_BOTTOM = (ss->maxy << 16) + ETNA_SE_SCISSOR_MARGIN_BOTTOM;
-   cs->SE_CLIP_RIGHT = (ss->maxx << 16) + ETNA_SE_CLIP_MARGIN_RIGHT;
-   cs->SE_CLIP_BOTTOM = (ss->maxy << 16) + ETNA_SE_CLIP_MARGIN_BOTTOM;
-
+   ctx->scissor = *ss;
    ctx->dirty |= ETNA_DIRTY_SCISSOR;
 }
 
@@ -425,14 +415,10 @@ etna_set_viewport_states(struct pipe_context *pctx, unsigned start_slot,
    /* Compute scissor rectangle (fixp) from viewport.
     * Make sure left is always < right and top always < bottom.
     */
-   cs->SE_SCISSOR_LEFT = etna_f32_to_fixp16(MAX2(vs->translate[0] - fabsf(vs->scale[0]), 0.0f));
-   cs->SE_SCISSOR_TOP = etna_f32_to_fixp16(MAX2(vs->translate[1] - fabsf(vs->scale[1]), 0.0f));
-   uint32_t right_fixp = etna_f32_to_fixp16(MAX2(vs->translate[0] + fabsf(vs->scale[0]), 0.0f));
-   uint32_t bottom_fixp = etna_f32_to_fixp16(MAX2(vs->translate[1] + fabsf(vs->scale[1]), 0.0f));
-   cs->SE_SCISSOR_RIGHT = right_fixp + ETNA_SE_SCISSOR_MARGIN_RIGHT;
-   cs->SE_SCISSOR_BOTTOM = bottom_fixp + ETNA_SE_SCISSOR_MARGIN_BOTTOM;
-   cs->SE_CLIP_RIGHT = right_fixp + ETNA_SE_CLIP_MARGIN_RIGHT;
-   cs->SE_CLIP_BOTTOM = bottom_fixp + ETNA_SE_CLIP_MARGIN_BOTTOM;
+   cs->SE_SCISSOR_LEFT = MAX2(vs->translate[0] - fabsf(vs->scale[0]), 0.0f);
+   cs->SE_SCISSOR_TOP = MAX2(vs->translate[1] - fabsf(vs->scale[1]), 0.0f);
+   cs->SE_SCISSOR_RIGHT = ceilf(MAX2(vs->translate[0] + fabsf(vs->scale[0]), 0.0f));
+   cs->SE_SCISSOR_BOTTOM = ceilf(MAX2(vs->translate[1] + fabsf(vs->scale[1]), 0.0f));
 
    cs->PE_DEPTH_NEAR = fui(0.0); /* not affected if depth mode is Z (as in GL) */
    cs->PE_DEPTH_FAR = fui(1.0);
@@ -524,14 +510,15 @@ etna_vertex_elements_state_create(struct pipe_context *pctx,
       unsigned num_elements, const struct pipe_vertex_element *elements)
 {
    struct etna_context *ctx = etna_context(pctx);
+   struct etna_screen *screen = ctx->screen;
    struct compiled_vertex_elements_state *cs = CALLOC_STRUCT(compiled_vertex_elements_state);
 
    if (!cs)
       return NULL;
 
-   if (num_elements > ctx->specs.vertex_max_elements) {
+   if (num_elements > screen->specs.vertex_max_elements) {
       BUG("number of elements (%u) exceeds chip maximum (%u)", num_elements,
-          ctx->specs.vertex_max_elements);
+          screen->specs.vertex_max_elements);
       return NULL;
    }
 
@@ -554,7 +541,7 @@ etna_vertex_elements_state_create(struct pipe_context *pctx,
          start_offset = elements[idx].src_offset;
 
       /* guaranteed by PIPE_CAP_MAX_VERTEX_BUFFERS */
-      assert(buffer_idx < ctx->specs.stream_count);
+      assert(buffer_idx < screen->specs.stream_count);
 
       /* maximum vertex size is 256 bytes */
       assert(element_size != 0 && (end_offset - start_offset) < 256);
@@ -570,7 +557,7 @@ etna_vertex_elements_state_create(struct pipe_context *pctx,
       assert(format_type != ETNA_NO_MATCH);
       assert(normalize != ETNA_NO_MATCH);
 
-      if (ctx->specs.halti < 5) {
+      if (screen->specs.halti < 5) {
          cs->FE_VERTEX_ELEMENT_CONFIG[idx] =
             COND(nonconsecutive, VIVS_FE_VERTEX_ELEMENT_CONFIG_NONCONSECUTIVE) |
             format_type |
@@ -660,6 +647,36 @@ etna_update_ts_config(struct etna_context *ctx)
    return true;
 }
 
+static bool
+etna_update_clipping(struct etna_context *ctx)
+{
+   const struct etna_rasterizer_state *rasterizer = etna_rasterizer_state(ctx->rasterizer);
+   const struct pipe_framebuffer_state *fb = &ctx->framebuffer_s;
+
+   /* clip framebuffer against viewport */
+   uint32_t scissor_left = ctx->viewport.SE_SCISSOR_LEFT;
+   uint32_t scissor_top = ctx->viewport.SE_SCISSOR_TOP;
+   uint32_t scissor_right = MIN2(fb->width, ctx->viewport.SE_SCISSOR_RIGHT);
+   uint32_t scissor_bottom = MIN2(fb->height, ctx->viewport.SE_SCISSOR_BOTTOM);
+
+   /* clip against scissor */
+   if (rasterizer->scissor) {
+      scissor_left = MAX2(ctx->scissor.minx, scissor_left);
+      scissor_top = MAX2(ctx->scissor.miny, scissor_top);
+      scissor_right = MIN2(ctx->scissor.maxx, scissor_right);
+      scissor_bottom = MIN2(ctx->scissor.maxy, scissor_bottom);
+   }
+
+   ctx->clipping.minx = scissor_left;
+   ctx->clipping.miny = scissor_top;
+   ctx->clipping.maxx = scissor_right;
+   ctx->clipping.maxy = scissor_bottom;
+
+   ctx->dirty |= ETNA_DIRTY_SCISSOR_CLIP;
+
+   return true;
+}
+
 struct etna_state_updater {
    bool (*update)(struct etna_context *ctx);
    uint32_t dirty;
@@ -680,6 +697,10 @@ static const struct etna_state_updater etna_state_updates[] = {
    },
    {
       etna_update_ts_config, ETNA_DIRTY_DERIVE_TS,
+   },
+   {
+      etna_update_clipping, ETNA_DIRTY_SCISSOR | ETNA_DIRTY_FRAMEBUFFER |
+                            ETNA_DIRTY_RASTERIZER | ETNA_DIRTY_VIEWPORT,
    }
 };
 

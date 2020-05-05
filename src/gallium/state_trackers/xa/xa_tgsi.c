@@ -99,8 +99,8 @@ print_fs_traits(int fs_traits)
 struct xa_shaders {
     struct xa_context *r;
 
-    struct cso_hash *vs_hash;
-    struct cso_hash *fs_hash;
+    struct cso_hash vs_hash;
+    struct cso_hash fs_hash;
 };
 
 static inline void
@@ -424,8 +424,8 @@ xa_shaders_create(struct xa_context *r)
     struct xa_shaders *sc = CALLOC_STRUCT(xa_shaders);
 
     sc->r = r;
-    sc->vs_hash = cso_hash_create();
-    sc->fs_hash = cso_hash_create();
+    cso_hash_init(&sc->vs_hash);
+    cso_hash_init(&sc->fs_hash);
 
     return sc;
 }
@@ -446,14 +446,14 @@ cache_destroy(struct pipe_context *pipe,
 	}
 	iter = cso_hash_erase(hash, iter);
     }
-    cso_hash_delete(hash);
+    cso_hash_deinit(hash);
 }
 
 void
 xa_shaders_destroy(struct xa_shaders *sc)
 {
-    cache_destroy(sc->r->pipe, sc->vs_hash, PIPE_SHADER_VERTEX);
-    cache_destroy(sc->r->pipe, sc->fs_hash, PIPE_SHADER_FRAGMENT);
+    cache_destroy(sc->r->pipe, &sc->vs_hash, PIPE_SHADER_VERTEX);
+    cache_destroy(sc->r->pipe, &sc->fs_hash, PIPE_SHADER_FRAGMENT);
 
     FREE(sc);
 }
@@ -485,9 +485,9 @@ xa_shaders_get(struct xa_shaders *sc, unsigned vs_traits, unsigned fs_traits)
     void *vs, *fs;
 
     vs = shader_from_cache(sc->r->pipe, PIPE_SHADER_VERTEX,
-			   sc->vs_hash, vs_traits);
+			   &sc->vs_hash, vs_traits);
     fs = shader_from_cache(sc->r->pipe, PIPE_SHADER_FRAGMENT,
-			   sc->fs_hash, fs_traits);
+			   &sc->fs_hash, fs_traits);
 
     debug_assert(vs && fs);
     if (!vs || !fs)

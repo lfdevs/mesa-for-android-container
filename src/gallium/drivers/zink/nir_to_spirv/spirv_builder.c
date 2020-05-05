@@ -222,6 +222,13 @@ spirv_builder_emit_array_stride(struct spirv_builder *b, SpvId target,
    emit_decoration(b, target, SpvDecorationArrayStride, args, ARRAY_SIZE(args));
 }
 
+void
+spirv_builder_emit_index(struct spirv_builder *b, SpvId target, int index)
+{
+   uint32_t args[] = { index };
+   emit_decoration(b, target, SpvDecorationIndex, args, ARRAY_SIZE(args));
+}
+
 static void
 emit_member_decoration(struct spirv_builder *b, SpvId target, uint32_t member,
                        SpvDecoration decoration, const uint32_t extra_operands[],

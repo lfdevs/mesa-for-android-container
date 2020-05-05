@@ -49,6 +49,7 @@ struct blorp_context {
                          const void *key, uint32_t key_size,
                          uint32_t *kernel_out, void *prog_data_out);
    bool (*upload_shader)(struct blorp_batch *batch,
+                         uint32_t stage,
                          const void *key, uint32_t key_size,
                          const void *kernel, uint32_t kernel_size,
                          const struct brw_stage_prog_data *prog_data,
@@ -159,9 +160,6 @@ blorp_buffer_copy(struct blorp_batch *batch,
                   struct blorp_address src,
                   struct blorp_address dst,
                   uint64_t size);
-
-union isl_color_value
-swizzle_color_value(union isl_color_value src, struct isl_swizzle swizzle);
 
 void
 blorp_fast_clear(struct blorp_batch *batch,

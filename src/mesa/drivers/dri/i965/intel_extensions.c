@@ -271,6 +271,7 @@ intelInitExtensions(struct gl_context *ctx)
             ctx->Extensions.ARB_ES3_1_compatibility =
                devinfo->gen >= 8 || devinfo->is_haswell;
             ctx->Extensions.NV_compute_shader_derivatives = true;
+            ctx->Extensions.ARB_compute_variable_group_size = true;
          }
 
          if (can_do_predicate_writes(brw->screen)) {
@@ -315,6 +316,12 @@ intelInitExtensions(struct gl_context *ctx)
        */
       ctx->Extensions.OES_copy_image = true;
    }
+
+   /* Gen < 6 still uses the blitter. It's somewhat annoying to add support
+    * for blackhole there... Does anybody actually care anymore anyway?
+    */
+   if (devinfo->gen >= 6)
+      ctx->Extensions.INTEL_blackhole_render = true;
 
    if (devinfo->gen >= 8) {
       ctx->Extensions.ARB_gpu_shader_int64 = true;

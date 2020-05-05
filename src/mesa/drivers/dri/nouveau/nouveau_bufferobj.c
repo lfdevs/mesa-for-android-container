@@ -29,6 +29,7 @@
 #include "nouveau_context.h"
 
 #include "main/bufferobj.h"
+#include "util/u_memory.h"
 
 static inline char *
 get_bufferobj_map(struct gl_context *ctx, struct gl_buffer_object *obj,

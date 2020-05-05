@@ -30,6 +30,7 @@ void intel_batchbuffer_require_space(struct brw_context *brw, GLuint sz);
 int _intel_batchbuffer_flush_fence(struct brw_context *brw,
                                    int in_fence_fd, int *out_fence_fd,
                                    const char *file, int line);
+void intel_batchbuffer_maybe_noop(struct brw_context *brw);
 
 #define intel_batchbuffer_flush(brw) \
    _intel_batchbuffer_flush_fence((brw), -1, NULL, __FILE__, __LINE__)

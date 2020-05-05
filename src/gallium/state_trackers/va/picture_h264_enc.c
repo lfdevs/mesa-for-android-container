@@ -52,7 +52,7 @@ vlVaHandleVAEncPictureParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *cont
                                             PIPE_USAGE_STREAM, coded_buf->size);
    context->coded_buf = coded_buf;
 
-   util_hash_table_set(context->desc.h264enc.frame_idx,
+   _mesa_hash_table_insert(context->desc.h264enc.frame_idx,
 		       UINT_TO_PTR(h264->CurrPic.picture_id),
 		       UINT_TO_PTR(h264->frame_num));
 

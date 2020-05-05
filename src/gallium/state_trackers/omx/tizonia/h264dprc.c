@@ -46,18 +46,6 @@
 
 unsigned dec_frame_delta;
 
-#define PTR_TO_UINT(x) ((unsigned)((intptr_t)(x)))
-
-static unsigned handle_hash(void *key)
-{
-   return PTR_TO_UINT(key);
-}
-
-static int handle_compare(void *key1, void *key2)
-{
-   return PTR_TO_UINT(key1) != PTR_TO_UINT(key2);
-}
-
 static enum pipe_error hash_table_clear_item_callback(void *key, void *value, void *data)
 {
    struct pipe_video_buffer *video_buffer = (struct pipe_video_buffer *)value;
@@ -229,7 +217,7 @@ static void get_eglimage(vid_dec_PrivateType* priv) {
         assert(video_buffer);
         assert(video_buffer->buffer_format == p_res->format);
 
-        util_hash_table_set(priv->video_buffer_map, priv->p_outhdr_, video_buffer);
+        _mesa_hash_table_insert(priv->video_buffer_map, priv->p_outhdr_, video_buffer);
       }
    } else {
       (void) tiz_krn_release_buffer(tiz_get_krn (handleOf (priv)),
@@ -434,7 +422,7 @@ static OMX_ERRORTYPE h264d_prc_allocate_resources(void *ap_obj, OMX_U32 a_pid)
 
    list_inithead(&priv->codec_data.h264.dpb_list);
 
-   priv->video_buffer_map = util_hash_table_create(handle_hash, handle_compare);
+   priv->video_buffer_map = util_hash_table_create_ptr_keys();
 
    return OMX_ErrorNone;
 }
@@ -448,7 +436,7 @@ static OMX_ERRORTYPE h264d_prc_deallocate_resources(void *ap_obj)
    util_hash_table_foreach(priv->video_buffer_map,
                             &hash_table_clear_item_callback,
                             NULL);
-   util_hash_table_destroy(priv->video_buffer_map);
+   _mesa_hash_table_destroy(priv->video_buffer_map, NULL);
 
    if (priv->pipe) {
       vl_compositor_cleanup_state(&priv->cstate);

@@ -372,7 +372,7 @@ v3d_bo_open_handle(struct v3d_screen *screen,
         bo->offset = get.offset;
         assert(bo->offset != 0);
 
-        util_hash_table_set(screen->bo_handles, (void *)(uintptr_t)handle, bo);
+        _mesa_hash_table_insert(screen->bo_handles, (void *)(uintptr_t)handle, bo);
 
         screen->bo_count++;
         screen->bo_size += bo->size;
@@ -433,7 +433,7 @@ v3d_bo_get_dmabuf(struct v3d_bo *bo)
 
         mtx_lock(&bo->screen->bo_handles_mutex);
         bo->private = false;
-        util_hash_table_set(bo->screen->bo_handles, (void *)(uintptr_t)bo->handle, bo);
+        _mesa_hash_table_insert(bo->screen->bo_handles, (void *)(uintptr_t)bo->handle, bo);
         mtx_unlock(&bo->screen->bo_handles_mutex);
 
         return fd;

@@ -320,6 +320,10 @@ try_setup_line( struct lp_setup_context *setup,
    boolean will_draw_start;
    boolean will_draw_end;
 
+   if (lp_context->active_statistics_queries) {
+      lp_context->pipeline_statistics.c_primitives++;
+   }
+
    if (0)
       print_line(setup, v1, v2);
 
@@ -357,10 +361,10 @@ try_setup_line( struct lp_setup_context *setup,
    if (fabsf(dx) >= fabsf(dy)) {
       float dydx = dy / dx;
 
-      x1diff = v1[0][0] - (float) floor(v1[0][0]) - 0.5;
-      y1diff = v1[0][1] - (float) floor(v1[0][1]) - 0.5;
-      x2diff = v2[0][0] - (float) floor(v2[0][0]) - 0.5;
-      y2diff = v2[0][1] - (float) floor(v2[0][1]) - 0.5;
+      x1diff = v1[0][0] - floorf(v1[0][0]) - 0.5f;
+      y1diff = v1[0][1] - floorf(v1[0][1]) - 0.5f;
+      x2diff = v2[0][0] - floorf(v2[0][0]) - 0.5f;
+      y2diff = v2[0][1] - floorf(v2[0][1]) - 0.5f;
 
       if (y2diff==-0.5 && dy<0){
          y2diff = 0.5;
@@ -455,10 +459,10 @@ try_setup_line( struct lp_setup_context *setup,
       const float dxdy = dx / dy;
 
       /* Y-MAJOR LINE */      
-      x1diff = v1[0][0] - (float) floor(v1[0][0]) - 0.5;
-      y1diff = v1[0][1] - (float) floor(v1[0][1]) - 0.5;
-      x2diff = v2[0][0] - (float) floor(v2[0][0]) - 0.5;
-      y2diff = v2[0][1] - (float) floor(v2[0][1]) - 0.5;
+      x1diff = v1[0][0] - floorf(v1[0][0]) - 0.5f;
+      y1diff = v1[0][1] - floorf(v1[0][1]) - 0.5f;
+      x2diff = v2[0][0] - floorf(v2[0][0]) - 0.5f;
+      y2diff = v2[0][1] - floorf(v2[0][1]) - 0.5f;
 
       if (x2diff==-0.5 && dx<0) {
          x2diff = 0.5;
@@ -615,10 +619,6 @@ try_setup_line( struct lp_setup_context *setup,
 #endif
 
    LP_COUNT(nr_tris);
-
-   if (lp_context->active_statistics_queries) {
-      lp_context->pipeline_statistics.c_primitives++;
-   }
 
    /* calculate the deltas */
    plane = GET_PLANES(line);

@@ -685,6 +685,75 @@ copy_uniform_state_to_shader(struct etna_shader_variant *sobj, uint64_t *consts,
 
 #include "etnaviv_compiler_nir_emit.h"
 
+static bool
+etna_compile_check_limits(struct etna_shader_variant *v)
+{
+   const struct etna_specs *specs = v->shader->specs;
+   int max_uniforms = (v->stage == MESA_SHADER_VERTEX)
+                         ? specs->max_vs_uniforms
+                         : specs->max_ps_uniforms;
+
+   if (!specs->has_icache && v->needs_icache) {
+      DBG("Number of instructions (%d) exceeds maximum %d", v->code_size / 4,
+          specs->max_instructions);
+      return false;
+   }
+
+   if (v->num_temps > specs->max_registers) {
+      DBG("Number of registers (%d) exceeds maximum %d", v->num_temps,
+          specs->max_registers);
+      return false;
+   }
+
+   if (v->uniforms.imm_count / 4 > max_uniforms) {
+      DBG("Number of uniforms (%d) exceeds maximum %d",
+          v->uniforms.imm_count / 4, max_uniforms);
+      return false;
+   }
+
+   return true;
+}
+
+static void
+fill_vs_mystery(struct etna_shader_variant *v)
+{
+   const struct etna_specs *specs = v->shader->specs;
+
+   v->input_count_unk8 = DIV_ROUND_UP(v->infile.num_reg + 4, 16); /* XXX what is this */
+
+   /* fill in "mystery meat" load balancing value. This value determines how
+    * work is scheduled between VS and PS
+    * in the unified shader architecture. More precisely, it is determined from
+    * the number of VS outputs, as well as chip-specific
+    * vertex output buffer size, vertex cache size, and the number of shader
+    * cores.
+    *
+    * XXX this is a conservative estimate, the "optimal" value is only known for
+    * sure at link time because some
+    * outputs may be unused and thus unmapped. Then again, in the general use
+    * case with GLSL the vertex and fragment
+    * shaders are linked already before submitting to Gallium, thus all outputs
+    * are used.
+    *
+    * note: TGSI compiler counts all outputs (including position and pointsize), here
+    * v->outfile.num_reg only counts varyings, +1 to compensate for the position output
+    * TODO: might have a problem that we don't count pointsize when it is used
+    */
+
+   int half_out = v->outfile.num_reg / 2 + 1;
+   assert(half_out);
+
+   uint32_t b = ((20480 / (specs->vertex_output_buffer_size -
+                           2 * half_out * specs->vertex_cache_size)) +
+                 9) /
+                10;
+   uint32_t a = (b + 256 / (specs->shader_core_count * half_out)) / 2;
+   v->vs_load_balancing = VIVS_VS_LOAD_BALANCING_A(MIN2(a, 255)) |
+                             VIVS_VS_LOAD_BALANCING_B(MIN2(b, 255)) |
+                             VIVS_VS_LOAD_BALANCING_C(0x3f) |
+                             VIVS_VS_LOAD_BALANCING_D(0x0f);
+}
+
 bool
 etna_compile_shader_nir(struct etna_shader_variant *v)
 {
@@ -819,48 +888,14 @@ etna_compile_shader_nir(struct etna_shader_variant *v)
    if (s->info.stage == MESA_SHADER_FRAGMENT) {
       v->input_count_unk8 = 31; /* XXX what is this */
       assert(v->ps_depth_out_reg <= 0);
-      ralloc_free(c->nir);
-      FREE(c);
-      return true;
+   } else {
+      fill_vs_mystery(v);
    }
 
-   v->input_count_unk8 = DIV_ROUND_UP(v->infile.num_reg + 4, 16); /* XXX what is this */
-
-   /* fill in "mystery meat" load balancing value. This value determines how
-    * work is scheduled between VS and PS
-    * in the unified shader architecture. More precisely, it is determined from
-    * the number of VS outputs, as well as chip-specific
-    * vertex output buffer size, vertex cache size, and the number of shader
-    * cores.
-    *
-    * XXX this is a conservative estimate, the "optimal" value is only known for
-    * sure at link time because some
-    * outputs may be unused and thus unmapped. Then again, in the general use
-    * case with GLSL the vertex and fragment
-    * shaders are linked already before submitting to Gallium, thus all outputs
-    * are used.
-    *
-    * note: TGSI compiler counts all outputs (including position and pointsize), here
-    * v->outfile.num_reg only counts varyings, +1 to compensate for the position output
-    * TODO: might have a problem that we don't count pointsize when it is used
-    */
-
-   int half_out = v->outfile.num_reg / 2 + 1;
-   assert(half_out);
-
-   uint32_t b = ((20480 / (specs->vertex_output_buffer_size -
-                           2 * half_out * specs->vertex_cache_size)) +
-                 9) /
-                10;
-   uint32_t a = (b + 256 / (specs->shader_core_count * half_out)) / 2;
-   v->vs_load_balancing = VIVS_VS_LOAD_BALANCING_A(MIN2(a, 255)) |
-                             VIVS_VS_LOAD_BALANCING_B(MIN2(b, 255)) |
-                             VIVS_VS_LOAD_BALANCING_C(0x3f) |
-                             VIVS_VS_LOAD_BALANCING_D(0x0f);
-
+   bool result = etna_compile_check_limits(v);
    ralloc_free(c->nir);
    FREE(c);
-   return true;
+   return result;
 }
 
 void

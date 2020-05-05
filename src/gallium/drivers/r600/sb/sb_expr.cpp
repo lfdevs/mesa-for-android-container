@@ -326,7 +326,7 @@ void expr_handler::apply_alu_src_mod(const bc_alu &bc, unsigned src,
 	const bc_alu_src &s = bc.src[src];
 
 	if (s.abs)
-		v = fabs(v.f);
+		v = fabsf(v.f);
 	if (s.neg)
 		v = -v.f;
 }
@@ -424,21 +424,21 @@ bool expr_handler::fold_alu_op1(alu_node& n) {
 	apply_alu_src_mod(n.bc, 0, cv);
 
 	switch (n.bc.op) {
-	case ALU_OP1_CEIL: dv = ceil(cv.f); break;
+	case ALU_OP1_CEIL: dv = ceilf(cv.f); break;
 	case ALU_OP1_COS: dv = cos(cv.f * 2.0f * M_PI); break;
-	case ALU_OP1_EXP_IEEE: dv = exp2(cv.f); break;
-	case ALU_OP1_FLOOR: dv = floor(cv.f); break;
+	case ALU_OP1_EXP_IEEE: dv = exp2f(cv.f); break;
+	case ALU_OP1_FLOOR: dv = floorf(cv.f); break;
 	case ALU_OP1_FLT_TO_INT: dv = (int)cv.f; break; // FIXME: round modes ????
-	case ALU_OP1_FLT_TO_INT_FLOOR: dv = (int32_t)floor(cv.f); break;
-	case ALU_OP1_FLT_TO_INT_RPI: dv = (int32_t)floor(cv.f + 0.5f); break;
-	case ALU_OP1_FLT_TO_INT_TRUNC: dv = (int32_t)trunc(cv.f); break;
+	case ALU_OP1_FLT_TO_INT_FLOOR: dv = (int32_t)floorf(cv.f); break;
+	case ALU_OP1_FLT_TO_INT_RPI: dv = (int32_t)floorf(cv.f + 0.5f); break;
+	case ALU_OP1_FLT_TO_INT_TRUNC: dv = (int32_t)truncf(cv.f); break;
 	case ALU_OP1_FLT_TO_UINT: dv = (uint32_t)cv.f; break;
-	case ALU_OP1_FRACT: dv = cv.f - floor(cv.f); break;
+	case ALU_OP1_FRACT: dv = cv.f - floorf(cv.f); break;
 	case ALU_OP1_INT_TO_FLT: dv = (float)cv.i; break;
 	case ALU_OP1_LOG_CLAMPED:
 	case ALU_OP1_LOG_IEEE:
 		if (cv.f != 0.0f)
-			dv = log2(cv.f);
+			dv = log2f(cv.f);
 		else
 			// don't fold to NAN, let the GPU handle it for now
 			// (prevents degenerate LIT tests from failing)
@@ -454,7 +454,7 @@ bool expr_handler::fold_alu_op1(alu_node& n) {
 	case ALU_OP1_PRED_SET_RESTORE: dv = cv; break;
 	case ALU_OP1_RECIPSQRT_CLAMPED:
 	case ALU_OP1_RECIPSQRT_FF:
-	case ALU_OP1_RECIPSQRT_IEEE: dv = 1.0f / sqrt(cv.f); break;
+	case ALU_OP1_RECIPSQRT_IEEE: dv = 1.0f / sqrtf(cv.f); break;
 	case ALU_OP1_RECIP_CLAMPED:
 	case ALU_OP1_RECIP_FF:
 	case ALU_OP1_RECIP_IEEE: dv = 1.0f / cv.f; break;
@@ -462,8 +462,8 @@ bool expr_handler::fold_alu_op1(alu_node& n) {
 	case ALU_OP1_RECIP_UINT: dv.u = (1ull << 32) / cv.u; break;
 //	case ALU_OP1_RNDNE: dv = floor(cv.f + 0.5f); break;
 	case ALU_OP1_SIN: dv = sin(cv.f * 2.0f * M_PI); break;
-	case ALU_OP1_SQRT_IEEE: dv = sqrt(cv.f); break;
-	case ALU_OP1_TRUNC: dv = trunc(cv.f); break;
+	case ALU_OP1_SQRT_IEEE: dv = sqrtf(cv.f); break;
+	case ALU_OP1_TRUNC: dv = truncf(cv.f); break;
 
 	default:
 		return false;

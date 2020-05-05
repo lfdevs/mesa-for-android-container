@@ -277,8 +277,7 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 			A4XX_TEX_CONST_1_HEIGHT(u_minify(prsc->height0, lvl));
 		so->texconst2 =
 			A4XX_TEX_CONST_2_FETCHSIZE(fd4_pipe2fetchsize(format)) |
-			A4XX_TEX_CONST_2_PITCH(
-				util_format_get_nblocksx(format, slice->pitch) * rsc->layout.cpp);
+			A4XX_TEX_CONST_2_PITCH(slice->pitch);
 		so->offset = fd_resource_offset(rsc, lvl, cso->u.tex.first_layer);
 	}
 

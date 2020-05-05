@@ -397,6 +397,8 @@ Mesa EGL supports different sets of environment variables.  See the
     <code>GALLIUM_HUD_TOGGLE_SIGNAL</code> to <code>10</code>
     (<code>SIGUSR1</code>).
     Use <code>kill -10 &lt;pid&gt;</code> to toggle the hud as desired.</dd>
+<dt><code>GALLIUM_HUD_SCALE</code></dt>
+<dd>Scale hud by an integer factor, for high DPI displays. Default is 1.</dd>
 <dt><code>GALLIUM_HUD_DUMP_DIR</code></dt>
 <dd>specifies a directory for writing the displayed hud values into files.</dd>
 <dt><code>GALLIUM_DRIVER</code></dt>
@@ -587,8 +589,6 @@ Mesa EGL supports different sets of environment variables.  See the
    <dd>disable out-of-order rasterization</dd>
    <dt><code>noshaderballot</code></dt>
    <dd>disable shader ballot</dd>
-   <dt><code>nosisched</code></dt>
-   <dd>disable LLVM sisched experimental scheduler</dd>
    <dt><code>nothreadllvm</code></dt>
    <dd>disable LLVM threaded compilation</dd>
    <dt><code>preoptir</code></dt>
@@ -628,20 +628,18 @@ Mesa EGL supports different sets of environment variables.  See the
    <dd>enable wave32 for vertex/tess/geometry shaders (GFX10+)</dd>
    <dt><code>localbos</code></dt>
    <dd>enable local BOs</dd>
-   <dt><code>nobatchchain</code></dt>
-   <dd>disable chained submissions</dd>
    <dt><code>pswave32</code></dt>
    <dd>enable wave32 for pixel shaders (GFX10+)</dd>
    <dt><code>shader_ballot</code></dt>
    <dd>enable shader ballot</dd>
-   <dt><code>sisched</code></dt>
-   <dd>enable LLVM sisched experimental scheduler</dd>
    <dt><code>tccompatcmask</code></dt>
    <dd>enable TC-compat cmask for MSAA images</dd>
 </dl>
 </dd>
 <dt><code>RADV_SECURE_COMPILE_THREADS</code></dt>
 <dd>maximum number of secure compile threads (up to 32)</dd>
+<dt><code>RADV_TEX_ANISO</code></dt>
+<dd>force anisotropy filter (up to 16)</dd>
 <dt><code>RADV_TRACE_FILE</code></dt>
 <dd>generate cmdbuffer tracefiles when a GPU hang is detected</dd>
 </dl>
@@ -714,8 +712,6 @@ Mesa EGL supports different sets of environment variables.  See the
   <dt><code>preoptir</code></dt>
   <dd>Print the LLVM IR before initial optimizations</dd>
   <h4>Shader compilation tuning flags:</h4>
-  <dt><code>sisched</code></dt>
-  <dd>Enable LLVM SI Machine Instruction Scheduler.</dd>
   <dt><code>gisel</code></dt>
   <dd>Enable LLVM global instruction selector.</dd>
   <dt><code>w32ge</code></dt>

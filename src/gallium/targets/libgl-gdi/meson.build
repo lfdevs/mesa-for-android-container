@@ -31,7 +31,7 @@ libopengl32 = shared_library(
   ['libgl_gdi.c'],
   vs_module_defs : ogldef,
   include_directories : [
-    inc_common, inc_wgl, inc_gallium_winsys_sw, inc_gallium_drivers,
+    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_wgl, inc_gallium_winsys_sw, inc_gallium_drivers,
   ],
   link_whole : [libwgl],
   link_with : [

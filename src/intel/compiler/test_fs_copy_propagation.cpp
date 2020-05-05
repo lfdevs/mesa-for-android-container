@@ -84,14 +84,14 @@ copy_propagation(fs_visitor *v)
 
    if (print) {
       fprintf(stderr, "= Before =\n");
-      v->cfg->dump(v);
+      v->cfg->dump();
    }
 
    bool ret = v->opt_copy_propagation();
 
    if (print) {
       fprintf(stderr, "\n= After =\n");
-      v->cfg->dump(v);
+      v->cfg->dump();
    }
 
    return ret;

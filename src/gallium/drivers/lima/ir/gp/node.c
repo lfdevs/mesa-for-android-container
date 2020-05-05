@@ -413,10 +413,10 @@ void gpir_node_insert_child(gpir_node *parent, gpir_node *child,
    gpir_node_foreach_pred(parent, dep) {
       if (dep->pred == child) {
          gpir_node_replace_pred(dep, insert_child);
+         gpir_node_replace_child(parent, child, insert_child);
          break;
       }
    }
-   gpir_node_add_dep(insert_child, child, GPIR_DEP_INPUT);
 }
 
 void gpir_node_delete(gpir_node *node)

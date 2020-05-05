@@ -703,7 +703,7 @@ backend_shader::backend_shader(const struct brw_compiler *compiler,
      nir(shader),
      stage_prog_data(stage_prog_data),
      mem_ctx(mem_ctx),
-     cfg(NULL),
+     cfg(NULL), idom_analysis(this),
      stage(shader->info.stage)
 {
    debug_enabled = INTEL_DEBUG & intel_debug_flag_for_shader_stage(stage);
@@ -941,6 +941,7 @@ backend_instruction::can_do_saturate() const
    case BRW_OPCODE_ADD:
    case BRW_OPCODE_ASR:
    case BRW_OPCODE_AVG:
+   case BRW_OPCODE_CSEL:
    case BRW_OPCODE_DP2:
    case BRW_OPCODE_DP3:
    case BRW_OPCODE_DP4:
@@ -1201,13 +1202,13 @@ backend_instruction::remove(bblock_t *block)
 }
 
 void
-backend_shader::dump_instructions()
+backend_shader::dump_instructions() const
 {
    dump_instructions(NULL);
 }
 
 void
-backend_shader::dump_instructions(const char *name)
+backend_shader::dump_instructions(const char *name) const
 {
    FILE *file = stderr;
    if (name && geteuid() != 0) {
@@ -1242,7 +1243,13 @@ backend_shader::calculate_cfg()
 {
    if (this->cfg)
       return;
-   cfg = new(mem_ctx) cfg_t(&this->instructions);
+   cfg = new(mem_ctx) cfg_t(this, &this->instructions);
+}
+
+void
+backend_shader::invalidate_analysis(brw::analysis_dependency_class c)
+{
+   idom_analysis.invalidate(c);
 }
 
 extern "C" const unsigned *
@@ -1271,7 +1278,7 @@ brw_compile_tes(const struct brw_compiler *compiler,
 
    brw_compute_vue_map(devinfo, &prog_data->base.vue_map,
                        nir->info.outputs_written,
-                       nir->info.separate_shader);
+                       nir->info.separate_shader, 1);
 
    unsigned output_size_bytes = prog_data->base.vue_map.num_slots * 4 * 4;
 
@@ -1355,8 +1362,7 @@ brw_compile_tes(const struct brw_compiler *compiler,
       prog_data->base.dispatch_mode = DISPATCH_MODE_SIMD8;
 
       fs_generator g(compiler, log_data, mem_ctx,
-                     &prog_data->base.base, v.shader_stats, false,
-                     MESA_SHADER_TESS_EVAL);
+                     &prog_data->base.base, false, MESA_SHADER_TESS_EVAL);
       if (unlikely(INTEL_DEBUG & DEBUG_TES)) {
          g.enable_debug(ralloc_asprintf(mem_ctx,
                                         "%s tessellation evaluation shader %s",
@@ -1365,7 +1371,8 @@ brw_compile_tes(const struct brw_compiler *compiler,
                                         nir->info.name));
       }
 
-      g.generate_code(v.cfg, 8, stats);
+      g.generate_code(v.cfg, 8, v.shader_stats,
+                      v.performance_analysis.require(), stats);
 
       assembly = g.get_assembly();
    } else {
@@ -1381,7 +1388,9 @@ brw_compile_tes(const struct brw_compiler *compiler,
 	 v.dump_instructions();
 
       assembly = brw_vec4_generate_assembly(compiler, log_data, mem_ctx, nir,
-                                            &prog_data->base, v.cfg, stats);
+                                            &prog_data->base, v.cfg,
+                                            v.performance_analysis.require(),
+                                            stats);
    }
 
    return assembly;

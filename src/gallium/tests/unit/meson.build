@@ -23,7 +23,7 @@ foreach t : ['pipe_barrier_test', 'u_cache_test', 'u_half_test',
   exe = executable(
     t,
     '@0@.c'.format(t),
-    include_directories : inc_common,
+    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
     link_with : libgallium,
     dependencies : idep_mesautil,
     install : false,

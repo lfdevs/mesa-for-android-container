@@ -67,6 +67,8 @@ struct llvmpipe_context {
    struct lp_fragment_shader *fs;
    struct draw_vertex_shader *vs;
    const struct lp_geometry_shader *gs;
+   const struct lp_tess_ctrl_shader *tcs;
+   const struct lp_tess_eval_shader *tes;
    struct lp_compute_shader *cs;
    const struct lp_velems_state *velems;
    const struct lp_so_state *so;
@@ -96,7 +98,7 @@ struct llvmpipe_context {
 
    struct draw_so_target *so_targets[PIPE_MAX_SO_BUFFERS];
    int num_so_targets;
-   struct pipe_query_data_so_statistics so_stats;
+   struct pipe_query_data_so_statistics so_stats[PIPE_MAX_VERTEX_STREAMS];
 
    struct pipe_query_data_pipeline_statistics pipeline_statistics;
    unsigned active_statistics_queries;

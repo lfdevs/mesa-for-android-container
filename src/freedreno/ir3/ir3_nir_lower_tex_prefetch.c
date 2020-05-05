@@ -115,7 +115,7 @@ lower_tex_prefetch_block(nir_block *block)
 {
 	bool progress = false;
 
-	nir_foreach_instr_safe(instr, block) {
+	nir_foreach_instr_safe (instr, block) {
 		if (instr->type != nir_instr_type_tex)
 			continue;
 
@@ -135,11 +135,30 @@ lower_tex_prefetch_block(nir_block *block)
 				has_src(tex, nir_tex_src_sampler_offset))
 			continue;
 
+		/* Disallow indirect or large bindless handles */
+		int idx = nir_tex_instr_src_index(tex, nir_tex_src_texture_handle);
+		if (idx >= 0) {
+			nir_intrinsic_instr *bindless =
+				ir3_bindless_resource(tex->src[idx].src);
+			if (!nir_src_is_const(bindless->src[0]) ||
+				nir_src_as_uint(bindless->src[0]) >= (1 << 16))
+				continue;
+		}
+
+		idx = nir_tex_instr_src_index(tex, nir_tex_src_sampler_handle);
+		if (idx >= 0) {
+			nir_intrinsic_instr *bindless =
+				ir3_bindless_resource(tex->src[idx].src);
+			if (!nir_src_is_const(bindless->src[0]) ||
+				nir_src_as_uint(bindless->src[0]) >= (1 << 16))
+				continue;
+		}
+
 		/* only prefetch for simple 2d tex fetch case */
 		if (tex->sampler_dim != GLSL_SAMPLER_DIM_2D || tex->is_array)
 			continue;
 
-		int idx = nir_tex_instr_src_index(tex, nir_tex_src_coord);
+		idx = nir_tex_instr_src_index(tex, nir_tex_src_coord);
 		/* First source should be the sampling coordinate. */
 		nir_tex_src *coord = &tex->src[idx];
 		debug_assert(coord->src.is_ssa);
@@ -183,7 +202,7 @@ ir3_nir_lower_tex_prefetch(nir_shader *shader)
 
 	assert(shader->info.stage == MESA_SHADER_FRAGMENT);
 
-	nir_foreach_function(function, shader) {
+	nir_foreach_function (function, shader) {
 		/* Only texture sampling instructions inside the main function
 		 * are eligible for pre-dispatch.
 		 */

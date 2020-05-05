@@ -78,7 +78,7 @@ can_fast_clear_color(struct iris_context *ice,
    if (INTEL_DEBUG & DEBUG_NO_FAST_CLEAR)
       return false;
 
-   if (res->aux.usage == ISL_AUX_USAGE_NONE)
+   if (!isl_aux_usage_has_fast_clears(res->aux.usage))
       return false;
 
    /* Check for partial clear */
@@ -219,7 +219,7 @@ fast_clear_color(struct iris_context *ice,
        * is not something that should happen often, we stall on the CPU here
        * to resolve the predication, and then proceed.
        */
-      ice->vtbl.resolve_conditional_render(ice);
+      batch->screen->vtbl.resolve_conditional_render(ice);
       if (ice->state.predicate == IRIS_PREDICATE_STATE_DONT_RENDER)
          return;
 
@@ -305,7 +305,7 @@ fast_clear_color(struct iris_context *ice,
    blorp_batch_init(&ice->blorp, &blorp_batch, batch, blorp_flags);
 
    struct blorp_surf surf;
-   iris_blorp_surf_for_resource(&ice->vtbl, &batch->screen->isl_dev, &surf,
+   iris_blorp_surf_for_resource(&batch->screen->isl_dev, &surf,
                                 p_res, res->aux.usage, level, true);
 
    /* In newer gens (> 9), the hardware will do a linear -> sRGB conversion of
@@ -376,7 +376,7 @@ clear_color(struct iris_context *ice,
                                 box->z, box->depth, aux_usage);
 
    struct blorp_surf surf;
-   iris_blorp_surf_for_resource(&ice->vtbl, &batch->screen->isl_dev, &surf,
+   iris_blorp_surf_for_resource(&batch->screen->isl_dev, &surf,
                                 p_res, aux_usage, level, true);
 
    struct blorp_batch blorp_batch;
@@ -475,7 +475,7 @@ fast_clear_depth(struct iris_context *ice,
        * even more complex, so the easiest thing to do when the fast clear
        * depth is changing is to stall on the CPU and resolve the predication.
        */
-      ice->vtbl.resolve_conditional_render(ice);
+      batch->screen->vtbl.resolve_conditional_render(ice);
       if (ice->state.predicate == IRIS_PREDICATE_STATE_DONT_RENDER)
          return;
 
@@ -588,7 +588,7 @@ clear_depth_stencil(struct iris_context *ice,
 
    if (clear_depth && z_res) {
       iris_resource_prepare_depth(ice, batch, z_res, level, box->z, box->depth);
-      iris_blorp_surf_for_resource(&ice->vtbl, &batch->screen->isl_dev,
+      iris_blorp_surf_for_resource(&batch->screen->isl_dev,
                                    &z_surf, &z_res->base, z_res->aux.usage,
                                    level, true);
    }
@@ -600,7 +600,7 @@ clear_depth_stencil(struct iris_context *ice,
    if (stencil_mask) {
       iris_resource_prepare_access(ice, batch, stencil_res, level, 1, box->z,
                                    box->depth, stencil_res->aux.usage, false);
-      iris_blorp_surf_for_resource(&ice->vtbl, &batch->screen->isl_dev,
+      iris_blorp_surf_for_resource(&batch->screen->isl_dev,
                                    &stencil_surf, &stencil_res->base,
                                    stencil_res->aux.usage, level, true);
    }
@@ -636,6 +636,7 @@ clear_depth_stencil(struct iris_context *ice,
 static void
 iris_clear(struct pipe_context *ctx,
            unsigned buffers,
+           const struct pipe_scissor_state *scissor_state,
            const union pipe_color_union *p_color,
            double depth,
            unsigned stencil)
@@ -645,15 +646,23 @@ iris_clear(struct pipe_context *ctx,
 
    assert(buffers != 0);
 
+   struct pipe_box box = {
+      .width = cso_fb->width,
+      .height = cso_fb->height,
+   };
+
+   if (scissor_state) {
+      box.x = scissor_state->minx;
+      box.y = scissor_state->miny;
+      box.width = MIN2(box.width, scissor_state->maxx - scissor_state->minx);
+      box.height = MIN2(box.height, scissor_state->maxy - scissor_state->miny);
+   }
+
    if (buffers & PIPE_CLEAR_DEPTHSTENCIL) {
       struct pipe_surface *psurf = cso_fb->zsbuf;
-      struct pipe_box box = {
-         .width = cso_fb->width,
-         .height = cso_fb->height,
-         .depth = psurf->u.tex.last_layer - psurf->u.tex.first_layer + 1,
-         .z = psurf->u.tex.first_layer,
-      };
 
+      box.depth = psurf->u.tex.last_layer - psurf->u.tex.first_layer + 1;
+      box.z = psurf->u.tex.first_layer,
       clear_depth_stencil(ice, psurf->texture, psurf->u.tex.level, &box, true,
                           buffers & PIPE_CLEAR_DEPTH,
                           buffers & PIPE_CLEAR_STENCIL,
@@ -668,12 +677,8 @@ iris_clear(struct pipe_context *ctx,
          if (buffers & (PIPE_CLEAR_COLOR0 << i)) {
             struct pipe_surface *psurf = cso_fb->cbufs[i];
             struct iris_surface *isurf = (void *) psurf;
-            struct pipe_box box = {
-               .width = cso_fb->width,
-               .height = cso_fb->height,
-               .depth = psurf->u.tex.last_layer - psurf->u.tex.first_layer + 1,
-               .z = psurf->u.tex.first_layer,
-            };
+            box.depth = psurf->u.tex.last_layer - psurf->u.tex.first_layer + 1,
+            box.z = psurf->u.tex.first_layer,
 
             clear_color(ice, psurf->texture, psurf->u.tex.level, &box,
                         true, isurf->view.format, isurf->view.swizzle,
@@ -707,10 +712,10 @@ iris_clear_texture(struct pipe_context *ctx,
       uint8_t stencil = 0;
 
       if (fmt_desc->unpack_z_float)
-         fmt_desc->unpack_z_float(&depth, 0, data, 0, 1, 1);
+         util_format_unpack_z_float(p_res->format, &depth, data, 1);
 
       if (fmt_desc->unpack_s_8uint)
-         fmt_desc->unpack_s_8uint(&stencil, 0, data, 0, 1, 1);
+         util_format_unpack_s_8uint(p_res->format, &stencil, data, 1);
 
       clear_depth_stencil(ice, p_res, level, box, true, true, true,
                           depth, stencil);

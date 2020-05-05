@@ -1841,6 +1841,7 @@ vec4_visitor::vec4_visitor(const struct brw_compiler *compiler,
      prog_data(prog_data),
      fail_msg(NULL),
      first_non_payload_grf(0),
+     live_analysis(this), performance_analysis(this),
      need_all_constants_in_pull_buffer(false),
      no_spills(no_spills),
      shader_time_index(shader_time_index),
@@ -1853,10 +1854,6 @@ vec4_visitor::vec4_visitor(const struct brw_compiler *compiler,
    memset(this->output_reg_annotation, 0, sizeof(this->output_reg_annotation));
 
    memset(this->output_num_components, 0, sizeof(this->output_num_components));
-
-   this->virtual_grf_start = NULL;
-   this->virtual_grf_end = NULL;
-   this->live_intervals = NULL;
 
    this->max_grf = devinfo->gen >= 7 ? GEN7_MRF_HACK_START : BRW_MAX_GRF;
 

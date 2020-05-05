@@ -69,7 +69,7 @@ foreach v : ['80', '90', '100', '110', '120']
   iris_gen_libs += static_library(
     'iris_gen@0@'.format(v),
     ['iris_blorp.c', 'iris_query.c', 'iris_state.c', gen_xml_pack],
-    include_directories : [inc_common, inc_intel],
+    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_intel],
     c_args : [
       c_vis_args, no_override_init_args, c_sse2_args,
       '-DGEN_VERSIONx10=@0@'.format(v),

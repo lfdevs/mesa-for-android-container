@@ -339,7 +339,7 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
 }
 
 static void
-etna_clear_blt(struct pipe_context *pctx, unsigned buffers,
+etna_clear_blt(struct pipe_context *pctx, unsigned buffers, const struct pipe_scissor_state *scissor_state,
            const union pipe_color_union *color, double depth, unsigned stencil)
 {
    struct etna_context *ctx = etna_context(pctx);
@@ -531,46 +531,26 @@ etna_try_blt_blit(struct pipe_context *pctx,
    return true;
 }
 
-static void
+static bool
 etna_blit_blt(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
 {
-   struct etna_context *ctx = etna_context(pctx);
-   struct pipe_blit_info info = *blit_info;
-
-   if (info.src.resource->nr_samples > 1 &&
-       info.dst.resource->nr_samples <= 1 &&
-       !util_format_is_depth_or_stencil(info.src.resource->format) &&
-       !util_format_is_pure_integer(info.src.resource->format)) {
+   if (blit_info->src.resource->nr_samples > 1 &&
+       blit_info->dst.resource->nr_samples <= 1 &&
+       !util_format_is_depth_or_stencil(blit_info->src.resource->format) &&
+       !util_format_is_pure_integer(blit_info->src.resource->format)) {
       DBG("color resolve unimplemented");
-      return;
+      return false;
    }
 
-   if (etna_try_blt_blit(pctx, blit_info))
-      return;
-
-   if (util_try_blit_via_copy_region(pctx, blit_info))
-      return;
-
-   if (info.mask & PIPE_MASK_S) {
-      DBG("cannot blit stencil, skipping");
-      info.mask &= ~PIPE_MASK_S;
-   }
-
-   if (!util_blitter_is_blit_supported(ctx->blitter, &info)) {
-      DBG("blit unsupported %s -> %s",
-          util_format_short_name(info.src.resource->format),
-          util_format_short_name(info.dst.resource->format));
-      return;
-   }
-
-   etna_blit_save_state(ctx);
-   util_blitter_blit(ctx->blitter, &info);
+   return etna_try_blt_blit(pctx, blit_info);
 }
 
 void
 etna_clear_blit_blt_init(struct pipe_context *pctx)
 {
+   struct etna_context *ctx = etna_context(pctx);
+
    DBG("etnaviv: Using BLT blit engine");
    pctx->clear = etna_clear_blt;
-   pctx->blit = etna_blit_blt;
+   ctx->blit = etna_blit_blt;
 }

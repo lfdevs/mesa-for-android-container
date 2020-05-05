@@ -62,7 +62,7 @@ foreach g : [['40', isl_gen4_files], ['50', []], ['60', isl_gen6_files],
   isl_gen_libs += static_library(
     'isl_gen@0@'.format(_gen),
     [g[1], isl_gen_files, gen_xml_pack],
-    include_directories : [inc_common, inc_intel],
+    include_directories : [inc_include, inc_src, inc_gallium, inc_intel],
     c_args : [c_vis_args, no_override_init_args,
               '-DGEN_VERSIONx10=@0@'.format(_gen)],
   )
@@ -87,7 +87,7 @@ isl_tiled_memcpy = static_library(
   'isl_tiled_memcpy',
   [files_isl_tiled_memcpy],
   include_directories : [
-    inc_common, inc_intel, inc_include,
+    inc_include, inc_src, inc_mesa, inc_gallium, inc_intel,
   ],
   c_args : [c_vis_args, no_override_init_args, '-msse2'],
   extra_files : ['isl_tiled_memcpy.c']
@@ -98,7 +98,7 @@ if with_sse41
     'isl_tiled_memcpy_sse41',
     [files_isl_tiled_memcpy_sse41],
     include_directories : [
-      inc_common, inc_intel, inc_include,
+      inc_include, inc_src, inc_mesa, inc_gallium, inc_intel,
     ],
     link_args : ['-Wl,--exclude-libs=ALL'],
     c_args : [c_vis_args, no_override_init_args, '-msse2', sse41_args],
@@ -111,6 +111,7 @@ endif
 libisl_files = files(
   'isl.c',
   'isl.h',
+  'isl_aux_info.c',
   'isl_drm.c',
   'isl_genX_priv.h',
   'isl_format.c',
@@ -121,7 +122,7 @@ libisl_files = files(
 libisl = static_library(
   'isl',
   [libisl_files, isl_format_layout_c, genX_bits_h],
-  include_directories : [inc_common, inc_intel, inc_include],
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
   link_with : [isl_gen_libs, isl_tiled_memcpy, isl_tiled_memcpy_sse41],
   c_args : [c_vis_args, no_override_init_args],
 )
@@ -133,8 +134,23 @@ if with_tests
       'isl_surf_get_image_offset_test',
       'tests/isl_surf_get_image_offset_test.c',
       dependencies : [dep_m, idep_mesautil],
-      include_directories : [inc_common, inc_intel],
+      include_directories : [inc_include, inc_src, inc_gallium, inc_intel],
       link_with : [libisl, libintel_dev],
+    ),
+    suite : ['intel'],
+  )
+  test(
+    'isl_aux_info',
+    executable(
+      'isl_aux_info_test',
+      [
+        'tests/isl_aux_info_test.cpp',
+        'isl_aux_info.c',
+      ],
+      dependencies : [dep_m, idep_gtest, idep_mesautil],
+      include_directories : [inc_include, inc_src, inc_gallium, inc_intel],
+      c_args : '-DIN_UNIT_TEST',
+      cpp_args : '-DIN_UNIT_TEST',
     ),
     suite : ['intel'],
   )

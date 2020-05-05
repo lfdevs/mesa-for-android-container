@@ -388,10 +388,7 @@ opt_split_alu_of_phi(nir_builder *b, nir_loop *loop)
        * to loop unrolling not recognizing loop termintators, and type
        * conversions also lead to regressions.
        */
-      if (alu->op == nir_op_vec2 ||
-          alu->op == nir_op_vec3 ||
-          alu->op == nir_op_vec4 ||
-          alu->op == nir_op_mov ||
+      if (nir_op_is_vec(alu->op) ||
           alu_instr_is_comparison(alu) ||
           alu_instr_is_type_conversion(alu))
          continue;
@@ -1001,7 +998,7 @@ opt_if_loop_terminator(nir_if *nif)
    if (is_block_empty(first_continue_from_blk))
       return false;
 
-   if (!nir_is_trivial_loop_if(nif, break_blk))
+   if (nir_block_ends_in_jump(continue_from_blk))
       return false;
 
    /* Even though this if statement has a jump on one side, we may still have

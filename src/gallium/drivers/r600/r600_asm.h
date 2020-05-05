@@ -214,6 +214,8 @@ struct r600_bytecode_cf {
 	struct r600_bytecode_alu		*prev_bs_head;
 	struct r600_bytecode_alu		*prev2_bs_head;
 	unsigned isa[2];
+	unsigned nlds_read;
+	unsigned nqueue_read;
 };
 
 #define FC_NONE				0

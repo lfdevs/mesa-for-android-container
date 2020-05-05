@@ -65,7 +65,25 @@ gen_get_urb_config(const struct gen_device_info *devinfo,
                    unsigned entries[4], unsigned start[4],
                    enum gen_urb_deref_block_size *deref_block_size)
 {
-   const unsigned urb_size_kB = gen_get_l3_config_urb_size(devinfo, l3_cfg);
+   unsigned urb_size_kB = gen_get_l3_config_urb_size(devinfo, l3_cfg);
+
+   /* RCU_MODE register for Gen12+ in BSpec says:
+    *
+    *    "HW reserves 4KB of URB space per bank for Compute Engine out of the
+    *    total storage available in L3. SW must consider that 4KB of storage
+    *    per bank will be reduced from what is programmed for the URB space
+    *    in L3 for Render Engine executed workloads.
+    *
+    *    Example: When URB space programmed is 64KB (per bank) for Render
+    *    Engine, the actual URB space available for operation is only 60KB
+    *    (per bank). Similarly when URB space programmed is 128KB (per bank)
+    *    for render engine, the actual URB space available for operation is
+    *    only 124KB (per bank). More detailed descripton available in "L3
+    *    Cache" section of the B-Spec."
+    */
+   if (devinfo->gen >= 12)
+      urb_size_kB -= 4 * devinfo->l3_banks;
+
    const unsigned push_constant_kB =
       (devinfo->gen >= 8 || (devinfo->is_haswell && devinfo->gt == 3)) ? 32 : 16;
 

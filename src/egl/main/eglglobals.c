@@ -62,16 +62,27 @@ struct _egl_global _eglGlobal =
       _eglFiniDisplay,
    },
 
+#if USE_LIBGLVND
    .ClientOnlyExtensionString =
+#else
+   .ClientExtensionString =
+#endif
    "EGL_EXT_client_extensions"
    " EGL_EXT_device_base"
    " EGL_EXT_device_enumeration"
    " EGL_EXT_device_query"
    " EGL_EXT_platform_base"
    " EGL_KHR_client_get_all_proc_addresses"
-   " EGL_KHR_debug",
+   " EGL_KHR_debug"
 
+#if USE_LIBGLVND
+   ,
    .PlatformExtensionString =
+#else
+   " "
+#endif
+
+   "EGL_EXT_platform_device"
 #ifdef HAVE_WAYLAND_PLATFORM
    " EGL_EXT_platform_wayland"
 #endif
@@ -84,10 +95,7 @@ struct _egl_global _eglGlobal =
 #ifdef HAVE_SURFACELESS_PLATFORM
    " EGL_MESA_platform_surfaceless"
 #endif
-   " EGL_EXT_platform_device"
    "",
-
-   .ClientExtensionString = NULL,
 
    .debugCallback = NULL,
    .debugTypesEnabled = _EGL_DEBUG_BIT_CRITICAL | _EGL_DEBUG_BIT_ERROR,
@@ -121,40 +129,6 @@ _eglAddAtExitCall(void (*func)(void))
 
       mtx_unlock(_eglGlobal.Mutex);
    }
-}
-
-const char *
-_eglGetClientExtensionString(void)
-{
-   const char *ret;
-
-   mtx_lock(_eglGlobal.Mutex);
-
-   if (_eglGlobal.ClientExtensionString == NULL) {
-      size_t clientLen = strlen(_eglGlobal.ClientOnlyExtensionString);
-      size_t platformLen = strlen(_eglGlobal.PlatformExtensionString);
-
-      _eglGlobal.ClientExtensionString = (char *) malloc(clientLen + platformLen + 1);
-      if (_eglGlobal.ClientExtensionString != NULL) {
-         char *ptr = _eglGlobal.ClientExtensionString;
-
-         memcpy(ptr, _eglGlobal.ClientOnlyExtensionString, clientLen);
-         ptr += clientLen;
-
-         if (platformLen > 0) {
-            // Note that if PlatformExtensionString is not empty, then it will
-            // already have a leading space.
-            assert(_eglGlobal.PlatformExtensionString[0] == ' ');
-            memcpy(ptr, _eglGlobal.PlatformExtensionString, platformLen);
-            ptr += platformLen;
-         }
-         *ptr = '\0';
-      }
-   }
-   ret = _eglGlobal.ClientExtensionString;
-
-   mtx_unlock(_eglGlobal.Mutex);
-   return ret;
 }
 
 EGLBoolean

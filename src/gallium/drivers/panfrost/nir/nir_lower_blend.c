@@ -32,6 +32,7 @@
 
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_builder.h"
+#include "compiler/nir/nir_format_convert.h"
 #include "nir_lower_blend.h"
 
 /* Given processed factors, combine them per a blend function */
@@ -156,6 +157,82 @@ nir_color_mask(
    return nir_vec(b, masked, 4);
 }
 
+static nir_ssa_def *
+nir_logicop_func(
+   nir_builder *b,
+   unsigned func,
+   nir_ssa_def *src, nir_ssa_def *dst)
+{
+   switch (func) {
+   case PIPE_LOGICOP_CLEAR:
+      return nir_imm_ivec4(b, 0, 0, 0, 0);
+   case PIPE_LOGICOP_NOR:
+      return nir_inot(b, nir_ior(b, src, dst));
+   case PIPE_LOGICOP_AND_INVERTED:
+      return nir_iand(b, nir_inot(b, src), dst);
+   case PIPE_LOGICOP_COPY_INVERTED:
+      return nir_inot(b, src);
+   case PIPE_LOGICOP_AND_REVERSE:
+      return nir_iand(b, src, nir_inot(b, dst));
+   case PIPE_LOGICOP_INVERT:
+      return nir_inot(b, dst);
+   case PIPE_LOGICOP_XOR:
+      return nir_ixor(b, src, dst);
+   case PIPE_LOGICOP_NAND:
+      return nir_inot(b, nir_iand(b, src, dst));
+   case PIPE_LOGICOP_AND:
+      return nir_iand(b, src, dst);
+   case PIPE_LOGICOP_EQUIV:
+      return nir_inot(b, nir_ixor(b, src, dst));
+   case PIPE_LOGICOP_NOOP:
+      return dst;
+   case PIPE_LOGICOP_OR_INVERTED:
+      return nir_ior(b, nir_inot(b, src), dst);
+   case PIPE_LOGICOP_COPY:
+      return src;
+   case PIPE_LOGICOP_OR_REVERSE:
+      return nir_ior(b, src, nir_inot(b, dst));
+   case PIPE_LOGICOP_OR:
+      return nir_ior(b, src, dst);
+   case PIPE_LOGICOP_SET:
+      return nir_imm_ivec4(b, ~0, ~0, ~0, ~0);
+   }
+
+   unreachable("Invalid logciop function");
+}
+
+static nir_ssa_def *
+nir_blend_logicop(
+   nir_builder *b,
+   nir_lower_blend_options options,
+   nir_ssa_def *src, nir_ssa_def *dst)
+{
+   const struct util_format_description *format_desc =
+      util_format_description(options.format);
+
+   assert(src->num_components <= 4);
+   assert(dst->num_components <= 4);
+
+   unsigned bits[4];
+   for (int i = 0; i < 4; ++i)
+       bits[i] = format_desc->channel[i].size;
+
+   src = nir_format_float_to_unorm(b, src, bits);
+   dst = nir_format_float_to_unorm(b, dst, bits);
+
+   nir_ssa_def *out = nir_logicop_func(b, options.logicop_func, src, dst);
+
+   if (bits[0] < 32) {
+       nir_const_value mask[4];
+       for (int i = 0; i < 4; ++i)
+           mask[i] = nir_const_value_for_int((1u << bits[i]) - 1, 32);
+
+       out = nir_iand(b, out, nir_build_imm(b, 4, 32, mask));
+   }
+
+   return nir_format_unorm_to_float(b, out, bits);
+}
+
 /* Given a blend state, the source color, and the destination color,
  * return the blended color
  */
@@ -166,6 +243,9 @@ nir_blend(
    nir_lower_blend_options options,
    nir_ssa_def *src, nir_ssa_def *dst)
 {
+   if (options.logicop_enable)
+      return nir_blend_logicop(b, options, src, dst);
+
    /* Grab the blend constant ahead of time */
    nir_ssa_def *bconst = nir_load_blend_const_color_rgba(b);
 

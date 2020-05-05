@@ -22,7 +22,7 @@ libswpipe = shared_library(
   'swpipe',
   files('SoftwareRenderer.cpp', 'GalliumContext.cpp'),
   include_directories : [
-    inc_common, inc_util, inc_haikugl, inc_gallium_drivers, inc_gallium_winsys,
+    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_util, inc_haikugl, inc_gallium_drivers, inc_gallium_winsys,
     include_directories('../../state_trackers/hgl'),
     include_directories('/boot/system/develop/headers/private')
   ],

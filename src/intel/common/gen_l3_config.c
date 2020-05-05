@@ -245,7 +245,7 @@ gen_diff_l3_weights(struct gen_l3_weights w0, struct gen_l3_weights w1)
       float dw = 0;
 
       for (unsigned i = 0; i < GEN_NUM_L3P; i++)
-         dw += fabs(w0.w[i] - w1.w[i]);
+         dw += fabsf(w0.w[i] - w1.w[i]);
 
       return dw;
    }
@@ -321,7 +321,7 @@ static unsigned
 get_l3_way_size(const struct gen_device_info *devinfo)
 {
    const unsigned way_size_per_bank =
-      (devinfo->gen >= 9 && devinfo->l3_banks == 1) || devinfo->gen == 11 ?
+      (devinfo->gen >= 9 && devinfo->l3_banks == 1) || devinfo->gen >= 11 ?
       4 : 2;
 
    assert(devinfo->l3_banks);

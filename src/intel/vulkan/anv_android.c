@@ -308,7 +308,7 @@ anv_import_ahw_memory(VkDevice device_h,
    VkResult result = anv_device_import_bo(device, dma_buf, 0,
                                           0 /* client_address */,
                                           &mem->bo);
-   assert(VK_SUCCESS);
+   assert(result == VK_SUCCESS);
 
    /* "If the vkAllocateMemory command succeeds, the implementation must
     * acquire a reference to the imported hardware buffer, which it must

@@ -34,7 +34,7 @@
 #include <inttypes.h>  /* for PRId64 macro */
 
 #include "main/errors.h"
-#include "main/imports.h"
+
 #include "main/mtypes.h"
 #include "main/arrayobj.h"
 #include "main/bufferobj.h"
@@ -494,6 +494,8 @@ st_access_flags_to_transfer_flags(GLbitfield access, bool wholeBuffer)
 
    if (access & MESA_MAP_NOWAIT_BIT)
       flags |= PIPE_TRANSFER_DONTBLOCK;
+   if (access & MESA_MAP_THREAD_SAFE_BIT)
+      flags |= PIPE_TRANSFER_THREAD_SAFE;
 
    return flags;
 }

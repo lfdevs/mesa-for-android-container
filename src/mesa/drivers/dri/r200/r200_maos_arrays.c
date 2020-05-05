@@ -34,7 +34,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "main/glheader.h"
 #include "main/mtypes.h"
-#include "main/imports.h"
+
 #include "main/macros.h"
 #include "main/state.h"
 
@@ -71,7 +71,7 @@ do {						\
 #endif
 
 /* Emit any changed arrays to new GART memory, re-emit a packet to
- * update the arrays.  
+ * update the arrays.
  */
 void r200EmitArrays( struct gl_context *ctx, GLubyte *vimap_rev )
 {

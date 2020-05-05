@@ -91,7 +91,9 @@ static const uint32_t isl_to_gen_aux_mode[] = {
    [ISL_AUX_USAGE_NONE] = AUX_NONE,
    [ISL_AUX_USAGE_MCS] = AUX_CCS_E,
    [ISL_AUX_USAGE_CCS_E] = AUX_CCS_E,
+   [ISL_AUX_USAGE_HIZ_CCS_WT] = AUX_CCS_E,
    [ISL_AUX_USAGE_MCS_CCS] = AUX_MCS_LCE,
+   [ISL_AUX_USAGE_STC_CCS] = AUX_CCS_E,
 };
 #elif GEN_GEN >= 9
 static const uint32_t isl_to_gen_aux_mode[] = {
@@ -282,8 +284,36 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
    s.SurfaceFormat = info->view->format;
 
 #if GEN_GEN >= 12
-   s.DepthStencilResource =
-      isl_surf_usage_is_depth_or_stencil(info->surf->usage);
+   /* The BSpec description of this field says:
+    *
+    *    "This bit field, when set, indicates if the resource is created as
+    *    Depth/Stencil resource."
+    *
+    *    "SW must set this bit for any resource that was created with
+    *    Depth/Stencil resource flag. Setting this bit allows HW to properly
+    *    interpret the data-layout for various cases. For any resource that's
+    *    created without Depth/Stencil resource flag, it must be reset."
+    *
+    * Even though the docs for this bit seem to imply that it's required for
+    * anything which might have been used for depth/stencil, empirical
+    * evidence suggests that it only affects CCS compression usage.  There are
+    * a few things which back this up:
+    *
+    *  1. The docs are also pretty clear that this bit was added as part
+    *     of enabling Gen12 depth/stencil lossless compression.
+    *
+    *  2. The only new difference between depth/stencil and color images on
+    *     Gen12 (where the bit was added) is how they treat CCS compression.
+    *     All other differences such as alignment requirements and MSAA layout
+    *     are already covered by other bits.
+    *
+    * Under these assumptions, it makes sense for ISL to model this bit as
+    * being an extension of AuxiliarySurfaceMode where STC_CCS and HIZ_CCS_WT
+    * are indicated by AuxiliarySurfaceMode == CCS_E and DepthStencilResource
+    * == true.
+    */
+   s.DepthStencilResource = info->aux_usage == ISL_AUX_USAGE_HIZ_CCS_WT ||
+                            info->aux_usage == ISL_AUX_USAGE_STC_CCS;
 #endif
 
 #if GEN_GEN <= 5
@@ -559,7 +589,9 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
       if (GEN_GEN >= 12) {
          assert(info->aux_usage == ISL_AUX_USAGE_MCS ||
                 info->aux_usage == ISL_AUX_USAGE_CCS_E ||
-                info->aux_usage == ISL_AUX_USAGE_MCS_CCS);
+                info->aux_usage == ISL_AUX_USAGE_HIZ_CCS_WT ||
+                info->aux_usage == ISL_AUX_USAGE_MCS_CCS ||
+                info->aux_usage == ISL_AUX_USAGE_STC_CCS);
       } else if (GEN_GEN >= 9) {
          assert(info->aux_usage == ISL_AUX_USAGE_HIZ ||
                 info->aux_usage == ISL_AUX_USAGE_MCS ||
@@ -574,23 +606,44 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
                 info->aux_usage == ISL_AUX_USAGE_CCS_D);
       }
 
-      if (GEN_GEN >= 12) {
-         /* We don't need an auxiliary surface for CCS on gen12+ */
-         assert (info->aux_usage == ISL_AUX_USAGE_CCS_E ||
-                 info->aux_usage == ISL_AUX_USAGE_MC || info->aux_surf);
-      } else {
-         /* We must have an auxiliary surface */
-         assert(info->aux_surf);
-      }
-
       /* The docs don't appear to say anything whatsoever about compression
        * and the data port.  Testing seems to indicate that the data port
        * completely ignores the AuxiliarySurfaceMode field.
+       *
+       * On gen12 HDC supports compression.
        */
-      assert(!(info->view->usage & ISL_SURF_USAGE_STORAGE_BIT));
+      if (GEN_GEN < 12)
+         assert(!(info->view->usage & ISL_SURF_USAGE_STORAGE_BIT));
 
-      if (info->aux_usage == ISL_AUX_USAGE_HIZ) {
-         /* The number of samples must be 1 */
+      if (isl_surf_usage_is_depth(info->surf->usage))
+         assert(isl_aux_usage_has_hiz(info->aux_usage));
+
+      if (isl_surf_usage_is_stencil(info->surf->usage))
+         assert(info->aux_usage == ISL_AUX_USAGE_STC_CCS);
+
+      if (isl_aux_usage_has_hiz(info->aux_usage)) {
+         /* For Gen8-10, there are some restrictions around sampling from HiZ.
+          * The Skylake PRM docs for RENDER_SURFACE_STATE::AuxiliarySurfaceMode
+          * say:
+          *
+          *    "If this field is set to AUX_HIZ, Number of Multisamples must
+          *    be MULTISAMPLECOUNT_1, and Surface Type cannot be SURFTYPE_3D."
+          *
+          * On Gen12, the docs are a bit less obvious but the restriction is
+          * the same.  The limitation isn't called out explicitly but the docs
+          * for the CCS_E value of RENDER_SURFACE_STATE::AuxiliarySurfaceMode
+          * say:
+          *
+          *    "If Number of multisamples > 1, programming this value means
+          *    MSAA compression is enabled for that surface. Auxillary surface
+          *    is MSC with tile y."
+          *
+          * Since this interpretation ignores whether the surface is
+          * depth/stencil or not and since multisampled depth buffers use
+          * ISL_MSAA_LAYOUT_INTERLEAVED which is incompatible with MCS
+          * compression, this means that we can't even specify MSAA depth CCS
+          * in RENDER_SURFACE_STATE::AuxiliarySurfaceMode.
+          */
          assert(info->surf->samples == 1);
 
          /* The dimension must not be 3D */
@@ -615,13 +668,18 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 #endif
    }
 
-   /* The auxiliary buffer info is filled when it's useable by the HW. On
-    * gen12 and above, CCS is controlled by the aux table and not the
-    * auxiliary surface information in SURFACE_STATE.
+   /* The auxiliary buffer info is filled when it's useable by the HW.
+    *
+    * Starting with Gen12, the only form of compression that can be used
+    * with RENDER_SURFACE_STATE which requires an aux surface is MCS.
+    * HiZ still requires a surface but the HiZ surface can only be
+    * accessed through 3DSTATE_HIER_DEPTH_BUFFER.
+    *
+    * On all earlier hardware, an aux surface is required for all forms
+    * of compression.
     */
-   if (info->aux_usage != ISL_AUX_USAGE_NONE &&
-       ((info->aux_usage != ISL_AUX_USAGE_MC &&
-         info->aux_usage != ISL_AUX_USAGE_CCS_E) || GEN_GEN <= 11)) {
+   if ((GEN_GEN < 12 && info->aux_usage != ISL_AUX_USAGE_NONE) ||
+       (GEN_GEN >= 12 && isl_aux_usage_has_mcs(info->aux_usage))) {
 
       assert(info->aux_surf != NULL);
 

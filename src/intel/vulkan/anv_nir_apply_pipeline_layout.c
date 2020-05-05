@@ -534,6 +534,7 @@ build_ssbo_descriptor_load(const VkDescriptorType desc_type,
       nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_ubo);
    desc_load->src[0] = nir_src_for_ssa(desc_buffer_index);
    desc_load->src[1] = nir_src_for_ssa(desc_offset);
+   nir_intrinsic_set_align(desc_load, 8, 0);
    desc_load->num_components = 4;
    nir_ssa_dest_init(&desc_load->instr, &desc_load->dest, 4, 32, NULL);
    nir_builder_instr_insert(b, &desc_load->instr);
@@ -714,6 +715,7 @@ build_descriptor_load(nir_deref_instr *deref, unsigned offset,
       nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_ubo);
    desc_load->src[0] = nir_src_for_ssa(desc_buffer_index);
    desc_load->src[1] = nir_src_for_ssa(desc_offset);
+   nir_intrinsic_set_align(desc_load, 8, offset % 8);
    desc_load->num_components = num_components;
    nir_ssa_dest_init(&desc_load->instr, &desc_load->dest,
                      num_components, bit_size, NULL);
@@ -798,6 +800,7 @@ lower_load_constant(nir_intrinsic_instr *intrin,
    load_ubo->num_components = intrin->num_components;
    load_ubo->src[0] = nir_src_for_ssa(index);
    load_ubo->src[1] = nir_src_for_ssa(offset);
+   nir_intrinsic_set_align(load_ubo, intrin->dest.ssa.bit_size / 8, 0);
    nir_ssa_dest_init(&load_ubo->instr, &load_ubo->dest,
                      intrin->dest.ssa.num_components,
                      intrin->dest.ssa.bit_size, NULL);
@@ -1021,11 +1024,6 @@ lower_tex(nir_tex_instr *tex, struct apply_pipeline_layout_state *state)
 
    lower_tex_deref(tex, nir_tex_src_sampler_deref,
                    &tex->sampler_index, plane, state);
-
-   /* The backend only ever uses this to mark used surfaces.  We don't care
-    * about that little optimization so it just needs to be non-zero.
-    */
-   tex->texture_array_size = 1;
 }
 
 static void

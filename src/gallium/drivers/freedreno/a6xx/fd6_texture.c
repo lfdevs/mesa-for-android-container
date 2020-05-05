@@ -266,8 +266,7 @@ fd6_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 			A6XX_TEX_CONST_1_HEIGHT(u_minify(prsc->height0, lvl));
 		so->texconst2 =
 			A6XX_TEX_CONST_2_FETCHSIZE(fd6_pipe2fetchsize(format)) |
-			A6XX_TEX_CONST_2_PITCH(
-				util_format_get_nblocksx(format, slice->pitch) * rsc->layout.cpp);
+			A6XX_TEX_CONST_2_PITCH(slice->pitch);
 		so->offset = fd_resource_offset(rsc, lvl, cso->u.tex.first_layer);
 		so->ubwc_offset = fd_resource_ubwc_offset(rsc, lvl, cso->u.tex.first_layer);
 		so->ubwc_enabled = fd_resource_ubwc_enabled(rsc, lvl);
@@ -276,11 +275,6 @@ fd6_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	so->texconst0 |= fd6_tex_const_0(prsc, lvl, cso->format,
 				cso->swizzle_r, cso->swizzle_g,
 				cso->swizzle_b, cso->swizzle_a);
-
-	if (so->ubwc_enabled) {
-		so->texconst9 |= A6XX_TEX_CONST_9_FLAG_BUFFER_ARRAY_PITCH(rsc->layout.ubwc_size);
-		so->texconst10 |= A6XX_TEX_CONST_10_FLAG_BUFFER_PITCH(rsc->layout.ubwc_slices[lvl].pitch);
-	}
 
 	so->texconst2 |= A6XX_TEX_CONST_2_TYPE(fd6_tex_type(cso->target));
 
@@ -320,7 +314,17 @@ fd6_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	}
 
 	if (so->ubwc_enabled) {
+		struct fdl_slice *ubwc_base_slice = &rsc->layout.ubwc_slices[lvl];
+
+		uint32_t block_width, block_height;
+		fdl6_get_ubwc_blockwidth(&rsc->layout, &block_width, &block_height);
+
 		so->texconst3 |= A6XX_TEX_CONST_3_FLAG | A6XX_TEX_CONST_3_TILE_ALL;
+		so->texconst9 |= A6XX_TEX_CONST_9_FLAG_BUFFER_ARRAY_PITCH(rsc->layout.ubwc_layer_size >> 2);
+		so->texconst10 |=
+			A6XX_TEX_CONST_10_FLAG_BUFFER_PITCH(ubwc_base_slice->pitch) |
+			A6XX_TEX_CONST_10_FLAG_BUFFER_LOGW(util_logbase2_ceil(DIV_ROUND_UP(u_minify(prsc->width0, lvl), block_width))) |
+			A6XX_TEX_CONST_10_FLAG_BUFFER_LOGH(util_logbase2_ceil(DIV_ROUND_UP(u_minify(prsc->height0, lvl), block_height)));
 	}
 
 	return &so->base;
@@ -437,10 +441,31 @@ fd6_texture_state_destroy(struct fd6_texture_state *state)
 	free(state);
 }
 
+static void
+fd6_rebind_resource(struct fd_context *ctx, struct fd_resource *rsc)
+{
+	if (!(rsc->dirty & FD_DIRTY_TEX))
+		return;
+
+	struct fd6_context *fd6_ctx = fd6_context(ctx);
+
+	hash_table_foreach (fd6_ctx->tex_cache, entry) {
+		struct fd6_texture_state *state = entry->data;
+
+		for (unsigned i = 0; i < ARRAY_SIZE(state->key.view); i++) {
+			if (rsc->seqno == state->key.view[i].rsc_seqno) {
+				fd6_texture_state_destroy(entry->data);
+				_mesa_hash_table_remove(fd6_ctx->tex_cache, entry);
+			}
+		}
+	}
+}
+
 void
 fd6_texture_init(struct pipe_context *pctx)
 {
-	struct fd6_context *fd6_ctx = fd6_context(fd_context(pctx));
+	struct fd_context *ctx = fd_context(pctx);
+	struct fd6_context *fd6_ctx = fd6_context(ctx);
 
 	pctx->create_sampler_state = fd6_sampler_state_create;
 	pctx->delete_sampler_state = fd6_sampler_state_delete;
@@ -449,6 +474,8 @@ fd6_texture_init(struct pipe_context *pctx)
 	pctx->create_sampler_view = fd6_sampler_view_create;
 	pctx->sampler_view_destroy = fd6_sampler_view_destroy;
 	pctx->set_sampler_views = fd_set_sampler_views;
+
+	ctx->rebind_resource = fd6_rebind_resource;
 
 	fd6_ctx->tex_cache = _mesa_hash_table_create(NULL, key_hash, key_equals);
 }

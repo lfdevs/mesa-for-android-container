@@ -175,7 +175,7 @@ void ProcessStoreTileBE(DRAW_CONTEXT*               pDC,
             int32_t destX = KNOB_MACROTILE_X_DIM * x;
             int32_t destY = KNOB_MACROTILE_Y_DIM * y;
 
-            pContext->pfnStoreTile(GetPrivateState(pDC),
+            pContext->pfnStoreTile(pDC,
                                    hWorkerPrivateData,
                                    srcFormat,
                                    attachment,

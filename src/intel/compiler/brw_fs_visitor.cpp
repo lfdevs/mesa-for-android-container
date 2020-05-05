@@ -122,6 +122,7 @@ fs_visitor::emit_dummy_fs()
    wm_prog_data->num_varying_inputs = devinfo->gen < 6 ? 1 : 0;
    memset(wm_prog_data->urb_setup, -1,
           sizeof(wm_prog_data->urb_setup[0]) * VARYING_SLOT_MAX);
+   brw_compute_urb_setup_index(wm_prog_data);
 
    /* We don't have any uniforms. */
    stage_prog_data->nr_params = 0;
@@ -178,10 +179,10 @@ fs_visitor::emit_interpolation_setup_gen4()
 
    if (devinfo->has_pln) {
       for (unsigned i = 0; i < dispatch_width / 8; i++) {
-         abld.half(i).ADD(half(offset(delta_xy, abld, 0), i),
-                          half(this->pixel_x, i), xstart);
-         abld.half(i).ADD(half(offset(delta_xy, abld, 1), i),
-                          half(this->pixel_y, i), ystart);
+         abld.quarter(i).ADD(quarter(offset(delta_xy, abld, 0), i),
+                             quarter(this->pixel_x, i), xstart);
+         abld.quarter(i).ADD(quarter(offset(delta_xy, abld, 1), i),
+                             quarter(this->pixel_y, i), ystart);
       }
    } else {
       abld.ADD(offset(delta_xy, abld, 0), this->pixel_x, xstart);
@@ -359,9 +360,10 @@ fs_visitor::emit_interpolation_setup_gen6()
          for (unsigned c = 0; c < 2; c++) {
             for (unsigned q = 0; q < dispatch_width / 8; q++) {
                set_predicate(BRW_PREDICATE_NORMAL,
-                  bld.half(q).SEL(half(offset(delta_xy[i], bld, c), q),
-                                  half(offset(centroid_delta_xy, bld, c), q),
-                                  half(offset(pixel_delta_xy, bld, c), q)));
+                  bld.quarter(q).SEL(
+                     quarter(offset(delta_xy[i], bld, c), q),
+                     quarter(offset(centroid_delta_xy, bld, c), q),
+                     quarter(offset(pixel_delta_xy, bld, c), q)));
             }
          }
       }
@@ -455,7 +457,7 @@ fs_visitor::emit_single_fb_write(const fs_builder &bld,
 
    if (prog_data->uses_kill) {
       write->predicate = BRW_PREDICATE_NORMAL;
-      write->flag_subreg = 1;
+      write->flag_subreg = sample_mask_flag_subreg(this);
    }
 
    return write;
@@ -493,7 +495,7 @@ fs_visitor::emit_fb_writes()
     * so we compute if we need replicate alpha and emit alpha to coverage
     * workaround here.
     */
-   prog_data->replicate_alpha = key->alpha_test_replicate_alpha ||
+   const bool replicate_alpha = key->alpha_test_replicate_alpha ||
       (key->nr_color_regions > 1 && key->alpha_to_coverage &&
        (sample_mask.file == BAD_FILE || devinfo->gen == 6));
 
@@ -506,7 +508,7 @@ fs_visitor::emit_fb_writes()
          ralloc_asprintf(this->mem_ctx, "FB write target %d", target));
 
       fs_reg src0_alpha;
-      if (devinfo->gen >= 6 && prog_data->replicate_alpha && target != 0)
+      if (devinfo->gen >= 6 && replicate_alpha && target != 0)
          src0_alpha = offset(outputs[0], bld, 3);
 
       inst = emit_single_fb_write(abld, this->outputs[target],
@@ -537,6 +539,19 @@ fs_visitor::emit_fb_writes()
 
    inst->last_rt = true;
    inst->eot = true;
+
+   if (devinfo->gen >= 11 && devinfo->gen <= 12 &&
+       prog_data->dual_src_blend) {
+      /* The dual-source RT write messages fail to release the thread
+       * dependency on ICL and TGL with SIMD32 dispatch, leading to hangs.
+       *
+       * XXX - Emit an extra single-source NULL RT-write marked LastRT in
+       *       order to release the thread dependency without disabling
+       *       SIMD32.
+       */
+      limit_dispatch_width(16, "Dual source blending unsupported "
+                           "in SIMD32 mode.\n");
+   }
 }
 
 void
@@ -685,8 +700,18 @@ fs_visitor::emit_urb_writes(const fs_reg &gs_vertex_count)
                sources[length++] = reg;
             }
          } else {
-            for (unsigned i = 0; i < 4; i++)
-               sources[length++] = offset(this->outputs[varying], bld, i);
+            int slot_offset = 0;
+
+            /* When using Primitive Replication, there may be multiple slots
+             * assigned to POS.
+             */
+            if (varying == VARYING_SLOT_POS)
+               slot_offset = slot - vue_map->varying_to_slot[VARYING_SLOT_POS];
+
+            for (unsigned i = 0; i < 4; i++) {
+               sources[length++] = offset(this->outputs[varying], bld,
+                                          i + (slot_offset * 4));
+            }
          }
          break;
       }
@@ -874,6 +899,8 @@ fs_visitor::fs_visitor(const struct brw_compiler *compiler, void *log_data,
    : backend_shader(compiler, log_data, mem_ctx, shader, prog_data),
      key(key), gs_compile(NULL), prog_data(prog_data),
      input_vue_map(input_vue_map),
+     live_analysis(this), regpressure_analysis(this),
+     performance_analysis(this),
      dispatch_width(dispatch_width),
      shader_time_index(shader_time_index),
      bld(fs_builder(this, dispatch_width).at_end())
@@ -891,6 +918,8 @@ fs_visitor::fs_visitor(const struct brw_compiler *compiler, void *log_data,
                     &prog_data->base.base),
      key(&c->key.base), gs_compile(c),
      prog_data(&prog_data->base.base),
+     live_analysis(this), regpressure_analysis(this),
+     performance_analysis(this),
      dispatch_width(8),
      shader_time_index(shader_time_index),
      bld(fs_builder(this, dispatch_width).at_end())
@@ -920,11 +949,6 @@ fs_visitor::init()
    this->runtime_check_aads_emit = false;
    this->first_non_payload_grf = 0;
    this->max_grf = devinfo->gen >= 7 ? GEN7_MRF_HACK_START : BRW_MAX_GRF;
-
-   this->virtual_grf_start = NULL;
-   this->virtual_grf_end = NULL;
-   this->live_intervals = NULL;
-   this->regs_live_at_ip = NULL;
 
    this->uniforms = 0;
    this->last_scratch = 0;

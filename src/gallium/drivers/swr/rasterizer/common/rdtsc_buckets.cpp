@@ -103,9 +103,10 @@ void BucketManager::PrintBucket(
     BUCKET_DESC& desc = mBuckets[bucket.id];
 
     // construct hierarchy visualization
+    std::string str = arrows[level];
+    str += desc.name;
     char hier[80];
-    strcpy(hier, arrows[level]);
-    strcat(hier, desc.name.c_str());
+    strcpy_s(hier, sizeof(hier), str.c_str());
 
     // print out
     fprintf(f,
@@ -156,6 +157,7 @@ void BucketManager::PrintReport(const std::string& filename)
 {
     {
         FILE* f = fopen(filename.c_str(), "w");
+        assert(f);
 
         mThreadMutex.lock();
         for (const BUCKET_THREAD& thread : mThreads)

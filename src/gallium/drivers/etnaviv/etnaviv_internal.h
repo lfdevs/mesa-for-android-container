@@ -34,7 +34,7 @@
 #include "drm/etnaviv_drmif.h"
 
 #define ETNA_NUM_INPUTS (16)
-#define ETNA_NUM_VARYINGS 8
+#define ETNA_NUM_VARYINGS 16
 #define ETNA_NUM_LOD (14)
 #define ETNA_NUM_LAYERS (6)
 #define ETNA_MAX_UNIFORMS (256)
@@ -157,16 +157,6 @@ struct compiled_stencil_ref {
    uint32_t PE_STENCIL_CONFIG_EXT[2];
 };
 
-/* Compiled pipe_scissor_state */
-struct compiled_scissor_state {
-   uint32_t SE_SCISSOR_LEFT;
-   uint32_t SE_SCISSOR_TOP;
-   uint32_t SE_SCISSOR_RIGHT;
-   uint32_t SE_SCISSOR_BOTTOM;
-   uint32_t SE_CLIP_RIGHT;
-   uint32_t SE_CLIP_BOTTOM;
-};
-
 /* Compiled pipe_viewport_state */
 struct compiled_viewport_state {
    uint32_t PA_VIEWPORT_SCALE_X;
@@ -179,8 +169,6 @@ struct compiled_viewport_state {
    uint32_t SE_SCISSOR_TOP;
    uint32_t SE_SCISSOR_RIGHT;
    uint32_t SE_SCISSOR_BOTTOM;
-   uint32_t SE_CLIP_RIGHT;
-   uint32_t SE_CLIP_BOTTOM;
    uint32_t PE_DEPTH_NEAR;
    uint32_t PE_DEPTH_FAR;
 };
@@ -199,12 +187,6 @@ struct compiled_framebuffer_state {
    struct etna_reloc PE_PIPE_COLOR_ADDR[ETNA_MAX_PIXELPIPES];
    uint32_t PE_COLOR_STRIDE;
    uint32_t PE_MEM_CONFIG;
-   uint32_t SE_SCISSOR_LEFT;
-   uint32_t SE_SCISSOR_TOP;
-   uint32_t SE_SCISSOR_RIGHT;
-   uint32_t SE_SCISSOR_BOTTOM;
-   uint32_t SE_CLIP_RIGHT;
-   uint32_t SE_CLIP_BOTTOM;
    uint32_t RA_MULTISAMPLE_UNK00E04;
    uint32_t RA_MULTISAMPLE_UNK00E10[VIVS_RA_MULTISAMPLE_UNK00E10__LEN];
    uint32_t RA_CENTROID_TABLE[VIVS_RA_CENTROID_TABLE__LEN];
@@ -263,7 +245,7 @@ struct compiled_shader_state {
    uint32_t PS_START_PC;
    uint32_t PE_DEPTH_CONFIG;
    uint32_t GL_VARYING_TOTAL_COMPONENTS;
-   uint32_t GL_VARYING_NUM_COMPONENTS;
+   uint32_t GL_VARYING_NUM_COMPONENTS[2];
    uint32_t GL_VARYING_COMPONENT_USE[2];
    uint32_t GL_HALTI5_SH_SPECIALS;
    uint32_t FE_HALTI5_ID_CONFIG;

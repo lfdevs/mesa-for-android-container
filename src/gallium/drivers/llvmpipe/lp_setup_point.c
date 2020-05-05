@@ -337,9 +337,12 @@ try_setup_point( struct lp_setup_context *setup,
    /* x/y positions in fixed point */
    const struct lp_setup_variant_key *key = &setup->setup.variant->key;
    const int sizeAttr = setup->psize_slot;
-   const float size
+   float size
       = (setup->point_size_per_vertex && sizeAttr > 0) ? v0[sizeAttr][0]
       : setup->point_size;
+
+   if (size > LP_MAX_POINT_WIDTH)
+      size = LP_MAX_POINT_WIDTH;
 
    /* Yes this is necessary to accurately calculate bounding boxes
     * with the two fill-conventions we support.  GL (normally) ends

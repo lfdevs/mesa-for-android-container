@@ -182,7 +182,7 @@ Status XvMCCreateSurface(Display *dpy, XvMCContext *context, XvMCSurface *surfac
       context_priv->decoder->entrypoint,
       PIPE_VIDEO_CAP_PREFERED_FORMAT
    );
-   tmpl.chroma_format = context_priv->decoder->chroma_format;
+   assert(pipe_format_to_chroma_format(tmpl.buffer_format) == context_priv->decoder->chroma_format);
    tmpl.width = context_priv->decoder->width;
    tmpl.height = context_priv->decoder->height;
    tmpl.interlaced = pipe->screen->get_video_param

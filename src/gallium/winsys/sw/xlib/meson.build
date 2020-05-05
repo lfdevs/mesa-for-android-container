@@ -22,6 +22,6 @@ libws_xlib = static_library(
   'ws_xlib',
   files('xlib_sw_winsys.c'),
   c_args : c_vis_args,
-  include_directories : inc_common,
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
   dependencies : [dep_x11, dep_xext, dep_xcb],
 )

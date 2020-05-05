@@ -135,7 +135,6 @@ process_glsl_ir(struct brw_context *brw,
    do_vec_index_to_cond_assign(shader->ir);
    lower_vector_insert(shader->ir, true);
    lower_offset_arrays(shader->ir);
-   lower_noise(shader->ir);
    lower_quadop_vector(shader->ir, false);
 
    validate_ir_tree(shader->ir);

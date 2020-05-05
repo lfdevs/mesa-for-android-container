@@ -34,7 +34,7 @@
 #include "util/u_sampler.h"
 #include "util/u_draw_quad.h"
 
-#define floatsEqual(x, y) (fabs(x - y) <= 0.00001f * MIN2(fabs(x), fabs(y)))
+#define floatsEqual(x, y) (fabsf(x - y) <= 0.00001f * MIN2(fabsf(x), fabsf(y)))
 #define floatIsZero(x) (floatsEqual((x) + 1, 1))
 
 #define NUM_COMPONENTS 4
@@ -88,7 +88,11 @@ renderer_draw(struct xa_context *r)
 
     r->pipe->set_scissor_states(r->pipe, 0, 1, &r->scissor);
 
-    cso_set_vertex_elements(r->cso, r->attrs_per_vertex, r->velems);
+    struct cso_velems_state velems;
+    velems.count = r->attrs_per_vertex;
+    memcpy(velems.velems, r->velems, sizeof(r->velems[0]) * velems.count);
+
+    cso_set_vertex_elements(r->cso, &velems);
     util_draw_user_vertex_buffer(r->cso, r->buffer, PIPE_PRIM_QUADS,
                                  num_verts,	/* verts */
                                  r->attrs_per_vertex);	/* attribs/vert */
@@ -517,7 +521,11 @@ renderer_draw_yuv(struct xa_context *r,
 
    r->pipe->set_scissor_states(r->pipe, 0, 1, &r->scissor);
 
-   cso_set_vertex_elements(r->cso, num_attribs, r->velems);
+   struct cso_velems_state velems;
+   velems.count = num_attribs;
+   memcpy(velems.velems, r->velems, sizeof(r->velems[0]) * velems.count);
+
+   cso_set_vertex_elements(r->cso, &velems);
    util_draw_user_vertex_buffer(r->cso, r->buffer, PIPE_PRIM_QUADS,
                                 4,	/* verts */
                                 num_attribs);	/* attribs/vert */

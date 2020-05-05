@@ -92,7 +92,7 @@ lp_build_print_value(struct gallivm_state *gallivm,
    type_ref = LLVMTypeOf(value);
    type_kind = LLVMGetTypeKind(type_ref);
 
-   if (type_kind == LLVMVectorTypeKind) {
+   if (type_kind == LLVMFixedVectorTypeKind) {
       length = LLVMGetVectorSize(type_ref);
 
       type_ref = LLVMGetElementType(type_ref);

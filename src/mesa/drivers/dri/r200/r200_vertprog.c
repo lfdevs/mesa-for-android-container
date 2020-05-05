@@ -1183,18 +1183,18 @@ void r200SetupVertexProg( struct gl_context *ctx ) {
 
 
 static struct gl_program *
-r200NewProgram(struct gl_context *ctx, GLenum target, GLuint id,
+r200NewProgram(struct gl_context *ctx, gl_shader_stage stage, GLuint id,
                bool is_arb_asm)
 {
-   switch(target){
-   case GL_VERTEX_PROGRAM_ARB: {
+   switch(stage){
+   case MESA_SHADER_VERTEX: {
       struct r200_vertex_program *vp = rzalloc(NULL,
                                                struct r200_vertex_program);
-      return _mesa_init_gl_program(&vp->mesa_program, target, id, is_arb_asm);
+      return _mesa_init_gl_program(&vp->mesa_program, stage, id, is_arb_asm);
    }
-   case GL_FRAGMENT_PROGRAM_ARB: {
+   case MESA_SHADER_FRAGMENT: {
       struct gl_program *prog = rzalloc(NULL, struct gl_program);
-      return _mesa_init_gl_program(prog, target, id, is_arb_asm);
+      return _mesa_init_gl_program(prog, stage, id, is_arb_asm);
    }
    default:
       _mesa_problem(ctx, "Bad target in r200NewProgram");

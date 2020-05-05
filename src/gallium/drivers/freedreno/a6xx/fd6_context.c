@@ -50,10 +50,10 @@ fd6_context_destroy(struct pipe_context *pctx)
 
 	fd_context_destroy(pctx);
 
-	if (fd6_ctx->vsc_data)
-		fd_bo_del(fd6_ctx->vsc_data);
-	if (fd6_ctx->vsc_data2)
-		fd_bo_del(fd6_ctx->vsc_data2);
+	if (fd6_ctx->vsc_draw_strm)
+		fd_bo_del(fd6_ctx->vsc_draw_strm);
+	if (fd6_ctx->vsc_prim_strm)
+		fd_bo_del(fd6_ctx->vsc_prim_strm);
 	fd_bo_del(fd6_ctx->control_mem);
 
 	fd_context_cleanup_common_vbos(&fd6_ctx->base);
@@ -111,23 +111,27 @@ PC_UNKNOWN_9805:
   - 0x1 -> 0
  */
 		fd6_ctx->magic.RB_UNKNOWN_8E04_blit = 0x00100000;
-		fd6_ctx->magic.RB_CCU_CNTL_gmem     = 0x3e400004;
-		fd6_ctx->magic.RB_CCU_CNTL_bypass   = 0x08000000;
+		fd6_ctx->magic.RB_CCU_CNTL_gmem = A6XX_RB_CCU_CNTL_OFFSET(0x7c000) |
+										  A6XX_RB_CCU_CNTL_GMEM |
+										  A6XX_RB_CCU_CNTL_UNK2;
+		fd6_ctx->magic.RB_CCU_CNTL_bypass = A6XX_RB_CCU_CNTL_OFFSET(0x10000);
 		fd6_ctx->magic.PC_UNKNOWN_9805 = 0x0;
 		fd6_ctx->magic.SP_UNKNOWN_A0F8 = 0x0;
 		break;
 	case 630:
 		fd6_ctx->magic.RB_UNKNOWN_8E04_blit = 0x01000000;
-		// NOTE: newer blob using 0x3c400004, need to revisit:
-		fd6_ctx->magic.RB_CCU_CNTL_gmem     = 0x7c400004;
-		fd6_ctx->magic.RB_CCU_CNTL_bypass   = 0x10000000;
+		fd6_ctx->magic.RB_CCU_CNTL_gmem = A6XX_RB_CCU_CNTL_OFFSET(0xf8000) |
+										  A6XX_RB_CCU_CNTL_GMEM |
+										  A6XX_RB_CCU_CNTL_UNK2;
+		fd6_ctx->magic.RB_CCU_CNTL_bypass = A6XX_RB_CCU_CNTL_OFFSET(0x20000);
 		fd6_ctx->magic.PC_UNKNOWN_9805 = 0x1;
 		fd6_ctx->magic.SP_UNKNOWN_A0F8 = 0x1;
 		break;
 	case 640:
 		fd6_ctx->magic.RB_UNKNOWN_8E04_blit = 0x00100000;
-		fd6_ctx->magic.RB_CCU_CNTL_gmem     = 0x7c400000;
-		fd6_ctx->magic.RB_CCU_CNTL_bypass   = 0x10000000;
+		fd6_ctx->magic.RB_CCU_CNTL_gmem = A6XX_RB_CCU_CNTL_OFFSET(0xf8000) |
+										  A6XX_RB_CCU_CNTL_GMEM;
+		fd6_ctx->magic.RB_CCU_CNTL_bypass = A6XX_RB_CCU_CNTL_OFFSET(0x20000);
 		fd6_ctx->magic.PC_UNKNOWN_9805 = 0x1;
 		fd6_ctx->magic.SP_UNKNOWN_A0F8 = 0x1;
 		break;
@@ -152,6 +156,7 @@ PC_UNKNOWN_9805:
 	fd6_texture_init(pctx);
 	fd6_prog_init(pctx);
 	fd6_emit_init(pctx);
+	fd6_query_context_init(pctx);
 
 	pctx = fd_context_init(&fd6_ctx->base, pscreen, primtypes, priv, flags);
 	if (!pctx)
@@ -171,15 +176,14 @@ PC_UNKNOWN_9805:
 	/* initial sizes for VSC buffers (or rather the per-pipe sizes
 	 * which is used to derive entire buffer size:
 	 */
-	fd6_ctx->vsc_data_pitch = 0x440;
-	fd6_ctx->vsc_data2_pitch = 0x1040;
+	fd6_ctx->vsc_draw_strm_pitch = 0x440;
+	fd6_ctx->vsc_prim_strm_pitch = 0x1040;
 
 	fd6_ctx->control_mem = fd_bo_new(screen->dev, 0x1000,
 			DRM_FREEDRENO_GEM_TYPE_KMEM, "control");
 
 	fd_context_setup_common_vbos(&fd6_ctx->base);
 
-	fd6_query_context_init(pctx);
 	fd6_blitter_init(pctx);
 
 	fd6_ctx->border_color_uploader = u_upload_create(pctx, 4096, 0,

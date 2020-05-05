@@ -385,9 +385,7 @@ Status XvMCClearSubpicture(Display *dpy, XvMCSubpicture *subpicture, short x, sh
       return XvMCBadSubpicture;
 
    /* Convert color to float */
-   util_format_read_4f(PIPE_FORMAT_B8G8R8A8_UNORM,
-                       uc.f, 1, &color, 4,
-                       0, 0, 1, 1);
+   util_format_unpack_rgba(PIPE_FORMAT_B8G8R8A8_UNORM, uc.f, &color, 1);
 
    subpicture_priv = subpicture->privData;
    context_priv = subpicture_priv->context->privData;

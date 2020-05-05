@@ -118,6 +118,8 @@ static void schedule_insert_ready_list(struct list_head *ready_list,
             (insert_node->rsched.reg_pressure == node->rsched.reg_pressure &&
              (insert_node->rsched.est >= node->rsched.est))))) {
          insert_pos = &node->list;
+         if (node == insert_node)
+            return;
          break;
       }
    }

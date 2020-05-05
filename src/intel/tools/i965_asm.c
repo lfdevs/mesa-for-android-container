@@ -56,6 +56,14 @@ print_help(const char *progname, FILE *file)
            progname);
 }
 
+static uint32_t
+get_dword(const brw_inst *inst, int idx)
+{
+   uint32_t dword;
+   memcpy(&dword, (char *)inst + 4 * idx, sizeof(dword));
+   return dword;
+}
+
 static void
 print_instruction(FILE *output, bool compact, const brw_inst *instruction)
 {
@@ -73,11 +81,11 @@ print_instruction(FILE *output, bool compact, const brw_inst *instruction)
       break;
    }
    case OPT_OUTPUT_C_LITERAL: {
-      fprintf(output, "\t0x%02x,", ((unsigned char *)instruction)[0]);
+      fprintf(output, "\t0x%08x,", get_dword(instruction, 0));
 
-      for (unsigned i = 1; i < byte_limit; i++) {
-         fprintf(output, " 0x%02x,", ((unsigned char *)instruction)[i]);
-      }
+      for (unsigned i = 1; i < byte_limit / 4; i++)
+         fprintf(output, " 0x%08x,", get_dword(instruction, i));
+
       break;
    }
    case OPT_OUTPUT_BIN:
@@ -231,7 +239,7 @@ int main(int argc, char **argv)
    }
 
    if (output_type == OPT_OUTPUT_C_LITERAL)
-      fprintf(output, "static const char gen_eu_bytes[] = {\n");
+      fprintf(output, "{\n");
 
    brw_validate_instructions(p->devinfo, p->store, 0,
                              p->next_insn_offset, disasm_info);

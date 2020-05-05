@@ -35,7 +35,7 @@ struct etna_query;
 
 struct etna_query_funcs {
    void (*destroy_query)(struct etna_context *ctx, struct etna_query *q);
-   bool (*begin_query)(struct etna_context *ctx, struct etna_query *q);
+   void (*begin_query)(struct etna_context *ctx, struct etna_query *q);
    void (*end_query)(struct etna_context *ctx, struct etna_query *q);
    bool (*get_query_result)(struct etna_context *ctx, struct etna_query *q,
                             bool wait, union pipe_query_result *result);
@@ -43,7 +43,6 @@ struct etna_query_funcs {
 
 struct etna_query {
    const struct etna_query_funcs *funcs;
-   bool active;
    unsigned type;
 };
 

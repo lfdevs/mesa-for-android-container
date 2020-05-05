@@ -265,7 +265,7 @@ fd3_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	/* when emitted, A3XX_TEX_CONST_2_INDX() must be OR'd in: */
 	struct fdl_slice *slice = fd_resource_slice(rsc, lvl);
 	so->texconst2 =
-			A3XX_TEX_CONST_2_PITCH(fd3_pipe2nblocksx(cso->format, slice->pitch) * rsc->layout.cpp);
+			A3XX_TEX_CONST_2_PITCH(slice->pitch);
 	switch (prsc->target) {
 	case PIPE_TEXTURE_1D_ARRAY:
 	case PIPE_TEXTURE_2D_ARRAY:

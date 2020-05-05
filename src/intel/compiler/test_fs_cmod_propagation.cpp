@@ -94,14 +94,14 @@ cmod_propagation(fs_visitor *v)
 
    if (print) {
       fprintf(stderr, "= Before =\n");
-      v->cfg->dump(v);
+      v->cfg->dump();
    }
 
    bool ret = v->opt_cmod_propagation();
 
    if (print) {
       fprintf(stderr, "\n= After =\n");
-      v->cfg->dump(v);
+      v->cfg->dump();
    }
 
    return ret;
@@ -644,6 +644,281 @@ TEST_F(cmod_propagation_test, andnz_non_one)
    EXPECT_EQ(BRW_CONDITIONAL_L, instruction(block0, 0)->conditional_mod);
    EXPECT_EQ(BRW_OPCODE_AND, instruction(block0, 1)->opcode);
    EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 1)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, cmp_cmpnz)
+{
+   const fs_builder &bld = v->bld;
+
+   fs_reg dst0 = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg zero(brw_imm_f(0));
+
+   bld.CMP(dst0, src0, zero, BRW_CONDITIONAL_NZ);
+   bld.CMP(bld.null_reg_f(), dst0, zero, BRW_CONDITIONAL_NZ);
+
+   /* = Before =
+    * 0: cmp.nz.f0.0(8) vgrf0:F, vgrf1:F, 0f
+    * 1: cmp.nz.f0.0(8) null:F, vgrf0:F, 0f
+    *
+    * = After =
+    * 0: cmp.nz.f0.0(8) vgrf0:F, vgrf1:F, 0f
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_TRUE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(0, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 0)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, cmp_cmpg)
+{
+   const fs_builder &bld = v->bld;
+
+   fs_reg dst0 = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg zero(brw_imm_f(0));
+
+   bld.CMP(dst0, src0, zero, BRW_CONDITIONAL_NZ);
+   bld.CMP(bld.null_reg_f(), dst0, zero, BRW_CONDITIONAL_G);
+
+   /* = Before =
+    * 0: cmp.nz.f0.0(8) vgrf0:F, vgrf1:F, 0f
+    * 1: cmp.g.f0.0(8) null:F, vgrf0:F, 0f
+    *
+    * = After =
+    * (no changes)
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_FALSE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 0)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_G, instruction(block0, 1)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, plnnz_cmpnz)
+{
+   const fs_builder &bld = v->bld;
+
+   fs_reg dst0 = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg zero(brw_imm_f(0));
+
+   set_condmod(BRW_CONDITIONAL_NZ, bld.PLN(dst0, src0, zero));
+   bld.CMP(bld.null_reg_f(), dst0, zero, BRW_CONDITIONAL_NZ);
+
+   /* = Before =
+    * 0: pln.nz.f0.0(8) vgrf0:F, vgrf1:F, 0f
+    * 1: cmp.nz.f0.0(8) null:F, vgrf0:F, 0f
+    *
+    * = After =
+    * 0: pln.nz.f0.0(8) vgrf0:F, vgrf1:F, 0f
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_TRUE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(0, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_PLN, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 0)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, plnnz_cmpz)
+{
+   const fs_builder &bld = v->bld;
+
+   fs_reg dst0 = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg zero(brw_imm_f(0));
+
+   set_condmod(BRW_CONDITIONAL_NZ, bld.PLN(dst0, src0, zero));
+   bld.CMP(bld.null_reg_f(), dst0, zero, BRW_CONDITIONAL_Z);
+
+   /* = Before =
+    * 0: pln.nz.f0.0(8) vgrf0:F, vgrf1:F, 0f
+    * 1: cmp.z.f0.0(8) null:F, vgrf0:F, 0f
+    *
+    * = After =
+    * 0: pln.z.f0.0(8) vgrf0:F, vgrf1:F, 0f
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_TRUE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(0, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_PLN, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_Z, instruction(block0, 0)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, plnnz_sel_cmpz)
+{
+   const fs_builder &bld = v->bld;
+
+   fs_reg dst0 = v->vgrf(glsl_type::float_type);
+   fs_reg dst1 = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg zero(brw_imm_f(0));
+
+   set_condmod(BRW_CONDITIONAL_NZ, bld.PLN(dst0, src0, zero));
+   set_predicate(BRW_PREDICATE_NORMAL, bld.SEL(dst1, src0, zero));
+   bld.CMP(bld.null_reg_f(), dst0, zero, BRW_CONDITIONAL_Z);
+
+   /* = Before =
+    * 0: pln.nz.f0.0(8) vgrf0:F, vgrf2:F, 0f
+    * 1: (+f0.0) sel(8) vgrf1:F, vgrf2:F, 0f
+    * 2: cmp.z.f0.0(8) null:F, vgrf0:F, 0f
+    *
+    * = After =
+    * (no changes)
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_FALSE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(2, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_PLN, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 0)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_SEL, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_PREDICATE_NORMAL, instruction(block0, 1)->predicate);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 2)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_Z, instruction(block0, 2)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, cmp_cmpg_D)
+{
+   const fs_builder &bld = v->bld;
+
+   fs_reg dst0 = v->vgrf(glsl_type::int_type);
+   fs_reg src0 = v->vgrf(glsl_type::int_type);
+   fs_reg zero(brw_imm_d(0));
+   fs_reg one(brw_imm_d(1));
+
+   bld.CMP(dst0, src0, zero, BRW_CONDITIONAL_NZ);
+   bld.CMP(bld.null_reg_d(), dst0, zero, BRW_CONDITIONAL_G);
+
+   /* = Before =
+    * 0: cmp.nz.f0.0(8) vgrf0:D, vgrf1:D, 0d
+    * 1: cmp.g.f0.0(8) null:D, vgrf0:D, 0d
+    *
+    * = After =
+    * (no changes)
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_FALSE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 0)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_G, instruction(block0, 1)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, cmp_cmpg_UD)
+{
+   const fs_builder &bld = v->bld;
+
+   fs_reg dst0 = v->vgrf(glsl_type::uint_type);
+   fs_reg src0 = v->vgrf(glsl_type::uint_type);
+   fs_reg zero(brw_imm_ud(0));
+
+   bld.CMP(dst0, src0, zero, BRW_CONDITIONAL_NZ);
+   bld.CMP(bld.null_reg_ud(), dst0, zero, BRW_CONDITIONAL_G);
+
+   /* = Before =
+    * 0: cmp.nz.f0.0(8) vgrf0:UD, vgrf1:UD, 0u
+    * 1: cmp.g.f0.0(8) null:UD, vgrf0:UD, 0u
+    *
+    * = After =
+    * 0: cmp.nz.f0.0(8) vgrf0:UD, vgrf1:UD, 0u
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_TRUE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(0, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 0)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, cmp_cmpl_D)
+{
+   const fs_builder &bld = v->bld;
+
+   fs_reg dst0 = v->vgrf(glsl_type::int_type);
+   fs_reg src0 = v->vgrf(glsl_type::int_type);
+   fs_reg zero(brw_imm_d(0));
+
+   bld.CMP(dst0, src0, zero, BRW_CONDITIONAL_NZ);
+   bld.CMP(bld.null_reg_d(), dst0, zero, BRW_CONDITIONAL_L);
+
+   /* = Before =
+    * 0: cmp.nz.f0.0(8) vgrf0:D, vgrf1:D, 0d
+    * 1: cmp.l.f0.0(8) null:D, vgrf0:D, 0d
+    *
+    * = After =
+    * 0: cmp.nz.f0.0(8) vgrf0:D, vgrf1:D, 0d
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_TRUE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(0, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 0)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, cmp_cmpl_UD)
+{
+   const fs_builder &bld = v->bld;
+
+   fs_reg dst0 = v->vgrf(glsl_type::uint_type);
+   fs_reg src0 = v->vgrf(glsl_type::uint_type);
+   fs_reg zero(brw_imm_ud(0));
+
+   bld.CMP(dst0, src0, zero, BRW_CONDITIONAL_NZ);
+   bld.CMP(bld.null_reg_ud(), dst0, zero, BRW_CONDITIONAL_L);
+
+   /* = Before =
+    * 0: cmp.nz.f0.0(8) vgrf0:UD, vgrf1:UD, 0u
+    * 1: cmp.l.f0.0(8) null:UD, vgrf0:UD, 0u
+    *
+    * = After =
+    * (no changes)
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_FALSE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 0)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_L, instruction(block0, 1)->conditional_mod);
 }
 
 TEST_F(cmod_propagation_test, andz_one)

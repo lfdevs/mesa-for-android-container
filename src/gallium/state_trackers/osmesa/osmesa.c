@@ -697,7 +697,7 @@ OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist)
    attribs.options.force_glsl_version = 0;
 
    osmesa_init_st_visual(&attribs.visual,
-                         PIPE_FORMAT_R8G8B8A8_UNORM,
+                         PIPE_FORMAT_NONE,
                          osmesa->depth_stencil_format,
                          osmesa->accum_format);
 

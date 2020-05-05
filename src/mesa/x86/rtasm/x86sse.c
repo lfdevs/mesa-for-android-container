@@ -2,8 +2,9 @@
 #if defined(__i386__) || defined(__386__)
 
 #include <stdio.h>
+#include <string.h>
+#include <assert.h>
 
-#include "main/imports.h"
 #include "main/execmem.h"
 #include "x86sse.h"
 
@@ -89,18 +90,18 @@ static void emit_3ub( struct x86_function *p, unsigned char b0, unsigned char b1
 /* Build a modRM byte + possible displacement.  No treatment of SIB
  * indexing.  BZZT - no way to encode an absolute address.
  */
-static void emit_modrm( struct x86_function *p, 
-			struct x86_reg reg, 
+static void emit_modrm( struct x86_function *p,
+			struct x86_reg reg,
 			struct x86_reg regmem )
 {
    unsigned char val = 0;
-   
+
    assert(reg.mod == mod_REG);
-   
+
    val |= regmem.mod << 6;     	/* mod field */
    val |= reg.idx << 3;		/* reg field */
    val |= regmem.idx;		/* r/m field */
-   
+
    emit_1ub(p, val);
 
    /* Oh-oh we've stumbled into the SIB thing.
@@ -141,11 +142,11 @@ static void emit_modrm_noreg( struct x86_function *p,
  * the arguments presented.
  */
 static void emit_op_modrm( struct x86_function *p,
-			   unsigned char op_dst_is_reg, 
+			   unsigned char op_dst_is_reg,
 			   unsigned char op_dst_is_mem,
 			   struct x86_reg dst,
 			   struct x86_reg src )
-{  
+{
    switch (dst.mod) {
    case mod_REG:
       emit_1ub(p, op_dst_is_reg);
@@ -232,7 +233,7 @@ void x86_jcc( struct x86_function *p,
 	      unsigned char *label )
 {
    int offset = label - (x86_get_label(p) + 2);
-   
+
    if (offset <= 127 && offset >= -128) {
       emit_1ub(p, 0x70 + cc);
       emit_1b(p, (char) offset);
@@ -616,7 +617,7 @@ void sse_cvtps2pi( struct x86_function *p,
 		   struct x86_reg dst,
 		   struct x86_reg src )
 {
-   assert(dst.file == file_MMX && 
+   assert(dst.file == file_MMX &&
 	  (src.file == file_XMM || src.mod != mod_REG));
 
    p->need_emms = 1;
@@ -632,21 +633,21 @@ void sse_cvtps2pi( struct x86_function *p,
 void sse_shufps( struct x86_function *p,
 		 struct x86_reg dest,
 		 struct x86_reg arg0,
-		 unsigned char shuf) 
+		 unsigned char shuf)
 {
    emit_2ub(p, X86_TWOB, 0xC6);
    emit_modrm(p, dest, arg0);
-   emit_1ub(p, shuf); 
+   emit_1ub(p, shuf);
 }
 
 void sse_cmpps( struct x86_function *p,
 		struct x86_reg dest,
 		struct x86_reg arg0,
-		unsigned char cc) 
+		unsigned char cc)
 {
    emit_2ub(p, X86_TWOB, 0xC2);
    emit_modrm(p, dest, arg0);
-   emit_1ub(p, cc); 
+   emit_1ub(p, cc);
 }
 
 void sse_pmovmskb( struct x86_function *p,
@@ -667,11 +668,11 @@ void sse_pmovmskb( struct x86_function *p,
 void sse2_pshufd( struct x86_function *p,
 		  struct x86_reg dest,
 		  struct x86_reg arg0,
-		  unsigned char shuf) 
+		  unsigned char shuf)
 {
    emit_3ub(p, 0x66, X86_TWOB, 0x70);
    emit_modrm(p, dest, arg0);
-   emit_1ub(p, shuf); 
+   emit_1ub(p, shuf);
 }
 
 void sse2_cvttps2dq( struct x86_function *p,
@@ -818,9 +819,9 @@ static void x87_arith_op( struct x86_function *p, struct x86_reg dst, struct x86
    assert(dst.file == file_x87);
 
    if (arg.file == file_x87) {
-      if (dst.idx == 0) 
+      if (dst.idx == 0)
 	 emit_2ub(p, dst0ub0, dst0ub1+arg.idx);
-      else if (arg.idx == 0) 
+      else if (arg.idx == 0)
 	 emit_2ub(p, arg0ub0, arg0ub1+arg.idx);
       else
 	 assert(0);
@@ -836,7 +837,7 @@ static void x87_arith_op( struct x86_function *p, struct x86_reg dst, struct x86
 
 void x87_fmul( struct x86_function *p, struct x86_reg dst, struct x86_reg arg )
 {
-   x87_arith_op(p, dst, arg, 
+   x87_arith_op(p, dst, arg,
 		0xd8, 0xc8,
 		0xdc, 0xc8,
 		4);
@@ -844,7 +845,7 @@ void x87_fmul( struct x86_function *p, struct x86_reg dst, struct x86_reg arg )
 
 void x87_fsub( struct x86_function *p, struct x86_reg dst, struct x86_reg arg )
 {
-   x87_arith_op(p, dst, arg, 
+   x87_arith_op(p, dst, arg,
 		0xd8, 0xe0,
 		0xdc, 0xe8,
 		4);
@@ -852,7 +853,7 @@ void x87_fsub( struct x86_function *p, struct x86_reg dst, struct x86_reg arg )
 
 void x87_fsubr( struct x86_function *p, struct x86_reg dst, struct x86_reg arg )
 {
-   x87_arith_op(p, dst, arg, 
+   x87_arith_op(p, dst, arg,
 		0xd8, 0xe8,
 		0xdc, 0xe0,
 		5);
@@ -860,7 +861,7 @@ void x87_fsubr( struct x86_function *p, struct x86_reg dst, struct x86_reg arg )
 
 void x87_fadd( struct x86_function *p, struct x86_reg dst, struct x86_reg arg )
 {
-   x87_arith_op(p, dst, arg, 
+   x87_arith_op(p, dst, arg,
 		0xd8, 0xc0,
 		0xdc, 0xc0,
 		0);
@@ -868,7 +869,7 @@ void x87_fadd( struct x86_function *p, struct x86_reg dst, struct x86_reg arg )
 
 void x87_fdiv( struct x86_function *p, struct x86_reg dst, struct x86_reg arg )
 {
-   x87_arith_op(p, dst, arg, 
+   x87_arith_op(p, dst, arg,
 		0xd8, 0xf0,
 		0xdc, 0xf8,
 		6);
@@ -876,7 +877,7 @@ void x87_fdiv( struct x86_function *p, struct x86_reg dst, struct x86_reg arg )
 
 void x87_fdivr( struct x86_function *p, struct x86_reg dst, struct x86_reg arg )
 {
-   x87_arith_op(p, dst, arg, 
+   x87_arith_op(p, dst, arg,
 		0xd8, 0xf8,
 		0xdc, 0xf0,
 		7);
@@ -1013,7 +1014,7 @@ void x87_fyl2x( struct x86_function *p )
 /* st1 = st1 * log2(st0 + 1.0);
  * pop_stack;
  *
- * A fast operation, with restrictions: -.29 < st0 < .29 
+ * A fast operation, with restrictions: -.29 < st0 < .29
  */
 void x87_fyl2xp1( struct x86_function *p )
 {
@@ -1023,7 +1024,7 @@ void x87_fyl2xp1( struct x86_function *p )
 
 void x87_fld( struct x86_function *p, struct x86_reg arg )
 {
-   if (arg.file == file_x87) 
+   if (arg.file == file_x87)
       emit_2ub(p, 0xd9, 0xc0 + arg.idx);
    else {
       emit_1ub(p, 0xd9);
@@ -1033,7 +1034,7 @@ void x87_fld( struct x86_function *p, struct x86_reg arg )
 
 void x87_fst( struct x86_function *p, struct x86_reg dst )
 {
-   if (dst.file == file_x87) 
+   if (dst.file == file_x87)
       emit_2ub(p, 0xdd, 0xd0 + dst.idx);
    else {
       emit_1ub(p, 0xd9);
@@ -1043,7 +1044,7 @@ void x87_fst( struct x86_function *p, struct x86_reg dst )
 
 void x87_fstp( struct x86_function *p, struct x86_reg dst )
 {
-   if (dst.file == file_x87) 
+   if (dst.file == file_x87)
       emit_2ub(p, 0xdd, 0xd8 + dst.idx);
    else {
       emit_1ub(p, 0xd9);
@@ -1053,7 +1054,7 @@ void x87_fstp( struct x86_function *p, struct x86_reg dst )
 
 void x87_fcom( struct x86_function *p, struct x86_reg dst )
 {
-   if (dst.file == file_x87) 
+   if (dst.file == file_x87)
       emit_2ub(p, 0xd8, 0xd0 + dst.idx);
    else {
       emit_1ub(p, 0xd8);
@@ -1063,7 +1064,7 @@ void x87_fcom( struct x86_function *p, struct x86_reg dst )
 
 void x87_fcomp( struct x86_function *p, struct x86_reg dst )
 {
-   if (dst.file == file_x87) 
+   if (dst.file == file_x87)
       emit_2ub(p, 0xd8, 0xd8 + dst.idx);
    else {
       emit_1ub(p, 0xd8);
@@ -1077,7 +1078,7 @@ void x87_fnstsw( struct x86_function *p, struct x86_reg dst )
    assert(dst.file == file_REG32);
 
    if (dst.idx == reg_AX &&
-       dst.mod == mod_REG) 
+       dst.mod == mod_REG)
       emit_2ub(p, 0xdf, 0xe0);
    else {
       emit_1ub(p, 0xdd);
@@ -1103,7 +1104,7 @@ void mmx_packssdw( struct x86_function *p,
 		   struct x86_reg dst,
 		   struct x86_reg src )
 {
-   assert(dst.file == file_MMX && 
+   assert(dst.file == file_MMX &&
 	  (src.file == file_MMX || src.mod != mod_REG));
 
    p->need_emms = 1;
@@ -1116,7 +1117,7 @@ void mmx_packuswb( struct x86_function *p,
 		   struct x86_reg dst,
 		   struct x86_reg src )
 {
-   assert(dst.file == file_MMX && 
+   assert(dst.file == file_MMX &&
 	  (src.file == file_MMX || src.mod != mod_REG));
 
    p->need_emms = 1;
@@ -1155,7 +1156,7 @@ void mmx_movq( struct x86_function *p,
 struct x86_reg x86_fn_arg( struct x86_function *p,
 			   unsigned arg )
 {
-   return x86_make_disp(x86_make_reg(file_REG32, reg_SP), 
+   return x86_make_disp(x86_make_reg(file_REG32, reg_SP),
 			p->stack_offset + arg * 4);	/* ??? */
 }
 

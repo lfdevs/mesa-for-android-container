@@ -47,7 +47,7 @@ libvirgl = static_library(
   'virgl',
   [ files_libvirgl, virgl_driinfo_h ],
   c_args : c_vis_args,
-  include_directories : inc_common,
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
   dependencies : dep_libdrm
 )
 

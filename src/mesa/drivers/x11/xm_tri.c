@@ -32,7 +32,6 @@
 
 #include <stdio.h>
 #include "c99_math.h"
-#include "main/imports.h"
 #include "main/mtypes.h"
 #include "glxheader.h"
 #include "xmesaP.h"
@@ -1021,7 +1020,7 @@ get_triangle_func(struct gl_context *ctx)
       return (swrast_tri_func) NULL;
    if (swrast->_RasterMask & MULTI_DRAW_BIT)
       return (swrast_tri_func) NULL;
-   if (ctx->Polygon.CullFlag && 
+   if (ctx->Polygon.CullFlag &&
        ctx->Polygon.CullFaceMode == GL_FRONT_AND_BACK)
       return (swrast_tri_func) NULL;
 

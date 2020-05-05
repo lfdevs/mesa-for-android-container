@@ -549,8 +549,8 @@ lp_setup_so_info(struct vbuf_render *vbr, uint stream, uint primitives, uint pri
    struct lp_setup_context *setup = lp_setup_context(vbr);
    struct llvmpipe_context *lp = llvmpipe_context(setup->pipe);
 
-   lp->so_stats.num_primitives_written += primitives;
-   lp->so_stats.primitives_storage_needed += prim_generated;
+   lp->so_stats[stream].num_primitives_written += primitives;
+   lp->so_stats[stream].primitives_storage_needed += prim_generated;
 }
 
 static void
@@ -571,6 +571,10 @@ lp_setup_pipeline_statistics(
       stats->gs_invocations;
    llvmpipe->pipeline_statistics.gs_primitives +=
       stats->gs_primitives;
+   llvmpipe->pipeline_statistics.hs_invocations +=
+      stats->hs_invocations;
+   llvmpipe->pipeline_statistics.ds_invocations +=
+      stats->ds_invocations;
    if (!setup->rasterizer_discard) {
       llvmpipe->pipeline_statistics.c_invocations +=
          stats->c_invocations;

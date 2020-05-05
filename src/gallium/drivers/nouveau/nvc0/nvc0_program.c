@@ -81,7 +81,7 @@ nvc0_shader_output_address(unsigned sn, unsigned si)
    case TGSI_SEMANTIC_CLIPDIST:      return 0x2c0 + si * 0x10;
    case TGSI_SEMANTIC_CLIPVERTEX:    return 0x270;
    case TGSI_SEMANTIC_TEXCOORD:      return 0x300 + si * 0x10;
-   /* case TGSI_SEMANTIC_VIEWPORT_MASK: return 0x3a0; */
+   case TGSI_SEMANTIC_VIEWPORT_MASK: return 0x3a0;
    case TGSI_SEMANTIC_EDGEFLAG:      return ~0;
    default:
       assert(!"invalid TGSI output semantic");
@@ -271,6 +271,8 @@ nvc0_vtgp_gen_header(struct nvc0_program *vp, struct nv50_ir_prog_info *info)
 
    if (info->io.genUserClip < 0)
       vp->vp.num_ucps = PIPE_MAX_CLIP_PLANES + 1; /* prevent rebuilding */
+
+   vp->vp.layer_viewport_relative = info->io.layer_viewport_relative;
 
    return 0;
 }

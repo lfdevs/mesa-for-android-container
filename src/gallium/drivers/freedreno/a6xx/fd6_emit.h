@@ -179,7 +179,7 @@ fd6_cache_flush(struct fd_batch *batch, struct fd_ringbuffer *ring)
 	struct fd6_context *fd6_ctx = fd6_context(batch->ctx);
 	unsigned seqno;
 
-	seqno = fd6_event_write(batch, ring, CACHE_FLUSH_AND_INV_EVENT, true);
+	seqno = fd6_event_write(batch, ring, RB_DONE_TS, true);
 
 	OUT_PKT7(ring, CP_WAIT_REG_MEM, 6);
 	OUT_RING(ring, CP_WAIT_REG_MEM_0_FUNCTION(WRITE_EQ) |

@@ -109,26 +109,29 @@ nouveau_init_array(struct nouveau_array *a, int attr, int stride,
 	a->type = type;
 	a->buf = NULL;
 
-	if (obj) {
-		if (nouveau_bufferobj_hw(obj)) {
-			struct nouveau_bufferobj *nbo =
-				to_nouveau_bufferobj(obj);
+	if (nouveau_bufferobj_hw(obj)) {
+		struct nouveau_bufferobj *nbo =
+			to_nouveau_bufferobj(obj);
 
-			nouveau_bo_ref(nbo->bo, &a->bo);
-			a->offset = (intptr_t)ptr;
+		nouveau_bo_ref(nbo->bo, &a->bo);
+		a->offset = (intptr_t)ptr;
 
-			if (map) {
-				nouveau_bo_map(a->bo, NOUVEAU_BO_RD, client);
-				a->buf = a->bo->map + a->offset;
-			}
+		if (map) {
+			nouveau_bo_map(a->bo, NOUVEAU_BO_RD, client);
+			a->buf = a->bo->map + a->offset;
+		}
 
-		} else {
-			nouveau_bo_ref(NULL, &a->bo);
-			a->offset = 0;
+	} else {
+		nouveau_bo_ref(NULL, &a->bo);
+		a->offset = 0;
 
-			if (map)
+		if (map) {
+			if (obj) {
 				a->buf = ADD_POINTERS(
 					nouveau_bufferobj_sys(obj), ptr);
+			} else {
+				a->buf = ptr;
+			}
 		}
 	}
 

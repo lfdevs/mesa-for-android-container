@@ -34,7 +34,7 @@
 
 #include "glapi/glapi.h"
 #include "stw_device.h"
-#include "stw_icd.h"
+#include "gldrv.h"
 #include "stw_nopfuncs.h"
 
 #include "util/u_debug.h"

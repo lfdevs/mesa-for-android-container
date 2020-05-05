@@ -272,7 +272,7 @@ VdpStatus vlVdpVideoMixerRender(VdpVideoMixer mixer,
 
    if (vmixer->video_width > video_buffer->width ||
        vmixer->video_height > video_buffer->height ||
-       vmixer->chroma_format != video_buffer->chroma_format)
+       vmixer->chroma_format != pipe_format_to_chroma_format(video_buffer->buffer_format))
       return VDP_STATUS_INVALID_SIZE;
 
    if (layer_count > vmixer->max_layers)

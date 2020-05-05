@@ -41,7 +41,7 @@ libgl = shared_library(
   'GL',
   files('xlib.c'),
   include_directories : [
-    inc_common, inc_gallium_winsys, inc_gallium_drivers,
+    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_gallium_winsys, inc_gallium_drivers,
     include_directories('../../state_trackers/glx/xlib'),
   ],
   c_args : [c_vis_args, gallium_xlib_c_args],

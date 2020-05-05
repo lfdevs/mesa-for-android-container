@@ -34,7 +34,7 @@
  * The other side of this is that we need to be able convert between several
  * types accurately and efficiently.
  *
- * Conversion between types of different bit width is quite complex since a 
+ * Conversion between types of different bit width is quite complex since a
  *
  * To remember there are a few invariants in type conversions:
  *
@@ -93,7 +93,7 @@ lp_build_half_to_float(struct gallivm_state *gallivm,
 {
    LLVMBuilderRef builder = gallivm->builder;
    LLVMTypeRef src_type = LLVMTypeOf(src);
-   unsigned src_length = LLVMGetTypeKind(src_type) == LLVMVectorTypeKind ?
+   unsigned src_length = LLVMGetTypeKind(src_type) == LLVMFixedVectorTypeKind ?
                             LLVMGetVectorSize(src_type) : 1;
 
    struct lp_type f32_type = lp_type_float_vec(32, 32 * src_length);
@@ -138,7 +138,7 @@ lp_build_float_to_half(struct gallivm_state *gallivm,
 {
    LLVMBuilderRef builder = gallivm->builder;
    LLVMTypeRef f32_vec_type = LLVMTypeOf(src);
-   unsigned length = LLVMGetTypeKind(f32_vec_type) == LLVMVectorTypeKind
+   unsigned length = LLVMGetTypeKind(f32_vec_type) == LLVMFixedVectorTypeKind
                    ? LLVMGetVectorSize(f32_vec_type) : 1;
    struct lp_type i32_type = lp_type_int_vec(32, 32 * length);
    struct lp_type i16_type = lp_type_int_vec(16, 16 * length);
@@ -321,7 +321,10 @@ lp_build_clamped_float_to_unsigned_norm(struct gallivm_state *gallivm,
 
       res = LLVMBuildFMul(builder, src,
                           lp_build_const_vec(gallivm, src_type, scale), "");
-      res = LLVMBuildFPToSI(builder, res, int_vec_type, "");
+      if (!src_type.sign && src_type.width == 32)
+         res = LLVMBuildFPToUI(builder, res, int_vec_type, "");
+      else
+         res = LLVMBuildFPToSI(builder, res, int_vec_type, "");
 
       /*
        * Align the most significant bit to its final place.
@@ -670,7 +673,7 @@ lp_build_conv(struct gallivm_state *gallivm,
          dst[0] = lp_build_extract_range(gallivm, dst[0], 0, dst_type.length);
       }
 
-      return; 
+      return;
    }
 
    /* Special case 2x8x32 --> 1x16x8, 1x8x32 ->1x8x8

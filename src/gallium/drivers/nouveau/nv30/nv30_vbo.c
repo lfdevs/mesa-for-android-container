@@ -41,15 +41,13 @@ nv30_emit_vtxattr(struct nv30_context *nv30, struct pipe_vertex_buffer *vb,
    const unsigned nc = util_format_get_nr_components(ve->src_format);
    struct nouveau_pushbuf *push = nv30->base.pushbuf;
    struct nv04_resource *res = nv04_resource(vb->buffer.resource);
-   const struct util_format_description *desc =
-      util_format_description(ve->src_format);
    const void *data;
    float v[4];
 
    data = nouveau_resource_map_offset(&nv30->base, res, vb->buffer_offset +
                                       ve->src_offset, NOUVEAU_BO_RD);
 
-   desc->unpack_rgba_float(v, 0, data, 0, 1, 1);
+   util_format_unpack_rgba_float(ve->src_format, v, data, 1);
 
    switch (nc) {
    case 4:

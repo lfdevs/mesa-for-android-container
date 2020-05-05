@@ -58,7 +58,7 @@ main(int argc, char **argv)
    struct hash_table *ht;
    struct hash_entry *entry;
    uint32_t keys[SIZE];
-   uint32_t i, random_value;
+   uint32_t i, random_value = 0;
 
    (void) argc;
    (void) argv;

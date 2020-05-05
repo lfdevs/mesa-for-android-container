@@ -87,6 +87,7 @@ extern struct draw_stage *draw_offset_stage( struct draw_context *context );
 extern struct draw_stage *draw_clip_stage( struct draw_context *context );
 extern struct draw_stage *draw_flatshade_stage( struct draw_context *context );
 extern struct draw_stage *draw_cull_stage( struct draw_context *context );
+extern struct draw_stage *draw_user_cull_stage( struct draw_context *draw );
 extern struct draw_stage *draw_stipple_stage( struct draw_context *context );
 extern struct draw_stage *draw_wide_line_stage( struct draw_context *context );
 extern struct draw_stage *draw_wide_point_stage( struct draw_context *context );

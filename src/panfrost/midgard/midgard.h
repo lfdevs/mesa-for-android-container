@@ -52,6 +52,25 @@ typedef enum {
         midgard_alu_lut
 } midgard_alu;
 
+enum {
+        TAG_INVALID = 0x0,
+        TAG_BREAK = 0x1,
+        TAG_TEXTURE_4_VTX = 0x2,
+        TAG_TEXTURE_4 = 0x3,
+        TAG_TEXTURE_4_BARRIER = 0x4,
+        TAG_LOAD_STORE_4 = 0x5,
+        TAG_UNKNOWN_1 = 0x6,
+        TAG_UNKNOWN_2 = 0x7,
+        TAG_ALU_4 = 0x8,
+        TAG_ALU_8 = 0x9,
+        TAG_ALU_12 = 0xA,
+        TAG_ALU_16 = 0xB,
+        TAG_ALU_4_WRITEOUT = 0xC,
+        TAG_ALU_8_WRITEOUT = 0xD,
+        TAG_ALU_12_WRITEOUT = 0xE,
+        TAG_ALU_16_WRITEOUT = 0xF
+};
+
 /*
  * ALU words
  */
@@ -188,9 +207,9 @@ typedef enum {
 
 typedef enum {
         midgard_outmod_none = 0,
-        midgard_outmod_pos  = 1,
-        /* 0x2 unknown */
-        midgard_outmod_sat  = 3
+        midgard_outmod_pos  = 1, /* max(x, 0.0) */
+        midgard_outmod_one  = 2, /* clamp(x, -1.0, 1.0) */
+        midgard_outmod_sat  = 3 /* clamp(x, 0.0, 1.0) */
 } midgard_outmod_float;
 
 typedef enum {
@@ -693,9 +712,15 @@ __attribute__((__packed__))
         midgard_outmod_float outmod  : 2;
 
         unsigned swizzle  : 8;
-        unsigned unknown4  : 8;
 
-        unsigned unknownA  : 4;
+        /* For barriers, control barriers are implied regardless, but these
+         * bits also enable memory barriers of various types. For regular
+         * textures, these bits are not yet understood. */
+        unsigned barrier_buffer : 1;
+        unsigned barrier_shared : 1;
+        unsigned barrier_stack  : 1;
+
+        unsigned unknown4  : 9;
 
         /* In immediate mode, each offset field is an immediate range [0, 7].
          *
@@ -765,8 +790,10 @@ __attribute__((__packed__))
         unsigned zero2 : 14;
 
         unsigned zero3 : 24;
-        unsigned unknown4 : 1;
-        unsigned zero4 : 7;
+        unsigned buffer : 1;
+        unsigned shared : 1;
+        unsigned stack  : 1;
+        unsigned zero4 : 5;
 
         uint64_t zero5;
 } midgard_texture_barrier_word;

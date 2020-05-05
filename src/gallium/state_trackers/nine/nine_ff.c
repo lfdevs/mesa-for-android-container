@@ -124,7 +124,7 @@ struct nine_ff_ps_key
     };
 };
 
-static unsigned nine_ff_vs_key_hash(void *key)
+static uint32_t nine_ff_vs_key_hash(const void *key)
 {
     const struct nine_ff_vs_key *vs = key;
     unsigned i;
@@ -133,14 +133,14 @@ static unsigned nine_ff_vs_key_hash(void *key)
         hash ^= vs->value32[i];
     return hash;
 }
-static int nine_ff_vs_key_comp(void *key1, void *key2)
+static bool nine_ff_vs_key_comp(const void *key1, const void *key2)
 {
     struct nine_ff_vs_key *a = (struct nine_ff_vs_key *)key1;
     struct nine_ff_vs_key *b = (struct nine_ff_vs_key *)key2;
 
-    return memcmp(a->value64, b->value64, sizeof(a->value64));
+    return memcmp(a->value64, b->value64, sizeof(a->value64)) == 0;
 }
-static unsigned nine_ff_ps_key_hash(void *key)
+static uint32_t nine_ff_ps_key_hash(const void *key)
 {
     const struct nine_ff_ps_key *ps = key;
     unsigned i;
@@ -149,20 +149,20 @@ static unsigned nine_ff_ps_key_hash(void *key)
         hash ^= ps->value32[i];
     return hash;
 }
-static int nine_ff_ps_key_comp(void *key1, void *key2)
+static bool nine_ff_ps_key_comp(const void *key1, const void *key2)
 {
     struct nine_ff_ps_key *a = (struct nine_ff_ps_key *)key1;
     struct nine_ff_ps_key *b = (struct nine_ff_ps_key *)key2;
 
-    return memcmp(a->value64, b->value64, sizeof(a->value64));
+    return memcmp(a->value64, b->value64, sizeof(a->value64)) == 0;
 }
-static unsigned nine_ff_fvf_key_hash(void *key)
+static uint32_t nine_ff_fvf_key_hash(const void *key)
 {
     return *(DWORD *)key;
 }
-static int nine_ff_fvf_key_comp(void *key1, void *key2)
+static bool nine_ff_fvf_key_comp(const void *key1, const void *key2)
 {
-    return *(DWORD *)key1 != *(DWORD *)key2;
+    return *(DWORD *)key1 == *(DWORD *)key2;
 }
 
 static void nine_ff_prune_vs(struct NineDevice9 *);
@@ -1563,7 +1563,6 @@ nine_ff_get_vs(struct NineDevice9 *device)
 {
     const struct nine_context *context = &device->context;
     struct NineVertexShader9 *vs;
-    enum pipe_error err;
     struct vs_build_ctx bld;
     struct nine_ff_vs_key key;
     unsigned s, i;
@@ -1695,9 +1694,7 @@ nine_ff_get_vs(struct NineDevice9 *device)
 
         memcpy(&vs->ff_key, &key, sizeof(vs->ff_key));
 
-        err = util_hash_table_set(device->ff.ht_vs, &vs->ff_key, vs);
-        (void)err;
-        assert(err == PIPE_OK);
+        _mesa_hash_table_insert(device->ff.ht_vs, &vs->ff_key, vs);
         device->ff.num_vs++;
 
         vs->num_inputs = bld.num_inputs;
@@ -1719,7 +1716,6 @@ nine_ff_get_ps(struct NineDevice9 *device)
     struct nine_context *context = &device->context;
     D3DMATRIX *projection_matrix = GET_D3DTS(PROJECTION);
     struct NinePixelShader9 *ps;
-    enum pipe_error err;
     struct nine_ff_ps_key key;
     unsigned s;
     uint8_t sampler_mask = 0;
@@ -1847,9 +1843,7 @@ nine_ff_get_ps(struct NineDevice9 *device)
     if (ps) {
         memcpy(&ps->ff_key, &key, sizeof(ps->ff_key));
 
-        err = util_hash_table_set(device->ff.ht_ps, &ps->ff_key, ps);
-        (void)err;
-        assert(err == PIPE_OK);
+        _mesa_hash_table_insert(device->ff.ht_ps, &ps->ff_key, ps);
         device->ff.num_ps++;
 
         ps->rt_mask = 0x1;
@@ -2089,13 +2083,13 @@ nine_ff_update(struct NineDevice9 *device)
 boolean
 nine_ff_init(struct NineDevice9 *device)
 {
-    device->ff.ht_vs = util_hash_table_create(nine_ff_vs_key_hash,
-                                              nine_ff_vs_key_comp);
-    device->ff.ht_ps = util_hash_table_create(nine_ff_ps_key_hash,
-                                              nine_ff_ps_key_comp);
+    device->ff.ht_vs = _mesa_hash_table_create(NULL, nine_ff_vs_key_hash,
+                                               nine_ff_vs_key_comp);
+    device->ff.ht_ps = _mesa_hash_table_create(NULL, nine_ff_ps_key_hash,
+                                               nine_ff_ps_key_comp);
 
-    device->ff.ht_fvf = util_hash_table_create(nine_ff_fvf_key_hash,
-                                               nine_ff_fvf_key_comp);
+    device->ff.ht_fvf = _mesa_hash_table_create(NULL, nine_ff_fvf_key_hash,
+                                                nine_ff_fvf_key_comp);
 
     device->ff.vs_const = CALLOC(NINE_FF_NUM_VS_CONST, 4 * sizeof(float));
     device->ff.ps_const = CALLOC(NINE_FF_NUM_PS_CONST, 4 * sizeof(float));
@@ -2116,15 +2110,15 @@ nine_ff_fini(struct NineDevice9 *device)
 {
     if (device->ff.ht_vs) {
         util_hash_table_foreach(device->ff.ht_vs, nine_ff_ht_delete_cb, NULL);
-        util_hash_table_destroy(device->ff.ht_vs);
+        _mesa_hash_table_destroy(device->ff.ht_vs, NULL);
     }
     if (device->ff.ht_ps) {
         util_hash_table_foreach(device->ff.ht_ps, nine_ff_ht_delete_cb, NULL);
-        util_hash_table_destroy(device->ff.ht_ps);
+        _mesa_hash_table_destroy(device->ff.ht_ps, NULL);
     }
     if (device->ff.ht_fvf) {
         util_hash_table_foreach(device->ff.ht_fvf, nine_ff_ht_delete_cb, NULL);
-        util_hash_table_destroy(device->ff.ht_fvf);
+        _mesa_hash_table_destroy(device->ff.ht_fvf, NULL);
     }
     device->ff.vs = NULL; /* destroyed by unbinding from hash table */
     device->ff.ps = NULL;
@@ -2142,7 +2136,7 @@ nine_ff_prune_vs(struct NineDevice9 *device)
         /* could destroy the bound one here, so unbind */
         context->pipe->bind_vs_state(context->pipe, NULL);
         util_hash_table_foreach(device->ff.ht_vs, nine_ff_ht_delete_cb, NULL);
-        util_hash_table_clear(device->ff.ht_vs);
+        _mesa_hash_table_clear(device->ff.ht_vs, NULL);
         device->ff.num_vs = 0;
         context->changed.group |= NINE_STATE_VS;
     }
@@ -2156,7 +2150,7 @@ nine_ff_prune_ps(struct NineDevice9 *device)
         /* could destroy the bound one here, so unbind */
         context->pipe->bind_fs_state(context->pipe, NULL);
         util_hash_table_foreach(device->ff.ht_ps, nine_ff_ht_delete_cb, NULL);
-        util_hash_table_clear(device->ff.ht_ps);
+        _mesa_hash_table_clear(device->ff.ht_ps, NULL);
         device->ff.num_ps = 0;
         context->changed.group |= NINE_STATE_PS;
     }

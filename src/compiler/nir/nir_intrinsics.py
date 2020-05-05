@@ -736,6 +736,8 @@ intrinsic("load_interpolated_input", src_comp=[2, 1], dest_comp=0,
 
 # src[] = { buffer_index, offset }.
 load("ssbo", 2, [ACCESS, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
+# src[] = { buffer_index }
+load("ssbo_address", 1, [], [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { offset }.
 load("output", 1, [BASE, COMPONENT], flags=[CAN_ELIMINATE])
 # src[] = { vertex, offset }.
@@ -745,7 +747,8 @@ load("shared", 1, [BASE, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
 # src[] = { offset }.
 load("push_constant", 1, [BASE, RANGE], [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { offset }.
-load("constant", 1, [BASE, RANGE], [CAN_ELIMINATE, CAN_REORDER])
+load("constant", 1, [BASE, RANGE, ALIGN_MUL, ALIGN_OFFSET],
+     [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { address }.
 load("global", 1, [ACCESS, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
 # src[] = { address }.
@@ -800,6 +803,12 @@ intrinsic("ssbo_atomic_xor_ir3",        src_comp=[1, 1, 1, 1],    dest_comp=1)
 intrinsic("ssbo_atomic_exchange_ir3",   src_comp=[1, 1, 1, 1],    dest_comp=1)
 intrinsic("ssbo_atomic_comp_swap_ir3",  src_comp=[1, 1, 1, 1, 1], dest_comp=1)
 
+# IR3-specific instruction for UBO loads using the ldc instruction. The second
+# source is the indirect offset, in units of four dwords. The base is a
+# component offset, in dword units.
+intrinsic("load_ubo_ir3", src_comp=[1, 1], bit_sizes=[32], dest_comp=0, indices=[BASE],
+          flags=[CAN_REORDER, CAN_ELIMINATE])
+
 # System values for freedreno geometry shaders.
 system_value("vs_primitive_stride_ir3", 1)
 system_value("vs_vertex_stride_ir3", 1)
@@ -839,6 +848,12 @@ intrinsic("store_global_ir3", [0, 2, 1], indices=[WRMASK, ACCESS, ALIGN_MUL, ALI
 # const_index[] = { access, align_mul, align_offset }
 intrinsic("load_global_ir3", [2, 1], dest_comp=0, indices=[ACCESS, ALIGN_MUL, ALIGN_OFFSET], flags=[CAN_ELIMINATE])
 
+# IR3-specific bindless handle specifier. Similar to vulkan_resource_index, but
+# without the binding because the hardware expects a single flattened index
+# rather than a (binding, index) pair. We may also want to use this with GL.
+# Note that this doesn't actually turn into a HW instruction.
+intrinsic("bindless_resource_ir3", [1], dest_comp=1, indices=[DESC_SET], flags=[CAN_ELIMINATE, CAN_REORDER])
+
 # Intrinsics used by the Midgard/Bifrost blend pipeline. These are defined
 # within a blend shader to read/write the raw value from the tile buffer,
 # without applying any format conversion in the process. If the shader needs
@@ -858,12 +873,33 @@ intrinsic("load_global_ir3", [2, 1], dest_comp=0, indices=[ACCESS, ALIGN_MUL, AL
 
 # src[] = { value }
 store("raw_output_pan", 1, [])
+store("zs_output_pan", 1, [COMPONENT])
 load("raw_output_pan", 0, [], [CAN_ELIMINATE, CAN_REORDER])
 load("output_u8_as_fp16_pan", 0, [], [CAN_ELIMINATE, CAN_REORDER])
 
 # Loads the sampler paramaters <min_lod, max_lod, lod_bias>
 # src[] = { sampler_index }
 load("sampler_lod_parameters_pan", 1, [CAN_ELIMINATE, CAN_REORDER])
+
+# R600 specific instrincs
+#
+# R600 can only fetch 16 byte aligned data from an UBO, and the actual offset
+# is given in vec4 units, so we have to fetch the a vec4 and get the component
+# later
+# src[] = { buffer_index, offset }.
+load("ubo_r600", 2, [ACCESS, ALIGN_MUL, ALIGN_OFFSET], flags=[CAN_ELIMINATE, CAN_REORDER])
+
+# location where the tesselation data is stored in LDS
+system_value("tcs_in_param_base_r600", 4)
+system_value("tcs_out_param_base_r600", 4)
+system_value("tcs_rel_patch_id_r600", 1)
+system_value("tcs_tess_factor_base_r600", 1)
+
+# load as many components as needed giving per-component addresses
+intrinsic("load_local_shared_r600", src_comp=[0], dest_comp=0, indices = [COMPONENT], flags = [CAN_ELIMINATE, CAN_REORDER])
+
+store("local_shared_r600", 2, [WRMASK])
+store("tf_r600", 1)
 
 # V3D-specific instrinc for tile buffer color reads.
 #

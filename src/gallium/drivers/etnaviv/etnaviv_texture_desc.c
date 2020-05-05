@@ -47,6 +47,7 @@ struct etna_sampler_state_desc {
    uint32_t SAMP_CTRL1;
    uint32_t SAMP_LOD_MINMAX;
    uint32_t SAMP_LOD_BIAS;
+   uint32_t SAMP_ANISOTROPY;
 };
 
 static inline struct etna_sampler_state_desc *
@@ -77,6 +78,7 @@ etna_create_sampler_state_desc(struct pipe_context *pipe,
                           const struct pipe_sampler_state *ss)
 {
    struct etna_sampler_state_desc *cs = CALLOC_STRUCT(etna_sampler_state_desc);
+   const bool ansio = ss->max_anisotropy > 1;
 
    if (!cs)
       return NULL;
@@ -107,6 +109,8 @@ etna_create_sampler_state_desc(struct pipe_context *pipe,
    cs->SAMP_LOD_BIAS =
       VIVS_NTE_DESCRIPTOR_SAMP_LOD_BIAS_BIAS(etna_float_to_fixp88(ss->lod_bias)) |
       COND(ss->lod_bias != 0.0, VIVS_NTE_DESCRIPTOR_SAMP_LOD_BIAS_ENABLE);
+   cs->SAMP_ANISOTROPY =
+      VIVS_NTE_DESCRIPTOR_SAMP_ANISOTROPY(COND(ansio, etna_log2_fixp88(ss->max_anisotropy)));
 
    return cs;
 }
@@ -298,6 +302,7 @@ etna_emit_texture_desc(struct etna_context *ctx)
             etna_set_state(stream, VIVS_NTE_DESCRIPTOR_SAMP_CTRL1(x), ss->SAMP_CTRL1 | sv->SAMP_CTRL1);
             etna_set_state(stream, VIVS_NTE_DESCRIPTOR_SAMP_LOD_MINMAX(x), ss->SAMP_LOD_MINMAX);
             etna_set_state(stream, VIVS_NTE_DESCRIPTOR_SAMP_LOD_BIAS(x), ss->SAMP_LOD_BIAS);
+            etna_set_state(stream, VIVS_NTE_DESCRIPTOR_SAMP_ANISOTROPY(x), ss->SAMP_ANISOTROPY);
          }
       }
    }

@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#include "brw_cfg.h"
+#include "brw_shader.h"
 
 using namespace brw;
 
@@ -138,7 +138,7 @@ opt_predicated_break(backend_shader *s)
    }
 
    if (progress)
-      s->invalidate_live_intervals();
+      s->invalidate_analysis(DEPENDENCY_BLOCKS | DEPENDENCY_INSTRUCTIONS);
 
    return progress;
 }

@@ -71,7 +71,7 @@ struct v3d_screen {
 
         const struct v3d_compiler *compiler;
 
-        struct util_hash_table *bo_handles;
+        struct hash_table *bo_handles;
         mtx_t bo_handles_mutex;
 
         uint32_t bo_size;

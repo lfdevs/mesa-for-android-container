@@ -27,6 +27,7 @@
 #include "r600_pipe_common.h"
 #include "r600_cs.h"
 #include "tgsi/tgsi_parse.h"
+#include "compiler/nir/nir.h"
 #include "util/list.h"
 #include "util/u_draw_quad.h"
 #include "util/u_memory.h"
@@ -38,6 +39,7 @@
 #include "radeon_video.h"
 #include <inttypes.h>
 #include <sys/utsname.h>
+#include <stdlib.h>
 
 #ifdef LLVM_AVAILABLE
 #include <llvm-c/TargetMachine.h>
@@ -909,7 +911,8 @@ const char *r600_get_llvm_processor_name(enum radeon_family family)
 static unsigned get_max_threads_per_block(struct r600_common_screen *screen,
 					  enum pipe_shader_ir ir_type)
 {
-	if (ir_type != PIPE_SHADER_IR_TGSI)
+	if (ir_type != PIPE_SHADER_IR_TGSI &&
+	    ir_type != PIPE_SHADER_IR_NIR)
 		return 256;
 	if (screen->chip_class >= EVERGREEN)
 		return 1024;
@@ -1177,6 +1180,57 @@ struct pipe_resource *r600_resource_create_common(struct pipe_screen *screen,
 	}
 }
 
+const struct nir_shader_compiler_options r600_nir_fs_options = {
+	.fuse_ffma = true,
+	.lower_scmp = true,
+	.lower_flrp32 = true,
+	.lower_flrp64 = true,
+	.lower_fpow = true,
+	.lower_fdiv = true,
+	.lower_idiv = true,
+	.lower_fmod = true,
+	.lower_doubles_options = nir_lower_fp64_full_software,
+	.lower_int64_options = 0,
+	.lower_extract_byte = true,
+	.lower_extract_word = true,
+	.max_unroll_iterations = 32,
+        .lower_all_io_to_temps = true,
+	.vectorize_io = true
+};
+
+const struct nir_shader_compiler_options r600_nir_options = {
+	.fuse_ffma = true,
+	.lower_scmp = true,
+	.lower_flrp32 = true,
+	.lower_flrp64 = true,
+	.lower_fpow = true,
+	.lower_fdiv = true,
+	.lower_idiv = true,
+	.lower_fmod = true,
+	.lower_doubles_options = nir_lower_fp64_full_software,
+	.lower_int64_options = 0,
+	.lower_extract_byte = true,
+	.lower_extract_word = true,
+	.max_unroll_iterations = 32,
+	.lower_all_io_to_temps = true,
+	.vectorize_io = true,
+        .has_umad24 = true,
+        .has_umul24 = true,
+};
+
+
+static const void *
+r600_get_compiler_options(struct pipe_screen *screen,
+			  enum pipe_shader_ir ir,
+			  enum pipe_shader_type shader)
+{
+	assert(ir == PIPE_SHADER_IR_NIR);
+	if (shader == PIPE_SHADER_FRAGMENT)
+	   return &r600_nir_fs_options;
+	else
+	   return &r600_nir_options;
+}
+
 bool r600_common_screen_init(struct r600_common_screen *rscreen,
 			     struct radeon_winsys *ws)
 {
@@ -1210,6 +1264,7 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 	rscreen->b.get_compute_param = r600_get_compute_param;
 	rscreen->b.get_paramf = r600_get_paramf;
 	rscreen->b.get_timestamp = r600_get_timestamp;
+	rscreen->b.get_compiler_options = r600_get_compiler_options;
 	rscreen->b.fence_finish = r600_fence_finish;
 	rscreen->b.fence_reference = r600_fence_reference;
 	rscreen->b.resource_destroy = u_resource_destroy_vtbl;
@@ -1230,6 +1285,10 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 	rscreen->family = rscreen->info.family;
 	rscreen->chip_class = rscreen->info.chip_class;
 	rscreen->debug_flags |= debug_get_flags_option("R600_DEBUG", common_debug_options, 0);
+	int has_draw_use_llvm = debug_get_bool_option("DRAW_USE_LLVM", FALSE);
+	if (!has_draw_use_llvm)
+	   setenv("DRAW_USE_LLVM", "no", 0);
+
 
 	r600_disk_cache_create(rscreen);
 

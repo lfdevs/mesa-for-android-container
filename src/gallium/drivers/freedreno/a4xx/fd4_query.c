@@ -259,7 +259,7 @@ static const struct fd_hw_sample_provider occlusion_predicate_conservative = {
 
 static const struct fd_hw_sample_provider time_elapsed = {
 		.query_type = PIPE_QUERY_TIME_ELAPSED,
-		.active = FD_STAGE_DRAW | FD_STAGE_CLEAR,
+		.active = FD_STAGE_ALL,
 		.enable = time_elapsed_enable,
 		.get_sample = time_elapsed_get_sample,
 		.accumulate_result = time_elapsed_accumulate_result,

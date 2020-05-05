@@ -134,7 +134,6 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
    switch (param) {
    /* Supported features (boolean caps). */
-   case PIPE_CAP_ANISOTROPIC_FILTER:
    case PIPE_CAP_POINT_SPRITE:
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
@@ -151,6 +150,8 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
    case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
    case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
+   case PIPE_CAP_STRING_MARKER:
+   case PIPE_CAP_SHAREABLE_SHADERS:
       return 1;
    case PIPE_CAP_NATIVE_FENCE_FD:
       return screen->drm_version >= ETNA_DRM_VERSION_FENCE_FD;
@@ -170,6 +171,7 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return true; /* VIV_FEATURE(priv->dev, chipMinorFeatures1,
                       NON_POWER_OF_TWO); */
 
+   case PIPE_CAP_ANISOTROPIC_FILTER:
    case PIPE_CAP_TEXTURE_SWIZZLE:
    case PIPE_CAP_PRIMITIVE_RESTART:
       return VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
@@ -229,6 +231,22 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    /* Preferences */
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return 0;
+   case PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET: {
+      /* etnaviv is being run on systems as small as 256MB total RAM so
+       * we need to provide a sane value for such a device. Limit the
+       * memory budget to min(~3% of pyhiscal memory, 64MB).
+       *
+       * a simple divison by 32 provides the numbers we want.
+       *    256MB / 32 =  8MB
+       *   2048MB / 32 = 64MB
+       */
+      uint64_t system_memory;
+
+      if (!os_get_total_physical_memory(&system_memory))
+         system_memory = (uint64_t)4096 << 20;
+
+      return MIN2(system_memory / 32, 64 * 1024 * 1024);
+   }
 
    case PIPE_CAP_MAX_VARYINGS:
       return screen->specs.max_varyings;
@@ -684,6 +702,12 @@ etna_get_specs(struct etna_screen *screen)
    }
    screen->specs.num_constants = val;
 
+   if (etna_gpu_get_param(screen->gpu, ETNA_GPU_NUM_VARYINGS, &val)) {
+      DBG("could not get ETNA_GPU_NUM_VARYINGS");
+      goto fail;
+   }
+   screen->specs.max_varyings = MAX2(val, ETNA_NUM_VARYINGS);
+
    /* Figure out gross GPU architecture. See rnndb/common.xml for a specific
     * description of the differences. */
    if (VIV_FEATURE(screen, chipMinorFeatures5, HALTI5))
@@ -775,21 +799,13 @@ etna_get_specs(struct etna_screen *screen)
    }
 
    if (VIV_FEATURE(screen, chipMinorFeatures1, HALTI0)) {
-      screen->specs.max_varyings = 12;
       screen->specs.vertex_max_elements = 16;
    } else {
-      screen->specs.max_varyings = 8;
       /* Etna_viv documentation seems confused over the correct value
        * here so choose the lower to be safe: HALTI0 says 16 i.s.o.
        * 10, but VERTEX_ELEMENT_CONFIG register says 16 i.s.o. 12. */
       screen->specs.vertex_max_elements = 10;
    }
-
-   /* Etna_viv documentation does not indicate where varyings above 8 are
-    * stored. Moreover, if we are passed more than 8 varyings, we will
-    * walk off the end of some arrays. Limit the maximum number of varyings. */
-   if (screen->specs.max_varyings > ETNA_NUM_VARYINGS)
-      screen->specs.max_varyings = ETNA_NUM_VARYINGS;
 
    etna_determine_uniform_limits(screen);
 

@@ -32,7 +32,7 @@
 #include "virgl_resource_cache.h"
 
 struct pipe_fence_handle;
-struct util_hash_table;
+struct hash_table;
 
 struct virgl_hw_res {
    struct pipe_reference reference;
@@ -60,8 +60,8 @@ struct virgl_drm_winsys
    struct virgl_resource_cache cache;
    mtx_t mutex;
 
-   struct util_hash_table *bo_handles;
-   struct util_hash_table *bo_names;
+   struct hash_table *bo_handles;
+   struct hash_table *bo_names;
    mtx_t bo_handles_mutex;
    bool has_capset_query_fix;
 };

@@ -244,7 +244,7 @@ nv10_get_spot_coeff(struct gl_light *l, float k[7])
 	float a0, b0, a1, a2, b2, a3;
 
 	if (e > 0)
-		a0 = -1 - 5.36e-3 / sqrt(e);
+		a0 = -1 - 5.36e-3 / sqrtf(e);
 	else
 		a0 = -1;
 	b0 = 1 / (1 + 0.273 * e);

@@ -38,8 +38,14 @@
 /* The kernel assumes batchbuffers are smaller than 256kB. */
 #define MAX_BATCH_SIZE (256 * 1024)
 
+/* Terminating the batch takes either 4 bytes for MI_BATCH_BUFFER_END
+ * or 12 bytes for MI_BATCH_BUFFER_START (when chaining).  Plus, we may
+ * need an extra 4 bytes to pad out to the nearest QWord.  So reserve 16.
+ */
+#define BATCH_RESERVED 16
+
 /* Our target batch size - flush approximately at this point. */
-#define BATCH_SZ (64 * 1024)
+#define BATCH_SZ (64 * 1024 - BATCH_RESERVED)
 
 enum iris_batch_name {
    IRIS_BATCH_RENDER,
@@ -56,7 +62,6 @@ struct iris_address {
 
 struct iris_batch {
    struct iris_screen *screen;
-   struct iris_vtable *vtbl;
    struct pipe_debug_callback *dbg;
    struct pipe_device_reset_callback *reset;
 
@@ -84,6 +89,11 @@ struct iris_batch {
    struct iris_bo **exec_bos;
    int exec_count;
    int exec_array_size;
+
+   /** Whether INTEL_BLACKHOLE_RENDER is enabled in the batch (aka first
+    * instruction is a MI_BATCH_BUFFER_END).
+    */
+   bool noop_enabled;
 
    /**
     * A list of iris_syncpts associated with this batch.
@@ -133,7 +143,6 @@ struct iris_batch {
 
 void iris_init_batch(struct iris_batch *batch,
                      struct iris_screen *screen,
-                     struct iris_vtable *vtbl,
                      struct pipe_debug_callback *dbg,
                      struct pipe_device_reset_callback *reset,
                      struct hash_table_u64 *state_sizes,
@@ -148,6 +157,10 @@ void _iris_batch_flush(struct iris_batch *batch, const char *file, int line);
 #define iris_batch_flush(batch) _iris_batch_flush((batch), __FILE__, __LINE__)
 
 bool iris_batch_references(struct iris_batch *batch, struct iris_bo *bo);
+
+uint64_t iris_batch_prepare_noop(struct iris_batch *batch,
+                                 bool noop_enable,
+                                 uint64_t dirty_flags);
 
 #define RELOC_WRITE EXEC_OBJECT_WRITE
 

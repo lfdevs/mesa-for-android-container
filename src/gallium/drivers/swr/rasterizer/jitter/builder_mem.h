@@ -84,7 +84,7 @@ virtual CallInst* MASKED_LOAD(Value*         Ptr,
                               Type*          Ty       = nullptr,
                               MEM_CLIENT usage    = MEM_CLIENT::MEM_CLIENT_INTERNAL)
 {
-    return IRB()->CreateMaskedLoad(Ptr, Align, Mask, PassThru, Name);
+    return IRB()->CreateMaskedLoad(Ptr, AlignType(Align), Mask, PassThru, Name);
 }
 
 virtual StoreInst* STORE(Value *Val, Value *Ptr, bool isVolatile = false, Type* Ty = nullptr, MEM_CLIENT usage = MEM_CLIENT::MEM_CLIENT_INTERNAL)
@@ -96,7 +96,7 @@ virtual StoreInst* STORE(Value* Val, Value* BasePtr, const std::initializer_list
 
 virtual CallInst* MASKED_STORE(Value *Val, Value *Ptr, unsigned Align, Value *Mask, Type* Ty = nullptr, MEM_CLIENT usage = MEM_CLIENT::MEM_CLIENT_INTERNAL)
 {
-    return IRB()->CreateMaskedStore(Val, Ptr, Align, Mask);
+    return IRB()->CreateMaskedStore(Val, Ptr, AlignType(Align), Mask);
 }
 
 LoadInst*  LOADV(Value* BasePtr, const std::initializer_list<Value*>& offset, const llvm::Twine& name = "");

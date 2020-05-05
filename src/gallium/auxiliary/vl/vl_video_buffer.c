@@ -188,7 +188,7 @@ vl_video_buffer_template(struct pipe_resource *templ,
    templ->usage = usage;
 
    vl_video_buffer_adjust_size(&templ->width0, &height, plane,
-                               tmpl->chroma_format, false);
+                               pipe_format_to_chroma_format(tmpl->buffer_format), false);
    templ->height0 = height;
 }
 

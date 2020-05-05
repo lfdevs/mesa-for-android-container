@@ -704,7 +704,6 @@ void ProcessStreamIdBuffer(uint32_t stream,
 {
     SWR_ASSERT(stream < MAX_SO_STREAMS);
 
-    uint32_t numInputBytes  = AlignUp(numEmittedVerts * 2, 8) / 8;
     uint32_t numOutputBytes = AlignUp(numEmittedVerts, 8) / 8;
 
     for (uint32_t b = 0; b < numOutputBytes; ++b)
@@ -1553,7 +1552,7 @@ static void TessellationStages(DRAW_CONTEXT* pDC,
                     // Gather data from the SVG if provided.
                     simd16scalari vViewportIdx = SIMD16::setzero_si();
                     simd16scalari vRtIdx       = SIMD16::setzero_si();
-                    SIMD16::Vec4  svgAttrib[4];
+                    SIMD16::Vec4 svgAttrib[4] = {SIMD16::setzero_ps()};
 
                     if (state.backendState.readViewportArrayIndex ||
                         state.backendState.readRenderTargetArrayIndex)

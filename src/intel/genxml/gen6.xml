@@ -608,7 +608,6 @@
     <field name="Perspective Divide Disable" start="73" end="73" type="bool"/>
     <field name="Clip Mode" start="77" end="79" type="uint">
       <value name="CLIPMODE_NORMAL" value="0"/>
-      <value name="reserved" value="2"/>
       <value name="CLIPMODE_REJECT_ALL" value="3"/>
       <value name="CLIPMODE_ACCEPT_ALL" value="4"/>
     </field>

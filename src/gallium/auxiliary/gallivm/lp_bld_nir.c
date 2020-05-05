@@ -946,6 +946,7 @@ static void visit_load_var(struct lp_build_nir_context *bld_base,
    nir_variable_mode mode = deref->mode;
    unsigned const_index;
    LLVMValueRef indir_index;
+   LLVMValueRef indir_vertex_index = NULL;
    unsigned vertex_index = 0;
    unsigned nc = nir_dest_num_components(instr->dest);
    unsigned bit_size = nir_dest_bit_size(instr->dest);
@@ -954,12 +955,19 @@ static void visit_load_var(struct lp_build_nir_context *bld_base,
          var->data.mode == nir_var_shader_in;
       bool gs_in = bld_base->shader->info.stage == MESA_SHADER_GEOMETRY &&
          var->data.mode == nir_var_shader_in;
+      bool tcs_in = bld_base->shader->info.stage == MESA_SHADER_TESS_CTRL &&
+         var->data.mode == nir_var_shader_in;
+      bool tcs_out = bld_base->shader->info.stage == MESA_SHADER_TESS_CTRL &&
+         var->data.mode == nir_var_shader_out && !var->data.patch;
+      bool tes_in = bld_base->shader->info.stage == MESA_SHADER_TESS_EVAL &&
+         var->data.mode == nir_var_shader_in && !var->data.patch;
+
       mode = var->data.mode;
 
-      get_deref_offset(bld_base, deref, vs_in, gs_in ? &vertex_index : NULL, NULL,
+      get_deref_offset(bld_base, deref, vs_in, gs_in ? &vertex_index : NULL, (tcs_in || tcs_out || tes_in) ? &indir_vertex_index : NULL,
                        &const_index, &indir_index);
    }
-   bld_base->load_var(bld_base, mode, nc, bit_size, var, vertex_index, const_index, indir_index, result);
+   bld_base->load_var(bld_base, mode, nc, bit_size, var, vertex_index, indir_vertex_index, const_index, indir_index, result);
 }
 
 static void
@@ -973,11 +981,14 @@ visit_store_var(struct lp_build_nir_context *bld_base,
    unsigned bit_size = nir_src_bit_size(instr->src[1]);
    LLVMValueRef src = get_src(bld_base, instr->src[1]);
    unsigned const_index = 0;
-   LLVMValueRef indir_index;
-   if (var)
-      get_deref_offset(bld_base, deref, false, NULL, NULL,
+   LLVMValueRef indir_index, indir_vertex_index = NULL;
+   if (var) {
+      bool tcs_out = bld_base->shader->info.stage == MESA_SHADER_TESS_CTRL &&
+         var->data.mode == nir_var_shader_out && !var->data.patch;
+      get_deref_offset(bld_base, deref, false, NULL, tcs_out ? &indir_vertex_index : NULL,
                        &const_index, &indir_index);
-   bld_base->store_var(bld_base, mode, bit_size, instr->num_components, writemask, const_index, var, src);
+   }
+   bld_base->store_var(bld_base, mode, instr->num_components, bit_size, var, writemask, indir_vertex_index, const_index, indir_index, src);
 }
 
 static void visit_load_ubo(struct lp_build_nir_context *bld_base,
@@ -1316,7 +1327,14 @@ static void visit_intrinsic(struct lp_build_nir_context *bld_base,
    case nir_intrinsic_load_draw_id:
    case nir_intrinsic_load_local_group_size:
    case nir_intrinsic_load_work_dim:
+   case nir_intrinsic_load_tess_coord:
+   case nir_intrinsic_load_tess_level_outer:
+   case nir_intrinsic_load_tess_level_inner:
+   case nir_intrinsic_load_patch_vertices_in:
       bld_base->sysval_intrin(bld_base, instr, result);
+      break;
+   case nir_intrinsic_load_helper_invocation:
+      bld_base->helper_invocation(bld_base, &result[0]);
       break;
    case nir_intrinsic_discard_if:
    case nir_intrinsic_discard:
@@ -1860,6 +1878,9 @@ void lp_build_opt_nir(struct nir_shader *nir)
       NIR_PASS_V(nir, nir_opt_constant_folding);
       NIR_PASS_V(nir, nir_opt_algebraic);
       NIR_PASS_V(nir, nir_lower_pack);
+
+      nir_lower_tex_options options = { .lower_tex_without_implicit_lod = true };
+      NIR_PASS_V(nir, nir_lower_tex, &options);
    } while (progress);
    nir_lower_bool_to_int32(nir);
 }

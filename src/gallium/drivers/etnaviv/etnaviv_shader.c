@@ -190,7 +190,8 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
 
    cs->GL_VARYING_TOTAL_COMPONENTS =
       VIVS_GL_VARYING_TOTAL_COMPONENTS_NUM(align(total_components, 2));
-   cs->GL_VARYING_NUM_COMPONENTS = num_components[0];
+   cs->GL_VARYING_NUM_COMPONENTS[0] = num_components[0];
+   cs->GL_VARYING_NUM_COMPONENTS[1] = num_components[1];
    cs->GL_VARYING_COMPONENT_USE[0] = component_use[0];
    cs->GL_VARYING_COMPONENT_USE[1] = component_use[1];
 
@@ -393,6 +394,7 @@ etna_create_shader_state(struct pipe_context *pctx,
                          const struct pipe_shader_state *pss)
 {
    struct etna_context *ctx = etna_context(pctx);
+   struct etna_screen *screen = ctx->screen;
    struct etna_shader *shader = CALLOC_STRUCT(etna_shader);
 
    if (!shader)
@@ -400,7 +402,7 @@ etna_create_shader_state(struct pipe_context *pctx,
 
    static uint32_t id;
    shader->id = id++;
-   shader->specs = &ctx->specs;
+   shader->specs = &screen->specs;
 
    if (DBG_ENABLED(ETNA_DBG_NIR))
       shader->nir = (pss->type == PIPE_SHADER_IR_NIR) ? pss->ir.nir :

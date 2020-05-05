@@ -537,7 +537,7 @@ tgsi_util_get_shadow_ref_src_index(enum tgsi_texture_type tgsi_tex)
 }
 
 
-boolean
+bool
 tgsi_is_shadow_target(enum tgsi_texture_type target)
 {
    switch (target) {

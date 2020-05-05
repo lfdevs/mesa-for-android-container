@@ -85,6 +85,11 @@ namespace clover {
          /// Set this argument to some object.
          virtual void set(size_t size, const void *value) = 0;
 
+         /// Set this argument to an SVM pointer.
+         virtual void set_svm(const void *value) {
+            throw error(CL_INVALID_ARG_INDEX);
+         };
+
          /// Allocate the necessary resources to bind the specified
          /// object to this argument, and update \a ctx accordingly.
          virtual void bind(exec_context &ctx,
@@ -158,12 +163,14 @@ namespace clover {
       class global_argument : public argument {
       public:
          virtual void set(size_t size, const void *value);
+         virtual void set_svm(const void *value);
          virtual void bind(exec_context &ctx,
                            const module::argument &marg);
          virtual void unbind(exec_context &ctx);
 
       private:
          buffer *buf;
+         const void *svm;
       };
 
       class local_argument : public argument {

@@ -562,11 +562,9 @@ static void gpir_codegen(gpir_codegen_instr *code, gpir_instr *instr)
 static void gpir_codegen_print_prog(gpir_compiler *comp)
 {
    uint32_t *data = comp->prog->shader;
-   int size = comp->prog->shader_size;
-   int num_instr = size / sizeof(gpir_codegen_instr);
    int num_dword_per_instr = sizeof(gpir_codegen_instr) / sizeof(uint32_t);
 
-   for (int i = 0; i < num_instr; i++) {
+   for (int i = 0; i < comp->num_instr; i++) {
       printf("%03d: ", i);
       for (int j = 0; j < num_dword_per_instr; j++)
          printf("%08x ", data[i * num_dword_per_instr + j]);
@@ -582,11 +580,7 @@ bool gpir_codegen_prog(gpir_compiler *comp)
       num_instr += list_length(&block->instr_list);
    }
 
-   if (num_instr > 512) {
-      gpir_error("shader too big (%d), GP has a 512 instruction limit.\n",
-                 num_instr);
-      return false;
-   }
+   assert(num_instr <= 512);
 
    gpir_codegen_instr *code = rzalloc_array(comp->prog, gpir_codegen_instr, num_instr);
    if (!code)
@@ -607,7 +601,6 @@ bool gpir_codegen_prog(gpir_compiler *comp)
 
    comp->prog->shader = code;
    comp->prog->shader_size = num_instr * sizeof(gpir_codegen_instr);
-   comp->num_instr = num_instr;
 
    if (lima_debug & LIMA_DEBUG_GP) {
       gpir_codegen_print_prog(comp);

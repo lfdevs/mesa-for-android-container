@@ -33,9 +33,9 @@
 
 #include "a6xx.xml.h"
 
-enum a6xx_vtx_fmt fd6_pipe2vtx(enum pipe_format format);
-enum a6xx_tex_fmt fd6_pipe2tex(enum pipe_format format);
-enum a6xx_color_fmt fd6_pipe2color(enum pipe_format format);
+enum a6xx_format fd6_pipe2vtx(enum pipe_format format);
+enum a6xx_format fd6_pipe2tex(enum pipe_format format);
+enum a6xx_format fd6_pipe2color(enum pipe_format format);
 enum a3xx_color_swap fd6_pipe2swap(enum pipe_format format);
 enum a6xx_tex_fetchsize fd6_pipe2fetchsize(enum pipe_format format);
 enum a6xx_depth_format fd6_pipe2depth(enum pipe_format format);
@@ -51,67 +51,67 @@ uint32_t fd6_tex_const_0(struct pipe_resource *prsc,
 					  unsigned swizzle_b, unsigned swizzle_a);
 
 static inline enum a6xx_2d_ifmt
-fd6_ifmt(enum a6xx_color_fmt fmt)
+fd6_ifmt(enum a6xx_format fmt)
 {
 	switch (fmt) {
-	case RB6_A8_UNORM:
-	case RB6_R8_UNORM:
-	case RB6_R8_SNORM:
-	case RB6_R8G8_UNORM:
-	case RB6_R8G8_SNORM:
-	case RB6_R8G8B8A8_UNORM:
-	case RB6_R8G8B8X8_UNORM:
-	case RB6_R8G8B8A8_SNORM:
+	case FMT6_A8_UNORM:
+	case FMT6_8_UNORM:
+	case FMT6_8_SNORM:
+	case FMT6_8_8_UNORM:
+	case FMT6_8_8_SNORM:
+	case FMT6_8_8_8_8_UNORM:
+	case FMT6_8_8_8_X8_UNORM:
+	case FMT6_8_8_8_8_SNORM:
 		return R2D_UNORM8;
 
-	case RB6_R32_UINT:
-	case RB6_R32_SINT:
-	case RB6_R32G32_UINT:
-	case RB6_R32G32_SINT:
-	case RB6_R32G32B32A32_UINT:
-	case RB6_R32G32B32A32_SINT:
+	case FMT6_32_UINT:
+	case FMT6_32_SINT:
+	case FMT6_32_32_UINT:
+	case FMT6_32_32_SINT:
+	case FMT6_32_32_32_32_UINT:
+	case FMT6_32_32_32_32_SINT:
 		return R2D_INT32;
 
-	case RB6_R16_UINT:
-	case RB6_R16_SINT:
-	case RB6_R16G16_UINT:
-	case RB6_R16G16_SINT:
-	case RB6_R16G16B16A16_UINT:
-	case RB6_R16G16B16A16_SINT:
+	case FMT6_16_UINT:
+	case FMT6_16_SINT:
+	case FMT6_16_16_UINT:
+	case FMT6_16_16_SINT:
+	case FMT6_16_16_16_16_UINT:
+	case FMT6_16_16_16_16_SINT:
 		return R2D_INT16;
 
-	case RB6_R8_UINT:
-	case RB6_R8_SINT:
-	case RB6_R8G8_UINT:
-	case RB6_R8G8_SINT:
-	case RB6_R8G8B8A8_UINT:
-	case RB6_R8G8B8A8_SINT:
+	case FMT6_8_UINT:
+	case FMT6_8_SINT:
+	case FMT6_8_8_UINT:
+	case FMT6_8_8_SINT:
+	case FMT6_8_8_8_8_UINT:
+	case FMT6_8_8_8_8_SINT:
 		return R2D_INT8;
 
-	case RB6_R16_UNORM:
-	case RB6_R16_SNORM:
-	case RB6_R16G16_UNORM:
-	case RB6_R16G16_SNORM:
-	case RB6_R16G16B16A16_UNORM:
-	case RB6_R16G16B16A16_SNORM:
-	case RB6_R32_FLOAT:
-	case RB6_R32G32_FLOAT:
-	case RB6_R32G32B32A32_FLOAT:
+	case FMT6_16_UNORM:
+	case FMT6_16_SNORM:
+	case FMT6_16_16_UNORM:
+	case FMT6_16_16_SNORM:
+	case FMT6_16_16_16_16_UNORM:
+	case FMT6_16_16_16_16_SNORM:
+	case FMT6_32_FLOAT:
+	case FMT6_32_32_FLOAT:
+	case FMT6_32_32_32_32_FLOAT:
 		return R2D_FLOAT32;
 
-	case RB6_R16_FLOAT:
-	case RB6_R16G16_FLOAT:
-	case RB6_R16G16B16A16_FLOAT:
-	case RB6_R11G11B10_FLOAT:
+	case FMT6_16_FLOAT:
+	case FMT6_16_16_FLOAT:
+	case FMT6_16_16_16_16_FLOAT:
+	case FMT6_11_11_10_FLOAT:
 		return R2D_FLOAT16;
 
-	case RB6_R10G10B10A2_UNORM:
-	case RB6_R4G4B4A4_UNORM:
-	case RB6_R5G5B5A1_UNORM:
-	case RB6_R5G6B5_UNORM:
-	case RB6_R10G10B10A2_UINT:
-	case RB6_Z24_UNORM_S8_UINT:
-	case RB6_Z24_UNORM_S8_UINT_AS_R8G8B8A8:
+	case FMT6_10_10_10_2_UNORM_DEST:
+	case FMT6_4_4_4_4_UNORM:
+	case FMT6_5_5_5_1_UNORM:
+	case FMT6_5_6_5_UNORM:
+	case FMT6_10_10_10_2_UINT:
+	case FMT6_Z24_UNORM_S8_UINT:
+	case FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8:
 		return R2D_RAW;
 	default:
 		unreachable("bad format");

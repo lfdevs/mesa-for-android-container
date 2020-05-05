@@ -194,7 +194,6 @@ struct encode_task *enc_NeedTask_common(vid_enc_PrivateType * priv, OMX_VIDEO_PO
       return NULL;
 
    templat.buffer_format = PIPE_FORMAT_NV12;
-   templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
    templat.width = def->nFrameWidth;
    templat.height = def->nFrameHeight;
    templat.interlaced = false;

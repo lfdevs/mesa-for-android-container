@@ -184,17 +184,15 @@ nvc0_set_constant_vertex_attrib(struct nvc0_context *nvc0, const unsigned a)
    PUSH_SPACE(push, 6);
    BEGIN_NVC0(push, NVC0_3D(VTX_ATTR_DEFINE), 5);
    dst = &push->cur[1];
+   util_format_unpack_rgba(ve->src_format, dst, src, 1);
    if (desc->channel[0].pure_integer) {
       if (desc->channel[0].type == UTIL_FORMAT_TYPE_SIGNED) {
          mode = VTX_ATTR(a, 4, SINT, 32);
-         desc->unpack_rgba_sint(dst, 0, src, 0, 1, 1);
       } else {
          mode = VTX_ATTR(a, 4, UINT, 32);
-         desc->unpack_rgba_uint(dst, 0, src, 0, 1, 1);
       }
    } else {
       mode = VTX_ATTR(a, 4, FLOAT, 32);
-      desc->unpack_rgba_float(dst, 0, src, 0, 1, 1);
    }
    push->cur[0] = mode;
    push->cur += 5;

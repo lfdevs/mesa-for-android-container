@@ -35,7 +35,6 @@
  * appropriately synced with the stage of the pipeline for our extensions'
  * needs.
  */
-#include "main/imports.h"
 #include "main/queryobj.h"
 
 #include "brw_context.h"

@@ -24,15 +24,8 @@ __eglGLVNDQueryString(EGLDisplay dpy, EGLenum name)
 static const char *
 __eglGLVNDGetVendorString(int name)
 {
-   if (name == __EGL_VENDOR_STRING_PLATFORM_EXTENSIONS) {
-      const char *str = _eglGlobal.PlatformExtensionString;
-      // The platform extension string may have a leading space. If it does,
-      // then skip over it.
-      while (*str == ' ') {
-         str++;
-      }
-      return str;
-   }
+   if (name == __EGL_VENDOR_STRING_PLATFORM_EXTENSIONS)
+      return _eglGlobal.PlatformExtensionString;
 
    return NULL;
 }

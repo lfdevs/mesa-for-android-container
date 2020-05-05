@@ -790,7 +790,7 @@ namespace {
     * instruction \p inst.
     */
    void
-   update_inst_scoreboard(const fs_visitor *shader, const ordered_address *jps,
+   update_inst_scoreboard(const ordered_address *jps,
                           const fs_inst *inst, unsigned ip, scoreboard &sb)
    {
       const bool exec_all = inst->force_writemask_all;
@@ -843,7 +843,7 @@ namespace {
       unsigned ip = 0;
 
       foreach_block_and_inst(block, fs_inst, inst, shader->cfg)
-         update_inst_scoreboard(shader, jps, inst, ip++, sbs[block->num]);
+         update_inst_scoreboard(jps, inst, ip++, sbs[block->num]);
 
       return sbs;
    }
@@ -943,7 +943,7 @@ namespace {
             }
          }
 
-         update_inst_scoreboard(shader, jps, inst, ip, sb);
+         update_inst_scoreboard(jps, inst, ip, sb);
          ip++;
       }
 

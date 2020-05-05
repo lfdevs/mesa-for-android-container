@@ -34,6 +34,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "radeon_common.h"
 #include "radeon_fog.h"
 #include "util/simple_list.h"
+#include "util/u_memory.h"
 
 #if defined(USE_X86_ASM)
 #define COPY_DWORDS( dst, src, nr )					\

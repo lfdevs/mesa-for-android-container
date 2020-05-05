@@ -136,7 +136,7 @@ foreach v : ['40', '45', '50', '60', '70', '75', '80', '90', '100', '110']
     'i965_gen@0@'.format(v),
     ['genX_blorp_exec.c', 'genX_boilerplate.h', 'genX_pipe_control.c',
      'genX_state_upload.c', gen_xml_pack],
-    include_directories : [inc_common, inc_intel, inc_dri_common],
+    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_dri_common],
     c_args : [
       c_vis_args, no_override_init_args, c_sse2_args,
       '-DGEN_VERSIONx10=@0@'.format(v),
@@ -150,7 +150,7 @@ libi965 = static_library(
   'i965',
   [files_i965, ir_expression_operation_h],
   include_directories : [
-    inc_common, inc_intel, inc_dri_common, inc_include,
+    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_dri_common,
   ],
   c_args : [c_vis_args, no_override_init_args, c_sse2_args],
   cpp_args : [cpp_vis_args, c_sse2_args],

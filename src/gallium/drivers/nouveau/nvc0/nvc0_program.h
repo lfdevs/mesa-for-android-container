@@ -41,6 +41,7 @@ struct nvc0_program {
       uint8_t edgeflag; /* attribute index of edgeflag input */
       bool need_vertex_id;
       bool need_draw_parameters;
+      bool layer_viewport_relative; /* also applies go gp and tp */
    } vp;
    struct {
       uint8_t early_z;

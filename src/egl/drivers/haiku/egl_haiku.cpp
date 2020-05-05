@@ -152,35 +152,34 @@ haiku_add_configs_for_visuals(_EGLDisplay *disp)
 	_eglInitConfig(&conf->base, disp, 1);
 	TRACE("Config inited\n");
 
-	_eglSetConfigKey(&conf->base, EGL_RED_SIZE, 8);
-	_eglSetConfigKey(&conf->base, EGL_BLUE_SIZE, 8);
-	_eglSetConfigKey(&conf->base, EGL_GREEN_SIZE, 8);
-	_eglSetConfigKey(&conf->base, EGL_LUMINANCE_SIZE, 0);
-	_eglSetConfigKey(&conf->base, EGL_ALPHA_SIZE, 8);
-	_eglSetConfigKey(&conf->base, EGL_COLOR_BUFFER_TYPE, EGL_RGB_BUFFER);
-	EGLint r = (_eglGetConfigKey(&conf->base, EGL_RED_SIZE)
-		+ _eglGetConfigKey(&conf->base, EGL_GREEN_SIZE)
-		+ _eglGetConfigKey(&conf->base, EGL_BLUE_SIZE)
-		+ _eglGetConfigKey(&conf->base, EGL_ALPHA_SIZE));
-	_eglSetConfigKey(&conf->base, EGL_BUFFER_SIZE, r);
-	_eglSetConfigKey(&conf->base, EGL_CONFIG_CAVEAT, EGL_NONE);
-	_eglSetConfigKey(&conf->base, EGL_CONFIG_ID, 1);
-	_eglSetConfigKey(&conf->base, EGL_BIND_TO_TEXTURE_RGB, EGL_FALSE);
-	_eglSetConfigKey(&conf->base, EGL_BIND_TO_TEXTURE_RGBA, EGL_FALSE);
-	_eglSetConfigKey(&conf->base, EGL_STENCIL_SIZE, 0);
-	_eglSetConfigKey(&conf->base, EGL_TRANSPARENT_TYPE, EGL_NONE);
-	_eglSetConfigKey(&conf->base, EGL_NATIVE_RENDERABLE, EGL_TRUE); // Let's say yes
-	_eglSetConfigKey(&conf->base, EGL_NATIVE_VISUAL_ID, 0); // No visual
-	_eglSetConfigKey(&conf->base, EGL_NATIVE_VISUAL_TYPE, EGL_NONE); // No visual
-	_eglSetConfigKey(&conf->base, EGL_RENDERABLE_TYPE, 0x8);
-	_eglSetConfigKey(&conf->base, EGL_SAMPLE_BUFFERS, 0); // TODO: How to get the right value ?
-	_eglSetConfigKey(&conf->base, EGL_SAMPLES, _eglGetConfigKey(&conf->base, EGL_SAMPLE_BUFFERS) == 0 ? 0 : 0);
-	_eglSetConfigKey(&conf->base, EGL_DEPTH_SIZE, 24); // TODO: How to get the right value ?
-	_eglSetConfigKey(&conf->base, EGL_LEVEL, 0);
-	_eglSetConfigKey(&conf->base, EGL_MAX_PBUFFER_WIDTH, 0); // TODO: How to get the right value ?
-	_eglSetConfigKey(&conf->base, EGL_MAX_PBUFFER_HEIGHT, 0); // TODO: How to get the right value ?
-	_eglSetConfigKey(&conf->base, EGL_MAX_PBUFFER_PIXELS, 0); // TODO: How to get the right value ?
-	_eglSetConfigKey(&conf->base, EGL_SURFACE_TYPE, EGL_WINDOW_BIT /*| EGL_PIXMAP_BIT | EGL_PBUFFER_BIT*/);
+	conf->base.RedSize = 8;
+	conf->base.BlueSize = 8;
+	conf->base.GreenSize = 8;
+	conf->base.LuminanceSize = 0;
+	conf->base.AlphaSize = 8;
+	conf->base.ColorBufferType = EGL_RGB_BUFFER;
+	conf->base.BufferSize = conf->base.RedSize
+	                      + conf->base.GreenSize
+	                      + conf->base.BlueSize
+	                      + conf->base.AlphaSize;
+	conf->base.ConfigCaveat = EGL_NONE;
+	conf->base.ConfigId = 1;
+	conf->base.BindToTextureRGB = EGL_FALSE;
+	conf->base.BindToTextureRGBA = EGL_FALSE;
+	conf->base.StencilSize = 0;
+	conf->base.TransparentType = EGL_NONE;
+	conf->base.NativeRenderable = EGL_TRUE; // Let's say yes
+	conf->base.NativeVisualID = 0; // No visual
+	conf->base.NativeVisualType = EGL_NONE; // No visual
+	conf->base.RenderableType = 0x8;
+	conf->base.SampleBuffers = 0; // TODO: How to get the right value ?
+	conf->base.Samples = conf->base.SampleBuffers == 0 ? 0 : 0;
+	conf->base.DepthSize = 24; // TODO: How to get the right value ?
+	conf->base.Level = 0;
+	conf->base.MaxPbufferWidth = 0; // TODO: How to get the right value ?
+	conf->base.MaxPbufferHeight = 0; // TODO: How to get the right value ?
+	conf->base.MaxPbufferPixels = 0; // TODO: How to get the right value ?
+	conf->base.SurfaceType = EGL_WINDOW_BIT /*| EGL_PIXMAP_BIT | EGL_PBUFFER_BIT*/;
 
 	TRACE("Config configuated\n");
 	if (!_eglValidateConfig(&conf->base, EGL_FALSE)) {

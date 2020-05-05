@@ -75,6 +75,7 @@
 #include "perf/gen_perf.h"
 #include "perf/gen_perf_regs.h"
 #include "perf/gen_perf_mdapi.h"
+#include "perf/gen_perf_query.h"
 
 #define FILE_DEBUG_FLAG DEBUG_PERFMON
 
@@ -483,7 +484,7 @@ brw_init_perf_query_info(struct gl_context *ctx)
    if (perf_cfg)
       return perf_cfg->n_queries;
 
-   if (!oa_metrics_kernel_support(brw->screen->driScrnPriv->fd, devinfo))
+   if (!oa_metrics_kernel_support(brw->screen->fd, devinfo))
       return 0;
 
    perf_cfg = gen_perf_new(ctx);
@@ -504,8 +505,8 @@ brw_init_perf_query_info(struct gl_context *ctx)
    perf_cfg->vtbl.bo_busy = (bo_busy_t)brw_bo_busy;
 
    gen_perf_init_context(perf_ctx, perf_cfg, brw, brw->bufmgr, devinfo,
-                         brw->hw_ctx, brw->screen->driScrnPriv->fd);
-   gen_perf_init_metrics(perf_cfg, devinfo, brw->screen->driScrnPriv->fd);
+                         brw->hw_ctx, brw->screen->fd);
+   gen_perf_init_metrics(perf_cfg, devinfo, brw->screen->fd);
 
    return perf_cfg->n_queries;
 }

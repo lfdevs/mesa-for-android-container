@@ -32,7 +32,7 @@
 
 
 #include <stdio.h>
-#include "imports.h"
+#include "main/glheader.h"
 #include "execmem.h"
 #include "c11/threads.h"
 
@@ -79,7 +79,7 @@ init_heap(void)
 
    if (!exec_heap)
       exec_heap = u_mmInit( 0, EXEC_HEAP_SIZE );
-   
+
    if (!exec_mem)
       exec_mem = mmap(NULL, EXEC_HEAP_SIZE, PROT_EXEC | PROT_READ | PROT_WRITE,
                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -89,7 +89,7 @@ init_heap(void)
 
 
 void *
-_mesa_exec_malloc(GLuint size)
+_mesa_exec_malloc(unsigned size)
 {
    struct mem_block *block = NULL;
    void *addr = NULL;
@@ -106,24 +106,24 @@ _mesa_exec_malloc(GLuint size)
 
    if (block)
       addr = exec_mem + block->ofs;
-   else 
+   else
       printf("_mesa_exec_malloc failed\n");
 
 bail:
    mtx_unlock(&exec_mutex);
-   
+
    return addr;
 }
 
- 
-void 
+
+void
 _mesa_exec_free(void *addr)
 {
    mtx_lock(&exec_mutex);
 
    if (exec_heap) {
       struct mem_block *block = u_mmFindBlock(exec_heap, (unsigned char *)addr - exec_mem);
-   
+
       if (block)
 	 u_mmFreeMem(block);
    }
@@ -139,13 +139,13 @@ _mesa_exec_free(void *addr)
  */
 
 void *
-_mesa_exec_malloc(GLuint size)
+_mesa_exec_malloc(unsigned size)
 {
    return malloc( size );
 }
 
- 
-void 
+
+void
 _mesa_exec_free(void *addr)
 {
    free(addr);

@@ -599,6 +599,12 @@ lp_build_depth_stencil_load_swizzled(struct gallivm_state *gallivm,
                                   LLVMConstVector(shuffles, zs_type.length), "");
    *s_fb = *z_fb;
 
+   if (format_desc->block.bits == 8) {
+      /* Extend stencil-only 8 bit values (S8_UINT) */
+      *s_fb = LLVMBuildZExt(builder, *s_fb,
+                            lp_build_int_vec_type(gallivm, z_src_type), "");
+   }
+
    if (format_desc->block.bits < z_src_type.width) {
       /* Extend destination ZS values (e.g., when reading from Z16_UNORM) */
       *z_fb = LLVMBuildZExt(builder, *z_fb,

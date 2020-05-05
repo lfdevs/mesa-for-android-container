@@ -31,33 +31,32 @@
 #include "radeon/radeon_winsys.h"
 #include "vl/vl_video_buffer.h"
 
-#define RVID_ERR(fmt, args...) \
-	fprintf(stderr, "EE %s:%d %s UVD - "fmt, __FILE__, __LINE__, __func__, ##args)
+#define RVID_ERR(fmt, args...)                                                                     \
+   fprintf(stderr, "EE %s:%d %s UVD - " fmt, __FILE__, __LINE__, __func__, ##args)
 
 #define UVD_FW_1_66_16 ((1 << 24) | (66 << 16) | (16 << 8))
 
 /* video buffer representation */
-struct rvid_buffer
-{
-	unsigned		usage;
-	struct si_resource	*res;
+struct rvid_buffer {
+   unsigned usage;
+   struct si_resource *res;
 };
 
 /* generate an stream handle */
 unsigned si_vid_alloc_stream_handle(void);
 
 /* create a buffer in the winsys */
-bool si_vid_create_buffer(struct pipe_screen *screen, struct rvid_buffer *buffer,
-			  unsigned size, unsigned usage);
+bool si_vid_create_buffer(struct pipe_screen *screen, struct rvid_buffer *buffer, unsigned size,
+                          unsigned usage);
 
 /* destroy a buffer */
 void si_vid_destroy_buffer(struct rvid_buffer *buffer);
 
 /* reallocate a buffer, preserving its content */
 bool si_vid_resize_buffer(struct pipe_screen *screen, struct radeon_cmdbuf *cs,
-			  struct rvid_buffer *new_buf, unsigned new_size);
+                          struct rvid_buffer *new_buf, unsigned new_size);
 
 /* clear the buffer with zeros */
-void si_vid_clear_buffer(struct pipe_context *context, struct rvid_buffer* buffer);
+void si_vid_clear_buffer(struct pipe_context *context, struct rvid_buffer *buffer);
 
 #endif // RADEON_VIDEO_H

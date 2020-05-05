@@ -77,7 +77,7 @@ iris_emit_pipe_control_flush(struct iris_batch *batch,
       flags &= ~(PIPE_CONTROL_CACHE_FLUSH_BITS | PIPE_CONTROL_CS_STALL);
    }
 
-   batch->vtbl->emit_raw_pipe_control(batch, reason, flags, NULL, 0, 0);
+   batch->screen->vtbl.emit_raw_pipe_control(batch, reason, flags, NULL, 0, 0);
 }
 
 /**
@@ -94,7 +94,7 @@ iris_emit_pipe_control_write(struct iris_batch *batch,
                              struct iris_bo *bo, uint32_t offset,
                              uint64_t imm)
 {
-   batch->vtbl->emit_raw_pipe_control(batch, reason, flags, bo, offset, imm);
+   batch->screen->vtbl.emit_raw_pipe_control(batch, reason, flags, bo, offset, imm);
 }
 
 /*

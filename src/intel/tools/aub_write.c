@@ -51,10 +51,10 @@
          _a > _b ? _a : _b;                     \
       })
 
-static void
-mem_trace_memory_write_header_out(struct aub_file *aub, uint64_t addr,
-                                  uint32_t len, uint32_t addr_space,
-                                  const char *desc);
+static struct aub_context *aub_context_new(struct aub_file *aub, uint32_t new_id);
+static void mem_trace_memory_write_header_out(struct aub_file *aub, uint64_t addr,
+                                              uint32_t len, uint32_t addr_space,
+                                              const char *desc);
 
 static void __attribute__ ((format(__printf__, 2, 3)))
 fail_if(int cond, const char *format, ...)
@@ -190,6 +190,7 @@ aub_file_init(struct aub_file *aub, FILE *file, FILE *debug, uint16_t pci_id, co
    dword_out(aub, 0);
 
    aub->next_context_handle = 1;
+   aub_context_new(aub, 0); /* Default context */
 }
 
 void

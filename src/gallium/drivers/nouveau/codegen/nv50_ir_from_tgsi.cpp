@@ -40,7 +40,6 @@ static nv50_ir::DataFile translateFile(uint file);
 static nv50_ir::TexTarget translateTexture(uint texTarg);
 static nv50_ir::SVSemantic translateSysVal(uint sysval);
 static nv50_ir::CacheMode translateCacheMode(uint qualifier);
-static nv50_ir::ImgFormat translateImgFormat(uint format);
 
 class Instruction
 {
@@ -224,8 +223,7 @@ public:
    nv50_ir::TexInstruction::Target getTexture(const Source *, int s) const;
 
    const nv50_ir::TexInstruction::ImgFormatDesc *getImageFormat() const {
-      return &nv50_ir::TexInstruction::formatTable[
-            translateImgFormat(insn->Memory.Format)];
+      return nv50_ir::TexInstruction::translateImgFormat((enum pipe_format)insn->Memory.Format);
    }
 
    nv50_ir::TexTarget getImageTarget() const {
@@ -511,66 +509,6 @@ static nv50_ir::CacheMode translateCacheMode(uint qualifier)
    if (qualifier & TGSI_MEMORY_COHERENT)
       return nv50_ir::CACHE_CG;
    return nv50_ir::CACHE_CA;
-}
-
-static nv50_ir::ImgFormat translateImgFormat(uint format)
-{
-
-#define FMT_CASE(a, b) \
-  case PIPE_FORMAT_ ## a: return nv50_ir::FMT_ ## b
-
-   switch (format) {
-   FMT_CASE(NONE, NONE);
-
-   FMT_CASE(R32G32B32A32_FLOAT, RGBA32F);
-   FMT_CASE(R16G16B16A16_FLOAT, RGBA16F);
-   FMT_CASE(R32G32_FLOAT, RG32F);
-   FMT_CASE(R16G16_FLOAT, RG16F);
-   FMT_CASE(R11G11B10_FLOAT, R11G11B10F);
-   FMT_CASE(R32_FLOAT, R32F);
-   FMT_CASE(R16_FLOAT, R16F);
-
-   FMT_CASE(R32G32B32A32_UINT, RGBA32UI);
-   FMT_CASE(R16G16B16A16_UINT, RGBA16UI);
-   FMT_CASE(R10G10B10A2_UINT, RGB10A2UI);
-   FMT_CASE(R8G8B8A8_UINT, RGBA8UI);
-   FMT_CASE(R32G32_UINT, RG32UI);
-   FMT_CASE(R16G16_UINT, RG16UI);
-   FMT_CASE(R8G8_UINT, RG8UI);
-   FMT_CASE(R32_UINT, R32UI);
-   FMT_CASE(R16_UINT, R16UI);
-   FMT_CASE(R8_UINT, R8UI);
-
-   FMT_CASE(R32G32B32A32_SINT, RGBA32I);
-   FMT_CASE(R16G16B16A16_SINT, RGBA16I);
-   FMT_CASE(R8G8B8A8_SINT, RGBA8I);
-   FMT_CASE(R32G32_SINT, RG32I);
-   FMT_CASE(R16G16_SINT, RG16I);
-   FMT_CASE(R8G8_SINT, RG8I);
-   FMT_CASE(R32_SINT, R32I);
-   FMT_CASE(R16_SINT, R16I);
-   FMT_CASE(R8_SINT, R8I);
-
-   FMT_CASE(R16G16B16A16_UNORM, RGBA16);
-   FMT_CASE(R10G10B10A2_UNORM, RGB10A2);
-   FMT_CASE(R8G8B8A8_UNORM, RGBA8);
-   FMT_CASE(R16G16_UNORM, RG16);
-   FMT_CASE(R8G8_UNORM, RG8);
-   FMT_CASE(R16_UNORM, R16);
-   FMT_CASE(R8_UNORM, R8);
-
-   FMT_CASE(R16G16B16A16_SNORM, RGBA16_SNORM);
-   FMT_CASE(R8G8B8A8_SNORM, RGBA8_SNORM);
-   FMT_CASE(R16G16_SNORM, RG16_SNORM);
-   FMT_CASE(R8G8_SNORM, RG8_SNORM);
-   FMT_CASE(R16_SNORM, R16_SNORM);
-   FMT_CASE(R8_SNORM, R8_SNORM);
-
-   FMT_CASE(B8G8R8A8_UNORM, BGRA8);
-   }
-
-   assert(!"Unexpected format");
-   return nv50_ir::FMT_NONE;
 }
 
 nv50_ir::DataType Instruction::inferSrcType() const
@@ -1291,6 +1229,9 @@ void Source::scanProperty(const struct tgsi_full_property *prop)
    case TGSI_PROPERTY_MUL_ZERO_WINS:
       info->io.mul_zero_wins = prop->u[0].Data;
       break;
+   case TGSI_PROPERTY_LAYER_VIEWPORT_RELATIVE:
+      info->io.layer_viewport_relative = prop->u[0].Data;
+      break;
    default:
       INFO("unhandled TGSI property %d\n", prop->Property.PropertyName);
       break;
@@ -1610,6 +1551,7 @@ bool Source::scanInstruction(const struct tgsi_full_instruction *inst)
              info->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_PRIMID ||
              info->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_LAYER ||
              info->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_VIEWPORT_INDEX ||
+             info->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_VIEWPORT_MASK ||
              info->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_FOG)
             info->out[dst.getIndex(0)].mask &= 1;
 
@@ -2377,9 +2319,15 @@ Converter::handleTEX(Value *dst[4], int R, int S, int L, int C, int Dx, int Dy)
    if (C == 0x0f)
       C = 0x00 | MAX2(tgt.getArgCount(), 2); // guess DC src
 
-   if (tgsi.getOpcode() == TGSI_OPCODE_TG4 &&
-       tgt == TEX_TARGET_CUBE_ARRAY_SHADOW)
-      shd = fetchSrc(1, 0);
+   if (tgt == TEX_TARGET_CUBE_ARRAY_SHADOW) {
+      switch (tgsi.getOpcode()) {
+      case TGSI_OPCODE_TG4: shd = fetchSrc(1, 0); break;
+      case TGSI_OPCODE_TEX2: shd = fetchSrc(1, 0); break;
+      case TGSI_OPCODE_TXB2: shd = fetchSrc(1, 1); break;
+      case TGSI_OPCODE_TXL2: shd = fetchSrc(1, 1); break;
+      default: assert(!"unexpected opcode with cube array shadow"); break;
+      }
+   }
    else if (tgt.isShadow())
       shd = fetchSrc(C >> 4, C & 3);
 

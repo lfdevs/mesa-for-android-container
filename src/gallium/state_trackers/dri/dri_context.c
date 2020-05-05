@@ -40,6 +40,8 @@
 #include "pipe-loader/pipe_loader.h"
 #include "state_tracker/st_context.h"
 
+#include "util/u_memory.h"
+
 GLboolean
 dri_create_context(gl_api api, const struct gl_config * visual,
                    __DRIcontext * cPriv,

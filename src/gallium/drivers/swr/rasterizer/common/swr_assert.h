@@ -164,12 +164,6 @@ void SwrTrace(
 #define SWR_ASSERT(e, ...) _SWR_ASSERT(true, e, ##__VA_ARGS__)
 #define SWR_ASSUME_ASSERT(e, ...) SWR_ASSERT(e, ##__VA_ARGS__)
 #define SWR_TRACE(_fmtstr, ...) _SWR_TRACE(_fmtstr, ##__VA_ARGS__)
-
-#if defined(assert)
-#undef assert
-#endif
-#define assert(exp) SWR_ASSERT(exp)
-
 #endif // SWR_ENABLE_ASSERTS
 
 #if SWR_ENABLE_REL_ASSERTS

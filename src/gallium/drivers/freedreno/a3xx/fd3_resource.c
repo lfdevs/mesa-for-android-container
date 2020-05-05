@@ -63,6 +63,8 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 			slice->pitch = width = align(width, pitchalign);
 			blocks = util_format_get_nblocks(format, slice->pitch, height);
 		}
+		slice->pitch = util_format_get_nblocksx(format, slice->pitch) *
+			rsc->layout.cpp;
 
 		slice->offset = size;
 		/* 1d array and 2d array textures must all have the same layer size

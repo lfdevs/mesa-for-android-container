@@ -108,6 +108,12 @@ struct ac_llvm_context {
 	LLVMValueRef i1true;
 	LLVMValueRef i1false;
 
+	/* Temporary helper to implement demote_to_helper:
+         * True = live lanes
+         * False = demoted lanes
+         */
+	LLVMValueRef postponed_kill;
+
 	/* Since ac_nir_translate makes a local copy of ac_llvm_context, there
 	 * are two ac_llvm_contexts. Declare a pointer here, so that the control
 	 * flow stack is shared by both ac_llvm_contexts.
@@ -605,6 +611,7 @@ void ac_optimize_vs_outputs(struct ac_llvm_context *ac,
 			    LLVMValueRef main_fn,
 			    uint8_t *vs_output_param_offset,
 			    uint32_t num_outputs,
+			    uint32_t skip_output_mask,
 			    uint8_t *num_param_exports);
 void ac_init_exec_full_mask(struct ac_llvm_context *ctx);
 
@@ -734,6 +741,9 @@ ac_build_ddxy_interp(struct ac_llvm_context *ctx, LLVMValueRef interp_ij);
 
 LLVMValueRef
 ac_build_load_helper_invocation(struct ac_llvm_context *ctx);
+
+LLVMValueRef
+ac_build_is_helper_invocation(struct ac_llvm_context *ctx);
 
 LLVMValueRef ac_build_call(struct ac_llvm_context *ctx, LLVMValueRef func,
 			   LLVMValueRef *args, unsigned num_args);

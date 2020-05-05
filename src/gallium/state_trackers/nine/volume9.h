@@ -28,7 +28,7 @@
 #include "pipe/p_state.h"
 #include "util/u_inlines.h"
 
-struct util_hash_table;
+struct hash_table;
 
 struct NineDevice9;
 

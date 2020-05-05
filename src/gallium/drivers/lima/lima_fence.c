@@ -33,7 +33,7 @@
 #include "lima_screen.h"
 #include "lima_context.h"
 #include "lima_fence.h"
-#include "lima_submit.h"
+#include "lima_job.h"
 
 struct pipe_fence_handle {
    struct pipe_reference reference;
@@ -55,7 +55,7 @@ lima_fence_server_sync(struct pipe_context *pctx,
 {
    struct lima_context *ctx = lima_context(pctx);
 
-   lima_submit_add_in_sync(ctx->gp_submit, fence->fd);
+   sync_accumulate("lima", &ctx->in_sync_fd, fence->fd);
 }
 
 void lima_fence_context_init(struct lima_context *ctx)

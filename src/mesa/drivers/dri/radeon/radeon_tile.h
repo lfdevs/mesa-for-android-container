@@ -25,7 +25,7 @@
  *
  */
 
-#include <main/formats.h>
+#include "main/formats.h"
 
 void tile_image(const void * src, unsigned src_pitch,
                 void *dst, unsigned dst_pitch,

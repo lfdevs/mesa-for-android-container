@@ -47,7 +47,6 @@
 #include "main/context.h"
 #include "main/config.h"
 #include "main/macros.h"
-#include "main/imports.h"
 #include "main/mtypes.h"
 #include "main/version.h"
 #include "xfonts.h"
@@ -1207,8 +1206,8 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
          stencil_size = 8;
       if (accumRedSize > 0 || accumGreenSize > 0 || accumBlueSize > 0 ||
           accumAlphaSize > 0) {
-         accumRedSize = 
-         accumGreenSize = 
+         accumRedSize =
+         accumGreenSize =
          accumBlueSize = default_accum_bits();
          accumAlphaSize = alpha_flag ? accumRedSize : 0;
       }

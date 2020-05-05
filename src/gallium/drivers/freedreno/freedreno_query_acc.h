@@ -59,8 +59,8 @@ struct fd_acc_query;
 struct fd_acc_sample_provider {
 	unsigned query_type;
 
-	/* stages applicable to the query type: */
-	enum fd_render_stage active;
+	/* Set if the provider should still count while !ctx->active_queries */
+	bool always;
 
 	unsigned size;
 
@@ -77,6 +77,11 @@ struct fd_acc_query {
 	const struct fd_acc_sample_provider *provider;
 
 	struct pipe_resource *prsc;
+
+	/* Pointer to the batch that our query has had resume() called on (if
+	 * any).
+	 */
+	struct fd_batch *batch;
 
 	/* usually the same as provider->size but for batch queries we
 	 * need to calculate the size dynamically when the query is

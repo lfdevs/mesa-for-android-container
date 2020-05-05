@@ -220,6 +220,11 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       vf.StatisticsEnable = false;
    }
 
+#if GEN_GEN >= 12
+   /* Disable Primitive Replication. */
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_PRIMITIVE_REPLICATION), pr);
+#endif
+
    anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
       prim.VertexAccessType         = SEQUENTIAL;
       prim.PrimitiveTopologyType    = _3DPRIM_POINTLIST;

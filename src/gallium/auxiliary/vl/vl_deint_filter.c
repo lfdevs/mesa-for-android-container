@@ -262,7 +262,6 @@ vl_deint_filter_init(struct vl_deint_filter *filter, struct pipe_context *pipe,
       PIPE_VIDEO_ENTRYPOINT_UNKNOWN,
       PIPE_VIDEO_CAP_PREFERED_FORMAT
    );
-   templ.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
    templ.width = video_width;
    templ.height = video_height;
    templ.interlaced = true;
@@ -420,7 +419,7 @@ vl_deint_filter_check_buffers(struct vl_deint_filter *filter,
    struct pipe_video_buffer *bufs[] = { prevprev, prev, cur, next };
 
    for (i = 0; i < 4; i++) {
-      if (bufs[i]->chroma_format != PIPE_VIDEO_CHROMA_FORMAT_420)
+      if (pipe_format_to_chroma_format(bufs[i]->buffer_format) != PIPE_VIDEO_CHROMA_FORMAT_420)
          return false;
       if (bufs[i]->width < filter->video_width ||
           bufs[i]->height < filter->video_height)

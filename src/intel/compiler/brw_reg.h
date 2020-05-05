@@ -43,7 +43,7 @@
 #define BRW_REG_H
 
 #include <stdbool.h>
-#include "main/compiler.h"
+#include "util/compiler.h"
 #include "main/macros.h"
 #include "program/prog_instruction.h"
 #include "brw_eu_defines.h"
@@ -986,7 +986,7 @@ static inline struct brw_reg
 spread(struct brw_reg reg, unsigned s)
 {
    if (s) {
-      assert(_mesa_is_pow_two(s));
+      assert(util_is_power_of_two_nonzero(s));
 
       if (reg.hstride)
          reg.hstride += cvt(s) - 1;

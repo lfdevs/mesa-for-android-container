@@ -189,6 +189,19 @@ lp_build_fetch_s3tc_rgba_aos(struct gallivm_state *gallivm,
                              LLVMValueRef j,
                              LLVMValueRef cache);
 
+/*
+ * RGTC
+ */
+
+LLVMValueRef
+lp_build_fetch_rgtc_rgba_aos(struct gallivm_state *gallivm,
+                             const struct util_format_description *format_desc,
+                             unsigned n,
+                             LLVMValueRef base_ptr,
+                             LLVMValueRef offset,
+                             LLVMValueRef i,
+                             LLVMValueRef j,
+                             LLVMValueRef cache);
 
 /*
  * special float formats

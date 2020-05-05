@@ -302,11 +302,11 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
       switch (u_reduce_video_profile(context->templat.profile)) {
       case PIPE_VIDEO_FORMAT_MPEG4_AVC:
          context->desc.h264enc.rate_ctrl.rate_ctrl_method = config->rc;
-         context->desc.h264enc.frame_idx = util_hash_table_create(handle_hash, handle_compare);
+         context->desc.h264enc.frame_idx = util_hash_table_create_ptr_keys();
          break;
       case PIPE_VIDEO_FORMAT_HEVC:
          context->desc.h265enc.rc.rate_ctrl_method = config->rc;
-         context->desc.h265enc.frame_idx = util_hash_table_create(handle_hash, handle_compare);
+         context->desc.h265enc.frame_idx = util_hash_table_create_ptr_keys();
          break;
       default:
          break;
@@ -342,12 +342,12 @@ vlVaDestroyContext(VADriverContextP ctx, VAContextID context_id)
          if (u_reduce_video_profile(context->decoder->profile) ==
              PIPE_VIDEO_FORMAT_MPEG4_AVC) {
             if (context->desc.h264enc.frame_idx)
-               util_hash_table_destroy (context->desc.h264enc.frame_idx);
+               _mesa_hash_table_destroy(context->desc.h264enc.frame_idx, NULL);
          }
          if (u_reduce_video_profile(context->decoder->profile) ==
              PIPE_VIDEO_FORMAT_HEVC) {
             if (context->desc.h265enc.frame_idx)
-               util_hash_table_destroy (context->desc.h265enc.frame_idx);
+               _mesa_hash_table_destroy(context->desc.h265enc.frame_idx, NULL);
          }
       } else {
          if (u_reduce_video_profile(context->decoder->profile) ==

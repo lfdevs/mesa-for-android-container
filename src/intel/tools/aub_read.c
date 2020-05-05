@@ -39,7 +39,7 @@
 #define SUBOPCODE(dw)  (((dw) >> 16) & 0x7f)
 
 #define MAKE_HEADER(type, opcode, subopcode) \
-                   (((type) << 29) | ((opcode) << 23) | ((subopcode) << 16))
+                   ((((unsigned) (type)) << 29) | ((opcode) << 23) | ((subopcode) << 16))
 
 #define TYPE_AUB            0x7
 

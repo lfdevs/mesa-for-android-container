@@ -400,7 +400,6 @@ static struct dirty_bit_map mesa_bits[] = {
    DEFINE_BIT(_NEW_TEXTURE_MATRIX),
    DEFINE_BIT(_NEW_COLOR),
    DEFINE_BIT(_NEW_DEPTH),
-   DEFINE_BIT(_NEW_EVAL),
    DEFINE_BIT(_NEW_FOG),
    DEFINE_BIT(_NEW_HINT),
    DEFINE_BIT(_NEW_LIGHT),

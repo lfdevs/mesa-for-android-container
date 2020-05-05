@@ -89,7 +89,7 @@ nouveau_vp3_video_buffer_create(struct pipe_context *pipe,
       return vl_video_buffer_create(pipe, templat);
 
    assert(templat->interlaced);
-   assert(templat->chroma_format == PIPE_VIDEO_CHROMA_FORMAT_420);
+   assert(pipe_format_to_chroma_format(templat->buffer_format) == PIPE_VIDEO_CHROMA_FORMAT_420);
 
    buffer = CALLOC_STRUCT(nouveau_vp3_video_buffer);
    if (!buffer)
@@ -98,7 +98,6 @@ nouveau_vp3_video_buffer_create(struct pipe_context *pipe,
    buffer->base.buffer_format = templat->buffer_format;
    buffer->base.context = pipe;
    buffer->base.destroy = nouveau_vp3_video_buffer_destroy;
-   buffer->base.chroma_format = templat->chroma_format;
    buffer->base.width = templat->width;
    buffer->base.height = templat->height;
    buffer->base.get_sampler_view_planes = nouveau_vp3_video_buffer_sampler_view_planes;

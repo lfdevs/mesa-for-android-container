@@ -163,7 +163,7 @@ instructions_match(vec4_instruction *a, vec4_instruction *b)
 }
 
 bool
-vec4_visitor::opt_cse_local(bblock_t *block)
+vec4_visitor::opt_cse_local(bblock_t *block, const vec4_live_variables &live)
 {
    bool progress = false;
    exec_list aeb;
@@ -288,7 +288,7 @@ vec4_visitor::opt_cse_local(bblock_t *block)
              * more -- a sure sign they'll fail operands_match().
              */
             if (src->file == VGRF) {
-               if (var_range_end(var_from_reg(alloc, dst_reg(*src)), 8) < ip) {
+               if (live.var_range_end(var_from_reg(alloc, *src), 8) < ip) {
                   entry->remove();
                   ralloc_free(entry);
                   break;
@@ -309,15 +309,14 @@ bool
 vec4_visitor::opt_cse()
 {
    bool progress = false;
-
-   calculate_live_intervals();
+   const vec4_live_variables &live = live_analysis.require();
 
    foreach_block (block, cfg) {
-      progress = opt_cse_local(block) || progress;
+      progress = opt_cse_local(block, live) || progress;
    }
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
 
    return progress;
 }

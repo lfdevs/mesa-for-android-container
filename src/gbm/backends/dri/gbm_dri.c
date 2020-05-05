@@ -618,14 +618,12 @@ gbm_dri_is_format_supported(struct gbm_device *gbm,
       }
    }
 
-   /* Check if the driver returns any modifiers for this format; since linear
-    * is counted as a modifier, we will have at least one modifier for any
-    * supported format. */
+   /* This returns false if the format isn't supported */
    if (!dri->image->queryDmaBufModifiers(dri->screen, format, 0, NULL, NULL,
                                          &count))
       return 0;
 
-   return (count > 0);
+   return 1;
 }
 
 static int

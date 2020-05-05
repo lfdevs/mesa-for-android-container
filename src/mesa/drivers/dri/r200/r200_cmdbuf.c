@@ -32,7 +32,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "main/glheader.h"
-#include "main/imports.h"
+
 #include "main/macros.h"
 #include "main/context.h"
 #include "util/simple_list.h"
@@ -111,7 +111,7 @@ void r200SetUpAtomList( r200ContextPtr rmesa )
 }
 
 /* Fire a section of the retained (indexed_verts) buffer as a regular
- * primtive.  
+ * primtive.
  */
 void r200EmitVbufPrim( r200ContextPtr rmesa,
                        GLuint primitive,
@@ -120,13 +120,13 @@ void r200EmitVbufPrim( r200ContextPtr rmesa,
    BATCH_LOCALS(&rmesa->radeon);
 
    assert(!(primitive & R200_VF_PRIM_WALK_IND));
-   
+
    radeonEmitState(&rmesa->radeon);
-   
+
    radeon_print(RADEON_RENDER|RADEON_SWRENDER,RADEON_VERBOSE,
            "%s cmd_used/4: %d prim %x nr %d\n", __func__,
            rmesa->store.cmd_used/4, primitive, vertex_nr);
- 
+
    BEGIN_BATCH(3);
    OUT_BATCH_PACKET3_CLIP(R200_CP_CMD_3D_DRAW_VBUF_2, 0);
    OUT_BATCH(primitive | R200_VF_PRIM_WALK_LIST | R200_VF_COLOR_ORDER_RGBA |
@@ -142,7 +142,7 @@ static void r200FireEB(r200ContextPtr rmesa, int vertex_count, int type)
 		BEGIN_BATCH(8+2);
 		OUT_BATCH_PACKET3_CLIP(R200_CP_CMD_3D_DRAW_INDX_2, 0);
 		OUT_BATCH(R200_VF_PRIM_WALK_IND |
-			  R200_VF_COLOR_ORDER_RGBA | 
+			  R200_VF_COLOR_ORDER_RGBA |
 			  ((vertex_count + 0) << 16) |
 			  type);
 
@@ -190,7 +190,7 @@ GLushort *r200AllocEltsOpenEnded( r200ContextPtr rmesa,
    radeon_print(RADEON_RENDER, RADEON_VERBOSE, "%s %d prim %x\n", __func__, min_nr, primitive);
 
    assert((primitive & R200_VF_PRIM_WALK_IND));
-   
+
    radeonEmitState(&rmesa->radeon);
 
    radeonAllocDmaRegion(&rmesa->radeon, &rmesa->radeon.tcl.elt_dma_bo,
@@ -199,7 +199,7 @@ GLushort *r200AllocEltsOpenEnded( r200ContextPtr rmesa,
 
    radeon_bo_map(rmesa->radeon.tcl.elt_dma_bo, 1);
    retval = rmesa->radeon.tcl.elt_dma_bo->ptr + rmesa->radeon.tcl.elt_dma_offset;
-   
+
    assert(!rmesa->radeon.dma.flush);
    rmesa->radeon.glCtx.Driver.NeedFlush |= FLUSH_STORED_VERTICES;
    rmesa->radeon.dma.flush = r200FlushElts;
@@ -242,7 +242,7 @@ void r200EmitAOS(r200ContextPtr rmesa, GLuint nr, GLuint offset)
    uint32_t voffset;
    int sz = 1 + (nr >> 1) * 3 + (nr & 1) * 2;
    int i;
-   
+
    radeon_print(RADEON_RENDER, RADEON_VERBOSE,
            "%s: nr=%d, ofs=0x%08x\n",
            __func__, nr, offset);
@@ -257,7 +257,7 @@ void r200EmitAOS(r200ContextPtr rmesa, GLuint nr, GLuint offset)
 		   (rmesa->radeon.tcl.aos[i].stride << 8) |
 		   (rmesa->radeon.tcl.aos[i + 1].components << 16) |
 		   (rmesa->radeon.tcl.aos[i + 1].stride << 24));
-	 
+
 	 voffset =  rmesa->radeon.tcl.aos[i + 0].offset +
 	    offset * 4 * rmesa->radeon.tcl.aos[i + 0].stride;
 	 OUT_BATCH(voffset);
@@ -265,7 +265,7 @@ void r200EmitAOS(r200ContextPtr rmesa, GLuint nr, GLuint offset)
 	    offset * 4 * rmesa->radeon.tcl.aos[i + 1].stride;
 	 OUT_BATCH(voffset);
       }
-      
+
       if (nr & 1) {
 	 OUT_BATCH((rmesa->radeon.tcl.aos[nr - 1].components << 0) |
 		   (rmesa->radeon.tcl.aos[nr - 1].stride << 8));

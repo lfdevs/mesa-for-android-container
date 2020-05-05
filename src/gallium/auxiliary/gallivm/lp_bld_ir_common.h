@@ -29,6 +29,10 @@
 #ifndef LP_BLD_IR_COMMON_H
 #define LP_BLD_IR_COMMON_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "gallivm/lp_bld.h"
 #include "gallivm/lp_bld_limits.h"
 
@@ -116,5 +120,9 @@ void lp_exec_mask_cond_pop(struct lp_exec_mask *mask);
 void lp_exec_continue(struct lp_exec_mask *mask);
 
 void lp_exec_break(struct lp_exec_mask *mask, int *pc, bool break_always);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

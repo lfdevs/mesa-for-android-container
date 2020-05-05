@@ -38,6 +38,7 @@
 #include "fd6_emit.h"
 #include "fd6_program.h"
 #include "fd6_format.h"
+#include "fd6_vsc.h"
 #include "fd6_zsa.h"
 
 static void
@@ -191,6 +192,9 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 
 	if (emit.key.gs)
 		emit.key.key.has_gs = true;
+
+	if (!(emit.key.hs || emit.key.ds || emit.key.gs || info->indirect))
+		fd6_vsc_update_sizes(ctx->batch, info);
 
 	fixup_shader_state(ctx, &emit.key.key);
 
@@ -350,16 +354,11 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 	struct fd_ringbuffer *ring;
 	struct fd6_context *fd6_ctx = fd6_context(batch->ctx);
 
-	// TODO mid-frame clears (ie. app doing crazy stuff)??  Maybe worth
-	// splitting both clear and lrz clear out into their own rb's.  And
-	// just throw away any draws prior to clear.  (Anything not fullscreen
-	// clear, just fallback to generic path that treats it as a normal
-	// draw
-
-	if (!batch->lrz_clear) {
-		batch->lrz_clear = fd_submit_new_ringbuffer(batch->submit, 0x1000, 0);
+	if (batch->lrz_clear) {
+		fd_ringbuffer_del(batch->lrz_clear);
 	}
 
+	batch->lrz_clear = fd_submit_new_ringbuffer(batch->submit, 0x1000, 0);
 	ring = batch->lrz_clear;
 
 	emit_marker6(ring, 7);
@@ -377,7 +376,7 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 
 	emit_marker6(ring, 7);
 	OUT_PKT7(ring, CP_SET_MARKER, 1);
-	OUT_RING(ring, A6XX_CP_SET_MARKER_0_MODE(0xc));
+	OUT_RING(ring, A6XX_CP_SET_MARKER_0_MODE(RM6_BLIT2DSCALE));
 	emit_marker6(ring, 7);
 
 	OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8C01, 1);
@@ -402,14 +401,14 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 	OUT_RING(ring, 0x0000f410);
 
 	OUT_PKT4(ring, REG_A6XX_GRAS_2D_BLIT_CNTL, 1);
-	OUT_RING(ring, A6XX_GRAS_2D_BLIT_CNTL_COLOR_FORMAT(RB6_R16_UNORM) |
+	OUT_RING(ring, A6XX_GRAS_2D_BLIT_CNTL_COLOR_FORMAT(FMT6_16_UNORM) |
 			0x4f00080);
 
 	OUT_PKT4(ring, REG_A6XX_RB_2D_BLIT_CNTL, 1);
-	OUT_RING(ring, A6XX_RB_2D_BLIT_CNTL_COLOR_FORMAT(RB6_R16_UNORM) |
+	OUT_RING(ring, A6XX_RB_2D_BLIT_CNTL_COLOR_FORMAT(FMT6_16_UNORM) |
 			0x4f00080);
 
-	fd6_event_write(batch, ring, UNK_1D, true);
+	fd6_event_write(batch, ring, PC_CCU_FLUSH_COLOR_TS, true);
 	fd6_event_write(batch, ring, PC_CCU_INVALIDATE_COLOR, false);
 
 	OUT_PKT4(ring, REG_A6XX_RB_2D_SRC_SOLID_C0, 4);
@@ -419,7 +418,7 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT4(ring, REG_A6XX_RB_2D_DST_INFO, 9);
-	OUT_RING(ring, A6XX_RB_2D_DST_INFO_COLOR_FORMAT(RB6_R16_UNORM) |
+	OUT_RING(ring, A6XX_RB_2D_DST_INFO_COLOR_FORMAT(FMT6_16_UNORM) |
 			A6XX_RB_2D_DST_INFO_TILE_MODE(TILE6_LINEAR) |
 			A6XX_RB_2D_DST_INFO_COLOR_SWAP(WZYX));
 	OUT_RELOCW(ring, zsbuf->lrz, 0, 0, 0);
@@ -457,8 +456,8 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 	OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
 	OUT_RING(ring, 0x0);               /* RB_UNKNOWN_8E04 */
 
-	fd6_event_write(batch, ring, UNK_1D, true);
-	fd6_event_write(batch, ring, FACENESS_FLUSH, true);
+	fd6_event_write(batch, ring, PC_CCU_FLUSH_COLOR_TS, true);
+	fd6_event_write(batch, ring, PC_CCU_FLUSH_DEPTH_TS, true);
 	fd6_event_write(batch, ring, CACHE_FLUSH_TS, true);
 
 	fd6_cache_inv(batch, ring);

@@ -22,35 +22,35 @@
  ***************************************************************************/
 
 #pragma once
-
+#include "rasterizer/core/context.h"
 INLINE void
-swr_LoadHotTile(HANDLE hPrivateContext,
+swr_LoadHotTile(HANDLE hDC,
                 HANDLE hWorkerPrivateData,
                 SWR_FORMAT dstFormat,
                 SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
                 UINT x, UINT y,
                 uint32_t renderTargetArrayIndex, uint8_t* pDstHotTile)
 {
-   // Grab source surface state from private context
-   swr_draw_context *pDC = (swr_draw_context*)hPrivateContext;
-   SWR_SURFACE_STATE *pSrcSurface = &pDC->renderTargets[renderTargetIndex];
+   DRAW_CONTEXT *pDC = (DRAW_CONTEXT*)hDC;
+   swr_draw_context *pSDC = (swr_draw_context*)GetPrivateState(pDC);
+   SWR_SURFACE_STATE *pSrcSurface = &pSDC->renderTargets[renderTargetIndex];
 
-   pDC->pTileAPI->pfnSwrLoadHotTile(hWorkerPrivateData, pSrcSurface, dstFormat, renderTargetIndex, x, y, renderTargetArrayIndex, pDstHotTile);
+   pSDC->pTileAPI->pfnSwrLoadHotTile(hWorkerPrivateData, pSrcSurface, pDC->pContext->pBucketMgr, dstFormat, renderTargetIndex, x, y, renderTargetArrayIndex, pDstHotTile);
 }
 
 INLINE void
-swr_StoreHotTile(HANDLE hPrivateContext,
+swr_StoreHotTile(HANDLE hDC,
                  HANDLE hWorkerPrivateData,
                  SWR_FORMAT srcFormat,
                  SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
                  UINT x, UINT y,
                  uint32_t renderTargetArrayIndex, uint8_t* pSrcHotTile)
 {
-   // Grab destination surface state from private context
-   swr_draw_context *pDC = (swr_draw_context*)hPrivateContext;
-   SWR_SURFACE_STATE *pDstSurface = &pDC->renderTargets[renderTargetIndex];
+   DRAW_CONTEXT *pDC = (DRAW_CONTEXT*)hDC;
+   swr_draw_context *pSDC = (swr_draw_context*)GetPrivateState(pDC);
+   SWR_SURFACE_STATE *pDstSurface = &pSDC->renderTargets[renderTargetIndex];
 
-   pDC->pTileAPI->pfnSwrStoreHotTileToSurface(hWorkerPrivateData, pDstSurface, srcFormat, renderTargetIndex, x, y, renderTargetArrayIndex, pSrcHotTile);
+   pSDC->pTileAPI->pfnSwrStoreHotTileToSurface(hWorkerPrivateData, pDstSurface, pDC->pContext->pBucketMgr, srcFormat, renderTargetIndex, x, y, renderTargetArrayIndex, pSrcHotTile);
 }
 
 INLINE gfxptr_t

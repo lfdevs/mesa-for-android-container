@@ -95,4 +95,8 @@
  */
 #define LP_MAX_SETUP_VARIANTS 64
 
+/*
+ * Max point size reported. Cap vertex shader point sizes to this.
+ */
+#define LP_MAX_POINT_WIDTH 255.0f
 #endif /* LP_LIMITS_H */

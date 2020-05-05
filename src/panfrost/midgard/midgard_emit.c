@@ -194,8 +194,19 @@ mir_pack_swizzle_alu(midgard_instruction *ins)
                         packed = mir_pack_swizzle_64(ins->swizzle[i], components);
 
                         if (mode == midgard_reg_mode_32) {
-                                src[i].rep_low |= (ins->swizzle[i][0] >= COMPONENT_Z);
-                                src[i].rep_high |= (ins->swizzle[i][1] >= COMPONENT_Z);
+                                bool lo = ins->swizzle[i][0] >= COMPONENT_Z;
+                                bool hi = ins->swizzle[i][1] >= COMPONENT_Z;
+                                unsigned mask = mir_bytemask(ins);
+
+                                if (mask & 0xFF) {
+                                        /* We can't mix halves... */
+                                        if (mask & 0xFF00)
+                                                assert(lo == hi);
+
+                                        src[i].rep_low |= lo;
+                                } else {
+                                        src[i].rep_low |= hi;
+                                }
                         } else if (mode < midgard_reg_mode_32) {
                                 unreachable("Cannot encode 8/16 swizzle in 64-bit");
                         }
@@ -231,6 +242,12 @@ mir_pack_swizzle_alu(midgard_instruction *ins)
                         }
 
                         src[i].rep_high = upper;
+
+                        /* Replicate for now.. should really pick a side for
+                         * dot products */
+
+                        if (ins->alu.reg_mode == midgard_reg_mode_16)
+                                src[i].rep_low = true;
                 }
 
                 src[i].swizzle = packed;
@@ -361,11 +378,11 @@ emit_alu_bundle(compiler_context *ctx,
                         source = &scalarized;
                 }
 
-                memcpy(util_dynarray_grow_bytes(emission, 1, size), source, size);
+                memcpy(util_dynarray_grow_bytes(emission, size, 1), source, size);
         }
 
         /* Emit padding (all zero) */
-        memset(util_dynarray_grow_bytes(emission, 1, bundle->padding), 0, bundle->padding);
+        memset(util_dynarray_grow_bytes(emission, bundle->padding, 1), 0, bundle->padding);
 
         /* Tack on constants */
 
@@ -384,6 +401,21 @@ mir_ldst_imm_shift(midgard_load_store_op op)
                 return 3;
         else
                 return 1;
+}
+
+static enum mali_sampler_type
+midgard_sampler_type(nir_alu_type t) {
+        switch (nir_alu_type_get_base_type(t))
+        {
+        case nir_type_float:
+                return MALI_SAMPLER_FLOAT;
+        case nir_type_int:
+                return MALI_SAMPLER_SIGNED;
+        case nir_type_uint:
+                return MALI_SAMPLER_UNSIGNED;
+        default:
+                unreachable("Unknown sampler type");
+        }
 }
 
 /* After everything is scheduled, emit whole bundles at a time */
@@ -450,7 +482,8 @@ emit_binary_bundle(compiler_context *ctx,
         }
 
         case TAG_TEXTURE_4:
-        case TAG_TEXTURE_4_VTX: {
+        case TAG_TEXTURE_4_VTX:
+        case TAG_TEXTURE_4_BARRIER: {
                 /* Texture instructions are easy, since there is no pipelining
                  * nor VLIW to worry about. We may need to set .cont/.last
                  * flags. */
@@ -461,6 +494,16 @@ emit_binary_bundle(compiler_context *ctx,
                 ins->texture.next_type = next_tag;
                 ins->texture.mask = ins->mask;
                 mir_pack_swizzle_tex(ins);
+
+                unsigned osz = nir_alu_type_get_type_size(ins->dest_type);
+                unsigned isz = nir_alu_type_get_type_size(ins->src_types[1]);
+
+                assert(osz == 32 || osz == 16);
+                assert(isz == 32 || isz == 16);
+
+                ins->texture.out_full = (osz == 32);
+                ins->texture.in_reg_full = (isz == 32);
+                ins->texture.sampler_type = midgard_sampler_type(ins->dest_type);
 
                 ctx->texture_op_count--;
 

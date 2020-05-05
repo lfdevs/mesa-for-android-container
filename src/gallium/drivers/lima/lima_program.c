@@ -34,8 +34,11 @@
 
 #include "lima_screen.h"
 #include "lima_context.h"
+#include "lima_job.h"
 #include "lima_program.h"
 #include "lima_bo.h"
+#include "lima_format.h"
+
 #include "ir/lima_ir.h"
 
 static const nir_shader_compiler_options vs_nir_options = {
@@ -48,7 +51,6 @@ static const nir_shader_compiler_options vs_nir_options = {
    .lower_sub = true,
    .lower_flrp32 = true,
    .lower_flrp64 = true,
-   .lower_ftrunc = true,
    /* could be implemented by clamp */
    .lower_fsat = true,
    .lower_bitops = true,
@@ -71,10 +73,6 @@ static const nir_shader_compiler_options fs_nir_options = {
    .lower_fdph = true,
    .lower_bitops = true,
    .lower_vector_cmp = true,
-};
-
-static const struct nir_lower_tex_options tex_options = {
-   .lower_txp = ~0u,
 };
 
 const void *
@@ -122,6 +120,7 @@ lima_program_optimize_vs_nir(struct nir_shader *s)
       NIR_PASS(progress, s, nir_opt_cse);
       NIR_PASS(progress, s, nir_opt_peephole_select, 8, true, true);
       NIR_PASS(progress, s, nir_opt_algebraic);
+      NIR_PASS(progress, s, lima_nir_lower_ftrunc);
       NIR_PASS(progress, s, nir_opt_constant_folding);
       NIR_PASS(progress, s, nir_opt_undef);
       NIR_PASS(progress, s, nir_opt_loop_unroll,
@@ -131,14 +130,8 @@ lima_program_optimize_vs_nir(struct nir_shader *s)
    } while (progress);
 
    NIR_PASS_V(s, nir_lower_int_to_float);
-   /* Run opt_algebraic between int_to_float and bool_to_float because
-    * int_to_float emits ftrunc, and ftrunc lowering generates bool ops
-    */
-   do {
-      progress = false;
-      NIR_PASS(progress, s, nir_opt_algebraic);
-   } while (progress);
-
+   /* int_to_float pass generates ftrunc, so lower it */
+   NIR_PASS(progress, s, lima_nir_lower_ftrunc);
    NIR_PASS_V(s, nir_lower_bool_to_float);
 
    NIR_PASS_V(s, nir_copy_prop);
@@ -194,14 +187,15 @@ lima_alu_to_scalar_filter_cb(const nir_instr *instr, const void *data)
 }
 
 void
-lima_program_optimize_fs_nir(struct nir_shader *s)
+lima_program_optimize_fs_nir(struct nir_shader *s,
+                             struct nir_lower_tex_options *tex_options)
 {
    bool progress;
 
    NIR_PASS_V(s, nir_lower_fragcoord_wtrans);
    NIR_PASS_V(s, nir_lower_io, nir_var_all, type_size, 0);
    NIR_PASS_V(s, nir_lower_regs_to_ssa);
-   NIR_PASS_V(s, nir_lower_tex, &tex_options);
+   NIR_PASS_V(s, nir_lower_tex, tex_options);
 
    do {
       progress = false;
@@ -257,12 +251,35 @@ lima_program_optimize_fs_nir(struct nir_shader *s)
    nir_sweep(s);
 }
 
+static bool
+lima_fs_compile_shader(struct lima_context *ctx,
+                       struct lima_fs_shader_state *fs,
+                       struct nir_lower_tex_options *tex_options)
+{
+   struct lima_screen *screen = lima_screen(ctx->base.screen);
+   nir_shader *nir = nir_shader_clone(fs, fs->base.ir.nir);
+
+   lima_program_optimize_fs_nir(nir, tex_options);
+
+   if (lima_debug & LIMA_DEBUG_PP)
+      nir_print_shader(nir, stdout);
+
+   if (!ppir_compile_nir(fs, nir, screen->pp_ra, &ctx->debug)) {
+      ralloc_free(nir);
+      return false;
+   }
+
+   fs->uses_discard = nir->info.fs.uses_discard;
+   ralloc_free(nir);
+
+   return true;
+}
+
 static void *
 lima_create_fs_state(struct pipe_context *pctx,
                      const struct pipe_shader_state *cso)
 {
    struct lima_context *ctx = lima_context(pctx);
-   struct lima_screen *screen = lima_screen(pctx->screen);
    struct lima_fs_shader_state *so = rzalloc(NULL, struct lima_fs_shader_state);
 
    if (!so)
@@ -270,6 +287,9 @@ lima_create_fs_state(struct pipe_context *pctx,
 
    nir_shader *nir;
    if (cso->type == PIPE_SHADER_IR_NIR)
+      /* The backend takes ownership of the NIR shader on state
+       * creation.
+       */
       nir = cso->ir.nir;
    else {
       assert(cso->type == PIPE_SHADER_IR_TGSI);
@@ -277,17 +297,27 @@ lima_create_fs_state(struct pipe_context *pctx,
       nir = tgsi_to_nir(cso->tokens, pctx->screen);
    }
 
-   lima_program_optimize_fs_nir(nir);
+   so->base.type = PIPE_SHADER_IR_NIR;
+   so->base.ir.nir = nir;
 
-   if (lima_debug & LIMA_DEBUG_PP)
-      nir_print_shader(nir, stdout);
+   uint8_t identity[4] = { PIPE_SWIZZLE_X,
+                           PIPE_SWIZZLE_Y,
+                           PIPE_SWIZZLE_Z,
+                           PIPE_SWIZZLE_W };
 
-   if (!ppir_compile_nir(so, nir, screen->pp_ra, &ctx->debug)) {
+   struct nir_lower_tex_options tex_options = {
+      .lower_txp = ~0u,
+      .swizzle_result = 0,
+   };
+
+   /* Initialize with identity swizzles. That should suffice for most shaders  */
+   for (int i = 0; i < PIPE_MAX_SAMPLERS; i++)
+      memcpy(so->swizzles[i], identity, 4);
+
+   if (!lima_fs_compile_shader(ctx, so, &tex_options)) {
       ralloc_free(so);
       return NULL;
    }
-
-   so->uses_discard = nir->info.fs.uses_discard;
 
    return so;
 }
@@ -309,6 +339,7 @@ lima_delete_fs_state(struct pipe_context *pctx, void *hwcso)
    if (so->bo)
       lima_bo_unreference(so->bo);
 
+   ralloc_free(so->base.ir.nir);
    ralloc_free(so);
 }
 
@@ -336,6 +367,54 @@ bool
 lima_update_fs_state(struct lima_context *ctx)
 {
    struct lima_fs_shader_state *fs = ctx->fs;
+   struct lima_texture_stateobj *lima_tex = &ctx->tex_stateobj;
+   struct nir_lower_tex_options tex_options = {
+      .lower_txp = ~0u,
+      .swizzle_result = 0,
+   };
+   bool needs_recompile = false;
+
+   /* Check if texture formats has changed since last compilation.
+    * If it has we need to recompile shader.
+    */
+   if (((ctx->dirty & LIMA_CONTEXT_DIRTY_TEXTURES) &&
+       lima_tex->num_samplers &&
+       lima_tex->num_textures)) {
+      uint8_t identity[4] = { PIPE_SWIZZLE_X,
+                              PIPE_SWIZZLE_Y,
+                              PIPE_SWIZZLE_Z,
+                              PIPE_SWIZZLE_W };
+      for (int i = 0; i < lima_tex->num_samplers; i++) {
+         struct lima_sampler_view *texture = lima_sampler_view(lima_tex->textures[i]);
+         struct pipe_resource *prsc = texture->base.texture;
+         const uint8_t *swizzle = lima_format_get_texel_swizzle(prsc->format);
+         if (memcmp(fs->swizzles[i], swizzle, 4)) {
+            needs_recompile = true;
+            memcpy(fs->swizzles[i], swizzle, 4);
+         }
+
+         for (int j = 0; j < 4; j++)
+            tex_options.swizzles[i][j] = swizzle[j];
+
+         if (memcmp(swizzle, identity, 4))
+            tex_options.swizzle_result |= (1 << i);
+      }
+
+      /* Fill rest with identity swizzle */
+      for (int i = lima_tex->num_samplers; i < PIPE_MAX_SAMPLERS; i++)
+         memcpy(fs->swizzles[i], identity, 4);
+   }
+
+   if (needs_recompile) {
+      if (fs->bo) {
+         lima_bo_unreference(fs->bo);
+         fs->bo = NULL;
+      }
+
+      if (!lima_fs_compile_shader(ctx, fs, &tex_options))
+         return false;
+   }
+
    if (!fs->bo) {
       struct lima_screen *screen = lima_screen(ctx->base.screen);
       fs->bo = lima_bo_create(screen, fs->shader_size, 0);
@@ -349,7 +428,8 @@ lima_update_fs_state(struct lima_context *ctx)
       fs->shader = NULL;
    }
 
-   ctx->pp_max_stack_size = MAX2(ctx->pp_max_stack_size, ctx->fs->stack_size);
+   struct lima_job *job = lima_job_get(ctx);
+   job->pp_max_stack_size = MAX2(job->pp_max_stack_size, ctx->fs->stack_size);
 
    return true;
 }

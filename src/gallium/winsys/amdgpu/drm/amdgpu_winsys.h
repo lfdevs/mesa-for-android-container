@@ -99,7 +99,7 @@ struct amdgpu_winsys {
 
    /* For returning the same amdgpu_winsys_bo instance for exported
     * and re-imported buffers. */
-   struct util_hash_table *bo_export_table;
+   struct hash_table *bo_export_table;
    simple_mtx_t bo_export_table_lock;
 };
 

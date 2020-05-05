@@ -30,7 +30,7 @@
   */
 
 
-#include "main/compiler.h"
+#include "util/compiler.h"
 #include "main/context.h"
 #include "brw_context.h"
 #include "brw_vs.h"
@@ -159,7 +159,7 @@ brw_codegen_vs_prog(struct brw_context *brw,
 
    brw_compute_vue_map(devinfo,
                        &prog_data.base.vue_map, outputs_written,
-                       nir->info.separate_shader);
+                       nir->info.separate_shader, 1);
 
    if (0) {
       _mesa_fprint_program_opt(stderr, &vp->program, PROG_PRINT_DEBUG, true);
@@ -265,7 +265,7 @@ brw_vs_populate_key(struct brw_context *brw,
        (ctx->API == API_OPENGL_COMPAT || ctx->API == API_OPENGLES) &&
        vp->program.info.clip_distance_array_size == 0) {
       key->nr_userclip_plane_consts =
-         _mesa_logbase2(ctx->Transform.ClipPlanesEnabled) + 1;
+         util_logbase2(ctx->Transform.ClipPlanesEnabled) + 1;
    }
 
    if (devinfo->gen < 6) {

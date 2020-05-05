@@ -61,7 +61,7 @@ fd2_setup_slices(struct fd_resource *rsc)
 			height = util_next_power_of_two(height);
 		}
 
-		slice->pitch = width;
+		slice->pitch = util_format_get_nblocksx(format, width) * rsc->layout.cpp;
 		slice->offset = size;
 
 		blocks = util_format_get_nblocks(format, width, height);

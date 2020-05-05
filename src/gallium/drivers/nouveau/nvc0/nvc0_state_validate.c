@@ -391,6 +391,7 @@ static void
 nvc0_validate_viewport(struct nvc0_context *nvc0)
 {
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+   uint16_t class_3d = nvc0->screen->base.class_3d;
    int x, y, w, h, i;
    float zmin, zmax;
 
@@ -431,6 +432,14 @@ nvc0_validate_viewport(struct nvc0_context *nvc0)
       BEGIN_NVC0(push, NVC0_3D(DEPTH_RANGE_NEAR(i)), 2);
       PUSH_DATAf(push, zmin);
       PUSH_DATAf(push, zmax);
+
+      if (class_3d >= GM200_3D_CLASS) {
+         BEGIN_NVC0(push, NVC0_3D(VIEWPORT_SWIZZLE(i)), 1);
+         PUSH_DATA (push, vp->swizzle_x << 0 |
+                          vp->swizzle_y << 4 |
+                          vp->swizzle_z << 8 |
+                          vp->swizzle_w << 12);
+      }
    }
    nvc0->viewports_dirty = 0;
 }

@@ -77,7 +77,7 @@ if with_tests
     executable(
       'osmesa-render',
       'test-render.cpp',
-      include_directories : inc_common,
+      include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
       link_with: libosmesa,
       dependencies : [idep_gtest],
     ),

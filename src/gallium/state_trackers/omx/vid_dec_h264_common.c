@@ -109,7 +109,7 @@ void vid_dec_h264_EndFrame(vid_dec_PrivateType *priv)
    struct dpb_list *entry;
    struct pipe_video_buffer *tmp;
    bool top_field_first;
-   OMX_TICKS timestamp;
+   OMX_TICKS timestamp = 0;
 
    if (!priv->frame_started)
       return;
@@ -303,11 +303,11 @@ static void seq_parameter_set(vid_dec_PrivateType *priv, struct vl_rbsp *rbsp)
    vl_rbsp_u(rbsp, 1);
 
    /* pic_width_in_mbs_minus1 */
-   int pic_width_in_samplesl = (vl_rbsp_ue(rbsp) + 1) * 16;
+   ASSERTED int pic_width_in_samplesl = (vl_rbsp_ue(rbsp) + 1) * 16;
    assert(pic_width_in_samplesl);
 
    /* pic_height_in_map_units_minus1 */
-   int pic_height_in_map_units = vl_rbsp_ue(rbsp) + 1;
+   ASSERTED int pic_height_in_map_units = vl_rbsp_ue(rbsp) + 1;
    assert(pic_height_in_map_units);
 
    sps->frame_mbs_only_flag = vl_rbsp_u(rbsp, 1);
@@ -1096,7 +1096,6 @@ void vid_dec_FrameDecoded_common(vid_dec_PrivateType* priv, OMX_BUFFERHEADERTYPE
             port = tiz_krn_get_port(tiz_get_krn(handleOf (priv)), OMX_VID_DEC_AVC_INPUT_PORT_INDEX);
 #endif
             memset(&templat, 0, sizeof(templat));
-            templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
 #if ENABLE_ST_OMX_BELLAGIO
             templat.width = port->sPortParam.format.video.nFrameWidth;
             templat.height = port->sPortParam.format.video.nFrameHeight;

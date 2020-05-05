@@ -34,6 +34,8 @@
  * yet in the tail end of this block.
  */
 
+using namespace brw;
+
 /**
  * Is it safe to eliminate the instruction?
  */
@@ -74,21 +76,20 @@ fs_visitor::dead_code_eliminate()
 {
    bool progress = false;
 
-   calculate_live_intervals();
-
-   int num_vars = live_intervals->num_vars;
+   const fs_live_variables &live_vars = live_analysis.require();
+   int num_vars = live_vars.num_vars;
    BITSET_WORD *live = rzalloc_array(NULL, BITSET_WORD, BITSET_WORDS(num_vars));
    BITSET_WORD *flag_live = rzalloc_array(NULL, BITSET_WORD, 1);
 
    foreach_block_reverse_safe(block, cfg) {
-      memcpy(live, live_intervals->block_data[block->num].liveout,
+      memcpy(live, live_vars.block_data[block->num].liveout,
              sizeof(BITSET_WORD) * BITSET_WORDS(num_vars));
-      memcpy(flag_live, live_intervals->block_data[block->num].flag_liveout,
+      memcpy(flag_live, live_vars.block_data[block->num].flag_liveout,
              sizeof(BITSET_WORD));
 
       foreach_inst_in_block_reverse_safe(fs_inst, inst, block) {
          if (inst->dst.file == VGRF) {
-            const unsigned var = live_intervals->var_from_reg(inst->dst);
+            const unsigned var = live_vars.var_from_reg(inst->dst);
             bool result_live = false;
 
             for (unsigned i = 0; i < regs_written(inst); i++)
@@ -109,7 +110,7 @@ fs_visitor::dead_code_eliminate()
 
          if (inst->dst.file == VGRF) {
             if (!inst->is_partial_write()) {
-               int var = live_intervals->var_from_reg(inst->dst);
+               const unsigned var = live_vars.var_from_reg(inst->dst);
                for (unsigned i = 0; i < regs_written(inst); i++) {
                   BITSET_CLEAR(live, var + i);
                }
@@ -126,7 +127,7 @@ fs_visitor::dead_code_eliminate()
 
          for (int i = 0; i < inst->sources; i++) {
             if (inst->src[i].file == VGRF) {
-               int var = live_intervals->var_from_reg(inst->src[i]);
+               int var = live_vars.var_from_reg(inst->src[i]);
 
                for (unsigned j = 0; j < regs_read(inst, i); j++) {
                   BITSET_SET(live, var + j);
@@ -142,7 +143,7 @@ fs_visitor::dead_code_eliminate()
    ralloc_free(flag_live);
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
 
    return progress;
 }

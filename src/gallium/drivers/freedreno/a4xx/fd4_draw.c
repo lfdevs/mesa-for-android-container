@@ -111,7 +111,7 @@ fd4_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 			.vclamp_color = ctx->rasterizer->clamp_vertex_color,
 			.fclamp_color = ctx->rasterizer->clamp_fragment_color,
 			.rasterflat = ctx->rasterizer->flatshade,
-			.half_precision = ctx->in_blit &&
+			.half_precision = ctx->in_discard_blit &&
 					fd_half_precision(&ctx->batch->framebuffer),
 			.ucp_enables = ctx->rasterizer->clip_plane_enable,
 			.has_per_samp = (fd4_ctx->fsaturate || fd4_ctx->vsaturate ||

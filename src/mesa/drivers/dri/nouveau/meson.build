@@ -82,7 +82,7 @@ files_nouveau_vieux = files(
 libnouveau_vieux = static_library(
   'nouveau_vieux',
   files_nouveau_vieux,
-  include_directories : [inc_common, inc_dri_common, inc_util],
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_dri_common, inc_util],
   c_args : [c_vis_args],
   cpp_args : [cpp_vis_args],
   dependencies : [dep_libdrm, dep_libdrm_nouveau, idep_xmlconfig_headers],

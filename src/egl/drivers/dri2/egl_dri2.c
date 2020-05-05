@@ -85,41 +85,49 @@
 #define NUM_ATTRIBS 12
 
 static const struct dri2_pbuffer_visual {
+   const char *format_name;
    unsigned int dri_image_format;
    int rgba_shifts[4];
    unsigned int rgba_sizes[4];
 } dri2_pbuffer_visuals[] = {
    {
+      "ABGR16F",
       __DRI_IMAGE_FORMAT_ABGR16161616F,
       { 0, 16, 32, 48 },
       { 16, 16, 16, 16 }
    },
    {
+      "XBGR16F",
       __DRI_IMAGE_FORMAT_XBGR16161616F,
       { 0, 16, 32, -1 },
       { 16, 16, 16, 0 }
    },
    {
+      "A2RGB10",
       __DRI_IMAGE_FORMAT_ARGB2101010,
       { 20, 10, 0, 30 },
       { 10, 10, 10, 2 }
    },
    {
+      "X2RGB10",
       __DRI_IMAGE_FORMAT_XRGB2101010,
       { 20, 10, 0, -1 },
       { 10, 10, 10, 0 }
    },
    {
+      "ARGB8888",
       __DRI_IMAGE_FORMAT_ARGB8888,
       { 16, 8, 0, 24 },
       { 8, 8, 8, 8 }
    },
    {
+      "RGB888",
       __DRI_IMAGE_FORMAT_XRGB8888,
       { 16, 8, 0, -1 },
       { 8, 8, 8, 0 }
    },
    {
+      "RGB565",
       __DRI_IMAGE_FORMAT_RGB565,
       { 11, 5, 0, -1 },
       { 5, 6, 5, 0 }
@@ -432,15 +440,14 @@ dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
       switch (attrib) {
       case __DRI_ATTRIB_RENDER_TYPE:
          if (value & __DRI_ATTRIB_FLOAT_BIT)
-            _eglSetConfigKey(&base, EGL_COLOR_COMPONENT_TYPE_EXT,
-                             EGL_COLOR_COMPONENT_TYPE_FLOAT_EXT);
+            base.ComponentType = EGL_COLOR_COMPONENT_TYPE_FLOAT_EXT;
          if (value & __DRI_ATTRIB_RGBA_BIT)
             value = EGL_RGB_BUFFER;
          else if (value & __DRI_ATTRIB_LUMINANCE_BIT)
             value = EGL_LUMINANCE_BUFFER;
          else
             return NULL;
-         _eglSetConfigKey(&base, EGL_COLOR_BUFFER_TYPE, value);
+         base.ColorBufferType = value;
          break;
 
       case __DRI_ATTRIB_CONFIG_CAVEAT:
@@ -450,7 +457,7 @@ dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
             value = EGL_SLOW_CONFIG;
          else
             value = EGL_NONE;
-         _eglSetConfigKey(&base, EGL_CONFIG_CAVEAT, value);
+         base.ConfigCaveat = value;
          break;
 
       case __DRI_ATTRIB_BIND_TO_TEXTURE_RGB:
@@ -467,7 +474,7 @@ dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
 
       case __DRI_ATTRIB_RED_SIZE:
          dri_sizes[0] = value;
-         _eglSetConfigKey(&base, EGL_RED_SIZE, value);
+         base.RedSize = value;
          break;
 
       case __DRI_ATTRIB_RED_MASK:
@@ -480,7 +487,7 @@ dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
 
       case __DRI_ATTRIB_GREEN_SIZE:
          dri_sizes[1] = value;
-         _eglSetConfigKey(&base, EGL_GREEN_SIZE, value);
+         base.GreenSize = value;
          break;
 
       case __DRI_ATTRIB_GREEN_MASK:
@@ -493,7 +500,7 @@ dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
 
       case __DRI_ATTRIB_BLUE_SIZE:
          dri_sizes[2] = value;
-         _eglSetConfigKey(&base, EGL_BLUE_SIZE, value);
+         base.BlueSize = value;
          break;
 
       case __DRI_ATTRIB_BLUE_MASK:
@@ -506,7 +513,7 @@ dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
 
      case __DRI_ATTRIB_ALPHA_SIZE:
          dri_sizes[3] = value;
-         _eglSetConfigKey(&base, EGL_ALPHA_SIZE, value);
+         base.AlphaSize = value;
          break;
 
       case __DRI_ATTRIB_ALPHA_MASK:
@@ -533,12 +540,10 @@ dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
          break;
 
       case __DRI_ATTRIB_MAX_PBUFFER_WIDTH:
-         _eglSetConfigKey(&base, EGL_MAX_PBUFFER_WIDTH,
-                          _EGL_MAX_PBUFFER_WIDTH);
+         base.MaxPbufferWidth = _EGL_MAX_PBUFFER_WIDTH;
          break;
       case __DRI_ATTRIB_MAX_PBUFFER_HEIGHT:
-         _eglSetConfigKey(&base, EGL_MAX_PBUFFER_HEIGHT,
-                          _EGL_MAX_PBUFFER_HEIGHT);
+         base.MaxPbufferHeight = _EGL_MAX_PBUFFER_HEIGHT;
          break;
       case __DRI_ATTRIB_MUTABLE_RENDER_BUFFER:
          if (disp->Extensions.KHR_mutable_render_buffer)
@@ -635,6 +640,39 @@ dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
    conf->base.SurfaceType |= surface_type;
 
    return conf;
+}
+
+EGLBoolean
+dri2_add_pbuffer_configs_for_visuals(_EGLDriver *drv, _EGLDisplay *disp)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   unsigned int format_count[ARRAY_SIZE(dri2_pbuffer_visuals)] = { 0 };
+   unsigned int config_count = 0;
+
+   for (unsigned i = 0; dri2_dpy->driver_configs[i] != NULL; i++) {
+      for (unsigned j = 0; j < ARRAY_SIZE(dri2_pbuffer_visuals); j++) {
+         struct dri2_egl_config *dri2_conf;
+
+         dri2_conf = dri2_add_config(disp, dri2_dpy->driver_configs[i],
+               config_count + 1, EGL_PBUFFER_BIT, NULL,
+               dri2_pbuffer_visuals[j].rgba_shifts, dri2_pbuffer_visuals[j].rgba_sizes);
+
+         if (dri2_conf) {
+            if (dri2_conf->base.ConfigID == config_count + 1)
+               config_count++;
+            format_count[j]++;
+         }
+      }
+   }
+
+   for (unsigned i = 0; i < ARRAY_SIZE(format_count); i++) {
+      if (!format_count[i]) {
+         _eglLog(_EGL_DEBUG, "No DRI config supports native format %s",
+               dri2_pbuffer_visuals[i].format_name);
+      }
+   }
+
+   return (config_count != 0);
 }
 
 __DRIimage *
@@ -784,9 +822,11 @@ dri2_load_driver_common(_EGLDisplay *disp,
    if (!extensions)
       return EGL_FALSE;
 
-   if (!dri2_bind_extensions(dri2_dpy, driver_extensions, extensions, false))
+   if (!dri2_bind_extensions(dri2_dpy, driver_extensions, extensions, false)) {
+      dlclose(dri2_dpy->driver);
+      dri2_dpy->driver = NULL;
       return EGL_FALSE;
-
+   }
    dri2_dpy->driver_extensions = extensions;
 
    dri2_bind_extensions(dri2_dpy, optional_driver_extensions, extensions, true);
@@ -966,11 +1006,6 @@ dri2_setup_screen(_EGLDisplay *disp)
       if (dri2_dpy->image->base.version >= 8 &&
           dri2_dpy->image->createImageFromDmaBufs) {
          disp->Extensions.EXT_image_dma_buf_import = EGL_TRUE;
-      }
-      if (dri2_dpy->image->base.version >= 15 &&
-          dri2_dpy->image->createImageFromDmaBufs2 &&
-          dri2_dpy->image->queryDmaBufFormats &&
-          dri2_dpy->image->queryDmaBufModifiers) {
          disp->Extensions.EXT_image_dma_buf_import_modifiers = EGL_TRUE;
       }
 #endif

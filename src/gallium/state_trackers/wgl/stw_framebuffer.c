@@ -33,7 +33,8 @@
 #include "util/os_time.h"
 #include "state_tracker/st_api.h"
 
-#include "stw_icd.h"
+#include <GL/gl.h>
+#include "gldrv.h"
 #include "stw_framebuffer.h"
 #include "stw_device.h"
 #include "stw_winsys.h"
@@ -485,7 +486,7 @@ stw_pixelformat_get(HDC hdc)
 
 
 BOOL APIENTRY
-DrvPresentBuffers(HDC hdc, PGLPRESENTBUFFERSDATA data)
+DrvPresentBuffers(HDC hdc, LPPRESENTBUFFERS data)
 {
    struct stw_framebuffer *fb;
    struct pipe_screen *screen;
@@ -500,17 +501,17 @@ DrvPresentBuffers(HDC hdc, PGLPRESENTBUFFERSDATA data)
 
    screen = stw_dev->screen;
 
-   res = (struct pipe_resource *)data->pPrivateData;
+   res = (struct pipe_resource *)data->pPrivData;
 
-   if (data->hSharedSurface != fb->hSharedSurface) {
+   if (data->hSurface != fb->hSharedSurface) {
       if (fb->shared_surface) {
          stw_dev->stw_winsys->shared_surface_close(screen, fb->shared_surface);
          fb->shared_surface = NULL;
       }
 
-      fb->hSharedSurface = data->hSharedSurface;
+      fb->hSharedSurface = data->hSurface;
 
-      if (data->hSharedSurface &&
+      if (data->hSurface &&
          stw_dev->stw_winsys->shared_surface_open) {
          fb->shared_surface =
             stw_dev->stw_winsys->shared_surface_open(screen,
@@ -524,7 +525,7 @@ DrvPresentBuffers(HDC hdc, PGLPRESENTBUFFERSDATA data)
                                       res,
                                       fb->shared_surface,
                                       &fb->client_rect,
-                                      data->PresentHistoryToken);
+                                      data->ullPresentToken);
       }
       else {
          stw_dev->stw_winsys->present( screen, res, hdc );
@@ -551,21 +552,21 @@ stw_framebuffer_present_locked(HDC hdc,
                                struct stw_framebuffer *fb,
                                struct pipe_resource *res)
 {
-   if (stw_dev->callbacks.wglCbPresentBuffers &&
+   if (stw_dev->callbacks.pfnPresentBuffers &&
       stw_dev->stw_winsys->compose) {
-      GLCBPRESENTBUFFERSDATA data;
+      PRESENTBUFFERSCB data;
 
       memset(&data, 0, sizeof data);
-      data.magic1 = 2;
-      data.magic2 = 0;
-      data.AdapterLuid = stw_dev->AdapterLuid;
-      data.rect = fb->client_rect;
-      data.pPrivateData = (void *)res;
+      data.nVersion = 2;
+      data.syncType = PRESCB_SYNCTYPE_NONE;
+      data.luidAdapter = stw_dev->AdapterLuid;
+      data.updateRect = fb->client_rect;
+      data.pPrivData = (void *)res;
 
       stw_notify_current_locked(fb);
       stw_framebuffer_unlock(fb);
 
-      return stw_dev->callbacks.wglCbPresentBuffers(hdc, &data);
+      return stw_dev->callbacks.pfnPresentBuffers(hdc, &data);
    }
    else {
       struct pipe_screen *screen = stw_dev->screen;

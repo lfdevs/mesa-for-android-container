@@ -208,7 +208,7 @@ struct vc4_ra_select_callback_data {
 };
 
 static unsigned int
-vc4_ra_select_callback(struct ra_graph *g, BITSET_WORD *regs, void *data)
+vc4_ra_select_callback(unsigned int n, BITSET_WORD *regs, void *data)
 {
         struct vc4_ra_select_callback_data *vc4_ra = data;
 

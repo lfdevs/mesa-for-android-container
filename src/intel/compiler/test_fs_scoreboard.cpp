@@ -73,14 +73,14 @@ lower_scoreboard(fs_visitor *v)
 
    if (print) {
       fprintf(stderr, "= Before =\n");
-      v->cfg->dump(v);
+      v->cfg->dump();
    }
 
    v->lower_scoreboard();
 
    if (print) {
       fprintf(stderr, "\n= After =\n");
-      v->cfg->dump(v);
+      v->cfg->dump();
    }
 }
 

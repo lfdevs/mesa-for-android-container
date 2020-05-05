@@ -65,7 +65,9 @@
 
 #include <llvm/Support/TargetSelect.h>
 
+#if LLVM_VERSION_MAJOR < 11
 #include <llvm/IR/CallSite.h>
+#endif
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CBindingWrapping.h>

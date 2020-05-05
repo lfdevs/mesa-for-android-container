@@ -115,7 +115,7 @@ try_pbo_upload(struct gl_context *ctx,
    GLuint src_offset;
    drm_intel_bo *src_buffer;
 
-   if (!_mesa_is_bufferobj(unpack->BufferObj))
+   if (!unpack->BufferObj)
       return false;
 
    DBG("trying pbo upload\n");

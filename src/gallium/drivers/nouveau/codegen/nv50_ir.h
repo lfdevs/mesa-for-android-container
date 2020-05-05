@@ -467,6 +467,7 @@ enum SVSemantic
    SV_VERTEX_COUNT, // gl_PatchVerticesIn
    SV_LAYER,
    SV_VIEWPORT_INDEX,
+   SV_VIEWPORT_MASK,
    SV_YDIR,
    SV_FACE,
    SV_POINT_SIZE,
@@ -1016,6 +1017,8 @@ public:
    };
 
    static const struct ImgFormatDesc formatTable[IMG_FORMAT_COUNT];
+   static const struct ImgFormatDesc *translateImgFormat(
+         enum pipe_format format);
 
 public:
    TexInstruction(Function *, operation);

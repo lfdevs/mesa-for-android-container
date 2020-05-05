@@ -410,6 +410,14 @@ kernel::global_argument::set(size_t size, const void *value) {
       throw error(CL_INVALID_ARG_SIZE);
 
    buf = pobj<buffer>(value ? *(cl_mem *)value : NULL);
+   svm = nullptr;
+   _set = true;
+}
+
+void
+kernel::global_argument::set_svm(const void *value) {
+   svm = value;
+   buf = nullptr;
    _set = true;
 }
 
@@ -427,6 +435,11 @@ kernel::global_argument::bind(exec_context &ctx,
       // We don't need to.  Buffer offsets are always
       // one-dimensional.
       auto v = bytes(r.offset[0]);
+      extend(v, marg.ext_type, marg.target_size);
+      byteswap(v, ctx.q->device().endianness());
+      insert(ctx.input, v);
+   } else if (svm) {
+      auto v = bytes(svm);
       extend(v, marg.ext_type, marg.target_size);
       byteswap(v, ctx.q->device().endianness());
       insert(ctx.input, v);

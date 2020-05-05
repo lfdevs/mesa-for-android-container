@@ -102,6 +102,8 @@ static void lp_blit(struct pipe_context *pipe,
    util_blitter_save_scissor(lp->blitter, &lp->scissors[0]);
    util_blitter_save_fragment_shader(lp->blitter, lp->fs);
    util_blitter_save_blend(lp->blitter, (void*)lp->blend);
+   util_blitter_save_tessctrl_shader(lp->blitter, (void*)lp->tcs);
+   util_blitter_save_tesseval_shader(lp->blitter, (void*)lp->tes);
    util_blitter_save_depth_stencil_alpha(lp->blitter, (void*)lp->depth_stencil);
    util_blitter_save_stencil_ref(lp->blitter, &lp->stencil_ref);
    /*util_blitter_save_sample_mask(sp->blitter, lp->sample_mask);*/

@@ -179,6 +179,7 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TGSI_BALLOT:
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
    case PIPE_CAP_CLEAR_TEXTURE:
+   case PIPE_CAP_CLEAR_SCISSORED:
    case PIPE_CAP_TGSI_VOTE:
    case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
    case PIPE_CAP_TEXTURE_GATHER_SM5:
@@ -199,6 +200,7 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_GL_SPIRV_VARIABLE_POINTERS:
    case PIPE_CAP_DEMOTE_TO_HELPER_INVOCATION:
    case PIPE_CAP_NATIVE_FENCE_FD:
+   case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
       return true;
    case PIPE_CAP_FBFETCH:
       return BRW_MAX_DRAW_BUFFERS;
@@ -210,6 +212,8 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_FRAGMENT_SHADER_INTERLOCK:
    case PIPE_CAP_ATOMIC_FLOAT_MINMAX:
       return devinfo->gen >= 9;
+   case PIPE_CAP_DEPTH_BOUNDS_TEST:
+      return devinfo->gen >= 12;
    case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
       return 1;
    case PIPE_CAP_MAX_RENDER_TARGETS:
@@ -314,6 +318,9 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return PIPE_CONTEXT_PRIORITY_LOW |
              PIPE_CONTEXT_PRIORITY_MEDIUM |
              PIPE_CONTEXT_PRIORITY_HIGH;
+
+   case PIPE_CAP_FRONTEND_NOOP:
+      return true;
 
    // XXX: don't hardcode 00:00:02.0 PCI here
    case PIPE_CAP_PCI_GROUP:
@@ -517,16 +524,20 @@ iris_get_timestamp(struct pipe_screen *pscreen)
    return result;
 }
 
-static void
-iris_destroy_screen(struct pipe_screen *pscreen)
+void
+iris_screen_destroy(struct iris_screen *screen)
 {
-   struct iris_screen *screen = (struct iris_screen *) pscreen;
    iris_bo_unreference(screen->workaround_bo);
-   u_transfer_helper_destroy(pscreen->transfer_helper);
-   iris_bufmgr_destroy(screen->bufmgr);
+   u_transfer_helper_destroy(screen->base.transfer_helper);
+   iris_bufmgr_unref(screen->bufmgr);
    disk_cache_destroy(screen->disk_cache);
-   close(screen->fd);
    ralloc_free(screen);
+}
+
+static void
+iris_screen_unref(struct pipe_screen *pscreen)
+{
+   iris_pscreen_unref(pscreen);
 }
 
 static void
@@ -555,22 +566,22 @@ iris_get_disk_shader_cache(struct pipe_screen *pscreen)
 }
 
 static int
-iris_getparam(struct iris_screen *screen, int param, int *value)
+iris_getparam(int fd, int param, int *value)
 {
    struct drm_i915_getparam gp = { .param = param, .value = value };
 
-   if (ioctl(screen->fd, DRM_IOCTL_I915_GETPARAM, &gp) == -1)
+   if (ioctl(fd, DRM_IOCTL_I915_GETPARAM, &gp) == -1)
       return -errno;
 
    return 0;
 }
 
 static int
-iris_getparam_integer(struct iris_screen *screen, int param)
+iris_getparam_integer(int fd, int param)
 {
    int value = -1;
 
-   if (iris_getparam(screen, param, &value) == 0)
+   if (iris_getparam(fd, param, &value) == 0)
       return value;
 
    return -1;
@@ -627,24 +638,33 @@ iris_shader_perf_log(void *data, const char *fmt, ...)
 struct pipe_screen *
 iris_screen_create(int fd, const struct pipe_screen_config *config)
 {
+   /* Here are the i915 features we need for Iris (in chronoligical order) :
+    *    - I915_PARAM_HAS_EXEC_NO_RELOC     (3.10)
+    *    - I915_PARAM_HAS_EXEC_HANDLE_LUT   (3.10)
+    *    - I915_PARAM_HAS_EXEC_BATCH_FIRST  (4.13)
+    *    - I915_PARAM_HAS_EXEC_FENCE_ARRAY  (4.14)
+    *    - I915_PARAM_HAS_CONTEXT_ISOLATION (4.16)
+    *
+    * Checking the last feature availability will include all previous ones.
+    */
+   if (!iris_getparam_integer(fd, I915_PARAM_HAS_CONTEXT_ISOLATION)) {
+      debug_error("Kernel is too old for Iris. Consider upgrading to kernel v4.16.\n");
+      return NULL;
+   }
+
    struct iris_screen *screen = rzalloc(NULL, struct iris_screen);
    if (!screen)
       return NULL;
-
-   screen->fd = fd;
 
    if (!gen_get_device_info_from_fd(fd, &screen->devinfo))
       return NULL;
    screen->pci_id = screen->devinfo.chipset_id;
    screen->no_hw = screen->devinfo.no_hw;
 
+   p_atomic_set(&screen->refcount, 1);
+
    if (screen->devinfo.gen < 8 || screen->devinfo.is_cherryview)
       return NULL;
-
-   screen->aperture_bytes = get_aperture_size(fd);
-
-   if (getenv("INTEL_NO_HW") != NULL)
-      screen->no_hw = true;
 
    bool bo_reuse = false;
    int bo_reuse_mode = driQueryOptioni(config->options, "bo_reuse");
@@ -656,9 +676,16 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
       break;
    }
 
-   screen->bufmgr = iris_bufmgr_init(&screen->devinfo, fd, bo_reuse);
+   screen->bufmgr = iris_bufmgr_get_for_fd(&screen->devinfo, fd, bo_reuse);
    if (!screen->bufmgr)
       return NULL;
+
+   screen->fd = iris_bufmgr_get_fd(screen->bufmgr);
+
+   screen->aperture_bytes = get_aperture_size(fd);
+
+   if (getenv("INTEL_NO_HW") != NULL)
+      screen->no_hw = true;
 
    screen->workaround_bo =
       iris_bo_alloc(screen->bufmgr, "workaround", 4096, IRIS_MEMZONE_OTHER);
@@ -694,7 +721,7 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
                       sizeof(struct iris_transfer), 64);
 
    screen->subslice_total =
-      iris_getparam_integer(screen, I915_PARAM_SUBSLICE_TOTAL);
+      iris_getparam_integer(screen->fd, I915_PARAM_SUBSLICE_TOTAL);
    assert(screen->subslice_total >= 1);
 
    struct pipe_screen *pscreen = &screen->base;
@@ -702,7 +729,7 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    iris_init_screen_fence_functions(pscreen);
    iris_init_screen_resource_functions(pscreen);
 
-   pscreen->destroy = iris_destroy_screen;
+   pscreen->destroy = iris_screen_unref;
    pscreen->get_name = iris_get_name;
    pscreen->get_vendor = iris_get_vendor;
    pscreen->get_device_vendor = iris_get_device_vendor;

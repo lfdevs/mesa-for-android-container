@@ -315,7 +315,7 @@ nv50_validate_tic(struct nv50_context *nv50, int s)
          struct nv50_tic_entry *tic = nv50_tic_entry(nv50->textures[s][i]);
          struct nv50_miptree *res;
 
-         if (!tic) {
+         if (!tic || tic->pipe.target == PIPE_BUFFER) {
             PUSH_DATA (push, 0);
             PUSH_DATA (push, 0);
             continue;

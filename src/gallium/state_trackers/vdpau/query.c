@@ -246,7 +246,7 @@ vlVdpOutputSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba
    mtx_lock(&dev->mutex);
    *is_supported = pscreen->is_format_supported
    (
-      pscreen, format, PIPE_TEXTURE_3D, 1, 1,
+      pscreen, format, PIPE_TEXTURE_2D, 1, 1,
       PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
    );
    if (*is_supported) {
@@ -446,7 +446,7 @@ vlVdpBitmapSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba
    mtx_lock(&dev->mutex);
    *is_supported = pscreen->is_format_supported
    (
-      pscreen, format, PIPE_TEXTURE_3D, 1, 1,
+      pscreen, format, PIPE_TEXTURE_2D, 1, 1,
       PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
    );
    if (*is_supported) {

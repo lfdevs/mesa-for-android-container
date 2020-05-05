@@ -46,9 +46,9 @@ swr_create_query(struct pipe_context *pipe, unsigned type, unsigned index)
    assert(index < MAX_SO_STREAMS);
 
    pq = (struct swr_query *) AlignedMalloc(sizeof(struct swr_query), 64);
-   memset(pq, 0, sizeof(*pq));
 
    if (pq) {
+      memset(pq, 0, sizeof(*pq));
       pq->type = type;
       pq->index = index;
    }

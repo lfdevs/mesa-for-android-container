@@ -33,6 +33,7 @@
 #define BRW_EU_DEFINES_H
 
 #include <stdint.h>
+#include <stdlib.h>
 #include "util/macros.h"
 
 /* The following hunk, up-to "Execution Unit" is used by both the
@@ -453,8 +454,8 @@ enum opcode {
     * Memory fence messages.
     *
     * Source 0: Must be register g0, used as header.
-    * Source 1: Immediate bool to indicate whether or not we need to stall
-    *           until memory transactions prior to the fence are completed.
+    * Source 1: Immediate bool to indicate whether control is returned to the
+    *           thread only after the fence has been honored.
     * Source 2: Immediate byte indicating which memory to fence.  Zero means
     *           global memory; GEN7_BTI_SLM means SLM (for Gen11+ only).
     *
@@ -464,6 +465,9 @@ enum opcode {
 
    /**
     * Scheduling-only fence.
+    *
+    * Sources can be used to force a stall until the registers in those are
+    * available.  This might generate MOVs or SYNC_NOPs (Gen12+).
     */
    FS_OPCODE_SCHEDULING_FENCE,
 

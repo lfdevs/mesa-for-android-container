@@ -36,6 +36,9 @@
 #ifndef LP_BLD_TYPE_H
 #define LP_BLD_TYPE_H
 
+#if LLVM_VERSION_MAJOR < 11
+#define LLVMFixedVectorTypeKind LLVMVectorTypeKind
+#endif
 
 #include "util/format/u_format.h"
 #include "pipe/p_compiler.h"

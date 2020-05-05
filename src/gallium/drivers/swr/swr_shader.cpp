@@ -52,6 +52,7 @@
 #include "gallivm/lp_bld_tgsi.h"
 #include "gallivm/lp_bld_const.h"
 #include "gallivm/lp_bld_printf.h"
+#include "gallivm/lp_bld_logic.h"
 
 #include "swr_context.h"
 #include "gen_surf_state_llvm.h"
@@ -72,10 +73,18 @@
 
 #include "gallivm/lp_bld_type.h"
 
-#ifdef DEBUG
-constexpr bool verbose_shader = true;
+#if defined(DEBUG) && defined(SWR_VERBOSE_SHADER)
+constexpr bool verbose_shader          = true;
+constexpr bool verbose_tcs_shader_in   = true;
+constexpr bool verbose_tcs_shader_out  = true;
+constexpr bool verbose_tcs_shader_loop = true;
+constexpr bool verbose_vs_shader       = true;
 #else
-constexpr bool verbose_shader = false;
+constexpr bool verbose_shader          = false;
+constexpr bool verbose_tcs_shader_in   = false;
+constexpr bool verbose_tcs_shader_out  = false;
+constexpr bool verbose_tcs_shader_loop = false;
+constexpr bool verbose_vs_shader       = false;
 #endif
 
 using namespace SwrJit;
@@ -363,7 +372,7 @@ struct BuilderSWR : public Builder {
    void
    swr_gs_llvm_epilogue(const struct lp_build_gs_iface *gs_base,
                         LLVMValueRef total_emitted_vertices_vec,
-                        LLVMValueRef emitted_prims_vec);
+                        LLVMValueRef emitted_prims_vec, unsigned stream);
 
    // TCS-specific emit functions
    void swr_tcs_llvm_emit_prologue(struct lp_build_tgsi_soa_context* bld);
@@ -397,7 +406,8 @@ struct BuilderSWR : public Builder {
                             boolean is_aindex_indirect,
                             LLVMValueRef attrib_index,
                             LLVMValueRef swizzle_index,
-                            LLVMValueRef value);
+                            LLVMValueRef value,
+                            LLVMValueRef mask_vec);
 
    // Barrier implementation (available only in TCS)
    void
@@ -447,7 +457,7 @@ struct swr_tcs_llvm_iface {
 
    uint32_t output_vertices;
 
-   struct lp_build_for_loop_state loop_state;
+   LLVMValueRef loop_var;
 
    Value *pVtxAttribMap;
    Value *pVtxOutputAttribMap;
@@ -524,13 +534,13 @@ swr_gs_llvm_end_primitive(const struct lp_build_gs_iface *gs_base,
 static void
 swr_gs_llvm_epilogue(const struct lp_build_gs_iface *gs_base,
                         LLVMValueRef total_emitted_vertices_vec,
-                        LLVMValueRef emitted_prims_vec)
+                        LLVMValueRef emitted_prims_vec, unsigned stream)
 {
     swr_gs_llvm_iface *iface = (swr_gs_llvm_iface*)gs_base;
 
     iface->pBuilder->swr_gs_llvm_epilogue(gs_base,
                                          total_emitted_vertices_vec,
-                                         emitted_prims_vec);
+                                         emitted_prims_vec, stream);
 }
 
 static LLVMValueRef
@@ -601,7 +611,8 @@ void swr_tcs_llvm_store_output(const struct lp_build_tcs_iface *tcs_iface,
                          boolean is_aindex_indirect,
                          LLVMValueRef attrib_index,
                          LLVMValueRef swizzle_index,
-                         LLVMValueRef value)
+                         LLVMValueRef value,
+                         LLVMValueRef mask_vec)
 {
     swr_tcs_llvm_iface *iface = (swr_tcs_llvm_iface*)tcs_iface;
     struct lp_build_tgsi_context *bld_base = (struct lp_build_tgsi_context*)bld;
@@ -614,7 +625,8 @@ void swr_tcs_llvm_store_output(const struct lp_build_tcs_iface *tcs_iface,
                                                is_aindex_indirect,
                                                attrib_index,
                                                swizzle_index,
-                                               value);
+                                               value,
+                                               mask_vec);
 }
 
 
@@ -909,7 +921,7 @@ BuilderSWR::swr_gs_llvm_end_primitive(const struct lp_build_gs_iface *gs_base,
 void
 BuilderSWR::swr_gs_llvm_epilogue(const struct lp_build_gs_iface *gs_base,
                         LLVMValueRef total_emitted_vertices_vec,
-                        LLVMValueRef emitted_prims_vec)
+                        LLVMValueRef emitted_prims_vec, unsigned stream)
 {
    swr_gs_llvm_iface *iface = (swr_gs_llvm_iface*)gs_base;
 
@@ -930,20 +942,20 @@ BuilderSWR::swr_tcs_llvm_emit_prologue(struct lp_build_tgsi_soa_context* bld)
 {
    swr_tcs_llvm_iface *iface = (swr_tcs_llvm_iface*)bld->tcs_iface;
 
-   // Iterate for all the vertices in the output patch
-   lp_build_for_loop_begin(&iface->loop_state, gallivm,
-                        lp_build_const_int32(gallivm, 0),
-                        LLVMIntULT,
-                        lp_build_const_int32(gallivm, iface->output_vertices),
-                        lp_build_const_int32(gallivm, 1));
+   Value* loop_var = ALLOCA(mSimdInt32Ty);
+   STORE(VBROADCAST(C(0)), loop_var);
+
+   iface->loop_var = wrap(loop_var);
+
+   lp_exec_bgnloop(&bld->exec_mask, true);
 
    IRB()->SetInsertPoint(unwrap(LLVMGetInsertBlock(gallivm->builder)));
-   bld->system_values.invocation_id  = wrap(VBROADCAST(unwrap(iface->loop_state.counter)));
+   bld->system_values.invocation_id = wrap((LOAD(unwrap(iface->loop_var))));
 
-   if (verbose_shader) {
-      lp_build_printf(gallivm, "Prologue LOOP: Iteration %d BEGIN\n", iface->loop_state.counter);
-      lp_build_print_value(gallivm, "LOOP: InvocationId: \n", bld->system_values.invocation_id);
+   if (verbose_tcs_shader_loop) {
+      lp_build_print_value(gallivm, "Prologue LOOP Iteration BEGIN:", bld->system_values.invocation_id);
    }
+
 }
 
 void
@@ -951,10 +963,19 @@ BuilderSWR::swr_tcs_llvm_emit_epilogue(struct lp_build_tgsi_soa_context* bld)
 {
    swr_tcs_llvm_iface *iface = (swr_tcs_llvm_iface*)bld->tcs_iface;
 
-   if (verbose_shader) {
-      lp_build_printf(gallivm, "Epilogue LOOP: Iteration %d END\n", iface->loop_state.counter);
+   struct lp_build_context *uint_bld = &bld->bld_base.uint_bld;
+
+   STORE(ADD(LOAD(unwrap(iface->loop_var)), VBROADCAST(C(1))), unwrap(iface->loop_var));
+   if (verbose_tcs_shader_loop) {
+      lp_build_print_value(gallivm, "Epilogue LOOP: ", wrap(LOAD(unwrap(iface->loop_var))));
    }
-   lp_build_for_loop_end(&iface->loop_state);
+
+   LLVMValueRef tmp = lp_build_cmp(uint_bld, PIPE_FUNC_GEQUAL, wrap(LOAD(unwrap(iface->loop_var))),
+                                   wrap(VBROADCAST(C(iface->output_vertices))));
+   lp_exec_mask_cond_push(&bld->exec_mask, tmp);
+   lp_exec_break(&bld->exec_mask, &bld->bld_base.pc, false);
+   lp_exec_mask_cond_pop(&bld->exec_mask);
+   lp_exec_endloop(bld->bld_base.base.gallivm, &bld->exec_mask);
 }
 
 LLVMValueRef
@@ -967,46 +988,75 @@ BuilderSWR::swr_tcs_llvm_fetch_input(const struct lp_build_tcs_iface *tcs_iface,
                                      LLVMValueRef swizzle_index)
 {
    swr_tcs_llvm_iface *iface = (swr_tcs_llvm_iface*)tcs_iface;
+
    Value *vert_index = unwrap(vertex_index);
    Value *attr_index = unwrap(attrib_index);
 
    IRB()->SetInsertPoint(unwrap(LLVMGetInsertBlock(gallivm->builder)));
 
-   if (verbose_shader) {
-      lp_build_print_value(gallivm, "TCS: Vertex index: ", vertex_index);
-      lp_build_print_value(gallivm, "TCS: Attrib index: ", attrib_index);
-      lp_build_print_value(gallivm, "TCS: Swizzle index: ", swizzle_index);
+   if (verbose_tcs_shader_in) {
+      lp_build_printf(gallivm, "[TCS IN][VTX] ======================================\n");
+      lp_build_print_value(gallivm, "[TCS IN][VTX] vertex_index: ", vertex_index);
+      lp_build_print_value(gallivm, "[TCS IN][VTX] attrib_index: ", attrib_index);
+      lp_build_printf(gallivm, "[TCS IN][VTX] --------------------------------------\n");
    }
 
-   if (is_vindex_indirect) {
-      vert_index = VEXTRACT(vert_index, C(0));
-      if (verbose_shader) {
-         lp_build_print_value(gallivm, "TCS: Extracted vertex index: ", vertex_index);
+   Value *res = unwrap(bld_base->base.zero);
+   if (is_vindex_indirect || is_aindex_indirect) {
+      int i;
+      struct lp_type type = bld_base->base.type;
+
+      for (i = 0; i < type.length; i++) {
+         Value *vert_chan_index = vert_index;
+         Value *attr_chan_index = attr_index;
+
+         if (is_vindex_indirect) {
+            vert_chan_index = VEXTRACT(vert_index, C(i));
+         }
+         if (is_aindex_indirect) {
+            attr_chan_index = VEXTRACT(attr_index, C(i));
+         }
+
+         Value *attrib =
+            LOAD(GEP(iface->pVtxAttribMap, {C(0), attr_chan_index}));
+
+         Value *pBase = GEP(iface->pTcsCtx,
+                        { C(0), C(SWR_HS_CONTEXT_vert), vert_chan_index,
+                        C(simdvertex_attrib), attrib, unwrap(swizzle_index), C(i) });
+
+         Value *val = LOAD(pBase);
+
+         if (verbose_tcs_shader_in) {
+            lp_build_print_value(gallivm, "[TCS IN][VTX] vert_chan_index: ", wrap(vert_chan_index));
+            lp_build_print_value(gallivm, "[TCS IN][VTX] attrib_index: ", attrib_index);
+            lp_build_print_value(gallivm, "[TCS IN][VTX] attr_chan_index: ", wrap(attr_index));
+            lp_build_print_value(gallivm, "[TCS IN][VTX] attrib read from map: ", wrap(attrib));
+            lp_build_print_value(gallivm, "[TCS IN][VTX] swizzle_index: ", swizzle_index);
+            lp_build_print_value(gallivm, "[TCS IN][VTX] Loaded: ", wrap(val));
+         }
+         res = VINSERT(res, val, C(i));
+      }
+   } else {
+      Value *attrib = LOAD(GEP(iface->pVtxAttribMap, {C(0), attr_index}));
+
+      Value *pBase = GEP(iface->pTcsCtx,
+                        { C(0), C(SWR_HS_CONTEXT_vert), vert_index,
+                        C(simdvertex_attrib), attrib, unwrap(swizzle_index) });
+
+      res = LOAD(pBase);
+
+      if (verbose_tcs_shader_in) {
+         lp_build_print_value(gallivm, "[TCS IN][VTX] attrib_index: ", attrib_index);
+         lp_build_print_value(gallivm, "[TCS IN][VTX] attr_chan_index: ", wrap(attr_index));
+         lp_build_print_value(gallivm, "[TCS IN][VTX] attrib read from map: ", wrap(attrib));
+         lp_build_print_value(gallivm, "[TCS IN][VTX] swizzle_index: ", swizzle_index);
+         lp_build_print_value(gallivm, "[TCS IN][VTX] Loaded: ", wrap(res));
       }
    }
-
-   if (is_aindex_indirect) {
-      attr_index = VEXTRACT(attr_index, C(0));
-      if (verbose_shader) {
-         lp_build_print_value(gallivm, "TCS: Extracted attrib index: ", attrib_index);
-      }
+   if (verbose_tcs_shader_in) {
+      lp_build_print_value(gallivm, "[TCS IN][VTX] returning: ", wrap(res));
    }
-
-   Value *attrib = LOAD(GEP(iface->pVtxAttribMap, {C(0), attr_index}));
-   if (verbose_shader) {
-      lp_build_print_value(gallivm, "TCS: Attrib index loaded from map: ", wrap(attrib));
-   }
-
-   Value *pBase = GEP(iface->pTcsCtx,
-                     { C(0), C(SWR_HS_CONTEXT_vert), vert_index,
-                     C(simdvertex_attrib), attrib /*attr_index*/, unwrap(swizzle_index) });
-
-   LLVMValueRef res = wrap(LOAD(pBase));
-
-   if (verbose_shader) {
-      lp_build_print_value(gallivm, "TCS input fetched: ", res);
-   }
-   return res;
+   return wrap(res);
 }
 
 LLVMValueRef
@@ -1026,25 +1076,10 @@ BuilderSWR::swr_tcs_llvm_fetch_output(const struct lp_build_tcs_iface *tcs_iface
 
    IRB()->SetInsertPoint(unwrap(LLVMGetInsertBlock(gallivm->builder)));
 
-   if (verbose_shader) {
-      lp_build_print_value(gallivm, "++TCSo: Vertex index: ", vertex_index);
-      lp_build_print_value(gallivm, "++TCSo: Attrib index: ", wrap(attr_index));
-      lp_build_print_value(gallivm, "++TCSo: Swizzle index: ", swizzle_index);
-   }
-
-   if (is_vindex_indirect) {
-      vert_index = VEXTRACT(vert_index, C(0));
-      if (verbose_shader)
-      {
-         lp_build_print_value(gallivm, "TCSo: Extracted vertex index: ", vertex_index);
-      }
-   }
-
-   if (is_aindex_indirect) {
-      attr_index = VEXTRACT(attr_index, C(0));
-      if (verbose_shader) {
-         lp_build_print_value(gallivm, "TCSo: Extracted attrib index: ", attrib_index);
-      }
+   if (verbose_tcs_shader_in) {
+      lp_build_print_value(gallivm, "[TCS INOUT] Vertex index: ", vertex_index);
+      lp_build_print_value(gallivm, "[TCS INOUT] Attrib index: ", wrap(attr_index));
+      lp_build_print_value(gallivm, "[TCS INOUT] Swizzle index: ", swizzle_index);
    }
 
    Value* res = unwrap(bld_base->base.zero);
@@ -1053,8 +1088,24 @@ BuilderSWR::swr_tcs_llvm_fetch_output(const struct lp_build_tcs_iface *tcs_iface
       Value* p1 = LOAD(iface->pTcsCtx, {0, SWR_HS_CONTEXT_pCPout});
       Value* pCpOut = GEP(p1, {lane});
 
-      if (name == TGSI_SEMANTIC_TESSOUTER || name == TGSI_SEMANTIC_TESSINNER) {
+      Value *vert_chan_index = vert_index;
+      Value *attr_chan_index = attr_index;
 
+      if (is_vindex_indirect) {
+         vert_chan_index = VEXTRACT(vert_index, C(lane));
+         if (verbose_tcs_shader_in) {
+            lp_build_print_value(gallivm, "[TCS INOUT] Extracted vertex index: ", wrap(vert_chan_index));
+         }
+      }
+
+      if (is_aindex_indirect) {
+         attr_chan_index = VEXTRACT(attr_index, C(lane));
+         if (verbose_tcs_shader_in) {
+            lp_build_print_value(gallivm, "[TCS INOUT] Extracted attrib index: ", wrap(attr_chan_index));
+         }
+      }
+
+      if (name == TGSI_SEMANTIC_TESSOUTER || name == TGSI_SEMANTIC_TESSINNER) {
          Value* tessFactors = GEP(pCpOut, {(uint32_t)0, ScalarPatch_tessFactors});
          Value* tessFactorArray = nullptr;
          if (name == TGSI_SEMANTIC_TESSOUTER) {
@@ -1064,33 +1115,36 @@ BuilderSWR::swr_tcs_llvm_fetch_output(const struct lp_build_tcs_iface *tcs_iface
          }
          Value* tessFactor = GEP(tessFactorArray, {C(0), unwrap(swizzle_index)});
          res = VINSERT(res, LOAD(tessFactor), C(lane));
-
+         if (verbose_tcs_shader_in) {
+            lp_build_print_value(gallivm, "[TCS INOUT][FACTOR] lane (patch-id): ", wrap(C(lane)));
+            lp_build_print_value(gallivm, "[TCS INOUT][FACTOR] loaded value: ", wrap(res));
+         }
       } else if (name == TGSI_SEMANTIC_PATCH) {
-         lp_build_print_value(gallivm, "bbbbb TCS per-patch attr_index: ", wrap(attr_index));
-         Value* attr = GEP(pCpOut, {C(0), C(ScalarPatch_patchData), C(ScalarCPoint_attrib), attr_index, unwrap(swizzle_index)});
-         res = VINSERT(res, LOAD(attr), C(lane));
-         if (verbose_shader) {
-            lp_build_print_value(gallivm, "++TCSo per-patch lane (patch-id): ", wrap(C(lane)));
-            lp_build_print_value(gallivm, "++TCSo per-patch loaded value: ", wrap(res));
+         Value* attr_index_from_map = LOAD(GEP(iface->pPatchOutputAttribMap, {C(0), attr_chan_index}));
+         Value* attr_value = GEP(pCpOut, {C(0), C(ScalarPatch_patchData), C(ScalarCPoint_attrib), attr_index_from_map, unwrap(swizzle_index)});
+         res = VINSERT(res, LOAD(attr_value), C(lane));
+         if (verbose_tcs_shader_in) {
+            lp_build_print_value(gallivm, "[TCS INOUT][PATCH] attr index loaded from map: ", wrap(attr_index_from_map));
+            lp_build_print_value(gallivm, "[TCS INOUT][PATCH] lane (patch-id): ", wrap(C(lane)));
+            lp_build_print_value(gallivm, "[TCS INOUT][PATCH] loaded value: ", wrap(res));
          }
       } else {
          // Generic attribute
          Value *attrib =
-             LOAD(GEP(iface->pVtxOutputAttribMap, {C(0), attr_index}));
-         if (verbose_shader)
-         {
-            lp_build_print_value(gallivm, "TCSo: Attrib index from map: ", wrap(attrib));
+             LOAD(GEP(iface->pVtxOutputAttribMap, {C(0), attr_chan_index}));
+         if (verbose_tcs_shader_in) {
+            lp_build_print_value(gallivm, "[TCS INOUT][VTX] Attrib index from map: ", wrap(attrib));
          }
-         Value* attr_chan = GEP(pCpOut, {C(0), C(ScalarPatch_cp), vert_index,
+         Value* attr_chan = GEP(pCpOut, {C(0), C(ScalarPatch_cp), vert_chan_index,
                                     C(ScalarCPoint_attrib), attrib, unwrap(swizzle_index)});
 
          res = VINSERT(res, LOAD(attr_chan), C(lane));
+         if (verbose_tcs_shader_in) {
+            lp_build_print_value(gallivm, "[TCS INOUT][VTX] loaded value: ", wrap(res));
+         }
       }
    }
 
-   if (verbose_shader) {
-      lp_build_print_value(gallivm, "TCSo: output fetched: ", wrap(res));
-   }
    return wrap(res);
 }
 
@@ -1103,18 +1157,19 @@ BuilderSWR::swr_tcs_llvm_store_output(const struct lp_build_tcs_iface *tcs_iface
                                       boolean is_aindex_indirect,
                                       LLVMValueRef attrib_index,
                                       LLVMValueRef swizzle_index,
-                                      LLVMValueRef value)
+                                      LLVMValueRef value,
+                                      LLVMValueRef mask_vec)
 {
    swr_tcs_llvm_iface *iface = (swr_tcs_llvm_iface*)tcs_iface;
    struct lp_build_tgsi_soa_context* bld = (struct lp_build_tgsi_soa_context*)bld_base;
 
    IRB()->SetInsertPoint(unwrap(LLVMGetInsertBlock(gallivm->builder)));
 
-    if (verbose_shader) {
+    if (verbose_tcs_shader_out) {
       lp_build_printf(gallivm, "[TCS OUT] =============================================\n");
     }
 
-   if (verbose_shader) {
+   if (verbose_tcs_shader_out) {
       lp_build_print_value(gallivm, "[TCS OUT] Store mask: ", bld->exec_mask.exec_mask);
       lp_build_print_value(gallivm, "[TCS OUT] Store value: ", value);
    }
@@ -1122,9 +1177,7 @@ BuilderSWR::swr_tcs_llvm_store_output(const struct lp_build_tcs_iface *tcs_iface
    Value *vert_index = unwrap(vertex_index);
    Value *attr_index = unwrap(attrib_index);
 
-   IRB()->SetInsertPoint(unwrap(LLVMGetInsertBlock(gallivm->builder)));
-
-   if (verbose_shader) {
+   if (verbose_tcs_shader_out) {
       lp_build_print_value(gallivm, "[TCS OUT] Vertex index: ", vertex_index);
       lp_build_print_value(gallivm, "[TCS OUT] Attrib index: ", wrap(attr_index));
       lp_build_print_value(gallivm, "[TCS OUT] Swizzle index: ", swizzle_index);
@@ -1132,19 +1185,26 @@ BuilderSWR::swr_tcs_llvm_store_output(const struct lp_build_tcs_iface *tcs_iface
 
    if (is_vindex_indirect) {
       vert_index = VEXTRACT(vert_index, C(0));
-      if (verbose_shader)
-      {
+      if (verbose_tcs_shader_out) {
          lp_build_print_value(gallivm, "[TCS OUT] Extracted vertex index: ", vertex_index);
       }
    }
 
    if (is_aindex_indirect) {
       attr_index = VEXTRACT(attr_index, C(0));
-      if (verbose_shader) {
+      if (verbose_tcs_shader_out) {
          lp_build_print_value(gallivm, "[TCS OUT] Extracted attrib index: ", wrap(attr_index));
       }
    }
 
+   if (verbose_tcs_shader_out) {
+      if (bld->exec_mask.has_mask) {
+         lp_build_print_value(gallivm, "[TCS OUT] Exec mask: ", bld->exec_mask.exec_mask);
+      }
+      else {
+         lp_build_printf(gallivm, "[TCS OUT] has no mask\n");
+      }
+   }
    for (uint32_t lane = 0; lane < mVWidth; lane++) {
       Value* p1 = LOAD(iface->pTcsCtx, {0, SWR_HS_CONTEXT_pCPout});
       Value* pCpOut = GEP(p1, {lane});
@@ -1159,19 +1219,21 @@ BuilderSWR::swr_tcs_llvm_store_output(const struct lp_build_tcs_iface *tcs_iface
          }
          Value* tessFactor = GEP(tessFactorArray, {C(0), unwrap(swizzle_index)});
          Value* valueToStore = VEXTRACT(unwrap(value), C(lane));
-         struct lp_exec_mask *mask = &bld->exec_mask;
-         if (mask->has_mask) {
+         valueToStore = BITCAST(valueToStore, mFP32Ty);
+         if (mask_vec) {
             Value *originalVal = LOAD(tessFactor);
-            Value *vMask = TRUNC(VEXTRACT(unwrap(mask->exec_mask), C(lane)), mInt1Ty);
+            Value *vMask = TRUNC(VEXTRACT(unwrap(mask_vec), C(lane)), mInt1Ty);
             valueToStore = SELECT(vMask, valueToStore, originalVal);
          }
          STORE(valueToStore, tessFactor);
-         if (verbose_shader) {
+         if (verbose_tcs_shader_out)
+         {
+            lp_build_print_value(gallivm, "[TCS OUT][FACTOR] Mask_vec mask: ", mask_vec);
             lp_build_print_value(gallivm, "[TCS OUT][FACTOR] Stored value: ", wrap(valueToStore));
          }
       } else if (name == TGSI_SEMANTIC_PATCH) {
          Value* attrib = LOAD(GEP(iface->pPatchOutputAttribMap, {C(0), attr_index}));
-         if (verbose_shader) {
+         if (verbose_tcs_shader_out) {
             lp_build_print_value(gallivm, "[TCS OUT][PATCH] vert_index: ", wrap(vert_index));
             lp_build_print_value(gallivm, "[TCS OUT][PATCH] attr_index: ", wrap(attr_index));
             lp_build_print_value(gallivm, "[TCS OUT][PATCH] vert_index_indirect: ", wrap(C(is_vindex_indirect)));
@@ -1180,33 +1242,34 @@ BuilderSWR::swr_tcs_llvm_store_output(const struct lp_build_tcs_iface *tcs_iface
          }
          Value* attr = GEP(pCpOut, {C(0), C(ScalarPatch_patchData), C(ScalarCPoint_attrib), attrib});
          Value* value_to_store = VEXTRACT(unwrap(value), C(lane));
-         if (verbose_shader) {
+         if (verbose_tcs_shader_out) {
             lp_build_print_value(gallivm, "[TCS OUT][PATCH] lane (patch-id): ", wrap(C(lane)));
             lp_build_print_value(gallivm, "[TCS OUT][PATCH] value to store: ", value);
             lp_build_print_value(gallivm, "[TCS OUT][PATCH] per-patch value to store: ", wrap(value_to_store));
             lp_build_print_value(gallivm, "[TCS OUT][PATCH] chan_index: ", swizzle_index);
          }
-         struct lp_exec_mask *mask = &bld->exec_mask;
-         if (mask->has_mask) {
+         value_to_store = BITCAST(value_to_store, mFP32Ty);
+         if (mask_vec) {
             Value *originalVal = LOADV(attr, {C(0), unwrap(swizzle_index)});
-            Value *vMask = TRUNC(VEXTRACT(unwrap(mask->exec_mask), C(lane)), mInt1Ty);
-            value_to_store = SELECT(vMask, BITCAST(value_to_store, mFP32Ty), originalVal);
-            if (verbose_shader) {
-               lp_build_print_value(gallivm, "[TCS OUT][PATCH] store mask: ", bld->exec_mask.exec_mask);
+            Value *vMask = TRUNC(VEXTRACT(unwrap(mask_vec), C(lane)), mInt1Ty);
+            value_to_store = SELECT(vMask, value_to_store, originalVal);
+            if (verbose_tcs_shader_out) {
+               lp_build_print_value(gallivm, "[TCS OUT][PATCH] store mask: ", mask_vec);
                lp_build_print_value(gallivm, "[TCS OUT][PATCH] loaded original value: ", wrap(originalVal));
                lp_build_print_value(gallivm, "[TCS OUT][PATCH] vMask: ", wrap(vMask));
                lp_build_print_value(gallivm, "[TCS OUT][PATCH] selected value to store: ", wrap(value_to_store));
             }
          }
          STOREV(value_to_store, attr, {C(0), unwrap(swizzle_index)});
-         if (verbose_shader) {
+         if (verbose_tcs_shader_out) {
             lp_build_print_value(gallivm, "[TCS OUT][PATCH] stored value: ", wrap(value_to_store));
          }
       } else {
          Value* value_to_store = VEXTRACT(unwrap(value), C(lane));
          Value* attrib = LOAD(GEP(iface->pVtxOutputAttribMap, {C(0), attr_index}));
 
-         if (verbose_shader) {
+         if (verbose_tcs_shader_out) {
+            lp_build_printf(gallivm, "[TCS OUT] Writting attribute\n");
             lp_build_print_value(gallivm, "[TCS OUT][VTX] invocation_id: ", bld->system_values.invocation_id);
             lp_build_print_value(gallivm, "[TCS OUT][VTX] attribIndex: ", wrap(attr_index));
             lp_build_print_value(gallivm, "[TCS OUT][VTX] attrib read from map: ", wrap(attrib));
@@ -1220,22 +1283,20 @@ BuilderSWR::swr_tcs_llvm_store_output(const struct lp_build_tcs_iface *tcs_iface
                                     C(ScalarCPoint_attrib), attrib, unwrap(swizzle_index)});
 
          // Mask output values if needed
-         struct lp_exec_mask *mask = &bld->exec_mask;
-         if (mask->has_mask) {
+         value_to_store = BITCAST(value_to_store, mFP32Ty);
+         if (mask_vec) {
             Value *originalVal = LOAD(attr_chan);
-            Value *vMask = TRUNC(VEXTRACT(unwrap(mask->exec_mask), C(lane)), mInt1Ty);
-            // convert input to float before trying to store
-            value_to_store = SELECT(vMask, BITCAST(value_to_store, mFP32Ty), originalVal);
+            Value *vMask = TRUNC(VEXTRACT(unwrap(mask_vec), C(lane)), mInt1Ty);
+            value_to_store = SELECT(vMask, value_to_store, originalVal);
          }
          STORE(value_to_store, attr_chan);
-         if (verbose_shader) {
+         if (verbose_tcs_shader_out) {
+            lp_build_print_value(gallivm, "[TCS OUT][VTX] Mask_vec mask: ", mask_vec);
             lp_build_print_value(gallivm, "[TCS OUT][VTX] stored: ", wrap(value_to_store));
          }
       }
    }
 }
-
-
 
 void
 BuilderSWR::swr_tcs_llvm_emit_barrier(const struct lp_build_tcs_iface *tcs_iface,
@@ -1244,28 +1305,34 @@ BuilderSWR::swr_tcs_llvm_emit_barrier(const struct lp_build_tcs_iface *tcs_iface
    swr_tcs_llvm_iface *iface = (swr_tcs_llvm_iface*)tcs_iface;
    struct lp_build_tgsi_soa_context* bld = (struct lp_build_tgsi_soa_context*)bld_base;
 
-   if (verbose_shader) {
-      lp_build_printf(gallivm, "Barrier LOOP: Iteration %d END\n", iface->loop_state.counter);
+   if (verbose_tcs_shader_loop) {
+      lp_build_print_value(gallivm, "Barrier LOOP: Iteration %d END\n", iface->loop_var);
    }
 
-   // End previous loop
-   lp_build_for_loop_end(&iface->loop_state);
+   struct lp_build_context *uint_bld = &bld->bld_base.uint_bld;
 
-   // Start new one
-   lp_build_for_loop_begin(&iface->loop_state, gallivm,
-                        lp_build_const_int32(gallivm, 0),
-                        LLVMIntULT,
-                        lp_build_const_int32(gallivm, iface->output_vertices),
-                        lp_build_const_int32(gallivm, 1));
+   STORE(ADD(LOAD(unwrap(iface->loop_var)), VBROADCAST(C(1))), unwrap(iface->loop_var));
 
+   LLVMValueRef tmp = lp_build_cmp(uint_bld, PIPE_FUNC_GEQUAL, wrap(LOAD(unwrap(iface->loop_var))),
+                                   wrap(VBROADCAST(C(iface->output_vertices))));
+
+   lp_exec_mask_cond_push(&bld->exec_mask, tmp);
+   lp_exec_break(&bld->exec_mask, &bld->bld_base.pc, false);
+   lp_exec_mask_cond_pop(&bld->exec_mask);
+   lp_exec_endloop(bld->bld_base.base.gallivm, &bld->exec_mask);
 
    IRB()->SetInsertPoint(unwrap(LLVMGetInsertBlock(gallivm->builder)));
 
-   bld->system_values.invocation_id  = wrap(VBROADCAST(unwrap(iface->loop_state.counter)));
+   STORE(VBROADCAST(C(0)), unwrap(iface->loop_var));
+   lp_exec_bgnloop(&bld->exec_mask, true);
 
-   if (verbose_shader) {
-      lp_build_printf(gallivm, "Barrier LOOP: Iteration %d BEGIN\n", iface->loop_state.counter);
-      lp_build_print_value(gallivm, "LOOP: InvocationId: \n", bld->system_values.invocation_id);
+   IRB()->SetInsertPoint(unwrap(LLVMGetInsertBlock(gallivm->builder)));
+
+   bld->system_values.invocation_id = wrap((LOAD(unwrap(iface->loop_var))));
+
+   if (verbose_tcs_shader_loop) {
+      lp_build_print_value(gallivm, "Barrier LOOP: Iteration BEGIN: ", iface->loop_var);
+      lp_build_print_value(gallivm, "Barrier LOOP: InvocationId: \n", bld->system_values.invocation_id);
    }
 }
 
@@ -1510,6 +1577,7 @@ BuilderSWR::CompileGS(struct swr_context *ctx, swr_jit_gs_key &key)
 
    struct lp_build_sampler_soa *sampler =
       swr_sampler_soa_create(key.sampler, PIPE_SHADER_GEOMETRY);
+   assert(sampler != nullptr);
 
    struct lp_bld_tgsi_system_values system_values;
    memset(&system_values, 0, sizeof(system_values));
@@ -1523,6 +1591,7 @@ BuilderSWR::CompileGS(struct swr_context *ctx, swr_jit_gs_key &key)
       ubyte semantic_idx = info->input_semantic_index[slot];
 
       unsigned vs_slot = locate_linkage(semantic_name, semantic_idx, &ctx->vs->info.base);
+      assert(vs_slot < PIPE_MAX_SHADER_OUTPUTS);
 
       vs_slot += VERTEX_ATTRIB_START_SLOT;
 
@@ -1622,10 +1691,10 @@ BuilderSWR::CompileTES(struct swr_context *ctx, swr_jit_tes_key &key)
    unsigned tes_spacing = info->properties[TGSI_PROPERTY_TES_SPACING];
    bool tes_vertex_order_cw = info->properties[TGSI_PROPERTY_TES_VERTEX_ORDER_CW];
    bool tes_point_mode = info->properties[TGSI_PROPERTY_TES_POINT_MODE];
-   SWR_TS_DOMAIN type;
-   SWR_TS_PARTITIONING partitioning;
-   SWR_TS_OUTPUT_TOPOLOGY topology;
-   PRIMITIVE_TOPOLOGY postDSTopology;
+   SWR_TS_DOMAIN type = SWR_TS_ISOLINE;
+   SWR_TS_PARTITIONING partitioning = SWR_TS_EVEN_FRACTIONAL;
+   SWR_TS_OUTPUT_TOPOLOGY topology = SWR_TS_OUTPUT_POINT;
+   PRIMITIVE_TOPOLOGY postDSTopology = TOP_POINT_LIST;
 
    // TESS_TODO: move this to helper functions to improve readability
    switch (tes_prim_mode) {
@@ -1736,6 +1805,7 @@ BuilderSWR::CompileTES(struct swr_context *ctx, swr_jit_tes_key &key)
 
    struct lp_build_sampler_soa *sampler =
       swr_sampler_soa_create(key.sampler, PIPE_SHADER_TESS_EVAL);
+   assert(sampler != nullptr);
 
    struct lp_bld_tgsi_system_values system_values;
    memset(&system_values, 0, sizeof(system_values));
@@ -1830,6 +1900,7 @@ BuilderSWR::CompileTES(struct swr_context *ctx, swr_jit_tes_key &key)
       // Where in TCS output is my attribute?
       // TESS_TODO: revisit after implement pass-through TCS
       unsigned tcs_slot = locate_linkage(semantic_name, semantic_idx, pPrevShader);
+      assert(tcs_slot < PIPE_MAX_SHADER_OUTPUTS);
 
       // Skip tessellation levels - these go to the tessellator, not TES
       switch (semantic_name) {
@@ -2035,6 +2106,7 @@ BuilderSWR::CompileTCS(struct swr_context *ctx, swr_jit_tcs_key &key)
 
    struct lp_build_sampler_soa *sampler =
       swr_sampler_soa_create(key.sampler, PIPE_SHADER_TESS_CTRL);
+   assert(sampler != nullptr);
 
    struct lp_bld_tgsi_system_values system_values;
    memset(&system_values, 0, sizeof(system_values));
@@ -2042,15 +2114,7 @@ BuilderSWR::CompileTCS(struct swr_context *ctx, swr_jit_tcs_key &key)
    system_values.prim_id =
       wrap(LOAD(pTcsCtx, {0, SWR_HS_CONTEXT_PrimitiveID}));
 
-   Constant *vInvocationId;
-   if (mVWidth == 8) {
-      vInvocationId = C({0, 1, 2, 3, 4, 5, 6, 7});
-   } else {
-      vInvocationId =
-         C({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15});
-   }
-
-   system_values.invocation_id = wrap(vInvocationId);
+   system_values.invocation_id = wrap(VBROADCAST(C(0)));
    system_values.vertices_in = wrap(C(tcs->vertices_per_patch));
 
    if (verbose_shader) {
@@ -2069,6 +2133,7 @@ BuilderSWR::CompileTCS(struct swr_context *ctx, swr_jit_tcs_key &key)
 
       unsigned vs_slot =
          locate_linkage(semantic_name, semantic_idx, &ctx->vs->info.base);
+      assert(vs_slot < PIPE_MAX_SHADER_OUTPUTS);
 
       vs_slot += VERTEX_ATTRIB_START_SLOT;
 
@@ -2236,7 +2301,7 @@ BuilderSWR::WriteVS(Value *pVal, Value *pVsContext, Value *pVtxOutput, unsigned 
 #else
    Value *pOut = GEP(pVtxOutput, {0, 0, slot});
    STORE(pVal, pOut, {0, channel});
-   if (verbose_shader) {
+   if (verbose_vs_shader) {
       lp_build_printf(gallivm, "VS: Storing on slot %d, channel %d: ", C(slot), C(channel));
       lp_build_print_value(gallivm, "", wrap(pVal));
    }
@@ -2311,6 +2376,7 @@ BuilderSWR::CompileVS(struct swr_context *ctx, swr_jit_vs_key &key)
 
    struct lp_build_sampler_soa *sampler =
       swr_sampler_soa_create(key.sampler, PIPE_SHADER_VERTEX);
+   assert(sampler != nullptr);
 
    struct lp_bld_tgsi_system_values system_values;
    memset(&system_values, 0, sizeof(system_values));
@@ -2397,6 +2463,7 @@ BuilderSWR::CompileVS(struct swr_context *ctx, swr_jit_vs_key &key)
             }
          }
       }
+      assert(cv < PIPE_MAX_SHADER_OUTPUTS);
       LLVMValueRef cx = LLVMBuildLoad(gallivm->builder, outputs[cv][0], "");
       LLVMValueRef cy = LLVMBuildLoad(gallivm->builder, outputs[cv][1], "");
       LLVMValueRef cz = LLVMBuildLoad(gallivm->builder, outputs[cv][2], "");
@@ -2419,6 +2486,7 @@ BuilderSWR::CompileVS(struct swr_context *ctx, swr_jit_vs_key &key)
          if ((pLastFE->clipdist_writemask & clip_mask & (1 << val)) ||
              ((pLastFE->culldist_writemask << pLastFE->num_written_clipdistance) & (1 << val))) {
             unsigned cv = locate_linkage(TGSI_SEMANTIC_CLIPDIST, val < 4 ? 0 : 1, pLastFE);
+            assert(cv < PIPE_MAX_SHADER_OUTPUTS);
             if (val < 4) {
                LLVMValueRef dist = LLVMBuildLoad(gallivm->builder, outputs[cv][val], "");
                WriteVS(unwrap(dist), pVsCtx, vtxOutput, VERTEX_CLIPCULL_DIST_LO_SLOT, val);
@@ -2711,7 +2779,7 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
          linkedAttrib = pPrevShader->num_outputs + extraAttribs - 1;
          swr_fs->pointSpriteMask |= (1 << linkedAttrib);
          extraAttribs++;
-      } else if (linkedAttrib == 0xFFFFFFFF) {
+      } else if (linkedAttrib + 1 == 0xFFFFFFFF) {
          inputs[attrib][0] = wrap(VIMMED1(0.0f));
          inputs[attrib][1] = wrap(VIMMED1(0.0f));
          inputs[attrib][2] = wrap(VIMMED1(0.0f));
@@ -2733,15 +2801,16 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
       Value *offset = NULL;
       if (semantic_name == TGSI_SEMANTIC_COLOR && key.light_twoside) {
          bcolorAttrib = locate_linkage(
-               TGSI_SEMANTIC_BCOLOR, semantic_idx, pPrevShader) - 1;
+               TGSI_SEMANTIC_BCOLOR, semantic_idx, pPrevShader);
          /* Neither front nor back colors were available. Nothing to load. */
          if (bcolorAttrib == 0xFFFFFFFF && linkedAttrib == 0xFFFFFFFF)
             continue;
          /* If there is no front color, just always use the back color. */
-         if (linkedAttrib == 0xFFFFFFFF)
+         if (linkedAttrib + 1 == 0xFFFFFFFF)
             linkedAttrib = bcolorAttrib;
 
          if (bcolorAttrib != 0xFFFFFFFF) {
+            bcolorAttrib -= 1;
             if (interpMode == TGSI_INTERPOLATE_CONSTANT) {
                swr_fs->constantMask |= 1 << bcolorAttrib;
             } else if (interpMode == TGSI_INTERPOLATE_COLOR) {
@@ -2797,6 +2866,7 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
    }
 
    sampler = swr_sampler_soa_create(key.sampler, PIPE_SHADER_FRAGMENT);
+   assert(sampler != nullptr);
 
    struct lp_bld_tgsi_system_values system_values;
    memset(&system_values, 0, sizeof(system_values));

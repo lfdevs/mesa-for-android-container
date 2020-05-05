@@ -40,8 +40,6 @@
 
 #include <libsync.h> /* Requires Android or libdrm-2.4.72 */
 
-#include "main/imports.h"
-
 #include "brw_context.h"
 #include "intel_batchbuffer.h"
 

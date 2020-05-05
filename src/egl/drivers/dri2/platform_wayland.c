@@ -266,6 +266,10 @@ resize_callback(struct wl_egl_window *wl_win, void *data)
    struct dri2_egl_display *dri2_dpy =
       dri2_egl_display(dri2_surf->base.Resource.Display);
 
+   if (dri2_surf->base.Width == wl_win->width &&
+       dri2_surf->base.Height == wl_win->height)
+      return;
+
    /* Update the surface size as soon as native window is resized; from user
     * pov, this makes the effect that resize is done immediately after native
     * window resize, without requiring to wait until the first draw.
@@ -521,6 +525,13 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
    linear_dri_image_format = dri_image_format;
    modifiers = u_vector_tail(&dri2_dpy->wl_modifiers[visual_idx]);
    num_modifiers = u_vector_length(&dri2_dpy->wl_modifiers[visual_idx]);
+
+   if (num_modifiers == 1 && modifiers[0] == DRM_FORMAT_MOD_INVALID) {
+      /* For the purposes of this function, an INVALID modifier on its own
+       * means the modifiers aren't supported.
+       */
+      num_modifiers = 0;
+   }
 
    /* Substitute dri image format if server does not support original format */
    if (!BITSET_TEST(dri2_dpy->formats, visual_idx))
@@ -917,7 +928,31 @@ create_wl_buffer(struct dri2_egl_display *dri2_dpy,
       }
    }
 
-   if (dri2_dpy->wl_dmabuf && modifier != DRM_FORMAT_MOD_INVALID) {
+   bool supported_modifier = false;
+   bool mod_invalid_supported = false;
+   int visual_idx = dri2_wl_visual_idx_from_fourcc(fourcc);
+   assert(visual_idx != -1);
+
+   uint64_t *mod;
+   u_vector_foreach(mod, &dri2_dpy->wl_modifiers[visual_idx]) {
+      if (*mod == DRM_FORMAT_MOD_INVALID) {
+         mod_invalid_supported = true;
+      }
+      if (*mod == modifier) {
+         supported_modifier = true;
+         break;
+      }
+   }
+   if (!supported_modifier && mod_invalid_supported) {
+      /* If the server has advertised DRM_FORMAT_MOD_INVALID then we trust
+       * that the client has allocated the buffer with the right implicit
+       * modifier for the format, even though it's allocated a buffer the
+       * server hasn't explicitly claimed to support. */
+      modifier = DRM_FORMAT_MOD_INVALID;
+      supported_modifier = true;
+   }
+
+   if (dri2_dpy->wl_dmabuf && supported_modifier) {
       struct zwp_linux_buffer_params_v1 *params;
       int i;
 
@@ -1288,10 +1323,6 @@ dmabuf_handle_modifier(void *data, struct zwp_linux_dmabuf_v1 *dmabuf,
    uint64_t *mod;
 
    if (visual_idx == -1)
-      return;
-
-   if (modifier_hi == (DRM_FORMAT_MOD_INVALID >> 32) &&
-       modifier_lo == (DRM_FORMAT_MOD_INVALID & 0xffffffff))
       return;
 
    BITSET_SET(dri2_dpy->formats, visual_idx);

@@ -344,14 +344,6 @@ fd3_pipe2fetchsize(enum pipe_format format)
 	}
 }
 
-unsigned
-fd3_pipe2nblocksx(enum pipe_format format, unsigned width)
-{
-	if (util_format_description(format)->layout == UTIL_FORMAT_LAYOUT_RGTC)
-		format = PIPE_FORMAT_R8G8B8A8_UNORM;
-	return util_format_get_nblocksx(format, width);
-}
-
 enum a3xx_color_fmt
 fd3_fs_output_format(enum pipe_format format)
 {

@@ -1,7 +1,7 @@
 --- a/src/gallium/targets/opencl/meson.build
 +++ b/src/gallium/targets/opencl/meson.build
-@@ -33,6 +33,13 @@ llvm_libdir = dep_llvm.get_configtool_va
- 
+@@ -32,6 +32,13 @@ endif
+ llvm_libdir = dep_llvm.get_configtool_variable('libdir')
  opencl_libname = with_opencl_icd ? 'MesaOpenCL' : 'OpenCL'
  
 +polly_dep = null_dep
@@ -11,14 +11,14 @@
 +  polly_isl_dep = cpp.find_library('PollyISL', dirs : llvm_libdir, required : false)
 +endif
 +
- libopencl = shared_library(
-   opencl_libname,
-   [],
-@@ -56,6 +63,7 @@ libopencl = shared_library(
+ dep_clang = cpp.find_library('clang-cpp', dirs : llvm_libdir, required : false)
+ 
+ # meson will return clang-cpp from system dirs if it's not found in llvm_libdir
+@@ -66,6 +73,7 @@ if not (dep_clang.found() and dep_clang_
      cpp.find_library('clangEdit', dirs : llvm_libdir),
      cpp.find_library('clangLex', dirs : llvm_libdir),
      cpp.find_library('clangBasic', dirs : llvm_libdir),
 +    polly_dep, polly_isl_dep,
-   ],
-   version : '@0@.0.0'.format(opencl_version),
-   install : true,
+   ]
+   # check clang once more
+   if can_check_clang

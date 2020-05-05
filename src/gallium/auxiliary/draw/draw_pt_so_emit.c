@@ -28,6 +28,7 @@
 #include "draw/draw_private.h"
 #include "draw/draw_vs.h"
 #include "draw/draw_gs.h"
+#include "draw/draw_tess.h"
 #include "draw/draw_context.h"
 #include "draw/draw_vbuf.h"
 #include "draw/draw_vertex.h"
@@ -60,6 +61,8 @@ draw_so_info(const struct draw_context *draw)
 
    if (draw->gs.geometry_shader) {
       state = &draw->gs.geometry_shader->state.stream_output;
+   } else if (draw->tes.tess_eval_shader) {
+      state = &draw->tes.tess_eval_shader->state.stream_output;
    } else {
       state = &draw->vs.vertex_shader->state.stream_output;
    }

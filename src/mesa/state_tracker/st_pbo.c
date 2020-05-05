@@ -219,7 +219,7 @@ st_pbo_draw(struct st_context *st, const struct st_pbo_addresses *addr,
    /* Upload vertices */
    {
       struct pipe_vertex_buffer vbo = {0};
-      struct pipe_vertex_element velem;
+      struct cso_velems_state velem;
 
       float x0 = (float) addr->xoffset / surface_width * 2.0f - 1.0f;
       float y0 = (float) addr->yoffset / surface_height * 2.0f - 1.0f;
@@ -246,14 +246,15 @@ st_pbo_draw(struct st_context *st, const struct st_pbo_addresses *addr,
 
       u_upload_unmap(st->pipe->stream_uploader);
 
-      velem.src_offset = 0;
-      velem.instance_divisor = 0;
-      velem.vertex_buffer_index = 0;
-      velem.src_format = PIPE_FORMAT_R32G32_FLOAT;
+      velem.count = 1;
+      velem.velems[0].src_offset = 0;
+      velem.velems[0].instance_divisor = 0;
+      velem.velems[0].vertex_buffer_index = 0;
+      velem.velems[0].src_format = PIPE_FORMAT_R32G32_FLOAT;
 
-      cso_set_vertex_elements(cso, 1, &velem);
+      cso_set_vertex_elements(cso, &velem);
 
-      cso_set_vertex_buffers(cso, velem.vertex_buffer_index, 1, &vbo);
+      cso_set_vertex_buffers(cso, 0, 1, &vbo);
 
       pipe_resource_reference(&vbo.buffer.resource, NULL);
    }

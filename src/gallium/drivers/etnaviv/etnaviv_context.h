@@ -73,6 +73,11 @@ struct etna_transfer {
    void *mapped;
 };
 
+struct etna_constbuf_state {
+   struct pipe_constant_buffer cb[ETNA_MAX_CONST_BUF];
+   uint32_t enabled_mask;
+};
+
 struct etna_vertexbuf_state {
    struct pipe_vertex_buffer vb[PIPE_MAX_ATTRIBS];
    struct compiled_set_vertex_buffer cvb[PIPE_MAX_ATTRIBS];
@@ -108,8 +113,9 @@ struct etna_context {
    void (*emit_texture_state)(struct etna_context *pctx);
    /* Get sampler TS pointer for sampler view */
    struct etna_sampler_ts *(*ts_for_sampler_view)(struct pipe_sampler_view *pview);
+   /* GPU-specific blit implementation */
+   bool (*blit)(struct pipe_context *pipe, const struct pipe_blit_info *info);
 
-   struct etna_specs specs;
    struct etna_screen *screen;
    struct etna_cmd_stream *stream;
 
@@ -134,6 +140,7 @@ struct etna_context {
       ETNA_DIRTY_TS              = (1 << 17),
       ETNA_DIRTY_TEXTURE_CACHES  = (1 << 18),
       ETNA_DIRTY_DERIVE_TS       = (1 << 19),
+      ETNA_DIRTY_SCISSOR_CLIP    = (1 << 20),
    } dirty;
 
    uint32_t prim_hwsupport;
@@ -152,19 +159,19 @@ struct etna_context {
    struct pipe_depth_stencil_alpha_state *zsa;
    struct compiled_vertex_elements_state *vertex_elements;
    struct compiled_shader_state shader_state;
+   struct pipe_scissor_state clipping;
 
    /* to simplify the emit process we store pre compiled state objects,
     * which got 'compiled' during state change. */
    struct compiled_blend_color blend_color;
    struct compiled_stencil_ref stencil_ref;
    struct compiled_framebuffer_state framebuffer;
-   struct compiled_scissor_state scissor;
    struct compiled_viewport_state viewport;
    unsigned num_fragment_sampler_views;
    uint32_t active_sampler_views;
    uint32_t dirty_sampler_views;
    struct pipe_sampler_view *sampler_view[PIPE_MAX_SAMPLERS];
-   struct pipe_constant_buffer constant_buffer[PIPE_SHADER_TYPES][ETNA_MAX_CONST_BUF];
+   struct etna_constbuf_state constant_buffer[PIPE_SHADER_TYPES];
    struct etna_vertexbuf_state vertex_buffer;
    struct etna_index_buffer index_buffer;
    struct etna_shader_state shader;
@@ -173,7 +180,7 @@ struct etna_context {
    struct pipe_framebuffer_state framebuffer_s;
    struct pipe_stencil_ref stencil_ref_s;
    struct pipe_viewport_state viewport_s;
-   struct pipe_scissor_state scissor_s;
+   struct pipe_scissor_state scissor;
 
    /* stats/counters */
    struct {
@@ -185,8 +192,8 @@ struct etna_context {
    struct pipe_debug_callback debug;
    int in_fence_fd;
 
-   /* list of active hardware queries */
-   struct list_head active_hw_queries;
+   /* list of accumulated HW queries */
+   struct list_head active_acc_queries;
 
    struct etna_bo *dummy_rt;
    struct etna_reloc dummy_rt_reloc;

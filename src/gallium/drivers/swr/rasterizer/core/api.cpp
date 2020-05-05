@@ -478,7 +478,7 @@ void SWR_API SwrSaveState(HANDLE hContext, void* pOutputStateBlock, size_t memSi
 {
     SWR_CONTEXT* pContext = GetContext(hContext);
     auto         pSrc     = GetDrawState(pContext);
-    SWR_ASSERT(pOutputStateBlock && memSize >= sizeof(*pSrc));
+    assert(pOutputStateBlock && memSize >= sizeof(*pSrc));
 
     memcpy(pOutputStateBlock, pSrc, sizeof(*pSrc));
 }
@@ -487,7 +487,7 @@ void SWR_API SwrRestoreState(HANDLE hContext, const void* pStateBlock, size_t me
 {
     SWR_CONTEXT* pContext = GetContext(hContext);
     auto         pDst     = GetDrawState(pContext);
-    SWR_ASSERT(pStateBlock && memSize >= sizeof(*pDst));
+    assert(pStateBlock && memSize >= sizeof(*pDst));
 
     memcpy(pDst, pStateBlock, sizeof(*pDst));
 }

@@ -25,7 +25,7 @@
  *
  */
 
-#include "brw_cfg.h"
+#include "brw_fs.h"
 #include "brw_fs_live_variables.h"
 
 using namespace brw;
@@ -53,7 +53,7 @@ using namespace brw;
  */
 
 void
-fs_live_variables::setup_one_read(struct fs_block_data *bd, fs_inst *inst,
+fs_live_variables::setup_one_read(struct block_data *bd,
                                   int ip, const fs_reg &reg)
 {
    int var = var_from_reg(reg);
@@ -71,7 +71,7 @@ fs_live_variables::setup_one_read(struct fs_block_data *bd, fs_inst *inst,
 }
 
 void
-fs_live_variables::setup_one_write(struct fs_block_data *bd, fs_inst *inst,
+fs_live_variables::setup_one_write(struct block_data *bd, fs_inst *inst,
                                    int ip, const fs_reg &reg)
 {
    int var = var_from_reg(reg);
@@ -110,7 +110,7 @@ fs_live_variables::setup_def_use()
       if (block->num > 0)
 	 assert(cfg->blocks[block->num - 1]->end_ip == ip - 1);
 
-      struct fs_block_data *bd = &block_data[block->num];
+      struct block_data *bd = &block_data[block->num];
 
       foreach_inst_in_block(fs_inst, inst, block) {
 	 /* Set use[] for this instruction */
@@ -121,12 +121,12 @@ fs_live_variables::setup_def_use()
                continue;
 
             for (unsigned j = 0; j < regs_read(inst, i); j++) {
-               setup_one_read(bd, inst, ip, reg);
+               setup_one_read(bd, ip, reg);
                reg.offset += REG_SIZE;
             }
 	 }
 
-         bd->flag_use[0] |= inst->flags_read(v->devinfo) & ~bd->flag_def[0];
+         bd->flag_use[0] |= inst->flags_read(devinfo) & ~bd->flag_def[0];
 
          /* Set def[] for this instruction */
          if (inst->dst.file == VGRF) {
@@ -160,11 +160,11 @@ fs_live_variables::compute_live_variables()
       cont = false;
 
       foreach_block_reverse (block, cfg) {
-         struct fs_block_data *bd = &block_data[block->num];
+         struct block_data *bd = &block_data[block->num];
 
 	 /* Update liveout */
 	 foreach_list_typed(bblock_link, child_link, link, &block->children) {
-       struct fs_block_data *child_bd = &block_data[child_link->block->num];
+       struct block_data *child_bd = &block_data[child_link->block->num];
 
 	    for (int i = 0; i < bitset_words; i++) {
                BITSET_WORD new_liveout = (child_bd->livein[i] &
@@ -209,10 +209,10 @@ fs_live_variables::compute_live_variables()
       cont = false;
 
       foreach_block (block, cfg) {
-         const struct fs_block_data *bd = &block_data[block->num];
+         const struct block_data *bd = &block_data[block->num];
 
 	 foreach_list_typed(bblock_link, child_link, link, &block->children) {
-       struct fs_block_data *child_bd = &block_data[child_link->block->num];
+       struct block_data *child_bd = &block_data[child_link->block->num];
 
 	    for (int i = 0; i < bitset_words; i++) {
                const BITSET_WORD new_def = bd->defout[i] & ~child_bd->defin[i];
@@ -233,7 +233,7 @@ void
 fs_live_variables::compute_start_end()
 {
    foreach_block (block, cfg) {
-      struct fs_block_data *bd = &block_data[block->num];
+      struct block_data *bd = &block_data[block->num];
 
       for (int w = 0; w < bitset_words; w++) {
          BITSET_WORD livedefin = bd->livein[w] & bd->defin[w];
@@ -255,22 +255,22 @@ fs_live_variables::compute_start_end()
    }
 }
 
-fs_live_variables::fs_live_variables(fs_visitor *v, const cfg_t *cfg)
-   : v(v), cfg(cfg)
+fs_live_variables::fs_live_variables(const backend_shader *s)
+   : devinfo(s->devinfo), cfg(s->cfg)
 {
    mem_ctx = ralloc_context(NULL);
 
-   num_vgrfs = v->alloc.count;
+   num_vgrfs = s->alloc.count;
    num_vars = 0;
    var_from_vgrf = rzalloc_array(mem_ctx, int, num_vgrfs);
    for (int i = 0; i < num_vgrfs; i++) {
       var_from_vgrf[i] = num_vars;
-      num_vars += v->alloc.sizes[i];
+      num_vars += s->alloc.sizes[i];
    }
 
    vgrf_from_var = rzalloc_array(mem_ctx, int, num_vars);
    for (int i = 0; i < num_vgrfs; i++) {
-      for (unsigned j = 0; j < v->alloc.sizes[i]; j++) {
+      for (unsigned j = 0; j < s->alloc.sizes[i]; j++) {
          vgrf_from_var[var_from_vgrf[i] + j] = i;
       }
    }
@@ -282,7 +282,14 @@ fs_live_variables::fs_live_variables(fs_visitor *v, const cfg_t *cfg)
       end[i] = -1;
    }
 
-   block_data = rzalloc_array(mem_ctx, struct fs_block_data, cfg->num_blocks);
+   vgrf_start = ralloc_array(mem_ctx, int, num_vgrfs);
+   vgrf_end = ralloc_array(mem_ctx, int, num_vgrfs);
+   for (int i = 0; i < num_vgrfs; i++) {
+      vgrf_start[i] = MAX_INSTRUCTION;
+      vgrf_end[i] = -1;
+   }
+
+   block_data = rzalloc_array(mem_ctx, struct block_data, cfg->num_blocks);
 
    bitset_words = BITSET_WORDS(num_vars);
    for (int i = 0; i < cfg->num_blocks; i++) {
@@ -302,6 +309,13 @@ fs_live_variables::fs_live_variables(fs_visitor *v, const cfg_t *cfg)
    setup_def_use();
    compute_live_variables();
    compute_start_end();
+
+   /* Merge the per-component live ranges to whole VGRF live ranges. */
+   for (int i = 0; i < num_vars; i++) {
+      const unsigned vgrf = vgrf_from_var[i];
+      vgrf_start[vgrf] = MIN2(vgrf_start[vgrf], start[i]);
+      vgrf_end[vgrf] = MAX2(vgrf_end[vgrf], end[i]);
+   }
 }
 
 fs_live_variables::~fs_live_variables()
@@ -309,58 +323,57 @@ fs_live_variables::~fs_live_variables()
    ralloc_free(mem_ctx);
 }
 
-void
-fs_visitor::invalidate_live_intervals()
+static bool
+check_register_live_range(const fs_live_variables *live, int ip,
+                          const fs_reg &reg, unsigned n)
 {
-   ralloc_free(live_intervals);
-   live_intervals = NULL;
-}
+   const unsigned var = live->var_from_reg(reg);
 
-/**
- * Compute the live intervals for each virtual GRF.
- *
- * This uses the per-component use/def data, but combines it to produce
- * information about whole VGRFs.
- */
-void
-fs_visitor::calculate_live_intervals()
-{
-   if (this->live_intervals)
-      return;
+   if (var + n > unsigned(live->num_vars) ||
+       live->vgrf_start[reg.nr] > ip || live->vgrf_end[reg.nr] < ip)
+      return false;
 
-   int num_vgrfs = this->alloc.count;
-   ralloc_free(this->virtual_grf_start);
-   ralloc_free(this->virtual_grf_end);
-   virtual_grf_start = ralloc_array(mem_ctx, int, num_vgrfs);
-   virtual_grf_end = ralloc_array(mem_ctx, int, num_vgrfs);
-
-   for (int i = 0; i < num_vgrfs; i++) {
-      virtual_grf_start[i] = MAX_INSTRUCTION;
-      virtual_grf_end[i] = -1;
+   for (unsigned j = 0; j < n; j++) {
+      if (live->start[var + j] > ip || live->end[var + j] < ip)
+         return false;
    }
 
-   this->live_intervals = new(mem_ctx) fs_live_variables(this, cfg);
-
-   /* Merge the per-component live ranges to whole VGRF live ranges. */
-   for (int i = 0; i < live_intervals->num_vars; i++) {
-      int vgrf = live_intervals->vgrf_from_var[i];
-      virtual_grf_start[vgrf] = MIN2(virtual_grf_start[vgrf],
-                                     live_intervals->start[i]);
-      virtual_grf_end[vgrf] = MAX2(virtual_grf_end[vgrf],
-                                   live_intervals->end[i]);
-   }
+   return true;
 }
 
 bool
-fs_live_variables::vars_interfere(int a, int b)
+fs_live_variables::validate(const backend_shader *s) const
+{
+   int ip = 0;
+
+   foreach_block_and_inst(block, fs_inst, inst, s->cfg) {
+      for (unsigned i = 0; i < inst->sources; i++) {
+         if (inst->src[i].file == VGRF &&
+             !check_register_live_range(this, ip,
+                                        inst->src[i], regs_read(inst, i)))
+            return false;
+      }
+
+      if (inst->dst.file == VGRF &&
+          !check_register_live_range(this, ip, inst->dst, regs_written(inst)))
+         return false;
+
+      ip++;
+   }
+
+   return true;
+}
+
+bool
+fs_live_variables::vars_interfere(int a, int b) const
 {
    return !(end[b] <= start[a] ||
             end[a] <= start[b]);
 }
 
 bool
-fs_visitor::virtual_grf_interferes(int a, int b)
+fs_live_variables::vgrfs_interfere(int a, int b) const
 {
-   return !(virtual_grf_end[a] <= virtual_grf_start[b] ||
-            virtual_grf_end[b] <= virtual_grf_start[a]);
+   return !(vgrf_end[a] <= vgrf_start[b] ||
+            vgrf_end[b] <= vgrf_start[a]);
 }

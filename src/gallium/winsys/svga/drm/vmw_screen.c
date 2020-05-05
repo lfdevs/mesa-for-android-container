@@ -41,15 +41,15 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-static struct util_hash_table *dev_hash = NULL;
+static struct hash_table *dev_hash = NULL;
 
-static int vmw_dev_compare(void *key1, void *key2)
+static bool vmw_dev_compare(const void *key1, const void *key2)
 {
    return (major(*(dev_t *)key1) == major(*(dev_t *)key2) &&
-           minor(*(dev_t *)key1) == minor(*(dev_t *)key2)) ? 0 : 1;
+           minor(*(dev_t *)key1) == minor(*(dev_t *)key2));
 }
 
-static unsigned vmw_dev_hash(void *key)
+static uint32_t vmw_dev_hash(const void *key)
 {
    return (major(*(dev_t *) key) << 16) | minor(*(dev_t *) key);
 }
@@ -67,9 +67,10 @@ vmw_winsys_create( int fd )
 {
    struct vmw_winsys_screen *vws;
    struct stat stat_buf;
+   const char *getenv_val;
 
    if (dev_hash == NULL) {
-      dev_hash = util_hash_table_create(vmw_dev_hash, vmw_dev_compare);
+      dev_hash = _mesa_hash_table_create(NULL, vmw_dev_hash, vmw_dev_compare);
       if (dev_hash == NULL)
          return NULL;
    }
@@ -97,6 +98,8 @@ vmw_winsys_create( int fd )
    vws->base.have_gb_dma = !vws->force_coherent;
    vws->base.need_to_rebind_resources = FALSE;
    vws->base.have_transfer_from_buffer_cmd = vws->base.have_vgpu10;
+   getenv_val = getenv("SVGA_FORCE_KERNEL_UNMAPS");
+   vws->cache_maps = !getenv_val || strcmp(getenv_val, "0") == 0;
    vws->fence_ops = vmw_fence_ops_create(vws);
    if (!vws->fence_ops)
       goto out_no_fence_ops;
@@ -107,14 +110,12 @@ vmw_winsys_create( int fd )
    if (!vmw_winsys_screen_init_svga(vws))
       goto out_no_svga;
 
-   if (util_hash_table_set(dev_hash, &vws->device, vws) != PIPE_OK)
-      goto out_no_hash_insert;
+   _mesa_hash_table_insert(dev_hash, &vws->device, vws);
 
    cnd_init(&vws->cs_cond);
    mtx_init(&vws->cs_mutex, mtx_plain);
 
    return vws;
-out_no_hash_insert:
 out_no_svga:
    vmw_pools_cleanup(vws);
 out_no_pools:
@@ -132,7 +133,7 @@ void
 vmw_winsys_destroy(struct vmw_winsys_screen *vws)
 {
    if (--vws->open_count == 0) {
-      util_hash_table_remove(dev_hash, &vws->device);
+      _mesa_hash_table_remove_key(dev_hash, &vws->device);
       vmw_pools_cleanup(vws);
       vws->fence_ops->destroy(vws->fence_ops);
       vmw_ioctl_cleanup(vws);

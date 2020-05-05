@@ -454,7 +454,7 @@ fs_visitor::lower_regioning()
       progress |= lower_instruction(this, block, inst);
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
 
    return progress;
 }

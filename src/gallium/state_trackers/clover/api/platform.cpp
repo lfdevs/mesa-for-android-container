@@ -20,6 +20,9 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#include <unordered_map>
+
+#include "api/dispatch.hpp"
 #include "api/util.hpp"
 #include "core/platform.hpp"
 #include "git_sha1.h"
@@ -101,14 +104,105 @@ clover::GetExtensionFunctionAddressForPlatform(cl_platform_id d_platform,
    return NULL;
 }
 
-void *
-clover::GetExtensionFunctionAddress(const char *p_name) {
-   std::string name { p_name };
+namespace {
 
-   if (name == "clIcdGetPlatformIDsKHR")
-      return reinterpret_cast<void *>(IcdGetPlatformIDsKHR);
-   else
-      return NULL;
+cl_int
+enqueueSVMFreeARM(cl_command_queue command_queue,
+                  cl_uint num_svm_pointers,
+                  void *svm_pointers[],
+                  void (CL_CALLBACK *pfn_free_func) (
+                    cl_command_queue queue, cl_uint num_svm_pointers,
+                    void *svm_pointers[], void *user_data),
+                  void *user_data,
+                  cl_uint num_events_in_wait_list,
+                  const cl_event *event_wait_list,
+                  cl_event *event) {
+
+   return EnqueueSVMFree(command_queue, num_svm_pointers, svm_pointers,
+                         pfn_free_func, user_data, num_events_in_wait_list,
+                         event_wait_list, event, CL_COMMAND_SVM_FREE_ARM);
+}
+
+cl_int
+enqueueSVMMapARM(cl_command_queue command_queue,
+                 cl_bool blocking_map,
+                 cl_map_flags map_flags,
+                 void *svm_ptr,
+                 size_t size,
+                 cl_uint num_events_in_wait_list,
+                 const cl_event *event_wait_list,
+                 cl_event *event) {
+
+   return EnqueueSVMMap(command_queue, blocking_map, map_flags, svm_ptr, size,
+                        num_events_in_wait_list, event_wait_list, event,
+                        CL_COMMAND_SVM_MAP_ARM);
+}
+
+cl_int
+enqueueSVMMemcpyARM(cl_command_queue command_queue,
+                    cl_bool blocking_copy,
+                    void *dst_ptr,
+                    const void *src_ptr,
+                    size_t size,
+                    cl_uint num_events_in_wait_list,
+                    const cl_event *event_wait_list,
+                    cl_event *event) {
+
+   return EnqueueSVMMemcpy(command_queue, blocking_copy, dst_ptr, src_ptr,
+                           size, num_events_in_wait_list, event_wait_list,
+                           event, CL_COMMAND_SVM_MEMCPY_ARM);
+}
+
+cl_int
+enqueueSVMMemFillARM(cl_command_queue command_queue,
+                     void *svm_ptr,
+                     const void *pattern,
+                     size_t pattern_size,
+                     size_t size,
+                     cl_uint num_events_in_wait_list,
+                     const cl_event *event_wait_list,
+                     cl_event *event) {
+
+   return EnqueueSVMMemFill(command_queue, svm_ptr, pattern, pattern_size,
+                            size, num_events_in_wait_list, event_wait_list,
+                            event, CL_COMMAND_SVM_MEMFILL_ARM);
+}
+
+cl_int
+enqueueSVMUnmapARM(cl_command_queue command_queue,
+                   void *svm_ptr,
+                   cl_uint num_events_in_wait_list,
+                   const cl_event *event_wait_list,
+                   cl_event *event) {
+
+   return EnqueueSVMUnmap(command_queue, svm_ptr, num_events_in_wait_list,
+                          event_wait_list, event, CL_COMMAND_SVM_UNMAP_ARM);
+}
+
+const std::unordered_map<std::string, void *>
+ext_funcs = {
+   // cl_arm_shared_virtual_memory
+   { "clEnqueueSVMFreeARM", reinterpret_cast<void *>(enqueueSVMFreeARM) },
+   { "clEnqueueSVMMapARM", reinterpret_cast<void *>(enqueueSVMMapARM) },
+   { "clEnqueueSVMMemcpyARM", reinterpret_cast<void *>(enqueueSVMMemcpyARM) },
+   { "clEnqueueSVMMemFillARM", reinterpret_cast<void *>(enqueueSVMMemFillARM) },
+   { "clEnqueueSVMUnmapARM", reinterpret_cast<void *>(enqueueSVMUnmapARM) },
+   { "clSetKernelArgSVMPointerARM", reinterpret_cast<void *>(clSetKernelArgSVMPointer) },
+   { "clSetKernelExecInfoARM", reinterpret_cast<void *>(clSetKernelExecInfo) },
+   { "clSVMAllocARM", reinterpret_cast<void *>(clSVMAlloc) },
+   { "clSVMFreeARM", reinterpret_cast<void *>(clSVMFree) },
+
+   // cl_khr_icd
+   { "clIcdGetPlatformIDsKHR", reinterpret_cast<void *>(IcdGetPlatformIDsKHR) },
+};
+
+} // anonymous namespace
+
+void *
+clover::GetExtensionFunctionAddress(const char *p_name) try {
+   return ext_funcs.at(p_name);
+} catch (...) {
+   return nullptr;
 }
 
 cl_int

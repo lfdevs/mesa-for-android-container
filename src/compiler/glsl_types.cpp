@@ -462,6 +462,16 @@ const glsl_type *glsl_type::get_bare_type() const
    unreachable("Invalid base type");
 }
 
+const glsl_type *glsl_type::get_float16_type() const
+{
+   assert(this->base_type == GLSL_TYPE_FLOAT);
+
+   return get_instance(GLSL_TYPE_FLOAT16,
+                       this->vector_elements,
+                       this->matrix_columns,
+                       this->explicit_stride,
+                       this->interface_row_major);
+}
 
 static void
 hash_free_type_function(struct hash_entry *entry)
@@ -2582,29 +2592,8 @@ glsl_type::count_dword_slots(bool is_bindless) const
 int
 glsl_type::coordinate_components() const
 {
-   int size;
-
-   switch (sampler_dimensionality) {
-   case GLSL_SAMPLER_DIM_1D:
-   case GLSL_SAMPLER_DIM_BUF:
-      size = 1;
-      break;
-   case GLSL_SAMPLER_DIM_2D:
-   case GLSL_SAMPLER_DIM_RECT:
-   case GLSL_SAMPLER_DIM_MS:
-   case GLSL_SAMPLER_DIM_EXTERNAL:
-   case GLSL_SAMPLER_DIM_SUBPASS:
-      size = 2;
-      break;
-   case GLSL_SAMPLER_DIM_3D:
-   case GLSL_SAMPLER_DIM_CUBE:
-      size = 3;
-      break;
-   default:
-      assert(!"Should not get here.");
-      size = 1;
-      break;
-   }
+   enum glsl_sampler_dim dim = (enum glsl_sampler_dim)sampler_dimensionality;
+   int size = glsl_get_sampler_dim_coordinate_components(dim);
 
    /* Array textures need an additional component for the array index, except
     * for cubemap array images that behave like a 2D array of interleaved
@@ -2936,4 +2925,30 @@ glsl_type::cl_size() const
       return size;
    }
    return 1;
+}
+
+extern "C" {
+
+int
+glsl_get_sampler_dim_coordinate_components(enum glsl_sampler_dim dim)
+{
+   switch (dim) {
+   case GLSL_SAMPLER_DIM_1D:
+   case GLSL_SAMPLER_DIM_BUF:
+      return 1;
+   case GLSL_SAMPLER_DIM_2D:
+   case GLSL_SAMPLER_DIM_RECT:
+   case GLSL_SAMPLER_DIM_MS:
+   case GLSL_SAMPLER_DIM_EXTERNAL:
+   case GLSL_SAMPLER_DIM_SUBPASS:
+   case GLSL_SAMPLER_DIM_SUBPASS_MS:
+      return 2;
+   case GLSL_SAMPLER_DIM_3D:
+   case GLSL_SAMPLER_DIM_CUBE:
+      return 3;
+   default:
+      unreachable("Unknown sampler dim");
+   }
+}
+
 }

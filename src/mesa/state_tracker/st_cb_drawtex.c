@@ -1,5 +1,5 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2008 VMware, Inc.
  * All Rights Reserved.
  *
@@ -12,7 +12,7 @@
 
 
 
-#include "main/imports.h"
+
 #include "main/image.h"
 #include "main/macros.h"
 #include "main/teximage.h"
@@ -170,7 +170,7 @@ st_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
    GLboolean emitColor;
    enum tgsi_semantic semantic_names[2 + MAX_TEXTURE_UNITS];
    uint semantic_indexes[2 + MAX_TEXTURE_UNITS];
-   struct pipe_vertex_element velements[2 + MAX_TEXTURE_UNITS];
+   struct cso_velems_state velems;
    unsigned offset;
 
    st_flush_bitmap_cache(st);
@@ -308,12 +308,14 @@ st_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
    cso_set_geometry_shader_handle(cso, NULL);
 
    for (i = 0; i < numAttribs; i++) {
-      velements[i].src_offset = i * 4 * sizeof(float);
-      velements[i].instance_divisor = 0;
-      velements[i].vertex_buffer_index = 0;
-      velements[i].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
+      velems.velems[i].src_offset = i * 4 * sizeof(float);
+      velems.velems[i].instance_divisor = 0;
+      velems.velems[i].vertex_buffer_index = 0;
+      velems.velems[i].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
    }
-   cso_set_vertex_elements(cso, numAttribs, velements);
+   velems.count = numAttribs;
+
+   cso_set_vertex_elements(cso, &velems);
    cso_set_stream_outputs(cso, 0, NULL, NULL);
 
    /* viewport state: viewport matching window dims */

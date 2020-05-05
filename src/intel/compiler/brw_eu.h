@@ -1153,7 +1153,8 @@ brw_memory_fence(struct brw_codegen *p,
                  struct brw_reg dst,
                  struct brw_reg src,
                  enum opcode send_op,
-                 bool stall,
+                 enum brw_message_target sfid,
+                 bool commit_enable,
                  unsigned bti);
 
 void

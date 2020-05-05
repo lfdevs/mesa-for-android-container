@@ -459,6 +459,13 @@ anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
    if (aspect & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
       assert(vk_format_aspects(vk_format) &
              (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT));
+
+      /* There's no reason why we strictly can't support depth or stencil with
+       * modifiers but there's also no reason why we should.
+       */
+      if (tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT)
+         return unsupported;
+
       return plane_format;
    }
 
@@ -478,9 +485,6 @@ anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
    if (tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
       /* No non-power-of-two fourcc formats exist */
       if (!util_is_power_of_two_or_zero(isl_layout->bpb))
-         return unsupported;
-
-      if (vk_format_is_depth_or_stencil(vk_format))
          return unsupported;
 
       if (isl_format_is_compressed(plane_format.isl_format))

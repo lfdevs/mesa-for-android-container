@@ -28,6 +28,8 @@
 #include "drm-uapi/v3d_drm.h"
 #include "drm-shim/drm_shim.h"
 
+bool drm_shim_driver_prefers_first_render_node = true;
+
 struct v3d_bo {
         struct shim_bo base;
         uint32_t offset;
@@ -146,6 +148,7 @@ static ioctl_fn_t driver_ioctls[] = {
 void
 drm_shim_driver_init(void)
 {
+        shim_device.bus_type = DRM_BUS_PLATFORM;
         shim_device.driver_name = "v3d";
         shim_device.driver_ioctls = driver_ioctls;
         shim_device.driver_ioctl_count = ARRAY_SIZE(driver_ioctls);

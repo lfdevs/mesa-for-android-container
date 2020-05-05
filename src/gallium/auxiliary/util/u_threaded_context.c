@@ -108,6 +108,7 @@ tc_batch_flush(struct threaded_context *tc)
    tc_assert(next->num_total_call_slots != 0);
    tc_batch_check(next);
    tc_debug_check(tc);
+   tc->bytes_mapped_estimate = 0;
    p_atomic_add(&tc->num_offloaded_slots, next->num_total_call_slots);
 
    if (next->token) {
@@ -204,6 +205,7 @@ _tc_sync(struct threaded_context *tc, UNUSED const char *info, UNUSED const char
    /* .. and execute unflushed calls directly. */
    if (next->num_total_call_slots) {
       p_atomic_add(&tc->num_direct_slots, next->num_total_call_slots);
+      tc->bytes_mapped_estimate = 0;
       tc_batch_execute(next, 0);
       synced = true;
    }
@@ -1393,6 +1395,9 @@ tc_improve_map_buffer_flags(struct threaded_context *tc,
 
    /* Handle CPU reads trivially. */
    if (usage & PIPE_TRANSFER_READ) {
+      if (usage & PIPE_TRANSFER_UNSYNCHRONIZED)
+         usage |= TC_TRANSFER_MAP_THREADED_UNSYNC; /* don't sync */
+
       /* Drivers aren't allowed to do buffer invalidations. */
       return usage & ~PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE;
    }
@@ -1485,6 +1490,8 @@ tc_transfer_map(struct pipe_context *_pipe,
       tc_sync_msg(tc, resource->target != PIPE_BUFFER ? "  texture" :
                       usage & PIPE_TRANSFER_DISCARD_RANGE ? "  discard_range" :
                       usage & PIPE_TRANSFER_READ ? "  read" : "  ??");
+
+   tc->bytes_mapped_estimate += box->width;
 
    return pipe->transfer_map(pipe, tres->latest ? tres->latest : resource,
                              level, usage, box, transfer);
@@ -1582,6 +1589,10 @@ tc_call_transfer_unmap(struct pipe_context *pipe, union tc_payload *payload)
 }
 
 static void
+tc_flush(struct pipe_context *_pipe, struct pipe_fence_handle **fence,
+         unsigned flags);
+
+static void
 tc_transfer_unmap(struct pipe_context *_pipe, struct pipe_transfer *transfer)
 {
    struct threaded_context *tc = threaded_context(_pipe);
@@ -1603,6 +1614,16 @@ tc_transfer_unmap(struct pipe_context *_pipe, struct pipe_transfer *transfer)
    }
 
    tc_add_small_call(tc, TC_CALL_transfer_unmap)->transfer = transfer;
+
+   /* tc_transfer_map directly maps the buffers, but tc_transfer_unmap
+    * defers the unmap operation to the batch execution.
+    * bytes_mapped_estimate is an estimation of the map/unmap bytes delta
+    * and if it goes over an optional limit the current batch is flushed,
+    * to reclaim some RAM. */
+   if (!ttrans->staging && tc->bytes_mapped_limit &&
+       tc->bytes_mapped_estimate > tc->bytes_mapped_limit) {
+      tc_flush(_pipe, NULL, PIPE_FLUSH_ASYNC);
+   }
 }
 
 struct tc_buffer_subdata {
@@ -1933,6 +1954,20 @@ tc_set_context_param(struct pipe_context *_pipe,
 {
    struct threaded_context *tc = threaded_context(_pipe);
 
+   if (param == PIPE_CONTEXT_PARAM_PIN_THREADS_TO_L3_CACHE) {
+      /* Pin the gallium thread as requested. */
+      util_pin_thread_to_L3(tc->queue.threads[0], value,
+                            util_cpu_caps.cores_per_L3);
+
+      /* Execute this immediately (without enqueuing).
+       * It's required to be thread-safe.
+       */
+      struct pipe_context *pipe = tc->pipe;
+      if (pipe->set_context_param)
+         pipe->set_context_param(pipe, param, value);
+      return;
+   }
+
    if (tc->pipe->set_context_param) {
       struct tc_context_param *payload =
          tc_add_struct_typed_call(tc, TC_CALL_set_context_param,
@@ -1940,12 +1975,6 @@ tc_set_context_param(struct pipe_context *_pipe,
 
       payload->param = param;
       payload->value = value;
-   }
-
-   if (param == PIPE_CONTEXT_PARAM_PIN_THREADS_TO_L3_CACHE) {
-      /* Pin the gallium thread as requested. */
-      util_pin_thread_to_L3(tc->queue.threads[0], value,
-                            util_cpu_caps.cores_per_L3);
    }
 }
 
@@ -2097,7 +2126,8 @@ tc_draw_vbo(struct pipe_context *_pipe, const struct pipe_draw_info *info)
        * e.g. transfer_unmap and flush partially-uninitialized draw_vbo
        * to the driver if it was done afterwards.
        */
-      u_upload_data(tc->base.stream_uploader, 0, size, 4, info->index.user,
+      u_upload_data(tc->base.stream_uploader, 0, size, 4,
+                    (uint8_t*)info->index.user + info->start * index_size,
                     &offset, &buffer);
       if (unlikely(!buffer))
          return;
@@ -2109,7 +2139,7 @@ tc_draw_vbo(struct pipe_context *_pipe, const struct pipe_draw_info *info)
       memcpy(&p->draw, info, sizeof(*info));
       p->draw.has_user_indices = false;
       p->draw.index.resource = buffer;
-      p->draw.start = offset / index_size;
+      p->draw.start = offset >> util_logbase2(index_size);
    } else {
       /* Non-indexed call or indexed with a real index buffer. */
       struct tc_full_draw_info *p = tc_add_draw_vbo(_pipe, indirect != NULL);
@@ -2313,20 +2343,22 @@ tc_invalidate_resource(struct pipe_context *_pipe,
 
 struct tc_clear {
    unsigned buffers;
+   struct pipe_scissor_state scissor_state;
    union pipe_color_union color;
    double depth;
    unsigned stencil;
+   bool scissor_state_set;
 };
 
 static void
 tc_call_clear(struct pipe_context *pipe, union tc_payload *payload)
 {
    struct tc_clear *p = (struct tc_clear *)payload;
-   pipe->clear(pipe, p->buffers, &p->color, p->depth, p->stencil);
+   pipe->clear(pipe, p->buffers, p->scissor_state_set ? &p->scissor_state : NULL, &p->color, p->depth, p->stencil);
 }
 
 static void
-tc_clear(struct pipe_context *_pipe, unsigned buffers,
+tc_clear(struct pipe_context *_pipe, unsigned buffers, const struct pipe_scissor_state *scissor_state,
          const union pipe_color_union *color, double depth,
          unsigned stencil)
 {
@@ -2334,6 +2366,9 @@ tc_clear(struct pipe_context *_pipe, unsigned buffers,
    struct tc_clear *p = tc_add_struct_typed_call(tc, TC_CALL_clear, tc_clear);
 
    p->buffers = buffers;
+   if (scissor_state)
+      p->scissor_state = *scissor_state;
+   p->scissor_state_set = !!scissor_state;
    p->color = *color;
    p->depth = depth;
    p->stencil = stencil;

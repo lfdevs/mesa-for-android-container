@@ -824,6 +824,80 @@ brw_nir_link_shaders(const struct brw_compiler *compiler,
    }
 }
 
+static bool
+brw_nir_should_vectorize_mem(unsigned align, unsigned bit_size,
+                             unsigned num_components, unsigned high_offset,
+                             nir_intrinsic_instr *low,
+                             nir_intrinsic_instr *high)
+{
+   /* Don't combine things to generate 64-bit loads/stores.  We have to split
+    * those back into 32-bit ones anyway and UBO loads aren't split in NIR so
+    * we don't want to make a mess for the back-end.
+    */
+   if (bit_size > 32)
+      return false;
+
+   /* We can handle at most a vec4 right now.  Anything bigger would get
+    * immediately split by brw_nir_lower_mem_access_bit_sizes anyway.
+    */
+   if (num_components > 4)
+      return false;
+
+   if (align < bit_size / 8)
+      return false;
+
+   return true;
+}
+
+static
+bool combine_all_barriers(nir_intrinsic_instr *a,
+                          nir_intrinsic_instr *b,
+                          void *data)
+{
+   /* Translation to backend IR will get rid of modes we don't care about, so
+    * no harm in always combining them.
+    *
+    * TODO: While HW has only ACQUIRE|RELEASE fences, we could improve the
+    * scheduling so that it can take advantage of the different semantics.
+    */
+   nir_intrinsic_set_memory_modes(a, nir_intrinsic_memory_modes(a) |
+                                     nir_intrinsic_memory_modes(b));
+   nir_intrinsic_set_memory_semantics(a, nir_intrinsic_memory_semantics(a) |
+                                         nir_intrinsic_memory_semantics(b));
+   nir_intrinsic_set_memory_scope(a, MAX2(nir_intrinsic_memory_scope(a),
+                                          nir_intrinsic_memory_scope(b)));
+   return true;
+}
+
+static void
+brw_vectorize_lower_mem_access(nir_shader *nir,
+                               const struct brw_compiler *compiler,
+                               bool is_scalar)
+{
+   const struct gen_device_info *devinfo = compiler->devinfo;
+   bool progress = false;
+
+   if (is_scalar) {
+      OPT(nir_opt_load_store_vectorize,
+          nir_var_mem_ubo | nir_var_mem_ssbo |
+          nir_var_mem_global | nir_var_mem_shared,
+          brw_nir_should_vectorize_mem);
+   }
+
+   OPT(brw_nir_lower_mem_access_bit_sizes, devinfo);
+
+   while (progress) {
+      progress = false;
+
+      OPT(nir_lower_pack);
+      OPT(nir_copy_prop);
+      OPT(nir_opt_dce);
+      OPT(nir_opt_cse);
+      OPT(nir_opt_algebraic);
+      OPT(nir_opt_constant_folding);
+   }
+}
+
 /* Prepare the given shader for codegen
  *
  * This function is intended to be called right before going into the actual
@@ -841,7 +915,7 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
 
    UNUSED bool progress; /* Written by OPT */
 
-   OPT(brw_nir_lower_mem_access_bit_sizes, devinfo);
+   OPT(nir_opt_combine_memory_barriers, combine_all_barriers, NULL);
 
    do {
       progress = false;
@@ -849,6 +923,8 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
    } while (progress);
 
    brw_nir_optimize(nir, compiler, is_scalar, false);
+
+   brw_vectorize_lower_mem_access(nir, compiler, is_scalar);
 
    if (OPT(nir_lower_int64, nir->options->lower_int64_options))
       brw_nir_optimize(nir, compiler, is_scalar, false);
@@ -885,10 +961,10 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
           * havok on the vec4 backend.  The handling of constants in the vec4
           * backend is not good.
           */
-         if (is_scalar) {
+         if (is_scalar)
             OPT(nir_opt_constant_folding);
-            OPT(nir_copy_prop);
-         }
+
+         OPT(nir_copy_prop);
          OPT(nir_opt_dce);
          OPT(nir_opt_cse);
       }
@@ -899,12 +975,20 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
 
    if (is_scalar)
       OPT(nir_lower_alu_to_scalar, NULL, NULL);
-   OPT(nir_lower_to_source_mods, nir_lower_all_source_mods);
+
+   while (OPT(nir_opt_algebraic_distribute_src_mods)) {
+      OPT(nir_copy_prop);
+      OPT(nir_opt_dce);
+      OPT(nir_opt_cse);
+   }
+
    OPT(nir_copy_prop);
    OPT(nir_opt_dce);
    OPT(nir_opt_move, nir_move_comparisons);
 
    OPT(nir_lower_bool_to_int32);
+   OPT(nir_copy_prop);
+   OPT(nir_opt_dce);
 
    OPT(nir_lower_locals_to_regs);
 
@@ -976,7 +1060,7 @@ brw_nir_apply_sampler_key(nir_shader *nir,
       if (key_tex->swizzles[s] == SWIZZLE_NOOP)
          continue;
 
-      tex_options.swizzle_result |= (1 << s);
+      tex_options.swizzle_result |= BITFIELD_BIT(s);
       for (unsigned c = 0; c < 4; c++)
          tex_options.swizzles[s][c] = GET_SWZ(key_tex->swizzles[s], c);
    }

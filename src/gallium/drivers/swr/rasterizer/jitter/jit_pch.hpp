@@ -1,5 +1,5 @@
 /****************************************************************************
- * Copyright (C) 2017-2018 Intel Corporation.   All Rights Reserved.
+ * Copyright (C) 2017-2020 Intel Corporation.   All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -140,6 +140,14 @@ static inline llvm::AttributeSet GetFuncAttribSet(llvm::LLVMContext&       ctx,
 
 #if LLVM_VERSION_MAJOR < 7
 #pragma pop_macro("DEBUG")
+#endif
+
+#if LLVM_VERSION_MAJOR > 10
+    typedef unsigned            IntrinsicID;
+    typedef llvm::Align         AlignType;
+#else
+    typedef llvm::Intrinsic::ID IntrinsicID;
+    typedef unsigned            AlignType;
 #endif
 
 #include <deque>

@@ -30,6 +30,7 @@
 #include "nouveau_util.h"
 #include "nv04_3d.xml.h"
 #include "nv04_driver.h"
+#include "util/u_memory.h"
 
 static GLboolean
 texunit_needs_combiners(struct gl_texture_unit *u,

@@ -463,6 +463,7 @@ static bool r600_decompress_subresource(struct pipe_context *ctx,
 }
 
 static void r600_clear(struct pipe_context *ctx, unsigned buffers,
+		       const struct pipe_scissor_state *scissor_state,
 		       const union pipe_color_union *color,
 		       double depth, unsigned stencil)
 {

@@ -145,3 +145,4 @@ mov.z.f1.0(8)   null<1>UW       0x0000UW                        { align1 1Q };
 mov.z.f1.0(16)  null<1>UW       0x0000UW                        { align1 1H };
 mov.z.f0.0(8)   null<1>D        g21<8,8,1>F                     { align1 1Q };
 mov.z.f0.0(16)  null<1>D        g86<8,8,1>F                     { align1 1H };
+mov(1)          a0.4<1>W        127W                            { align1 1N };

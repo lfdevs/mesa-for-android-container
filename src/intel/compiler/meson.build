@@ -68,8 +68,12 @@ libintel_compiler_files = files(
   'brw_fs_visitor.cpp',
   'brw_inst.h',
   'brw_interpolation_map.c',
+  'brw_ir.h',
   'brw_ir_allocator.h',
+  'brw_ir_analysis.h',
   'brw_ir_fs.h',
+  'brw_ir_performance.h',
+  'brw_ir_performance.cpp',
   'brw_ir_vec4.h',
   'brw_nir.h',
   'brw_nir.c',
@@ -137,7 +141,7 @@ brw_nir_trig = custom_target(
 libintel_compiler = static_library(
   'intel_compiler',
   [libintel_compiler_files, brw_nir_trig, ir_expression_operation_h],
-  include_directories : [inc_common, inc_intel],
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
   c_args : [c_vis_args, no_override_init_args],
   cpp_args : [cpp_vis_args],
   dependencies : idep_nir_headers,
@@ -156,7 +160,7 @@ if with_tests
       executable(
         [t, ir_expression_operation_h],
         'test_@0@.cpp'.format(t),
-        include_directories : [inc_common, inc_intel],
+        include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
         link_with : [
           libintel_compiler, libintel_common, libintel_dev, libisl,
         ],

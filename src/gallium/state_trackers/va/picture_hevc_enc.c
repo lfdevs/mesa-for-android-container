@@ -73,7 +73,7 @@ vlVaHandleVAEncPictureParameterBufferTypeHEVC(vlVaDriver *drv, vlVaContext *cont
 
    context->desc.h265enc.pic.constrained_intra_pred_flag = h265->pic_fields.bits.constrained_intra_pred_flag;
 
-   util_hash_table_set(context->desc.h265enc.frame_idx,
+   _mesa_hash_table_insert(context->desc.h265enc.frame_idx,
                        UINT_TO_PTR(h265->decoded_curr_pic.picture_id),
                        UINT_TO_PTR(context->desc.h265enc.frame_num));
 

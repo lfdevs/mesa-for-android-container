@@ -134,17 +134,17 @@ static void
 util_set_interleaved_vertex_elements(struct cso_context *cso,
                                      unsigned num_elements)
 {
+   struct cso_velems_state velem;
    unsigned i;
-   struct pipe_vertex_element *velem =
-      calloc(1, num_elements * sizeof(struct pipe_vertex_element));
 
+   memset(&velem, 0, sizeof(velem));
+   velem.count = num_elements;
    for (i = 0; i < num_elements; i++) {
-      velem[i].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
-      velem[i].src_offset = i * 16;
+      velem.velems[i].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
+      velem.velems[i].src_offset = i * 16;
    }
 
-   cso_set_vertex_elements(cso, num_elements, velem);
-   free(velem);
+   cso_set_vertex_elements(cso, &velem);
 }
 
 static void *
@@ -177,7 +177,7 @@ util_set_common_states_and_clear(struct cso_context *cso, struct pipe_context *c
    util_set_rasterizer_normal(cso);
    util_set_max_viewport(cso, cb);
 
-   ctx->clear(ctx, PIPE_CLEAR_COLOR0, (void*)clear_color, 0, 0);
+   ctx->clear(ctx, PIPE_CLEAR_COLOR0, NULL, (void*)clear_color, 0, 0);
 }
 
 static void
@@ -229,7 +229,7 @@ util_probe_rect_rgba_multi(struct pipe_context *ctx, struct pipe_resource *tex,
 
    map = pipe_transfer_map(ctx, tex, 0, 0, PIPE_TRANSFER_READ,
                            offx, offy, w, h, &transfer);
-   pipe_get_tile_rgba(transfer, map, 0, 0, w, h, pixels);
+   pipe_get_tile_rgba(transfer, map, 0, 0, w, h, tex->format, pixels);
    pipe_transfer_unmap(ctx, transfer);
 
    for (e = 0; e < num_expected_colors; e++) {

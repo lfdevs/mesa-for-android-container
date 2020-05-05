@@ -202,9 +202,15 @@ fs_visitor::opt_peephole_sel()
                ibld.MOV(src0, then_mov[i]->src[0]);
             }
 
+            /* 64-bit immediates can't be placed in src1. */
+            fs_reg src1(else_mov[i]->src[0]);
+            if (src1.file == IMM && type_sz(src1.type) == 8) {
+               src1 = ibld.vgrf(else_mov[i]->src[0].type);
+               ibld.MOV(src1, else_mov[i]->src[0]);
+            }
+
             set_predicate_inv(if_inst->predicate, if_inst->predicate_inverse,
-                              ibld.SEL(then_mov[i]->dst, src0,
-                                       else_mov[i]->src[0]));
+                              ibld.SEL(then_mov[i]->dst, src0, src1));
          }
 
          then_mov[i]->remove(then_block);
@@ -215,7 +221,7 @@ fs_visitor::opt_peephole_sel()
    }
 
    if (progress)
-      invalidate_live_intervals();
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
 
    return progress;
 }

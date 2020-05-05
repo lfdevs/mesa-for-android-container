@@ -148,7 +148,7 @@ static void draw( void )
 
       ctx->bind_fs_state(ctx, fs);
 
-      ctx->clear(ctx, PIPE_CLEAR_COLOR, &clear_color, 0, 0);
+      ctx->clear(ctx, PIPE_CLEAR_COLOR, NULL, &clear_color, 0, 0);
       util_draw_arrays(ctx, PIPE_PRIM_POINTS, 0, 1);
       ctx->flush(ctx, NULL, 0);
 

@@ -31,6 +31,8 @@
 #include "drm-shim/drm_shim.h"
 #include "util/u_debug.h"
 
+bool drm_shim_driver_prefers_first_render_node = true;
+
 struct etna_shim_gpu
 {
    const char *name;
@@ -215,6 +217,7 @@ static ioctl_fn_t driver_ioctls[] = {
 void
 drm_shim_driver_init(void)
 {
+   shim_device.bus_type = DRM_BUS_PLATFORM;
    shim_device.driver_name = "etnaviv";
    shim_device.driver_ioctls = driver_ioctls;
    shim_device.driver_ioctl_count = ARRAY_SIZE(driver_ioctls);

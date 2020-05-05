@@ -46,7 +46,7 @@ get_array_stride(struct gl_context *ctx, const struct tnl_vertex_array *a)
 	struct nouveau_render_state *render = to_render_state(ctx);
 	const struct gl_vertex_buffer_binding *binding = a->BufferBinding;
 
-	if (render->mode == VBO && !_mesa_is_bufferobj(binding->BufferObj)) {
+	if (render->mode == VBO && !binding->BufferObj) {
 		const struct gl_array_attributes *attrib = a->VertexAttrib;
 		/* Pack client buffers. */
 		return align(attrib->Format._ElementSize, 4);
@@ -66,9 +66,9 @@ vbo_init_arrays(struct gl_context *ctx, const struct _mesa_index_buffer *ib,
 	if (ib) {
 		GLenum ib_type;
 
-		if (ib->index_size == 4)
+		if (ib->index_size_shift == 2)
 			ib_type = GL_UNSIGNED_INT;
-		else if (ib->index_size == 2)
+		else if (ib->index_size_shift == 1)
 			ib_type = GL_UNSIGNED_SHORT;
 		else
 			ib_type = GL_UNSIGNED_BYTE;
@@ -230,7 +230,7 @@ get_max_client_stride(struct gl_context *ctx, const struct tnl_vertex_array *arr
 	FOR_EACH_BOUND_ATTR(render, i, attr) {
 		const struct tnl_vertex_array *a = &arrays[attr];
 
-		if (!_mesa_is_bufferobj(a->BufferBinding->BufferObj))
+		if (!a->BufferBinding->BufferObj)
 			s = MAX2(s, get_array_stride(ctx, a));
 	}
 
@@ -244,15 +244,14 @@ TAG(vbo_render_prims)(struct gl_context *ctx,
 		      const struct _mesa_index_buffer *ib,
 		      GLboolean index_bounds_valid,
 		      GLuint min_index, GLuint max_index,
-		      struct gl_transform_feedback_object *tfb_vertcount,
-                      unsigned stream,
-		      struct gl_buffer_object *indirect);
+                      GLuint num_instances, GLuint base_instance);
 
 static GLboolean
 vbo_maybe_split(struct gl_context *ctx, const struct tnl_vertex_array *arrays,
 	    const struct _mesa_prim *prims, GLuint nr_prims,
 	    const struct _mesa_index_buffer *ib,
-	    GLuint min_index, GLuint max_index)
+	    GLuint min_index, GLuint max_index,
+            GLuint num_instances, GLuint base_instance)
 {
 	struct nouveau_context *nctx = to_nouveau_context(ctx);
 	struct nouveau_render_state *render = to_render_state(ctx);
@@ -278,7 +277,8 @@ vbo_maybe_split(struct gl_context *ctx, const struct tnl_vertex_array *arrays,
 		};
 
 		_tnl_split_prims(ctx, arrays, prims, nr_prims, ib, min_index,
-				 max_index, TAG(vbo_render_prims), &limits);
+				 max_index, num_instances, base_instance,
+                                 TAG(vbo_render_prims), &limits);
 		return GL_TRUE;
 	}
 
@@ -341,8 +341,13 @@ vbo_bind_vertices(struct gl_context *ctx, const struct tnl_vertex_array *arrays,
 
 		} else {
 			int n = max_index - min_index + 1;
-			char *sp = (char *)ADD_POINTERS(
+			const char *sp;
+                        if (obj) {
+                           sp = (char *)ADD_POINTERS(
 				nouveau_bufferobj_sys(obj), p) + delta;
+                        } else {
+                           sp = p + delta;
+                        }
 			char *dp  = nouveau_get_scratch(ctx, n * a->stride,
 							&bo[i], &offset[i]);
 
@@ -482,9 +487,7 @@ TAG(vbo_render_prims)(struct gl_context *ctx,
 		      const struct _mesa_index_buffer *ib,
 		      GLboolean index_bounds_valid,
 		      GLuint min_index, GLuint max_index,
-		      struct gl_transform_feedback_object *tfb_vertcount,
-                      unsigned stream,
-		      struct gl_buffer_object *indirect)
+                      GLuint num_instances, GLuint base_instance)
 {
 	struct nouveau_render_state *render = to_render_state(ctx);
 
@@ -496,7 +499,7 @@ TAG(vbo_render_prims)(struct gl_context *ctx,
 	vbo_choose_attrs(ctx, arrays);
 
 	if (vbo_maybe_split(ctx, arrays, prims, nr_prims, ib, min_index,
-			    max_index))
+			    max_index, num_instances, base_instance))
 		return;
 
 	vbo_init_arrays(ctx, ib, arrays);
@@ -520,9 +523,7 @@ TAG(vbo_check_render_prims)(struct gl_context *ctx,
 			    const struct _mesa_index_buffer *ib,
 			    GLboolean index_bounds_valid,
 			    GLuint min_index, GLuint max_index,
-			    struct gl_transform_feedback_object *tfb_vertcount,
-                            unsigned stream,
-			    struct gl_buffer_object *indirect)
+                            GLuint num_instances, GLuint base_instance)
 {
 	struct nouveau_context *nctx = to_nouveau_context(ctx);
 
@@ -531,12 +532,12 @@ TAG(vbo_check_render_prims)(struct gl_context *ctx,
 	if (nctx->fallback == HWTNL)
 		TAG(vbo_render_prims)(ctx, arrays, prims, nr_prims, ib,
 				      index_bounds_valid, min_index, max_index,
-				      tfb_vertcount, stream, indirect);
+				      num_instances, base_instance);
 
 	if (nctx->fallback == SWTNL)
 		_tnl_draw_prims(ctx, arrays, prims, nr_prims, ib,
 				index_bounds_valid, min_index, max_index,
-				tfb_vertcount, stream, indirect);
+                                num_instances, base_instance);
 }
 
 static void
@@ -545,9 +546,9 @@ TAG(vbo_draw)(struct gl_context *ctx,
 	      const struct _mesa_index_buffer *ib,
 	      GLboolean index_bounds_valid,
 	      GLuint min_index, GLuint max_index,
-	      struct gl_transform_feedback_object *tfb_vertcount,
-	      unsigned stream,
-	      struct gl_buffer_object *indirect)
+              GLuint num_instances, GLuint base_instance,
+	      UNUSED struct gl_transform_feedback_object *tfb_vertcount,
+	      UNUSED unsigned stream)
 {
 	/* Borrow and update the inputs list from the tnl context */
 	const struct tnl_vertex_array* arrays = _tnl_bind_inputs(ctx);
@@ -555,7 +556,7 @@ TAG(vbo_draw)(struct gl_context *ctx,
 	TAG(vbo_check_render_prims)(ctx, arrays,
 				    prims, nr_prims, ib,
 				    index_bounds_valid, min_index, max_index,
-				    tfb_vertcount, stream, indirect);
+                                    num_instances, base_instance);
 }
 
 void
@@ -569,7 +570,6 @@ TAG(vbo_init)(struct gl_context *ctx)
 
 	/* Overwrite our draw function */
 	ctx->Driver.Draw = TAG(vbo_draw);
-	vbo_use_buffer_objects(ctx);
 }
 
 void

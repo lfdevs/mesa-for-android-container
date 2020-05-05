@@ -692,13 +692,11 @@ eglQueryString(EGLDisplay dpy, EGLint name)
    _EGLDisplay *disp;
    _EGLDriver *drv;
 
+#if !USE_LIBGLVND
    if (dpy == EGL_NO_DISPLAY && name == EGL_EXTENSIONS) {
-      const char *ret = _eglGetClientExtensionString();
-      if (ret != NULL)
-         RETURN_EGL_SUCCESS(NULL, ret);
-      else
-         RETURN_EGL_ERROR(NULL, EGL_BAD_ALLOC, NULL);
+      RETURN_EGL_SUCCESS(NULL, _eglGlobal.ClientExtensionString);
    }
+#endif
 
    disp = _eglLockDisplay(dpy);
    _EGL_FUNC_START(disp, EGL_OBJECT_DISPLAY_KHR, NULL, NULL);

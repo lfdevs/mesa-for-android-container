@@ -28,6 +28,7 @@
 #ifndef TGSI_UTIL_H
 #define TGSI_UTIL_H
 
+#include <stdbool.h>
 #include "pipe/p_shader_tokens.h"
 
 #if defined __cplusplus
@@ -84,11 +85,11 @@ tgsi_util_get_texture_coord_dim(enum tgsi_texture_type tgsi_tex);
 int
 tgsi_util_get_shadow_ref_src_index(enum tgsi_texture_type tgsi_tex);
 
-boolean
+bool
 tgsi_is_shadow_target(enum tgsi_texture_type target);
 
 
-static inline boolean
+static inline bool
 tgsi_is_msaa_target(enum tgsi_texture_type target)
 {
    return (target == TGSI_TEXTURE_2D_MSAA ||

@@ -1072,7 +1072,7 @@ static void test_surface_ld_init0f(void *p, int s, int x, int y)
         float v[] = { 1.0, -.75, .50, -.25 };
         int i = 0;
 
-        util_format_write_4f(surface_fmts[i], v, 0, p, 0, 0, 0, 1, 1);
+        util_format_pack_rgba(surface_fmts[i], p, v, 1);
 }
 
 static void test_surface_ld_init0i(void *p, int s, int x, int y)
@@ -1080,7 +1080,7 @@ static void test_surface_ld_init0i(void *p, int s, int x, int y)
         int v[] = { 0xffffffff, 0xffff, 0xff, 0xf };
         int i = 0;
 
-        util_format_write_4i(surface_fmts[i], v, 0, p, 0, 0, 0, 1, 1);
+        util_format_pack_rgba(surface_fmts[i], p, v, 1);
 }
 
 static void test_surface_ld_expectf(void *p, int s, int x, int y)
@@ -1089,7 +1089,7 @@ static void test_surface_ld_expectf(void *p, int s, int x, int y)
         int i = 0;
 
         test_surface_ld_init0f(v, s, x / 4, y);
-        util_format_read_4f(surface_fmts[i], w, 0, v, 0, 0, 0, 1, 1);
+        util_format_unpack_rgba(surface_fmts[i], w, v, 1);
         *(float *)p = w[x % 4];
 }
 
@@ -1099,7 +1099,7 @@ static void test_surface_ld_expecti(void *p, int s, int x, int y)
         int i = 0;
 
         test_surface_ld_init0i(v, s, x / 4, y);
-        util_format_read_4i(surface_fmts[i], w, 0, v, 0, 0, 0, 1, 1);
+        util_format_unpack_rgba(surface_fmts[i], w, v, 1);
         *(uint32_t *)p = w[x % 4];
 }
 
@@ -1180,7 +1180,7 @@ static void test_surface_st_expectf(void *p, int s, int x, int y)
 
         for (j = 0; j < 4; j++)
                 test_surface_st_init0f(&vf[j], s, 4 * x + j, y);
-        util_format_write_4f(surface_fmts[i], vf, 0, p, 0, 0, 0, 1, 1);
+        util_format_pack_rgba(surface_fmts[i], p, vf, 1);
 }
 
 static void test_surface_st_expects(void *p, int s, int x, int y)
@@ -1190,7 +1190,7 @@ static void test_surface_st_expects(void *p, int s, int x, int y)
 
         for (j = 0; j < 4; j++)
                 test_surface_st_init0i(&v[j], s, 4 * x + j, y);
-        util_format_write_4i(surface_fmts[i], v, 0, p, 0, 0, 0, 1, 1);
+        util_format_pack_rgba(surface_fmts[i], p, v, 1);
 }
 
 static void test_surface_st_expectu(void *p, int s, int x, int y)
@@ -1200,7 +1200,7 @@ static void test_surface_st_expectu(void *p, int s, int x, int y)
 
         for (j = 0; j < 4; j++)
                 test_surface_st_init0i(&v[j], s, 4 * x + j, y);
-        util_format_write_4ui(surface_fmts[i], v, 0, p, 0, 0, 0, 1, 1);
+        util_format_pack_rgba(surface_fmts[i], p, v, 1);
 }
 
 static bool test_surface_st_check(void *x, void *y, int sz)

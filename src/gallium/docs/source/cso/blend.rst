@@ -99,6 +99,10 @@ alpha_to_one
    If enabled, the fragment's alpha value will be set to one.  As with
    alpha_to_coverage, this step happens regardless of whether multisample
    is enabled or the destination buffer is multisampled.
+max_rt
+   The index of the max render target (irrespecitive of whether independent
+   blend is enabled), ie. the number of MRTs minus one.  This is provided
+   so that the driver can avoid the overhead of programming unused MRTs.
 
 
 Per-rendertarget Members

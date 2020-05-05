@@ -25,7 +25,6 @@
 #include "pan_bo.h"
 #include "pan_context.h"
 #include "pan_util.h"
-#include "pan_format.h"
 
 #include "util/format/u_format.h"
 
@@ -141,9 +140,9 @@ panfrost_sfbd_set_cbuf(
         fb->framebuffer = base;
         fb->stride = stride;
 
-        if (rsrc->layout == PAN_LINEAR)
+        if (rsrc->layout == MALI_TEXTURE_LINEAR)
                 fb->format.block = MALI_BLOCK_LINEAR;
-        else if (rsrc->layout == PAN_TILED) {
+        else if (rsrc->layout == MALI_TEXTURE_TILED) {
                 fb->format.block = MALI_BLOCK_TILED;
                 fb->stride *= 16;
         } else {
@@ -163,7 +162,7 @@ panfrost_sfbd_set_zsbuf(
         unsigned level = surf->u.tex.level;
         assert(surf->u.tex.first_layer == 0);
 
-        if (rsrc->layout != PAN_TILED)
+        if (rsrc->layout != MALI_TEXTURE_TILED)
                 unreachable("Invalid render layout.");
 
         fb->depth_buffer = rsrc->bo->gpu + rsrc->slices[level].offset;
@@ -200,7 +199,7 @@ panfrost_emit_sfbd(struct panfrost_batch *batch, unsigned vertex_count)
 {
         struct panfrost_context *ctx = batch->ctx;
         struct pipe_context *gallium = (struct pipe_context *) ctx;
-        struct panfrost_screen *screen = pan_screen(gallium->screen);
+        struct panfrost_device *dev = pan_device(gallium->screen);
 
         unsigned width = batch->key.width;
         unsigned height = batch->key.height;
@@ -213,12 +212,14 @@ panfrost_emit_sfbd(struct panfrost_batch *batch, unsigned vertex_count)
         struct mali_single_framebuffer framebuffer = {
                 .width = MALI_POSITIVE(width),
                 .height = MALI_POSITIVE(height),
-                .unknown2 = 0x1f,
+                .shared_memory = {
+                        .shared_workgroup_count = ~0,
+                        .scratchpad = panfrost_batch_get_scratchpad(batch, shift, dev->thread_tls_alloc, dev->core_count)->gpu,
+                },
                 .format = {
                         .unk3 = 0x3,
                 },
                 .clear_flags = 0x1000,
-                .scratchpad = panfrost_batch_get_scratchpad(batch, shift, screen->thread_tls_alloc, screen->core_count)->gpu,
                 .tiler = panfrost_emit_midg_tiler(batch, vertex_count),
         };
 

@@ -46,6 +46,7 @@ static const VAImageFormat formats[] =
    {VA_FOURCC('I','4','2','0')},
    {VA_FOURCC('Y','V','1','2')},
    {VA_FOURCC('Y','U','Y','V')},
+   {VA_FOURCC('Y','U','Y','2')},
    {VA_FOURCC('U','Y','V','Y')},
    {.fourcc = VA_FOURCC('B','G','R','A'), .byte_order = VA_LSB_FIRST, 32, 32,
     0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000},
@@ -65,7 +66,7 @@ vlVaVideoSurfaceSize(vlVaSurface *p_surf, int component,
    *height = p_surf->templat.height;
 
    vl_video_buffer_adjust_size(width, height, component,
-                               p_surf->templat.chroma_format,
+                               pipe_format_to_chroma_format(p_surf->templat.buffer_format),
                                p_surf->templat.interlaced);
 }
 
@@ -160,6 +161,7 @@ vlVaCreateImage(VADriverContextP ctx, VAImageFormat *format, int width, int heig
 
    case VA_FOURCC('U','Y','V','Y'):
    case VA_FOURCC('Y','U','Y','V'):
+   case VA_FOURCC('Y','U','Y','2'):
       img->num_planes = 1;
       img->pitches[0] = w * 2;
       img->offsets[0] = 0;
@@ -453,10 +455,10 @@ vlVaGetImage(VADriverContextP ctx, VASurfaceID surface, int x, int y,
       unsigned box_y = y & ~1;
       if (!views[i]) continue;
       vl_video_buffer_adjust_size(&box_w, &box_h, i,
-                                  surf->templat.chroma_format,
+                                  pipe_format_to_chroma_format(surf->templat.buffer_format),
                                   surf->templat.interlaced);
       vl_video_buffer_adjust_size(&box_x, &box_y, i,
-                                  surf->templat.chroma_format,
+                                  pipe_format_to_chroma_format(surf->templat.buffer_format),
                                   surf->templat.interlaced);
       for (j = 0; j < views[i]->texture->array_size; ++j) {
          struct pipe_box box = {box_x, box_y, j, box_w, box_h, 1};

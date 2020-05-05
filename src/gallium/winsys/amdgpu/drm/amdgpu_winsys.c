@@ -31,11 +31,12 @@
 #include "amdgpu_public.h"
 
 #include "util/os_file.h"
+#include "util/os_misc.h"
 #include "util/u_cpu_detect.h"
 #include "util/u_hash_table.h"
 #include "util/hash_table.h"
 #include "util/xmlconfig.h"
-#include <amdgpu_drm.h>
+#include "drm-uapi/amdgpu_drm.h"
 #include <xf86drm.h>
 #include <stdio.h>
 #include <sys/stat.h>
@@ -47,7 +48,7 @@
 #define AMDGPU_INFO_NUM_VRAM_CPU_PAGE_FAULTS	0x1E
 #endif
 
-static struct util_hash_table *dev_tab = NULL;
+static struct hash_table *dev_tab = NULL;
 static simple_mtx_t dev_tab_mutex = _SIMPLE_MTX_INITIALIZER_NP;
 
 DEBUG_GET_ONCE_BOOL_OPTION(all_bos, "RADEON_ALL_BOS", false)
@@ -138,7 +139,7 @@ static void do_winsys_deinit(struct amdgpu_winsys *ws)
          pb_slabs_deinit(&ws->bo_slabs[i]);
    }
    pb_cache_deinit(&ws->bo_cache);
-   util_hash_table_destroy(ws->bo_export_table);
+   _mesa_hash_table_destroy(ws->bo_export_table, NULL);
    simple_mtx_destroy(&ws->sws_list_lock);
    simple_mtx_destroy(&ws->global_bo_list_lock);
    simple_mtx_destroy(&ws->bo_export_table_lock);
@@ -164,9 +165,9 @@ static void amdgpu_winsys_destroy(struct radeon_winsys *rws)
 
    destroy = pipe_reference(&ws->reference, NULL);
    if (destroy && dev_tab) {
-      util_hash_table_remove(dev_tab, ws->dev);
-      if (util_hash_table_count(dev_tab) == 0) {
-         util_hash_table_destroy(dev_tab);
+      _mesa_hash_table_remove_key(dev_tab, ws->dev);
+      if (_mesa_hash_table_num_entries(dev_tab) == 0) {
+         _mesa_hash_table_destroy(dev_tab, NULL);
          dev_tab = NULL;
       }
    }
@@ -268,16 +269,6 @@ static bool amdgpu_read_registers(struct radeon_winsys *rws,
                                    0xffffffff, 0, out) == 0;
 }
 
-static unsigned hash_pointer(void *key)
-{
-   return _mesa_hash_pointer(key);
-}
-
-static int compare_pointers(void *key1, void *key2)
-{
-   return key1 != key2;
-}
-
 static bool amdgpu_winsys_unref(struct radeon_winsys *rws)
 {
    struct amdgpu_screen_winsys *sws = amdgpu_screen_winsys(rws);
@@ -345,7 +336,8 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
    struct amdgpu_screen_winsys *ws;
    struct amdgpu_winsys *aws;
    amdgpu_device_handle dev;
-   uint32_t drm_major, drm_minor, r;
+   uint32_t drm_major, drm_minor;
+   int r;
 
    ws = CALLOC_STRUCT(amdgpu_screen_winsys);
    if (!ws)
@@ -357,7 +349,7 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
    /* Look up the winsys from the dev table. */
    simple_mtx_lock(&dev_tab_mutex);
    if (!dev_tab)
-      dev_tab = util_hash_table_create(hash_pointer, compare_pointers);
+      dev_tab = util_hash_table_create_ptr_keys();
 
    /* Initialize the amdgpu device. This should always return the same pointer
     * for the same fd. */
@@ -380,13 +372,25 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
 
       simple_mtx_lock(&aws->sws_list_lock);
       for (sws_iter = aws->sws_list; sws_iter; sws_iter = sws_iter->next) {
-         if (os_same_file_description(sws_iter->fd, ws->fd)) {
+         r = os_same_file_description(sws_iter->fd, ws->fd);
+
+         if (r == 0) {
             close(ws->fd);
             FREE(ws);
             ws = sws_iter;
             pipe_reference(NULL, &ws->reference);
             simple_mtx_unlock(&aws->sws_list_lock);
             goto unlock;
+         } else if (r < 0) {
+            static bool logged;
+
+            if (!logged) {
+               os_log_message("amdgpu: os_same_file_description couldn't "
+                              "determine if two DRM fds reference the same "
+                              "file description.\n"
+                              "If they do, bad things may happen!\n");
+               logged = true;
+            }
          }
       }
       simple_mtx_unlock(&aws->sws_list_lock);
@@ -449,7 +453,7 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
       pipe_reference_init(&aws->reference, 1);
 
       list_inithead(&aws->global_bo_list);
-      aws->bo_export_table = util_hash_table_create(hash_pointer, compare_pointers);
+      aws->bo_export_table = util_hash_table_create_ptr_keys();
 
       (void) simple_mtx_init(&aws->sws_list_lock, mtx_plain);
       (void) simple_mtx_init(&aws->global_bo_list_lock, mtx_plain);
@@ -463,7 +467,7 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
          return NULL;
       }
 
-      util_hash_table_set(dev_tab, dev, aws);
+      _mesa_hash_table_insert(dev_tab, dev, aws);
 
       if (aws->reserve_vmid) {
          r = amdgpu_vm_reserve_vmid(dev, 0);
