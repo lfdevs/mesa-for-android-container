@@ -3867,6 +3867,11 @@ struct gl_constants
    GLboolean GLSLZeroInit;
 
    /**
+    * Treat integer textures using GL_LINEAR filters as GL_NEAREST.
+    */
+   GLboolean ForceIntegerTexNearest;
+
+   /**
     * Does the driver support real 32-bit integers?  (Otherwise, integers are
     * simulated via floats.)
     */

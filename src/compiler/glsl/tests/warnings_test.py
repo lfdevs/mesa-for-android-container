@@ -26,6 +26,13 @@ import os
 import subprocess
 import sys
 
+# The meson version handles windows paths better, but if it's not available
+# fall back to shlex
+try:
+    from meson.mesonlib import split_args
+except ImportError:
+    from shlex import split as split_args
+
 
 def arg_parser():
     parser = argparse.ArgumentParser()
@@ -42,10 +49,10 @@ def arg_parser():
 
 def get_test_runner(runner):
     """Wrap the test runner in the exe wrapper if necessary."""
-    wrapper =  os.environ.get('MESON_EXE_WRAPPER', None)
+    wrapper = os.environ.get('MESON_EXE_WRAPPER', None)
     if wrapper is None:
         return [runner]
-    return [wrapper, runner]
+    return split_args(wrapper) + [runner]
 
 
 def main():
@@ -86,7 +93,6 @@ if __name__ == '__main__':
         main()
     except OSError as e:
         if e.errno == errno.ENOEXEC:
-            print('Skipping due to lack of exe_wrapper.', file=sys.stderr)
+            print('Skipping due to inability to run host binaries', file=sys.stderr)
             sys.exit(77)
-        else:
-            raise
+        raise

@@ -14,3 +14,4 @@ VK_KHR_16bit_storage for ACO on GFX8+ (storageInputOutput16 is still unsupported
 shaderInt16 for ACO on GFX9+
 VK_KHR_shader_float16_int8 for ACO on GFX8+ (shaderFloat16 is still unsupported)
 VK_EXT_robustness2 on Intel, RADV.
+Add Rocket Lake (RKL) support on anvil and iris.

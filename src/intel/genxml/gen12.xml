@@ -1964,7 +1964,7 @@
       <value name="9-12 Samplers" value="3"/>
       <value name="13-16 Samplers" value="4"/>
     </field>
-    <field name="Instance Count" start="64" end="67" type="uint"/>
+    <field name="Instance Count" start="64" end="68" type="uint"/>
     <field name="Maximum Number of Threads" start="72" end="80" type="uint"/>
     <field name="Statistics Enable" start="93" end="93" type="bool"/>
     <field name="Enable" start="95" end="95" type="bool"/>

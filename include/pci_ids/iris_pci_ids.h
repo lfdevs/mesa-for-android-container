@@ -1,3 +1,9 @@
+CHIPSET(0x4c8a, rkl_gt1, "RKL GT1", "Intel(R) Graphics")
+CHIPSET(0x4c8b, rkl_gt1, "RKL GT1", "Intel(R) Graphics")
+CHIPSET(0x4c8c, rkl_gt05, "RKL GT0.5", "Intel(R) Graphics")
+CHIPSET(0x4c90, rkl_gt1, "RKL GT1", "Intel(R) Graphics")
+CHIPSET(0x4c9a, rkl_gt1, "RKL GT1", "Intel(R) Graphics")
+
 CHIPSET(0x9A40, tgl_gt2, "TGL GT2", "Intel(R) Xe Graphics")
 CHIPSET(0x9A49, tgl_gt2, "TGL GT2", "Intel(R) Xe Graphics")
 CHIPSET(0x9A59, tgl_gt2, "TGL GT2", "Intel(R) Graphics")

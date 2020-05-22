@@ -166,6 +166,7 @@ gather_vars_written(struct copy_prop_var_state *state,
          nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
          switch (intrin->intrinsic) {
          case nir_intrinsic_control_barrier:
+         case nir_intrinsic_group_memory_barrier:
          case nir_intrinsic_memory_barrier:
             written->modes |= nir_var_shader_out |
                               nir_var_mem_ssbo |

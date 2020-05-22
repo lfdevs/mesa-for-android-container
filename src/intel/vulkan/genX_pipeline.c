@@ -1624,7 +1624,12 @@ emit_3dstate_hs_te_ds(struct anv_graphics_pipeline *pipeline,
       hs.VertexURBEntryReadLength = 0;
       hs.VertexURBEntryReadOffset = 0;
       hs.DispatchGRFStartRegisterForURBData =
-         tcs_prog_data->base.base.dispatch_grf_start_reg;
+         tcs_prog_data->base.base.dispatch_grf_start_reg & 0x1f;
+#if GEN_GEN >= 12
+      hs.DispatchGRFStartRegisterForURBData5 =
+         tcs_prog_data->base.base.dispatch_grf_start_reg >> 5;
+#endif
+
 
       hs.PerThreadScratchSpace = get_scratch_space(tcs_bin);
       hs.ScratchSpaceBasePointer =

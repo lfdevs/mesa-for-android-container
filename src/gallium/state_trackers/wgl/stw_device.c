@@ -112,10 +112,6 @@ stw_init(const struct stw_winsys *stw_winsys)
    stw_dev = &stw_dev_storage;
    memset(stw_dev, 0, sizeof(*stw_dev));
 
-#ifdef DEBUG
-   stw_dev->memdbg_no = debug_memory_begin();
-#endif
-
    stw_dev->stw_winsys = stw_winsys;
 
    stw_dev->stapi = stw_st_create_api();
@@ -228,10 +224,6 @@ stw_cleanup(void)
    /* glapi is statically linked: we can call the local destroy function. */
 #ifdef _GLAPI_NO_EXPORTS
    _glapi_destroy_multithread();
-#endif
-
-#ifdef DEBUG
-   debug_memory_end(stw_dev->memdbg_no);
 #endif
 
    stw_tls_cleanup();

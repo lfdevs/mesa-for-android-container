@@ -1092,7 +1092,6 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
 	struct fd_resource *rsc = CALLOC_STRUCT(fd_resource);
 	struct fdl_slice *slice = fd_resource_slice(rsc, 0);
 	struct pipe_resource *prsc = &rsc->base;
-	uint32_t pitchalign = fd_screen(pscreen)->gmem_alignw * rsc->layout.cpp;
 
 	DBG("target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
 			"nr_samples=%u, usage=%u, bind=%x, flags=%x",
@@ -1123,6 +1122,8 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
 	slice->pitch = handle->stride;
 	slice->offset = handle->offset;
 	slice->size0 = handle->stride * prsc->height0;
+
+	uint32_t pitchalign = fd_screen(pscreen)->gmem_alignw * rsc->layout.cpp;
 
 	if ((slice->pitch < align(prsc->width0 * rsc->layout.cpp, pitchalign)) ||
 			(slice->pitch & (pitchalign - 1)))

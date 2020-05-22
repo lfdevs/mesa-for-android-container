@@ -113,6 +113,13 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       });
 
 #if GEN_GEN >= 8
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_INSTANCING), vfi) {
+      vfi.InstancingEnable = false;
+      vfi.VertexElementIndex = 0;
+   }
+#endif
+
+#if GEN_GEN >= 8
    anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_SGVS), sgvs);
 #endif
 

@@ -220,7 +220,7 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MAX_TEXEL_OFFSET:
       return 7;
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
-      return VIV_FEATURE(screen, chipMinorFeatures2, SEAMLESS_CUBE_MAP);
+      return screen->specs.seamless_cube_map;
 
    /* Timer queries. */
    case PIPE_CAP_OCCLUSION_QUERY:
@@ -763,6 +763,9 @@ etna_get_specs(struct etna_screen *screen)
       VIV_FEATURE(screen, chipMinorFeatures4, HALTI2);
    screen->specs.v4_compression =
       VIV_FEATURE(screen, chipMinorFeatures6, V4_COMPRESSION);
+   screen->specs.seamless_cube_map =
+      (screen->model != 0x880) && /* Seamless cubemap is broken on GC880? */
+      VIV_FEATURE(screen, chipMinorFeatures2, SEAMLESS_CUBE_MAP);
 
    if (screen->specs.halti >= 5) {
       /* GC7000 - this core must load shaders from memory. */

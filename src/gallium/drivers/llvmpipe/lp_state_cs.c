@@ -523,6 +523,8 @@ llvmpipe_delete_compute_state(struct pipe_context *pipe,
       llvmpipe_remove_cs_shader_variant(llvmpipe, li->base);
       li = next;
    }
+   if (shader->base.ir.nir)
+      ralloc_free(shader->base.ir.nir);
    tgsi_free_tokens(shader->base.tokens);
    FREE(shader);
 }

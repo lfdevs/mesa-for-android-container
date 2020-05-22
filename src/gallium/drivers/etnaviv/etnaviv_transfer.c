@@ -241,6 +241,17 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
 
    assert(level <= prsc->last_level);
 
+   /* This one is a little tricky: if we have a separate render resource, which
+    * is newer than the base resource we want the transfer to target this one,
+    * to get the most up-to-date content, but only if we don't have a texture
+    * target of the same age, as transfering in/out of the texture target is
+    * generally preferred for the reasons listed below */
+   if (rsc->render && etna_resource_newer(etna_resource(rsc->render), rsc) &&
+       (!rsc->texture || etna_resource_newer(etna_resource(rsc->render),
+                                             etna_resource(rsc->texture)))) {
+      rsc = etna_resource(rsc->render);
+   }
+
    if (rsc->texture && !etna_resource_newer(rsc, etna_resource(rsc->texture))) {
       /* We have a texture resource which is the same age or newer than the
        * render resource. Use the texture resource, which avoids bouncing
@@ -303,7 +314,7 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
       }
 
       if (!(usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE))
-         etna_copy_resource_box(pctx, trans->rsc, prsc, level, &ptrans->box);
+         etna_copy_resource_box(pctx, trans->rsc, &rsc->base, level, &ptrans->box);
 
       /* Switch to using the temporary resource instead */
       rsc = etna_resource(trans->rsc);

@@ -21,11 +21,10 @@
  * IN THE SOFTWARE.
  */
 
-#undef NDEBUG
-
 #include <pthread.h>
 
 #include "anv_private.h"
+#include "test_common.h"
 
 #define NUM_THREADS 16
 #define STATES_PER_THREAD 1024
@@ -103,7 +102,7 @@ static void run_test()
          break;
 
       /* That next element had better be higher than the previous highest */
-      assert(jobs[max_thread_idx].offsets[next[max_thread_idx]] > highest);
+      ASSERT(jobs[max_thread_idx].offsets[next[max_thread_idx]] > highest);
 
       highest = jobs[max_thread_idx].offsets[next[max_thread_idx]];
       next[max_thread_idx]++;

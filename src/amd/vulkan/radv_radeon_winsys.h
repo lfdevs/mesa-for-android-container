@@ -34,6 +34,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vulkan/vulkan.h>
 #include "amd_family.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
@@ -158,6 +159,7 @@ struct radeon_bo_metadata {
 };
 
 struct radeon_winsys_fence;
+struct radeon_winsys_ctx;
 
 struct radeon_winsys_bo {
 	uint64_t va;
@@ -256,8 +258,9 @@ struct radeon_winsys {
 	void (*buffer_virtual_bind)(struct radeon_winsys_bo *parent,
 	                            uint64_t offset, uint64_t size,
 	                            struct radeon_winsys_bo *bo, uint64_t bo_offset);
-	struct radeon_winsys_ctx *(*ctx_create)(struct radeon_winsys *ws,
-						enum radeon_ctx_priority priority);
+	VkResult (*ctx_create)(struct radeon_winsys *ws,
+	                       enum radeon_ctx_priority priority,
+	                       struct radeon_winsys_ctx **ctx);
 	void (*ctx_destroy)(struct radeon_winsys_ctx *ctx);
 
 	bool (*ctx_wait_idle)(struct radeon_winsys_ctx *ctx,

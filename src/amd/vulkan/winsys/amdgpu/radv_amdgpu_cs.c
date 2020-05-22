@@ -1318,20 +1318,26 @@ static uint32_t radv_to_amdgpu_priority(enum radeon_ctx_priority radv_priority)
 	}
 }
 
-static struct radeon_winsys_ctx *radv_amdgpu_ctx_create(struct radeon_winsys *_ws,
-							enum radeon_ctx_priority priority)
+static VkResult radv_amdgpu_ctx_create(struct radeon_winsys *_ws,
+                                       enum radeon_ctx_priority priority,
+                                       struct radeon_winsys_ctx **rctx)
 {
 	struct radv_amdgpu_winsys *ws = radv_amdgpu_winsys(_ws);
 	struct radv_amdgpu_ctx *ctx = CALLOC_STRUCT(radv_amdgpu_ctx);
 	uint32_t amdgpu_priority = radv_to_amdgpu_priority(priority);
+	VkResult result;
 	int r;
 
 	if (!ctx)
-		return NULL;
+		return VK_ERROR_OUT_OF_HOST_MEMORY;
 
 	r = amdgpu_cs_ctx_create2(ws->dev, amdgpu_priority, &ctx->ctx);
-	if (r) {
+	if (r && r == -EACCES) {
+		result = VK_ERROR_NOT_PERMITTED_EXT;
+		goto error_create;
+	} else if (r) {
 		fprintf(stderr, "amdgpu: radv_amdgpu_cs_ctx_create2 failed. (%i)\n", r);
+		result = VK_ERROR_OUT_OF_HOST_MEMORY;
 		goto error_create;
 	}
 	ctx->ws = ws;
@@ -1346,10 +1352,12 @@ static struct radeon_winsys_ctx *radv_amdgpu_ctx_create(struct radeon_winsys *_w
 		ctx->fence_map = (uint64_t*)ws->base.buffer_map(ctx->fence_bo);
 	if (ctx->fence_map)
 		memset(ctx->fence_map, 0, 4096);
-	return (struct radeon_winsys_ctx *)ctx;
+
+	*rctx = (struct radeon_winsys_ctx *)ctx;
+	return VK_SUCCESS;
 error_create:
 	FREE(ctx);
-	return NULL;
+	return result;
 }
 
 static void radv_amdgpu_ctx_destroy(struct radeon_winsys_ctx *rwctx)

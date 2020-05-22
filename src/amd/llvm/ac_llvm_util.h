@@ -36,10 +36,6 @@
 extern "C" {
 #endif
 
-#if LLVM_VERSION_MAJOR < 11
-#define LLVMFixedVectorTypeKind LLVMVectorTypeKind
-#endif
-
 struct ac_compiler_passes;
 
 enum ac_func_attr {

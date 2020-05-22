@@ -815,31 +815,31 @@ struct Instruction {
       return false;
    }
 };
-static_assert(sizeof(Instruction) == 16);
+static_assert(sizeof(Instruction) == 16, "Unexpected padding");
 
 struct SOPK_instruction : public Instruction {
    uint16_t imm;
    uint16_t padding;
 };
-static_assert(sizeof(SOPK_instruction) == sizeof(Instruction) + 4);
+static_assert(sizeof(SOPK_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
 
 struct SOPP_instruction : public Instruction {
    uint32_t imm;
    int block;
 };
-static_assert(sizeof(SOPP_instruction) == sizeof(Instruction) + 8);
+static_assert(sizeof(SOPP_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
 struct SOPC_instruction : public Instruction {
 };
-static_assert(sizeof(SOPC_instruction) == sizeof(Instruction) + 0);
+static_assert(sizeof(SOPC_instruction) == sizeof(Instruction) + 0, "Unexpected padding");
 
 struct SOP1_instruction : public Instruction {
 };
-static_assert(sizeof(SOP1_instruction) == sizeof(Instruction) + 0);
+static_assert(sizeof(SOP1_instruction) == sizeof(Instruction) + 0, "Unexpected padding");
 
 struct SOP2_instruction : public Instruction {
 };
-static_assert(sizeof(SOP2_instruction) == sizeof(Instruction) + 0);
+static_assert(sizeof(SOP2_instruction) == sizeof(Instruction) + 0, "Unexpected padding");
 
 /**
  * Scalar Memory Format:
@@ -861,19 +861,19 @@ struct SMEM_instruction : public Instruction {
    bool disable_wqm : 1;
    uint32_t padding: 19;
 };
-static_assert(sizeof(SMEM_instruction) == sizeof(Instruction) + 4);
+static_assert(sizeof(SMEM_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
 
 struct VOP1_instruction : public Instruction {
 };
-static_assert(sizeof(VOP1_instruction) == sizeof(Instruction) + 0);
+static_assert(sizeof(VOP1_instruction) == sizeof(Instruction) + 0, "Unexpected padding");
 
 struct VOP2_instruction : public Instruction {
 };
-static_assert(sizeof(VOP2_instruction) == sizeof(Instruction) + 0);
+static_assert(sizeof(VOP2_instruction) == sizeof(Instruction) + 0, "Unexpected padding");
 
 struct VOPC_instruction : public Instruction {
 };
-static_assert(sizeof(VOPC_instruction) == sizeof(Instruction) + 0);
+static_assert(sizeof(VOPC_instruction) == sizeof(Instruction) + 0, "Unexpected padding");
 
 struct VOP3A_instruction : public Instruction {
    bool abs[3];
@@ -883,7 +883,7 @@ struct VOP3A_instruction : public Instruction {
    bool clamp : 1;
    uint32_t padding : 9;
 };
-static_assert(sizeof(VOP3A_instruction) == sizeof(Instruction) + 8);
+static_assert(sizeof(VOP3A_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
 struct VOP3P_instruction : public Instruction {
    bool neg_lo[3];
@@ -893,7 +893,7 @@ struct VOP3P_instruction : public Instruction {
    bool clamp : 1;
    uint32_t padding : 9;
 };
-static_assert(sizeof(VOP3P_instruction) == sizeof(Instruction) + 8);
+static_assert(sizeof(VOP3P_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
 /**
  * Data Parallel Primitives Format:
@@ -910,7 +910,7 @@ struct DPP_instruction : public Instruction {
    bool bound_ctrl : 1;
    uint32_t padding : 7;
 };
-static_assert(sizeof(DPP_instruction) == sizeof(Instruction) + 8);
+static_assert(sizeof(DPP_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
 enum sdwa_sel : uint8_t {
     /* masks */
@@ -968,14 +968,14 @@ struct SDWA_instruction : public Instruction {
    uint8_t omod : 2; /* GFX9+ */
    uint32_t padding : 4;
 };
-static_assert(sizeof(SDWA_instruction) == sizeof(Instruction) + 8);
+static_assert(sizeof(SDWA_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
 struct Interp_instruction : public Instruction {
    uint8_t attribute;
    uint8_t component;
    uint16_t padding;
 };
-static_assert(sizeof(Interp_instruction) == sizeof(Instruction) + 4);
+static_assert(sizeof(Interp_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
 
 /**
  * Local and Global Data Sharing instructions
@@ -991,7 +991,7 @@ struct DS_instruction : public Instruction {
    int8_t offset1;
    bool gds;
 };
-static_assert(sizeof(DS_instruction) == sizeof(Instruction) + 4);
+static_assert(sizeof(DS_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
 
 /**
  * Vector Memory Untyped-buffer Instructions
@@ -1016,7 +1016,7 @@ struct MUBUF_instruction : public Instruction {
    uint8_t padding : 2;
    barrier_interaction barrier;
 };
-static_assert(sizeof(MUBUF_instruction) == sizeof(Instruction) + 4);
+static_assert(sizeof(MUBUF_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
 
 /**
  * Vector Memory Typed-buffer Instructions
@@ -1041,7 +1041,7 @@ struct MTBUF_instruction : public Instruction {
    bool can_reorder : 1;
    uint32_t padding : 25;
 };
-static_assert(sizeof(MTBUF_instruction) == sizeof(Instruction) + 8);
+static_assert(sizeof(MTBUF_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
 /**
  * Vector Memory Image Instructions
@@ -1070,7 +1070,7 @@ struct MIMG_instruction : public Instruction {
    uint8_t padding : 1;
    barrier_interaction barrier;
 };
-static_assert(sizeof(MIMG_instruction) == sizeof(Instruction) + 4);
+static_assert(sizeof(MIMG_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
 
 /**
  * Flat/Scratch/Global Instructions
@@ -1091,7 +1091,7 @@ struct FLAT_instruction : public Instruction {
    uint8_t padding : 1;
    barrier_interaction barrier;
 };
-static_assert(sizeof(FLAT_instruction) == sizeof(Instruction) + 4);
+static_assert(sizeof(FLAT_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
 
 struct Export_instruction : public Instruction {
    uint8_t enabled_mask;
@@ -1101,14 +1101,14 @@ struct Export_instruction : public Instruction {
    bool valid_mask : 1;
    uint32_t padding : 13;
 };
-static_assert(sizeof(Export_instruction) == sizeof(Instruction) + 4);
+static_assert(sizeof(Export_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
 
 struct Pseudo_instruction : public Instruction {
    PhysReg scratch_sgpr; /* might not be valid if it's not needed */
    bool tmp_in_scc;
    uint8_t padding;
 };
-static_assert(sizeof(Pseudo_instruction) == sizeof(Instruction) + 4);
+static_assert(sizeof(Pseudo_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
 
 struct Pseudo_branch_instruction : public Instruction {
    /* target[0] is the block index of the branch target.
@@ -1117,11 +1117,11 @@ struct Pseudo_branch_instruction : public Instruction {
     */
    uint32_t target[2];
 };
-static_assert(sizeof(Pseudo_branch_instruction) == sizeof(Instruction) + 8);
+static_assert(sizeof(Pseudo_branch_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
 struct Pseudo_barrier_instruction : public Instruction {
 };
-static_assert(sizeof(Pseudo_barrier_instruction) == sizeof(Instruction) + 0);
+static_assert(sizeof(Pseudo_barrier_instruction) == sizeof(Instruction) + 0, "Unexpected padding");
 
 enum ReduceOp : uint16_t {
    iadd32, iadd64,
@@ -1157,7 +1157,7 @@ struct Pseudo_reduction_instruction : public Instruction {
    ReduceOp reduce_op;
    uint16_t cluster_size; // must be 0 for scans
 };
-static_assert(sizeof(Pseudo_reduction_instruction) == sizeof(Instruction) + 4);
+static_assert(sizeof(Pseudo_reduction_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
 
 struct instr_deleter_functor {
    void operator()(void* p) {

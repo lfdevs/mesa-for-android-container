@@ -62,6 +62,8 @@ _TEMPLATE_H = Template(COPYRIGHT + """
 
 #include "stdbool.h"
 
+#include "perf/gen_perf.h"
+
 #define ANV_INSTANCE_EXTENSION_COUNT ${len(instance_extensions)}
 
 extern const VkExtensionProperties anv_instance_extensions[];

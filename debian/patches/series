@@ -1,4 +1,5 @@
 07_gallium-fix-build-failure-on-powerpcspe.diff
 fix-python-shebang.diff
 path_max.diff
-fix-build-with-llvm-10.diff
+fix-ppc64el.patch
+src_glx_dri_common.h.diff

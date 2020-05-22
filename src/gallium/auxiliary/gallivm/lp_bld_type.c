@@ -129,7 +129,7 @@ lp_check_vec_type(struct lp_type type, LLVMTypeRef vec_type)
    if (type.length == 1)
       return lp_check_elem_type(type, vec_type);
 
-   if(LLVMGetTypeKind(vec_type) != LLVMFixedVectorTypeKind)
+   if(LLVMGetTypeKind(vec_type) != LLVMVectorTypeKind)
       return FALSE;
 
    if(LLVMGetVectorSize(vec_type) != type.length)
@@ -259,7 +259,7 @@ lp_sizeof_llvm_type(LLVMTypeRef t)
       return 8 * sizeof(float);
    case LLVMDoubleTypeKind:
       return 8 * sizeof(double);
-   case LLVMFixedVectorTypeKind:
+   case LLVMVectorTypeKind:
       {
          LLVMTypeRef elem = LLVMGetElementType(t);
          unsigned len = LLVMGetVectorSize(t);
@@ -311,12 +311,8 @@ lp_typekind_name(LLVMTypeKind t)
       return "LLVMArrayTypeKind";
    case LLVMPointerTypeKind:
       return "LLVMPointerTypeKind";
-   case LLVMFixedVectorTypeKind:
-   #if LLVM_VERSION_MAJOR >= 11
-      return "LLVMFixedVectorTypeKind";
-   #else
+   case LLVMVectorTypeKind:
       return "LLVMVectorTypeKind";
-   #endif
    case LLVMMetadataTypeKind:
       return "LLVMMetadataTypeKind";
    default:
@@ -333,7 +329,7 @@ lp_dump_llvmtype(LLVMTypeRef t)
 {
    LLVMTypeKind k = LLVMGetTypeKind(t);
 
-   if (k == LLVMFixedVectorTypeKind) {
+   if (k == LLVMVectorTypeKind) {
       LLVMTypeRef te = LLVMGetElementType(t);
       LLVMTypeKind ke = LLVMGetTypeKind(te);
       unsigned len = LLVMGetVectorSize(t);

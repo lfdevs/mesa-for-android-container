@@ -1364,33 +1364,39 @@ brw_upload_ubo_surfaces(struct brw_context *brw, struct gl_program *prog,
                  prog->info.num_abos == 0))
       return;
 
-   uint32_t *ubo_surf_offsets =
-      &stage_state->surf_offset[prog_data->binding_table.ubo_start];
+   if (prog->info.num_ubos) {
+      assert(prog_data->binding_table.ubo_start < BRW_MAX_SURFACES);
+      uint32_t *ubo_surf_offsets =
+         &stage_state->surf_offset[prog_data->binding_table.ubo_start];
 
-   for (int i = 0; i < prog->info.num_ubos; i++) {
-      struct gl_buffer_binding *binding =
-         &ctx->UniformBufferBindings[prog->sh.UniformBlocks[i]->Binding];
-      upload_buffer_surface(brw, binding, &ubo_surf_offsets[i],
-                            ISL_FORMAT_R32G32B32A32_FLOAT, 0);
+      for (int i = 0; i < prog->info.num_ubos; i++) {
+         struct gl_buffer_binding *binding =
+            &ctx->UniformBufferBindings[prog->sh.UniformBlocks[i]->Binding];
+         upload_buffer_surface(brw, binding, &ubo_surf_offsets[i],
+                               ISL_FORMAT_R32G32B32A32_FLOAT, 0);
+      }
    }
 
-   uint32_t *ssbo_surf_offsets =
-      &stage_state->surf_offset[prog_data->binding_table.ssbo_start];
-   uint32_t *abo_surf_offsets = ssbo_surf_offsets + prog->info.num_ssbos;
+   if (prog->info.num_ssbos || prog->info.num_abos) {
+      assert(prog_data->binding_table.ssbo_start < BRW_MAX_SURFACES);
+      uint32_t *ssbo_surf_offsets =
+         &stage_state->surf_offset[prog_data->binding_table.ssbo_start];
+      uint32_t *abo_surf_offsets = ssbo_surf_offsets + prog->info.num_ssbos;
 
-   for (int i = 0; i < prog->info.num_abos; i++) {
-      struct gl_buffer_binding *binding =
-         &ctx->AtomicBufferBindings[prog->sh.AtomicBuffers[i]->Binding];
-      upload_buffer_surface(brw, binding, &abo_surf_offsets[i],
-                            ISL_FORMAT_RAW, RELOC_WRITE);
-   }
+      for (int i = 0; i < prog->info.num_abos; i++) {
+         struct gl_buffer_binding *binding =
+            &ctx->AtomicBufferBindings[prog->sh.AtomicBuffers[i]->Binding];
+         upload_buffer_surface(brw, binding, &abo_surf_offsets[i],
+                               ISL_FORMAT_RAW, RELOC_WRITE);
+      }
 
-   for (int i = 0; i < prog->info.num_ssbos; i++) {
-      struct gl_buffer_binding *binding =
-         &ctx->ShaderStorageBufferBindings[prog->sh.ShaderStorageBlocks[i]->Binding];
+      for (int i = 0; i < prog->info.num_ssbos; i++) {
+         struct gl_buffer_binding *binding =
+            &ctx->ShaderStorageBufferBindings[prog->sh.ShaderStorageBlocks[i]->Binding];
 
-      upload_buffer_surface(brw, binding, &ssbo_surf_offsets[i],
-                            ISL_FORMAT_RAW, RELOC_WRITE);
+         upload_buffer_surface(brw, binding, &ssbo_surf_offsets[i],
+                               ISL_FORMAT_RAW, RELOC_WRITE);
+      }
    }
 
    stage_state->push_constants_dirty = true;

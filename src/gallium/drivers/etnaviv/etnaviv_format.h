@@ -39,7 +39,9 @@ uint32_t
 translate_texture_format(enum pipe_format fmt);
 
 bool
-texture_use_int_filter(const struct pipe_sampler_view *so, bool tex_desc);
+texture_use_int_filter(const struct pipe_sampler_view *sv,
+                       const struct pipe_sampler_state *ss,
+                       bool tex_desc);
 
 bool
 texture_format_needs_swiz(enum pipe_format fmt);

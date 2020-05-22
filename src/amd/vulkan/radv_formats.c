@@ -1060,7 +1060,7 @@ bool radv_format_pack_clear_color(VkFormat format,
 			if (channel->size == 32) {
 				memcpy(&v, &value->float32[c], 4);
 			} else if(channel->size == 16) {
-				v = util_float_to_half(value->float32[c]);
+				v = util_float_to_half_rtz(value->float32[c]);
 			} else {
 				fprintf(stderr, "failed to fast clear for unhandled float size in format %d\n", format);
 				return false;

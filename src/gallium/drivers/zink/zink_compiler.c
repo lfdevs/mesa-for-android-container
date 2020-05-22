@@ -209,6 +209,7 @@ optimize_nir(struct nir_shader *s)
       NIR_PASS(progress, s, nir_opt_algebraic);
       NIR_PASS(progress, s, nir_opt_constant_folding);
       NIR_PASS(progress, s, nir_opt_undef);
+      NIR_PASS(progress, s, zink_nir_lower_b2b);
    } while (progress);
 }
 

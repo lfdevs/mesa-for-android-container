@@ -362,6 +362,11 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
          blorp_flags |= BLORP_BATCH_PREDICATE_ENABLE;
    }
 
+   if (iris_resource_unfinished_aux_import(src_res))
+      iris_resource_finish_aux_import(ctx->screen, src_res);
+   if (iris_resource_unfinished_aux_import(dst_res))
+      iris_resource_finish_aux_import(ctx->screen, dst_res);
+
    struct iris_format_info src_fmt =
       iris_format_for_usage(devinfo, info->src.format,
                             ISL_SURF_USAGE_TEXTURE_BIT);
@@ -715,44 +720,52 @@ get_preferred_batch(struct iris_context *ice, struct iris_bo *bo)
  */
 static void
 iris_resource_copy_region(struct pipe_context *ctx,
-                          struct pipe_resource *dst,
+                          struct pipe_resource *p_dst,
                           unsigned dst_level,
                           unsigned dstx, unsigned dsty, unsigned dstz,
-                          struct pipe_resource *src,
+                          struct pipe_resource *p_src,
                           unsigned src_level,
                           const struct pipe_box *src_box)
 {
    struct iris_context *ice = (void *) ctx;
+   struct iris_screen *screen = (void *) ctx->screen;
    struct iris_batch *batch = &ice->batches[IRIS_BATCH_RENDER];
+   struct iris_resource *src = (void *) p_src;
+   struct iris_resource *dst = (void *) p_dst;
+
+   if (iris_resource_unfinished_aux_import(src))
+      iris_resource_finish_aux_import(ctx->screen, src);
+   if (iris_resource_unfinished_aux_import(dst))
+      iris_resource_finish_aux_import(ctx->screen, dst);
 
    /* Use MI_COPY_MEM_MEM for tiny (<= 16 byte, % 4) buffer copies. */
-   if (src->target == PIPE_BUFFER && dst->target == PIPE_BUFFER &&
+   if (p_src->target == PIPE_BUFFER && p_dst->target == PIPE_BUFFER &&
        (src_box->width % 4 == 0) && src_box->width <= 16) {
-      struct iris_bo *dst_bo = iris_resource_bo(dst);
+      struct iris_bo *dst_bo = iris_resource_bo(p_dst);
       batch = get_preferred_batch(ice, dst_bo);
       iris_batch_maybe_flush(batch, 24 + 5 * (src_box->width / 4));
       iris_emit_pipe_control_flush(batch,
                                    "stall for MI_COPY_MEM_MEM copy_region",
                                    PIPE_CONTROL_CS_STALL);
-      batch->screen->vtbl.copy_mem_mem(batch, dst_bo, dstx, iris_resource_bo(src),
-                             src_box->x, src_box->width);
+      screen->vtbl.copy_mem_mem(batch, dst_bo, dstx, iris_resource_bo(p_src),
+                                src_box->x, src_box->width);
       return;
    }
 
-   iris_copy_region(&ice->blorp, batch, dst, dst_level, dstx, dsty, dstz,
-                    src, src_level, src_box);
+   iris_copy_region(&ice->blorp, batch, p_dst, dst_level, dstx, dsty, dstz,
+                    p_src, src_level, src_box);
 
-   if (util_format_is_depth_and_stencil(dst->format) &&
-       util_format_has_stencil(util_format_description(src->format))) {
+   if (util_format_is_depth_and_stencil(p_dst->format) &&
+       util_format_has_stencil(util_format_description(p_src->format))) {
       struct iris_resource *junk, *s_src_res, *s_dst_res;
-      iris_get_depth_stencil_resources(src, &junk, &s_src_res);
-      iris_get_depth_stencil_resources(dst, &junk, &s_dst_res);
+      iris_get_depth_stencil_resources(p_src, &junk, &s_src_res);
+      iris_get_depth_stencil_resources(p_dst, &junk, &s_dst_res);
 
       iris_copy_region(&ice->blorp, batch, &s_dst_res->base, dst_level, dstx,
                        dsty, dstz, &s_src_res->base, src_level, src_box);
    }
 
-   iris_flush_and_dirty_for_history(ice, batch, (struct iris_resource *) dst,
+   iris_flush_and_dirty_for_history(ice, batch, dst,
                                     PIPE_CONTROL_RENDER_TARGET_FLUSH,
                                     "cache history: post copy_region");
 }

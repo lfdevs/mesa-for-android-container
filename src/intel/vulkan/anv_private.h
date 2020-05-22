@@ -172,7 +172,12 @@ struct gen_perf_config;
 #define MAX_PUSH_DESCRIPTORS 32 /* Minimum requirement */
 #define MAX_INLINE_UNIFORM_BLOCK_SIZE 4096
 #define MAX_INLINE_UNIFORM_BLOCK_DESCRIPTORS 32
-#define ANV_UBO_BOUNDS_CHECK_ALIGNMENT 32
+/* We need 16 for UBO block reads to work and 32 for push UBOs. However, we
+ * use 64 here to avoid cache issues. This could most likely bring it back to
+ * 32 if we had different virtual addresses for the different views on a given
+ * GEM object.
+ */
+#define ANV_UBO_ALIGNMENT 64
 #define ANV_SSBO_BOUNDS_CHECK_ALIGNMENT 4
 #define MAX_VIEWS_FOR_PRIMITIVE_REPLICATION 16
 

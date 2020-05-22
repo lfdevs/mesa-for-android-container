@@ -67,7 +67,7 @@ lp_format_intrinsic(char *name,
    char c;
 
    LLVMTypeKind kind = LLVMGetTypeKind(type);
-   if (kind == LLVMFixedVectorTypeKind) {
+   if (kind == LLVMVectorTypeKind) {
       length = LLVMGetVectorSize(type);
       type = LLVMGetElementType(type);
       kind = LLVMGetTypeKind(type);

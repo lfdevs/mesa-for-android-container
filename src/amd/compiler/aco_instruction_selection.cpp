@@ -884,7 +884,8 @@ Temp emit_trunc_f64(isel_context *ctx, Builder& bld, Definition dst, Temp val)
    bld.pseudo(aco_opcode::p_split_vector, Definition(val_lo), Definition(val_hi), val);
 
    /* Extract the exponent and compute the unbiased value. */
-   Temp exponent = bld.vop1(aco_opcode::v_frexp_exp_i32_f64, bld.def(v1), val);
+   Temp exponent = bld.vop3(aco_opcode::v_bfe_u32, bld.def(v1), val_hi, Operand(20u), Operand(11u));
+   exponent = bld.vsub32(bld.def(v1), exponent, Operand(1023u));
 
    /* Extract the fractional part. */
    Temp fract_mask = bld.pseudo(aco_opcode::p_create_vector, bld.def(v2), Operand(-1u), Operand(0x000fffffu));
@@ -900,7 +901,7 @@ Temp emit_trunc_f64(isel_context *ctx, Builder& bld, Definition dst, Temp val)
    fract_hi = bld.vop2(aco_opcode::v_and_b32, bld.def(v1), val_hi, tmp);
 
    /* Get the sign bit. */
-   Temp sign = bld.vop2(aco_opcode::v_ashr_i32, bld.def(v1), Operand(31u), val_hi);
+   Temp sign = bld.vop2(aco_opcode::v_and_b32, bld.def(v1), Operand(0x80000000u), val_hi);
 
    /* Decide the operation to apply depending on the unbiased exponent. */
    Temp exp_lt0 = bld.vopc_e64(aco_opcode::v_cmp_lt_i32, bld.hint_vcc(bld.def(bld.lm)), exponent, Operand(0u));

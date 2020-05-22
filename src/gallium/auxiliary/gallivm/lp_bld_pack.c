@@ -1035,7 +1035,7 @@ lp_build_pad_vector(struct gallivm_state *gallivm,
 
    type = LLVMTypeOf(src);
 
-   if (LLVMGetTypeKind(type) != LLVMFixedVectorTypeKind) {
+   if (LLVMGetTypeKind(type) != LLVMVectorTypeKind) {
       /* Can't use ShuffleVector on non-vector type */
       undef = LLVMGetUndef(LLVMVectorType(type, dst_length));
       return LLVMBuildInsertElement(gallivm->builder, undef, src, lp_build_const_int32(gallivm, 0), "");

@@ -1503,8 +1503,7 @@ void anv_GetPhysicalDeviceProperties(
        * case of R32G32B32A32 which is 16 bytes.
        */
       .minTexelBufferOffsetAlignment            = 16,
-      /* We need 16 for UBO block reads to work and 32 for push UBOs */
-      .minUniformBufferOffsetAlignment          = 32,
+      .minUniformBufferOffsetAlignment          = ANV_UBO_ALIGNMENT,
       .minStorageBufferOffsetAlignment          = 4,
       .minTexelOffset                           = -8,
       .maxTexelOffset                           = 7,
@@ -1915,7 +1914,7 @@ void anv_GetPhysicalDeviceProperties2(
          properties->robustStorageBufferAccessSizeAlignment =
             ANV_SSBO_BOUNDS_CHECK_ALIGNMENT;
          properties->robustUniformBufferAccessSizeAlignment =
-            ANV_UBO_BOUNDS_CHECK_ALIGNMENT;
+            ANV_UBO_ALIGNMENT;
          break;
       }
 
@@ -3846,9 +3845,8 @@ void anv_GetBufferMemoryRequirements(
    /* Base alignment requirement of a cache line */
    uint32_t alignment = 16;
 
-   /* We need an alignment of 32 for pushing UBOs */
    if (buffer->usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
-      alignment = MAX2(alignment, 32);
+      alignment = MAX2(alignment, ANV_UBO_ALIGNMENT);
 
    pMemoryRequirements->size = buffer->size;
    pMemoryRequirements->alignment = alignment;

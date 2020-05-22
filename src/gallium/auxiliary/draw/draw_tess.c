@@ -497,8 +497,11 @@ void draw_delete_tess_ctrl_shader(struct draw_context *draw,
       }
 
       assert(shader->variants_cached == 0);
+      align_free(dtcs->tcs_input);
+      align_free(dtcs->tcs_output);
    }
 #endif
+
    if (dtcs->state.ir.nir)
       ralloc_free(dtcs->state.ir.nir);
    FREE(dtcs);

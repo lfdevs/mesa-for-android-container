@@ -1,3 +1,10 @@
+mesa (20.1.0~rc4-1) experimental; urgency=medium
+
+  * New upstream snapshot.
+  * fix-build-with-llvm-10.diff: Dropped, upstream.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 22 May 2020 09:17:06 +0300
+
 mesa (20.1.0~rc1-1) experimental; urgency=medium
 
   * New upstream snapshot.
@@ -5,6 +12,33 @@ mesa (20.1.0~rc1-1) experimental; urgency=medium
   * signing-key: Add key from Eric Engeström.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Tue, 05 May 2020 12:47:17 +0300
+
+mesa (20.0.7-1) unstable; urgency=medium
+
+  * New upstream release.
+  * src_glx_dri_common.h.diff: A new attempt to fix hurd ftbfs. (Closes:
+    #960197)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 22 May 2020 08:36:18 +0300
+
+mesa (20.0.6-3) unstable; urgency=medium
+
+  * src_glx_dri_common.h.diff: Dropped, breaks the build.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 08 May 2020 12:44:12 +0300
+
+mesa (20.0.6-2) unstable; urgency=medium
+
+  [ Timo Aaltonen ]
+  * control: Bump libdrm-dev build-dep.
+
+  [ Svante Signell ]
+  * src_glx_dri_common.h.diff: Fix build on Hurd. (Closes: #959975)
+
+  [ Frédéric Bonnard ]
+  * Fix ppc64el FTBFS. (Closes: #959943)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 08 May 2020 11:00:10 +0300
 
 mesa (20.0.6-1) unstable; urgency=medium
 

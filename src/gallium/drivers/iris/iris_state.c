@@ -4178,6 +4178,8 @@ iris_store_tcs_state(struct iris_context *ice,
        *    more than 2 times the number of instance count.
        */
       assert((devinfo->max_tcs_threads / 2) > tcs_prog_data->instances);
+      hs.DispatchGRFStartRegisterForURBData = prog_data->dispatch_grf_start_reg & 0x1f;
+      hs.DispatchGRFStartRegisterForURBData5 = prog_data->dispatch_grf_start_reg >> 5;
 #endif
 
       hs.InstanceCount = tcs_prog_data->instances - 1;

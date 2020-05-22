@@ -84,6 +84,8 @@ dri_fill_st_options(struct dri_screen *screen)
    options->allow_higher_compat_version =
       driQueryOptionb(optionCache, "allow_higher_compat_version");
    options->glsl_zero_init = driQueryOptionb(optionCache, "glsl_zero_init");
+   options->force_integer_tex_nearest =
+      driQueryOptionb(optionCache, "force_integer_tex_nearest");
    options->vs_position_always_invariant =
       driQueryOptionb(optionCache, "vs_position_always_invariant");
    options->force_glsl_abs_sqrt =

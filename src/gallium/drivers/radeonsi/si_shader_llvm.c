@@ -526,7 +526,7 @@ void si_build_wrapper_function(struct si_shader_context *ctx, LLVMValueRef *part
       if (LLVMGetTypeKind(type) == LLVMPointerTypeKind) {
          type = LLVMGetElementType(type);
 
-         if (LLVMGetTypeKind(type) == LLVMFixedVectorTypeKind) {
+         if (LLVMGetTypeKind(type) == LLVMVectorTypeKind) {
             if (LLVMGetVectorSize(type) == 4)
                arg_type = AC_ARG_CONST_DESC_PTR;
             else if (LLVMGetVectorSize(type) == 8)

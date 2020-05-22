@@ -934,11 +934,25 @@ namespace {
 
       case SHADER_OPCODE_MEMORY_FENCE:
       case SHADER_OPCODE_INTERLOCK:
-         if (devinfo->gen >= 7)
-            return calculate_desc(info, unit_dp_dc, 2, 0, 0, 30 /* XXX */, 0,
-                                  10 /* XXX */, 100 /* XXX */, 0, 0, 0, 0);
-         else
+         switch (info.sfid) {
+         case GEN6_SFID_DATAPORT_RENDER_CACHE:
+            if (devinfo->gen >= 7)
+               return calculate_desc(info, unit_dp_rc, 2, 0, 0, 30 /* XXX */, 0,
+                                     10 /* XXX */, 300 /* XXX */, 0, 0, 0, 0);
+            else
+               abort();
+
+         case GEN7_SFID_DATAPORT_DATA_CACHE:
+         case HSW_SFID_DATAPORT_DATA_CACHE_1:
+            if (devinfo->gen >= 7)
+               return calculate_desc(info, unit_dp_dc, 2, 0, 0, 30 /* XXX */, 0,
+                                     10 /* XXX */, 100 /* XXX */, 0, 0, 0, 0);
+            else
+               abort();
+
+         default:
             abort();
+         }
 
       case SHADER_OPCODE_GEN4_SCRATCH_READ:
       case SHADER_OPCODE_GEN4_SCRATCH_WRITE:

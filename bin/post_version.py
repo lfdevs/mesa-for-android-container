@@ -33,11 +33,22 @@ from lxml import (
 )
 
 
-def is_point_release(version: str) -> bool:
-    return not version.endswith('.0')
+def is_first_release(version: str) -> bool:
+    return version.endswith('.0')
 
 
-def update_index(is_point: bool, version: str) -> None:
+def is_release_candidate(version: str) -> bool:
+    return '-rc' in version
+
+
+def branch_name(version: str) -> str:
+    if is_release_candidate(version):
+        version = version.split('-')[0]
+    (major, minor, _) = version.split('.')
+    return f'{major}.{minor}'
+
+
+def update_index(version: str) -> None:
     p = pathlib.Path(__file__).parent.parent / 'docs' / 'index.html'
     with p.open('rt') as f:
         tree = html.parse(f)
@@ -53,11 +64,11 @@ def update_index(is_point: bool, version: str) -> None:
     a = etree.SubElement(
         body, 'a', attrib={'href': f'relnotes/{version}.html'})
     a.text = f"Mesa {version}"
-    if is_point:
-        a.tail = " is released. This is a bug fix release."
-    else:
+    if is_first_release(version):
         a.tail = (" is released. This is a new development release. "
                   "See the release notes for more information about this release.")
+    else:
+        a.tail = " is released. This is a bug fix release."
 
     root = news.getparent()
     index = root.index(news) + 1
@@ -89,7 +100,7 @@ def update_calendar(version: str) -> None:
     with p.open('rt') as f:
         tree = html.parse(f)
 
-    base_version = version[:-2]
+    branch = branch_name(version)
 
     old = None
     new = None
@@ -100,7 +111,7 @@ def update_calendar(version: str) -> None:
             break
 
         for td in tr.xpath('./td'):
-            if td.text == base_version:
+            if td.text == branch:
                 old = tr
                 break
 
@@ -123,14 +134,16 @@ def main() -> None:
     parser.add_argument('version', help="The released version.")
     args = parser.parse_args()
 
-    is_point = is_point_release(args.version)
-
-    update_index(is_point, args.version)
-    update_release_notes(args.version)
     update_calendar(args.version)
+    done = 'update calendar'
+
+    if not is_release_candidate(args.version):
+        update_index(args.version)
+        update_release_notes(args.version)
+        done += ', add news item, and link releases notes'
+
     subprocess.run(['git', 'commit', '-m',
-                    'docs: update calendar, add news item, and link releases '
-                    f'notes for {args.version}'])
+                    f'docs: {done} for {args.version}'])
 
 
 if __name__ == "__main__":

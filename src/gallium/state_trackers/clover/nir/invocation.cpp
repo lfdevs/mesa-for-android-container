@@ -90,6 +90,11 @@ module clover::nir::spirv_to_nir(const module &mod, const device &dev,
       nir_shader *nir = spirv_to_nir(data, num_words, nullptr, 0,
                                      MESA_SHADER_KERNEL, name,
                                      &spirv_options, compiler_options);
+      if (!nir) {
+         r_log += "Translation from SPIR-V to NIR for kernel \"" + sym.name +
+                  "\" failed.\n";
+         throw build_error();
+      }
 
       nir->info.cs.local_size_variable = true;
       nir_validate_shader(nir, "clover");

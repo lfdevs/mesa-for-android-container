@@ -831,7 +831,7 @@ void si_update_ps_colorbuf0_slot(struct si_context *sctx)
       if (tex->buffer.b.b.nr_samples <= 1 && tex->cmask_buffer) {
          /* Disable CMASK. */
          assert(tex->cmask_buffer != &tex->buffer);
-         si_eliminate_fast_color_clear(sctx, tex);
+         si_eliminate_fast_color_clear(sctx, tex, NULL);
          si_texture_discard_cmask(sctx->screen, tex);
       }
 

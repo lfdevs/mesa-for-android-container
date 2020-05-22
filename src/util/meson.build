@@ -287,10 +287,13 @@ if with_tests
     dependencies : idep_mesautil,
     c_args : [c_msvc_compat_args],
   )
-  if (host_machine.system() == 'windows' and cc.get_id() == 'gcc')
-    # This conversion is only required on mingw
+  if (host_machine.system() == 'windows' and build_machine.system() != 'windows')
+    # This conversion is only required on mingw crosscompilers, otherwise we hit at least one of these issues
+    # https://gitlab.freedesktop.org/mesa/mesa/-/issues/2690
+    # https://gitlab.freedesktop.org/mesa/mesa/-/issues/2788
+    prog_winepath = find_program('winepath')
     process_test_exe_full_path = run_command(
-      'winepath', '-w', process_test_exe.full_path()
+      prog_winepath, '-w', process_test_exe.full_path()
     ).stdout().strip()
   else
     process_test_exe_full_path = process_test_exe.full_path()

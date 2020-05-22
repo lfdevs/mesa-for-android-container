@@ -1173,7 +1173,7 @@ radv_fixup_vertex_input_fetches(struct radv_shader_context *ctx,
 	LLVMValueRef one = is_float ? ctx->ac.f32_1 : ctx->ac.i32_1;
 	LLVMValueRef chan[4];
 
-	if (LLVMGetTypeKind(LLVMTypeOf(value)) == LLVMFixedVectorTypeKind) {
+	if (LLVMGetTypeKind(LLVMTypeOf(value)) == LLVMVectorTypeKind) {
 		unsigned vec_size = LLVMGetVectorSize(LLVMTypeOf(value));
 
 		if (num_channels == 4 && num_channels == vec_size)

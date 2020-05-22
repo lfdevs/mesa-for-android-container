@@ -268,9 +268,11 @@ translate_texture_format(enum pipe_format fmt)
 }
 
 bool
-texture_use_int_filter(const struct pipe_sampler_view *so, bool tex_desc)
+texture_use_int_filter(const struct pipe_sampler_view *sv,
+                       const struct pipe_sampler_state *ss,
+                       bool tex_desc)
 {
-   switch (so->target) {
+   switch (sv->target) {
    case PIPE_TEXTURE_1D_ARRAY:
    case PIPE_TEXTURE_2D_ARRAY:
       if (tex_desc)
@@ -282,16 +284,19 @@ texture_use_int_filter(const struct pipe_sampler_view *so, bool tex_desc)
    }
 
    /* only unorm formats can use int filter */
-   if (!util_format_is_unorm(so->format))
+   if (!util_format_is_unorm(sv->format))
       return false;
 
-   if (util_format_is_srgb(so->format))
+   if (util_format_is_srgb(sv->format))
       return false;
 
-   if (util_format_description(so->format)->layout == UTIL_FORMAT_LAYOUT_ASTC)
+   if (util_format_description(sv->format)->layout == UTIL_FORMAT_LAYOUT_ASTC)
       return false;
 
-   switch (so->format) {
+   if (ss->max_anisotropy > 1)
+      return false;
+
+   switch (sv->format) {
    /* apparently D16 can't use int filter but D24 can */
    case PIPE_FORMAT_Z16_UNORM:
    case PIPE_FORMAT_R10G10B10A2_UNORM:

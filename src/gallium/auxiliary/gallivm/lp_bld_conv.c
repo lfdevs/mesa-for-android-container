@@ -93,7 +93,7 @@ lp_build_half_to_float(struct gallivm_state *gallivm,
 {
    LLVMBuilderRef builder = gallivm->builder;
    LLVMTypeRef src_type = LLVMTypeOf(src);
-   unsigned src_length = LLVMGetTypeKind(src_type) == LLVMFixedVectorTypeKind ?
+   unsigned src_length = LLVMGetTypeKind(src_type) == LLVMVectorTypeKind ?
                             LLVMGetVectorSize(src_type) : 1;
 
    struct lp_type f32_type = lp_type_float_vec(32, 32 * src_length);
@@ -138,7 +138,7 @@ lp_build_float_to_half(struct gallivm_state *gallivm,
 {
    LLVMBuilderRef builder = gallivm->builder;
    LLVMTypeRef f32_vec_type = LLVMTypeOf(src);
-   unsigned length = LLVMGetTypeKind(f32_vec_type) == LLVMFixedVectorTypeKind
+   unsigned length = LLVMGetTypeKind(f32_vec_type) == LLVMVectorTypeKind
                    ? LLVMGetVectorSize(f32_vec_type) : 1;
    struct lp_type i32_type = lp_type_int_vec(32, 32 * length);
    struct lp_type i16_type = lp_type_int_vec(16, 16 * length);

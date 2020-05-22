@@ -1,5 +1,5 @@
 /*
- * Copyright © 2015 Intel Corporation
+ * Copyright © 2020 Intel Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -21,39 +21,14 @@
  * IN THE SOFTWARE.
  */
 
-#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-#include "anv_private.h"
-#include "test_common.h"
-
-#define NUM_THREADS 8
-#define STATES_PER_THREAD_LOG2 10
-#define STATES_PER_THREAD (1 << STATES_PER_THREAD_LOG2)
-#define NUM_RUNS 64
-
-#include "state_pool_test_helper.h"
-
-int main(int argc, char **argv)
-{
-   struct anv_physical_device physical_device = { };
-   struct anv_device device = {
-      .physical = &physical_device,
-   };
-   struct anv_state_pool state_pool;
-
-   pthread_mutex_init(&device.mutex, NULL);
-   anv_bo_cache_init(&device.bo_cache);
-
-   for (unsigned i = 0; i < NUM_RUNS; i++) {
-      anv_state_pool_init(&state_pool, &device, 4096, 256);
-
-      /* Grab one so a zero offset is impossible */
-      anv_state_pool_alloc(&state_pool, 16, 16);
-
-      run_state_pool_test(&state_pool);
-
-      anv_state_pool_finish(&state_pool);
-   }
-
-   pthread_mutex_destroy(&device.mutex);
-}
+#define ASSERT(cond)                                                    \
+   do {                                                                 \
+      if (!(cond)) {                                                    \
+         fprintf(stderr, "%s:%d: Test assertion `%s` failed.\n",        \
+                 __FILE__, __LINE__, # cond);                           \
+         abort();                                                       \
+      }                                                                 \
+   } while (false)

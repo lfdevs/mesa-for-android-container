@@ -717,7 +717,7 @@ radv_amdgpu_winsys_bo_set_metadata(struct radeon_winsys_bo *_bo,
 {
 	struct radv_amdgpu_winsys_bo *bo = radv_amdgpu_winsys_bo(_bo);
 	struct amdgpu_bo_metadata metadata = {0};
-	uint32_t tiling_flags = 0;
+	uint64_t tiling_flags = 0;
 
 	if (bo->ws->info.chip_class >= GFX9) {
 		tiling_flags |= AMDGPU_TILING_SET(SWIZZLE_MODE, md->u.gfx9.swizzle_mode);

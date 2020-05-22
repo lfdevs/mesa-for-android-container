@@ -309,6 +309,11 @@ DRI_CONF_OPT_BEGIN_B(allow_fp16_configs, def) \
 DRI_CONF_DESC(en,gettext("Allow exposure of visuals and fbconfigs with fp16 formats")) \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_FORCE_INTEGER_TEX_NEAREST(def) \
+DRI_CONF_OPT_BEGIN_B(force_integer_tex_nearest, def) \
+        DRI_CONF_DESC(en,gettext("Force integer textures to use nearest filtering")) \
+DRI_CONF_OPT_END
+
 /**
  * \brief Initialization configuration options
  */

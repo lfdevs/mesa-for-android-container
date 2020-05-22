@@ -98,8 +98,8 @@ gather_ubo_ranges(nir_shader *nir, nir_intrinsic_instr *instr,
 			/* If this is an indirect on UBO 0, we'll still lower it back to
 			 * load_uniform.  Set the range to cover all of UBO 0.
 			 */
-			state->range[0].start = 0;
-			state->range[0].end = ALIGN(nir->num_uniforms * 16, 16 * 4);
+			old_r->start = 0;
+			old_r->end = ALIGN(nir->num_uniforms * 16, 16 * 4);
 		}
 
 		return;

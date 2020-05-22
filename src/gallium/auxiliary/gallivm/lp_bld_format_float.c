@@ -240,7 +240,7 @@ lp_build_float_to_r11g11b10(struct gallivm_state *gallivm,
    LLVMValueRef dst, rcomp, bcomp, gcomp;
    struct lp_build_context i32_bld;
    LLVMTypeRef src_type = LLVMTypeOf(*src);
-   unsigned src_length = LLVMGetTypeKind(src_type) == LLVMFixedVectorTypeKind ?
+   unsigned src_length = LLVMGetTypeKind(src_type) == LLVMVectorTypeKind ?
                             LLVMGetVectorSize(src_type) : 1;
    struct lp_type i32_type = lp_type_int_vec(32, 32 * src_length);
 
@@ -406,7 +406,7 @@ lp_build_r11g11b10_to_float(struct gallivm_state *gallivm,
                             LLVMValueRef *dst)
 {
    LLVMTypeRef src_type = LLVMTypeOf(src);
-   unsigned src_length = LLVMGetTypeKind(src_type) == LLVMFixedVectorTypeKind ?
+   unsigned src_length = LLVMGetTypeKind(src_type) == LLVMVectorTypeKind ?
                             LLVMGetVectorSize(src_type) : 1;
    struct lp_type f32_type = lp_type_float_vec(32, 32 * src_length);
 
@@ -464,7 +464,7 @@ lp_build_rgb9e5_to_float(struct gallivm_state *gallivm,
    LLVMBuilderRef builder = gallivm->builder;
    LLVMTypeRef src_type = LLVMTypeOf(src);
    LLVMValueRef shift, scale, bias, exp;
-   unsigned src_length = LLVMGetTypeKind(src_type) == LLVMFixedVectorTypeKind ?
+   unsigned src_length = LLVMGetTypeKind(src_type) == LLVMVectorTypeKind ?
                             LLVMGetVectorSize(src_type) : 1;
    struct lp_type i32_type = lp_type_int_vec(32, 32 * src_length);
    struct lp_type u32_type = lp_type_uint_vec(32, 32 * src_length);

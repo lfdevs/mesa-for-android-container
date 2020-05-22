@@ -1203,6 +1203,8 @@ void st_init_extensions(struct pipe_screen *screen,
 
    consts->GLSLZeroInit = options->glsl_zero_init;
 
+   consts->ForceIntegerTexNearest = options->force_integer_tex_nearest;
+
    consts->VendorOverride = options->force_gl_vendor;
 
    consts->UniformBooleanTrue = consts->NativeIntegers ? ~0U : fui(1.0f);

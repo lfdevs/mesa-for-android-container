@@ -2664,7 +2664,7 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
 
                /* Align the range for consistency */
                if (desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
-                  range = align_u32(range, ANV_UBO_BOUNDS_CHECK_ALIGNMENT);
+                  range = align_u32(range, ANV_UBO_ALIGNMENT);
 
                struct anv_address address =
                   anv_address_add(desc->buffer->address, offset);
@@ -2993,7 +2993,7 @@ get_push_range_bound_size(struct anv_cmd_buffer *cmd_buffer,
          uint32_t bound_range = MIN2(desc->range, desc->buffer->size - offset);
 
          /* Align the range for consistency */
-         bound_range = align_u32(bound_range, ANV_UBO_BOUNDS_CHECK_ALIGNMENT);
+         bound_range = align_u32(bound_range, ANV_UBO_ALIGNMENT);
 
          return bound_range;
       }

@@ -245,7 +245,7 @@ static LLVMValueRef emit_bcsel(struct ac_llvm_context *ctx,
 	LLVMTypeRef src1_type = LLVMTypeOf(src1);
 	LLVMTypeRef src2_type = LLVMTypeOf(src2);
 
-	assert(LLVMGetTypeKind(LLVMTypeOf(src0)) != LLVMFixedVectorTypeKind);
+	assert(LLVMGetTypeKind(LLVMTypeOf(src0)) != LLVMVectorTypeKind);
 
 	if (LLVMGetTypeKind(src1_type) == LLVMPointerTypeKind &&
 	    LLVMGetTypeKind(src2_type) != LLVMPointerTypeKind) {
@@ -2193,7 +2193,7 @@ static LLVMValueRef load_tess_varyings(struct ac_nir_context *ctx,
 	LLVMTypeRef dest_type = get_def_type(ctx, &instr->dest.ssa);
 
 	LLVMTypeRef src_component_type;
-	if (LLVMGetTypeKind(dest_type) == LLVMFixedVectorTypeKind)
+	if (LLVMGetTypeKind(dest_type) == LLVMVectorTypeKind)
 		src_component_type = LLVMGetElementType(dest_type);
 	else
 		src_component_type = dest_type;
@@ -2353,7 +2353,7 @@ static LLVMValueRef visit_load_var(struct ac_nir_context *ctx,
 		bool split_loads = ctx->ac.chip_class == GFX6 && elem_size_bytes < 4;
 
 		if (stride != natural_stride || split_loads) {
-			if (LLVMGetTypeKind(result_type) == LLVMFixedVectorTypeKind)
+			if (LLVMGetTypeKind(result_type) == LLVMVectorTypeKind)
 				result_type = LLVMGetElementType(result_type);
 
 			LLVMTypeRef ptr_type = LLVMPointerType(result_type,
@@ -2529,7 +2529,7 @@ visit_store_var(struct ac_nir_context *ctx,
 			LLVMBuildStore(ctx->ac.builder, val, address);
 		} else {
 			LLVMTypeRef val_type = LLVMTypeOf(val);
-			if (LLVMGetTypeKind(LLVMTypeOf(val)) == LLVMFixedVectorTypeKind)
+			if (LLVMGetTypeKind(LLVMTypeOf(val)) == LLVMVectorTypeKind)
 				val_type = LLVMGetElementType(val_type);
 
 			LLVMTypeRef ptr_type = LLVMPointerType(val_type,
@@ -4978,7 +4978,7 @@ static void visit_deref(struct ac_nir_context *ctx,
 		LLVMTypeRef type = LLVMPointerType(pointee_type, address_space);
 
 		if (LLVMTypeOf(result) != type) {
-			if (LLVMGetTypeKind(LLVMTypeOf(result)) == LLVMFixedVectorTypeKind) {
+			if (LLVMGetTypeKind(LLVMTypeOf(result)) == LLVMVectorTypeKind) {
 				result = LLVMBuildBitCast(ctx->ac.builder, result,
 				                          type, "");
 			} else {

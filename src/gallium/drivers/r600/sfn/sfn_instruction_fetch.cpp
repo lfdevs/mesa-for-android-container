@@ -430,7 +430,7 @@ void FetchInstruction::do_print(std::ostream& os) const
    };
    static const char buffer_index_mode_char[] = "_01E";
    static const char *flag_string[] = {"WQM",  "CF", "signed", "no_zero",
-                                       "nostride", "AC"};
+                                       "nostride", "AC", "TC", "VPM"};
    switch (m_vc_opcode) {
    case vc_fetch:
       os << "Fetch " << m_dst;

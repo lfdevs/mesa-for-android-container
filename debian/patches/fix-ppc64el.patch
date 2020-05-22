@@ -1,0 +1,41 @@
+Description: Fix FTBFS on ppc64el
+gnu++11 used to let mesa compile on ppc64el but with the use of C++14
+compilation now fails.
+Let's not force gnu++11 and use defaults like on other arches but
+fix the issue that happens then, that is, the collision of altivec and
+c++ symbols.
+For that we undefine bool, vector, pixel as advised by altivec.h .
+Author: Frédéric Bonnard <frediz@debian.org>
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/meson.build
++++ b/meson.build
+@@ -724,14 +724,6 @@
+     dep_spirv_tools = null_dep
+     dep_llvmspirvlib = null_dep
+   endif
+-
+-  if host_machine.cpu_family().startswith('ppc') and cpp.compiles('''
+-      #if !defined(__VEC__) || !defined(__ALTIVEC__)
+-      #error "AltiVec not enabled"
+-      #endif''',
+-      name : 'Altivec')
+-    clover_cpp_std += ['cpp_std=gnu++11']
+-  endif
+ else
+   dep_clc = null_dep
+   dep_spirv_tools = null_dep
+--- a/include/CL/cl_platform.h
++++ b/include/CL/cl_platform.h
+@@ -356,6 +356,11 @@
+ /* Define basic vector types */
+ #if defined( __VEC__ )
+    #include <altivec.h>   /* may be omitted depending on compiler. AltiVec spec provides no way to detect whether the header is required. */
++   #if defined(__ALTIVEC__) && !defined(__APPLE_ALTIVEC__)
++      #undef vector
++      #undef pixel
++      #undef bool
++   #endif
+    typedef __vector unsigned char     __cl_uchar16;
+    typedef __vector signed char       __cl_char16;
+    typedef __vector unsigned short    __cl_ushort8;

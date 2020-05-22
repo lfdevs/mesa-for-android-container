@@ -905,6 +905,7 @@ void si_llvm_build_monolithic_ps(struct si_shader_context *ctx, struct si_shader
 {
    LLVMValueRef parts[3];
    unsigned num_parts = 0, main_index;
+   LLVMValueRef main_fn = ctx->main_fn;
 
    union si_shader_part_key prolog_key;
    si_get_ps_prolog_key(shader, &prolog_key, false);
@@ -915,7 +916,7 @@ void si_llvm_build_monolithic_ps(struct si_shader_context *ctx, struct si_shader
    }
 
    main_index = num_parts;
-   parts[num_parts++] = ctx->main_fn;
+   parts[num_parts++] = main_fn;
 
    union si_shader_part_key epilog_key;
    si_get_ps_epilog_key(shader, &epilog_key);

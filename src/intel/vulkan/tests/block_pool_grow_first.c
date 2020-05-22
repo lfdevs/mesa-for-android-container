@@ -21,9 +21,8 @@
  * IN THE SOFTWARE.
  */
 
-#undef NDEBUG
-
 #include "anv_private.h"
+#include "test_common.h"
 
 int main(int argc, char **argv)
 {
@@ -44,20 +43,20 @@ int main(int argc, char **argv)
    pthread_mutex_init(&device.mutex, NULL);
    anv_bo_cache_init(&device.bo_cache);
    anv_block_pool_init(&pool, &device, 4096, initial_size);
-   assert(pool.size == initial_size);
+   ASSERT(pool.size == initial_size);
 
    uint32_t padding;
    int32_t offset = anv_block_pool_alloc(&pool, block_size, &padding);
 
    /* Pool will have grown at least space to fit the new allocation. */
-   assert(pool.size > initial_size);
-   assert(pool.size >= initial_size + block_size);
+   ASSERT(pool.size > initial_size);
+   ASSERT(pool.size >= initial_size + block_size);
 
    /* The whole initial size is considered padding and the allocation should be
     * right next to it.
     */
-   assert(padding == initial_size);
-   assert(offset == initial_size);
+   ASSERT(padding == initial_size);
+   ASSERT(offset == initial_size);
 
    /* Use the memory to ensure it is valid. */
    void *map = anv_block_pool_map(&pool, offset, block_size);
