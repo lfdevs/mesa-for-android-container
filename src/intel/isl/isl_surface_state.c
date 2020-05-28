@@ -928,7 +928,7 @@ isl_genX(null_fill_state)(void *state, struct isl_extent3d size)
       /* We previously had this format set to B8G8R8A8_UNORM but ran into
        * hangs on IVB. R32_UINT seems to work for everybody.
        *
-       * https://gitlab.freedesktop.org/mesa/mesa/issues/1872
+       * https://gitlab.freedesktop.org/mesa/mesa/-/issues/1872
        */
       .SurfaceFormat = ISL_FORMAT_R32_UINT,
 #if GEN_GEN >= 7

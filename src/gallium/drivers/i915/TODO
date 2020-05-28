@@ -35,4 +35,4 @@ Random list of problems with i915g:
 - Fix fragment discard
 
 Other bugs can be found here:
-https://gitlab.freedesktop.org/mesa/mesa/issues?scope=all&utf8=%E2%9C%93&state=opened&label_name[]=i915g
+https://gitlab.freedesktop.org/mesa/mesa/-/issues?scope=all&utf8=%E2%9C%93&state=opened&label_name[]=i915g

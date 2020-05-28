@@ -137,7 +137,7 @@ lp_cs_tpool_queue_task(struct lp_cs_tpool *pool,
 
    list_addtail(&task->list, &pool->workqueue);
 
-   cnd_signal(&pool->new_work);
+   cnd_broadcast(&pool->new_work);
    mtx_unlock(&pool->m);
    return task;
 }

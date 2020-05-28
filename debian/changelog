@@ -1,3 +1,9 @@
+mesa (20.1.0-1) experimental; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 28 May 2020 13:14:52 +0300
+
 mesa (20.1.0~rc4-1) experimental; urgency=medium
 
   * New upstream snapshot.

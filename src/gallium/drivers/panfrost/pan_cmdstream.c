@@ -742,8 +742,14 @@ panfrost_frag_shader_meta_init(struct panfrost_context *ctx,
          * related to forward-pixel kill, as per "Mali Performance 3: Is
          * EGL_BUFFER_PRESERVED a good thing?" by Peter Harris */
 
+        const struct pipe_depth_stencil_alpha_state *zsa = ctx->depth_stencil;
+
+        bool depth_enabled = fs->writes_depth ||
+           (zsa && zsa->depth.enabled && zsa->depth.func != PIPE_FUNC_ALWAYS);
+
         SET_BIT(fragmeta->unknown2_3, MALI_CAN_DISCARD, fs->can_discard);
-        SET_BIT(fragmeta->midgard1.flags_lo, 0x400, fs->can_discard);
+        SET_BIT(fragmeta->midgard1.flags_lo, 0x400, !depth_enabled && fs->can_discard);
+        SET_BIT(fragmeta->midgard1.flags_lo, MALI_READS_ZS, depth_enabled && fs->can_discard);
 
         panfrost_frag_meta_rasterizer_update(ctx, fragmeta);
         panfrost_frag_meta_zsa_update(ctx, fragmeta);

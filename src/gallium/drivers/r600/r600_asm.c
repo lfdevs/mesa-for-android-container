@@ -1452,7 +1452,7 @@ int r600_bytecode_add_tex(struct r600_bytecode *bc, const struct r600_bytecode_t
 		LIST_FOR_EACH_ENTRY(ttex, &bc->cf_last->tex, list) {
 			if (ttex->dst_gpr == ntex->src_gpr &&
                             (ttex->dst_sel_x < 4 || ttex->dst_sel_y < 4 ||
-                             ttex->dst_sel_z < 4 || ttex->dst_sel_z < 4)) {
+                             ttex->dst_sel_z < 4 || ttex->dst_sel_w < 4)) {
 				bc->force_add_cf = 1;
 				break;
 			}

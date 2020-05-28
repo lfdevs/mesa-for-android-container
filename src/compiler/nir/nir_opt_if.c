@@ -632,7 +632,7 @@ opt_simplify_bcsel_of_phi(nir_builder *b, nir_loop *loop)
     * bcsel that must come before any break.
     *
     * For more details, see
-    * https://gitlab.freedesktop.org/mesa/mesa/merge_requests/170#note_110305
+    * https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/170#note_110305
     */
    nir_foreach_instr_safe(instr, header_block) {
       if (instr->type != nir_instr_type_alu)

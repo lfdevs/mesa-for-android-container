@@ -149,7 +149,7 @@ void GPRVector::set_reg_i(int i, PValue reg)
 void GPRVector::pin_to_channel(int i)
 {
    auto& v = static_cast<GPRValue&>(*m_elms[i]);
-   v.pin_to_channel();
+   v.set_pin_to_channel();
 }
 
 void GPRVector::do_print(std::ostream& os) const

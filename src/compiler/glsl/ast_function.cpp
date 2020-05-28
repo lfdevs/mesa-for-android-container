@@ -49,9 +49,12 @@ process_parameters(exec_list *instructions, exec_list *actual_parameters,
       ast->set_is_lhs(true);
       ir_rvalue *result = ast->hir(instructions, state);
 
-      /* Error happened, bail out. */
-      if (state->error)
-         return 0;
+      /* Error happened processing function parameter */
+      if (!result) {
+         actual_parameters->push_tail(ir_rvalue::error_value(mem_ctx));
+         count++;
+         continue;
+      }
 
       ir_constant *const constant =
          result->constant_expression_value(mem_ctx);

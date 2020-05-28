@@ -407,7 +407,8 @@ radv_physical_device_init(struct radv_physical_device *device,
 	return VK_SUCCESS;
 
 fail:
-	close(fd);
+	if (fd != -1)
+		close(fd);
 	if (master_fd != -1)
 		close(master_fd);
 	return result;

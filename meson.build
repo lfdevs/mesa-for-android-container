@@ -46,7 +46,7 @@ pre_args = [
   '-D__STDC_FORMAT_MACROS',
   '-D__STDC_LIMIT_MACROS',
   '-DPACKAGE_VERSION="@0@"'.format(meson.project_version()),
-  '-DPACKAGE_BUGREPORT="https://gitlab.freedesktop.org/mesa/mesa/issues"',
+  '-DPACKAGE_BUGREPORT="https://gitlab.freedesktop.org/mesa/mesa/-/issues"',
 ]
 
 with_vulkan_icd_dir = get_option('vulkan-icd-dir')
@@ -980,6 +980,11 @@ else
     '-fno-math-errno',
     '-fno-trapping-math',
     '-Qunused-arguments',
+    # Some classes use custom new operator which zeroes memory, however
+    # gcc does aggressive dead-store elimination which threats all writes
+    # to the memory before the constructor as "dead stores".
+    # For now we disable this optimization.
+    '-flifetime-dse=1',
   ]
   # MinGW chokes on format specifiers and I can't get it all working
   if not (cc.get_id() == 'gcc' and host_machine.system() == 'windows')
@@ -1525,7 +1530,7 @@ else
 
   # Disable deprecated keyword warnings, since we have to use them for
   # old-bison compat.  See discussion in
-  # https://gitlab.freedesktop.org/mesa/mesa/merge_requests/2161
+  # https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/2161
   if meson.version().version_compare('>= 0.52.0') and find_program('bison', required : false, version : '> 2.3').found()
     prog_bison = [prog_bison, '-Wno-deprecated']
   endif

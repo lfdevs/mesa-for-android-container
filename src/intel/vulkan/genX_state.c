@@ -237,6 +237,22 @@ genX(init_device_state)(struct anv_device *device)
          lri.DataDWord      = cache_mode_0;
       }
    }
+
+   /* an unknown issue is causing vs push constants to become
+    * corrupted during object-level preemption. For now, restrict
+    * to command buffer level preemption to avoid rendering
+    * corruption.
+    */
+   uint32_t cs_chicken1;
+   anv_pack_struct(&cs_chicken1,
+                   GENX(CS_CHICKEN1),
+                   .ReplayMode = MidcmdbufferPreemption,
+                   .ReplayModeMask = true);
+
+   anv_batch_emit(&batch, GENX(MI_LOAD_REGISTER_IMM), lri) {
+      lri.RegisterOffset = GENX(CS_CHICKEN1_num);
+      lri.DataDWord      = cs_chicken1;
+   }
 #endif
 
 #if GEN_GEN == 12

@@ -45,6 +45,34 @@ is_gl_identifier(const char *s)
    return s && s[0] == 'g' && s[1] == 'l' && s[2] == '_';
 }
 
+static unsigned
+uniform_storage_size(const struct glsl_type *type)
+{
+   switch (glsl_get_base_type(type)) {
+   case GLSL_TYPE_STRUCT:
+   case GLSL_TYPE_INTERFACE: {
+      unsigned size = 0;
+      for (unsigned i = 0; i < glsl_get_length(type); i++)
+         size += uniform_storage_size(glsl_get_struct_field(type, i));
+      return size;
+   }
+   case GLSL_TYPE_ARRAY: {
+      const struct glsl_type *e_type = glsl_get_array_element(type);
+      enum glsl_base_type e_base_type = glsl_get_base_type(e_type);
+      if (e_base_type == GLSL_TYPE_STRUCT ||
+          e_base_type == GLSL_TYPE_INTERFACE ||
+          e_base_type == GLSL_TYPE_ARRAY) {
+         unsigned length = !glsl_type_is_unsized_array(type) ?
+            glsl_get_length(type) : 1;
+         return length * uniform_storage_size(e_type);
+      } else
+         return 1;
+   }
+   default:
+      return 1;
+   }
+}
+
 static void
 nir_setup_uniform_remap_tables(struct gl_context *ctx,
                                struct gl_shader_program *prog)
@@ -1142,15 +1170,20 @@ nir_link_uniform(struct gl_context *ctx,
 
       return location_count;
    } else {
-      /* Create a new uniform storage entry */
-      prog->data->UniformStorage =
-         reralloc(prog->data,
-                  prog->data->UniformStorage,
-                  struct gl_uniform_storage,
-                  prog->data->NumUniformStorage + 1);
-      if (!prog->data->UniformStorage) {
-         linker_error(prog, "Out of memory during linking.\n");
-         return -1;
+      /* TODO: reallocating storage is slow, we should figure out a way to
+       * allocate storage up front for spirv like we do for GLSL.
+       */
+      if (prog->data->spirv) {
+         /* Create a new uniform storage entry */
+         prog->data->UniformStorage =
+            reralloc(prog->data,
+                     prog->data->UniformStorage,
+                     struct gl_uniform_storage,
+                     prog->data->NumUniformStorage + 1);
+         if (!prog->data->UniformStorage) {
+            linker_error(prog, "Out of memory during linking.\n");
+            return -1;
+         }
       }
 
       uniform = &prog->data->UniformStorage[prog->data->NumUniformStorage];
@@ -1348,6 +1381,43 @@ gl_nir_link_uniforms(struct gl_context *ctx,
    ralloc_free(prog->data->UniformStorage);
    prog->data->UniformStorage = NULL;
    prog->data->NumUniformStorage = 0;
+
+   /* Count total number of uniforms and allocate storage */
+   unsigned storage_size = 0;
+   if (!prog->data->spirv) {
+      struct set *storage_counted =
+         _mesa_set_create(NULL, _mesa_hash_string, _mesa_key_string_equal);
+      for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+         struct gl_linked_shader *sh = prog->_LinkedShaders[stage];
+         if (!sh)
+            continue;
+
+         nir_foreach_variable(var, &sh->Program->nir->uniforms) {
+            const struct glsl_type *type = var->type;
+            const char *name = var->name;
+            if (nir_variable_is_in_block(var) &&
+                glsl_without_array(type) == var->interface_type) {
+               type = glsl_without_array(var->type);
+               name = glsl_get_type_name(type);
+            }
+
+            struct set_entry *entry = _mesa_set_search(storage_counted, name);
+            if (!entry) {
+               storage_size += uniform_storage_size(type);
+               _mesa_set_add(storage_counted, name);
+            }
+         }
+      }
+      _mesa_set_destroy(storage_counted, NULL);
+
+      prog->data->UniformStorage = rzalloc_array(prog->data,
+                                                 struct gl_uniform_storage,
+                                                 storage_size);
+      if (!prog->data->UniformStorage) {
+         linker_error(prog, "Out of memory while linking uniforms.\n");
+         return false;
+      }
+   }
 
    /* Iterate through all linked shaders */
    struct nir_link_uniforms_state state = {0,};
@@ -1638,6 +1708,8 @@ gl_nir_link_uniforms(struct gl_context *ctx,
 
    prog->data->NumHiddenUniforms = state.num_hidden_uniforms;
    prog->data->NumUniformDataSlots = state.num_values;
+
+   assert(prog->data->spirv || prog->data->NumUniformStorage == storage_size);
 
    if (prog->data->spirv)
       prog->NumUniformRemapTable = state.max_uniform_location;

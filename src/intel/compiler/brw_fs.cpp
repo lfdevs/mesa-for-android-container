@@ -8725,7 +8725,7 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
    }
 
    /* Limit dispatch width to simd8 with dual source blending on gen8.
-    * See: https://gitlab.freedesktop.org/mesa/mesa/issues/1917
+    * See: https://gitlab.freedesktop.org/mesa/mesa/-/issues/1917
     */
    if (devinfo->gen == 8 && prog_data->dual_src_blend &&
        !(INTEL_DEBUG & DEBUG_NO8)) {

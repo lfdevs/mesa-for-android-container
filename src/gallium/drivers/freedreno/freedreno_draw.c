@@ -93,8 +93,6 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 		return;
 	}
 
-	fd_fence_ref(&ctx->last_fence, NULL);
-
 	/* Upload a user index buffer. */
 	struct pipe_resource *indexbuf = NULL;
 	unsigned index_offset = 0;
@@ -285,6 +283,12 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	/* and any buffers used, need to be resolved: */
 	batch->resolve |= buffers;
 
+	/* Clearing last_fence must come after the batch dependency tracking
+	 * (resource_read()/resource_written()), as that can trigger a flush,
+	 * re-populating last_fence
+	 */
+	fd_fence_ref(&ctx->last_fence, NULL);
+
 	DBG("%p: %x %ux%u num_draws=%u (%s/%s)", batch, buffers,
 		pfb->width, pfb->height, batch->num_draws,
 		util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
@@ -320,8 +324,6 @@ fd_clear(struct pipe_context *pctx, unsigned buffers, const struct pipe_scissor_
 	/* TODO: push down the region versions into the tiles */
 	if (!fd_render_condition_check(pctx))
 		return;
-
-	fd_fence_ref(&ctx->last_fence, NULL);
 
 	if (ctx->in_discard_blit) {
 		fd_batch_reset(batch);
@@ -368,6 +370,12 @@ fd_clear(struct pipe_context *pctx, unsigned buffers, const struct pipe_scissor_
 		resource_written(batch, aq->prsc);
 
 	mtx_unlock(&ctx->screen->lock);
+
+	/* Clearing last_fence must come after the batch dependency tracking
+	 * (resource_read()/resource_written()), as that can trigger a flush,
+	 * re-populating last_fence
+	 */
+	fd_fence_ref(&ctx->last_fence, NULL);
 
 	DBG("%p: %x %ux%u depth=%f, stencil=%u (%s/%s)", batch, buffers,
 		pfb->width, pfb->height, depth, stencil,

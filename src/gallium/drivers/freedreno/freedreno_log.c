@@ -215,8 +215,10 @@ _fd_log(struct fd_batch *batch, const char *fmt, ...)
 
 	va_list ap;
 	va_start(ap, fmt);
-	if (vasprintf(&msg, fmt, ap) < 0)
+	if (vasprintf(&msg, fmt, ap) < 0) {
+		va_end(ap);
 		return;
+	}
 	va_end(ap);
 
 	u_fifo_add(chunk->msg_fifo, msg);

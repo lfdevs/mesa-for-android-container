@@ -262,7 +262,8 @@ radv_builtin_cache_path(char *path)
 
 	strcpy(path, pwd.pw_dir);
 	strcat(path, "/.cache");
-	mkdir(path, 0755);
+	if (mkdir(path, 0755))
+		return false;
 
 	ret = snprintf(path, PATH_MAX + 1, "%s%s%zd",
 		       pwd.pw_dir, suffix2, sizeof(void *) * 8);

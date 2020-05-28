@@ -164,7 +164,7 @@ static void radv_amdgpu_request_to_fence(struct radv_amdgpu_ctx *ctx,
 	fence->fence.ip_instance = req->ip_instance;
 	fence->fence.ring = req->ring;
 	fence->fence.fence = req->seq_no;
-	fence->user_ptr = (volatile uint64_t*)(ctx->fence_map + (req->ip_type * MAX_RINGS_PER_TYPE + req->ring) * sizeof(uint64_t));
+	fence->user_ptr = (volatile uint64_t*)(ctx->fence_map + req->ip_type * MAX_RINGS_PER_TYPE + req->ring);
 }
 
 static struct radeon_winsys_fence *radv_amdgpu_create_fence()

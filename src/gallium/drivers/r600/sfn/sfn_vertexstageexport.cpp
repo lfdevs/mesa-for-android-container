@@ -382,6 +382,7 @@ bool VertexStageExportForFS::emit_stream(int stream)
 VertexStageExportForGS::VertexStageExportForGS(VertexStage &proc,
                                                const r600_shader *gs_shader):
    VertexStageExportBase(proc),
+   m_num_clip_dist(0),
    m_gs_shader(gs_shader)
 {
 
