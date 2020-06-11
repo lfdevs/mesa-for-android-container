@@ -25,7 +25,7 @@
 from __future__ import print_function
 import sys
 import zlib
-import xml.etree.cElementTree as et
+import xml.etree.ElementTree as et
 
 def main():
     if len(sys.argv) < 2:

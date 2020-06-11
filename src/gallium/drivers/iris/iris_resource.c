@@ -1139,7 +1139,7 @@ iris_resource_disable_aux_on_first_query(struct pipe_resource *resource,
 }
 
 static bool
-iris_resource_get_param(struct pipe_screen *screen,
+iris_resource_get_param(struct pipe_screen *pscreen,
                         struct pipe_context *context,
                         struct pipe_resource *resource,
                         unsigned plane,
@@ -1148,6 +1148,7 @@ iris_resource_get_param(struct pipe_screen *screen,
                         unsigned handle_usage,
                         uint64_t *value)
 {
+   struct iris_screen *screen = (struct iris_screen *)pscreen;
    struct iris_resource *res = (struct iris_resource *)resource;
    bool mod_with_aux =
       res->mod_info && res->mod_info->aux_usage != ISL_AUX_USAGE_NONE;
@@ -1156,7 +1157,7 @@ iris_resource_get_param(struct pipe_screen *screen,
    unsigned handle;
 
    if (iris_resource_unfinished_aux_import(res))
-      iris_resource_finish_aux_import(screen, res);
+      iris_resource_finish_aux_import(pscreen, res);
 
    struct iris_bo *bo = wants_aux ? res->aux.bo : res->bo;
 
@@ -1188,9 +1189,19 @@ iris_resource_get_param(struct pipe_screen *screen,
       if (result)
          *value = handle;
       return result;
-   case PIPE_RESOURCE_PARAM_HANDLE_TYPE_KMS:
-      *value = iris_bo_export_gem_handle(bo);
+   case PIPE_RESOURCE_PARAM_HANDLE_TYPE_KMS: {
+      /* Because we share the same drm file across multiple iris_screen, when
+       * we export a GEM handle we must make sure it is valid in the DRM file
+       * descriptor the caller is using (this is the FD given at screen
+       * creation).
+       */
+      uint32_t handle;
+      if (iris_bo_export_gem_handle_for_device(bo, screen->winsys_fd, &handle))
+         return false;
+      *value = handle;
       return true;
+   }
+
    case PIPE_RESOURCE_PARAM_HANDLE_TYPE_FD:
       result = iris_bo_export_dmabuf(bo, (int *) &handle) == 0;
       if (result)
@@ -1208,6 +1219,7 @@ iris_resource_get_handle(struct pipe_screen *pscreen,
                          struct winsys_handle *whandle,
                          unsigned usage)
 {
+   struct iris_screen *screen = (struct iris_screen *) pscreen;
    struct iris_resource *res = (struct iris_resource *)resource;
    bool mod_with_aux =
       res->mod_info && res->mod_info->aux_usage != ISL_AUX_USAGE_NONE;
@@ -1245,9 +1257,18 @@ iris_resource_get_handle(struct pipe_screen *pscreen,
    switch (whandle->type) {
    case WINSYS_HANDLE_TYPE_SHARED:
       return iris_bo_flink(bo, &whandle->handle) == 0;
-   case WINSYS_HANDLE_TYPE_KMS:
-      whandle->handle = iris_bo_export_gem_handle(bo);
+   case WINSYS_HANDLE_TYPE_KMS: {
+      /* Because we share the same drm file across multiple iris_screen, when
+       * we export a GEM handle we must make sure it is valid in the DRM file
+       * descriptor the caller is using (this is the FD given at screen
+       * creation).
+       */
+      uint32_t handle;
+      if (iris_bo_export_gem_handle_for_device(bo, screen->winsys_fd, &handle))
+         return false;
+      whandle->handle = handle;
       return true;
+   }
    case WINSYS_HANDLE_TYPE_FD:
       return iris_bo_export_dmabuf(bo, (int *) &whandle->handle) == 0;
    }

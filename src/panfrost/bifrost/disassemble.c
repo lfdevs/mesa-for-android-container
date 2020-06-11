@@ -613,6 +613,7 @@ static struct fma_op_info find_fma_op_info(unsigned op, bool extended)
 
         struct fma_op_info info;
         snprintf(info.name, sizeof(info.name), "op%04x", op);
+        info.extended = extended;
         info.op = op;
         info.src_type = FMA_THREE_SRC;
         return info;

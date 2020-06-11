@@ -170,7 +170,7 @@ vlVdpPresentationQueueTargetCreateX11(VdpDevice device, Drawable drawable,
    if (!dev)
       return VDP_STATUS_INVALID_HANDLE;
 
-   pqt = CALLOC(1, sizeof(vlVdpPresentationQueue));
+   pqt = CALLOC(1, sizeof(vlVdpPresentationQueueTarget));
    if (!pqt)
       return VDP_STATUS_RESOURCES;
 

@@ -289,10 +289,11 @@ setup_stateobj(struct fd_ringbuffer *ring, struct fd_screen *screen,
 	const struct ir3_shader_variant *gs = state->gs;
 	const struct ir3_shader_variant *fs = binning_pass ? &dummy_fs : state->fs;
 
-	if (binning_pass && state->ds)
-		ds = state->bs;
-	else if (binning_pass)
-		vs = state->bs;
+	/* binning VS is wrong when GS is present, so use nonbinning VS
+	 * TODO: compile both binning VS/GS variants correctly
+	 */
+	if (binning_pass && state->gs)
+		vs = state->vs;
 
 	bool sample_shading = fs->per_samp | key->sample_shading;
 

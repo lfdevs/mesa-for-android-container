@@ -52,9 +52,8 @@ install_data(
   install_dir : join_paths(get_option('datadir'), 'vulkan', 'explicit_layer.d'),
 )
 
-configure_file(
-  input : files('mesa-overlay-control.py'),
-  output : '@PLAINNAME@',
-  configuration : configuration_data(), # only copy the file
-  install_dir: get_option('bindir'),
+install_data(
+  'mesa-overlay-control.py',
+  install_dir : get_option('bindir'),
+  install_mode : 'r-xr-xr-x',
 )

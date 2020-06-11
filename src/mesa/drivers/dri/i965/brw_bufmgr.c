@@ -58,6 +58,7 @@
 #include "util/macros.h"
 #include "util/hash_table.h"
 #include "util/list.h"
+#include "util/os_file.h"
 #include "util/u_dynarray.h"
 #include "util/vma.h"
 #include "brw_bufmgr.h"
@@ -73,6 +74,20 @@
 #else
 #define VG(x)
 #endif
+
+/* Bufmgr is not aware of brw_context. */
+#undef WARN_ONCE
+#define WARN_ONCE(cond, fmt...) do {                            \
+   if (unlikely(cond)) {                                        \
+      static bool _warned = false;                              \
+      if (!_warned) {                                           \
+         fprintf(stderr, "WARNING: ");                          \
+         fprintf(stderr, fmt);                                  \
+         _warned = true;                                        \
+      }                                                         \
+   }                                                            \
+} while (0)
+
 
 /* VALGRIND_FREELIKE_BLOCK unfortunately does not actually undo the earlier
  * VALGRIND_MALLOCLIKE_BLOCK but instead leaves vg convinced the memory is
@@ -133,6 +148,16 @@ struct bo_cache_bucket {
 
    /** List of vma_bucket_nodes. */
    struct util_dynarray vma_list[BRW_MEMZONE_COUNT];
+};
+
+struct bo_export {
+   /** File descriptor associated with a handle export. */
+   int drm_fd;
+
+   /** GEM handle in drm_fd */
+   uint32_t gem_handle;
+
+   struct list_head link;
 };
 
 struct brw_bufmgr {
@@ -485,6 +510,18 @@ brw_bo_cache_purge_bucket(struct brw_bufmgr *bufmgr,
 }
 
 static struct brw_bo *
+bo_calloc(void)
+{
+   struct brw_bo *bo = calloc(1, sizeof(*bo));
+   if (!bo)
+      return NULL;
+
+   list_inithead(&bo->exports);
+
+   return bo;
+}
+
+static struct brw_bo *
 bo_alloc_internal(struct brw_bufmgr *bufmgr,
                   const char *name,
                   uint64_t size,
@@ -557,6 +594,7 @@ retry:
       }
 
       if (alloc_from_cache) {
+         assert(list_is_empty(&bo->exports));
          if (!brw_bo_madvise(bo, I915_MADV_WILLNEED)) {
             bo_free(bo);
             brw_bo_cache_purge_bucket(bufmgr, bucket);
@@ -589,7 +627,7 @@ retry:
          bo->gtt_offset = 0ull;
       }
    } else {
-      bo = calloc(1, sizeof(*bo));
+      bo = bo_calloc();
       if (!bo)
          goto err;
 
@@ -760,11 +798,12 @@ brw_bo_gem_create_from_name(struct brw_bufmgr *bufmgr,
     */
    bo = hash_find_bo(bufmgr->handle_table, open_arg.handle);
    if (bo) {
+      assert(list_is_empty(&bo->exports));
       brw_bo_reference(bo);
       goto out;
    }
 
-   bo = calloc(1, sizeof(*bo));
+   bo = bo_calloc();
    if (!bo)
       goto out;
 
@@ -834,6 +873,8 @@ bo_free(struct brw_bo *bo)
 
       entry = _mesa_hash_table_search(bufmgr->handle_table, &bo->gem_handle);
       _mesa_hash_table_remove(bufmgr->handle_table, entry);
+   } else {
+      assert(list_is_empty(&bo->exports));
    }
 
    /* Close this object */
@@ -882,6 +923,14 @@ bo_unreference_final(struct brw_bo *bo, time_t time)
    struct bo_cache_bucket *bucket;
 
    DBG("bo_unreference final: %d (%s)\n", bo->gem_handle, bo->name);
+
+   list_for_each_entry_safe(struct bo_export, export, &bo->exports, link) {
+      struct drm_gem_close close = { .handle = export->gem_handle };
+      gen_ioctl(export->drm_fd, DRM_IOCTL_GEM_CLOSE, &close);
+
+      list_del(&export->link);
+      free(export);
+   }
 
    bucket = bucket_for_size(bufmgr, bo->size);
    /* Put the buffer into our internal cache for reuse if we can. */
@@ -1440,11 +1489,12 @@ brw_bo_gem_create_from_prime_internal(struct brw_bufmgr *bufmgr, int prime_fd,
     */
    bo = hash_find_bo(bufmgr->handle_table, handle);
    if (bo) {
+      assert(list_is_empty(&bo->exports));
       brw_bo_reference(bo);
       goto out;
    }
 
-   bo = calloc(1, sizeof(*bo));
+   bo = bo_calloc();
    if (!bo)
       goto out;
 
@@ -1576,6 +1626,70 @@ brw_bo_flink(struct brw_bo *bo, uint32_t *name)
    }
 
    *name = bo->global_name;
+   return 0;
+}
+
+int
+brw_bo_export_gem_handle_for_device(struct brw_bo *bo, int drm_fd,
+                                    uint32_t *out_handle)
+{
+   struct brw_bufmgr *bufmgr = bo->bufmgr;
+
+   /* Only add the new GEM handle to the list of export if it belongs to a
+    * different GEM device. Otherwise we might close the same buffer multiple
+    * times.
+    */
+   int ret = os_same_file_description(drm_fd, bufmgr->fd);
+   WARN_ONCE(ret < 0,
+             "Kernel has no file descriptor comparison support: %s\n",
+             strerror(errno));
+   if (ret == 0) {
+      *out_handle = brw_bo_export_gem_handle(bo);
+      return 0;
+   }
+
+   struct bo_export *export = calloc(1, sizeof(*export));
+   if (!export)
+      return -ENOMEM;
+
+   export->drm_fd = drm_fd;
+
+   int dmabuf_fd = -1;
+   int err = brw_bo_gem_export_to_prime(bo, &dmabuf_fd);
+   if (err) {
+      free(export);
+      return err;
+   }
+
+   mtx_lock(&bufmgr->lock);
+   err = drmPrimeFDToHandle(drm_fd, dmabuf_fd, &export->gem_handle);
+   close(dmabuf_fd);
+   if (err) {
+      mtx_unlock(&bufmgr->lock);
+      free(export);
+      return err;
+   }
+
+   bool found = false;
+   list_for_each_entry(struct bo_export, iter, &bo->exports, link) {
+      if (iter->drm_fd != drm_fd)
+         continue;
+      /* Here we assume that for a given DRM fd, we'll always get back the
+       * same GEM handle for a given buffer.
+       */
+      assert(iter->gem_handle == export->gem_handle);
+      free(export);
+      export = iter;
+      found = true;
+      break;
+   }
+   if (!found)
+      list_addtail(&export->link, &bo->exports);
+
+   mtx_unlock(&bufmgr->lock);
+
+   *out_handle = export->gem_handle;
+
    return 0;
 }
 

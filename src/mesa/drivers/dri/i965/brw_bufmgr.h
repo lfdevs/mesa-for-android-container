@@ -39,6 +39,7 @@
 #include <stdio.h>
 #include <time.h>
 
+#include "c11/threads.h"
 #include "util/u_atomic.h"
 #include "util/list.h"
 
@@ -178,6 +179,13 @@ struct brw_bo {
 
    /** BO cache list */
    struct list_head head;
+
+   /**
+    * List of GEM handle exports of this buffer (bo_export).
+    *
+    * Hold bufmgr->lock when using this list.
+    */
+   struct list_head exports;
 
    /**
     * Boolean of whether this buffer can be re-used
@@ -371,6 +379,18 @@ struct brw_bo *brw_bo_gem_create_from_prime_tiled(struct brw_bufmgr *bufmgr,
                                                   uint32_t stride);
 
 uint32_t brw_bo_export_gem_handle(struct brw_bo *bo);
+
+/**
+ * Exports a bo as a GEM handle into a given DRM file descriptor
+ * \param bo Buffer to export
+ * \param drm_fd File descriptor where the new handle is created
+ * \param out_handle Pointer to store the new handle
+ *
+ * Returns 0 if the buffer was successfully exported, a non zero error code
+ * otherwise.
+ */
+int brw_bo_export_gem_handle_for_device(struct brw_bo *bo, int drm_fd,
+                                        uint32_t *out_handle);
 
 int brw_reg_read(struct brw_bufmgr *bufmgr, uint32_t offset,
                  uint64_t *result);

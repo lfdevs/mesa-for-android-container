@@ -457,7 +457,7 @@ wait_imm kill(Instruction* instr, wait_ctx& ctx)
       imm.lgkm = 0;
    }
 
-   if (ctx.chip_class >= GFX10) {
+   if (ctx.chip_class >= GFX10 && instr->format == Format::SMEM) {
       /* GFX10: A store followed by a load at the same address causes a problem because
        * the load doesn't load the correct values unless we wait for the store first.
        * This is NOT mitigated by an s_nop.

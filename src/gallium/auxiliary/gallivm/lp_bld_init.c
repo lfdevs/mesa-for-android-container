@@ -172,9 +172,6 @@ create_pass_manager(struct gallivm_state *gallivm)
       LLVMAddConstantPropagationPass(gallivm->passmgr);
       LLVMAddInstructionCombiningPass(gallivm->passmgr);
       LLVMAddGVNPass(gallivm->passmgr);
-#if GALLIVM_HAVE_CORO
-      LLVMAddCoroCleanupPass(gallivm->passmgr);
-#endif
    }
    else {
       /* We need at least this pass to prevent the backends to fail in
@@ -182,6 +179,9 @@ create_pass_manager(struct gallivm_state *gallivm)
        */
       LLVMAddPromoteMemoryToRegisterPass(gallivm->passmgr);
    }
+#if GALLIVM_HAVE_CORO
+   LLVMAddCoroCleanupPass(gallivm->passmgr);
+#endif
 
    return TRUE;
 }

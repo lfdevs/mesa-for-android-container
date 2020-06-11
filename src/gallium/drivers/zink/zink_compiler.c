@@ -277,9 +277,11 @@ zink_compile_nir(struct zink_screen *screen, struct nir_shader *nir)
       static int i;
       snprintf(buf, sizeof(buf), "dump%02d.spv", i++);
       FILE *fp = fopen(buf, "wb");
-      fwrite(spirv->words, sizeof(uint32_t), spirv->num_words, fp);
-      fclose(fp);
-      fprintf(stderr, "wrote '%s'...\n", buf);
+      if (fp) {
+         fwrite(spirv->words, sizeof(uint32_t), spirv->num_words, fp);
+         fclose(fp);
+         fprintf(stderr, "wrote '%s'...\n", buf);
+      }
    }
 
    VkShaderModuleCreateInfo smci = {};

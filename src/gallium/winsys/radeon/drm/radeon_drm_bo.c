@@ -718,14 +718,14 @@ static struct radeon_bo *radeon_create_bo(struct radeon_drm_winsys *rws,
       if (va.operation == RADEON_VA_RESULT_VA_EXIST) {
          struct pb_buffer *b = &bo->base;
          struct radeon_bo *old_bo =
-               util_hash_table_get(rws->bo_vas, (void*)(uintptr_t)va.offset);
+               _mesa_hash_table_u64_search(rws->bo_vas, va.offset);
 
          mtx_unlock(&rws->bo_handles_mutex);
          pb_reference(&b, &old_bo->base);
          return radeon_bo(b);
       }
 
-      _mesa_hash_table_insert(rws->bo_vas, (void*)(uintptr_t)bo->va, bo);
+      _mesa_hash_table_u64_insert(rws->bo_vas, bo->va, bo);
       mtx_unlock(&rws->bo_handles_mutex);
    }
 
@@ -1116,14 +1116,14 @@ static struct pb_buffer *radeon_winsys_bo_from_ptr(struct radeon_winsys *rws,
       if (va.operation == RADEON_VA_RESULT_VA_EXIST) {
          struct pb_buffer *b = &bo->base;
          struct radeon_bo *old_bo =
-               util_hash_table_get(ws->bo_vas, (void*)(uintptr_t)va.offset);
+               _mesa_hash_table_u64_search(ws->bo_vas, va.offset);
 
          mtx_unlock(&ws->bo_handles_mutex);
          pb_reference(&b, &old_bo->base);
          return b;
       }
 
-      _mesa_hash_table_insert(ws->bo_vas, (void*)(uintptr_t)bo->va, bo);
+      _mesa_hash_table_u64_insert(ws->bo_vas, bo->va, bo);
       mtx_unlock(&ws->bo_handles_mutex);
    }
 
@@ -1247,14 +1247,14 @@ done:
       if (va.operation == RADEON_VA_RESULT_VA_EXIST) {
          struct pb_buffer *b = &bo->base;
          struct radeon_bo *old_bo =
-               util_hash_table_get(ws->bo_vas, (void*)(uintptr_t)va.offset);
+               _mesa_hash_table_u64_search(ws->bo_vas, va.offset);
 
          mtx_unlock(&ws->bo_handles_mutex);
          pb_reference(&b, &old_bo->base);
          return b;
       }
 
-      _mesa_hash_table_insert(ws->bo_vas, (void*)(uintptr_t)bo->va, bo);
+      _mesa_hash_table_u64_insert(ws->bo_vas, bo->va, bo);
       mtx_unlock(&ws->bo_handles_mutex);
    }
 

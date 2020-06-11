@@ -165,6 +165,12 @@ public:
          }
       }
 
+      if (!glsl_type_is_vector_or_scalar(ir->return_type) &&
+          !ir->return_type->is_void()) {
+         unsupported = true;
+         return visit_stop;
+      }
+
       return visit_continue;
    }
 

@@ -2133,7 +2133,7 @@ void *ureg_create_shader( struct ureg_program *ureg,
                           struct pipe_context *pipe,
                           const struct pipe_stream_output_info *so )
 {
-   struct pipe_shader_state state;
+   struct pipe_shader_state state = {0};
 
    pipe_shader_state_from_tgsi(&state, ureg_finalize(ureg));
    if(!state.tokens)

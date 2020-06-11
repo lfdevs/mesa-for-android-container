@@ -959,7 +959,8 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
          progress = lower_offset(b, tex) || progress;
       }
 
-      if ((tex->sampler_dim == GLSL_SAMPLER_DIM_RECT) && options->lower_rect) {
+      if ((tex->sampler_dim == GLSL_SAMPLER_DIM_RECT) && options->lower_rect &&
+          tex->op != nir_texop_txf && !nir_tex_instr_is_query(tex)) {
          lower_rect(b, tex);
          progress = true;
       }

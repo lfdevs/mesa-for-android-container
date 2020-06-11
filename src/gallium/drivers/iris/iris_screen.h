@@ -144,8 +144,14 @@ struct iris_screen {
    /** Global slab allocator for iris_transfer_map objects */
    struct slab_parent_pool transfer_pool;
 
-   /** drm device file descriptor, on shared with bufmgr, do not close. */
+   /** drm device file descriptor, shared with bufmgr, do not close. */
    int fd;
+
+   /**
+    * drm device file descriptor to used for window system integration, owned
+    * by iris_screen, can be a different DRM instance than fd.
+    */
+   int winsys_fd;
 
    /** PCI ID for our GPU device */
    int pci_id;

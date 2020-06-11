@@ -549,6 +549,26 @@ brw_prepare_vertices(struct brw_context *brw)
             start = vertex_range_start + stride * min_index;
             range = (stride * (max_index - min_index) +
                      vertex_size);
+
+            /**
+             * Unreal Engine 4 has a bug in usage of glDrawRangeElements,
+             * causing it to be called with a number of vertices in place
+             * of "end" parameter (which specifies the maximum array index
+             * contained in indices).
+             *
+             * Since there is unknown amount of games affected and we
+             * could not identify that a game is built with UE4 - we are
+             * forced to make a blanket workaround, disregarding max_index
+             * in range calculations. Fortunately all such calls look like:
+             *   glDrawRangeElements(GL_TRIANGLES, 0, 3, 3, ...);
+             * So we are able to narrow down this workaround.
+             *
+             * See: https://gitlab.freedesktop.org/mesa/mesa/-/issues/2917
+             */
+            if (unlikely(max_index == 3 && min_index == 0 &&
+                         brw->draw.derived_params.is_indexed_draw)) {
+                  range = intel_buffer->Base.Size - offset - start;
+            }
          }
       }
 

@@ -78,10 +78,10 @@ struct radeon_drm_winsys {
 
    /* List of buffer GEM names. Protected by bo_handles_mutex. */
    struct hash_table *bo_names;
-   /* List of buffer handles. Protectded by bo_handles_mutex. */
+   /* List of buffer handles. Protected by bo_handles_mutex. */
    struct hash_table *bo_handles;
-   /* List of buffer virtual memory ranges. Protectded by bo_handles_mutex. */
-   struct hash_table *bo_vas;
+   /* List of buffer virtual memory ranges. Protected by bo_handles_mutex. */
+   struct hash_table_u64 *bo_vas;
    mtx_t bo_handles_mutex;
    mtx_t bo_fence_lock;
 

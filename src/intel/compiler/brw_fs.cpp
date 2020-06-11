@@ -4754,7 +4754,8 @@ lower_sampler_logical_send_gen4(const fs_builder &bld, fs_inst *inst, opcode op,
    if (coord_components > 0 &&
        (has_lod || shadow_c.file != BAD_FILE ||
         (op == SHADER_OPCODE_TEX && bld.dispatch_width() == 8))) {
-      for (unsigned i = coord_components; i < 3; i++)
+      assert(coord_components <= 3);
+      for (unsigned i = 0; i < 3 - coord_components; i++)
          bld.MOV(offset(msg_end, bld, i), brw_imm_f(0.0f));
 
       msg_end = offset(msg_end, bld, 3 - coord_components);

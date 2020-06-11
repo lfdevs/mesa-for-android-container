@@ -173,6 +173,7 @@ EXTENSIONS = [
     Extension('VK_ANDROID_native_buffer',                 7, 'ANDROID'),
     Extension('VK_GOOGLE_decorate_string',                1, True),
     Extension('VK_GOOGLE_hlsl_functionality1',            1, True),
+    Extension('VK_GOOGLE_user_type',                      1, True),
     Extension('VK_INTEL_performance_query',               1, 'device->perf && device->perf->i915_perf_version >= 3'),
     Extension('VK_INTEL_shader_integer_functions2',       1, 'device->info.gen >= 8'),
     Extension('VK_NV_compute_shader_derivatives',         1, True),

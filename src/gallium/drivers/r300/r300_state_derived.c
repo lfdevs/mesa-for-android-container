@@ -376,7 +376,7 @@ static void r300_update_rs_block(struct r300_context *r300)
             if (fs_inputs->color[i] != ATTR_UNUSED) {
                 fp_offset++;
 
-                DBG(r300, DBG_RS, "r300: FS input color %i unassigned%s.\n",
+                DBG(r300, DBG_RS, "r300: FS input color %i unassigned.\n",
                     i);
             }
         }
@@ -474,7 +474,7 @@ static void r300_update_rs_block(struct r300_context *r300)
 		if (fs_inputs->generic[i] != ATTR_UNUSED) {
 		    fp_offset++;
 
-		    DBG(r300, DBG_RS, "r300: FS input generic %i unassigned%s.\n", i);
+		    DBG(r300, DBG_RS, "r300: FS input generic %i unassigned.\n", i);
 		}
 	    }
 	}

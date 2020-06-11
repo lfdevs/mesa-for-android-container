@@ -101,11 +101,8 @@ perfmon_supports(unsigned query_type)
 static struct etna_acc_query *
 perfmon_allocate(struct etna_context *ctx, unsigned query_type)
 {
-   struct etna_pm_query *pq = CALLOC_STRUCT(etna_pm_query);
+   struct etna_pm_query *pq;
    const struct etna_perfmon_config *cfg;
-
-   if (!pq)
-      return NULL;
 
    cfg = etna_pm_query_config(query_type);
    if (!cfg)
@@ -113,6 +110,10 @@ perfmon_allocate(struct etna_context *ctx, unsigned query_type)
 
    if (!etna_pm_cfg_supported(ctx->screen->perfmon, cfg))
       return false;
+
+   pq = CALLOC_STRUCT(etna_pm_query);
+   if (!pq)
+      return NULL;
 
    pm_add_signal(pq, ctx->screen->perfmon, cfg);
 

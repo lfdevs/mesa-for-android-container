@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
+#include "c11/threads.h"
 #include "util/macros.h"
 #include "util/u_atomic.h"
 #include "util/list.h"
@@ -165,6 +166,9 @@ struct iris_bo {
 
    /** BO cache list */
    struct list_head head;
+
+   /** List of GEM handle exports of this buffer (bo_export) */
+   struct list_head exports;
 
    /**
     * Boolean of whether the GPU is definitely not accessing the buffer.
@@ -364,6 +368,18 @@ void iris_destroy_hw_context(struct iris_bufmgr *bufmgr, uint32_t ctx_id);
 int iris_bo_export_dmabuf(struct iris_bo *bo, int *prime_fd);
 struct iris_bo *iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd,
                                       uint32_t tiling, uint32_t stride);
+
+/**
+ * Exports a bo as a GEM handle into a given DRM file descriptor
+ * \param bo Buffer to export
+ * \param drm_fd File descriptor where the new handle is created
+ * \param out_handle Pointer to store the new handle
+ *
+ * Returns 0 if the buffer was successfully exported, a non zero error code
+ * otherwise.
+ */
+int iris_bo_export_gem_handle_for_device(struct iris_bo *bo, int drm_fd,
+                                         uint32_t *out_handle);
 
 uint32_t iris_bo_export_gem_handle(struct iris_bo *bo);
 

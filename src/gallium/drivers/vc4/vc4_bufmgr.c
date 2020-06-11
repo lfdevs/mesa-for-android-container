@@ -100,7 +100,7 @@ vc4_bo_dump_stats(struct vc4_screen *screen)
                 struct timespec time;
                 clock_gettime(CLOCK_MONOTONIC, &time);
                 fprintf(stderr, "  now:               %ld\n",
-                        time.tv_sec);
+                        (long)time.tv_sec);
         }
 }
 

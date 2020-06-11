@@ -1079,7 +1079,7 @@ static const struct gen_device_info gen_device_info_ehl_4 = {
    .num_subslices = dual_subslices(1)
 
 #define GEN12_GT_FEATURES(_gt)                                  \
-   GEN12_FEATURES(1, 1, _gt == 1 ? 4 : 8),                      \
+   GEN12_FEATURES(_gt, 1, _gt == 1 ? 4 : 8),                    \
    .num_subslices = dual_subslices(_gt == 1 ? 2 : 6)
 
 static const struct gen_device_info gen_device_info_tgl_gt1 = {

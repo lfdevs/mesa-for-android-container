@@ -850,11 +850,6 @@ nouveau_buffer_invalidate(struct pipe_context *pipe,
    if (unlikely(buf->base.bind & PIPE_BIND_SHARED))
       return;
 
-   /* We can't touch persistent/coherent buffers */
-   if (buf->base.flags & (PIPE_RESOURCE_FLAG_MAP_PERSISTENT |
-                          PIPE_RESOURCE_FLAG_MAP_COHERENT))
-      return;
-
    /* If the buffer is sub-allocated and not currently being written, just
     * wipe the valid buffer range. Otherwise we have to create fresh
     * storage. (We don't keep track of fences for non-sub-allocated BO's.)

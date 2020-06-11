@@ -1861,10 +1861,8 @@ void register_allocation(Program *program, std::vector<TempSet>& live_out_per_bl
 
             if (!definition.isFixed()) {
                Temp tmp = definition.getTemp();
-               /* subdword instructions before RDNA write full registers */
                if (tmp.regClass().is_subdword() &&
-                   !instr_can_access_subdword(instr) &&
-                   ctx.program->chip_class <= GFX9) {
+                   !instr_can_access_subdword(instr)) {
                   assert(tmp.bytes() <= 4);
                   tmp = Temp(definition.tempId(), v1);
                }

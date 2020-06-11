@@ -876,6 +876,10 @@ void label_instruction(opt_ctx &ctx, Block& block, aco_ptr<Instruction>& instr)
                   new_instr->definitions[0] = smem->definitions[0];
                new_instr->can_reorder = smem->can_reorder;
                new_instr->barrier = smem->barrier;
+               new_instr->glc = smem->glc;
+               new_instr->dlc = smem->dlc;
+               new_instr->nv = smem->nv;
+               new_instr->disable_wqm = smem->disable_wqm;
                instr.reset(new_instr);
                smem = static_cast<SMEM_instruction *>(instr.get());
             }

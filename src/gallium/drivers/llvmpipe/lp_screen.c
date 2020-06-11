@@ -433,7 +433,8 @@ llvmpipe_get_shader_param(struct pipe_screen *screen,
       }
    case PIPE_SHADER_TESS_CTRL:
    case PIPE_SHADER_TESS_EVAL:
-      if (lscreen->use_tgsi)
+      /* Tessellation shader needs llvm coroutines support */
+      if (!GALLIVM_HAVE_CORO || lscreen->use_tgsi)
          return 0;
    case PIPE_SHADER_VERTEX:
    case PIPE_SHADER_GEOMETRY:

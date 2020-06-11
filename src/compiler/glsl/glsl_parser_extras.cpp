@@ -2355,7 +2355,20 @@ do_common_optimization(exec_list *ir, bool linked,
    OPT(lower_vector_insert, ir, false);
    OPT(optimize_swizzles, ir);
 
-   OPT(optimize_split_arrays, ir, linked);
+   /* Some drivers only call do_common_optimization() once rather than in a
+    * loop, and split arrays causes each element of a constant array to
+    * dereference is own copy of the entire array initilizer. This IR is not
+    * something that can be generated manually in a shader and is not
+    * accounted for by NIR optimisations, the result is an exponential slow
+    * down in compilation speed as a constant arrays element count grows. To
+    * avoid that here we make sure to always clean up the mess split arrays
+    * causes to constant arrays.
+    */
+   bool array_split = optimize_split_arrays(ir, linked);
+   if (array_split)
+      do_constant_propagation(ir);
+   progress |= array_split;
+
    OPT(optimize_redundant_jumps, ir);
 
    if (options->MaxUnrollIterations) {
