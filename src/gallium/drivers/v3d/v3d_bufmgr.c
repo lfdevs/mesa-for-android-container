@@ -367,7 +367,8 @@ v3d_bo_open_handle(struct v3d_screen *screen,
                         strerror(errno));
                 free(bo->map);
                 free(bo);
-                return NULL;
+                bo = NULL;
+                goto done;
         }
         bo->offset = get.offset;
         assert(bo->offset != 0);

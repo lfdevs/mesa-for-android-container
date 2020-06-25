@@ -27,9 +27,8 @@ static nir_ssa_def *
 emit_load_param_base(nir_builder *b, nir_intrinsic_op op)
 {
    nir_intrinsic_instr *result = nir_intrinsic_instr_create(b->shader, op);
-   result->num_components = 4;
-   nir_ssa_dest_init(&result->instr, &result->dest,
-                     result->num_components, 32, NULL);
+	nir_ssa_dest_init(&result->instr, &result->dest,
+                     4, 32, NULL);
    nir_builder_instr_insert(b, &result->instr);
    return &result->dest.ssa;
 }
@@ -155,9 +154,8 @@ static nir_ssa_def *
 r600_load_rel_patch_id(nir_builder *b)
 {
    auto patch_id = nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_tcs_rel_patch_id_r600);
-   patch_id->num_components = 1;
    nir_ssa_dest_init(&patch_id->instr, &patch_id->dest,
-                     patch_id->num_components, 32, NULL);
+                     1, 32, NULL);
    nir_builder_instr_insert(b, &patch_id->instr);
    return &patch_id->dest.ssa;
 }
@@ -378,9 +376,8 @@ bool r600_append_tcs_TF_emission(nir_shader *shader, enum pipe_prim_type prim_ty
    b->cursor = nir_after_cf_list(&f->impl->body);
 
    auto invocation_id = nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_invocation_id);
-   invocation_id->num_components = 1;
-   nir_ssa_dest_init(&invocation_id->instr, &invocation_id->dest,
-                     invocation_id->num_components, 32, NULL);
+	nir_ssa_dest_init(&invocation_id->instr, &invocation_id->dest,
+                     1, 32, NULL);
    nir_builder_instr_insert(b, &invocation_id->instr);
 
    nir_push_if(b, nir_ieq(b, &invocation_id->dest.ssa, nir_imm_int(b, 0)));
@@ -402,9 +399,8 @@ bool r600_append_tcs_TF_emission(nir_shader *shader, enum pipe_prim_type prim_ty
 
 
    auto tf_out_base = nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_tcs_tess_factor_base_r600);
-   tf_out_base->num_components = 1;
-   nir_ssa_dest_init(&tf_out_base->instr, &tf_out_base->dest,
-                     tf_out_base->num_components, 32, NULL);
+	nir_ssa_dest_init(&tf_out_base->instr, &tf_out_base->dest,
+                     1, 32, NULL);
    nir_builder_instr_insert(b, &tf_out_base->instr);
 
    auto out_addr0 = nir_build_alu(b, nir_op_umad24,

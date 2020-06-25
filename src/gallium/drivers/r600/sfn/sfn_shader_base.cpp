@@ -427,7 +427,7 @@ bool ShaderFromNirProcessor::emit_load_tcs_param_base(nir_intrinsic_instr* instr
    PValue src = get_temp_register();
    emit_instruction(new AluInstruction(op1_mov, src, Value::zero, {alu_write, alu_last_instr}));
 
-   GPRVector dest = vec_from_nir(instr->dest, instr->num_components);
+   GPRVector dest = vec_from_nir(instr->dest, nir_dest_num_components(instr->dest));
    emit_instruction(new FetchTCSIOParam(dest, src, offset));
 
    return true;

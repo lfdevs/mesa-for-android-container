@@ -1019,12 +1019,8 @@ static bool si_texture_get_handle(struct pipe_screen *screen, struct pipe_contex
 
 static void si_texture_destroy(struct pipe_screen *screen, struct pipe_resource *ptex)
 {
-   struct si_screen *sscreen = (struct si_screen *)screen;
    struct si_texture *tex = (struct si_texture *)ptex;
    struct si_resource *resource = &tex->buffer;
-
-   if (sscreen->info.chip_class >= GFX9)
-      free(tex->surface.u.gfx9.dcc_retile_map);
 
    si_texture_reference(&tex->flushed_depth_texture, NULL);
 
@@ -1378,20 +1374,14 @@ static struct si_texture *si_texture_create_object(struct pipe_screen *screen,
           */
          bool use_uint16 = tex->surface.u.gfx9.dcc_retile_use_uint16;
          unsigned num_elements = tex->surface.u.gfx9.dcc_retile_num_elements;
+         unsigned dcc_retile_map_size = num_elements * (use_uint16 ? 2 : 4);
          struct si_resource *buf = si_aligned_buffer_create(screen, 0, PIPE_USAGE_STREAM,
-                                                            num_elements * (use_uint16 ? 2 : 4),
+                                                            dcc_retile_map_size,
                                                             sscreen->info.tcc_cache_line_size);
-         uint32_t *ui = (uint32_t *)sscreen->ws->buffer_map(buf->buf, NULL, PIPE_TRANSFER_WRITE);
-         uint16_t *us = (uint16_t *)ui;
+         void *map = sscreen->ws->buffer_map(buf->buf, NULL, PIPE_TRANSFER_WRITE);
 
-         /* Upload the retile map into a staging buffer. */
-         if (use_uint16) {
-            for (unsigned i = 0; i < num_elements; i++)
-               us[i] = tex->surface.u.gfx9.dcc_retile_map[i];
-         } else {
-            for (unsigned i = 0; i < num_elements; i++)
-               ui[i] = tex->surface.u.gfx9.dcc_retile_map[i];
-         }
+         /* Upload the retile map into the staging buffer. */
+         memcpy(map, tex->surface.u.gfx9.dcc_retile_map, dcc_retile_map_size);
 
          /* Copy the staging buffer to the buffer backing the texture. */
          struct si_context *sctx = (struct si_context *)sscreen->aux_context;
@@ -1433,8 +1423,6 @@ static struct si_texture *si_texture_create_object(struct pipe_screen *screen,
 
 error:
    FREE(tex);
-   if (sscreen->info.chip_class >= GFX9)
-      free(surface->u.gfx9.dcc_retile_map);
    return NULL;
 }
 

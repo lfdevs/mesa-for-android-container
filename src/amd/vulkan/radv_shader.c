@@ -662,7 +662,18 @@ radv_alloc_shader_memory(struct radv_device *device,
 					     (device->physical_device->rad_info.cpdma_prefetch_writes_memory ?
 					             0 : RADEON_FLAG_READ_ONLY),
 					     RADV_BO_PRIORITY_SHADER);
+	if (!slab->bo) {
+		free(slab);
+		return NULL;
+	}
+
 	slab->ptr = (char*)device->ws->buffer_map(slab->bo);
+	if (!slab->ptr) {
+		device->ws->buffer_destroy(slab->bo);
+		free(slab);
+		return NULL;
+	}
+
 	list_inithead(&slab->shaders);
 
 	mtx_lock(&device->shader_slab_mutex);
@@ -1006,6 +1017,12 @@ radv_shader_variant_create(struct radv_device *device,
 	}
 
 	void *dest_ptr = radv_alloc_shader_memory(device, variant);
+	if (!dest_ptr) {
+		if (binary->type == RADV_BINARY_TYPE_RTLD)
+			ac_rtld_close(&rtld_binary);
+		free(variant);
+		return NULL;
+	}
 
 	if (binary->type == RADV_BINARY_TYPE_RTLD) {
 		struct radv_shader_binary_rtld* bin = (struct radv_shader_binary_rtld *)binary;

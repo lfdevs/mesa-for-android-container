@@ -692,8 +692,15 @@ static void visit_alu(struct ac_nir_context *ctx, const nir_alu_instr *instr)
 		result = LLVMBuildFMul(ctx->ac.builder, src[0], src[1], "");
 		break;
 	case nir_op_frcp:
-		result = emit_intrin_1f_param(&ctx->ac, "llvm.amdgcn.rcp",
-					      ac_to_float_type(&ctx->ac, def_type), src[0]);
+		/* For doubles, we need precise division to pass GLCTS. */
+		if (ctx->ac.float_mode == AC_FLOAT_MODE_DEFAULT_OPENGL &&
+		    ac_get_type_size(def_type) == 8) {
+			result = LLVMBuildFDiv(ctx->ac.builder, ctx->ac.f64_1,
+					       ac_to_float(&ctx->ac, src[0]), "");
+		} else {
+			result = emit_intrin_1f_param(&ctx->ac, "llvm.amdgcn.rcp",
+						      ac_to_float_type(&ctx->ac, def_type), src[0]);
+		}
 		break;
 	case nir_op_iand:
 		result = LLVMBuildAnd(ctx->ac.builder, src[0], src[1], "");

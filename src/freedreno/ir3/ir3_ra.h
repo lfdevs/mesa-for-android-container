@@ -144,6 +144,8 @@ struct ir3_ra_ctx {
 	bool scalar_pass;
 
 	unsigned alloc_count;
+	unsigned r0_xyz_nodes; /* ra node numbers for r0.[xyz] precolors */
+	unsigned hr0_xyz_nodes; /* ra node numbers for hr0.[xyz] precolors pre-a6xx */
 	/* one per class, plus one slot for arrays: */
 	unsigned class_alloc_count[total_class_count + 1];
 	unsigned class_base[total_class_count + 1];

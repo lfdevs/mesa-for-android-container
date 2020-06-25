@@ -703,6 +703,11 @@ ac_build_fdiv(struct ac_llvm_context *ctx,
 	unsigned type_size = ac_get_type_size(LLVMTypeOf(den));
 	const char *name;
 
+	/* For doubles, we need precise division to pass GLCTS. */
+	if (ctx->float_mode == AC_FLOAT_MODE_DEFAULT_OPENGL &&
+	    type_size == 8)
+		return LLVMBuildFDiv(ctx->builder, num, den, "");
+
 	if (type_size == 2)
 		name = "llvm.amdgcn.rcp.f16";
 	else if (type_size == 4)

@@ -763,6 +763,7 @@ radv_nir_shader_info_pass(const struct nir_shader *nir,
 		info->ps.can_discard = nir->info.fs.uses_discard;
                 info->ps.early_fragment_test = nir->info.fs.early_fragment_tests;
                 info->ps.post_depth_coverage = nir->info.fs.post_depth_coverage;
+                info->ps.depth_layout = nir->info.fs.depth_layout;
                 break;
         case MESA_SHADER_GEOMETRY:
                 info->gs.vertices_in = nir->info.gs.vertices_in;

@@ -1,5 +1,7 @@
 usr/bin/mesa-overlay-control.py
 usr/share/vulkan/explicit_layer.d/*.json
 usr/share/vulkan/icd.d/*.json
+usr/share/vulkan/implicit_layer.d/*.json
 usr/lib/*/libvulkan_*.so
+usr/lib/*/libVkLayer_MESA_device_select.so
 usr/lib/*/libVkLayer_MESA_overlay.so

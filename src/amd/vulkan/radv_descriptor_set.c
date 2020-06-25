@@ -615,6 +615,22 @@ radv_descriptor_set_destroy(struct radv_device *device,
 	vk_free2(&device->alloc, NULL, set);
 }
 
+static void radv_destroy_descriptor_pool(struct radv_device *device,
+                                         const VkAllocationCallbacks *pAllocator,
+                                         struct radv_descriptor_pool *pool)
+{
+	if (!pool->host_memory_base) {
+		for(int i = 0; i < pool->entry_count; ++i) {
+			radv_descriptor_set_destroy(device, pool, pool->entries[i].set, false);
+		}
+	}
+
+	if (pool->bo)
+		device->ws->buffer_destroy(pool->bo);
+
+	vk_free2(&device->alloc, pAllocator, pool);
+}
+
 VkResult radv_CreateDescriptorPool(
 	VkDevice                                    _device,
 	const VkDescriptorPoolCreateInfo*           pCreateInfo,
@@ -704,7 +720,15 @@ VkResult radv_CreateDescriptorPool(
 						     RADEON_FLAG_READ_ONLY |
 						     RADEON_FLAG_32BIT,
 						     RADV_BO_PRIORITY_DESCRIPTOR);
+		if (!pool->bo) {
+			radv_destroy_descriptor_pool(device, pAllocator, pool);
+			return vk_error(device->instance, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+		}
 		pool->mapped_ptr = (uint8_t*)device->ws->buffer_map(pool->bo);
+		if (!pool->mapped_ptr) {
+			radv_destroy_descriptor_pool(device, pAllocator, pool);
+			return vk_error(device->instance, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+		}
 	}
 	pool->size = bo_size;
 	pool->max_entry_count = pCreateInfo->maxSets;
@@ -724,15 +748,7 @@ void radv_DestroyDescriptorPool(
 	if (!pool)
 		return;
 
-	if (!pool->host_memory_base) {
-		for(int i = 0; i < pool->entry_count; ++i) {
-			radv_descriptor_set_destroy(device, pool, pool->entries[i].set, false);
-		}
-	}
-
-	if (pool->bo)
-		device->ws->buffer_destroy(pool->bo);
-	vk_free2(&device->alloc, pAllocator, pool);
+	radv_destroy_descriptor_pool(device, pAllocator, pool);
 }
 
 VkResult radv_ResetDescriptorPool(

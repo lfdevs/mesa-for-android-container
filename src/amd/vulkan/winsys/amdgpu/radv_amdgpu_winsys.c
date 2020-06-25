@@ -55,7 +55,7 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
 	ws->info.use_display_dcc_unaligned = false;
 	ws->info.use_display_dcc_with_retile_blit = false;
 
-	ws->addrlib = amdgpu_addr_create(&ws->info, &ws->amdinfo, &ws->info.max_alignment);
+	ws->addrlib = ac_addrlib_create(&ws->info, &ws->amdinfo, &ws->info.max_alignment);
 	if (!ws->addrlib) {
 		fprintf(stderr, "amdgpu: Cannot create addrlib.\n");
 		return false;
@@ -156,7 +156,7 @@ static void radv_amdgpu_winsys_destroy(struct radeon_winsys *rws)
 {
 	struct radv_amdgpu_winsys *ws = (struct radv_amdgpu_winsys*)rws;
 
-	AddrDestroy(ws->addrlib);
+	ac_addrlib_destroy(ws->addrlib);
 	amdgpu_device_deinitialize(ws->dev);
 	FREE(rws);
 }

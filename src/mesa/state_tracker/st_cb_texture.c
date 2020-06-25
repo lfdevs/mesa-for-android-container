@@ -215,9 +215,10 @@ st_FreeTextureImageBuffer(struct gl_context *ctx,
    stImage->transfer = NULL;
    stImage->num_transfers = 0;
 
-   if (stImage->compressed_data) {
+   if (stImage->compressed_data &&
+       pipe_reference(&stImage->compressed_data->reference, NULL)) {
+      free(stImage->compressed_data->ptr);
       free(stImage->compressed_data);
-      stImage->compressed_data = NULL;
    }
 
    /* if the texture image is being deallocated, the structure of the
@@ -264,16 +265,21 @@ compressed_tex_fallback_allocate(struct st_context *st,
    if (!st_compressed_format_fallback(st, texImage->TexFormat))
       return;
 
-   if (stImage->compressed_data)
+   if (stImage->compressed_data &&
+       pipe_reference(&stImage->compressed_data->reference, NULL)) {
+      free(stImage->compressed_data->ptr);
       free(stImage->compressed_data);
+   }
 
    unsigned data_size = _mesa_format_image_size(texImage->TexFormat,
                                                 texImage->Width2,
                                                 texImage->Height2,
                                                 texImage->Depth2);
 
-   stImage->compressed_data =
+   stImage->compressed_data = ST_CALLOC_STRUCT(st_compressed_data);
+   stImage->compressed_data->ptr =
       malloc(data_size * _mesa_num_tex_faces(texImage->TexObject->Target));
+   pipe_reference_init(&stImage->compressed_data->reference, 1);
 }
 
 
@@ -320,8 +326,9 @@ st_MapTextureImage(struct gl_context *ctx,
             _mesa_format_row_stride(texImage->TexFormat, texImage->Width2);
          unsigned block_size = _mesa_get_format_bytes(texImage->TexFormat);
 
+         assert(stImage->compressed_data);
          *mapOut = itransfer->temp_data =
-            stImage->compressed_data +
+            stImage->compressed_data->ptr +
             (z * y_blocks + (y / blk_h)) * stride +
             (x / blk_w) * block_size;
          itransfer->map = map;
@@ -3100,7 +3107,15 @@ st_TextureView(struct gl_context *ctx,
       for (face = 0; face < numFaces; face++) {
          struct st_texture_image *stImage =
             st_texture_image(texObj->Image[face][level]);
+         struct st_texture_image *origImage =
+            st_texture_image(origTexObj->Image[face][level]);
          pipe_resource_reference(&stImage->pt, tex->pt);
+         if (origImage &&
+             origImage->compressed_data) {
+            pipe_reference(NULL,
+                           &origImage->compressed_data->reference);
+            stImage->compressed_data = origImage->compressed_data;
+         }
       }
    }
 

@@ -310,6 +310,7 @@ struct radv_shader_info {
 		bool can_discard;
 		bool early_fragment_test;
 		bool post_depth_coverage;
+		uint8_t depth_layout;
 	} ps;
 	struct {
 		bool uses_grid_size;

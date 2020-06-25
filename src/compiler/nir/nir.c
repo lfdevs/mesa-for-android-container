@@ -1323,8 +1323,8 @@ nir_src_is_dynamically_uniform(nir_src src)
    /* As are uniform variables */
    if (src.ssa->parent_instr->type == nir_instr_type_intrinsic) {
       nir_intrinsic_instr *intr = nir_instr_as_intrinsic(src.ssa->parent_instr);
-
-      if (intr->intrinsic == nir_intrinsic_load_uniform)
+      if (intr->intrinsic == nir_intrinsic_load_uniform &&
+          nir_src_is_dynamically_uniform(intr->src[0]))
          return true;
    }
 

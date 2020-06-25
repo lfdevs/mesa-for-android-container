@@ -497,19 +497,6 @@ ra_select_reg_merged(unsigned int n, BITSET_WORD *regs, void *data)
 				return reg;
 			}
 		}
-	} else if (is_tex_or_prefetch(instr)) {
-		/* we could have a tex fetch w/ wrmask .z, for example.. these
-		 * cannot land in r0.x since that would underflow when we
-		 * subtract the offset.  Ie. if we pick r0.z, and subtract
-		 * the offset, the register encoded for dst will be r0.x
-		 */
-		unsigned n = ffs(instr->regs[0]->wrmask);
-		debug_assert(n > 0);
-		unsigned offset = n - 1;
-		if (!half)
-			offset *= 2;
-		base += offset;
-		max_target -= offset;
 	}
 
 	int r = pick_in_range(regs, base + start, base + max_target);
@@ -570,6 +557,12 @@ ra_init(struct ir3_ra_ctx *ctx)
 		base += reg_size_for_array(arr);
 	}
 	ctx->alloc_count += ctx->class_alloc_count[total_class_count];
+
+	/* Add vreg names for r0.xyz */
+	ctx->r0_xyz_nodes = ctx->alloc_count;
+	ctx->alloc_count += 3;
+	ctx->hr0_xyz_nodes = ctx->alloc_count;
+	ctx->alloc_count += 3;
 
 	ctx->g = ra_alloc_interference_graph(ctx->set->regs, ctx->alloc_count);
 	ralloc_steal(ctx->g, ctx->instrd);
@@ -710,6 +703,20 @@ ra_block_compute_live_ranges(struct ir3_ra_ctx *ctx, struct ir3_block *block)
 
 			if ((instr->opc == OPC_META_INPUT) && first_non_input)
 				use(name, first_non_input);
+
+			/* Texture instructions with writemasks can be treated as smaller
+			 * vectors (or just scalars!) to allocate knowing that the
+			 * masked-out regs won't be written, but we need to make sure that
+			 * the start of the vector doesn't come before the first register
+			 * or we'll wrap.
+			 */
+			if (is_tex_or_prefetch(instr)) {
+				int writemask_skipped_regs = ffs(instr->regs[0]->wrmask) - 1;
+				int r0_xyz = (instr->regs[0]->flags & IR3_REG_HALF) ?
+					ctx->hr0_xyz_nodes : ctx->r0_xyz_nodes;
+				for (int i = 0; i < writemask_skipped_regs; i++)
+					ra_add_node_interference(ctx->g, name, r0_xyz + i);
+			}
 		}
 
 		foreach_use (name, ctx, instr) {
@@ -1003,6 +1010,14 @@ ra_add_interference(struct ir3_ra_ctx *ctx)
 	foreach_array (arr, &ir->array_list) {
 		arr->start_ip = ~0;
 		arr->end_ip = 0;
+	}
+
+
+	/* set up the r0.xyz precolor regs. */
+	for (int i = 0; i < 3; i++) {
+		ra_set_node_reg(ctx->g, ctx->r0_xyz_nodes + i, i);
+		ra_set_node_reg(ctx->g, ctx->hr0_xyz_nodes + i,
+				ctx->set->first_half_reg + i);
 	}
 
 	/* compute live ranges (use/def) on a block level, also updating

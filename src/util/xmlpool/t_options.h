@@ -421,3 +421,12 @@ DRI_CONF_OPT_END
 DRI_CONF_OPT_BEGIN_V(gles_samples_passed_value, def, minimum, maximum) \
         DRI_CONF_DESC(en,gettext("GL_SAMPLES_PASSED value when emulated by GL_ANY_SAMPLES_PASSED")) \
 DRI_CONF_OPT_END
+
+/**
+ * \brief RADV specific configuration options
+ */
+
+#define DRI_CONF_RADV_NO_DYNAMIC_BOUNDS(def) \
+DRI_CONF_OPT_BEGIN_B(radv_no_dynamic_bounds, def) \
+        DRI_CONF_DESC(en,gettext("Disabling bounds checking for dynamic buffer descriptors")) \
+DRI_CONF_OPT_END

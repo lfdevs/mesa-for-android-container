@@ -2220,10 +2220,23 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
       struct vtn_value *val =
          vtn_push_value(b, w[2], vtn_value_type_sampled_image);
       val->sampled_image = ralloc(b, struct vtn_sampled_image);
-      val->sampled_image->image =
-         vtn_value(b, w[3], vtn_value_type_pointer)->pointer;
-      val->sampled_image->sampler =
-         vtn_value(b, w[4], vtn_value_type_pointer)->pointer;
+
+      /* It seems valid to use OpSampledImage with OpUndef instead of
+       * OpTypeImage or OpTypeSampler.
+       */
+      if (vtn_untyped_value(b, w[3])->value_type == vtn_value_type_undef) {
+         val->sampled_image->image = NULL;
+      } else {
+         val->sampled_image->image =
+            vtn_value(b, w[3], vtn_value_type_pointer)->pointer;
+      }
+
+      if (vtn_untyped_value(b, w[4])->value_type == vtn_value_type_undef) {
+         val->sampled_image->sampler = NULL;
+      } else {
+         val->sampled_image->sampler =
+            vtn_value(b, w[4], vtn_value_type_pointer)->pointer;
+      }
       return;
    } else if (opcode == SpvOpImage) {
       struct vtn_value *src_val = vtn_untyped_value(b, w[3]);
@@ -2246,6 +2259,11 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
    } else {
       vtn_assert(sampled_val->value_type == vtn_value_type_pointer);
       image = sampled_val->pointer;
+   }
+
+   if (!image) {
+      vtn_push_value(b, w[2], vtn_value_type_undef);
+      return;
    }
 
    nir_deref_instr *image_deref = vtn_pointer_to_deref(b, image);

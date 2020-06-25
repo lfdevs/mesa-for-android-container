@@ -542,6 +542,9 @@ radv_handle_per_app_options(struct radv_instance *instance,
 		} else if (!strcmp(name, "DOOMEternal")) {
 			/* Zero VRAM for Doom Eternal to fix rendering issues. */
 			instance->debug_flags |= RADV_DEBUG_ZERO_VRAM;
+		} else if (!strcmp(name, "Red Dead Redemption 2")) {
+			/* Work around a RDR2 game bug */
+			instance->debug_flags |= RADV_DEBUG_DISCARD_TO_DEMOTE;
 		}
 	}
 
@@ -553,6 +556,9 @@ radv_handle_per_app_options(struct radv_instance *instance,
 			instance->debug_flags |= RADV_DEBUG_ZERO_VRAM;
 		}
 	}
+
+	if (driQueryOptionb(&instance->dri_options, "radv_no_dynamic_bounds"))
+		instance->debug_flags |= RADV_DEBUG_NO_DYNAMIC_BOUNDS;
 }
 
 static int radv_get_instance_extension_index(const char *name)
@@ -570,6 +576,7 @@ DRI_CONF_BEGIN
 		DRI_CONF_ADAPTIVE_SYNC("true")
 		DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(0)
 		DRI_CONF_VK_X11_STRICT_IMAGE_COUNT("false")
+		DRI_CONF_RADV_NO_DYNAMIC_BOUNDS("false")
 	DRI_CONF_SECTION_END
 
 	DRI_CONF_SECTION_DEBUG
@@ -3958,6 +3965,8 @@ radv_get_preamble_cs(struct radv_queue *queue,
 
 	if (descriptor_bo != queue->descriptor_bo) {
 		uint32_t *map = (uint32_t*)queue->device->ws->buffer_map(descriptor_bo);
+		if (!map)
+			goto fail;
 
 		if (scratch_bo) {
 			uint64_t scratch_va = radv_buffer_get_va(scratch_bo);
@@ -6211,7 +6220,13 @@ radv_SignalSemaphore(VkDevice _device,
 	return VK_SUCCESS;
 }
 
-
+static void radv_destroy_event(struct radv_device *device,
+                               const VkAllocationCallbacks* pAllocator,
+                               struct radv_event *event)
+{
+	device->ws->buffer_destroy(event->bo);
+	vk_free2(&device->alloc, pAllocator, event);
+}
 
 VkResult radv_CreateEvent(
 	VkDevice                                    _device,
@@ -6237,6 +6252,10 @@ VkResult radv_CreateEvent(
 	}
 
 	event->map = (uint64_t*)device->ws->buffer_map(event->bo);
+	if (!event->map) {
+		radv_destroy_event(device, pAllocator, event);
+		return vk_error(device->instance, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+	}
 
 	*pEvent = radv_event_to_handle(event);
 
@@ -6253,8 +6272,8 @@ void radv_DestroyEvent(
 
 	if (!event)
 		return;
-	device->ws->buffer_destroy(event->bo);
-	vk_free2(&device->alloc, pAllocator, event);
+
+	radv_destroy_event(device, pAllocator, event);
 }
 
 VkResult radv_GetEventStatus(

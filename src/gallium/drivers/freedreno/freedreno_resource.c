@@ -1244,6 +1244,12 @@ fd_layout_resource_for_modifier(struct fd_resource *rsc, uint64_t modifier)
 {
 	switch (modifier) {
 	case DRM_FORMAT_MOD_LINEAR:
+		/* The dri gallium frontend will pass DRM_FORMAT_MOD_INVALID to us
+		 * when it's called through any of the non-modifier BO create entry
+		 * points.  Other drivers will determine tiling from the kernel or
+		 * other legacy backchannels, but for freedreno it just means
+		 * LINEAR. */
+	case DRM_FORMAT_MOD_INVALID:
 		return 0;
 	default:
 		return -1;

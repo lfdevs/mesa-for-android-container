@@ -558,13 +558,20 @@ static void radv_amdgpu_cs_add_buffer_internal(struct radv_amdgpu_cs *cs,
 	unsigned hash;
 	int index = radv_amdgpu_cs_find_buffer(cs, bo);
 
-	if (index != -1)
+	if (index != -1 || cs->failed)
 		return;
 
 	if (cs->num_buffers == cs->max_num_buffers) {
 		unsigned new_count = MAX2(1, cs->max_num_buffers * 2);
-		cs->handles = realloc(cs->handles, new_count * sizeof(struct drm_amdgpu_bo_list_entry));
-		cs->max_num_buffers = new_count;
+		struct drm_amdgpu_bo_list_entry *new_entries =
+			realloc(cs->handles, new_count * sizeof(struct drm_amdgpu_bo_list_entry));
+		if (new_entries) {
+			cs->max_num_buffers = new_count;
+			cs->handles = new_entries;
+		} else {
+			cs->failed = true;
+			return;
+		}
 	}
 
 	cs->handles[cs->num_buffers].bo_handle = bo;

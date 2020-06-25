@@ -4482,11 +4482,17 @@ radv_compute_db_shader_control(const struct radv_device *device,
 			       const struct radv_pipeline *pipeline,
                                const struct radv_shader_variant *ps)
 {
+	unsigned conservative_z_export = V_02880C_EXPORT_ANY_Z;
 	unsigned z_order;
 	if (ps->info.ps.early_fragment_test || !ps->info.ps.writes_memory)
 		z_order = V_02880C_EARLY_Z_THEN_LATE_Z;
 	else
 		z_order = V_02880C_LATE_Z;
+
+	if (ps->info.ps.depth_layout == FRAG_DEPTH_LAYOUT_GREATER)
+		conservative_z_export = V_02880C_EXPORT_GREATER_THAN_Z;
+	else if (ps->info.ps.depth_layout == FRAG_DEPTH_LAYOUT_LESS)
+		conservative_z_export = V_02880C_EXPORT_LESS_THAN_Z;
 
 	bool disable_rbplus = device->physical_device->rad_info.has_rbplus &&
 	                      !device->physical_device->rad_info.rbplus_allowed;
@@ -4501,6 +4507,7 @@ radv_compute_db_shader_control(const struct radv_device *device,
 		S_02880C_STENCIL_TEST_VAL_EXPORT_ENABLE(ps->info.ps.writes_stencil) |
 		S_02880C_KILL_ENABLE(!!ps->info.ps.can_discard) |
 		S_02880C_MASK_EXPORT_ENABLE(mask_export_enable) |
+		S_02880C_CONSERVATIVE_Z_EXPORT(conservative_z_export) |
 		S_02880C_Z_ORDER(z_order) |
 		S_02880C_DEPTH_BEFORE_SHADER(ps->info.ps.early_fragment_test) |
 		S_02880C_PRE_SHADER_DEPTH_COVERAGE_ENABLE(ps->info.ps.post_depth_coverage) |

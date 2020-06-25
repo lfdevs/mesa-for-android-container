@@ -102,7 +102,7 @@ static bool do_winsys_init(struct amdgpu_winsys *ws,
 
    handle_env_var_force_family(ws);
 
-   ws->addrlib = amdgpu_addr_create(&ws->info, &ws->amdinfo, &ws->info.max_alignment);
+   ws->addrlib = ac_addrlib_create(&ws->info, &ws->amdinfo, &ws->info.max_alignment);
    if (!ws->addrlib) {
       fprintf(stderr, "amdgpu: Cannot create addrlib.\n");
       goto fail;
@@ -144,7 +144,7 @@ static void do_winsys_deinit(struct amdgpu_winsys *ws)
    simple_mtx_destroy(&ws->global_bo_list_lock);
    simple_mtx_destroy(&ws->bo_export_table_lock);
 
-   AddrDestroy(ws->addrlib);
+   ac_addrlib_destroy(ws->addrlib);
    amdgpu_device_deinitialize(ws->dev);
    FREE(ws);
 }
