@@ -346,7 +346,7 @@ vbo_bind_vertices(struct gl_context *ctx, const struct tnl_vertex_array *arrays,
                            sp = (char *)ADD_POINTERS(
 				nouveau_bufferobj_sys(obj), p) + delta;
                         } else {
-                           sp = p + delta;
+                           sp = (char *)(p + delta);
                         }
 			char *dp  = nouveau_get_scratch(ctx, n * a->stride,
 							&bo[i], &offset[i]);

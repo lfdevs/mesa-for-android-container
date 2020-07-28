@@ -276,6 +276,37 @@ find_freqs(void)
 	free(path);
 }
 
+static const char * compatibles[] = {
+		"qcom,adreno-3xx",
+		"qcom,kgsl-3d0",
+		"amd,imageon",
+		"qcom,adreno",
+};
+
+/**
+ * compatstrs is a list of compatible strings separated by null, ie.
+ *
+ *       compatible = "qcom,adreno-630.2", "qcom,adreno";
+ *
+ * would result in "qcom,adreno-630.2\0qcom,adreno\0"
+ */
+static bool match_compatible(char *compatstrs, int sz)
+{
+	while (sz > 0) {
+		char *compatible = compatstrs;
+
+		for (unsigned i = 0; i < ARRAY_SIZE(compatibles); i++) {
+			if (strcmp(compatible, compatibles[i]) == 0) {
+				return true;
+			}
+		}
+
+		compatstrs += strlen(compatible) + 1;
+		sz -= strlen(compatible) + 1;
+	}
+	return false;
+}
+
 static int
 find_device_fn(const char *fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
 {
@@ -284,10 +315,7 @@ find_device_fn(const char *fpath, const struct stat *sb, int typeflag, struct FT
 
 	if (strcmp(fname, "compatible") == 0) {
 		char *str = readfile(fpath, &sz);
-		if ((strcmp(str, "qcom,adreno-3xx") == 0) ||
-				(strcmp(str, "qcom,kgsl-3d0") == 0) ||
-				(strstr(str, "amd,imageon") == str) ||
-				(strstr(str, "qcom,adreno") == str)) {
+		if (match_compatible(str, sz)) {
 			int dlen = strlen(fpath) - strlen("/compatible");
 			dev.dtnode = malloc(dlen + 1);
 			memcpy(dev.dtnode, fpath, dlen);

@@ -1,0 +1,230 @@
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html lang="en">
+<head>
+<meta http-equiv="content-type" content="text/html; charset=utf-8">
+<title>Mesa Release Notes</title>
+<link rel="stylesheet" type="text/css" href="../mesa.css">
+</head>
+<body>
+
+<div class="header">
+<h1>The Mesa 3D Graphics Library</h1>
+</div>
+
+<iframe src="../contents.html"></iframe>
+<div class="content">
+
+<h1>Mesa 20.1.3 Release Notes / 2020-07-08</h1>
+
+<p>
+    Mesa 20.1.3 is a bug fix release which fixes bugs found since the 20.1.2 release.
+</p>
+<p>
+Mesa 20.1.3 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is <strong>only</strong> available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+</p>
+<p>
+Mesa 20.1.3 implements the Vulkan 1.2 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+</p>
+
+<h2>SHA256 checksum</h2>
+<pre>
+9872b8d46bee822177ffbe4292addff7bdb84cefc1fe776b8e6b2881a8362bf1  mesa-20.1.3.tar.xz
+</pre>
+
+
+<h2>New features</h2>
+
+<ul>
+    <li>None</li>
+</ul>
+
+<h2>Bug fixes</h2>
+
+<ul>
+    <li>vkGetSemaphoreCounterValue doesn&#x27;t update without vkWaitSemaphores calls on Intel UHD 620</li>
+    <li>[v3d] corruption when GS omits some vertices</li>
+    <li>[RADV] Non-precise occlusion queries return non-zero when all fragments are discarded</li>
+    <li>[DXVK] Project Cars rendering problems</li>
+    <li>Add fallthrough to prevent errors caused by missing break</li>
+    <li>i965/20.1: gray rendering with torcs racing</li>
+    <li>glBindBufferRange call seems to be ignored by one of two shader-programs on radeon cards</li>
+    <li>[bisected][g33] piglit.spec.ext_framebuffer_object.fbo-cubemap failure</li>
+    <li>Double unlock in rbug_context.c</li>
+    <li>ci: Report flakes on IRC from baremetal tests</li>
+</ul>
+
+<h2>Changes</h2>
+
+<ul>
+    <p>Bas Nieuwenhuizen (4):</p>
+    <li>      meson: Do not require shader cache for radv.</li>
+    <li>      radv: Set handle types in Android semaphore/fence import.</li>
+    <li>      radv: Always enable PERFECT_ZPASS_COUNTS.</li>
+    <li>      radv: Use correct semaphore handle type for Android import.</li>
+    <p></p>
+    <p>Christian Gmeiner (1):</p>
+    <li>      etnaviv: replace prims-emitted query</li>
+    <p></p>
+    <p>Danylo Piliaiev (1):</p>
+    <li>      iris: Fix fast-clearing of depth via glClearTex(Sub)Image</li>
+    <p></p>
+    <p>Dave Airlie (6):</p>
+    <li>      gallivm/nir: fix const loading on big endian systems</li>
+    <li>      glsl: fix constant packing for 64-bit big endian.</li>
+    <li>      gallivm/nir: fix big-endian 64-bit splitting/merging.</li>
+    <li>      llvmpipe: fix occlusion queries on big-endian.</li>
+    <li>      mesa/get: fix enum16 big-endian getting.</li>
+    <li>      draw/llvm: fix big-endian mask adjusting</li>
+    <p></p>
+    <p>Dylan Baker (1):</p>
+    <li>      mesa/swrast: use logf2 instead of util_fast_log2</li>
+    <p></p>
+    <p>Emmanuel (3):</p>
+    <li>      meson: Do not enable USE_ELF_TLS for FreeBSD</li>
+    <li>      iris: Explicitly cast value to uint64_t</li>
+    <li>      i965: Explicitly cast value to uint64_t</li>
+    <p></p>
+    <p>Emmanuel Vadot (1):</p>
+    <li>      meson: Add versioning for xvmc tracker</li>
+    <p></p>
+    <p>Eric Anholt (26):</p>
+    <li>      ci: Clean up setup of the job-specific env vars in baremetal testing.</li>
+    <li>      ci: Enable IRC flake reporting on freedreno baremetal boards.</li>
+    <li>      ci: Improve the flakes reports on IRC.</li>
+    <li>      ci: Fix the nick used in IRC reporting.</li>
+    <li>      ci: Move cross file generation to a shared script.</li>
+    <li>      ci: Autodetect whether we need cross setup in lava_arm builds.</li>
+    <li>      ci: Make cmake toolchain file for deqp cross build setup.</li>
+    <li>      ci: Make the create-rootfs more resilient.</li>
+    <li>      ci: Update versions of packages to remove from rootfses.</li>
+    <li>      ci: Switch the baremetal runner to be an x86 docker image.</li>
+    <li>      ci: Disable SMP on the a5xx boards.</li>
+    <li>      ci: Fix DEQP_CASELIST_FILTER (used by a630 noubo run)</li>
+    <li>      ci: Do an explicit NIR validation-enabled pass on freedreno a630.</li>
+    <li>      ci: Improve baremetal&#x27;s logging of the job env var passthrough.</li>
+    <li>      ci: Drop double &quot;.txt&quot; suffix on the unexpected results file.</li>
+    <li>      ci: Drop old comment about enabling --deqp-watchdog.</li>
+    <li>      ci: Auto-detect the architecture for VK ICD filenames.</li>
+    <li>      ci: Add DEQP_EXPECTED_RENDERER support for VK tests.</li>
+    <li>      ci: Move baremetal DEQP_NO_SAVE_RESULTS setup to the yml.</li>
+    <li>      ci: Quick exit qpa extraction for non-matching qpas.</li>
+    <li>      ci: Disable the firmware loader user helper option in arm64 kernels.</li>
+    <li>      ci: Build a cheza kernel.</li>
+    <li>      ci: Add scripts for controlling bare-metal chezas.</li>
+    <li>      ci: Switch cheza (freedreno a630) testing to baremetal.</li>
+    <li>      ci: Don&#x27;t build an arm_test container now that the last user is gone.</li>
+    <li>      ci: Rename x86_cross_arm_test to just arm_test.</li>
+    <p></p>
+    <p>Eric Engestrom (4):</p>
+    <li>      docs/relnotes: add sha256 sums to 20.1.2</li>
+    <li>      .pick_status.json: Update to 0ca7bd73c6f1f59dcb41ead7a3923c55040377d9</li>
+    <li>      gitlab-ci: exclude scripts that don&#x27;t affect the build</li>
+    <li>      .pick_status.json: Mark 293221dddaedb410781d39fdecf3c93bb111475b as denominated</li>
+    <p></p>
+    <p>Erik Faye-Lund (2):</p>
+    <li>      gallium/docs: fixup formatting of numbered lists</li>
+    <li>      gallium/docs: remove reference to non-existent label</li>
+    <p></p>
+    <p>Frédéric Bonnard (2):</p>
+    <li>      clover: Fix types collision between c++ and altivec</li>
+    <li>      meson: Revert commit overriding C++ standard with gnu++11 on ppc64el</li>
+    <p></p>
+    <p>Greg V (1):</p>
+    <li>      gallium,util: undef ALIGN on FreeBSD to prevent name clash</li>
+    <p></p>
+    <p>Iago Toral Quiroga (1):</p>
+    <li>      v3d/compiler: fix spill offset</li>
+    <p></p>
+    <p>Ian Romanick (1):</p>
+    <li>      nir/algebraic: Don&#x27;t distrubte absolute-value into dot-products</li>
+    <p></p>
+    <p>Ilia Mirkin (3):</p>
+    <li>      freedreno/a3xx: there&#x27;s no r8i/ui rb format, only rg8i/rg8ui</li>
+    <li>      freedreno/a3xx: reinstate rgb10_a2ui texture format</li>
+    <li>      freedreno/ir3: avoid applying (sat) on bary.f</li>
+    <p></p>
+    <p>Jason Ekstrand (2):</p>
+    <li>      vulkan/wsi: Don&#x27;t consider VK_SUBOPTIMAL_KHR to be an error condition</li>
+    <li>      anv: Handle clamping of inverted depth ranges</li>
+    <p></p>
+    <p>Lepton Wu (1):</p>
+    <li>      mapi: x86: Fix dynamic entries in x86 tsd stubs.</li>
+    <p></p>
+    <p>Lionel Landwerlin (1):</p>
+    <li>      anv: garbage collect timeline semaphore when querying value</li>
+    <p></p>
+    <p>Marcin Ślusarz (2):</p>
+    <li>      st/mesa: fix reporting of float perf counters max value</li>
+    <li>      iris: return max counter value for AMD_performance_monitor</li>
+    <p></p>
+    <p>Marek Olšák (1):</p>
+    <li>      radeonsi: don&#x27;t flush in fence_server_sync</li>
+    <p></p>
+    <p>Michel Dänzer (8):</p>
+    <li>      gitlab-ci: Use YAML anchor for llvmpipe paths in virgl rules</li>
+    <li>      gitlab-ci: Move down container_pre_build.sh invocation in x86_build.sh</li>
+    <li>      gitlab-ci: Add Debian testing repository for x86_build image</li>
+    <li>      gitlab-ci: Install WINE from Debian testing</li>
+    <li>      gitlab-ci: Move lib{drm,pciaccess}-dev cross packages out of loop</li>
+    <li>      gitlab-ci: Install g++-mingw-w64-x86-64-win32 instead of mingw-w64</li>
+    <li>      gitlab-ci: Enable -Werror in `meson-s390x` job</li>
+    <li>      gitlab-ci: Also list arm/x86_build in needs: of test jobs</li>
+    <p></p>
+    <p>Neil Armstrong (2):</p>
+    <li>      Revert &quot;CI: Disable Lima jobs due to lab unhealthiness&quot;</li>
+    <li>      Revert &quot;CI: Disable Panfrost Mali-T820 jobs&quot;</li>
+    <p></p>
+    <p>Neil Roberts (3):</p>
+    <li>      v3d: Add missing macro for stvpmd instruction</li>
+    <li>      v3d: Use stvpmd for non-uniform offsets in GS</li>
+    <li>      v3d/compiler: Fix sorting the gs and fs inputs</li>
+    <p></p>
+    <p>Pablo Saavedra (5):</p>
+    <li>      ci: TRACES_DB_PATH and RESULTS_PATH defined as relative paths</li>
+    <li>      ci: ArgumentParser receives the args from the main parameters</li>
+    <li>      ci: Migrate tracie tests done in shell script to pytest</li>
+    <li>      ci: Split test_tracie_skips_traces_without_checksum in separate cases</li>
+    <li>      ci: Fix TypoError error when traces in traces.yml is an empty list</li>
+    <p></p>
+    <p>Pavel Asyutchenko (1):</p>
+    <li>      vulkan/overlay: fix crash on destroying NULL swapchain</li>
+    <p></p>
+    <p>Pierre-Eric Pelloux-Prayer (1):</p>
+    <li>      st/mesa: do not clear NewDriverState for inactive states</li>
+    <p></p>
+    <p>Rhys Perry (1):</p>
+    <li>      radv: enable zerovram for Quantic Dream games</li>
+    <p></p>
+    <p>Rob Clark (1):</p>
+    <li>      freedreno/fdperf: better compatible string matching</li>
+    <p></p>
+    <p>Samuel Pitoiset (3):</p>
+    <li>      Revert &quot;vulkan/wsi/x11: Ensure we create at least minImageCount images.&quot;</li>
+    <li>      radv,vulkan: add a new x11 wsi drirc workaround for DOOM Eternal</li>
+    <li>      radv: disable FMASK compression when drawing with GENERAL layout</li>
+    <p></p>
+    <p>Timothy Arceri (6):</p>
+    <li>      gallivm: add missing break</li>
+    <li>      nir: add missing break to nir_opt_access()</li>
+    <li>      mesa: fix fallthrough in glformats</li>
+    <li>      mesa: fix unintended fallthrough in glIsEnabled()</li>
+    <li>      nouveau: fix pointer-sign warning</li>
+    <li>      radeonsi: fix SI_NUM_ATOMS</li>
+    <p></p>
+    <p>Vinson Lee (1):</p>
+    <li>      rbug: Fix rbug_delete_vs_state lock acquisition.</li>
+    <p></p>
+    <p></p>
+</ul>
+
+</div>
+</body>
+</html>

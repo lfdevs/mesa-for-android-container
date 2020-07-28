@@ -229,6 +229,7 @@ union value {
    GLint value_int_4[4];
    GLint64 value_int64;
    GLenum value_enum;
+   GLenum16 value_enum16;
    GLubyte value_ubyte;
    GLshort value_short;
    GLuint value_uint;
@@ -750,7 +751,7 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
       break;
 
    case GL_READ_BUFFER:
-      v->value_enum = ctx->ReadBuffer->ColorReadBuffer;
+      v->value_enum16 = ctx->ReadBuffer->ColorReadBuffer;
       break;
 
    case GL_MAP2_GRID_DOMAIN:
@@ -849,11 +850,11 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
       break;
    case GL_LIST_MODE:
       if (!ctx->CompileFlag)
-         v->value_enum = 0;
+         v->value_enum16 = 0;
       else if (ctx->ExecuteFlag)
-         v->value_enum = GL_COMPILE_AND_EXECUTE;
+         v->value_enum16 = GL_COMPILE_AND_EXECUTE;
       else
-         v->value_enum = GL_COMPILE;
+         v->value_enum16 = GL_COMPILE;
       break;
 
    case GL_VIEWPORT:
@@ -869,20 +870,20 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
       break;
 
    case GL_ACTIVE_STENCIL_FACE_EXT:
-      v->value_enum = ctx->Stencil.ActiveFace ? GL_BACK : GL_FRONT;
+      v->value_enum16 = ctx->Stencil.ActiveFace ? GL_BACK : GL_FRONT;
       break;
 
    case GL_STENCIL_FAIL:
-      v->value_enum = ctx->Stencil.FailFunc[ctx->Stencil.ActiveFace];
+      v->value_enum16 = ctx->Stencil.FailFunc[ctx->Stencil.ActiveFace];
       break;
    case GL_STENCIL_FUNC:
-      v->value_enum = ctx->Stencil.Function[ctx->Stencil.ActiveFace];
+      v->value_enum16 = ctx->Stencil.Function[ctx->Stencil.ActiveFace];
       break;
    case GL_STENCIL_PASS_DEPTH_FAIL:
-      v->value_enum = ctx->Stencil.ZFailFunc[ctx->Stencil.ActiveFace];
+      v->value_enum16 = ctx->Stencil.ZFailFunc[ctx->Stencil.ActiveFace];
       break;
    case GL_STENCIL_PASS_DEPTH_PASS:
-      v->value_enum = ctx->Stencil.ZPassFunc[ctx->Stencil.ActiveFace];
+      v->value_enum16 = ctx->Stencil.ZPassFunc[ctx->Stencil.ActiveFace];
       break;
    case GL_STENCIL_REF:
       v->value_int = _mesa_get_stencil_ref(ctx, ctx->Stencil.ActiveFace);

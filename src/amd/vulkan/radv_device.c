@@ -554,6 +554,10 @@ radv_handle_per_app_options(struct radv_instance *instance,
 			 * rendering issues.
 			 */
 			instance->debug_flags |= RADV_DEBUG_ZERO_VRAM;
+		} else if (!strcmp(engine_name, "Quantic Dream Engine")) {
+			/* Fix various artifacts in Detroit: Become Human */
+			instance->debug_flags |= RADV_DEBUG_ZERO_VRAM |
+			                         RADV_DEBUG_DISCARD_TO_DEMOTE;
 		}
 	}
 
@@ -576,6 +580,7 @@ DRI_CONF_BEGIN
 		DRI_CONF_ADAPTIVE_SYNC("true")
 		DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(0)
 		DRI_CONF_VK_X11_STRICT_IMAGE_COUNT("false")
+		DRI_CONF_VK_X11_ENSURE_MIN_IMAGE_COUNT("false")
 		DRI_CONF_RADV_NO_DYNAMIC_BOUNDS("false")
 	DRI_CONF_SECTION_END
 
@@ -7547,7 +7552,7 @@ VkResult radv_GetFenceFdKHR(VkDevice _device,
 		ret = device->ws->export_syncobj_to_sync_file(device->ws, syncobj_handle, pFd);
 		if (!ret) {
 			if (fence->temp_syncobj) {
-				close (fence->temp_syncobj);
+				device->ws->destroy_syncobj(device->ws, fence->temp_syncobj);
 				fence->temp_syncobj = 0;
 			} else {
 				device->ws->reset_syncobj(device->ws, syncobj_handle);

@@ -1307,18 +1307,27 @@ static int gfx9_compute_miptree(struct ac_addrlib *addrlib,
 
 	surf->u.gfx9.surf_slice_size = out.sliceSize;
 	surf->u.gfx9.surf_pitch = out.pitch;
+	surf->u.gfx9.surf_height = out.height;
+	surf->surf_size = out.surfSize;
+	surf->surf_alignment = out.baseAlign;
+
 	if (!compressed && surf->blk_w > 1 && out.pitch == out.pixelPitch &&
 	    surf->u.gfx9.surf.swizzle_mode == ADDR_SW_LINEAR) {
-		/* Adjust surf_pitch to be in elements units,
-		 * not in pixels */
+		/* Adjust surf_pitch to be in elements units not in pixels */
 		surf->u.gfx9.surf_pitch =
 			align(surf->u.gfx9.surf_pitch / surf->blk_w, 256 / surf->bpe);
 		surf->u.gfx9.surf.epitch = MAX2(surf->u.gfx9.surf.epitch,
 						surf->u.gfx9.surf_pitch * surf->blk_w - 1);
+		/* The surface is really a surf->bpe bytes per pixel surface even if we
+		 * use it as a surf->bpe bytes per element one.
+		 * Adjust surf_slice_size and surf_size to reflect the change
+		 * made to surf_pitch.
+		 */
+		surf->u.gfx9.surf_slice_size = MAX2(
+			surf->u.gfx9.surf_slice_size,
+			surf->u.gfx9.surf_pitch * out.height * surf->bpe * surf->blk_w);
+		surf->surf_size = surf->u.gfx9.surf_slice_size * in->numSlices;
 	}
-	surf->u.gfx9.surf_height = out.height;
-	surf->surf_size = out.surfSize;
-	surf->surf_alignment = out.baseAlign;
 
 	if (in->swizzleMode == ADDR_SW_LINEAR) {
 		for (unsigned i = 0; i < in->numMipLevels; i++) {

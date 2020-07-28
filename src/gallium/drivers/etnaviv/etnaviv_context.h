@@ -184,7 +184,7 @@ struct etna_context {
 
    /* stats/counters */
    struct {
-      uint64_t prims_emitted;
+      uint64_t prims_generated;
       uint64_t draw_calls;
       uint64_t rs_operations;
    } stats;

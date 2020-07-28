@@ -452,6 +452,21 @@ isub64_saturate(int64_t a, int64_t b)
    return a - b;
 }
 
+static uint64_t
+pack_2x32(uint32_t a, uint32_t b)
+{
+   uint64_t v = a;
+   v |= (uint64_t)b << 32;
+   return v;
+}
+
+static void
+unpack_2x32(uint64_t p, uint32_t *a, uint32_t *b)
+{
+   *a = p & 0xffffffff;
+   *b = (p >> 32);
+}
+
 /**
  * Get the constant that is ultimately referenced by an r-value, in a constant
  * expression evaluation context.

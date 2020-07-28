@@ -453,6 +453,9 @@ panfrost_batch_update_bo_access(struct panfrost_batch *batch,
                 }
                 panfrost_batch_fence_reference(batch->out_sync);
 
+                if (access->writer)
+                        panfrost_batch_fence_unreference(access->writer);
+
                 /* We now are the new writer. */
                 access->writer = batch->out_sync;
                 access->type = access_type;

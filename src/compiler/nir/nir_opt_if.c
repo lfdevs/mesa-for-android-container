@@ -933,6 +933,17 @@ opt_if_simplification(nir_builder *b, nir_if *nif)
    nir_block *then_block = nir_if_last_then_block(nif);
    nir_block *else_block = nir_if_last_else_block(nif);
 
+   if (nir_block_ends_in_jump(else_block)) {
+      /* Even though this if statement has a jump on one side, we may still have
+       * phis afterwards.  Single-source phis can be produced by loop unrolling
+       * or dead control-flow passes and are perfectly legal.  Run a quick phi
+       * removal on the block after the if to clean up any such phis.
+       */
+      nir_block *const next_block =
+         nir_cf_node_as_block(nir_cf_node_next(&nif->cf_node));
+      nir_opt_remove_phis_block(next_block);
+   }
+
    rewrite_phi_predecessor_blocks(nif, then_block, else_block, else_block,
                                   then_block);
 

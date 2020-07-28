@@ -1247,6 +1247,7 @@ enum image_function_flags {
    IMAGE_FUNCTION_AVAIL_ATOMIC_EXCHANGE = (1 << 8),
    IMAGE_FUNCTION_AVAIL_ATOMIC_ADD = (1 << 9),
    IMAGE_FUNCTION_EXT_ONLY = (1 << 10),
+   IMAGE_FUNCTION_SUPPORTS_SIGNED_DATA_TYPE = (1 << 11),
 };
 
 } /* anonymous namespace */
@@ -4613,14 +4614,15 @@ builtin_builder::add_image_function(const char *name,
    ir_function *f = new(mem_ctx) ir_function(name);
 
    for (unsigned i = 0; i < ARRAY_SIZE(types); ++i) {
-      if ((types[i]->sampled_type != GLSL_TYPE_FLOAT ||
-           (flags & IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE)) &&
-          (types[i]->sampler_dimensionality == GLSL_SAMPLER_DIM_MS ||
-           !(flags & IMAGE_FUNCTION_MS_ONLY)))
-         f->add_signature(_image(prototype, types[i], intrinsic_name,
-                                 num_arguments, flags, intrinsic_id));
+      if (types[i]->sampled_type == GLSL_TYPE_FLOAT && !(flags & IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE))
+         continue;
+      if (types[i]->sampled_type == GLSL_TYPE_INT && !(flags & IMAGE_FUNCTION_SUPPORTS_SIGNED_DATA_TYPE))
+         continue;
+      if ((types[i]->sampler_dimensionality != GLSL_SAMPLER_DIM_MS) && (flags & IMAGE_FUNCTION_MS_ONLY))
+         continue;
+      f->add_signature(_image(prototype, types[i], intrinsic_name,
+                              num_arguments, flags, intrinsic_id));
    }
-
    shader->symbols->add_function(f);
 }
 
@@ -4634,6 +4636,7 @@ builtin_builder::add_image_functions(bool glsl)
                        &builtin_builder::_image_prototype, 0,
                        (flags | IMAGE_FUNCTION_HAS_VECTOR_DATA_TYPE |
                        IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE |
+                       IMAGE_FUNCTION_SUPPORTS_SIGNED_DATA_TYPE |
                        IMAGE_FUNCTION_READ_ONLY),
                       ir_intrinsic_image_load);
 
@@ -4643,6 +4646,7 @@ builtin_builder::add_image_functions(bool glsl)
                       (flags | IMAGE_FUNCTION_RETURNS_VOID |
                        IMAGE_FUNCTION_HAS_VECTOR_DATA_TYPE |
                        IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE |
+                       IMAGE_FUNCTION_SUPPORTS_SIGNED_DATA_TYPE |
                        IMAGE_FUNCTION_WRITE_ONLY),
                       ir_intrinsic_image_store);
 
@@ -4652,32 +4656,38 @@ builtin_builder::add_image_functions(bool glsl)
                       "__intrinsic_image_atomic_add",
                       &builtin_builder::_image_prototype, 1,
                       (flags | IMAGE_FUNCTION_AVAIL_ATOMIC_ADD |
-                       IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE),
+                       IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE |
+                       IMAGE_FUNCTION_SUPPORTS_SIGNED_DATA_TYPE),
                       ir_intrinsic_image_atomic_add);
 
    add_image_function(glsl ? "imageAtomicMin" : "__intrinsic_image_atomic_min",
                       "__intrinsic_image_atomic_min",
-                      &builtin_builder::_image_prototype, 1, atom_flags,
+                      &builtin_builder::_image_prototype, 1,
+                      atom_flags | IMAGE_FUNCTION_SUPPORTS_SIGNED_DATA_TYPE,
                       ir_intrinsic_image_atomic_min);
 
    add_image_function(glsl ? "imageAtomicMax" : "__intrinsic_image_atomic_max",
                       "__intrinsic_image_atomic_max",
-                      &builtin_builder::_image_prototype, 1, atom_flags,
+                      &builtin_builder::_image_prototype, 1,
+                      atom_flags | IMAGE_FUNCTION_SUPPORTS_SIGNED_DATA_TYPE,
                       ir_intrinsic_image_atomic_max);
 
    add_image_function(glsl ? "imageAtomicAnd" : "__intrinsic_image_atomic_and",
                       "__intrinsic_image_atomic_and",
-                      &builtin_builder::_image_prototype, 1, atom_flags,
+                      &builtin_builder::_image_prototype, 1,
+                      atom_flags | IMAGE_FUNCTION_SUPPORTS_SIGNED_DATA_TYPE,
                       ir_intrinsic_image_atomic_and);
 
    add_image_function(glsl ? "imageAtomicOr" : "__intrinsic_image_atomic_or",
                       "__intrinsic_image_atomic_or",
-                      &builtin_builder::_image_prototype, 1, atom_flags,
+                      &builtin_builder::_image_prototype, 1,
+                      atom_flags | IMAGE_FUNCTION_SUPPORTS_SIGNED_DATA_TYPE,
                       ir_intrinsic_image_atomic_or);
 
    add_image_function(glsl ? "imageAtomicXor" : "__intrinsic_image_atomic_xor",
                       "__intrinsic_image_atomic_xor",
-                      &builtin_builder::_image_prototype, 1, atom_flags,
+                      &builtin_builder::_image_prototype, 1,
+                      atom_flags | IMAGE_FUNCTION_SUPPORTS_SIGNED_DATA_TYPE,
                       ir_intrinsic_image_atomic_xor);
 
    add_image_function((glsl ? "imageAtomicExchange" :
@@ -4685,25 +4695,29 @@ builtin_builder::add_image_functions(bool glsl)
                       "__intrinsic_image_atomic_exchange",
                       &builtin_builder::_image_prototype, 1,
                       (flags | IMAGE_FUNCTION_AVAIL_ATOMIC_EXCHANGE |
+                       IMAGE_FUNCTION_SUPPORTS_SIGNED_DATA_TYPE |
                        IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE),
                       ir_intrinsic_image_atomic_exchange);
 
    add_image_function((glsl ? "imageAtomicCompSwap" :
                        "__intrinsic_image_atomic_comp_swap"),
                       "__intrinsic_image_atomic_comp_swap",
-                      &builtin_builder::_image_prototype, 2, atom_flags,
+                      &builtin_builder::_image_prototype, 2,
+                      atom_flags | IMAGE_FUNCTION_SUPPORTS_SIGNED_DATA_TYPE,
                       ir_intrinsic_image_atomic_comp_swap);
 
    add_image_function(glsl ? "imageSize" : "__intrinsic_image_size",
                       "__intrinsic_image_size",
                       &builtin_builder::_image_size_prototype, 1,
-                      flags | IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE,
+                      flags | IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE |
+                      IMAGE_FUNCTION_SUPPORTS_SIGNED_DATA_TYPE,
                       ir_intrinsic_image_size);
 
    add_image_function(glsl ? "imageSamples" : "__intrinsic_image_samples",
                       "__intrinsic_image_samples",
                       &builtin_builder::_image_samples_prototype, 1,
                       flags | IMAGE_FUNCTION_SUPPORTS_FLOAT_DATA_TYPE |
+                      IMAGE_FUNCTION_SUPPORTS_SIGNED_DATA_TYPE |
                       IMAGE_FUNCTION_MS_ONLY,
                       ir_intrinsic_image_samples);
 

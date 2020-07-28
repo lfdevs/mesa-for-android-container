@@ -213,7 +213,7 @@ v3d_spill_reg(struct v3d_compile *c, int spill_temp)
         uint32_t spill_offset = 0;
 
         if (!is_uniform) {
-                uint32_t spill_offset = c->spill_size;
+                spill_offset = c->spill_size;
                 c->spill_size += V3D_CHANNELS * sizeof(uint32_t);
 
                 if (spill_offset == 0)

@@ -3059,14 +3059,15 @@ _mesa_gles_error_check_format_and_type(const struct gl_context *ctx,
             if (ctx->Version <= 20)
                return GL_INVALID_OPERATION;
             break;
-         case GL_RGB:
-            if (_mesa_has_OES_texture_float(ctx) && internalFormat == format)
-               break;
          case GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT:
          case GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT:
             if (!_mesa_has_EXT_texture_compression_bptc(ctx))
                return GL_INVALID_OPERATION;
             break;
+         case GL_RGB:
+            if (_mesa_has_OES_texture_float(ctx) && internalFormat == format)
+               break;
+            /* fallthrough */
          default:
             return GL_INVALID_OPERATION;
          }

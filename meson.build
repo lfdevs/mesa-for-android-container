@@ -392,7 +392,7 @@ if with_egl and not (with_platform_drm or with_platform_surfaceless or with_plat
 endif
 
 # Android uses emutls for versions <= P/28. For USE_ELF_TLS we need ELF TLS.
-if host_machine.system() != 'windows' and (not with_platform_android or get_option('platform-sdk-version') >= 29)
+if not ['windows', 'freebsd'].contains(host_machine.system()) and (not with_platform_android or get_option('platform-sdk-version') >= 29)
   pre_args += '-DUSE_ELF_TLS'
 endif
 
@@ -705,7 +705,6 @@ if get_option('power8') != 'false'
 endif
 
 _opencl = get_option('gallium-opencl')
-clover_cpp_std = []
 if _opencl != 'disabled'
   if not with_gallium
     error('OpenCL Clover implementation requires at least one gallium driver.')
@@ -723,14 +722,6 @@ if _opencl != 'disabled'
   else
     dep_spirv_tools = null_dep
     dep_llvmspirvlib = null_dep
-  endif
-
-  if host_machine.cpu_family().startswith('ppc') and cpp.compiles('''
-      #if !defined(__VEC__) || !defined(__ALTIVEC__)
-      #error "AltiVec not enabled"
-      #endif''',
-      name : 'Altivec')
-    clover_cpp_std += ['cpp_std=gnu++11']
   endif
 else
   dep_clc = null_dep
@@ -833,9 +824,6 @@ if _shader_cache != 'false'
     pre_args += '-DENABLE_SHADER_CACHE'
     with_shader_cache = true
   endif
-endif
-if with_amd_vk and not with_shader_cache
-  error('Radv requires shader cache support')
 endif
 
 # Check for GCC style builtins

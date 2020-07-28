@@ -493,7 +493,7 @@ panfrost_bo_import(struct panfrost_device *dev, int fd)
                  * acquired it in the meantime.
                  */
                 if (p_atomic_read(&bo->refcnt) == 0)
-                        p_atomic_set(&newbo->refcnt, 1);
+                        p_atomic_set(&bo->refcnt, 1);
                 else
                         panfrost_bo_reference(bo);
                 assert(bo->cpu);

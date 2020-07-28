@@ -1095,7 +1095,7 @@ wsi_common_acquire_next_image2(const struct wsi_device *wsi,
 
    VkResult result = swapchain->acquire_next_image(swapchain, pAcquireInfo,
                                                    pImageIndex);
-   if (result != VK_SUCCESS)
+   if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
       return result;
 
    if (wsi->set_memory_ownership) {
@@ -1119,7 +1119,7 @@ wsi_common_acquire_next_image2(const struct wsi_device *wsi,
                                    image->memory);
    }
 
-   return VK_SUCCESS;
+   return result;
 }
 
 VkResult
@@ -1221,7 +1221,7 @@ wsi_common_queue_present(const struct wsi_device *wsi,
          region = &regions->pRegions[i];
 
       result = swapchain->queue_present(swapchain, image_index, region);
-      if (result != VK_SUCCESS)
+      if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
          goto fail_present;
 
       if (wsi->set_memory_ownership) {

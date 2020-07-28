@@ -72,16 +72,17 @@ iris_get_monitor_info(struct pipe_screen *pscreen, unsigned index,
    case GEN_PERF_COUNTER_DATA_TYPE_BOOL32:
    case GEN_PERF_COUNTER_DATA_TYPE_UINT32:
       info->type = PIPE_DRIVER_QUERY_TYPE_UINT;
-      info->max_value.u32 = 0;
+      assert(counter->raw_max <= UINT32_MAX);
+      info->max_value.u32 = (uint32_t)counter->raw_max;
       break;
    case GEN_PERF_COUNTER_DATA_TYPE_UINT64:
       info->type = PIPE_DRIVER_QUERY_TYPE_UINT64;
-      info->max_value.u64 = 0;
+      info->max_value.u64 = counter->raw_max;
       break;
    case GEN_PERF_COUNTER_DATA_TYPE_FLOAT:
    case GEN_PERF_COUNTER_DATA_TYPE_DOUBLE:
       info->type = PIPE_DRIVER_QUERY_TYPE_FLOAT;
-      info->max_value.u64 = -1;
+      info->max_value.f = counter->raw_max;
       break;
    default:
       assert(false);

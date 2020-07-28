@@ -67,14 +67,14 @@ dump_validation_list(struct intel_batchbuffer *batch)
       uint64_t flags = batch->validation_list[i].flags;
       assert(batch->validation_list[i].handle ==
              batch->exec_bos[i]->gem_handle);
-      fprintf(stderr, "[%2d]: %2d %-14s %p %s%-7s @ 0x%016llx%s (%"PRIu64"B)\n",
+      fprintf(stderr, "[%2d]: %2d %-14s %p %s%-7s @ 0x%"PRIx64"%s (%"PRIu64"B)\n",
               i,
               batch->validation_list[i].handle,
               batch->exec_bos[i]->name,
               batch->exec_bos[i],
               (flags & EXEC_OBJECT_SUPPORTS_48B_ADDRESS) ? "(48b" : "(32b",
               (flags & EXEC_OBJECT_WRITE) ? " write)" : ")",
-              batch->validation_list[i].offset,
+              (uint64_t)batch->validation_list[i].offset,
               (flags & EXEC_OBJECT_PINNED) ? " (pinned)" : "",
               batch->exec_bos[i]->size);
    }
@@ -729,9 +729,9 @@ execbuffer(int fd,
 
       /* Update brw_bo::gtt_offset */
       if (batch->validation_list[i].offset != bo->gtt_offset) {
-         DBG("BO %d migrated: 0x%" PRIx64 " -> 0x%llx\n",
+         DBG("BO %d migrated: 0x%" PRIx64 " -> 0x%" PRIx64 "\n",
              bo->gem_handle, bo->gtt_offset,
-             batch->validation_list[i].offset);
+             (uint64_t)batch->validation_list[i].offset);
          assert(!(bo->kflags & EXEC_OBJECT_PINNED));
          bo->gtt_offset = batch->validation_list[i].offset;
       }

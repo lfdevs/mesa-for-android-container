@@ -256,7 +256,8 @@ vtn_const_ssa_value(struct vtn_builder *b, nir_constant *constant,
       break;
    }
 
-   case GLSL_TYPE_STRUCT: {
+   case GLSL_TYPE_STRUCT:
+   case GLSL_TYPE_INTERFACE: {
       unsigned elems = glsl_get_length(val->type);
       val->elems = ralloc_array(b, struct vtn_ssa_value *, elems);
       for (unsigned i = 0; i < elems; i++) {

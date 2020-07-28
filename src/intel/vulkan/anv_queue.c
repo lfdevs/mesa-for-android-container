@@ -1620,23 +1620,35 @@ VkResult anv_ImportFenceFdKHR(
 
       break;
 
-   case VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT:
+   case VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT: {
       /* Sync files are a bit tricky.  Because we want to continue using the
        * syncobj implementation of WaitForFences, we don't use the sync file
        * directly but instead import it into a syncobj.
        */
       new_impl.type = ANV_FENCE_TYPE_SYNCOBJ;
 
-      new_impl.syncobj = anv_gem_syncobj_create(device, 0);
+      /* "If handleType is VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT, the
+       *  special value -1 for fd is treated like a valid sync file descriptor
+       *  referring to an object that has already signaled. The import
+       *  operation will succeed and the VkFence will have a temporarily
+       *  imported payload as if a valid file descriptor had been provided."
+       */
+      uint32_t create_flags = 0;
+      if (fd == -1)
+         create_flags |= DRM_SYNCOBJ_CREATE_SIGNALED;
+
+      new_impl.syncobj = anv_gem_syncobj_create(device, create_flags);
       if (!new_impl.syncobj)
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-      if (anv_gem_syncobj_import_sync_file(device, new_impl.syncobj, fd)) {
+      if (fd != -1 &&
+          anv_gem_syncobj_import_sync_file(device, new_impl.syncobj, fd)) {
          anv_gem_syncobj_destroy(device, new_impl.syncobj);
          return vk_errorf(device, NULL, VK_ERROR_INVALID_EXTERNAL_HANDLE,
                           "syncobj sync file import failed: %m");
       }
       break;
+   }
 
    default:
       return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE);
@@ -2167,6 +2179,7 @@ VkResult anv_GetSemaphoreCounterValue(
    switch (impl->type) {
    case ANV_SEMAPHORE_TYPE_TIMELINE: {
       pthread_mutex_lock(&device->mutex);
+      anv_timeline_gc_locked(device, &impl->timeline);
       *pValue = impl->timeline.highest_past;
       pthread_mutex_unlock(&device->mutex);
       return VK_SUCCESS;

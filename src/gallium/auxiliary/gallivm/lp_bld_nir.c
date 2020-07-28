@@ -350,8 +350,13 @@ static LLVMValueRef split_64bit(struct lp_build_nir_context *bld_base,
    LLVMValueRef shuffles2[LP_MAX_VECTOR_WIDTH/32];
    int len = bld_base->base.type.length * 2;
    for (unsigned i = 0; i < bld_base->base.type.length; i++) {
+#if UTIL_ARCH_LITTLE_ENDIAN
       shuffles[i] = lp_build_const_int32(gallivm, i * 2);
       shuffles2[i] = lp_build_const_int32(gallivm, (i * 2) + 1);
+#else
+      shuffles[i] = lp_build_const_int32(gallivm, (i * 2) + 1);
+      shuffles2[i] = lp_build_const_int32(gallivm, (i * 2));
+#endif
    }
 
    src = LLVMBuildBitCast(gallivm->builder, src, LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), len), "");
@@ -375,8 +380,13 @@ merge_64bit(struct lp_build_nir_context *bld_base,
    assert(len <= (2 * (LP_MAX_VECTOR_WIDTH/32)));
 
    for (i = 0; i < bld_base->base.type.length * 2; i+=2) {
+#if UTIL_ARCH_LITTLE_ENDIAN
       shuffles[i] = lp_build_const_int32(gallivm, i / 2);
       shuffles[i + 1] = lp_build_const_int32(gallivm, i / 2 + bld_base->base.type.length);
+#else
+      shuffles[i] = lp_build_const_int32(gallivm, i / 2 + bld_base->base.type.length);
+      shuffles[i + 1] = lp_build_const_int32(gallivm, i / 2);
+#endif
    }
    return LLVMBuildShuffleVector(builder, input, input2, LLVMConstVector(shuffles, len), "");
 }
@@ -862,7 +872,7 @@ static void visit_load_const(struct lp_build_nir_context *bld_base,
    LLVMValueRef result[NIR_MAX_VEC_COMPONENTS];
    struct lp_build_context *int_bld = get_int_bld(bld_base, true, instr->def.bit_size);
    for (unsigned i = 0; i < instr->def.num_components; i++)
-      result[i] = lp_build_const_int_vec(bld_base->base.gallivm, int_bld->type, instr->value[i].u64);
+      result[i] = lp_build_const_int_vec(bld_base->base.gallivm, int_bld->type, instr->def.bit_size == 32 ? instr->value[i].u32 : instr->value[i].u64);
    assign_ssa_dest(bld_base, &instr->def, result);
 }
 
@@ -1426,6 +1436,7 @@ static void visit_intrinsic(struct lp_build_nir_context *bld_base,
    case nir_intrinsic_global_atomic_exchange:
    case nir_intrinsic_global_atomic_comp_swap:
       visit_global_atomic(bld_base, instr, result);
+      break;
    case nir_intrinsic_vote_all:
    case nir_intrinsic_vote_any:
    case nir_intrinsic_vote_ieq:

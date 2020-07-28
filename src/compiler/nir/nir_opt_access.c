@@ -120,6 +120,7 @@ gather_intrinsic(struct access_state *state, nir_intrinsic_instr *instr)
 
       _mesa_set_add(state->vars_written, var);
       state->buffers_written = true;
+      break;
 
    case nir_intrinsic_memory_barrier:
       state->buffer_barriers = true;

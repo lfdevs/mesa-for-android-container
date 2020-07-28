@@ -4981,12 +4981,14 @@ ast_declarator_list::hir(exec_list *instructions,
       if (strncmp(this->type->specifier->type_name, "image", strlen("image")) == 0) {
          switch (this->type->qualifier.image_format) {
          case PIPE_FORMAT_R8_SINT:
-            /* No valid qualifier in this case, driver will need to look at
-             * the underlying image's format (just like no qualifier being
-             * present).
+            /* The GL_EXT_shader_image_load_store spec says:
+             *    A layout of "size1x8" is illegal for image variables associated
+             *    with floating-point data types.
              */
-            this->type->qualifier.image_format = PIPE_FORMAT_NONE;
-            break;
+            _mesa_glsl_error(& loc, state,
+                             "size1x8 is illegal for image variables "
+                             "with floating-point data types.");
+            return NULL;
          case PIPE_FORMAT_R16_SINT:
             this->type->qualifier.image_format = PIPE_FORMAT_R16_FLOAT;
             break;

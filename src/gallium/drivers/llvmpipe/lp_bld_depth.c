@@ -469,7 +469,11 @@ lp_build_occlusion_count(struct gallivm_state *gallivm,
       countv = LLVMBuildBitCast(builder, countv, i8vntype, "");
 
        for (i = 0; i < type.length; i++) {
+#if UTIL_ARCH_LITTLE_ENDIAN
           shuffles[i] = lp_build_const_int32(gallivm, 4*i);
+#else
+          shuffles[i] = lp_build_const_int32(gallivm, (4*i) + 3);
+#endif
        }
 
        shufflev = LLVMConstVector(shuffles, type.length);

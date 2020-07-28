@@ -38,7 +38,7 @@ vklayer_files = files(
 
 vklayer_mesa_overlay = shared_library(
   'VkLayer_MESA_overlay',
-  vklayer_files, overlay_spv,
+  vklayer_files, overlay_spv, sha1_h,
   c_args : [c_vis_args, no_override_init_args, vulkan_wsi_args],
   cpp_args : [cpp_vis_args, vulkan_wsi_args],
   dependencies : [idep_vulkan_util, idep_mesautil, vulkan_wsi_deps, libimgui_core_dep, dep_dl],

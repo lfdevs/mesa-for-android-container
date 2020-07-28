@@ -1003,7 +1003,14 @@ vtn_handle_phi_second_pass(struct vtn_builder *b, SpvOp opcode,
       return true;
 
    struct hash_entry *phi_entry = _mesa_hash_table_search(b->phi_table, w);
-   vtn_assert(phi_entry);
+
+   /* It's possible that this phi is in an unreachable block in which case it
+    * may never have been emitted and therefore may not be in the hash table.
+    * In this case, there's no var for it and it's safe to just bail.
+    */
+   if (phi_entry == NULL)
+      return true;
+
    nir_variable *phi_var = phi_entry->data;
 
    for (unsigned i = 3; i < count; i += 2) {

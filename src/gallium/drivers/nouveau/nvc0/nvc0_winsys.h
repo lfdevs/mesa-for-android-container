@@ -63,7 +63,7 @@ PUSH_REFN(struct nouveau_pushbuf *push, struct nouveau_bo *bo, uint32_t flags)
 #define NVC0_2D(n) SUBC_2D(NV50_2D_##n)
 
 #define SUBC_COPY(m) 4, (m)
-#define NVE4_COPY(m) SUBC_COPY(NVE4_COPY_##n)
+#define NVE4_COPY(n) SUBC_COPY(NVE4_COPY_##n)
 
 #define SUBC_SW(m) 7, (m)
 

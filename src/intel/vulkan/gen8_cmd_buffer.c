@@ -104,9 +104,17 @@ gen8_cmd_buffer_emit_depth_viewport(struct anv_cmd_buffer *cmd_buffer,
    for (uint32_t i = 0; i < count; i++) {
       const VkViewport *vp = &viewports[i];
 
+      /* From the Vulkan spec:
+       *
+       *    "It is valid for minDepth to be greater than or equal to
+       *    maxDepth."
+       */
+      float min_depth = MIN2(vp->minDepth, vp->maxDepth);
+      float max_depth = MAX2(vp->minDepth, vp->maxDepth);
+
       struct GENX(CC_VIEWPORT) cc_viewport = {
-         .MinimumDepth = depth_clamp_enable ? vp->minDepth : 0.0f,
-         .MaximumDepth = depth_clamp_enable ? vp->maxDepth : 1.0f,
+         .MinimumDepth = depth_clamp_enable ? min_depth : 0.0f,
+         .MaximumDepth = depth_clamp_enable ? max_depth : 1.0f,
       };
 
       GENX(CC_VIEWPORT_pack)(NULL, cc_state.map + i * 8, &cc_viewport);

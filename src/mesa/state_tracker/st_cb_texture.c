@@ -219,6 +219,7 @@ st_FreeTextureImageBuffer(struct gl_context *ctx,
        pipe_reference(&stImage->compressed_data->reference, NULL)) {
       free(stImage->compressed_data->ptr);
       free(stImage->compressed_data);
+      stImage->compressed_data = NULL;
    }
 
    /* if the texture image is being deallocated, the structure of the

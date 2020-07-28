@@ -582,7 +582,7 @@ clear_depth_stencil(struct iris_context *ice,
    /* At this point, we might have fast cleared the depth buffer. So if there's
     * no stencil clear pending, return early.
     */
-   if (!(clear_depth || clear_stencil)) {
+   if (!(clear_depth || (clear_stencil && stencil_res))) {
       return;
    }
 

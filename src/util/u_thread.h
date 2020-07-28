@@ -45,6 +45,10 @@
 #endif
 
 #ifdef __FreeBSD__
+/* pthread_np.h -> sys/param.h -> machine/param.h
+ * - defines ALIGN which clashes with our ALIGN
+ */
+#undef ALIGN
 #define cpu_set_t cpuset_t
 #endif
 

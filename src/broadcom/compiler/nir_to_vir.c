@@ -1459,6 +1459,9 @@ driver_location_compare(const void *in_a, const void *in_b)
         const nir_variable *const *a = in_a;
         const nir_variable *const *b = in_b;
 
+        if ((*a)->data.driver_location == (*b)->data.driver_location)
+                return (*a)->data.location_frac - (*b)->data.location_frac;
+
         return (*a)->data.driver_location - (*b)->data.driver_location;
 }
 
@@ -2027,7 +2030,18 @@ emit_store_output_gs(struct v3d_compile *c, nir_intrinsic_instr *instr)
                            V3D_QPU_PF_PUSHZ);
         }
 
-        vir_VPM_WRITE_indirect(c, ntq_get_src(c, instr->src[0], 0), offset);
+        struct qreg val = ntq_get_src(c, instr->src[0], 0);
+
+        /* The offset isn’t necessarily dynamically uniform for a geometry
+         * shader. This can happen if the shader sometimes doesn’t emit one of
+         * the vertices. In that case subsequent vertices will be written to
+         * different offsets in the VPM and we need to use the scatter write
+         * instruction to have a different offset for each lane.
+         */
+        if (nir_src_is_dynamically_uniform(instr->src[1]))
+                vir_VPM_WRITE_indirect(c, val, offset);
+        else
+                vir_STVPMD(c, offset, val);
 
         if (vir_in_nonuniform_control_flow(c)) {
                 struct qinst *last_inst =

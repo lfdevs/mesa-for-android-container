@@ -450,7 +450,6 @@ x11_surface_get_support(VkIcdSurfaceBase *icd_surface,
    return VK_SUCCESS;
 }
 
-
 static uint32_t
 x11_get_min_image_count(struct wsi_device *wsi_device)
 {
@@ -477,6 +476,7 @@ x11_get_min_image_count(struct wsi_device *wsi_device)
     */
    return 3;
 }
+
 static VkResult
 x11_surface_get_capabilities(VkIcdSurfaceBase *icd_surface,
                              struct wsi_device *wsi_device,
@@ -1441,12 +1441,12 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR);
 
    unsigned num_images = pCreateInfo->minImageCount;
-   if (!wsi_device->x11.strict_imageCount) {
-      if (present_mode == VK_PRESENT_MODE_MAILBOX_KHR)
-         num_images = MAX2(num_images, 5);
-
+   if (wsi_device->x11.strict_imageCount)
+      num_images = pCreateInfo->minImageCount;
+   else if (present_mode == VK_PRESENT_MODE_MAILBOX_KHR)
+      num_images = MAX2(num_images, 5);
+   else if (wsi_device->x11.ensure_minImageCount)
       num_images = MAX2(num_images, x11_get_min_image_count(wsi_device));
-   }
 
    xcb_connection_t *conn = x11_surface_get_connection(icd_surface);
    struct wsi_x11_connection *wsi_conn =
@@ -1666,6 +1666,11 @@ wsi_x11_init_wsi(struct wsi_device *wsi_device,
          wsi_device->x11.strict_imageCount =
             driQueryOptionb(dri_options, "vk_x11_strict_image_count");
       }
+      if (driCheckOption(dri_options, "vk_x11_ensure_min_image_count", DRI_BOOL)) {
+         wsi_device->x11.ensure_minImageCount =
+            driQueryOptionb(dri_options, "vk_x11_ensure_min_image_count");
+      }
+
    }
 
    wsi->base.get_support = x11_surface_get_support;

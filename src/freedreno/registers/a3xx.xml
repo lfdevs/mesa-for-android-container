@@ -236,8 +236,8 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value name="RB_R8G8B8A8_SINT"	    value="0x0b"/>
 	<value name="RB_R8G8_UNORM"	    value="0x0c"/>
 	<value name="RB_R8G8_SNORM"	    value="0x0d"/>
-	<value name="RB_R8_UINT"	    value="0x0e"/> <!-- also used for R8G8_UINT? -->
-	<value name="RB_R8_SINT"	    value="0x0f"/> <!-- also used for R8G8_SINT? -->
+	<value name="RB_R8G8_UINT"	    value="0x0e"/>
+	<value name="RB_R8G8_SINT"	    value="0x0f"/>
 	<value name="RB_R10G10B10A2_UNORM"  value="0x10"/>
 	<value name="RB_A2R10G10B10_UNORM"  value="0x11"/>
 	<value name="RB_R10G10B10A2_UINT"   value="0x12"/>

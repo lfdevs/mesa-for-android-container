@@ -347,7 +347,7 @@ etna_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
       }
    }
 
-   ctx->stats.prims_emitted += u_reduced_prims_for_vertices(info->mode, info->count);
+   ctx->stats.prims_generated += u_reduced_prims_for_vertices(info->mode, info->count);
    ctx->stats.draw_calls++;
 
    /* Update state for this draw operation */

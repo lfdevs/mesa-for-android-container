@@ -109,6 +109,11 @@ struct wsi_device {
        * provided VkSwapchainCreateInfoKH::RminImageCount.
        */
       bool strict_imageCount;
+
+      /* Ensures to create at least the number of image specified by the
+       * driver in VkSurfaceCapabilitiesKHR::minImageCount.
+       */
+      bool ensure_minImageCount;
    } x11;
 
    /* Signals the semaphore such that any wait on the semaphore will wait on

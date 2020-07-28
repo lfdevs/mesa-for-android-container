@@ -250,6 +250,25 @@ radv_is_dcc_decompress_pipeline(struct radv_cmd_buffer *cmd_buffer)
 	       meta_state->fast_clear_flush.dcc_decompress_pipeline;
 }
 
+/**
+ * Return whether the bound pipeline is the hardware resolve path.
+ */
+static inline bool
+radv_is_hw_resolve_pipeline(struct radv_cmd_buffer *cmd_buffer)
+{
+	struct radv_meta_state *meta_state = &cmd_buffer->device->meta_state;
+	struct radv_pipeline *pipeline = cmd_buffer->state.pipeline;
+
+	for (uint32_t i = 0; i < NUM_META_FS_KEYS; ++i) {
+		VkFormat format = radv_fs_key_format_exemplars[i];
+		unsigned fs_key = radv_format_meta_fs_key(format);
+
+		if (radv_pipeline_to_handle(pipeline) == meta_state->resolve.pipeline[fs_key])
+			return true;
+	}
+	return false;
+}
+
 /* common nir builder helpers */
 #include "nir/nir_builder.h"
 

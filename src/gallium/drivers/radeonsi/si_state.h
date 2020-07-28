@@ -232,7 +232,7 @@ union si_state_atoms {
 };
 
 #define SI_ATOM_BIT(name) (1 << (offsetof(union si_state_atoms, s.name) / sizeof(struct si_atom)))
-#define SI_NUM_ATOMS      (sizeof(union si_state_atoms) / sizeof(struct si_atom *))
+#define SI_NUM_ATOMS      (sizeof(union si_state_atoms) / sizeof(struct si_atom))
 
 static inline unsigned si_atoms_that_always_roll_context(void)
 {

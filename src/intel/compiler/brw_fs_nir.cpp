@@ -5503,7 +5503,7 @@ fs_visitor::nir_emit_global_atomic_float(const fs_builder &bld,
       data = tmp;
    }
 
-   bld.emit(SHADER_OPCODE_A64_UNTYPED_ATOMIC_LOGICAL,
+   bld.emit(SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT_LOGICAL,
             dest, addr, data, brw_imm_ud(op));
 }
 

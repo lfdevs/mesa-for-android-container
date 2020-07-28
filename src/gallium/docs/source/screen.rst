@@ -443,12 +443,14 @@ The integer capabilities:
 * ``PIPE_CAP_FRAMEBUFFER_MSAA_CONSTRAINTS``: This determines limitations
   on the number of samples that framebuffer attachments can have.
   Possible values:
-    0: color.nr_samples == zs.nr_samples == color.nr_storage_samples
+
+    0. color.nr_samples == zs.nr_samples == color.nr_storage_samples
        (standard MSAA quality)
-    1: color.nr_samples >= zs.nr_samples == color.nr_storage_samples
+    1. color.nr_samples >= zs.nr_samples == color.nr_storage_samples
        (enhanced MSAA quality)
-    2: color.nr_samples >= zs.nr_samples >= color.nr_storage_samples
+    2. color.nr_samples >= zs.nr_samples >= color.nr_storage_samples
        (full flexibility in tuning MSAA quality and performance)
+
   All color attachments must have the same number of samples and the same
   number of storage samples.
 * ``PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET``:
@@ -928,6 +930,7 @@ If there are not enough slots to store all sample colors, some samples will
 have an undefined color (called "undefined samples").
 
 The resolve blit behavior is driver-specific, but can be one of these two:
+
 1. Only defined samples will be averaged. Undefined samples will be ignored.
 2. Undefined samples will be approximated by looking at surrounding defined
    samples (even in different pixels).

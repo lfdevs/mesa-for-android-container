@@ -540,7 +540,7 @@ ptn_tex(struct ptn_compile *c, nir_alu_dest dest, nir_ssa_def **src,
    nir_variable *var = c->sampler_vars[prog_inst->TexSrcUnit];
    if (!var) {
       const struct glsl_type *type =
-         glsl_sampler_type(instr->sampler_dim, false, false, GLSL_TYPE_FLOAT);
+         glsl_sampler_type(instr->sampler_dim, instr->is_shadow, false, GLSL_TYPE_FLOAT);
       var = nir_variable_create(b->shader, nir_var_uniform, type, "sampler");
       var->data.binding = prog_inst->TexSrcUnit;
       var->data.explicit_binding = true;

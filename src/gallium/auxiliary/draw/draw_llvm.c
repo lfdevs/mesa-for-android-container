@@ -1123,8 +1123,8 @@ store_aos(struct gallivm_state *gallivm,
  * {
  *   return (x >> 16) |              // vertex_id
  *          ((x & 0x3fff) << 18) |   // clipmask
- *          ((x & 0x4000) << 3) |    // pad
- *          ((x & 0x8000) << 1);     // edgeflag
+ *          ((x & 0x4000) << 3) |    // edgeflag
+ *          ((x & 0x8000) << 1);     // pad
  * }
  */
 static LLVMValueRef
@@ -1142,11 +1142,11 @@ adjust_mask(struct gallivm_state *gallivm,
    clipmask  = LLVMBuildAnd(builder, mask, lp_build_const_int32(gallivm, 0x3fff), "");
    clipmask  = LLVMBuildShl(builder, clipmask, lp_build_const_int32(gallivm, 18), "");
    if (0) {
-      pad = LLVMBuildAnd(builder, mask, lp_build_const_int32(gallivm, 0x4000), "");
-      pad = LLVMBuildShl(builder, pad, lp_build_const_int32(gallivm, 3), "");
+      pad = LLVMBuildAnd(builder, mask, lp_build_const_int32(gallivm, 0x8000), "");
+      pad = LLVMBuildShl(builder, pad, lp_build_const_int32(gallivm, 1), "");
    }
-   edgeflag = LLVMBuildAnd(builder, mask, lp_build_const_int32(gallivm, 0x8000), "");
-   edgeflag = LLVMBuildShl(builder, edgeflag, lp_build_const_int32(gallivm, 1), "");
+   edgeflag = LLVMBuildAnd(builder, mask, lp_build_const_int32(gallivm, 0x4000), "");
+   edgeflag = LLVMBuildShl(builder, edgeflag, lp_build_const_int32(gallivm, 3), "");
 
    mask = LLVMBuildOr(builder, vertex_id, clipmask, "");
    if (0) {

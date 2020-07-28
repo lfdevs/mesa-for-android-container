@@ -103,7 +103,7 @@ MesaGL
 
 Tracker implementing a GL state machine. Not usable as a standalone tracker;
 Mesa should be built with another state tracker, such as :ref:`DRI` or
-:ref:`EGL`.
+EGL.
 
 VDPAU
 ^^^^^

@@ -440,9 +440,14 @@ emit_alu(struct ir3_context *ctx, nir_alu_instr *alu)
 		 * src instruction and create a mov.  This is easier for cp
 		 * to eliminate.
 		 *
+		 * NOTE: a3xx definitely seen not working with flat bary.f. Same test
+		 * uses ldlv on a4xx+, so not definitive. Seems rare enough to apply
+		 * everywhere.
+		 *
 		 * TODO probably opc_cat==4 is ok too
 		 */
 		if (alu->src[0].src.is_ssa &&
+				src[0]->opc != OPC_BARY_F &&
 				(list_length(&alu->src[0].src.ssa->uses) == 1) &&
 				((opc_cat(src[0]->opc) == 2) || (opc_cat(src[0]->opc) == 3))) {
 			src[0]->flags |= IR3_INSTR_SAT;
