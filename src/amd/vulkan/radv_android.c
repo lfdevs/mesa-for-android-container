@@ -25,13 +25,13 @@
 #include <hardware/gralloc.h>
 #include <hardware/hardware.h>
 #include <hardware/hwvulkan.h>
-#include <vndk/hardware_buffer.h>
 #include <vulkan/vk_android_native_buffer.h>
 #include <vulkan/vk_icd.h>
 #include <libsync.h>
 
 #if ANDROID_API_LEVEL >= 26
 #include <hardware/gralloc1.h>
+#include <vndk/hardware_buffer.h>
 #endif
 #endif
 

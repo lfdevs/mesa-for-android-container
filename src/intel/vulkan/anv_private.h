@@ -1953,6 +1953,10 @@ struct anv_descriptor {
 struct anv_descriptor_set {
    struct anv_descriptor_pool *pool;
    struct anv_descriptor_set_layout *layout;
+
+   /* Amount of space occupied in the the pool by this descriptor set. It can
+    * be larger than the size of the descriptor set.
+    */
    uint32_t size;
 
    /* State relative to anv_descriptor_pool::bo */

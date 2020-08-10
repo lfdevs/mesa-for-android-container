@@ -744,7 +744,8 @@ brw_dp_a64_untyped_surface_rw_desc(const struct gen_device_info *devinfo,
       SET_BITS(brw_mdc_cmask(num_channels), 3, 0) |
       SET_BITS(simd_mode, 5, 4);
 
-   return brw_dp_desc(devinfo, BRW_BTI_STATELESS, msg_type, msg_control);
+   return brw_dp_desc(devinfo, GEN8_BTI_STATELESS_NON_COHERENT,
+                      msg_type, msg_control);
 }
 
 /**
@@ -782,7 +783,8 @@ brw_dp_a64_byte_scattered_rw_desc(const struct gen_device_info *devinfo,
       SET_BITS(brw_mdc_a64_ds(bit_size / 8), 3, 2) |
       SET_BITS(exec_size == 16, 4, 4);
 
-   return brw_dp_desc(devinfo, BRW_BTI_STATELESS, msg_type, msg_control);
+   return brw_dp_desc(devinfo, GEN8_BTI_STATELESS_NON_COHERENT,
+                      msg_type, msg_control);
 }
 
 static inline uint32_t
@@ -803,7 +805,8 @@ brw_dp_a64_untyped_atomic_desc(const struct gen_device_info *devinfo,
       SET_BITS(bit_size == 64, 4, 4) |
       SET_BITS(response_expected, 5, 5);
 
-   return brw_dp_desc(devinfo, BRW_BTI_STATELESS, msg_type, msg_control);
+   return brw_dp_desc(devinfo, GEN8_BTI_STATELESS_NON_COHERENT,
+                      msg_type, msg_control);
 }
 
 static inline uint32_t
@@ -822,7 +825,8 @@ brw_dp_a64_untyped_atomic_float_desc(const struct gen_device_info *devinfo,
       SET_BITS(atomic_op, 1, 0) |
       SET_BITS(response_expected, 5, 5);
 
-   return brw_dp_desc(devinfo, BRW_BTI_STATELESS, msg_type, msg_control);
+   return brw_dp_desc(devinfo, GEN8_BTI_STATELESS_NON_COHERENT,
+                      msg_type, msg_control);
 }
 
 static inline uint32_t

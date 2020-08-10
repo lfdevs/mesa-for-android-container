@@ -164,8 +164,8 @@ si_emit_graphics(struct radv_device *device,
 	int i;
 
 	radeon_emit(cs, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
-	radeon_emit(cs, CONTEXT_CONTROL_LOAD_ENABLE(1));
-	radeon_emit(cs, CONTEXT_CONTROL_SHADOW_ENABLE(1));
+	radeon_emit(cs, CC0_UPDATE_LOAD_ENABLES(1));
+	radeon_emit(cs, CC1_UPDATE_SHADOW_ENABLES(1));
 
 	if (has_clear_state) {
 		radeon_emit(cs, PKT3(PKT3_CLEAR_STATE, 0, 0));

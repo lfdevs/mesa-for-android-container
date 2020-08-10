@@ -97,7 +97,7 @@ iris_new_perf_query_obj(struct pipe_context *pipe, unsigned query_index)
    return (struct pipe_query *)&q->base;
 }
 
-static void
+static bool
 iris_begin_perf_query(struct pipe_context *pipe, struct pipe_query *q)
 {
    struct iris_context *ice = (void *) pipe;
@@ -105,7 +105,7 @@ iris_begin_perf_query(struct pipe_context *pipe, struct pipe_query *q)
    struct gen_perf_query_object *obj = perf_query->query;
    struct gen_perf_context *perf_ctx = ice->perf_ctx;
 
-   gen_perf_begin_query(perf_ctx, obj);
+   return gen_perf_begin_query(perf_ctx, obj);
 }
 
 static void

@@ -5144,8 +5144,8 @@ static void si_init_config(struct si_context *sctx)
       return;
 
    si_pm4_cmd_begin(pm4, PKT3_CONTEXT_CONTROL);
-   si_pm4_cmd_add(pm4, CONTEXT_CONTROL_LOAD_ENABLE(1));
-   si_pm4_cmd_add(pm4, CONTEXT_CONTROL_SHADOW_ENABLE(1));
+   si_pm4_cmd_add(pm4, CC0_UPDATE_LOAD_ENABLES(1));
+   si_pm4_cmd_add(pm4, CC1_UPDATE_SHADOW_ENABLES(1));
    si_pm4_cmd_end(pm4, false);
 
    if (has_clear_state) {
@@ -5402,6 +5402,27 @@ static void si_init_config(struct si_context *sctx)
       si_pm4_set_reg(pm4, R_028C4C_PA_SC_CONSERVATIVE_RASTERIZATION_CNTL,
                      S_028C4C_NULL_SQUAD_AA_MASK_ENABLE(1));
       si_pm4_set_reg(pm4, R_030968_VGT_INSTANCE_BASE_ID, 0);
+      si_pm4_set_reg(pm4, R_0301EC_CP_COHER_START_DELAY,
+                     sctx->chip_class >= GFX10 ? 0x20 : 0);
+   }
+
+   if (sctx->chip_class >= GFX10) {
+      si_pm4_set_reg(pm4, R_00B0C8_SPI_SHADER_USER_ACCUM_PS_0, 0);
+      si_pm4_set_reg(pm4, R_00B0CC_SPI_SHADER_USER_ACCUM_PS_1, 0);
+      si_pm4_set_reg(pm4, R_00B0D0_SPI_SHADER_USER_ACCUM_PS_2, 0);
+      si_pm4_set_reg(pm4, R_00B0D4_SPI_SHADER_USER_ACCUM_PS_3, 0);
+      si_pm4_set_reg(pm4, R_00B1C8_SPI_SHADER_USER_ACCUM_VS_0, 0);
+      si_pm4_set_reg(pm4, R_00B1CC_SPI_SHADER_USER_ACCUM_VS_1, 0);
+      si_pm4_set_reg(pm4, R_00B1D0_SPI_SHADER_USER_ACCUM_VS_2, 0);
+      si_pm4_set_reg(pm4, R_00B1D4_SPI_SHADER_USER_ACCUM_VS_3, 0);
+      si_pm4_set_reg(pm4, R_00B2C8_SPI_SHADER_USER_ACCUM_ESGS_0, 0);
+      si_pm4_set_reg(pm4, R_00B2CC_SPI_SHADER_USER_ACCUM_ESGS_1, 0);
+      si_pm4_set_reg(pm4, R_00B2D0_SPI_SHADER_USER_ACCUM_ESGS_2, 0);
+      si_pm4_set_reg(pm4, R_00B2D4_SPI_SHADER_USER_ACCUM_ESGS_3, 0);
+      si_pm4_set_reg(pm4, R_00B4C8_SPI_SHADER_USER_ACCUM_LSHS_0, 0);
+      si_pm4_set_reg(pm4, R_00B4CC_SPI_SHADER_USER_ACCUM_LSHS_1, 0);
+      si_pm4_set_reg(pm4, R_00B4D0_SPI_SHADER_USER_ACCUM_LSHS_2, 0);
+      si_pm4_set_reg(pm4, R_00B4D4_SPI_SHADER_USER_ACCUM_LSHS_3, 0);
    }
 
    si_pm4_upload_indirect_buffer(sctx, pm4);

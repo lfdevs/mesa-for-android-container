@@ -997,7 +997,7 @@ try_immediate_source(const nir_alu_instr *instr, src_reg *op,
 
    case BRW_REGISTER_TYPE_F: {
       int first_comp = -1;
-      float f[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+      float f[NIR_MAX_VEC_COMPONENTS] = { 0.0f };
       bool is_scalar = true;
 
       for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++) {

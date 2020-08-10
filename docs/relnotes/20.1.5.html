@@ -1,0 +1,132 @@
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html lang="en">
+<head>
+<meta http-equiv="content-type" content="text/html; charset=utf-8">
+<title>Mesa Release Notes</title>
+<link rel="stylesheet" type="text/css" href="../mesa.css">
+</head>
+<body>
+
+<div class="header">
+<h1>The Mesa 3D Graphics Library</h1>
+</div>
+
+<iframe src="../contents.html"></iframe>
+<div class="content">
+
+<h1>Mesa 20.1.5 Release Notes / 2020-08-05</h1>
+
+<p>
+    Mesa 20.1.5 is a bug fix release which fixes bugs found since the 20.1.4 release.
+</p>
+<p>
+Mesa 20.1.5 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is <strong>only</strong> available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+</p>
+<p>
+Mesa 20.1.5 implements the Vulkan 1.2 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+</p>
+
+<h2>SHA256 checksum</h2>
+<pre>
+TBD.
+</pre>
+
+
+<h2>New features</h2>
+
+<ul>
+    <li>None</li>
+</ul>
+
+<h2>Bug fixes</h2>
+
+<ul>
+    <li>panfrost: Register allocation fails for Firefox WebRender shaders</li>
+    <li>VRAM leak with vuilkan external memory + opengl memory objects</li>
+    <li>Possible array out of bounds in brw_vec4_nir.cpp</li>
+    <li>[tgl][bisected][regression][iris] failure on dEQP-EGL.functional.wide_color.pbuffer_8888_colorspace_default</li>
+    <li>Multiply defined symbols compiling with gcc@10.1.0</li>
+    <li>shrinking descriptor pool on intel+vulkan</li>
+    <li>dEQP-VK.renderpass2.dedicated_allocation.attachment.1.12 fails on NAVI14</li>
+</ul>
+
+<h2>Changes</h2>
+
+<ul>
+    <p>Alyssa Rosenzweig (2):</p>
+    <li>      pan/mdg: Mask spills from texture write</li>
+    <li>      pan/mdg: Test for SSA before chasing addresses</li>
+    <p></p>
+    <p>Bas Nieuwenhuizen (3):</p>
+    <li>      radv: Fix uninitialized variable in renderpass.</li>
+    <li>      radv: Fix host-&gt;host signalling with legacy timeline semaphores.</li>
+    <li>      mesa/st: Actually free the driver part of memory objects on destruction.</li>
+    <p></p>
+    <p>Daniel Schürmann (3):</p>
+    <li>      aco: fix scratch loads which cross element_size boundaries</li>
+    <li>      aco: don&#x27;t split store data if it was already split into more elements</li>
+    <li>      aco: prevent infinite recursion in RA for subdword variables</li>
+    <p></p>
+    <p>Daryl W. Grunau (1):</p>
+    <li>      prevent multiply defined symbols</li>
+    <p></p>
+    <p>Eric Engestrom (5):</p>
+    <li>      docs/relnotes: add sha256 sums to 20.1.4</li>
+    <li>      .pick_status.json: Update to caa98246a0e180a96f3fcdcd3bfcbef0b136bc11</li>
+    <li>      .pick_status.json: Mark bd75e9923302a3d389469b7b233968576a46f4de as denominated</li>
+    <li>      .pick_status.json: Mark 1b3be07b5faf867f698668080b060a270c5f795e as denominated</li>
+    <li>      bin/gen_release_notes: automatically commit release notes</li>
+    <p></p>
+    <p>Francisco Jerez (1):</p>
+    <li>      intel/ir/gen12+: Work around FS performance regressions due to SIMD32 discard divergence.</li>
+    <p></p>
+    <p>Frank Binns (1):</p>
+    <li>      egl/dri2: only take a dri2_dpy reference when binding a new context/surfaces</li>
+    <p></p>
+    <p>Jason Ekstrand (2):</p>
+    <li>      intel/eu: Use non-coherent mode (BTI=253) for stateless A64 messages</li>
+    <li>      nir/deref: Don&#x27;t try to compare derefs containing casts</li>
+    <p></p>
+    <p>Kenneth Graunke (1):</p>
+    <li>      iris: Delete shader variants when deleting the API-facing shader</li>
+    <p></p>
+    <p>Kristian Høgsberg (1):</p>
+    <li>      anv: Pass device to setup_gralloc0_usage for error reporting</li>
+    <p></p>
+    <p>Lionel Landwerlin (1):</p>
+    <li>      anv: fix descriptor set free</li>
+    <p></p>
+    <p>Marcin Ślusarz (6):</p>
+    <li>      iris: propagate error from gen_perf_begin_query to glBeginPerfQueryINTEL</li>
+    <li>      i965: propagate error from gen_perf_begin_query to glBeginPerfQueryINTEL</li>
+    <li>      util: fix possible fd leaks in os_socket_listen_abstract</li>
+    <li>      util: fix possible buffer overflow in util_get_process_exec_path</li>
+    <li>      mesa: fix out of bounds access in glGetFramebufferParameterivEXT</li>
+    <li>      intel/vec4: fix out of bounds read</li>
+    <p></p>
+    <p>Marek Olšák (4):</p>
+    <li>      ac: update register and packet definitions for preemption</li>
+    <li>      radeonsi: add missing initialization of registers</li>
+    <li>      radeonsi/gfx10: set the correct value for OFFCHIP_BUFFERING</li>
+    <li>      radeonsi: disable SDMA on gfx9</li>
+    <p></p>
+    <p>Mauro Rossi (1):</p>
+    <li>      radv: fix build on Android 7 (v2)</li>
+    <p></p>
+    <p>Yevhenii Kolesnikov (1):</p>
+    <li>      nine: fix incorrect calculation of layer count for 3D textures</li>
+    <p></p>
+    <p></p>
+</ul>
+
+</div>
+</body>
+</html>

@@ -475,6 +475,14 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, unsign
         *    https://gitlab.freedesktop.org/mesa/mesa/-/issues/1889
         */
        (sctx->chip_class != GFX8 || sscreen->debug_flags & DBG(FORCE_SDMA)) &&
+       /* SDMA causes corruption on gfx9 APUs:
+        *    https://gitlab.freedesktop.org/mesa/mesa/-/issues/2814
+        *
+        * While we could keep buffer copies and clears enabled, let's disable
+        * everything, because neither gfx8 nor gfx10 enable SDMA, and it's not
+        * easy to test.
+        */
+       (sctx->chip_class != GFX9 || sscreen->debug_flags & DBG(FORCE_SDMA)) &&
        /* SDMA timeouts sometimes on gfx10 so disable it for now. See:
         *    https://bugs.freedesktop.org/show_bug.cgi?id=111481
         *    https://gitlab.freedesktop.org/mesa/mesa/-/issues/1907
@@ -1057,7 +1065,7 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
    unsigned max_offchip_buffers_per_se;
 
    if (sscreen->info.chip_class >= GFX10)
-      max_offchip_buffers_per_se = 256;
+      max_offchip_buffers_per_se = 128;
    /* Only certain chips can use the maximum value. */
    else if (sscreen->info.family == CHIP_VEGA12 || sscreen->info.family == CHIP_VEGA20)
       max_offchip_buffers_per_se = double_offchip_buffers ? 128 : 64;

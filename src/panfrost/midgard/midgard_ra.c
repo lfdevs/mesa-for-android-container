@@ -835,9 +835,17 @@ mir_spill_register(
 
                         midgard_instruction st;
 
+                        /* Note: it's important to match the mask of the spill
+                         * with the mask of the instruction whose destination
+                         * we're spilling, or otherwise we'll read invalid
+                         * components and can fail RA in a subsequent iteration
+                         */
+
                         if (is_special_w) {
                                 st = v_mov(spill_node, spill_slot);
                                 st.no_spill |= (1 << spill_class);
+                                st.mask = ins->mask;
+                                st.dest_type = st.src_types[0] = ins->dest_type;
                         } else {
                                 ins->dest = spill_index++;
                                 ins->no_spill |= (1 << spill_class);

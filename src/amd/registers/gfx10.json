@@ -7817,26 +7817,26 @@
   {
    "chips": ["gfx10"],
    "map": {"at": 47248, "to": "mm"},
-   "name": "COMPUTE_PREF_PRI_ACCUM_0",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "COMPUTE_USER_ACCUM_0",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 47252, "to": "mm"},
-   "name": "COMPUTE_PREF_PRI_ACCUM_1",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "COMPUTE_USER_ACCUM_1",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 47256, "to": "mm"},
-   "name": "COMPUTE_PREF_PRI_ACCUM_2",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "COMPUTE_USER_ACCUM_2",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 47260, "to": "mm"},
-   "name": "COMPUTE_PREF_PRI_ACCUM_3",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "COMPUTE_USER_ACCUM_3",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
@@ -14429,98 +14429,98 @@
   {
    "chips": ["gfx10"],
    "map": {"at": 45768, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_ESGS_0",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_ESGS_0",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 45772, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_ESGS_1",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_ESGS_1",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 45776, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_ESGS_2",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_ESGS_2",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 45780, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_ESGS_3",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_ESGS_3",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 46280, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_LSHS_0",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_LSHS_0",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 46284, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_LSHS_1",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_LSHS_1",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 46288, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_LSHS_2",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_LSHS_2",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 46292, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_LSHS_3",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_LSHS_3",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 45256, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_PS_0",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_PS_0",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 45260, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_PS_1",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_PS_1",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 45264, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_PS_2",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_PS_2",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 45268, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_PS_3",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_PS_3",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 45512, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_VS_0",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_VS_0",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 45516, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_VS_1",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_VS_1",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 45520, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_VS_2",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_VS_2",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
    "map": {"at": 45524, "to": "mm"},
-   "name": "SPI_SHADER_PREF_PRI_ACCUM_VS_3",
-   "type_ref": "COMPUTE_PREF_PRI_ACCUM_0"
+   "name": "SPI_SHADER_USER_ACCUM_VS_3",
+   "type_ref": "COMPUTE_USER_ACCUM_0"
   },
   {
    "chips": ["gfx10"],
@@ -17594,14 +17594,9 @@
     {"bits": [0, 0], "name": "PIPELINESTAT_ENABLE"}
    ]
   },
-  "COMPUTE_PREF_PRI_ACCUM_0": {
+  "COMPUTE_USER_ACCUM_0": {
    "fields": [
-    {"bits": [0, 2], "name": "COEFFICIENT_HIER_SELECT"},
-    {"bits": [3, 5], "name": "CONTRIBUTION_HIER_SELECT"},
-    {"bits": [6, 6], "name": "GROUP_UPDATE_EN"},
-    {"bits": [7, 7], "name": "RESERVED"},
-    {"bits": [8, 15], "name": "COEFFICIENT"},
-    {"bits": [16, 23], "name": "CONTRIBUTION"}
+    {"bits": [0, 6], "name": "CONTRIBUTION"}
    ]
   },
   "COMPUTE_PREF_PRI_CNTR_CTRL": {

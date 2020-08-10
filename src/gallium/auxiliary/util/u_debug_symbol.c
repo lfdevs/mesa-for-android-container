@@ -270,7 +270,7 @@ debug_symbol_print(const void *addr)
    debug_printf("\t%s\n", buf);
 }
 
-struct hash_table* symbols_hash;
+static struct hash_table* symbols_hash;
 static mtx_t symbols_mutex = _MTX_INITIALIZER_NP;
 
 const char*

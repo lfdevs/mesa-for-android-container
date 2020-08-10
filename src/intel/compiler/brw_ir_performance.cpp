@@ -1522,9 +1522,19 @@ namespace {
        *       difference is the worst-case scenario branch_weight used for
        *       SIMD32 which accounts for the possibility of a dynamically
        *       uniform branch becoming divergent in SIMD32.
+       *
+       *       Note that we provide slightly more pessimistic weights on
+       *       Gen12+ for SIMD32, since the effective warp size on that
+       *       platform is 2x the SIMD width due to EU fusion, which increases
+       *       the likelihood of divergent control flow in comparison to
+       *       previous generations, giving narrower SIMD modes a performance
+       *       advantage in several test-cases with non-uniform discard jumps.
        */
       const float branch_weight = (dispatch_width > 16 ? 1.0 : 0.5);
+      const float discard_weight = (dispatch_width > 16 || s->devinfo->gen < 12 ?
+                                    1.0 : 0.5);
       const float loop_weight = 10;
+      unsigned discard_count = 0;
       unsigned elapsed = 0;
       state st;
 
@@ -1538,6 +1548,8 @@ namespace {
 
             if (inst->opcode == BRW_OPCODE_ENDIF)
                st.weight /= branch_weight;
+            else if (inst->opcode == FS_OPCODE_PLACEHOLDER_HALT && discard_count)
+               st.weight /= discard_weight;
 
             elapsed += (st.unit_ready[unit_fe] - clock0) * st.weight;
 
@@ -1547,6 +1559,8 @@ namespace {
                st.weight *= loop_weight;
             else if (inst->opcode == BRW_OPCODE_WHILE)
                st.weight /= loop_weight;
+            else if (inst->opcode == FS_OPCODE_DISCARD_JUMP && !discard_count++)
+               st.weight *= discard_weight;
          }
 
          p.block_latency[block->num] = elapsed - elapsed0;

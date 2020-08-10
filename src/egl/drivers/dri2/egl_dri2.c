@@ -1851,6 +1851,13 @@ dri2_make_current(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *dsurf,
                 tmp_rsurf == old_rsurf);
 
          _eglLog(_EGL_WARNING, "DRI2: failed to rebind the previous context");
+      } else {
+         /* dri2_dpy->core->bindContext succeeded, so take a reference on the
+          * dri2_dpy. This prevents dri2_dpy from being reinitialized when a
+          * EGLDisplay is terminated and then initialized again while a
+          * context is still bound. See dri2_intitialize() for a more in depth
+          * explanation. */
+         dri2_dpy->ref_count++;
       }
    }
 
@@ -1864,8 +1871,6 @@ dri2_make_current(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *dsurf,
 
    if (egl_error != EGL_SUCCESS)
       return _eglError(egl_error, "eglMakeCurrent");
-
-   dri2_dpy->ref_count++;
 
    if (dsurf && _eglSurfaceHasMutableRenderBuffer(dsurf) &&
        dri2_dpy->vtbl->set_shared_buffer_mode) {

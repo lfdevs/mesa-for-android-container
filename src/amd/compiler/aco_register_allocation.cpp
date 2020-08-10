@@ -396,7 +396,7 @@ std::pair<PhysReg, bool> get_reg_simple(ra_ctx& ctx,
    }
 
    if (stride == 1) {
-
+      info.rc = RegClass(rc.type(), size);
       for (unsigned stride = 8; stride > 1; stride /= 2) {
          if (size % stride)
             continue;

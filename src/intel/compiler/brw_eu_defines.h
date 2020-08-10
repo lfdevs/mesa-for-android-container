@@ -1419,12 +1419,37 @@ enum brw_message_target {
 /* Dataport special binding table indices: */
 #define BRW_BTI_STATELESS                255
 #define GEN7_BTI_SLM                     254
-/* Note that on Gen8+ BTI 255 was redefined to be IA-coherent according to the
- * hardware spec, however because the DRM sets bit 4 of HDC_CHICKEN0 on BDW,
- * CHV and at least some pre-production steppings of SKL due to
- * WaForceEnableNonCoherent, HDC memory access may have been overridden by the
- * kernel to be non-coherent (matching the behavior of the same BTI on
- * pre-Gen8 hardware) and BTI 255 may actually be an alias for BTI 253.
+
+#define HSW_BTI_STATELESS_LOCALLY_COHERENT 255
+#define HSW_BTI_STATELESS_NON_COHERENT 253
+#define HSW_BTI_STATELESS_GLOBALLY_COHERENT 252
+#define HSW_BTI_STATELESS_LLC_COHERENT 251
+#define HSW_BTI_STATELESS_L3_UNCACHED 250
+
+/* The hardware docs are a bit contradictory here.  On Haswell, where they
+ * first added cache ability control, there were 5 different cache modes (see
+ * HSW_BTI_STATELESS_* above).  On Broadwell, they reduced to two:
+ *
+ *  - IA-Coherent (BTI=255): Coherent within Gen and coherent within the
+ *    entire IA cache memory hierarchy.
+ *
+ *  - Non-Coherent (BTI=253): Coherent within Gen, same cache type.
+ *
+ * Information about stateless cache coherency can be found in the "A32
+ * Stateless" section of the "3D Media GPGPU" volume of the PRM for each
+ * hardware generation.
+ *
+ * Unfortunately, the docs for MDC_STATELESS appear to have been copied and
+ * pasted from Haswell and give the Haswell definitions for the BTI values of
+ * 255 and 253 including a warning about accessing 253 surfaces from multiple
+ * threads.  This seems to be a copy+paste error and the definitions from the
+ * "A32 Stateless" section should be trusted instead.
+ *
+ * Note that because the DRM sets bit 4 of HDC_CHICKEN0 on BDW, CHV and at
+ * least some pre-production steppings of SKL due to WaForceEnableNonCoherent,
+ * HDC memory access may have been overridden by the kernel to be non-coherent
+ * (matching the behavior of the same BTI on pre-Gen8 hardware) and BTI 255
+ * may actually be an alias for BTI 253.
  */
 #define GEN8_BTI_STATELESS_IA_COHERENT   255
 #define GEN8_BTI_STATELESS_NON_COHERENT  253

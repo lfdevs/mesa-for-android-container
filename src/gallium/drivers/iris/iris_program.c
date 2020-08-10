@@ -1820,9 +1820,6 @@ get_vue_prog_data(struct iris_context *ice, gl_shader_stage stage)
    return (void *) ice->shaders.prog[stage]->prog_data;
 }
 
-// XXX: iris_compiled_shaders are space-leaking :(
-// XXX: do remember to unbind them if deleting them.
-
 /**
  * Update the current shader variants for the given state.
  *
@@ -2398,6 +2395,8 @@ iris_delete_shader_state(struct pipe_context *ctx, void *state, gl_shader_stage 
       pipe_resource_reference(&ish->const_data, NULL);
       pipe_resource_reference(&ish->const_data_state.res, NULL);
    }
+
+   iris_delete_shader_variants(ice, ish);
 
    ralloc_free(ish->nir);
    free(ish);

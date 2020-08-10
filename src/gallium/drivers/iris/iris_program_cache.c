@@ -115,6 +115,59 @@ iris_find_previous_compile(const struct iris_context *ice,
    return NULL;
 }
 
+void
+iris_delete_shader_variants(struct iris_context *ice,
+                            struct iris_uncompiled_shader *ish)
+{
+   struct hash_table *cache = ice->shaders.cache;
+   gl_shader_stage stage = ish->nir->info.stage;
+   enum iris_program_cache_id cache_id = stage;
+
+   hash_table_foreach(cache, entry) {
+      const struct keybox *keybox = entry->key;
+      const struct brw_base_prog_key *key = (const void *)keybox->data;
+
+      if (keybox->cache_id == cache_id &&
+          key->program_string_id == ish->program_id) {
+         struct iris_compiled_shader *shader = entry->data;
+
+         _mesa_hash_table_remove(cache, entry);
+
+         /* Shader variants may still be bound in the context even after
+          * the API-facing shader has been deleted.  In particular, a draw
+          * may not have triggered iris_update_compiled_shaders() yet.  In
+          * that case, we may be referring to that shader's VUE map, stream
+          * output settings, and so on.  We also like to compare the old and
+          * new shader programs when swapping them out to flag dirty state.
+          *
+          * So, it's hazardous to delete a bound shader variant.  We avoid
+          * doing so, choosing to instead move "deleted" shader variants to
+          * a list, deferring the actual deletion until they're not bound.
+          *
+          * For simplicity, we always move deleted variants to the list,
+          * even if we could delete them immediately.  We'll then process
+          * the list, catching both these variants and any others.
+          */
+         list_addtail(&shader->link, &ice->shaders.deleted_variants[stage]);
+      }
+   }
+
+   /* Process any pending deferred variant deletions. */
+   list_for_each_entry_safe(struct iris_compiled_shader, shader,
+                            &ice->shaders.deleted_variants[stage], link) {
+      /* If the shader is still bound, defer deletion. */
+      if (ice->shaders.prog[stage] == shader)
+         continue;
+
+      list_del(&shader->link);
+
+      /* Actually delete the variant. */
+      pipe_resource_reference(&shader->assembly.res, NULL);
+      ralloc_free(shader);
+   }
+}
+
+
 /**
  * Look for an existing entry in the cache that has identical assembly code.
  *
@@ -174,6 +227,8 @@ iris_upload_shader(struct iris_context *ice,
                      &shader->map);
       memcpy(shader->map, assembly, prog_data->program_size);
    }
+
+   list_inithead(&shader->link);
 
    shader->prog_data = prog_data;
    shader->streamout = streamout;
@@ -262,6 +317,9 @@ iris_init_program_cache(struct iris_context *ice)
    ice->shaders.uploader =
       u_upload_create(&ice->ctx, 16384, PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
                       IRIS_RESOURCE_FLAG_SHADER_MEMZONE);
+
+   for (int i = 0; i < MESA_SHADER_STAGES; i++)
+      list_inithead(&ice->shaders.deleted_variants[i]);
 }
 
 void
@@ -269,6 +327,11 @@ iris_destroy_program_cache(struct iris_context *ice)
 {
    for (int i = 0; i < MESA_SHADER_STAGES; i++) {
       ice->shaders.prog[i] = NULL;
+
+      list_for_each_entry_safe(struct iris_compiled_shader, shader,
+                               &ice->shaders.deleted_variants[i], link) {
+         pipe_resource_reference(&shader->assembly.res, NULL);
+      }
    }
 
    hash_table_foreach(ice->shaders.cache, entry) {

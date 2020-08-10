@@ -46,7 +46,7 @@
 #include "os/os_thread.h"
 #include "u_hash_table.h"
 
-struct hash_table* symbols_hash;
+static struct hash_table* symbols_hash;
 static mtx_t symbols_mutex = _MTX_INITIALIZER_NP;
 
 /* TODO with some refactoring we might be able to re-use debug_symbol_name_cached()

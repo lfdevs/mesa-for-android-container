@@ -1828,7 +1828,7 @@ radv_load_ds_clear_metadata(struct radv_cmd_buffer *cmd_buffer,
 	uint32_t reg = R_028028_DB_STENCIL_CLEAR + 4 * reg_offset;
 
 	if (cmd_buffer->device->physical_device->rad_info.has_load_ctx_reg_pkt) {
-		radeon_emit(cs, PKT3(PKT3_LOAD_CONTEXT_REG, 3, 0));
+		radeon_emit(cs, PKT3(PKT3_LOAD_CONTEXT_REG_INDEX, 3, 0));
 		radeon_emit(cs, va);
 		radeon_emit(cs, va >> 32);
 		radeon_emit(cs, (reg - SI_CONTEXT_REG_OFFSET) >> 2);
@@ -2012,7 +2012,7 @@ radv_load_color_clear_metadata(struct radv_cmd_buffer *cmd_buffer,
 	uint32_t reg = R_028C8C_CB_COLOR0_CLEAR_WORD0 + cb_idx * 0x3c;
 
 	if (cmd_buffer->device->physical_device->rad_info.has_load_ctx_reg_pkt) {
-		radeon_emit(cs, PKT3(PKT3_LOAD_CONTEXT_REG, 3, cmd_buffer->state.predicating));
+		radeon_emit(cs, PKT3(PKT3_LOAD_CONTEXT_REG_INDEX, 3, cmd_buffer->state.predicating));
 		radeon_emit(cs, va);
 		radeon_emit(cs, va >> 32);
 		radeon_emit(cs, (reg - SI_CONTEXT_REG_OFFSET) >> 2);
@@ -3300,6 +3300,7 @@ radv_cmd_state_setup_attachments(struct radv_cmd_buffer *cmd_buffer,
 		}
 
 		state->attachments[i].current_layout = att->initial_layout;
+		state->attachments[i].current_in_render_loop = false;
 		state->attachments[i].current_stencil_layout = att->stencil_initial_layout;
 		state->attachments[i].sample_location.count = 0;
 
