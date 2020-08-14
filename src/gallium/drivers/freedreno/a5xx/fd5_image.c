@@ -44,7 +44,6 @@ static enum a4xx_state_block imgsb[] = {
 struct fd5_image {
 	enum pipe_format pfmt;
 	enum a5xx_tex_fmt fmt;
-	enum a5xx_tex_fetchsize fetchsize;
 	enum a5xx_tex_type type;
 	bool srgb;
 	uint32_t cpp;
@@ -62,7 +61,6 @@ static void translate_image(struct fd5_image *img, struct pipe_image_view *pimg)
 	enum pipe_format format = pimg->format;
 	struct pipe_resource *prsc = pimg->resource;
 	struct fd_resource *rsc = fd_resource(prsc);
-	struct fdl_slice *slice = NULL;
 	unsigned lvl;
 
 	if (!pimg->resource) {
@@ -72,7 +70,6 @@ static void translate_image(struct fd5_image *img, struct pipe_image_view *pimg)
 
 	img->pfmt      = format;
 	img->fmt       = fd5_pipe2tex(format);
-	img->fetchsize = fd5_pipe2fetchsize(format);
 	img->type      = fd5_tex_type(prsc->target);
 	img->srgb      = util_format_is_srgb(format);
 	img->cpp       = rsc->layout.cpp;
@@ -84,9 +81,8 @@ static void translate_image(struct fd5_image *img, struct pipe_image_view *pimg)
 		img->pitch  = pimg->u.buf.size;
 	} else {
 		lvl = pimg->u.tex.level;
-		slice = fd_resource_slice(rsc, lvl);
 		img->offset = fd_resource_offset(rsc, lvl, pimg->u.tex.first_layer);
-		img->pitch  = slice->pitch;
+		img->pitch  = fd_resource_pitch(rsc, lvl);
 	}
 
 	img->width     = u_minify(prsc->width0, lvl);
@@ -112,7 +108,7 @@ static void translate_image(struct fd5_image *img, struct pipe_image_view *pimg)
 		img->depth = layers;
 		break;
 	case PIPE_TEXTURE_3D:
-		img->array_pitch = slice->size0;
+		img->array_pitch = fd_resource_slice(rsc, lvl)->size0;
 		img->depth = u_minify(prsc->depth0, lvl);
 		break;
 	default:
@@ -140,8 +136,7 @@ static void emit_image_tex(struct fd_ringbuffer *ring, unsigned slot,
 		COND(img->srgb, A5XX_TEX_CONST_0_SRGB));
 	OUT_RING(ring, A5XX_TEX_CONST_1_WIDTH(img->width) |
 		A5XX_TEX_CONST_1_HEIGHT(img->height));
-	OUT_RING(ring, A5XX_TEX_CONST_2_FETCHSIZE(img->fetchsize) |
-		A5XX_TEX_CONST_2_TYPE(img->type) |
+	OUT_RING(ring, A5XX_TEX_CONST_2_TYPE(img->type) |
 		A5XX_TEX_CONST_2_PITCH(img->pitch));
 	OUT_RING(ring, A5XX_TEX_CONST_3_ARRAY_PITCH(img->array_pitch));
 	if (img->bo) {
@@ -184,7 +179,7 @@ static void emit_image_ssbo(struct fd_ringbuffer *ring, unsigned slot,
 		CP_LOAD_STATE4_1_EXT_SRC_ADDR(0));
 	OUT_RING(ring, CP_LOAD_STATE4_2_EXT_SRC_ADDR_HI(0));
 	if (img->bo) {
-		OUT_RELOCW(ring, img->bo, img->offset, 0, 0);
+		OUT_RELOC(ring, img->bo, img->offset, 0, 0);
 	} else {
 		OUT_RING(ring, 0x00000000);
 		OUT_RING(ring, 0x00000000);

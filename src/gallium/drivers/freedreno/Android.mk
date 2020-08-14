@@ -39,7 +39,8 @@ LOCAL_SRC_FILES := \
 
 LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/ir3 \
-	$(MESA_TOP)/include
+	$(MESA_TOP)/include \
+	$(MESA_TOP)/src/freedreno/common
 
 LOCAL_GENERATED_SOURCES := $(MESA_GEN_NIR_H)
 
@@ -47,7 +48,6 @@ LOCAL_SHARED_LIBRARIES := libdrm
 LOCAL_STATIC_LIBRARIES := libmesa_glsl libmesa_nir libfreedreno_drm libfreedreno_ir3 libfreedreno_perfcntrs libfreedreno_registers
 LOCAL_MODULE := libmesa_pipe_freedreno
 
-include $(LOCAL_PATH)/Android.gen.mk
 include $(GALLIUM_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 

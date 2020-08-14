@@ -421,6 +421,16 @@ llvm_middle_end_prepare( struct draw_pt_middle_end *middle,
    }
 }
 
+static unsigned
+get_num_consts_robust(struct draw_context *draw, unsigned *sizes, unsigned idx)
+{
+   unsigned const_bytes = sizes[idx];
+
+   if (const_bytes < sizeof(float))
+      return 0;
+
+   return DIV_ROUND_UP(const_bytes, draw->constant_buffer_stride);
+}
 
 /**
  * Bind/update constant buffer pointers, clip planes and viewport dims.
@@ -443,8 +453,7 @@ llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
        * shader expects 16-byte allocations, the fix is likely to move
        * to LOAD intrinsic in the future and remove the vec4 constraint.
        */
-      int num_consts =
-         DIV_ROUND_UP(draw->pt.user.vs_constants_size[i], (sizeof(float) * 4));
+      int num_consts = get_num_consts_robust(draw, draw->pt.user.vs_constants_size, i);
       llvm->jit_context.vs_constants[i] = draw->pt.user.vs_constants[i];
       llvm->jit_context.num_vs_constants[i] = num_consts;
       if (num_consts == 0) {
@@ -461,8 +470,7 @@ llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
    }
 
    for (i = 0; i < ARRAY_SIZE(llvm->gs_jit_context.constants); ++i) {
-      int num_consts =
-         DIV_ROUND_UP(draw->pt.user.gs_constants_size[i], (sizeof(float) * 4));
+      int num_consts = get_num_consts_robust(draw, draw->pt.user.gs_constants_size, i);
       llvm->gs_jit_context.constants[i] = draw->pt.user.gs_constants[i];
       llvm->gs_jit_context.num_constants[i] = num_consts;
       if (num_consts == 0) {
@@ -479,8 +487,7 @@ llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
    }
 
    for (i = 0; i < ARRAY_SIZE(llvm->tcs_jit_context.constants); ++i) {
-      int num_consts =
-         DIV_ROUND_UP(draw->pt.user.tcs_constants_size[i], (sizeof(float) * 4));
+      int num_consts = get_num_consts_robust(draw, draw->pt.user.tcs_constants_size, i);
       llvm->tcs_jit_context.constants[i] = draw->pt.user.tcs_constants[i];
       llvm->tcs_jit_context.num_constants[i] = num_consts;
       if (num_consts == 0) {
@@ -497,8 +504,7 @@ llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
    }
 
    for (i = 0; i < ARRAY_SIZE(llvm->tes_jit_context.constants); ++i) {
-      int num_consts =
-         DIV_ROUND_UP(draw->pt.user.tes_constants_size[i], (sizeof(float) * 4));
+      int num_consts = get_num_consts_robust(draw, draw->pt.user.tes_constants_size, i);
       llvm->tes_jit_context.constants[i] = draw->pt.user.tes_constants[i];
       llvm->tes_jit_context.num_constants[i] = num_consts;
       if (num_consts == 0) {
@@ -582,6 +588,7 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
    const unsigned *elts;
    ushort *tes_elts_out = NULL;
 
+   memset(&gs_vert_info, 0, sizeof(struct draw_vertex_info) * TGSI_MAX_VERTEX_STREAMS);
    assert(fetch_info->count > 0);
    llvm_vert_info.count = fetch_info->count;
    llvm_vert_info.vertex_size = fpme->vertex_size;
@@ -722,19 +729,14 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
          }
       }
    }
-   if (prim_info->count == 0) {
-      debug_printf("GS/IA didn't emit any vertices!\n");
-
-      FREE(vert_info->verts);
-      if (free_prim_info) {
-         FREE(tes_elts_out);
-         FREE(prim_info->primitive_lengths);
-      }
-      return;
-   }
 
    /* stream output needs to be done before clipping */
    draw_pt_so_emit( fpme->so_emit, gshader ? gshader->num_vertex_streams : 1, vert_info, prim_info );
+
+   if (prim_info->count == 0) {
+      debug_printf("GS/IA didn't emit any vertices!\n");
+      goto out;
+   }
 
    draw_stats_clipper_primitives(draw, prim_info);
 
@@ -761,7 +763,12 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
          emit( fpme->emit, vert_info, prim_info );
       }
    }
+out:
    FREE(vert_info->verts);
+   if (gshader && gshader->num_vertex_streams > 1)
+     for (unsigned i = 1; i < gshader->num_vertex_streams; i++)
+       FREE(gs_vert_info[i].verts);
+
    if (free_prim_info) {
       FREE(tes_elts_out);
       FREE(prim_info->primitive_lengths);

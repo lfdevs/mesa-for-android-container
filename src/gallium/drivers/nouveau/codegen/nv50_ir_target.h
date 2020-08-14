@@ -200,7 +200,7 @@ public:
       uint8_t dstMods;
       uint16_t srcFiles[3];
       uint16_t dstFiles;
-      unsigned int minEncSize  : 4;
+      unsigned int minEncSize  : 5;
       unsigned int vector      : 1;
       unsigned int predicate   : 1;
       unsigned int commutative : 1;

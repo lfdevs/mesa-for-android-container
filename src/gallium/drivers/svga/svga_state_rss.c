@@ -97,7 +97,7 @@ translate_fill_mode(unsigned fill)
  * the "to" state.
  */
 static enum pipe_error
-emit_rss_vgpu9(struct svga_context *svga, unsigned dirty)
+emit_rss_vgpu9(struct svga_context *svga, uint64_t dirty)
 {
    struct svga_screen *screen = svga_screen(svga->pipe.screen);
    struct rs_queue queue;
@@ -363,7 +363,7 @@ get_no_depth_stencil_test_state(struct svga_context *svga)
 
 
 static enum pipe_error
-emit_rss_vgpu10(struct svga_context *svga, unsigned dirty)
+emit_rss_vgpu10(struct svga_context *svga, uint64_t dirty)
 {
    enum pipe_error ret = PIPE_OK;
 
@@ -487,7 +487,7 @@ emit_rss_vgpu10(struct svga_context *svga, unsigned dirty)
 
 
 static enum pipe_error
-emit_rss(struct svga_context *svga, unsigned dirty)
+emit_rss(struct svga_context *svga, uint64_t dirty)
 {
    if (svga_have_vgpu10(svga)) {
       return emit_rss_vgpu10(svga, dirty);

@@ -39,7 +39,7 @@
 
 #include "pipe/p_format.h"
 #include "util/u_memory.h"
-#include "state_tracker/sw_winsys.h"
+#include "frontend/sw_winsys.h"
 #include "null_sw_winsys.h"
 
 

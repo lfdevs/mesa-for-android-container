@@ -39,7 +39,7 @@
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
-#include "state_tracker/xlibsw_api.h"
+#include "frontend/xlibsw_api.h"
 #include "xlib_sw_winsys.h"
 
 #include <X11/Xlib.h>

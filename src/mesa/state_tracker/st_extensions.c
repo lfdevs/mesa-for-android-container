@@ -340,11 +340,14 @@ void st_init_limits(struct pipe_screen *screen,
             options->LowerBuiltinVariablesXfb |= VARYING_BIT_PSIZ;
       }
 
-      /* Initialize lower precision shader compiler option based on
-       * the value of PIPE_SHADER_CAP_FP16.
-       */
-      options->LowerPrecision =
+      options->LowerPrecisionFloat16 =
          screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_FP16);
+      options->LowerPrecisionDerivatives =
+         screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_FP16_DERIVATIVES);
+      options->LowerPrecisionInt16 =
+         screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_INT16);
+      options->LowerPrecisionConstants =
+         screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_GLSL_16BIT_CONSTS);
    }
 
    c->MaxUserAssignableUniformLocations =
@@ -582,6 +585,8 @@ void st_init_limits(struct pipe_screen *screen,
 
    c->MultiDrawWithUserIndices =
       screen->get_param(screen, PIPE_CAP_DRAW_INFO_START_WITH_USER_INDICES);
+
+   c->AllowDynamicVAOFastPath = true;
 
    c->glBeginEndBufferSize =
       screen->get_param(screen, PIPE_CAP_GL_BEGIN_END_BUFFER_SIZE);
@@ -1129,6 +1134,9 @@ void st_init_extensions(struct pipe_screen *screen,
 
    consts->AllowGLSLCrossStageInterpolationMismatch = options->allow_glsl_cross_stage_interpolation_mismatch;
 
+   consts->PrimitiveRestartFixedIndex =
+      screen->get_param(screen, PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX);
+
    /* Technically we are turning on the EXT_gpu_shader5 extension,
     * ARB_gpu_shader5 does not exist in GLES, but this flag is what
     * switches on EXT_gpu_shader5:
@@ -1201,7 +1209,11 @@ void st_init_extensions(struct pipe_screen *screen,
       extensions->EXT_texture_integer = GL_FALSE;
    }
 
-   consts->GLSLZeroInit = options->glsl_zero_init;
+   if (options->glsl_zero_init) {
+      consts->GLSLZeroInit = 1;
+   } else {
+      consts->GLSLZeroInit = screen->get_param(screen, PIPE_CAP_GLSL_ZERO_INIT);
+   }
 
    consts->ForceIntegerTexNearest = options->force_integer_tex_nearest;
 
@@ -1392,6 +1404,9 @@ void st_init_extensions(struct pipe_screen *screen,
    if (options->allow_glsl_extension_directive_midshader)
       consts->AllowGLSLExtensionDirectiveMidShader = GL_TRUE;
 
+   if (options->allow_glsl_120_subset_in_110)
+      consts->AllowGLSL120SubsetIn110 = GL_TRUE;
+
    if (options->allow_glsl_builtin_const_expression)
       consts->AllowGLSLBuiltinConstantExpression = GL_TRUE;
 
@@ -1455,6 +1470,9 @@ void st_init_extensions(struct pipe_screen *screen,
    bool coherent_fb_fetch =
       screen->get_param(screen, PIPE_CAP_FBFETCH_COHERENT);
 
+   if (screen->get_param(screen, PIPE_CAP_BLEND_EQUATION_ADVANCED))
+      extensions->KHR_blend_equation_advanced = true;
+
    if (max_fb_fetch_rts > 0) {
       extensions->KHR_blend_equation_advanced = true;
       extensions->KHR_blend_equation_advanced_coherent = coherent_fb_fetch;
@@ -1498,7 +1516,8 @@ void st_init_extensions(struct pipe_screen *screen,
     */
    if (GLSLVersion >= 130 &&
        extensions->ARB_uniform_buffer_object &&
-       extensions->NV_primitive_restart &&
+       (extensions->NV_primitive_restart ||
+        consts->PrimitiveRestartFixedIndex) &&
        screen->get_shader_param(screen, PIPE_SHADER_VERTEX,
                                 PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS) >= 16 &&
        /* Requirements for ETC2 emulation. */

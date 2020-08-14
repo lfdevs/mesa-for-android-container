@@ -138,7 +138,7 @@ static void ppir_regalloc_update_reglist_ssa(ppir_compiler *comp)
 {
    list_for_each_entry(ppir_block, block, &comp->block_list, list) {
       list_for_each_entry(ppir_node, node, &block->node_list, list) {
-         if (node->op == ppir_op_store_color)
+         if (node->is_end)
             continue;
 
          if (!node->instr || node->op == ppir_op_const)
@@ -599,6 +599,17 @@ static void ppir_regalloc_reset_liveness_info(ppir_compiler *comp)
                                                _mesa_hash_pointer,
                                                _mesa_key_pointer_equal);
 
+         if (instr->live_internal)
+            ralloc_free(instr->live_internal);
+         instr->live_internal = rzalloc_array(comp,
+               struct ppir_liveness, list_length(&comp->reg_list));
+
+         if (instr->live_internal_set)
+            _mesa_set_destroy(instr->live_internal_set, NULL);
+         instr->live_internal_set = _mesa_set_create(comp,
+                                               _mesa_hash_pointer,
+                                               _mesa_key_pointer_equal);
+
          if (instr->live_out)
             ralloc_free(instr->live_out);
          instr->live_out = rzalloc_array(comp,
@@ -648,6 +659,10 @@ static bool ppir_regalloc_prog_try(ppir_compiler *comp, bool *spilled)
 
    list_for_each_entry(ppir_block, block, &comp->block_list, list) {
       list_for_each_entry(ppir_instr, instr, &block->instr_list, list) {
+         set_foreach(instr->live_internal_set, entry) {
+            _mesa_set_add(instr->live_in_set, entry->key);
+            _mesa_set_add(instr->live_out_set, entry->key);
+         }
          ppir_all_interference(comp, g, instr->live_in_set);
          ppir_all_interference(comp, g, instr->live_out_set);
       }

@@ -262,32 +262,13 @@ sp_tgsi_load(const struct tgsi_image *image,
       offset = get_image_offset(spr, iview, params->format, r_coord);
       data_ptr = (char *)spr->data + offset;
 
-      if (util_format_is_pure_sint(params->format)) {
-         int32_t sdata[4];
-
-         util_format_read_4i(params->format,
-                             sdata, 0,
-                             data_ptr, stride,
-                             s_coord, t_coord, 1, 1);
-         for (c = 0; c < 4; c++)
-            ((int32_t *)rgba[c])[j] = sdata[c];
-      } else if (util_format_is_pure_uint(params->format)) {
-         uint32_t sdata[4];
-         util_format_read_4ui(params->format,
-                             sdata, 0,
-                             data_ptr, stride,
-                             s_coord, t_coord, 1, 1);
-         for (c = 0; c < 4; c++)
-            ((uint32_t *)rgba[c])[j] = sdata[c];
-      } else {
-         float sdata[4];
-         util_format_read_4f(params->format,
-                             sdata, 0,
-                             data_ptr, stride,
-                             s_coord, t_coord, 1, 1);
-         for (c = 0; c < 4; c++)
-            rgba[c][j] = sdata[c];
-      }
+      uint32_t sdata[4];
+      util_format_read_4(params->format,
+                         sdata, 0,
+                         data_ptr, stride,
+                         s_coord, t_coord, 1, 1);
+      for (c = 0; c < 4; c++)
+         ((uint32_t *)rgba[c])[j] = sdata[c];
    }
    return;
 fail_write_all_zero:
@@ -352,25 +333,11 @@ sp_tgsi_store(const struct tgsi_image *image,
       offset = get_image_offset(spr, iview, pformat, r_coord);
       data_ptr = (char *)spr->data + offset;
 
-      if (util_format_is_pure_sint(pformat)) {
-         int32_t sdata[4];
-         for (c = 0; c < 4; c++)
-            sdata[c] = ((int32_t *)rgba[c])[j];
-         util_format_write_4i(pformat, sdata, 0, data_ptr, stride,
-                              s_coord, t_coord, 1, 1);
-      } else if (util_format_is_pure_uint(pformat)) {
-         uint32_t sdata[4];
-         for (c = 0; c < 4; c++)
-            sdata[c] = ((uint32_t *)rgba[c])[j];
-         util_format_write_4ui(pformat, sdata, 0, data_ptr, stride,
-                               s_coord, t_coord, 1, 1);
-      } else {
-         float sdata[4];
-         for (c = 0; c < 4; c++)
-            sdata[c] = rgba[c][j];
-         util_format_write_4f(pformat, sdata, 0, data_ptr, stride,
-                              s_coord, t_coord, 1, 1);
-      }
+      uint32_t sdata[4];
+      for (c = 0; c < 4; c++)
+         sdata[c] = ((uint32_t *)rgba[c])[j];
+      util_format_write_4(pformat, sdata, 0, data_ptr, stride,
+                          s_coord, t_coord, 1, 1);
    }
 }
 
@@ -394,10 +361,10 @@ handle_op_uint(const struct pipe_image_view *iview,
    int nc = util_format_get_nr_components(params->format);
    unsigned sdata[4];
 
-   util_format_read_4ui(params->format,
-                        sdata, 0,
-                        data_ptr, stride,
-                        s, t, 1, 1);
+   util_format_read_4(params->format,
+                      sdata, 0,
+                      data_ptr, stride,
+                      s, t, 1, 1);
 
    if (just_read) {
       for (c = 0; c < nc; c++) {
@@ -487,8 +454,8 @@ handle_op_uint(const struct pipe_image_view *iview,
       assert(!"Unexpected TGSI opcode in sp_tgsi_op");
       break;
    }
-   util_format_write_4ui(params->format, sdata, 0, data_ptr, stride,
-                         s, t, 1, 1);
+   util_format_write_4(params->format, sdata, 0, data_ptr, stride,
+                       s, t, 1, 1);
 }
 
 /*
@@ -510,10 +477,10 @@ handle_op_int(const struct pipe_image_view *iview,
    uint c;
    int nc = util_format_get_nr_components(params->format);
    int sdata[4];
-   util_format_read_4i(params->format,
-                       sdata, 0,
-                       data_ptr, stride,
-                       s, t, 1, 1);
+   util_format_read_4(params->format,
+                      sdata, 0,
+                      data_ptr, stride,
+                      s, t, 1, 1);
 
    if (just_read) {
       for (c = 0; c < nc; c++) {
@@ -603,8 +570,8 @@ handle_op_int(const struct pipe_image_view *iview,
       assert(!"Unexpected TGSI opcode in sp_tgsi_op");
       break;
    }
-   util_format_write_4i(params->format, sdata, 0, data_ptr, stride,
-                        s, t, 1, 1);
+   util_format_write_4(params->format, sdata, 0, data_ptr, stride,
+                       s, t, 1, 1);
 }
 
 /* GLES OES_shader_image_atomic.txt allows XCHG on R32F */
@@ -623,10 +590,10 @@ handle_op_r32f_xchg(const struct pipe_image_view *iview,
    float sdata[4];
    uint c;
    int nc = 1;
-   util_format_read_4f(params->format,
-                       sdata, 0,
-                       data_ptr, stride,
-                       s, t, 1, 1);
+   util_format_read_4(params->format,
+                      sdata, 0,
+                      data_ptr, stride,
+                      s, t, 1, 1);
    if (just_read) {
       for (c = 0; c < nc; c++) {
          ((int32_t *)rgba[c])[qi] = sdata[c];
@@ -639,8 +606,8 @@ handle_op_r32f_xchg(const struct pipe_image_view *iview,
       sdata[c] = ((float *)rgba[c])[qi];
       ((float *)rgba[c])[qi] = temp;
    }
-   util_format_write_4f(params->format, sdata, 0, data_ptr, stride,
-                        s, t, 1, 1);
+   util_format_write_4(params->format, sdata, 0, data_ptr, stride,
+                       s, t, 1, 1);
 }
 
 /*

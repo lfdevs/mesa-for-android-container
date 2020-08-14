@@ -42,7 +42,7 @@
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 #include "pipe-loader/pipe_loader.h"
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 
 #include "util/u_memory.h"
 #include "util/crc32.h"

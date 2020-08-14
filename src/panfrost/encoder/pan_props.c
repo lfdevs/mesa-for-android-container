@@ -93,6 +93,45 @@ panfrost_query_thread_tls_alloc(int fd)
                 return 256;
 }
 
+static uint32_t
+panfrost_query_compressed_formats(int fd)
+{
+        /* If unspecified, assume ASTC/ETC only. Factory default for Juno, and
+         * should exist on any Mali configuration. All hardware should report
+         * these texture formats but the kernel might not be new enough. */
+
+        uint32_t default_set =
+                (1 << MALI_ETC2_RGB8) |
+                (1 << MALI_ETC2_R11_UNORM) |
+                (1 << MALI_ETC2_RGBA8) |
+                (1 << MALI_ETC2_RG11_UNORM) |
+                (1 << MALI_ETC2_R11_SNORM) |
+                (1 << MALI_ETC2_RG11_SNORM) |
+                (1 << MALI_ETC2_RGB8A1) |
+                (1 << MALI_ASTC_3D_LDR) |
+                (1 << MALI_ASTC_3D_HDR) |
+                (1 << MALI_ASTC_2D_LDR) |
+                (1 << MALI_ASTC_2D_HDR);
+
+        return panfrost_query_raw(fd, DRM_PANFROST_PARAM_TEXTURE_FEATURES0,
+                        false, default_set);
+}
+
+/* DRM_PANFROST_PARAM_TEXTURE_FEATURES0 will return a bitmask of supported
+ * compressed formats, so we offer a helper to test if a format is supported */
+
+bool
+panfrost_supports_compressed_format(struct panfrost_device *dev, unsigned fmt)
+{
+        if (MALI_EXTRACT_TYPE(fmt) != MALI_FORMAT_COMPRESSED)
+                return true;
+
+        unsigned idx = fmt & ~MALI_FORMAT_COMPRESSED;
+        assert(idx < 32);
+
+        return dev->compressed_formats & (1 << idx);
+}
+
 /* Given a GPU ID like 0x860, return a prettified model name */
 
 const char *
@@ -107,25 +146,11 @@ panfrost_model_name(unsigned gpu_id)
         case 0x750: return "Mali T760 (Panfrost)";
         case 0x860: return "Mali T860 (Panfrost)";
         case 0x880: return "Mali T880 (Panfrost)";
+        case 0x7093: return "Mali G31 (Panfrost)";
+        case 0x7212: return "Mali G52 (Panfrost)";
         default:
                     unreachable("Invalid GPU ID");
         }
-}
-
-static uint32_t
-panfrost_active_bos_hash(const void *key)
-{
-        const struct panfrost_bo *bo = key;
-
-        return _mesa_hash_data(&bo->gem_handle, sizeof(bo->gem_handle));
-}
-
-static bool
-panfrost_active_bos_cmp(const void *keya, const void *keyb)
-{
-        const struct panfrost_bo *a = keya, *b = keyb;
-
-        return a->gem_handle == b->gem_handle;
 }
 
 void
@@ -138,10 +163,9 @@ panfrost_open_device(void *memctx, int fd, struct panfrost_device *dev)
         dev->thread_tls_alloc = panfrost_query_thread_tls_alloc(fd);
         dev->kernel_version = drmGetVersion(fd);
         dev->quirks = panfrost_get_quirks(dev->gpu_id);
+        dev->compressed_formats = panfrost_query_compressed_formats(fd);
 
-        pthread_mutex_init(&dev->active_bos_lock, NULL);
-        dev->active_bos = _mesa_set_create(memctx,
-                        panfrost_active_bos_hash, panfrost_active_bos_cmp);
+        util_sparse_array_init(&dev->bo_map, sizeof(struct panfrost_bo), 512);
 
         pthread_mutex_init(&dev->bo_cache.lock, NULL);
         list_inithead(&dev->bo_cache.lru);
@@ -153,9 +177,10 @@ panfrost_open_device(void *memctx, int fd, struct panfrost_device *dev)
 void
 panfrost_close_device(struct panfrost_device *dev)
 {
+        panfrost_bo_unreference(dev->blit_shaders.bo);
         panfrost_bo_cache_evict_all(dev);
         pthread_mutex_destroy(&dev->bo_cache.lock);
-        pthread_mutex_destroy(&dev->active_bos_lock);
         drmFreeVersion(dev->kernel_version);
+        util_sparse_array_finish(&dev->bo_map);
 
 }

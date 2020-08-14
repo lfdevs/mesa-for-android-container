@@ -68,6 +68,7 @@ panfrost_sfbd_format(struct pipe_surface *surf)
 
         case PIPE_FORMAT_A4B4G4R4_UNORM:
         case PIPE_FORMAT_B4G4R4A4_UNORM:
+        case PIPE_FORMAT_R4G4B4A4_UNORM:
                 fmt.unk1 = 0x4;
                 fmt.nr_channels = MALI_POSITIVE(1);
                 fmt.unk2 = 0x5;
@@ -133,7 +134,7 @@ panfrost_sfbd_set_cbuf(
         assert(surf->u.tex.last_layer == first_layer);
         signed stride = rsrc->slices[level].stride;
 
-        mali_ptr base = panfrost_get_texture_address(rsrc, level, first_layer);
+        mali_ptr base = panfrost_get_texture_address(rsrc, level, first_layer, 0);
 
         fb->format = panfrost_sfbd_format(surf);
 
@@ -173,16 +174,12 @@ panfrost_sfbd_set_zsbuf(
                 return;
 
         if (panfrost_is_z24s8_variant(surf->format)) {
-
                 /* Stencil data is interleaved with depth */
                 fb->stencil_buffer = fb->depth_buffer;
                 fb->stencil_stride = fb->depth_stride;
-        } else if (surf->format == PIPE_FORMAT_Z32_UNORM ||
-                   surf->format == PIPE_FORMAT_Z32_FLOAT) {
-
+        } else if (surf->format == PIPE_FORMAT_Z32_FLOAT) {
                 /* No stencil, nothing to do */
         } else if (surf->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) {
-
                 /* Stencil data in separate buffer */
                 struct panfrost_resource *stencil = rsrc->separate_stencil;
                 struct panfrost_slice stencil_slice = stencil->slices[level];
@@ -207,12 +204,11 @@ panfrost_emit_sfbd(struct panfrost_batch *batch, unsigned vertex_count)
         /* TODO: Why do we need to make the stack bigger than other platforms? */
         unsigned shift = panfrost_get_stack_shift(MAX2(batch->stack_size, 512));
 
-        /* TODO: where do we specify the shift? */
-
         struct mali_single_framebuffer framebuffer = {
                 .width = MALI_POSITIVE(width),
                 .height = MALI_POSITIVE(height),
                 .shared_memory = {
+                        .stack_shift = shift,
                         .shared_workgroup_count = ~0,
                         .scratchpad = panfrost_batch_get_scratchpad(batch, shift, dev->thread_tls_alloc, dev->core_count)->gpu,
                 },
@@ -270,5 +266,5 @@ panfrost_sfbd_fragment(struct panfrost_batch *batch, bool has_draws)
                 fb.format.unk2 |= MALI_SFBD_FORMAT_MSAA_B;
         }
 
-        return panfrost_upload_transient(batch, &fb, sizeof(fb));
+        return panfrost_pool_upload(&batch->pool, &fb, sizeof(fb));
 }

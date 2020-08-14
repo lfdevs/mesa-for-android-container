@@ -15,7 +15,9 @@ struct nvc0_transform_feedback_state {
 };
 
 
-#define NVC0_SHADER_HEADER_SIZE (20 * 4)
+#define GF100_SHADER_HEADER_SIZE (20 * 4)
+#define TU102_SHADER_HEADER_SIZE (32 * 4)
+#define NVC0_MAX_SHADER_HEADER_SIZE TU102_SHADER_HEADER_SIZE
 
 struct nvc0_program {
    struct pipe_shader_state pipe;
@@ -30,7 +32,7 @@ struct nvc0_program {
    unsigned code_size;
    unsigned parm_size; /* size of non-bindable uniforms (c0[]) */
 
-   uint32_t hdr[20];
+   uint32_t hdr[NVC0_MAX_SHADER_HEADER_SIZE/4];
    uint32_t flags[2];
 
    struct {
@@ -72,4 +74,6 @@ struct nvc0_program {
    struct nouveau_heap *mem;
 };
 
+void
+nvc0_program_sp_start_id(struct nvc0_context *, int, struct nvc0_program *);
 #endif

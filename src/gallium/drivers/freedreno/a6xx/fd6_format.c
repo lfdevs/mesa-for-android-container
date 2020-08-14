@@ -44,8 +44,6 @@ struct fd6_format {
 	boolean present;
 };
 
-#define FMT6_NONE ~0
-
 #define FMT(pipe, vtxfmt, texfmt, rbfmt, swapfmt) \
 	[PIPE_FORMAT_ ## pipe] = { \
 		.present = 1, \
@@ -132,6 +130,8 @@ static struct fd6_format formats[PIPE_FORMAT_COUNT] = {
 	V__(R8G8B8_SSCALED, 8_8_8_SINT,              WZYX),
 
 	/* 32-bit */
+	V__(R32_UNORM,   32_UNORM,                   WZYX),
+	V__(R32_SNORM,   32_SNORM,                   WZYX),
 	VTC(R32_UINT,    32_UINT,                    WZYX),
 	VTC(R32_SINT,    32_SINT,                    WZYX),
 	V__(R32_USCALED, 32_UINT,                    WZYX),
@@ -232,6 +232,8 @@ static struct fd6_format formats[PIPE_FORMAT_COUNT] = {
 	VTC(R16G16B16A16_FLOAT,   16_16_16_16_FLOAT, WZYX),
 	VTC(R16G16B16X16_FLOAT,   16_16_16_16_FLOAT, WZYX),
 
+	V__(R32G32_UNORM,   32_32_UNORM,             WZYX),
+	V__(R32G32_SNORM,   32_32_SNORM,             WZYX),
 	VTC(R32G32_UINT,    32_32_UINT,              WZYX),
 	VTC(R32G32_SINT,    32_32_SINT,              WZYX),
 	V__(R32G32_USCALED, 32_32_UINT,              WZYX),
@@ -243,6 +245,8 @@ static struct fd6_format formats[PIPE_FORMAT_COUNT] = {
 	_T_(L32A32_SINT,    32_32_SINT,              WZYX),
 
 	/* 96-bit */
+	V__(R32G32B32_UNORM,   32_32_32_UNORM,       WZYX),
+	V__(R32G32B32_SNORM,   32_32_32_SNORM,       WZYX),
 	VT_(R32G32B32_UINT,    32_32_32_UINT,        WZYX),
 	VT_(R32G32B32_SINT,    32_32_32_SINT,        WZYX),
 	V__(R32G32B32_USCALED, 32_32_32_UINT,        WZYX),
@@ -251,6 +255,8 @@ static struct fd6_format formats[PIPE_FORMAT_COUNT] = {
 	V__(R32G32B32_FIXED,   32_32_32_FIXED,       WZYX),
 
 	/* 128-bit */
+	V__(R32G32B32A32_UNORM,   32_32_32_32_UNORM, WZYX),
+	V__(R32G32B32A32_SNORM,   32_32_32_32_SNORM, WZYX),
 	VTC(R32G32B32A32_UINT,    32_32_32_32_UINT,  WZYX),
 	_TC(R32G32B32X32_UINT,    32_32_32_32_UINT,  WZYX),
 	VTC(R32G32B32A32_SINT,    32_32_32_32_SINT,  WZYX),
@@ -333,7 +339,7 @@ enum a6xx_format
 fd6_pipe2vtx(enum pipe_format format)
 {
 	if (!formats[format].present)
-		return ~0;
+		return FMT6_NONE;
 	return formats[format].vtx;
 }
 
@@ -342,7 +348,7 @@ enum a6xx_format
 fd6_pipe2tex(enum pipe_format format)
 {
 	if (!formats[format].present)
-		return ~0;
+		return FMT6_NONE;
 	return formats[format].tex;
 }
 
@@ -351,7 +357,7 @@ enum a6xx_format
 fd6_pipe2color(enum pipe_format format)
 {
 	if (!formats[format].present)
-		return ~0;
+		return FMT6_NONE;
 	return formats[format].rb;
 }
 
@@ -361,31 +367,6 @@ fd6_pipe2swap(enum pipe_format format)
 	if (!formats[format].present)
 		return WZYX;
 	return formats[format].swap;
-}
-
-// XXX possibly same as a4xx..
-enum a6xx_tex_fetchsize
-fd6_pipe2fetchsize(enum pipe_format format)
-{
-	if (format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
-		format = PIPE_FORMAT_Z32_FLOAT;
-
-	if (util_format_description(format)->layout == UTIL_FORMAT_LAYOUT_ASTC)
-		return TFETCH6_16_BYTE;
-
-	switch (util_format_get_blocksizebits(format) / util_format_get_blockwidth(format)) {
-	case 8:   return TFETCH6_1_BYTE;
-	case 16:  return TFETCH6_2_BYTE;
-	case 32:  return TFETCH6_4_BYTE;
-	case 64:  return TFETCH6_8_BYTE;
-	case 96:  return TFETCH6_1_BYTE; /* Does this matter? */
-	case 128: return TFETCH6_16_BYTE;
-	default:
-		debug_printf("Unknown block size for format %s: %d\n",
-				util_format_name(format),
-				util_format_get_blocksizebits(format));
-		return TFETCH6_1_BYTE;
-	}
 }
 
 enum a6xx_depth_format

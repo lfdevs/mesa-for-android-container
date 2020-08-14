@@ -118,7 +118,8 @@ define_rasterizer_object(struct svga_context *svga,
       rast->templ.line_stipple_factor : 0;
    const uint16 line_pattern = rast->templ.line_stipple_enable ?
       rast->templ.line_stipple_pattern : 0;
-   unsigned try;
+   const uint8 pv_last = !rast->templ.flatshade_first &&
+      svgascreen->haveProvokingVertex;
 
    rast->id = util_bitmask_add(svga->rast_object_id_bm);
 
@@ -130,31 +131,24 @@ define_rasterizer_object(struct svga_context *svga,
       fill_mode = SVGA3D_FILLMODE_FILL;
    }
 
-   for (try = 0; try < 2; try++) {
-      const uint8 pv_last = !rast->templ.flatshade_first &&
-         svgascreen->haveProvokingVertex;
-      enum pipe_error ret =
-         SVGA3D_vgpu10_DefineRasterizerState(svga->swc,
-                                             rast->id,
-                                             fill_mode,
-                                             cull_mode,
-                                             rast->templ.front_ccw,
-                                             depth_bias,
-                                             depth_bias_clamp,
-                                             slope_scaled_depth_bias,
-                                             rast->templ.depth_clip_near,
-                                             rast->templ.scissor,
-                                             rast->templ.multisample,
-                                             rast->templ.line_smooth,
-                                             line_width,
-                                             rast->templ.line_stipple_enable,
-                                             line_factor,
-                                             line_pattern,
-                                             pv_last);
-      if (ret == PIPE_OK)
-         return;
-      svga_context_flush(svga, NULL);
-   }
+   SVGA_RETRY(svga, SVGA3D_vgpu10_DefineRasterizerState
+              (svga->swc,
+               rast->id,
+               fill_mode,
+               cull_mode,
+               rast->templ.front_ccw,
+               depth_bias,
+               depth_bias_clamp,
+               slope_scaled_depth_bias,
+               rast->templ.depth_clip_near,
+               rast->templ.scissor,
+               rast->templ.multisample,
+               rast->templ.line_smooth,
+               line_width,
+               rast->templ.line_stipple_enable,
+               line_factor,
+               line_pattern,
+               pv_last));
 }
 
 
@@ -194,7 +188,18 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
       rast->templ.point_smooth = TRUE;
    }
 
-   if (templ->point_smooth) {
+   if (rast->templ.point_smooth &&
+       rast->templ.point_size_per_vertex == 0 &&
+       rast->templ.point_size <= screen->pointSmoothThreshold) {
+      /* If the point size is less than the threshold, disable smoothing.
+       * Note that this only effects point rendering when we use the
+       * pipe_rasterizer_state::point_size value, not when the point size
+       * is set in the VS.
+       */
+      rast->templ.point_smooth = FALSE;
+   }
+
+   if (rast->templ.point_smooth) {
       /* For smooth points we need to generate fragments for at least
        * a 2x2 region.  Otherwise the quad we draw may be too small and
        * we may generate no fragments at all.
@@ -237,7 +242,7 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
       }
    }
 
-   if (!svga_have_vgpu10(svga) && templ->point_smooth) {
+   if (!svga_have_vgpu10(svga) && rast->templ.point_smooth) {
       rast->need_pipeline |= SVGA_PIPELINE_FLAG_POINTS;
       rast->need_pipeline_points_str = "smooth points";
    }
@@ -404,12 +409,8 @@ svga_delete_rasterizer_state(struct pipe_context *pipe, void *state)
       (struct svga_rasterizer_state *) state;
 
    if (svga_have_vgpu10(svga)) {
-      enum pipe_error ret =
-         SVGA3D_vgpu10_DestroyRasterizerState(svga->swc, raster->id);
-      if (ret != PIPE_OK) {
-         svga_context_flush(svga, NULL);
-         ret = SVGA3D_vgpu10_DestroyRasterizerState(svga->swc, raster->id);
-      }
+      SVGA_RETRY(svga, SVGA3D_vgpu10_DestroyRasterizerState(svga->swc,
+                                                            raster->id));
 
       if (raster->id == svga->state.hw_draw.rasterizer_id)
          svga->state.hw_draw.rasterizer_id = SVGA3D_INVALID_ID;

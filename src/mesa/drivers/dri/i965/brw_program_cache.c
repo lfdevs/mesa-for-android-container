@@ -54,6 +54,8 @@
 #include "brw_program.h"
 #include "compiler/brw_eu.h"
 #include "util/u_memory.h"
+#define XXH_INLINE_ALL
+#include "util/xxhash.h"
 
 #define FILE_DEBUG_FLAG DEBUG_STATE
 
@@ -96,9 +98,9 @@ brw_stage_cache_id(gl_shader_stage stage)
 static GLuint
 hash_key(struct brw_cache_item *item)
 {
-    uint32_t hash = _mesa_fnv32_1a_offset_bias;
-    hash = _mesa_fnv32_1a_accumulate(hash, item->cache_id);
-    hash = _mesa_fnv32_1a_accumulate_block(hash, item->key, item->key_size);
+    uint32_t hash = 0;
+    hash = XXH32(&item->cache_id, sizeof(item->cache_id), hash);
+    hash = XXH32(item->key, item->key_size, hash);
 
    return hash;
 }

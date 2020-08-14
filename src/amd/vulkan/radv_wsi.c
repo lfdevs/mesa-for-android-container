@@ -186,7 +186,7 @@ VkResult radv_CreateSwapchainKHR(
 	if (pAllocator)
 		alloc = pAllocator;
 	else
-		alloc = &device->alloc;
+		alloc = &device->vk.alloc;
 
 	return wsi_common_create_swapchain(&device->physical_device->wsi_device,
 					   radv_device_to_handle(device),
@@ -206,7 +206,7 @@ void radv_DestroySwapchainKHR(
 	if (pAllocator)
 		alloc = pAllocator;
 	else
-		alloc = &device->alloc;
+		alloc = &device->vk.alloc;
 
 	wsi_common_destroy_swapchain(_device, swapchain, alloc);
 }
@@ -259,12 +259,21 @@ VkResult radv_AcquireNextImage2KHR(
 
 	if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
 		if (fence) {
-			if (fence->fence)
-				device->ws->signal_fence(fence->fence);
-			if (fence->temp_syncobj) {
-				device->ws->signal_syncobj(device->ws, fence->temp_syncobj);
-			} else if (fence->syncobj) {
-				device->ws->signal_syncobj(device->ws, fence->syncobj);
+			struct radv_fence_part *part =
+				fence->temporary.kind != RADV_FENCE_NONE ?
+				&fence->temporary : &fence->permanent;
+
+			switch (part->kind) {
+			case RADV_FENCE_NONE:
+				break;
+			case RADV_FENCE_WINSYS:
+				device->ws->signal_fence(part->fence);
+				break;
+			case RADV_FENCE_SYNCOBJ:
+				device->ws->signal_syncobj(device->ws, part->syncobj, 0);
+				break;
+			default:
+				unreachable("Invalid WSI fence type");
 			}
 		}
 		if (semaphore) {
@@ -278,9 +287,10 @@ VkResult radv_AcquireNextImage2KHR(
 				/* Do not need to do anything. */
 				break;
 			case RADV_SEMAPHORE_TIMELINE:
+			case RADV_SEMAPHORE_TIMELINE_SYNCOBJ:
 				unreachable("WSI only allows binary semaphores.");
 			case RADV_SEMAPHORE_SYNCOBJ:
-				device->ws->signal_syncobj(device->ws, part->syncobj);
+				device->ws->signal_syncobj(device->ws, part->syncobj, 0);
 				break;
 			}
 		}

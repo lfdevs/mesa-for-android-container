@@ -32,7 +32,8 @@
 #include "a2xx.xml.h"
 
 struct surface_format {
-#define FMT_INVALID 0x7f
+/* If enum is a signed type, 0x7f is out of range. Cast it to avoid warnings. */
+#define FMT_INVALID ((enum a2xx_sq_surfaceformat) 0x7f)
 	enum a2xx_sq_surfaceformat format : 7;
 	enum sq_tex_sign sign : 2;
 	enum sq_tex_num_format num_format : 1;

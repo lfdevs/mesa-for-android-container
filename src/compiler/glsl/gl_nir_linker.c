@@ -34,6 +34,38 @@
  * the counter-part glsl/linker.cpp
  */
 
+static bool
+can_remove_uniform(nir_variable *var)
+{
+   /* Section 2.11.6 (Uniform Variables) of the OpenGL ES 3.0.3 spec
+    * says:
+    *
+    *     "All members of a named uniform block declared with a shared or
+    *     std140 layout qualifier are considered active, even if they are not
+    *     referenced in any shader in the program. The uniform block itself is
+    *     also considered active, even if no member of the block is
+    *     referenced."
+    *
+    * Although the spec doesn't state it std430 layouts are expect to behave
+    * the same way. If the variable is in a uniform block with one of those
+    * layouts, do not eliminate it.
+    */
+   if (nir_variable_is_in_block(var) &&
+       (glsl_get_ifc_packing(var->interface_type) !=
+        GLSL_INTERFACE_PACKING_PACKED))
+      return false;
+
+   if (glsl_get_base_type(glsl_without_array(var->type)) ==
+       GLSL_TYPE_SUBROUTINE)
+      return false;
+
+   /* Uniform initializers could get used by another stage */
+   if (var->constant_initializer)
+      return false;
+
+   return true;
+}
+
 /**
  * Built-in / reserved GL variables names start with "gl_"
  */
@@ -255,8 +287,8 @@ add_shader_variable(const struct gl_context *ctx,
          }
          return true;
       }
-      /* fallthrough */
    }
+   /* fallthrough */
 
    default: {
       /* The ARB_program_interface_query spec says:
@@ -279,12 +311,12 @@ add_shader_variable(const struct gl_context *ctx,
 }
 
 static bool
-add_vars_from_list(const struct gl_context *ctx,
-                   struct gl_shader_program *prog, struct set *resource_set,
-                   const struct exec_list *var_list, unsigned stage,
-                   GLenum programInterface)
+add_vars_with_modes(const struct gl_context *ctx,
+                    struct gl_shader_program *prog, struct set *resource_set,
+                    nir_shader *nir, nir_variable_mode modes,
+                    unsigned stage, GLenum programInterface)
 {
-   nir_foreach_variable(var, var_list) {
+   nir_foreach_variable_with_modes(var, nir, modes) {
       if (var->data.how_declared == nir_var_hidden)
          continue;
 
@@ -373,15 +405,14 @@ add_interface_variables(const struct gl_context *ctx,
 
    switch (programInterface) {
    case GL_PROGRAM_INPUT: {
-      bool result = add_vars_from_list(ctx, prog, resource_set,
-                                       &nir->inputs, stage, programInterface);
-      result &= add_vars_from_list(ctx, prog, resource_set, &nir->system_values,
-                                   stage, programInterface);
-      return result;
+      return add_vars_with_modes(ctx, prog, resource_set,
+                                 nir, nir_var_shader_in | nir_var_system_value,
+                                 stage, programInterface);
    }
    case GL_PROGRAM_OUTPUT:
-      return add_vars_from_list(ctx, prog, resource_set, &nir->outputs, stage,
-                                programInterface);
+      return add_vars_with_modes(ctx, prog, resource_set,
+                                 nir, nir_var_shader_out,
+                                 stage, programInterface);
    default:
       assert("!Should not get here");
       break;
@@ -569,6 +600,14 @@ bool
 gl_nir_link_spirv(struct gl_context *ctx, struct gl_shader_program *prog,
                   const struct gl_nir_linker_options *options)
 {
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      struct gl_linked_shader *shader = prog->_LinkedShaders[i];
+      if (shader) {
+         nir_remove_dead_variables(shader->Program->nir, nir_var_uniform,
+                                   &can_remove_uniform);
+      }
+   }
+
    if (!gl_nir_link_uniform_blocks(ctx, prog))
       return false;
 
@@ -622,6 +661,14 @@ check_image_resources(struct gl_context *ctx, struct gl_shader_program *prog)
 bool
 gl_nir_link_glsl(struct gl_context *ctx, struct gl_shader_program *prog)
 {
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      struct gl_linked_shader *shader = prog->_LinkedShaders[i];
+      if (shader) {
+         nir_remove_dead_variables(shader->Program->nir, nir_var_uniform,
+                                   &can_remove_uniform);
+      }
+   }
+
    if (!gl_nir_link_uniforms(ctx, prog, true))
       return false;
 

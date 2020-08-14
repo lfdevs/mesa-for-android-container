@@ -97,6 +97,7 @@ struct vl_compositor_state
 
    unsigned used_layers:VL_COMPOSITOR_MAX_LAYERS;
    struct vl_compositor_layer layers[VL_COMPOSITOR_MAX_LAYERS];
+   bool interlaced;
 };
 
 struct vl_compositor

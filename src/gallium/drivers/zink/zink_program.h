@@ -28,6 +28,7 @@
 
 #include "pipe/p_state.h"
 
+struct zink_context;
 struct zink_screen;
 struct zink_shader;
 struct zink_gfx_pipeline_state;
@@ -45,7 +46,7 @@ struct zink_gfx_program {
 };
 
 struct zink_gfx_program *
-zink_create_gfx_program(struct zink_screen *screen,
+zink_create_gfx_program(struct zink_context *ctx,
                         struct zink_shader *stages[PIPE_SHADER_TYPES - 1]);
 
 void

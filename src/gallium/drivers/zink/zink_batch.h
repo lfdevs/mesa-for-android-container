@@ -26,6 +26,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include "util/list.h"
 #include "util/u_dynarray.h"
 
 struct zink_context;
@@ -50,6 +51,8 @@ struct zink_batch {
    struct set *sampler_views;
 
    struct util_dynarray zombie_samplers;
+
+   struct set *active_queries; /* zink_query objects which were active at some point in this batch */
 };
 
 void

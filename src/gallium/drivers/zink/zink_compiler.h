@@ -32,10 +32,14 @@
 #include <vulkan/vulkan.h>
 
 struct pipe_screen;
+struct zink_context;
 struct zink_screen;
+struct zink_gfx_program;
 
 struct nir_shader_compiler_options;
 struct nir_shader;
+
+struct set;
 
 struct tgsi_token;
 
@@ -52,18 +56,22 @@ struct zink_shader {
 
    shader_info info;
 
+   struct pipe_stream_output_info stream_output;
+
    struct {
       int index;
       int binding;
       VkDescriptorType type;
    } bindings[PIPE_MAX_CONSTANT_BUFFERS + PIPE_MAX_SHADER_SAMPLER_VIEWS];
    size_t num_bindings;
+   struct set *programs;
 };
 
 struct zink_shader *
-zink_compile_nir(struct zink_screen *screen, struct nir_shader *nir);
+zink_compile_nir(struct zink_screen *screen, struct nir_shader *nir,
+                 const struct pipe_stream_output_info *so_info);
 
 void
-zink_shader_free(struct zink_screen *screen, struct zink_shader *shader);
+zink_shader_free(struct zink_context *ctx, struct zink_shader *shader);
 
 #endif

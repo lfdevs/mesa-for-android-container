@@ -50,6 +50,7 @@
 #include "compiler/glsl/list.h"
 #include "util/simple_mtx.h"
 #include "util/u_dynarray.h"
+#include "vbo/vbo.h"
 
 
 #ifdef __cplusplus
@@ -79,7 +80,6 @@ struct gl_program_parameter_list;
 struct gl_shader_spirv_data;
 struct set;
 struct shader_includes;
-struct vbo_context;
 /*@}*/
 
 
@@ -1540,11 +1540,25 @@ struct gl_vertex_array_object
    GLboolean EverBound;
 
    /**
+    * Whether the VAO is changed by the application so often that some of
+    * the derived fields are not updated at all to decrease overhead.
+    * Also, interleaved arrays are not detected, because it's too expensive
+    * to do that before every draw call.
+    */
+   bool IsDynamic;
+
+   /**
     * Marked to true if the object is shared between contexts and immutable.
     * Then reference counting is done using atomics and thread safe.
     * Is used for dlist VAOs.
     */
    bool SharedAndImmutable;
+
+   /**
+    * Number of updates that were done by the application. This is used to
+    * decide whether the VAO is static or dynamic.
+    */
+   unsigned NumUpdates;
 
    /** Vertex attribute arrays */
    struct gl_array_attributes VertexAttrib[VERT_ATTRIB_MAX];
@@ -2053,19 +2067,6 @@ struct gl_bindless_image
 
 
 /**
- * Current vertex processing mode: fixed function vs. shader.
- * In reality, fixed function is probably implemented by a shader but that's
- * not what we care about here.
- */
-typedef enum
-{
-   VP_MODE_FF,     /**< legacy / fixed function */
-   VP_MODE_SHADER, /**< ARB vertex program or GLSL vertex shader */
-   VP_MODE_MAX     /**< for sizing arrays */
-} gl_vertex_processing_mode;
-
-
-/**
  * Base class for any kind of program object
  */
 struct gl_program
@@ -2181,6 +2182,7 @@ struct gl_program
           */
          GLenum16 ImageAccess[MAX_IMAGE_UNIFORMS];
 
+         GLuint NumUniformBlocks;
          struct gl_uniform_block **UniformBlocks;
          struct gl_uniform_block **ShaderStorageBlocks;
 
@@ -2290,6 +2292,8 @@ struct gl_vertex_program_state
    GLboolean TwoSideEnabled;     /**< GL_VERTEX_PROGRAM_TWO_SIDE_ARB/NV */
    /** Should fixed-function T&L be implemented with a vertex prog? */
    GLboolean _MaintainTnlProgram;
+   /** Whether the fixed-func program is being used right now. */
+   GLboolean _UsesTnlProgram;
 
    struct gl_program *Current;  /**< User-bound vertex program */
 
@@ -2363,6 +2367,8 @@ struct gl_fragment_program_state
    GLboolean Enabled;     /**< User-set fragment program enable flag */
    /** Should fixed-function texturing be implemented with a fragment prog? */
    GLboolean _MaintainTexEnvProgram;
+   /** Whether the fixed-func program is being used right now. */
+   GLboolean _UsesTexEnvProgram;
 
    struct gl_program *Current;  /**< User-bound fragment program */
 
@@ -3200,7 +3206,16 @@ struct gl_shader_compiler_options
     * If we can lower the precision of variables based on precision
     * qualifiers
     */
-   GLboolean LowerPrecision;
+   GLboolean LowerPrecisionFloat16;
+   GLboolean LowerPrecisionInt16;
+   GLboolean LowerPrecisionDerivatives;
+
+   /**
+    * This enables lowering of 16b constants.  Some drivers may not
+    * to lower constants to 16b (ie. if the hw can do automatic
+    * narrowing on constant load)
+    */
+   GLboolean LowerPrecisionConstants;
 
    /**
     * \name Forms of indirect addressing the driver cannot do.
@@ -3822,6 +3837,11 @@ struct gl_constants
    GLboolean AllowGLSLExtensionDirectiveMidShader;
 
    /**
+    * Allow a subset of GLSL 1.20 in GLSL 1.10 as needed by SPECviewperf13.
+    */
+   GLboolean AllowGLSL120SubsetIn110;
+
+   /**
     * Allow builtins as part of constant expressions. This was not allowed
     * until GLSL 1.20 this allows it everywhere.
     */
@@ -3862,9 +3882,13 @@ struct gl_constants
    GLboolean ForceGLSLAbsSqrt;
 
    /**
-    * Force uninitialized variables to default to zero.
+    * Types of variable to default initialized to zero. Supported values are:
+    *   - 0: no zero initialization
+    *   - 1: all shader variables and gl_FragColor are initialiazed to 0
+    *   - 2: same as 1, but shader out variables are *not* initialized, while
+    *        function out variables are now initialized.
     */
-   GLboolean GLSLZeroInit;
+   GLchar GLSLZeroInit;
 
    /**
     * Treat integer textures using GL_LINEAR filters as GL_NEAREST.
@@ -4164,6 +4188,16 @@ struct gl_constants
 
    /** Whether out-of-order draw (Begin/End) optimizations are allowed. */
    bool AllowDrawOutOfOrder;
+
+   /** Whether to allow the fast path for frequently updated VAOs. */
+   bool AllowDynamicVAOFastPath;
+
+   /** Whether the driver can support primitive restart with a fixed index.
+    * This is essentially a subset of NV_primitive_restart with enough support
+    * to be able to enable GLES 3.1. Some hardware can support this but not the
+    * full NV extension with arbitrary restart indices.
+    */
+   bool PrimitiveRestartFixedIndex;
 
    /** GL_ARB_gl_spirv */
    struct spirv_supported_capabilities SpirVCapabilities;
@@ -4712,6 +4746,9 @@ struct gl_driver_flags
    /** gl_context::Transform::ClipPlanesEnabled */
    uint64_t NewClipPlaneEnable;
 
+   /** gl_context::Color::ClampFragmentColor */
+   uint64_t NewFragClamp;
+
    /** gl_context::Transform::DepthClamp */
    uint64_t NewDepthClamp;
 
@@ -4833,6 +4870,31 @@ struct gl_memory_object
 struct gl_semaphore_object
 {
    GLuint Name;            /**< hash table ID/name */
+};
+
+/**
+ * One element of the client attrib stack.
+ */
+struct gl_client_attrib_node
+{
+   GLbitfield Mask;
+   struct gl_array_attrib Array;
+   struct gl_vertex_array_object VAO;
+   struct gl_pixelstore_attrib Pack;
+   struct gl_pixelstore_attrib Unpack;
+};
+
+/**
+ * The VBO module implemented in src/vbo.
+ */
+struct vbo_context {
+   struct gl_vertex_buffer_binding binding;
+   struct gl_array_attributes current[VBO_ATTRIB_MAX];
+
+   struct gl_vertex_array_object *VAO;
+
+   struct vbo_exec_context exec;
+   struct vbo_save_context save;
 };
 
 /**
@@ -4973,7 +5035,7 @@ struct gl_context
    /** \name Client attribute stack */
    /*@{*/
    GLuint ClientAttribStackDepth;
-   struct gl_attrib_node *ClientAttribStack[MAX_CLIENT_ATTRIB_STACK_DEPTH];
+   struct gl_client_attrib_node ClientAttribStack[MAX_CLIENT_ATTRIB_STACK_DEPTH];
    /*@}*/
 
    /** \name Client attribute groups */
@@ -5182,7 +5244,7 @@ struct gl_context
    void *swrast_context;
    void *swsetup_context;
    void *swtnl_context;
-   struct vbo_context *vbo_context;
+   struct vbo_context vbo_context;
    struct st_context *st;
    /*@}*/
 

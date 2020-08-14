@@ -161,6 +161,10 @@ private:
 
 };
 
+std::pair<unsigned, unsigned>
+r600_get_varying_semantic(unsigned varying_location);
+
+
 }
 
 #endif // SFN_SHADERIO_H

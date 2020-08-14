@@ -31,9 +31,9 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "registers/adreno_pm4.xml.h"
-#include "registers/adreno_common.xml.h"
-#include "registers/a6xx.xml.h"
+#include "adreno_pm4.xml.h"
+#include "adreno_common.xml.h"
+#include "a6xx.xml.h"
 
 #include "nir/nir_builder.h"
 #include "util/os_time.h"
@@ -129,23 +129,22 @@ tu_CreateQueryPool(VkDevice _device,
    }
 
    struct tu_query_pool *pool =
-      vk_alloc2(&device->alloc, pAllocator, sizeof(*pool), 8,
-                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-
+         vk_object_alloc(&device->vk, pAllocator, sizeof(*pool),
+                         VK_OBJECT_TYPE_QUERY_POOL);
    if (!pool)
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    VkResult result = tu_bo_init_new(device, &pool->bo,
          pCreateInfo->queryCount * slot_size);
    if (result != VK_SUCCESS) {
-      vk_free2(&device->alloc, pAllocator, pool);
+      vk_object_free(&device->vk, pAllocator, pool);
       return result;
    }
 
    result = tu_bo_map(device, &pool->bo);
    if (result != VK_SUCCESS) {
       tu_bo_finish(device, &pool->bo);
-      vk_free2(&device->alloc, pAllocator, pool);
+      vk_object_free(&device->vk, pAllocator, pool);
       return result;
    }
 
@@ -173,7 +172,7 @@ tu_DestroyQueryPool(VkDevice _device,
       return;
 
    tu_bo_finish(device, &pool->bo);
-   vk_free2(&device->alloc, pAllocator, pool);
+   vk_object_free(&device->vk, pAllocator, pool);
 }
 
 static uint32_t
@@ -310,6 +309,9 @@ tu_GetQueryPoolResults(VkDevice _device,
    TU_FROM_HANDLE(tu_device, device, _device);
    TU_FROM_HANDLE(tu_query_pool, pool, queryPool);
    assert(firstQuery + queryCount <= pool->size);
+
+   if (tu_device_is_lost(device))
+      return VK_ERROR_DEVICE_LOST;
 
    switch (pool->type) {
    case VK_QUERY_TYPE_OCCLUSION:
@@ -546,7 +548,7 @@ emit_begin_xfb_query(struct tu_cmd_buffer *cmdbuf,
    uint64_t begin_iova = primitive_query_iova(pool, query, begin[0], 0);
 
    tu_cs_emit_regs(cs, A6XX_VPC_SO_STREAM_COUNTS_LO(begin_iova));
-   tu6_emit_event_write(cmdbuf, cs, WRITE_PRIMITIVE_COUNTS, false);
+   tu6_emit_event_write(cmdbuf, cs, WRITE_PRIMITIVE_COUNTS);
 }
 
 void
@@ -693,10 +695,10 @@ emit_end_xfb_query(struct tu_cmd_buffer *cmdbuf,
    uint64_t available_iova = query_available_iova(pool, query);
 
    tu_cs_emit_regs(cs, A6XX_VPC_SO_STREAM_COUNTS_LO(end_iova));
-   tu6_emit_event_write(cmdbuf, cs, WRITE_PRIMITIVE_COUNTS, false);
+   tu6_emit_event_write(cmdbuf, cs, WRITE_PRIMITIVE_COUNTS);
 
    tu_cs_emit_wfi(cs);
-   tu6_emit_event_write(cmdbuf, cs, CACHE_FLUSH_TS, true);
+   tu6_emit_event_write(cmdbuf, cs, CACHE_FLUSH_TS);
 
    /* Set the count of written primitives */
    tu_cs_emit_pkt7(cs, CP_MEM_TO_MEM, 9);
@@ -707,7 +709,7 @@ emit_end_xfb_query(struct tu_cmd_buffer *cmdbuf,
    tu_cs_emit_qw(cs, end_written_iova);
    tu_cs_emit_qw(cs, begin_written_iova);
 
-   tu6_emit_event_write(cmdbuf, cs, CACHE_FLUSH_TS, true);
+   tu6_emit_event_write(cmdbuf, cs, CACHE_FLUSH_TS);
 
    /* Set the count of generated primitives */
    tu_cs_emit_pkt7(cs, CP_MEM_TO_MEM, 9);

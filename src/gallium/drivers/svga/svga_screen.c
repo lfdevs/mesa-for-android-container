@@ -49,6 +49,10 @@
 /* NOTE: this constant may get moved into a svga3d*.h header file */
 #define SVGA3D_DX_MAX_RESOURCE_SIZE (128 * 1024 * 1024)
 
+#ifndef MESA_GIT_SHA1
+#define MESA_GIT_SHA1 "(unknown git revision)"
+#endif
+
 #ifdef DEBUG
 int SVGA_DEBUG = 0;
 
@@ -202,22 +206,14 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_POINT_SPRITE:
       return 1;
-   case PIPE_CAP_TGSI_TEXCOORD:
-      return 0;
    case PIPE_CAP_MAX_RENDER_TARGETS:
       return svgascreen->max_color_buffers;
    case PIPE_CAP_OCCLUSION_QUERY:
       return 1;
-   case PIPE_CAP_QUERY_TIME_ELAPSED:
-      return 0;
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
       return sws->have_vgpu10;
    case PIPE_CAP_TEXTURE_SWIZZLE:
       return 1;
-   case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
-      return 0;
-   case PIPE_CAP_USER_VERTEX_BUFFERS:
-      return 0;
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 256;
 
@@ -249,7 +245,8 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
                   12 /* 2048x2048 */);
 
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
-      return sws->have_vgpu10 ? SVGA3D_MAX_SURFACE_ARRAYSIZE : 0;
+      return sws->have_sm5 ? SVGA3D_SM5_MAX_SURFACE_ARRAYSIZE :
+             (sws->have_vgpu10 ? SVGA3D_SM4_MAX_SURFACE_ARRAYSIZE : 0);
 
    case PIPE_CAP_BLEND_EQUATION_SEPARATE: /* req. for GL 1.5 */
       return 1;
@@ -258,29 +255,30 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
       return sws->have_vgpu10;
-   case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
-      return 0;
    case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
       return !sws->have_vgpu10;
 
    case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
       return 1; /* The color outputs of vertex shaders are not clamped */
    case PIPE_CAP_VERTEX_COLOR_CLAMPED:
-      return 0; /* The driver can't clamp vertex colors */
-   case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
-      return 0; /* The driver can't clamp fragment colors */
+      return sws->have_vgpu10;
 
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
       return 1; /* expected for GL_ARB_framebuffer_object */
 
    case PIPE_CAP_GLSL_FEATURE_LEVEL:
-      return sws->have_vgpu10 ? 330 : 120;
+      if (sws->have_sm5) {
+         return 410;
+      } else if (sws->have_vgpu10) {
+         return 330;
+      } else {
+         return 120;
+      }
 
    case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
-      return sws->have_vgpu10 ? 330 : 120;
+      return sws->have_sm5 ? 410 : (sws->have_vgpu10 ? 330 : 120);
 
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
-   case PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE:
       return 0;
 
    case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
@@ -303,10 +301,12 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS:
       return sws->have_vgpu10 ? 4 : 0;
    case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
-      return sws->have_vgpu10 ? SVGA3D_MAX_STREAMOUT_DECLS : 0;
+      return sws->have_sm5 ? SVGA3D_MAX_STREAMOUT_DECLS :
+             (sws->have_vgpu10 ? SVGA3D_MAX_DX10_STREAMOUT_DECLS : 0);
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
+      return sws->have_sm5;
    case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
-      return 0;
+      return sws->have_sm5;
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
       return svgascreen->ms_samples ? 1 : 0;
 
@@ -331,6 +331,7 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return sws->have_vgpu10 ? 1024 : 0;
 
    case PIPE_CAP_PRIMITIVE_RESTART:
+   case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
       return 1; /* may be a sw fallback, depending on restart index */
 
    case PIPE_CAP_GENERATE_MIPMAP:
@@ -350,56 +351,25 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return sws->have_sm4_1;
 
    case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
-      return sws->have_sm4_1 ? 1 : 0; /* only single-channel textures */
+      /* SM4_1 supports only single-channel textures where as SM5 supports
+       * all four channel textures */
+      return sws->have_sm5 ? 4 :
+             (sws->have_sm4_1 ? 1 : 0);
+   case PIPE_CAP_DRAW_INDIRECT:
+      return sws->have_sm5;
+   case PIPE_CAP_MAX_VERTEX_STREAMS:
+      return sws->have_sm5 ? 4 : 0;
+   case PIPE_CAP_COMPUTE:
+      return 0;
    case PIPE_CAP_MAX_VARYINGS:
       return sws->have_vgpu10 ? VGPU10_MAX_FS_INPUTS : 10;
    case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
       return sws->have_coherent;
 
-   /* Unsupported features */
-   case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
-   case PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE:
-   case PIPE_CAP_SHADER_STENCIL_EXPORT:
-   case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
-   case PIPE_CAP_TEXTURE_BARRIER:
-   case PIPE_CAP_MAX_VERTEX_STREAMS:
-   case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
-   case PIPE_CAP_COMPUTE:
-   case PIPE_CAP_START_INSTANCE:
-   case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
-   case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
-   case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
-   case PIPE_CAP_TEXTURE_GATHER_SM5:
-   case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
-   case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
-   case PIPE_CAP_DRAW_INDIRECT:
-   case PIPE_CAP_MULTI_DRAW_INDIRECT:
-   case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
-   case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
-   case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
-   case PIPE_CAP_SAMPLER_VIEW_TARGET:
-   case PIPE_CAP_CLIP_HALFZ:
-   case PIPE_CAP_VERTEXID_NOBASE:
-   case PIPE_CAP_POLYGON_OFFSET_CLAMP:
-   case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
-   case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
-   case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
-   case PIPE_CAP_INVALIDATE_BUFFER:
-   case PIPE_CAP_STRING_MARKER:
-   case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
-   case PIPE_CAP_QUERY_MEMORY_INFO:
    case PIPE_CAP_PCI_GROUP:
    case PIPE_CAP_PCI_BUS:
    case PIPE_CAP_PCI_DEVICE:
    case PIPE_CAP_PCI_FUNCTION:
-   case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
-   case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_TRIANGLES:
-   case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_POINTS_LINES:
-   case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_TRIANGLES:
-   case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_POINTS_LINES:
-   case PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE:
-   case PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS:
-   case PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET:
       return 0;
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
       return 64;
@@ -410,7 +380,10 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
       return 2048;
    case PIPE_CAP_MAX_VIEWPORTS:
-      return 1;
+      assert((!sws->have_vgpu10 && svgascreen->max_viewports == 1) ||
+             (sws->have_vgpu10 &&
+              svgascreen->max_viewports == SVGA3D_DX_MAX_VIEWPORTS));
+      return svgascreen->max_viewports;
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_LITTLE;
 
@@ -427,59 +400,11 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return sws->have_vgpu10;
    case PIPE_CAP_CLEAR_TEXTURE:
       return sws->have_vgpu10;
-   case PIPE_CAP_UMA:
-   case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
-   case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
-   case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
-   case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
-   case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
-   case PIPE_CAP_DEPTH_BOUNDS_TEST:
-   case PIPE_CAP_TGSI_TXQS:
-   case PIPE_CAP_SHAREABLE_SHADERS:
-   case PIPE_CAP_DRAW_PARAMETERS:
-   case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
-   case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
-   case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
-   case PIPE_CAP_QUERY_BUFFER_OBJECT:
-   case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
-   case PIPE_CAP_CULL_DISTANCE:
-   case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
-   case PIPE_CAP_TGSI_VOTE:
-   case PIPE_CAP_MAX_WINDOW_RECTANGLES:
-   case PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED:
-   case PIPE_CAP_VIEWPORT_SUBPIXEL_BITS:
-   case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
-   case PIPE_CAP_TGSI_CAN_READ_OUTPUTS:
-   case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
-   case PIPE_CAP_FBFETCH:
-   case PIPE_CAP_TGSI_MUL_ZERO_WINS:
    case PIPE_CAP_DOUBLES:
-   case PIPE_CAP_INT64:
-   case PIPE_CAP_INT64_DIVMOD:
-   case PIPE_CAP_TGSI_TEX_TXF_LZ:
-   case PIPE_CAP_TGSI_CLOCK:
-   case PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE:
-   case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
-   case PIPE_CAP_TGSI_BALLOT:
-   case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
-   case PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX:
+      return sws->have_sm5;
+   case PIPE_CAP_UMA:
+   case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
    case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
-   case PIPE_CAP_POST_DEPTH_COVERAGE:
-   case PIPE_CAP_BINDLESS_TEXTURE:
-   case PIPE_CAP_NIR_SAMPLERS_AS_DEREF:
-   case PIPE_CAP_QUERY_SO_OVERFLOW:
-   case PIPE_CAP_MEMOBJ:
-   case PIPE_CAP_LOAD_CONSTBUF:
-   case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
-   case PIPE_CAP_TILE_RASTER_ORDER:
-   case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
-   case PIPE_CAP_FRAMEBUFFER_MSAA_CONSTRAINTS:
-   case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
-   case PIPE_CAP_CONTEXT_PRIORITY_MASK:
-   case PIPE_CAP_FENCE_SIGNAL:
-   case PIPE_CAP_CONSTBUF0_FLAGS:
-   case PIPE_CAP_PACKED_UNIFORMS:
-   case PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS:
       return 0;
    case PIPE_CAP_TGSI_DIV:
       return 1;
@@ -487,6 +412,9 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 32;
    case PIPE_CAP_MAX_SHADER_BUFFER_SIZE:
       return 1 << 27;
+   /* Verify this once protocol is finalized. Setting it to minimum value. */
+   case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+      return sws->have_sm5 ? 30 : 0;
    default:
       return u_pipe_screen_get_param_defaults(screen, param);
    }
@@ -534,8 +462,8 @@ vgpu9_get_shader_param(struct pipe_screen *screen,
          /*
           * Although PS 3.0 has some addressing abilities it can only represent
           * loops that can be statically determined and unrolled. Given we can
-          * only handle a subset of the cases that the state tracker already
-          * does it is better to defer loop unrolling to the state tracker.
+          * only handle a subset of the cases that the gallium frontend already
+          * does it is better to defer loop unrolling to the gallium frontend.
           */
          return 0;
       case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
@@ -552,6 +480,9 @@ vgpu9_get_shader_param(struct pipe_screen *screen,
       case PIPE_SHADER_CAP_INTEGERS:
          return 0;
       case PIPE_SHADER_CAP_FP16:
+      case PIPE_SHADER_CAP_FP16_DERIVATIVES:
+      case PIPE_SHADER_CAP_INT16:
+      case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
          return 0;
       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
@@ -619,6 +550,9 @@ vgpu9_get_shader_param(struct pipe_screen *screen,
       case PIPE_SHADER_CAP_INTEGERS:
          return 0;
       case PIPE_SHADER_CAP_FP16:
+      case PIPE_SHADER_CAP_FP16_DERIVATIVES:
+      case PIPE_SHADER_CAP_INT16:
+      case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
          return 0;
       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
@@ -670,12 +604,12 @@ vgpu10_get_shader_param(struct pipe_screen *screen,
    assert(sws->have_vgpu10);
    (void) sws;  /* silence unused var warnings in non-debug builds */
 
-   /* Only VS, GS, FS supported */
-   if (shader != PIPE_SHADER_VERTEX &&
-       shader != PIPE_SHADER_GEOMETRY &&
-       shader != PIPE_SHADER_FRAGMENT) {
+   if ((!sws->have_sm5) &&
+       (shader == PIPE_SHADER_TESS_CTRL || shader == PIPE_SHADER_TESS_EVAL))
       return 0;
-   }
+
+   if (shader == PIPE_SHADER_COMPUTE)
+      return 0;
 
    /* NOTE: we do not query the device for any caps/limits at this time */
 
@@ -693,6 +627,10 @@ vgpu10_get_shader_param(struct pipe_screen *screen,
          return VGPU10_MAX_FS_INPUTS;
       else if (shader == PIPE_SHADER_GEOMETRY)
          return VGPU10_MAX_GS_INPUTS;
+      else if (shader == PIPE_SHADER_TESS_CTRL)
+         return VGPU11_MAX_HS_INPUT_CONTROL_POINTS;
+      else if (shader == PIPE_SHADER_TESS_EVAL)
+         return VGPU11_MAX_DS_INPUT_CONTROL_POINTS;
       else
          return VGPU10_MAX_VS_INPUTS;
    case PIPE_SHADER_CAP_MAX_OUTPUTS:
@@ -700,6 +638,10 @@ vgpu10_get_shader_param(struct pipe_screen *screen,
          return VGPU10_MAX_FS_OUTPUTS;
       else if (shader == PIPE_SHADER_GEOMETRY)
          return VGPU10_MAX_GS_OUTPUTS;
+      else if (shader == PIPE_SHADER_TESS_CTRL)
+         return VGPU11_MAX_HS_OUTPUTS;
+      else if (shader == PIPE_SHADER_TESS_EVAL)
+         return VGPU11_MAX_DS_OUTPUTS;
       else
          return VGPU10_MAX_VS_OUTPUTS;
    case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
@@ -719,6 +661,9 @@ vgpu10_get_shader_param(struct pipe_screen *screen,
    case PIPE_SHADER_CAP_INTEGERS:
       return TRUE;
    case PIPE_SHADER_CAP_FP16:
+   case PIPE_SHADER_CAP_FP16_DERIVATIVES:
+   case PIPE_SHADER_CAP_INT16:
+   case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
       return FALSE;
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
    case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
@@ -838,6 +783,8 @@ svga_get_driver_query_info(struct pipe_screen *screen,
             PIPE_DRIVER_QUERY_TYPE_UINT64),
       QUERY("num-bytes-uploaded", SVGA_QUERY_NUM_BYTES_UPLOADED,
             PIPE_DRIVER_QUERY_TYPE_BYTES),
+      QUERY("num-command-buffers", SVGA_QUERY_NUM_COMMAND_BUFFERS,
+            PIPE_DRIVER_QUERY_TYPE_UINT64),
       QUERY("command-buffer-size", SVGA_QUERY_COMMAND_BUFFER_SIZE,
             PIPE_DRIVER_QUERY_TYPE_BYTES),
       QUERY("flush-time", SVGA_QUERY_FLUSH_TIME,
@@ -853,6 +800,10 @@ svga_get_driver_query_info(struct pipe_screen *screen,
       QUERY("num-const-buf-updates", SVGA_QUERY_NUM_CONST_BUF_UPDATES,
             PIPE_DRIVER_QUERY_TYPE_UINT64),
       QUERY("num-const-updates", SVGA_QUERY_NUM_CONST_UPDATES,
+            PIPE_DRIVER_QUERY_TYPE_UINT64),
+      QUERY("num-shader-relocations", SVGA_QUERY_NUM_SHADER_RELOCATIONS,
+            PIPE_DRIVER_QUERY_TYPE_UINT64),
+      QUERY("num-surface-relocations", SVGA_QUERY_NUM_SURFACE_RELOCATIONS,
             PIPE_DRIVER_QUERY_TYPE_UINT64),
 
       /* running total counters */
@@ -872,6 +823,8 @@ svga_get_driver_query_info(struct pipe_screen *screen,
             PIPE_DRIVER_QUERY_TYPE_UINT64),
       QUERY("num-commands-per-draw", SVGA_QUERY_NUM_COMMANDS_PER_DRAW,
             PIPE_DRIVER_QUERY_TYPE_FLOAT),
+      QUERY("shader-mem-used", SVGA_QUERY_SHADER_MEM_USED,
+            PIPE_DRIVER_QUERY_TYPE_UINT64),
    };
 #undef QUERY
 
@@ -1006,9 +959,10 @@ svga_screen_create(struct svga_winsys_screen *sws)
       goto error2;
    }
 
-   debug_printf("%s enabled = %u\n",
-                sws->have_sm4_1 ? "SM4_1" : "VGPU10",
-                sws->have_sm4_1 ? 1 : sws->have_vgpu10);
+   debug_printf("%s enabled\n",
+                sws->have_sm5 ? "SM5" :
+                sws->have_sm4_1 ? "SM4_1" :
+                sws->have_vgpu10 ? "VGPU10" : "VGPU9");
 
    debug_printf("Mesa: %s %s (%s)\n", svga_get_name(screen),
                 PACKAGE_VERSION, MESA_GIT_SHA1);
@@ -1075,13 +1029,23 @@ svga_screen_create(struct svga_winsys_screen *sws)
             svgascreen->ms_samples |= 1 << 3;
       }
 
+      if (sws->have_sm5 && debug_get_bool_option("SVGA_MSAA", TRUE)) {
+         if (get_bool_cap(sws, SVGA3D_DEVCAP_MULTISAMPLE_8X, FALSE))
+            svgascreen->ms_samples |= 1 << 7;
+      }
+
       /* Maximum number of constant buffers */
       svgascreen->max_const_buffers =
          get_uint_cap(sws, SVGA3D_DEVCAP_DX_MAX_CONSTANT_BUFFERS, 1);
       svgascreen->max_const_buffers = MIN2(svgascreen->max_const_buffers,
                                            SVGA_MAX_CONST_BUFS);
 
+      svgascreen->haveBlendLogicops =
+         get_bool_cap(sws, SVGA3D_DEVCAP_LOGIC_BLENDOPS, FALSE);
+
       screen->is_format_supported = svga_is_dx_format_supported;
+
+      svgascreen->max_viewports = SVGA3D_DX_MAX_VIEWPORTS;
    }
    else {
       /* VGPU9 */
@@ -1116,6 +1080,9 @@ svga_screen_create(struct svga_winsys_screen *sws)
 
       /* No multisampling */
       svgascreen->ms_samples = 0;
+
+      /* Only one viewport */
+      svgascreen->max_viewports = 1;
    }
 
    /* common VGPU9 / VGPU10 caps */

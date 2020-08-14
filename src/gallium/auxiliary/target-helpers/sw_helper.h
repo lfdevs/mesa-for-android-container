@@ -5,7 +5,7 @@
 #include "pipe/p_compiler.h"
 #include "util/u_debug.h"
 #include "target-helpers/sw_helper_public.h"
-#include "state_tracker/sw_winsys.h"
+#include "frontend/sw_winsys.h"
 
 
 /* Helper function to choose and instantiate one of the software rasterizers:

@@ -32,25 +32,34 @@
 #include "brw_program.h"
 #include "compiler/glsl/ir_uniform.h"
 
-uint32_t
-brw_cs_group_size(const struct brw_context *brw)
+struct brw_cs_parameters
+brw_cs_get_parameters(const struct brw_context *brw)
 {
    assert(brw->cs.base.prog_data);
    struct brw_cs_prog_data *cs_prog_data =
       brw_cs_prog_data(brw->cs.base.prog_data);
 
+   struct brw_cs_parameters params = {};
+
    if (brw->compute.group_size) {
       /* With ARB_compute_variable_group_size the group size is set at
        * dispatch time, so we can't use the one provided by the compiler.
        */
-      return brw->compute.group_size[0] *
-             brw->compute.group_size[1] *
-             brw->compute.group_size[2];
+      params.group_size = brw->compute.group_size[0] *
+                          brw->compute.group_size[1] *
+                          brw->compute.group_size[2];
    } else {
-      return cs_prog_data->local_size[0] *
-             cs_prog_data->local_size[1] *
-             cs_prog_data->local_size[2];
+      params.group_size = cs_prog_data->local_size[0] *
+                          cs_prog_data->local_size[1] *
+                          cs_prog_data->local_size[2];
    }
+
+   params.simd_size =
+      brw_cs_simd_size_for_group_size(&brw->screen->devinfo,
+                                      cs_prog_data, params.group_size);
+   params.threads = DIV_ROUND_UP(params.group_size, params.simd_size);
+
+   return params;
 }
 
 static void
@@ -79,7 +88,6 @@ brw_codegen_cs_prog(struct brw_context *brw,
    struct brw_cs_prog_data prog_data;
    bool start_busy = false;
    double start_time = 0;
-   struct gl_context *gl_ctx = &brw->ctx;
    nir_shader *nir = nir_shader_clone(mem_ctx, cp->program.nir);
 
    memset(&prog_data, 0, sizeof(prog_data));
@@ -110,16 +118,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
    if (INTEL_DEBUG & DEBUG_SHADER_TIME)
       st_index = brw_get_shader_time_index(brw, &cp->program, ST_CS, true);
 
-   /* If the work group size is variable we set it to the maximum here since
-    * the actual size is not known until the dispatch command is issued.
-    */
-   if (nir->info.cs.local_size_variable) {
-      prog_data.uses_variable_group_size = true;
-      nir->info.cs.max_variable_local_size =
-         gl_ctx->Const.MaxComputeVariableGroupInvocations;
-   } else {
-      prog_data.uses_variable_group_size = false;
-   }
+   brw_nir_lower_cs_intrinsics(nir);
 
    char *error_str;
    program = brw_compile_cs(brw->screen->compiler, brw, mem_ctx, key,

@@ -67,7 +67,7 @@ blorp_vf_invalidate_for_vb_48b_transitions(struct blorp_batch *batch,
                                            unsigned num_vbs);
 
 UNUSED static struct blorp_address
-blorp_get_workaround_page(struct blorp_batch *batch);
+blorp_get_workaround_address(struct blorp_batch *batch);
 
 static void
 blorp_alloc_binding_table(struct blorp_batch *batch, unsigned num_entries,
@@ -209,7 +209,7 @@ emit_urb_config(struct blorp_batch *batch,
    /* The URB size is expressed in units of 64 bytes (512 bits) */
    const unsigned vs_entry_size = DIV_ROUND_UP(total_needed, 64);
 
-   const unsigned sf_entry_size =
+   ASSERTED const unsigned sf_entry_size =
       params->sf_prog_data ? params->sf_prog_data->urb_entry_size : 0;
 
 #if GEN_GEN >= 7
@@ -234,7 +234,7 @@ emit_urb_config(struct blorp_batch *batch,
    blorp_emit(batch, GENX(PIPE_CONTROL), pc) {
       pc.DepthStallEnable  = true;
       pc.PostSyncOperation = WriteImmediateData;
-      pc.Address           = blorp_get_workaround_page(batch);
+      pc.Address           = blorp_get_workaround_address(batch);
    }
 #endif
 
@@ -1698,7 +1698,7 @@ blorp_emit_depth_stencil_config(struct blorp_batch *batch,
     */
    blorp_emit(batch, GENX(PIPE_CONTROL), pc) {
       pc.PostSyncOperation = WriteImmediateData;
-      pc.Address = blorp_get_workaround_page(batch);
+      pc.Address = blorp_get_workaround_address(batch);
    }
 #endif
 }
@@ -1844,7 +1844,7 @@ blorp_emit_gen8_hiz_op(struct blorp_batch *batch,
     */
    blorp_emit(batch, GENX(PIPE_CONTROL), pc) {
       pc.PostSyncOperation = WriteImmediateData;
-      pc.Address = blorp_get_workaround_page(batch);
+      pc.Address = blorp_get_workaround_address(batch);
    }
 
 

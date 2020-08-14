@@ -6984,6 +6984,12 @@
    "name": "RLC_PERFCOUNTER1_LO"
   },
   {
+   "chips": ["gfx7", "fiji", "gfx6", "stoney", "gfx8", "gfx9"],
+   "map": {"at": 226044, "to": "mm"},
+   "name": "RLC_PERFMON_CLK_CNTL",
+   "type_ref": "RLC_PERFMON_CLK_CNTL"
+  },
+  {
    "chips": ["gfx7", "fiji", "gfx6", "stoney", "gfx8"],
    "map": {"at": 53300, "to": "mm"},
    "name": "SDMA0_STATUS_REG",

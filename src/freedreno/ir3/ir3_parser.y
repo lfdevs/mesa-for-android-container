@@ -22,17 +22,7 @@
  */
 
 %code requires {
-
-#define MAX_BUFS 4
-
-struct ir3_kernel_info {
-	uint32_t local_size[3];
-	uint32_t num_bufs;
-	uint32_t buf_sizes[MAX_BUFS]; /* size in dwords */
-
-	/* driver-param uniforms: */
-	unsigned numwg;
-};
+#include "ir3/ir3_assembler.h"
 
 struct ir3 * ir3_parse(struct ir3_shader_variant *v,
 		struct ir3_kernel_info *k, FILE *f);
@@ -99,7 +89,7 @@ static struct ir3_instruction * new_instr(opc_t opc)
 
 static void new_shader(void)
 {
-	variant->ir = ir3_create(variant->shader->compiler, variant->shader->type);
+	variant->ir = ir3_create(variant->shader->compiler, variant);
 	block = ir3_block_create(variant->ir);
 	list_addtail(&block->node, &variant->ir->block_list);
 }
@@ -163,20 +153,22 @@ static struct ir3_register * dummy_dst(void)
 
 static void add_const(unsigned reg, unsigned c0, unsigned c1, unsigned c2, unsigned c3)
 {
-	struct ir3_const_state *const_state = &variant->shader->const_state;
+	struct ir3_const_state *const_state = ir3_const_state(variant);
 	assert((reg & 0x7) == 0);
 	int idx = reg >> (1 + 2); /* low bit is half vs full, next two bits are swiz */
-	if (const_state->immediate_idx == const_state->immediates_size * 4) {
+	if (const_state->immediates_count == const_state->immediates_size) {
+		const_state->immediates = rerzalloc(const_state,
+				const_state->immediates,
+				__typeof__(const_state->immediates[0]),
+				const_state->immediates_size,
+				const_state->immediates_size + 4);
 		const_state->immediates_size += 4;
-		const_state->immediates = realloc (const_state->immediates,
-			const_state->immediates_size * sizeof(const_state->immediates[0]));
 	}
-	const_state->immediates[idx].val[0] = c0;
-	const_state->immediates[idx].val[1] = c1;
-	const_state->immediates[idx].val[2] = c2;
-	const_state->immediates[idx].val[3] = c3;
-	const_state->immediates_count = idx + 1;
-	const_state->immediate_idx++;
+	const_state->immediates[idx * 4 + 0] = c0;
+	const_state->immediates[idx * 4 + 1] = c1;
+	const_state->immediates[idx * 4 + 2] = c2;
+	const_state->immediates[idx * 4 + 3] = c3;
+	const_state->immediates_count++;
 }
 
 static void add_sysval(unsigned reg, unsigned compmask, gl_system_value sysval)
@@ -272,6 +264,9 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_NEG
 %token <tok> T_ABS
 %token <tok> T_R
+
+%token <tok> T_HR
+%token <tok> T_HC
 
 /* dst register flags */
 %token <tok> T_EVEN
@@ -596,7 +591,7 @@ cat0_src:          '!' T_P0        { instr->cat0.inv = true; instr->cat0.comp = 
 cat0_immed:        '#' integer     { instr->cat0.immed = $2; }
 
 cat0_instr:        T_OP_NOP        { new_instr(OPC_NOP); }
-|                  T_OP_BR         { new_instr(OPC_BR); }    cat0_src ',' cat0_immed
+|                  T_OP_BR         { new_instr(OPC_B); }    cat0_src ',' cat0_immed
 |                  T_OP_JUMP       { new_instr(OPC_JUMP); }  cat0_immed
 |                  T_OP_CALL       { new_instr(OPC_CALL); }  cat0_immed
 |                  T_OP_RET        { new_instr(OPC_RET); }
@@ -880,6 +875,8 @@ offset:            { $$ = 0; }
 
 relative:          'r' '<' T_A0 offset '>'  { new_reg(0, IR3_REG_RELATIV)->array.offset = $4; }
 |                  'c' '<' T_A0 offset '>'  { new_reg(0, IR3_REG_RELATIV | IR3_REG_CONST)->array.offset = $4; }
+|                  T_HR '<' T_A0 offset '>'  { new_reg(0, IR3_REG_RELATIV | IR3_REG_HALF)->array.offset = $4; }
+|                  T_HC '<' T_A0 offset '>'  { new_reg(0, IR3_REG_RELATIV | IR3_REG_CONST | IR3_REG_HALF)->array.offset = $4; }
 
 immediate:         integer             { new_reg(0, IR3_REG_IMMED)->iim_val = $1; }
 |                  '(' integer ')'     { new_reg(0, IR3_REG_IMMED)->fim_val = $2; }

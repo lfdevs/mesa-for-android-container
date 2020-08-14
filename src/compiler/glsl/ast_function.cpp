@@ -236,9 +236,6 @@ verify_parameter_modes(_mesa_glsl_parse_state *state,
       const ast_expression *const actual_ast =
          exec_node_data(ast_expression, actual_ast_node, link);
 
-      /* FIXME: 'loc' is incorrect (as of 2011-01-21). It is always
-       * FIXME: 0:0(0).
-       */
       YYLTYPE loc = actual_ast->get_location();
 
       /* Verify that 'const_in' parameters are ir_constants. */
@@ -2154,8 +2151,8 @@ ast_function_expression::hir(exec_list *instructions,
       }
 
       if (constructor_type->is_array()) {
-         if (!state->check_version(120, 300, &loc,
-                                   "array constructors forbidden")) {
+         if (!state->check_version(state->allow_glsl_120_subset_in_110 ? 110 : 120,
+                                   300, &loc, "array constructors forbidden")) {
             return ir_rvalue::error_value(ctx);
          }
 

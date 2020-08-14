@@ -71,7 +71,9 @@ fd4_rasterizer_state_create(struct pipe_context *pctx,
 	so->gras_su_poly_offset_scale =
 			A4XX_GRAS_SU_POLY_OFFSET_SCALE(cso->offset_scale);
 	so->gras_su_poly_offset_offset =
-			A4XX_GRAS_SU_POLY_OFFSET_OFFSET(cso->offset_units);
+			A4XX_GRAS_SU_POLY_OFFSET_OFFSET(cso->offset_units * 2.0f);
+	so->gras_su_poly_offset_clamp =
+			A4XX_GRAS_SU_POLY_OFFSET_CLAMP(cso->offset_clamp);
 
 	so->gras_su_mode_control =
 			A4XX_GRAS_SU_MODE_CONTROL_LINEHALFWIDTH(cso->line_width/2.0);

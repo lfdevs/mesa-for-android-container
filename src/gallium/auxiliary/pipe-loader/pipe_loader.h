@@ -34,7 +34,7 @@
 #define PIPE_LOADER_H
 
 #include "pipe/p_compiler.h"
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 #include "util/xmlconfig.h"
 
 #ifdef __cplusplus

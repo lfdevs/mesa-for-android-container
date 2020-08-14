@@ -905,10 +905,8 @@ Instruction::isCommutationLegal(const Instruction *i) const
 }
 
 TexInstruction::TexInstruction(Function *fn, operation op)
-   : Instruction(fn, op, TYPE_F32)
+   : Instruction(fn, op, TYPE_F32), tex()
 {
-   memset(&tex, 0, sizeof(tex));
-
    tex.rIndirectSrc = -1;
    tex.sIndirectSrc = -1;
 
@@ -1184,6 +1182,7 @@ Program::Program(Type type, Target *arch)
 
    maxGPR = -1;
    fp64 = false;
+   persampleInvocation = false;
 
    main = new Function(this, "MAIN", ~0);
    calls.insert(&main->call);
@@ -1256,14 +1255,12 @@ nv50_ir_init_prog_info(struct nv50_ir_prog_info *info)
       info->prop.cp.numThreads[1] =
       info->prop.cp.numThreads[2] = 1;
    }
-   info->io.pointSize = 0xff;
    info->io.instanceId = 0xff;
    info->io.vertexId = 0xff;
    info->io.edgeFlagIn = 0xff;
    info->io.edgeFlagOut = 0xff;
    info->io.fragDepth = 0xff;
    info->io.sampleMask = 0xff;
-   info->io.backFaceColor[0] = info->io.backFaceColor[1] = 0xff;
 }
 
 int

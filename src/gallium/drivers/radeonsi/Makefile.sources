@@ -1,5 +1,4 @@
 GENERATED_SOURCES := \
-	gfx10_format_table.h \
 	si_driinfo.h
 
 C_SOURCES := \
@@ -17,6 +16,7 @@ C_SOURCES := \
 	si_compute.h \
 	si_compute_blit.c \
 	si_cp_dma.c \
+	si_cp_reg_shadowing.c \
 	si_debug.c \
 	si_descriptors.c \
 	si_dma_cs.c \
@@ -62,6 +62,7 @@ C_SOURCES := \
 	../radeon/radeon_vcn_dec.h \
 	../radeon/radeon_vcn_enc_1_2.c \
 	../radeon/radeon_vcn_enc_2_0.c \
+	../radeon/radeon_vcn_enc_3_0.c \
 	../radeon/radeon_vcn_enc.c \
 	../radeon/radeon_vcn_enc.h \
 	../radeon/radeon_uvd_enc_1_1.c \

@@ -41,6 +41,7 @@
 #include "util/xmlconfig.h"
 
 #include "vk_util.h"
+#include "vk_enum_to_str.h"
 #include "wsi_common_private.h"
 #include "wsi_common_x11.h"
 #include "wsi_common_queue.h"
@@ -511,7 +512,7 @@ x11_surface_get_capabilities(VkIcdSurfaceBase *icd_surface,
        * to come back from the compositor.  In that case, we don't know the
        * size of the window so we just return valid "I don't know" stuff.
        */
-      caps->currentExtent = (VkExtent2D) { -1, -1 };
+      caps->currentExtent = (VkExtent2D) { UINT32_MAX, UINT32_MAX };
       caps->minImageExtent = (VkExtent2D) { 1, 1 };
       caps->maxImageExtent = (VkExtent2D) {
          wsi_device->maxImageDimension2D,
@@ -652,25 +653,6 @@ x11_surface_get_present_modes(VkIcdSurfaceBase *surface,
       VK_INCOMPLETE : VK_SUCCESS;
 }
 
-static bool
-x11_surface_is_local_to_gpu(struct wsi_device *wsi_dev,
-                            xcb_connection_t *conn)
-{
-   struct wsi_x11_connection *wsi_conn =
-      wsi_x11_get_connection(wsi_dev, conn);
-
-   if (!wsi_conn)
-      return false;
-
-   if (!wsi_x11_check_for_dri3(wsi_conn))
-      return false;
-
-   if (!wsi_x11_check_dri3_compatible(wsi_dev, conn))
-      return false;
-
-   return true;
-}
-
 static VkResult
 x11_surface_get_present_rectangles(VkIcdSurfaceBase *icd_surface,
                                    struct wsi_device *wsi_device,
@@ -681,30 +663,28 @@ x11_surface_get_present_rectangles(VkIcdSurfaceBase *icd_surface,
    xcb_window_t window = x11_surface_get_window(icd_surface);
    VK_OUTARRAY_MAKE(out, pRects, pRectCount);
 
-   if (x11_surface_is_local_to_gpu(wsi_device, conn)) {
-      vk_outarray_append(&out, rect) {
-         xcb_generic_error_t *err = NULL;
-         xcb_get_geometry_cookie_t geom_cookie = xcb_get_geometry(conn, window);
-         xcb_get_geometry_reply_t *geom =
-            xcb_get_geometry_reply(conn, geom_cookie, &err);
-         free(err);
-         if (geom) {
-            *rect = (VkRect2D) {
-               .offset = { 0, 0 },
-               .extent = { geom->width, geom->height },
-            };
-         } else {
-            /* This can happen if the client didn't wait for the configure event
-             * to come back from the compositor.  In that case, we don't know the
-             * size of the window so we just return valid "I don't know" stuff.
-             */
-            *rect = (VkRect2D) {
-               .offset = { 0, 0 },
-               .extent = { -1, -1 },
-            };
-         }
-         free(geom);
+   vk_outarray_append(&out, rect) {
+      xcb_generic_error_t *err = NULL;
+      xcb_get_geometry_cookie_t geom_cookie = xcb_get_geometry(conn, window);
+      xcb_get_geometry_reply_t *geom =
+         xcb_get_geometry_reply(conn, geom_cookie, &err);
+      free(err);
+      if (geom) {
+         *rect = (VkRect2D) {
+            .offset = { 0, 0 },
+            .extent = { geom->width, geom->height },
+         };
+      } else {
+         /* This can happen if the client didn't wait for the configure event
+          * to come back from the compositor.  In that case, we don't know the
+          * size of the window so we just return valid "I don't know" stuff.
+          */
+         *rect = (VkRect2D) {
+            .offset = { 0, 0 },
+            .extent = { UINT32_MAX, UINT32_MAX },
+         };
       }
+      free(geom);
    }
 
    return vk_outarray_status(&out);
@@ -783,7 +763,8 @@ struct x11_swapchain {
 
    struct x11_image                             images[0];
 };
-WSI_DEFINE_NONDISP_HANDLE_CASTS(x11_swapchain, VkSwapchainKHR)
+VK_DEFINE_NONDISP_HANDLE_CASTS(x11_swapchain, base.base, VkSwapchainKHR,
+                               VK_OBJECT_TYPE_SWAPCHAIN_KHR)
 
 /**
  * Update the swapchain status with the result of an operation, and return
@@ -795,7 +776,8 @@ WSI_DEFINE_NONDISP_HANDLE_CASTS(x11_swapchain, VkSwapchainKHR)
  * this has not been seen, success will be returned.
  */
 static VkResult
-x11_swapchain_result(struct x11_swapchain *chain, VkResult result)
+_x11_swapchain_result(struct x11_swapchain *chain, VkResult result,
+                      const char *file, int line)
 {
    /* Prioritise returning existing errors for consistency. */
    if (chain->status < 0)
@@ -803,6 +785,10 @@ x11_swapchain_result(struct x11_swapchain *chain, VkResult result)
 
    /* If we have a new error, mark it as permanent on the chain and return. */
    if (result < 0) {
+#ifndef NDEBUG
+      fprintf(stderr, "%s:%d: Swapchain status changed to %s\n",
+              file, line, vk_Result_to_str(result));
+#endif
       chain->status = result;
       return result;
    }
@@ -815,6 +801,12 @@ x11_swapchain_result(struct x11_swapchain *chain, VkResult result)
     * and is always returned rather than success.
     */
    if (result == VK_SUBOPTIMAL_KHR) {
+#ifndef NDEBUG
+      if (chain->status != VK_SUBOPTIMAL_KHR) {
+         fprintf(stderr, "%s:%d: Swapchain status changed to %s\n",
+                 file, line, vk_Result_to_str(result));
+      }
+#endif
       chain->status = result;
       return result;
    }
@@ -822,6 +814,8 @@ x11_swapchain_result(struct x11_swapchain *chain, VkResult result)
    /* No changes, so return the last status. */
    return chain->status;
 }
+#define x11_swapchain_result(chain, result) \
+   _x11_swapchain_result(chain, result, __FILE__, __LINE__)
 
 static struct wsi_image *
 x11_get_wsi_image(struct wsi_swapchain *wsi_chain, uint32_t image_index)
@@ -1497,7 +1491,7 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
     * mode which provokes reallocation when anything changes, to make
     * sure we have the most optimal allocation.
     */
-   WSI_FROM_HANDLE(x11_swapchain, old_chain, pCreateInfo->oldSwapchain);
+   VK_FROM_HANDLE(x11_swapchain, old_chain, pCreateInfo->oldSwapchain);
    if (old_chain)
       chain->last_present_mode = old_chain->last_present_mode;
    else

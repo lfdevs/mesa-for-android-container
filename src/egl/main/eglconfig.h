@@ -224,15 +224,15 @@ _eglFilterConfigArray(_EGLArray *array, EGLConfig *configs,
 
 
 extern EGLBoolean
-_eglChooseConfig(_EGLDriver *drv, _EGLDisplay *disp, const EGLint *attrib_list, EGLConfig *configs, EGLint config_size, EGLint *num_config);
+_eglChooseConfig(const _EGLDriver *drv, _EGLDisplay *disp, const EGLint *attrib_list, EGLConfig *configs, EGLint config_size, EGLint *num_config);
 
 
 extern EGLBoolean
-_eglGetConfigAttrib(_EGLDriver *drv, _EGLDisplay *disp, _EGLConfig *conf, EGLint attribute, EGLint *value);
+_eglGetConfigAttrib(const _EGLDriver *drv, _EGLDisplay *disp, _EGLConfig *conf, EGLint attribute, EGLint *value);
 
 
 extern EGLBoolean
-_eglGetConfigs(_EGLDriver *drv, _EGLDisplay *disp, EGLConfig *configs, EGLint config_size, EGLint *num_config);
+_eglGetConfigs(const _EGLDriver *drv, _EGLDisplay *disp, EGLConfig *configs, EGLint config_size, EGLint *num_config);
 
 
 #ifdef __cplusplus

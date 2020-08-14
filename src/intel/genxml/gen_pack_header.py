@@ -10,6 +10,7 @@ import re
 import sys
 import copy
 import textwrap
+from util import *
 
 license =  """/*
  * Copyright (C) 2016 Intel Corporation
@@ -181,40 +182,6 @@ __gen_ufixed(float v, uint32_t start, NDEBUG_UNUSED uint32_t end, uint32_t fract
 #endif
 
 """
-
-def to_alphanum(name):
-    substitutions = {
-        ' ': '',
-        '/': '',
-        '[': '',
-        ']': '',
-        '(': '',
-        ')': '',
-        '-': '',
-        ':': '',
-        '.': '',
-        ',': '',
-        '=': '',
-        '>': '',
-        '#': '',
-        '&': '',
-        '*': '',
-        '"': '',
-        '+': '',
-        '\'': '',
-    }
-
-    for i, j in substitutions.items():
-        name = name.replace(i, j)
-
-    return name
-
-def safe_name(name):
-    name = to_alphanum(name)
-    if not name[0].isalpha():
-        name = '_' + name
-
-    return name
 
 def num_from_str(num_str):
     if num_str.lower().startswith('0x'):
@@ -650,7 +617,13 @@ class Parser(object):
                 continue
             if field.default is None:
                 continue
-            default_fields.append("   .%-35s = %6d" % (field.name, field.default))
+
+            if field.is_builtin_type():
+                default_fields.append("   .%-35s = %6d" % (field.name, field.default))
+            else:
+                # Default values should not apply to structures
+                assert field.is_enum_type()
+                default_fields.append("   .%-35s = (enum %s) %6d" % (field.name, self.gen_prefix(safe_name(field.type)), field.default))
 
         if default_fields:
             print('#define %-40s\\' % (self.gen_prefix(name + '_header')))

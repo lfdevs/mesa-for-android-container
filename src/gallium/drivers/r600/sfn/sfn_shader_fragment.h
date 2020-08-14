@@ -36,7 +36,8 @@ namespace r600 {
 class FragmentShaderFromNir : public ShaderFromNirProcessor {
 public:
    FragmentShaderFromNir(const nir_shader& nir, r600_shader& sh_info,
-                         r600_pipe_shader_selector &sel, const r600_shader_key &key);
+                         r600_pipe_shader_selector &sel, const r600_shader_key &key,
+                         enum chip_class chip_class);
    bool scan_sysvalue_access(nir_instr *instr) override;
 private:
 
@@ -49,7 +50,7 @@ private:
 
    void emit_shader_start() override;
    bool do_process_inputs(nir_variable *input) override;
-   bool allocate_reserved_registers() override;
+   bool do_allocate_reserved_registers() override;
    bool do_process_outputs(nir_variable *output) override;
    bool do_emit_load_deref(const nir_variable *in_var, nir_intrinsic_instr* instr) override;
    bool do_emit_store_deref(const nir_variable *out_var, nir_intrinsic_instr* instr) override;
@@ -69,6 +70,7 @@ private:
 
    bool emit_load_front_face(nir_intrinsic_instr* instr);
    bool emit_load_sample_mask_in(nir_intrinsic_instr* instr);
+   bool emit_load_sample_pos(nir_intrinsic_instr* instr);
    bool emit_load_sample_id(nir_intrinsic_instr* instr);
    bool emit_interp_deref_at_sample(nir_intrinsic_instr* instr);
    bool emit_interp_deref_at_offset(nir_intrinsic_instr* instr);
@@ -94,6 +96,7 @@ private:
 
    std::map<unsigned, PValue> m_input_cache;
    bool m_enable_centroid_interpolators;
+   unsigned m_apply_sample_mask;
 };
 	
 }

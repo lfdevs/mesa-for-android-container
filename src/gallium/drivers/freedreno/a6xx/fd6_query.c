@@ -68,7 +68,7 @@ occlusion_resume(struct fd_acc_query *aq, struct fd_batch *batch)
 	OUT_RING(ring, A6XX_RB_SAMPLE_COUNT_CONTROL_COPY);
 
 	OUT_PKT4(ring, REG_A6XX_RB_SAMPLE_COUNT_ADDR_LO, 2);
-	OUT_RELOCW(ring, query_sample(aq, start));
+	OUT_RELOC(ring, query_sample(aq, start));
 
 	fd6_event_write(batch, ring, ZPASS_DONE, false);
 
@@ -81,7 +81,7 @@ occlusion_pause(struct fd_acc_query *aq, struct fd_batch *batch)
 	struct fd_ringbuffer *ring = batch->draw;
 
 	OUT_PKT7(ring, CP_MEM_WRITE, 4);
-	OUT_RELOCW(ring, query_sample(aq, stop));
+	OUT_RELOC(ring, query_sample(aq, stop));
 	OUT_RING(ring, 0xffffffff);
 	OUT_RING(ring, 0xffffffff);
 
@@ -91,27 +91,24 @@ occlusion_pause(struct fd_acc_query *aq, struct fd_batch *batch)
 	OUT_RING(ring, A6XX_RB_SAMPLE_COUNT_CONTROL_COPY);
 
 	OUT_PKT4(ring, REG_A6XX_RB_SAMPLE_COUNT_ADDR_LO, 2);
-	OUT_RELOCW(ring, query_sample(aq, stop));
-
-	OUT_PKT7(ring, CP_EVENT_WRITE, 1);
-	OUT_RING(ring, ZPASS_DONE);
-	fd_reset_wfi(batch);
-
-	OUT_PKT7(ring, CP_WAIT_REG_MEM, 6);
-	OUT_RING(ring, 0x00000014);   // XXX
 	OUT_RELOC(ring, query_sample(aq, stop));
-	OUT_RING(ring, 0xffffffff);
-	OUT_RING(ring, 0xffffffff);
-	OUT_RING(ring, 0x00000010);   // XXX
+
+	fd6_event_write(batch, ring, ZPASS_DONE, false);
+
+	/* To avoid stalling in the draw buffer, emit code the code to compute the
+	 * counter delta in the epilogue ring.
+	 */
+	struct fd_ringbuffer *epilogue = fd_batch_get_epilogue(batch);
+	fd_wfi(batch, epilogue);
 
 	/* result += stop - start: */
-	OUT_PKT7(ring, CP_MEM_TO_MEM, 9);
-	OUT_RING(ring, CP_MEM_TO_MEM_0_DOUBLE |
+	OUT_PKT7(epilogue, CP_MEM_TO_MEM, 9);
+	OUT_RING(epilogue, CP_MEM_TO_MEM_0_DOUBLE |
 			CP_MEM_TO_MEM_0_NEG_C);
-	OUT_RELOCW(ring, query_sample(aq, result));     /* dst */
-	OUT_RELOC(ring, query_sample(aq, result));      /* srcA */
-	OUT_RELOC(ring, query_sample(aq, stop));        /* srcB */
-	OUT_RELOC(ring, query_sample(aq, start));       /* srcC */
+	OUT_RELOC(epilogue, query_sample(aq, result));     /* dst */
+	OUT_RELOC(epilogue, query_sample(aq, result));      /* srcA */
+	OUT_RELOC(epilogue, query_sample(aq, stop));        /* srcB */
+	OUT_RELOC(epilogue, query_sample(aq, start));       /* srcC */
 
 	fd6_context(batch->ctx)->samples_passed_queries--;
 }
@@ -168,7 +165,7 @@ timestamp_resume(struct fd_acc_query *aq, struct fd_batch *batch)
 	OUT_PKT7(ring, CP_EVENT_WRITE, 4);
 	OUT_RING(ring, CP_EVENT_WRITE_0_EVENT(RB_DONE_TS) |
 			CP_EVENT_WRITE_0_TIMESTAMP);
-	OUT_RELOCW(ring, query_sample(aq, start));
+	OUT_RELOC(ring, query_sample(aq, start));
 	OUT_RING(ring, 0x00000000);
 
 	fd_reset_wfi(batch);
@@ -182,7 +179,7 @@ time_elapsed_pause(struct fd_acc_query *aq, struct fd_batch *batch)
 	OUT_PKT7(ring, CP_EVENT_WRITE, 4);
 	OUT_RING(ring, CP_EVENT_WRITE_0_EVENT(RB_DONE_TS) |
 			CP_EVENT_WRITE_0_TIMESTAMP);
-	OUT_RELOCW(ring, query_sample(aq, stop));
+	OUT_RELOC(ring, query_sample(aq, stop));
 	OUT_RING(ring, 0x00000000);
 
 	fd_reset_wfi(batch);
@@ -192,7 +189,7 @@ time_elapsed_pause(struct fd_acc_query *aq, struct fd_batch *batch)
 	OUT_PKT7(ring, CP_MEM_TO_MEM, 9);
 	OUT_RING(ring, CP_MEM_TO_MEM_0_DOUBLE |
 			CP_MEM_TO_MEM_0_NEG_C);
-	OUT_RELOCW(ring, query_sample(aq, result));     /* dst */
+	OUT_RELOC(ring, query_sample(aq, result));     /* dst */
 	OUT_RELOC(ring, query_sample(aq, result));      /* srcA */
 	OUT_RELOC(ring, query_sample(aq, stop));        /* srcB */
 	OUT_RELOC(ring, query_sample(aq, start));       /* srcC */
@@ -211,7 +208,7 @@ record_timestamp(struct fd_ringbuffer *ring, struct fd_bo *bo, unsigned offset)
 	OUT_PKT7(ring, CP_EVENT_WRITE, 4);
 	OUT_RING(ring, CP_EVENT_WRITE_0_EVENT(RB_DONE_TS) |
 			CP_EVENT_WRITE_0_TIMESTAMP);
-	OUT_RELOCW(ring, bo, offset, 0, 0);
+	OUT_RELOC(ring, bo, offset, 0, 0);
 	OUT_RING(ring, 0x00000000);
 }
 
@@ -276,7 +273,7 @@ struct PACKED fd6_primitives_sample {
 
 
 #define primitives_relocw(ring, aq, field) \
-	OUT_RELOCW(ring, fd_resource((aq)->prsc)->bo, offsetof(struct fd6_primitives_sample, field), 0, 0);
+	OUT_RELOC(ring, fd_resource((aq)->prsc)->bo, offsetof(struct fd6_primitives_sample, field), 0, 0);
 #define primitives_reloc(ring, aq, field) \
 	OUT_RELOC(ring, fd_resource((aq)->prsc)->bo, offsetof(struct fd6_primitives_sample, field), 0, 0);
 
@@ -501,7 +498,7 @@ perfcntr_resume(struct fd_acc_query *aq, struct fd_batch *batch)
 		OUT_PKT7(ring, CP_REG_TO_MEM, 3);
 		OUT_RING(ring, CP_REG_TO_MEM_0_64B |
 			CP_REG_TO_MEM_0_REG(counter->counter_reg_lo));
-		OUT_RELOCW(ring, query_sample_idx(aq, i, start));
+		OUT_RELOC(ring, query_sample_idx(aq, i, start));
 	}
 }
 
@@ -529,7 +526,7 @@ perfcntr_pause(struct fd_acc_query *aq, struct fd_batch *batch)
 		OUT_PKT7(ring, CP_REG_TO_MEM, 3);
 		OUT_RING(ring, CP_REG_TO_MEM_0_64B |
 			CP_REG_TO_MEM_0_REG(counter->counter_reg_lo));
-		OUT_RELOCW(ring, query_sample_idx(aq, i, stop));
+		OUT_RELOC(ring, query_sample_idx(aq, i, stop));
 	}
 
 	/* and compute the result: */
@@ -538,7 +535,7 @@ perfcntr_pause(struct fd_acc_query *aq, struct fd_batch *batch)
 		OUT_PKT7(ring, CP_MEM_TO_MEM, 9);
 		OUT_RING(ring, CP_MEM_TO_MEM_0_DOUBLE |
 				CP_MEM_TO_MEM_0_NEG_C);
-		OUT_RELOCW(ring, query_sample_idx(aq, i, result));     /* dst */
+		OUT_RELOC(ring, query_sample_idx(aq, i, result));     /* dst */
 		OUT_RELOC(ring, query_sample_idx(aq, i, result));      /* srcA */
 		OUT_RELOC(ring, query_sample_idx(aq, i, stop));        /* srcB */
 		OUT_RELOC(ring, query_sample_idx(aq, i, start));       /* srcC */

@@ -1,10 +1,7 @@
 C_SOURCES := \
 	nir/nir_lower_blend.c \
 	nir/nir_lower_blend.h \
-	nir/nir_lower_framebuffer.c \
     \
-	pan_allocate.c \
-	pan_allocate.h \
 	pan_assemble.c \
 	pan_blend_cso.c \
 	pan_blend.h \
@@ -22,10 +19,11 @@ C_SOURCES := \
 	pan_job.c \
 	pan_job.h \
 	pan_mfbd.c \
+	pan_partial_update.c \
+	pan_partial_update.h \
 	pan_public.h \
 	pan_resource.c \
 	pan_resource.h \
-	pan_scoreboard.c \
 	pan_screen.c \
 	pan_screen.h \
 	pan_sfbd.c \

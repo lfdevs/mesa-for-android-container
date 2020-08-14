@@ -29,6 +29,8 @@
 #include "util/format/u_format.h"
 #include "util/u_surface.h"
 
+#include "tgsi/tgsi_ureg.h"
+
 #include "os/os_thread.h"
 
 #include "nvc0/nvc0_context.h"
@@ -136,6 +138,11 @@ nvc0_2d_texture_set(struct nouveau_pushbuf *push, bool dst,
       PUSH_DATA (push, height);
       PUSH_DATAh(push, bo->offset + offset);
       PUSH_DATA (push, bo->offset + offset);
+   }
+
+   if (dst) {
+      IMMED_NVC0(push, SUBC_2D(NVC0_2D_SET_DST_COLOR_RENDER_TO_ZETA_SURFACE),
+                 util_format_is_depth_or_stencil(pformat));
    }
 
 #if 0
@@ -507,6 +514,7 @@ nvc0_clear_buffer(struct pipe_context *pipe,
       /* RGB32 is not a valid RT format. This will be handled by the pushbuf
        * uploader.
        */
+      dst_fmt = PIPE_FORMAT_NONE; /* Init dst_fmt to silence gcc warning */
       break;
    case 8:
       dst_fmt = PIPE_FORMAT_R32G32_UINT;
@@ -772,7 +780,7 @@ gm200_evaluate_depth_buffer(struct pipe_context *pipe)
 struct nvc0_blitter
 {
    struct nvc0_program *fp[NV50_BLIT_MAX_TEXTURE_TYPES][NV50_BLIT_MODES];
-   struct nvc0_program vp;
+   struct nvc0_program *vp;
 
    struct nv50_tsc_entry sampler[2]; /* nearest, bilinear */
 
@@ -785,6 +793,7 @@ struct nvc0_blitctx
 {
    struct nvc0_context *nvc0;
    struct nvc0_program *fp;
+   struct nvc0_program *vp;
    uint8_t mode;
    uint16_t color_mask;
    uint8_t filter;
@@ -809,78 +818,27 @@ struct nvc0_blitctx
    struct nvc0_rasterizer_stateobj rast;
 };
 
-static void
-nvc0_blitter_make_vp(struct nvc0_blitter *blit)
+static void *
+nvc0_blitter_make_vp(struct pipe_context *pipe)
 {
-   static const uint32_t code_nvc0[] =
-   {
-      0xfff11c26, 0x06000080, /* vfetch b64 $r4:$r5 a[0x80] */
-      0xfff01c46, 0x06000090, /* vfetch b96 $r0:$r1:$r2 a[0x90] */
-      0x13f01c26, 0x0a7e0070, /* export b64 o[0x70] $r4:$r5 */
-      0x03f01c46, 0x0a7e0080, /* export b96 o[0x80] $r0:$r1:$r2 */
-      0x00001de7, 0x80000000, /* exit */
-   };
-   static const uint32_t code_nve4[] =
-   {
-      0x00000007, 0x20000000, /* sched */
-      0xfff11c26, 0x06000080, /* vfetch b64 $r4:$r5 a[0x80] */
-      0xfff01c46, 0x06000090, /* vfetch b96 $r0:$r1:$r2 a[0x90] */
-      0x13f01c26, 0x0a7e0070, /* export b64 o[0x70] $r4:$r5 */
-      0x03f01c46, 0x0a7e0080, /* export b96 o[0x80] $r0:$r1:$r2 */
-      0x00001de7, 0x80000000, /* exit */
-   };
-   static const uint32_t code_gk110[] =
-   {
-      0x00000000, 0x08000000, /* sched */
-      0x401ffc12, 0x7ec7fc00, /* ld b64 $r4d a[0x80] 0x0 0x0 */
-      0x481ffc02, 0x7ecbfc00, /* ld b96 $r0t a[0x90] 0x0 0x0 */
-      0x381ffc12, 0x7f07fc00, /* st b64 a[0x70] $r4d 0x0 0x0 */
-      0x401ffc02, 0x7f0bfc00, /* st b96 a[0x80] $r0t 0x0 0x0 */
-      0x001c003c, 0x18000000, /* exit */
-   };
-   static const uint32_t code_gm107[] =
-   {
-      0xe4200701, 0x001d0400, /* sched (st 0x1 wr 0x0) (st 0x1 wr 0x1) (st 0x1 wr 0x2) */
-      0x0807ff00, 0xefd87f80, /* ld b32 $r0 a[0x80] 0x0 */
-      0x0847ff01, 0xefd87f80, /* ld b32 $r1 a[0x84] 0x0 */
-      0x0907ff02, 0xefd87f80, /* ld b32 $r2 a[0x90] 0x0 */
-      0xf0200761, 0x003f8400, /* sched (st 0x1 wr 0x3) (st 0x1 wr 0x4) (st 0x1 wt 0x1) */
-      0x0947ff03, 0xefd87f80, /* ld b32 $r3 a[0x94] 0x0 */
-      0x0987ff04, 0xefd87f80, /* ld b32 $r4 a[0x98] 0x0 */
-      0x0707ff00, 0xeff07f80, /* st b32 a[0x70] $r0 0x0 */
-      0xfc2017e1, 0x011f8404, /* sched (st 0x1 wt 0x2) (st 0x1 wt 0x4) (st 0x1 wt 0x8) */
-      0x0747ff01, 0xeff07f80, /* st b32 a[0x74] $r1 0x0 */
-      0x0807ff02, 0xeff07f80, /* st b32 a[0x80] $r2 0x0 */
-      0x0847ff03, 0xeff07f80, /* st b32 a[0x84] $r3 0x0 */
-      0xfde087e1, 0x001f8000, /* sched (st 0x1 wt 0x10) (st 0xf) (st 0x0) */
-      0x0887ff04, 0xeff07f80, /* st b32 a[0x88] $r4 0x0 */
-      0x0007000f, 0xe3000000, /* exit */
-   };
+   struct ureg_program *ureg;
+   struct ureg_src ipos, itex;
+   struct ureg_dst opos, otex;
 
-   blit->vp.type = PIPE_SHADER_VERTEX;
-   blit->vp.translated = true;
-   if (blit->screen->base.class_3d >= GM107_3D_CLASS) {
-      blit->vp.code = (uint32_t *)code_gm107; /* const_cast */
-      blit->vp.code_size = sizeof(code_gm107);
-   } else
-   if (blit->screen->base.class_3d >= NVF0_3D_CLASS) {
-      blit->vp.code = (uint32_t *)code_gk110; /* const_cast */
-      blit->vp.code_size = sizeof(code_gk110);
-   } else
-   if (blit->screen->base.class_3d >= NVE4_3D_CLASS) {
-      blit->vp.code = (uint32_t *)code_nve4; /* const_cast */
-      blit->vp.code_size = sizeof(code_nve4);
-   } else {
-      blit->vp.code = (uint32_t *)code_nvc0; /* const_cast */
-      blit->vp.code_size = sizeof(code_nvc0);
-   }
-   blit->vp.num_gprs = 6;
-   blit->vp.vp.edgeflag = PIPE_MAX_ATTRIBS;
+   ureg = ureg_create(PIPE_SHADER_VERTEX);
+   if (!ureg)
+      return NULL;
 
-   blit->vp.hdr[0]  = 0x00020461; /* vertprog magic */
-   blit->vp.hdr[4]  = 0x000ff000; /* no outputs read */
-   blit->vp.hdr[6]  = 0x00000073; /* a[0x80].xy, a[0x90].xyz */
-   blit->vp.hdr[13] = 0x00073000; /* o[0x70].xy, o[0x80].xyz */
+   opos = ureg_DECL_output(ureg, TGSI_SEMANTIC_POSITION, 0);
+   ipos = ureg_DECL_vs_input(ureg, 0);
+   otex = ureg_DECL_output(ureg, TGSI_SEMANTIC_GENERIC, 0);
+   itex = ureg_DECL_vs_input(ureg, 1);
+
+   ureg_MOV(ureg, ureg_writemask(opos, TGSI_WRITEMASK_XY ), ipos);
+   ureg_MOV(ureg, ureg_writemask(otex, TGSI_WRITEMASK_XYZ), itex);
+   ureg_END(ureg);
+
+   return ureg_create_shader_and_destroy(ureg, pipe);
 }
 
 static void
@@ -908,6 +866,20 @@ nvc0_blitter_make_sampler(struct nvc0_blitter *blit)
       G80_TSC_1_MAG_FILTER_LINEAR |
       G80_TSC_1_MIN_FILTER_LINEAR |
       G80_TSC_1_MIP_FILTER_NONE;
+}
+
+static void
+nvc0_blit_select_vp(struct nvc0_blitctx *ctx)
+{
+   struct nvc0_blitter *blitter = ctx->nvc0->screen->blitter;
+
+   if (!blitter->vp) {
+      mtx_lock(&blitter->mutex);
+      if (!blitter->vp)
+         blitter->vp = nvc0_blitter_make_vp(&ctx->nvc0->base.pipe);
+      mtx_unlock(&blitter->mutex);
+   }
+   ctx->vp = blitter->vp;
 }
 
 static void
@@ -1082,7 +1054,7 @@ nvc0_blitctx_pre_blit(struct nvc0_blitctx *ctx,
 
    nvc0->rast = &ctx->rast;
 
-   nvc0->vertprog = &blitter->vp;
+   nvc0->vertprog = ctx->vp;
    nvc0->tctlprog = NULL;
    nvc0->tevlprog = NULL;
    nvc0->gmtyprog = NULL;
@@ -1221,6 +1193,7 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
    blit->filter = nv50_blit_get_filter(info);
    blit->render_condition_enable = info->render_condition_enable;
 
+   nvc0_blit_select_vp(blit);
    nvc0_blit_select_fp(blit, info);
    nvc0_blitctx_pre_blit(blit, info);
 
@@ -1264,6 +1237,11 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
          z /= u_minify(src->depth0, l);
          dz /= u_minify(src->depth0, l);
       }
+   }
+
+   if (screen->eng3d->oclass >= TU102_3D_CLASS) {
+      IMMED_NVC0(push, SUBC_3D(TU102_3D_SET_COLOR_RENDER_TO_ZETA_SURFACE),
+                 util_format_is_depth_or_stencil(info->dst.format));
    }
 
    IMMED_NVC0(push, NVC0_3D(VIEWPORT_TRANSFORM_EN), 0);
@@ -1326,7 +1304,10 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
    PUSH_DATAh(push, vtxbuf);
    PUSH_DATA (push, vtxbuf);
    PUSH_DATA (push, 0);
-   BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_LIMIT_HIGH(0)), 2);
+   if (screen->eng3d->oclass < TU102_3D_CLASS)
+      BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_LIMIT_HIGH(0)), 2);
+   else
+      BEGIN_NVC0(push, SUBC_3D(TU102_3D_VERTEX_ARRAY_LIMIT_HIGH(0)), 2);
    PUSH_DATAh(push, vtxbuf + length - 1);
    PUSH_DATA (push, vtxbuf + length - 1);
 
@@ -1403,6 +1384,8 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
 
    /* restore viewport transform */
    IMMED_NVC0(push, NVC0_3D(VIEWPORT_TRANSFORM_EN), 1);
+   if (screen->eng3d->oclass >= TU102_3D_CLASS)
+      IMMED_NVC0(push, SUBC_3D(TU102_3D_SET_COLOR_RENDER_TO_ZETA_SURFACE), 0);
 }
 
 static void
@@ -1697,7 +1680,6 @@ nvc0_blitter_create(struct nvc0_screen *screen)
 
    (void) mtx_init(&screen->blitter->mutex, mtx_plain);
 
-   nvc0_blitter_make_vp(screen->blitter);
    nvc0_blitter_make_sampler(screen->blitter);
 
    return true;

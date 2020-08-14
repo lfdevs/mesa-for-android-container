@@ -110,8 +110,8 @@
 
 // total # of hot tiles available. This should be enough to
 // fully render a 16kx16k 128bpp render target
-#define KNOB_NUM_HOT_TILES_X 256
-#define KNOB_NUM_HOT_TILES_Y 256
+#define KNOB_NUM_HOT_TILES_X 512
+#define KNOB_NUM_HOT_TILES_Y 512
 #define KNOB_COLOR_HOT_TILE_FORMAT R32G32B32A32_FLOAT
 #define KNOB_DEPTH_HOT_TILE_FORMAT R32_FLOAT
 #define KNOB_STENCIL_HOT_TILE_FORMAT R8_UINT

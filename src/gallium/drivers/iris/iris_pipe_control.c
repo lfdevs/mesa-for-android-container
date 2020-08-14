@@ -148,7 +148,137 @@ iris_emit_end_of_pipe_sync(struct iris_batch *batch,
    iris_emit_pipe_control_write(batch, reason,
                                 flags | PIPE_CONTROL_CS_STALL |
                                 PIPE_CONTROL_WRITE_IMMEDIATE,
-                                batch->screen->workaround_bo, 0, 0);
+                                batch->screen->workaround_address.bo,
+                                batch->screen->workaround_address.offset, 0);
+}
+
+/**
+ * Emits appropriate flushes and invalidations for any previous memory
+ * operations on \p bo to be strictly ordered relative to any subsequent
+ * memory operations performed from the caching domain \p access.
+ *
+ * This is useful because the GPU has separate incoherent caches for the
+ * render target, sampler, etc., which need to be explicitly invalidated or
+ * flushed in order to obtain the expected memory ordering in cases where the
+ * same surface is accessed through multiple caches (e.g. due to
+ * render-to-texture).
+ *
+ * This provides the expected memory ordering guarantees whether or not the
+ * previous access was performed from the same batch or a different one, but
+ * only the former case needs to be handled explicitly here, since the kernel
+ * already inserts implicit flushes and synchronization in order to guarantee
+ * that any data dependencies between batches are satisfied.
+ *
+ * Even though no flushing nor invalidation is required in order to account
+ * for concurrent updates from other batches, we provide the guarantee that a
+ * required synchronization operation due to a previous batch-local update
+ * will never be omitted due to the influence of another thread accessing the
+ * same buffer concurrently from the same caching domain: Such a concurrent
+ * update will only ever change the seqno of the last update to a value
+ * greater than the local value (see iris_bo_bump_seqno()), which means that
+ * we will always emit at least as much flushing and invalidation as we would
+ * have for the local seqno (see the coherent_seqnos comparisons below).
+ */
+void
+iris_emit_buffer_barrier_for(struct iris_batch *batch,
+                             struct iris_bo *bo,
+                             enum iris_domain access)
+{
+   const uint32_t all_flush_bits = (PIPE_CONTROL_CACHE_FLUSH_BITS |
+                                    PIPE_CONTROL_STALL_AT_SCOREBOARD |
+                                    PIPE_CONTROL_FLUSH_ENABLE);
+   const uint32_t flush_bits[NUM_IRIS_DOMAINS] = {
+      [IRIS_DOMAIN_RENDER_WRITE] = PIPE_CONTROL_RENDER_TARGET_FLUSH,
+      [IRIS_DOMAIN_DEPTH_WRITE] = PIPE_CONTROL_DEPTH_CACHE_FLUSH,
+      [IRIS_DOMAIN_OTHER_WRITE] = PIPE_CONTROL_FLUSH_ENABLE,
+      [IRIS_DOMAIN_OTHER_READ] = PIPE_CONTROL_STALL_AT_SCOREBOARD,
+   };
+   const uint32_t invalidate_bits[NUM_IRIS_DOMAINS] = {
+      [IRIS_DOMAIN_RENDER_WRITE] = PIPE_CONTROL_RENDER_TARGET_FLUSH,
+      [IRIS_DOMAIN_DEPTH_WRITE] = PIPE_CONTROL_DEPTH_CACHE_FLUSH,
+      [IRIS_DOMAIN_OTHER_WRITE] = PIPE_CONTROL_FLUSH_ENABLE,
+      [IRIS_DOMAIN_OTHER_READ] = (PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |
+                                  PIPE_CONTROL_CONST_CACHE_INVALIDATE),
+   };
+   uint32_t bits = 0;
+
+   /* Iterate over all read/write domains first in order to handle RaW
+    * and WaW dependencies, which might involve flushing the domain of
+    * the previous access and invalidating the specified domain.
+    */
+   for (unsigned i = 0; i < IRIS_DOMAIN_OTHER_WRITE; i++) {
+      assert(!iris_domain_is_read_only(i));
+      if (i != access) {
+         const uint64_t seqno = READ_ONCE(bo->last_seqnos[i]);
+
+         /* Invalidate unless the most recent read/write access from
+          * this domain is already guaranteed to be visible to the
+          * specified domain.  Flush if the most recent access from
+          * this domain occurred after its most recent flush.
+          */
+         if (seqno > batch->coherent_seqnos[access][i]) {
+            bits |= invalidate_bits[access];
+
+            if (seqno > batch->coherent_seqnos[i][i])
+               bits |= flush_bits[i];
+         }
+      }
+   }
+
+   /* All read-only domains can be considered mutually coherent since
+    * the order of read-only memory operations is immaterial.  If the
+    * specified domain is read/write we need to iterate over them too,
+    * in order to handle any WaR dependencies.
+    */
+   if (!iris_domain_is_read_only(access)) {
+      for (unsigned i = IRIS_DOMAIN_OTHER_READ; i < NUM_IRIS_DOMAINS; i++) {
+         assert(iris_domain_is_read_only(i));
+         const uint64_t seqno = READ_ONCE(bo->last_seqnos[i]);
+
+         /* Flush if the most recent access from this domain occurred
+          * after its most recent flush.
+          */
+         if (seqno > batch->coherent_seqnos[i][i])
+            bits |= flush_bits[i];
+      }
+   }
+
+   /* The IRIS_DOMAIN_OTHER_WRITE kitchen-sink domain cannot be
+    * considered coherent with itself since it's really a collection
+    * of multiple incoherent read/write domains, so we special-case it
+    * here.
+    */
+   const unsigned i = IRIS_DOMAIN_OTHER_WRITE;
+   const uint64_t seqno = READ_ONCE(bo->last_seqnos[i]);
+
+   /* Invalidate unless the most recent read/write access from this
+    * domain is already guaranteed to be visible to the specified
+    * domain.  Flush if the most recent access from this domain
+    * occurred after its most recent flush.
+    */
+   if (seqno > batch->coherent_seqnos[access][i]) {
+      bits |= invalidate_bits[access];
+
+      if (seqno > batch->coherent_seqnos[i][i])
+         bits |= flush_bits[i];
+   }
+
+   if (bits) {
+      /* Stall-at-scoreboard is not expected to work in combination with other
+       * flush bits.
+       */
+      if (bits & PIPE_CONTROL_CACHE_FLUSH_BITS)
+         bits &= ~PIPE_CONTROL_STALL_AT_SCOREBOARD;
+
+      /* Emit any required flushes and invalidations. */
+      if (bits & all_flush_bits)
+         iris_emit_end_of_pipe_sync(batch, "cache tracker: flush",
+                                    bits & all_flush_bits);
+
+      if (bits & ~all_flush_bits)
+         iris_emit_pipe_control_flush(batch, "cache tracker: invalidate",
+                                      bits & ~all_flush_bits);
+   }
 }
 
 /**
@@ -176,9 +306,7 @@ iris_texture_barrier(struct pipe_context *ctx, unsigned flags)
    struct iris_batch *render_batch = &ice->batches[IRIS_BATCH_RENDER];
    struct iris_batch *compute_batch = &ice->batches[IRIS_BATCH_COMPUTE];
 
-   if (render_batch->contains_draw ||
-       render_batch->cache.render->entries ||
-       render_batch->cache.depth->entries) {
+   if (render_batch->contains_draw) {
       iris_batch_maybe_flush(render_batch, 48);
       iris_emit_pipe_control_flush(render_batch,
                                    "API: texture barrier (1/2)",
@@ -224,8 +352,7 @@ iris_memory_barrier(struct pipe_context *ctx, unsigned flags)
    }
 
    for (int i = 0; i < IRIS_BATCH_COUNT; i++) {
-      if (ice->batches[i].contains_draw ||
-          ice->batches[i].cache.render->entries) {
+      if (ice->batches[i].contains_draw) {
          iris_batch_maybe_flush(&ice->batches[i], 24);
          iris_emit_pipe_control_flush(&ice->batches[i], "API: memory barrier",
                                       bits);

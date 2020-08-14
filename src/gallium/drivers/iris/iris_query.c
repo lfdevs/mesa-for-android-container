@@ -63,7 +63,7 @@ struct iris_query {
 
    struct iris_state_ref query_state_ref;
    struct iris_query_snapshots *map;
-   struct iris_syncpt *syncpt;
+   struct iris_syncobj *syncobj;
 
    int batch_idx;
 
@@ -101,7 +101,7 @@ query_mem64(struct iris_query *q, uint32_t offset)
    struct iris_address addr = {
       .bo = iris_resource_bo(q->query_state_ref.res),
       .offset = q->query_state_ref.offset + offset,
-      .write = true
+      .access = IRIS_DOMAIN_OTHER_WRITE
    };
    return gen_mi_mem64(addr);
 }
@@ -481,7 +481,7 @@ iris_destroy_query(struct pipe_context *ctx, struct pipe_query *p_query)
       iris_destroy_monitor_object(ctx, query->monitor);
       query->monitor = NULL;
    } else {
-      iris_syncpt_reference(screen, &query->syncpt, NULL);
+      iris_syncobj_reference(screen, &query->syncobj, NULL);
       screen->base.fence_reference(ctx->screen, &query->fence, NULL);
    }
    free(query);
@@ -555,7 +555,7 @@ iris_end_query(struct pipe_context *ctx, struct pipe_query *query)
 
    if (q->type == PIPE_QUERY_TIMESTAMP) {
       iris_begin_query(ctx, query);
-      iris_batch_reference_signal_syncpt(batch, &q->syncpt);
+      iris_batch_reference_signal_syncobj(batch, &q->syncobj);
       mark_available(ice, q);
       return true;
    }
@@ -573,7 +573,7 @@ iris_end_query(struct pipe_context *ctx, struct pipe_query *query)
                   q->query_state_ref.offset +
                   offsetof(struct iris_query_snapshots, end));
 
-   iris_batch_reference_signal_syncpt(batch, &q->syncpt);
+   iris_batch_reference_signal_syncobj(batch, &q->syncobj);
    mark_available(ice, q);
 
    return true;
@@ -624,12 +624,12 @@ iris_get_query_result(struct pipe_context *ctx,
 
    if (!q->ready) {
       struct iris_batch *batch = &ice->batches[q->batch_idx];
-      if (q->syncpt == iris_batch_get_signal_syncpt(batch))
+      if (q->syncobj == iris_batch_get_signal_syncobj(batch))
          iris_batch_flush(batch);
 
       while (!READ_ONCE(q->map->snapshots_landed)) {
          if (wait)
-            iris_wait_syncpt(ctx->screen, q->syncpt, INT64_MAX);
+            iris_wait_syncobj(ctx->screen, q->syncobj, INT64_MAX);
          else
             return false;
       }
@@ -672,7 +672,7 @@ iris_get_query_result_resource(struct pipe_context *ctx,
        * now so that progress happens.  Either way, copy the snapshots
        * landed field to the destination resource.
        */
-      if (q->syncpt == iris_batch_get_signal_syncpt(batch))
+      if (q->syncobj == iris_batch_get_signal_syncobj(batch))
          iris_batch_flush(batch);
 
       batch->screen->vtbl.copy_mem_mem(batch, dst_bo, offset,
@@ -711,10 +711,13 @@ iris_get_query_result_resource(struct pipe_context *ctx,
    struct gen_mi_builder b;
    gen_mi_builder_init(&b, batch);
 
+   iris_batch_sync_region_start(batch);
+
    struct gen_mi_value result = calculate_result_on_gpu(devinfo, &b, q);
    struct gen_mi_value dst =
-      result_type <= PIPE_QUERY_TYPE_U32 ? gen_mi_mem32(rw_bo(dst_bo, offset))
-                                         : gen_mi_mem64(rw_bo(dst_bo, offset));
+      result_type <= PIPE_QUERY_TYPE_U32 ?
+      gen_mi_mem32(rw_bo(dst_bo, offset, IRIS_DOMAIN_OTHER_WRITE)) :
+      gen_mi_mem64(rw_bo(dst_bo, offset, IRIS_DOMAIN_OTHER_WRITE));
 
    if (predicated) {
       gen_mi_store(&b, gen_mi_reg32(MI_PREDICATE_RESULT),
@@ -723,6 +726,8 @@ iris_get_query_result_resource(struct pipe_context *ctx,
    } else {
       gen_mi_store(&b, dst, result);
    }
+
+   iris_batch_sync_region_end(batch);
 }
 
 static void
@@ -737,13 +742,13 @@ iris_set_active_query_state(struct pipe_context *ctx, bool enable)
    // have to be done dynamically at draw time, which is a pain
    ice->state.statistics_counters_enabled = enable;
    ice->state.dirty |= IRIS_DIRTY_CLIP |
-                       IRIS_DIRTY_GS |
                        IRIS_DIRTY_RASTER |
                        IRIS_DIRTY_STREAMOUT |
-                       IRIS_DIRTY_TCS |
-                       IRIS_DIRTY_TES |
-                       IRIS_DIRTY_VS |
                        IRIS_DIRTY_WM;
+   ice->state.stage_dirty |= IRIS_STAGE_DIRTY_GS |
+                             IRIS_STAGE_DIRTY_TCS |
+                             IRIS_STAGE_DIRTY_TES |
+                             IRIS_STAGE_DIRTY_VS;
 }
 
 static void
@@ -762,6 +767,8 @@ set_predicate_for_result(struct iris_context *ice,
 {
    struct iris_batch *batch = &ice->batches[IRIS_BATCH_RENDER];
    struct iris_bo *bo = iris_resource_bo(q->query_state_ref.res);
+
+   iris_batch_sync_region_start(batch);
 
    /* The CPU doesn't have the query result yet; use hardware predication */
    ice->state.predicate = IRIS_PREDICATE_STATE_USE_BIT;
@@ -809,6 +816,8 @@ set_predicate_for_result(struct iris_context *ice,
    gen_mi_store(&b, query_mem64(q, offsetof(struct iris_query_snapshots,
                                             predicate_result)), result);
    ice->state.compute_predicate = bo;
+
+   iris_batch_sync_region_end(batch);
 }
 
 static void

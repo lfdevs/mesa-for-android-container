@@ -28,7 +28,9 @@
 #include "util/u_debug.h"
 #include "util/u_memory.h"
 
+#include "vmw_context.h"
 #include "vmw_shader.h"
+#include "vmw_buffer.h"
 #include "vmw_screen.h"
 
 void
@@ -62,4 +64,55 @@ vmw_svga_winsys_shader_reference(struct vmw_svga_winsys_shader **pdst,
    }
 
    *pdst = src;
+}
+
+
+/**
+ * A helper function to create a shader object and upload the
+ * shader bytecode and signature if specified to the shader memory.
+ */
+struct vmw_svga_winsys_shader *
+vmw_svga_shader_create(struct svga_winsys_screen *sws,
+                       SVGA3dShaderType type,
+                       const uint32 *bytecode,
+                       uint32 bytecodeLen,
+                       const SVGA3dDXShaderSignatureHeader *sgnInfo,
+                       uint32 sgnLen)
+{
+   struct vmw_svga_winsys_shader *shader;
+   void *map;
+
+   shader = CALLOC_STRUCT(vmw_svga_winsys_shader);
+   if (!shader)
+      return NULL;
+
+   pipe_reference_init(&shader->refcnt, 1);
+   p_atomic_set(&shader->validated, 0);
+   shader->screen = vmw_winsys_screen(sws);
+   shader->buf = sws->buffer_create(sws, 64,
+                                    SVGA_BUFFER_USAGE_SHADER,
+                                    bytecodeLen + sgnLen);
+   if (!shader->buf) {
+      FREE(shader);
+      return NULL;
+   }
+
+   map = sws->buffer_map(sws, shader->buf, PIPE_TRANSFER_WRITE);
+   if (!map) {
+      FREE(shader);
+      return NULL;
+   }
+
+   /* copy the shader bytecode */
+   memcpy(map, bytecode, bytecodeLen);
+
+   /* if shader signature is specified, append it to the bytecode. */
+   if (sgnLen) {
+      assert(sws->have_sm5);
+      map = (char *)map + bytecodeLen;
+      memcpy(map, sgnInfo, sgnLen);
+   }
+   sws->buffer_unmap(sws, shader->buf);
+
+   return shader;
 }

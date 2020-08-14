@@ -28,7 +28,7 @@
 #define sfn_defines_h
 
 #include "../r600_isa.h"
-
+#include "amd_family.h"
 namespace r600 {
 
 

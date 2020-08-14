@@ -708,6 +708,9 @@ reg(FILE *file, unsigned _reg_file, unsigned _reg_nr)
          format(file, "mask%d", _reg_nr & 0x0f);
          break;
       case BRW_ARF_MASK_STACK:
+         format(file, "ms%d", _reg_nr & 0x0f);
+         break;
+      case BRW_ARF_MASK_STACK_DEPTH:
          format(file, "msd%d", _reg_nr & 0x0f);
          break;
       case BRW_ARF_STATE:
@@ -2061,8 +2064,8 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
                format(file, ")");
                break;
             }
-            /* FALLTHROUGH */
          }
+         /* FALLTHROUGH */
 
          case GEN7_SFID_PIXEL_INTERPOLATOR:
             if (devinfo->gen >= 7) {

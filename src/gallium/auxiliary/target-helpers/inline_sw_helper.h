@@ -4,7 +4,7 @@
 
 #include "pipe/p_compiler.h"
 #include "util/u_debug.h"
-#include "state_tracker/sw_winsys.h"
+#include "frontend/sw_winsys.h"
 
 #ifdef GALLIUM_SWR
 #include "swr/swr_public.h"

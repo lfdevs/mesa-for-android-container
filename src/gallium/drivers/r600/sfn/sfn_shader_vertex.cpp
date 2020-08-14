@@ -40,9 +40,10 @@ using std::priority_queue;
 VertexShaderFromNir::VertexShaderFromNir(r600_pipe_shader *sh,
                                          r600_pipe_shader_selector& sel,
                                          const r600_shader_key& key,
-                                         struct r600_shader* gs_shader):
+                                         struct r600_shader* gs_shader,
+                                         enum chip_class chip_class):
    VertexStage(PIPE_SHADER_VERTEX, sel, sh->shader,
-               sh->scratch_space_needed),
+               sh->scratch_space_needed, chip_class, key.vs.first_atomic_counter),
    m_num_clip_dist(0),
    m_last_param_export(nullptr),
    m_last_pos_export(nullptr),
@@ -82,7 +83,7 @@ bool VertexShaderFromNir::do_process_inputs(nir_variable *input)
    return false;
 }
 
-bool VertexShaderFromNir::allocate_reserved_registers()
+bool VertexShaderFromNir::do_allocate_reserved_registers()
 {
    /* Since the vertex ID is nearly always used, we add it here as an input so
     * that the registers used for vertex attributes don't get clobbered by the
@@ -119,7 +120,6 @@ bool VertexShaderFromNir::allocate_reserved_registers()
 
 void VertexShaderFromNir::emit_shader_start()
 {
-   m_export_processor->setup_paramn_map();
 }
 
 bool VertexShaderFromNir::scan_sysvalue_access(nir_instr *instr)

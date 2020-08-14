@@ -148,7 +148,7 @@ static const struct anv_format main_formats[] = {
    fmt1(VK_FORMAT_R4G4B4A4_UNORM_PACK16,             ISL_FORMAT_A4B4G4R4_UNORM),
    swiz_fmt1(VK_FORMAT_B4G4R4A4_UNORM_PACK16,        ISL_FORMAT_A4B4G4R4_UNORM,  BGRA),
    fmt1(VK_FORMAT_R5G6B5_UNORM_PACK16,               ISL_FORMAT_B5G6R5_UNORM),
-   swiz_fmt1(VK_FORMAT_B5G6R5_UNORM_PACK16,          ISL_FORMAT_B5G6R5_UNORM, BGRA),
+   fmt_unsupported(VK_FORMAT_B5G6R5_UNORM_PACK16),
    fmt1(VK_FORMAT_R5G5B5A1_UNORM_PACK16,             ISL_FORMAT_A1B5G5R5_UNORM),
    fmt_unsupported(VK_FORMAT_B5G5R5A1_UNORM_PACK16),
    fmt1(VK_FORMAT_A1R5G5B5_UNORM_PACK16,             ISL_FORMAT_B5G5R5A1_UNORM),
@@ -333,6 +333,11 @@ static const struct anv_format main_formats[] = {
    fmt1(VK_FORMAT_B8G8R8A8_SRGB,                     ISL_FORMAT_B8G8R8A8_UNORM_SRGB),
 };
 
+static const struct anv_format _4444_formats[] = {
+   fmt1(VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT, ISL_FORMAT_B4G4R4A4_UNORM),
+   fmt_unsupported(VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT),
+};
+
 static const struct anv_format ycbcr_formats[] = {
    ycbcr_fmt(VK_FORMAT_G8B8G8R8_422_UNORM, 1,
              y_plane(0, ISL_FORMAT_YCRCB_SWAPUV, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO), 1, 1)),
@@ -414,6 +419,8 @@ static const struct {
 } anv_formats[] = {
    [0]                                       = { .formats = main_formats,
                                                  .n_formats = ARRAY_SIZE(main_formats), },
+   [_VK_EXT_4444_formats_number]             = { .formats = _4444_formats,
+                                                 .n_formats = ARRAY_SIZE(_4444_formats), },
    [_VK_KHR_sampler_ycbcr_conversion_number] = { .formats = ycbcr_formats,
                                                  .n_formats = ARRAY_SIZE(ycbcr_formats), },
 };
@@ -610,7 +617,8 @@ anv_get_image_format_features(const struct gen_device_info *devinfo,
       flags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
 
    if (base_isl_format == ISL_FORMAT_R32_SINT ||
-       base_isl_format == ISL_FORMAT_R32_UINT)
+       base_isl_format == ISL_FORMAT_R32_UINT ||
+       base_isl_format == ISL_FORMAT_R32_FLOAT)
       flags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT;
 
    if (flags) {
@@ -1155,7 +1163,7 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
             external_props->externalMemoryProperties = android_image_props;
             break;
          }
-      /* fallthrough if ahw not supported */
+      /* fallthrough - if ahw not supported */
       default:
          /* From the Vulkan 1.0.42 spec:
           *
@@ -1286,13 +1294,15 @@ VkResult anv_CreateSamplerYcbcrConversion(
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_CREATE_INFO);
 
-   conversion = vk_alloc2(&device->alloc, pAllocator, sizeof(*conversion), 8,
+   conversion = vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*conversion), 8,
                           VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!conversion)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
    memset(conversion, 0, sizeof(*conversion));
 
+   vk_object_base_init(&device->vk, &conversion->base,
+                       VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION);
    conversion->format = anv_get_format(pCreateInfo->format);
    conversion->ycbcr_model = pCreateInfo->ycbcrModel;
    conversion->ycbcr_range = pCreateInfo->ycbcrRange;
@@ -1342,5 +1352,6 @@ void anv_DestroySamplerYcbcrConversion(
    if (!conversion)
       return;
 
-   vk_free2(&device->alloc, pAllocator, conversion);
+   vk_object_base_finish(&conversion->base);
+   vk_free2(&device->vk.alloc, pAllocator, conversion);
 }

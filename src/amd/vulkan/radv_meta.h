@@ -58,6 +58,33 @@ struct radv_meta_saved_state {
 	struct radv_attachment_state *attachments;
 	struct radv_framebuffer *framebuffer;
 	VkRect2D render_area;
+
+	VkCullModeFlags cull_mode;
+	VkFrontFace front_face;
+
+	unsigned primitive_topology;
+
+	bool depth_test_enable;
+	bool depth_write_enable;
+	unsigned depth_compare_op;
+	bool depth_bounds_test_enable;
+	bool stencil_test_enable;
+
+	struct {
+		struct {
+			VkStencilOp fail_op;
+			VkStencilOp pass_op;
+			VkStencilOp depth_fail_op;
+			VkCompareOp compare_op;
+		} front;
+
+		struct {
+			VkStencilOp fail_op;
+			VkStencilOp pass_op;
+			VkStencilOp depth_fail_op;
+			VkCompareOp compare_op;
+		} back;
+	} stencil_op;
 };
 
 VkResult radv_device_init_meta_clear_state(struct radv_device *device, bool on_demand);

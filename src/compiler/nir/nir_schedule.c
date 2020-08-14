@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#include "nir.h"
+#include "nir_schedule.h"
 #include "util/dag.h"
 #include "util/u_dynarray.h"
 
@@ -110,10 +110,8 @@ typedef struct {
     */
    int pressure;
 
-   /* Number of channels that may be in use before we switch to the
-    * pressure-prioritizing scheduling heuristic.
-    */
-   int threshold;
+   /* Options specified by the backend */
+   const nir_schedule_options *options;
 } nir_schedule_scoreboard;
 
 /* When walking the instructions in reverse, we use this flag to swap
@@ -121,11 +119,15 @@ typedef struct {
  */
 enum direction { F, R };
 
-typedef struct {
-   nir_shader *shader;
+struct nir_schedule_class_dep {
+   int klass;
+   nir_schedule_node *node;
+   struct nir_schedule_class_dep *next;
+};
 
-   /* Map from nir_instr to nir_schedule_node * */
-   struct hash_table *instr_map;
+typedef struct {
+   nir_schedule_scoreboard *scoreboard;
+
    /* Map from nir_register to nir_schedule_node * */
    struct hash_table *reg_map;
 
@@ -136,6 +138,8 @@ typedef struct {
    nir_schedule_node *unknown_intrinsic;
    nir_schedule_node *discard;
    nir_schedule_node *jump;
+
+   struct nir_schedule_class_dep *class_deps;
 
    enum direction dir;
 } nir_deps_state;
@@ -245,8 +249,9 @@ nir_schedule_reg_src_deps(nir_src *src, void *in_state)
       return true;
    nir_schedule_node *dst_n = entry->data;
 
-   nir_schedule_node *src_n = nir_schedule_get_node(state->instr_map,
-                                                    src->parent_instr);
+   nir_schedule_node *src_n =
+      nir_schedule_get_node(state->scoreboard->instr_map,
+                            src->parent_instr);
 
    add_dep(state, dst_n, src_n);
 
@@ -261,8 +266,9 @@ nir_schedule_reg_dest_deps(nir_dest *dest, void *in_state)
    if (dest->is_ssa)
       return true;
 
-   nir_schedule_node *dest_n = nir_schedule_get_node(state->instr_map,
-                                                     dest->reg.parent_instr);
+   nir_schedule_node *dest_n =
+      nir_schedule_get_node(state->scoreboard->instr_map,
+                            dest->reg.parent_instr);
 
    struct hash_entry *entry = _mesa_hash_table_search(state->reg_map,
                                                       dest->reg.reg);
@@ -281,10 +287,11 @@ static bool
 nir_schedule_ssa_deps(nir_ssa_def *def, void *in_state)
 {
    nir_deps_state *state = in_state;
-   nir_schedule_node *def_n = nir_schedule_get_node(state->instr_map, def->parent_instr);
+   struct hash_table *instr_map = state->scoreboard->instr_map;
+   nir_schedule_node *def_n = nir_schedule_get_node(instr_map, def->parent_instr);
 
    nir_foreach_use(src, def) {
-      nir_schedule_node *use_n = nir_schedule_get_node(state->instr_map,
+      nir_schedule_node *use_n = nir_schedule_get_node(instr_map,
                                                        src->parent_instr);
 
       add_read_dep(state, def_n, use_n);
@@ -293,11 +300,52 @@ nir_schedule_ssa_deps(nir_ssa_def *def, void *in_state)
    return true;
 }
 
+static struct nir_schedule_class_dep *
+nir_schedule_get_class_dep(nir_deps_state *state,
+                           int klass)
+{
+   for (struct nir_schedule_class_dep *class_dep = state->class_deps;
+        class_dep != NULL;
+        class_dep = class_dep->next) {
+      if (class_dep->klass == klass)
+         return class_dep;
+   }
+
+   struct nir_schedule_class_dep *class_dep =
+      ralloc(state->reg_map, struct nir_schedule_class_dep);
+
+   class_dep->klass = klass;
+   class_dep->node = NULL;
+   class_dep->next = state->class_deps;
+
+   state->class_deps = class_dep;
+
+   return class_dep;
+}
+
 static void
 nir_schedule_intrinsic_deps(nir_deps_state *state,
                             nir_intrinsic_instr *instr)
 {
-   nir_schedule_node *n = nir_schedule_get_node(state->instr_map, &instr->instr);
+   nir_schedule_node *n = nir_schedule_get_node(state->scoreboard->instr_map,
+                                                &instr->instr);
+   const nir_schedule_options *options = state->scoreboard->options;
+   nir_schedule_dependency dep;
+
+   if (options->intrinsic_cb &&
+       options->intrinsic_cb(instr, &dep, options->intrinsic_cb_data)) {
+      struct nir_schedule_class_dep *class_dep =
+         nir_schedule_get_class_dep(state, dep.klass);
+
+      switch (dep.type) {
+      case NIR_SCHEDULE_READ_DEPENDENCY:
+         add_read_dep(state, class_dep->node, n);
+         break;
+      case NIR_SCHEDULE_WRITE_DEPENDENCY:
+         add_write_dep(state, &class_dep->node, n);
+         break;
+      }
+   }
 
    switch (instr->intrinsic) {
    case nir_intrinsic_load_uniform:
@@ -321,10 +369,11 @@ nir_schedule_intrinsic_deps(nir_deps_state *state,
       break;
 
    case nir_intrinsic_store_output:
-      /* For some non-FS shader stages, or for some hardware, output stores
-       * affect the same shared memory as input loads.
+      /* For some hardware and stages, output stores affect the same shared
+       * memory as input loads.
        */
-      if (state->shader->info.stage != MESA_SHADER_FRAGMENT)
+      if ((state->scoreboard->options->stages_with_shared_io_memory &
+           (1 << state->scoreboard->shader->info.stage)))
          add_write_dep(state, &state->load_input, n);
 
       /* Make sure that preceding discards stay before the store_output */
@@ -333,6 +382,7 @@ nir_schedule_intrinsic_deps(nir_deps_state *state,
       break;
 
    case nir_intrinsic_load_input:
+   case nir_intrinsic_load_per_vertex_input:
       add_read_dep(state, state->load_input, n);
       break;
 
@@ -437,9 +487,8 @@ static void
 calculate_forward_deps(nir_schedule_scoreboard *scoreboard, nir_block *block)
 {
    nir_deps_state state = {
-      .shader = scoreboard->shader,
+      .scoreboard = scoreboard,
       .dir = F,
-      .instr_map = scoreboard->instr_map,
       .reg_map = _mesa_pointer_hash_table_create(NULL),
    };
 
@@ -456,9 +505,8 @@ static void
 calculate_reverse_deps(nir_schedule_scoreboard *scoreboard, nir_block *block)
 {
    nir_deps_state state = {
-      .shader = scoreboard->shader,
+      .scoreboard = scoreboard,
       .dir = R,
-      .instr_map = scoreboard->instr_map,
       .reg_map = _mesa_pointer_hash_table_create(NULL),
    };
 
@@ -533,6 +581,50 @@ nir_schedule_regs_freed(nir_schedule_scoreboard *scoreboard, nir_schedule_node *
    nir_foreach_dest(n->instr, nir_schedule_regs_freed_dest_cb, &state);
 
    return state.regs_freed;
+}
+
+/**
+ * Chooses an instruction that will minimise the register pressure as much as
+ * possible. This should only be used as a fallback when the regular scheduling
+ * generates a shader whose register allocation fails.
+ */
+static nir_schedule_node *
+nir_schedule_choose_instruction_fallback(nir_schedule_scoreboard *scoreboard)
+{
+   nir_schedule_node *chosen = NULL;
+
+   /* Find the leader in the ready (shouldn't-stall) set with the mininum
+    * cost.
+    */
+   list_for_each_entry(nir_schedule_node, n, &scoreboard->dag->heads, dag.link) {
+      if (scoreboard->time < n->ready_time)
+         continue;
+
+      if (!chosen || chosen->max_delay > n->max_delay)
+         chosen = n;
+   }
+   if (chosen) {
+      if (debug) {
+         fprintf(stderr, "chose (ready fallback):          ");
+         nir_print_instr(chosen->instr, stderr);
+         fprintf(stderr, "\n");
+      }
+
+      return chosen;
+   }
+
+   /* Otherwise, choose the leader with the minimum cost. */
+   list_for_each_entry(nir_schedule_node, n, &scoreboard->dag->heads, dag.link) {
+      if (!chosen || chosen->max_delay > n->max_delay)
+         chosen = n;
+   }
+   if (debug) {
+      fprintf(stderr, "chose (leader fallback):         ");
+      nir_print_instr(chosen->instr, stderr);
+      fprintf(stderr, "\n");
+   }
+
+   return chosen;
 }
 
 /**
@@ -865,7 +957,9 @@ nir_schedule_instructions(nir_schedule_scoreboard *scoreboard, nir_block *block)
       }
 
       nir_schedule_node *chosen;
-      if (scoreboard->pressure < scoreboard->threshold)
+      if (scoreboard->options->fallback)
+         chosen = nir_schedule_choose_instruction_fallback(scoreboard);
+      else if (scoreboard->pressure < scoreboard->options->threshold)
          chosen = nir_schedule_choose_instruction_csp(scoreboard);
       else
          chosen = nir_schedule_choose_instruction_csr(scoreboard);
@@ -978,14 +1072,15 @@ nir_schedule_ssa_def_init_scoreboard(nir_ssa_def *def, void *state)
 }
 
 static nir_schedule_scoreboard *
-nir_schedule_get_scoreboard(nir_shader *shader, int threshold)
+nir_schedule_get_scoreboard(nir_shader *shader,
+                            const nir_schedule_options *options)
 {
    nir_schedule_scoreboard *scoreboard = rzalloc(NULL, nir_schedule_scoreboard);
 
    scoreboard->shader = shader;
    scoreboard->live_values = _mesa_pointer_set_create(scoreboard);
    scoreboard->remaining_uses = _mesa_pointer_hash_table_create(scoreboard);
-   scoreboard->threshold = threshold;
+   scoreboard->options = options;
    scoreboard->pressure = 0;
 
    nir_foreach_function(function, shader) {
@@ -1062,10 +1157,11 @@ nir_schedule_validate_uses(nir_schedule_scoreboard *scoreboard)
  * tune.
  */
 void
-nir_schedule(nir_shader *shader, int threshold)
+nir_schedule(nir_shader *shader,
+             const nir_schedule_options *options)
 {
    nir_schedule_scoreboard *scoreboard = nir_schedule_get_scoreboard(shader,
-                                                                     threshold);
+                                                                     options);
 
    if (debug) {
       fprintf(stderr, "NIR shader before scheduling:\n");

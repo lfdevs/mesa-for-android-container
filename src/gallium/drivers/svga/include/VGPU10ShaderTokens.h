@@ -41,7 +41,7 @@
 #define VGPU10_MAX_FS_INPUTS 32
 #define VGPU10_MAX_FS_OUTPUTS 8
 #define VGPU10_MAX_TEMPS 4096
-#define VGPU10_MAX_CONSTANT_BUFFERS 14
+#define VGPU10_MAX_CONSTANT_BUFFERS (14 + 1)
 #define VGPU10_MAX_CONSTANT_BUFFER_ELEMENT_COUNT 4096
 #define VGPU10_MAX_IMMEDIATE_CONSTANT_BUFFER_ELEMENT_COUNT 4096
 #define VGPU10_MAX_SAMPLERS 16
@@ -49,10 +49,35 @@
 #define VGPU10_MIN_TEXEL_FETCH_OFFSET -8
 #define VGPU10_MAX_TEXEL_FETCH_OFFSET 7
 
+/* Shader Model 4.1 limits */
+#define VGPU10_1_MAX_VS_INPUTS   32
+#define VGPU10_1_MAX_VS_OUTPUTS  32
+#define VGPU10_1_MAX_GS_INPUTS   32
+
+/* Shader Model 5.0 limits */
+#define VGPU11_MAX_HS_INPUTS                    32
+#define VGPU11_MAX_HS_INPUT_CONTROL_POINTS      32
+#define VGPU11_MAX_HS_INPUT_PATCH_CONSTANTS     32
+#define VGPU11_MAX_HS_OUTPUTS                   32
+#define VGPU11_MAX_DS_INPUT_CONTROL_POINTS      32
+#define VGPU11_MAX_DS_INPUT_PATCH_CONSTANTS     32
+#define VGPU11_MAX_DS_OUTPUTS                   32
+#define VGPU11_MAX_GS_STREAMS                   4
+
+/* Maximums of limits for all stages */
+#define VGPU10_MAX_INPUTS                 32
+#define VGPU10_MAX_OUTPUTS                32
+#define VGPU10_MAX_INPUT_PATCH_CONSTANTS  32
+
 typedef enum {
-   VGPU10_PIXEL_SHADER = 0,
-   VGPU10_VERTEX_SHADER = 1,
-   VGPU10_GEOMETRY_SHADER = 2
+   VGPU10_PIXEL_SHADER     = 0,
+   VGPU10_VERTEX_SHADER    = 1,
+   VGPU10_GEOMETRY_SHADER  = 2,
+
+   /* DX11 */
+   VGPU10_HULL_SHADER      = 3,
+   VGPU10_DOMAIN_SHADER    = 4,
+   VGPU10_COMPUTE_SHADER   = 5
 } VGPU10_PROGRAM_TYPE;
 
 typedef union {
@@ -174,13 +199,136 @@ typedef enum {
    VGPU10_OPCODE_DCL_TEMPS                         = 104,
    VGPU10_OPCODE_DCL_INDEXABLE_TEMP                = 105,
    VGPU10_OPCODE_DCL_GLOBAL_FLAGS                  = 106,
-   VGPU10_OPCODE_IDIV                              = 107,
+
+   /* GL guest */
+   VGPU10_OPCODE_VMWARE                            = 107,
+
+   /* DX10.1 */
    VGPU10_OPCODE_LOD                               = 108,
    VGPU10_OPCODE_GATHER4                           = 109,
    VGPU10_OPCODE_SAMPLE_POS                        = 110,
    VGPU10_OPCODE_SAMPLE_INFO                       = 111,
+
+   /* DX11 */
+   VGPU10_OPCODE_RESERVED1                         = 112,
+   VGPU10_OPCODE_HS_DECLS                          = 113,
+   VGPU10_OPCODE_HS_CONTROL_POINT_PHASE            = 114,
+   VGPU10_OPCODE_HS_FORK_PHASE                     = 115,
+   VGPU10_OPCODE_HS_JOIN_PHASE                     = 116,
+   VGPU10_OPCODE_EMIT_STREAM                       = 117,
+   VGPU10_OPCODE_CUT_STREAM                        = 118,
+   VGPU10_OPCODE_EMITTHENCUT_STREAM                = 119,
+   VGPU10_OPCODE_INTERFACE_CALL                    = 120,
+   VGPU10_OPCODE_BUFINFO                           = 121,
+   VGPU10_OPCODE_DERIV_RTX_COARSE                  = 122,
+   VGPU10_OPCODE_DERIV_RTX_FINE                    = 123,
+   VGPU10_OPCODE_DERIV_RTY_COARSE                  = 124,
+   VGPU10_OPCODE_DERIV_RTY_FINE                    = 125,
+   VGPU10_OPCODE_GATHER4_C                         = 126,
+   VGPU10_OPCODE_GATHER4_PO                        = 127,
+   VGPU10_OPCODE_GATHER4_PO_C                      = 128,
+   VGPU10_OPCODE_RCP                               = 129,
+   VGPU10_OPCODE_F32TOF16                          = 130,
+   VGPU10_OPCODE_F16TOF32                          = 131,
+   VGPU10_OPCODE_UADDC                             = 132,
+   VGPU10_OPCODE_USUBB                             = 133,
+   VGPU10_OPCODE_COUNTBITS                         = 134,
+   VGPU10_OPCODE_FIRSTBIT_HI                       = 135,
+   VGPU10_OPCODE_FIRSTBIT_LO                       = 136,
+   VGPU10_OPCODE_FIRSTBIT_SHI                      = 137,
+   VGPU10_OPCODE_UBFE                              = 138,
+   VGPU10_OPCODE_IBFE                              = 139,
+   VGPU10_OPCODE_BFI                               = 140,
+   VGPU10_OPCODE_BFREV                             = 141,
+   VGPU10_OPCODE_SWAPC                             = 142,
+   VGPU10_OPCODE_DCL_STREAM                        = 143,
+   VGPU10_OPCODE_DCL_FUNCTION_BODY                 = 144,
+   VGPU10_OPCODE_DCL_FUNCTION_TABLE                = 145,
+   VGPU10_OPCODE_DCL_INTERFACE                     = 146,
+   VGPU10_OPCODE_DCL_INPUT_CONTROL_POINT_COUNT     = 147,
+   VGPU10_OPCODE_DCL_OUTPUT_CONTROL_POINT_COUNT    = 148,
+   VGPU10_OPCODE_DCL_TESS_DOMAIN                   = 149,
+   VGPU10_OPCODE_DCL_TESS_PARTITIONING             = 150,
+   VGPU10_OPCODE_DCL_TESS_OUTPUT_PRIMITIVE         = 151,
+   VGPU10_OPCODE_DCL_HS_MAX_TESSFACTOR             = 152,
+   VGPU10_OPCODE_DCL_HS_FORK_PHASE_INSTANCE_COUNT  = 153,
+   VGPU10_OPCODE_DCL_HS_JOIN_PHASE_INSTANCE_COUNT  = 154,
+   VGPU10_OPCODE_DCL_THREAD_GROUP                  = 155,
+   VGPU10_OPCODE_DCL_UAV_TYPED                     = 156,
+   VGPU10_OPCODE_DCL_UAV_RAW                       = 157,
+   VGPU10_OPCODE_DCL_UAV_STRUCTURED                = 158,
+   VGPU10_OPCODE_DCL_TGSM_RAW                      = 159,
+   VGPU10_OPCODE_DCL_TGSM_STRUCTURED               = 160,
+   VGPU10_OPCODE_DCL_RESOURCE_RAW                  = 161,
+   VGPU10_OPCODE_DCL_RESOURCE_STRUCTURED           = 162,
+   VGPU10_OPCODE_LD_UAV_TYPED                      = 163,
+   VGPU10_OPCODE_STORE_UAV_TYPED                   = 164,
+   VGPU10_OPCODE_LD_RAW                            = 165,
+   VGPU10_OPCODE_STORE_RAW                         = 166,
+   VGPU10_OPCODE_LD_STRUCTURED                     = 167,
+   VGPU10_OPCODE_STORE_STRUCTURED                  = 168,
+   VGPU10_OPCODE_ATOMIC_AND                        = 169,
+   VGPU10_OPCODE_ATOMIC_OR                         = 170,
+   VGPU10_OPCODE_ATOMIC_XOR                        = 171,
+   VGPU10_OPCODE_ATOMIC_CMP_STORE                  = 172,
+   VGPU10_OPCODE_ATOMIC_IADD                       = 173,
+   VGPU10_OPCODE_ATOMIC_IMAX                       = 174,
+   VGPU10_OPCODE_ATOMIC_IMIN                       = 175,
+   VGPU10_OPCODE_ATOMIC_UMAX                       = 176,
+   VGPU10_OPCODE_ATOMIC_UMIN                       = 177,
+   VGPU10_OPCODE_IMM_ATOMIC_ALLOC                  = 178,
+   VGPU10_OPCODE_IMM_ATOMIC_CONSUME                = 179,
+   VGPU10_OPCODE_IMM_ATOMIC_IADD                   = 180,
+   VGPU10_OPCODE_IMM_ATOMIC_AND                    = 181,
+   VGPU10_OPCODE_IMM_ATOMIC_OR                     = 182,
+   VGPU10_OPCODE_IMM_ATOMIC_XOR                    = 183,
+   VGPU10_OPCODE_IMM_ATOMIC_EXCH                   = 184,
+   VGPU10_OPCODE_IMM_ATOMIC_CMP_EXCH               = 185,
+   VGPU10_OPCODE_IMM_ATOMIC_IMAX                   = 186,
+   VGPU10_OPCODE_IMM_ATOMIC_IMIN                   = 187,
+   VGPU10_OPCODE_IMM_ATOMIC_UMAX                   = 188,
+   VGPU10_OPCODE_IMM_ATOMIC_UMIN                   = 189,
+   VGPU10_OPCODE_SYNC                              = 190,
+   VGPU10_OPCODE_DADD                              = 191,
+   VGPU10_OPCODE_DMAX                              = 192,
+   VGPU10_OPCODE_DMIN                              = 193,
+   VGPU10_OPCODE_DMUL                              = 194,
+   VGPU10_OPCODE_DEQ                               = 195,
+   VGPU10_OPCODE_DGE                               = 196,
+   VGPU10_OPCODE_DLT                               = 197,
+   VGPU10_OPCODE_DNE                               = 198,
+   VGPU10_OPCODE_DMOV                              = 199,
+   VGPU10_OPCODE_DMOVC                             = 200,
+   VGPU10_OPCODE_DTOF                              = 201,
+   VGPU10_OPCODE_FTOD                              = 202,
+   VGPU10_OPCODE_EVAL_SNAPPED                      = 203,
+   VGPU10_OPCODE_EVAL_SAMPLE_INDEX                 = 204,
+   VGPU10_OPCODE_EVAL_CENTROID                     = 205,
+   VGPU10_OPCODE_DCL_GS_INSTANCE_COUNT             = 206,
+   VGPU10_OPCODE_ABORT                             = 207,
+   VGPU10_OPCODE_DEBUG_BREAK                       = 208,
+
+   /* DX11.1 */
+   VGPU10_OPCODE_RESERVED0                         = 209,
+   VGPU10_OPCODE_DDIV                              = 210,
+   VGPU10_OPCODE_DFMA                              = 211,
+   VGPU10_OPCODE_DRCP                              = 212,
+   VGPU10_OPCODE_MSAD                              = 213,
+   VGPU10_OPCODE_DTOI                              = 214,
+   VGPU10_OPCODE_DTOU                              = 215,
+   VGPU10_OPCODE_ITOD                              = 216,
+   VGPU10_OPCODE_UTOD                              = 217,
+
    VGPU10_NUM_OPCODES                  /* Should be the last entry. */
 } VGPU10_OPCODE_TYPE;
+
+/* Sub-opcode of VGPU10_OPCODE_VMWARE. */
+typedef enum {
+   VGPU10_VMWARE_OPCODE_IDIV                       = 0,
+   VGPU10_VMWARE_OPCODE_DFRC                       = 1,
+   VGPU10_VMWARE_OPCODE_DRSQ                       = 2,
+   VGPU10_VMWARE_NUM_OPCODES           /* Should be the last entry. */
+} VGPU10_VMWARE_OPCODE_TYPE;
 
 typedef enum {
    VGPU10_INTERPOLATION_UNDEFINED = 0,
@@ -229,7 +377,43 @@ typedef enum {
    VGPU10_PRIMITIVE_LINE         = 2,
    VGPU10_PRIMITIVE_TRIANGLE     = 3,
    VGPU10_PRIMITIVE_LINE_ADJ     = 6,
-   VGPU10_PRIMITIVE_TRIANGLE_ADJ = 7
+   VGPU10_PRIMITIVE_TRIANGLE_ADJ = 7,
+   VGPU10_PRIMITIVE_SM40_MAX     = 7,
+
+   /* DX11 */
+   VGPU10_PRIMITIVE_1_CONTROL_POINT_PATCH    = 8,
+   VGPU10_PRIMITIVE_2_CONTROL_POINT_PATCH    = 9,
+   VGPU10_PRIMITIVE_3_CONTROL_POINT_PATCH    = 10,
+   VGPU10_PRIMITIVE_4_CONTROL_POINT_PATCH    = 11,
+   VGPU10_PRIMITIVE_5_CONTROL_POINT_PATCH    = 12,
+   VGPU10_PRIMITIVE_6_CONTROL_POINT_PATCH    = 13,
+   VGPU10_PRIMITIVE_7_CONTROL_POINT_PATCH    = 14,
+   VGPU10_PRIMITIVE_8_CONTROL_POINT_PATCH    = 15,
+   VGPU10_PRIMITIVE_9_CONTROL_POINT_PATCH    = 16,
+   VGPU10_PRIMITIVE_10_CONTROL_POINT_PATCH   = 17,
+   VGPU10_PRIMITIVE_11_CONTROL_POINT_PATCH   = 18,
+   VGPU10_PRIMITIVE_12_CONTROL_POINT_PATCH   = 19,
+   VGPU10_PRIMITIVE_13_CONTROL_POINT_PATCH   = 20,
+   VGPU10_PRIMITIVE_14_CONTROL_POINT_PATCH   = 21,
+   VGPU10_PRIMITIVE_15_CONTROL_POINT_PATCH   = 22,
+   VGPU10_PRIMITIVE_16_CONTROL_POINT_PATCH   = 23,
+   VGPU10_PRIMITIVE_17_CONTROL_POINT_PATCH   = 24,
+   VGPU10_PRIMITIVE_18_CONTROL_POINT_PATCH   = 25,
+   VGPU10_PRIMITIVE_19_CONTROL_POINT_PATCH   = 26,
+   VGPU10_PRIMITIVE_20_CONTROL_POINT_PATCH   = 27,
+   VGPU10_PRIMITIVE_21_CONTROL_POINT_PATCH   = 28,
+   VGPU10_PRIMITIVE_22_CONTROL_POINT_PATCH   = 29,
+   VGPU10_PRIMITIVE_23_CONTROL_POINT_PATCH   = 30,
+   VGPU10_PRIMITIVE_24_CONTROL_POINT_PATCH   = 31,
+   VGPU10_PRIMITIVE_25_CONTROL_POINT_PATCH   = 32,
+   VGPU10_PRIMITIVE_26_CONTROL_POINT_PATCH   = 33,
+   VGPU10_PRIMITIVE_27_CONTROL_POINT_PATCH   = 34,
+   VGPU10_PRIMITIVE_28_CONTROL_POINT_PATCH   = 35,
+   VGPU10_PRIMITIVE_29_CONTROL_POINT_PATCH   = 36,
+   VGPU10_PRIMITIVE_30_CONTROL_POINT_PATCH   = 37,
+   VGPU10_PRIMITIVE_31_CONTROL_POINT_PATCH   = 38,
+   VGPU10_PRIMITIVE_32_CONTROL_POINT_PATCH   = 39,
+   VGPU10_PRIMITIVE_MAX                      = 39
 } VGPU10_PRIMITIVE;
 
 typedef enum {
@@ -264,15 +448,50 @@ typedef enum {
    VGPU10_INSTRUCTION_RETURN_UINT   = 1
 } VGPU10_INSTRUCTION_RETURN_TYPE;
 
+/* DX11 */
+typedef enum {
+    VGPU10_TESSELLATOR_DOMAIN_UNDEFINED   = 0,
+    VGPU10_TESSELLATOR_DOMAIN_ISOLINE     = 1,
+    VGPU10_TESSELLATOR_DOMAIN_TRI         = 2,
+    VGPU10_TESSELLATOR_DOMAIN_QUAD        = 3,
+    VGPU10_TESSELLATOR_DOMAIN_MAX         = 3
+} VGPU10_TESSELLATOR_DOMAIN;
+
+/* DX11 */
+typedef enum {
+    VGPU10_TESSELLATOR_PARTITIONING_UNDEFINED         = 0,
+    VGPU10_TESSELLATOR_PARTITIONING_INTEGER           = 1,
+    VGPU10_TESSELLATOR_PARTITIONING_POW2              = 2,
+    VGPU10_TESSELLATOR_PARTITIONING_FRACTIONAL_ODD    = 3,
+    VGPU10_TESSELLATOR_PARTITIONING_FRACTIONAL_EVEN   = 4,
+    VGPU10_TESSELLATOR_PARTITIONING_MAX               = 4
+} VGPU10_TESSELLATOR_PARTITIONING;
+
+/* DX11 */
+typedef enum {
+    VGPU10_TESSELLATOR_OUTPUT_UNDEFINED      = 0,
+    VGPU10_TESSELLATOR_OUTPUT_POINT          = 1,
+    VGPU10_TESSELLATOR_OUTPUT_LINE           = 2,
+    VGPU10_TESSELLATOR_OUTPUT_TRIANGLE_CW    = 3,
+    VGPU10_TESSELLATOR_OUTPUT_TRIANGLE_CCW   = 4,
+    VGPU10_TESSELLATOR_OUTPUT_MAX            = 4
+} VGPU10_TESSELLATOR_OUTPUT_PRIMITIVE;
+
 typedef union {
    struct {
       unsigned int opcodeType          : 11; /* VGPU10_OPCODE_TYPE */
       unsigned int interpolationMode   : 4;  /* VGPU10_INTERPOLATION_MODE */
       unsigned int                     : 3;
       unsigned int testBoolean         : 1;  /* VGPU10_INSTRUCTION_TEST_BOOLEAN */
-      unsigned int                     : 5;
+      unsigned int preciseValues       : 4;  /* DX11 VGPU10_OPERAND_4_COMPONENT_MASK_* */
+      unsigned int                     : 1;
       unsigned int instructionLength   : 7;
       unsigned int extended            : 1;
+   };
+   /* VGPU10_OPCODE_VMWARE */
+   struct {
+      unsigned int                     : 11;
+      unsigned int vmwareOpcodeType    : 4;  /* VGPU10_VMWARE_OPCODE_TYPE */
    };
    struct {
       unsigned int                     : 11;
@@ -307,10 +526,52 @@ typedef union {
    struct {
       unsigned int                     : 11;
       unsigned int refactoringAllowed  : 1;
+
+      /* DX11 */
+      unsigned int enableDoublePrecisionFloatOps   : 1;
+      unsigned int forceEarlyDepthStencil          : 1;
+      unsigned int enableRawAndStructuredBuffers   : 1;
    };
    struct {
       unsigned int                     : 11;
       unsigned int instReturnType      : 2;  /* VGPU10_INSTRUCTION_RETURN_TYPE */
+   };
+
+   /* DX11 */
+   struct {
+      unsigned int                        : 11;
+      unsigned int syncThreadsInGroup     : 1;
+      unsigned int syncThreadGroupShared  : 1;
+      unsigned int syncUAVMemoryGroup     : 1;
+      unsigned int syncUAVMemoryGlobal    : 1;
+   };
+   struct {
+      unsigned int                     : 11; /* VGPU10_OPCODE_DCL_INPUT_CONTROL_POINT_COUNT
+                                              * VGPU10_OPCODE_DCL_OUTPUT_CONTROL_POINT_COUNT */
+      unsigned int controlPointCount   : 6;
+   };
+   struct {
+      unsigned int                     : 11; /* VGPU10_OPCODE_DCL_TESS_DOMAIN */
+      unsigned int tessDomain          : 2;  /* VGPU10_TESSELLATOR_DOMAIN */
+   };
+   struct {
+      unsigned int                     : 11; /* VGPU10_OPCODE_DCL_TESS_PARTITIONING */
+      unsigned int tessPartitioning    : 3;  /* VGPU10_TESSELLATOR_PARTITIONING */
+   };
+   struct {
+      unsigned int                     : 11; /* VGPU10_OPCODE_DCL_TESS_OUTPUT_PRIMITIVE */
+      unsigned int tessOutputPrimitive : 3;  /* VGPU10_TESSELLATOR_OUTPUT_PRIMITIVE */
+   };
+   struct {
+      unsigned int                              : 11; /* VGPU10_OPCODE_DCL_INTERFACE */
+      unsigned int interfaceIndexedDynamically  : 1;
+   };
+   struct {
+      unsigned int                        : 11; /* VGPU10_OPCODE_DCL_UAV_* */
+      unsigned int uavResourceDimension   : 5;  /* VGPU10_RESOURCE_DIMENSION */
+      unsigned int globallyCoherent       : 1;
+      unsigned int                        : 6;
+      unsigned int uavHasCounter          : 1;
    };
    uint32 value;
 } VGPU10OpcodeToken0;
@@ -376,22 +637,56 @@ typedef enum {
 } VGPU10_COMPONENT_NAME;
 
 typedef enum {
-   VGPU10_OPERAND_TYPE_TEMP = 0,
-   VGPU10_OPERAND_TYPE_INPUT = 1,
-   VGPU10_OPERAND_TYPE_OUTPUT = 2,
-   VGPU10_OPERAND_TYPE_INDEXABLE_TEMP = 3,
-   VGPU10_OPERAND_TYPE_IMMEDIATE32 = 4,
-   VGPU10_OPERAND_TYPE_IMMEDIATE64 = 5,
-   VGPU10_OPERAND_TYPE_SAMPLER = 6,
-   VGPU10_OPERAND_TYPE_RESOURCE = 7,
-   VGPU10_OPERAND_TYPE_CONSTANT_BUFFER = 8,
-   VGPU10_OPERAND_TYPE_IMMEDIATE_CONSTANT_BUFFER = 9,
-   VGPU10_OPERAND_TYPE_LABEL = 10,
-   VGPU10_OPERAND_TYPE_INPUT_PRIMITIVEID = 11,
-   VGPU10_OPERAND_TYPE_OUTPUT_DEPTH = 12,
-   VGPU10_OPERAND_TYPE_NULL = 13,
-   VGPU10_OPERAND_TYPE_RASTERIZER = 14,            /* DX10.1 */
-   VGPU10_OPERAND_TYPE_OUTPUT_COVERAGE_MASK = 15   /* DX10.1 */
+   VGPU10_OPERAND_TYPE_TEMP                                 = 0,
+   VGPU10_OPERAND_TYPE_INPUT                                = 1,
+   VGPU10_OPERAND_TYPE_OUTPUT                               = 2,
+   VGPU10_OPERAND_TYPE_INDEXABLE_TEMP                       = 3,
+   VGPU10_OPERAND_TYPE_IMMEDIATE32                          = 4,
+   VGPU10_OPERAND_TYPE_IMMEDIATE64                          = 5,
+   VGPU10_OPERAND_TYPE_SAMPLER                              = 6,
+   VGPU10_OPERAND_TYPE_RESOURCE                             = 7,
+   VGPU10_OPERAND_TYPE_CONSTANT_BUFFER                      = 8,
+   VGPU10_OPERAND_TYPE_IMMEDIATE_CONSTANT_BUFFER            = 9,
+   VGPU10_OPERAND_TYPE_LABEL                                = 10,
+   VGPU10_OPERAND_TYPE_INPUT_PRIMITIVEID                    = 11,
+   VGPU10_OPERAND_TYPE_OUTPUT_DEPTH                         = 12,
+   VGPU10_OPERAND_TYPE_NULL                                 = 13,
+   VGPU10_OPERAND_TYPE_SM40_MAX                             = 13,
+
+   /* DX10.1 */
+   VGPU10_OPERAND_TYPE_RASTERIZER                           = 14,
+   VGPU10_OPERAND_TYPE_OUTPUT_COVERAGE_MASK                 = 15,
+   VGPU10_OPERAND_TYPE_SM41_MAX                             = 15,
+
+   /* DX11 */
+   VGPU10_OPERAND_TYPE_STREAM                               = 16,
+   VGPU10_OPERAND_TYPE_FUNCTION_BODY                        = 17,
+   VGPU10_OPERAND_TYPE_FUNCTION_TABLE                       = 18,
+   VGPU10_OPERAND_TYPE_INTERFACE                            = 19,
+   VGPU10_OPERAND_TYPE_FUNCTION_INPUT                       = 20,
+   VGPU10_OPERAND_TYPE_FUNCTION_OUTPUT                      = 21,
+   VGPU10_OPERAND_TYPE_OUTPUT_CONTROL_POINT_ID              = 22,
+   VGPU10_OPERAND_TYPE_INPUT_FORK_INSTANCE_ID               = 23,
+   VGPU10_OPERAND_TYPE_INPUT_JOIN_INSTANCE_ID               = 24,
+   VGPU10_OPERAND_TYPE_INPUT_CONTROL_POINT                  = 25,
+   VGPU10_OPERAND_TYPE_OUTPUT_CONTROL_POINT                 = 26,
+   VGPU10_OPERAND_TYPE_INPUT_PATCH_CONSTANT                 = 27,
+   VGPU10_OPERAND_TYPE_INPUT_DOMAIN_POINT                   = 28,
+   VGPU10_OPERAND_TYPE_THIS_POINTER                         = 29,
+   VGPU10_OPERAND_TYPE_UAV                                  = 30,
+   VGPU10_OPERAND_TYPE_THREAD_GROUP_SHARED_MEMORY           = 31,
+   VGPU10_OPERAND_TYPE_INPUT_THREAD_ID                      = 32,
+   VGPU10_OPERAND_TYPE_INPUT_THREAD_GROUP_ID                = 33,
+   VGPU10_OPERAND_TYPE_INPUT_THREAD_ID_IN_GROUP             = 34,
+   VGPU10_OPERAND_TYPE_INPUT_COVERAGE_MASK                  = 35,
+   VGPU10_OPERAND_TYPE_INPUT_THREAD_ID_IN_GROUP_FLATTENED   = 36,
+   VGPU10_OPERAND_TYPE_INPUT_GS_INSTANCE_ID                 = 37,
+   VGPU10_OPERAND_TYPE_OUTPUT_DEPTH_GREATER_EQUAL           = 38,
+   VGPU10_OPERAND_TYPE_OUTPUT_DEPTH_LESS_EQUAL              = 39,
+   VGPU10_OPERAND_TYPE_CYCLE_COUNTER                        = 40,
+   VGPU10_OPERAND_TYPE_SM50_MAX                             = 40,
+
+   VGPU10_NUM_OPERANDS
 } VGPU10_OPERAND_TYPE;
 
 typedef enum {
@@ -495,7 +790,23 @@ typedef enum {
    VGPU10_NAME_INSTANCE_ID                = 8,
    VGPU10_NAME_IS_FRONT_FACE              = 9,
    VGPU10_NAME_SAMPLE_INDEX               = 10,
-   VGPU10_NAME_MAX                        = 10
+   VGPU10_NAME_SM40_MAX                   = 10,
+
+   /* DX11 */
+   VGPU10_NAME_FINAL_QUAD_U_EQ_0_EDGE_TESSFACTOR   = 11,
+   VGPU10_NAME_FINAL_QUAD_V_EQ_0_EDGE_TESSFACTOR   = 12,
+   VGPU10_NAME_FINAL_QUAD_U_EQ_1_EDGE_TESSFACTOR   = 13,
+   VGPU10_NAME_FINAL_QUAD_V_EQ_1_EDGE_TESSFACTOR   = 14,
+   VGPU10_NAME_FINAL_QUAD_U_INSIDE_TESSFACTOR      = 15,
+   VGPU10_NAME_FINAL_QUAD_V_INSIDE_TESSFACTOR      = 16,
+   VGPU10_NAME_FINAL_TRI_U_EQ_0_EDGE_TESSFACTOR    = 17,
+   VGPU10_NAME_FINAL_TRI_V_EQ_0_EDGE_TESSFACTOR    = 18,
+   VGPU10_NAME_FINAL_TRI_W_EQ_0_EDGE_TESSFACTOR    = 19,
+   VGPU10_NAME_FINAL_TRI_INSIDE_TESSFACTOR         = 20,
+   VGPU10_NAME_FINAL_LINE_DETAIL_TESSFACTOR        = 21,
+   VGPU10_NAME_FINAL_LINE_DENSITY_TESSFACTOR       = 22,
+
+   VGPU10_NAME_MAX                                 = 22
 } VGPU10_SYSTEM_NAME;
 
 typedef union {

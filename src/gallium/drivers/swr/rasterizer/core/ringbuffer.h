@@ -46,7 +46,7 @@ public:
         mNumEntries  = numEntries;
         mpRingBuffer = (T*)AlignedMalloc(sizeof(T) * numEntries, 64);
         SWR_ASSERT(mpRingBuffer != nullptr);
-        memset(mpRingBuffer, 0, sizeof(T) * numEntries);
+        memset((void*)mpRingBuffer, 0, sizeof(T) * numEntries);
     }
 
     void Destroy()

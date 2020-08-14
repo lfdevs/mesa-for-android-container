@@ -440,15 +440,18 @@ lima_screen_query_dmabuf_modifiers(struct pipe_screen *pscreen,
       DRM_FORMAT_MOD_LINEAR,
    };
 
+   int num_modifiers = ARRAY_SIZE(available_modifiers);
+
    if (!modifiers) {
-      *count = ARRAY_SIZE(available_modifiers);
+      *count = num_modifiers;
       return;
    }
 
+   *count = MIN2(max, num_modifiers);
    for (int i = 0; i < *count; i++) {
       modifiers[i] = available_modifiers[i];
       if (external_only)
-         external_only = false;
+         external_only[i] = false;
    }
 }
 

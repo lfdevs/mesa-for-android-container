@@ -53,14 +53,14 @@
 #define RENCODE_IB_PARAM_FEEDBACK_BUFFER           0x00000010
 #define RENCODE_IB_PARAM_DIRECT_OUTPUT_NALU        0x00000020
 
-#define RENCODE_HEVC_IB_PARAM_SLICE_CONTROL     0x00100001
-#define RENCODE_HEVC_IB_PARAM_SPEC_MISC         0x00100002
-#define RENCODE_HEVC_IB_PARAM_DEBLOCKING_FILTER 0x00100003
+#define RENCODE_HEVC_IB_PARAM_SLICE_CONTROL        0x00100001
+#define RENCODE_HEVC_IB_PARAM_SPEC_MISC            0x00100002
+#define RENCODE_HEVC_IB_PARAM_DEBLOCKING_FILTER    0x00100003
 
-#define RENCODE_H264_IB_PARAM_SLICE_CONTROL     0x00200001
-#define RENCODE_H264_IB_PARAM_SPEC_MISC         0x00200002
-#define RENCODE_H264_IB_PARAM_ENCODE_PARAMS     0x00200003
-#define RENCODE_H264_IB_PARAM_DEBLOCKING_FILTER 0x00200004
+#define RENCODE_H264_IB_PARAM_SLICE_CONTROL        0x00200001
+#define RENCODE_H264_IB_PARAM_SPEC_MISC            0x00200002
+#define RENCODE_H264_IB_PARAM_ENCODE_PARAMS        0x00200003
+#define RENCODE_H264_IB_PARAM_DEBLOCKING_FILTER    0x00200004
 
 static void radeon_enc_session_info(struct radeon_encoder *enc)
 {
@@ -296,8 +296,8 @@ static void radeon_enc_nalu_sps(struct radeon_encoder *enc)
 
    if (enc->enc_pic.spec_misc.profile_idc == 100 || enc->enc_pic.spec_misc.profile_idc == 110 ||
        enc->enc_pic.spec_misc.profile_idc == 122 || enc->enc_pic.spec_misc.profile_idc == 244 ||
-       enc->enc_pic.spec_misc.profile_idc == 44 || enc->enc_pic.spec_misc.profile_idc == 83 ||
-       enc->enc_pic.spec_misc.profile_idc == 86 || enc->enc_pic.spec_misc.profile_idc == 118 ||
+       enc->enc_pic.spec_misc.profile_idc == 44  || enc->enc_pic.spec_misc.profile_idc == 83 ||
+       enc->enc_pic.spec_misc.profile_idc == 86  || enc->enc_pic.spec_misc.profile_idc == 118 ||
        enc->enc_pic.spec_misc.profile_idc == 128 || enc->enc_pic.spec_misc.profile_idc == 138) {
       radeon_enc_code_ue(enc, 0x1);
       radeon_enc_code_ue(enc, 0x0);
@@ -324,8 +324,8 @@ static void radeon_enc_nalu_sps(struct radeon_encoder *enc)
 
    radeon_enc_code_fixed_bits(enc, 0x1, 1);
 
-   if ((enc->enc_pic.crop_left != 0) || (enc->enc_pic.crop_right != 0) ||
-       (enc->enc_pic.crop_top != 0) || (enc->enc_pic.crop_bottom != 0)) {
+   if ((enc->enc_pic.crop_left != 0) || (enc->enc_pic.crop_right  != 0) ||
+       (enc->enc_pic.crop_top  != 0) || (enc->enc_pic.crop_bottom != 0)) {
       radeon_enc_code_fixed_bits(enc, 0x1, 1);
       radeon_enc_code_ue(enc, enc->enc_pic.crop_left);
       radeon_enc_code_ue(enc, enc->enc_pic.crop_right);

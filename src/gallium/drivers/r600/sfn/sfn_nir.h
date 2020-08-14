@@ -57,7 +57,7 @@ public:
 
    bool lower(const nir_shader *shader, r600_pipe_shader *sh,
               r600_pipe_shader_selector *sel, r600_shader_key &key,
-              r600_shader *gs_shader);
+              r600_shader *gs_shader, enum chip_class chip_class);
 
    bool process_declaration();
 
@@ -79,6 +79,7 @@ private:
    std::unique_ptr<ShaderFromNirProcessor> impl;
    const nir_shader *sh;
 
+   enum chip_class chip_class;
    int m_current_if_id;
    int m_current_loop_id;
    std::stack<int> m_if_stack;

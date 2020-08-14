@@ -175,6 +175,8 @@ nir_lower_vars_to_scratch(nir_shader *shader,
          progress = true;
          nir_metadata_preserve(function->impl, nir_metadata_block_index |
                                                nir_metadata_dominance);
+      } else {
+         nir_metadata_preserve(function->impl, nir_metadata_all);
       }
    }
 

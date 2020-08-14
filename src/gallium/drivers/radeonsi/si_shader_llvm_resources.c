@@ -107,6 +107,12 @@ static LLVMValueRef load_ubo(struct ac_shader_abi *abi, LLVMValueRef index)
 static LLVMValueRef load_ssbo(struct ac_shader_abi *abi, LLVMValueRef index, bool write)
 {
    struct si_shader_context *ctx = si_shader_context_from_abi(abi);
+
+   /* Fast path if the shader buffer is in user SGPRs. */
+   if (LLVMIsConstant(index) &&
+       LLVMConstIntGetZExtValue(index) < ctx->shader->selector->cs_num_shaderbufs_in_user_sgprs)
+      return ac_get_arg(&ctx->ac, ctx->cs_shaderbuf[LLVMConstIntGetZExtValue(index)]);
+
    LLVMValueRef rsrc_ptr = ac_get_arg(&ctx->ac, ctx->const_and_shader_buffers);
 
    index = si_llvm_bound_index(ctx, index, ctx->num_shader_buffers);
@@ -270,6 +276,12 @@ static LLVMValueRef si_nir_load_sampler_desc(struct ac_shader_abi *abi, unsigned
    }
 
    if (image) {
+      /* Fast path if the image is in user SGPRs. */
+      if (!dynamic_index &&
+          const_index < ctx->shader->selector->cs_num_images_in_user_sgprs &&
+          (desc_type == AC_DESC_IMAGE || desc_type == AC_DESC_BUFFER))
+         return ac_get_arg(&ctx->ac, ctx->cs_image[const_index]);
+
       /* FMASKs are separate from images. */
       if (desc_type == AC_DESC_FMASK) {
          index =

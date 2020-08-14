@@ -857,7 +857,7 @@ OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist)
       osmesa->gl_buffer = _mesa_create_framebuffer(osmesa->gl_visual);
       if (!osmesa->gl_buffer) {
          _mesa_destroy_visual( osmesa->gl_visual );
-         _mesa_free_context_data(&osmesa->mesa);
+         _mesa_free_context_data(&osmesa->mesa, true);
          free(osmesa);
          return NULL;
       }
@@ -894,7 +894,7 @@ OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist)
              !_tnl_CreateContext( ctx ) ||
              !_swsetup_CreateContext( ctx )) {
             _mesa_destroy_visual(osmesa->gl_visual);
-            _mesa_free_context_data(ctx);
+            _mesa_free_context_data(ctx, true);
             free(osmesa);
             return NULL;
          }
@@ -922,7 +922,7 @@ OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist)
 
          if (ctx->Version < version_major * 10 + version_minor) {
             _mesa_destroy_visual(osmesa->gl_visual);
-            _mesa_free_context_data(ctx);
+            _mesa_free_context_data(ctx, true);
             free(osmesa);
             return NULL;
          }
@@ -958,7 +958,7 @@ OSMesaDestroyContext( OSMesaContext osmesa )
       _mesa_destroy_visual( osmesa->gl_visual );
       _mesa_reference_framebuffer( &osmesa->gl_buffer, NULL );
 
-      _mesa_free_context_data(&osmesa->mesa);
+      _mesa_free_context_data(&osmesa->mesa, true);
       free( osmesa );
    }
 }

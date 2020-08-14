@@ -29,6 +29,8 @@
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_scan.h"
 
+struct nir_shader_compiler_options;
+
 /*
  * This struct constitutes linkage information in TGSI terminology.
  *
@@ -70,10 +72,12 @@ struct nv50_ir_prog_symbol
    uint32_t offset;
 };
 
+#define NVISA_GF100_CHIPSET    0xc0
 #define NVISA_GK104_CHIPSET    0xe0
 #define NVISA_GK20A_CHIPSET    0xea
 #define NVISA_GM107_CHIPSET    0x110
 #define NVISA_GM200_CHIPSET    0x120
+#define NVISA_GV100_CHIPSET    0x140
 
 struct nv50_ir_prog_info
 {
@@ -87,7 +91,6 @@ struct nv50_ir_prog_info
 
    struct {
       int16_t maxGPR;     /* may be -1 if none used */
-      int16_t maxOutput;
       uint32_t tlsSpace;  /* required local memory per thread */
       uint32_t smemSize;  /* required shared memory per block */
       uint32_t *code;
@@ -109,17 +112,8 @@ struct nv50_ir_prog_info
    uint8_t numPatchConstants; /* also included in numInputs/numOutputs */
    uint8_t numSysVals;
 
-   struct {
-      uint32_t *buf;    /* for IMMEDIATE_ARRAY */
-      uint16_t bufSize; /* size of immediate array */
-      uint16_t count;   /* count of inline immediates */
-      uint32_t *data;   /* inline immediate data */
-      uint8_t *type;    /* for each vec4 (128 bit) */
-   } immd;
-
    union {
       struct {
-         uint32_t inputMask[4]; /* mask of attributes read (1 bit per scalar) */
          bool usesDrawParameters;
       } vp;
       struct {
@@ -130,7 +124,6 @@ struct nv50_ir_prog_info
          uint8_t outputPrim;      /* PIPE_PRIM_{TRIANGLES,LINES,POINTS} */
       } tp;
       struct {
-         uint8_t inputPrim;
          uint8_t outputPrim;
          unsigned instanceCount;
          unsigned maxVertices;
@@ -142,14 +135,12 @@ struct nv50_ir_prog_info
          bool postDepthCoverage;
          bool separateFragData;
          bool usesDiscard;
-         bool persampleInvocation;
          bool usesSampleMaskIn;
          bool readsFramebuffer;
          bool readsSampleLocations;
       } fp;
       struct {
          uint32_t inputOffset; /* base address for user args */
-         uint32_t sharedOffset; /* reserved space in s[] */
          uint32_t gridInfoBase;  /* base address for NTID,NCTAID */
          uint16_t numThreads[3]; /* max number of threads */
       } cp;
@@ -165,7 +156,6 @@ struct nv50_ir_prog_info
       uint16_t ucpBase;          /* base address for UCPs */
       uint16_t drawInfoBase;     /* base address for draw parameters */
       uint16_t alphaRefBase;     /* base address for alpha test values */
-      uint8_t pointSize;         /* output index for PointSize */
       uint8_t instanceId;        /* system value index of InstanceID */
       uint8_t vertexId;          /* system value index of VertexID */
       uint8_t edgeFlagIn;
@@ -173,7 +163,6 @@ struct nv50_ir_prog_info
       int8_t viewportId;         /* output index of ViewportIndex */
       uint8_t fragDepth;         /* output index of FragDepth */
       uint8_t sampleMask;        /* output index of SampleMask */
-      uint8_t backFaceColor[2];  /* input/output indices of back face colour */
       uint8_t globalAccess;      /* 1 for read, 2 for wr, 3 for rw */
       bool fp64;                 /* program uses fp64 math */
       bool mul_zero_wins;        /* program wants for x*0 = 0 */
@@ -199,6 +188,9 @@ struct nv50_ir_prog_info
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+const struct nir_shader_compiler_options *
+nv50_ir_nir_shader_compiler_options(int chipset);
 
 extern int nv50_ir_generate_code(struct nv50_ir_prog_info *);
 

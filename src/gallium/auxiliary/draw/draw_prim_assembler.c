@@ -76,6 +76,9 @@ draw_prim_assembler_is_required(const struct draw_context *draw,
                                 const struct draw_prim_info *prim_info,
                                 const struct draw_vertex_info *vert_info)
 {
+   /* viewport index requires primitive boundaries to get correct vertex */
+   if (draw_current_shader_uses_viewport_index(draw))
+      return TRUE;
    switch (prim_info->prim) {
    case PIPE_PRIM_LINES_ADJACENCY:
    case PIPE_PRIM_LINE_STRIP_ADJACENCY:

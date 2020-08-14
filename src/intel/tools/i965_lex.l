@@ -311,7 +311,7 @@ sechalf 	{ return SECHALF; }
 :?W 	{ return TYPE_W; }
 
  /* Address registers */
-"a0" 		{ yylval.integer = atoi(yytext + 1); BEGIN(REG); return ADDRREG; }
+"a0" 		{ return ADDRREG; }
 
  /* accumulator registers */
 "acc"[0-9]+ 	{ yylval.integer = atoi(yytext + 3); return ACCREG; }
@@ -333,7 +333,7 @@ m[0-9]+ 	{ yylval.integer = atoi(yytext + 1); BEGIN(REG); return MSGREG; }
 sr[0-9]+ 	{ yylval.integer = atoi(yytext + 2); return STATEREG; }
 
  /* notification registers */
-"n"[0-2]+ 	{ yylval.integer = atoi(yytext + 1); BEGIN(REG); return NOTIFYREG; }
+"n0"  		{ BEGIN(REG); return NOTIFYREG; }
 
  /* IP register */
 "ip" 		{ return IPREG; }

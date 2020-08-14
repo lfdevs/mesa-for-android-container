@@ -42,8 +42,6 @@ struct fd5_format {
 	boolean present;
 };
 
-#define RB5_NONE ~0
-
 /* vertex + texture */
 #define VT(pipe, fmt, rbfmt, swapfmt) \
 	[PIPE_FORMAT_ ## pipe] = { \
@@ -58,7 +56,7 @@ struct fd5_format {
 #define _T(pipe, fmt, rbfmt, swapfmt) \
 	[PIPE_FORMAT_ ## pipe] = { \
 		.present = 1, \
-		.vtx = ~0, \
+		.vtx = VFMT5_NONE, \
 		.tex = TFMT5_ ## fmt, \
 		.rb = RB5_ ## rbfmt, \
 		.swap = swapfmt \
@@ -69,7 +67,7 @@ struct fd5_format {
 	[PIPE_FORMAT_ ## pipe] = { \
 		.present = 1, \
 		.vtx = VFMT5_ ## fmt, \
-		.tex = ~0, \
+		.tex = TFMT5_NONE, \
 		.rb = RB5_ ## rbfmt, \
 		.swap = swapfmt \
 	}
@@ -344,7 +342,7 @@ enum a5xx_vtx_fmt
 fd5_pipe2vtx(enum pipe_format format)
 {
 	if (!formats[format].present)
-		return ~0;
+		return VFMT5_NONE;
 	return formats[format].vtx;
 }
 
@@ -353,7 +351,7 @@ enum a5xx_tex_fmt
 fd5_pipe2tex(enum pipe_format format)
 {
 	if (!formats[format].present)
-		return ~0;
+		return TFMT5_NONE;
 	return formats[format].tex;
 }
 
@@ -362,7 +360,7 @@ enum a5xx_color_fmt
 fd5_pipe2color(enum pipe_format format)
 {
 	if (!formats[format].present)
-		return ~0;
+		return RB5_NONE;
 	return formats[format].rb;
 }
 
@@ -372,31 +370,6 @@ fd5_pipe2swap(enum pipe_format format)
 	if (!formats[format].present)
 		return WZYX;
 	return formats[format].swap;
-}
-
-// XXX possibly same as a4xx..
-enum a5xx_tex_fetchsize
-fd5_pipe2fetchsize(enum pipe_format format)
-{
-	if (format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
-		format = PIPE_FORMAT_Z32_FLOAT;
-
-	if (util_format_description(format)->layout == UTIL_FORMAT_LAYOUT_ASTC)
-		return TFETCH5_16_BYTE;
-
-	switch (util_format_get_blocksizebits(format) / util_format_get_blockwidth(format)) {
-	case 8:   return TFETCH5_1_BYTE;
-	case 16:  return TFETCH5_2_BYTE;
-	case 32:  return TFETCH5_4_BYTE;
-	case 64:  return TFETCH5_8_BYTE;
-	case 96:  return TFETCH5_1_BYTE; /* Does this matter? */
-	case 128: return TFETCH5_16_BYTE;
-	default:
-		debug_printf("Unknown block size for format %s: %d\n",
-				util_format_name(format),
-				util_format_get_blocksizebits(format));
-		return TFETCH5_1_BYTE;
-	}
 }
 
 enum a5xx_depth_format

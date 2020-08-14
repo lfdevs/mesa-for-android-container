@@ -17,7 +17,6 @@ class VertexStageExportBase
 public:
    VertexStageExportBase(VertexStage& proc);
    virtual ~VertexStageExportBase();
-   void setup_paramn_map();
    virtual bool store_deref(const nir_variable *out_var, nir_intrinsic_instr* instr) = 0;
    virtual void finalize_exports() = 0;
    virtual bool do_process_outputs(nir_variable *output);
@@ -27,6 +26,7 @@ protected:
    std::map<unsigned, unsigned> m_param_map;
    int m_cur_clip_pos;
    int m_cur_param;
+   GPRVector m_clip_vertex;
 };
 
 class VertexStageExportForFS : public VertexStageExportBase

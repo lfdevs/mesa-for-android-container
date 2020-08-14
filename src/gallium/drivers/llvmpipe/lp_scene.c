@@ -106,8 +106,8 @@ lp_scene_is_empty(struct lp_scene *scene )
 {
    unsigned x, y;
 
-   for (y = 0; y < TILES_Y; y++) {
-      for (x = 0; x < TILES_X; x++) {
+   for (y = 0; y < scene->tiles_y; y++) {
+      for (x = 0; x < scene->tiles_x; x++) {
          const struct cmd_bin *bin = lp_scene_get_bin(scene, x, y);
          if (bin->head) {
             return FALSE;
@@ -160,6 +160,8 @@ lp_scene_begin_rasterization(struct lp_scene *scene)
       if (!cbuf) {
          scene->cbufs[i].stride = 0;
          scene->cbufs[i].layer_stride = 0;
+         scene->cbufs[i].sample_stride = 0;
+         scene->cbufs[i].nr_samples = 0;
          scene->cbufs[i].map = NULL;
          continue;
       }
@@ -169,18 +171,22 @@ lp_scene_begin_rasterization(struct lp_scene *scene)
                                                            cbuf->u.tex.level);
          scene->cbufs[i].layer_stride = llvmpipe_layer_stride(cbuf->texture,
                                                               cbuf->u.tex.level);
+         scene->cbufs[i].sample_stride = llvmpipe_sample_stride(cbuf->texture);
 
          scene->cbufs[i].map = llvmpipe_resource_map(cbuf->texture,
                                                      cbuf->u.tex.level,
                                                      cbuf->u.tex.first_layer,
                                                      LP_TEX_USAGE_READ_WRITE);
          scene->cbufs[i].format_bytes = util_format_get_blocksize(cbuf->format);
+         scene->cbufs[i].nr_samples = util_res_sample_count(cbuf->texture);
       }
       else {
          struct llvmpipe_resource *lpr = llvmpipe_resource(cbuf->texture);
          unsigned pixstride = util_format_get_blocksize(cbuf->format);
          scene->cbufs[i].stride = cbuf->texture->width0;
          scene->cbufs[i].layer_stride = 0;
+         scene->cbufs[i].sample_stride = 0;
+         scene->cbufs[i].nr_samples = 1;
          scene->cbufs[i].map = lpr->data;
          scene->cbufs[i].map += cbuf->u.buf.first_element * pixstride;
          scene->cbufs[i].format_bytes = util_format_get_blocksize(cbuf->format);
@@ -191,7 +197,8 @@ lp_scene_begin_rasterization(struct lp_scene *scene)
       struct pipe_surface *zsbuf = scene->fb.zsbuf;
       scene->zsbuf.stride = llvmpipe_resource_stride(zsbuf->texture, zsbuf->u.tex.level);
       scene->zsbuf.layer_stride = llvmpipe_layer_stride(zsbuf->texture, zsbuf->u.tex.level);
-
+      scene->zsbuf.sample_stride = llvmpipe_sample_stride(zsbuf->texture);
+      scene->zsbuf.nr_samples = util_res_sample_count(zsbuf->texture);
       scene->zsbuf.map = llvmpipe_resource_map(zsbuf->texture,
                                                zsbuf->u.tex.level,
                                                zsbuf->u.tex.first_layer,
@@ -545,6 +552,13 @@ void lp_scene_begin_binning(struct lp_scene *scene,
       max_layer = MIN2(max_layer, zsbuf->u.tex.last_layer - zsbuf->u.tex.first_layer);
    }
    scene->fb_max_layer = max_layer;
+   scene->fb_max_samples = util_framebuffer_get_num_samples(fb);
+   if (scene->fb_max_samples == 4) {
+      for (unsigned i = 0; i < 4; i++) {
+         scene->fixed_sample_pos[i][0] = util_iround(lp_sample_pos_4x[i][0] * FIXED_ONE);
+         scene->fixed_sample_pos[i][1] = util_iround(lp_sample_pos_4x[i][1] * FIXED_ONE);
+      }
+   }
 }
 
 

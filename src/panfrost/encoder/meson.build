@@ -25,12 +25,15 @@ libpanfrost_encoder_files = files(
   'pan_afbc.c',
   'pan_attributes.c',
   'pan_bo.c',
+  'pan_blit.c',
   'pan_format.c',
   'pan_invocation.c',
   'pan_sampler.c',
   'pan_tiler.c',
   'pan_texture.c',
+  'pan_scoreboard.c',
   'pan_scratch.c',
+  'pan_pool.c',
   'pan_props.c',
 )
 
@@ -38,8 +41,8 @@ libpanfrost_encoder = static_library(
   'panfrost_encoder',
   [libpanfrost_encoder_files],
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_panfrost_hw],
-  c_args : [c_vis_args, no_override_init_args],
-  cpp_args : [cpp_vis_args],
-  dependencies: [dep_libdrm],
+  c_args : [no_override_init_args],
+  gnu_symbol_visibility : 'hidden',
+  dependencies: [dep_libdrm, idep_nir],
   build_by_default : false,
 )

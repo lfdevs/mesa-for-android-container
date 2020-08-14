@@ -64,7 +64,7 @@ Keeping genxml files tidy :
    In order to spot differences easily between generations, we keep genxml files sorted.
    You can trigger the sort by running :
 
-      $ cd src/intel/genxml; ./sort_xml.sh
+      $ cd src/intel/genxml; ./gen_sort_tags.py
 
    gen_sort_tags.py is the script that sorts genxml files using with
    the following rules :

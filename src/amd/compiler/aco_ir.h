@@ -103,21 +103,78 @@ enum class Format : std::uint16_t {
    SDWA = 1 << 14,
 };
 
-enum barrier_interaction : uint8_t {
-   barrier_none = 0,
-   barrier_buffer = 0x1,
-   barrier_image = 0x2,
-   barrier_atomic = 0x4,
-   barrier_shared = 0x8,
-   /* used for geometry shaders to ensure vertex data writes are before the
-    * GS_DONE s_sendmsg. */
-   barrier_gs_data = 0x10,
-   /* used for geometry shaders to ensure s_sendmsg instructions are in-order. */
-   barrier_gs_sendmsg = 0x20,
-   /* used by barriers. created by s_barrier */
-   barrier_barrier = 0x40,
-   barrier_count = 7,
+enum storage_class : uint8_t {
+   storage_none = 0x0, /* no synchronization and can be reordered around aliasing stores */
+   storage_buffer = 0x1, /* SSBOs and global memory */
+   storage_atomic_counter = 0x2, /* not used for Vulkan */
+   storage_image = 0x4,
+   storage_shared = 0x8, /* or TCS output */
+   storage_vmem_output = 0x10, /* GS or TCS output stores using VMEM */
+   storage_scratch = 0x20,
+   storage_vgpr_spill = 0x40,
+   storage_count = 8,
 };
+
+enum memory_semantics : uint8_t {
+   semantic_none = 0x0,
+   /* for loads: don't move any access after this load to before this load (even other loads)
+    * for barriers: don't move any access after the barrier to before any
+    * atomics/control_barriers/sendmsg_gs_done before the barrier */
+   semantic_acquire = 0x1,
+   /* for stores: don't move any access before this store to after this store
+    * for barriers: don't move any access before the barrier to after any
+    * atomics/control_barriers/sendmsg_gs_done after the barrier */
+   semantic_release = 0x2,
+
+   /* the rest are for load/stores/atomics only */
+   /* cannot be DCE'd or CSE'd */
+   semantic_volatile = 0x4,
+   /* does not interact with barriers and assumes this lane is the only lane
+    * accessing this memory */
+   semantic_private = 0x8,
+   /* this operation can be reordered around operations of the same storage. says nothing about barriers */
+   semantic_can_reorder = 0x10,
+   /* this is a atomic instruction (may only read or write memory) */
+   semantic_atomic = 0x20,
+   /* this is instruction both reads and writes memory */
+   semantic_rmw = 0x40,
+
+   semantic_acqrel = semantic_acquire | semantic_release,
+   semantic_atomicrmw = semantic_volatile | semantic_atomic | semantic_rmw,
+};
+
+enum sync_scope : uint8_t {
+   scope_invocation = 0,
+   scope_subgroup = 1,
+   scope_workgroup = 2,
+   scope_queuefamily = 3,
+   scope_device = 4,
+};
+
+struct memory_sync_info {
+   memory_sync_info() : storage(storage_none), semantics(semantic_none), scope(scope_invocation) {}
+   memory_sync_info(int storage, int semantics=0, sync_scope scope=scope_invocation)
+      : storage((storage_class)storage), semantics((memory_semantics)semantics), scope(scope) {}
+
+   storage_class storage:8;
+   memory_semantics semantics:8;
+   sync_scope scope:8;
+
+   bool operator == (const memory_sync_info& rhs) const {
+      return storage == rhs.storage &&
+             semantics == rhs.semantics &&
+             scope == rhs.scope;
+   }
+
+   bool can_reorder() const {
+      if (semantics & semantic_acqrel)
+         return false;
+      /* Also check storage so that zero-initialized memory_sync_info can be
+       * reordered. */
+      return (!storage || (semantics & semantic_can_reorder)) && !(semantics & semantic_volatile);
+   }
+};
+static_assert(sizeof(memory_sync_info) == 3, "Unexpected padding");
 
 enum fp_round {
    fp_round_ne = 0,
@@ -141,6 +198,10 @@ struct float_mode {
           fp_round round16_64:2;
           unsigned denorm32:2;
           unsigned denorm16_64:2;
+      };
+      struct {
+         uint8_t round:4;
+         uint8_t denorm:4;
       };
       uint8_t val = 0;
    };
@@ -307,6 +368,7 @@ struct PhysReg {
    constexpr bool operator==(PhysReg other) const { return reg_b == other.reg_b; }
    constexpr bool operator!=(PhysReg other) const { return reg_b != other.reg_b; }
    constexpr bool operator <(PhysReg other) const { return reg_b < other.reg_b; }
+   constexpr PhysReg advance(int bytes) const { PhysReg res = *this; res.reg_b += bytes; return res; }
 
    uint16_t reg_b = 0;
 };
@@ -336,7 +398,7 @@ class Operand final
 public:
    constexpr Operand()
       : reg_(PhysReg{128}), isTemp_(false), isFixed_(true), isConstant_(false),
-        isKill_(false), isUndef_(true), isFirstKill_(false), is64BitConst_(false),
+        isKill_(false), isUndef_(true), isFirstKill_(false), constSize(0),
         isLateKill_(false) {}
 
    explicit Operand(Temp r) noexcept
@@ -349,11 +411,51 @@ public:
          setFixed(PhysReg{128});
       }
    };
+   explicit Operand(uint8_t v) noexcept
+   {
+      /* 8-bit constants are only used for copies and copies from any 8-bit
+       * constant can be implemented with a SDWA v_mul_u32_u24. So consider all
+       * to be inline constants. */
+      data_.i = v;
+      isConstant_ = true;
+      constSize = 0;
+      setFixed(PhysReg{0u});
+   };
+   explicit Operand(uint16_t v) noexcept
+   {
+      data_.i = v;
+      isConstant_ = true;
+      constSize = 1;
+      if (v <= 64)
+         setFixed(PhysReg{128u + v});
+      else if (v >= 0xFFF0) /* [-16 .. -1] */
+         setFixed(PhysReg{192u + (0xFFFF - v)});
+      else if (v == 0x3800) /* 0.5 */
+         setFixed(PhysReg{240});
+      else if (v == 0xB800) /* -0.5 */
+         setFixed(PhysReg{241});
+      else if (v == 0x3C00) /* 1.0 */
+         setFixed(PhysReg{242});
+      else if (v == 0xBC00) /* -1.0 */
+         setFixed(PhysReg{243});
+      else if (v == 0x4000) /* 2.0 */
+         setFixed(PhysReg{244});
+      else if (v == 0xC000) /* -2.0 */
+         setFixed(PhysReg{245});
+      else if (v == 0x4400) /* 4.0 */
+         setFixed(PhysReg{246});
+      else if (v == 0xC400) /* -4.0 */
+         setFixed(PhysReg{247});
+      else if (v == 0x3118) /* 1/2 PI */
+         setFixed(PhysReg{248});
+      else /* Literal Constant */
+         setFixed(PhysReg{255});
+   };
    explicit Operand(uint32_t v, bool is64bit = false) noexcept
    {
       data_.i = v;
       isConstant_ = true;
-      is64BitConst_ = is64bit;
+      constSize = is64bit ? 3 : 2;
       if (v <= 64)
          setFixed(PhysReg{128 + v});
       else if (v >= 0xFFFFFFF0) /* [-16 .. -1] */
@@ -382,7 +484,7 @@ public:
    explicit Operand(uint64_t v) noexcept
    {
       isConstant_ = true;
-      is64BitConst_ = true;
+      constSize = 3;
       if (v <= 64) {
          data_.i = (uint32_t) v;
          setFixed(PhysReg{128 + (uint32_t) v});
@@ -464,7 +566,7 @@ public:
    constexpr unsigned bytes() const noexcept
    {
       if (isConstant())
-         return is64BitConst_ ? 8 : 4; //TODO: sub-dword constants
+         return 1 << constSize;
       else
          return data_.temp.bytes();
    }
@@ -472,7 +574,7 @@ public:
    constexpr unsigned size() const noexcept
    {
       if (isConstant())
-         return is64BitConst_ ? 2 : 1;
+         return constSize > 2 ? 2 : 1;
       else
          return data_.temp.size();
    }
@@ -520,7 +622,7 @@ public:
 
    constexpr uint64_t constantValue64(bool signext=false) const noexcept
    {
-      if (is64BitConst_) {
+      if (constSize == 3) {
          if (reg_ <= 192)
             return reg_ - 128;
          else if (reg_ <= 208)
@@ -544,8 +646,17 @@ public:
          case 247:
             return 0xC010000000000000;
          }
+      } else if (constSize == 1) {
+         return (signext && (data_.i & 0x8000u) ? 0xffffffffffff0000ull : 0ull) | data_.i;
+      } else if (constSize == 0) {
+         return (signext && (data_.i & 0x80u) ? 0xffffffffffffff00ull : 0ull) | data_.i;
       }
       return (signext && (data_.i & 0x80000000u) ? 0xffffffff00000000ull : 0ull) | data_.i;
+   }
+
+   constexpr bool isOfType(RegType type) const noexcept
+   {
+      return hasRegClass() && regClass().type() == type;
    }
 
    /* Indicates that the killed operand's live range intersects with the
@@ -629,11 +740,11 @@ private:
          uint8_t isKill_:1;
          uint8_t isUndef_:1;
          uint8_t isFirstKill_:1;
-         uint8_t is64BitConst_:1;
+         uint8_t constSize:2;
          uint8_t isLateKill_:1;
       };
       /* can't initialize bit-fields in c++11, so work around using a union */
-      uint8_t control_ = 0;
+      uint16_t control_ = 0;
    };
 };
 
@@ -646,7 +757,8 @@ private:
 class Definition final
 {
 public:
-   constexpr Definition() : temp(Temp(0, s1)), reg_(0), isFixed_(0), hasHint_(0), isKill_(0) {}
+   constexpr Definition() : temp(Temp(0, s1)), reg_(0), isFixed_(0), hasHint_(0),
+                            isKill_(0), isPrecise_(0), isNUW_(0) {}
    Definition(uint32_t index, RegClass type) noexcept
       : temp(index, type) {}
    explicit Definition(Temp tmp) noexcept
@@ -733,6 +845,27 @@ public:
       return isKill_;
    }
 
+   constexpr void setPrecise(bool precise) noexcept
+   {
+      isPrecise_ = precise;
+   }
+
+   constexpr bool isPrecise() const noexcept
+   {
+      return isPrecise_;
+   }
+
+   /* No Unsigned Wrap */
+   constexpr void setNUW(bool nuw) noexcept
+   {
+      isNUW_ = nuw;
+   }
+
+   constexpr bool isNUW() const noexcept
+   {
+      return isNUW_;
+   }
+
 private:
    Temp temp = Temp(0, s1);
    PhysReg reg_;
@@ -741,13 +874,15 @@ private:
          uint8_t isFixed_:1;
          uint8_t hasHint_:1;
          uint8_t isKill_:1;
+         uint8_t isPrecise_:1;
+         uint8_t isNUW_:1;
       };
       /* can't initialize bit-fields in c++11, so work around using a union */
       uint8_t control_ = 0;
    };
 };
 
-class Block;
+struct Block;
 
 struct Instruction {
    aco_opcode opcode;
@@ -853,13 +988,13 @@ static_assert(sizeof(SOP2_instruction) == sizeof(Instruction) + 0, "Unexpected p
  *
  */
 struct SMEM_instruction : public Instruction {
-   barrier_interaction barrier;
+   memory_sync_info sync;
    bool glc : 1; /* VI+: globally coherent */
    bool dlc : 1; /* NAVI: device level coherent */
    bool nv : 1; /* VEGA only: Non-volatile */
-   bool can_reorder : 1;
    bool disable_wqm : 1;
-   uint32_t padding: 19;
+   bool prevent_overflow : 1; /* avoid overflow when combining additions */
+   uint32_t padding: 3;
 };
 static_assert(sizeof(SMEM_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
 
@@ -987,11 +1122,13 @@ static_assert(sizeof(Interp_instruction) == sizeof(Instruction) + 4, "Unexpected
  *
  */
 struct DS_instruction : public Instruction {
+   memory_sync_info sync;
+   bool gds;
    int16_t offset0;
    int8_t offset1;
-   bool gds;
+   uint8_t padding;
 };
-static_assert(sizeof(DS_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
+static_assert(sizeof(DS_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
 /**
  * Vector Memory Untyped-buffer Instructions
@@ -1002,7 +1139,7 @@ static_assert(sizeof(DS_instruction) == sizeof(Instruction) + 4, "Unexpected pad
  *
  */
 struct MUBUF_instruction : public Instruction {
-   uint16_t offset : 12; /* Unsigned byte offset - 12 bit */
+   memory_sync_info sync;
    bool offen : 1; /* Supply an offset from VGPR (VADDR) */
    bool idxen : 1; /* Supply an index from VGPR (VADDR) */
    bool addr64 : 1; /* SI, CIK: Address size is 64-bit */
@@ -1012,11 +1149,11 @@ struct MUBUF_instruction : public Instruction {
    bool tfe : 1; /* texture fail enable */
    bool lds : 1; /* Return read-data to LDS instead of VGPRs */
    bool disable_wqm : 1; /* Require an exec mask without helper invocations */
-   bool can_reorder : 1;
-   uint8_t padding : 2;
-   barrier_interaction barrier;
+   uint16_t offset : 12; /* Unsigned byte offset - 12 bit */
+   bool swizzled : 1;
+   uint32_t padding1 : 18;
 };
-static_assert(sizeof(MUBUF_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
+static_assert(sizeof(MUBUF_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
 /**
  * Vector Memory Typed-buffer Instructions
@@ -1027,8 +1164,7 @@ static_assert(sizeof(MUBUF_instruction) == sizeof(Instruction) + 4, "Unexpected 
  *
  */
 struct MTBUF_instruction : public Instruction {
-   uint16_t offset; /* Unsigned byte offset - 12 bit */
-   barrier_interaction barrier;
+   memory_sync_info sync;
    uint8_t dfmt : 4; /* Data Format of data in memory buffer */
    uint8_t nfmt : 3; /* Numeric format of data in memory */
    bool offen : 1; /* Supply an offset from VGPR (VADDR) */
@@ -1038,8 +1174,8 @@ struct MTBUF_instruction : public Instruction {
    bool slc : 1; /* system level coherent */
    bool tfe : 1; /* texture fail enable */
    bool disable_wqm : 1; /* Require an exec mask without helper invocations */
-   bool can_reorder : 1;
-   uint32_t padding : 25;
+   uint32_t padding : 10;
+   uint16_t offset; /* Unsigned byte offset - 12 bit */
 };
 static_assert(sizeof(MTBUF_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
@@ -1053,6 +1189,7 @@ static_assert(sizeof(MTBUF_instruction) == sizeof(Instruction) + 8, "Unexpected 
  *
  */
 struct MIMG_instruction : public Instruction {
+   memory_sync_info sync;
    uint8_t dmask; /* Data VGPR enable mask */
    uint8_t dim : 3; /* NAVI: dimensionality */
    bool unrm : 1; /* Force address to be un-normalized */
@@ -1066,11 +1203,9 @@ struct MIMG_instruction : public Instruction {
    bool a16 : 1; /* VEGA, NAVI: Address components are 16-bits */
    bool d16 : 1; /* Convert 32-bit data to 16-bit data */
    bool disable_wqm : 1; /* Require an exec mask without helper invocations */
-   bool can_reorder : 1;
-   uint8_t padding : 1;
-   barrier_interaction barrier;
+   uint32_t padding : 18;
 };
-static_assert(sizeof(MIMG_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
+static_assert(sizeof(MIMG_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
 /**
  * Flat/Scratch/Global Instructions
@@ -1080,18 +1215,18 @@ static_assert(sizeof(MIMG_instruction) == sizeof(Instruction) + 4, "Unexpected p
  *
  */
 struct FLAT_instruction : public Instruction {
-   uint16_t offset; /* Vega/Navi only */
+   memory_sync_info sync;
    bool slc : 1; /* system level coherent */
    bool glc : 1; /* globally coherent */
    bool dlc : 1; /* NAVI: device level coherent */
    bool lds : 1;
    bool nv : 1;
    bool disable_wqm : 1; /* Require an exec mask without helper invocations */
-   bool can_reorder : 1;
-   uint8_t padding : 1;
-   barrier_interaction barrier;
+   uint32_t padding0 : 2;
+   uint16_t offset; /* Vega/Navi only */
+   uint16_t padding1;
 };
-static_assert(sizeof(FLAT_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
+static_assert(sizeof(FLAT_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
 struct Export_instruction : public Instruction {
    uint8_t enabled_mask;
@@ -1120,24 +1255,25 @@ struct Pseudo_branch_instruction : public Instruction {
 static_assert(sizeof(Pseudo_branch_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
 struct Pseudo_barrier_instruction : public Instruction {
+   memory_sync_info sync;
+   sync_scope exec_scope;
 };
-static_assert(sizeof(Pseudo_barrier_instruction) == sizeof(Instruction) + 0, "Unexpected padding");
+static_assert(sizeof(Pseudo_barrier_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
 
 enum ReduceOp : uint16_t {
-   iadd32, iadd64,
-   imul32, imul64,
-   fadd32, fadd64,
-   fmul32, fmul64,
-   imin32, imin64,
-   imax32, imax64,
-   umin32, umin64,
-   umax32, umax64,
-   fmin32, fmin64,
-   fmax32, fmax64,
-   iand32, iand64,
-   ior32, ior64,
-   ixor32, ixor64,
-   gfx10_wave64_bpermute
+   iadd8, iadd16, iadd32, iadd64,
+   imul8, imul16, imul32, imul64,
+          fadd16, fadd32, fadd64,
+          fmul16, fmul32, fmul64,
+   imin8, imin16, imin32, imin64,
+   imax8, imax16, imax32, imax64,
+   umin8, umin16, umin32, umin64,
+   umax8, umax16, umax32, umax64,
+          fmin16, fmin32, fmin64,
+          fmax16, fmax32, fmax64,
+   iand8, iand16, iand32, iand64,
+   ior8, ior16, ior32, ior64,
+   ixor8, ixor16, ixor32, ixor64,
 };
 
 /**
@@ -1219,9 +1355,14 @@ static inline bool is_phi(aco_ptr<Instruction>& instr)
    return is_phi(instr.get());
 }
 
-barrier_interaction get_barrier_interaction(const Instruction* instr);
+memory_sync_info get_sync_info(const Instruction* instr);
 
 bool is_dead(const std::vector<uint16_t>& uses, Instruction *instr);
+
+bool can_use_opsel(chip_class chip, aco_opcode op, int idx, bool high);
+bool can_use_SDWA(chip_class chip, const aco_ptr<Instruction>& instr);
+/* updates "instr" and returns the old instruction (or NULL if no update was needed) */
+aco_ptr<Instruction> convert_to_SDWA(chip_class chip, aco_ptr<Instruction>& instr);
 
 enum block_kind {
    /* uniform indicates that leaving this block,
@@ -1430,6 +1571,8 @@ public:
    unsigned workgroup_size; /* if known; otherwise UINT_MAX */
 
    bool xnack_enabled = false;
+   bool sram_ecc_enabled = false;
+   bool has_fast_fma32 = false;
 
    bool needs_vcc = false;
    bool needs_flat_scr = false;
@@ -1484,6 +1627,12 @@ struct live {
    std::vector<std::vector<RegisterDemand>> register_demand;
 };
 
+void init();
+
+void init_program(Program *program, Stage stage, struct radv_shader_info *info,
+                  enum chip_class chip_class, enum radeon_family family,
+                  ac_shader_config *config);
+
 void select_program(Program *program,
                     unsigned shader_count,
                     struct nir_shader *const *shaders,
@@ -1516,7 +1665,7 @@ void insert_NOPs(Program* program);
 unsigned emit_program(Program* program, std::vector<uint32_t>& code);
 void print_asm(Program *program, std::vector<uint32_t>& binary,
                unsigned exec_size, std::ostream& out);
-void validate(Program* program, FILE *output);
+bool validate(Program* program, FILE *output);
 bool validate_ra(Program* program, const struct radv_nir_compiler_options *options, FILE *output);
 #ifndef NDEBUG
 void perfwarn(bool cond, const char *msg, Instruction *instr=NULL);
@@ -1556,6 +1705,9 @@ typedef struct {
    const std::bitset<static_cast<int>(aco_opcode::num_opcodes)> is_atomic;
    const char *name[static_cast<int>(aco_opcode::num_opcodes)];
    const aco::Format format[static_cast<int>(aco_opcode::num_opcodes)];
+   /* sizes used for input/output modifiers and constants */
+   const unsigned operand_size[static_cast<int>(aco_opcode::num_opcodes)];
+   const unsigned definition_size[static_cast<int>(aco_opcode::num_opcodes)];
 } Info;
 
 extern const Info instr_info;

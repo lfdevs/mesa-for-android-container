@@ -47,7 +47,7 @@ v3d_setup_shared_precompile_key(struct v3d_uncompiled_shader *uncompiled,
 static gl_varying_slot
 v3d_get_slot_for_driver_location(nir_shader *s, uint32_t driver_location)
 {
-        nir_foreach_variable(var, &s->outputs) {
+        nir_foreach_shader_out_variable(var, s) {
                 if (var->data.driver_location == driver_location) {
                         return var->data.location;
                 }
@@ -180,7 +180,7 @@ precompile_all_outputs(nir_shader *s,
                        struct v3d_varying_slot *outputs,
                        uint8_t *num_outputs)
 {
-        nir_foreach_variable(var, &s->outputs) {
+        nir_foreach_shader_out_variable(var, s) {
                 const int array_len = MAX2(glsl_get_length(var->type), 1);
                 for (int j = 0; j < array_len; j++) {
                         const int slot = var->data.location + j;
@@ -212,7 +212,7 @@ v3d_shader_precompile(struct v3d_context *v3d,
                         .base.shader_state = so,
                 };
 
-                nir_foreach_variable(var, &s->outputs) {
+                nir_foreach_shader_out_variable(var, s) {
                         if (var->data.location == FRAG_RESULT_COLOR) {
                                 key.cbufs |= 1 << 0;
                         } else if (var->data.location >= FRAG_RESULT_DATA0) {
@@ -303,17 +303,15 @@ v3d_uncompiled_shader_create(struct pipe_context *pctx,
                         tgsi_dump(ir, 0);
                         fprintf(stderr, "\n");
                 }
-                s = tgsi_to_nir(ir, pctx->screen);
+                s = tgsi_to_nir(ir, pctx->screen, false);
         }
 
-        nir_variable_mode lower_mode = nir_var_all & ~nir_var_uniform;
-        if (s->info.stage == MESA_SHADER_VERTEX ||
-            s->info.stage == MESA_SHADER_GEOMETRY) {
-                lower_mode &= ~(nir_var_shader_in | nir_var_shader_out);
+        if (s->info.stage != MESA_SHADER_VERTEX &&
+            s->info.stage != MESA_SHADER_GEOMETRY) {
+                NIR_PASS_V(s, nir_lower_io,
+                           nir_var_shader_in | nir_var_shader_out,
+                           type_size, (nir_lower_io_options)0);
         }
-        NIR_PASS_V(s, nir_lower_io, lower_mode,
-                   type_size,
-                   (nir_lower_io_options)0);
 
         NIR_PASS_V(s, nir_lower_regs_to_ssa);
         NIR_PASS_V(s, nir_normalize_cubemap_coords);
@@ -322,7 +320,7 @@ v3d_uncompiled_shader_create(struct pipe_context *pctx,
 
         v3d_optimize_nir(s);
 
-        NIR_PASS_V(s, nir_remove_dead_variables, nir_var_function_temp);
+        NIR_PASS_V(s, nir_remove_dead_variables, nir_var_function_temp, NULL);
 
         /* Garbage collect dead instructions */
         nir_sweep(s);
@@ -543,6 +541,8 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
         key->is_points = (prim_mode == PIPE_PRIM_POINTS);
         key->is_lines = (prim_mode >= PIPE_PRIM_LINES &&
                          prim_mode <= PIPE_PRIM_LINE_STRIP);
+        key->line_smoothing = (key->is_lines &&
+                               v3d_line_smoothing_enabled(v3d));
         key->clamp_color = v3d->rasterizer->base.clamp_fragment_color;
         if (v3d->blend->base.logicop_enable) {
                 key->logicop_func = v3d->blend->base.logicop_func;

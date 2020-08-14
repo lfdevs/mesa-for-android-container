@@ -1130,7 +1130,7 @@ SVGA3D_vgpu10_DefineStreamOutput(struct svga_winsys_context *swc,
 
    memcpy(cmd->decl, decl,
           sizeof(SVGA3dStreamOutputDeclarationEntry)
-          * SVGA3D_MAX_STREAMOUT_DECLS);
+          * SVGA3D_MAX_DX10_STREAMOUT_DECLS);
 
    cmd->rasterizedStream = 0;
    swc->commit(swc);
@@ -1257,6 +1257,31 @@ SVGA3D_vgpu10_SetSingleConstantBuffer(struct svga_winsys_context *swc,
    swc->surface_relocation(swc, &cmd->sid, NULL, surface, SVGA_RELOC_READ);
    cmd->offsetInBytes = offsetInBytes;
    cmd->sizeInBytes = sizeInBytes;
+
+   swc->commit(swc);
+
+   return PIPE_OK;
+}
+
+
+enum pipe_error
+SVGA3D_vgpu10_SetConstantBufferOffset(struct svga_winsys_context *swc,
+                                      unsigned command,
+                                      unsigned slot,
+                                      uint32 offsetInBytes)
+{
+   SVGA3dCmdDXSetConstantBufferOffset *cmd;
+
+   assert(offsetInBytes % 256 == 0);
+
+   cmd = SVGA3D_FIFOReserve(swc, command,
+                            sizeof(SVGA3dCmdDXSetConstantBufferOffset),
+                            0);  /* one relocation */
+   if (!cmd)
+      return PIPE_ERROR_OUT_OF_MEMORY;
+
+   cmd->slot = slot;
+   cmd->offsetInBytes = offsetInBytes;
 
    swc->commit(swc);
 
@@ -1430,5 +1455,161 @@ SVGA3D_vgpu10_ResolveCopy(struct svga_winsys_context *swc,
 
    swc->commit(swc);
 
+   return PIPE_OK;
+}
+
+
+enum pipe_error
+SVGA3D_sm5_DrawIndexedInstancedIndirect(struct svga_winsys_context *swc,
+                                        struct svga_winsys_surface *argBuffer,
+                                        unsigned argOffset)
+{
+   SVGA3dCmdDXDrawIndexedInstancedIndirect *cmd =
+      SVGA3D_FIFOReserve(swc,
+                         SVGA_3D_CMD_DX_DRAW_INDEXED_INSTANCED_INDIRECT,
+                         sizeof(SVGA3dCmdDXDrawIndexedInstancedIndirect),
+                         1); /* one relocation */
+   if (!cmd)
+      return PIPE_ERROR_OUT_OF_MEMORY;
+
+   swc->surface_relocation(swc, &cmd->argsBufferSid, NULL, argBuffer,
+                           SVGA_RELOC_READ);
+   cmd->byteOffsetForArgs = argOffset;
+
+   swc->commit(swc);
+
+   return PIPE_OK;
+}
+
+
+enum pipe_error
+SVGA3D_sm5_DrawInstancedIndirect(struct svga_winsys_context *swc,
+                                 struct svga_winsys_surface *argBuffer,
+                                 unsigned argOffset)
+{
+   SVGA3dCmdDXDrawInstancedIndirect *cmd =
+      SVGA3D_FIFOReserve(swc,
+                         SVGA_3D_CMD_DX_DRAW_INSTANCED_INDIRECT,
+                         sizeof(SVGA3dCmdDXDrawInstancedIndirect),
+                         1); /* one relocation */
+   if (!cmd)
+      return PIPE_ERROR_OUT_OF_MEMORY;
+
+   swc->surface_relocation(swc, &cmd->argsBufferSid, NULL, argBuffer,
+                           SVGA_RELOC_READ);
+   cmd->byteOffsetForArgs = argOffset;
+
+   swc->commit(swc);
+
+   return PIPE_OK;
+}
+
+
+enum pipe_error
+SVGA3D_sm5_Dispatch(struct svga_winsys_context *swc,
+                    const uint32 threadGroupCount[3])
+{
+   SVGA3dCmdDXDispatch *cmd;
+
+   cmd = SVGA3D_FIFOReserve(swc,
+                            SVGA_3D_CMD_DX_DISPATCH,
+                            sizeof(SVGA3dCmdDXDispatch),
+                            0);
+   if (!cmd)
+      return PIPE_ERROR_OUT_OF_MEMORY;
+
+   cmd->threadGroupCountX = threadGroupCount[0];
+   cmd->threadGroupCountY = threadGroupCount[1];
+   cmd->threadGroupCountZ = threadGroupCount[2];
+
+   swc->commit(swc);
+   return PIPE_OK;
+}
+
+
+enum pipe_error
+SVGA3D_sm5_DispatchIndirect(struct svga_winsys_context *swc,
+                            struct svga_winsys_surface *argBuffer,
+                            uint32 argOffset)
+{
+   SVGA3dCmdDXDispatchIndirect *cmd;
+
+   cmd = SVGA3D_FIFOReserve(swc,
+                            SVGA_3D_CMD_DX_DISPATCH_INDIRECT,
+                            sizeof(SVGA3dCmdDXDispatchIndirect),
+                            1);
+   if (!cmd)
+      return PIPE_ERROR_OUT_OF_MEMORY;
+
+   swc->surface_relocation(swc, &cmd->argsBufferSid, NULL, argBuffer,
+                           SVGA_RELOC_READ);
+   cmd->byteOffsetForArgs = argOffset;
+
+   swc->commit(swc);
+   return PIPE_OK;
+}
+
+
+/**
+  * We don't want any flush between DefineStreamOutputWithMob and
+  * BindStreamOutput because it will cause partial state in command
+  * buffer. This function make that sure there is enough room for
+  * both commands before issuing them
+  */
+
+enum pipe_error
+SVGA3D_sm5_DefineAndBindStreamOutput(struct svga_winsys_context *swc,
+       SVGA3dStreamOutputId soid,
+       uint32 numOutputStreamEntries,
+       uint32 numOutputStreamStrides,
+       uint32 streamOutputStrideInBytes[SVGA3D_DX_MAX_SOTARGETS],
+       struct svga_winsys_buffer *declBuf,
+       uint32 rasterizedStream,
+       uint32 sizeInBytes)
+{
+   unsigned i;
+   SVGA3dCmdHeader *header;
+   SVGA3dCmdDXDefineStreamOutputWithMob *dcmd;
+   SVGA3dCmdDXBindStreamOutput *bcmd;
+
+   unsigned totalSize = 2 * sizeof(*header) +
+                        sizeof(*dcmd) + sizeof(*bcmd);
+
+   /* Make sure there is room for both commands */
+   header = swc->reserve(swc, totalSize, 2);
+   if (!header)
+      return PIPE_ERROR_OUT_OF_MEMORY;
+
+   /* DXDefineStreamOutputWithMob command */
+   header->id = SVGA_3D_CMD_DX_DEFINE_STREAMOUTPUT_WITH_MOB;
+   header->size = sizeof(*dcmd);
+   dcmd = (SVGA3dCmdDXDefineStreamOutputWithMob *)(header + 1);
+   dcmd->soid= soid;
+   dcmd->numOutputStreamEntries = numOutputStreamEntries;
+   dcmd->numOutputStreamStrides = numOutputStreamStrides;
+   dcmd->rasterizedStream = rasterizedStream;
+
+   for (i = 0; i < ARRAY_SIZE(dcmd->streamOutputStrideInBytes); i++)
+      dcmd->streamOutputStrideInBytes[i] = streamOutputStrideInBytes[i];
+
+
+   /* DXBindStreamOutput command */
+   header = (SVGA3dCmdHeader *)(dcmd + 1);
+
+   header->id = SVGA_3D_CMD_DX_BIND_STREAMOUTPUT;
+   header->size = sizeof(*bcmd);
+   bcmd = (SVGA3dCmdDXBindStreamOutput *)(header + 1);
+
+   bcmd->soid = soid;
+   bcmd->offsetInBytes = 0;
+   swc->mob_relocation(swc, &bcmd->mobid,
+                       &bcmd->offsetInBytes, declBuf, 0,
+                       SVGA_RELOC_WRITE);
+
+   bcmd->sizeInBytes = sizeInBytes;
+   bcmd->offsetInBytes = 0;
+
+
+   swc->commit(swc);
    return PIPE_OK;
 }

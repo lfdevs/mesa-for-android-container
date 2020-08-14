@@ -166,6 +166,13 @@ void si_init_resource_fields(struct si_screen *sscreen, struct si_resource *res,
    else
       res->flags |= RADEON_FLAG_NO_INTERPROCESS_SHARING;
 
+   if (sscreen->ws->ws_is_secure(sscreen->ws)) {
+      if (res->b.b.bind & PIPE_BIND_SCANOUT)
+         res->flags |= RADEON_FLAG_ENCRYPTED;
+      if (res->b.b.flags & PIPE_RESOURCE_FLAG_ENCRYPTED)
+         res->flags |= RADEON_FLAG_ENCRYPTED;
+   }
+
    if (sscreen->debug_flags & DBG(NO_WC))
       res->flags &= ~RADEON_FLAG_GTT_WC;
 
@@ -174,6 +181,14 @@ void si_init_resource_fields(struct si_screen *sscreen, struct si_resource *res,
 
    if (res->b.b.flags & SI_RESOURCE_FLAG_32BIT)
       res->flags |= RADEON_FLAG_32BIT;
+
+   /* For higher throughput and lower latency over PCIe assuming sequential access.
+    * Only CP DMA, SDMA, and optimized compute benefit from this.
+    * GFX8 and older don't support RADEON_FLAG_UNCACHED.
+    */
+   if (sscreen->info.chip_class >= GFX9 &&
+       res->b.b.flags & SI_RESOURCE_FLAG_UNCACHED)
+      res->flags |= RADEON_FLAG_UNCACHED;
 
    /* Set expected VRAM and GART usage for the buffer. */
    res->vram_usage = 0;
@@ -464,8 +479,9 @@ static void *si_buffer_transfer_map(struct pipe_context *ctx, struct pipe_resour
       struct si_resource *staging;
 
       assert(!(usage & (TC_TRANSFER_MAP_THREADED_UNSYNC | PIPE_TRANSFER_THREAD_SAFE)));
-      staging = si_resource(pipe_buffer_create(ctx->screen, 0, PIPE_USAGE_STAGING,
-                                               box->width + (box->x % SI_MAP_BUFFER_ALIGNMENT)));
+      staging = si_aligned_buffer_create(ctx->screen, SI_RESOURCE_FLAG_UNCACHED,
+                                         PIPE_USAGE_STAGING,
+                                         box->width + (box->x % SI_MAP_BUFFER_ALIGNMENT), 256);
       if (staging) {
          /* Copy the VRAM buffer to the staging buffer. */
          si_sdma_copy_buffer(sctx, &staging->b.b, resource, box->x % SI_MAP_BUFFER_ALIGNMENT,

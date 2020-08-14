@@ -188,6 +188,7 @@ def main():
             times_gmem = []
             times = None
             gmem_passes = []
+            times_compute = []
             gmem = None
             continue
 

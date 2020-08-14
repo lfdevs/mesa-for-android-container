@@ -189,7 +189,7 @@ iris_is_format_supported(struct pipe_screen *pscreen,
 
       /* Don't advertise 3-component RGB formats for non-buffer textures.
        * This ensures that they are renderable from an API perspective since
-       * the state tracker will fall back to RGBA or RGBX, which are
+       * gallium frontends will fall back to RGBA or RGBX, which are
        * renderable.  We want to render internally for copies and blits,
        * even if the application doesn't.
        *

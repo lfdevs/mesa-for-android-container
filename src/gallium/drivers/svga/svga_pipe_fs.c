@@ -37,7 +37,7 @@
 #include "svga_shader.h"
 
 
-static void *
+void *
 svga_create_fs_state(struct pipe_context *pipe,
                      const struct pipe_shader_state *templ)
 {
@@ -69,7 +69,7 @@ svga_create_fs_state(struct pipe_context *pipe,
 }
 
 
-static void
+void
 svga_bind_fs_state(struct pipe_context *pipe, void *shader)
 {
    struct svga_fragment_shader *fs = (struct svga_fragment_shader *) shader;
@@ -85,34 +85,34 @@ svga_delete_fs_state(struct pipe_context *pipe, void *shader)
 {
    struct svga_context *svga = svga_context(pipe);
    struct svga_fragment_shader *fs = (struct svga_fragment_shader *) shader;
+   struct svga_fragment_shader *next_fs;
    struct svga_shader_variant *variant, *tmp;
-   enum pipe_error ret;
 
    svga_hwtnl_flush_retry(svga);
 
    assert(fs->base.parent == NULL);
 
-   draw_delete_fragment_shader(svga->swtnl.draw, fs->draw_shader);
+   while (fs) {
+      next_fs = (struct svga_fragment_shader *) fs->base.next;
 
-   for (variant = fs->base.variants; variant; variant = tmp) {
-      tmp = variant->next;
+      draw_delete_fragment_shader(svga->swtnl.draw, fs->draw_shader);
 
-      /* Check if deleting currently bound shader */
-      if (variant == svga->state.hw_draw.fs) {
-         ret = svga_set_shader(svga, SVGA3D_SHADERTYPE_PS, NULL);
-         if (ret != PIPE_OK) {
-            svga_context_flush(svga, NULL);
-            ret = svga_set_shader(svga, SVGA3D_SHADERTYPE_PS, NULL);
-            assert(ret == PIPE_OK);
+      for (variant = fs->base.variants; variant; variant = tmp) {
+         tmp = variant->next;
+
+         /* Check if deleting currently bound shader */
+         if (variant == svga->state.hw_draw.fs) {
+            SVGA_RETRY(svga, svga_set_shader(svga, SVGA3D_SHADERTYPE_PS, NULL));
+            svga->state.hw_draw.fs = NULL;
          }
-         svga->state.hw_draw.fs = NULL;
+
+         svga_destroy_shader_variant(svga, variant);
       }
 
-      svga_destroy_shader_variant(svga, variant);
+      FREE((void *)fs->base.tokens);
+      FREE(fs);
+      fs = next_fs;
    }
-
-   FREE((void *)fs->base.tokens);
-   FREE(fs);
 }
 
 

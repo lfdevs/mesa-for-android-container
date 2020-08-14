@@ -43,50 +43,55 @@
 #include "fd4_format.h"
 #include "fd4_zsa.h"
 
+#define emit_const_user fd4_emit_const_user
+#define emit_const_bo fd4_emit_const_bo
+#include "ir3_const.h"
+
 /* regid:          base const register
  * prsc or dwords: buffer containing constant values
  * sizedwords:     size of const value buffer
  */
 static void
-fd4_emit_const(struct fd_ringbuffer *ring, gl_shader_stage type,
-		uint32_t regid, uint32_t offset, uint32_t sizedwords,
-		const uint32_t *dwords, struct pipe_resource *prsc)
+fd4_emit_const_user(struct fd_ringbuffer *ring,
+		const struct ir3_shader_variant *v, uint32_t regid, uint32_t sizedwords,
+		const uint32_t *dwords)
 {
-	uint32_t i, sz;
-	enum a4xx_state_src src;
+	emit_const_asserts(ring, v, regid, sizedwords);
 
-	debug_assert((regid % 4) == 0);
-	debug_assert((sizedwords % 4) == 0);
-
-	if (prsc) {
-		sz = 0;
-		src = SS4_INDIRECT;
-	} else {
-		sz = sizedwords;
-		src = SS4_DIRECT;
-	}
-
-	OUT_PKT3(ring, CP_LOAD_STATE4, 2 + sz);
+	OUT_PKT3(ring, CP_LOAD_STATE4, 2 + sizedwords);
 	OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(regid/4) |
-			CP_LOAD_STATE4_0_STATE_SRC(src) |
-			CP_LOAD_STATE4_0_STATE_BLOCK(fd4_stage2shadersb(type)) |
+			CP_LOAD_STATE4_0_STATE_SRC(SS4_DIRECT) |
+			CP_LOAD_STATE4_0_STATE_BLOCK(fd4_stage2shadersb(v->type)) |
 			CP_LOAD_STATE4_0_NUM_UNIT(sizedwords/4));
-	if (prsc) {
-		struct fd_bo *bo = fd_resource(prsc)->bo;
-		OUT_RELOC(ring, bo, offset,
-				CP_LOAD_STATE4_1_STATE_TYPE(ST4_CONSTANTS), 0);
-	} else {
-		OUT_RING(ring, CP_LOAD_STATE4_1_EXT_SRC_ADDR(0) |
-				CP_LOAD_STATE4_1_STATE_TYPE(ST4_CONSTANTS));
-		dwords = (uint32_t *)&((uint8_t *)dwords)[offset];
-	}
-	for (i = 0; i < sz; i++) {
+	OUT_RING(ring, CP_LOAD_STATE4_1_EXT_SRC_ADDR(0) |
+			CP_LOAD_STATE4_1_STATE_TYPE(ST4_CONSTANTS));
+	for (int i = 0; i < sizedwords; i++)
 		OUT_RING(ring, dwords[i]);
-	}
 }
 
 static void
-fd4_emit_const_bo(struct fd_ringbuffer *ring, gl_shader_stage type, boolean write,
+fd4_emit_const_bo(struct fd_ringbuffer *ring, const struct ir3_shader_variant *v,
+		uint32_t regid, uint32_t offset, uint32_t sizedwords,
+		struct fd_bo *bo)
+{
+	uint32_t dst_off = regid / 4;
+	assert(dst_off % 4 == 0);
+	uint32_t num_unit = sizedwords / 4;
+	assert(num_unit % 4 == 0);
+
+	emit_const_asserts(ring, v, regid, sizedwords);
+
+	OUT_PKT3(ring, CP_LOAD_STATE4, 2);
+	OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(dst_off) |
+			CP_LOAD_STATE4_0_STATE_SRC(SS4_INDIRECT) |
+			CP_LOAD_STATE4_0_STATE_BLOCK(fd4_stage2shadersb(v->type)) |
+			CP_LOAD_STATE4_0_NUM_UNIT(num_unit));
+	OUT_RELOC(ring, bo, offset,
+			CP_LOAD_STATE4_1_STATE_TYPE(ST4_CONSTANTS), 0);
+}
+
+static void
+fd4_emit_const_ptrs(struct fd_ringbuffer *ring, gl_shader_stage type,
 		uint32_t regid, uint32_t num, struct pipe_resource **prscs, uint32_t *offsets)
 {
 	uint32_t anum = align(num, 4);
@@ -104,11 +109,7 @@ fd4_emit_const_bo(struct fd_ringbuffer *ring, gl_shader_stage type, boolean writ
 
 	for (i = 0; i < num; i++) {
 		if (prscs[i]) {
-			if (write) {
-				OUT_RELOCW(ring, fd_resource(prscs[i])->bo, offsets[i], 0, 0);
-			} else {
-				OUT_RELOC(ring, fd_resource(prscs[i])->bo, offsets[i], 0, 0);
-			}
+			OUT_RELOC(ring, fd_resource(prscs[i])->bo, offsets[i], 0, 0);
 		} else {
 			OUT_RING(ring, 0xbad00000 | (i << 16));
 		}
@@ -116,6 +117,22 @@ fd4_emit_const_bo(struct fd_ringbuffer *ring, gl_shader_stage type, boolean writ
 
 	for (; i < anum; i++)
 		OUT_RING(ring, 0xffffffff);
+}
+
+static bool
+is_stateobj(struct fd_ringbuffer *ring)
+{
+	return false;
+}
+
+static void
+emit_const_ptrs(struct fd_ringbuffer *ring,
+		const struct ir3_shader_variant *v, uint32_t dst_offset,
+		uint32_t num, struct pipe_resource **prscs, uint32_t *offsets)
+{
+	/* TODO inline this */
+	assert(dst_offset + num <= v->constlen * 4);
+	fd4_emit_const_ptrs(ring, v->type, dst_offset, num, prscs, offsets);
 }
 
 static void
@@ -301,7 +318,6 @@ fd4_emit_gmem_restore_tex(struct fd_ringbuffer *ring, unsigned nr_bufs,
 
 			/* note: PIPE_BUFFER disallowed for surfaces */
 			unsigned lvl = bufs[i]->u.tex.level;
-			struct fdl_slice *slice = fd_resource_slice(rsc, lvl);
 			unsigned offset = fd_resource_offset(rsc, lvl, bufs[i]->u.tex.first_layer);
 
 			/* z32 restore is accomplished using depth write.  If there is
@@ -323,8 +339,7 @@ fd4_emit_gmem_restore_tex(struct fd_ringbuffer *ring, unsigned nr_bufs,
 							PIPE_SWIZZLE_Z, PIPE_SWIZZLE_W));
 			OUT_RING(ring, A4XX_TEX_CONST_1_WIDTH(bufs[i]->width) |
 					A4XX_TEX_CONST_1_HEIGHT(bufs[i]->height));
-			OUT_RING(ring, A4XX_TEX_CONST_2_PITCH(slice->pitch) |
-					A4XX_TEX_CONST_2_FETCHSIZE(fd4_pipe2fetchsize(format)));
+			OUT_RING(ring, A4XX_TEX_CONST_2_PITCH(fd_resource_pitch(rsc, lvl)));
 			OUT_RING(ring, 0x00000000);
 			OUT_RELOC(ring, rsc->bo, offset, 0, 0);
 			OUT_RING(ring, 0x00000000);
@@ -411,7 +426,7 @@ fd4_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 			uint32_t fs = util_format_get_blocksize(pfmt);
 			uint32_t off = vb->buffer_offset + elem->src_offset;
 			uint32_t size = fd_bo_size(rsc->bo) - off;
-			debug_assert(fmt != ~0);
+			debug_assert(fmt != VFMT4_NONE);
 
 #ifdef DEBUG
 			/* see dEQP-GLES31.stress.vertex_attribute_binding.buffer_bounds.bind_vertex_buffer_offset_near_wrap_10
@@ -555,14 +570,15 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 	if (dirty & (FD_DIRTY_ZSA | FD_DIRTY_RASTERIZER | FD_DIRTY_PROG)) {
 		struct fd4_zsa_stateobj *zsa = fd4_zsa_stateobj(ctx->zsa);
-		bool fragz = fp->no_earlyz | fp->writes_pos;
+		bool fragz = fp->no_earlyz | fp->has_kill | fp->writes_pos;
 		bool clamp = !ctx->rasterizer->depth_clip_near;
 
 		OUT_PKT0(ring, REG_A4XX_RB_DEPTH_CONTROL, 1);
 		OUT_RING(ring, zsa->rb_depth_control |
 				COND(clamp, A4XX_RB_DEPTH_CONTROL_Z_CLAMP_ENABLE) |
 				COND(fragz, A4XX_RB_DEPTH_CONTROL_EARLY_Z_DISABLE) |
-				COND(fragz && fp->frag_coord, A4XX_RB_DEPTH_CONTROL_FORCE_FRAGZ_TO_FS));
+				COND(fragz && fp->fragcoord_compmask != 0,
+						A4XX_RB_DEPTH_CONTROL_FORCE_FRAGZ_TO_FS));
 
 		/* maybe this register/bitfield needs a better name.. this
 		 * appears to be just disabling early-z
@@ -570,7 +586,8 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		OUT_PKT0(ring, REG_A4XX_GRAS_ALPHA_CONTROL, 1);
 		OUT_RING(ring, zsa->gras_alpha_control |
 				COND(fragz, A4XX_GRAS_ALPHA_CONTROL_ALPHA_TEST_ENABLE) |
-				COND(fragz && fp->frag_coord, A4XX_GRAS_ALPHA_CONTROL_FORCE_FRAGZ_TO_FS));
+				COND(fragz && fp->fragcoord_compmask != 0,
+						A4XX_GRAS_ALPHA_CONTROL_FORCE_FRAGZ_TO_FS));
 	}
 
 	if (dirty & FD_DIRTY_RASTERIZER) {
@@ -585,9 +602,10 @@ fd4_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		OUT_RING(ring, rasterizer->gras_su_point_minmax);
 		OUT_RING(ring, rasterizer->gras_su_point_size);
 
-		OUT_PKT0(ring, REG_A4XX_GRAS_SU_POLY_OFFSET_SCALE, 2);
+		OUT_PKT0(ring, REG_A4XX_GRAS_SU_POLY_OFFSET_SCALE, 3);
 		OUT_RING(ring, rasterizer->gras_su_poly_offset_scale);
 		OUT_RING(ring, rasterizer->gras_su_poly_offset_offset);
+		OUT_RING(ring, rasterizer->gras_su_poly_offset_clamp);
 
 		OUT_PKT0(ring, REG_A4XX_GRAS_CL_CLIP_CNTL, 1);
 		OUT_RING(ring, rasterizer->gras_cl_clip_cntl);
@@ -896,9 +914,6 @@ fd4_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
 	OUT_PKT0(ring, REG_A4XX_RB_FS_OUTPUT, 1);
 	OUT_RING(ring, A4XX_RB_FS_OUTPUT_SAMPLE_MASK(0xffff));
 
-	OUT_PKT0(ring, REG_A4XX_GRAS_CLEAR_CNTL, 1);
-	OUT_RING(ring, A4XX_GRAS_CLEAR_CNTL_NOT_FASTCLEAR);
-
 	OUT_PKT0(ring, REG_A4XX_GRAS_ALPHA_CONTROL, 1);
 	OUT_RING(ring, 0x0);
 
@@ -917,8 +932,8 @@ fd4_mem_to_mem(struct fd_ringbuffer *ring, struct pipe_resource *dst,
 	for (i = 0; i < sizedwords; i++) {
 		OUT_PKT3(ring, CP_MEM_TO_MEM, 3);
 		OUT_RING(ring, 0x00000000);
-		OUT_RELOCW(ring, dst_bo, dst_off, 0, 0);
-		OUT_RELOC (ring, src_bo, src_off, 0, 0);
+		OUT_RELOC(ring, dst_bo, dst_off, 0, 0);
+		OUT_RELOC(ring, src_bo, src_off, 0, 0);
 
 		dst_off += 4;
 		src_off += 4;
@@ -930,8 +945,6 @@ fd4_emit_init_screen(struct pipe_screen *pscreen)
 {
 	struct fd_screen *screen = fd_screen(pscreen);
 
-	screen->emit_const = fd4_emit_const;
-	screen->emit_const_bo = fd4_emit_const_bo;
 	screen->emit_ib = fd4_emit_ib;
 	screen->mem_to_mem = fd4_mem_to_mem;
 }

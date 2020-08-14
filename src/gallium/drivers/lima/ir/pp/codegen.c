@@ -130,7 +130,7 @@ static void ppir_codegen_encode_texld(ppir_node *node, void *code)
    f->lod_bias_en = ldtex->lod_bias_en;
    f->explicit_lod = ldtex->explicit_lod;
    if (ldtex->lod_bias_en)
-      ppir_target_get_src_reg_index(&ldtex->src[1]);
+      f->lod_bias = ppir_target_get_src_reg_index(&ldtex->src[1]);
 
    switch (ldtex->sampler_dim) {
    case GLSL_SAMPLER_DIM_2D:
@@ -201,7 +201,6 @@ static void ppir_codegen_encode_vec_mul(ppir_node *node, void *code)
       f->op = shift_to_op(alu->shift);
       break;
    case ppir_op_mov:
-   case ppir_op_store_color:
       f->op = ppir_codegen_vec4_mul_op_mov;
       break;
    case ppir_op_max:
@@ -277,9 +276,6 @@ static void ppir_codegen_encode_scl_mul(ppir_node *node, void *code)
    case ppir_op_mov:
       f->op = ppir_codegen_float_mul_op_mov;
       break;
-   case ppir_op_sel_cond:
-      f->op = ppir_codegen_float_mul_op_mov;
-      break;
    case ppir_op_max:
       f->op = ppir_codegen_float_mul_op_max;
       break;
@@ -344,7 +340,6 @@ static void ppir_codegen_encode_vec_add(ppir_node *node, void *code)
       f->op = ppir_codegen_vec4_acc_op_add;
       break;
    case ppir_op_mov:
-   case ppir_op_store_color:
       f->op = ppir_codegen_vec4_acc_op_mov;
       break;
    case ppir_op_sum3:

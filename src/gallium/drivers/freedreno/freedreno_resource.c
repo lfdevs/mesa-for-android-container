@@ -48,7 +48,7 @@
 #include <errno.h>
 
 /* XXX this should go away, needed for 'struct winsys_handle' */
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 
 /* A private modifier for now, so we have a way to request tiled but not
  * compressed.  It would perhaps be good to get real modifiers for the
@@ -153,7 +153,7 @@ rebind_resource(struct fd_resource *rsc)
 {
 	struct fd_screen *screen = fd_screen(rsc->base.screen);
 
-	mtx_lock(&screen->lock);
+	fd_screen_lock(screen);
 	fd_resource_lock(rsc);
 
 	if (rsc->dirty)
@@ -161,7 +161,7 @@ rebind_resource(struct fd_resource *rsc)
 			rebind_resource_in_ctx(ctx, rsc);
 
 	fd_resource_unlock(rsc);
-	mtx_unlock(&screen->lock);
+	fd_screen_unlock(screen);
 }
 
 static void
@@ -269,7 +269,7 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
 	fd_bc_invalidate_resource(rsc, false);
 	rebind_resource(rsc);
 
-	mtx_lock(&ctx->screen->lock);
+	fd_screen_lock(ctx->screen);
 
 	/* Swap the backing bo's, so shadow becomes the old buffer,
 	 * blit from shadow to new buffer.  From here on out, we
@@ -303,7 +303,7 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
 	}
 	swap(rsc->batch_mask, shadow->batch_mask);
 
-	mtx_unlock(&ctx->screen->lock);
+	fd_screen_unlock(ctx->screen);
 
 	struct pipe_blit_info blit = {};
 	blit.dst.resource = prsc;
@@ -380,7 +380,7 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
  * Uncompress an UBWC compressed buffer "in place".  This works basically
  * like resource shadowing, creating a new resource, and doing an uncompress
  * blit, and swapping the state between shadow and original resource so it
- * appears to the state tracker as if nothing changed.
+ * appears to the gallium frontends as if nothing changed.
  */
 void
 fd_resource_uncompress(struct fd_context *ctx, struct fd_resource *rsc)
@@ -481,9 +481,9 @@ flush_resource(struct fd_context *ctx, struct fd_resource *rsc, unsigned usage)
 {
 	struct fd_batch *write_batch = NULL;
 
-	mtx_lock(&ctx->screen->lock);
+	fd_screen_lock(ctx->screen);
 	fd_batch_reference_locked(&write_batch, rsc->write_batch);
-	mtx_unlock(&ctx->screen->lock);
+	fd_screen_unlock(ctx->screen);
 
 	if (usage & PIPE_TRANSFER_WRITE) {
 		struct fd_batch *batch, *batches[32] = {};
@@ -494,11 +494,11 @@ flush_resource(struct fd_context *ctx, struct fd_resource *rsc, unsigned usage)
 		 * to iterate the batches which reference this resource.  So
 		 * we must first grab references under a lock, then flush.
 		 */
-		mtx_lock(&ctx->screen->lock);
+		fd_screen_lock(ctx->screen);
 		batch_mask = rsc->batch_mask;
 		foreach_batch(batch, &ctx->screen->batch_cache, batch_mask)
 			fd_batch_reference_locked(&batches[batch->idx], batch);
-		mtx_unlock(&ctx->screen->lock);
+		fd_screen_unlock(ctx->screen);
 
 		foreach_batch(batch, &ctx->screen->batch_cache, batch_mask)
 			fd_batch_flush(batch);
@@ -557,7 +557,6 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 {
 	struct fd_context *ctx = fd_context(pctx);
 	struct fd_resource *rsc = fd_resource(prsc);
-	struct fdl_slice *slice = fd_resource_slice(rsc, level);
 	struct fd_transfer *trans;
 	struct pipe_transfer *ptrans;
 	enum pipe_format format = prsc->format;
@@ -568,6 +567,11 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 
 	DBG("prsc=%p, level=%u, usage=%x, box=%dx%d+%d,%d", prsc, level, usage,
 		box->width, box->height, box->x, box->y);
+
+	if ((usage & PIPE_TRANSFER_MAP_DIRECTLY) && rsc->layout.tile_mode) {
+		DBG("CANNOT MAP DIRECTLY!\n");
+		return NULL;
+	}
 
 	ptrans = slab_alloc(&ctx->transfer_pool);
 	if (!ptrans)
@@ -581,7 +585,7 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 	ptrans->level = level;
 	ptrans->usage = usage;
 	ptrans->box = *box;
-	ptrans->stride = slice->pitch;
+	ptrans->stride = fd_resource_pitch(rsc, level);
 	ptrans->layer_stride = fd_resource_layer_stride(rsc, level);
 
 	/* we always need a staging texture for tiled buffers:
@@ -595,11 +599,9 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 
 		staging_rsc = fd_alloc_staging(ctx, rsc, level, box);
 		if (staging_rsc) {
-			struct fdl_slice *staging_slice =
-				fd_resource_slice(staging_rsc, 0);
 			// TODO for PIPE_TRANSFER_READ, need to do untiling blit..
 			trans->staging_prsc = &staging_rsc->base;
-			trans->base.stride = staging_slice->pitch;
+			trans->base.stride = fd_resource_pitch(staging_rsc, 0);
 			trans->base.layer_stride = fd_resource_layer_stride(staging_rsc, 0);
 			trans->staging_box = *box;
 			trans->staging_box.x = 0;
@@ -697,10 +699,8 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 				 */
 				staging_rsc = fd_alloc_staging(ctx, rsc, level, box);
 				if (staging_rsc) {
-					struct fdl_slice *staging_slice =
-						fd_resource_slice(staging_rsc, 0);
 					trans->staging_prsc = &staging_rsc->base;
-					trans->base.stride = staging_slice->pitch;
+					trans->base.stride = fd_resource_pitch(staging_rsc, 0);
 					trans->base.layer_stride =
 						fd_resource_layer_stride(staging_rsc, 0);
 					trans->staging_box = *box;
@@ -798,105 +798,7 @@ fd_resource_get_handle(struct pipe_screen *pscreen,
 	handle->modifier = fd_resource_modifier(rsc);
 
 	return fd_screen_bo_get_handle(pscreen, rsc->bo, rsc->scanout,
-			fd_resource_slice(rsc, 0)->pitch, handle);
-}
-
-static uint32_t
-setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format format)
-{
-	struct pipe_resource *prsc = &rsc->base;
-	struct fd_screen *screen = fd_screen(prsc->screen);
-	enum util_format_layout layout = util_format_description(format)->layout;
-	uint32_t pitchalign = screen->gmem_alignw;
-	uint32_t level, size = 0;
-	uint32_t width = prsc->width0;
-	uint32_t height = prsc->height0;
-	uint32_t depth = prsc->depth0;
-	/* in layer_first layout, the level (slice) contains just one
-	 * layer (since in fact the layer contains the slices)
-	 */
-	uint32_t layers_in_level = rsc->layout.layer_first ? 1 : prsc->array_size;
-
-	for (level = 0; level <= prsc->last_level; level++) {
-		struct fdl_slice *slice = fd_resource_slice(rsc, level);
-		uint32_t blocks;
-
-		if (layout == UTIL_FORMAT_LAYOUT_ASTC)
-			width = util_align_npot(width, pitchalign * util_format_get_blockwidth(format));
-		else
-			width = align(width, pitchalign);
-		slice->pitch = util_format_get_nblocksx(format, width) * rsc->layout.cpp;
-		slice->offset = size;
-		blocks = util_format_get_nblocks(format, width, height);
-		/* 1d array and 2d array textures must all have the same layer size
-		 * for each miplevel on a3xx. 3d textures can have different layer
-		 * sizes for high levels, but the hw auto-sizer is buggy (or at least
-		 * different than what this code does), so as soon as the layer size
-		 * range gets into range, we stop reducing it.
-		 */
-		if (prsc->target == PIPE_TEXTURE_3D && (
-					level == 1 ||
-					(level > 1 && fd_resource_slice(rsc, level - 1)->size0 > 0xf000)))
-			slice->size0 = align(blocks * rsc->layout.cpp, alignment);
-		else if (level == 0 || rsc->layout.layer_first || alignment == 1)
-			slice->size0 = align(blocks * rsc->layout.cpp, alignment);
-		else
-			slice->size0 = fd_resource_slice(rsc, level - 1)->size0;
-
-		size += slice->size0 * depth * layers_in_level;
-
-		width = u_minify(width, 1);
-		height = u_minify(height, 1);
-		depth = u_minify(depth, 1);
-	}
-
-	return size;
-}
-
-static uint32_t
-slice_alignment(enum pipe_texture_target target)
-{
-	/* on a3xx, 2d array and 3d textures seem to want their
-	 * layers aligned to page boundaries:
-	 */
-	switch (target) {
-	case PIPE_TEXTURE_3D:
-	case PIPE_TEXTURE_1D_ARRAY:
-	case PIPE_TEXTURE_2D_ARRAY:
-		return 4096;
-	default:
-		return 1;
-	}
-}
-
-/* cross generation texture layout to plug in to screen->setup_slices()..
- * replace with generation specific one as-needed.
- *
- * TODO for a4xx probably can extract out the a4xx specific logic int
- * a small fd4_setup_slices() wrapper that sets up layer_first, and then
- * calls this.
- */
-uint32_t
-fd_setup_slices(struct fd_resource *rsc)
-{
-	uint32_t alignment;
-
-	alignment = slice_alignment(rsc->base.target);
-
-	struct fd_screen *screen = fd_screen(rsc->base.screen);
-	if (is_a4xx(screen)) {
-		switch (rsc->base.target) {
-		case PIPE_TEXTURE_3D:
-			rsc->layout.layer_first = false;
-			break;
-		default:
-			rsc->layout.layer_first = true;
-			alignment = 1;
-			break;
-		}
-	}
-
-	return setup_slices(rsc, alignment, rsc->base.format);
+			fd_resource_pitch(rsc, 0), handle);
 }
 
 /* special case to resize query buf after allocated.. */
@@ -918,6 +820,8 @@ fd_resource_layout_init(struct pipe_resource *prsc)
 {
 	struct fd_resource *rsc = fd_resource(prsc);
 	struct fdl_layout *layout = &rsc->layout;
+
+	layout->format = prsc->format;
 
 	layout->width0 = prsc->width0;
 	layout->height0 = prsc->height0;
@@ -953,7 +857,7 @@ fd_resource_create_with_modifiers(struct pipe_screen *pscreen,
 		struct renderonly_scanout *scanout;
 		struct winsys_handle handle;
 
-		/* apply freedreno alignment requirement */
+		/* note: alignment is wrong for a6xx */
 		scanout_templat.width0 = align(tmpl->width0, screen->gmem_alignw);
 
 		scanout = renderonly_scanout_for_resource(&scanout_templat,
@@ -1119,14 +1023,27 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
 		goto fail;
 
 	rsc->internal_format = tmpl->format;
-	slice->pitch = handle->stride;
+	rsc->layout.pitch0 = handle->stride;
 	slice->offset = handle->offset;
 	slice->size0 = handle->stride * prsc->height0;
 
-	uint32_t pitchalign = fd_screen(pscreen)->gmem_alignw * rsc->layout.cpp;
+	/* use a pitchalign of gmem_alignw pixels, because GMEM resolve for
+	 * lower alignments is not implemented (but possible for a6xx at least)
+	 *
+	 * for UBWC-enabled resources, layout_resource_for_modifier will further
+	 * validate the pitch and set the right pitchalign
+	 */
+	rsc->layout.pitchalign =
+		fdl_cpp_shift(&rsc->layout) + util_logbase2(screen->gmem_alignw);
 
-	if ((slice->pitch < align(prsc->width0 * rsc->layout.cpp, pitchalign)) ||
-			(slice->pitch & (pitchalign - 1)))
+	/* apply the minimum pitchalign (note: actually 4 for a3xx but doesn't matter) */
+	if (is_a6xx(screen) || is_a5xx(screen))
+		rsc->layout.pitchalign = MAX2(rsc->layout.pitchalign, 6);
+	else
+		rsc->layout.pitchalign = MAX2(rsc->layout.pitchalign, 5);
+
+	if (rsc->layout.pitch0 < (prsc->width0 * rsc->layout.cpp) ||
+		fd_resource_pitch(rsc, 0) != rsc->layout.pitch0)
 		goto fail;
 
 	assert(rsc->layout.cpp);
@@ -1274,8 +1191,6 @@ fd_resource_screen_init(struct pipe_screen *pscreen)
 	pscreen->transfer_helper = u_transfer_helper_create(&transfer_vtbl,
 			true, false, fake_rgtc, true);
 
-	if (!screen->setup_slices)
-		screen->setup_slices = fd_setup_slices;
 	if (!screen->layout_resource_for_modifier)
 		screen->layout_resource_for_modifier = fd_layout_resource_for_modifier;
 	if (!screen->supported_modifiers) {

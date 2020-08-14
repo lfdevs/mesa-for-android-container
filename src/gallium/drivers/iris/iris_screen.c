@@ -90,14 +90,6 @@ iris_get_name(struct pipe_screen *pscreen)
    return buf;
 }
 
-static uint64_t
-get_aperture_size(int fd)
-{
-   struct drm_i915_gem_get_aperture aperture = {};
-   gen_ioctl(fd, DRM_IOCTL_I915_GEM_GET_APERTURE, &aperture);
-   return aperture.aper_size;
-}
-
 static int
 iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 {
@@ -117,6 +109,7 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
    case PIPE_CAP_VERTEX_SHADER_SATURATE:
    case PIPE_CAP_PRIMITIVE_RESTART:
+   case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
    case PIPE_CAP_INDEP_BLEND_ENABLE:
    case PIPE_CAP_INDEP_BLEND_FUNC:
    case PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND:
@@ -283,7 +276,7 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
        * flushing, etc.  That's the big cliff apps will care about.
        */
       const unsigned gpu_mappable_megabytes =
-         (screen->aperture_bytes * 3 / 4) / (1024 * 1024);
+         (devinfo->aperture_bytes * 3 / 4) / (1024 * 1024);
 
       const long system_memory_pages = sysconf(_SC_PHYS_PAGES);
       const long system_page_size = sysconf(_SC_PAGE_SIZE);
@@ -413,6 +406,9 @@ iris_get_shader_param(struct pipe_screen *pscreen,
       return 1;
    case PIPE_SHADER_CAP_INT64_ATOMICS:
    case PIPE_SHADER_CAP_FP16:
+   case PIPE_SHADER_CAP_FP16_DERIVATIVES:
+   case PIPE_SHADER_CAP_INT16:
+   case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
       return 0;
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
    case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
@@ -452,6 +448,7 @@ iris_get_compute_param(struct pipe_screen *pscreen,
    struct iris_screen *screen = (struct iris_screen *)pscreen;
    const struct gen_device_info *devinfo = &screen->devinfo;
 
+   /* Limit max_threads to 64 for the GPGPU_WALKER command. */
    const unsigned max_threads = MIN2(64, devinfo->max_cs_threads);
    const uint32_t max_invocations = 32 * max_threads;
 
@@ -482,6 +479,8 @@ iris_get_compute_param(struct pipe_screen *pscreen,
 
    case PIPE_COMPUTE_CAP_MAX_THREADS_PER_BLOCK:
       /* MaxComputeWorkGroupInvocations */
+   case PIPE_COMPUTE_CAP_MAX_VARIABLE_THREADS_PER_BLOCK:
+      /* MaxComputeVariableGroupInvocations */
       RET((uint64_t []) { max_invocations });
 
    case PIPE_COMPUTE_CAP_MAX_LOCAL_SIZE:
@@ -500,7 +499,6 @@ iris_get_compute_param(struct pipe_screen *pscreen,
    case PIPE_COMPUTE_CAP_MAX_GLOBAL_SIZE:
    case PIPE_COMPUTE_CAP_MAX_PRIVATE_SIZE:
    case PIPE_COMPUTE_CAP_MAX_INPUT_SIZE:
-   case PIPE_COMPUTE_CAP_MAX_VARIABLE_THREADS_PER_BLOCK:
       // XXX: I think these are for Clover...
       return 0;
 
@@ -636,6 +634,35 @@ iris_shader_perf_log(void *data, const char *fmt, ...)
    va_end(args);
 }
 
+static void
+iris_detect_kernel_features(struct iris_screen *screen)
+{
+   /* Kernel 5.2+ */
+   if (gen_gem_supports_syncobj_wait(screen->fd))
+      screen->kernel_features |= KERNEL_HAS_WAIT_FOR_SUBMIT;
+}
+
+static bool
+iris_init_identifier_bo(struct iris_screen *screen)
+{
+   void *bo_map;
+
+   bo_map = iris_bo_map(NULL, screen->workaround_bo, MAP_READ | MAP_WRITE);
+   if (!bo_map)
+      return false;
+
+   screen->workaround_bo->kflags |= EXEC_OBJECT_CAPTURE;
+   screen->workaround_address = (struct iris_address) {
+      .bo = screen->workaround_bo,
+      .offset = ALIGN(
+         intel_debug_write_identifiers(bo_map, 4096, "Iris") + 8, 8),
+   };
+
+   iris_bo_unmap(screen->workaround_bo);
+
+   return true;
+}
+
 struct pipe_screen *
 iris_screen_create(int fd, const struct pipe_screen_config *config)
 {
@@ -684,14 +711,15 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    screen->fd = iris_bufmgr_get_fd(screen->bufmgr);
    screen->winsys_fd = fd;
 
-   screen->aperture_bytes = get_aperture_size(fd);
-
    if (getenv("INTEL_NO_HW") != NULL)
       screen->no_hw = true;
 
    screen->workaround_bo =
       iris_bo_alloc(screen->bufmgr, "workaround", 4096, IRIS_MEMZONE_OTHER);
    if (!screen->workaround_bo)
+      return NULL;
+
+   if (!iris_init_identifier_bo(screen))
       return NULL;
 
    brw_process_intel_debug_variable();
@@ -725,6 +753,8 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    screen->subslice_total =
       iris_getparam_integer(screen->fd, I915_PARAM_SUBSLICE_TOTAL);
    assert(screen->subslice_total >= 1);
+
+   iris_detect_kernel_features(screen);
 
    struct pipe_screen *pscreen = &screen->base;
 

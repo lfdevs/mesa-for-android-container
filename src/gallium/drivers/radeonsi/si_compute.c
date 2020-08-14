@@ -141,6 +141,38 @@ static void si_create_compute_state_async(void *job, int thread_index)
    program->num_cs_user_data_dwords =
       sel->info.properties[TGSI_PROPERTY_CS_USER_DATA_COMPONENTS_AMD];
 
+   unsigned user_sgprs = SI_NUM_RESOURCE_SGPRS + (sel->info.uses_grid_size ? 3 : 0) +
+                         (program->reads_variable_block_size ? 3 : 0) +
+                         program->num_cs_user_data_dwords;
+
+   /* Fast path for compute shaders - some descriptors passed via user SGPRs. */
+   /* Shader buffers in user SGPRs. */
+   for (unsigned i = 0; i < 3 && user_sgprs <= 12 && sel->info.shader_buffers_declared & (1 << i); i++) {
+      user_sgprs = align(user_sgprs, 4);
+      if (i == 0)
+         sel->cs_shaderbufs_sgpr_index = user_sgprs;
+      user_sgprs += 4;
+      sel->cs_num_shaderbufs_in_user_sgprs++;
+   }
+
+   /* Images in user SGPRs. */
+   unsigned non_msaa_images = sel->info.images_declared & ~sel->info.msaa_images_declared;
+
+   for (unsigned i = 0; i < 3 && non_msaa_images & (1 << i); i++) {
+      unsigned num_sgprs = sel->info.image_buffers & (1 << i) ? 4 : 8;
+
+      if (align(user_sgprs, num_sgprs) + num_sgprs > 16)
+         break;
+
+      user_sgprs = align(user_sgprs, num_sgprs);
+      if (i == 0)
+         sel->cs_images_sgpr_index = user_sgprs;
+      user_sgprs += num_sgprs;
+      sel->cs_num_images_in_user_sgprs++;
+   }
+   sel->cs_images_num_sgprs = user_sgprs - sel->cs_images_sgpr_index;
+   assert(user_sgprs <= 16);
+
    unsigned char ir_sha1_cache_key[20];
    si_get_ir_cache_key(sel, false, false, ir_sha1_cache_key);
 
@@ -164,9 +196,6 @@ static void si_create_compute_state_async(void *job, int thread_index)
       }
 
       bool scratch_enabled = shader->config.scratch_bytes_per_wave > 0;
-      unsigned user_sgprs = SI_NUM_RESOURCE_SGPRS + (sel->info.uses_grid_size ? 3 : 0) +
-                            (program->reads_variable_block_size ? 3 : 0) +
-                            program->num_cs_user_data_dwords;
 
       shader->config.rsrc1 = S_00B848_VGPRS((shader->config.num_vgprs - 1) /
                                             (sscreen->compute_wave_size == 32 ? 8 : 4)) |
@@ -217,7 +246,7 @@ static void *si_create_compute_state(struct pipe_context *ctx, const struct pipe
    if (cso->ir_type != PIPE_SHADER_IR_NATIVE) {
       if (cso->ir_type == PIPE_SHADER_IR_TGSI) {
          program->ir_type = PIPE_SHADER_IR_NIR;
-         sel->nir = tgsi_to_nir(cso->prog, ctx->screen);
+         sel->nir = tgsi_to_nir(cso->prog, ctx->screen, true);
       } else {
          assert(cso->ir_type == PIPE_SHADER_IR_NIR);
          sel->nir = (struct nir_shader *)cso->prog;
@@ -275,6 +304,9 @@ static void si_bind_compute_state(struct pipe_context *ctx, void *state)
                              sel->active_const_and_shader_buffers);
    si_set_active_descriptors(sctx, SI_DESCS_FIRST_COMPUTE + SI_SHADER_DESCS_SAMPLERS_AND_IMAGES,
                              sel->active_samplers_and_images);
+
+   sctx->compute_shaderbuf_sgprs_dirty = true;
+   sctx->compute_image_sgprs_dirty = true;
 }
 
 static void si_set_global_binding(struct pipe_context *ctx, unsigned first, unsigned n,
@@ -319,13 +351,27 @@ static void si_set_global_binding(struct pipe_context *ctx, unsigned first, unsi
 
 void si_emit_initial_compute_regs(struct si_context *sctx, struct radeon_cmdbuf *cs)
 {
-   uint64_t bc_va;
+   uint64_t bc_va = sctx->border_color_buffer->gpu_address;
 
    radeon_set_sh_reg_seq(cs, R_00B858_COMPUTE_STATIC_THREAD_MGMT_SE0, 2);
    /* R_00B858_COMPUTE_STATIC_THREAD_MGMT_SE0 / SE1,
     * renamed COMPUTE_DESTINATION_EN_SEn on gfx10. */
    radeon_emit(cs, S_00B858_SH0_CU_EN(0xffff) | S_00B858_SH1_CU_EN(0xffff));
    radeon_emit(cs, S_00B858_SH0_CU_EN(0xffff) | S_00B858_SH1_CU_EN(0xffff));
+
+   if (sctx->chip_class == GFX6) {
+      /* This register has been moved to R_00CD20_COMPUTE_MAX_WAVE_ID
+       * and is now per pipe, so it should be handled in the
+       * kernel if we want to use something other than the default value.
+       *
+       * TODO: This should be:
+       * (number of compute units) * 4 * (waves per simd) - 1
+       */
+      radeon_set_sh_reg(cs, R_00B82C_COMPUTE_MAX_WAVE_ID, 0x190 /* Default value */);
+
+      if (sctx->screen->info.si_TA_CS_BC_BASE_ADDR_allowed)
+         radeon_set_config_reg(cs, R_00950C_TA_CS_BC_BASE_ADDR, bc_va >> 8);
+   }
 
    if (sctx->chip_class >= GFX7) {
       /* Also set R_00B858_COMPUTE_STATIC_THREAD_MGMT_SE2 / SE3 */
@@ -338,40 +384,11 @@ void si_emit_initial_compute_regs(struct si_context *sctx, struct radeon_cmdbuf 
          radeon_set_sh_reg(cs, R_00B82C_COMPUTE_PERFCOUNT_ENABLE, 0);
          radeon_set_sh_reg(cs, R_00B878_COMPUTE_THREAD_TRACE_ENABLE, 0);
       }
-   }
 
-   if (sctx->chip_class >= GFX10) {
-      radeon_set_sh_reg(cs, R_00B890_COMPUTE_USER_ACCUM_0, 0);
-      radeon_set_sh_reg(cs, R_00B894_COMPUTE_USER_ACCUM_1, 0);
-      radeon_set_sh_reg(cs, R_00B898_COMPUTE_USER_ACCUM_2, 0);
-      radeon_set_sh_reg(cs, R_00B89C_COMPUTE_USER_ACCUM_3, 0);
-      radeon_set_sh_reg(cs, R_00B8A0_COMPUTE_PGM_RSRC3, 0);
-      radeon_set_sh_reg(cs, R_00B9F4_COMPUTE_DISPATCH_TUNNEL, 0);
-   }
-
-   /* This register has been moved to R_00CD20_COMPUTE_MAX_WAVE_ID
-    * and is now per pipe, so it should be handled in the
-    * kernel if we want to use something other than the default value,
-    * which is now 0x22f.
-    */
-   if (sctx->chip_class <= GFX6) {
-      /* XXX: This should be:
-       * (number of compute units) * 4 * (waves per simd) - 1 */
-
-      radeon_set_sh_reg(cs, R_00B82C_COMPUTE_MAX_WAVE_ID, 0x190 /* Default value */);
-   }
-
-   /* Set the pointer to border colors. */
-   bc_va = sctx->border_color_buffer->gpu_address;
-
-   if (sctx->chip_class >= GFX7) {
+      /* Set the pointer to border colors. */
       radeon_set_uconfig_reg_seq(cs, R_030E00_TA_CS_BC_BASE_ADDR, 2);
       radeon_emit(cs, bc_va >> 8);                    /* R_030E00_TA_CS_BC_BASE_ADDR */
       radeon_emit(cs, S_030E04_ADDRESS(bc_va >> 40)); /* R_030E04_TA_CS_BC_BASE_ADDR_HI */
-   } else {
-      if (sctx->screen->info.si_TA_CS_BC_BASE_ADDR_allowed) {
-         radeon_set_config_reg(cs, R_00950C_TA_CS_BC_BASE_ADDR, bc_va >> 8);
-      }
    }
 
    /* cs_preamble_state initializes this for the gfx queue, so only do this
@@ -381,6 +398,15 @@ void si_emit_initial_compute_regs(struct si_context *sctx, struct radeon_cmdbuf 
        (cs != sctx->gfx_cs || !sctx->screen->info.has_graphics)) {
       radeon_set_uconfig_reg(cs, R_0301EC_CP_COHER_START_DELAY,
                              sctx->chip_class >= GFX10 ? 0x20 : 0);
+   }
+
+   if (sctx->chip_class >= GFX10) {
+      radeon_set_sh_reg(cs, R_00B890_COMPUTE_USER_ACCUM_0, 0);
+      radeon_set_sh_reg(cs, R_00B894_COMPUTE_USER_ACCUM_1, 0);
+      radeon_set_sh_reg(cs, R_00B898_COMPUTE_USER_ACCUM_2, 0);
+      radeon_set_sh_reg(cs, R_00B89C_COMPUTE_USER_ACCUM_3, 0);
+      radeon_set_sh_reg(cs, R_00B8A0_COMPUTE_PGM_RSRC3, 0);
+      radeon_set_sh_reg(cs, R_00B9F4_COMPUTE_DISPATCH_TUNNEL, 0);
    }
 }
 
@@ -826,6 +852,15 @@ static void si_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info
    }
 
    si_need_gfx_cs_space(sctx);
+
+   /* If we're using a secure context, determine if cs must be secure or not */
+   if (unlikely(sctx->ws->ws_is_secure(sctx->ws))) {
+      bool secure = si_compute_resources_check_encrypted(sctx);
+      if (secure != sctx->ws->cs_is_secure(sctx->gfx_cs)) {
+         si_flush_gfx_cs(sctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
+         sctx->ws->cs_set_secure(sctx->gfx_cs, secure);
+      }
+   }
 
    if (sctx->bo_list_add_all_compute_resources)
       si_compute_resources_add_all_to_bo_list(sctx);

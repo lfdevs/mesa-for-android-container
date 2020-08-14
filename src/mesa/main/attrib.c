@@ -1589,6 +1589,8 @@ copy_array_object(struct gl_context *ctx,
    dest->NonZeroDivisorMask = src->NonZeroDivisorMask;
    dest->_AttributeMapMode = src->_AttributeMapMode;
    dest->NewArrays = src->NewArrays;
+   dest->NumUpdates = src->NumUpdates;
+   dest->IsDynamic = src->IsDynamic;
 }
 
 /**
@@ -1690,47 +1692,11 @@ restore_array_attrib(struct gl_context *ctx,
    }
 }
 
-/**
- * init/alloc the fields of 'attrib'.
- * Needs to the init part matching free_array_attrib_data below.
- */
-static bool
-init_array_attrib_data(struct gl_context *ctx,
-                       struct gl_array_attrib *attrib)
-{
-   /* Get a non driver gl_vertex_array_object. */
-   attrib->VAO = MALLOC_STRUCT(gl_vertex_array_object);
-
-   if (attrib->VAO == NULL) {
-      _mesa_error(ctx, GL_OUT_OF_MEMORY, "glPushClientAttrib");
-      return false;
-   }
-
-   _mesa_initialize_vao(ctx, attrib->VAO, 0);
-   return true;
-}
-
-/**
- * Free/unreference the fields of 'attrib' but don't delete it (that's
- * done later in the calling code).
- * Needs to the cleanup part matching init_array_attrib_data above.
- */
-static void
-free_array_attrib_data(struct gl_context *ctx,
-                       struct gl_array_attrib *attrib)
-{
-   /* We use a non driver array object, so don't just unref since we would
-    * end up using the drivers DeleteArrayObject function for deletion. */
-   _mesa_delete_vao(ctx, attrib->VAO);
-   attrib->VAO = 0;
-   _mesa_reference_buffer_object(ctx, &attrib->ArrayBufferObj, NULL);
-}
-
 
 void GLAPIENTRY
 _mesa_PushClientAttrib(GLbitfield mask)
 {
-   struct gl_attrib_node *head;
+   struct gl_client_attrib_node *head;
 
    GET_CURRENT_CONTEXT(ctx);
 
@@ -1739,81 +1705,29 @@ _mesa_PushClientAttrib(GLbitfield mask)
       return;
    }
 
-   /* Build linked list of attribute nodes which save all attribute
-    * groups specified by the mask.
-    */
-   head = NULL;
+   head = &ctx->ClientAttribStack[ctx->ClientAttribStackDepth];
+   head->Mask = mask;
 
    if (mask & GL_CLIENT_PIXEL_STORE_BIT) {
-      struct gl_pixelstore_attrib *attr;
-      /* packing attribs */
-      attr = CALLOC_STRUCT(gl_pixelstore_attrib);
-      if (attr == NULL) {
-         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glPushClientAttrib");
-         goto end;
-      }
-      if (save_attrib_data(&head, GL_CLIENT_PACK_BIT, attr)) {
-         copy_pixelstore(ctx, attr, &ctx->Pack);
-      }
-      else {
-         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glPushClientAttrib");
-         free(attr);
-         goto end;
-      }
-
-      /* unpacking attribs */
-      attr = CALLOC_STRUCT(gl_pixelstore_attrib);
-      if (attr == NULL) {
-         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glPushClientAttrib");
-         goto end;
-      }
-
-      if (save_attrib_data(&head, GL_CLIENT_UNPACK_BIT, attr)) {
-         copy_pixelstore(ctx, attr, &ctx->Unpack);
-      }
-      else {
-         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glPushClientAttrib");
-         free(attr);
-         goto end;
-       }
+      copy_pixelstore(ctx, &head->Pack, &ctx->Pack);
+      copy_pixelstore(ctx, &head->Unpack, &ctx->Unpack);
    }
 
    if (mask & GL_CLIENT_VERTEX_ARRAY_BIT) {
-      struct gl_array_attrib *attr;
-      attr = CALLOC_STRUCT(gl_array_attrib);
-      if (attr == NULL) {
-         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glPushClientAttrib");
-         goto end;
-      }
-
-      if (!init_array_attrib_data(ctx, attr)) {
-         free(attr);
-         goto end;
-      }
-
-      if (save_attrib_data(&head, GL_CLIENT_VERTEX_ARRAY_BIT, attr)) {
-         save_array_attrib(ctx, attr, &ctx->Array);
-      }
-      else {
-         free_array_attrib_data(ctx, attr);
-         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glPushClientAttrib");
-         free(attr);
-         /* goto to keep safe from possible later changes */
-         goto end;
-      }
+      _mesa_initialize_vao(ctx, &head->VAO, 0);
+      /* Use the VAO declared within the node instead of allocating it. */
+      head->Array.VAO = &head->VAO;
+      save_array_attrib(ctx, &head->Array, &ctx->Array);
    }
-end:
-   if (head != NULL) {
-       ctx->ClientAttribStack[ctx->ClientAttribStackDepth] = head;
-       ctx->ClientAttribStackDepth++;
-   }
+
+   ctx->ClientAttribStackDepth++;
 }
 
 
 void GLAPIENTRY
 _mesa_PopClientAttrib(void)
 {
-   struct gl_attrib_node *node, *next;
+   struct gl_client_attrib_node *head;
 
    GET_CURRENT_CONTEXT(ctx);
    FLUSH_VERTICES(ctx, 0);
@@ -1824,41 +1738,21 @@ _mesa_PopClientAttrib(void)
    }
 
    ctx->ClientAttribStackDepth--;
-   node = ctx->ClientAttribStack[ctx->ClientAttribStackDepth];
+   head = &ctx->ClientAttribStack[ctx->ClientAttribStackDepth];
 
-   while (node) {
-      switch (node->kind) {
-         case GL_CLIENT_PACK_BIT:
-            {
-               struct gl_pixelstore_attrib *store =
-                  (struct gl_pixelstore_attrib *) node->data;
-               copy_pixelstore(ctx, &ctx->Pack, store);
-               _mesa_reference_buffer_object(ctx, &store->BufferObj, NULL);
-            }
-            break;
-         case GL_CLIENT_UNPACK_BIT:
-            {
-               struct gl_pixelstore_attrib *store =
-                  (struct gl_pixelstore_attrib *) node->data;
-               copy_pixelstore(ctx, &ctx->Unpack, store);
-               _mesa_reference_buffer_object(ctx, &store->BufferObj, NULL);
-            }
-            break;
-         case GL_CLIENT_VERTEX_ARRAY_BIT: {
-            struct gl_array_attrib * attr =
-               (struct gl_array_attrib *) node->data;
-            restore_array_attrib(ctx, &ctx->Array, attr);
-            free_array_attrib_data(ctx, attr);
-            break;
-         }
-         default:
-            unreachable("Bad attrib flag in PopClientAttrib");
-      }
+   if (head->Mask & GL_CLIENT_PIXEL_STORE_BIT) {
+      copy_pixelstore(ctx, &ctx->Pack, &head->Pack);
+      _mesa_reference_buffer_object(ctx, &head->Pack.BufferObj, NULL);
 
-      next = node->next;
-      free(node->data);
-      free(node);
-      node = next;
+      copy_pixelstore(ctx, &ctx->Unpack, &head->Unpack);
+      _mesa_reference_buffer_object(ctx, &head->Unpack.BufferObj, NULL);
+   }
+
+   if (head->Mask & GL_CLIENT_VERTEX_ARRAY_BIT) {
+      restore_array_attrib(ctx, &ctx->Array, &head->Array);
+      _mesa_unbind_array_object_vbos(ctx, &head->VAO);
+      _mesa_reference_buffer_object(ctx, &head->VAO.IndexBufferObj, NULL);
+      _mesa_reference_buffer_object(ctx, &head->Array.ArrayBufferObj, NULL);
    }
 }
 

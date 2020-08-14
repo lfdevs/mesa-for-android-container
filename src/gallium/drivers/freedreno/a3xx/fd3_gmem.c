@@ -55,7 +55,6 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 		enum a3xx_color_swap swap = WZYX;
 		bool srgb = false;
 		struct fd_resource *rsc = NULL;
-		struct fdl_slice *slice = NULL;
 		uint32_t stride = 0;
 		uint32_t base = 0;
 		uint32_t offset = 0;
@@ -80,7 +79,6 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 				if (bases)
 					bases++;
 			}
-			slice = fd_resource_slice(rsc, psurf->u.tex.level);
 			format = fd3_pipe2color(pformat);
 			if (decode_srgb)
 				srgb = util_format_is_srgb(pformat);
@@ -100,7 +98,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 					base = bases[i];
 				}
 			} else {
-				stride = slice->pitch;
+				stride = fd_resource_pitch(rsc, psurf->u.tex.level);
 				tile_mode = rsc->layout.tile_mode;
 			}
 		} else if (i < nr_bufs && bases) {
@@ -116,7 +114,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 		if (bin_w || (i >= nr_bufs) || !bufs[i]) {
 			OUT_RING(ring, A3XX_RB_MRT_BUF_BASE_COLOR_BUF_BASE(base));
 		} else {
-			OUT_RELOCW(ring, rsc->bo, offset, 0, -1);
+			OUT_RELOC(ring, rsc->bo, offset, 0, -1);
 		}
 
 		OUT_PKT0(ring, REG_A3XX_SP_FS_IMAGE_OUTPUT_REG(i), 1);
@@ -169,9 +167,6 @@ emit_binning_workaround(struct fd_batch *batch)
 			.debug = &ctx->debug,
 			.vtx = &ctx->solid_vbuf_state,
 			.prog = &ctx->solid_prog,
-			.key = {
-				.half_precision = true,
-			},
 	};
 
 	OUT_PKT0(ring, REG_A3XX_RB_MODE_CONTROL, 2);
@@ -186,7 +181,7 @@ emit_binning_workaround(struct fd_batch *batch)
 	OUT_RING(ring, A3XX_RB_COPY_CONTROL_MSAA_RESOLVE(MSAA_ONE) |
 			A3XX_RB_COPY_CONTROL_MODE(0) |
 			A3XX_RB_COPY_CONTROL_GMEM_BASE(0));
-	OUT_RELOCW(ring, fd_resource(ctx->solid_vbuf)->bo, 0x20, 0, -1);  /* RB_COPY_DEST_BASE */
+	OUT_RELOC(ring, fd_resource(ctx->solid_vbuf)->bo, 0x20, 0, -1);  /* RB_COPY_DEST_BASE */
 	OUT_RING(ring, A3XX_RB_COPY_DEST_PITCH_PITCH(128));
 	OUT_RING(ring, A3XX_RB_COPY_DEST_INFO_TILE(LINEAR) |
 			A3XX_RB_COPY_DEST_INFO_FORMAT(RB_R8G8B8A8_UNORM) |
@@ -330,9 +325,9 @@ emit_gmem2mem_surf(struct fd_batch *batch,
 		format = rsc->base.format;
 	}
 
-	struct fdl_slice *slice = fd_resource_slice(rsc, psurf->u.tex.level);
 	uint32_t offset = fd_resource_offset(rsc, psurf->u.tex.level,
 			psurf->u.tex.first_layer);
+	uint32_t pitch = fd_resource_pitch(rsc, psurf->u.tex.level);
 
 	debug_assert(psurf->u.tex.first_layer == psurf->u.tex.last_layer);
 
@@ -344,8 +339,8 @@ emit_gmem2mem_surf(struct fd_batch *batch,
 				 format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT,
 				 A3XX_RB_COPY_CONTROL_DEPTH32_RESOLVE));
 
-	OUT_RELOCW(ring, rsc->bo, offset, 0, -1);    /* RB_COPY_DEST_BASE */
-	OUT_RING(ring, A3XX_RB_COPY_DEST_PITCH_PITCH(slice->pitch));
+	OUT_RELOC(ring, rsc->bo, offset, 0, -1);    /* RB_COPY_DEST_BASE */
+	OUT_RING(ring, A3XX_RB_COPY_DEST_PITCH_PITCH(pitch));
 	OUT_RING(ring, A3XX_RB_COPY_DEST_INFO_TILE(rsc->layout.tile_mode) |
 			A3XX_RB_COPY_DEST_INFO_FORMAT(fd3_pipe2color(format)) |
 			A3XX_RB_COPY_DEST_INFO_COMPONENT_ENABLE(0xf) |
@@ -367,9 +362,6 @@ fd3_emit_tile_gmem2mem(struct fd_batch *batch, const struct fd_tile *tile)
 			.debug = &ctx->debug,
 			.vtx = &ctx->solid_vbuf_state,
 			.prog = &ctx->solid_prog,
-			.key = {
-				.half_precision = true,
-			},
 	};
 	int i;
 
@@ -551,9 +543,6 @@ fd3_emit_tile_mem2gmem(struct fd_batch *batch, const struct fd_tile *tile)
 			.sprite_coord_enable = 1,
 			/* NOTE: They all use the same VP, this is for vtx bufs. */
 			.prog = &ctx->blit_prog[0],
-			.key = {
-				.half_precision = fd_half_precision(pfb),
-			},
 	};
 	float x0, y0, x1, y1;
 	unsigned bin_w = tile->bin_w;
@@ -567,7 +556,7 @@ fd3_emit_tile_mem2gmem(struct fd_batch *batch, const struct fd_tile *tile)
 	y1 = ((float)tile->yoff + bin_h) / ((float)pfb->height);
 
 	OUT_PKT3(ring, CP_MEM_WRITE, 5);
-	OUT_RELOCW(ring, fd_resource(ctx->blit_texcoord_vbuf)->bo, 0, 0, 0);
+	OUT_RELOC(ring, fd_resource(ctx->blit_texcoord_vbuf)->bo, 0, 0, 0);
 	OUT_RING(ring, fui(x0));
 	OUT_RING(ring, fui(y0));
 	OUT_RING(ring, fui(x1));
@@ -680,14 +669,12 @@ fd3_emit_tile_mem2gmem(struct fd_batch *batch, const struct fd_tile *tile)
 			 * components, so half precision is always sufficient.
 			 */
 			emit.prog = &ctx->blit_prog[0];
-			emit.key.half_precision = true;
 		} else {
 			/* Float depth needs special blit shader that writes depth */
 			if (pfb->zsbuf->format == PIPE_FORMAT_Z32_FLOAT)
 				emit.prog = &ctx->blit_z;
 			else
 				emit.prog = &ctx->blit_zs;
-			emit.key.half_precision = false;
 		}
 		emit.fs = NULL;      /* frag shader changed so clear cache */
 		fd3_program_emit(ring, &emit, 1, &pfb->zsbuf);
@@ -740,8 +727,7 @@ fd3_emit_sysmem_prep(struct fd_batch *batch)
 		if (!psurf)
 			continue;
 		struct fd_resource *rsc = fd_resource(psurf->texture);
-		struct fdl_slice *slice = fd_resource_slice(rsc, psurf->u.tex.level);
-		pitch = slice->pitch / rsc->layout.cpp;
+		pitch = fd_resource_pitch(rsc, psurf->u.tex.level) / rsc->layout.cpp;
 	}
 
 	fd3_emit_restore(batch, ring);
@@ -783,7 +769,7 @@ update_vsc_pipe(struct fd_batch *batch)
 	int i;
 
 	OUT_PKT0(ring, REG_A3XX_VSC_SIZE_ADDRESS, 1);
-	OUT_RELOCW(ring, fd3_ctx->vsc_size_mem, 0, 0, 0); /* VSC_SIZE_ADDRESS */
+	OUT_RELOC(ring, fd3_ctx->vsc_size_mem, 0, 0, 0); /* VSC_SIZE_ADDRESS */
 
 	for (i = 0; i < 8; i++) {
 		const struct fd_vsc_pipe *pipe = &gmem->vsc_pipe[i];
@@ -798,7 +784,7 @@ update_vsc_pipe(struct fd_batch *batch)
 				A3XX_VSC_PIPE_CONFIG_Y(pipe->y) |
 				A3XX_VSC_PIPE_CONFIG_W(pipe->w) |
 				A3XX_VSC_PIPE_CONFIG_H(pipe->h));
-		OUT_RELOCW(ring, ctx->vsc_pipe_bo[i], 0, 0, 0);       /* VSC_PIPE[i].DATA_ADDRESS */
+		OUT_RELOC(ring, ctx->vsc_pipe_bo[i], 0, 0, 0);       /* VSC_PIPE[i].DATA_ADDRESS */
 		OUT_RING(ring, fd_bo_size(ctx->vsc_pipe_bo[i]) - 32); /* VSC_PIPE[i].DATA_LENGTH */
 	}
 }
@@ -1035,8 +1021,8 @@ fd3_emit_tile_renderprep(struct fd_batch *batch, const struct fd_tile *tile)
 
 
 		OUT_PKT3(ring, CP_SET_BIN_DATA, 2);
-		OUT_RELOCW(ring, pipe_bo, 0, 0, 0);     /* BIN_DATA_ADDR <- VSC_PIPE[p].DATA_ADDRESS */
-		OUT_RELOCW(ring, fd3_ctx->vsc_size_mem, /* BIN_SIZE_ADDR <- VSC_SIZE_ADDRESS + (p * 4) */
+		OUT_RELOC(ring, pipe_bo, 0, 0, 0);     /* BIN_DATA_ADDR <- VSC_PIPE[p].DATA_ADDRESS */
+		OUT_RELOC(ring, fd3_ctx->vsc_size_mem, /* BIN_SIZE_ADDR <- VSC_SIZE_ADDRESS + (p * 4) */
 				(tile->p * 4), 0, 0);
 	} else {
 		OUT_PKT0(ring, REG_A3XX_PC_VSTREAM_CONTROL, 1);

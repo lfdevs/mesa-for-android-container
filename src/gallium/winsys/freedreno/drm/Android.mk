@@ -27,6 +27,9 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := $(C_SOURCES)
 
+LOCAL_C_INCLUDES := \
+	$(MESA_TOP)/src/freedreno/common
+
 LOCAL_SHARED_LIBRARIES := libdrm_freedreno
 LOCAL_STATIC_LIBRARIES := libfreedreno_registers
 

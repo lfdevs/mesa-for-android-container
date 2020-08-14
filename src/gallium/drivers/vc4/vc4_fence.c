@@ -37,6 +37,7 @@
 #include <libsync.h>
 #include <fcntl.h>
 
+#include "util/os_file.h"
 #include "util/u_inlines.h"
 
 #include "vc4_screen.h"
@@ -111,7 +112,7 @@ vc4_fence_create_fd(struct pipe_context *pctx, struct pipe_fence_handle **pf,
 
         assert(type == PIPE_FD_TYPE_NATIVE_SYNC);
         *fence = vc4_fence_create(vc4->screen, vc4->last_emit_seqno,
-                                  fcntl(fd, F_DUPFD_CLOEXEC, 3));
+                                  os_dupfd_cloexec(fd));
 }
 
 static void
@@ -130,7 +131,7 @@ vc4_fence_get_fd(struct pipe_screen *screen, struct pipe_fence_handle *pfence)
 {
         struct vc4_fence *fence = vc4_fence(pfence);
 
-        return fcntl(fence->fd, F_DUPFD_CLOEXEC, 3);
+        return os_dupfd_cloexec(fence->fd);
 }
 
 int

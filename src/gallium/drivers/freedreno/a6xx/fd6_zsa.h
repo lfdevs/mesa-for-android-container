@@ -34,6 +34,8 @@
 
 #include "freedreno_util.h"
 
+#include "fd6_context.h"
+
 struct fd6_zsa_stateobj {
 	struct pipe_depth_stencil_alpha_state base;
 
@@ -42,10 +44,10 @@ struct fd6_zsa_stateobj {
 	uint32_t rb_stencil_control;
 	uint32_t rb_stencilmask;
 	uint32_t rb_stencilwrmask;
-	uint32_t gras_lrz_cntl;
-	uint32_t rb_lrz_cntl;
-	bool lrz_write;
+
+	struct fd6_lrz_state lrz;
 	bool invalidate_lrz;
+	bool alpha_test;
 
 	struct fd_ringbuffer *stateobj;
 	struct fd_ringbuffer *stateobj_no_alpha;

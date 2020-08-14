@@ -605,7 +605,7 @@ st_copy_buffer_subdata(struct gl_context *ctx,
 
    /* buffer should not already be mapped */
    assert(!_mesa_check_disallowed_mapping(src));
-   assert(!_mesa_check_disallowed_mapping(dst));
+   /* dst can be mapped, just not the same range as the target range */
 
    u_box_1d(readOffset, size, &box);
 

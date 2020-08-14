@@ -165,12 +165,6 @@ void mark_block_wqm(wqm_ctx &ctx, unsigned block_idx)
 
    ctx.branch_wqm[block_idx] = true;
    Block& block = ctx.program->blocks[block_idx];
-   aco_ptr<Instruction>& branch = block.instructions.back();
-
-   if (branch->opcode != aco_opcode::p_branch) {
-      assert(!branch->operands.empty() && branch->operands[0].isTemp());
-      set_needs_wqm(ctx, branch->operands[0].getTemp());
-   }
 
    /* TODO: this sets more branch conditions to WQM than it needs to
     * it should be enough to stop at the "exec mask top level" */
@@ -231,6 +225,11 @@ void get_block_needs(wqm_ctx &ctx, exec_ctx &exec_ctx, Block* block)
             needs = pred_by_exec ? WQM : Unspecified;
             propagate_wqm = true;
          }
+      }
+
+      if (instr->format == Format::PSEUDO_BRANCH && ctx.branch_wqm[block->index]) {
+         needs = WQM;
+         propagate_wqm = true;
       }
 
       if (propagate_wqm) {

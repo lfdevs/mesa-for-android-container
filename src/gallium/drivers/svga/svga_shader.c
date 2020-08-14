@@ -229,22 +229,25 @@ static const enum pipe_swizzle set_XXXY[PIPE_SWIZZLE_MAX] = {
  */
 void
 svga_init_shader_key_common(const struct svga_context *svga,
-                            enum pipe_shader_type shader,
+                            enum pipe_shader_type shader_type,
+                            const struct svga_shader *shader,
                             struct svga_compile_key *key)
 {
    unsigned i, idx = 0;
 
-   assert(shader < ARRAY_SIZE(svga->curr.num_sampler_views));
+   assert(shader_type < ARRAY_SIZE(svga->curr.num_sampler_views));
 
    /* In case the number of samplers and sampler_views doesn't match,
     * loop over the lower of the two counts.
     */
-   key->num_textures = MAX2(svga->curr.num_sampler_views[shader],
-                            svga->curr.num_samplers[shader]);
+   key->num_textures = MAX2(svga->curr.num_sampler_views[shader_type],
+                            svga->curr.num_samplers[shader_type]);
 
    for (i = 0; i < key->num_textures; i++) {
-      struct pipe_sampler_view *view = svga->curr.sampler_views[shader][i];
-      const struct svga_sampler_state *sampler = svga->curr.sampler[shader][i];
+      struct pipe_sampler_view *view = svga->curr.sampler_views[shader_type][i];
+      const struct svga_sampler_state
+         *sampler = svga->curr.sampler[shader_type][i];
+
       if (view) {
          assert(view->texture);
          assert(view->texture->target < (1 << 4)); /* texture_target:4 */
@@ -304,6 +307,12 @@ svga_init_shader_key_common(const struct svga_context *svga,
             if (view->texture->format == PIPE_FORMAT_DXT1_RGB ||
                 view->texture->format == PIPE_FORMAT_DXT1_SRGB)
                swizzle_tab = set_alpha;
+
+            /* Save the compare function as we need to handle
+             * depth compare in the shader.
+             */
+            key->tex[i].compare_mode = sampler->compare_mode;
+            key->tex[i].compare_func = sampler->compare_func;
          }
 
          key->tex[i].swizzle_r = swizzle_tab[view->swizzle_r];
@@ -314,8 +323,10 @@ svga_init_shader_key_common(const struct svga_context *svga,
 
       if (sampler) {
          if (!sampler->normalized_coords) {
-            assert(idx < (1 << 5));  /* width_height_idx:5 bitfield */
-            key->tex[i].width_height_idx = idx++;
+            if (view) {
+               assert(idx < (1 << 5));  /* width_height_idx:5 bitfield */
+               key->tex[i].width_height_idx = idx++;
+	    }
             key->tex[i].unnormalized = TRUE;
             ++key->num_unnormalized_coords;
 
@@ -326,6 +337,9 @@ svga_init_shader_key_common(const struct svga_context *svga,
          }
       }
    }
+
+   key->clamp_vertex_color = svga->curr.rast ?
+                             svga->curr.rast->templ.clamp_vertex_color : 0;
 }
 
 
@@ -380,6 +394,8 @@ define_gb_shader_vgpu9(struct svga_context *svga,
    variant->gb_shader = sws->shader_create(sws, variant->type,
                                            variant->tokens, codeLen);
 
+   svga->hud.shader_mem_used += codeLen;
+
    if (!variant->gb_shader)
       return PIPE_ERROR_OUT_OF_MEMORY;
 
@@ -398,6 +414,7 @@ define_gb_shader_vgpu10(struct svga_context *svga,
 {
    struct svga_winsys_context *swc = svga->swc;
    enum pipe_error ret;
+   unsigned len = codeLen + variant->signatureLen;
 
    /**
     * Shaders in VGPU10 enabled device reside in the device COTable.
@@ -412,7 +429,11 @@ define_gb_shader_vgpu10(struct svga_context *svga,
    /* Create gb memory for the shader and upload the shader code */
    variant->gb_shader = swc->shader_create(swc,
                                            variant->id, variant->type,
-                                           variant->tokens, codeLen);
+                                           variant->tokens, codeLen,
+                                           variant->signature,
+                                           variant->signatureLen);
+
+   svga->hud.shader_mem_used += len;
 
    if (!variant->gb_shader) {
       /* Free the shader ID */
@@ -429,7 +450,8 @@ define_gb_shader_vgpu10(struct svga_context *svga,
     * the shader creation and return an error.
     */
    ret = SVGA3D_vgpu10_DefineAndBindShader(swc, variant->gb_shader,
-                                           variant->id, variant->type, codeLen);
+                                           variant->id, variant->type,
+                                           len);
 
    if (ret != PIPE_OK)
       goto fail;
@@ -511,7 +533,10 @@ svga_set_shader(struct svga_context *svga,
 
    assert(type == SVGA3D_SHADERTYPE_VS ||
           type == SVGA3D_SHADERTYPE_GS ||
-          type == SVGA3D_SHADERTYPE_PS);
+          type == SVGA3D_SHADERTYPE_PS ||
+          type == SVGA3D_SHADERTYPE_HS ||
+          type == SVGA3D_SHADERTYPE_DS ||
+          type == SVGA3D_SHADERTYPE_CS);
 
    if (svga_have_gb_objects(svga)) {
       struct svga_winsys_gb_shader *gbshader =
@@ -533,7 +558,27 @@ svga_set_shader(struct svga_context *svga,
 struct svga_shader_variant *
 svga_new_shader_variant(struct svga_context *svga, enum pipe_shader_type type)
 {
-   struct svga_shader_variant *variant = CALLOC_STRUCT(svga_shader_variant);
+   struct svga_shader_variant *variant;
+
+   switch (type) {
+   case PIPE_SHADER_FRAGMENT:
+      variant = CALLOC(1, sizeof(struct svga_fs_variant));
+      break;
+   case PIPE_SHADER_GEOMETRY:
+      variant = CALLOC(1, sizeof(struct svga_gs_variant));
+      break;
+   case PIPE_SHADER_VERTEX:
+      variant = CALLOC(1, sizeof(struct svga_vs_variant));
+      break;
+   case PIPE_SHADER_TESS_EVAL:
+      variant = CALLOC(1, sizeof(struct svga_tes_variant));
+      break;
+   case PIPE_SHADER_TESS_CTRL:
+      variant = CALLOC(1, sizeof(struct svga_tcs_variant));
+      break;
+   default:
+      return NULL;
+   }
 
    if (variant) {
       variant->type = svga_shader_type(type);
@@ -547,19 +592,11 @@ void
 svga_destroy_shader_variant(struct svga_context *svga,
                             struct svga_shader_variant *variant)
 {
-   enum pipe_error ret = PIPE_OK;
-
    if (svga_have_gb_objects(svga) && variant->gb_shader) {
       if (svga_have_vgpu10(svga)) {
          struct svga_winsys_context *swc = svga->swc;
          swc->shader_destroy(swc, variant->gb_shader);
-         ret = SVGA3D_vgpu10_DestroyShader(svga->swc, variant->id);
-         if (ret != PIPE_OK) {
-            /* flush and try again */
-            svga_context_flush(svga, NULL);
-            ret = SVGA3D_vgpu10_DestroyShader(svga->swc, variant->id);
-            assert(ret == PIPE_OK);
-         }
+         SVGA_RETRY(svga, SVGA3D_vgpu10_DestroyShader(svga->swc, variant->id));
          util_bitmask_clear(svga->shader_id_bm, variant->id);
       }
       else {
@@ -570,17 +607,13 @@ svga_destroy_shader_variant(struct svga_context *svga,
    }
    else {
       if (variant->id != UTIL_BITMASK_INVALID_INDEX) {
-         ret = SVGA3D_DestroyShader(svga->swc, variant->id, variant->type);
-         if (ret != PIPE_OK) {
-            /* flush and try again */
-            svga_context_flush(svga, NULL);
-            ret = SVGA3D_DestroyShader(svga->swc, variant->id, variant->type);
-            assert(ret == PIPE_OK);
-         }
+         SVGA_RETRY(svga, SVGA3D_DestroyShader(svga->swc, variant->id,
+                                               variant->type));
          util_bitmask_clear(svga->shader_id_bm, variant->id);
       }
    }
 
+   FREE(variant->signature);
    FREE((unsigned *)variant->tokens);
    FREE(variant);
 
@@ -612,6 +645,8 @@ svga_rebind_shaders(struct svga_context *svga)
       svga->rebind.flags.vs = 0;
       svga->rebind.flags.gs = 0;
       svga->rebind.flags.fs = 0;
+      svga->rebind.flags.tcs = 0;
+      svga->rebind.flags.tes = 0;
 
       return PIPE_OK;
    }
@@ -636,6 +671,20 @@ svga_rebind_shaders(struct svga_context *svga)
          return ret;
    }
    svga->rebind.flags.fs = 0;
+
+   if (svga->rebind.flags.tcs && hw->tcs && hw->tcs->gb_shader) {
+      ret = swc->resource_rebind(swc, NULL, hw->tcs->gb_shader, SVGA_RELOC_READ);
+      if (ret != PIPE_OK)
+         return ret;
+   }
+   svga->rebind.flags.tcs = 0;
+
+   if (svga->rebind.flags.tes && hw->tes && hw->tes->gb_shader) {
+      ret = swc->resource_rebind(swc, NULL, hw->tes->gb_shader, SVGA_RELOC_READ);
+      if (ret != PIPE_OK)
+         return ret;
+   }
+   svga->rebind.flags.tes = 0;
 
    return PIPE_OK;
 }

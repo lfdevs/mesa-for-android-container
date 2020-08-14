@@ -341,14 +341,6 @@ _mesa_destroy_visual( struct gl_config *vis )
 
 
 /**
- * One-time initialization mutex lock.
- *
- * \sa Used by one_time_init().
- */
-mtx_t OneTimeLock = _MTX_INITIALIZER_NP;
-
-
-/**
  * Calls all the various one-time-fini functions in Mesa
  */
 
@@ -358,6 +350,56 @@ one_time_fini(void)
    glsl_type_singleton_decref();
    _mesa_locale_fini();
 }
+
+/**
+ * Calls all the various one-time-init functions in Mesa
+ */
+
+static void
+one_time_init(void)
+{
+   GLuint i;
+
+   STATIC_ASSERT(sizeof(GLbyte) == 1);
+   STATIC_ASSERT(sizeof(GLubyte) == 1);
+   STATIC_ASSERT(sizeof(GLshort) == 2);
+   STATIC_ASSERT(sizeof(GLushort) == 2);
+   STATIC_ASSERT(sizeof(GLint) == 4);
+   STATIC_ASSERT(sizeof(GLuint) == 4);
+
+   _mesa_locale_init();
+
+   _mesa_one_time_init_extension_overrides();
+
+   _mesa_get_cpu_features();
+
+   for (i = 0; i < 256; i++) {
+      _mesa_ubyte_to_float_color_tab[i] = (float) i / 255.0F;
+   }
+
+   atexit(one_time_fini);
+
+#if defined(DEBUG)
+   if (MESA_VERBOSE != 0) {
+      _mesa_debug(NULL, "Mesa " PACKAGE_VERSION " DEBUG build" MESA_GIT_SHA1 "\n");
+   }
+#endif
+
+   /* Take a glsl type reference for the duration of libGL's life to avoid
+    * unecessary creation/destruction of glsl types.
+    */
+   glsl_type_singleton_init_or_ref();
+
+   _mesa_init_remap_table();
+}
+
+/**
+ * One-time initialization flag
+ *
+ * \sa Used by _mesa_initialize().
+ */
+static once_flag init_once = ONCE_FLAG_INIT;
+
 
 /**
  * Calls all the various one-time-init functions in Mesa.
@@ -371,50 +413,7 @@ one_time_fini(void)
 void
 _mesa_initialize(void)
 {
-   static bool initialized;
-
-   mtx_lock(&OneTimeLock);
-
-   /* truly one-time init */
-   if (!initialized) {
-      GLuint i;
-
-      STATIC_ASSERT(sizeof(GLbyte) == 1);
-      STATIC_ASSERT(sizeof(GLubyte) == 1);
-      STATIC_ASSERT(sizeof(GLshort) == 2);
-      STATIC_ASSERT(sizeof(GLushort) == 2);
-      STATIC_ASSERT(sizeof(GLint) == 4);
-      STATIC_ASSERT(sizeof(GLuint) == 4);
-
-      _mesa_locale_init();
-
-      _mesa_one_time_init_extension_overrides();
-
-      _mesa_get_cpu_features();
-
-      for (i = 0; i < 256; i++) {
-         _mesa_ubyte_to_float_color_tab[i] = (float) i / 255.0F;
-      }
-
-      atexit(one_time_fini);
-
-#if defined(DEBUG)
-      if (MESA_VERBOSE != 0) {
-         _mesa_debug(NULL, "Mesa " PACKAGE_VERSION " DEBUG build" MESA_GIT_SHA1 "\n");
-      }
-#endif
-
-      /* Take a glsl type reference for the duration of libGL's life to avoid
-       * unecessary creation/destruction of glsl types.
-       */
-      glsl_type_singleton_init_or_ref();
-
-      _mesa_init_remap_table();
-   }
-
-   initialized = true;
-
-   mtx_unlock(&OneTimeLock);
+   call_once(&init_once, one_time_init);
 }
 
 
@@ -1318,7 +1317,7 @@ fail:
  * \sa _mesa_initialize_context() and init_attrib_groups().
  */
 void
-_mesa_free_context_data(struct gl_context *ctx)
+_mesa_free_context_data(struct gl_context *ctx, bool destroy_debug_output)
 {
    if (!_mesa_get_current_context()){
       /* No current context, but we may need one in order to delete
@@ -1387,7 +1386,8 @@ _mesa_free_context_data(struct gl_context *ctx)
    /* needs to be after freeing shared state */
    _mesa_free_display_list_data(ctx);
 
-   _mesa_free_errors_data(ctx);
+   if (destroy_debug_output)
+      _mesa_destroy_debug_output(ctx);
 
    free((void *)ctx->Extensions.String);
 
@@ -1421,7 +1421,7 @@ void
 _mesa_destroy_context( struct gl_context *ctx )
 {
    if (ctx) {
-      _mesa_free_context_data(ctx);
+      _mesa_free_context_data(ctx, true);
       free( (void *) ctx );
    }
 }

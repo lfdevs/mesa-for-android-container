@@ -169,7 +169,7 @@ lp_build_extract_soa_chan(struct lp_build_context *bld,
             if(chan_desc.normalized)
                input = lp_build_unsigned_norm_to_float(gallivm, width, type, input);
             else
-               input = LLVMBuildSIToFP(builder, input, bld->vec_type, "");
+               input = LLVMBuildUIToFP(builder, input, bld->vec_type, "");
          }
       }
       else if (chan_desc.pure_integer) {
@@ -209,12 +209,12 @@ lp_build_extract_soa_chan(struct lp_build_context *bld,
             LLVMValueRef scale_val = lp_build_const_vec(gallivm, type, scale);
             input = LLVMBuildFMul(builder, input, scale_val, "");
             /*
-             * The formula above will produce value below -1.0 for most negative
-             * value but everything seems happy with that hence disable for now.
+             * The formula above will produce value below -1.0 for most negative values.
+             * compliance requires clamping it.
+             * GTF-GL45.gtf33.GL3Tests.vertex_type_2_10_10_10_rev.vertex_type_2_10_10_10_rev_conversion.
              */
-            if (0)
-               input = lp_build_max(bld, input,
-                                    lp_build_const_vec(gallivm, type, -1.0f));
+            input = lp_build_max(bld, input,
+                                 lp_build_const_vec(gallivm, type, -1.0f));
          }
       }
       else if (chan_desc.pure_integer) {
@@ -837,6 +837,16 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
 
       tmp_type = type;
       tmp_type.length = 4;
+
+      if (type.length == 1) {
+         LLVMValueRef fetch = lp_build_fetch_rgba_aos(gallivm, format_desc, tmp_type,
+                                                      aligned, base_ptr, offset,
+                                                      i, j, cache);
+
+         for (k = 0; k < 4; k++)
+            rgba_out[k] = LLVMBuildExtractElement(gallivm->builder, fetch, lp_build_const_int32(gallivm, k), "");
+         return;
+      }
 
       /*
        * Note that vector transpose can be worse compared to insert/extract

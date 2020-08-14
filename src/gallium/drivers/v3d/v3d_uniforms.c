@@ -312,6 +312,15 @@ v3d_write_uniforms(struct v3d_context *v3d, struct v3d_job *job,
                                      v3d->zsa->base.alpha.ref_value);
                         break;
 
+                case QUNIFORM_LINE_WIDTH:
+                        cl_aligned_f(&uniforms,
+                                     v3d->rasterizer->base.line_width);
+                        break;
+
+                case QUNIFORM_AA_LINE_WIDTH:
+                        cl_aligned_f(&uniforms, v3d_get_real_line_width(v3d));
+                        break;
+
                 case QUNIFORM_UBO_ADDR: {
                         uint32_t unit = v3d_unit_data_get_unit(data);
                         /* Constant buffer 0 may be a system memory pointer,
@@ -462,6 +471,11 @@ v3d_set_shader_uniform_dirty_flags(struct v3d_compiled_shader *shader)
 
                 case QUNIFORM_ALPHA_REF:
                         dirty |= VC5_DIRTY_ZSA;
+                        break;
+
+                case QUNIFORM_LINE_WIDTH:
+                case QUNIFORM_AA_LINE_WIDTH:
+                        dirty |= VC5_DIRTY_RASTERIZER;
                         break;
 
                 case QUNIFORM_NUM_WORK_GROUPS:

@@ -58,25 +58,23 @@ find_continue_block(nir_loop *loop)
 static bool
 phi_has_constant_from_outside_and_one_from_inside_loop(nir_phi_instr *phi,
                                                        const nir_block *entry_block,
-                                                       uint32_t *entry_val,
-                                                       uint32_t *continue_val)
+                                                       bool *entry_val,
+                                                       bool *continue_val)
 {
    /* We already know we have exactly one continue */
    assert(exec_list_length(&phi->srcs) == 2);
 
-   *entry_val = 0;
-   *continue_val = 0;
+   *entry_val = false;
+   *continue_val = false;
 
     nir_foreach_phi_src(src, phi) {
-       assert(src->src.is_ssa);
-       nir_const_value *const_src = nir_src_as_const_value(src->src);
-       if (!const_src)
-          return false;
+       if (!nir_src_is_const(src->src))
+         return false;
 
        if (src->pred != entry_block) {
-          *continue_val = const_src[0].u32;
+          *continue_val = nir_src_as_bool(src->src);
        } else {
-          *entry_val = const_src[0].u32;
+          *entry_val = nir_src_as_bool(src->src);
        }
     }
 
@@ -169,7 +167,7 @@ opt_peel_loop_initial_if(nir_loop *loop)
    if (cond->parent_instr->block != header_block)
       return false;
 
-   uint32_t entry_val = 0, continue_val = 0;
+   bool entry_val = false, continue_val = false;
    if (!phi_has_constant_from_outside_and_one_from_inside_loop(cond_phi,
                                                                prev_block,
                                                                &entry_val,
@@ -665,7 +663,7 @@ opt_simplify_bcsel_of_phi(nir_builder *b, nir_loop *loop)
       nir_phi_instr *const cond_phi =
          nir_instr_as_phi(bcsel->src[0].src.ssa->parent_instr);
 
-      uint32_t entry_val = 0, continue_val = 0;
+      bool entry_val = false, continue_val = false;
       if (!phi_has_constant_from_outside_and_one_from_inside_loop(cond_phi,
                                                                   prev_block,
                                                                   &entry_val,
@@ -1464,9 +1462,7 @@ nir_opt_if(nir_shader *shader, bool aggressive_last_continue)
       if (preserve) {
          nir_metadata_preserve(function->impl, nir_metadata_none);
       } else {
-   #ifndef NDEBUG
-         function->impl->valid_metadata &= ~nir_metadata_not_properly_reset;
-   #endif
+         nir_metadata_preserve(function->impl, nir_metadata_all);
       }
    }
 

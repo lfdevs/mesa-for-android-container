@@ -39,8 +39,6 @@ struct fd3_format {
 	boolean present;
 };
 
-#define RB_NONE ~0
-
 /* vertex + texture */
 #define VT(pipe, fmt, rbfmt, swapfmt) \
 	[PIPE_FORMAT_ ## pipe] = { \
@@ -55,7 +53,7 @@ struct fd3_format {
 #define _T(pipe, fmt, rbfmt, swapfmt) \
 	[PIPE_FORMAT_ ## pipe] = { \
 		.present = 1, \
-		.vtx = ~0, \
+		.vtx = VFMT_NONE, \
 		.tex = TFMT_ ## fmt, \
 		.rb = RB_ ## rbfmt, \
 		.swap = swapfmt \
@@ -66,7 +64,7 @@ struct fd3_format {
 	[PIPE_FORMAT_ ## pipe] = { \
 		.present = 1, \
 		.vtx = VFMT_ ## fmt, \
-		.tex = ~0, \
+		.tex = TFMT_NONE, \
 		.rb = RB_ ## rbfmt, \
 		.swap = swapfmt \
 	}
@@ -295,7 +293,7 @@ enum a3xx_vtx_fmt
 fd3_pipe2vtx(enum pipe_format format)
 {
 	if (!formats[format].present)
-		return ~0;
+		return VFMT_NONE;
 	return formats[format].vtx;
 }
 
@@ -303,7 +301,7 @@ enum a3xx_tex_fmt
 fd3_pipe2tex(enum pipe_format format)
 {
 	if (!formats[format].present)
-		return ~0;
+		return TFMT_NONE;
 	return formats[format].tex;
 }
 
@@ -311,7 +309,7 @@ enum a3xx_color_fmt
 fd3_pipe2color(enum pipe_format format)
 {
 	if (!formats[format].present)
-		return ~0;
+		return RB_NONE;
 	return formats[format].rb;
 }
 
@@ -321,27 +319,6 @@ fd3_pipe2swap(enum pipe_format format)
 	if (!formats[format].present)
 		return WZYX;
 	return formats[format].swap;
-}
-
-enum a3xx_tex_fetchsize
-fd3_pipe2fetchsize(enum pipe_format format)
-{
-	if (format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
-		format = PIPE_FORMAT_Z32_FLOAT;
-	else if (util_format_description(format)->layout == UTIL_FORMAT_LAYOUT_RGTC)
-		format = PIPE_FORMAT_R8G8B8A8_UNORM;
-	switch (util_format_get_blocksizebits(format) / util_format_get_blockwidth(format)) {
-	case 8: return TFETCH_1_BYTE;
-	case 16: return TFETCH_2_BYTE;
-	case 32: return TFETCH_4_BYTE;
-	case 64: return TFETCH_8_BYTE;
-	case 128: return TFETCH_16_BYTE;
-	default:
-		debug_printf("Unknown block size for format %s: %d\n",
-					 util_format_name(format),
-					 util_format_get_blocksizebits(format));
-		return TFETCH_DISABLE;
-	}
 }
 
 enum a3xx_color_fmt

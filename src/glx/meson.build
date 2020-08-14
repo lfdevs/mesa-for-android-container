@@ -136,9 +136,10 @@ libglx = static_library(
   [files_libglx, glx_generated],
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_glapi, inc_loader],
   c_args : [
-    c_vis_args, gl_lib_cargs,
+    gl_lib_cargs,
     '-DGL_LIB_NAME="lib@0@.so.@1@"'.format(gl_lib_name, gl_lib_version.split('.')[0]),
   ],
+  gnu_symbol_visibility : 'hidden',
   link_with : [
     libloader, libloader_dri3_helper,
     extra_libs_libglx,

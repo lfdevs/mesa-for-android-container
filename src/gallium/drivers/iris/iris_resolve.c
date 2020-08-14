@@ -54,7 +54,8 @@ disable_rb_aux_buffer(struct iris_context *ice,
 
    /* We only need to worry about color compression and fast clears. */
    if (tex_res->aux.usage != ISL_AUX_USAGE_CCS_D &&
-       tex_res->aux.usage != ISL_AUX_USAGE_CCS_E)
+       tex_res->aux.usage != ISL_AUX_USAGE_CCS_E &&
+       tex_res->aux.usage != ISL_AUX_USAGE_GEN12_CCS_E)
       return false;
 
    for (unsigned i = 0; i < cso_fb->nr_cbufs; i++) {
@@ -102,13 +103,13 @@ resolve_sampler_views(struct iris_context *ice,
                                   "for sampling");
          }
 
-         iris_resource_prepare_texture(ice, batch, res, isv->view.format,
+         iris_resource_prepare_texture(ice, res, isv->view.format,
                                        isv->view.base_level, isv->view.levels,
                                        isv->view.base_array_layer,
                                        isv->view.array_len);
       }
 
-      iris_cache_flush_for_read(batch, res->bo);
+      iris_emit_buffer_barrier_for(batch, res->bo, IRIS_DOMAIN_OTHER_READ);
    }
 }
 
@@ -140,13 +141,13 @@ resolve_image_views(struct iris_context *ice,
          enum isl_aux_usage aux_usage =
             iris_image_view_aux_usage(ice, pview, info);
 
-         iris_resource_prepare_access(ice, batch, res,
+         iris_resource_prepare_access(ice, res,
                                       pview->u.tex.level, 1,
                                       pview->u.tex.first_layer, num_layers,
                                       aux_usage, false);
       }
 
-      iris_cache_flush_for_read(batch, res->bo);
+      iris_emit_buffer_barrier_for(batch, res->bo, IRIS_DOMAIN_OTHER_READ);
    }
 }
 
@@ -167,10 +168,10 @@ iris_predraw_resolve_inputs(struct iris_context *ice,
    struct iris_shader_state *shs = &ice->state.shaders[stage];
    const struct shader_info *info = iris_get_shader_info(ice, stage);
 
-   uint64_t dirty = (IRIS_DIRTY_BINDINGS_VS << stage) |
-                    (consider_framebuffer ? IRIS_DIRTY_BINDINGS_FS : 0);
+   uint64_t stage_dirty = (IRIS_STAGE_DIRTY_BINDINGS_VS << stage) |
+      (consider_framebuffer ? IRIS_STAGE_DIRTY_BINDINGS_FS : 0);
 
-   if (ice->state.dirty & dirty) {
+   if (ice->state.stage_dirty & stage_dirty) {
       resolve_sampler_views(ice, batch, shs, info, draw_aux_buffer_disabled,
                             consider_framebuffer);
       resolve_image_views(ice, batch, shs, info, draw_aux_buffer_disabled,
@@ -204,11 +205,13 @@ iris_predraw_resolve_framebuffer(struct iris_context *ice,
                                         zs_surf->u.tex.level,
                                         zs_surf->u.tex.first_layer,
                                         num_layers);
-            iris_cache_flush_for_depth(batch, z_res->bo);
+            iris_emit_buffer_barrier_for(batch, z_res->bo,
+                                         IRIS_DOMAIN_DEPTH_WRITE);
          }
 
          if (s_res) {
-            iris_cache_flush_for_depth(batch, s_res->bo);
+            iris_emit_buffer_barrier_for(batch, s_res->bo,
+                                         IRIS_DOMAIN_DEPTH_WRITE);
          }
       }
    }
@@ -219,7 +222,7 @@ iris_predraw_resolve_framebuffer(struct iris_context *ice,
             struct iris_surface *surf = (void *) cso_fb->cbufs[i];
             struct iris_resource *res = (void *) cso_fb->cbufs[i]->texture;
 
-            iris_resource_prepare_texture(ice, batch, res, surf->view.format,
+            iris_resource_prepare_texture(ice, res, surf->view.format,
                                           surf->view.base_level, 1,
                                           surf->view.base_array_layer,
                                           surf->view.array_len);
@@ -227,7 +230,7 @@ iris_predraw_resolve_framebuffer(struct iris_context *ice,
       }
    }
 
-   if (ice->state.dirty & (IRIS_DIRTY_BINDINGS_FS | IRIS_DIRTY_BLEND_STATE)) {
+   if (ice->state.stage_dirty & IRIS_STAGE_DIRTY_BINDINGS_FS) {
       for (unsigned i = 0; i < cso_fb->nr_cbufs; i++) {
          struct iris_surface *surf = (void *) cso_fb->cbufs[i];
          if (!surf)
@@ -237,13 +240,13 @@ iris_predraw_resolve_framebuffer(struct iris_context *ice,
 
          enum isl_aux_usage aux_usage =
             iris_resource_render_aux_usage(ice, res, surf->view.format,
-                                           ice->state.blend_enables & (1u << i),
                                            draw_aux_buffer_disabled[i]);
 
          if (ice->state.draw_aux_usage[i] != aux_usage) {
             ice->state.draw_aux_usage[i] = aux_usage;
             /* XXX: Need to track which bindings to make dirty */
-            ice->state.dirty |= IRIS_ALL_DIRTY_BINDINGS;
+            ice->state.dirty |= IRIS_DIRTY_RENDER_BUFFER;
+            ice->state.stage_dirty |= IRIS_ALL_STAGE_DIRTY_BINDINGS;
          }
 
          iris_resource_prepare_render(ice, batch, res, surf->view.base_level,
@@ -294,9 +297,6 @@ iris_postdraw_update_resolve_tracking(struct iris_context *ice,
                                        zs_surf->u.tex.first_layer, num_layers,
                                        ice->state.depth_writes_enabled);
          }
-
-         if (ice->state.depth_writes_enabled)
-            iris_depth_cache_add_bo(batch, z_res->bo);
       }
 
       if (s_res) {
@@ -305,14 +305,11 @@ iris_postdraw_update_resolve_tracking(struct iris_context *ice,
                                        zs_surf->u.tex.first_layer, num_layers,
                                        s_res->aux.usage);
          }
-
-         if (ice->state.stencil_writes_enabled)
-            iris_depth_cache_add_bo(batch, s_res->bo);
       }
    }
 
    bool may_have_resolved_color =
-      ice->state.dirty & (IRIS_DIRTY_BINDINGS_FS | IRIS_DIRTY_BLEND_STATE);
+      ice->state.stage_dirty & IRIS_STAGE_DIRTY_BINDINGS_FS;
 
    for (unsigned i = 0; i < cso_fb->nr_cbufs; i++) {
       struct iris_surface *surf = (void *) cso_fb->cbufs[i];
@@ -321,9 +318,6 @@ iris_postdraw_update_resolve_tracking(struct iris_context *ice,
 
       struct iris_resource *res = (void *) surf->base.texture;
       enum isl_aux_usage aux_usage = ice->state.draw_aux_usage[i];
-
-      iris_render_cache_add_bo(batch, res->bo, surf->view.format,
-                               aux_usage);
 
       if (may_have_resolved_color) {
          union pipe_surface_desc *desc = &surf->base.u;
@@ -334,57 +328,6 @@ iris_postdraw_update_resolve_tracking(struct iris_context *ice,
                                      aux_usage);
       }
    }
-}
-
-/**
- * Clear the cache-tracking sets.
- */
-void
-iris_cache_sets_clear(struct iris_batch *batch)
-{
-   hash_table_foreach(batch->cache.render, render_entry)
-      _mesa_hash_table_remove(batch->cache.render, render_entry);
-
-   set_foreach(batch->cache.depth, depth_entry)
-      _mesa_set_remove(batch->cache.depth, depth_entry);
-}
-
-/**
- * Emits an appropriate flush for a BO if it has been rendered to within the
- * same batchbuffer as a read that's about to be emitted.
- *
- * The GPU has separate, incoherent caches for the render cache and the
- * sampler cache, along with other caches.  Usually data in the different
- * caches don't interact (e.g. we don't render to our driver-generated
- * immediate constant data), but for render-to-texture in FBOs we definitely
- * do.  When a batchbuffer is flushed, the kernel will ensure that everything
- * necessary is flushed before another use of that BO, but for reuse from
- * different caches within a batchbuffer, it's all our responsibility.
- */
-void
-iris_flush_depth_and_render_caches(struct iris_batch *batch)
-{
-   iris_emit_pipe_control_flush(batch,
-                                "cache tracker: render-to-texture",
-                                PIPE_CONTROL_DEPTH_CACHE_FLUSH |
-                                PIPE_CONTROL_RENDER_TARGET_FLUSH |
-                                PIPE_CONTROL_CS_STALL);
-
-   iris_emit_pipe_control_flush(batch,
-                                "cache tracker: render-to-texture",
-                                PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |
-                                PIPE_CONTROL_CONST_CACHE_INVALIDATE);
-
-   iris_cache_sets_clear(batch);
-}
-
-void
-iris_cache_flush_for_read(struct iris_batch *batch,
-                          struct iris_bo *bo)
-{
-   if (_mesa_hash_table_search_pre_hashed(batch->cache.render, bo->hash, bo) ||
-       _mesa_set_search_pre_hashed(batch->cache.depth, bo->hash, bo))
-      iris_flush_depth_and_render_caches(batch);
 }
 
 static void *
@@ -399,8 +342,7 @@ iris_cache_flush_for_render(struct iris_batch *batch,
                             enum isl_format format,
                             enum isl_aux_usage aux_usage)
 {
-   if (_mesa_set_search_pre_hashed(batch->cache.depth, bo->hash, bo))
-      iris_flush_depth_and_render_caches(batch);
+   iris_emit_buffer_barrier_for(batch, bo, IRIS_DOMAIN_RENDER_WRITE);
 
    /* Check to see if this bo has been used by a previous rendering operation
     * but with a different format or aux usage.  If it has, flush the render
@@ -427,43 +369,16 @@ iris_cache_flush_for_render(struct iris_batch *batch,
     */
    struct hash_entry *entry =
       _mesa_hash_table_search_pre_hashed(batch->cache.render, bo->hash, bo);
-   if (entry && entry->data != format_aux_tuple(format, aux_usage))
-      iris_flush_depth_and_render_caches(batch);
-}
-
-void
-iris_render_cache_add_bo(struct iris_batch *batch,
-                         struct iris_bo *bo,
-                         enum isl_format format,
-                         enum isl_aux_usage aux_usage)
-{
-#ifndef NDEBUG
-   struct hash_entry *entry =
-      _mesa_hash_table_search_pre_hashed(batch->cache.render, bo->hash, bo);
-   if (entry) {
-      /* Otherwise, someone didn't do a flush_for_render and that would be
-       * very bad indeed.
-       */
-      assert(entry->data == format_aux_tuple(format, aux_usage));
+   if (!entry) {
+      _mesa_hash_table_insert_pre_hashed(batch->cache.render, bo->hash, bo,
+                                         format_aux_tuple(format, aux_usage));
+   } else if (entry->data != format_aux_tuple(format, aux_usage)) {
+      iris_emit_pipe_control_flush(batch,
+                                   "cache tracker: render format mismatch",
+                                   PIPE_CONTROL_RENDER_TARGET_FLUSH |
+                                   PIPE_CONTROL_CS_STALL);
+      entry->data = format_aux_tuple(format, aux_usage);
    }
-#endif
-
-   _mesa_hash_table_insert_pre_hashed(batch->cache.render, bo->hash, bo,
-                                      format_aux_tuple(format, aux_usage));
-}
-
-void
-iris_cache_flush_for_depth(struct iris_batch *batch,
-                           struct iris_bo *bo)
-{
-   if (_mesa_hash_table_search_pre_hashed(batch->cache.render, bo->hash, bo))
-      iris_flush_depth_and_render_caches(batch);
-}
-
-void
-iris_depth_cache_add_bo(struct iris_batch *batch, struct iris_bo *bo)
-{
-   _mesa_set_add_pre_hashed(batch->cache.depth, bo->hash, bo);
 }
 
 static void
@@ -496,6 +411,7 @@ iris_resolve_color(struct iris_context *ice,
    iris_emit_end_of_pipe_sync(batch, "color resolve: pre-flush",
                               PIPE_CONTROL_RENDER_TARGET_FLUSH);
 
+   iris_batch_sync_region_start(batch);
    struct blorp_batch blorp_batch;
    blorp_batch_init(&ice->blorp, &blorp_batch, batch, 0);
    /* On Gen >= 12, Stencil buffer with lossless compression needs to be
@@ -506,14 +422,14 @@ iris_resolve_color(struct iris_context *ice,
                            1, resolve_op);
    } else {
       blorp_ccs_resolve(&blorp_batch, &surf, level, layer, 1,
-                        isl_format_srgb_to_linear(res->surf.format),
-                        resolve_op);
+                        res->surf.format, resolve_op);
    }
    blorp_batch_finish(&blorp_batch);
 
    /* See comment above */
    iris_emit_end_of_pipe_sync(batch, "color resolve: post-flush",
                               PIPE_CONTROL_RENDER_TARGET_FLUSH);
+   iris_batch_sync_region_end(batch);
 }
 
 static void
@@ -531,34 +447,15 @@ iris_mcs_partial_resolve(struct iris_context *ice,
    struct blorp_surf surf;
    iris_blorp_surf_for_resource(&batch->screen->isl_dev, &surf,
                                 &res->base, res->aux.usage, 0, true);
+   iris_emit_buffer_barrier_for(batch, res->bo, IRIS_DOMAIN_RENDER_WRITE);
 
    struct blorp_batch blorp_batch;
+   iris_batch_sync_region_start(batch);
    blorp_batch_init(&ice->blorp, &blorp_batch, batch, 0);
-   blorp_mcs_partial_resolve(&blorp_batch, &surf,
-                             isl_format_srgb_to_linear(res->surf.format),
+   blorp_mcs_partial_resolve(&blorp_batch, &surf, res->surf.format,
                              start_layer, num_layers);
    blorp_batch_finish(&blorp_batch);
-}
-
-
-/**
- * Return true if the format that will be used to access the resource is
- * CCS_E-compatible with the resource's linear/non-sRGB format.
- *
- * Why use the linear format?  Well, although the resourcemay be specified
- * with an sRGB format, the usage of that color space/format can be toggled.
- * Since our HW tends to support more linear formats than sRGB ones, we use
- * this format variant for check for CCS_E compatibility.
- */
-static bool
-format_ccs_e_compat_with_resource(const struct gen_device_info *devinfo,
-                                  const struct iris_resource *res,
-                                  enum isl_format access_format)
-{
-   assert(res->aux.usage == ISL_AUX_USAGE_CCS_E);
-
-   enum isl_format isl_format = isl_format_srgb_to_linear(res->surf.format);
-   return isl_formats_are_ccs_e_compatible(devinfo, isl_format, access_format);
+   iris_batch_sync_region_end(batch);
 }
 
 bool
@@ -678,6 +575,8 @@ iris_hiz_exec(struct iris_context *ice,
 
    iris_batch_maybe_flush(batch, 1500);
 
+   iris_batch_sync_region_start(batch);
+
    struct blorp_surf surf;
    iris_blorp_surf_for_resource(&batch->screen->isl_dev, &surf,
                                 &res->base, res->aux.usage, level, true);
@@ -709,6 +608,8 @@ iris_hiz_exec(struct iris_context *ice,
                                 "hiz op: post flush",
                                 PIPE_CONTROL_DEPTH_CACHE_FLUSH |
                                 PIPE_CONTROL_DEPTH_STALL);
+
+   iris_batch_sync_region_end(batch);
 }
 
 static bool
@@ -800,13 +701,17 @@ iris_has_color_unresolved(const struct iris_resource *res,
 
 void
 iris_resource_prepare_access(struct iris_context *ice,
-                             struct iris_batch *batch,
                              struct iris_resource *res,
                              uint32_t start_level, uint32_t num_levels,
                              uint32_t start_layer, uint32_t num_layers,
                              enum isl_aux_usage aux_usage,
                              bool fast_clear_supported)
 {
+   /* We can't do resolves on the compute engine, so awkwardly, we have to
+    * do them on the render batch...
+    */
+   struct iris_batch *batch = &ice->batches[IRIS_BATCH_RENDER];
+
    const uint32_t clamped_levels =
       miptree_level_range_length(res, start_level, num_levels);
    for (uint32_t l = 0; l < clamped_levels; l++) {
@@ -899,44 +804,10 @@ iris_resource_set_aux_state(struct iris_context *ice,
       if (res->aux.state[level][start_layer + a] != aux_state) {
          res->aux.state[level][start_layer + a] = aux_state;
          /* XXX: Need to track which bindings to make dirty */
-         ice->state.dirty |= IRIS_ALL_DIRTY_BINDINGS;
+         ice->state.dirty |= IRIS_DIRTY_RENDER_BUFFER;
+         ice->state.stage_dirty |= IRIS_ALL_STAGE_DIRTY_BINDINGS;
       }
    }
-}
-
-/* On Gen9 color buffers may be compressed by the hardware (lossless
- * compression). There are, however, format restrictions and care needs to be
- * taken that the sampler engine is capable for re-interpreting a buffer with
- * format different the buffer was originally written with.
- *
- * For example, SRGB formats are not compressible and the sampler engine isn't
- * capable of treating RGBA_UNORM as SRGB_ALPHA. In such a case the underlying
- * color buffer needs to be resolved so that the sampling surface can be
- * sampled as non-compressed (i.e., without the auxiliary MCS buffer being
- * set).
- */
-static bool
-can_texture_with_ccs(const struct gen_device_info *devinfo,
-                     struct pipe_debug_callback *dbg,
-                     const struct iris_resource *res,
-                     enum isl_format view_format)
-{
-   if (res->aux.usage != ISL_AUX_USAGE_CCS_E)
-      return false;
-
-   if (!format_ccs_e_compat_with_resource(devinfo, res, view_format)) {
-      const struct isl_format_layout *res_fmtl =
-         isl_format_get_layout(res->surf.format);
-      const struct isl_format_layout *view_fmtl =
-         isl_format_get_layout(view_format);
-
-      perf_debug(dbg, "Incompatible sampling format (%s) for CCS (%s)\n",
-                 view_fmtl->name, res_fmtl->name);
-
-      return false;
-   }
-
-   return true;
 }
 
 enum isl_aux_usage
@@ -967,8 +838,8 @@ iris_resource_texture_aux_usage(struct iris_context *ice,
    case ISL_AUX_USAGE_STC_CCS:
       return res->aux.usage;
 
-   case ISL_AUX_USAGE_CCS_D:
    case ISL_AUX_USAGE_CCS_E:
+   case ISL_AUX_USAGE_GEN12_CCS_E:
       /* If we don't have any unresolved color, report an aux usage of
        * ISL_AUX_USAGE_NONE.  This way, texturing won't even look at the
        * aux surface and we can save some bandwidth.
@@ -977,8 +848,20 @@ iris_resource_texture_aux_usage(struct iris_context *ice,
                                      0, INTEL_REMAINING_LAYERS))
          return ISL_AUX_USAGE_NONE;
 
-      if (can_texture_with_ccs(devinfo, &ice->dbg, res, view_format))
-         return ISL_AUX_USAGE_CCS_E;
+      /* On Gen9 color buffers may be compressed by the hardware (lossless
+       * compression). There are, however, format restrictions and care needs
+       * to be taken that the sampler engine is capable for re-interpreting a
+       * buffer with format different the buffer was originally written with.
+       *
+       * For example, SRGB formats are not compressible and the sampler engine
+       * isn't capable of treating RGBA_UNORM as SRGB_ALPHA. In such a case
+       * the underlying color buffer needs to be resolved so that the sampling
+       * surface can be sampled as non-compressed (i.e., without the auxiliary
+       * MCS buffer being set).
+       */
+      if (isl_formats_are_ccs_e_compatible(devinfo, res->surf.format,
+                                           view_format))
+         return res->aux.usage;
       break;
 
    default:
@@ -996,8 +879,6 @@ iris_image_view_aux_usage(struct iris_context *ice,
    if (!info)
       return ISL_AUX_USAGE_NONE;
 
-   struct iris_screen *screen = (void *) ice->ctx.screen;
-   const struct gen_device_info *devinfo = &screen->devinfo;
    struct iris_resource *res = (void *) pview->resource;
 
    enum isl_format view_format = iris_image_view_get_format(ice, pview);
@@ -1007,9 +888,8 @@ iris_image_view_aux_usage(struct iris_context *ice,
    bool uses_atomic_load_store =
       ice->shaders.uncompiled[info->stage]->uses_atomic_load_store;
 
-   if ((devinfo->gen == 12 && aux_usage == ISL_AUX_USAGE_CCS_E) &&
-       !uses_atomic_load_store)
-      return ISL_AUX_USAGE_CCS_E;
+   if (aux_usage == ISL_AUX_USAGE_GEN12_CCS_E && !uses_atomic_load_store)
+      return ISL_AUX_USAGE_GEN12_CCS_E;
 
    return ISL_AUX_USAGE_NONE;
 }
@@ -1033,7 +913,6 @@ isl_formats_are_fast_clear_compatible(enum isl_format a, enum isl_format b)
 
 void
 iris_resource_prepare_texture(struct iris_context *ice,
-                              struct iris_batch *batch,
                               struct iris_resource *res,
                               enum isl_format view_format,
                               uint32_t start_level, uint32_t num_levels,
@@ -1051,16 +930,34 @@ iris_resource_prepare_texture(struct iris_context *ice,
    if (!isl_formats_are_fast_clear_compatible(res->surf.format, view_format))
       clear_supported = false;
 
-   iris_resource_prepare_access(ice, batch, res, start_level, num_levels,
+   iris_resource_prepare_access(ice, res, start_level, num_levels,
                                 start_layer, num_layers,
                                 aux_usage, clear_supported);
+}
+
+/* Whether or not rendering a color value with either format results in the
+ * same pixel. This can return false negatives.
+ */
+bool
+iris_render_formats_color_compatible(enum isl_format a, enum isl_format b,
+                                     union isl_color_value color)
+{
+   if (a == b)
+      return true;
+
+   /* A difference in color space doesn't matter for 0/1 values. */
+   if (isl_format_srgb_to_linear(a) == isl_format_srgb_to_linear(b) &&
+       isl_color_value_is_zero_one(color, a)) {
+      return true;
+   }
+
+   return false;
 }
 
 enum isl_aux_usage
 iris_resource_render_aux_usage(struct iris_context *ice,
                                struct iris_resource *res,
                                enum isl_format render_format,
-                               bool blend_enabled,
                                bool draw_aux_disabled)
 {
    struct iris_screen *screen = (void *) ice->ctx.screen;
@@ -1076,22 +973,31 @@ iris_resource_render_aux_usage(struct iris_context *ice,
 
    case ISL_AUX_USAGE_CCS_D:
    case ISL_AUX_USAGE_CCS_E:
-      /* Gen9+ hardware technically supports non-0/1 clear colors with sRGB
-       * formats.  However, there are issues with blending where it doesn't
-       * properly apply the sRGB curve to the clear color when blending.
+   case ISL_AUX_USAGE_GEN12_CCS_E:
+      /* Disable CCS for some cases of texture-view rendering. On gen12, HW
+       * may convert some subregions of shader output to fast-cleared blocks
+       * if CCS is enabled and the shader output matches the clear color.
+       * Existing fast-cleared blocks are correctly interpreted by the clear
+       * color and the resource format (see can_fast_clear_color). To avoid
+       * gaining new fast-cleared blocks that can't be interpreted by the
+       * resource format (and to avoid misinterpreting existing ones), shut
+       * off CCS when the interpretation of the clear color differs between
+       * the render_format and the resource format.
        */
-      if (devinfo->gen >= 9 && blend_enabled &&
-          isl_format_is_srgb(render_format) &&
-          !isl_color_value_is_zero_one(res->aux.clear_color, render_format))
+      if (!iris_render_formats_color_compatible(render_format,
+                                                res->surf.format,
+                                                res->aux.clear_color)) {
          return ISL_AUX_USAGE_NONE;
+      }
 
-      if (res->aux.usage == ISL_AUX_USAGE_CCS_E &&
-          format_ccs_e_compat_with_resource(devinfo, res, render_format))
-         return ISL_AUX_USAGE_CCS_E;
-
-      /* Otherwise, we try to fall back to CCS_D */
-      if (isl_format_supports_ccs_d(devinfo, render_format))
+      if (res->aux.usage == ISL_AUX_USAGE_CCS_D)
          return ISL_AUX_USAGE_CCS_D;
+
+      if (isl_formats_are_ccs_e_compatible(devinfo, res->surf.format,
+                                           render_format)) {
+         return res->aux.usage;
+      }
+      /* fallthrough */
 
    default:
       return ISL_AUX_USAGE_NONE;
@@ -1105,7 +1011,7 @@ iris_resource_prepare_render(struct iris_context *ice,
                              uint32_t start_layer, uint32_t layer_count,
                              enum isl_aux_usage aux_usage)
 {
-   iris_resource_prepare_access(ice, batch, res, level, 1, start_layer,
+   iris_resource_prepare_access(ice, res, level, 1, start_layer,
                                 layer_count, aux_usage,
                                 isl_aux_usage_has_fast_clears(aux_usage));
 }
@@ -1126,7 +1032,7 @@ iris_resource_prepare_depth(struct iris_context *ice,
                             struct iris_resource *res, uint32_t level,
                             uint32_t start_layer, uint32_t layer_count)
 {
-   iris_resource_prepare_access(ice, batch, res, level, 1, start_layer,
+   iris_resource_prepare_access(ice, res, level, 1, start_layer,
                                 layer_count, res->aux.usage, !!res->aux.bo);
 }
 

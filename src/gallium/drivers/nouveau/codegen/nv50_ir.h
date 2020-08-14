@@ -67,8 +67,10 @@ enum operation
    OP_AND,
    OP_OR,
    OP_XOR,
+   OP_LOP3_LUT,
    OP_SHL,
    OP_SHR,
+   OP_SHF,
    OP_MAX,
    OP_MIN,
    OP_SAT, // CLAMP(f32, 0.0, 1.0)
@@ -116,6 +118,7 @@ enum operation
    OP_PINTERP,
    OP_EMIT,    // emit vertex
    OP_RESTART, // restart primitive
+   OP_FINAL, // finish emitting primitives
    OP_TEX,
    OP_TXB, // texture bias
    OP_TXL, // texure lod
@@ -151,7 +154,10 @@ enum operation
    OP_INSBF,  // insert first src1[8:15] bits of src0 into src2 at src1[0:7]
    OP_EXTBF,  // place bits [K,K+N) of src0 into dst, src1 = 0xNNKK
    OP_BFIND,  // find highest/lowest set bit
+   OP_BREV,   // bitfield reverse
+   OP_BMSK,   // bitfield mask
    OP_PERMT,  // dst = bytes from src2,src0 selected by src1 (nvc0's src order)
+   OP_SGXT,
    OP_ATOM,
    OP_BAR,    // execution barrier, sources = { id, thread count, predicate }
    OP_VADD,   // byte/word vector operations
@@ -167,6 +173,7 @@ enum operation
    OP_SHFL, // warp shuffle
    OP_VOTE,
    OP_BUFQ, // buffer query
+   OP_WARPSYNC,
    OP_LAST
 };
 
@@ -254,10 +261,28 @@ enum operation
 #define NV50_IR_SUBOP_VOTE_ALL 0
 #define NV50_IR_SUBOP_VOTE_ANY 1
 #define NV50_IR_SUBOP_VOTE_UNI 2
+#define NV50_IR_SUBOP_LOP3_LUT_SRC0 0xf0
+#define NV50_IR_SUBOP_LOP3_LUT_SRC1 0xcc
+#define NV50_IR_SUBOP_LOP3_LUT_SRC2 0xaa
+#define NV50_IR_SUBOP_LOP3_LUT(exp) ({         \
+      uint8_t a = NV50_IR_SUBOP_LOP3_LUT_SRC0; \
+      uint8_t b = NV50_IR_SUBOP_LOP3_LUT_SRC1; \
+      uint8_t c = NV50_IR_SUBOP_LOP3_LUT_SRC2; \
+      (uint8_t)(exp);                          \
+})
+#define NV50_IR_SUBOP_BMSK_C (0 << 0)
+#define NV50_IR_SUBOP_BMSK_W (1 << 0)
 
 #define NV50_IR_SUBOP_MINMAX_LOW  1
 #define NV50_IR_SUBOP_MINMAX_MED  2
 #define NV50_IR_SUBOP_MINMAX_HIGH 3
+
+#define NV50_IR_SUBOP_SHF_L  (0 << 0)
+#define NV50_IR_SUBOP_SHF_R  (1 << 0)
+#define NV50_IR_SUBOP_SHF_LO (0 << 1)
+#define NV50_IR_SUBOP_SHF_HI (1 << 1)
+#define NV50_IR_SUBOP_SHF_C  (0 << 2)
+#define NV50_IR_SUBOP_SHF_W  (1 << 2)
 
 // xmad(src0, src1, 0) << 16 + src2
 #define NV50_IR_SUBOP_XMAD_PSL (1 << 0)
@@ -900,7 +925,7 @@ public:
 
    uint16_t subOp; // quadop, 1 for mul-high, etc.
 
-   unsigned encSize    : 4; // encoding size in bytes
+   unsigned encSize    : 5; // encoding size in bytes
    unsigned saturate   : 1; // to [0.0f, 1.0f]
    unsigned join       : 1; // converge control flow (use OP_JOIN until end)
    unsigned fixed      : 1; // prevent dead code elimination
@@ -958,7 +983,7 @@ public:
    class Target
    {
    public:
-      Target(TexTarget targ = TEX_TARGET_2D) : target(targ) { }
+      Target(TexTarget targ = TEX_TARGET_1D) : target(targ) { }
 
       const char *getName() const { return descTable[target].name; }
       unsigned int getArgCount() const { return descTable[target].argc; }
@@ -1316,6 +1341,7 @@ public:
 
    int maxGPR;
    bool fp64;
+   bool persampleInvocation;
 
    MemoryPool mem_Instruction;
    MemoryPool mem_CmpInstruction;

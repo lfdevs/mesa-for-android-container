@@ -28,7 +28,7 @@ files_tegra = files(
 libtegra = static_library(
   'tegra',
   files_tegra,
-  c_args : [c_vis_args],
+  gnu_symbol_visibility : 'hidden',
   include_directories : [
     inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_gallium_drivers,
     inc_gallium_winsys,

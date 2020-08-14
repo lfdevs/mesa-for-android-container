@@ -152,7 +152,7 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
    for (unsigned i = 0; i < num_fetches; ++i) {
       LLVMValueRef voffset = LLVMConstInt(ctx->ac.i32, fetch_stride * i, 0);
       fetches[i] = ac_build_buffer_load_format(&ctx->ac, vb_desc, vertex_index, voffset,
-                                               channels_per_fetch, 0, true);
+                                               channels_per_fetch, 0, true, false);
    }
 
    if (num_fetches == 1 && channels_per_fetch > 1) {
@@ -235,7 +235,7 @@ void si_llvm_load_vs_inputs(struct si_shader_context *ctx, struct nir_shader *ni
 {
    uint64_t processed_inputs = 0;
 
-   nir_foreach_variable (variable, &nir->inputs) {
+   nir_foreach_shader_in_variable (variable, nir) {
       unsigned attrib_count = glsl_count_attribute_slots(variable->type, true);
       unsigned input_idx = variable->data.driver_location;
       unsigned loc = variable->data.location;
@@ -1013,7 +1013,7 @@ void si_llvm_init_vs_callbacks(struct si_shader_context *ctx, bool ngg_cull_shad
    else if (shader->key.opt.vs_as_prim_discard_cs)
       ctx->abi.emit_outputs = si_llvm_emit_prim_discard_cs_epilogue;
    else if (ngg_cull_shader)
-      ctx->abi.emit_outputs = gfx10_emit_ngg_culling_epilogue_4x_wave32;
+      ctx->abi.emit_outputs = gfx10_emit_ngg_culling_epilogue;
    else if (shader->key.as_ngg)
       ctx->abi.emit_outputs = gfx10_emit_ngg_epilogue;
    else

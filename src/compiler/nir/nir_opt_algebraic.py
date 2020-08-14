@@ -121,6 +121,8 @@ optimizations = [
    (('usadd_4x8', a, ~0), ~0),
    (('~fadd', ('fmul', a, b), ('fmul', a, c)), ('fmul', a, ('fadd', b, c))),
    (('iadd', ('imul', a, b), ('imul', a, c)), ('imul', a, ('iadd', b, c))),
+   (('iand', ('ior', a, b), ('ior', a, c)), ('ior', a, ('iand', b, c))),
+   (('ior', ('iand', a, b), ('iand', a, c)), ('iand', a, ('ior', b, c))),
    (('~fadd', ('fneg', a), a), 0.0),
    (('iadd', ('ineg', a), a), 0),
    (('iadd', ('ineg', a), ('iadd', a, b)), b),
@@ -543,9 +545,17 @@ optimizations.extend([
    (('fmax', a, ('fneg', a)), ('fabs', a)),
    (('imax', a, ('ineg', a)), ('iabs', a)),
    (('~fmax', ('fabs', a), 0.0), ('fabs', a)),
-   (('~fmin', ('fmax', a, 0.0), 1.0), ('fsat', a), '!options->lower_fsat'),
+   (('fmin', ('fmax', a, 0.0), 1.0), ('fsat', a), '!options->lower_fsat'),
+   # fmax(fmin(a, 1.0), 0.0) is inexact because it returns 1.0 on NaN, while
+   # fsat(a) returns 0.0.
    (('~fmax', ('fmin', a, 1.0), 0.0), ('fsat', a), '!options->lower_fsat'),
+   # fmin(fmax(a, -1.0), 0.0) is inexact because it returns -1.0 on NaN, while
+   # fneg(fsat(fneg(a))) returns -0.0 on NaN.
    (('~fmin', ('fmax', a, -1.0),  0.0), ('fneg', ('fsat', ('fneg', a))), '!options->lower_fsat'),
+   # fmax(fmin(a, 0.0), -1.0) is inexact because it returns 0.0 on NaN, while
+   # fneg(fsat(fneg(a))) returns -0.0 on NaN. This only matters if
+   # SignedZeroInfNanPreserve is set, but we don't currently have any way of
+   # representing this in the optimizations other than the usual ~.
    (('~fmax', ('fmin', a,  0.0), -1.0), ('fneg', ('fsat', ('fneg', a))), '!options->lower_fsat'),
    (('fsat', ('fsign', a)), ('b2f', ('flt', 0.0, a))),
    (('fsat', ('b2f', a)), ('b2f', a)),
@@ -557,8 +567,11 @@ optimizations.extend([
    (('fmin', ('fmax', ('fmin', ('fmax', a, b), c), b), c), ('fmin', ('fmax', a, b), c)),
    (('imin', ('imax', ('imin', ('imax', a, b), c), b), c), ('imin', ('imax', a, b), c)),
    (('umin', ('umax', ('umin', ('umax', a, b), c), b), c), ('umin', ('umax', a, b), c)),
+   # Both the left and right patterns are "b" when isnan(a), so this is exact.
    (('fmax', ('fsat', a), '#b@32(is_zero_to_one)'), ('fsat', ('fmax', a, b))),
-   (('fmin', ('fsat', a), '#b@32(is_zero_to_one)'), ('fsat', ('fmin', a, b))),
+   # The left pattern is 0.0 when isnan(a) (because fmin(fsat(NaN), b) ->
+   # fmin(0.0, b)) while the right one is "b", so this optimization is inexact.
+   (('~fmin', ('fsat', a), '#b@32(is_zero_to_one)'), ('fsat', ('fmin', a, b))),
 
    # If a in [0,b] then b-a is also in [0,b].  Since b in [0,1], max(b-a, 0) =
    # fsat(b-a).
@@ -635,8 +648,10 @@ optimizations.extend([
    (('ine', ('ineg', ('b2i32', 'a@1')), ('ineg', ('b2i32', 'b@1'))), ('ine', a, b)),
    (('b2i32', ('ine', 'a@1', 'b@1')), ('b2i32', ('ixor', a, b))),
 
-   (('iand', ('ieq', 'a@32', 0), ('ieq', 'b@32', 0)), ('ieq', ('ior', a, b), 0), '!options->lower_bitops'),
-   (('ior',  ('ine', 'a@32', 0), ('ine', 'b@32', 0)), ('ine', ('ior', a, b), 0), '!options->lower_bitops'),
+   (('iand', ('ieq', 'a@32', 0), ('ieq', 'b@32', 0)), ('ieq', ('umax', a, b), 0)),
+   (('ior',  ('ieq', 'a@32', 0), ('ieq', 'b@32', 0)), ('ieq', ('umin', a, b), 0)),
+   (('iand', ('ine', 'a@32', 0), ('ine', 'b@32', 0)), ('ine', ('umin', a, b), 0)),
+   (('ior',  ('ine', 'a@32', 0), ('ine', 'b@32', 0)), ('ine', ('umax', a, b), 0)),
 
    # This pattern occurs coutresy of __flt64_nonnan in the soft-fp64 code.
    # The first part of the iand comes from the !__feq64_nonnan.
@@ -738,6 +753,8 @@ optimizations.extend([
    (('feq', ('fneg', a), a), ('feq', a, 0.0)),
    # Emulating booleans
    (('imul', ('b2i', 'a@1'), ('b2i', 'b@1')), ('b2i', ('iand', a, b))),
+   (('iand', ('b2i', 'a@1'), ('b2i', 'b@1')), ('b2i', ('iand', a, b))),
+   (('ior', ('b2i', 'a@1'), ('b2i', 'b@1')), ('b2i', ('ior', a, b))),
    (('fmul', ('b2f', 'a@1'), ('b2f', 'b@1')), ('b2f', ('iand', a, b))),
    (('fsat', ('fadd', ('b2f', 'a@1'), ('b2f', 'b@1'))), ('b2f', ('ior', a, b))),
    (('iand', 'a@bool32', 1.0), ('b2f', a)),
@@ -848,6 +865,8 @@ optimizations.extend([
    # D3D Boolean emulation
    (('bcsel', a, -1, 0), ('ineg', ('b2i', 'a@1'))),
    (('bcsel', a, 0, -1), ('ineg', ('b2i', ('inot', a)))),
+   (('bcsel', a, 1, 0), ('b2i', 'a@1')),
+   (('bcsel', a, 0, 1), ('b2i', ('inot', a))),
    (('iand', ('ineg', ('b2i', 'a@1')), ('ineg', ('b2i', 'b@1'))),
     ('ineg', ('b2i', ('iand', a, b)))),
    (('ior', ('ineg', ('b2i','a@1')), ('ineg', ('b2i', 'b@1'))),
@@ -885,12 +904,24 @@ optimizations.extend([
    (('~f2u32', ('i2f', 'a@32')), a),
    (('~f2u32', ('u2f', 'a@32')), a),
 
-   # Conversions from float16 to float32 and back can always be removed
+   # Conversions from 16 bits to 32 bits and back can always be removed
    (('f2f16', ('f2f32', 'a@16')), a),
    (('f2fmp', ('f2f32', 'a@16')), a),
-   # Conversions to float16 would be lossy so they should only be removed if
+   (('i2i16', ('i2i32', 'a@16')), a),
+   (('i2imp', ('i2i32', 'a@16')), a),
+   (('u2u16', ('u2u32', 'a@16')), a),
+   (('u2ump', ('u2u32', 'a@16')), a),
+   (('f2f16', ('b2f32', 'a@1')), ('b2f16', a)),
+   (('f2fmp', ('b2f32', 'a@1')), ('b2f16', a)),
+   (('i2i16', ('b2i32', 'a@1')), ('b2i16', a)),
+   (('i2imp', ('b2i32', 'a@1')), ('b2i16', a)),
+   (('u2u16', ('b2i32', 'a@1')), ('b2i16', a)),
+   (('u2ump', ('b2i32', 'a@1')), ('b2i16', a)),
+   # Conversions to 16 bits would be lossy so they should only be removed if
    # the instruction was generated by the precision lowering pass.
    (('f2f32', ('f2fmp', 'a@32')), a),
+   (('i2i32', ('i2imp', 'a@32')), a),
+   (('u2u32', ('u2ump', 'a@32')), a),
 
    (('ffloor', 'a(is_integral)'), a),
    (('fceil', 'a(is_integral)'), a),
@@ -968,8 +999,13 @@ optimizations.extend([
    # Packing and then unpacking does nothing
    (('unpack_64_2x32_split_x', ('pack_64_2x32_split', a, b)), a),
    (('unpack_64_2x32_split_y', ('pack_64_2x32_split', a, b)), b),
+   (('unpack_64_2x32', ('pack_64_2x32_split', a, b)), ('vec2', a, b)),
+   (('unpack_64_2x32', ('pack_64_2x32', a)), a),
    (('pack_64_2x32_split', ('unpack_64_2x32_split_x', a),
                            ('unpack_64_2x32_split_y', a)), a),
+   (('pack_64_2x32', ('vec2', ('unpack_64_2x32_split_x', a),
+                              ('unpack_64_2x32_split_y', a))), a),
+   (('pack_64_2x32', ('unpack_64_2x32', a)), a),
 
    # Comparing two halves of an unpack separately.  While this optimization
    # should be correct for non-constant values, it's less obvious that it's
@@ -988,6 +1024,27 @@ optimizations.extend([
    (('ishr', 'a@64', 56), ('extract_i8', a, 7), '!options->lower_extract_byte'),
    (('iand', 0xff, a), ('extract_u8', a, 0), '!options->lower_extract_byte'),
 
+   (('ubfe', a,  0, 8), ('extract_u8', a, 0), '!options->lower_extract_byte'),
+   (('ubfe', a,  8, 8), ('extract_u8', a, 1), '!options->lower_extract_byte'),
+   (('ubfe', a, 16, 8), ('extract_u8', a, 2), '!options->lower_extract_byte'),
+   (('ubfe', a, 24, 8), ('extract_u8', a, 3), '!options->lower_extract_byte'),
+   (('ibfe', a,  0, 8), ('extract_i8', a, 0), '!options->lower_extract_byte'),
+   (('ibfe', a,  8, 8), ('extract_i8', a, 1), '!options->lower_extract_byte'),
+   (('ibfe', a, 16, 8), ('extract_i8', a, 2), '!options->lower_extract_byte'),
+   (('ibfe', a, 24, 8), ('extract_i8', a, 3), '!options->lower_extract_byte'),
+
+    # Word extraction
+   (('ushr', ('ishl', 'a@32', 16), 16), ('extract_u16', a, 0), '!options->lower_extract_word'),
+   (('ushr', 'a@32', 16), ('extract_u16', a, 1), '!options->lower_extract_word'),
+   (('ishr', ('ishl', 'a@32', 16), 16), ('extract_i16', a, 0), '!options->lower_extract_word'),
+   (('ishr', 'a@32', 16), ('extract_i16', a, 1), '!options->lower_extract_word'),
+   (('iand', 0xffff, a), ('extract_u16', a, 0), '!options->lower_extract_word'),
+
+   (('ubfe', a,  0, 16), ('extract_u16', a, 0), '!options->lower_extract_word'),
+   (('ubfe', a, 16, 16), ('extract_u16', a, 1), '!options->lower_extract_word'),
+   (('ibfe', a,  0, 16), ('extract_i16', a, 0), '!options->lower_extract_word'),
+   (('ibfe', a, 16, 16), ('extract_i16', a, 1), '!options->lower_extract_word'),
+
    # Useless masking before unpacking
    (('unpack_half_2x16_split_x', ('iand', a, 0xffff)), ('unpack_half_2x16_split_x', a)),
    (('unpack_32_2x16_split_x', ('iand', a, 0xffff)), ('unpack_32_2x16_split_x', a)),
@@ -995,6 +1052,11 @@ optimizations.extend([
    (('unpack_half_2x16_split_y', ('iand', a, 0xffff0000)), ('unpack_half_2x16_split_y', a)),
    (('unpack_32_2x16_split_y', ('iand', a, 0xffff0000)), ('unpack_32_2x16_split_y', a)),
    (('unpack_64_2x32_split_y', ('iand', a, 0xffffffff00000000)), ('unpack_64_2x32_split_y', a)),
+
+   (('unpack_half_2x16_split_x', ('extract_u16', a, 0)), ('unpack_half_2x16_split_x', a)),
+   (('unpack_half_2x16_split_x', ('extract_u16', a, 1)), ('unpack_half_2x16_split_y', a)),
+   (('unpack_32_2x16_split_x', ('extract_u16', a, 0)), ('unpack_32_2x16_split_x', a)),
+   (('unpack_32_2x16_split_x', ('extract_u16', a, 1)), ('unpack_32_2x16_split_y', a)),
 
    # Optimize half packing
    (('ishl', ('pack_half_2x16', ('vec2', a, 0)), 16), ('pack_half_2x16', ('vec2', 0, a))),
@@ -1004,6 +1066,13 @@ optimizations.extend([
     ('pack_half_2x16', ('vec2', a, b))),
    (('ior', ('pack_half_2x16', ('vec2', a, 0)), ('pack_half_2x16', ('vec2', 0, b))),
     ('pack_half_2x16', ('vec2', a, b))),
+
+   (('ishl', ('pack_half_2x16_split', a, 0), 16), ('pack_half_2x16_split', 0, a)),
+   (('ushr', ('pack_half_2x16_split', 0, a), 16), ('pack_half_2x16_split', a, 0)),
+   (('extract_u16', ('pack_half_2x16_split', 0, a), 1), ('pack_half_2x16_split', a, 0)),
+
+   (('iadd', ('pack_half_2x16_split', a, 0), ('pack_half_2x16_split', 0, b)), ('pack_half_2x16_split', a, b)),
+   (('ior',  ('pack_half_2x16_split', a, 0), ('pack_half_2x16_split', 0, b)), ('pack_half_2x16_split', a, b)),
 ])
 
 # After the ('extract_u8', a, 0) pattern, above, triggers, there will be
@@ -1023,13 +1092,6 @@ for op in ('extract_u8', 'extract_i8'):
    optimizations.extend([((op, ('ishl', 'a@64', 56 - 8 * i), 7), (op, a, i)) for i in range(6, -1, -1)])
 
 optimizations.extend([
-    # Word extraction
-   (('ushr', ('ishl', 'a@32', 16), 16), ('extract_u16', a, 0), '!options->lower_extract_word'),
-   (('ushr', 'a@32', 16), ('extract_u16', a, 1), '!options->lower_extract_word'),
-   (('ishr', ('ishl', 'a@32', 16), 16), ('extract_i16', a, 0), '!options->lower_extract_word'),
-   (('ishr', 'a@32', 16), ('extract_i16', a, 1), '!options->lower_extract_word'),
-   (('iand', 0xffff, a), ('extract_u16', a, 0), '!options->lower_extract_word'),
-
    # Subtracts
    (('ussub_4x8', a, 0), a),
    (('ussub_4x8', a, ~0), 0),
@@ -1075,6 +1137,13 @@ optimizations.extend([
    (('bcsel', ('ine', a, 0), ('ufind_msb', a), -1), ('ufind_msb', a)),
 
    (('bcsel', ('ine', a, -1), ('ifind_msb', a), -1), ('ifind_msb', a)),
+
+   (('~fmul', ('bcsel(is_used_once)', c, -1.0, 1.0), b), ('bcsel', c, ('fneg', b), b)),
+   (('~fmul', ('bcsel(is_used_once)', c, 1.0, -1.0), b), ('bcsel', c, b, ('fneg', b))),
+   (('~bcsel', ('flt', a, 0.0), ('fneg', a), a), ('fabs', a)),
+
+   (('bcsel', a, ('bcsel', b, c, d), d), ('bcsel', ('iand', a, b), c, d)),
+   (('bcsel', a, b, ('bcsel', c, b, d)), ('bcsel', ('ior', a, c), b, d)),
 
    (('fmin3@64', a, b, c), ('fmin@64', a, ('fmin@64', b, c))),
    (('fmax3@64', a, b, c), ('fmax@64', a, ('fmax@64', b, c))),
@@ -1205,6 +1274,24 @@ optimizations.extend([
    (('bfm', 'bits', ('iand', 31, 'offset')), ('bfm', 'bits', 'offset')),
    (('bfm', ('iand', 31, 'bits'), 'offset'), ('bfm', 'bits', 'offset')),
 
+   # Section 8.8 (Integer Functions) of the GLSL 4.60 spec says:
+   #
+   #    If bits is zero, the result will be zero.
+   #
+   # These patterns prevent other patterns from generating invalid results
+   # when count is zero.
+   (('ubfe', a, b, 0), 0),
+   (('ibfe', a, b, 0), 0),
+
+   (('ubfe', a, 0, '#b'), ('iand', a, ('ushr', 0xffffffff, ('ineg', b)))),
+
+   (('b2i32', ('i2b', ('ubfe', a, b, 1))), ('ubfe', a, b, 1)),
+   (('b2i32', ('i2b', ('ibfe', a, b, 1))), ('ubfe', a, b, 1)), # ubfe in the replacement is correct
+   (('ine', ('ibfe(is_used_once)', a, '#b', '#c'), 0), ('ine', ('iand', a, ('ishl', ('ushr', 0xffffffff, ('ineg', c)), b)), 0)),
+   (('ieq', ('ibfe(is_used_once)', a, '#b', '#c'), 0), ('ieq', ('iand', a, ('ishl', ('ushr', 0xffffffff, ('ineg', c)), b)), 0)),
+   (('ine', ('ubfe(is_used_once)', a, '#b', '#c'), 0), ('ine', ('iand', a, ('ishl', ('ushr', 0xffffffff, ('ineg', c)), b)), 0)),
+   (('ieq', ('ubfe(is_used_once)', a, '#b', '#c'), 0), ('ieq', ('iand', a, ('ishl', ('ushr', 0xffffffff, ('ineg', c)), b)), 0)),
+
    (('ibitfield_extract', 'value', 'offset', 'bits'),
     ('bcsel', ('ieq', 0, 'bits'),
      0,
@@ -1318,7 +1405,11 @@ optimizations.extend([
     'options->lower_pack_split'),
 
    (('isign', a), ('imin', ('imax', a, -1), 1), 'options->lower_isign'),
+   (('imin', ('imax', a, -1), 1), ('isign', a), '!options->lower_isign'),
+   (('imax', ('imin', a, 1), -1), ('isign', a), '!options->lower_isign'),
    (('fsign', a), ('fsub', ('b2f', ('flt', 0.0, a)), ('b2f', ('flt', a, 0.0))), 'options->lower_fsign'),
+   (('fadd', ('b2f32', ('flt', 0.0, 'a@32')), ('fneg', ('b2f32', ('flt', 'a@32', 0.0)))), ('fsign', a), '!options->lower_fsign'),
+   (('iadd', ('b2i32', ('flt', 0, 'a@32')), ('ineg', ('b2i32', ('flt', 'a@32', 0)))), ('f2i32', ('fsign', a)), '!options->lower_fsign'),
 
    # Address/offset calculations:
    # Drivers supporting imul24 should use the nir_lower_amul() pass, this
@@ -1699,11 +1790,51 @@ for op in ['fpow']:
         (('bcsel', a, (op, b, c), (op + '(is_used_once)', d, c)), (op, ('bcsel', a, b, d), c)),
     ]
 
-for op in ['frcp', 'frsq', 'fsqrt', 'fexp2', 'flog2', 'fsign', 'fsin', 'fcos']:
+for op in ['frcp', 'frsq', 'fsqrt', 'fexp2', 'flog2', 'fsign', 'fsin', 'fcos', 'fneg', 'fabs', 'fsign']:
     optimizations += [
-        (('bcsel', a, (op + '(is_used_once)', b), (op, c)), (op, ('bcsel', a, b, c))),
-        (('bcsel', a, (op, b), (op + '(is_used_once)', c)), (op, ('bcsel', a, b, c))),
+        (('bcsel', c, (op + '(is_used_once)', a), (op + '(is_used_once)', b)), (op, ('bcsel', c, a, b))),
     ]
+
+for op in ['ineg', 'iabs', 'inot', 'isign']:
+    optimizations += [
+        ((op, ('bcsel', c, '#a', '#b')), ('bcsel', c, (op, a), (op, b))),
+    ]
+
+# This section contains optimizations to propagate downsizing conversions of
+# constructed vectors into vectors of downsized components. Whether this is
+# useful depends on the SIMD semantics of the backend. On a true SIMD machine,
+# this reduces the register pressure of the vector itself and often enables the
+# conversions to be eliminated via other algebraic rules or constant folding.
+# In the worst case on a SIMD architecture, the propagated conversions may be
+# revectorized via nir_opt_vectorize so instruction count is minimally
+# impacted.
+#
+# On a machine with SIMD-within-a-register only, this actually
+# counterintuitively hurts instruction count. These machines are the same that
+# require vectorize_vec2_16bit, so we predicate the optimizations on that flag
+# not being set.
+#
+# Finally for scalar architectures, there should be no difference in generated
+# code since it all ends up scalarized at the end, but it might minimally help
+# compile-times.
+
+for i in range(2, 4 + 1):
+   for T in ('f', 'u', 'i'):
+      vec_inst = ('vec' + str(i),)
+
+      indices = ['a', 'b', 'c', 'd']
+      suffix_in = tuple((indices[j] + '@32') for j in range(i))
+
+      to_16 = '{}2{}16'.format(T, T)
+      to_mp = '{}2{}mp'.format(T, T)
+
+      out_16 = tuple((to_16, indices[j]) for j in range(i))
+      out_mp = tuple((to_mp, indices[j]) for j in range(i))
+
+      optimizations  += [
+         ((to_16, vec_inst + suffix_in), vec_inst + out_16, '!options->vectorize_vec2_16bit'),
+         ((to_mp, vec_inst + suffix_in), vec_inst + out_mp, '!options->vectorize_vec2_16bit')
+      ]
 
 # This section contains "late" optimizations that should be run before
 # creating ffmas and calling regular optimizations for the final time.
@@ -1869,10 +2000,44 @@ late_optimizations = [
    (('~fadd', ('ffma(is_used_once)', a, b, ('fmul', 'c(is_not_const_and_not_fsign)', 'd(is_not_const_and_not_fsign)') ), 'e(is_not_const)'),
     ('ffma', a, b, ('ffma', c, d, e)), '(info->stage != MESA_SHADER_VERTEX && info->stage != MESA_SHADER_GEOMETRY) && !options->intel_vec4'),
 
-   # Convert f2fmp instructions to concrete f2f16 instructions. At this point
+   # Convert *2*mp instructions to concrete *2*16 instructions. At this point
    # any conversions that could have been removed will have been removed in
    # nir_opt_algebraic so any remaining ones are required.
    (('f2fmp', a), ('f2f16', a)),
+   (('i2imp', a), ('i2i16', a)),
+   (('u2ump', a), ('u2u16', a)),
+
+   # Section 8.8 (Integer Functions) of the GLSL 4.60 spec says:
+   #
+   #    If bits is zero, the result will be zero.
+   #
+   # These prevent the next two lowerings generating incorrect results when
+   # count is zero.
+   (('ubfe', a, b, 0), 0),
+   (('ibfe', a, b, 0), 0),
+
+   # On Intel GPUs, BFE is a 3-source instruction.  Like all 3-source
+   # instructions on Intel GPUs, it cannot have an immediate values as
+   # sources.  There are also limitations on source register strides.  As a
+   # result, it is very easy for 3-source instruction combined with either
+   # loads of immediate values or copies from weird register strides to be
+   # more expensive than the primitive instructions it represents.
+   (('ubfe', a, '#b', '#c'), ('iand', ('ushr', 0xffffffff, ('ineg', c)), ('ushr', a, b)), 'options->lower_bfe_with_two_constants'),
+
+   # b is the lowest order bit to be extracted and c is the number of bits to
+   # extract.  The inner shift removes the bits above b + c by shifting left
+   # 32 - (b + c).  ishl only sees the low 5 bits of the shift count, which is
+   # -(b + c).  The outer shift moves the bit that was at b to bit zero.
+   # After the first shift, that bit is now at b + (32 - (b + c)) or 32 - c.
+   # This means that it must be shifted right by 32 - c or -c bits.
+   (('ibfe', a, '#b', '#c'), ('ishr', ('ishl', a, ('ineg', ('iadd', b, c))), ('ineg', c)), 'options->lower_bfe_with_two_constants'),
+
+   # Clean up no-op shifts that may result from the bfe lowerings.
+   (('ishl', a, 0), a),
+   (('ishl', a, -32), a),
+   (('ishr', a, 0), a),
+   (('ishr', a, -32), a),
+   (('ushr', a, 0), a),
 ]
 
 for op in ['fadd']:

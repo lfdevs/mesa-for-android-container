@@ -33,9 +33,10 @@ emit_load_param_base(nir_builder *b, nir_intrinsic_op op)
    return &result->dest.ssa;
 }
 
-static int get_tcs_varying_offset(exec_list *io, unsigned index)
+static int get_tcs_varying_offset(nir_shader *nir, nir_variable_mode mode,
+                                  unsigned index)
 {
-   nir_foreach_variable(var, io){
+   nir_foreach_variable_with_modes(var, nir, mode) {
       if (var->data.driver_location == index) {
          switch (var->data.location) {
          case VARYING_SLOT_POS:
@@ -92,7 +93,7 @@ emil_lsd_in_addr(nir_builder *b, nir_ssa_def *base, nir_ssa_def *patch_id, nir_i
       addr = r600_umad_24(b, nir_channel(b, base, 1),
                           op->src[0].ssa, addr);
 
-   auto offset = nir_imm_int(b, get_tcs_varying_offset(&b->shader->inputs, nir_intrinsic_base(op)));
+   auto offset = nir_imm_int(b, get_tcs_varying_offset(b->shader, nir_var_shader_in, nir_intrinsic_base(op)));
 
    auto idx2 = nir_src_as_const_value(op->src[1]);
    if (!idx2 || idx2->u32 != 0)
@@ -102,7 +103,7 @@ emil_lsd_in_addr(nir_builder *b, nir_ssa_def *base, nir_ssa_def *patch_id, nir_i
 }
 
 static nir_ssa_def *
-emil_lsd_out_addr(nir_builder *b, nir_ssa_def *base, nir_ssa_def *patch_id, nir_intrinsic_instr *op, exec_list *io, int src_offset)
+emil_lsd_out_addr(nir_builder *b, nir_ssa_def *base, nir_ssa_def *patch_id, nir_intrinsic_instr *op, nir_variable_mode mode, int src_offset)
 {
 
    nir_ssa_def *addr1 = r600_umad_24(b, nir_channel(b, base, 0),
@@ -111,7 +112,7 @@ emil_lsd_out_addr(nir_builder *b, nir_ssa_def *base, nir_ssa_def *patch_id, nir_
    nir_ssa_def *addr2 = r600_umad_24(b, nir_channel(b, base, 1),
                                      op->src[src_offset].ssa, addr1);
 
-   int offset = get_tcs_varying_offset(io, nir_intrinsic_base(op));
+   int offset = get_tcs_varying_offset(b->shader, mode, nir_intrinsic_base(op));
    return nir_iadd(b, nir_iadd(b, addr2,
                                nir_ishl(b, op->src[src_offset + 1].ssa, nir_imm_int(b,4))),
                                nir_imm_int(b, offset));
@@ -183,10 +184,10 @@ emit_store_lds(nir_builder *b, nir_intrinsic_instr *op, nir_ssa_def *addr)
 }
 
 static nir_ssa_def *
-emil_tcs_io_offset(nir_builder *b, nir_ssa_def *addr, nir_intrinsic_instr *op, exec_list *io, int src_offset)
+emil_tcs_io_offset(nir_builder *b, nir_ssa_def *addr, nir_intrinsic_instr *op, nir_variable_mode mode, int src_offset)
 {
 
-   int offset = get_tcs_varying_offset(io, nir_intrinsic_base(op));
+   int offset = get_tcs_varying_offset(b->shader, mode, nir_intrinsic_base(op));
    return nir_iadd(b, nir_iadd(b, addr,
                                nir_ishl(b, op->src[src_offset].ssa, nir_imm_int(b,4))),
                                nir_imm_int(b, offset));
@@ -241,18 +242,18 @@ r600_lower_tess_io_impl(nir_builder *b, nir_instr *instr, enum pipe_prim_type pr
       nir_ssa_def *addr =
             b->shader->info.stage == MESA_SHADER_TESS_CTRL ?
                emil_lsd_in_addr(b, load_in_param_base, rel_patch_id, op) :
-               emil_lsd_out_addr(b, load_in_param_base, rel_patch_id, op, &b->shader->inputs, 0);
+               emil_lsd_out_addr(b, load_in_param_base, rel_patch_id, op, nir_var_shader_in, 0);
       replace_load_instr(b, op, addr);
       return true;
    }
    case nir_intrinsic_store_per_vertex_output: {
-      nir_ssa_def *addr = emil_lsd_out_addr(b, load_out_param_base, rel_patch_id, op, &b->shader->outputs, 1);
+      nir_ssa_def *addr = emil_lsd_out_addr(b, load_out_param_base, rel_patch_id, op, nir_var_shader_out, 1);
       emit_store_lds(b, op, addr);
       nir_instr_remove(instr);
       return true;
    }
    case nir_intrinsic_load_per_vertex_output: {
-      nir_ssa_def *addr = emil_lsd_out_addr(b, load_out_param_base, rel_patch_id, op, &b->shader->outputs, 0);
+      nir_ssa_def *addr = emil_lsd_out_addr(b, load_out_param_base, rel_patch_id, op, nir_var_shader_out, 0);
       replace_load_instr(b, op, addr);
       return true;
    }
@@ -262,20 +263,20 @@ r600_lower_tess_io_impl(nir_builder *b, nir_instr *instr, enum pipe_prim_type pr
                              nir_build_alu(b, nir_op_umul24,
                                            nir_channel(b, load_out_param_base, 1),
                                            rel_patch_id, NULL, NULL);
-      addr = emil_tcs_io_offset(b, addr, op, &b->shader->outputs, 1);
+      addr = emil_tcs_io_offset(b, addr, op, nir_var_shader_out, 1);
       emit_store_lds(b, op, addr);
       nir_instr_remove(instr);
       return true;
    }
    case nir_intrinsic_load_output: {
       nir_ssa_def *addr = r600_tcs_base_address(b, load_out_param_base, rel_patch_id);
-      addr = emil_tcs_io_offset(b, addr, op, &b->shader->outputs, 0);
+      addr = emil_tcs_io_offset(b, addr, op, nir_var_shader_out, 0);
       replace_load_instr(b, op, addr);
       return true;
    }
    case nir_intrinsic_load_input: {
       nir_ssa_def *addr = r600_tcs_base_address(b, load_in_param_base, rel_patch_id);
-      addr = emil_tcs_io_offset(b, addr, op, &b->shader->inputs, 0);
+      addr = emil_tcs_io_offset(b, addr, op, nir_var_shader_in, 0);
       replace_load_instr(b, op, addr);
       return true;
    }

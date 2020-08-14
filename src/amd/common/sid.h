@@ -35,7 +35,20 @@
 #define SI_CONTEXT_REG_END                   0x00030000
 #define CIK_UCONFIG_REG_OFFSET               0x00030000
 #define CIK_UCONFIG_REG_END                  0x00040000
+#define SI_UCONFIG_PERF_REG_OFFSET           0x00034000
+#define SI_UCONFIG_PERF_REG_END              0x00038000
 
+/* For register shadowing: */
+#define SI_SH_REG_SPACE_SIZE			(SI_SH_REG_END - SI_SH_REG_OFFSET)
+#define SI_CONTEXT_REG_SPACE_SIZE		(SI_CONTEXT_REG_END - SI_CONTEXT_REG_OFFSET)
+#define SI_UCONFIG_REG_SPACE_SIZE		(CIK_UCONFIG_REG_END - CIK_UCONFIG_REG_OFFSET)
+#define SI_UCONFIG_PERF_REG_SPACE_SIZE          (SI_UCONFIG_PERF_REG_END - SI_UCONFIG_PERF_REG_OFFSET)
+
+#define SI_SHADOWED_SH_REG_OFFSET		0
+#define SI_SHADOWED_CONTEXT_REG_OFFSET		SI_SH_REG_SPACE_SIZE
+#define SI_SHADOWED_UCONFIG_REG_OFFSET		(SI_SH_REG_SPACE_SIZE + SI_CONTEXT_REG_SPACE_SIZE)
+#define SI_SHADOWED_REG_BUFFER_SIZE		(SI_SH_REG_SPACE_SIZE + SI_CONTEXT_REG_SPACE_SIZE + \
+						 SI_UCONFIG_REG_SPACE_SIZE)
 
 #define EVENT_TYPE_CACHE_FLUSH                  0x6
 #define EVENT_TYPE_PS_PARTIAL_FLUSH            0x10
@@ -231,6 +244,9 @@
 #define PKT0(index, count) (PKT_TYPE_S(0) | PKT0_BASE_INDEX_S(index) | PKT_COUNT_S(count))
 #define PKT3(op, count, predicate) (PKT_TYPE_S(3) | PKT_COUNT_S(count) | PKT3_IT_OPCODE_S(op) | PKT3_PREDICATE(predicate))
 
+#define PKT2_NOP_PAD                    PKT_TYPE_S(2)
+#define PKT3_NOP_PAD                    PKT3(PKT3_NOP, 0x3fff, 0) /* header-only version */
+
 #define PKT3_CP_DMA					0x41
 /* 1. header
  * 2. SRC_ADDR_LO [31:0] or DATA [31:0]
@@ -298,9 +314,10 @@
 #define        SDMA_TS_SUB_OPCODE_GET_LOCAL_TIMESTAMP     0x1
 #define        SDMA_TS_SUB_OPCODE_GET_GLOBAL_TIMESTAMP    0x2
 #define    CIK_SDMA_PACKET_SRBM_WRITE              0xe
-/* There is apparently an undocumented HW "feature" that
-   prevents the HW from copying past 256 bytes of (1 << 22) */
-#define    CIK_SDMA_COPY_MAX_SIZE                  0x3fff00
+/* There is apparently an undocumented HW limitation that
+   prevents the HW from copying the last 255 bytes of (1 << 22) - 1 */
+#define    CIK_SDMA_COPY_MAX_SIZE                  0x3fff00  /* almost 4 MB*/
+#define    GFX103_SDMA_COPY_MAX_SIZE               0x3fffff00 /* almost 1 GB */
 
 enum amd_cmp_class_flags {
 	S_NAN = 1 << 0,        // Signaling NaN

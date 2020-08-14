@@ -45,7 +45,7 @@
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
-#include "state_tracker/sw_winsys.h"
+#include "frontend/sw_winsys.h"
 #include "dri_sw_winsys.h"
 
 

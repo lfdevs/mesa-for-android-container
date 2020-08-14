@@ -35,14 +35,6 @@
 #include "v3d_context.h"
 #include "v3d_screen.h"
 
-#ifdef HAVE_VALGRIND
-#include <valgrind.h>
-#include <memcheck.h>
-#define VG(x) x
-#else
-#define VG(x)
-#endif
-
 static bool dump_stats = false;
 
 static void

@@ -44,7 +44,7 @@
 #define FW_52_0_3  ((52 << 24) | (0 << 16) | (3 << 8))
 #define FW_52_4_3  ((52 << 24) | (4 << 16) | (3 << 8))
 #define FW_52_8_3  ((52 << 24) | (8 << 16) | (3 << 8))
-#define FW_53      (53 << 24)
+#define FW_53       (53 << 24)
 
 /**
  * flush commands to the hardware
@@ -59,26 +59,26 @@ static void flush(struct rvce_encoder *enc)
 #if 0
 static void dump_feedback(struct rvce_encoder *enc, struct rvid_buffer *fb)
 {
-	uint32_t *ptr = enc->ws->buffer_map(fb->res->buf, enc->cs, PIPE_TRANSFER_READ_WRITE);
-	unsigned i = 0;
-	fprintf(stderr, "\n");
-	fprintf(stderr, "encStatus:\t\t\t%08x\n", ptr[i++]);
-	fprintf(stderr, "encHasBitstream:\t\t%08x\n", ptr[i++]);
-	fprintf(stderr, "encHasAudioBitstream:\t\t%08x\n", ptr[i++]);
-	fprintf(stderr, "encBitstreamOffset:\t\t%08x\n", ptr[i++]);
-	fprintf(stderr, "encBitstreamSize:\t\t%08x\n", ptr[i++]);
-	fprintf(stderr, "encAudioBitstreamOffset:\t%08x\n", ptr[i++]);
-	fprintf(stderr, "encAudioBitstreamSize:\t\t%08x\n", ptr[i++]);
-	fprintf(stderr, "encExtrabytes:\t\t\t%08x\n", ptr[i++]);
-	fprintf(stderr, "encAudioExtrabytes:\t\t%08x\n", ptr[i++]);
-	fprintf(stderr, "videoTimeStamp:\t\t\t%08x\n", ptr[i++]);
-	fprintf(stderr, "audioTimeStamp:\t\t\t%08x\n", ptr[i++]);
-	fprintf(stderr, "videoOutputType:\t\t%08x\n", ptr[i++]);
-	fprintf(stderr, "attributeFlags:\t\t\t%08x\n", ptr[i++]);
-	fprintf(stderr, "seiPrivatePackageOffset:\t%08x\n", ptr[i++]);
-	fprintf(stderr, "seiPrivatePackageSize:\t\t%08x\n", ptr[i++]);
-	fprintf(stderr, "\n");
-	enc->ws->buffer_unmap(fb->res->buf);
+   uint32_t *ptr = enc->ws->buffer_map(fb->res->buf, enc->cs, PIPE_TRANSFER_READ_WRITE);
+   unsigned i = 0;
+   fprintf(stderr, "\n");
+   fprintf(stderr, "encStatus:\t\t\t%08x\n", ptr[i++]);
+   fprintf(stderr, "encHasBitstream:\t\t%08x\n", ptr[i++]);
+   fprintf(stderr, "encHasAudioBitstream:\t\t%08x\n", ptr[i++]);
+   fprintf(stderr, "encBitstreamOffset:\t\t%08x\n", ptr[i++]);
+   fprintf(stderr, "encBitstreamSize:\t\t%08x\n", ptr[i++]);
+   fprintf(stderr, "encAudioBitstreamOffset:\t%08x\n", ptr[i++]);
+   fprintf(stderr, "encAudioBitstreamSize:\t\t%08x\n", ptr[i++]);
+   fprintf(stderr, "encExtrabytes:\t\t\t%08x\n", ptr[i++]);
+   fprintf(stderr, "encAudioExtrabytes:\t\t%08x\n", ptr[i++]);
+   fprintf(stderr, "videoTimeStamp:\t\t\t%08x\n", ptr[i++]);
+   fprintf(stderr, "audioTimeStamp:\t\t\t%08x\n", ptr[i++]);
+   fprintf(stderr, "videoOutputType:\t\t%08x\n", ptr[i++]);
+   fprintf(stderr, "attributeFlags:\t\t\t%08x\n", ptr[i++]);
+   fprintf(stderr, "seiPrivatePackageOffset:\t%08x\n", ptr[i++]);
+   fprintf(stderr, "seiPrivatePackageSize:\t\t%08x\n", ptr[i++]);
+   fprintf(stderr, "\n");
+   enc->ws->buffer_unmap(fb->res->buf);
 }
 #endif
 

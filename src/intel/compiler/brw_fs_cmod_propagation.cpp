@@ -93,18 +93,44 @@ cmod_propagate_cmp_to_add(const gen_device_info *devinfo, bblock_t *block,
              scan_inst->flags_written() != flags_written)
             goto not_match;
 
-         /* From the Sky Lake PRM Vol. 7 "Assigning Conditional Mods":
+         /* From the Kaby Lake PRM Vol. 7 "Assigning Conditional Flags":
           *
           *    * Note that the [post condition signal] bits generated at
           *      the output of a compute are before the .sat.
           *
-          * So we don't have to bail if scan_inst has saturate.
+          * Paragraph about post_zero does not mention saturation, but
+          * testing it on actual GPUs shows that conditional modifiers
+          * are applied after saturation.
+          *
+          *    * post_zero bit: This bit reflects whether the final
+          *      result is zero after all the clamping, normalizing,
+          *      or format conversion logic.
+          *
+          * For signed types we don't care about saturation: it won't
+          * change the result of conditional modifier.
+          *
+          * For floating and unsigned types there two special cases,
+          * when we can remove inst even if scan_inst is saturated: G
+          * and LE. Since conditional modifiers are just comparations
+          * against zero, saturating positive values to the upper
+          * limit never changes the result of comparation.
+          *
+          * For negative values:
+          * (sat(x) >  0) == (x >  0) --- false
+          * (sat(x) <= 0) == (x <= 0) --- true
           */
-         /* Otherwise, try propagating the conditional. */
          const enum brw_conditional_mod cond =
             negate ? brw_swap_cmod(inst->conditional_mod)
             : inst->conditional_mod;
 
+         if (scan_inst->saturate &&
+             (brw_reg_type_is_floating_point(scan_inst->dst.type) ||
+              type_is_unsigned_int(scan_inst->dst.type)) &&
+             (cond != BRW_CONDITIONAL_G &&
+              cond != BRW_CONDITIONAL_LE))
+            goto not_match;
+
+         /* Otherwise, try propagating the conditional. */
          if (scan_inst->can_do_cmod() &&
              ((!read_flag && scan_inst->conditional_mod == BRW_CONDITIONAL_NONE) ||
               scan_inst->conditional_mod == cond)) {

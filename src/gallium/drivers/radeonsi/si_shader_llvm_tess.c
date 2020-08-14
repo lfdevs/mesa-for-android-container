@@ -1149,7 +1149,7 @@ void si_llvm_init_tes_callbacks(struct si_shader_context *ctx, bool ngg_cull_sha
    if (ctx->shader->key.as_es)
       ctx->abi.emit_outputs = si_llvm_emit_es_epilogue;
    else if (ngg_cull_shader)
-      ctx->abi.emit_outputs = gfx10_emit_ngg_culling_epilogue_4x_wave32;
+      ctx->abi.emit_outputs = gfx10_emit_ngg_culling_epilogue;
    else if (ctx->shader->key.as_ngg)
       ctx->abi.emit_outputs = gfx10_emit_ngg_epilogue;
    else

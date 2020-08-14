@@ -1125,6 +1125,7 @@ static void r600_get_hw_query_params(struct r600_common_context *rctx,
 	case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
 		params->pair_count = R600_MAX_STREAMS;
 		params->pair_stride = 32;
+		/* fallthrough */
 	case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
 		params->start_offset = 0;
 		params->end_offset = 16;

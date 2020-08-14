@@ -48,8 +48,6 @@ lp_build_print_args(struct gallivm_state* gallivm,
 {
    LLVMBuilderRef builder = gallivm->builder;
    LLVMContextRef context = gallivm->context;
-   LLVMValueRef func_printf;
-   LLVMTypeRef printf_type;
    int i;
 
    assert(args);
@@ -64,11 +62,11 @@ lp_build_print_args(struct gallivm_state* gallivm,
          args[i] = LLVMBuildFPExt(builder, args[i], LLVMDoubleTypeInContext(context), "");
    }
 
-   printf_type = LLVMFunctionType(LLVMInt32TypeInContext(context), NULL, 0, 1);
-   func_printf = lp_build_const_int_pointer(gallivm, func_to_pointer((func_pointer)debug_printf));
-   func_printf = LLVMBuildBitCast(builder, func_printf, LLVMPointerType(printf_type, 0), "debug_printf");
-
-   return LLVMBuildCall(builder, func_printf, args, argcount, "");
+   if (!gallivm->debug_printf_hook) {
+      LLVMTypeRef printf_type = LLVMFunctionType(LLVMInt32TypeInContext(context), NULL, 0, 1);
+      gallivm->debug_printf_hook = LLVMAddFunction(gallivm->module, "debug_printf", printf_type);
+   }
+   return LLVMBuildCall(builder, gallivm->debug_printf_hook, args, argcount, "");
 }
 
 

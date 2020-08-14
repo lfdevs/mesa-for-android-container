@@ -31,6 +31,7 @@
 
 #include "pipe_loader_priv.h"
 
+#include "util/os_file.h"
 #include "util/u_memory.h"
 #include "util/u_dl.h"
 #include "sw/dri/dri_sw_winsys.h"
@@ -38,9 +39,9 @@
 #include "sw/null/null_sw_winsys.h"
 #include "sw/wrapper/wrapper_sw_winsys.h"
 #include "target-helpers/sw_helper_public.h"
-#include "state_tracker/drisw_api.h"
-#include "state_tracker/sw_driver.h"
-#include "state_tracker/sw_winsys.h"
+#include "frontend/drisw_api.h"
+#include "frontend/sw_driver.h"
+#include "frontend/sw_winsys.h"
 
 struct pipe_loader_sw_device {
    struct pipe_loader_device base;
@@ -175,7 +176,7 @@ pipe_loader_sw_probe_kms(struct pipe_loader_device **devs, int fd)
    if (!pipe_loader_sw_probe_init_common(sdev))
       goto fail;
 
-   if (fd < 0 || (sdev->fd = fcntl(fd, F_DUPFD_CLOEXEC, 3)) < 0)
+   if (fd < 0 || (sdev->fd = os_dupfd_cloexec(fd)) < 0)
       goto fail;
 
    for (i = 0; sdev->dd->winsys[i].name; i++) {

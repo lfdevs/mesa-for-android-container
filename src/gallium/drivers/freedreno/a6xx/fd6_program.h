@@ -34,13 +34,6 @@
 #include "ir3/ir3_shader.h"
 #include "ir3_cache.h"
 
-struct fd6_streamout_state {
-	uint32_t ncomp[PIPE_MAX_SO_BUFFERS];
-	uint32_t prog[256/2];
-	uint32_t prog_count;
-	uint32_t vpc_so_buf_cntl;
-};
-
 struct fd6_emit;
 
 struct fd6_program_state {
@@ -54,10 +47,8 @@ struct fd6_program_state {
 	struct fd_ringbuffer *config_stateobj;
 	struct fd_ringbuffer *interp_stateobj;
 	struct fd_ringbuffer *binning_stateobj;
+	struct fd_ringbuffer *streamout_stateobj;
 	struct fd_ringbuffer *stateobj;
-
-	/* cached state about current emitted shader program (3d): */
-	struct fd6_streamout_state tf;
 };
 
 static inline struct fd6_program_state *

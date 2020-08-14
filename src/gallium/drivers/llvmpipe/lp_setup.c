@@ -53,7 +53,7 @@
 #include "lp_setup_context.h"
 #include "lp_screen.h"
 #include "lp_state.h"
-#include "state_tracker/sw_winsys.h"
+#include "frontend/sw_winsys.h"
 
 #include "draw/draw_context.h"
 #include "draw/draw_vbuf.h"
@@ -440,7 +440,7 @@ lp_setup_try_clear_color_buffer(struct lp_setup_context *setup,
    else {
       /* Put ourselves into the 'pre-clear' state, specifically to try
        * and accumulate multiple clears to color and depth_stencil
-       * buffers which the app or state-tracker might issue
+       * buffers which the app or gallium frontend might issue
        * separately.
        */
       set_scene_state( setup, SETUP_CLEARED, __FUNCTION__ );
@@ -504,7 +504,7 @@ lp_setup_try_clear_zs(struct lp_setup_context *setup,
    else {
       /* Put ourselves into the 'pre-clear' state, specifically to try
        * and accumulate multiple clears to color and depth_stencil
-       * buffers which the app or state-tracker might issue
+       * buffers which the app or gallium frontend might issue
        * separately.
        */
       set_scene_state( setup, SETUP_CLEARED, __FUNCTION__ );
@@ -567,13 +567,15 @@ lp_setup_set_triangle_state( struct lp_setup_context *setup,
                              boolean ccw_is_frontface,
                              boolean scissor,
                              boolean half_pixel_center,
-                             boolean bottom_edge_rule)
+                             boolean bottom_edge_rule,
+                             boolean multisample)
 {
    LP_DBG(DEBUG_SETUP, "%s\n", __FUNCTION__);
 
    setup->ccw_is_frontface = ccw_is_frontface;
    setup->cullmode = cull_mode;
    setup->triangle = first_triangle;
+   setup->multisample = multisample;
    setup->pixel_offset = half_pixel_center ? 0.5f : 0.0f;
    setup->bottom_edge_rule = bottom_edge_rule;
 
@@ -700,6 +702,7 @@ lp_setup_set_fs_images(struct lp_setup_context *setup,
          jit_image->width = res->width0;
          jit_image->height = res->height0;
          jit_image->depth = res->depth0;
+         jit_image->num_samples = res->nr_samples;
 
          if (llvmpipe_resource_is_texture(res)) {
             uint32_t mip_offset = lp_res->mip_offsets[image->u.tex.level];
@@ -725,6 +728,7 @@ lp_setup_set_fs_images(struct lp_setup_context *setup,
 
             jit_image->row_stride = lp_res->row_stride[image->u.tex.level];
             jit_image->img_stride = lp_res->img_stride[image->u.tex.level];
+            jit_image->sample_stride = lp_res->sample_stride;
             jit_image->base = (uint8_t *)jit_image->base + mip_offset;
          }
          else {
@@ -737,7 +741,7 @@ lp_setup_set_fs_images(struct lp_setup_context *setup,
    for (; i < ARRAY_SIZE(setup->images); i++) {
       util_copy_image_view(&setup->images[i].current, NULL);
    }
-   setup->dirty |= LP_SETUP_NEW_IMAGES;
+   setup->dirty |= LP_SETUP_NEW_FS;
 }
 
 void
@@ -799,6 +803,15 @@ lp_setup_set_scissors( struct lp_setup_context *setup,
    setup->dirty |= LP_SETUP_NEW_SCISSOR;
 }
 
+void
+lp_setup_set_sample_mask(struct lp_setup_context *setup,
+                         uint32_t sample_mask)
+{
+   if (setup->fs.current.jit_context.sample_mask != sample_mask) {
+      setup->fs.current.jit_context.sample_mask = sample_mask;
+      setup->dirty |= LP_SETUP_NEW_FS;
+   }
+}
 
 void 
 lp_setup_set_flatshade_first(struct lp_setup_context *setup,
@@ -922,6 +935,8 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
                jit_tex->mip_offsets[0] = 0;
                jit_tex->row_stride[0] = 0;
                jit_tex->img_stride[0] = 0;
+               jit_tex->num_samples = 0;
+               jit_tex->sample_stride = 0;
             }
             else {
                jit_tex->width = res->width0;
@@ -929,6 +944,8 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
                jit_tex->depth = res->depth0;
                jit_tex->first_level = first_level;
                jit_tex->last_level = last_level;
+               jit_tex->num_samples = res->nr_samples;
+               jit_tex->sample_stride = 0;
 
                if (llvmpipe_resource_is_texture(res)) {
                   for (j = first_level; j <= last_level; j++) {
@@ -936,6 +953,8 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
                      jit_tex->row_stride[j] = lp_tex->row_stride[j];
                      jit_tex->img_stride[j] = lp_tex->img_stride[j];
                   }
+
+                  jit_tex->sample_stride = lp_tex->sample_stride;
 
                   if (res->target == PIPE_TEXTURE_1D_ARRAY ||
                       res->target == PIPE_TEXTURE_2D_ARRAY ||
@@ -995,6 +1014,8 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
             jit_tex->height = res->height0;
             jit_tex->depth = res->depth0;
             jit_tex->first_level = jit_tex->last_level = 0;
+            jit_tex->num_samples = res->nr_samples;
+            jit_tex->sample_stride = 0;
             assert(jit_tex->base);
          }
       }
@@ -1180,7 +1201,7 @@ try_update_scene_state( struct lp_setup_context *setup )
             current_data = (ubyte *) setup->constants[i].current.user_buffer;
          }
 
-         if (current_data) {
+         if (current_data && current_size >= sizeof(float)) {
             current_data += setup->constants[i].current.buffer_offset;
 
             /* TODO: copy only the actually used constants? */
@@ -1214,7 +1235,7 @@ try_update_scene_state( struct lp_setup_context *setup )
          }
 
          num_constants =
-            DIV_ROUND_UP(setup->constants[i].stored_size, (sizeof(float) * 4));
+            DIV_ROUND_UP(setup->constants[i].stored_size, lp_get_constant_buffer_stride(scene->pipe->screen));
          setup->fs.current.jit_context.num_constants[i] = num_constants;
          setup->dirty |= LP_SETUP_NEW_FS;
       }

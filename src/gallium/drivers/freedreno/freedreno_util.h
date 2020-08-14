@@ -50,8 +50,6 @@ enum adreno_pa_su_sc_draw fd_polygon_mode(unsigned mode);
 enum adreno_stencil_op fd_stencil_op(unsigned op);
 
 #define A3XX_MAX_MIP_LEVELS 14
-/* TBD if it is same on a2xx, but for now: */
-#define MAX_MIP_LEVELS A3XX_MAX_MIP_LEVELS
 
 #define A2XX_MAX_RENDER_TARGETS 1
 #define A3XX_MAX_RENDER_TARGETS 4
@@ -90,6 +88,7 @@ enum fd_debug_flag {
 	FD_DBG_NOTILE       = BITFIELD_BIT(25),
 	FD_DBG_LAYOUT       = BITFIELD_BIT(26),
 	FD_DBG_NOFP16       = BITFIELD_BIT(27),
+	FD_DBG_NOHW         = BITFIELD_BIT(28),
 };
 
 extern int fd_mesa_debug;
@@ -204,31 +203,7 @@ fd_half_precision(struct pipe_framebuffer_state *pfb)
 	return true;
 }
 
-/* Note sure if this is same on all gens, but seems to be same on the later
- * gen's
- */
-static inline unsigned
-fd_calc_guardband(unsigned x)
-{
-	float l = log2(x);
-	if (l <= 8)
-		return 511;
-	return 511 - ((l - 8) * 65);
-}
-
-#define LOG_DWORDS 0
-
 static inline void emit_marker(struct fd_ringbuffer *ring, int scratch_idx);
-
-static inline void
-OUT_RING(struct fd_ringbuffer *ring, uint32_t data)
-{
-	if (LOG_DWORDS) {
-		DBG("ring[%p]: OUT_RING   %04x:  %08x", ring,
-				(uint32_t)(ring->cur - ring->start), data);
-	}
-	fd_ringbuffer_emit(ring, data);
-}
 
 /* like OUT_RING() but appends a cmdstream patch point to 'buf' */
 static inline void
@@ -243,133 +218,6 @@ OUT_RINGP(struct fd_ringbuffer *ring, uint32_t data,
 		.cs  = ring->cur++,
 		.val = data,
 	}));
-}
-
-/*
- * NOTE: OUT_RELOC*() is 2 dwords (64b) on a5xx+
- */
-
-static inline void
-__out_reloc(struct fd_ringbuffer *ring, struct fd_bo *bo,
-		uint32_t offset, uint64_t or, int32_t shift, uint32_t flags)
-{
-	if (LOG_DWORDS) {
-		DBG("ring[%p]: OUT_RELOC   %04x:  %p+%u << %d", ring,
-				(uint32_t)(ring->cur - ring->start), bo, offset, shift);
-	}
-	debug_assert(offset < fd_bo_size(bo));
-	fd_ringbuffer_reloc(ring, &(struct fd_reloc){
-		.bo = bo,
-		.flags = flags,
-		.offset = offset,
-		.or = or,
-		.shift = shift,
-		.orhi = or >> 32,
-	});
-}
-
-static inline void
-OUT_RELOC(struct fd_ringbuffer *ring, struct fd_bo *bo,
-		uint32_t offset, uint64_t or, int32_t shift)
-{
-	__out_reloc(ring, bo, offset, or, shift, FD_RELOC_READ);
-}
-
-static inline void
-OUT_RELOCW(struct fd_ringbuffer *ring, struct fd_bo *bo,
-		uint32_t offset, uint64_t or, int32_t shift)
-{
-	__out_reloc(ring, bo, offset, or, shift, FD_RELOC_READ | FD_RELOC_WRITE);
-}
-
-static inline void
-OUT_RELOCD(struct fd_ringbuffer *ring, struct fd_bo *bo,
-		uint32_t offset, uint64_t or, int32_t shift)
-{
-	__out_reloc(ring, bo, offset, or, shift, FD_RELOC_READ | FD_RELOC_DUMP);
-}
-
-static inline void
-OUT_RB(struct fd_ringbuffer *ring, struct fd_ringbuffer *target)
-{
-	fd_ringbuffer_emit_reloc_ring_full(ring, target, 0);
-}
-
-static inline void BEGIN_RING(struct fd_ringbuffer *ring, uint32_t ndwords)
-{
-	if (ring->cur + ndwords > ring->end)
-		fd_ringbuffer_grow(ring, ndwords);
-}
-
-static inline void
-OUT_PKT0(struct fd_ringbuffer *ring, uint16_t regindx, uint16_t cnt)
-{
-	BEGIN_RING(ring, cnt+1);
-	OUT_RING(ring, CP_TYPE0_PKT | ((cnt-1) << 16) | (regindx & 0x7FFF));
-}
-
-static inline void
-OUT_PKT2(struct fd_ringbuffer *ring)
-{
-	BEGIN_RING(ring, 1);
-	OUT_RING(ring, CP_TYPE2_PKT);
-}
-
-static inline void
-OUT_PKT3(struct fd_ringbuffer *ring, uint8_t opcode, uint16_t cnt)
-{
-	BEGIN_RING(ring, cnt+1);
-	OUT_RING(ring, CP_TYPE3_PKT | ((cnt-1) << 16) | ((opcode & 0xFF) << 8));
-}
-
-/*
- * Starting with a5xx, pkt4/pkt7 are used instead of pkt0/pkt3
- */
-
-static inline unsigned
-_odd_parity_bit(unsigned val)
-{
-	/* See: http://graphics.stanford.edu/~seander/bithacks.html#ParityParallel
-	 * note that we want odd parity so 0x6996 is inverted.
-	 */
-	val ^= val >> 16;
-	val ^= val >> 8;
-	val ^= val >> 4;
-	val &= 0xf;
-	return (~0x6996 >> val) & 1;
-}
-
-static inline void
-OUT_PKT4(struct fd_ringbuffer *ring, uint16_t regindx, uint16_t cnt)
-{
-	BEGIN_RING(ring, cnt+1);
-	OUT_RING(ring, CP_TYPE4_PKT | cnt |
-			(_odd_parity_bit(cnt) << 7) |
-			((regindx & 0x3ffff) << 8) |
-			((_odd_parity_bit(regindx) << 27)));
-}
-
-static inline void
-OUT_PKT7(struct fd_ringbuffer *ring, uint8_t opcode, uint16_t cnt)
-{
-	BEGIN_RING(ring, cnt+1);
-	OUT_RING(ring, CP_TYPE7_PKT | cnt |
-			(_odd_parity_bit(cnt) << 15) |
-			((opcode & 0x7f) << 16) |
-			((_odd_parity_bit(opcode) << 23)));
-}
-
-static inline void
-OUT_WFI(struct fd_ringbuffer *ring)
-{
-	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
-	OUT_RING(ring, 0x00000000);
-}
-
-static inline void
-OUT_WFI5(struct fd_ringbuffer *ring)
-{
-	OUT_PKT7(ring, CP_WAIT_FOR_IDLE, 0);
 }
 
 static inline void
@@ -450,7 +298,7 @@ pack_rgba(enum pipe_format format, const float *rgba)
 	do { __typeof(a) __tmp = (a); (a) = (b); (b) = __tmp; } while (0)
 
 #define foreach_bit(b, mask) \
-	for (uint32_t _m = (mask); _m && ({(b) = u_bit_scan(&_m); 1;});)
+	for (uint32_t _m = (mask), b; _m && ({(b) = u_bit_scan(&_m); (void)(b); 1;});)
 
 
 #define BIT(bit) (1u << bit)
@@ -465,6 +313,7 @@ fd_msaa_samples(unsigned samples)
 	switch (samples) {
 	default:
 		debug_assert(0);
+		/* fallthrough */
 	case 0:
 	case 1: return MSAA_ONE;
 	case 2: return MSAA_TWO;

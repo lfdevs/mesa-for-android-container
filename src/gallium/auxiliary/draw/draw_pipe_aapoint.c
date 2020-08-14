@@ -580,7 +580,7 @@ aapoint_first_point(struct draw_stage *stage, struct prim_header *header)
    const struct pipe_rasterizer_state *rast = draw->rasterizer;
    void *r;
 
-   assert(draw->rasterizer->point_smooth);
+   assert(draw->rasterizer->point_smooth && !draw->rasterizer->multisample);
 
    if (draw->rasterizer->point_size <= 2.0)
       aapoint->radius = 1.0;
@@ -666,10 +666,10 @@ draw_aapoint_prepare_outputs(struct draw_context *draw,
    /* update vertex attrib info */
    aapoint->pos_slot = draw_current_shader_position_output(draw);
 
-   if (!rast->point_smooth)
+   if (!rast->point_smooth || rast->multisample)
       return;
 
-   if (aapoint->fs->aapoint_fs) {
+   if (aapoint->fs && aapoint->fs->aapoint_fs) {
       /* allocate the extra post-transformed vertex attribute */
       aapoint->tex_slot = draw_alloc_extra_vertex_attrib(draw,
                                                          TGSI_SEMANTIC_GENERIC,
@@ -734,7 +734,7 @@ aapoint_stage_from_pipe(struct pipe_context *pipe)
 
 /**
  * This function overrides the driver's create_fs_state() function and
- * will typically be called by the state tracker.
+ * will typically be called by the gallium frontend.
  */
 static void *
 aapoint_create_fs_state(struct pipe_context *pipe,

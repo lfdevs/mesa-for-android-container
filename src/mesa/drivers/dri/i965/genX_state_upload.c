@@ -671,9 +671,9 @@ genX(emit_vertices)(struct brw_context *brw)
             upload_format_size(upload_format) : glformat->Size;
 
          switch (size) {
-            case 0: comp0 = VFCOMP_STORE_0;
-            case 1: comp1 = VFCOMP_STORE_0;
-            case 2: comp2 = VFCOMP_STORE_0;
+            case 0: comp0 = VFCOMP_STORE_0; /* fallthrough */
+            case 1: comp1 = VFCOMP_STORE_0; /* fallthrough */
+            case 2: comp2 = VFCOMP_STORE_0; /* fallthrough */
             case 3:
                if (GEN_GEN >= 8 && glformat->Doubles) {
                   comp3 = VFCOMP_STORE_0;
@@ -2843,7 +2843,8 @@ set_blend_entry_bits(struct brw_context *brw, BLEND_ENTRY_GENXML *entry, int i,
          entry->LogicOpEnable = true;
          entry->LogicOpFunction = ctx->Color._LogicOp;
       }
-   } else if (blend_enabled && !ctx->Color._AdvancedBlendMode
+   } else if (blend_enabled &&
+              ctx->Color._AdvancedBlendMode == BLEND_NONE
               && (GEN_GEN <= 5 || !integer)) {
       GLenum eqRGB = ctx->Color.Blend[i].EquationRGB;
       GLenum eqA = ctx->Color.Blend[i].EquationA;
@@ -4264,8 +4265,7 @@ genX(upload_cs_state)(struct brw_context *brw)
    struct brw_cs_prog_data *cs_prog_data = brw_cs_prog_data(prog_data);
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-   const unsigned threads =
-      DIV_ROUND_UP(brw_cs_group_size(brw), cs_prog_data->simd_size);
+   const struct brw_cs_parameters cs_params = brw_cs_get_parameters(brw);
 
    if (INTEL_DEBUG & DEBUG_SHADER_TIME) {
       brw_emit_buffer_surface_state(
@@ -4357,13 +4357,13 @@ genX(upload_cs_state)(struct brw_context *brw)
       vfe.URBEntryAllocationSize = GEN_GEN >= 8 ? 2 : 0;
 
       const uint32_t vfe_curbe_allocation =
-         ALIGN(cs_prog_data->push.per_thread.regs * threads +
+         ALIGN(cs_prog_data->push.per_thread.regs * cs_params.threads +
                cs_prog_data->push.cross_thread.regs, 2);
       vfe.CURBEAllocationSize = vfe_curbe_allocation;
    }
 
    const unsigned push_const_size =
-      brw_cs_push_const_total_size(cs_prog_data, threads);
+      brw_cs_push_const_total_size(cs_prog_data, cs_params.threads);
    if (push_const_size > 0) {
       brw_batch_emit(brw, GENX(MEDIA_CURBE_LOAD), curbe) {
          curbe.CURBETotalDataLength = ALIGN(push_const_size, 64);
@@ -4374,15 +4374,18 @@ genX(upload_cs_state)(struct brw_context *brw)
    /* BRW_NEW_SURFACES and BRW_NEW_*_CONSTBUF */
    memcpy(bind, stage_state->surf_offset,
           prog_data->binding_table.size_bytes);
+   const uint64_t ksp = brw->cs.base.prog_offset +
+                        brw_cs_prog_data_prog_offset(cs_prog_data,
+                                                     cs_params.simd_size);
    const struct GENX(INTERFACE_DESCRIPTOR_DATA) idd = {
-      .KernelStartPointer = brw->cs.base.prog_offset,
+      .KernelStartPointer = ksp,
       .SamplerStatePointer = stage_state->sampler_offset,
       /* WA_1606682166 */
       .SamplerCount = GEN_GEN == 11 ? 0 :
                       DIV_ROUND_UP(CLAMP(stage_state->sampler_count, 0, 16), 4),
       .BindingTablePointer = stage_state->bind_bo_offset,
       .ConstantURBEntryReadLength = cs_prog_data->push.per_thread.regs,
-      .NumberofThreadsinGPGPUThreadGroup = threads,
+      .NumberofThreadsinGPGPUThreadGroup = cs_params.threads,
       .SharedLocalMemorySize = encode_slm_size(GEN_GEN,
                                                prog_data->total_shared),
       .BarrierEnable = cs_prog_data->uses_barrier,
@@ -4479,31 +4482,24 @@ prepare_indirect_gpgpu_walker(struct brw_context *brw)
 static void
 genX(emit_gpgpu_walker)(struct brw_context *brw)
 {
-   const struct brw_cs_prog_data *prog_data =
-      brw_cs_prog_data(brw->cs.base.prog_data);
-
    const GLuint *num_groups = brw->compute.num_work_groups;
 
    bool indirect = brw->compute.num_work_groups_bo != NULL;
    if (indirect)
       prepare_indirect_gpgpu_walker(brw);
 
-   const unsigned group_size = brw_cs_group_size(brw);
-   const unsigned simd_size = prog_data->simd_size;
-   unsigned thread_width_max = DIV_ROUND_UP(group_size, simd_size);
+   const struct brw_cs_parameters cs_params = brw_cs_get_parameters(brw);
 
-   uint32_t right_mask = 0xffffffffu >> (32 - simd_size);
-   const unsigned right_non_aligned = group_size & (simd_size - 1);
-   if (right_non_aligned != 0)
-      right_mask >>= (simd_size - right_non_aligned);
+   const uint32_t right_mask =
+      brw_cs_right_mask(cs_params.group_size, cs_params.simd_size);
 
    brw_batch_emit(brw, GENX(GPGPU_WALKER), ggw) {
       ggw.IndirectParameterEnable      = indirect;
       ggw.PredicateEnable              = GEN_GEN <= 7 && indirect;
-      ggw.SIMDSize                     = prog_data->simd_size / 16;
+      ggw.SIMDSize                     = cs_params.simd_size / 16;
       ggw.ThreadDepthCounterMaximum    = 0;
       ggw.ThreadHeightCounterMaximum   = 0;
-      ggw.ThreadWidthCounterMaximum    = thread_width_max - 1;
+      ggw.ThreadWidthCounterMaximum    = cs_params.threads - 1;
       ggw.ThreadGroupIDXDimension      = num_groups[0];
       ggw.ThreadGroupIDYDimension      = num_groups[1];
       ggw.ThreadGroupIDZDimension      = num_groups[2];

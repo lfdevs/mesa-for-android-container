@@ -428,7 +428,7 @@ update_polygon_stipple_enable(struct softpipe_context *softpipe, unsigned prim)
 
 
 /* Hopefully this will remain quite simple, otherwise need to pull in
- * something like the state tracker mechanism.
+ * something like the gallium frontend mechanism.
  */
 void
 softpipe_update_derived(struct softpipe_context *softpipe, unsigned prim)

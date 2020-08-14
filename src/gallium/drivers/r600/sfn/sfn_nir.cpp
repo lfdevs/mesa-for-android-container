@@ -55,34 +55,35 @@ ShaderFromNir::ShaderFromNir():sh(nullptr),
 
 bool ShaderFromNir::lower(const nir_shader *shader, r600_pipe_shader *pipe_shader,
                           r600_pipe_shader_selector *sel, r600_shader_key& key,
-                          struct r600_shader* gs_shader)
+                          struct r600_shader* gs_shader, enum chip_class _chip_class)
 {
    sh = shader;
+   chip_class = _chip_class;
    assert(sh);
 
    switch (shader->info.stage) {
    case MESA_SHADER_VERTEX:
-      impl.reset(new VertexShaderFromNir(pipe_shader, *sel, key, gs_shader));
+      impl.reset(new VertexShaderFromNir(pipe_shader, *sel, key, gs_shader, chip_class));
       break;
    case MESA_SHADER_TESS_CTRL:
       sfn_log << SfnLog::trans << "Start TCS\n";
-      impl.reset(new TcsShaderFromNir(pipe_shader, *sel, key));
+      impl.reset(new TcsShaderFromNir(pipe_shader, *sel, key, chip_class));
       break;
    case MESA_SHADER_TESS_EVAL:
       sfn_log << SfnLog::trans << "Start TESS_EVAL\n";
-      impl.reset(new TEvalShaderFromNir(pipe_shader, *sel, key, gs_shader));
+      impl.reset(new TEvalShaderFromNir(pipe_shader, *sel, key, gs_shader, chip_class));
       break;
    case MESA_SHADER_GEOMETRY:
       sfn_log << SfnLog::trans << "Start GS\n";
-      impl.reset(new GeometryShaderFromNir(pipe_shader, *sel, key));
+      impl.reset(new GeometryShaderFromNir(pipe_shader, *sel, key, chip_class));
       break;
    case MESA_SHADER_FRAGMENT:
       sfn_log << SfnLog::trans << "Start FS\n";
-      impl.reset(new FragmentShaderFromNir(*shader, pipe_shader->shader, *sel, key));
+      impl.reset(new FragmentShaderFromNir(*shader, pipe_shader->shader, *sel, key, chip_class));
       break;
    case MESA_SHADER_COMPUTE:
       sfn_log << SfnLog::trans << "Start CS\n";
-      impl.reset(new ComputeShaderFromNir(pipe_shader, *sel, key));
+      impl.reset(new ComputeShaderFromNir(pipe_shader, *sel, key, chip_class));
       break;
    default:
       return false;
@@ -265,7 +266,7 @@ bool ShaderFromNir::emit_instruction(nir_instr *instr)
 bool ShaderFromNir::process_declaration()
 {
    // scan declarations
-   nir_foreach_variable(variable, &sh->inputs) {
+   nir_foreach_shader_in_variable(variable, sh) {
       if (!impl->process_inputs(variable)) {
          fprintf(stderr, "R600: error parsing input varible %s\n", variable->name);
          return false;
@@ -273,7 +274,7 @@ bool ShaderFromNir::process_declaration()
    }
 
    // scan declarations
-   nir_foreach_variable(variable, &sh->outputs) {
+   nir_foreach_shader_out_variable(variable, sh) {
       if (!impl->process_outputs(variable)) {
          fprintf(stderr, "R600: error parsing outputs varible %s\n", variable->name);
          return false;
@@ -281,7 +282,9 @@ bool ShaderFromNir::process_declaration()
    }
 
    // scan declarations
-   nir_foreach_variable(variable, &sh->uniforms) {
+   nir_foreach_variable_with_modes(variable, sh, nir_var_uniform |
+                                                 nir_var_mem_ubo |
+                                                 nir_var_mem_ssbo) {
       if (!impl->process_uniforms(variable)) {
          fprintf(stderr, "R600: error parsing outputs varible %s\n", variable->name);
          return false;
@@ -512,6 +515,94 @@ r600_get_natural_size_align_bytes(const struct glsl_type *type,
 }
 
 static bool
+r600_lower_shared_io_impl(nir_function *func)
+{
+   nir_builder b;
+   nir_builder_init(&b, func->impl);
+
+   bool progress = false;
+   nir_foreach_block(block, func->impl) {
+      nir_foreach_instr_safe(instr, block) {
+
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+
+         nir_intrinsic_instr *op = nir_instr_as_intrinsic(instr);
+         if (op->intrinsic != nir_intrinsic_load_shared &&
+             op->intrinsic != nir_intrinsic_store_shared)
+            continue;
+
+         b.cursor = nir_before_instr(instr);
+
+         if (op->intrinsic == nir_intrinsic_load_shared) {
+            nir_ssa_def *addr = op->src[0].ssa;
+
+            switch (nir_dest_num_components(op->dest)) {
+            case 2: {
+               auto addr2 = nir_iadd_imm(&b, addr, 4);
+               addr = nir_vec2(&b, addr, addr2);
+               break;
+            }
+            case 3: {
+               auto addr2 = nir_iadd(&b, addr, nir_imm_ivec2(&b, 4, 8));
+               addr = nir_vec3(&b, addr,
+                               nir_channel(&b, addr2, 0),
+                               nir_channel(&b, addr2, 1));
+               break;
+            }
+            case 4: {
+               addr = nir_iadd(&b, addr, nir_imm_ivec4(&b, 0, 4, 8, 12));
+               break;
+            }
+            }
+
+            auto load = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_local_shared_r600);
+            load->num_components = nir_dest_num_components(op->dest);
+            load->src[0] = nir_src_for_ssa(addr);
+            nir_ssa_dest_init(&load->instr, &load->dest,
+                              load->num_components, 32, NULL);
+            nir_ssa_def_rewrite_uses(&op->dest.ssa, nir_src_for_ssa(&load->dest.ssa));
+            nir_builder_instr_insert(&b, &load->instr);
+         } else {
+            nir_ssa_def *addr = op->src[1].ssa;
+            for (int i = 0; i < 2; ++i) {
+               unsigned test_mask = (0x3 << 2 * i);
+               if (!(nir_intrinsic_write_mask(op) & test_mask))
+                  continue;
+
+               auto store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_store_local_shared_r600);
+               unsigned writemask = nir_intrinsic_write_mask(op) & test_mask;
+               nir_intrinsic_set_write_mask(store, writemask);
+               store->src[0] = nir_src_for_ssa(op->src[0].ssa);
+               store->num_components = store->src[0].ssa->num_components;
+               bool start_even = (writemask & (1u << (2 * i)));
+
+               auto addr2 = nir_iadd(&b, addr, nir_imm_int(&b, 8 * i + (start_even ? 0 : 4)));
+               store->src[1] = nir_src_for_ssa(addr2);
+
+               nir_builder_instr_insert(&b, &store->instr);
+            }
+         }
+         nir_instr_remove(instr);
+         progress = true;
+      }
+   }
+   return progress;
+}
+
+static bool
+r600_lower_shared_io(nir_shader *nir)
+{
+	bool progress=false;
+	nir_foreach_function(function, nir) {
+		if (function->impl &&
+			 r600_lower_shared_io_impl(function))
+			progress = true;
+	}
+	return progress;
+}
+
+static bool
 optimize_once(nir_shader *shader)
 {
    bool progress = false;
@@ -574,11 +665,12 @@ int r600_shader_from_nir(struct r600_context *rctx,
    NIR_PASS_V(sel->nir, nir_lower_regs_to_ssa);
    NIR_PASS_V(sel->nir, nir_lower_phis_to_scalar);
 
+   NIR_PASS_V(sel->nir, r600_lower_shared_io);
+
    static const struct nir_lower_tex_options lower_tex_options = {
       .lower_txp = ~0u,
    };
    NIR_PASS_V(sel->nir, nir_lower_tex, &lower_tex_options);
-
    NIR_PASS_V(sel->nir, r600::r600_nir_lower_txl_txf_array_or_cube);
 
    NIR_PASS_V(sel->nir, r600_nir_lower_int_tg4);
@@ -634,8 +726,8 @@ int r600_shader_from_nir(struct r600_context *rctx,
    if (optimize)
       while(optimize_once(sel->nir));
 
-   NIR_PASS_V(sel->nir, nir_remove_dead_variables, nir_var_shader_in);
-   NIR_PASS_V(sel->nir, nir_remove_dead_variables,  nir_var_shader_out);
+   NIR_PASS_V(sel->nir, nir_remove_dead_variables, nir_var_shader_in, NULL);
+   NIR_PASS_V(sel->nir, nir_remove_dead_variables,  nir_var_shader_out, NULL);
 
 
    NIR_PASS_V(sel->nir, nir_lower_vars_to_scratch,
@@ -677,9 +769,9 @@ int r600_shader_from_nir(struct r600_context *rctx,
    struct r600_shader* gs_shader = nullptr;
    if (rctx->gs_shader)
       gs_shader = &rctx->gs_shader->current->shader;
+   r600_screen *rscreen = rctx->screen;
 
-   bool r = convert.lower(sel->nir, pipeshader, sel, *key, gs_shader);
-
+   bool r = convert.lower(sel->nir, pipeshader, sel, *key, gs_shader, rscreen->b.chip_class);
    if (!r || rctx->screen->b.debug_flags & DBG_ALL_SHADERS) {
       static int shnr = 0;
 
@@ -701,7 +793,6 @@ int r600_shader_from_nir(struct r600_context *rctx,
 
    auto shader = convert.shader();
 
-   r600_screen *rscreen = rctx->screen;
    r600_bytecode_init(&pipeshader->shader.bc, rscreen->b.chip_class, rscreen->b.family,
                       rscreen->has_compressed_msaa_texturing);
 

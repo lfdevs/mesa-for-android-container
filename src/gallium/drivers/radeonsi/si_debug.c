@@ -411,12 +411,12 @@ static void si_log_chunk_type_cs_print(void *data, FILE *f)
 
    if (chunk->gfx_end != chunk->gfx_begin) {
       if (chunk->gfx_begin == 0) {
-         if (ctx->init_config)
-            ac_parse_ib(f, ctx->init_config->pm4, ctx->init_config->ndw, NULL, 0,
+         if (ctx->cs_preamble_state)
+            ac_parse_ib(f, ctx->cs_preamble_state->pm4, ctx->cs_preamble_state->ndw, NULL, 0,
                         "IB2: Init config", ctx->chip_class, NULL, NULL);
 
-         if (ctx->init_config_gs_rings)
-            ac_parse_ib(f, ctx->init_config_gs_rings->pm4, ctx->init_config_gs_rings->ndw, NULL, 0,
+         if (ctx->cs_preamble_gs_rings)
+            ac_parse_ib(f, ctx->cs_preamble_gs_rings->pm4, ctx->cs_preamble_gs_rings->ndw, NULL, 0,
                         "IB2: Init GS rings", ctx->chip_class, NULL, NULL);
       }
 
@@ -796,8 +796,13 @@ static void si_dump_descriptors(struct si_context *sctx, enum pipe_shader_type p
       enabled_constbuf =
          sctx->const_and_shader_buffers[processor].enabled_mask >> SI_NUM_SHADER_BUFFERS;
       enabled_shaderbuf = sctx->const_and_shader_buffers[processor].enabled_mask &
-                          u_bit_consecutive(0, SI_NUM_SHADER_BUFFERS);
-      enabled_shaderbuf = util_bitreverse(enabled_shaderbuf) >> (32 - SI_NUM_SHADER_BUFFERS);
+                          u_bit_consecutive64(0, SI_NUM_SHADER_BUFFERS);
+      enabled_shaderbuf = 0;
+      for (int i = 0; i < SI_NUM_SHADER_BUFFERS; i++) {
+         enabled_shaderbuf |=
+            (sctx->const_and_shader_buffers[processor].enabled_mask &
+             1llu << (SI_NUM_SHADER_BUFFERS - i - 1)) << i;
+      }
       enabled_samplers = sctx->samplers[processor].enabled_mask;
       enabled_images = sctx->images[processor].enabled_mask;
    }

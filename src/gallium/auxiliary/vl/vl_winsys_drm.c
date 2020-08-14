@@ -29,7 +29,7 @@
 
 #include "pipe/p_screen.h"
 #include "pipe-loader/pipe_loader.h"
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 
 #include "util/u_memory.h"
 #include "vl/vl_winsys.h"

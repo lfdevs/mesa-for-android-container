@@ -37,7 +37,8 @@ LOCAL_SRC_FILES := \
 	$(LIBEGL_C_FILES) \
 	$(dri2_backend_core_FILES) \
 	drivers/dri2/platform_device.c \
-	drivers/dri2/platform_android.c
+	drivers/dri2/platform_android.c \
+	drivers/dri2/platform_surfaceless.c \
 
 LOCAL_CFLAGS := \
 	-D_EGL_NATIVE_PLATFORM=_EGL_PLATFORM_ANDROID \

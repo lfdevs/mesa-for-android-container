@@ -381,9 +381,7 @@ static const __DRIgetDrawableInfoExtension getDrawableInfoExtension = {
 static const __DRIextension *loader_extensions[] = {
    &systemTimeExtension.base,
    &getDrawableInfoExtension.base,
-#ifdef XDAMAGE_1_1_INTERFACE
    &damageExtension.base,
-#endif
    NULL
 };
 

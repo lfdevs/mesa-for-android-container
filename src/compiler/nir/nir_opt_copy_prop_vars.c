@@ -174,7 +174,7 @@ gather_vars_written(struct copy_prop_var_state *state,
                               nir_var_mem_global;
             break;
 
-         case nir_intrinsic_scoped_memory_barrier:
+         case nir_intrinsic_scoped_barrier:
             if (nir_intrinsic_memory_semantics(intrin) & NIR_MEMORY_ACQUIRE)
                written->modes |= nir_intrinsic_memory_modes(intrin);
             break;
@@ -831,7 +831,7 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
          apply_barrier_for_modes(copies, nir_var_shader_out);
          break;
 
-      case nir_intrinsic_scoped_memory_barrier:
+      case nir_intrinsic_scoped_barrier:
          if (debug) dump_instr(instr);
 
          if (nir_intrinsic_memory_semantics(intrin) & NIR_MEMORY_ACQUIRE)
@@ -1186,9 +1186,7 @@ nir_copy_prop_vars_impl(nir_function_impl *impl)
       nir_metadata_preserve(impl, nir_metadata_block_index |
                                   nir_metadata_dominance);
    } else {
-#ifndef NDEBUG
-      impl->valid_metadata &= ~nir_metadata_not_properly_reset;
-#endif
+      nir_metadata_preserve(impl, nir_metadata_all);
    }
 
    ralloc_free(mem_ctx);

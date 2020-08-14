@@ -364,7 +364,7 @@
   <struct name="HCP_PAK_INSERT_OBJECT_INDIRECT_PAYLOAD" length="4">
     <field name="Indirect Payload Data Size in bits" start="0" end="31" type="uint"/>
     <field name="Indirect Payload Base Address" start="32" end="95" type="address"/>
-    <field name="Indirect Payload Base Address2" start="96" end="128" type="MEMORYADDRESSATTRIBUTES"/>
+    <field name="Indirect Payload Base Address2" start="96" end="127" type="MEMORYADDRESSATTRIBUTES"/>
   </struct>
 
   <struct name="HCP_REF_LIST_ENTRY" length="1">

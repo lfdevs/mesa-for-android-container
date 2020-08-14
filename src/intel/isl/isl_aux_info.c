@@ -49,6 +49,11 @@ enum write_behavior {
    /* Writes using the 3D engine are compressed. */
    WRITES_COMPRESS,
 
+   /* Writes using the 3D engine are either compressed or substituted with
+    * fast-cleared blocks.
+    */
+   WRITES_COMPRESS_CLEAR,
+
    /* Writes implicitly fully resolve the compression block and write the data
     * uncompressed into the main surface. The resolved aux blocks are
     * ambiguated and left in the pass-through state.
@@ -87,6 +92,7 @@ static const struct aux_usage_info info[] = {
    AUX(         COMPRESS, Y, Y, Y, x, MCS)
    AUX(         COMPRESS, Y, Y, Y, x, MCS_CCS)
    AUX(         COMPRESS, Y, Y, Y, Y, CCS_E)
+   AUX(   COMPRESS_CLEAR, Y, Y, Y, Y, GEN12_CCS_E)
    AUX(RESOLVE_AMBIGUATE, x, Y, x, Y, CCS_D)
    AUX(RESOLVE_AMBIGUATE, Y, x, x, Y, MC)
    AUX(         COMPRESS, Y, x, x, Y, STC_CCS)
@@ -213,24 +219,29 @@ isl_aux_state_transition_write(enum isl_aux_state initial_state,
    assert(isl_aux_state_has_valid_aux(initial_state));
    assert(aux_state_possible(initial_state, usage));
    assert(info[usage].write_behavior == WRITES_COMPRESS ||
+          info[usage].write_behavior == WRITES_COMPRESS_CLEAR ||
           info[usage].write_behavior == WRITES_RESOLVE_AMBIGUATE);
 
    if (full_surface) {
       return info[usage].write_behavior == WRITES_COMPRESS ?
-             ISL_AUX_STATE_COMPRESSED_NO_CLEAR : ISL_AUX_STATE_PASS_THROUGH;
+                ISL_AUX_STATE_COMPRESSED_NO_CLEAR :
+             info[usage].write_behavior == WRITES_COMPRESS_CLEAR ?
+                ISL_AUX_STATE_COMPRESSED_CLEAR : ISL_AUX_STATE_PASS_THROUGH;
    }
 
    switch (initial_state) {
    case ISL_AUX_STATE_CLEAR:
    case ISL_AUX_STATE_PARTIAL_CLEAR:
-      return info[usage].write_behavior == WRITES_COMPRESS ?
-             ISL_AUX_STATE_COMPRESSED_CLEAR : ISL_AUX_STATE_PARTIAL_CLEAR;
+      return info[usage].write_behavior == WRITES_RESOLVE_AMBIGUATE ?
+             ISL_AUX_STATE_PARTIAL_CLEAR : ISL_AUX_STATE_COMPRESSED_CLEAR;
    case ISL_AUX_STATE_RESOLVED:
    case ISL_AUX_STATE_PASS_THROUGH:
-      return info[usage].write_behavior == WRITES_COMPRESS ?
-             ISL_AUX_STATE_COMPRESSED_NO_CLEAR : initial_state;
-   case ISL_AUX_STATE_COMPRESSED_CLEAR:
    case ISL_AUX_STATE_COMPRESSED_NO_CLEAR:
+      return info[usage].write_behavior == WRITES_COMPRESS ?
+                ISL_AUX_STATE_COMPRESSED_NO_CLEAR :
+             info[usage].write_behavior == WRITES_COMPRESS_CLEAR ?
+                ISL_AUX_STATE_COMPRESSED_CLEAR : initial_state;
+   case ISL_AUX_STATE_COMPRESSED_CLEAR:
    case ISL_AUX_STATE_AUX_INVALID:
       return initial_state;
 #ifdef IN_UNIT_TEST

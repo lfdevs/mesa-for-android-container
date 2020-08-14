@@ -71,10 +71,10 @@ static const struct vgpu10_format_entry format_conversion_table[] =
    [ PIPE_FORMAT_Z32_FLOAT ] =             { SVGA3D_FORMAT_INVALID,      SVGA3D_D32_FLOAT,            SVGA3D_D32_FLOAT,            0 },
    [ PIPE_FORMAT_Z24_UNORM_S8_UINT ] =     { SVGA3D_FORMAT_INVALID,      SVGA3D_D24_UNORM_S8_UINT,    SVGA3D_D24_UNORM_S8_UINT,    0 },
    [ PIPE_FORMAT_Z24X8_UNORM ] =           { SVGA3D_FORMAT_INVALID,      SVGA3D_D24_UNORM_S8_UINT,    SVGA3D_D24_UNORM_S8_UINT,    0 },
-   [ PIPE_FORMAT_R32_FLOAT ] =             { SVGA3D_R32_FLOAT,           SVGA3D_R32_FLOAT,            SVGA3D_R32_FLOAT,            TF_GEN_MIPS },
-   [ PIPE_FORMAT_R32G32_FLOAT ] =          { SVGA3D_R32G32_FLOAT,        SVGA3D_R32G32_FLOAT,         SVGA3D_R32G32_FLOAT,         TF_GEN_MIPS },
+   [ PIPE_FORMAT_R32_FLOAT ] =             { SVGA3D_R32_FLOAT,           SVGA3D_R32_FLOAT,            SVGA3D_R32_FLOAT,            TF_GEN_MIPS  },
+   [ PIPE_FORMAT_R32G32_FLOAT ] =          { SVGA3D_R32G32_FLOAT,        SVGA3D_R32G32_FLOAT,         SVGA3D_R32G32_FLOAT,         TF_GEN_MIPS  },
    [ PIPE_FORMAT_R32G32B32_FLOAT ] =       { SVGA3D_R32G32B32_FLOAT,     SVGA3D_R32G32B32_FLOAT,      SVGA3D_R32G32B32_FLOAT,      TF_GEN_MIPS },
-   [ PIPE_FORMAT_R32G32B32A32_FLOAT ] =    { SVGA3D_R32G32B32A32_FLOAT,  SVGA3D_R32G32B32A32_FLOAT,   SVGA3D_R32G32B32A32_FLOAT,   TF_GEN_MIPS },
+   [ PIPE_FORMAT_R32G32B32A32_FLOAT ] =    { SVGA3D_R32G32B32A32_FLOAT,  SVGA3D_R32G32B32A32_FLOAT,   SVGA3D_R32G32B32A32_FLOAT,   TF_GEN_MIPS  },
    [ PIPE_FORMAT_R32_USCALED ] =           { SVGA3D_R32_UINT,            SVGA3D_FORMAT_INVALID,       SVGA3D_FORMAT_INVALID,       VF_U_TO_F_CAST },
    [ PIPE_FORMAT_R32G32_USCALED ] =        { SVGA3D_R32G32_UINT,         SVGA3D_FORMAT_INVALID,       SVGA3D_FORMAT_INVALID,       VF_U_TO_F_CAST },
    [ PIPE_FORMAT_R32G32B32_USCALED ] =     { SVGA3D_R32G32B32_UINT,      SVGA3D_FORMAT_INVALID,       SVGA3D_FORMAT_INVALID,       VF_U_TO_F_CAST },
@@ -176,11 +176,11 @@ static const struct vgpu10_format_entry format_conversion_table[] =
    [ PIPE_FORMAT_R16G16B16A16_SINT ] =     { SVGA3D_R16G16B16A16_SINT,   SVGA3D_R16G16B16A16_SINT,    SVGA3D_R16G16B16A16_SINT,    0 },
    [ PIPE_FORMAT_R32_UINT ] =              { SVGA3D_R32_UINT,            SVGA3D_R32_UINT,             SVGA3D_R32_UINT,             0 },
    [ PIPE_FORMAT_R32G32_UINT ] =           { SVGA3D_R32G32_UINT,         SVGA3D_R32G32_UINT,          SVGA3D_R32G32_UINT,          0 },
-   [ PIPE_FORMAT_R32G32B32_UINT ] =        { SVGA3D_R32G32B32_UINT,      SVGA3D_FORMAT_INVALID,       SVGA3D_FORMAT_INVALID,       0 },
+   [ PIPE_FORMAT_R32G32B32_UINT ] =        { SVGA3D_R32G32B32_UINT,      SVGA3D_R32G32B32_UINT,       SVGA3D_R32G32B32_UINT,       0 },
    [ PIPE_FORMAT_R32G32B32A32_UINT ] =     { SVGA3D_R32G32B32A32_UINT,   SVGA3D_R32G32B32A32_UINT,    SVGA3D_R32G32B32A32_UINT,    0 },
    [ PIPE_FORMAT_R32_SINT ] =              { SVGA3D_R32_SINT,            SVGA3D_R32_SINT,             SVGA3D_R32_SINT,             0 },
    [ PIPE_FORMAT_R32G32_SINT ] =           { SVGA3D_R32G32_SINT,         SVGA3D_R32G32_SINT,          SVGA3D_R32G32_SINT,          0 },
-   [ PIPE_FORMAT_R32G32B32_SINT ] =        { SVGA3D_R32G32B32_SINT,      SVGA3D_FORMAT_INVALID,       SVGA3D_FORMAT_INVALID,       0 },
+   [ PIPE_FORMAT_R32G32B32_SINT ] =        { SVGA3D_R32G32B32_SINT,      SVGA3D_R32G32B32_SINT,       SVGA3D_R32G32B32_SINT,       0 },
    [ PIPE_FORMAT_R32G32B32A32_SINT ] =     { SVGA3D_R32G32B32A32_SINT,   SVGA3D_R32G32B32A32_SINT,    SVGA3D_R32G32B32A32_SINT,    0 },
    [ PIPE_FORMAT_A8_UINT ] =               { SVGA3D_FORMAT_INVALID,      SVGA3D_FORMAT_INVALID,       SVGA3D_R8_UINT,              TF_000X },
    [ PIPE_FORMAT_I8_UINT ] =               { SVGA3D_FORMAT_INVALID,      SVGA3D_FORMAT_INVALID,       SVGA3D_R8_UINT,              TF_XXXX },
@@ -2137,7 +2137,7 @@ svga_is_format_supported(struct pipe_screen *screen,
    }
 
    if (util_format_is_srgb(format) &&
-       (bindings & PIPE_BIND_DISPLAY_TARGET)) {
+       (bindings & (PIPE_BIND_DISPLAY_TARGET | PIPE_BIND_RENDER_TARGET))) {
        /* We only support sRGB rendering with vgpu10 */
       return false;
    }
@@ -2249,6 +2249,12 @@ svga_is_dx_format_supported(struct pipe_screen *screen,
       SVGA3dSurfaceFormat svga_format;
       unsigned flags;
       svga_translate_vertex_format_vgpu10(format, &svga_format, &flags);
+      return svga_format != SVGA3D_FORMAT_INVALID;
+   }
+
+   if (bindings & PIPE_BIND_SAMPLER_VIEW && target == PIPE_BUFFER) {
+      unsigned flags;
+      svga_translate_texture_buffer_view_format(format, &svga_format, &flags);
       return svga_format != SVGA3D_FORMAT_INVALID;
    }
 

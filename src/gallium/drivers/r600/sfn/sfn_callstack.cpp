@@ -90,12 +90,40 @@ int CallStack::update_max_depth(unsigned type)
    elements = (stack.loop + stack.push_wqm ) * entry_size;
    elements += stack.push;
 
-   /* These next three lines are EVERGREEN specific and should
-    * be moved to a virtual function when other chipsets are to
-    * be supported */
-   assert(m_bc.chip_class == EVERGREEN);
-   if (type == FC_PUSH_VPM || stack.push > 0) {
-      elements += 1;
+   switch (m_bc.chip_class) {
+   case R600:
+   case R700:
+     /* pre-r8xx: if any non-WQM PUSH instruction is invoked, 2 elements on
+      * the stack must be reserved to hold the current active/continue
+      * masks */
+     if (type == FC_PUSH_VPM || stack.push > 0) {
+       elements += 2;
+     }
+     break;
+   case CAYMAN:
+     /* r9xx: any stack operation on empty stack consumes 2 additional
+      * elements */
+     elements += 2;
+     break;
+   case EVERGREEN:
+     /* r8xx+: 2 extra elements are not always required, but one extra
+      * element must be added for each of the following cases:
+      * 1. There is an ALU_ELSE_AFTER instruction at the point of greatest
+      *    stack usage.
+      *    (Currently we don't use ALU_ELSE_AFTER.)
+      * 2. There are LOOP/WQM frames on the stack when any flavor of non-WQM
+      *    PUSH instruction executed.
+      *
+      *    NOTE: it seems we also need to reserve additional element in some
+      *    other cases, e.g. when we have 4 levels of PUSH_VPM in the shader,
+      *    then STACK_SIZE should be 2 instead of 1 */
+     if (type == FC_PUSH_VPM || stack.push > 0) {
+       elements += 1;
+     }
+     break;
+   default:
+     assert(0);
+     break;
    }
 
    entry_size = 4;

@@ -476,7 +476,7 @@ int bc_parser::prepare_alu_group(cf_node* cf, alu_group_node *g) {
 				n->src[s] = sh->get_const_value(src.value);
 			} else if (src.sel == ALU_SRC_PS || src.sel == ALU_SRC_PV) {
 				unsigned pgroup = !cgroup, prev_slot = src.sel == ALU_SRC_PS ?
-						SLOT_TRANS : src.chan;
+						((unsigned)SLOT_TRANS) : src.chan;
 
 				// XXX shouldn't happen but llvm backend uses PS on cayman
 				if (prev_slot == SLOT_TRANS && ctx.is_cayman())

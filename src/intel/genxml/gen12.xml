@@ -249,6 +249,17 @@
     </group>
   </struct>
 
+  <struct name="3DSTATE_SO_BUFFER_INDEX_BODY" length="7">
+    <field name="Stream Output Buffer Offset Address Enable" start="20" end="20" type="bool"/>
+    <field name="Stream Offset Write Enable" start="21" end="21" type="bool"/>
+    <field name="MOCS" start="22" end="28" type="uint"/>
+    <field name="SO Buffer Enable" start="31" end="31" type="bool"/>
+    <field name="Surface Base Address" start="34" end="79" type="address"/>
+    <field name="Surface Size" start="96" end="125" type="uint"/>
+    <field name="Stream Output Buffer Offset Address" start="130" end="175" type="address"/>
+    <field name="Stream Offset" start="192" end="223" type="uint"/>
+  </struct>
+
   <struct name="BINDING_TABLE_EDIT_ENTRY" length="1">
     <field name="Surface State Pointer" start="0" end="15" type="offset"/>
     <field name="Binding Table Index" start="16" end="23" type="uint"/>
@@ -391,7 +402,7 @@
   <struct name="HCP_PAK_INSERT_OBJECT_INDIRECT_PAYLOAD" length="4">
     <field name="Indirect Payload Data Size in bits" start="0" end="31" type="uint"/>
     <field name="Indirect Payload Base Address" start="32" end="95" type="address"/>
-    <field name="Indirect Payload Base Address2" start="96" end="128" type="MEMORYADDRESSATTRIBUTES"/>
+    <field name="Indirect Payload Base Address2" start="96" end="127" type="MEMORYADDRESSATTRIBUTES"/>
   </struct>
 
   <struct name="HCP_REF_LIST_ENTRY" length="1">
@@ -1228,17 +1239,6 @@
     <field name="Component 2 Control" start="52" end="54" type="3D_Vertex_Component_Control"/>
     <field name="Component 1 Control" start="56" end="58" type="3D_Vertex_Component_Control"/>
     <field name="Component 0 Control" start="60" end="62" type="3D_Vertex_Component_Control"/>
-  </struct>
-
-  <struct name="3DSTATE_SO_BUFFER_INDEX_BODY" length="7">
-    <field name="Stream Output Buffer Offset Address Enable" start="20" end="20" type="bool"/>
-    <field name="Stream Offset Write Enable" start="21" end="21" type="bool"/>
-    <field name="MOCS" start="22" end="28" type="uint"/>
-    <field name="SO Buffer Enable" start="31" end="31" type="bool"/>
-    <field name="Surface Base Address" start="34" end="79" type="address"/>
-    <field name="Surface Size" start="96" end="125" type="uint"/>
-    <field name="Stream Output Buffer Offset Address" start="130" end="175" type="address"/>
-    <field name="Stream Offset" start="192" end="223" type="uint"/>
   </struct>
 
   <instruction name="3DPRIMITIVE" bias="2" length="7" engine="render">
@@ -6373,11 +6373,11 @@
 
   <instruction name="PIPE_CONTROL" bias="2" length="6" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="4"/>
+    <field name="HDC Pipeline Flush Enable" start="9" end="9" type="bool"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="0"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="2"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <field name="HDC Pipeline Flush Enable" start="9" end="9" type="bool"/>
     <field name="Depth Cache Flush Enable" start="32" end="32" type="bool"/>
     <field name="Stall At Pixel Scoreboard" start="33" end="33" type="bool"/>
     <field name="State Cache Invalidation Enable" start="34" end="34" type="bool"/>
@@ -6413,6 +6413,7 @@
     </field>
     <field name="Flush LLC" start="58" end="58" type="bool"/>
     <field name="Tile Cache Flush Enable" start="60" end="60" type="bool"/>
+    <field name="Command Cache Invalidate Enable" start="61" end="61" type="bool"/>
     <field name="Address" start="66" end="111" type="address"/>
     <field name="Immediate Data" start="128" end="191" type="uint"/>
   </instruction>
@@ -7055,11 +7056,6 @@
     <field name="HIZ Plane Optimization disable bit Mask" start="25" end="25" type="bool"/>
   </register>
 
-  <register name="HIZ_CHICKEN" length="1" num="0x7018">
-    <field name="HZ Depth Test LE/GE Optimization Disable" start="13" end="13" type="bool"/>
-    <field name="HZ Depth Test LE/GE Optimization Disable Mask" start="29" end="29" type="bool"/>
-  </register>
-
   <register name="COMMON_SLICE_CHICKEN3" length="1" num="0x7304">
     <field name="PS Thread Panic Dispatch" start="6" end="7" type="uint"/>
     <field name="PS Thread Panic Dispatch Mask" start="22" end="23" type="uint"/>
@@ -7114,6 +7110,11 @@
   <register name="HALF_SLICE_CHICKEN7" length="1" num="0x0e194">
     <field name="Enabled Texel Offset Precision Fix" start="1" end="1" type="bool"/>
     <field name="Enabled Texel Offset Precision Fix Mask" start="17" end="17" type="bool"/>
+  </register>
+
+  <register name="HIZ_CHICKEN" length="1" num="0x7018">
+    <field name="HZ Depth Test LE/GE Optimization Disable" start="13" end="13" type="bool"/>
+    <field name="HZ Depth Test LE/GE Optimization Disable Mask" start="29" end="29" type="bool"/>
   </register>
 
   <register name="HS_INVOCATION_COUNT" length="2" num="0x2300">

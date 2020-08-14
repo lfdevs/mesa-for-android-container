@@ -174,6 +174,7 @@ struct loader_dri3_drawable {
     */
    mtx_t mtx;
    cnd_t event_cnd;
+   unsigned last_special_event_sequence;
    bool has_event_waiter;
 };
 

@@ -43,24 +43,20 @@ iris_get_monitor_info(struct pipe_screen *pscreen, unsigned index,
                       struct pipe_driver_query_info *info)
 {
    const struct iris_screen *screen = (struct iris_screen *)pscreen;
-   assert(screen->monitor_cfg);
-   if (!screen->monitor_cfg)
+   const struct gen_perf_config *perf_cfg = screen->perf_cfg;
+   assert(perf_cfg);
+   if (!perf_cfg)
       return 0;
-
-   const struct iris_monitor_config *monitor_cfg = screen->monitor_cfg;
 
    if (!info) {
       /* return the number of metrics */
-      return monitor_cfg->num_counters;
+      return perf_cfg->n_counters;
    }
 
-   const struct gen_perf_config *perf_cfg = monitor_cfg->perf_cfg;
-   const int group = monitor_cfg->counters[index].group;
-   const int counter_index = monitor_cfg->counters[index].counter;
-   struct gen_perf_query_counter *counter =
-      &perf_cfg->queries[group].counters[counter_index];
+   struct gen_perf_query_counter_info *counter_info = &perf_cfg->counter_infos[index];
+   struct gen_perf_query_counter *counter = counter_info->counter;
 
-   info->group_id = group;
+   info->group_id = counter_info->location.group_idx;
    info->name = counter->name;
    info->query_type = PIPE_QUERY_DRIVER_SPECIFIC + index;
 
@@ -97,83 +93,18 @@ iris_get_monitor_info(struct pipe_screen *pscreen, unsigned index,
 static bool
 iris_monitor_init_metrics(struct iris_screen *screen)
 {
-   struct iris_monitor_config *monitor_cfg =
-      rzalloc(screen, struct iris_monitor_config);
-   struct gen_perf_config *perf_cfg = NULL;
-   if (unlikely(!monitor_cfg))
-      goto allocation_error;
-   perf_cfg = gen_perf_new(monitor_cfg);
+   struct gen_perf_config *perf_cfg = gen_perf_new(screen);
    if (unlikely(!perf_cfg))
-      goto allocation_error;
+      return false;
 
-   monitor_cfg->perf_cfg = perf_cfg;
+   screen->perf_cfg = perf_cfg;
 
    iris_perf_init_vtbl(perf_cfg);
 
-   gen_perf_init_metrics(perf_cfg, &screen->devinfo, screen->fd);
-   screen->monitor_cfg = monitor_cfg;
+   gen_perf_init_metrics(perf_cfg, &screen->devinfo, screen->fd,
+                         true /* pipeline stats*/);
 
-   /* a gallium "group" is equivalent to a gen "query"
-    * a gallium "query" is equivalent to a gen "query_counter"
-    *
-    * Each gen_query supports a specific number of query_counters.  To
-    * allocate the array of iris_monitor_counter, we need an upper bound
-    * (ignoring duplicate query_counters).
-    */
-   int gen_query_counters_count = 0;
-   for (int gen_query_id = 0;
-        gen_query_id < perf_cfg->n_queries;
-        ++gen_query_id) {
-      gen_query_counters_count += perf_cfg->queries[gen_query_id].n_counters;
-   }
-
-   monitor_cfg->counters = rzalloc_size(monitor_cfg,
-                                        sizeof(struct iris_monitor_counter) *
-                                        gen_query_counters_count);
-   if (unlikely(!monitor_cfg->counters))
-      goto allocation_error;
-
-   int iris_monitor_id = 0;
-   for (int group = 0; group < perf_cfg->n_queries; ++group) {
-      for (int counter = 0;
-           counter < perf_cfg->queries[group].n_counters;
-           ++counter) {
-         /* Check previously identified metrics to filter out duplicates. The
-          * user is not helped by having the same metric available in several
-          * groups. (n^2 algorithm).
-          */
-         bool duplicate = false;
-         for (int existing_group = 0;
-              existing_group < group && !duplicate;
-              ++existing_group) {
-            for (int existing_counter = 0;
-                 existing_counter < perf_cfg->queries[existing_group].n_counters && !duplicate;
-                 ++existing_counter) {
-               const char *current_name =
-                  perf_cfg->queries[group].counters[counter].name;
-               const char *existing_name =
-                  perf_cfg->queries[existing_group].counters[existing_counter].name;
-               if (strcmp(current_name, existing_name) == 0) {
-                  duplicate = true;
-               }
-            }
-         }
-         if (duplicate)
-            continue;
-         monitor_cfg->counters[iris_monitor_id].group = group;
-         monitor_cfg->counters[iris_monitor_id].counter = counter;
-         ++iris_monitor_id;
-      }
-   }
-   monitor_cfg->num_counters = iris_monitor_id;
-   return monitor_cfg->num_counters;
-
-allocation_error:
-   if (monitor_cfg)
-      free(monitor_cfg->counters);
-   free(perf_cfg);
-   free(monitor_cfg);
-   return false;
+   return perf_cfg->n_counters > 0;
 }
 
 int
@@ -182,13 +113,12 @@ iris_get_monitor_group_info(struct pipe_screen *pscreen,
                             struct pipe_driver_query_group_info *info)
 {
    struct iris_screen *screen = (struct iris_screen *)pscreen;
-   if (!screen->monitor_cfg) {
+   if (!screen->perf_cfg) {
       if (!iris_monitor_init_metrics(screen))
          return 0;
    }
 
-   const struct iris_monitor_config *monitor_cfg = screen->monitor_cfg;
-   const struct gen_perf_config *perf_cfg = monitor_cfg->perf_cfg;
+   const struct gen_perf_config *perf_cfg = screen->perf_cfg;
 
    if (!info) {
       /* return the count that can be queried */
@@ -213,14 +143,13 @@ static void
 iris_init_monitor_ctx(struct iris_context *ice)
 {
    struct iris_screen *screen = (struct iris_screen *) ice->ctx.screen;
-   struct iris_monitor_config *monitor_cfg = screen->monitor_cfg;
 
    ice->perf_ctx = gen_perf_new_context(ice);
    if (unlikely(!ice->perf_ctx))
       return;
 
    struct gen_perf_context *perf_ctx = ice->perf_ctx;
-   struct gen_perf_config *perf_cfg = monitor_cfg->perf_cfg;
+   struct gen_perf_config *perf_cfg = screen->perf_cfg;
    gen_perf_init_context(perf_ctx,
                          perf_cfg,
                          ice,
@@ -237,8 +166,7 @@ iris_create_monitor_object(struct iris_context *ice,
                            unsigned *query_types)
 {
    struct iris_screen *screen = (struct iris_screen *) ice->ctx.screen;
-   struct iris_monitor_config *monitor_cfg = screen->monitor_cfg;
-   struct gen_perf_config *perf_cfg = monitor_cfg->perf_cfg;
+   struct gen_perf_config *perf_cfg = screen->perf_cfg;
    struct gen_perf_query_object *query_obj = NULL;
 
    /* initialize perf context if this has not already been done.  This
@@ -251,8 +179,8 @@ iris_create_monitor_object(struct iris_context *ice,
 
    assert(num_queries > 0);
    int query_index = query_types[0] - PIPE_QUERY_DRIVER_SPECIFIC;
-   assert(query_index <= monitor_cfg->num_counters);
-   const int group = monitor_cfg->counters[query_index].group;
+   assert(query_index <= perf_cfg->n_counters);
+   const int group = perf_cfg->counter_infos[query_index].location.group_idx;
 
    struct iris_monitor_object *monitor =
       calloc(1, sizeof(struct iris_monitor_object));
@@ -269,10 +197,10 @@ iris_create_monitor_object(struct iris_context *ice,
       unsigned current_query_index = current_query - PIPE_QUERY_DRIVER_SPECIFIC;
 
       /* all queries must be in the same group */
-      assert(current_query_index <= monitor_cfg->num_counters);
-      assert(monitor_cfg->counters[current_query_index].group == group);
+      assert(current_query_index <= perf_cfg->n_counters);
+      assert(perf_cfg->counter_infos[current_query_index].location.group_idx == group);
       monitor->active_counters[i] =
-         monitor_cfg->counters[current_query_index].counter;
+         perf_cfg->counter_infos[current_query_index].location.counter_idx;
    }
 
    /* create the gen_perf_query */
@@ -355,7 +283,7 @@ iris_get_monitor_result(struct pipe_context *ctx,
    assert(gen_perf_is_query_ready(perf_ctx, monitor->query, batch));
 
    unsigned bytes_written;
-   gen_perf_get_query_data(perf_ctx, monitor->query,
+   gen_perf_get_query_data(perf_ctx, monitor->query, batch,
                            monitor->result_size,
                            (unsigned*) monitor->result_buffer,
                            &bytes_written);

@@ -716,24 +716,30 @@ st_create_vp_variant(struct st_context *st,
                                               PIPE_CAP_NIR_COMPACT_ARRAYS);
 
          bool use_eye = st->ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX] != NULL;
-         gl_state_index16 clipplane_state[MAX_CLIP_PLANES][STATE_LENGTH];
-         for (int i = 0; i < MAX_CLIP_PLANES; ++i) {
-            if (use_eye) {
-               clipplane_state[i][0] = STATE_CLIPPLANE;
-               clipplane_state[i][1] = i;
-            } else {
-               clipplane_state[i][0] = STATE_INTERNAL;
-               clipplane_state[i][1] = STATE_CLIP_INTERNAL;
-               clipplane_state[i][2] = i;
-            }
-            _mesa_add_state_reference(params, clipplane_state[i]);
-         }
+         struct nir_shader *nir = state.ir.nir;
 
-         NIR_PASS_V(state.ir.nir, nir_lower_clip_vs, key->lower_ucp,
-                    true, can_compact, clipplane_state);
-         NIR_PASS_V(state.ir.nir, nir_lower_io_to_temporaries,
-                    nir_shader_get_entrypoint(state.ir.nir), true, false);
-         NIR_PASS_V(state.ir.nir, nir_lower_global_vars_to_local);
+         if (nir->info.outputs_written & VARYING_BIT_CLIP_DIST0)
+            NIR_PASS_V(state.ir.nir, nir_lower_clip_disable, key->lower_ucp);
+         else {
+            gl_state_index16 clipplane_state[MAX_CLIP_PLANES][STATE_LENGTH];
+            for (int i = 0; i < MAX_CLIP_PLANES; ++i) {
+               if (use_eye) {
+                  clipplane_state[i][0] = STATE_CLIPPLANE;
+                  clipplane_state[i][1] = i;
+               } else {
+                  clipplane_state[i][0] = STATE_INTERNAL;
+                  clipplane_state[i][1] = STATE_CLIP_INTERNAL;
+                  clipplane_state[i][2] = i;
+               }
+               _mesa_add_state_reference(params, clipplane_state[i]);
+            }
+
+            NIR_PASS_V(state.ir.nir, nir_lower_clip_vs, key->lower_ucp,
+                       true, can_compact, clipplane_state);
+            NIR_PASS_V(state.ir.nir, nir_lower_io_to_temporaries,
+                       nir_shader_get_entrypoint(state.ir.nir), true, false);
+            NIR_PASS_V(state.ir.nir, nir_lower_global_vars_to_local);
+         }
          finalize = true;
       }
 
@@ -1272,13 +1278,14 @@ st_create_fp_variant(struct st_context *st,
       }
 
       if (key->lower_two_sided_color) {
-         NIR_PASS_V(state.ir.nir, nir_lower_two_sided_color);
+         bool face_sysval = st->ctx->Const.GLSLFrontFacingIsSysVal;
+         NIR_PASS_V(state.ir.nir, nir_lower_two_sided_color, face_sysval);
          finalize = true;
       }
 
       if (key->persample_shading) {
           nir_shader *shader = state.ir.nir;
-          nir_foreach_variable(var, &shader->inputs)
+          nir_foreach_shader_in_variable(var, shader)
              var->data.sample = true;
           finalize = true;
       }

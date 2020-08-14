@@ -489,7 +489,7 @@ void nir_tgsi_scan_shader(const struct nir_shader *nir,
 
    i = 0;
    uint64_t processed_inputs = 0;
-   nir_foreach_variable(variable, &nir->inputs) {
+   nir_foreach_shader_in_variable(variable, nir) {
       unsigned semantic_name, semantic_index;
 
       const struct glsl_type *type = variable->type;
@@ -530,6 +530,11 @@ void nir_tgsi_scan_shader(const struct nir_shader *nir,
          enum glsl_base_type base_type =
             glsl_get_base_type(glsl_without_array(variable->type));
 
+         if (variable->data.centroid)
+            info->input_interpolate_loc[i] = TGSI_INTERPOLATE_LOC_CENTROID;
+         if (variable->data.sample)
+            info->input_interpolate_loc[i] = TGSI_INTERPOLATE_LOC_SAMPLE;
+
          switch (variable->data.interpolation) {
          case INTERP_MODE_NONE:
             if (glsl_base_type_is_integer(base_type)) {
@@ -568,7 +573,7 @@ void nir_tgsi_scan_shader(const struct nir_shader *nir,
    i = 0;
    uint64_t processed_outputs = 0;
    unsigned num_outputs = 0;
-   nir_foreach_variable(variable, &nir->outputs) {
+   nir_foreach_shader_out_variable(variable, nir) {
       unsigned semantic_name, semantic_index;
 
       i = variable->data.driver_location;

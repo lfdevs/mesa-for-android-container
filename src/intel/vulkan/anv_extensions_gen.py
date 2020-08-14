@@ -24,172 +24,15 @@ COPYRIGHT = """\
  */
 """
 
-import argparse
-import xml.etree.cElementTree as et
-
-from mako.template import Template
+import os.path
+import sys
 
 from anv_extensions import *
 
-platform_defines = []
+VULKAN_UTIL = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../vulkan/util'))
+sys.path.append(VULKAN_UTIL)
 
-def _init_exts_from_xml(xml):
-    """ Walk the Vulkan XML and fill out extra extension information. """
-
-    xml = et.parse(xml)
-
-    ext_name_map = {}
-    for ext in EXTENSIONS:
-        ext_name_map[ext.name] = ext
-
-    # KHR_display is missing from the list.
-    platform_defines.append('VK_USE_PLATFORM_DISPLAY_KHR')
-    for platform in xml.findall('./platforms/platform'):
-        platform_defines.append(platform.attrib['protect'])
-
-    for ext_elem in xml.findall('.extensions/extension'):
-        ext_name = ext_elem.attrib['name']
-        if ext_name not in ext_name_map:
-            continue
-
-        ext = ext_name_map[ext_name]
-        ext.type = ext_elem.attrib['type']
-
-_TEMPLATE_H = Template(COPYRIGHT + """
-
-#ifndef ANV_EXTENSIONS_H
-#define ANV_EXTENSIONS_H
-
-#include "stdbool.h"
-
-#include "perf/gen_perf.h"
-
-#define ANV_INSTANCE_EXTENSION_COUNT ${len(instance_extensions)}
-
-extern const VkExtensionProperties anv_instance_extensions[];
-
-struct anv_instance_extension_table {
-   union {
-      bool extensions[ANV_INSTANCE_EXTENSION_COUNT];
-      struct {
-%for ext in instance_extensions:
-         bool ${ext.name[3:]};
-%endfor
-      };
-   };
-};
-
-extern const struct anv_instance_extension_table anv_instance_extensions_supported;
-
-
-#define ANV_DEVICE_EXTENSION_COUNT ${len(device_extensions)}
-
-extern const VkExtensionProperties anv_device_extensions[];
-
-struct anv_device_extension_table {
-   union {
-      bool extensions[ANV_DEVICE_EXTENSION_COUNT];
-      struct {
-%for ext in device_extensions:
-        bool ${ext.name[3:]};
-%endfor
-      };
-   };
-};
-
-struct anv_physical_device;
-
-void
-anv_physical_device_get_supported_extensions(const struct anv_physical_device *device,
-                                             struct anv_device_extension_table *extensions);
-
-#endif /* ANV_EXTENSIONS_H */
-""")
-
-_TEMPLATE_C = Template(COPYRIGHT + """
-#include "anv_private.h"
-
-#include "vk_util.h"
-
-/* Convert the VK_USE_PLATFORM_* defines to booleans */
-%for platform_define in platform_defines:
-#ifdef ${platform_define}
-#   undef ${platform_define}
-#   define ${platform_define} true
-#else
-#   define ${platform_define} false
-#endif
-%endfor
-
-/* And ANDROID too */
-#ifdef ANDROID
-#   undef ANDROID
-#   define ANDROID true
-#else
-#   define ANDROID false
-#endif
-
-#define ANV_HAS_SURFACE (VK_USE_PLATFORM_WAYLAND_KHR || \\
-                         VK_USE_PLATFORM_XCB_KHR || \\
-                         VK_USE_PLATFORM_XLIB_KHR || \\
-                         VK_USE_PLATFORM_DISPLAY_KHR)
-
-static const uint32_t MAX_API_VERSION = ${MAX_API_VERSION.c_vk_version()};
-
-VkResult anv_EnumerateInstanceVersion(
-    uint32_t*                                   pApiVersion)
-{
-    *pApiVersion = MAX_API_VERSION;
-    return VK_SUCCESS;
-}
-
-const VkExtensionProperties anv_instance_extensions[ANV_INSTANCE_EXTENSION_COUNT] = {
-%for ext in instance_extensions:
-   {"${ext.name}", ${ext.ext_version}},
-%endfor
-};
-
-const struct anv_instance_extension_table anv_instance_extensions_supported = {
-%for ext in instance_extensions:
-   .${ext.name[3:]} = ${ext.enable},
-%endfor
-};
-
-uint32_t
-anv_physical_device_api_version(struct anv_physical_device *device)
-{
-    uint32_t version = 0;
-
-    uint32_t override = vk_get_version_override();
-    if (override)
-        return MIN2(override, MAX_API_VERSION);
-
-%for version in API_VERSIONS:
-    if (!(${version.enable}))
-        return version;
-    version = ${version.version.c_vk_version()};
-
-%endfor
-    return version;
-}
-
-const VkExtensionProperties anv_device_extensions[ANV_DEVICE_EXTENSION_COUNT] = {
-%for ext in device_extensions:
-   {"${ext.name}", ${ext.ext_version}},
-%endfor
-};
-
-void
-anv_physical_device_get_supported_extensions(const struct anv_physical_device *device,
-                                             struct anv_device_extension_table *extensions)
-{
-   *extensions = (struct anv_device_extension_table) {
-%for ext in device_extensions:
-      .${ext.name[3:]} = ${ext.enable},
-%endfor
-   };
-}
-""")
+from vk_extensions_gen import *
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -202,24 +45,8 @@ if __name__ == '__main__':
                         dest='xml_files')
     args = parser.parse_args()
 
-    for filename in args.xml_files:
-        _init_exts_from_xml(filename)
+    includes = [
+        "perf/gen_perf.h"
+    ]
 
-    for ext in EXTENSIONS:
-        assert ext.type == 'instance' or ext.type == 'device'
-
-    template_env = {
-        'API_VERSIONS': API_VERSIONS,
-        'MAX_API_VERSION': MAX_API_VERSION,
-        'instance_extensions': [e for e in EXTENSIONS if e.type == 'instance'],
-        'device_extensions': [e for e in EXTENSIONS if e.type == 'device'],
-        'platform_defines': platform_defines,
-    }
-
-    if args.out_h:
-        with open(args.out_h, 'w') as f:
-            f.write(_TEMPLATE_H.render(**template_env))
-
-    if args.out_c:
-        with open(args.out_c, 'w') as f:
-            f.write(_TEMPLATE_C.render(**template_env))
+    gen_extensions('anv', args.xml_files, API_VERSIONS, MAX_API_VERSION, EXTENSIONS, args.out_c, args.out_h, includes)

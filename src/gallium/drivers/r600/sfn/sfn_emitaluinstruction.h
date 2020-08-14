@@ -53,6 +53,7 @@ private:
 
    void split_constants(const nir_alu_instr& instr);
 
+   bool emit_mov(const nir_alu_instr& instr);
    bool emit_alu_op1(const nir_alu_instr& instr, EAluOp opcode, const AluOpFlags &flags = 0);
    bool emit_alu_op2(const nir_alu_instr& instr, EAluOp opcode, AluOp2Opts ops = op2_opt_none);
    bool emit_alu_op2_split_src_mods(const nir_alu_instr& instr, EAluOp opcode, AluOp2Opts ops = op2_opt_none);

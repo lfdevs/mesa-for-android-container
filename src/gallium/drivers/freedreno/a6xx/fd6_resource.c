@@ -153,7 +153,8 @@ fd6_setup_slices(struct fd_resource *rsc)
 	fdl6_layout(&rsc->layout, prsc->format, fd_resource_nr_samples(prsc),
 			prsc->width0, prsc->height0, prsc->depth0,
 			prsc->last_level + 1, prsc->array_size,
-			prsc->target == PIPE_TEXTURE_3D);
+			prsc->target == PIPE_TEXTURE_3D,
+			NULL);
 
 	return rsc->layout.size;
 }
@@ -162,7 +163,10 @@ static int
 fill_ubwc_buffer_sizes(struct fd_resource *rsc)
 {
 	struct pipe_resource *prsc = &rsc->base;
-	struct fdl_slice slice = *fd_resource_slice(rsc, 0);
+	struct fdl_explicit_layout explicit = {
+		.offset = rsc->layout.slices[0].offset,
+		.pitch = rsc->layout.pitch0,
+	};
 
 	/* limit things to simple single level 2d for now: */
 	if ((prsc->depth0 != 1) || (prsc->array_size != 1) || (prsc->last_level != 0))
@@ -175,17 +179,10 @@ fill_ubwc_buffer_sizes(struct fd_resource *rsc)
 	rsc->layout.ubwc = true;
 	rsc->layout.tile_mode = TILE6_3;
 
-	fdl6_layout(&rsc->layout, prsc->format, fd_resource_nr_samples(prsc),
+	if (!fdl6_layout(&rsc->layout, prsc->format, fd_resource_nr_samples(prsc),
 			prsc->width0, prsc->height0, prsc->depth0,
-			prsc->last_level + 1, prsc->array_size, false);
-
-	if (fd_resource_slice(rsc, 0)->pitch != slice.pitch)
+			prsc->last_level + 1, prsc->array_size, false, &explicit))
 		return -1;
-
-	/* The imported buffer may specify an offset, add that in here. */
-	rsc->layout.slices[0].offset += slice.offset;
-	rsc->layout.ubwc_slices[0].offset += slice.offset;
-	rsc->layout.size += slice.offset;
 
 	if (rsc->layout.size > fd_bo_size(rsc->bo))
 		return -1;

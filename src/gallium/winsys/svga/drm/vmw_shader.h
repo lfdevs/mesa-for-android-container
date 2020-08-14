@@ -65,4 +65,12 @@ void
 vmw_svga_winsys_shader_reference(struct vmw_svga_winsys_shader **pdst,
                                   struct vmw_svga_winsys_shader *src);
 
+struct vmw_svga_winsys_shader *
+vmw_svga_shader_create(struct svga_winsys_screen *sws,
+                       SVGA3dShaderType type,
+                       const uint32 *bytecode,
+                       uint32 bytecodeLen,
+                       const SVGA3dDXShaderSignatureHeader *sgnInfo,
+                       uint32 sgnLen);
+
 #endif /* VMW_SHADER_H_ */

@@ -30,32 +30,39 @@ struct pipe_screen;
 struct iris_screen;
 struct iris_batch;
 
-struct iris_syncpt {
+/**
+ * A refcounted DRM Sync Object (drm_syncobj).
+ */
+struct iris_syncobj {
    struct pipe_reference ref;
    uint32_t handle;
 };
 
-void iris_init_context_fence_functions(struct pipe_context *ctx);
-void iris_init_screen_fence_functions(struct pipe_screen *screen);
+struct iris_syncobj *iris_create_syncobj(struct iris_screen *screen);
+void iris_syncobj_destroy(struct iris_screen *, struct iris_syncobj *);
 
-struct iris_syncpt *iris_create_syncpt(struct iris_screen *screen);
-void iris_syncpt_destroy(struct iris_screen *, struct iris_syncpt *);
-void iris_batch_add_syncpt(struct iris_batch *batch,
-                           struct iris_syncpt *syncpt,
-                           unsigned flags);
-bool iris_wait_syncpt(struct pipe_screen *screen,
-                      struct iris_syncpt *syncpt,
-                      int64_t timeout_nsec);
+void iris_batch_add_syncobj(struct iris_batch *batch,
+                            struct iris_syncobj *syncobj,
+                            unsigned flags);
+bool iris_wait_syncobj(struct pipe_screen *screen,
+                       struct iris_syncobj *syncobj,
+                       int64_t timeout_nsec);
+
 static inline void
-iris_syncpt_reference(struct iris_screen *screen,
-                      struct iris_syncpt **dst,
-                      struct iris_syncpt *src)
+iris_syncobj_reference(struct iris_screen *screen,
+                       struct iris_syncobj **dst,
+                       struct iris_syncobj *src)
 {
    if (pipe_reference(*dst ? &(*dst)->ref : NULL,
-                      src ? &src->ref: NULL))
-      iris_syncpt_destroy(screen, *dst);
+                      src ? &src->ref : NULL))
+      iris_syncobj_destroy(screen, *dst);
 
    *dst = src;
 }
+
+/* ------------------------------------------------------------------- */
+
+void iris_init_context_fence_functions(struct pipe_context *ctx);
+void iris_init_screen_fence_functions(struct pipe_screen *screen);
 
 #endif

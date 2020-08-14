@@ -85,6 +85,7 @@ struct etna_screen {
 
    uint32_t drm_version;
 
+   struct etna_compiler *compiler;
    nir_shader_compiler_options options;
 };
 

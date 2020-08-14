@@ -191,6 +191,7 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
    case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
    case PIPE_CAP_PRIMITIVE_RESTART:
+   case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
    case PIPE_CAP_TGSI_INSTANCEID:
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
@@ -435,6 +436,9 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen,
       return 1;
    case PIPE_SHADER_CAP_INT64_ATOMICS:
    case PIPE_SHADER_CAP_FP16:
+   case PIPE_SHADER_CAP_FP16_DERIVATIVES:
+   case PIPE_SHADER_CAP_INT16:
+   case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
    case PIPE_SHADER_CAP_SUBROUTINES:
       return 0; /* please inline, or provide function declarations */
    case PIPE_SHADER_CAP_INTEGERS:
@@ -653,7 +657,7 @@ nv50_screen_init_hwctx(struct nv50_screen *screen)
    PUSH_DATA (push, 0);
    BEGIN_NV04(push, NV50_2D(COLOR_KEY_ENABLE), 1);
    PUSH_DATA (push, 0);
-   BEGIN_NV04(push, SUBC_2D(0x0888), 1);
+   BEGIN_NV04(push, NV50_2D(SET_PIXELS_FROM_MEMORY_SAFE_OVERLAP), 1);
    PUSH_DATA (push, 1);
    BEGIN_NV04(push, NV50_2D(COND_MODE), 1);
    PUSH_DATA (push, NV50_2D_COND_MODE_ALWAYS);

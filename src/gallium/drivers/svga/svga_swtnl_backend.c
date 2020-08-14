@@ -90,11 +90,12 @@ svga_vbuf_render_allocate_vertices(struct vbuf_render *render,
 
    if (!svga_render->vbuf) {
       svga_render->vbuf_size = MAX2(size, svga_render->vbuf_alloc_size);
-      svga_render->vbuf = pipe_buffer_create(screen,
-                                             PIPE_BIND_VERTEX_BUFFER,
-                                             PIPE_USAGE_STREAM,
-                                             svga_render->vbuf_size);
+      svga_render->vbuf = SVGA_TRY_PTR(pipe_buffer_create
+                                       (screen, PIPE_BIND_VERTEX_BUFFER,
+                                        PIPE_USAGE_STREAM,
+                                        svga_render->vbuf_size));
       if (!svga_render->vbuf) {
+         svga_retry_enter(svga);
          svga_context_flush(svga, NULL);
          assert(!svga_render->vbuf);
          svga_render->vbuf = pipe_buffer_create(screen,
@@ -104,6 +105,7 @@ svga_vbuf_render_allocate_vertices(struct vbuf_render *render,
          /* The buffer allocation may fail if we run out of memory.
           * The draw module's vbuf code should handle that without crashing.
           */
+         svga_retry_exit(svga);
       }
 
       svga->swtnl.new_vdecl = TRUE;
@@ -214,9 +216,9 @@ svga_vbuf_submit_state(struct svga_vbuf_render *svga_render)
 {
    struct svga_context *svga = svga_render->svga;
    SVGA3dVertexDecl vdecl[PIPE_MAX_ATTRIBS];
-   enum pipe_error ret;
    unsigned i;
    static const unsigned zero[PIPE_MAX_ATTRIBS] = {0};
+   boolean retried;
 
    /* if the vdecl or vbuf hasn't changed do nothing */
    if (!svga->swtnl.new_vdecl)
@@ -228,13 +230,10 @@ svga_vbuf_submit_state(struct svga_vbuf_render *svga_render)
    memcpy(vdecl, svga_render->vdecl, sizeof(vdecl));
 
    /* flush the hw state */
-   ret = svga_hwtnl_flush(svga->hwtnl);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = svga_hwtnl_flush(svga->hwtnl);
+   SVGA_RETRY_CHECK(svga, svga_hwtnl_flush(svga->hwtnl), retried);
+   if (retried) {
       /* if we hit this path we might become synced with hw */
       svga->swtnl.new_vbuf = TRUE;
-      assert(ret == PIPE_OK);
    }
 
    for (i = 0; i < svga_render->vdecl_count; i++) {
@@ -267,7 +266,7 @@ svga_vbuf_submit_state(struct svga_vbuf_render *svga_render)
    else {
       svga_hwtnl_set_flatshade(svga->hwtnl,
                                 svga->curr.rast->templ.flatshade ||
-                                svga->state.hw_draw.fs->uses_flat_interp,
+                                svga_is_using_flat_shading(svga),
                                 svga->curr.rast->templ.flatshade_first);
 
       svga_hwtnl_set_fillmode(svga->hwtnl, svga->curr.rast->hw_fillmode);
@@ -286,10 +285,10 @@ svga_vbuf_render_draw_arrays(struct vbuf_render *render,
    struct svga_context *svga = svga_render->svga;
    unsigned bias = (svga_render->vbuf_offset - svga_render->vdecl_offset)
       / svga_render->vertex_size;
-   enum pipe_error ret = PIPE_OK;
    /* instancing will already have been resolved at this point by 'draw' */
    const unsigned start_instance = 0;
    const unsigned instance_count = 1;
+   boolean retried;
 
    SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_VBUFDRAWARRAYS);
 
@@ -301,17 +300,13 @@ svga_vbuf_render_draw_arrays(struct vbuf_render *render,
     * redbook/polys.c
     */
    svga_update_state_retry(svga, SVGA_STATE_HW_DRAW);
-
-   ret = svga_hwtnl_draw_arrays(svga->hwtnl, svga_render->prim, start + bias,
-                                 nr, start_instance, instance_count);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = svga_hwtnl_draw_arrays(svga->hwtnl, svga_render->prim,
-                                   start + bias, nr,
-                                   start_instance, instance_count);
+   SVGA_RETRY_CHECK(svga, svga_hwtnl_draw_arrays
+                    (svga->hwtnl, svga_render->prim, start + bias,
+                     nr, start_instance, instance_count, 0), retried);
+   if (retried) {
       svga->swtnl.new_vbuf = TRUE;
-      assert(ret == PIPE_OK);
    }
+
    SVGA_STATS_TIME_POP(svga_sws(svga));
 }
 
@@ -325,7 +320,7 @@ svga_vbuf_render_draw_elements(struct vbuf_render *render,
    struct svga_context *svga = svga_render->svga;
    int bias = (svga_render->vbuf_offset - svga_render->vdecl_offset)
       / svga_render->vertex_size;
-   boolean ret;
+   boolean retried;
    /* instancing will already have been resolved at this point by 'draw' */
    const struct pipe_draw_info info = {
       .index_size = 2,
@@ -354,13 +349,12 @@ svga_vbuf_render_draw_elements(struct vbuf_render *render,
     * redbook/polys.c
     */
    svga_update_state_retry(svga, SVGA_STATE_HW_DRAW);
-   ret = svga_hwtnl_draw_range_elements(svga->hwtnl, &info, nr_indices);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = svga_hwtnl_draw_range_elements(svga->hwtnl, &info, nr_indices);
+   SVGA_RETRY_CHECK(svga, svga_hwtnl_draw_range_elements(svga->hwtnl, &info,
+                                                         nr_indices), retried);
+   if (retried) {
       svga->swtnl.new_vbuf = TRUE;
-      assert(ret == PIPE_OK);
    }
+
    SVGA_STATS_TIME_POP(svga_sws(svga));
 }
 

@@ -184,7 +184,7 @@ public:
 
    PValue literal(uint32_t value);
 
-   PValue get_temp_register();
+   PValue get_temp_register(int channel = -1);
 
    GPRVector get_temp_vec4();
 

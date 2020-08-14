@@ -32,6 +32,7 @@ libblorp = static_library(
   'blorp',
   files_libblorp,
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
-  c_args : [c_vis_args, no_override_init_args],
+  c_args : [no_override_init_args],
+  gnu_symbol_visibility : 'hidden',
   dependencies : [idep_nir_headers, idep_genxml],
 )

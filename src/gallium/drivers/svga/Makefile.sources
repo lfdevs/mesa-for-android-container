@@ -31,6 +31,7 @@ C_SOURCES := \
 	svga_pipe_sampler.c \
 	svga_pipe_streamout.c \
 	svga_pipe_vertex.c \
+	svga_pipe_ts.c \
 	svga_pipe_vs.c \
 	svga_public.h \
 	svga_resource_buffer.c \
@@ -61,6 +62,7 @@ C_SOURCES := \
 	svga_state_tgsi_transform.c \
 	svga_state_tss.c \
 	svga_state_vdecl.c \
+	svga_state_ts.c \
 	svga_state_vs.c \
 	svga_streamout.h \
 	svga_surface.c \

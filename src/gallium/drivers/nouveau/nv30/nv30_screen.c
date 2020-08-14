@@ -112,6 +112,7 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE:
    case PIPE_CAP_PRIMITIVE_RESTART:
+   case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
       return (eng3d->oclass >= NV40_3D_CLASS) ? 1 : 0;
    /* unsupported */
    case PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE:
@@ -350,6 +351,9 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen,
       case PIPE_SHADER_CAP_INTEGERS:
       case PIPE_SHADER_CAP_INT64_ATOMICS:
       case PIPE_SHADER_CAP_FP16:
+      case PIPE_SHADER_CAP_FP16_DERIVATIVES:
+      case PIPE_SHADER_CAP_INT16:
+      case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
       case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_LDEXP_SUPPORTED:
@@ -402,6 +406,9 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen,
       case PIPE_SHADER_CAP_SUBROUTINES:
       case PIPE_SHADER_CAP_INTEGERS:
       case PIPE_SHADER_CAP_FP16:
+      case PIPE_SHADER_CAP_FP16_DERIVATIVES:
+      case PIPE_SHADER_CAP_INT16:
+      case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
       case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_LDEXP_SUPPORTED:

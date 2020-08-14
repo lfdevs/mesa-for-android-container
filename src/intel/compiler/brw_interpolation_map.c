@@ -75,7 +75,7 @@ brw_setup_vue_interpolation(struct brw_vue_map *vue_map, nir_shader *nir,
       prog_data->contains_noperspective_varying = true;
    }
 
-   foreach_list_typed(nir_variable, var, node, &nir->inputs) {
+   nir_foreach_shader_in_variable(var, nir) {
       unsigned location = var->data.location;
       unsigned slot_count = glsl_count_attribute_slots(var->type, false);
 

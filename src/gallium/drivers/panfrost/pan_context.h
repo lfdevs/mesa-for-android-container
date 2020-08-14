@@ -82,7 +82,8 @@ struct panfrost_query {
 
 struct panfrost_fence {
         struct pipe_reference reference;
-        struct util_dynarray syncfds;
+        uint32_t syncobj;
+        bool signaled;
 };
 
 struct panfrost_streamout {
@@ -163,6 +164,10 @@ struct panfrost_context {
         struct pipe_blend_color blend_color;
         struct pipe_depth_stencil_alpha_state *depth_stencil;
         struct pipe_stencil_ref stencil_ref;
+        unsigned sample_mask;
+        unsigned min_samples;
+
+        struct panfrost_blend_state blit_blend;
 };
 
 /* Corresponds to the CSO */
@@ -192,12 +197,19 @@ struct panfrost_shader_state {
         bool reads_point_coord;
         bool reads_face;
         bool reads_frag_coord;
+        bool writes_global;
         unsigned stack_size;
         unsigned shared_size;
 
+        /* Does the fragment shader have side effects? In particular, if output
+         * is masked out, is it legal to skip shader execution? */
+        bool fs_sidefx;
+
+        /* For Bifrost - output type for each RT */
+        enum bifrost_shader_type blend_types[BIFROST_MAX_RENDER_TARGET_COUNT];
 
         unsigned int varying_count;
-        struct mali_attr_meta varyings[PIPE_MAX_ATTRIBS];
+        enum mali_format varyings[PIPE_MAX_ATTRIBS];
         gl_varying_slot varyings_loc[PIPE_MAX_ATTRIBS];
         struct pipe_stream_output_info stream_output;
         uint64_t so_mask;
@@ -216,6 +228,9 @@ struct panfrost_shader_state {
 
         unsigned first_tag;
         struct panfrost_bo *bo;
+
+        BITSET_WORD outputs_read;
+        enum pipe_format rt_formats[8];
 };
 
 /* A collection of varyings (the CSO) */
@@ -256,9 +271,10 @@ struct panfrost_sampler_state {
 
 struct panfrost_sampler_view {
         struct pipe_sampler_view base;
-        struct panfrost_bo *midgard_bo;
-        struct panfrost_bo *bifrost_bo;
+        struct panfrost_bo *bo;
         struct bifrost_texture_descriptor *bifrost_descriptor;
+        mali_ptr texture_bo;
+        enum mali_texture_layout layout;
 };
 
 static inline struct panfrost_context *
@@ -326,6 +342,11 @@ panfrost_shader_compile(struct panfrost_context *ctx,
 
 unsigned
 panfrost_ubo_count(struct panfrost_context *ctx, enum pipe_shader_type stage);
+
+void
+panfrost_create_sampler_view_bo(struct panfrost_sampler_view *so,
+                                struct pipe_context *pctx,
+                                struct pipe_resource *texture);
 
 /* Instancing */
 

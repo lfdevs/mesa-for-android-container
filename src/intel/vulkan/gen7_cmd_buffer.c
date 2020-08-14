@@ -201,7 +201,9 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
    if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
                                       ANV_CMD_DIRTY_RENDER_TARGETS |
                                       ANV_CMD_DIRTY_DYNAMIC_LINE_WIDTH |
-                                      ANV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS)) {
+                                      ANV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS |
+                                      ANV_CMD_DIRTY_DYNAMIC_CULL_MODE |
+                                      ANV_CMD_DIRTY_DYNAMIC_FRONT_FACE)) {
       uint32_t sf_dw[GENX(3DSTATE_SF_length)];
       struct GENX(3DSTATE_SF) sf = {
          GENX(3DSTATE_SF_header),
@@ -209,7 +211,9 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
          .LineWidth = d->line_width,
          .GlobalDepthOffsetConstant = d->depth_bias.bias,
          .GlobalDepthOffsetScale = d->depth_bias.slope,
-         .GlobalDepthOffsetClamp = d->depth_bias.clamp
+         .GlobalDepthOffsetClamp = d->depth_bias.clamp,
+         .FrontWinding            = genX(vk_to_gen_front_face)[d->front_face],
+         .CullMode                = genX(vk_to_gen_cullmode)[d->cull_mode],
       };
       GENX(3DSTATE_SF_pack)(NULL, sf_dw, &sf);
 
@@ -249,7 +253,12 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
    if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
                                       ANV_CMD_DIRTY_RENDER_TARGETS |
                                       ANV_CMD_DIRTY_DYNAMIC_STENCIL_COMPARE_MASK |
-                                      ANV_CMD_DIRTY_DYNAMIC_STENCIL_WRITE_MASK)) {
+                                      ANV_CMD_DIRTY_DYNAMIC_STENCIL_WRITE_MASK |
+                                      ANV_CMD_DIRTY_DYNAMIC_DEPTH_TEST_ENABLE |
+                                      ANV_CMD_DIRTY_DYNAMIC_DEPTH_WRITE_ENABLE |
+                                      ANV_CMD_DIRTY_DYNAMIC_DEPTH_COMPARE_OP |
+                                      ANV_CMD_DIRTY_DYNAMIC_STENCIL_TEST_ENABLE |
+                                      ANV_CMD_DIRTY_DYNAMIC_STENCIL_OP)) {
       uint32_t depth_stencil_dw[GENX(DEPTH_STENCIL_STATE_length)];
 
       struct GENX(DEPTH_STENCIL_STATE) depth_stencil = {
@@ -261,7 +270,20 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
 
          .StencilBufferWriteEnable =
             (d->stencil_write_mask.front || d->stencil_write_mask.back) &&
-            pipeline->writes_stencil,
+            d->stencil_test_enable,
+
+         .DepthTestEnable = d->depth_test_enable,
+         .DepthBufferWriteEnable = d->depth_test_enable && d->depth_write_enable,
+         .DepthTestFunction = genX(vk_to_gen_compare_op)[d->depth_compare_op],
+         .StencilTestEnable = d->stencil_test_enable,
+         .StencilFailOp = genX(vk_to_gen_stencil_op)[d->stencil_op.front.fail_op],
+         .StencilPassDepthPassOp = genX(vk_to_gen_stencil_op)[d->stencil_op.front.pass_op],
+         .StencilPassDepthFailOp = genX(vk_to_gen_stencil_op)[d->stencil_op.front.depth_fail_op],
+         .StencilTestFunction = genX(vk_to_gen_compare_op)[d->stencil_op.front.compare_op],
+         .BackfaceStencilFailOp = genX(vk_to_gen_stencil_op)[d->stencil_op.back.fail_op],
+         .BackfaceStencilPassDepthPassOp = genX(vk_to_gen_stencil_op)[d->stencil_op.back.pass_op],
+         .BackfaceStencilPassDepthFailOp = genX(vk_to_gen_stencil_op)[d->stencil_op.back.depth_fail_op],
+         .BackfaceStencilTestFunction = genX(vk_to_gen_compare_op)[d->stencil_op.back.compare_op],
       };
       GENX(DEPTH_STENCIL_STATE_pack)(NULL, depth_stencil_dw, &depth_stencil);
 
@@ -302,6 +324,17 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
          ib.BufferEndingAddress        = anv_address_add(buffer->address,
                                                          buffer->size);
       }
+   }
+
+   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
+                                      ANV_CMD_DIRTY_DYNAMIC_PRIMITIVE_TOPOLOGY)) {
+      uint32_t topology;
+      if (anv_pipeline_has_stage(pipeline, MESA_SHADER_TESS_EVAL))
+         topology = d->primitive_topology;
+      else
+         topology = genX(vk_to_gen_primitive_type)[d->primitive_topology];
+
+      cmd_buffer->state.gfx.primitive_topology = topology;
    }
 
    cmd_buffer->state.gfx.dirty = 0;

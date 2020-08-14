@@ -99,8 +99,8 @@ void if_conversion::convert_kill_instructions(region_node *r,
 			a->src[0] = cnd;
 			a->src[1] = sh.get_const_value(0);
 			// clear modifiers
-			memset(&a->bc.src[0], 0, sizeof(bc_alu_src));
-			memset(&a->bc.src[1], 0, sizeof(bc_alu_src));
+			a->bc.src[0].clear();
+			a->bc.src[1].clear();
 		} else {
 			// kill with constant 'false' condition, this shouldn't happen
 			// but remove it anyway

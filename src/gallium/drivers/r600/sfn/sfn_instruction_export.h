@@ -152,6 +152,7 @@ public:
    void replace_values_child(const ValueSet& candiates, PValue new_value) override;
    void remap_registers_child(std::vector<rename_reg_pair>& map,
                         ValueMap& values) override;
+   void patch_ring(int stream);
 private:
    bool is_equal_to(const Instruction& lhs) const override;
    void do_print(std::ostream& os) const override;

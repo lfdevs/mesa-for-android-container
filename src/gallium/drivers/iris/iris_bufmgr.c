@@ -31,10 +31,6 @@
  * - main interface to GEM in the kernel
  */
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #include <xf86drm.h>
 #include <util/u_atomic.h>
 #include <fcntl.h>
@@ -178,6 +174,7 @@ struct iris_bufmgr {
 
    bool has_llc:1;
    bool has_mmap_offset:1;
+   bool has_tiling_uapi:1;
    bool bo_reuse:1;
 
    struct gen_aux_map_context *aux_map_ctx;
@@ -336,6 +333,8 @@ vma_free(struct iris_bufmgr *bufmgr,
    if (memzone == IRIS_MEMZONE_BINDER)
       return;
 
+   assert(memzone < ARRAY_SIZE(bufmgr->vma_allocator));
+
    util_vma_heap_free(&bufmgr->vma_allocator[memzone], address, size);
 }
 
@@ -482,7 +481,6 @@ alloc_fresh_bo(struct iris_bufmgr *bufmgr, uint64_t bo_size)
    bo->size = bo_size;
    bo->idle = true;
    bo->tiling_mode = I915_TILING_NONE;
-   bo->swizzle_mode = I915_BIT_6_SWIZZLE_NONE;
    bo->stride = 0;
 
    /* Calling set_domain() will allocate pages for the BO outside of the
@@ -732,7 +730,6 @@ iris_bo_gem_create_from_name(struct iris_bufmgr *bufmgr,
       goto err_unref;
 
    bo->tiling_mode = get_tiling.tiling_mode;
-   bo->swizzle_mode = get_tiling.swizzle_mode;
 
    /* XXX stride is unknown */
    DBG("bo_create_from_handle: %d (%s)\n", handle, bo->name);
@@ -1121,6 +1118,11 @@ iris_bo_map_gtt(struct pipe_debug_callback *dbg,
 {
    struct iris_bufmgr *bufmgr = bo->bufmgr;
 
+   /* If we don't support get/set_tiling, there's no support for GTT mapping
+    * either (it won't do any de-tiling for us).
+    */
+   assert(bufmgr->has_tiling_uapi);
+
    /* Get a mapping of the buffer if we haven't before. */
    if (bo->map_gtt == NULL) {
       DBG("bo_map_gtt: mmap %d (%s)\n", bo->gem_handle, bo->name);
@@ -1348,6 +1350,15 @@ bo_set_tiling_internal(struct iris_bo *bo, uint32_t tiling_mode,
        tiling_mode == bo->tiling_mode && stride == bo->stride)
       return 0;
 
+   /* If we can't do map_gtt, the set/get_tiling API isn't useful. And it's
+    * actually not supported by the kernel in those cases.
+    */
+   if (!bufmgr->has_tiling_uapi) {
+      bo->tiling_mode = tiling_mode;
+      bo->stride = stride;
+      return 0;
+   }
+
    memset(&set_tiling, 0, sizeof(set_tiling));
    do {
       /* set_tiling is slightly broken and overwrites the
@@ -1364,23 +1375,13 @@ bo_set_tiling_internal(struct iris_bo *bo, uint32_t tiling_mode,
       return -errno;
 
    bo->tiling_mode = set_tiling.tiling_mode;
-   bo->swizzle_mode = set_tiling.swizzle_mode;
    bo->stride = set_tiling.stride;
-   return 0;
-}
-
-int
-iris_bo_get_tiling(struct iris_bo *bo, uint32_t *tiling_mode,
-                  uint32_t *swizzle_mode)
-{
-   *tiling_mode = bo->tiling_mode;
-   *swizzle_mode = bo->swizzle_mode;
    return 0;
 }
 
 struct iris_bo *
 iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd,
-                      uint32_t tiling, uint32_t stride)
+                      int tiling, uint32_t stride)
 {
    uint32_t handle;
    struct iris_bo *bo;
@@ -1423,20 +1424,38 @@ iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd,
    bo->reusable = false;
    bo->external = true;
    bo->kflags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS | EXEC_OBJECT_PINNED;
-   bo->gtt_offset = vma_alloc(bufmgr, IRIS_MEMZONE_OTHER, bo->size, 1);
+
+   /* From the Bspec, Memory Compression - Gen12:
+    *
+    *    The base address for the surface has to be 64K page aligned and the
+    *    surface is expected to be padded in the virtual domain to be 4 4K
+    *    pages.
+    *
+    * The dmabuf may contain a compressed surface. Align the BO to 64KB just
+    * in case. We always align to 64KB even on platforms where we don't need
+    * to, because it's a fairly reasonable thing to do anyway.
+    */
+   bo->gtt_offset =
+      vma_alloc(bufmgr, IRIS_MEMZONE_OTHER, bo->size, 64 * 1024);
+
    bo->gem_handle = handle;
    _mesa_hash_table_insert(bufmgr->handle_table, &bo->gem_handle, bo);
 
    struct drm_i915_gem_get_tiling get_tiling = { .handle = bo->gem_handle };
-   if (gen_ioctl(bufmgr->fd, DRM_IOCTL_I915_GEM_GET_TILING, &get_tiling))
+   if (!bufmgr->has_tiling_uapi)
+      get_tiling.tiling_mode = I915_TILING_NONE;
+   else if (gen_ioctl(bufmgr->fd, DRM_IOCTL_I915_GEM_GET_TILING, &get_tiling))
       goto err;
 
-   if (get_tiling.tiling_mode == tiling || tiling > I915_TILING_LAST) {
+   if (tiling == -1) {
       bo->tiling_mode = get_tiling.tiling_mode;
-      bo->swizzle_mode = get_tiling.swizzle_mode;
-       /* XXX stride is unknown */
+      /* XXX stride is unknown */
    } else {
-      if (bo_set_tiling_internal(bo, tiling, stride)) {
+      /* Modifiers path */
+      if (get_tiling.tiling_mode == tiling || !bufmgr->has_tiling_uapi) {
+         bo->tiling_mode = tiling;
+         bo->stride = stride;
+      } else if (bo_set_tiling_internal(bo, tiling, stride)) {
          goto err;
       }
    }
@@ -1818,7 +1837,7 @@ iris_bufmgr_create(struct gen_device_info *devinfo, int fd, bool bo_reuse)
     * Don't do this! Ensure that each library/bufmgr has its own device
     * fd so that its namespace does not clash with another.
     */
-   bufmgr->fd = dup(fd);
+   bufmgr->fd = os_dupfd_cloexec(fd);
 
    p_atomic_set(&bufmgr->refcount, 1);
 
@@ -1831,6 +1850,7 @@ iris_bufmgr_create(struct gen_device_info *devinfo, int fd, bool bo_reuse)
    list_inithead(&bufmgr->zombie_list);
 
    bufmgr->has_llc = devinfo->has_llc;
+   bufmgr->has_tiling_uapi = devinfo->has_tiling_uapi;
    bufmgr->bo_reuse = bo_reuse;
    bufmgr->has_mmap_offset = gem_param(fd, I915_PARAM_MMAP_GTT_VERSION) >= 4;
 
@@ -1871,7 +1891,7 @@ iris_bufmgr_create(struct gen_device_info *devinfo, int fd, bool bo_reuse)
    bufmgr->handle_table =
       _mesa_hash_table_create(NULL, _mesa_hash_uint, _mesa_key_uint_equal);
 
-   if (devinfo->gen >= 12) {
+   if (devinfo->has_aux_map) {
       bufmgr->aux_map_ctx = gen_aux_map_init(bufmgr, &aux_map_allocator,
                                              devinfo);
       assert(bufmgr->aux_map_ctx);

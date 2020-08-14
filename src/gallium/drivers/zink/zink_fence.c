@@ -21,8 +21,10 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include "zink_batch.h"
 #include "zink_fence.h"
 
+#include "zink_query.h"
 #include "zink_screen.h"
 
 #include "util/u_memory.h"
@@ -36,7 +38,7 @@ destroy_fence(struct zink_screen *screen, struct zink_fence *fence)
 }
 
 struct zink_fence *
-zink_create_fence(struct pipe_screen *pscreen)
+zink_create_fence(struct pipe_screen *pscreen, struct zink_batch *batch)
 {
    struct zink_screen *screen = zink_screen(pscreen);
 
@@ -53,6 +55,8 @@ zink_create_fence(struct pipe_screen *pscreen)
       debug_printf("vkCreateFence failed\n");
       goto fail;
    }
+   ret->active_queries = batch->active_queries;
+   batch->active_queries = NULL;
 
    pipe_reference_init(&ret->reference, 1);
    return ret;
@@ -86,8 +90,11 @@ bool
 zink_fence_finish(struct zink_screen *screen, struct zink_fence *fence,
                   uint64_t timeout_ns)
 {
-   return vkWaitForFences(screen->dev, 1, &fence->fence, VK_TRUE,
-                          timeout_ns) == VK_SUCCESS;
+   bool success = vkWaitForFences(screen->dev, 1, &fence->fence, VK_TRUE,
+                                  timeout_ns) == VK_SUCCESS;
+   if (success && fence->active_queries)
+      zink_prune_queries(screen, fence);
+   return success;
 }
 
 static bool

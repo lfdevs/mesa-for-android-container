@@ -37,12 +37,12 @@ libglesv1_cm = shared_library(
   ['../entry.c', es1_glapi_mapi_tmp_h],
   c_args : [
     c_msvc_compat_args,
-    c_vis_args,
     _es1_c_args,
     '-DMAPI_MODE_BRIDGE',
     '-DMAPI_ABI_HEADER="@0@"'.format(es1_glapi_mapi_tmp_h.full_path()),
     gcc_lto_quirk,
   ],
+  gnu_symbol_visibility : 'hidden',
   link_args : [ld_args_gc_sections],
   include_directories : [inc_src, inc_include, inc_mapi],
   link_with : libglapi,

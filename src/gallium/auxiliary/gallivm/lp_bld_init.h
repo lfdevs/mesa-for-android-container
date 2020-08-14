@@ -39,6 +39,7 @@
 extern "C" {
 #endif
 
+struct lp_cached_code;
 struct gallivm_state
 {
    char *module_name;
@@ -51,7 +52,11 @@ struct gallivm_state
    LLVMBuilderRef builder;
    LLVMMCJITMemoryManagerRef memorymgr;
    struct lp_generated_code *code;
+   struct lp_cached_code *cache;
    unsigned compiled;
+   LLVMValueRef coro_malloc_hook;
+   LLVMValueRef coro_free_hook;
+   LLVMValueRef debug_printf_hook;
 };
 
 
@@ -60,7 +65,8 @@ lp_build_init(void);
 
 
 struct gallivm_state *
-gallivm_create(const char *name, LLVMContextRef context);
+gallivm_create(const char *name, LLVMContextRef context,
+               struct lp_cached_code *cache);
 
 void
 gallivm_destroy(struct gallivm_state *gallivm);

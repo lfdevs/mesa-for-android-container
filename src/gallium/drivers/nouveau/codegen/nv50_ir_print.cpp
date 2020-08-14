@@ -93,8 +93,10 @@ const char *operationStr[OP_LAST + 1] =
    "and",
    "or",
    "xor",
+   "lop3 lut",
    "shl",
    "shr",
+   "shf",
    "max",
    "min",
    "sat",
@@ -142,6 +144,7 @@ const char *operationStr[OP_LAST + 1] =
    "pinterp",
    "emit",
    "restart",
+   "final",
    "tex",
    "texbias",
    "texlod",
@@ -177,7 +180,10 @@ const char *operationStr[OP_LAST + 1] =
    "insbf",
    "extbf",
    "bfind",
+   "brev",
+   "bmsk",
    "permt",
+   "sgxt",
    "atom",
    "bar",
    "vadd",
@@ -193,6 +199,7 @@ const char *operationStr[OP_LAST + 1] =
    "shfl",
    "vote",
    "bufq",
+   "warpsync",
    "(invalid)"
 };
 
@@ -290,7 +297,7 @@ static const char *CondCodeStr[] =
    "o"
 };
 
-static const char *SemanticStr[SV_LAST + 1] =
+static const char *SemanticStr[] =
 {
    "POSITION",
    "VERTEX_ID",
@@ -300,6 +307,7 @@ static const char *SemanticStr[SV_LAST + 1] =
    "VERTEX_COUNT",
    "LAYER",
    "VIEWPORT_INDEX",
+   "VIEWPORT_MASK",
    "Y_DIR",
    "FACE",
    "POINT_SIZE",
@@ -510,6 +518,8 @@ int Symbol::print(char *buf, size_t size, DataType ty) const
 int Symbol::print(char *buf, size_t size,
                   Value *rel, Value *dimRel, DataType ty) const
 {
+   STATIC_ASSERT(ARRAY_SIZE(SemanticStr) == SV_LAST + 1);
+
    size_t pos = 0;
    char c;
 

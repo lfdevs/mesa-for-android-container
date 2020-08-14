@@ -558,6 +558,19 @@ ConstantFolding::expr(Instruction *i,
    memset(&res.data, 0, sizeof(res.data));
 
    switch (i->op) {
+   case OP_SGXT: {
+      int bits = b->data.u32;
+      if (bits) {
+         uint32_t data = a->data.u32 & (0xffffffff >> (32 - bits));
+         if (bits < 32 && (data & (1 << (bits - 1))))
+            data = data - (1 << bits);
+         res.data.u32 = data;
+      }
+      break;
+   }
+   case OP_BMSK:
+      res.data.u32 = ((1 << b->data.u32) - 1) << a->data.u32;
+      break;
    case OP_MAD:
    case OP_FMA:
    case OP_MUL:
@@ -780,6 +793,23 @@ ConstantFolding::expr(Instruction *i,
    memset(&res.data, 0, sizeof(res.data));
 
    switch (i->op) {
+   case OP_LOP3_LUT:
+      for (int n = 0; n < 32; n++) {
+         uint8_t lut = ((a->data.u32 >> n) & 1) << 2 |
+                       ((b->data.u32 >> n) & 1) << 1 |
+                       ((c->data.u32 >> n) & 1);
+         res.data.u32 |= !!(i->subOp & (1 << lut)) << n;
+      }
+      break;
+   case OP_PERMT:
+      if (!i->subOp) {
+         uint64_t input = (uint64_t)c->data.u32 << 32 | a->data.u32;
+         uint16_t permt = b->data.u32;
+         for (int n = 0 ; n < 4; n++, permt >>= 4)
+            res.data.u32 |= ((input >> ((permt & 0xf) * 8)) & 0xff) << n * 8;
+      } else
+         return;
+      break;
    case OP_INSBF: {
       int offset = b->data.u32 & 0xff;
       int width = (b->data.u32 >> 8) & 0xff;
@@ -848,7 +878,7 @@ ConstantFolding::unary(Instruction *i, const ImmediateValue &imm)
    switch (i->op) {
    case OP_NEG: res.data.f32 = -imm.reg.data.f32; break;
    case OP_ABS: res.data.f32 = fabsf(imm.reg.data.f32); break;
-   case OP_SAT: res.data.f32 = CLAMP(imm.reg.data.f32, 0.0f, 1.0f); break;
+   case OP_SAT: res.data.f32 = SATURATE(imm.reg.data.f32); break;
    case OP_RCP: res.data.f32 = 1.0f / imm.reg.data.f32; break;
    case OP_RSQ: res.data.f32 = 1.0f / sqrtf(imm.reg.data.f32); break;
    case OP_LG2: res.data.f32 = log2f(imm.reg.data.f32); break;
@@ -1526,6 +1556,12 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
       i->subOp = 0;
       break;
    }
+   case OP_BREV: {
+      uint32_t res = util_bitreverse(imm0.reg.data.u32);
+      i->setSrc(0, new_ImmediateValue(i->bb->getProgram(), res));
+      i->op = OP_MOV;
+      break;
+   }
    case OP_POPCNT: {
       // Only deal with 1-arg POPCNT here
       if (i->srcExists(1))
@@ -1596,12 +1632,12 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
          switch (i->sType) {
          case TYPE_F64:
             res.data.f32 = i->saturate ?
-               CLAMP(imm0.reg.data.f64, 0.0f, 1.0f) :
+               SATURATE(imm0.reg.data.f64) :
                imm0.reg.data.f64;
             break;
          case TYPE_F32:
             res.data.f32 = i->saturate ?
-               CLAMP(imm0.reg.data.f32, 0.0f, 1.0f) :
+               SATURATE(imm0.reg.data.f32) :
                imm0.reg.data.f32;
             break;
          case TYPE_U16: res.data.f32 = (float) imm0.reg.data.u16; break;
@@ -1617,12 +1653,12 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
          switch (i->sType) {
          case TYPE_F64:
             res.data.f64 = i->saturate ?
-               CLAMP(imm0.reg.data.f64, 0.0f, 1.0f) :
+               SATURATE(imm0.reg.data.f64) :
                imm0.reg.data.f64;
             break;
          case TYPE_F32:
             res.data.f64 = i->saturate ?
-               CLAMP(imm0.reg.data.f32, 0.0f, 1.0f) :
+               SATURATE(imm0.reg.data.f32) :
                imm0.reg.data.f32;
             break;
          case TYPE_U16: res.data.f64 = (double) imm0.reg.data.u16; break;

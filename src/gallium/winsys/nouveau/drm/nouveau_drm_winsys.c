@@ -4,6 +4,7 @@
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 #include "util/format/u_format.h"
+#include "util/os_file.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_hash_table.h"
@@ -71,7 +72,7 @@ nouveau_drm_screen_create(int fd)
 	 * nouveau_device_wrap does not close the fd in case of a device
 	 * creation error.
 	 */
-	dupfd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
+	dupfd = os_dupfd_cloexec(fd);
 
 	ret = nouveau_drm_new(dupfd, &drm);
 	if (ret)
@@ -104,6 +105,8 @@ nouveau_drm_screen_create(int fd)
 	case 0x110:
 	case 0x120:
 	case 0x130:
+	case 0x140:
+	case 0x160:
 		init = nvc0_screen_create;
 		break;
 	default:

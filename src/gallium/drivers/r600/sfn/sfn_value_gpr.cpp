@@ -152,6 +152,14 @@ void GPRVector::pin_to_channel(int i)
    v.set_pin_to_channel();
 }
 
+void GPRVector::pin_all_to_channel()
+{
+   for (auto& v: m_elms) {
+      auto& c = static_cast<GPRValue&>(*v);
+      c.set_pin_to_channel();
+   }
+}
+
 void GPRVector::do_print(std::ostream& os) const
 {
    os << "R" << sel() << ".";

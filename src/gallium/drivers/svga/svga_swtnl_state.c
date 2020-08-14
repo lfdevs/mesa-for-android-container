@@ -51,7 +51,7 @@
 static void
 set_draw_viewport(struct svga_context *svga)
 {
-   struct pipe_viewport_state vp = svga->curr.viewport;
+   struct pipe_viewport_state vp = svga->curr.viewport[0];
    float adjx = 0.0f;
    float adjy = 0.0f;
 
@@ -98,7 +98,7 @@ set_draw_viewport(struct svga_context *svga)
 }
 
 static enum pipe_error
-update_swtnl_draw(struct svga_context *svga, unsigned dirty)
+update_swtnl_draw(struct svga_context *svga, uint64_t dirty)
 {
    SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_SWTNLUPDATEDRAW);
 
@@ -191,7 +191,6 @@ svga_vdecl_to_input_element(struct svga_context *svga,
 {
    SVGA3dElementLayoutId id;
    SVGA3dInputElementDesc elements[PIPE_MAX_ATTRIBS];
-   enum pipe_error ret;
    unsigned i;
 
    assert(num_decls <= PIPE_MAX_ATTRIBS);
@@ -208,13 +207,8 @@ svga_vdecl_to_input_element(struct svga_context *svga,
 
    id = util_bitmask_add(svga->input_element_object_id_bm);
 
-   ret = SVGA3D_vgpu10_DefineElementLayout(svga->swc, num_decls, id, elements);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_vgpu10_DefineElementLayout(svga->swc, num_decls,
-                                              id, elements);
-      assert(ret == PIPE_OK);
-   }
+   SVGA_RETRY(svga, SVGA3D_vgpu10_DefineElementLayout(svga->swc, num_decls, id,
+                                                      elements));
 
    return id;
 }
@@ -306,22 +300,14 @@ svga_swtnl_update_vdecl(struct svga_context *svga)
    any_change = memcmp(svga_render->vdecl, vdecl, sizeof(vdecl));
 
    if (svga_have_vgpu10(svga)) {
-      enum pipe_error ret;
-
       if (!any_change && svga_render->layout_id != SVGA3D_INVALID_ID) {
          goto done;
       }
 
       if (svga_render->layout_id != SVGA3D_INVALID_ID) {
          /* destroy old */
-         ret = SVGA3D_vgpu10_DestroyElementLayout(svga->swc,
-                                                  svga_render->layout_id);
-         if (ret != PIPE_OK) {
-            svga_context_flush(svga, NULL);
-            ret = SVGA3D_vgpu10_DestroyElementLayout(svga->swc,
-                                                     svga_render->layout_id);
-            assert(ret == PIPE_OK);
-         }
+         SVGA_RETRY(svga, SVGA3D_vgpu10_DestroyElementLayout
+                    (svga->swc, svga_render->layout_id));
 
          /**
           * reset current layout id state after the element layout is
@@ -340,14 +326,8 @@ svga_swtnl_update_vdecl(struct svga_context *svga)
 
       /* bind new */
       if (svga->state.hw_draw.layout_id != svga_render->layout_id) {
-         ret = SVGA3D_vgpu10_SetInputLayout(svga->swc, svga_render->layout_id);
-         if (ret != PIPE_OK) {
-            svga_context_flush(svga, NULL);
-            ret = SVGA3D_vgpu10_SetInputLayout(svga->swc,
-                                               svga_render->layout_id);
-            assert(ret == PIPE_OK);
-         }
-
+         SVGA_RETRY(svga, SVGA3D_vgpu10_SetInputLayout(svga->swc,
+                                                       svga_render->layout_id));
          svga->state.hw_draw.layout_id = svga_render->layout_id;
       }
    }
@@ -366,7 +346,7 @@ done:
 
 
 static enum pipe_error
-update_swtnl_vdecl(struct svga_context *svga, unsigned dirty)
+update_swtnl_vdecl(struct svga_context *svga, uint64_t dirty)
 {
    return svga_swtnl_update_vdecl(svga);
 }

@@ -56,6 +56,6 @@ libappleglx = static_library(
   [files_libappleglx, glapitable_h],
   include_directories: [inc_mesa, inc_glx, inc_src, inc_include, inc_glapi],
   dependencies: [dep_xext, dep_xplugin],
-  c_args: [c_vis_args],
+  gnu_symbol_visibility : 'hidden',
   build_by_default: false,
 )

@@ -131,7 +131,7 @@ svga_validate_pipe_sampler_view(struct svga_context *svga,
    if (sv->id == SVGA3D_INVALID_ID) {
       struct svga_screen *ss = svga_screen(svga->pipe.screen);
       struct pipe_resource *texture = sv->base.texture;
-      struct svga_winsys_surface *surface = svga_resource_handle(texture);
+      struct svga_winsys_surface *surface;
       SVGA3dSurfaceFormat format;
       SVGA3dResourceType resourceDim;
       SVGA3dShaderResourceViewDesc viewDesc;
@@ -154,6 +154,7 @@ svga_validate_pipe_sampler_view(struct svga_context *svga,
          svga_translate_texture_buffer_view_format(viewFormat,
                                                    &format,
                                                    &pf_flags);
+         surface = svga_buffer_handle(svga, texture, PIPE_BIND_SAMPLER_VIEW);
       }
       else {
          format = svga_translate_format(ss, viewFormat,
@@ -161,6 +162,8 @@ svga_validate_pipe_sampler_view(struct svga_context *svga,
 
          /* Convert the format to a sampler-friendly format, if needed */
          format = svga_sampler_format(format);
+
+         surface = svga_texture(texture)->handle;
       }
 
       assert(format != SVGA3D_FORMAT_INVALID);
@@ -234,15 +237,14 @@ svga_validate_pipe_sampler_view(struct svga_context *svga,
 
 
 static enum pipe_error
-update_sampler_resources(struct svga_context *svga, unsigned dirty)
+update_sampler_resources(struct svga_context *svga, uint64_t dirty)
 {
    enum pipe_error ret = PIPE_OK;
    enum pipe_shader_type shader;
 
-   if (!svga_have_vgpu10(svga))
-      return PIPE_OK;
+   assert(svga_have_vgpu10(svga));
 
-   for (shader = PIPE_SHADER_VERTEX; shader <= PIPE_SHADER_GEOMETRY; shader++) {
+   for (shader = PIPE_SHADER_VERTEX; shader <= PIPE_SHADER_TESS_EVAL; shader++) {
       SVGA3dShaderResourceViewId ids[PIPE_MAX_SAMPLERS];
       struct svga_winsys_surface *surfaces[PIPE_MAX_SAMPLERS];
       struct pipe_sampler_view *sampler_views[PIPE_MAX_SAMPLERS];
@@ -349,7 +351,8 @@ update_sampler_resources(struct svga_context *svga, unsigned dirty)
 
    /* Handle polygon stipple sampler view */
    if (svga->curr.rast->templ.poly_stipple_enable) {
-      const unsigned unit = svga->state.hw_draw.fs->pstipple_sampler_unit;
+      const unsigned unit =
+         svga_fs_variant(svga->state.hw_draw.fs)->pstipple_sampler_unit;
       struct svga_pipe_sampler_view *sv = svga->polygon_stipple.sampler_view;
       struct svga_winsys_surface *surface;
 
@@ -385,15 +388,14 @@ struct svga_tracked_state svga_hw_sampler_bindings = {
 
 
 static enum pipe_error
-update_samplers(struct svga_context *svga, unsigned dirty )
+update_samplers(struct svga_context *svga, uint64_t dirty )
 {
    enum pipe_error ret = PIPE_OK;
    enum pipe_shader_type shader;
 
-   if (!svga_have_vgpu10(svga))
-      return PIPE_OK;
+   assert(svga_have_vgpu10(svga));
 
-   for (shader = PIPE_SHADER_VERTEX; shader <= PIPE_SHADER_GEOMETRY; shader++) {
+   for (shader = PIPE_SHADER_VERTEX; shader <= PIPE_SHADER_TESS_EVAL; shader++) {
       const unsigned count = svga->curr.num_samplers[shader];
       SVGA3dSamplerId ids[PIPE_MAX_SAMPLERS];
       unsigned i;
@@ -404,7 +406,8 @@ update_samplers(struct svga_context *svga, unsigned dirty )
 
          /* _NEW_FS */
          if (shader == PIPE_SHADER_FRAGMENT) {
-            struct svga_shader_variant *fs = svga->state.hw_draw.fs;
+            struct svga_fs_variant *fs =
+               svga_fs_variant(svga->state.hw_draw.fs);
             /* If the fragment shader is doing the shadow comparison
              * for this texture unit, don't enable shadow compare in
              * the texture sampler state.
@@ -449,7 +452,8 @@ update_samplers(struct svga_context *svga, unsigned dirty )
 
    /* Handle polygon stipple sampler texture */
    if (svga->curr.rast->templ.poly_stipple_enable) {
-      const unsigned unit = svga->state.hw_draw.fs->pstipple_sampler_unit;
+      const unsigned unit =
+         svga_fs_variant(svga->state.hw_draw.fs)->pstipple_sampler_unit;
       struct svga_sampler_state *sampler = svga->polygon_stipple.sampler;
 
       assert(sampler);

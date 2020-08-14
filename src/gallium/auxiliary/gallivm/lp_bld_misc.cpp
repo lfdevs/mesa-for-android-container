@@ -62,7 +62,7 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Host.h>
 #include <llvm/Support/PrettyStackTrace.h>
-
+#include <llvm/ExecutionEngine/ObjectCache.h>
 #include <llvm/Support/TargetSelect.h>
 
 #if LLVM_VERSION_MAJOR < 11
@@ -143,11 +143,11 @@ static void init_native_targets()
 extern "C" void
 lp_set_target_options(void)
 {
-   /* The llvm target registry is not thread-safe, so drivers and state-trackers
+   /* The llvm target registry is not thread-safe, so drivers and gallium frontends
     * that want to initialize targets should use the lp_set_target_options()
     * function to safely initialize targets.
     *
-    * LLVM targets should be initialized before the driver or state-tracker tries
+    * LLVM targets should be initialized before the driver or gallium frontend tries
     * to access the registry.
     */
    call_once(&init_native_targets_once_flag, init_native_targets);
@@ -289,6 +289,36 @@ class ShaderMemoryManager : public DelegatingJITMemoryManager {
       }
 };
 
+class LPObjectCache : public llvm::ObjectCache {
+private:
+   bool has_object;
+   struct lp_cached_code *cache_out;
+public:
+   LPObjectCache(struct lp_cached_code *cache) {
+      cache_out = cache;
+      has_object = false;
+   }
+
+   ~LPObjectCache() {
+   }
+   void notifyObjectCompiled(const llvm::Module *M, llvm::MemoryBufferRef Obj) {
+      const std::string ModuleID = M->getModuleIdentifier();
+      if (has_object)
+         fprintf(stderr, "CACHE ALREADY HAS MODULE OBJECT\n");
+      has_object = true;
+      cache_out->data_size = Obj.getBufferSize();
+      cache_out->data = malloc(cache_out->data_size);
+      memcpy(cache_out->data, Obj.getBufferStart(), cache_out->data_size);
+   }
+
+   virtual std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module *M) {
+      if (cache_out->data_size) {
+         return llvm::MemoryBuffer::getMemBuffer(llvm::StringRef((const char *)cache_out->data, cache_out->data_size), "", false);
+      }
+      return NULL;
+   }
+
+};
 
 /**
  * Same as LLVMCreateJITCompilerForModule, but:
@@ -304,6 +334,7 @@ extern "C"
 LLVMBool
 lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
                                         lp_generated_code **OutCode,
+                                        struct lp_cached_code *cache_out,
                                         LLVMModuleRef M,
                                         LLVMMCJITMemoryManagerRef CMM,
                                         unsigned OptLevel,
@@ -501,6 +532,13 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    ExecutionEngine *JIT;
 
    JIT = builder.create();
+
+   if (cache_out) {
+      LPObjectCache *objcache = new LPObjectCache(cache_out);
+      JIT->setObjectCache(objcache);
+      cache_out->jit_obj_cache = (void *)objcache;
+   }
+
 #if LLVM_USE_INTEL_JITEVENTS
    JITEventListener *JEL = JITEventListener::createIntelJITEventListener();
    JIT->RegisterJITEventListener(JEL);
@@ -538,6 +576,13 @@ void
 lp_free_memory_manager(LLVMMCJITMemoryManagerRef memorymgr)
 {
    delete reinterpret_cast<BaseMemoryManager*>(memorymgr);
+}
+
+extern "C" void
+lp_free_objcache(void *objcache_ptr)
+{
+   LPObjectCache *objcache = (LPObjectCache *)objcache_ptr;
+   delete objcache;
 }
 
 extern "C" LLVMValueRef

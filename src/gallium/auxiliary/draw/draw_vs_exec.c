@@ -174,10 +174,10 @@ vs_exec_run_linear(struct draw_vertex_shader *shader,
             enum tgsi_semantic name = shader->info.output_semantic_name[slot];
             if (clamp_vertex_color &&
                 (name == TGSI_SEMANTIC_COLOR || name == TGSI_SEMANTIC_BCOLOR)) {
-               output[slot][0] = CLAMP(machine->Outputs[slot].xyzw[0].f[j], 0.0f, 1.0f);
-               output[slot][1] = CLAMP(machine->Outputs[slot].xyzw[1].f[j], 0.0f, 1.0f);
-               output[slot][2] = CLAMP(machine->Outputs[slot].xyzw[2].f[j], 0.0f, 1.0f);
-               output[slot][3] = CLAMP(machine->Outputs[slot].xyzw[3].f[j], 0.0f, 1.0f);
+               output[slot][0] = SATURATE(machine->Outputs[slot].xyzw[0].f[j]);
+               output[slot][1] = SATURATE(machine->Outputs[slot].xyzw[1].f[j]);
+               output[slot][2] = SATURATE(machine->Outputs[slot].xyzw[2].f[j]);
+               output[slot][3] = SATURATE(machine->Outputs[slot].xyzw[3].f[j]);
             } else {
                output[slot][0] = machine->Outputs[slot].xyzw[0].f[j];
                output[slot][1] = machine->Outputs[slot].xyzw[1].f[j];

@@ -38,6 +38,7 @@ libintel_perf = static_library(
   include_directories : [
     inc_include, inc_src, inc_intel,
   ],
-  c_args : [c_vis_args, no_override_init_args, '-msse2'],
-  cpp_args : [cpp_vis_args, '-msse2'],
+  c_args : [no_override_init_args, '-msse2'],
+  cpp_args : ['-msse2'],
+  gnu_symbol_visibility : 'hidden',
 )

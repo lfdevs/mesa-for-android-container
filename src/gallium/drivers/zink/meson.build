@@ -54,7 +54,7 @@ zink_nir_algebraic_c = custom_target(
 libzink = static_library(
   'zink',
   [files_libzink, zink_nir_algebraic_c],
-  c_args : c_vis_args,
+  gnu_symbol_visibility : 'hidden',
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
   dependencies: [dep_vulkan, idep_nir_headers],
 )

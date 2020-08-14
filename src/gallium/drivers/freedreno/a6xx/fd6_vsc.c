@@ -114,12 +114,11 @@ draw_stream_size_bits(const struct pipe_draw_info *info, unsigned num_bins,
 		unsigned prim_strm_bits)
 {
 	unsigned ndwords = prim_strm_bits / dword;
-	assert(info->instance_count > 0);
 	return (bitfield_size_bits(num_bins)    /* bitfield of bins */
 			+ 1                             /* last-instance-bit */
 			+ number_size_bits(ndwords)     /* size of corresponding prim strm */
 			+ 1                             /* checksum */
-			) * info->instance_count;
+			) * MAX2(1, info->instance_count);
 }
 
 void

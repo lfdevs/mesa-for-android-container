@@ -85,7 +85,7 @@ emit_shader(struct fd_ringbuffer *ring, const struct ir3_shader_variant *so)
 		OUT_RING(ring, CP_LOAD_STATE_1_EXT_SRC_ADDR(0) |
 				CP_LOAD_STATE_1_STATE_TYPE(ST_SHADER));
 	} else {
-		OUT_RELOCD(ring, so->bo, 0,
+		OUT_RELOC(ring, so->bo, 0,
 				CP_LOAD_STATE_1_STATE_TYPE(ST_SHADER), 0);
 	}
 	for (i = 0; i < sz; i++) {
@@ -102,7 +102,7 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 	enum a3xx_instrbuffermode fpbuffer, vpbuffer;
 	uint32_t fpbuffersz, vpbuffersz, fsoff;
 	uint32_t pos_regid, posz_regid, psize_regid;
-	uint32_t vcoord_regid, face_regid, coord_regid, zwcoord_regid;
+	uint32_t ij_regid[4], face_regid, coord_regid, zwcoord_regid;
 	uint32_t color_regid[4] = {0};
 	int constmode;
 	int i, j;
@@ -174,7 +174,10 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 	face_regid      = ir3_find_sysval_regid(fp, SYSTEM_VALUE_FRONT_FACE);
 	coord_regid     = ir3_find_sysval_regid(fp, SYSTEM_VALUE_FRAG_COORD);
 	zwcoord_regid   = (coord_regid == regid(63,0)) ? regid(63,0) : (coord_regid + 2);
-	vcoord_regid    = ir3_find_sysval_regid(fp, SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL);
+	ij_regid[0] = ir3_find_sysval_regid(fp, SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL);
+	ij_regid[1] = ir3_find_sysval_regid(fp, SYSTEM_VALUE_BARYCENTRIC_LINEAR_PIXEL);
+	ij_regid[2] = ir3_find_sysval_regid(fp, SYSTEM_VALUE_BARYCENTRIC_PERSP_CENTROID);
+	ij_regid[3] = ir3_find_sysval_regid(fp, SYSTEM_VALUE_BARYCENTRIC_LINEAR_CENTROID);
 
 	/* adjust regids for alpha output formats. there is no alpha render
 	 * format, so it's just treated like red
@@ -203,7 +206,11 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 			A3XX_HLSQ_CONTROL_1_REG_FRAGCOORDZWREGID(zwcoord_regid));
 	OUT_RING(ring, A3XX_HLSQ_CONTROL_2_REG_PRIMALLOCTHRESHOLD(31) |
 			A3XX_HLSQ_CONTROL_2_REG_FACENESSREGID(face_regid));
-	OUT_RING(ring, A3XX_HLSQ_CONTROL_3_REG_REGID(vcoord_regid));
+	OUT_RING(ring,
+			A3XX_HLSQ_CONTROL_3_REG_IJPERSPCENTERREGID(ij_regid[0]) |
+			A3XX_HLSQ_CONTROL_3_REG_IJNONPERSPCENTERREGID(ij_regid[1]) |
+			A3XX_HLSQ_CONTROL_3_REG_IJPERSPCENTROIDREGID(ij_regid[2]) |
+			A3XX_HLSQ_CONTROL_3_REG_IJNONPERSPCENTROIDREGID(ij_regid[3]));
 	OUT_RING(ring, A3XX_HLSQ_VS_CONTROL_REG_CONSTLENGTH(vp->constlen) |
 			A3XX_HLSQ_VS_CONTROL_REG_CONSTSTARTOFFSET(0) |
 			A3XX_HLSQ_VS_CONTROL_REG_INSTRLENGTH(vpbuffersz));
@@ -231,7 +238,7 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 			A3XX_SP_VS_CTRL_REG0_LENGTH(vpbuffersz));
 	OUT_RING(ring, A3XX_SP_VS_CTRL_REG1_CONSTLENGTH(vp->constlen) |
 			A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING(vp->total_in) |
-			A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT(MAX2(vp->constlen + 1, 0)));
+			A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT(MAX2(vp->constlen - 1, 0)));
 	OUT_RING(ring, A3XX_SP_VS_PARAM_REG_POSREGID(pos_regid) |
 			A3XX_SP_VS_PARAM_REG_PSIZEREGID(psize_regid) |
 			A3XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(fp->varying_in));
@@ -302,7 +309,7 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 				A3XX_SP_FS_CTRL_REG0_LENGTH(fpbuffersz));
 		OUT_RING(ring, A3XX_SP_FS_CTRL_REG1_CONSTLENGTH(fp->constlen) |
 				A3XX_SP_FS_CTRL_REG1_INITIALOUTSTANDING(fp->total_in) |
-				A3XX_SP_FS_CTRL_REG1_CONSTFOOTPRINT(MAX2(fp->constlen + 1, 0)) |
+				A3XX_SP_FS_CTRL_REG1_CONSTFOOTPRINT(MAX2(fp->constlen - 1, 0)) |
 				A3XX_SP_FS_CTRL_REG1_HALFPRECVAROFFSET(63));
 
 		OUT_PKT0(ring, REG_A3XX_SP_FS_OBJ_OFFSET_REG, 2);
@@ -367,40 +374,32 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 				}
 			}
 
-			gl_varying_slot slot = fp->inputs[j].slot;
-
-			/* since we don't enable PIPE_CAP_TGSI_TEXCOORD: */
-			if (slot >= VARYING_SLOT_VAR0) {
-				unsigned texmask = 1 << (slot - VARYING_SLOT_VAR0);
-				/* Replace the .xy coordinates with S/T from the point sprite. Set
-				 * interpolation bits for .zw such that they become .01
+			bool coord_mode = emit->sprite_coord_mode;
+			if (ir3_point_sprite(fp, j, emit->sprite_coord_enable, &coord_mode)) {
+				/* mask is two 2-bit fields, where:
+				 *   '01' -> S
+				 *   '10' -> T
+				 *   '11' -> 1 - T  (flip mode)
 				 */
-				if (emit->sprite_coord_enable & texmask) {
-					/* mask is two 2-bit fields, where:
-					 *   '01' -> S
-					 *   '10' -> T
-					 *   '11' -> 1 - T  (flip mode)
-					 */
-					unsigned mask = emit->sprite_coord_mode ? 0b1101 : 0b1001;
-					uint32_t loc = inloc;
-					if (compmask & 0x1) {
-						vpsrepl[loc / 16] |= ((mask >> 0) & 0x3) << ((loc % 16) * 2);
-						loc++;
-					}
-					if (compmask & 0x2) {
-						vpsrepl[loc / 16] |= ((mask >> 2) & 0x3) << ((loc % 16) * 2);
-						loc++;
-					}
-					if (compmask & 0x4) {
-						/* .z <- 0.0f */
-						vinterp[loc / 16] |= 0b10 << ((loc % 16) * 2);
-						loc++;
-					}
-					if (compmask & 0x8) {
-						/* .w <- 1.0f */
-						vinterp[loc / 16] |= 0b11 << ((loc % 16) * 2);
-						loc++;
-					}
+				unsigned mask = coord_mode ? 0b1101 : 0b1001;
+				uint32_t loc = inloc;
+				if (compmask & 0x1) {
+					vpsrepl[loc / 16] |= ((mask >> 0) & 0x3) << ((loc % 16) * 2);
+					loc++;
+				}
+				if (compmask & 0x2) {
+					vpsrepl[loc / 16] |= ((mask >> 2) & 0x3) << ((loc % 16) * 2);
+					loc++;
+				}
+				if (compmask & 0x4) {
+					/* .z <- 0.0f */
+					vinterp[loc / 16] |= 0b10 << ((loc % 16) * 2);
+					loc++;
+				}
+				if (compmask & 0x8) {
+					/* .w <- 1.0f */
+					vinterp[loc / 16] |= 0b11 << ((loc % 16) * 2);
+					loc++;
 				}
 			}
 		}

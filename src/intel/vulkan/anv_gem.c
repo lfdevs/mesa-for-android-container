@@ -32,6 +32,7 @@
 #include "anv_private.h"
 #include "common/gen_defines.h"
 #include "common/gen_gem.h"
+#include "drm-uapi/sync_file.h"
 
 /**
  * Wrapper around DRM_IOCTL_I915_GEM_CREATE.
@@ -226,6 +227,11 @@ anv_gem_get_tiling(struct anv_device *device, uint32_t gem_handle)
       .handle = gem_handle,
    };
 
+   /* FIXME: On discrete platforms we don't have DRM_IOCTL_I915_GEM_GET_TILING
+    * anymore, so we will need another way to get the tiling. Apparently this
+    * is only used in Android code, so we may need some other way to
+    * communicate the tiling mode.
+    */
    if (gen_ioctl(device->fd, DRM_IOCTL_I915_GEM_GET_TILING, &get_tiling)) {
       assert(!"Failed to get BO tiling");
       return -1;
@@ -239,6 +245,12 @@ anv_gem_set_tiling(struct anv_device *device,
                    uint32_t gem_handle, uint32_t stride, uint32_t tiling)
 {
    int ret;
+
+   /* On discrete platforms we don't have DRM_IOCTL_I915_GEM_SET_TILING. So
+    * nothing needs to be done.
+    */
+   if (!device->info.has_tiling_uapi)
+      return 0;
 
    /* set_tiling overwrites the input on the error path, so we have to open
     * code gen_ioctl.
@@ -389,20 +401,6 @@ anv_gem_get_context_param(int fd, int context, uint32_t param, uint64_t *value)
 }
 
 int
-anv_gem_get_aperture(int fd, uint64_t *size)
-{
-   struct drm_i915_gem_get_aperture aperture = { 0 };
-
-   int ret = gen_ioctl(fd, DRM_IOCTL_I915_GEM_GET_APERTURE, &aperture);
-   if (ret == -1)
-      return -1;
-
-   *size = aperture.aper_available_size;
-
-   return 0;
-}
-
-int
 anv_gem_gpu_get_reset_stats(struct anv_device *device,
                             uint32_t *active, uint32_t *pending)
 {
@@ -449,35 +447,17 @@ anv_gem_fd_to_handle(struct anv_device *device, int fd)
 }
 
 int
-anv_gem_reg_read(struct anv_device *device, uint32_t offset, uint64_t *result)
+anv_gem_reg_read(int fd, uint32_t offset, uint64_t *result)
 {
    struct drm_i915_reg_read args = {
       .offset = offset
    };
 
-   int ret = gen_ioctl(device->fd, DRM_IOCTL_I915_REG_READ, &args);
+   int ret = gen_ioctl(fd, DRM_IOCTL_I915_REG_READ, &args);
 
    *result = args.val;
    return ret;
 }
-
-#ifndef SYNC_IOC_MAGIC
-/* duplicated from linux/sync_file.h to avoid build-time dependency
- * on new (v4.7) kernel headers.  Once distro's are mostly using
- * something newer than v4.7 drop this and #include <linux/sync_file.h>
- * instead.
- */
-struct sync_merge_data {
-   char  name[32];
-   __s32 fd2;
-   __s32 fence;
-   __u32 flags;
-   __u32 pad;
-};
-
-#define SYNC_IOC_MAGIC '>'
-#define SYNC_IOC_MERGE _IOWR(SYNC_IOC_MAGIC, 3, struct sync_merge_data)
-#endif
 
 int
 anv_gem_sync_file_merge(struct anv_device *device, int fd1, int fd2)
@@ -589,34 +569,7 @@ anv_gem_syncobj_reset(struct anv_device *device, uint32_t handle)
 bool
 anv_gem_supports_syncobj_wait(int fd)
 {
-   int ret;
-
-   struct drm_syncobj_create create = {
-      .flags = 0,
-   };
-   ret = gen_ioctl(fd, DRM_IOCTL_SYNCOBJ_CREATE, &create);
-   if (ret)
-      return false;
-
-   uint32_t syncobj = create.handle;
-
-   struct drm_syncobj_wait wait = {
-      .handles = (uint64_t)(uintptr_t)&create,
-      .count_handles = 1,
-      .timeout_nsec = 0,
-      .flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT,
-   };
-   ret = gen_ioctl(fd, DRM_IOCTL_SYNCOBJ_WAIT, &wait);
-
-   struct drm_syncobj_destroy destroy = {
-      .handle = syncobj,
-   };
-   gen_ioctl(fd, DRM_IOCTL_SYNCOBJ_DESTROY, &destroy);
-
-   /* If it timed out, then we have the ioctl and it supports the
-    * DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT flag.
-    */
-   return ret == -1 && errno == ETIME;
+   return gen_gem_supports_syncobj_wait(fd);
 }
 
 int

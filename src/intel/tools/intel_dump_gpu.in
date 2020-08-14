@@ -27,7 +27,7 @@ EOF
     exit 0
 }
 
-ld_preload="@install_libexecdir@/libintel_dump_gpu.so${LD_PPRELOAD:+:$LD_PRELOAD}"
+ld_preload="@install_libexecdir@/libintel_dump_gpu.so${LD_PRELOAD:+:$LD_PRELOAD}"
 args=""
 file=""
 gdb=""

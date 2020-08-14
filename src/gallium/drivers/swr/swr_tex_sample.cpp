@@ -169,7 +169,8 @@ swr_texture_member(const struct lp_sampler_dynamic_state *base,
       const struct lp_sampler_dynamic_state *base,                           \
       struct gallivm_state *gallivm,                                         \
       LLVMValueRef context_ptr,                                              \
-      unsigned texture_unit)                                                 \
+      unsigned texture_unit,                                                 \
+      LLVMValueRef texture_unit_offset)                                      \
    {                                                                         \
       return swr_texture_member(base,                                        \
                                 gallivm,                                     \
@@ -187,6 +188,8 @@ SWR_TEXTURE_MEMBER(depth, TRUE)
 SWR_TEXTURE_MEMBER(first_level, TRUE)
 SWR_TEXTURE_MEMBER(last_level, TRUE)
 SWR_TEXTURE_MEMBER(base_ptr, TRUE)
+SWR_TEXTURE_MEMBER(num_samples, TRUE)
+SWR_TEXTURE_MEMBER(sample_stride, TRUE)
 SWR_TEXTURE_MEMBER(row_stride, FALSE)
 SWR_TEXTURE_MEMBER(img_stride, FALSE)
 SWR_TEXTURE_MEMBER(mip_offsets, FALSE)
@@ -358,6 +361,8 @@ swr_sampler_soa_create(const struct swr_sampler_static_state *static_state,
    sampler->dynamic_state.base.row_stride = swr_texture_row_stride;
    sampler->dynamic_state.base.img_stride = swr_texture_img_stride;
    sampler->dynamic_state.base.mip_offsets = swr_texture_mip_offsets;
+   sampler->dynamic_state.base.num_samples = swr_texture_num_samples;
+   sampler->dynamic_state.base.sample_stride = swr_texture_sample_stride;
    sampler->dynamic_state.base.min_lod = swr_sampler_min_lod;
    sampler->dynamic_state.base.max_lod = swr_sampler_max_lod;
    sampler->dynamic_state.base.lod_bias = swr_sampler_lod_bias;

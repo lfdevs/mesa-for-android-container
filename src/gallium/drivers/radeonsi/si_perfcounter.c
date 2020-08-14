@@ -49,16 +49,40 @@ enum si_pc_reg_layout
 {
    /* All secondary selector dwords follow as one block after the primary
     * selector dwords for the counters that have secondary selectors.
+    *
+    * Example:
+    *    PERFCOUNTER0_SELECT
+    *    PERFCOUNTER1_SELECT
+    *    PERFCOUNTER0_SELECT1
+    *    PERFCOUNTER1_SELECT1
+    *    PERFCOUNTER2_SELECT
+    *    PERFCOUNTER3_SELECT
     */
    SI_PC_MULTI_BLOCK = 0,
 
-   /* Each secondary selector dword follows immediately afters the
+   /* Each secondary selector dword follows immediately after the
     * corresponding primary.
+    *
+    * Example:
+    *    PERFCOUNTER0_SELECT
+    *    PERFCOUNTER0_SELECT1
+    *    PERFCOUNTER1_SELECT
+    *    PERFCOUNTER1_SELECT1
+    *    PERFCOUNTER2_SELECT
+    *    PERFCOUNTER3_SELECT
     */
    SI_PC_MULTI_ALTERNATE = 1,
 
    /* All secondary selector dwords follow as one block after all primary
     * selector dwords.
+    *
+    * Example:
+    *    PERFCOUNTER0_SELECT
+    *    PERFCOUNTER1_SELECT
+    *    PERFCOUNTER2_SELECT
+    *    PERFCOUNTER3_SELECT
+    *    PERFCOUNTER0_SELECT1
+    *    PERFCOUNTER1_SELECT1
     */
    SI_PC_MULTI_TAIL = 2,
 
@@ -399,6 +423,168 @@ static struct si_pc_block_base cik_SRBM = {
    .layout = SI_PC_FAKE,
 };
 
+static struct si_pc_block_base gfx10_CHA = {
+   .name = "CHA",
+   .num_counters = 4,
+
+   .select0 = R_037780_CHA_PERFCOUNTER0_SELECT,
+   .counter0_lo = R_035800_CHA_PERFCOUNTER0_LO,
+   .num_multi = 1,
+   .layout = SI_PC_MULTI_ALTERNATE,
+};
+
+static struct si_pc_block_base gfx10_CHCG = {
+   .name = "CHCG",
+   .num_counters = 4,
+
+   .select0 = R_036F18_CHCG_PERFCOUNTER0_SELECT,
+   .counter0_lo = R_034F20_CHCG_PERFCOUNTER0_LO,
+   .num_multi = 1,
+   .layout = SI_PC_MULTI_ALTERNATE,
+};
+
+static struct si_pc_block_base gfx10_CHC = {
+   .name = "CHC",
+   .num_counters = 4,
+
+   .select0 = R_036F00_CHC_PERFCOUNTER0_SELECT,
+   .counter0_lo = R_034F00_CHC_PERFCOUNTER0_LO,
+   .num_multi = 1,
+   .layout = SI_PC_MULTI_ALTERNATE,
+};
+
+static struct si_pc_block_base gfx10_GCR = {
+   .name = "GCR",
+   .num_counters = 2,
+
+   .select0 = R_037580_GCR_PERFCOUNTER0_SELECT,
+   .counter0_lo = R_035480_GCR_PERFCOUNTER0_LO,
+   .num_multi = 1,
+   .layout = SI_PC_MULTI_ALTERNATE,
+};
+
+static struct si_pc_block_base gfx10_GE = {
+   .name = "GE",
+   .num_counters = 12,
+
+   .select0 = R_036200_GE_PERFCOUNTER0_SELECT,
+   .counter0_lo = R_034200_GE_PERFCOUNTER0_LO,
+   .num_multi = 4,
+   .layout = SI_PC_MULTI_ALTERNATE,
+};
+
+static struct si_pc_block_base gfx10_GL1A = {
+   .name = "GL1A",
+   .num_counters = 4,
+   .flags = SI_PC_BLOCK_SE | SI_PC_BLOCK_SHADER_WINDOWED,
+
+   .select0 = R_037700_GL1A_PERFCOUNTER0_SELECT,
+   .counter0_lo = R_035700_GL1A_PERFCOUNTER0_LO,
+   .num_multi = 1,
+   .layout = SI_PC_MULTI_ALTERNATE,
+};
+
+static struct si_pc_block_base gfx10_GL1C = {
+   .name = "GL1C",
+   .num_counters = 4,
+   .flags = SI_PC_BLOCK_SE | SI_PC_BLOCK_SHADER_WINDOWED,
+
+   .select0 = R_036E80_GL1C_PERFCOUNTER0_SELECT,
+   .counter0_lo = R_034E80_GL1C_PERFCOUNTER0_LO,
+   .num_multi = 1,
+   .layout = SI_PC_MULTI_ALTERNATE,
+};
+
+static struct si_pc_block_base gfx10_GL2A = {
+   .name = "GL2A",
+   .num_counters = 4,
+
+   .select0 = R_036E40_GL2A_PERFCOUNTER0_SELECT,
+   .counter0_lo = R_034E40_GL2A_PERFCOUNTER0_LO,
+   .num_multi = 2,
+   .layout = SI_PC_MULTI_ALTERNATE,
+};
+
+static struct si_pc_block_base gfx10_GL2C = {
+   .name = "GL2C",
+   .num_counters = 4,
+
+   .select0 = R_036E00_GL2C_PERFCOUNTER0_SELECT,
+   .counter0_lo = R_034E00_GL2C_PERFCOUNTER0_LO,
+   .num_multi = 2,
+   .layout = SI_PC_MULTI_ALTERNATE,
+};
+
+static unsigned gfx10_PA_PH_select[] = {
+   R_037600_PA_PH_PERFCOUNTER0_SELECT,
+   R_037604_PA_PH_PERFCOUNTER0_SELECT1,
+   R_037608_PA_PH_PERFCOUNTER1_SELECT,
+   R_037640_PA_PH_PERFCOUNTER1_SELECT1,
+   R_03760C_PA_PH_PERFCOUNTER2_SELECT,
+   R_037644_PA_PH_PERFCOUNTER2_SELECT1,
+   R_037610_PA_PH_PERFCOUNTER3_SELECT,
+   R_037648_PA_PH_PERFCOUNTER3_SELECT1,
+   R_037614_PA_PH_PERFCOUNTER4_SELECT,
+   R_037618_PA_PH_PERFCOUNTER5_SELECT,
+   R_03761C_PA_PH_PERFCOUNTER6_SELECT,
+   R_037620_PA_PH_PERFCOUNTER7_SELECT,
+};
+static struct si_pc_block_base gfx10_PA_PH = {
+   .name = "PA_PH",
+   .num_counters = 8,
+   .flags = SI_PC_BLOCK_SE,
+
+   .select = gfx10_PA_PH_select,
+   .counter0_lo = R_035600_PA_PH_PERFCOUNTER0_LO,
+   .num_multi = 4,
+   .layout = SI_PC_MULTI_CUSTOM,
+};
+
+static struct si_pc_block_base gfx10_PA_SU = {
+   .name = "PA_SU",
+   .num_counters = 4,
+   .flags = SI_PC_BLOCK_SE,
+
+   .select0 = R_036400_PA_SU_PERFCOUNTER0_SELECT,
+   .counter0_lo = R_034400_PA_SU_PERFCOUNTER0_LO,
+   .num_multi = 4,
+   .layout = SI_PC_MULTI_ALTERNATE,
+};
+
+static struct si_pc_block_base gfx10_RLC = {
+   .name = "RLC",
+   .num_counters = 2,
+
+   .select0 = R_037304_RLC_PERFCOUNTER0_SELECT,
+   .counter0_lo = R_035200_RLC_PERFCOUNTER0_LO,
+   .num_multi = 0,
+   .layout = SI_PC_MULTI_ALTERNATE,
+};
+
+static struct si_pc_block_base gfx10_RMI = {
+   .name = "RMI",
+   /* Actually 4, but the 2nd counter is missing the secondary selector while
+    * the 3rd counter has it, which complicates the register layout. */
+   .num_counters = 2,
+   .flags = SI_PC_BLOCK_SE | SI_PC_BLOCK_INSTANCE_GROUPS,
+
+   .select0 = R_037400_RMI_PERFCOUNTER0_SELECT,
+   .counter0_lo = R_035300_RMI_PERFCOUNTER0_LO,
+   .num_multi = 1,
+   .layout = SI_PC_MULTI_ALTERNATE,
+};
+
+static struct si_pc_block_base gfx10_UTCL1 = {
+   .name = "UTCL1",
+   .num_counters = 2,
+   .flags = SI_PC_BLOCK_SE | SI_PC_BLOCK_SHADER_WINDOWED,
+
+   .select0 = R_03758C_UTCL1_PERFCOUNTER0_SELECT,
+   .counter0_lo = R_035470_UTCL1_PERFCOUNTER0_LO,
+   .num_multi = 0,
+   .layout = SI_PC_MULTI_ALTERNATE,
+};
+
 /* Both the number of instances and selectors varies between chips of the same
  * class. We only differentiate by class here and simply expose the maximum
  * number over all chips in a class.
@@ -410,7 +596,7 @@ static struct si_pc_block_base cik_SRBM = {
 static struct si_pc_block_gfxdescr groups_CIK[] = {
    {&cik_CB, 226},     {&cik_CPF, 17},    {&cik_DB, 257},  {&cik_GRBM, 34},   {&cik_GRBMSE, 15},
    {&cik_PA_SU, 153},  {&cik_PA_SC, 395}, {&cik_SPI, 186}, {&cik_SQ, 252},    {&cik_SX, 32},
-   {&cik_TA, 111, 11}, {&cik_TCA, 39, 2}, {&cik_TCC, 160}, {&cik_TD, 55, 11}, {&cik_TCP, 154, 11},
+   {&cik_TA, 111},     {&cik_TCA, 39, 2}, {&cik_TCC, 160}, {&cik_TD, 55},     {&cik_TCP, 154},
    {&cik_GDS, 121},    {&cik_VGT, 140},   {&cik_IA, 22},   {&cik_MC, 22},     {&cik_SRBM, 19},
    {&cik_WD, 22},      {&cik_CPG, 46},    {&cik_CPC, 22},
 
@@ -419,7 +605,7 @@ static struct si_pc_block_gfxdescr groups_CIK[] = {
 static struct si_pc_block_gfxdescr groups_VI[] = {
    {&cik_CB, 405},     {&cik_CPF, 19},    {&cik_DB, 257},  {&cik_GRBM, 34},   {&cik_GRBMSE, 15},
    {&cik_PA_SU, 154},  {&cik_PA_SC, 397}, {&cik_SPI, 197}, {&cik_SQ, 273},    {&cik_SX, 34},
-   {&cik_TA, 119, 16}, {&cik_TCA, 35, 2}, {&cik_TCC, 192}, {&cik_TD, 55, 16}, {&cik_TCP, 180, 16},
+   {&cik_TA, 119},     {&cik_TCA, 35, 2}, {&cik_TCC, 192}, {&cik_TD, 55},     {&cik_TCP, 180},
    {&cik_GDS, 121},    {&cik_VGT, 147},   {&cik_IA, 24},   {&cik_MC, 22},     {&cik_SRBM, 27},
    {&cik_WD, 37},      {&cik_CPG, 48},    {&cik_CPC, 24},
 
@@ -428,9 +614,41 @@ static struct si_pc_block_gfxdescr groups_VI[] = {
 static struct si_pc_block_gfxdescr groups_gfx9[] = {
    {&cik_CB, 438},     {&cik_CPF, 32},    {&cik_DB, 328},  {&cik_GRBM, 38},   {&cik_GRBMSE, 16},
    {&cik_PA_SU, 292},  {&cik_PA_SC, 491}, {&cik_SPI, 196}, {&cik_SQ, 374},    {&cik_SX, 208},
-   {&cik_TA, 119, 16}, {&cik_TCA, 35, 2}, {&cik_TCC, 256}, {&cik_TD, 57, 16}, {&cik_TCP, 85, 16},
+   {&cik_TA, 119},     {&cik_TCA, 35, 2}, {&cik_TCC, 256}, {&cik_TD, 57},     {&cik_TCP, 85},
    {&cik_GDS, 121},    {&cik_VGT, 148},   {&cik_IA, 32},   {&cik_WD, 58},     {&cik_CPG, 59},
    {&cik_CPC, 35},
+};
+
+static struct si_pc_block_gfxdescr groups_gfx10[] = {
+   {&cik_CB, 461},
+   {&gfx10_CHA, 45},
+   {&gfx10_CHCG, 35},
+   {&gfx10_CHC, 35},
+   {&cik_CPC, 47},
+   {&cik_CPF, 40},
+   {&cik_CPG, 82},
+   {&cik_DB, 370},
+   {&gfx10_GCR, 94},
+   {&cik_GDS, 123},
+   {&gfx10_GE, 315},
+   {&gfx10_GL1A, 36},
+   {&gfx10_GL1C, 64},
+   {&gfx10_GL2A, 91},
+   {&gfx10_GL2C, 235},
+   {&cik_GRBM, 47},
+   {&cik_GRBMSE, 19},
+   {&gfx10_PA_PH, 960},
+   {&cik_PA_SC, 552},
+   {&gfx10_PA_SU, 266},
+   {&gfx10_RLC, 7},
+   {&gfx10_RMI, 258},
+   {&cik_SPI, 329},
+   {&cik_SQ, 509},
+   {&cik_SX, 225},
+   {&cik_TA, 226},
+   {&cik_TCP, 77},
+   {&cik_TD, 61},
+   {&gfx10_UTCL1, 15},
 };
 
 static bool si_pc_block_has_per_se_groups(const struct si_perfcounters *pc,
@@ -492,6 +710,11 @@ static void si_pc_emit_instance(struct si_context *sctx, int se, int instance)
       value |= S_030800_SE_INDEX(se);
    } else {
       value |= S_030800_SE_BROADCAST_WRITES(1);
+   }
+
+   if (sctx->chip_class >= GFX10) {
+      /* TODO: Expose counters from each shader array separately if needed. */
+      value |= S_030800_SA_BROADCAST_WRITES(1);
    }
 
    if (instance >= 0) {
@@ -696,6 +919,17 @@ static void si_pc_query_destroy(struct si_context *sctx, struct si_query *squery
    FREE(query);
 }
 
+static void si_inhibit_clockgating(struct si_context *sctx, bool inhibit)
+{
+   if (sctx->chip_class >= GFX10) {
+      radeon_set_uconfig_reg(sctx->gfx_cs, R_037390_RLC_PERFMON_CLK_CNTL,
+                            S_037390_PERFMON_CLOCK_STATE(inhibit));
+   } else if (sctx->chip_class >= GFX8) {
+      radeon_set_uconfig_reg(sctx->gfx_cs, R_0372FC_RLC_PERFMON_CLK_CNTL,
+                            S_0372FC_PERFMON_CLOCK_STATE(inhibit));
+   }
+}
+
 static void si_pc_query_resume(struct si_context *sctx, struct si_query *squery)
 /*
                                    struct si_query_hw *hwquery,
@@ -711,6 +945,8 @@ static void si_pc_query_resume(struct si_context *sctx, struct si_query *squery)
 
    if (query->shaders)
       si_pc_emit_shaders(sctx, query->shaders);
+
+   si_inhibit_clockgating(sctx, true);
 
    for (struct si_query_group *group = query->groups; group; group = group->next) {
       struct si_pc_block *block = group->block;
@@ -763,6 +999,8 @@ static void si_pc_query_suspend(struct si_context *sctx, struct si_query *squery
    }
 
    si_pc_emit_instance(sctx, -1, -1);
+
+   si_inhibit_clockgating(sctx, false);
 }
 
 static bool si_pc_query_begin(struct si_context *ctx, struct si_query *squery)
@@ -1214,17 +1452,14 @@ void si_init_perfcounters(struct si_screen *screen)
       blocks = groups_gfx9;
       num_blocks = ARRAY_SIZE(groups_gfx9);
       break;
+   case GFX10:
+   case GFX10_3:
+      blocks = groups_gfx10;
+      num_blocks = ARRAY_SIZE(groups_gfx10);
+      break;
    case GFX6:
    default:
       return; /* not implemented */
-   }
-
-   if (screen->info.max_sh_per_se != 1) {
-      /* This should not happen on non-GFX6 chips. */
-      fprintf(stderr,
-              "si_init_perfcounters: max_sh_per_se = %d not "
-              "supported (inaccurate performance counters)\n",
-              screen->info.max_sh_per_se);
    }
 
    screen->perfcounters = pc = CALLOC_STRUCT(si_perfcounters);
@@ -1247,12 +1482,19 @@ void si_init_perfcounters(struct si_screen *screen)
       block->b = &blocks[i];
       block->num_instances = MAX2(1, block->b->instances);
 
-      if (!strcmp(block->b->b->name, "CB") || !strcmp(block->b->b->name, "DB"))
+      if (!strcmp(block->b->b->name, "CB") ||
+          !strcmp(block->b->b->name, "DB") ||
+          !strcmp(block->b->b->name, "RMI"))
          block->num_instances = screen->info.max_se;
       else if (!strcmp(block->b->b->name, "TCC"))
          block->num_instances = screen->info.num_tcc_blocks;
       else if (!strcmp(block->b->b->name, "IA"))
          block->num_instances = MAX2(1, screen->info.max_se / 2);
+      else if (!strcmp(block->b->b->name, "TA") ||
+               !strcmp(block->b->b->name, "TCP") ||
+               !strcmp(block->b->b->name, "TD")) {
+         block->num_instances = MAX2(1, screen->info.max_good_cu_per_sa);
+      }
 
       if (si_pc_block_has_per_instance_groups(pc, block)) {
          block->num_groups = block->num_instances;

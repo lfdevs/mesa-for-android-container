@@ -82,7 +82,7 @@ libr200 = static_library(
   include_directories : [
     inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_dri_common, inc_util, include_directories('server'),
   ],
-  c_args : [c_vis_args, '-DRADEON_R200'],
-  cpp_args : [cpp_vis_args],
-  dependencies : [dep_libdrm, dep_libdrm_radeon, idep_xmlconfig_headers],
+  c_args : ['-DRADEON_R200'],
+  gnu_symbol_visibility : 'hidden',
+  dependencies : [dep_libdrm, dep_libdrm_radeon],
 )

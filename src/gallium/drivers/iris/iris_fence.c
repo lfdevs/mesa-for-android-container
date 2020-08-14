@@ -26,6 +26,8 @@
  * Fences for driver and IPC serialisation, scheduling and synchronisation.
  */
 
+#include "drm-uapi/sync_file.h"
+#include "util/u_debug.h"
 #include "util/u_inlines.h"
 #include "intel/common/gen_gem.h"
 
@@ -60,27 +62,27 @@ gem_syncobj_destroy(int fd, uint32_t handle)
 /**
  * Make a new sync-point.
  */
-struct iris_syncpt *
-iris_create_syncpt(struct iris_screen *screen)
+struct iris_syncobj *
+iris_create_syncobj(struct iris_screen *screen)
 {
-   struct iris_syncpt *syncpt = malloc(sizeof(*syncpt));
+   struct iris_syncobj *syncobj = malloc(sizeof(*syncobj));
 
-   if (!syncpt)
+   if (!syncobj)
       return NULL;
 
-   syncpt->handle = gem_syncobj_create(screen->fd, 0);
-   assert(syncpt->handle);
+   syncobj->handle = gem_syncobj_create(screen->fd, 0);
+   assert(syncobj->handle);
 
-   pipe_reference_init(&syncpt->ref, 1);
+   pipe_reference_init(&syncobj->ref, 1);
 
-   return syncpt;
+   return syncobj;
 }
 
 void
-iris_syncpt_destroy(struct iris_screen *screen, struct iris_syncpt *syncpt)
+iris_syncobj_destroy(struct iris_screen *screen, struct iris_syncobj *syncobj)
 {
-   gem_syncobj_destroy(screen->fd, syncpt->handle);
-   free(syncpt);
+   gem_syncobj_destroy(screen->fd, syncobj->handle);
+   free(syncobj);
 }
 
 /**
@@ -89,31 +91,33 @@ iris_syncpt_destroy(struct iris_screen *screen, struct iris_syncpt *syncpt)
  * \p flags   One of I915_EXEC_FENCE_WAIT or I915_EXEC_FENCE_SIGNAL.
  */
 void
-iris_batch_add_syncpt(struct iris_batch *batch,
-                      struct iris_syncpt *syncpt,
-                      unsigned flags)
+iris_batch_add_syncobj(struct iris_batch *batch,
+                       struct iris_syncobj *syncobj,
+                       unsigned flags)
 {
    struct drm_i915_gem_exec_fence *fence =
       util_dynarray_grow(&batch->exec_fences, struct drm_i915_gem_exec_fence, 1);
 
    *fence = (struct drm_i915_gem_exec_fence) {
-      .handle = syncpt->handle,
+      .handle = syncobj->handle,
       .flags = flags,
    };
 
-   struct iris_syncpt **store =
-      util_dynarray_grow(&batch->syncpts, struct iris_syncpt *, 1);
+   struct iris_syncobj **store =
+      util_dynarray_grow(&batch->syncobjs, struct iris_syncobj *, 1);
 
    *store = NULL;
-   iris_syncpt_reference(batch->screen, store, syncpt);
+   iris_syncobj_reference(batch->screen, store, syncobj);
 }
 
 /* ------------------------------------------------------------------- */
 
 struct pipe_fence_handle {
    struct pipe_reference ref;
-   struct iris_syncpt *syncpt[IRIS_BATCH_COUNT];
-   unsigned count;
+
+   struct pipe_context *unflushed_ctx;
+
+   struct iris_fine_fence *fine[IRIS_BATCH_COUNT];
 };
 
 static void
@@ -122,8 +126,8 @@ iris_fence_destroy(struct pipe_screen *p_screen,
 {
    struct iris_screen *screen = (struct iris_screen *)p_screen;
 
-   for (unsigned i = 0; i < fence->count; i++)
-      iris_syncpt_reference(screen, &fence->syncpt[i], NULL);
+   for (unsigned i = 0; i < ARRAY_SIZE(fence->fine); i++)
+      iris_fine_fence_reference(screen, &fence->fine[i], NULL);
 
    free(fence);
 }
@@ -141,16 +145,16 @@ iris_fence_reference(struct pipe_screen *p_screen,
 }
 
 bool
-iris_wait_syncpt(struct pipe_screen *p_screen,
-                 struct iris_syncpt *syncpt,
-                 int64_t timeout_nsec)
+iris_wait_syncobj(struct pipe_screen *p_screen,
+                  struct iris_syncobj *syncobj,
+                  int64_t timeout_nsec)
 {
-   if (!syncpt)
+   if (!syncobj)
       return false;
 
    struct iris_screen *screen = (struct iris_screen *)p_screen;
    struct drm_syncobj_wait args = {
-      .handles = (uintptr_t)&syncpt->handle,
+      .handles = (uintptr_t)&syncobj->handle,
       .count_handles = 1,
       .timeout_nsec = timeout_nsec,
    };
@@ -169,6 +173,14 @@ iris_fence_flush(struct pipe_context *ctx,
    struct iris_screen *screen = (void *) ctx->screen;
    struct iris_context *ice = (struct iris_context *)ctx;
 
+   /* We require DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT (kernel 5.2+) for
+    * deferred flushes.  Just ignore the request to defer on older kernels.
+    */
+   if (!(screen->kernel_features & KERNEL_HAS_WAIT_FOR_SUBMIT))
+      flags &= ~PIPE_FLUSH_DEFERRED;
+
+   const bool deferred = flags & PIPE_FLUSH_DEFERRED;
+
    if (flags & PIPE_FLUSH_END_OF_FRAME) {
       ice->frame++;
 
@@ -180,9 +192,10 @@ iris_fence_flush(struct pipe_context *ctx,
       }
    }
 
-   /* XXX PIPE_FLUSH_DEFERRED */
-   for (unsigned i = 0; i < IRIS_BATCH_COUNT; i++)
-      iris_batch_flush(&ice->batches[i]);
+   if (!deferred) {
+      for (unsigned i = 0; i < IRIS_BATCH_COUNT; i++)
+         iris_batch_flush(&ice->batches[i]);
+   }
 
    if (!out_fence)
       return;
@@ -193,12 +206,27 @@ iris_fence_flush(struct pipe_context *ctx,
 
    pipe_reference_init(&fence->ref, 1);
 
-   for (unsigned b = 0; b < IRIS_BATCH_COUNT; b++) {
-      if (!iris_wait_syncpt(ctx->screen, ice->batches[b].last_syncpt, 0))
-         continue;
+   if (deferred)
+      fence->unflushed_ctx = ctx;
 
-      iris_syncpt_reference(screen, &fence->syncpt[fence->count++],
-                            ice->batches[b].last_syncpt);
+   for (unsigned b = 0; b < IRIS_BATCH_COUNT; b++) {
+      struct iris_batch *batch = &ice->batches[b];
+
+      if (deferred && iris_batch_bytes_used(batch) > 0) {
+         struct iris_fine_fence *fine =
+            iris_fine_fence_new(batch, IRIS_FENCE_BOTTOM_OF_PIPE);
+         iris_fine_fence_reference(screen, &fence->fine[b], fine);
+         iris_fine_fence_reference(screen, &fine, NULL);
+      } else {
+         /* This batch has no commands queued up (perhaps we just flushed,
+          * or all the commands are on the other batch).  Wait for the last
+          * syncobj on this engine - unless it's already finished by now.
+          */
+         if (iris_fine_fence_signaled(batch->last_fence))
+            continue;
+
+         iris_fine_fence_reference(screen, &fence->fine[b], batch->last_fence);
+      }
    }
 
    iris_fence_reference(ctx->screen, out_fence, NULL);
@@ -211,10 +239,37 @@ iris_fence_await(struct pipe_context *ctx,
 {
    struct iris_context *ice = (struct iris_context *)ctx;
 
+   /* Unflushed fences from the same context are no-ops. */
+   if (ctx && ctx == fence->unflushed_ctx)
+      return;
+
+   /* XXX: We can't safely flush the other context, because it might be
+    *      bound to another thread, and poking at its internals wouldn't
+    *      be safe.  In the future we should use MI_SEMAPHORE_WAIT and
+    *      block until the other job has been submitted, relying on
+    *      kernel timeslicing to preempt us until the other job is
+    *      actually flushed and the seqno finally passes.
+    */
+   if (fence->unflushed_ctx) {
+      pipe_debug_message(&ice->dbg, CONFORMANCE, "%s",
+                         "glWaitSync on unflushed fence from another context "
+                         "is unlikely to work without kernel 5.8+\n");
+   }
+
+   /* Flush any current work in our context as it doesn't need to wait
+    * for this fence.  Any future work in our context must wait.
+    */
    for (unsigned b = 0; b < IRIS_BATCH_COUNT; b++) {
-      for (unsigned i = 0; i < fence->count; i++) {
-         iris_batch_add_syncpt(&ice->batches[b], fence->syncpt[i],
-                               I915_EXEC_FENCE_WAIT);
+      struct iris_batch *batch = &ice->batches[b];
+
+      for (unsigned i = 0; i < ARRAY_SIZE(fence->fine); i++) {
+         struct iris_fine_fence *fine = fence->fine[i];
+
+         if (iris_fine_fence_signaled(fine))
+            continue;
+
+         iris_batch_flush(batch);
+         iris_batch_add_syncobj(batch, fine->syncobj, I915_EXEC_FENCE_WAIT);
       }
    }
 }
@@ -251,41 +306,66 @@ iris_fence_finish(struct pipe_screen *p_screen,
                   struct pipe_fence_handle *fence,
                   uint64_t timeout)
 {
+   struct iris_context *ice = (struct iris_context *)ctx;
    struct iris_screen *screen = (struct iris_screen *)p_screen;
 
-   if (!fence->count)
-      return true;
+   /* If we created the fence with PIPE_FLUSH_DEFERRED, we may not have
+    * flushed yet.  Check if our syncobj is the current batch's signalling
+    * syncobj - if so, we haven't flushed and need to now.
+    *
+    * The Gallium docs mention that a flush will occur if \p ctx matches
+    * the context the fence was created with.  It may be NULL, so we check
+    * that it matches first.
+    */
+   if (ctx && ctx == fence->unflushed_ctx) {
+      for (unsigned i = 0; i < IRIS_BATCH_COUNT; i++) {
+         struct iris_fine_fence *fine = fence->fine[i];
 
-   uint32_t handles[ARRAY_SIZE(fence->syncpt)];
-   for (unsigned i = 0; i < fence->count; i++)
-      handles[i] = fence->syncpt[i]->handle;
+         if (iris_fine_fence_signaled(fine))
+            continue;
+
+         if (fine->syncobj == iris_batch_get_signal_syncobj(&ice->batches[i]))
+            iris_batch_flush(&ice->batches[i]);
+      }
+
+      /* The fence is no longer deferred. */
+      fence->unflushed_ctx = NULL;
+   }
+
+   unsigned int handle_count = 0;
+   uint32_t handles[ARRAY_SIZE(fence->fine)];
+   for (unsigned i = 0; i < ARRAY_SIZE(fence->fine); i++) {
+      struct iris_fine_fence *fine = fence->fine[i];
+
+      if (iris_fine_fence_signaled(fine))
+         continue;
+
+      handles[handle_count++] = fine->syncobj->handle;
+   }
+
+   if (handle_count == 0)
+      return true;
 
    struct drm_syncobj_wait args = {
       .handles = (uintptr_t)handles,
-      .count_handles = fence->count,
+      .count_handles = handle_count,
       .timeout_nsec = rel2abs(timeout),
       .flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL
    };
+
+   if (fence->unflushed_ctx) {
+      /* This fence had a deferred flush from another context.  We can't
+       * safely flush it here, because the context might be bound to a
+       * different thread, and poking at its internals wouldn't be safe.
+       *
+       * Instead, use the WAIT_FOR_SUBMIT flag to block and hope that
+       * another thread submits the work.
+       */
+      args.flags |= DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT;
+   }
+
    return gen_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_WAIT, &args) == 0;
 }
-
-#ifndef SYNC_IOC_MAGIC
-/* duplicated from linux/sync_file.h to avoid build-time dependency
- * on new (v4.7) kernel headers.  Once distro's are mostly using
- * something newer than v4.7 drop this and #include <linux/sync_file.h>
- * instead.
- */
-struct sync_merge_data {
-   char  name[32];
-   __s32 fd2;
-   __s32 fence;
-   __u32 flags;
-   __u32 pad;
-};
-
-#define SYNC_IOC_MAGIC '>'
-#define SYNC_IOC_MERGE _IOWR(SYNC_IOC_MAGIC, 3, struct sync_merge_data)
-#endif
 
 static int
 sync_merge_fd(int sync_fd, int new_fd)
@@ -316,7 +396,27 @@ iris_fence_get_fd(struct pipe_screen *p_screen,
    struct iris_screen *screen = (struct iris_screen *)p_screen;
    int fd = -1;
 
-   if (fence->count == 0) {
+   /* Deferred fences aren't supported. */
+   if (fence->unflushed_ctx)
+      return -1;
+
+   for (unsigned i = 0; i < ARRAY_SIZE(fence->fine); i++) {
+      struct iris_fine_fence *fine = fence->fine[i];
+
+      if (iris_fine_fence_signaled(fine))
+         continue;
+
+      struct drm_syncobj_handle args = {
+         .handle = fine->syncobj->handle,
+         .flags = DRM_SYNCOBJ_HANDLE_TO_FD_FLAGS_EXPORT_SYNC_FILE,
+         .fd = -1,
+      };
+
+      gen_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD, &args);
+      fd = sync_merge_fd(fd, args.fd);
+   }
+
+   if (fd == -1) {
       /* Our fence has no syncobj's recorded.  This means that all of the
        * batches had already completed, their syncobj's had been signalled,
        * and so we didn't bother to record them.  But we're being asked to
@@ -330,17 +430,6 @@ iris_fence_get_fd(struct pipe_screen *p_screen,
       gen_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD, &args);
       gem_syncobj_destroy(screen->fd, args.handle);
       return args.fd;
-   }
-
-   for (unsigned i = 0; i < fence->count; i++) {
-      struct drm_syncobj_handle args = {
-         .handle = fence->syncpt[i]->handle,
-         .flags = DRM_SYNCOBJ_HANDLE_TO_FD_FLAGS_EXPORT_SYNC_FILE,
-         .fd = -1,
-      };
-
-      gen_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD, &args);
-      fd = sync_merge_fd(fd, args.fd);
    }
 
    return fd;
@@ -368,14 +457,42 @@ iris_fence_create_fd(struct pipe_context *ctx,
       return;
    }
 
-   struct iris_syncpt *syncpt = malloc(sizeof(*syncpt));
-   syncpt->handle = args.handle;
-   pipe_reference_init(&syncpt->ref, 1);
+   struct iris_syncobj *syncobj = malloc(sizeof(*syncobj));
+   if (!syncobj) {
+      *out = NULL;
+      return;
+   }
+   syncobj->handle = args.handle;
+   pipe_reference_init(&syncobj->ref, 1);
 
-   struct pipe_fence_handle *fence = malloc(sizeof(*fence));
+   struct iris_fine_fence *fine = calloc(1, sizeof(*fine));
+   if (!fine) {
+      free(syncobj);
+      *out = NULL;
+      return;
+   }
+
+   static const uint32_t zero = 0;
+
+   /* Fences work in terms of iris_fine_fence, but we don't actually have a
+    * seqno for an imported fence.  So, create a fake one which always
+    * returns as 'not signaled' so we fall back to using the sync object.
+    */
+   fine->seqno = UINT32_MAX;
+   fine->map = &zero;
+   fine->syncobj = syncobj;
+   fine->flags = IRIS_FENCE_END;
+   pipe_reference_init(&fine->reference, 1);
+
+   struct pipe_fence_handle *fence = calloc(1, sizeof(*fence));
+   if (!fence) {
+      free(fine);
+      free(syncobj);
+      *out = NULL;
+      return;
+   }
    pipe_reference_init(&fence->ref, 1);
-   fence->syncpt[0] = syncpt;
-   fence->count = 1;
+   fence->fine[0] = fine;
 
    *out = fence;
 }

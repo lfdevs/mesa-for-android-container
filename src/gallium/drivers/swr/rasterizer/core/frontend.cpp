@@ -1243,7 +1243,7 @@ static void AllocateTessellationData(SWR_CONTEXT* pContext)
     {
         gt_pTessellationThreadData =
             (TessellationThreadLocalData*)AlignedMalloc(sizeof(TessellationThreadLocalData), 64);
-        memset(gt_pTessellationThreadData, 0, sizeof(*gt_pTessellationThreadData));
+        memset((void*)gt_pTessellationThreadData, 0, sizeof(*gt_pTessellationThreadData));
     }
 }
 

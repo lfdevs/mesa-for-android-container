@@ -71,7 +71,7 @@ cso_set_samplers(struct cso_context *cso,
                  const struct pipe_sampler_state **states);
 
 
-/* Alternate interface to support state trackers that like to modify
+/* Alternate interface to support gallium frontends that like to modify
  * samplers one at a time:
  */
 void
@@ -100,7 +100,7 @@ void cso_set_stream_outputs(struct cso_context *ctx,
  * We don't provide shader caching in CSO.  Most of the time the api provides
  * object semantics for shaders anyway, and the cases where it doesn't
  * (eg mesa's internally-generated texenv programs), it will be up to
- * the state tracker to implement their own specialized caching.
+ * gallium frontends to implement their own specialized caching.
  */
 
 void cso_set_fragment_shader_handle(struct cso_context *ctx, void *handle);

@@ -28,24 +28,48 @@
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/mman.h>
 
 #include "decode.h"
 #include "util/macros.h"
 #include "util/u_debug.h"
+#include "util/u_dynarray.h"
+#include "util/hash_table.h"
 
 /* Memory handling */
 
-static struct pandecode_mapped_memory mmaps;
+static struct hash_table_u64 *mmap_table;
+
+static struct util_dynarray ro_mappings;
+
+static struct pandecode_mapped_memory *
+pandecode_find_mapped_gpu_mem_containing_rw(uint64_t addr)
+{
+        return _mesa_hash_table_u64_search(mmap_table, addr & ~(4096 - 1));
+}
 
 struct pandecode_mapped_memory *
 pandecode_find_mapped_gpu_mem_containing(uint64_t addr)
 {
-        list_for_each_entry(struct pandecode_mapped_memory, pos, &mmaps.node, node) {
-                if (addr >= pos->gpu_va && addr < pos->gpu_va + pos->length)
-                        return pos;
+        struct pandecode_mapped_memory *mem = pandecode_find_mapped_gpu_mem_containing_rw(addr);
+
+        if (mem && mem->addr && !mem->ro) {
+                mprotect(mem->addr, mem->length, PROT_READ);
+                mem->ro = true;
+                util_dynarray_append(&ro_mappings, struct pandecode_mapped_memory *, mem);
         }
 
-        return NULL;
+        return mem;
+}
+
+void
+pandecode_map_read_write(void)
+{
+        util_dynarray_foreach(&ro_mappings, struct pandecode_mapped_memory *, mem) {
+                (*mem)->ro = false;
+                mprotect((*mem)->addr, (*mem)->length, PROT_READ | PROT_WRITE);
+        }
+        util_dynarray_clear(&ro_mappings);
 }
 
 static void
@@ -67,31 +91,30 @@ pandecode_inject_mmap(uint64_t gpu_va, void *cpu, unsigned sz, const char *name)
 {
         /* First, search if we already mapped this and are just updating an address */
 
-        list_for_each_entry(struct pandecode_mapped_memory, pos, &mmaps.node, node) {
-                if (pos->gpu_va == gpu_va) {
-                        /* TODO: Resizing weirdness. Only applies to tracing
-                         * the legacy driver, not for native traces */
+        struct pandecode_mapped_memory *existing =
+                pandecode_find_mapped_gpu_mem_containing_rw(gpu_va);
 
-                        pos->length = sz;
-                        pos->addr = cpu;
-                        pandecode_add_name(pos, gpu_va, name);
-
-                        return;
-                }
+        if (existing && existing->gpu_va == gpu_va) {
+                existing->length = sz;
+                existing->addr = cpu;
+                pandecode_add_name(existing, gpu_va, name);
+                return;
         }
 
         /* Otherwise, add a fresh mapping */
         struct pandecode_mapped_memory *mapped_mem = NULL;
 
         mapped_mem = malloc(sizeof(*mapped_mem));
-        list_inithead(&mapped_mem->node);
-
         mapped_mem->gpu_va = gpu_va;
         mapped_mem->length = sz;
         mapped_mem->addr = cpu;
         pandecode_add_name(mapped_mem, gpu_va, name);
 
-        list_add(&mapped_mem->node, &mmaps.node);
+        /* Add it to the table */
+        assert((gpu_va & 4095) == 0);
+
+        for (unsigned i = 0; i < sz; i += 4096)
+                _mesa_hash_table_u64_insert(mmap_table, gpu_va + i, mapped_mem);
 }
 
 char *
@@ -102,7 +125,7 @@ pointer_as_memory_reference(uint64_t ptr)
 
         /* Try to find the corresponding mapped zone */
 
-        mapped = pandecode_find_mapped_gpu_mem_containing(ptr);
+        mapped = pandecode_find_mapped_gpu_mem_containing_rw(ptr);
 
         if (mapped) {
                 snprintf(out, 128, "%s + %d", mapped->name, (int) (ptr - mapped->gpu_va));
@@ -118,32 +141,36 @@ pointer_as_memory_reference(uint64_t ptr)
 
 static int pandecode_dump_frame_count = 0;
 
-static void
+static bool force_stderr = false;
+
+void
 pandecode_dump_file_open(void)
 {
         if (pandecode_dump_stream)
                 return;
 
-        char buffer[1024];
-
         /* This does a getenv every frame, so it is possible to use
          * setenv to change the base at runtime.
          */
         const char *dump_file_base = debug_get_option("PANDECODE_DUMP_FILE", "pandecode.dump");
-        snprintf(buffer, sizeof(buffer), "%s.%04d", dump_file_base, pandecode_dump_frame_count);
-
-        printf("pandecode: dump command stream to file %s\n", buffer);
-        pandecode_dump_stream = fopen(buffer, "w");
-
-        if (!pandecode_dump_stream)
-                fprintf(stderr,"pandecode: failed to open command stream log file %s\n",
-                        buffer);
+        if (force_stderr || !strcmp(dump_file_base, "stderr"))
+                pandecode_dump_stream = stderr;
+        else {
+                char buffer[1024];
+                snprintf(buffer, sizeof(buffer), "%s.%04d", dump_file_base, pandecode_dump_frame_count);
+                printf("pandecode: dump command stream to file %s\n", buffer);
+                pandecode_dump_stream = fopen(buffer, "w");
+                if (!pandecode_dump_stream)
+                        fprintf(stderr,
+                                "pandecode: failed to open command stream log file %s\n",
+                                buffer);
+        }
 }
 
 static void
 pandecode_dump_file_close(void)
 {
-        if (pandecode_dump_stream) {
+        if (pandecode_dump_stream && pandecode_dump_stream != stderr) {
                 fclose(pandecode_dump_stream);
                 pandecode_dump_stream = NULL;
         }
@@ -152,12 +179,9 @@ pandecode_dump_file_close(void)
 void
 pandecode_initialize(bool to_stderr)
 {
-        list_inithead(&mmaps.node);
-
-        if (to_stderr)
-                pandecode_dump_stream = stderr;
-        else
-                pandecode_dump_file_open();
+        force_stderr = to_stderr;
+        mmap_table = _mesa_hash_table_u64_create(NULL);
+        util_dynarray_init(&ro_mappings, NULL);
 }
 
 void
@@ -165,11 +189,12 @@ pandecode_next_frame(void)
 {
         pandecode_dump_file_close();
         pandecode_dump_frame_count++;
-        pandecode_dump_file_open();
 }
 
 void
 pandecode_close(void)
 {
+        _mesa_hash_table_u64_destroy(mmap_table, NULL);
+        util_dynarray_fini(&ro_mappings);
         pandecode_dump_file_close();
 }

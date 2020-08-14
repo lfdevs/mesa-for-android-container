@@ -108,6 +108,14 @@ bit_write(struct bit_state *s, unsigned index, nir_alu_type T, bit_t value, bool
                                         srcs[3].u16[ins->swizzle[3][c]]); \
         }
 
+#define bv4i8(fxn) \
+        for (unsigned c = 0; c < 4; ++c) { \
+                dest.u8[c] = fxn(srcs[0].u8[ins->swizzle[0][c]], \
+                                        srcs[1].u8[ins->swizzle[1][c]], \
+                                        srcs[2].u8[ins->swizzle[2][c]], \
+                                        srcs[3].u8[ins->swizzle[3][c]]); \
+        }
+
 #define bf32(fxn) dest.f32 = fxn(srcs[0].f32, srcs[1].f32, srcs[2].f32, srcs[3].f32)
 #define bi32(fxn) dest.i32 = fxn(srcs[0].u32, srcs[1].u32, srcs[2].u32, srcs[3].i32)
 
@@ -132,7 +140,8 @@ bit_write(struct bit_state *s, unsigned index, nir_alu_type T, bit_t value, bool
                 bv2i16(fxn16); \
                 break; \
         } else if (ins->dest_type == nir_type_int8 || ins->dest_type == nir_type_uint8) { \
-                unreachable("TODO: 8-bit"); \
+                bv4i8(fxn8); \
+                break; \
         }
 
 #define bpoly(name) \
@@ -140,17 +149,20 @@ bit_write(struct bit_state *s, unsigned index, nir_alu_type T, bit_t value, bool
         bint(bit_i64 ## name, bit_i32 ## name, bit_i16 ## name, bit_i8 ## name); \
         unreachable("Invalid type");
 
-#define bit_make_float(name, expr) \
+#define bit_make_float_2(name, expr32, expr64) \
         static inline double \
         bit_f64 ## name(double a, double b, double c, double d) \
         { \
-                return expr; \
+                return expr64; \
         } \
         static inline float \
         bit_f32 ## name(float a, float b, float c, float d) \
         { \
-                return expr; \
+                return expr32; \
         } \
+
+#define bit_make_float(name, expr) \
+        bit_make_float_2(name, expr, expr)
 
 #define bit_make_int(name, expr) \
         static inline int64_t \
@@ -182,10 +194,15 @@ bit_write(struct bit_state *s, unsigned index, nir_alu_type T, bit_t value, bool
         bit_make_int(name, expr) \
         
 bit_make_poly(add, a + b);
+bit_make_int(sub, a - b);
 bit_make_float(fma, (a * b) + c);
 bit_make_poly(mov, a);
 bit_make_poly(min, MIN2(a, b));
 bit_make_poly(max, MAX2(a, b));
+bit_make_float_2(floor, floorf(a), floor(a));
+bit_make_float_2(ceil,  ceilf(a), ceil(a));
+bit_make_float_2(trunc, truncf(a), trunc(a));
+bit_make_float_2(nearbyint, nearbyintf(a), nearbyint(a));
 
 /* Modifiers */
 
@@ -198,7 +215,7 @@ bit_outmod(float raw, enum bifrost_outmod mod)
         case BIFROST_SAT_SIGNED:
                 return CLAMP(raw, -1.0, 1.0);
         case BIFROST_SAT:
-                return CLAMP(raw, 0.0, 1.0);
+                return SATURATE(raw);
         default:
                 return raw;
         }
@@ -472,13 +489,7 @@ bit_step(struct bit_state *s, bi_instruction *ins, bool FMA)
                         dest.i32 = bit_as_int32(ins->src_types[0], srcs[0], comp, ins->roundmode);
                 else if (ins->dest_type == nir_type_float16) {
                         dest.u16[0] = bit_as_float16(ins->src_types[0], srcs[0], ins->swizzle[0][0]);
-
-                        if (ins->src_types[0] == nir_type_float32) {
-                                /* TODO: Second argument */
-                                dest.u16[1] = 0;
-                        } else {
-                                dest.u16[1] = bit_as_float16(ins->src_types[0], srcs[0], ins->swizzle[0][1]);
-                        }
+                        dest.u16[1] = bit_as_float16(ins->src_types[0], srcs[0], ins->swizzle[0][1]);
                 } else if (ins->dest_type == nir_type_uint16) {
                         dest.u16[0] = bit_as_uint16(ins->src_types[0], srcs[0], ins->swizzle[0][0], ins->roundmode);
                         dest.u16[1] = bit_as_uint16(ins->src_types[0], srcs[0], ins->swizzle[0][1], ins->roundmode);
@@ -494,10 +505,24 @@ bit_step(struct bit_state *s, bi_instruction *ins, bool FMA)
 
         case BI_CSEL: {
                 bool direct = ins->cond == BI_COND_ALWAYS;
-                bool cond = direct ? srcs[0].u32 :
-                        bit_eval_cond(ins->cond, srcs[0], srcs[1], ins->src_types[0], 0, 0);
+                unsigned sz = nir_alu_type_get_type_size(ins->src_types[0]);
 
-                dest = cond ? srcs[2] : srcs[3];
+                if (sz == 32) {
+                        bool cond = direct ? srcs[0].u32 :
+                                bit_eval_cond(ins->cond, srcs[0], srcs[1], ins->src_types[0], 0, 0);
+
+                        dest = cond ? srcs[2] : srcs[3];
+                } else if (sz == 16) {
+                        for (unsigned c = 0; c < 2; ++c) {
+                                bool cond = direct ? srcs[0].u16[c] :
+                                        bit_eval_cond(ins->cond, srcs[0], srcs[1], ins->src_types[0], c, c);
+
+                                dest.u16[c] = cond ? srcs[2].u16[c] : srcs[3].u16[c];
+                        }
+                } else {
+                        unreachable("Remaining types todo");
+                }
+
                 break;
         }
 
@@ -518,8 +543,18 @@ bit_step(struct bit_state *s, bi_instruction *ins, bool FMA)
 
                 break;
         }
-        case BI_ISUB:
-                unreachable("Unsupported op");
+
+        case BI_IMATH: {
+                if (ins->op.imath == BI_IMATH_ADD) {
+                        bint(bit_i64add, bit_i32add, bit_i16add, bit_i8add);
+                } else if (ins->op.imath == BI_IMATH_SUB) {
+                        bint(bit_i64sub, bit_i32sub, bit_i16sub, bit_i8sub);
+                } else {
+                        unreachable("Unsupported op");
+                }
+
+                break;
+        }
 
         case BI_MINMAX: {
                 if (ins->op.minmax == BI_MINMAX_MIN) {
@@ -602,9 +637,20 @@ bit_step(struct bit_state *s, bi_instruction *ins, bool FMA)
                 break;
         }
 
-        case BI_SHIFT:
-        case BI_ROUND:
-                unreachable("Unsupported op");
+        case BI_ROUND: {
+                if (ins->roundmode == BIFROST_RTP) {
+                        bfloat(bit_f64ceil, bit_f32ceil);
+                } else if (ins->roundmode == BIFROST_RTN) {
+                        bfloat(bit_f64floor, bit_f32floor);
+                } else if (ins->roundmode == BIFROST_RTE) {
+                        bfloat(bit_f64nearbyint, bit_f32nearbyint);
+                } else if (ins->roundmode == BIFROST_RTZ) {
+                        bfloat(bit_f64trunc, bit_f32trunc);
+                } else
+                        unreachable("Invalid");
+
+                break;
+        }
         
         /* We only interpret vertex shaders */
         case BI_DISCARD:

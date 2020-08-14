@@ -2,7 +2,7 @@ These directory contains tools for manipulating traces produced by the trace
 pipe driver.
 
 
-Most debug builds of state trackers already load the trace driver by default.
+Most debug builds of gallium frontends already load the trace driver by default.
 To produce a trace do
 
   export GALLIUM_TRACE=foo.gtrace
@@ -34,6 +34,6 @@ You can compare two JSON files by doing
 
   ./diff_state.py foo.json boo.json | less
 
-If you're investigating a regression in a state tracker, you can obtain a good
+If you're investigating a regression in an gallium frontend, you can obtain a good
 and bad trace, dump respective state in JSON, and then compare the states to
 identify the problem.

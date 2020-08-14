@@ -143,7 +143,6 @@ private:
    bool visit(nir_alu_instr *);
    bool visit(nir_block *);
    bool visit(nir_cf_node *);
-   bool visit(nir_deref_instr *);
    bool visit(nir_function *);
    bool visit(nir_if *);
    bool visit(nir_instr *);
@@ -158,10 +157,6 @@ private:
    Value* applyProjection(Value *src, Value *proj);
    unsigned int getNIRArgCount(TexInstruction::Target&);
 
-   // image stuff
-   uint16_t handleDeref(nir_deref_instr *, Value * & indirect, const nir_variable * &);
-   CacheMode getCacheModeFromVar(const nir_variable *);
-
    nir_shader *nir;
 
    NirDefMap ssaDefs;
@@ -170,6 +165,7 @@ private:
    NirArrayLMemOffsets regToLmemOffset;
    NirBlockMap blocks;
    unsigned int curLoopDepth;
+   unsigned int curIfDepth;
 
    BasicBlock *exit;
    Value *zero;
@@ -188,6 +184,7 @@ Converter::Converter(Program *prog, nir_shader *nir, nv50_ir_prog_info *info)
    : ConverterCommon(prog, info),
      nir(nir),
      curLoopDepth(0),
+     curIfDepth(0),
      clipVertexOutput(-1)
 {
    zero = mkImm((uint32_t)0);
@@ -501,49 +498,39 @@ Converter::getOperation(nir_intrinsic_op op)
       return OP_RESTART;
    case nir_intrinsic_bindless_image_atomic_add:
    case nir_intrinsic_image_atomic_add:
-   case nir_intrinsic_image_deref_atomic_add:
    case nir_intrinsic_bindless_image_atomic_and:
    case nir_intrinsic_image_atomic_and:
-   case nir_intrinsic_image_deref_atomic_and:
    case nir_intrinsic_bindless_image_atomic_comp_swap:
    case nir_intrinsic_image_atomic_comp_swap:
-   case nir_intrinsic_image_deref_atomic_comp_swap:
    case nir_intrinsic_bindless_image_atomic_exchange:
    case nir_intrinsic_image_atomic_exchange:
-   case nir_intrinsic_image_deref_atomic_exchange:
    case nir_intrinsic_bindless_image_atomic_imax:
    case nir_intrinsic_image_atomic_imax:
-   case nir_intrinsic_image_deref_atomic_imax:
    case nir_intrinsic_bindless_image_atomic_umax:
    case nir_intrinsic_image_atomic_umax:
-   case nir_intrinsic_image_deref_atomic_umax:
    case nir_intrinsic_bindless_image_atomic_imin:
    case nir_intrinsic_image_atomic_imin:
-   case nir_intrinsic_image_deref_atomic_imin:
    case nir_intrinsic_bindless_image_atomic_umin:
    case nir_intrinsic_image_atomic_umin:
-   case nir_intrinsic_image_deref_atomic_umin:
    case nir_intrinsic_bindless_image_atomic_or:
    case nir_intrinsic_image_atomic_or:
-   case nir_intrinsic_image_deref_atomic_or:
    case nir_intrinsic_bindless_image_atomic_xor:
    case nir_intrinsic_image_atomic_xor:
-   case nir_intrinsic_image_deref_atomic_xor:
+   case nir_intrinsic_bindless_image_atomic_inc_wrap:
+   case nir_intrinsic_image_atomic_inc_wrap:
+   case nir_intrinsic_bindless_image_atomic_dec_wrap:
+   case nir_intrinsic_image_atomic_dec_wrap:
       return OP_SUREDP;
    case nir_intrinsic_bindless_image_load:
    case nir_intrinsic_image_load:
-   case nir_intrinsic_image_deref_load:
       return OP_SULDP;
    case nir_intrinsic_bindless_image_samples:
    case nir_intrinsic_image_samples:
-   case nir_intrinsic_image_deref_samples:
    case nir_intrinsic_bindless_image_size:
    case nir_intrinsic_image_size:
-   case nir_intrinsic_image_deref_size:
       return OP_SUQ;
    case nir_intrinsic_bindless_image_store:
    case nir_intrinsic_image_store:
-   case nir_intrinsic_image_deref_store:
       return OP_SUSTP;
    default:
       ERROR("couldn't get operation for nir_intrinsic_op %u\n", op);
@@ -571,6 +558,10 @@ Converter::getSubOp(nir_op op)
    case nir_op_imul_high:
    case nir_op_umul_high:
       return NV50_IR_SUBOP_MUL_HIGH;
+   case nir_op_ishl:
+   case nir_op_ishr:
+   case nir_op_ushr:
+      return NV50_IR_SUBOP_SHIFT_WRAP;
    default:
       return 0;
    }
@@ -583,35 +574,30 @@ Converter::getSubOp(nir_intrinsic_op op)
    case nir_intrinsic_bindless_image_atomic_add:
    case nir_intrinsic_global_atomic_add:
    case nir_intrinsic_image_atomic_add:
-   case nir_intrinsic_image_deref_atomic_add:
    case nir_intrinsic_shared_atomic_add:
    case nir_intrinsic_ssbo_atomic_add:
       return  NV50_IR_SUBOP_ATOM_ADD;
    case nir_intrinsic_bindless_image_atomic_and:
    case nir_intrinsic_global_atomic_and:
    case nir_intrinsic_image_atomic_and:
-   case nir_intrinsic_image_deref_atomic_and:
    case nir_intrinsic_shared_atomic_and:
    case nir_intrinsic_ssbo_atomic_and:
       return  NV50_IR_SUBOP_ATOM_AND;
    case nir_intrinsic_bindless_image_atomic_comp_swap:
    case nir_intrinsic_global_atomic_comp_swap:
    case nir_intrinsic_image_atomic_comp_swap:
-   case nir_intrinsic_image_deref_atomic_comp_swap:
    case nir_intrinsic_shared_atomic_comp_swap:
    case nir_intrinsic_ssbo_atomic_comp_swap:
       return  NV50_IR_SUBOP_ATOM_CAS;
    case nir_intrinsic_bindless_image_atomic_exchange:
    case nir_intrinsic_global_atomic_exchange:
    case nir_intrinsic_image_atomic_exchange:
-   case nir_intrinsic_image_deref_atomic_exchange:
    case nir_intrinsic_shared_atomic_exchange:
    case nir_intrinsic_ssbo_atomic_exchange:
       return  NV50_IR_SUBOP_ATOM_EXCH;
    case nir_intrinsic_bindless_image_atomic_or:
    case nir_intrinsic_global_atomic_or:
    case nir_intrinsic_image_atomic_or:
-   case nir_intrinsic_image_deref_atomic_or:
    case nir_intrinsic_shared_atomic_or:
    case nir_intrinsic_ssbo_atomic_or:
       return  NV50_IR_SUBOP_ATOM_OR;
@@ -621,8 +607,6 @@ Converter::getSubOp(nir_intrinsic_op op)
    case nir_intrinsic_global_atomic_umax:
    case nir_intrinsic_image_atomic_imax:
    case nir_intrinsic_image_atomic_umax:
-   case nir_intrinsic_image_deref_atomic_imax:
-   case nir_intrinsic_image_deref_atomic_umax:
    case nir_intrinsic_shared_atomic_imax:
    case nir_intrinsic_shared_atomic_umax:
    case nir_intrinsic_ssbo_atomic_imax:
@@ -634,8 +618,6 @@ Converter::getSubOp(nir_intrinsic_op op)
    case nir_intrinsic_global_atomic_umin:
    case nir_intrinsic_image_atomic_imin:
    case nir_intrinsic_image_atomic_umin:
-   case nir_intrinsic_image_deref_atomic_imin:
-   case nir_intrinsic_image_deref_atomic_umin:
    case nir_intrinsic_shared_atomic_imin:
    case nir_intrinsic_shared_atomic_umin:
    case nir_intrinsic_ssbo_atomic_imin:
@@ -644,10 +626,15 @@ Converter::getSubOp(nir_intrinsic_op op)
    case nir_intrinsic_bindless_image_atomic_xor:
    case nir_intrinsic_global_atomic_xor:
    case nir_intrinsic_image_atomic_xor:
-   case nir_intrinsic_image_deref_atomic_xor:
    case nir_intrinsic_shared_atomic_xor:
    case nir_intrinsic_ssbo_atomic_xor:
       return  NV50_IR_SUBOP_ATOM_XOR;
+   case nir_intrinsic_bindless_image_atomic_inc_wrap:
+   case nir_intrinsic_image_atomic_inc_wrap:
+      return NV50_IR_SUBOP_ATOM_INC;
+   case nir_intrinsic_bindless_image_atomic_dec_wrap:
+   case nir_intrinsic_image_atomic_dec_wrap:
+      return NV50_IR_SUBOP_ATOM_DEC;
 
    case nir_intrinsic_group_memory_barrier:
    case nir_intrinsic_memory_barrier:
@@ -909,7 +896,7 @@ calcSlots(const glsl_type *type, Program::Type stage, const shader_info &info,
    uint16_t slots;
    switch (stage) {
    case Program::TYPE_GEOMETRY:
-      slots = type->uniform_locations();
+      slots = type->count_attribute_slots(false);
       if (input)
          slots /= info.gs.vertices_in;
       break;
@@ -917,9 +904,9 @@ calcSlots(const glsl_type *type, Program::Type stage, const shader_info &info,
    case Program::TYPE_TESSELLATION_EVAL:
       // remove first dimension
       if (var->data.patch || (!input && stage == Program::TYPE_TESSELLATION_EVAL))
-         slots = type->uniform_locations();
+         slots = type->count_attribute_slots(false);
       else
-         slots = type->fields.array->uniform_locations();
+         slots = type->fields.array->count_attribute_slots(false);
       break;
    default:
       slots = type->count_attribute_slots(false);
@@ -929,6 +916,24 @@ calcSlots(const glsl_type *type, Program::Type stage, const shader_info &info,
    return slots;
 }
 
+static uint8_t
+getMaskForType(const glsl_type *type, uint8_t slot) {
+   uint16_t comp = type->without_array()->components();
+   comp = comp ? comp : 4;
+
+   if (glsl_base_type_is_64bit(type->without_array()->base_type)) {
+      comp *= 2;
+      if (comp > 4) {
+         if (slot % 2)
+            comp -= 4;
+         else
+            comp = 4;
+      }
+   }
+
+   return (1 << comp) - 1;
+}
+
 bool Converter::assignSlots() {
    unsigned name;
    unsigned index;
@@ -936,18 +941,8 @@ bool Converter::assignSlots() {
    info->io.viewportId = -1;
    info->numInputs = 0;
    info->numOutputs = 0;
-
-   // we have to fixup the uniform locations for arrays
-   unsigned numImages = 0;
-   nir_foreach_variable(var, &nir->uniforms) {
-      const glsl_type *type = var->type;
-      if (!type->without_array()->is_image())
-         continue;
-      var->data.driver_location = numImages;
-      numImages += type->is_array() ? type->arrays_of_arrays_size() : 1;
-   }
-
    info->numSysVals = 0;
+
    for (uint8_t i = 0; i < SYSTEM_VALUE_MAX; ++i) {
       if (!(nir->info.system_values_read & 1ull << i))
          continue;
@@ -977,19 +972,11 @@ bool Converter::assignSlots() {
    if (prog->getType() == Program::TYPE_COMPUTE)
       return true;
 
-   nir_foreach_variable(var, &nir->inputs) {
+   nir_foreach_shader_in_variable(var, nir) {
       const glsl_type *type = var->type;
       int slot = var->data.location;
       uint16_t slots = calcSlots(type, prog->getType(), nir->info, true, var);
-      uint32_t comp = type->is_array() ? type->without_array()->component_slots()
-                                       : type->component_slots();
-      uint32_t frac = var->data.location_frac;
       uint32_t vary = var->data.driver_location;
-
-      if (glsl_base_type_is_64bit(type->without_array()->base_type)) {
-         if (comp > 2)
-            slots *= 2;
-      }
 
       assert(vary + slots <= PIPE_MAX_SHADER_INPUTS);
 
@@ -1014,6 +1001,8 @@ bool Converter::assignSlots() {
             info->numPatchConstants = MAX2(info->numPatchConstants, index + slots);
          break;
       case Program::TYPE_VERTEX:
+         if (slot >= VERT_ATTRIB_GENERIC0)
+            slot = VERT_ATTRIB_GENERIC0 + vary;
          vert_attrib_to_tgsi_semantic((gl_vert_attrib)slot, &name, &index);
          switch (name) {
          case TGSI_SEMANTIC_EDGEFLAG:
@@ -1029,34 +1018,21 @@ bool Converter::assignSlots() {
       }
 
       for (uint16_t i = 0u; i < slots; ++i, ++vary) {
-         info->in[vary].id = vary;
-         info->in[vary].patch = var->data.patch;
-         info->in[vary].sn = name;
-         info->in[vary].si = index + i;
-         if (glsl_base_type_is_64bit(type->without_array()->base_type))
-            if (i & 0x1)
-               info->in[vary].mask |= (((1 << (comp * 2)) - 1) << (frac * 2) >> 0x4);
-            else
-               info->in[vary].mask |= (((1 << (comp * 2)) - 1) << (frac * 2) & 0xf);
-         else
-            info->in[vary].mask |= ((1 << comp) - 1) << frac;
+         nv50_ir_varying *v = &info->in[vary];
+
+         v->patch = var->data.patch;
+         v->sn = name;
+         v->si = index + i;
+         v->mask |= getMaskForType(type, i) << var->data.location_frac;
       }
       info->numInputs = std::max<uint8_t>(info->numInputs, vary);
    }
 
-   nir_foreach_variable(var, &nir->outputs) {
+   nir_foreach_shader_out_variable(var, nir) {
       const glsl_type *type = var->type;
       int slot = var->data.location;
       uint16_t slots = calcSlots(type, prog->getType(), nir->info, false, var);
-      uint32_t comp = type->is_array() ? type->without_array()->component_slots()
-                                       : type->component_slots();
-      uint32_t frac = var->data.location_frac;
       uint32_t vary = var->data.driver_location;
-
-      if (glsl_base_type_is_64bit(type->without_array()->base_type)) {
-         if (comp > 2)
-            slots *= 2;
-      }
 
       assert(vary < PIPE_MAX_SHADER_OUTPUTS);
 
@@ -1067,7 +1043,11 @@ bool Converter::assignSlots() {
          case TGSI_SEMANTIC_COLOR:
             if (!var->data.fb_fetch_output)
                info->prop.fp.numColourResults++;
-            info->prop.fp.separateFragData = true;
+
+            if (var->data.location == FRAG_RESULT_COLOR &&
+                nir->info.outputs_written & BITFIELD64_BIT(var->data.location))
+               info->prop.fp.separateFragData = true;
+
             // sometimes we get FRAG_RESULT_DATAX with data.index 0
             // sometimes we get FRAG_RESULT_DATA0 with data.index X
             index = index == 0 ? var->data.index : index;
@@ -1118,20 +1098,14 @@ bool Converter::assignSlots() {
       }
 
       for (uint16_t i = 0u; i < slots; ++i, ++vary) {
-         info->out[vary].id = vary;
-         info->out[vary].patch = var->data.patch;
-         info->out[vary].sn = name;
-         info->out[vary].si = index + i;
-         if (glsl_base_type_is_64bit(type->without_array()->base_type))
-            if (i & 0x1)
-               info->out[vary].mask |= (((1 << (comp * 2)) - 1) << (frac * 2) >> 0x4);
-            else
-               info->out[vary].mask |= (((1 << (comp * 2)) - 1) << (frac * 2) & 0xf);
-         else
-            info->out[vary].mask |= ((1 << comp) - 1) << frac;
+         nv50_ir_varying *v = &info->out[vary];
+         v->patch = var->data.patch;
+         v->sn = name;
+         v->si = index + i;
+         v->mask |= getMaskForType(type, i) << var->data.location_frac;
 
          if (nir->info.outputs_read & 1ull << slot)
-            info->out[vary].oread = 1;
+            v->oread = 1;
       }
       info->numOutputs = std::max<uint8_t>(info->numOutputs, vary);
    }
@@ -1275,6 +1249,7 @@ Converter::parseNIR()
    info->bin.tlsSpace = 0;
    info->io.clipDistances = nir->info.clip_distance_array_size;
    info->io.cullDistances = nir->info.cull_distance_array_size;
+   info->io.layer_viewport_relative = nir->info.layer_viewport_relative;
 
    switch(prog->getType()) {
    case Program::TYPE_COMPUTE:
@@ -1285,18 +1260,17 @@ Converter::parseNIR()
       break;
    case Program::TYPE_FRAGMENT:
       info->prop.fp.earlyFragTests = nir->info.fs.early_fragment_tests;
-      info->prop.fp.persampleInvocation =
+      prog->persampleInvocation =
          (nir->info.system_values_read & SYSTEM_BIT_SAMPLE_ID) ||
          (nir->info.system_values_read & SYSTEM_BIT_SAMPLE_POS);
       info->prop.fp.postDepthCoverage = nir->info.fs.post_depth_coverage;
       info->prop.fp.readsSampleLocations =
          (nir->info.system_values_read & SYSTEM_BIT_SAMPLE_POS);
-      info->prop.fp.usesDiscard = nir->info.fs.uses_discard;
+      info->prop.fp.usesDiscard = nir->info.fs.uses_discard || nir->info.fs.uses_demote;
       info->prop.fp.usesSampleMaskIn =
          !!(nir->info.system_values_read & SYSTEM_BIT_SAMPLE_MASK_IN);
       break;
    case Program::TYPE_GEOMETRY:
-      info->prop.gp.inputPrim = nir->info.gs.input_primitive;
       info->prop.gp.instanceCount = nir->info.gs.invocations;
       info->prop.gp.maxVertices = nir->info.gs.vertices_out;
       info->prop.gp.outputPrim = nir->info.gs.output_primitive;
@@ -1426,64 +1400,69 @@ Converter::visit(nir_block *block)
 bool
 Converter::visit(nir_if *nif)
 {
+   curIfDepth++;
+
    DataType sType = getSType(nif->condition, false, false);
    Value *src = getSrc(&nif->condition, 0);
 
    nir_block *lastThen = nir_if_last_then_block(nif);
    nir_block *lastElse = nir_if_last_else_block(nif);
 
-   assert(!lastThen->successors[1]);
-   assert(!lastElse->successors[1]);
-
+   BasicBlock *headBB = bb;
    BasicBlock *ifBB = convert(nir_if_first_then_block(nif));
    BasicBlock *elseBB = convert(nir_if_first_else_block(nif));
 
    bb->cfg.attach(&ifBB->cfg, Graph::Edge::TREE);
    bb->cfg.attach(&elseBB->cfg, Graph::Edge::TREE);
 
-   // we only insert joinats, if both nodes end up at the end of the if again.
-   // the reason for this to not happens are breaks/continues/ret/... which
-   // have their own handling
-   if (lastThen->successors[0] == lastElse->successors[0])
-      bb->joinAt = mkFlow(OP_JOINAT, convert(lastThen->successors[0]),
-                          CC_ALWAYS, NULL);
-
+   bool insertJoins = lastThen->successors[0] == lastElse->successors[0];
    mkFlow(OP_BRA, elseBB, CC_EQ, src)->setType(sType);
 
    foreach_list_typed(nir_cf_node, node, node, &nif->then_list) {
       if (!visit(node))
          return false;
    }
+
    setPosition(convert(lastThen), true);
-   if (!bb->getExit() ||
-       !bb->getExit()->asFlow() ||
-        bb->getExit()->asFlow()->op == OP_JOIN) {
+   if (!bb->isTerminated()) {
       BasicBlock *tailBB = convert(lastThen->successors[0]);
       mkFlow(OP_BRA, tailBB, CC_ALWAYS, NULL);
       bb->cfg.attach(&tailBB->cfg, Graph::Edge::FORWARD);
+   } else {
+      insertJoins = insertJoins && bb->getExit()->op == OP_BRA;
    }
 
    foreach_list_typed(nir_cf_node, node, node, &nif->else_list) {
       if (!visit(node))
          return false;
    }
+
    setPosition(convert(lastElse), true);
-   if (!bb->getExit() ||
-       !bb->getExit()->asFlow() ||
-        bb->getExit()->asFlow()->op == OP_JOIN) {
+   if (!bb->isTerminated()) {
       BasicBlock *tailBB = convert(lastElse->successors[0]);
       mkFlow(OP_BRA, tailBB, CC_ALWAYS, NULL);
       bb->cfg.attach(&tailBB->cfg, Graph::Edge::FORWARD);
+   } else {
+      insertJoins = insertJoins && bb->getExit()->op == OP_BRA;
    }
 
-   if (lastThen->successors[0] == lastElse->successors[0]) {
-      setPosition(convert(lastThen->successors[0]), true);
+   /* only insert joins for the most outer if */
+   if (--curIfDepth)
+      insertJoins = false;
+
+   /* we made sure that all threads would converge at the same block */
+   if (insertJoins) {
+      BasicBlock *conv = convert(lastThen->successors[0]);
+      setPosition(headBB->getExit(), false);
+      headBB->joinAt = mkFlow(OP_JOINAT, conv, CC_ALWAYS, NULL);
+      setPosition(conv, false);
       mkFlow(OP_JOIN, NULL, CC_ALWAYS, NULL)->fixed = 1;
    }
 
    return true;
 }
 
+// TODO: add convergency
 bool
 Converter::visit(nir_loop *loop)
 {
@@ -1491,8 +1470,8 @@ Converter::visit(nir_loop *loop)
    func->loopNestingBound = std::max(func->loopNestingBound, curLoopDepth);
 
    BasicBlock *loopBB = convert(nir_loop_first_block(loop));
-   BasicBlock *tailBB =
-      convert(nir_cf_node_as_block(nir_cf_node_next(&loop->cf_node)));
+   BasicBlock *tailBB = convert(nir_cf_node_as_block(nir_cf_node_next(&loop->cf_node)));
+
    bb->cfg.attach(&loopBB->cfg, Graph::Edge::TREE);
 
    mkFlow(OP_PREBREAK, tailBB, CC_ALWAYS, NULL);
@@ -1503,18 +1482,14 @@ Converter::visit(nir_loop *loop)
       if (!visit(node))
          return false;
    }
-   Instruction *insn = bb->getExit();
-   if (bb->cfg.incidentCount() != 0) {
-      if (!insn || !insn->asFlow()) {
-         mkFlow(OP_CONT, loopBB, CC_ALWAYS, NULL);
-         bb->cfg.attach(&loopBB->cfg, Graph::Edge::BACK);
-      } else if (insn && insn->op == OP_BRA && !insn->getPredicate() &&
-                 tailBB->cfg.incidentCount() == 0) {
-         // RA doesn't like having blocks around with no incident edge,
-         // so we create a fake one to make it happy
-         bb->cfg.attach(&tailBB->cfg, Graph::Edge::TREE);
-      }
+
+   if (!bb->isTerminated()) {
+      mkFlow(OP_CONT, loopBB, CC_ALWAYS, NULL);
+      bb->cfg.attach(&loopBB->cfg, Graph::Edge::BACK);
    }
+
+   if (tailBB->cfg.incidentCount() == 0)
+      loopBB->cfg.attach(&tailBB->cfg, Graph::Edge::TREE);
 
    curLoopDepth -= 1;
 
@@ -1529,8 +1504,6 @@ Converter::visit(nir_instr *insn)
    switch (insn->type) {
    case nir_instr_type_alu:
       return visit(nir_instr_as_alu(insn));
-   case nir_instr_type_deref:
-      return visit(nir_instr_as_deref(insn));
    case nir_instr_type_intrinsic:
       return visit(nir_instr_as_intrinsic(insn));
    case nir_instr_type_jump:
@@ -1560,6 +1533,7 @@ Converter::convert(nir_intrinsic_op intr)
       return SV_DRAWID;
    case nir_intrinsic_load_front_face:
       return SV_FACE;
+   case nir_intrinsic_is_helper_invocation:
    case nir_intrinsic_load_helper_invocation:
       return SV_THREAD_KILL;
    case nir_intrinsic_load_instance_id:
@@ -1617,6 +1591,7 @@ Converter::visit(nir_intrinsic_instr *insn)
 {
    nir_intrinsic_op op = insn->intrinsic;
    const nir_intrinsic_info &opInfo = nir_intrinsic_infos[op];
+   unsigned dest_components = nir_intrinsic_dest_components(insn);
 
    switch (op) {
    case nir_intrinsic_load_uniform: {
@@ -1624,7 +1599,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       const DataType dType = getDType(insn);
       Value *indirect;
       uint32_t coffset = getIndirect(insn, 0, 0, indirect);
-      for (uint8_t i = 0; i < insn->num_components; ++i) {
+      for (uint8_t i = 0; i < dest_components; ++i) {
          loadFrom(FILE_MEMORY_CONST, 0, dType, newDefs[i], 16 * coffset, i, indirect);
       }
       break;
@@ -1635,7 +1610,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       DataType dType = getSType(insn->src[0], false, false);
       uint32_t idx = getIndirect(insn, op == nir_intrinsic_store_output ? 1 : 2, 0, indirect);
 
-      for (uint8_t i = 0u; i < insn->num_components; ++i) {
+      for (uint8_t i = 0u; i < nir_intrinsic_src_components(insn, 0); ++i) {
          if (!((1u << i) & nir_intrinsic_write_mask(insn)))
             continue;
 
@@ -1652,6 +1627,7 @@ Converter::visit(nir_intrinsic_instr *insn)
             break;
          }
          case Program::TYPE_GEOMETRY:
+         case Program::TYPE_TESSELLATION_EVAL:
          case Program::TYPE_VERTEX: {
             if (info->io.genUserClip > 0 && idx == (uint32_t)clipVertexOutput) {
                mkMov(clipVtx[i], src);
@@ -1688,7 +1664,7 @@ Converter::visit(nir_intrinsic_instr *insn)
          srcs.push_back(mkOp1v(OP_RDSV, TYPE_U32, getSSA(), mkSysVal(SV_LAYER, 0)));
          srcs.push_back(mkOp1v(OP_RDSV, TYPE_U32, getSSA(), mkSysVal(SV_SAMPLE_INDEX, 0)));
 
-         for (uint8_t i = 0u; i < insn->num_components; ++i) {
+         for (uint8_t i = 0u; i < dest_components; ++i) {
             defs.push_back(newDefs[i]);
             mask |= 1 << i;
          }
@@ -1715,15 +1691,25 @@ Converter::visit(nir_intrinsic_instr *insn)
 
       // see load_barycentric_* handling
       if (prog->getType() == Program::TYPE_FRAGMENT) {
-         mode = translateInterpMode(&vary, nvirOp);
          if (op == nir_intrinsic_load_interpolated_input) {
             ImmediateValue immMode;
             if (getSrc(&insn->src[0], 1)->getUniqueInsn()->src(0).getImmediate(immMode))
-               mode |= immMode.reg.data.u32;
+               mode = immMode.reg.data.u32;
+         }
+         if (mode == NV50_IR_INTERP_DEFAULT)
+            mode |= translateInterpMode(&vary, nvirOp);
+         else {
+            if (vary.linear) {
+               nvirOp = OP_LINTERP;
+               mode |= NV50_IR_INTERP_LINEAR;
+            } else {
+               nvirOp = OP_PINTERP;
+               mode |= NV50_IR_INTERP_PERSPECTIVE;
+            }
          }
       }
 
-      for (uint8_t i = 0u; i < insn->num_components; ++i) {
+      for (uint8_t i = 0u; i < dest_components; ++i) {
          uint32_t address = getSlotAddress(insn, idx, i);
          Symbol *sym = mkSymbol(input ? FILE_SHADER_INPUT : FILE_SHADER_OUTPUT, 0, dType, address);
          if (prog->getType() == Program::TYPE_FRAGMENT) {
@@ -1814,9 +1800,11 @@ Converter::visit(nir_intrinsic_instr *insn)
       loadImm(newDefs[1], mode);
       break;
    }
+   case nir_intrinsic_demote:
    case nir_intrinsic_discard:
       mkOp(OP_DISCARD, TYPE_NONE, NULL);
       break;
+   case nir_intrinsic_demote_if:
    case nir_intrinsic_discard_if: {
       Value *pred = getSSA(1, FILE_PREDICATE);
       if (insn->num_components > 1) {
@@ -1832,6 +1820,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_load_base_instance:
    case nir_intrinsic_load_draw_id:
    case nir_intrinsic_load_front_face:
+   case nir_intrinsic_is_helper_invocation:
    case nir_intrinsic_load_helper_invocation:
    case nir_intrinsic_load_instance_id:
    case nir_intrinsic_load_invocation_id:
@@ -1858,7 +1847,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       SVSemantic sv = convert(op);
       LValues &newDefs = convert(&insn->dest);
 
-      for (uint8_t i = 0u; i < insn->num_components; ++i) {
+      for (uint8_t i = 0u; i < nir_intrinsic_dest_components(insn); ++i) {
          Value *def;
          if (typeSizeof(dType) == 8)
             def = getSSA();
@@ -1910,12 +1899,12 @@ Converter::visit(nir_intrinsic_instr *insn)
 
       if (op == nir_intrinsic_read_first_invocation) {
          mkOp1(OP_VOTE, TYPE_U32, tmp, mkImm(1))->subOp = NV50_IR_SUBOP_VOTE_ANY;
-         mkOp2(OP_EXTBF, TYPE_U32, tmp, tmp, mkImm(0x2000))->subOp = NV50_IR_SUBOP_EXTBF_REV;
+         mkOp1(OP_BREV, TYPE_U32, tmp, tmp);
          mkOp1(OP_BFIND, TYPE_U32, tmp, tmp)->subOp = NV50_IR_SUBOP_BFIND_SAMT;
       } else
          tmp = getSrc(&insn->src[1], 0);
 
-      for (uint8_t i = 0; i < insn->num_components; ++i) {
+      for (uint8_t i = 0; i < dest_components; ++i) {
          mkOp3(OP_SHFL, dType, newDefs[i], getSrc(&insn->src[0], i), tmp, mkImm(0x1f))
             ->subOp = NV50_IR_SUBOP_SHFL_IDX;
       }
@@ -1931,7 +1920,7 @@ Converter::visit(nir_intrinsic_instr *insn)
 
       Value *vtxBase = mkOp2v(OP_PFETCH, TYPE_U32, getSSA(4, FILE_ADDRESS),
                               mkImm(baseVertex), indirectVertex);
-      for (uint8_t i = 0u; i < insn->num_components; ++i) {
+      for (uint8_t i = 0u; i < dest_components; ++i) {
          uint32_t address = getSlotAddress(insn, idx, i);
          loadFrom(FILE_SHADER_INPUT, 0, dType, newDefs[i], address, 0,
                   indirectOffset, vtxBase, info->in[idx].patch);
@@ -1954,19 +1943,24 @@ Converter::visit(nir_intrinsic_instr *insn)
 
       vtxBase = mkOp2v(OP_ADD, TYPE_U32, getSSA(4, FILE_ADDRESS), outBase, vtxBase);
 
-      for (uint8_t i = 0u; i < insn->num_components; ++i) {
+      for (uint8_t i = 0u; i < dest_components; ++i) {
          uint32_t address = getSlotAddress(insn, idx, i);
          loadFrom(FILE_SHADER_OUTPUT, 0, dType, newDefs[i], address, 0,
                   indirectOffset, vtxBase, info->in[idx].patch);
       }
       break;
    }
-   case nir_intrinsic_emit_vertex:
+   case nir_intrinsic_emit_vertex: {
       if (info->io.genUserClip > 0)
          handleUserClipPlanes();
-      // fallthrough
+      uint32_t idx = nir_intrinsic_stream_id(insn);
+      mkOp1(getOperation(op), TYPE_U32, NULL, mkImm(idx))->fixed = 1;
+      break;
+   }
    case nir_intrinsic_end_primitive: {
       uint32_t idx = nir_intrinsic_stream_id(insn);
+      if (idx)
+         break;
       mkOp1(getOperation(op), TYPE_U32, NULL, mkImm(idx))->fixed = 1;
       break;
    }
@@ -1978,7 +1972,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       uint32_t index = getIndirect(&insn->src[0], 0, indirectIndex) + 1;
       uint32_t offset = getIndirect(&insn->src[1], 0, indirectOffset);
 
-      for (uint8_t i = 0u; i < insn->num_components; ++i) {
+      for (uint8_t i = 0u; i < dest_components; ++i) {
          loadFrom(FILE_MEMORY_CONST, index, dType, newDefs[i], offset, i,
                   indirectOffset, indirectIndex);
       }
@@ -2001,7 +1995,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       uint32_t buffer = getIndirect(&insn->src[1], 0, indirectBuffer);
       uint32_t offset = getIndirect(&insn->src[2], 0, indirectOffset);
 
-      for (uint8_t i = 0u; i < insn->num_components; ++i) {
+      for (uint8_t i = 0u; i < nir_intrinsic_src_components(insn, 0); ++i) {
          if (!((1u << i) & nir_intrinsic_write_mask(insn)))
             continue;
          Symbol *sym = mkSymbol(FILE_MEMORY_BUFFER, buffer, sType,
@@ -2020,7 +2014,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       uint32_t buffer = getIndirect(&insn->src[0], 0, indirectBuffer);
       uint32_t offset = getIndirect(&insn->src[1], 0, indirectOffset);
 
-      for (uint8_t i = 0u; i < insn->num_components; ++i)
+      for (uint8_t i = 0u; i < dest_components; ++i)
          loadFrom(FILE_MEMORY_BUFFER, buffer, dType, newDefs[i], offset, i,
                   indirectOffset, indirectBuffer);
 
@@ -2112,12 +2106,30 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_bindless_image_atomic_umin:
    case nir_intrinsic_bindless_image_atomic_or:
    case nir_intrinsic_bindless_image_atomic_xor:
+   case nir_intrinsic_bindless_image_atomic_inc_wrap:
+   case nir_intrinsic_bindless_image_atomic_dec_wrap:
    case nir_intrinsic_bindless_image_load:
    case nir_intrinsic_bindless_image_samples:
    case nir_intrinsic_bindless_image_size:
-   case nir_intrinsic_bindless_image_store: {
+   case nir_intrinsic_bindless_image_store:
+   case nir_intrinsic_image_atomic_add:
+   case nir_intrinsic_image_atomic_and:
+   case nir_intrinsic_image_atomic_comp_swap:
+   case nir_intrinsic_image_atomic_exchange:
+   case nir_intrinsic_image_atomic_imax:
+   case nir_intrinsic_image_atomic_umax:
+   case nir_intrinsic_image_atomic_imin:
+   case nir_intrinsic_image_atomic_umin:
+   case nir_intrinsic_image_atomic_or:
+   case nir_intrinsic_image_atomic_xor:
+   case nir_intrinsic_image_atomic_inc_wrap:
+   case nir_intrinsic_image_atomic_dec_wrap:
+   case nir_intrinsic_image_load:
+   case nir_intrinsic_image_samples:
+   case nir_intrinsic_image_size:
+   case nir_intrinsic_image_store: {
       std::vector<Value*> srcs, defs;
-      Value *indirect = getSrc(&insn->src[0], 0);
+      Value *indirect;
       DataType ty;
 
       uint32_t mask = 0;
@@ -2134,6 +2146,8 @@ Converter::visit(nir_intrinsic_instr *insn)
          }
       }
 
+      int lod_src = -1;
+      bool bindless = false;
       switch (op) {
       case nir_intrinsic_bindless_image_atomic_add:
       case nir_intrinsic_bindless_image_atomic_and:
@@ -2145,30 +2159,65 @@ Converter::visit(nir_intrinsic_instr *insn)
       case nir_intrinsic_bindless_image_atomic_umin:
       case nir_intrinsic_bindless_image_atomic_or:
       case nir_intrinsic_bindless_image_atomic_xor:
+      case nir_intrinsic_bindless_image_atomic_inc_wrap:
+      case nir_intrinsic_bindless_image_atomic_dec_wrap:
          ty = getDType(insn);
-         mask = 0x1;
+         bindless = true;
          info->io.globalAccess |= 0x2;
+         mask = 0x1;
+         break;
+      case nir_intrinsic_image_atomic_add:
+      case nir_intrinsic_image_atomic_and:
+      case nir_intrinsic_image_atomic_comp_swap:
+      case nir_intrinsic_image_atomic_exchange:
+      case nir_intrinsic_image_atomic_imax:
+      case nir_intrinsic_image_atomic_umax:
+      case nir_intrinsic_image_atomic_imin:
+      case nir_intrinsic_image_atomic_umin:
+      case nir_intrinsic_image_atomic_or:
+      case nir_intrinsic_image_atomic_xor:
+      case nir_intrinsic_image_atomic_inc_wrap:
+      case nir_intrinsic_image_atomic_dec_wrap:
+         ty = getDType(insn);
+         bindless = false;
+         info->io.globalAccess |= 0x2;
+         mask = 0x1;
          break;
       case nir_intrinsic_bindless_image_load:
+      case nir_intrinsic_image_load:
          ty = TYPE_U32;
+         bindless = op == nir_intrinsic_bindless_image_load;
          info->io.globalAccess |= 0x1;
+         lod_src = 4;
          break;
       case nir_intrinsic_bindless_image_store:
+      case nir_intrinsic_image_store:
          ty = TYPE_U32;
-         mask = 0xf;
+         bindless = op == nir_intrinsic_bindless_image_store;
          info->io.globalAccess |= 0x2;
+         lod_src = 5;
+         mask = 0xf;
          break;
       case nir_intrinsic_bindless_image_samples:
-         mask = 0x8;
+      case nir_intrinsic_image_samples:
          ty = TYPE_U32;
+         bindless = op == nir_intrinsic_bindless_image_samples;
+         mask = 0x8;
          break;
       case nir_intrinsic_bindless_image_size:
+      case nir_intrinsic_image_size:
          ty = TYPE_U32;
+         bindless = op == nir_intrinsic_bindless_image_size;
          break;
       default:
          unreachable("unhandled image opcode");
          break;
       }
+
+      if (bindless)
+         indirect = getSrc(&insn->src[0], 0);
+      else
+         location = getIndirect(&insn->src[0], 0, indirect);
 
       // coords
       if (opInfo.num_srcs >= 2)
@@ -2179,128 +2228,22 @@ Converter::visit(nir_intrinsic_instr *insn)
       if (opInfo.num_srcs >= 3 && target.isMS())
          srcs.push_back(getSrc(&insn->src[2], 0));
 
-      if (opInfo.num_srcs >= 4) {
+      if (opInfo.num_srcs >= 4 && lod_src != 4) {
          unsigned components = opInfo.src_components[3] ? opInfo.src_components[3] : insn->num_components;
          for (uint8_t i = 0u; i < components; ++i)
             srcs.push_back(getSrc(&insn->src[3], i));
       }
 
-      if (opInfo.num_srcs >= 5)
+      if (opInfo.num_srcs >= 5 && lod_src != 5)
          // 1 for aotmic swap
          for (uint8_t i = 0u; i < opInfo.src_components[4]; ++i)
             srcs.push_back(getSrc(&insn->src[4], i));
 
       TexInstruction *texi = mkTex(getOperation(op), target.getEnum(), location, 0, defs, srcs);
-      texi->tex.bindless = false;
+      texi->tex.bindless = bindless;
       texi->tex.format = nv50_ir::TexInstruction::translateImgFormat(nir_intrinsic_format(insn));
       texi->tex.mask = mask;
-      texi->tex.bindless = true;
       texi->cache = convert(nir_intrinsic_access(insn));
-      texi->setType(ty);
-      texi->subOp = getSubOp(op);
-
-      if (indirect)
-         texi->setIndirectR(indirect);
-
-      break;
-   }
-   case nir_intrinsic_image_deref_atomic_add:
-   case nir_intrinsic_image_deref_atomic_and:
-   case nir_intrinsic_image_deref_atomic_comp_swap:
-   case nir_intrinsic_image_deref_atomic_exchange:
-   case nir_intrinsic_image_deref_atomic_imax:
-   case nir_intrinsic_image_deref_atomic_umax:
-   case nir_intrinsic_image_deref_atomic_imin:
-   case nir_intrinsic_image_deref_atomic_umin:
-   case nir_intrinsic_image_deref_atomic_or:
-   case nir_intrinsic_image_deref_atomic_xor:
-   case nir_intrinsic_image_deref_load:
-   case nir_intrinsic_image_deref_samples:
-   case nir_intrinsic_image_deref_size:
-   case nir_intrinsic_image_deref_store: {
-      const nir_variable *tex;
-      std::vector<Value*> srcs, defs;
-      Value *indirect;
-      DataType ty;
-
-      uint32_t mask = 0;
-      nir_deref_instr *deref = nir_src_as_deref(insn->src[0]);
-      const glsl_type *type = deref->type;
-      TexInstruction::Target target =
-         convert((glsl_sampler_dim)type->sampler_dimensionality,
-                 type->sampler_array, type->sampler_shadow);
-      unsigned int argCount = getNIRArgCount(target);
-      uint16_t location = handleDeref(deref, indirect, tex);
-
-      if (opInfo.has_dest) {
-         LValues &newDefs = convert(&insn->dest);
-         for (uint8_t i = 0u; i < newDefs.size(); ++i) {
-            defs.push_back(newDefs[i]);
-            mask |= 1 << i;
-         }
-      }
-
-      switch (op) {
-      case nir_intrinsic_image_deref_atomic_add:
-      case nir_intrinsic_image_deref_atomic_and:
-      case nir_intrinsic_image_deref_atomic_comp_swap:
-      case nir_intrinsic_image_deref_atomic_exchange:
-      case nir_intrinsic_image_deref_atomic_imax:
-      case nir_intrinsic_image_deref_atomic_umax:
-      case nir_intrinsic_image_deref_atomic_imin:
-      case nir_intrinsic_image_deref_atomic_umin:
-      case nir_intrinsic_image_deref_atomic_or:
-      case nir_intrinsic_image_deref_atomic_xor:
-         ty = getDType(insn);
-         mask = 0x1;
-         info->io.globalAccess |= 0x2;
-         break;
-      case nir_intrinsic_image_deref_load:
-         ty = TYPE_U32;
-         info->io.globalAccess |= 0x1;
-         break;
-      case nir_intrinsic_image_deref_store:
-         ty = TYPE_U32;
-         mask = 0xf;
-         info->io.globalAccess |= 0x2;
-         break;
-      case nir_intrinsic_image_deref_samples:
-         mask = 0x8;
-         ty = TYPE_U32;
-         break;
-      case nir_intrinsic_image_deref_size:
-         ty = TYPE_U32;
-         break;
-      default:
-         unreachable("unhandled image opcode");
-         break;
-      }
-
-      // coords
-      if (opInfo.num_srcs >= 2)
-         for (unsigned int i = 0u; i < argCount; ++i)
-            srcs.push_back(getSrc(&insn->src[1], i));
-
-      // the sampler is just another src added after coords
-      if (opInfo.num_srcs >= 3 && target.isMS())
-         srcs.push_back(getSrc(&insn->src[2], 0));
-
-      if (opInfo.num_srcs >= 4) {
-         unsigned components = opInfo.src_components[3] ? opInfo.src_components[3] : insn->num_components;
-         for (uint8_t i = 0u; i < components; ++i)
-            srcs.push_back(getSrc(&insn->src[3], i));
-      }
-
-      if (opInfo.num_srcs >= 5)
-         // 1 for aotmic swap
-         for (uint8_t i = 0u; i < opInfo.src_components[4]; ++i)
-            srcs.push_back(getSrc(&insn->src[4], i));
-
-      TexInstruction *texi = mkTex(getOperation(op), target.getEnum(), location, 0, defs, srcs);
-      texi->tex.bindless = false;
-      texi->tex.format = nv50_ir::TexInstruction::translateImgFormat(tex->data.image.format);
-      texi->tex.mask = mask;
-      texi->cache = getCacheModeFromVar(tex);
       texi->setType(ty);
       texi->subOp = getSubOp(op);
 
@@ -2314,7 +2257,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       Value *indirectOffset;
       uint32_t offset = getIndirect(&insn->src[1], 0, indirectOffset);
 
-      for (uint8_t i = 0u; i < insn->num_components; ++i) {
+      for (uint8_t i = 0u; i < nir_intrinsic_src_components(insn, 0); ++i) {
          if (!((1u << i) & nir_intrinsic_write_mask(insn)))
             continue;
          Symbol *sym = mkSymbol(FILE_MEMORY_SHARED, 0, sType, offset + i * typeSizeof(sType));
@@ -2328,7 +2271,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       Value *indirectOffset;
       uint32_t offset = getIndirect(&insn->src[0], 0, indirectOffset);
 
-      for (uint8_t i = 0u; i < insn->num_components; ++i)
+      for (uint8_t i = 0u; i < dest_components; ++i)
          loadFrom(FILE_MEMORY_SHARED, 0, dType, newDefs[i], offset, i, indirectOffset);
 
       break;
@@ -2367,7 +2310,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       Value *indirectOffset;
       uint32_t offset = getIndirect(&insn->src[0], 0, indirectOffset);
 
-      for (auto i = 0u; i < insn->num_components; ++i)
+      for (auto i = 0u; i < dest_components; ++i)
          loadFrom(FILE_MEMORY_GLOBAL, 0, dType, newDefs[i], offset, i, indirectOffset);
 
       info->io.globalAccess |= 0x1;
@@ -2376,7 +2319,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_store_global: {
       DataType sType = getSType(insn->src[0], false, false);
 
-      for (auto i = 0u; i < insn->num_components; ++i) {
+      for (auto i = 0u; i < nir_intrinsic_src_components(insn, 0); ++i) {
          if (!((1u << i) & nir_intrinsic_write_mask(insn)))
             continue;
          if (typeSizeof(sType) == 8) {
@@ -2418,7 +2361,6 @@ Converter::visit(nir_jump_instr *insn)
    case nir_jump_continue: {
       bool isBreak = insn->type == nir_jump_break;
       nir_block *block = insn->instr.block;
-      assert(!block->successors[1]);
       BasicBlock *target = convert(block->successors[0]);
       mkFlow(isBreak ? OP_BREAK : OP_CONT, target, CC_ALWAYS, NULL);
       bb->cfg.attach(&target->cfg, isBreak ? Graph::Edge::CROSS : Graph::Edge::BACK);
@@ -2774,7 +2716,7 @@ Converter::visit(nir_alu_instr *insn)
    case nir_op_bfm: {
       DEFAULT_CHECKS;
       LValues &newDefs = convert(&insn->dest);
-      mkOp3(OP_INSBF, dType, newDefs[0], getSrc(&insn->src[0]), loadImm(NULL, 0x808), getSrc(&insn->src[1]));
+      mkOp2(OP_BMSK, dType, newDefs[0], getSrc(&insn->src[1]), getSrc(&insn->src[0]))->subOp = NV50_IR_SUBOP_BMSK_W;
       break;
    }
    case nir_op_bitfield_insert: {
@@ -2794,15 +2736,67 @@ Converter::visit(nir_alu_instr *insn)
    case nir_op_bitfield_reverse: {
       DEFAULT_CHECKS;
       LValues &newDefs = convert(&insn->dest);
-      mkOp2(OP_EXTBF, TYPE_U32, newDefs[0], getSrc(&insn->src[0]), mkImm(0x2000))->subOp = NV50_IR_SUBOP_EXTBF_REV;
+      mkOp1(OP_BREV, TYPE_U32, newDefs[0], getSrc(&insn->src[0]));
       break;
    }
    case nir_op_find_lsb: {
       DEFAULT_CHECKS;
       LValues &newDefs = convert(&insn->dest);
       Value *tmp = getSSA();
-      mkOp2(OP_EXTBF, TYPE_U32, tmp, getSrc(&insn->src[0]), mkImm(0x2000))->subOp = NV50_IR_SUBOP_EXTBF_REV;
+      mkOp1(OP_BREV, TYPE_U32, tmp, getSrc(&insn->src[0]));
       mkOp1(OP_BFIND, TYPE_U32, newDefs[0], tmp)->subOp = NV50_IR_SUBOP_BFIND_SAMT;
+      break;
+   }
+   case nir_op_extract_u8: {
+      DEFAULT_CHECKS;
+      LValues &newDefs = convert(&insn->dest);
+      Value *prmt = getSSA();
+      mkOp2(OP_OR, TYPE_U32, prmt, getSrc(&insn->src[1]), loadImm(NULL, 0x4440));
+      mkOp3(OP_PERMT, TYPE_U32, newDefs[0], getSrc(&insn->src[0]), prmt, loadImm(NULL, 0));
+      break;
+   }
+   case nir_op_extract_i8: {
+      DEFAULT_CHECKS;
+      LValues &newDefs = convert(&insn->dest);
+      Value *prmt = getSSA();
+      mkOp3(OP_MAD, TYPE_U32, prmt, getSrc(&insn->src[1]), loadImm(NULL, 0x1111), loadImm(NULL, 0x8880));
+      mkOp3(OP_PERMT, TYPE_U32, newDefs[0], getSrc(&insn->src[0]), prmt, loadImm(NULL, 0));
+      break;
+   }
+   case nir_op_extract_u16: {
+      DEFAULT_CHECKS;
+      LValues &newDefs = convert(&insn->dest);
+      Value *prmt = getSSA();
+      mkOp3(OP_MAD, TYPE_U32, prmt, getSrc(&insn->src[1]), loadImm(NULL, 0x22), loadImm(NULL, 0x4410));
+      mkOp3(OP_PERMT, TYPE_U32, newDefs[0], getSrc(&insn->src[0]), prmt, loadImm(NULL, 0));
+      break;
+   }
+   case nir_op_extract_i16: {
+      DEFAULT_CHECKS;
+      LValues &newDefs = convert(&insn->dest);
+      Value *prmt = getSSA();
+      mkOp3(OP_MAD, TYPE_U32, prmt, getSrc(&insn->src[1]), loadImm(NULL, 0x2222), loadImm(NULL, 0x9910));
+      mkOp3(OP_PERMT, TYPE_U32, newDefs[0], getSrc(&insn->src[0]), prmt, loadImm(NULL, 0));
+      break;
+   }
+   case nir_op_urol: {
+      DEFAULT_CHECKS;
+      LValues &newDefs = convert(&insn->dest);
+      mkOp3(OP_SHF, TYPE_U32, newDefs[0], getSrc(&insn->src[0]),
+            getSrc(&insn->src[1]), getSrc(&insn->src[0]))
+         ->subOp = NV50_IR_SUBOP_SHF_L |
+                   NV50_IR_SUBOP_SHF_W |
+                   NV50_IR_SUBOP_SHF_HI;
+      break;
+   }
+   case nir_op_uror: {
+      DEFAULT_CHECKS;
+      LValues &newDefs = convert(&insn->dest);
+      mkOp3(OP_SHF, TYPE_U32, newDefs[0], getSrc(&insn->src[0]),
+            getSrc(&insn->src[1]), getSrc(&insn->src[0]))
+         ->subOp = NV50_IR_SUBOP_SHF_R |
+                   NV50_IR_SUBOP_SHF_W |
+                   NV50_IR_SUBOP_SHF_LO;
       break;
    }
    // boolean conversions
@@ -2940,70 +2934,14 @@ Converter::getNIRArgCount(TexInstruction::Target& target)
    return result;
 }
 
-uint16_t
-Converter::handleDeref(nir_deref_instr *deref, Value * &indirect, const nir_variable * &tex)
-{
-   typedef std::pair<uint32_t,Value*> DerefPair;
-   std::list<DerefPair> derefs;
-
-   uint16_t result = 0;
-   while (deref->deref_type != nir_deref_type_var) {
-      switch (deref->deref_type) {
-      case nir_deref_type_array: {
-         Value *indirect;
-         uint8_t size = type_size(deref->type, true);
-         result += size * getIndirect(&deref->arr.index, 0, indirect);
-
-         if (indirect) {
-            derefs.push_front(std::make_pair(size, indirect));
-         }
-
-         break;
-      }
-      case nir_deref_type_struct: {
-         result += nir_deref_instr_parent(deref)->type->struct_location_offset(deref->strct.index);
-         break;
-      }
-      case nir_deref_type_var:
-      default:
-         unreachable("nir_deref_type_var reached in handleDeref!");
-         break;
-      }
-      deref = nir_deref_instr_parent(deref);
-   }
-
-   indirect = NULL;
-   for (std::list<DerefPair>::const_iterator it = derefs.begin(); it != derefs.end(); ++it) {
-      Value *offset = mkOp2v(OP_MUL, TYPE_U32, getSSA(), loadImm(getSSA(), it->first), it->second);
-      if (indirect)
-         indirect = mkOp2v(OP_ADD, TYPE_U32, getSSA(), indirect, offset);
-      else
-         indirect = offset;
-   }
-
-   tex = nir_deref_instr_get_variable(deref);
-   assert(tex);
-
-   return result + tex->data.driver_location;
-}
-
 CacheMode
 Converter::convert(enum gl_access_qualifier access)
 {
-   switch (access) {
-   case ACCESS_VOLATILE:
+   if (access & ACCESS_VOLATILE)
       return CACHE_CV;
-   case ACCESS_COHERENT:
+   if (access & ACCESS_COHERENT)
       return CACHE_CG;
-   default:
-      return CACHE_CA;
-   }
-}
-
-CacheMode
-Converter::getCacheModeFromVar(const nir_variable *var)
-{
-   return convert(var->data.access);
+   return CACHE_CA;
 }
 
 bool
@@ -3185,25 +3123,6 @@ Converter::visit(nir_tex_instr *insn)
 }
 
 bool
-Converter::visit(nir_deref_instr *deref)
-{
-   // we just ignore those, because images intrinsics are the only place where
-   // we should end up with deref sources and those have to backtrack anyway
-   // to get the nir_variable. This code just exists to handle some special
-   // cases.
-   switch (deref->deref_type) {
-   case nir_deref_type_array:
-   case nir_deref_type_struct:
-   case nir_deref_type_var:
-      break;
-   default:
-      ERROR("unknown nir_deref_instr %u\n", deref->deref_type);
-      return false;
-   }
-   return true;
-}
-
-bool
 Converter::run()
 {
    bool progress;
@@ -3216,13 +3135,20 @@ Converter::run()
       .ballot_bit_size = 32,
    };
 
-   NIR_PASS_V(nir, nir_lower_io, nir_var_all, type_size, (nir_lower_io_options)0);
+   NIR_PASS_V(nir, nir_lower_io,
+              (nir_variable_mode)(nir_var_shader_in | nir_var_shader_out),
+              type_size, (nir_lower_io_options)0);
    NIR_PASS_V(nir, nir_lower_subgroups, &subgroup_options);
    NIR_PASS_V(nir, nir_lower_regs_to_ssa);
    NIR_PASS_V(nir, nir_lower_load_const_to_scalar);
    NIR_PASS_V(nir, nir_lower_vars_to_ssa);
    NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL, NULL);
    NIR_PASS_V(nir, nir_lower_phis_to_scalar);
+
+   /*TODO: improve this lowering/optimisation loop so that we can use
+    *      nir_opt_idiv_const effectively before this.
+    */
+   NIR_PASS(progress, nir, nir_lower_idiv, nir_lower_idiv_precise);
 
    do {
       progress = false;
@@ -3239,7 +3165,7 @@ Converter::run()
 
    NIR_PASS_V(nir, nir_lower_bool_to_int32);
    NIR_PASS_V(nir, nir_lower_locals_to_regs);
-   NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp);
+   NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
    NIR_PASS_V(nir, nir_convert_from_ssa, true);
 
    // Garbage collect dead instructions
@@ -3285,3 +3211,125 @@ Program::makeFromNIR(struct nv50_ir_prog_info *info)
 }
 
 } // namespace nv50_ir
+
+static nir_shader_compiler_options
+nvir_nir_shader_compiler_options(int chipset)
+{
+   nir_shader_compiler_options op = {};
+   op.lower_fdiv = (chipset >= NVISA_GV100_CHIPSET);
+   op.lower_ffma = false;
+   op.fuse_ffma = false; /* nir doesn't track mad vs fma */
+   op.lower_flrp16 = (chipset >= NVISA_GV100_CHIPSET);
+   op.lower_flrp32 = true;
+   op.lower_flrp64 = true;
+   op.lower_fpow = false; // TODO: nir's lowering is broken, or we could use it
+   op.lower_fsat = false;
+   op.lower_fsqrt = false; // TODO: only before gm200
+   op.lower_sincos = false;
+   op.lower_fmod = true;
+   op.lower_bitfield_extract = false;
+   op.lower_bitfield_extract_to_shifts = (chipset >= NVISA_GV100_CHIPSET);
+   op.lower_bitfield_insert = false;
+   op.lower_bitfield_insert_to_shifts = (chipset >= NVISA_GV100_CHIPSET);
+   op.lower_bitfield_insert_to_bitfield_select = false;
+   op.lower_bitfield_reverse = false;
+   op.lower_bit_count = false;
+   op.lower_ifind_msb = false;
+   op.lower_find_lsb = false;
+   op.lower_uadd_carry = true; // TODO
+   op.lower_usub_borrow = true; // TODO
+   op.lower_mul_high = false;
+   op.lower_negate = false;
+   op.lower_sub = true;
+   op.lower_scmp = true; // TODO: not implemented yet
+   op.lower_vector_cmp = false;
+   op.lower_idiv = true;
+   op.lower_bitops = false;
+   op.lower_isign = (chipset >= NVISA_GV100_CHIPSET);
+   op.lower_fsign = (chipset >= NVISA_GV100_CHIPSET);
+   op.lower_fdph = false;
+   op.lower_fdot = false;
+   op.fdot_replicates = false; // TODO
+   op.lower_ffloor = false; // TODO
+   op.lower_ffract = true;
+   op.lower_fceil = false; // TODO
+   op.lower_ftrunc = false;
+   op.lower_ldexp = true;
+   op.lower_pack_half_2x16 = true;
+   op.lower_pack_unorm_2x16 = true;
+   op.lower_pack_snorm_2x16 = true;
+   op.lower_pack_unorm_4x8 = true;
+   op.lower_pack_snorm_4x8 = true;
+   op.lower_unpack_half_2x16 = true;
+   op.lower_unpack_unorm_2x16 = true;
+   op.lower_unpack_snorm_2x16 = true;
+   op.lower_unpack_unorm_4x8 = true;
+   op.lower_unpack_snorm_4x8 = true;
+   op.lower_pack_split = false;
+   op.lower_extract_byte = (chipset < NVISA_GM107_CHIPSET);
+   op.lower_extract_word = (chipset < NVISA_GM107_CHIPSET);
+   op.lower_all_io_to_temps = false;
+   op.lower_all_io_to_elements = false;
+   op.vertex_id_zero_based = false;
+   op.lower_base_vertex = false;
+   op.lower_helper_invocation = false;
+   op.optimize_sample_mask_in = false;
+   op.lower_cs_local_index_from_id = true;
+   op.lower_cs_local_id_from_index = false;
+   op.lower_device_index_to_zero = false; // TODO
+   op.lower_wpos_pntc = false; // TODO
+   op.lower_hadd = true; // TODO
+   op.lower_add_sat = true; // TODO
+   op.vectorize_io = false;
+   op.lower_to_scalar = false;
+   op.unify_interfaces = false;
+   op.use_interpolated_input_intrinsics = true;
+   op.lower_mul_2x32_64 = true; // TODO
+   op.lower_rotate = (chipset < NVISA_GV100_CHIPSET);
+   op.has_imul24 = false;
+   op.intel_vec4 = false;
+   op.max_unroll_iterations = 32;
+   op.lower_int64_options = (nir_lower_int64_options) (
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_imul64 : 0) |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_isign64 : 0) |
+      nir_lower_divmod64 |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_imul_high64 : 0) |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_mov64 : 0) |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_icmp64 : 0) |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_iabs64 : 0) |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_ineg64 : 0) |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_logic64 : 0) |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_minmax64 : 0) |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_shift64 : 0) |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_imul_2x32_64 : 0) |
+      ((chipset >= NVISA_GM107_CHIPSET) ? nir_lower_extract64 : 0) |
+      nir_lower_ufind_msb64
+   );
+   op.lower_doubles_options = (nir_lower_doubles_options) (
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_drcp : 0) |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_dsqrt : 0) |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_drsq : 0) |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_dfract : 0) |
+      nir_lower_dmod |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_dsub : 0) |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_ddiv : 0)
+   );
+   return op;
+}
+
+static const nir_shader_compiler_options gf100_nir_shader_compiler_options =
+nvir_nir_shader_compiler_options(NVISA_GF100_CHIPSET);
+static const nir_shader_compiler_options gm107_nir_shader_compiler_options =
+nvir_nir_shader_compiler_options(NVISA_GM107_CHIPSET);
+static const nir_shader_compiler_options gv100_nir_shader_compiler_options =
+nvir_nir_shader_compiler_options(NVISA_GV100_CHIPSET);
+
+const nir_shader_compiler_options *
+nv50_ir_nir_shader_compiler_options(int chipset)
+{
+   if (chipset >= NVISA_GV100_CHIPSET)
+      return &gv100_nir_shader_compiler_options;
+   if (chipset >= NVISA_GM107_CHIPSET)
+      return &gm107_nir_shader_compiler_options;
+   return &gf100_nir_shader_compiler_options;
+}

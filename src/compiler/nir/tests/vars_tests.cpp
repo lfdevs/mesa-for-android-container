@@ -81,7 +81,10 @@ protected:
    }
 
    unsigned count_shader_temp_vars(void) {
-      return exec_list_length(&b->shader->globals);
+      unsigned count = 0;
+      nir_foreach_variable_with_modes(var, b->shader, nir_var_shader_temp)
+         count++;
+      return count;
    }
 
    nir_intrinsic_instr *get_intrinsic(nir_intrinsic_op intrinsic,

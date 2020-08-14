@@ -37,6 +37,7 @@
 #include "util/u_surface.h"
 #include "sp_clear.h"
 #include "sp_context.h"
+#include "sp_screen.h"
 #include "sp_query.h"
 #include "sp_tile_cache.h"
 
@@ -57,7 +58,7 @@ softpipe_clear(struct pipe_context *pipe, unsigned buffers,
    uint64_t cv;
    uint i;
 
-   if (softpipe->no_rast)
+   if (unlikely(sp_debug & SP_DBG_NO_RAST))
       return;
 
    if (!softpipe_check_render_cond(softpipe))

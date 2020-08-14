@@ -37,28 +37,33 @@ GDSInstr::GDSInstr(ESDOp op, const GPRVector& dest,  const PValue& value,
    m_src2(value2),
    m_dest(dest),
    m_dest_swizzle({PIPE_SWIZZLE_X,7,7,7}),
-   m_src_swizzle({PIPE_SWIZZLE_0, PIPE_SWIZZLE_X, 7}),
+   m_src_swizzle({PIPE_SWIZZLE_0, PIPE_SWIZZLE_X, PIPE_SWIZZLE_0}),
    m_buffer_index_mode(bim_none),
    m_uav_id(uav_id),
    m_uav_base(uav_base),
    m_flags(0)
 {
    add_remappable_src_value(&m_src);
+   add_remappable_src_value(&m_src2);
    add_remappable_src_value(&m_uav_id);
    add_remappable_dst_value(&m_dest);
+   m_dest_swizzle[0] = m_dest.chan_i(0);
 }
 
 GDSInstr::GDSInstr(ESDOp op, const GPRVector& dest,  const PValue& value,
                    const PValue& uav_id, int uav_base):
    GDSInstr(op, dest,  value, PValue(), uav_id, uav_base)
 {
+      assert(value);
+      m_src_swizzle[1] = value->chan();
+      m_src_swizzle[2] = PIPE_SWIZZLE_0;
 }
 
 GDSInstr::GDSInstr(ESDOp op, const GPRVector& dest,
                    const PValue& uav_id, int uav_base):
    GDSInstr(op, dest,  PValue(), PValue(), uav_id, uav_base)
 {
-   m_src_swizzle[1] = PIPE_SWIZZLE_1;
+   m_src_swizzle[1] = PIPE_SWIZZLE_0;
 }
 
 bool GDSInstr::is_equal_to(UNUSED const Instruction& lhs) const
@@ -110,7 +115,8 @@ void RatInstruction::do_print(std::ostream& os) const
    os << "MEM_RAT RAT(" << m_rat_id;
    if (m_rat_id_offset)
       os << "+" << *m_rat_id_offset;
-   os << ") @" << m_index << " OP:" << m_rat_op << " " << m_data;
+   os << ") @" << m_index;
+   os << " OP:" << m_rat_op << " " << m_data;
    os << " BC:" << m_burst_count
       << " MASK:" << m_comp_mask
       << " ES:" << m_element_size;

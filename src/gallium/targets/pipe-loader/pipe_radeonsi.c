@@ -1,7 +1,7 @@
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 #include "target-helpers/inline_debug_helper.h"
 #include "radeonsi/si_public.h"
-#include "util/xmlpool.h"
+#include "util/driconf.h"
 
 static struct pipe_screen *
 create_screen(int fd, const struct pipe_screen_config *config)

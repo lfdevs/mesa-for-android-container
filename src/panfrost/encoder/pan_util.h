@@ -34,13 +34,8 @@
 #define PAN_DBG_AFBC            0x0008
 #define PAN_DBG_SYNC            0x0010
 #define PAN_DBG_PRECOMPILE      0x0020
-#define PAN_DBG_GLES3           0x0040
-
-extern int pan_debug;
-
-#define DBG(fmt, ...) \
-		do { if (pan_debug & PAN_DBG_MSGS) \
-			fprintf(stderr, "%s:%d: "fmt, \
-				__FUNCTION__, __LINE__, ##__VA_ARGS__); } while (0)
+#define PAN_DBG_NOFP16          0x0040
+#define PAN_DBG_BIFROST         0x0080
+#define PAN_DBG_GL3             0x0100
 
 #endif /* PAN_UTIL_H */

@@ -37,17 +37,24 @@ static bool ppir_lower_const(ppir_block *block, ppir_node *node)
    assert(ppir_node_has_single_succ(node));
 
    ppir_node *succ = ppir_node_first_succ(node);
-   ppir_src *src = ppir_node_get_src_for_pred(succ, node);
    ppir_dest *dest = ppir_node_get_dest(node);
-   assert(src != NULL);
 
    switch (succ->type) {
    case ppir_node_type_alu:
    case ppir_node_type_branch:
       /* ALU and branch can consume consts directly */
-      dest->type = src->type = ppir_target_pipeline;
+      dest->type = ppir_target_pipeline;
       /* Reg will be updated in node_to_instr later */
-      dest->pipeline = src->pipeline = ppir_pipeline_reg_const0;
+      dest->pipeline = ppir_pipeline_reg_const0;
+
+      /* single succ can still have multiple references to this node */
+      for (int i = 0; i < ppir_node_get_src_num(succ); i++) {
+         ppir_src *src = ppir_node_get_src(succ, i);
+         if (src && src->node == node) {
+            src->type = ppir_target_pipeline;
+            src->pipeline = ppir_pipeline_reg_const0;
+         }
+      }
       return true;
    default:
       /* Create a move for everyone else */
@@ -105,10 +112,15 @@ static bool ppir_lower_load(ppir_block *block, ppir_node *node)
       switch (succ->type) {
       case ppir_node_type_alu:
       case ppir_node_type_branch: {
-         ppir_src *src = ppir_node_get_src_for_pred(succ, node);
-         /* Can consume uniforms directly */
-         src->type = dest->type = ppir_target_pipeline;
-         src->pipeline = dest->pipeline = ppir_pipeline_reg_uniform;
+         /* single succ can still have multiple references to this node */
+         for (int i = 0; i < ppir_node_get_src_num(succ); i++) {
+            ppir_src *src = ppir_node_get_src(succ, i);
+            if (src && src->node == node) {
+               /* Can consume uniforms directly */
+               src->type = dest->type = ppir_target_pipeline;
+               src->pipeline = dest->pipeline = ppir_pipeline_reg_uniform;
+            }
+         }
          return true;
       }
       default:
@@ -148,75 +160,88 @@ static bool ppir_lower_ddxy(ppir_block *block, ppir_node *node)
 
 static bool ppir_lower_texture(ppir_block *block, ppir_node *node)
 {
-   ppir_load_texture_node *load_tex = ppir_node_to_load_texture(node);
    ppir_dest *dest = ppir_node_get_dest(node);
-   ppir_node *src_coords = ppir_node_get_src(node, 0)->node;
-   ppir_load_node *load = NULL;
 
-   if (src_coords && ppir_node_has_single_src_succ(src_coords) &&
-       (src_coords->op == ppir_op_load_coords))
-      load = ppir_node_to_load(src_coords);
-   else {
-      /* Create load_coords node */
-      load = ppir_node_create(block, ppir_op_load_coords_reg, -1, 0);
-      if (!load)
-         return false;
-      list_addtail(&load->node.list, &node->list);
+   if (ppir_node_has_single_succ(node)) {
+      ppir_node *succ = ppir_node_first_succ(node);
+      dest->type = ppir_target_pipeline;
+      dest->pipeline = ppir_pipeline_reg_sampler;
 
-      load->src = load_tex->src[0];
-      load->num_src = 1;
-      if (load_tex->sampler_dim == GLSL_SAMPLER_DIM_CUBE)
-         load->num_components = 3;
-      else
-         load->num_components = 2;
-
-      ppir_debug("%s create load_coords node %d for %d\n",
-                 __FUNCTION__, load->node.index, node->index);
-
-      ppir_node_foreach_pred_safe(node, dep) {
-         ppir_node *pred = dep->pred;
-         ppir_node_remove_dep(dep);
-         ppir_node_add_dep(&load->node, pred, ppir_dep_src);
+      for (int i = 0; i < ppir_node_get_src_num(succ); i++) {
+         ppir_src *src = ppir_node_get_src(succ, i);
+         if (src && src->node == node) {
+            src->type = ppir_target_pipeline;
+            src->pipeline = ppir_pipeline_reg_sampler;
+         }
       }
-      ppir_node_add_dep(node, &load->node, ppir_dep_src);
+      return true;
    }
 
-   assert(load);
-   load_tex->src[0].type = load->dest.type = ppir_target_pipeline;
-   load_tex->src[0].pipeline = load->dest.pipeline = ppir_pipeline_reg_discard;
-
-   /* Always create move node since there can be successors in other blocks */
-   ppir_node *move = ppir_node_insert_mov_all_blocks(node);
+   /* Create move node as fallback */
+   ppir_node *move = ppir_node_insert_mov(node);
    if (unlikely(!move))
       return false;
 
    ppir_debug("lower texture create move %d for %d\n",
               move->index, node->index);
 
-   ppir_src *mov_src=  ppir_node_get_src(move, 0);
+   ppir_src *mov_src = ppir_node_get_src(move, 0);
    mov_src->type = dest->type = ppir_target_pipeline;
    mov_src->pipeline = dest->pipeline = ppir_pipeline_reg_sampler;
 
    return true;
 }
 
-/* insert a move as the select condition to make sure it can
- * be inserted to select instr float mul slot
- */
+/* Check if the select condition and ensure it can be inserted to
+ * the scalar mul slot */
 static bool ppir_lower_select(ppir_block *block, ppir_node *node)
 {
    ppir_alu_node *alu = ppir_node_to_alu(node);
+   ppir_src *src0 = &alu->src[0];
+   ppir_src *src1 = &alu->src[1];
+   ppir_src *src2 = &alu->src[2];
 
-   ppir_node *move = ppir_node_create(block, ppir_op_sel_cond, -1, 0);
+   /* If the condition is already an alu scalar whose only successor
+    * is the select node, just turn it into pipeline output. */
+   /* The (src2->node == cond) case is a tricky exception.
+    * The reason is that we must force cond to output to ^fmul -- but
+    * then it no longer writes to a register and it is impossible to
+    * reference ^fmul in src2. So in that exceptional case, also fall
+    * back to the mov. */
+   ppir_node *cond = src0->node;
+   if (cond &&
+       cond->type == ppir_node_type_alu &&
+       ppir_node_has_single_succ(cond) &&
+       ppir_target_is_scalar(ppir_node_get_dest(cond)) &&
+       ppir_node_schedulable_slot(cond, PPIR_INSTR_SLOT_ALU_SCL_MUL) &&
+       src2->node != cond) {
+
+      ppir_dest *cond_dest = ppir_node_get_dest(cond);
+      cond_dest->type = ppir_target_pipeline;
+      cond_dest->pipeline = ppir_pipeline_reg_fmul;
+
+      ppir_node_target_assign(src0, cond);
+
+      /* src1 could also be a reference from the same node as
+       * the condition, so update it in that case. */
+      if (src1->node && src1->node == cond)
+         ppir_node_target_assign(src1, cond);
+
+      return true;
+   }
+
+   /* If the condition can't be used for any reason, insert a mov
+    * so that the condition can end up in ^fmul */
+   ppir_node *move = ppir_node_create(block, ppir_op_mov, -1, 0);
    if (!move)
       return false;
    list_addtail(&move->list, &node->list);
 
    ppir_alu_node *move_alu = ppir_node_to_alu(move);
-   ppir_src *move_src = move_alu->src, *src = alu->src;
-   move_src->type = src->type;
-   move_src->ssa = src->ssa;
-   move_src->swizzle[0] = src->swizzle[0];
+   ppir_src *move_src = move_alu->src;
+   move_src->type = src0->type;
+   move_src->ssa = src0->ssa;
+   move_src->swizzle[0] = src0->swizzle[0];
    move_alu->num_src = 1;
 
    ppir_dest *move_dest = &move_alu->dest;
@@ -224,7 +249,7 @@ static bool ppir_lower_select(ppir_block *block, ppir_node *node)
    move_dest->pipeline = ppir_pipeline_reg_fmul;
    move_dest->write_mask = 1;
 
-   ppir_node *pred = alu->src[0].node;
+   ppir_node *pred = src0->node;
    ppir_dep *dep = ppir_dep_for_pred(node, pred);
    if (dep)
       ppir_node_replace_pred(dep, move);
@@ -235,8 +260,12 @@ static bool ppir_lower_select(ppir_block *block, ppir_node *node)
    if (pred)
       ppir_node_add_dep(move, pred, ppir_dep_src);
 
-   src->swizzle[0] = 0;
-   ppir_node_target_assign(alu->src, move);
+   ppir_node_target_assign(src0, move);
+
+   /* src1 could also be a reference from the same node as
+    * the condition, so update it in that case. */
+   if (src1->node && src1->node == pred)
+      ppir_node_target_assign(src1, move);
 
    return true;
 }

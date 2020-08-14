@@ -66,6 +66,7 @@ struct etna_shader {
    struct tgsi_token *tokens;
    struct nir_shader *nir;
    const struct etna_specs *specs;
+   struct etna_compiler *compiler;
 
    struct etna_shader_variant *variants;
 };

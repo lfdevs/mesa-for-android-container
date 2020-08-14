@@ -33,7 +33,7 @@
 #include "util/u_pack_color.h"
 #include "util/u_surface.h"
 #include "util/os_time.h"
-#include "state_tracker/winsys_handle.h"
+#include "frontend/winsys_handle.h"
 #include <errno.h>
 #include <inttypes.h>
 
@@ -519,7 +519,7 @@ static bool r600_texture_get_handle(struct pipe_screen* screen,
 		if (!res->b.is_shared || update_metadata) {
 			r600_texture_init_metadata(rscreen, rtex, &metadata);
 
-			rscreen->ws->buffer_set_metadata(res->buf, &metadata);
+			rscreen->ws->buffer_set_metadata(res->buf, &metadata, NULL);
 		}
 
 		slice_size = (uint64_t)rtex->surface.u.legacy.level[0].slice_size_dw * 4;
@@ -1132,7 +1132,7 @@ static struct pipe_resource *r600_texture_from_handle(struct pipe_screen *screen
 	if (!buf)
 		return NULL;
 
-	rscreen->ws->buffer_get_metadata(buf, &metadata);
+	rscreen->ws->buffer_get_metadata(buf, &metadata, NULL);
 	r600_surface_import_metadata(rscreen, &surface, &metadata,
 				     &array_mode, &is_scanout);
 
@@ -1614,8 +1614,6 @@ static void r600_clear_texture(struct pipe_context *pipe,
 	struct r600_texture *rtex = (struct r600_texture*)tex;
 	struct pipe_surface tmpl = {{0}};
 	struct pipe_surface *sf;
-	const struct util_format_description *desc =
-		util_format_description(tex->format);
 
 	tmpl.format = tex->format;
 	tmpl.u.tex.first_layer = box->z;
@@ -1901,7 +1899,7 @@ r600_texture_from_memobj(struct pipe_screen *screen,
 	struct pb_buffer *buf = NULL;
 
 	if (memobj->b.dedicated) {
-		rscreen->ws->buffer_get_metadata(memobj->buf, &metadata);
+		rscreen->ws->buffer_get_metadata(memobj->buf, &metadata, NULL);
 		r600_surface_import_metadata(rscreen, &surface, &metadata,
 				     &array_mode, &is_scanout);
 	} else {

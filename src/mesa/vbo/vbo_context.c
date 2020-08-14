@@ -160,9 +160,9 @@ vbo_exec_update_eval_maps(struct gl_context *ctx)
 GLboolean
 _vbo_CreateContext(struct gl_context *ctx, bool use_buffer_objects)
 {
-   struct vbo_context *vbo = CALLOC_STRUCT(vbo_context);
+   struct vbo_context *vbo = &ctx->vbo_context;
 
-   ctx->vbo_context = vbo;
+   memset(vbo, 0, sizeof(*vbo));
 
    vbo->binding.Offset = 0;
    vbo->binding.Stride = 0;
@@ -206,8 +206,6 @@ _vbo_DestroyContext(struct gl_context *ctx)
       if (ctx->API == API_OPENGL_COMPAT)
          vbo_save_destroy(ctx);
       _mesa_reference_vao(ctx, &vbo->VAO, NULL);
-      free(vbo);
-      ctx->vbo_context = NULL;
    }
 }
 

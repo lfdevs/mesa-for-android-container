@@ -37,7 +37,7 @@
 #include "pipe/p_screen.h"
 #include "draw/draw_context.h"
 
-#include "state_tracker/sw_winsys.h"
+#include "frontend/sw_winsys.h"
 #include "tgsi/tgsi_exec.h"
 
 #include "sp_texture.h"
@@ -46,12 +46,22 @@
 #include "sp_fence.h"
 #include "sp_public.h"
 
-DEBUG_GET_ONCE_BOOL_OPTION(use_llvm, "SOFTPIPE_USE_LLVM", FALSE)
+static const struct debug_named_value sp_debug_options[] = {
+   {"vs",        SP_DBG_VS,         "dump vertex shader assembly to stderr"},
+   {"gs",        SP_DBG_GS,         "dump geometry shader assembly to stderr"},
+   {"fs",        SP_DBG_FS,         "dump fragment shader assembly to stderr"},
+   {"cs",        SP_DBG_CS,         "dump compute shader assembly to stderr"},
+   {"no_rast",   SP_DBG_NO_RAST,    "no-ops rasterization, for profiling purposes"},
+   {"use_llvm",  SP_DBG_USE_LLVM,   "Use LLVM if available for shaders"},
+};
+
+int sp_debug;
+DEBUG_GET_ONCE_FLAGS_OPTION(sp_debug, "SOFTPIPE_DEBUG", sp_debug_options, 0)
 
 static const char *
 softpipe_get_vendor(struct pipe_screen *screen)
 {
-   return "VMware, Inc.";
+   return "Mesa/X.org";
 }
 
 
@@ -94,9 +104,6 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_TEXTURE_SWIZZLE:
       return 1;
-   case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
-   case PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET:
-      return 0;
    case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
       return 1 << (SP_MAX_TEXTURE_2D_LEVELS - 1);
    case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
@@ -132,6 +139,7 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
       return 2048;
    case PIPE_CAP_PRIMITIVE_RESTART:
+   case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
       return 1;
    case PIPE_CAP_SHADER_STENCIL_EXPORT:
       return 1;
@@ -150,10 +158,6 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_TEXEL_OFFSET:
       return 7;
    case PIPE_CAP_CONDITIONAL_RENDER:
-      return 1;
-   case PIPE_CAP_TEXTURE_BARRIER:
-   case PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE:
-      return 0;
    case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
    case PIPE_CAP_VERTEX_COLOR_UNCLAMPED: /* draw module */
    case PIPE_CAP_VERTEX_COLOR_CLAMPED: /* draw module */
@@ -164,9 +168,6 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 400;
    case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
       return 140;
-   case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
-   case PIPE_CAP_TGSI_TEX_TXF_LZ:
-      return 0;
    case PIPE_CAP_COMPUTE:
       return 1;
    case PIPE_CAP_USER_VERTEX_BUFFERS:
@@ -180,12 +181,6 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 16;
-   case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
-   case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
-   case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
-   case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
-   case PIPE_CAP_TEXTURE_MULTISAMPLE:
-      return 0;
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
       return 64;
    case PIPE_CAP_QUERY_TIMESTAMP:
@@ -193,13 +188,10 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
       return 1;
-   case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
-      return 0;
    case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
       return 65536;
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
       return 16;
-   case PIPE_CAP_TGSI_TEXCOORD:
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return 0;
    case PIPE_CAP_MAX_VIEWPORTS:
@@ -211,10 +203,6 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_GATHER_SM5:
    case PIPE_CAP_TEXTURE_QUERY_LOD:
       return 1;
-   case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
-   case PIPE_CAP_SAMPLE_SHADING:
-   case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
-      return 0;
    case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
       return 1;
    case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
@@ -263,81 +251,20 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
    case PIPE_CAP_CULL_DISTANCE:
-      return 1;
-   case PIPE_CAP_VERTEXID_NOBASE:
-      return 0;
-   case PIPE_CAP_POLYGON_OFFSET_CLAMP:
-      return 0;
    case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
    case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
+   case PIPE_CAP_TGSI_TEXCOORD:
+   case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
       return 1;
    case PIPE_CAP_CLEAR_TEXTURE:
       return 1;
    case PIPE_CAP_MAX_VARYINGS:
       return TGSI_EXEC_MAX_INPUT_ATTRIBS;
-   case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
-   case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
-   case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
-   case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
-   case PIPE_CAP_DEPTH_BOUNDS_TEST:
-   case PIPE_CAP_TGSI_TXQS:
-   case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
-   case PIPE_CAP_SHAREABLE_SHADERS:
-   case PIPE_CAP_DRAW_PARAMETERS:
-   case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
-   case PIPE_CAP_MULTI_DRAW_INDIRECT:
-   case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
-   case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
-   case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
-   case PIPE_CAP_INVALIDATE_BUFFER:
-   case PIPE_CAP_GENERATE_MIPMAP:
-   case PIPE_CAP_STRING_MARKER:
-   case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
-   case PIPE_CAP_QUERY_BUFFER_OBJECT:
-   case PIPE_CAP_QUERY_MEMORY_INFO:
    case PIPE_CAP_PCI_GROUP:
    case PIPE_CAP_PCI_BUS:
    case PIPE_CAP_PCI_DEVICE:
    case PIPE_CAP_PCI_FUNCTION:
-   case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
-   case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
-   case PIPE_CAP_TGSI_VOTE:
-   case PIPE_CAP_MAX_WINDOW_RECTANGLES:
-   case PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED:
-   case PIPE_CAP_VIEWPORT_SUBPIXEL_BITS:
-   case PIPE_CAP_TGSI_CAN_READ_OUTPUTS:
-   case PIPE_CAP_NATIVE_FENCE_FD:
    case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
-   case PIPE_CAP_FBFETCH:
-   case PIPE_CAP_TGSI_MUL_ZERO_WINS:
-   case PIPE_CAP_TGSI_CLOCK:
-   case PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE:
-   case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
-   case PIPE_CAP_TGSI_BALLOT:
-   case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
-   case PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX:
-   case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
-   case PIPE_CAP_POST_DEPTH_COVERAGE:
-   case PIPE_CAP_BINDLESS_TEXTURE:
-   case PIPE_CAP_NIR_SAMPLERS_AS_DEREF:
-   case PIPE_CAP_MEMOBJ:
-   case PIPE_CAP_LOAD_CONSTBUF:
-   case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
-   case PIPE_CAP_TILE_RASTER_ORDER:
-   case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
-   case PIPE_CAP_FRAMEBUFFER_MSAA_CONSTRAINTS:
-   case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
-   case PIPE_CAP_CONTEXT_PRIORITY_MASK:
-   case PIPE_CAP_FENCE_SIGNAL:
-   case PIPE_CAP_CONSTBUF0_FLAGS:
-   case PIPE_CAP_PACKED_UNIFORMS:
-   case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_TRIANGLES:
-   case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_POINTS_LINES:
-   case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_TRIANGLES:
-   case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_POINTS_LINES:
-   case PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE:
-   case PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS:
-   case PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS:
       return 0;
    case PIPE_CAP_MAX_GS_INVOCATIONS:
       return 32;
@@ -451,7 +378,7 @@ softpipe_is_format_supported( struct pipe_screen *screen,
       /*
        * Although possible, it is unnatural to render into compressed or YUV
        * surfaces. So disable these here to avoid going into weird paths
-       * inside the state trackers.
+       * inside gallium frontends.
        */
       if (format_desc->block.width != 1 ||
           format_desc->block.height != 1)
@@ -604,6 +531,8 @@ softpipe_create_screen(struct sw_winsys *winsys)
    if (!screen)
       return NULL;
 
+   sp_debug = debug_get_option_sp_debug();
+
    screen->winsys = winsys;
 
    screen->base.destroy = softpipe_destroy_screen;
@@ -619,7 +548,7 @@ softpipe_create_screen(struct sw_winsys *winsys)
    screen->base.context_create = softpipe_create_context;
    screen->base.flush_frontbuffer = softpipe_flush_frontbuffer;
    screen->base.get_compute_param = softpipe_get_compute_param;
-   screen->use_llvm = debug_get_option_use_llvm();
+   screen->use_llvm = sp_debug & SP_DBG_USE_LLVM;
 
    softpipe_init_screen_texture_funcs(&screen->base);
    softpipe_init_screen_fence_funcs(&screen->base);

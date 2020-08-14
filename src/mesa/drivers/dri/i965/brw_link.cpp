@@ -346,7 +346,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
        * too late.  At that point, the values for the built-in uniforms won't
        * get sent to the shader.
        */
-      nir_foreach_variable(var, &prog->nir->uniforms) {
+      nir_foreach_uniform_variable(var, prog->nir) {
          const nir_state_slot *const slots = var->state_slots;
          for (unsigned int i = 0; i < var->num_state_slots; i++) {
             assert(slots != NULL);

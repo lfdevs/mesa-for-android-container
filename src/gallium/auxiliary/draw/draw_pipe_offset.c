@@ -120,9 +120,9 @@ static void do_offset_tri( struct draw_stage *stage,
     * Note: we're applying the offset and clamping per-vertex.
     * Ideally, the offset is applied per-fragment prior to fragment shading.
     */
-   v0[2] = CLAMP(v0[2] + zoffset, 0.0f, 1.0f);
-   v1[2] = CLAMP(v1[2] + zoffset, 0.0f, 1.0f);
-   v2[2] = CLAMP(v2[2] + zoffset, 0.0f, 1.0f);
+   v0[2] = SATURATE(v0[2] + zoffset);
+   v1[2] = SATURATE(v1[2] + zoffset);
+   v2[2] = SATURATE(v2[2] + zoffset);
 
    stage->next->tri( stage->next, header );
 }

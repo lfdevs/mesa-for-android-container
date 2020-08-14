@@ -171,6 +171,8 @@ struct si_shader_context {
    /* CS */
    struct ac_arg block_size;
    struct ac_arg cs_user_data;
+   struct ac_arg cs_shaderbuf[3];
+   struct ac_arg cs_image[3];
 
    struct ac_llvm_compiler *compiler;
 
@@ -211,13 +213,14 @@ bool gfx10_ngg_export_prim_early(struct si_shader *shader);
 void gfx10_ngg_build_sendmsg_gs_alloc_req(struct si_shader_context *ctx);
 void gfx10_ngg_build_export_prim(struct si_shader_context *ctx, LLVMValueRef user_edgeflags[3],
                                  LLVMValueRef prim_passthrough);
-void gfx10_emit_ngg_culling_epilogue_4x_wave32(struct ac_shader_abi *abi, unsigned max_outputs,
-                                               LLVMValueRef *addrs);
+void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_outputs,
+                                     LLVMValueRef *addrs);
 void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi, unsigned max_outputs, LLVMValueRef *addrs);
 void gfx10_ngg_gs_emit_vertex(struct si_shader_context *ctx, unsigned stream, LLVMValueRef *addrs);
 void gfx10_ngg_gs_emit_prologue(struct si_shader_context *ctx);
 void gfx10_ngg_gs_emit_epilogue(struct si_shader_context *ctx);
-void gfx10_ngg_calculate_subgroup_info(struct si_shader *shader);
+unsigned gfx10_ngg_get_scratch_dw_size(struct si_shader *shader);
+bool gfx10_ngg_calculate_subgroup_info(struct si_shader *shader);
 
 /* si_shader_llvm.c */
 bool si_compile_llvm(struct si_screen *sscreen, struct si_shader_binary *binary,

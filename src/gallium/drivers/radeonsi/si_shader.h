@@ -394,6 +394,7 @@ struct si_shader_info {
    unsigned num_written_clipdistance;
 
    unsigned images_declared;         /**< bitmask of declared images */
+   unsigned image_buffers;           /**< bitmask of images that are buffers */
    unsigned msaa_images_declared;    /**< bitmask of declared MSAA images */
    unsigned shader_buffers_declared; /**< bitmask of declared shader buffers */
 
@@ -439,6 +440,11 @@ struct si_shader_selector {
    bool vs_needs_prolog;
    bool prim_discard_cs_allowed;
    bool ngg_culling_allowed;
+   ubyte cs_shaderbufs_sgpr_index;
+   ubyte cs_num_shaderbufs_in_user_sgprs;
+   ubyte cs_images_sgpr_index;
+   ubyte cs_images_num_sgprs;
+   ubyte cs_num_images_in_user_sgprs;
    unsigned num_vs_inputs;
    unsigned num_vbos_in_user_sgprs;
    unsigned pa_cl_vs_out_cntl;
@@ -476,7 +482,7 @@ struct si_shader_selector {
    uint64_t inputs_read; /* "get_unique_index" bits */
 
    /* bitmasks of used descriptor slots */
-   uint32_t active_const_and_shader_buffers;
+   uint64_t active_const_and_shader_buffers;
    uint64_t active_samplers_and_images;
 };
 

@@ -55,6 +55,17 @@ softpipe_screen( struct pipe_screen *pipe )
    return (struct softpipe_screen *)pipe;
 }
 
+enum sp_debug_flag {
+   SP_DBG_VS              = BITFIELD_BIT(0),
+   /* SP_DBG_TCS             = BITFIELD_BIT(1), */
+   /* SP_DBG_TES             = BITFIELD_BIT(2), */
+   SP_DBG_GS              = BITFIELD_BIT(3),
+   SP_DBG_FS              = BITFIELD_BIT(4),
+   SP_DBG_CS              = BITFIELD_BIT(5),
+   SP_DBG_USE_LLVM        = BITFIELD_BIT(6),
+   SP_DBG_NO_RAST         = BITFIELD_BIT(7),
+};
 
+extern int sp_debug;
 
 #endif /* SP_SCREEN_H */

@@ -271,7 +271,7 @@ iris_blorp_lookup_shader(struct blorp_batch *blorp_batch,
       iris_bo_offset_from_base_address(bo) + shader->assembly.offset;
    *((void **) prog_data_out) = shader->prog_data;
 
-   iris_use_pinned_bo(batch, bo, false);
+   iris_use_pinned_bo(batch, bo, false, IRIS_DOMAIN_NONE);
 
    return true;
 }
@@ -303,7 +303,7 @@ iris_blorp_upload_shader(struct blorp_batch *blorp_batch, uint32_t stage,
       iris_bo_offset_from_base_address(bo) + shader->assembly.offset;
    *((void **) prog_data_out) = shader->prog_data;
 
-   iris_use_pinned_bo(batch, bo, false);
+   iris_use_pinned_bo(batch, bo, false, IRIS_DOMAIN_NONE);
 
    return true;
 }

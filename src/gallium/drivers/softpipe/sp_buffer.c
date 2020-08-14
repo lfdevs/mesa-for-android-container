@@ -56,8 +56,6 @@ sp_tgsi_load(const struct tgsi_buffer *buffer,
    struct softpipe_resource *spr;
    unsigned width;
    int c, j;
-   unsigned char *data_ptr;
-   const struct util_format_description *format_desc = util_format_description(PIPE_FORMAT_R32_UINT);
 
    if (params->unit >= PIPE_MAX_SHADER_BUFFERS)
       goto fail_write_all_zero;
@@ -73,7 +71,6 @@ sp_tgsi_load(const struct tgsi_buffer *buffer,
    for (j = 0; j < TGSI_QUAD_SIZE; j++) {
       int s_coord;
       bool fill_zero = false;
-      uint32_t sdata[4];
 
       if (!(params->execmask & (1 << j)))
          fill_zero = true;
@@ -87,11 +84,10 @@ sp_tgsi_load(const struct tgsi_buffer *buffer,
             rgba[c][j] = 0;
          continue;
       }
-      data_ptr = (unsigned char *)spr->data + bview->buffer_offset + s_coord;
+      uint32_t *src = (uint32_t *)((unsigned char *)spr->data +
+                                   bview->buffer_offset + s_coord);
       for (c = 0; c < 4; c++) {
-         format_desc->fetch_rgba_uint(sdata, data_ptr, 0, 0);
-         ((uint32_t *)rgba[c])[j] = sdata[0];
-         data_ptr += 4;
+         memcpy(&rgba[c][j], &src[c], 4);
       }
    }
    return;
@@ -113,9 +109,7 @@ sp_tgsi_store(const struct tgsi_buffer *buffer,
    struct pipe_shader_buffer *bview;
    struct softpipe_resource *spr;
    unsigned width;
-   unsigned char *data_ptr;
    int j, c;
-   const struct util_format_description *format_desc = util_format_description(PIPE_FORMAT_R32_UINT);
 
    if (params->unit >= PIPE_MAX_SHADER_BUFFERS)
       return;
@@ -138,15 +132,12 @@ sp_tgsi_store(const struct tgsi_buffer *buffer,
       if (s_coord >= width)
          continue;
 
-      data_ptr = (unsigned char *)spr->data + bview->buffer_offset + s_coord;
+      uint32_t *dst = (uint32_t *)((unsigned char *)spr->data +
+                                   bview->buffer_offset + s_coord);
 
       for (c = 0; c < 4; c++) {
-         if (params->writemask & (1 << c)) {
-            unsigned temp[4];
-            unsigned char *dptr = data_ptr + (c * 4);
-            temp[0] = ((uint32_t *)rgba[c])[j];
-            format_desc->pack_rgba_uint(dptr, 0, temp, 0, 1, 1);
-         }
+         if (params->writemask & (1 << c))
+            memcpy(&dst[c], &rgba[c][j], 4);
       }
    }
 }
@@ -165,14 +156,10 @@ handle_op_atomic(const struct pipe_shader_buffer *bview,
                  float rgba2[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])
 {
    uint c;
-   const struct util_format_description *format_desc = util_format_description(PIPE_FORMAT_R32_UINT);
    unsigned sdata[4];
 
    for (c = 0; c < 4; c++) {
-      unsigned temp[4];
-      unsigned char *dptr = data_ptr + (c * 4);
-      format_desc->fetch_rgba_uint(temp, dptr, 0, 0);
-      sdata[c] = temp[0];
+      memcpy(&sdata[c], data_ptr + (c * 4), 4);
    }
 
    if (just_read) {
@@ -274,10 +261,7 @@ handle_op_atomic(const struct pipe_shader_buffer *bview,
 
    for (c = 0; c < 4; c++) {
       if (writemask & (1 << c)) {
-         unsigned temp[4];
-         unsigned char *dptr = data_ptr + (c * 4);
-         temp[0] = sdata[c];
-         format_desc->pack_rgba_uint(dptr, 0, temp, 0, 1, 1);
+         memcpy(data_ptr + (c * 4), &sdata[c], 4);
       }
    }
 }

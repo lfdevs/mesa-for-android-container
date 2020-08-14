@@ -45,7 +45,7 @@ fd5_draw(struct fd_batch *batch, struct fd_ringbuffer *ring,
 		enum pc_di_vis_cull_mode vismode,
 		enum pc_di_src_sel src_sel, uint32_t count,
 		uint32_t instances, enum a4xx_index_size idx_type,
-		uint32_t idx_size, uint32_t idx_offset,
+		uint32_t max_indices, uint32_t idx_offset,
 		struct pipe_resource *idx_buffer)
 {
 	/* for debug after a lock up, write a unique counter value
@@ -71,7 +71,7 @@ fd5_draw(struct fd_batch *batch, struct fd_ringbuffer *ring,
 	if (idx_buffer) {
 		OUT_RING(ring, 0x0);           /* XXX */
 		OUT_RELOC(ring, fd_resource(idx_buffer)->bo, idx_offset, 0, 0);
-		OUT_RING (ring, idx_size);
+		OUT_RING (ring, max_indices);
 	}
 
 	emit_marker5(ring, 7);
@@ -89,7 +89,7 @@ fd5_draw_emit(struct fd_batch *batch, struct fd_ringbuffer *ring,
 	struct pipe_resource *idx_buffer = NULL;
 	enum a4xx_index_size idx_type;
 	enum pc_di_src_sel src_sel;
-	uint32_t idx_size, idx_offset;
+	uint32_t max_indices, idx_offset;
 
 	if (info->indirect) {
 		struct fd_resource *ind = fd_resource(info->indirect->buffer);
@@ -98,7 +98,7 @@ fd5_draw_emit(struct fd_batch *batch, struct fd_ringbuffer *ring,
 
 		if (info->index_size) {
 			struct pipe_resource *idx = info->index.resource;
-			unsigned max_indicies = idx->width0 / info->index_size;
+			max_indices = idx->width0 / info->index_size;
 
 			OUT_PKT7(ring, CP_DRAW_INDX_INDIRECT, 6);
 			OUT_RINGP(ring, DRAW4(primtype, DI_SRC_SEL_DMA,
@@ -106,7 +106,7 @@ fd5_draw_emit(struct fd_batch *batch, struct fd_ringbuffer *ring,
 					&batch->draw_patches);
 			OUT_RELOC(ring, fd_resource(idx)->bo,
 					index_offset, 0, 0);
-			OUT_RING(ring, A5XX_CP_DRAW_INDX_INDIRECT_3_MAX_INDICES(max_indicies));
+			OUT_RING(ring, A5XX_CP_DRAW_INDX_INDIRECT_3_MAX_INDICES(max_indices));
 			OUT_RELOC(ring, ind->bo, info->indirect->offset, 0, 0);
 		} else {
 			OUT_PKT7(ring, CP_DRAW_INDIRECT, 3);
@@ -126,20 +126,20 @@ fd5_draw_emit(struct fd_batch *batch, struct fd_ringbuffer *ring,
 
 		idx_buffer = info->index.resource;
 		idx_type = fd4_size2indextype(info->index_size);
-		idx_size = info->index_size * info->count;
+		max_indices = idx_buffer->width0 / info->index_size;
 		idx_offset = index_offset + info->start * info->index_size;
 		src_sel = DI_SRC_SEL_DMA;
 	} else {
 		idx_buffer = NULL;
 		idx_type = INDEX4_SIZE_32_BIT;
-		idx_size = 0;
+		max_indices = 0;
 		idx_offset = 0;
 		src_sel = DI_SRC_SEL_AUTO_INDEX;
 	}
 
 	fd5_draw(batch, ring, primtype, vismode, src_sel,
 			info->count, info->instance_count,
-			idx_type, idx_size, idx_offset, idx_buffer);
+			idx_type, max_indices, idx_offset, idx_buffer);
 }
 
 #endif /* FD5_DRAW_H_ */

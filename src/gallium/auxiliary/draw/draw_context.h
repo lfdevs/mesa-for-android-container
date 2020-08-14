@@ -122,6 +122,9 @@ void draw_enable_point_sprites(struct draw_context *draw, boolean enable);
 
 void draw_set_zs_format(struct draw_context *draw, enum pipe_format format);
 
+/* for TGSI constants are 4 * sizeof(float), but for NIR they need to be sizeof(float); */
+void draw_set_constant_buffer_stride(struct draw_context *draw, unsigned num_bytes);
+
 boolean
 draw_install_aaline_stage(struct draw_context *draw, struct pipe_context *pipe);
 
@@ -198,6 +201,8 @@ draw_set_mapped_texture(struct draw_context *draw,
                         unsigned sview_idx,
                         uint32_t width, uint32_t height, uint32_t depth,
                         uint32_t first_level, uint32_t last_level,
+                        uint32_t num_samples,
+                        uint32_t sample_stride,
                         const void *base,
                         uint32_t row_stride[PIPE_MAX_TEXTURE_LEVELS],
                         uint32_t img_stride[PIPE_MAX_TEXTURE_LEVELS],
@@ -210,7 +215,9 @@ draw_set_mapped_image(struct draw_context *draw,
                       uint32_t width, uint32_t height, uint32_t depth,
                       const void *base_ptr,
                       uint32_t row_stride,
-                      uint32_t img_stride);
+                      uint32_t img_stride,
+                      uint32_t num_samples,
+                      uint32_t sample_stride);
 
 /*
  * Vertex shader functions
@@ -362,4 +369,14 @@ draw_get_shader_param_no_llvm(enum pipe_shader_type shader,
 boolean
 draw_get_option_use_llvm(void);
 
+struct lp_cached_code;
+void
+draw_set_disk_cache_callbacks(struct draw_context *draw,
+                              void *data_cookie,
+                              void (*find_shader)(void *cookie,
+                                                  struct lp_cached_code *cache,
+                                                  unsigned char ir_sha1_cache_key[20]),
+                              void (*insert_shader)(void *cookie,
+                                                    struct lp_cached_code *cache,
+                                                    unsigned char ir_sha1_cache_key[20]));
 #endif /* DRAW_CONTEXT_H */

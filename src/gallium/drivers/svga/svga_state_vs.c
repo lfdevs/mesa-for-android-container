@@ -164,7 +164,7 @@ compile_vs(struct svga_context *svga,
 static void
 make_vs_key(struct svga_context *svga, struct svga_compile_key *key)
 {
-   const enum pipe_shader_type shader = PIPE_SHADER_VERTEX;
+   struct svga_vertex_shader *vs = svga->curr.vs;
 
    memset(key, 0, sizeof *key);
 
@@ -175,8 +175,13 @@ make_vs_key(struct svga_context *svga, struct svga_compile_key *key)
       return;
    }
 
+   if (svga_have_vgpu10(svga)) {
+      key->vs.need_vertex_id_bias = 1;
+   }
+
    /* SVGA_NEW_PRESCALE */
-   key->vs.need_prescale = svga->state.hw_clear.prescale.enabled &&
+   key->vs.need_prescale = svga->state.hw_clear.prescale[0].enabled &&
+                           (svga->curr.tes == NULL) &&
                            (svga->curr.gs == NULL);
 
    /* SVGA_NEW_RAST */
@@ -199,10 +204,16 @@ make_vs_key(struct svga_context *svga, struct svga_compile_key *key)
    key->vs.attrib_puint_to_sscaled = svga->curr.velems->attrib_puint_to_sscaled;
 
    /* SVGA_NEW_TEXTURE_BINDING | SVGA_NEW_SAMPLER */
-   svga_init_shader_key_common(svga, shader, key);
+   svga_init_shader_key_common(svga, PIPE_SHADER_VERTEX, &vs->base, key);
 
    /* SVGA_NEW_RAST */
    key->clip_plane_enable = svga->curr.rast->templ.clip_plane_enable;
+
+   /* Determine if this shader is the last shader in the vertex
+    * processing stage.
+    */
+   key->last_vertex_stage = !(svga->curr.gs ||
+                              svga->curr.tcs || svga->curr.tes);
 }
 
 
@@ -338,7 +349,7 @@ compile_passthrough_vs(struct svga_context *svga,
 
 
 static enum pipe_error
-emit_hw_vs(struct svga_context *svga, unsigned dirty)
+emit_hw_vs(struct svga_context *svga, uint64_t dirty)
 {
    struct svga_shader_variant *variant;
    struct svga_vertex_shader *vs = svga->curr.vs;

@@ -39,7 +39,7 @@
 #include "util/os_file.h"
 #include "util/u_atomic.h"
 #include "util/u_string.h"
-#include "util/xmlpool.h"
+#include "util/driconf.h"
 #include "git_sha1.h"
 #include "vk_util.h"
 #include "common/gen_aux_map.h"
@@ -65,6 +65,9 @@ DRI_CONF_END;
  * in OpenGLs KHR_debug.
  */
 #define MAX_DEBUG_MESSAGE_LENGTH    4096
+
+/* Render engine timestamp register */
+#define TIMESTAMP 0x2358
 
 static void
 compiler_debug_log(void *data, const char *fmt, ...)
@@ -136,7 +139,7 @@ anv_physical_device_init_heaps(struct anv_physical_device *device, int fd)
       anv_perf_warn(NULL, NULL,
                     "Failed to get I915_CONTEXT_PARAM_GTT_SIZE: %m");
 
-      if (anv_gem_get_aperture(fd, &device->gtt_size) == -1) {
+      if (gen_get_aperture_size(fd, &device->gtt_size) == -1) {
          return vk_errorfi(device->instance, NULL,
                            VK_ERROR_INITIALIZATION_FAILED,
                            "failed to get aperture size: %m");
@@ -377,7 +380,7 @@ anv_physical_device_try_create(struct anv_instance *instance,
       goto fail_fd;
    }
 
-   device->_loader_data.loaderMagic = ICD_LOADER_MAGIC;
+   vk_object_base_init(NULL, &device->base, VK_OBJECT_TYPE_PHYSICAL_DEVICE);
    device->instance = instance;
 
    assert(strlen(path) < ARRAY_SIZE(device->path));
@@ -451,6 +454,10 @@ anv_physical_device_try_create(struct anv_instance *instance,
    device->always_use_bindless =
       env_var_as_boolean("ANV_ALWAYS_BINDLESS", false);
 
+   device->use_call_secondary =
+      device->use_softpin &&
+      !env_var_as_boolean("ANV_DISABLE_SECONDARY_CMD_BUFFER_CALLS", false);
+
    /* We first got the A64 messages on broadwell and we can only use them if
     * we can pass addresses directly into the shader which requires softpin.
     */
@@ -471,6 +478,11 @@ anv_physical_device_try_create(struct anv_instance *instance,
    device->has_bindless_samplers = device->info.gen >= 8;
 
    device->has_implicit_ccs = device->info.has_aux_map;
+
+   /* Check if we can read the GPU timestamp register from the CPU */
+   uint64_t u64_ignore;
+   device->has_reg_timestamp = anv_gem_reg_read(fd, TIMESTAMP | I915_REG_READ_8B_WA,
+                                                &u64_ignore) == 0;
 
    device->has_mem_available = get_available_system_memory() != 0;
 
@@ -595,6 +607,7 @@ anv_physical_device_destroy(struct anv_physical_device *device)
    close(device->local_fd);
    if (device->master_fd >= 0)
       close(device->master_fd);
+   vk_object_base_finish(&device->base);
    vk_free(&device->instance->alloc, device);
 }
 
@@ -676,7 +689,7 @@ VkResult anv_CreateInstance(
    if (!instance)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   instance->_loader_data.loaderMagic = ICD_LOADER_MAGIC;
+   vk_object_base_init(NULL, &instance->base, VK_OBJECT_TYPE_INSTANCE);
 
    if (pAllocator)
       instance->alloc = *pAllocator;
@@ -796,6 +809,7 @@ void anv_DestroyInstance(
    driDestroyOptionCache(&instance->dri_options);
    driDestroyOptionInfo(&instance->available_dri_options);
 
+   vk_object_base_finish(&instance->base);
    vk_free(&instance->alloc, instance);
 }
 
@@ -1068,6 +1082,14 @@ void anv_GetPhysicalDeviceFeatures2(
 
    vk_foreach_struct(ext, pFeatures->pNext) {
       switch (ext->sType) {
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT: {
+         VkPhysicalDevice4444FormatsFeaturesEXT *features =
+            (VkPhysicalDevice4444FormatsFeaturesEXT *)ext;
+         features->formatA4R4G4B4 = true;
+         features->formatA4B4G4R4 = false;
+         break;
+      }
+
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR: {
          VkPhysicalDevice8BitStorageFeaturesKHR *features =
             (VkPhysicalDevice8BitStorageFeaturesKHR *)ext;
@@ -1118,6 +1140,14 @@ void anv_GetPhysicalDeviceFeatures2(
                                           pdevice->info.is_haswell;
          features->inheritedConditionalRendering = pdevice->info.gen >= 8 ||
                                                    pdevice->info.is_haswell;
+         break;
+      }
+
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT: {
+         VkPhysicalDeviceCustomBorderColorFeaturesEXT *features =
+            (VkPhysicalDeviceCustomBorderColorFeaturesEXT *)ext;
+         features->customBorderColors = pdevice->info.gen >= 8;
+         features->customBorderColorWithoutFormat = pdevice->info.gen >= 8;
          break;
       }
 
@@ -1177,6 +1207,13 @@ void anv_GetPhysicalDeviceFeatures2(
          break;
       }
 
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES_EXT: {
+         VkPhysicalDeviceImageRobustnessFeaturesEXT *features =
+            (VkPhysicalDeviceImageRobustnessFeaturesEXT *)ext;
+         features->robustImageAccess = true;
+         break;
+      }
+
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES_EXT: {
          VkPhysicalDeviceIndexTypeUint8FeaturesEXT *features =
             (VkPhysicalDeviceIndexTypeUint8FeaturesEXT *)ext;
@@ -1228,10 +1265,32 @@ void anv_GetPhysicalDeviceFeatures2(
          break;
       }
 
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR: {
+         VkPhysicalDevicePerformanceQueryFeaturesKHR *feature =
+            (VkPhysicalDevicePerformanceQueryFeaturesKHR *)ext;
+         feature->performanceCounterQueryPools = true;
+         /* HW only supports a single configuration at a time. */
+         feature->performanceCounterMultipleQueryPools = false;
+         break;
+      }
+
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES_EXT: {
+         VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT *features =
+            (VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT *)ext;
+         features->pipelineCreationCacheControl = true;
+         break;
+      }
+
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR: {
          VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR *features =
             (VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR *)ext;
          features->pipelineExecutableInfo = true;
+         break;
+      }
+
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES_EXT: {
+         VkPhysicalDevicePrivateDataFeaturesEXT *features = (void *)ext;
+         features->privateData = true;
          break;
       }
 
@@ -1270,6 +1329,23 @@ void anv_GetPhysicalDeviceFeatures2(
          break;
       }
 
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT: {
+         VkPhysicalDeviceShaderAtomicFloatFeaturesEXT *features = (void *)ext;
+         features->shaderBufferFloat32Atomics =    true;
+         features->shaderBufferFloat32AtomicAdd =  false;
+         features->shaderBufferFloat64Atomics =    false;
+         features->shaderBufferFloat64AtomicAdd =  false;
+         features->shaderSharedFloat32Atomics =    true;
+         features->shaderSharedFloat32AtomicAdd =  false;
+         features->shaderSharedFloat64Atomics =    false;
+         features->shaderSharedFloat64AtomicAdd =  false;
+         features->shaderImageFloat32Atomics =     true;
+         features->shaderImageFloat32AtomicAdd =   false;
+         features->sparseImageFloat32Atomics =     false;
+         features->sparseImageFloat32AtomicAdd =   false;
+         break;
+      }
+
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES_KHR: {
          VkPhysicalDeviceShaderAtomicInt64FeaturesKHR *features = (void *)ext;
          CORE_FEATURE(1, 2, shaderBufferInt64Atomics);
@@ -1294,6 +1370,13 @@ void anv_GetPhysicalDeviceFeatures2(
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES: {
          VkPhysicalDeviceShaderDrawParametersFeatures *features = (void *)ext;
          CORE_FEATURE(1, 1, shaderDrawParameters);
+         break;
+      }
+
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_FUNCTIONS_2_FEATURES_INTEL: {
+         VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL *features =
+            (VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL *)ext;
+         features->shaderIntegerFunctions2 = true;
          break;
       }
 
@@ -1379,6 +1462,13 @@ void anv_GetPhysicalDeviceFeatures2(
          break;
       }
 
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT: {
+         VkPhysicalDeviceExtendedDynamicStateFeaturesEXT *features =
+            (VkPhysicalDeviceExtendedDynamicStateFeaturesEXT *)ext;
+         features->extendedDynamicState = true;
+         break;
+      }
+
       default:
          anv_debug_ignored_stype(ext->sType);
          break;
@@ -1392,6 +1482,8 @@ void anv_GetPhysicalDeviceFeatures2(
 
 #define MAX_PER_STAGE_DESCRIPTOR_INPUT_ATTACHMENTS 64
 #define MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS       256
+
+#define MAX_CUSTOM_BORDER_COLORS                   4096
 
 void anv_GetPhysicalDeviceProperties(
     VkPhysicalDevice                            physicalDevice,
@@ -1748,6 +1840,13 @@ void anv_GetPhysicalDeviceProperties2(
 
    vk_foreach_struct(ext, pProperties->pNext) {
       switch (ext->sType) {
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_PROPERTIES_EXT: {
+         VkPhysicalDeviceCustomBorderColorPropertiesEXT *properties =
+            (VkPhysicalDeviceCustomBorderColorPropertiesEXT *)ext;
+         properties->maxCustomBorderColorSamplers = MAX_CUSTOM_BORDER_COLORS;
+         break;
+      }
+
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES_KHR: {
          VkPhysicalDeviceDepthStencilResolvePropertiesKHR *properties =
             (VkPhysicalDeviceDepthStencilResolvePropertiesKHR *)ext;
@@ -1875,6 +1974,16 @@ void anv_GetPhysicalDeviceProperties2(
          properties->pciBus = pdevice->pci_info.bus;
          properties->pciDevice = pdevice->pci_info.device;
          properties->pciFunction = pdevice->pci_info.function;
+         break;
+      }
+
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_PROPERTIES_KHR: {
+         VkPhysicalDevicePerformanceQueryPropertiesKHR *properties =
+            (VkPhysicalDevicePerformanceQueryPropertiesKHR *)ext;
+         /* We could support this by spawning a shader to do the equation
+          * normalization.
+          */
+         properties->allowCommandBufferQueryCopies = false;
          break;
       }
 
@@ -2351,34 +2460,6 @@ anv_state_pool_emit_data(struct anv_state_pool *pool, size_t size, size_t align,
    return state;
 }
 
-/* Haswell border color is a bit of a disaster.  Float and unorm formats use a
- * straightforward 32-bit float color in the first 64 bytes.  Instead of using
- * a nice float/integer union like Gen8+, Haswell specifies the integer border
- * color as a separate entry /after/ the float color.  The layout of this entry
- * also depends on the format's bpp (with extra hacks for RG32), and overlaps.
- *
- * Since we don't know the format/bpp, we can't make any of the border colors
- * containing '1' work for all formats, as it would be in the wrong place for
- * some of them.  We opt to make 32-bit integers work as this seems like the
- * most common option.  Fortunately, transparent black works regardless, as
- * all zeroes is the same in every bit-size.
- */
-struct hsw_border_color {
-   float float32[4];
-   uint32_t _pad0[12];
-   uint32_t uint32[4];
-   uint32_t _pad1[108];
-};
-
-struct gen8_border_color {
-   union {
-      float float32[4];
-      uint32_t uint32[4];
-   };
-   /* Pad out to 64 bytes */
-   uint32_t _pad[12];
-};
-
 static void
 anv_device_init_border_colors(struct anv_device *device)
 {
@@ -2454,55 +2535,6 @@ VkResult anv_EnumerateDeviceExtensionProperties(
    }
 
    return vk_outarray_status(&out);
-}
-
-static void
-anv_device_init_dispatch(struct anv_device *device)
-{
-   const struct anv_instance *instance = device->physical->instance;
-
-   const struct anv_device_dispatch_table *genX_table;
-   switch (device->info.gen) {
-   case 12:
-      genX_table = &gen12_device_dispatch_table;
-      break;
-   case 11:
-      genX_table = &gen11_device_dispatch_table;
-      break;
-   case 10:
-      genX_table = &gen10_device_dispatch_table;
-      break;
-   case 9:
-      genX_table = &gen9_device_dispatch_table;
-      break;
-   case 8:
-      genX_table = &gen8_device_dispatch_table;
-      break;
-   case 7:
-      if (device->info.is_haswell)
-         genX_table = &gen75_device_dispatch_table;
-      else
-         genX_table = &gen7_device_dispatch_table;
-      break;
-   default:
-      unreachable("unsupported gen\n");
-   }
-
-   for (unsigned i = 0; i < ARRAY_SIZE(device->dispatch.entrypoints); i++) {
-      /* Vulkan requires that entrypoints for extensions which have not been
-       * enabled must not be advertised.
-       */
-      if (!anv_device_entrypoint_is_enabled(i, instance->app_info.api_version,
-                                            &instance->enabled_extensions,
-                                            &device->enabled_extensions)) {
-         device->dispatch.entrypoints[i] = NULL;
-      } else if (genX_table->entrypoints[i]) {
-         device->dispatch.entrypoints[i] = genX_table->entrypoints[i];
-      } else {
-         device->dispatch.entrypoints[i] =
-            anv_device_dispatch_table.entrypoints[i];
-      }
-   }
 }
 
 static int
@@ -2745,6 +2777,9 @@ VkResult anv_CreateDevice(
    if (!device)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
+   vk_device_init(&device->vk, pCreateInfo,
+                  &physical_device->instance->alloc, pAllocator);
+
    if (INTEL_DEBUG & DEBUG_BATCH) {
       const unsigned decode_flags =
          GEN_BATCH_DECODE_FULL |
@@ -2758,15 +2793,9 @@ VkResult anv_CreateDevice(
                                 decode_get_bo, NULL, device);
    }
 
-   device->_loader_data.loaderMagic = ICD_LOADER_MAGIC;
    device->physical = physical_device;
    device->no_hw = physical_device->no_hw;
    device->_lost = false;
-
-   if (pAllocator)
-      device->alloc = *pAllocator;
-   else
-      device->alloc = physical_device->instance->alloc;
 
    /* XXX(chadv): Can we dup() physicalDevice->fd here? */
    device->fd = open(physical_device->path, O_RDWR | O_CLOEXEC);
@@ -2837,7 +2866,20 @@ VkResult anv_CreateDevice(
    device->robust_buffer_access = robust_buffer_access;
    device->enabled_extensions = enabled_extensions;
 
-   anv_device_init_dispatch(device);
+   const struct anv_instance *instance = physical_device->instance;
+   for (unsigned i = 0; i < ARRAY_SIZE(device->dispatch.entrypoints); i++) {
+      /* Vulkan requires that entrypoints for extensions which have not been
+       * enabled must not be advertised.
+       */
+      if (!anv_device_entrypoint_is_enabled(i, instance->app_info.api_version,
+                                            &instance->enabled_extensions,
+                                            &device->enabled_extensions)) {
+         device->dispatch.entrypoints[i] = NULL;
+      } else {
+         device->dispatch.entrypoints[i] =
+            anv_resolve_device_entrypoint(&device->info, i);
+      }
+   }
 
    if (pthread_mutex_init(&device->mutex, NULL) != 0) {
       result = vk_error(VK_ERROR_INITIALIZATION_FAILED);
@@ -2868,39 +2910,70 @@ VkResult anv_CreateDevice(
    anv_bo_pool_init(&device->batch_bo_pool, device);
 
    result = anv_state_pool_init(&device->dynamic_state_pool, device,
-                                DYNAMIC_STATE_POOL_MIN_ADDRESS, 16384);
+                                DYNAMIC_STATE_POOL_MIN_ADDRESS, 0, 16384);
    if (result != VK_SUCCESS)
       goto fail_batch_bo_pool;
 
+   if (device->info.gen >= 8) {
+      /* The border color pointer is limited to 24 bits, so we need to make
+       * sure that any such color used at any point in the program doesn't
+       * exceed that limit.
+       * We achieve that by reserving all the custom border colors we support
+       * right off the bat, so they are close to the base address.
+       */
+      anv_state_reserved_pool_init(&device->custom_border_colors,
+                                   &device->dynamic_state_pool,
+                                   MAX_CUSTOM_BORDER_COLORS,
+                                   sizeof(struct gen8_border_color), 64);
+   }
+
    result = anv_state_pool_init(&device->instruction_state_pool, device,
-                                INSTRUCTION_STATE_POOL_MIN_ADDRESS, 16384);
+                                INSTRUCTION_STATE_POOL_MIN_ADDRESS, 0, 16384);
    if (result != VK_SUCCESS)
       goto fail_dynamic_state_pool;
 
    result = anv_state_pool_init(&device->surface_state_pool, device,
-                                SURFACE_STATE_POOL_MIN_ADDRESS, 4096);
+                                SURFACE_STATE_POOL_MIN_ADDRESS, 0, 4096);
    if (result != VK_SUCCESS)
       goto fail_instruction_state_pool;
 
    if (physical_device->use_softpin) {
+      int64_t bt_pool_offset = (int64_t)BINDING_TABLE_POOL_MIN_ADDRESS -
+                               (int64_t)SURFACE_STATE_POOL_MIN_ADDRESS;
+      assert(INT32_MIN < bt_pool_offset && bt_pool_offset < 0);
       result = anv_state_pool_init(&device->binding_table_pool, device,
-                                   BINDING_TABLE_POOL_MIN_ADDRESS, 4096);
+                                   SURFACE_STATE_POOL_MIN_ADDRESS,
+                                   bt_pool_offset, 4096);
       if (result != VK_SUCCESS)
          goto fail_surface_state_pool;
    }
 
-   if (device->info.gen >= 12) {
+   if (device->info.has_aux_map) {
       device->aux_map_ctx = gen_aux_map_init(device, &aux_map_allocator,
                                              &physical_device->info);
       if (!device->aux_map_ctx)
          goto fail_binding_table_pool;
    }
 
-   result = anv_device_alloc_bo(device, 4096, 0 /* flags */,
+   result = anv_device_alloc_bo(device, 4096,
+                                ANV_BO_ALLOC_CAPTURE | ANV_BO_ALLOC_MAPPED /* flags */,
                                 0 /* explicit_address */,
                                 &device->workaround_bo);
    if (result != VK_SUCCESS)
       goto fail_surface_aux_map_pool;
+
+   device->workaround_address = (struct anv_address) {
+      .bo = device->workaround_bo,
+      .offset = align_u32(
+         intel_debug_write_identifiers(device->workaround_bo->map,
+                                       device->workaround_bo->size,
+                                       "Anv") + 8, 8),
+   };
+
+   if (!device->info.has_llc) {
+      gen_clflush_range(device->workaround_bo->map,
+                        device->workaround_address.offset);
+   }
 
    result = anv_device_init_trivial_batch(device);
    if (result != VK_SUCCESS)
@@ -2954,9 +3027,10 @@ VkResult anv_CreateDevice(
       unreachable("unhandled gen");
    }
    if (result != VK_SUCCESS)
-      goto fail_workaround_bo;
+      goto fail_clear_value_bo;
 
-   anv_pipeline_cache_init(&device->default_pipeline_cache, device, true);
+   anv_pipeline_cache_init(&device->default_pipeline_cache, device,
+                           true /* cache_enabled */, false /* external_sync */);
 
    anv_device_init_blorp(device);
 
@@ -2968,15 +3042,16 @@ VkResult anv_CreateDevice(
 
    return VK_SUCCESS;
 
- fail_workaround_bo:
-   anv_scratch_pool_finish(device, &device->scratch_pool);
+ fail_clear_value_bo:
    if (device->info.gen >= 10)
       anv_device_release_bo(device, device->hiz_clear_bo);
-   anv_device_release_bo(device, device->workaround_bo);
+   anv_scratch_pool_finish(device, &device->scratch_pool);
  fail_trivial_batch_bo:
    anv_device_release_bo(device, device->trivial_batch_bo);
+ fail_workaround_bo:
+   anv_device_release_bo(device, device->workaround_bo);
  fail_surface_aux_map_pool:
-   if (device->info.gen >= 12) {
+   if (device->info.has_aux_map) {
       gen_aux_map_finish(device->aux_map_ctx);
       device->aux_map_ctx = NULL;
    }
@@ -2988,6 +3063,8 @@ VkResult anv_CreateDevice(
  fail_instruction_state_pool:
    anv_state_pool_finish(&device->instruction_state_pool);
  fail_dynamic_state_pool:
+   if (device->info.gen >= 8)
+      anv_state_reserved_pool_finish(&device->custom_border_colors);
    anv_state_pool_finish(&device->dynamic_state_pool);
  fail_batch_bo_pool:
    anv_bo_pool_finish(&device->batch_bo_pool);
@@ -3009,7 +3086,7 @@ VkResult anv_CreateDevice(
  fail_fd:
    close(device->fd);
  fail_device:
-   vk_free(&device->alloc, device);
+   vk_free(&device->vk.alloc, device);
 
    return result;
 }
@@ -3033,6 +3110,8 @@ void anv_DestroyDevice(
    /* We only need to free these to prevent valgrind errors.  The backing
     * BO will go away in a couple of lines so we don't actually leak.
     */
+   if (device->info.gen >= 8)
+      anv_state_reserved_pool_finish(&device->custom_border_colors);
    anv_state_pool_free(&device->dynamic_state_pool, device->border_colors);
    anv_state_pool_free(&device->dynamic_state_pool, device->slice_hash);
 #endif
@@ -3044,7 +3123,7 @@ void anv_DestroyDevice(
    if (device->info.gen >= 10)
       anv_device_release_bo(device, device->hiz_clear_bo);
 
-   if (device->info.gen >= 12) {
+   if (device->info.has_aux_map) {
       gen_aux_map_finish(device->aux_map_ctx);
       device->aux_map_ctx = NULL;
    }
@@ -3075,7 +3154,8 @@ void anv_DestroyDevice(
 
    close(device->fd);
 
-   vk_free(&device->alloc, device);
+   vk_device_finish(&device->vk);
+   vk_free(&device->vk.alloc, device);
 }
 
 VkResult anv_EnumerateInstanceLayerProperties(
@@ -3355,12 +3435,13 @@ VkResult anv_AllocateMemory(
    if (mem_heap_used + aligned_alloc_size > mem_heap->size)
       return vk_error(VK_ERROR_OUT_OF_DEVICE_MEMORY);
 
-   mem = vk_alloc2(&device->alloc, pAllocator, sizeof(*mem), 8,
+   mem = vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*mem), 8,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (mem == NULL)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
    assert(pAllocateInfo->memoryTypeIndex < pdevice->memory.type_count);
+   vk_object_base_init(&device->vk, &mem->base, VK_OBJECT_TYPE_DEVICE_MEMORY);
    mem->type = mem_type;
    mem->map = NULL;
    mem->map_size = 0;
@@ -3584,7 +3665,7 @@ VkResult anv_AllocateMemory(
    return VK_SUCCESS;
 
  fail:
-   vk_free2(&device->alloc, pAllocator, mem);
+   vk_free2(&device->vk.alloc, pAllocator, mem);
 
    return result;
 }
@@ -3684,7 +3765,8 @@ void anv_FreeMemory(
       AHardwareBuffer_release(mem->ahw);
 #endif
 
-   vk_free2(&device->alloc, pAllocator, mem);
+   vk_object_base_finish(&mem->base);
+   vk_free2(&device->vk.alloc, pAllocator, mem);
 }
 
 VkResult anv_MapMemory(
@@ -4078,22 +4160,19 @@ VkResult anv_CreateEvent(
     VkEvent*                                    pEvent)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
-   struct anv_state state;
    struct anv_event *event;
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_EVENT_CREATE_INFO);
 
-   state = anv_state_pool_alloc(&device->dynamic_state_pool,
-                                sizeof(*event), 8);
-   event = state.map;
-   event->state = state;
-   event->semaphore = VK_EVENT_RESET;
+   event = vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*event), 8,
+                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (event == NULL)
+      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   if (!device->info.has_llc) {
-      /* Make sure the writes we're flushing have landed. */
-      __builtin_ia32_mfence();
-      __builtin_ia32_clflush(event);
-   }
+   vk_object_base_init(&device->vk, &event->base, VK_OBJECT_TYPE_EVENT);
+   event->state = anv_state_pool_alloc(&device->dynamic_state_pool,
+                                       sizeof(uint64_t), 8);
+   *(uint64_t *)event->state.map = VK_EVENT_RESET;
 
    *pEvent = anv_event_to_handle(event);
 
@@ -4112,6 +4191,9 @@ void anv_DestroyEvent(
       return;
 
    anv_state_pool_free(&device->dynamic_state_pool, event->state);
+
+   vk_object_base_finish(&event->base);
+   vk_free2(&device->vk.alloc, pAllocator, event);
 }
 
 VkResult anv_GetEventStatus(
@@ -4124,30 +4206,16 @@ VkResult anv_GetEventStatus(
    if (anv_device_is_lost(device))
       return VK_ERROR_DEVICE_LOST;
 
-   if (!device->info.has_llc) {
-      /* Invalidate read cache before reading event written by GPU. */
-      __builtin_ia32_clflush(event);
-      __builtin_ia32_mfence();
-
-   }
-
-   return event->semaphore;
+   return *(uint64_t *)event->state.map;
 }
 
 VkResult anv_SetEvent(
     VkDevice                                    _device,
     VkEvent                                     _event)
 {
-   ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_event, event, _event);
 
-   event->semaphore = VK_EVENT_SET;
-
-   if (!device->info.has_llc) {
-      /* Make sure the writes we're flushing have landed. */
-      __builtin_ia32_mfence();
-      __builtin_ia32_clflush(event);
-   }
+   *(uint64_t *)event->state.map = VK_EVENT_SET;
 
    return VK_SUCCESS;
 }
@@ -4156,16 +4224,9 @@ VkResult anv_ResetEvent(
     VkDevice                                    _device,
     VkEvent                                     _event)
 {
-   ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_event, event, _event);
 
-   event->semaphore = VK_EVENT_RESET;
-
-   if (!device->info.has_llc) {
-      /* Make sure the writes we're flushing have landed. */
-      __builtin_ia32_mfence();
-      __builtin_ia32_clflush(event);
-   }
+   *(uint64_t *)event->state.map = VK_EVENT_RESET;
 
    return VK_SUCCESS;
 }
@@ -4191,11 +4252,12 @@ VkResult anv_CreateBuffer(
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
 
-   buffer = vk_alloc2(&device->alloc, pAllocator, sizeof(*buffer), 8,
+   buffer = vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*buffer), 8,
                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (buffer == NULL)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
+   vk_object_base_init(&device->vk, &buffer->base, VK_OBJECT_TYPE_BUFFER);
    buffer->size = pCreateInfo->size;
    buffer->usage = pCreateInfo->usage;
    buffer->address = ANV_NULL_ADDRESS;
@@ -4216,7 +4278,8 @@ void anv_DestroyBuffer(
    if (!buffer)
       return;
 
-   vk_free2(&device->alloc, pAllocator, buffer);
+   vk_object_base_finish(&buffer->base);
+   vk_free2(&device->vk.alloc, pAllocator, buffer);
 }
 
 VkDeviceAddress anv_GetBufferDeviceAddress(
@@ -4281,7 +4344,13 @@ void anv_DestroySampler(
                           sampler->bindless_state);
    }
 
-   vk_free2(&device->alloc, pAllocator, sampler);
+   if (sampler->custom_border_color.map) {
+      anv_state_reserved_pool_free(&device->custom_border_colors,
+                                   sampler->custom_border_color);
+   }
+
+   vk_object_base_finish(&sampler->base);
+   vk_free2(&device->vk.alloc, pAllocator, sampler);
 }
 
 VkResult anv_CreateFramebuffer(
@@ -4304,7 +4373,7 @@ VkResult anv_CreateFramebuffer(
     */
    if (!(pCreateInfo->flags & VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT_KHR)) {
       size += sizeof(struct anv_image_view *) * pCreateInfo->attachmentCount;
-      framebuffer = vk_alloc2(&device->alloc, pAllocator, size, 8,
+      framebuffer = vk_alloc2(&device->vk.alloc, pAllocator, size, 8,
                               VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
       if (framebuffer == NULL)
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -4315,13 +4384,16 @@ VkResult anv_CreateFramebuffer(
       }
       framebuffer->attachment_count = pCreateInfo->attachmentCount;
    } else {
-      framebuffer = vk_alloc2(&device->alloc, pAllocator, size, 8,
+      framebuffer = vk_alloc2(&device->vk.alloc, pAllocator, size, 8,
                               VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
       if (framebuffer == NULL)
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
       framebuffer->attachment_count = 0;
    }
+
+   vk_object_base_init(&device->vk, &framebuffer->base,
+                       VK_OBJECT_TYPE_FRAMEBUFFER);
 
    framebuffer->width = pCreateInfo->width;
    framebuffer->height = pCreateInfo->height;
@@ -4343,7 +4415,8 @@ void anv_DestroyFramebuffer(
    if (!fb)
       return;
 
-   vk_free2(&device->alloc, pAllocator, fb);
+   vk_object_base_finish(&fb->base);
+   vk_free2(&device->vk.alloc, pAllocator, fb);
 }
 
 static const VkTimeDomainEXT anv_time_domains[] = {
@@ -4384,8 +4457,6 @@ anv_clock_gettime(clockid_t clock_id)
    return (uint64_t) current.tv_sec * 1000000000ULL + current.tv_nsec;
 }
 
-#define TIMESTAMP 0x2358
-
 VkResult anv_GetCalibratedTimestampsEXT(
    VkDevice                                     _device,
    uint32_t                                     timestampCount,
@@ -4405,7 +4476,7 @@ VkResult anv_GetCalibratedTimestampsEXT(
    for (d = 0; d < timestampCount; d++) {
       switch (pTimestampInfos[d].timeDomain) {
       case VK_TIME_DOMAIN_DEVICE_EXT:
-         ret = anv_gem_reg_read(device, TIMESTAMP | 1,
+         ret = anv_gem_reg_read(device->fd, TIMESTAMP | I915_REG_READ_8B_WA,
                                 &pTimestamps[d]);
 
          if (ret != 0) {
@@ -4518,4 +4589,50 @@ vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t* pSupportedVersion)
     */
    *pSupportedVersion = MIN2(*pSupportedVersion, 4u);
    return VK_SUCCESS;
+}
+
+VkResult anv_CreatePrivateDataSlotEXT(
+    VkDevice                                    _device,
+    const VkPrivateDataSlotCreateInfoEXT*       pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkPrivateDataSlotEXT*                       pPrivateDataSlot)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+   return vk_private_data_slot_create(&device->vk, pCreateInfo, pAllocator,
+                                      pPrivateDataSlot);
+}
+
+void anv_DestroyPrivateDataSlotEXT(
+    VkDevice                                    _device,
+    VkPrivateDataSlotEXT                        privateDataSlot,
+    const VkAllocationCallbacks*                pAllocator)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+   vk_private_data_slot_destroy(&device->vk, privateDataSlot, pAllocator);
+}
+
+VkResult anv_SetPrivateDataEXT(
+    VkDevice                                    _device,
+    VkObjectType                                objectType,
+    uint64_t                                    objectHandle,
+    VkPrivateDataSlotEXT                        privateDataSlot,
+    uint64_t                                    data)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+   return vk_object_base_set_private_data(&device->vk,
+                                          objectType, objectHandle,
+                                          privateDataSlot, data);
+}
+
+void anv_GetPrivateDataEXT(
+    VkDevice                                    _device,
+    VkObjectType                                objectType,
+    uint64_t                                    objectHandle,
+    VkPrivateDataSlotEXT                        privateDataSlot,
+    uint64_t*                                   pData)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+   vk_object_base_get_private_data(&device->vk,
+                                   objectType, objectHandle,
+                                   privateDataSlot, pData);
 }

@@ -31,6 +31,8 @@
 #include "drm-uapi/panfrost_drm.h"
 
 #include "pan_bo.h"
+#include "pan_util.h"
+#include "../pandecode/public.h"
 
 #include "os/os_mman.h"
 
@@ -74,8 +76,9 @@ panfrost_bo_alloc(struct panfrost_device *dev, size_t size,
                 return NULL;
         }
 
-        bo = rzalloc(dev->memctx, struct panfrost_bo);
-        assert(bo);
+        bo = pan_lookup_bo(dev, create_bo.handle);
+        assert(!memcmp(bo, &((struct panfrost_bo){}), sizeof(*bo)));
+
         bo->size = create_bo.size;
         bo->gpu = create_bo.offset;
         bo->gem_handle = create_bo.handle;
@@ -96,21 +99,17 @@ panfrost_bo_free(struct panfrost_bo *bo)
                 assert(0);
         }
 
-        ralloc_free(bo);
+        /* BO will be freed with the sparse array, but zero to indicate free */
+        memset(bo, 0, sizeof(*bo));
 }
 
 /* Returns true if the BO is ready, false otherwise.
  * access_type is encoding the type of access one wants to ensure is done.
- * Say you want to make sure all writers are done writing, you should pass
- * PAN_BO_ACCESS_WRITE.
- * If you want to wait for all users, you should pass PAN_BO_ACCESS_RW.
- * PAN_BO_ACCESS_READ would work too as waiting for readers implies
- * waiting for writers as well, but we want to make things explicit and waiting
- * only for readers is impossible.
+ * Waiting is always done for writers, but if wait_readers is set then readers
+ * are also waited for.
  */
 bool
-panfrost_bo_wait(struct panfrost_bo *bo, int64_t timeout_ns,
-                 uint32_t access_type)
+panfrost_bo_wait(struct panfrost_bo *bo, int64_t timeout_ns, bool wait_readers)
 {
         struct drm_panfrost_wait_bo req = {
                 .handle = bo->gem_handle,
@@ -118,13 +117,10 @@ panfrost_bo_wait(struct panfrost_bo *bo, int64_t timeout_ns,
         };
         int ret;
 
-        assert(access_type == PAN_BO_ACCESS_WRITE ||
-               access_type == PAN_BO_ACCESS_RW);
-
         /* If the BO has been exported or imported we can't rely on the cached
          * state, we need to call the WAIT_BO ioctl.
          */
-        if (!(bo->flags & (PAN_BO_IMPORTED | PAN_BO_EXPORTED))) {
+        if (!(bo->flags & PAN_BO_SHARED)) {
                 /* If ->gpu_access is 0, the BO is idle, no need to wait. */
                 if (!bo->gpu_access)
                         return true;
@@ -132,8 +128,7 @@ panfrost_bo_wait(struct panfrost_bo *bo, int64_t timeout_ns,
                 /* If the caller only wants to wait for writers and no
                  * writes are pending, we don't have to wait.
                  */
-                if (access_type == PAN_BO_ACCESS_WRITE &&
-                    !(bo->gpu_access & PAN_BO_ACCESS_WRITE))
+                if (!wait_readers && !(bo->gpu_access & PAN_BO_ACCESS_WRITE))
                         return true;
         }
 
@@ -266,7 +261,7 @@ panfrost_bo_cache_put(struct panfrost_bo *bo)
 {
         struct panfrost_device *dev = bo->dev;
 
-        if (bo->flags & PAN_BO_DONT_REUSE)
+        if (bo->flags & PAN_BO_SHARED)
                 return false;
 
         pthread_mutex_lock(&dev->bo_cache.lock);
@@ -401,9 +396,12 @@ panfrost_bo_create(struct panfrost_device *dev, size_t size,
 
         p_atomic_set(&bo->refcnt, 1);
 
-        pthread_mutex_lock(&dev->active_bos_lock);
-        _mesa_set_add(bo->dev->active_bos, bo);
-        pthread_mutex_unlock(&dev->active_bos_lock);
+        if (dev->debug & (PAN_DBG_TRACE | PAN_DBG_SYNC)) {
+                if (flags & PAN_BO_INVISIBLE)
+                        pandecode_inject_mmap(bo->gpu, NULL, bo->size, NULL);
+                else if (!(flags & PAN_BO_DELAY_MMAP))
+                        pandecode_inject_mmap(bo->gpu, bo->cpu, bo->size, NULL);
+        }
 
         return bo;
 }
@@ -429,13 +427,12 @@ panfrost_bo_unreference(struct panfrost_bo *bo)
 
         struct panfrost_device *dev = bo->dev;
 
-        pthread_mutex_lock(&dev->active_bos_lock);
+        pthread_mutex_lock(&dev->bo_map_lock);
+
         /* Someone might have imported this BO while we were waiting for the
          * lock, let's make sure it's still not referenced before freeing it.
          */
         if (p_atomic_read(&bo->refcnt) == 0) {
-                _mesa_set_remove_key(bo->dev->active_bos, bo);
-
                 /* When the reference count goes to zero, we need to cleanup */
                 panfrost_bo_munmap(bo);
 
@@ -444,44 +441,40 @@ panfrost_bo_unreference(struct panfrost_bo *bo)
                  */
                 if (!panfrost_bo_cache_put(bo))
                         panfrost_bo_free(bo);
+
         }
-        pthread_mutex_unlock(&dev->active_bos_lock);
+        pthread_mutex_unlock(&dev->bo_map_lock);
 }
 
 struct panfrost_bo *
 panfrost_bo_import(struct panfrost_device *dev, int fd)
 {
-        struct panfrost_bo *bo, *newbo = rzalloc(dev->memctx, struct panfrost_bo);
+        struct panfrost_bo *bo;
         struct drm_panfrost_get_bo_offset get_bo_offset = {0,};
-        struct set_entry *entry;
         ASSERTED int ret;
         unsigned gem_handle;
-
-        newbo->dev = dev;
 
         ret = drmPrimeFDToHandle(dev->fd, fd, &gem_handle);
         assert(!ret);
 
-        newbo->gem_handle = gem_handle;
+        pthread_mutex_lock(&dev->bo_map_lock);
+        bo = pan_lookup_bo(dev, gem_handle);
 
-        pthread_mutex_lock(&dev->active_bos_lock);
-        entry = _mesa_set_search_or_add(dev->active_bos, newbo);
-        assert(entry);
-        bo = (struct panfrost_bo *)entry->key;
-        if (newbo == bo) {
+        if (!bo->dev) {
                 get_bo_offset.handle = gem_handle;
                 ret = drmIoctl(dev->fd, DRM_IOCTL_PANFROST_GET_BO_OFFSET, &get_bo_offset);
                 assert(!ret);
 
-                newbo->gpu = (mali_ptr) get_bo_offset.offset;
-                newbo->size = lseek(fd, 0, SEEK_END);
-                newbo->flags |= PAN_BO_DONT_REUSE | PAN_BO_IMPORTED;
-                assert(newbo->size > 0);
-                p_atomic_set(&newbo->refcnt, 1);
+                bo->dev = dev;
+                bo->gpu = (mali_ptr) get_bo_offset.offset;
+                bo->size = lseek(fd, 0, SEEK_END);
+                bo->flags = PAN_BO_SHARED;
+                bo->gem_handle = gem_handle;
+                assert(bo->size > 0);
+                p_atomic_set(&bo->refcnt, 1);
                 // TODO map and unmap on demand?
-                panfrost_bo_mmap(newbo);
+                panfrost_bo_mmap(bo);
         } else {
-                ralloc_free(newbo);
                 /* bo->refcnt == 0 can happen if the BO
                  * was being released but panfrost_bo_import() acquired the
                  * lock before panfrost_bo_unreference(). In that case, refcnt
@@ -498,7 +491,7 @@ panfrost_bo_import(struct panfrost_device *dev, int fd)
                         panfrost_bo_reference(bo);
                 assert(bo->cpu);
         }
-        pthread_mutex_unlock(&dev->active_bos_lock);
+        pthread_mutex_unlock(&dev->bo_map_lock);
 
         return bo;
 }
@@ -515,7 +508,7 @@ panfrost_bo_export(struct panfrost_bo *bo)
         if (ret == -1)
                 return -1;
 
-        bo->flags |= PAN_BO_DONT_REUSE | PAN_BO_EXPORTED;
+        bo->flags |= PAN_BO_SHARED;
         return args.fd;
 }
 

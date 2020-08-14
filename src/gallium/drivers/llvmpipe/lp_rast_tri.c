@@ -133,6 +133,33 @@ lp_rast_triangle_4_16(struct lp_rasterizer_task *task,
    lp_rast_triangle_4(task, arg2);
 }
 
+void
+lp_rast_triangle_ms_3_16(struct lp_rasterizer_task *task,
+                      const union lp_rast_cmd_arg arg)
+{
+   union lp_rast_cmd_arg arg2;
+   arg2.triangle.tri = arg.triangle.tri;
+   arg2.triangle.plane_mask = (1<<3)-1;
+   lp_rast_triangle_ms_3(task, arg2);
+}
+
+void
+lp_rast_triangle_ms_3_4(struct lp_rasterizer_task *task,
+                      const union lp_rast_cmd_arg arg)
+{
+   lp_rast_triangle_ms_3_16(task, arg);
+}
+
+void
+lp_rast_triangle_ms_4_16(struct lp_rasterizer_task *task,
+                      const union lp_rast_cmd_arg arg)
+{
+   union lp_rast_cmd_arg arg2;
+   arg2.triangle.tri = arg.triangle.tri;
+   arg2.triangle.plane_mask = (1<<4)-1;
+   lp_rast_triangle_ms_4(task, arg2);
+}
+
 #if defined(PIPE_ARCH_SSE)
 
 #include <emmintrin.h>
@@ -683,7 +710,6 @@ lp_rast_triangle_32_3_4(struct lp_rasterizer_task *task,
 
 #endif
 
-
 #if defined PIPE_ARCH_SSE
 #define BUILD_MASKS(c, cdiff, dcdx, dcdy, omask, pmask) build_masks_sse((int)c, (int)cdiff, dcdx, dcdy, omask, pmask)
 #define BUILD_MASK_LINEAR(c, dcdx, dcdy) build_mask_linear_sse((int)c, dcdx, dcdy)
@@ -771,3 +797,42 @@ lp_rast_triangle_32_3_4(struct lp_rasterizer_task *task,
 #define NR_PLANES 8
 #include "lp_rast_tri_tmp.h"
 
+#define MULTISAMPLE 1
+#define RASTER_64 1
+
+#define TAG(x) x##_ms_1
+#define NR_PLANES 1
+#include "lp_rast_tri_tmp.h"
+
+#define TAG(x) x##_ms_2
+#define NR_PLANES 2
+#include "lp_rast_tri_tmp.h"
+
+#define TAG(x) x##_ms_3
+#define NR_PLANES 3
+/*#define TRI_4 lp_rast_triangle_3_4*/
+/*#define TRI_16 lp_rast_triangle_3_16*/
+#include "lp_rast_tri_tmp.h"
+
+#define TAG(x) x##_ms_4
+#define NR_PLANES 4
+/*#define TRI_16 lp_rast_triangle_4_16*/
+#include "lp_rast_tri_tmp.h"
+
+#define TAG(x) x##_ms_5
+#define NR_PLANES 5
+#include "lp_rast_tri_tmp.h"
+
+#define TAG(x) x##_ms_6
+#define NR_PLANES 6
+#include "lp_rast_tri_tmp.h"
+
+#define TAG(x) x##_ms_7
+#define NR_PLANES 7
+#include "lp_rast_tri_tmp.h"
+
+#define TAG(x) x##_ms_8
+#define NR_PLANES 8
+#include "lp_rast_tri_tmp.h"
+
+#undef RASTER_64

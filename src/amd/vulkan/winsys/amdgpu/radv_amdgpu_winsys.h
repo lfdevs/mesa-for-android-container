@@ -46,6 +46,7 @@ struct radv_amdgpu_winsys {
 	bool use_ib_bos;
 	bool zero_all_vram_allocs;
 	bool use_local_bos;
+	bool use_llvm;
 	unsigned num_buffers;
 
 	pthread_mutex_t global_bo_list_lock;
@@ -54,6 +55,11 @@ struct radv_amdgpu_winsys {
 	uint64_t allocated_vram;
 	uint64_t allocated_vram_vis;
 	uint64_t allocated_gtt;
+
+	/* syncobj cache */
+	pthread_mutex_t syncobj_lock;
+	uint32_t *syncobj;
+	uint32_t syncobj_count, syncobj_capacity;
 };
 
 static inline struct radv_amdgpu_winsys *

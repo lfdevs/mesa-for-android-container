@@ -34,10 +34,12 @@
 
 #include "nir/nir.h"
 #include "vulkan/vulkan.h"
+#include "vulkan/util/vk_object.h"
 
 struct radv_device;
 
 struct radv_shader_module {
+	struct vk_object_base base;
 	struct nir_shader *nir;
 	unsigned char sha1[20];
 	uint32_t size;
@@ -104,6 +106,7 @@ struct radv_fs_variant_key {
 	uint8_t num_samples;
 	uint32_t is_int8;
 	uint32_t is_int10;
+	bool is_dual_src;
 };
 
 struct radv_cs_variant_key {
@@ -137,6 +140,7 @@ struct radv_nir_compiler_options {
 	bool check_ir;
 	bool has_ls_vgpr_init_bug;
 	bool use_ngg_streamout;
+	bool enable_mrt_output_nan_fixup;
 	enum radeon_family family;
 	enum chip_class chip_class;
 	uint32_t tess_offchip_block_dw_size;
@@ -307,6 +311,7 @@ struct radv_shader_info {
 		uint32_t explicit_shaded_mask;
 		uint32_t float16_shaded_mask;
 		uint32_t num_interp;
+		uint32_t cb_shader_mask;
 		bool can_discard;
 		bool early_fragment_test;
 		bool post_depth_coverage;
@@ -326,7 +331,7 @@ struct radv_shader_info {
 		uint64_t tes_patch_inputs_read;
 		unsigned tcs_vertices_out;
 		uint32_t num_patches;
-		uint32_t lds_size;
+		uint32_t num_lds_blocks;
 		uint8_t num_linked_inputs;
 		uint8_t num_linked_outputs;
 		uint8_t num_linked_patch_outputs;
@@ -434,14 +439,10 @@ radv_shader_compile_to_nir(struct radv_device *device,
 			   const struct radv_pipeline_layout *layout,
 			   unsigned subgroup_size, unsigned ballot_bit_size);
 
-void *
-radv_alloc_shader_memory(struct radv_device *device,
-			  struct radv_shader_variant *shader);
-
 void
 radv_destroy_shader_slabs(struct radv_device *device);
 
-void
+VkResult
 radv_create_shaders(struct radv_pipeline *pipeline,
 		    struct radv_device *device,
 		    struct radv_pipeline_cache *cache,
@@ -532,7 +533,8 @@ shader_io_get_unique_index(gl_varying_slot slot)
 }
 
 static inline unsigned
-calculate_tess_lds_size(unsigned tcs_num_input_vertices,
+calculate_tess_lds_size(enum chip_class chip_class,
+			unsigned tcs_num_input_vertices,
 			unsigned tcs_num_output_vertices,
 			unsigned tcs_num_inputs,
 			unsigned tcs_num_patches,
@@ -549,7 +551,17 @@ calculate_tess_lds_size(unsigned tcs_num_input_vertices,
 
 	unsigned output_patch0_offset = input_patch_size * tcs_num_patches;
 
-	return output_patch0_offset + output_patch_size * tcs_num_patches;
+	unsigned lds_size = output_patch0_offset + output_patch_size * tcs_num_patches;
+
+	if (chip_class >= GFX7) {
+		assert(lds_size <= 65536);
+		lds_size = align(lds_size, 512) / 512;
+	} else {
+		assert(lds_size <= 32768);
+		lds_size = align(lds_size, 256) / 256;
+	}
+
+	return lds_size;
 }
 
 static inline unsigned

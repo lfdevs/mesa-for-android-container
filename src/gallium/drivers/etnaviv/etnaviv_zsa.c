@@ -98,7 +98,7 @@ etna_zsa_state_create(struct pipe_context *pctx,
    uint32_t extra_reference = 0;
 
    if (VIV_FEATURE(screen, chipMinorFeatures1, HALF_FLOAT))
-      extra_reference = util_float_to_half(CLAMP(so->alpha.ref_value, 0.0f, 1.0f));
+      extra_reference = util_float_to_half(SATURATE(so->alpha.ref_value));
 
    cs->PE_STENCIL_CONFIG_EXT =
       VIVS_PE_STENCIL_CONFIG_EXT_EXTRA_ALPHA_REF(extra_reference);

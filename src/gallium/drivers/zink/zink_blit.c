@@ -4,6 +4,7 @@
 #include "zink_screen.h"
 
 #include "util/u_blitter.h"
+#include "util/u_surface.h"
 #include "util/format/u_format.h"
 
 static bool
@@ -11,8 +12,10 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info)
 {
    if (util_format_get_mask(info->dst.format) != info->mask ||
        util_format_get_mask(info->src.format) != info->mask ||
+       util_format_is_depth_or_stencil(info->dst.format) ||
        info->scissor_enable ||
-       info->alpha_blend)
+       info->alpha_blend ||
+       info->render_condition_enable)
       return false;
 
    struct zink_resource *src = zink_resource(info->src.resource);
@@ -70,11 +73,16 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info)
    if (util_format_get_mask(info->dst.format) != info->mask ||
        util_format_get_mask(info->src.format) != info->mask ||
        info->scissor_enable ||
-       info->alpha_blend)
+       info->alpha_blend ||
+       info->render_condition_enable)
       return false;
 
    if (util_format_is_depth_or_stencil(info->dst.format) &&
        info->dst.format != info->src.format)
+      return false;
+
+   /* vkCmdBlitImage must not be used for multisampled source or destination images. */
+   if (info->src.resource->nr_samples > 1 || info->dst.resource->nr_samples > 1)
       return false;
 
    struct zink_resource *src = zink_resource(info->src.resource);
@@ -180,6 +188,12 @@ zink_blit(struct pipe_context *pctx,
          return;
    }
 
+   struct zink_resource *src = zink_resource(info->src.resource);
+   struct zink_resource *dst = zink_resource(info->dst.resource);
+   /* if we're copying between resources with matching aspects then we can probably just copy_region */
+   if (src->aspect == dst->aspect && util_try_blit_via_copy_region(pctx, info))
+      return;
+
    if (!util_blitter_is_blit_supported(ctx->blitter, info)) {
       debug_printf("blit unsupported %s -> %s\n",
               util_format_short_name(info->src.resource->format),
@@ -206,6 +220,7 @@ zink_blit(struct pipe_context *pctx,
    util_blitter_save_fragment_constant_buffer_slot(ctx->blitter, ctx->ubos[PIPE_SHADER_FRAGMENT]);
    util_blitter_save_vertex_buffer_slot(ctx->blitter, ctx->buffers);
    util_blitter_save_sample_mask(ctx->blitter, ctx->gfx_pipeline_state.sample_mask);
+   util_blitter_save_so_targets(ctx->blitter, ctx->num_so_targets, ctx->so_targets);
 
    util_blitter_blit(ctx->blitter, info);
 }

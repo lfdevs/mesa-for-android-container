@@ -44,6 +44,15 @@
 #define ETNA_MAX_DEPTH (32)
 #define ETNA_MAX_INSTRUCTIONS (2048)
 
+/**
+ * Compiler state saved across compiler invocations, for any expensive global
+ * setup.
+ */
+struct etna_compiler {
+   uint32_t shader_count;
+   struct ra_regs *regs;
+};
+
 /* compiler output per input/output */
 struct etna_shader_inout {
    int reg; /* native register */
@@ -123,6 +132,12 @@ struct etna_shader_link_info {
    struct etna_varying varyings[ETNA_NUM_INPUTS];
    int pcoord_varying_comp_ofs;
 };
+
+struct etna_compiler *
+etna_compiler_create(void);
+
+void
+etna_compiler_destroy(const struct etna_compiler *compiler);
 
 bool
 etna_compile_shader(struct etna_shader_variant *shader);

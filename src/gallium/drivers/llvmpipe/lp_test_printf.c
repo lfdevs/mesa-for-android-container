@@ -96,7 +96,7 @@ test_printf(unsigned verbose, FILE *fp,
    boolean success = TRUE;
 
    context = LLVMContextCreate();
-   gallivm = gallivm_create("test_module", context);
+   gallivm = gallivm_create("test_module", context, NULL);
 
    test = add_printf_test(gallivm);
 

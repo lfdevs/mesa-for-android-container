@@ -196,6 +196,8 @@ void ShaderInputVarying::evaluate_spi_sid()
       assert(0 && "System value used as varying");
       break;
    case TGSI_SEMANTIC_GENERIC:
+   case TGSI_SEMANTIC_TEXCOORD:
+   case TGSI_SEMANTIC_PCOORD:
       m_spi_sid = m_sid + 1;
       break;
    default:
@@ -379,6 +381,23 @@ void ShaderIO::set_two_sided()
 {
    m_two_sided = true;
 }
+
+std::pair<unsigned, unsigned>
+r600_get_varying_semantic(unsigned varying_location)
+{
+   std::pair<unsigned, unsigned> result;
+   tgsi_get_gl_varying_semantic(static_cast<gl_varying_slot>(varying_location),
+                                true, &result.first, &result.second);
+
+   if (result.first == TGSI_SEMANTIC_GENERIC) {
+      result.second += 9;
+   } else if (result.first == TGSI_SEMANTIC_PCOORD) {
+      result.second = 8;
+   }
+   return result;
+}
+
+
 
 }
 

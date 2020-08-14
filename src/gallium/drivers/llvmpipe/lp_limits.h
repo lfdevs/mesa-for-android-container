@@ -48,10 +48,10 @@
  * llvm GEP as well as avx2 gather use signed offsets).
  */
 #define LP_MAX_TEXTURE_SIZE (2 * 1024 * 1024 * 1024ULL)
-#define LP_MAX_TEXTURE_2D_LEVELS 14  /* 8K x 8K for now */
+#define LP_MAX_TEXTURE_2D_LEVELS 15  /* 16K x 16K for now */
 #define LP_MAX_TEXTURE_3D_LEVELS 12  /* 2K x 2K x 2K for now */
-#define LP_MAX_TEXTURE_CUBE_LEVELS 14  /* 8K x 8K for now */
-#define LP_MAX_TEXTURE_ARRAY_LAYERS 512 /* 8K x 512 / 8K x 8K x 512 */
+#define LP_MAX_TEXTURE_CUBE_LEVELS 15  /* 16K x 16K for now */
+#define LP_MAX_TEXTURE_ARRAY_LAYERS 2048 /* 16K x 2048 / 16K x 16K x 2048 */
 
 
 /** This must be the larger of LP_MAX_TEXTURE_2D/3D_LEVELS */
@@ -64,6 +64,7 @@
 #define LP_MAX_HEIGHT (1 << (LP_MAX_TEXTURE_LEVELS - 1))
 #define LP_MAX_WIDTH  (1 << (LP_MAX_TEXTURE_LEVELS - 1))
 
+#define LP_MAX_SAMPLES 4
 
 #define LP_MAX_THREADS 16
 

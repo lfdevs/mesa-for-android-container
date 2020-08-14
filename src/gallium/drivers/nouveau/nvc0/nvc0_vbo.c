@@ -360,7 +360,11 @@ nvc0_validate_vertex_buffers(struct nvc0_context *nvc0)
          PUSH_DATAh(push, res->address + offset);
          PUSH_DATA (push, res->address + offset);
       }
-      BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_LIMIT_HIGH(i)), 2);
+
+      if (nvc0->screen->eng3d->oclass < TU102_3D_CLASS)
+         BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_LIMIT_HIGH(i)), 2);
+      else
+         BEGIN_NVC0(push, SUBC_3D(TU102_3D_VERTEX_ARRAY_LIMIT_HIGH(i)), 2);
       PUSH_DATAh(push, res->address + limit);
       PUSH_DATA (push, res->address + limit);
 
@@ -406,7 +410,11 @@ nvc0_validate_vertex_buffers_shared(struct nvc0_context *nvc0)
       PUSH_DATA (push, NVC0_3D_VERTEX_ARRAY_FETCH_ENABLE | vb->stride);
       PUSH_DATAh(push, buf->address + offset);
       PUSH_DATA (push, buf->address + offset);
-      BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_LIMIT_HIGH(b)), 2);
+
+      if (nvc0->screen->eng3d->oclass < TU102_3D_CLASS)
+         BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_LIMIT_HIGH(b)), 2);
+      else
+         BEGIN_NVC0(push, SUBC_3D(TU102_3D_VERTEX_ARRAY_LIMIT_HIGH(b)), 2);
       PUSH_DATAh(push, buf->address + limit);
       PUSH_DATA (push, buf->address + limit);
 
@@ -961,12 +969,23 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       assert(nouveau_resource_mapped_by_gpu(&buf->base));
 
       PUSH_SPACE(push, 6);
-      BEGIN_NVC0(push, NVC0_3D(INDEX_ARRAY_START_HIGH), 5);
-      PUSH_DATAh(push, buf->address);
-      PUSH_DATA (push, buf->address);
-      PUSH_DATAh(push, buf->address + buf->base.width0 - 1);
-      PUSH_DATA (push, buf->address + buf->base.width0 - 1);
-      PUSH_DATA (push, info->index_size >> 1);
+      if (nvc0->screen->eng3d->oclass < TU102_3D_CLASS) {
+         BEGIN_NVC0(push, NVC0_3D(INDEX_ARRAY_START_HIGH), 5);
+         PUSH_DATAh(push, buf->address);
+         PUSH_DATA (push, buf->address);
+         PUSH_DATAh(push, buf->address + buf->base.width0 - 1);
+         PUSH_DATA (push, buf->address + buf->base.width0 - 1);
+         PUSH_DATA (push, info->index_size >> 1);
+      } else {
+         BEGIN_NVC0(push, NVC0_3D(INDEX_ARRAY_START_HIGH), 2);
+         PUSH_DATAh(push, buf->address);
+         PUSH_DATA (push, buf->address);
+         BEGIN_NVC0(push, SUBC_3D(TU102_3D_INDEX_ARRAY_LIMIT_HIGH), 2);
+         PUSH_DATAh(push, buf->address + buf->base.width0 - 1);
+         PUSH_DATA (push, buf->address + buf->base.width0 - 1);
+         BEGIN_NVC0(push, NVC0_3D(INDEX_FORMAT), 1);
+         PUSH_DATA (push, info->index_size >> 1);
+      }
 
       BCTX_REFN(nvc0->bufctx_3d, 3D_IDX, buf, RD);
    }

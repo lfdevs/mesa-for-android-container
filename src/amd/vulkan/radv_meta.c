@@ -63,14 +63,26 @@ radv_meta_save(struct radv_meta_saved_state *state,
 			     cmd_buffer->state.dynamic.scissor.scissors,
 			     MAX_SCISSORS);
 
-		/* The most common meta operations all want to have the
-		 * viewport reset and any scissors disabled. The rest of the
-		 * dynamic state should have no effect.
-		 */
-		cmd_buffer->state.dynamic.viewport.count = 0;
-		cmd_buffer->state.dynamic.scissor.count = 0;
-		cmd_buffer->state.dirty |= 1 << VK_DYNAMIC_STATE_VIEWPORT |
-					   1 << VK_DYNAMIC_STATE_SCISSOR;
+		state->cull_mode = cmd_buffer->state.dynamic.cull_mode;
+		state->front_face = cmd_buffer->state.dynamic.front_face;
+
+		state->primitive_topology = cmd_buffer->state.dynamic.primitive_topology;
+
+		state->depth_test_enable = cmd_buffer->state.dynamic.depth_test_enable;
+		state->depth_write_enable = cmd_buffer->state.dynamic.depth_write_enable;
+		state->depth_compare_op = cmd_buffer->state.dynamic.depth_compare_op;
+		state->depth_bounds_test_enable = cmd_buffer->state.dynamic.depth_bounds_test_enable;
+		state->stencil_test_enable = cmd_buffer->state.dynamic.stencil_test_enable;
+
+		state->stencil_op.front.compare_op = cmd_buffer->state.dynamic.stencil_op.front.compare_op;
+		state->stencil_op.front.fail_op = cmd_buffer->state.dynamic.stencil_op.front.fail_op;
+		state->stencil_op.front.pass_op = cmd_buffer->state.dynamic.stencil_op.front.pass_op;
+		state->stencil_op.front.depth_fail_op = cmd_buffer->state.dynamic.stencil_op.front.depth_fail_op;
+
+		state->stencil_op.back.compare_op = cmd_buffer->state.dynamic.stencil_op.back.compare_op;
+		state->stencil_op.back.fail_op = cmd_buffer->state.dynamic.stencil_op.back.fail_op;
+		state->stencil_op.back.pass_op = cmd_buffer->state.dynamic.stencil_op.back.pass_op;
+		state->stencil_op.back.depth_fail_op = cmd_buffer->state.dynamic.stencil_op.back.depth_fail_op;
 	}
 
 	if (state->flags & RADV_META_SAVE_SAMPLE_LOCATIONS) {
@@ -132,8 +144,38 @@ radv_meta_restore(const struct radv_meta_saved_state *state,
 			     state->scissor.scissors,
 			     MAX_SCISSORS);
 
+		cmd_buffer->state.dynamic.cull_mode = state->cull_mode;
+		cmd_buffer->state.dynamic.front_face = state->front_face;
+
+		cmd_buffer->state.dynamic.primitive_topology = state->primitive_topology;
+
+		cmd_buffer->state.dynamic.depth_test_enable = state->depth_test_enable;
+		cmd_buffer->state.dynamic.depth_write_enable = state->depth_write_enable;
+		cmd_buffer->state.dynamic.depth_compare_op = state->depth_compare_op;
+		cmd_buffer->state.dynamic.depth_bounds_test_enable = state->depth_bounds_test_enable;
+		cmd_buffer->state.dynamic.stencil_test_enable = state->stencil_test_enable;
+
+		cmd_buffer->state.dynamic.stencil_op.front.compare_op = state->stencil_op.front.compare_op;
+		cmd_buffer->state.dynamic.stencil_op.front.fail_op = state->stencil_op.front.fail_op;
+		cmd_buffer->state.dynamic.stencil_op.front.pass_op = state->stencil_op.front.pass_op;
+		cmd_buffer->state.dynamic.stencil_op.front.depth_fail_op = state->stencil_op.front.depth_fail_op;
+
+		cmd_buffer->state.dynamic.stencil_op.back.compare_op = state->stencil_op.back.compare_op;
+		cmd_buffer->state.dynamic.stencil_op.back.fail_op = state->stencil_op.back.fail_op;
+		cmd_buffer->state.dynamic.stencil_op.back.pass_op = state->stencil_op.back.pass_op;
+		cmd_buffer->state.dynamic.stencil_op.back.depth_fail_op = state->stencil_op.back.depth_fail_op;
+
 		cmd_buffer->state.dirty |= RADV_CMD_DIRTY_DYNAMIC_VIEWPORT |
-					   RADV_CMD_DIRTY_DYNAMIC_SCISSOR;
+					   RADV_CMD_DIRTY_DYNAMIC_SCISSOR |
+					   RADV_CMD_DIRTY_DYNAMIC_CULL_MODE |
+					   RADV_CMD_DIRTY_DYNAMIC_FRONT_FACE |
+					   RADV_CMD_DIRTY_DYNAMIC_PRIMITIVE_TOPOLOGY |
+					   RADV_CMD_DIRTY_DYNAMIC_DEPTH_TEST_ENABLE |
+					   RADV_CMD_DIRTY_DYNAMIC_DEPTH_WRITE_ENABLE |
+					   RADV_CMD_DIRTY_DYNAMIC_DEPTH_COMPARE_OP |
+					   RADV_CMD_DIRTY_DYNAMIC_DEPTH_BOUNDS_TEST_ENABLE |
+					   RADV_CMD_DIRTY_DYNAMIC_STENCIL_TEST_ENABLE |
+					   RADV_CMD_DIRTY_DYNAMIC_STENCIL_OP;
 	}
 
 	if (state->flags & RADV_META_SAVE_SAMPLE_LOCATIONS) {
@@ -219,7 +261,7 @@ meta_alloc(void* _device, size_t size, size_t alignment,
            VkSystemAllocationScope allocationScope)
 {
 	struct radv_device *device = _device;
-	return device->alloc.pfnAllocation(device->alloc.pUserData, size, alignment,
+	return device->vk.alloc.pfnAllocation(device->vk.alloc.pUserData, size, alignment,
 					   VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
 }
 
@@ -228,7 +270,7 @@ meta_realloc(void* _device, void *original, size_t size, size_t alignment,
              VkSystemAllocationScope allocationScope)
 {
 	struct radv_device *device = _device;
-	return device->alloc.pfnReallocation(device->alloc.pUserData, original,
+	return device->vk.alloc.pfnReallocation(device->vk.alloc.pUserData, original,
 					     size, alignment,
 					     VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
 }
@@ -237,7 +279,7 @@ static void
 meta_free(void* _device, void *data)
 {
 	struct radv_device *device = _device;
-	return device->alloc.pfnFree(device->alloc.pUserData, data);
+	return device->vk.alloc.pfnFree(device->vk.alloc.pUserData, data);
 }
 
 static bool

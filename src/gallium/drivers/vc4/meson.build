@@ -108,8 +108,8 @@ libvc4 = static_library(
     inc_gallium_drivers,
   ],
   link_with: libvc4_neon,
-  c_args : [c_vis_args, vc4_c_args],
-  cpp_args : [cpp_vis_args],
+  c_args : [vc4_c_args],
+  gnu_symbol_visibility : 'hidden',
   dependencies : [dep_simpenrose, dep_libdrm, dep_valgrind, idep_nir_headers],
   build_by_default : false,
 )

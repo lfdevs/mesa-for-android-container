@@ -56,7 +56,7 @@ bool EmitAluInstruction::do_emit(nir_instr* ir)
    case nir_op_i2b1: return emit_alu_i2orf2_b1(instr, op2_setne_int);
    case nir_op_f2b1: return emit_alu_i2orf2_b1(instr, op2_setne_dx10);
    case nir_op_b2b1:
-   case nir_op_mov:return emit_alu_op1(instr, op1_mov);
+   case nir_op_mov:return emit_mov(instr);
    case nir_op_ftrunc: return emit_alu_op1(instr, op1_trunc);
    case nir_op_fabs: return emit_alu_op1(instr, op1_mov, {1 << alu_src0_abs});
    case nir_op_fneg: return emit_alu_op1(instr, op1_mov, {1 << alu_src0_neg});
@@ -191,13 +191,13 @@ void EmitAluInstruction::split_constants(const nir_alu_instr& instr)
        return;
 
     int nconst = 0;
-    std::array<PValue,4> c;
+    std::array<const UniformValue *,4> c;
     std::array<int,4> idx;
     for (unsigned i = 0; i < op_info->num_inputs; ++i) {
        PValue src = from_nir(instr.src[i], 0);
        assert(src);
        if (src->type() == Value::kconst) {
-          c[nconst] = src;
+          c[nconst] = static_cast<const UniformValue *>(src.get());
 
           idx[nconst++] = i;
        }
@@ -206,11 +206,12 @@ void EmitAluInstruction::split_constants(const nir_alu_instr& instr)
        return;
 
     unsigned sel = c[0]->sel();
+    unsigned kcache =  c[0]->kcache_bank();
     sfn_log << SfnLog::reg << "split " << nconst << " constants, sel[0] = " << sel; ;
 
     for (int i = 1; i < nconst; ++i) {
        sfn_log << "sel[" << i << "] = " <<  c[i]->sel() << "\n";
-       if (c[i]->sel() != sel) {
+       if (c[i]->sel() != sel || c[i]->kcache_bank() != kcache) {
           load_uniform(instr.src[idx[i]]);
        }
     }
@@ -260,6 +261,30 @@ bool EmitAluInstruction::emit_alu_op1(const nir_alu_instr& instr, EAluOp opcode,
    make_last(ir);
 
    return true;
+}
+
+bool EmitAluInstruction::emit_mov(const nir_alu_instr& instr)
+{
+   /* If the op is a plain move beween SSA values we can just forward
+    * the register reference to the original register */
+   if (instr.dest.dest.is_ssa && instr.src[0].src.is_ssa &&
+       !instr.src[0].abs && !instr.src[0].negate  && !instr.dest.saturate) {
+      bool result = true;
+      for (int i = 0; i < 4 ; ++i) {
+         if (instr.dest.write_mask & (1 << i)){
+            auto src = from_nir(instr.src[0], i);
+            result &= inject_register(instr.dest.dest.ssa.index, i,
+                                      src, true);
+
+            if (src->type() == Value::kconst) {
+               add_uniform((instr.dest.dest.ssa.index << 2) + i, src);
+            }
+         }
+      }
+      return result;
+   } else {
+      return emit_alu_op1(instr, op1_mov);
+   }
 }
 
 bool EmitAluInstruction::emit_alu_trig_op1(const nir_alu_instr& instr, EAluOp opcode)
@@ -318,14 +343,30 @@ bool EmitAluInstruction::emit_alu_trans_op1(const nir_alu_instr& instr, EAluOp o
 {
    AluInstruction *ir = nullptr;
    std::set<int> src_idx;
-   for (int i = 0; i < 4 ; ++i) {
-      if (instr.dest.write_mask & (1 << i)){
+
+   if (get_chip_class() == CAYMAN) {
+      int last_slot = (instr.dest.write_mask & 0x8) ? 4 : 3;
+      for (int i = 0; i < last_slot; ++i) {
          ir = new AluInstruction(opcode, from_nir(instr.dest, i),
-                                 from_nir(instr.src[0], i), last_write);
+                                 from_nir(instr.src[0], 0), instr.dest.write_mask & (1 << i) ? write : empty);
          if (absolute || instr.src[0].abs) ir->set_flag(alu_src0_abs);
          if (instr.src[0].negate) ir->set_flag(alu_src0_neg);
          if (instr.dest.saturate) ir->set_flag(alu_dst_clamp);
+
+         if (i == (last_slot - 1)) ir->set_flag(alu_last_instr);
+
          emit_instruction(ir);
+      }
+   } else {
+      for (int i = 0; i < 4 ; ++i) {
+         if (instr.dest.write_mask & (1 << i)){
+            ir = new AluInstruction(opcode, from_nir(instr.dest, i),
+                                    from_nir(instr.src[0], i), last_write);
+            if (absolute || instr.src[0].abs) ir->set_flag(alu_src0_abs);
+            if (instr.src[0].negate) ir->set_flag(alu_src0_neg);
+            if (instr.dest.saturate) ir->set_flag(alu_dst_clamp);
+            emit_instruction(ir);
+         }
       }
    }
    return true;
@@ -694,15 +735,35 @@ bool EmitAluInstruction::emit_alu_trans_op2(const nir_alu_instr& instr, EAluOp o
    const nir_alu_src& src1 = instr.src[1];
 
    AluInstruction *ir = nullptr;
-   for (int i = 0; i < 4 ; ++i) {
-      if (instr.dest.write_mask & (1 << i)){
-         ir = new AluInstruction(opcode, from_nir(instr.dest, i), from_nir(src0, i), from_nir(src1, i), last_write);
-         if (src0.negate) ir->set_flag(alu_src0_neg);
-         if (src0.abs) ir->set_flag(alu_src0_abs);
-         if (src1.negate) ir->set_flag(alu_src1_neg);
-         if (src1.abs) ir->set_flag(alu_src1_abs);
-         if (instr.dest.saturate) ir->set_flag(alu_dst_clamp);
-         emit_instruction(ir);
+
+   if (get_chip_class() == CAYMAN) {
+      int lasti = util_last_bit(instr.dest.write_mask);
+      for (int k = 0; k < lasti ; ++k) {
+         if (instr.dest.write_mask & (1 << k)) {
+
+            for (int i = 0; i < 4; i++) {
+               ir = new AluInstruction(opcode, from_nir(instr.dest, i), from_nir(src0, k), from_nir(src1, k), (i == k) ? write : empty);
+               if (src0.negate) ir->set_flag(alu_src0_neg);
+            if (src0.abs) ir->set_flag(alu_src0_abs);
+            if (src1.negate) ir->set_flag(alu_src1_neg);
+            if (src1.abs) ir->set_flag(alu_src1_abs);
+            if (instr.dest.saturate) ir->set_flag(alu_dst_clamp);
+            if (i == 3) ir->set_flag(alu_last_instr);
+            emit_instruction(ir);
+            }
+         }
+      }
+   } else {
+      for (int i = 0; i < 4 ; ++i) {
+         if (instr.dest.write_mask & (1 << i)){
+            ir = new AluInstruction(opcode, from_nir(instr.dest, i), from_nir(src0, i), from_nir(src1, i), last_write);
+            if (src0.negate) ir->set_flag(alu_src0_neg);
+            if (src0.abs) ir->set_flag(alu_src0_abs);
+            if (src1.negate) ir->set_flag(alu_src1_neg);
+            if (src1.abs) ir->set_flag(alu_src1_abs);
+            if (instr.dest.saturate) ir->set_flag(alu_dst_clamp);
+            emit_instruction(ir);
+         }
       }
    }
    return true;

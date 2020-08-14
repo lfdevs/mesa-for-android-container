@@ -31,10 +31,21 @@
 #include "util/u_upload_mgr.h"
 
 #include "freedreno_context.h"
+#include "freedreno_resource.h"
 
 #include "ir3/ir3_shader.h"
 
 #include "a6xx.xml.h"
+
+struct fd6_lrz_state {
+	bool enable : 1;
+	bool write  : 1;
+	bool test   : 1;
+	enum fd_lrz_direction direction : 2;
+
+	/* this comes from the fs program state, rather than zsa: */
+	enum a6xx_ztest_mode z_mode : 2;
+};
 
 struct fd6_context {
 	struct fd_context base;
@@ -78,6 +89,9 @@ struct fd6_context {
 	 */
 	struct ir3_shader_key last_key;
 
+	/* Is there current VS driver-param state set? */
+	bool has_dp_state;
+
 	/* number of active samples-passed queries: */
 	int samples_passed_queries;
 
@@ -102,6 +116,13 @@ struct fd6_context {
 		uint32_t PC_UNKNOWN_9805;
 		uint32_t SP_UNKNOWN_A0F8;
 	} magic;
+
+	struct {
+		/* previous binning/draw lrz state, which is a function of multiple
+		 * gallium stateobjs, but doesn't necessarily change as frequently:
+		 */
+		struct fd6_lrz_state lrz[2];
+	} last;
 };
 
 static inline struct fd6_context *
@@ -119,12 +140,7 @@ struct fd6_control {
 	uint32_t seqno;          /* seqno for async CP_EVENT_WRITE, etc */
 	uint32_t _pad0;
 	volatile uint32_t vsc_overflow;
-	uint32_t _pad1;
-	/* flag set from cmdstream when VSC overflow detected: */
-	uint32_t vsc_scratch;
-	uint32_t _pad2;
-	uint32_t _pad3;
-	uint32_t _pad4;
+	uint32_t _pad1[5];
 
 	/* scratch space for VPC_SO[i].FLUSH_BASE_LO/HI, start on 32 byte boundary. */
 	struct {
@@ -153,5 +169,17 @@ emit_marker6(struct fd_ringbuffer *ring, int scratch_idx)
 		OUT_RING(ring, ++marker_cnt);
 	}
 }
+
+struct fd6_vertex_stateobj {
+	struct fd_vertex_stateobj base;
+	struct fd_ringbuffer *stateobj;
+};
+
+static inline struct fd6_vertex_stateobj *
+fd6_vertex_stateobj(void *p)
+{
+	return (struct fd6_vertex_stateobj *) p;
+}
+
 
 #endif /* FD6_CONTEXT_H_ */

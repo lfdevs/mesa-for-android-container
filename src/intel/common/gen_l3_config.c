@@ -29,6 +29,15 @@
 
 #include "gen_l3_config.h"
 
+struct gen_l3_list {
+   const struct gen_l3_config *configs;
+   int length;
+};
+
+#define DECLARE_L3_LIST(hw) \
+   struct gen_l3_list hw##_l3_list = \
+   { .configs = hw##_l3_configs, .length = ARRAY_SIZE(hw##_l3_configs) }
+
 /**
  * IVB/HSW validated L3 configurations.  The first entry will be used as
  * default by gen7_restore_default_l3_config(), otherwise the ordering is
@@ -50,8 +59,8 @@ static const struct gen_l3_config ivb_l3_configs[] = {
    {{ 16, 16,  0,  4,  0,  8,  4, 16 }},
    {{ 16, 16,  0,  4,  0, 16,  4,  8 }},
    {{ 16, 16,  0,  0, 32,  0,  0,  0 }},
-   {{ 0 }}
 };
+DECLARE_L3_LIST(ivb);
 
 /**
  * VLV validated L3 configurations.  \sa ivb_l3_configs.
@@ -66,8 +75,8 @@ static const struct gen_l3_config vlv_l3_configs[] = {
    {{ 32, 32,  0, 16, 16,  0,  0,  0 }},
    {{ 32, 40,  0,  8, 16,  0,  0,  0 }},
    {{ 32, 40,  0, 16,  8,  0,  0,  0 }},
-   {{ 0 }}
 };
+DECLARE_L3_LIST(vlv);
 
 /**
  * BDW validated L3 configurations.  \sa ivb_l3_configs.
@@ -82,8 +91,8 @@ static const struct gen_l3_config bdw_l3_configs[] = {
    {{ 24, 16, 48,  0,  0,  0,  0,  0 }},
    {{ 24, 16,  0, 16, 32,  0,  0,  0 }},
    {{ 24, 16,  0, 32, 16,  0,  0,  0 }},
-   {{ 0 }}
 };
+DECLARE_L3_LIST(bdw);
 
 /**
  * CHV/SKL validated L3 configurations.  \sa ivb_l3_configs.
@@ -98,8 +107,8 @@ static const struct gen_l3_config chv_l3_configs[] = {
    {{ 32, 16, 48,  0,  0,  0,  0,  0 }},
    {{ 32, 16,  0, 16, 32,  0,  0,  0 }},
    {{ 32, 16,  0, 32, 16,  0,  0,  0 }},
-   {{ 0 }}
 };
+DECLARE_L3_LIST(chv);
 
 /**
  * BXT 2x6 validated L3 configurations.  \sa ivb_l3_configs.
@@ -112,8 +121,8 @@ static const struct gen_l3_config bxt_2x6_l3_configs[] = {
    {{ 16, 16, 48,  0,  0,  0,  0,  0 }},
    {{ 16, 16,  0, 40,  8,  0,  0,  0 }},
    {{ 16, 16,  0, 16, 32,  0,  0,  0 }},
-   {{ 0 }}
 };
+DECLARE_L3_LIST(bxt_2x6);
 
 /**
  * CNL validated L3 configurations.  \sa ivb_l3_configs.
@@ -129,8 +138,8 @@ static const struct gen_l3_config cnl_l3_configs[] = {
    {{ 32, 16, 80,  0,  0,  0,  0,  0 }},
    {{ 32, 16,  0, 64, 16,  0,  0,  0 }},
    {{ 32,  0, 96,  0,  0,  0,  0,  0 }},
-   {{ 0 }}
 };
+DECLARE_L3_LIST(cnl);
 
 /**
  * ICL validated L3 configurations.  \sa icl_l3_configs.
@@ -143,8 +152,8 @@ static const struct gen_l3_config icl_l3_configs[] = {
    /* SLM URB ALL DC  RO  IS   C   T */
    /*{{  0, 16, 80,  0,  0,  0,  0,  0 }},*/
    {{  0, 32, 64,  0,  0,  0,  0,  0 }},
-   {{  0 }}
 };
+DECLARE_L3_LIST(icl);
 
 /**
  * TGL validated L3 configurations.  \sa tgl_l3_configs.
@@ -153,36 +162,47 @@ static const struct gen_l3_config tgl_l3_configs[] = {
    /* SLM URB ALL DC  RO  IS   C   T */
    {{  0, 32,  88,  0,  0,  0,  0,  0 }},
    {{  0, 16, 104,  0,  0,  0,  0,  0 }},
-   {{  0 }}
 };
+DECLARE_L3_LIST(tgl);
+
+/**
+ * DG1 validated L3 configurations.  \sa dg1_l3_configs.
+ */
+static const struct gen_l3_config dg1_l3_configs[] = {
+   /* No configurations. L3FullWayAllocationEnable is always set. */
+};
+DECLARE_L3_LIST(dg1);
 
 /**
  * Return a zero-terminated array of validated L3 configurations for the
  * specified device.
  */
-static const struct gen_l3_config *
-get_l3_configs(const struct gen_device_info *devinfo)
+static const struct gen_l3_list *
+get_l3_list(const struct gen_device_info *devinfo)
 {
    switch (devinfo->gen) {
    case 7:
-      return (devinfo->is_baytrail ? vlv_l3_configs : ivb_l3_configs);
+      return (devinfo->is_baytrail ? &vlv_l3_list : &ivb_l3_list);
 
    case 8:
-      return (devinfo->is_cherryview ? chv_l3_configs : bdw_l3_configs);
+      return (devinfo->is_cherryview ? &chv_l3_list : &bdw_l3_list);
 
    case 9:
       if (devinfo->l3_banks == 1)
-         return bxt_2x6_l3_configs;
-      return chv_l3_configs;
+         return &bxt_2x6_l3_list;
+      return &chv_l3_list;
 
    case 10:
-      return cnl_l3_configs;
+      return &cnl_l3_list;
 
    case 11:
-      return icl_l3_configs;
+      return &icl_l3_list;
 
    case 12:
-      return tgl_l3_configs;
+      if (devinfo->is_dg1)
+         return &dg1_l3_list;
+      else
+         return &tgl_l3_list;
 
    default:
       unreachable("Not implemented");
@@ -284,10 +304,16 @@ gen_get_default_l3_config(const struct gen_device_info *devinfo)
    /* For efficiency assume that the first entry of the array matches the
     * default configuration.
     */
-   const struct gen_l3_config *const cfg = get_l3_configs(devinfo);
-   assert(cfg == gen_get_l3_config(devinfo,
-                    gen_get_default_l3_weights(devinfo, false, false)));
-   return cfg;
+   const struct gen_l3_list *const list = get_l3_list(devinfo);
+   assert(list->length > 0 || devinfo->gen >= 12);
+   if (list->length > 0) {
+      const struct gen_l3_config *const cfg = &list->configs[0];
+      assert(cfg == gen_get_l3_config(devinfo,
+                       gen_get_default_l3_weights(devinfo, false, false)));
+      return cfg;
+   } else {
+      return NULL;
+   }
 }
 
 /**
@@ -298,11 +324,13 @@ const struct gen_l3_config *
 gen_get_l3_config(const struct gen_device_info *devinfo,
                   struct gen_l3_weights w0)
 {
-   const struct gen_l3_config *const cfgs = get_l3_configs(devinfo);
+   const struct gen_l3_list *const list = get_l3_list(devinfo);
+   const struct gen_l3_config *const cfgs = list->configs;
    const struct gen_l3_config *cfg_best = NULL;
    float dw_best = HUGE_VALF;
 
-   for (const struct gen_l3_config *cfg = cfgs; cfg->n[GEN_L3P_URB]; cfg++) {
+   for (int i = 0; i < list->length; i++) {
+      const struct gen_l3_config *cfg = &cfgs[i];
       const float dw = gen_diff_l3_weights(w0, gen_get_l3_config_weights(cfg));
 
       if (dw < dw_best) {
@@ -311,6 +339,7 @@ gen_get_l3_config(const struct gen_device_info *devinfo,
       }
    }
 
+   assert(cfg_best || devinfo->gen >= 12);
    return cfg_best;
 }
 
@@ -342,6 +371,10 @@ unsigned
 gen_get_l3_config_urb_size(const struct gen_device_info *devinfo,
                            const struct gen_l3_config *cfg)
 {
+   /* We don't have to program the URB size in DG1, it's a fixed value. */
+   if (devinfo->is_dg1)
+      return devinfo->urb.size;
+
    /* From the SKL "L3 Allocation and Programming" documentation:
     *
     * "URB is limited to 1008KB due to programming restrictions.  This is not

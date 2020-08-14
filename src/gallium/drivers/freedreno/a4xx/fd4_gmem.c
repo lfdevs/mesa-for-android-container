@@ -61,7 +61,6 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 		enum a3xx_color_swap swap = WZYX;
 		bool srgb = false;
 		struct fd_resource *rsc = NULL;
-		struct fdl_slice *slice = NULL;
 		uint32_t stride = 0;
 		uint32_t base = 0;
 		uint32_t offset = 0;
@@ -82,7 +81,6 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 					bases++;
 			}
 
-			slice = fd_resource_slice(rsc, psurf->u.tex.level);
 			format = fd4_pipe2color(pformat);
 			swap = fd4_pipe2swap(pformat);
 
@@ -103,7 +101,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 					base = bases[i];
 				}
 			} else {
-				stride = slice->pitch;
+				stride = fd_resource_pitch(rsc, psurf->u.tex.level);
 			}
 		} else if ((i < nr_bufs) && bases) {
 			base = bases[i];
@@ -119,7 +117,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 			OUT_RING(ring, base);
 			OUT_RING(ring, A4XX_RB_MRT_CONTROL3_STRIDE(stride));
 		} else {
-			OUT_RELOCW(ring, rsc->bo, offset, 0, 0);
+			OUT_RELOC(ring, rsc->bo, offset, 0, 0);
 			/* RB_MRT[i].CONTROL3.STRIDE not emitted by c2d..
 			 * not sure if we need to skip it for bypass or
 			 * not.
@@ -152,8 +150,7 @@ emit_gmem2mem_surf(struct fd_batch *batch, bool stencil,
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
 	enum pipe_format pformat = psurf->format;
-	struct fdl_slice *slice;
-	uint32_t offset;
+	uint32_t offset, pitch;
 
 	if (!rsc->valid)
 		return;
@@ -164,9 +161,9 @@ emit_gmem2mem_surf(struct fd_batch *batch, bool stencil,
 		pformat = rsc->base.format;
 	}
 
-	slice = fd_resource_slice(rsc, psurf->u.tex.level);
 	offset = fd_resource_offset(rsc, psurf->u.tex.level,
 			psurf->u.tex.first_layer);
+	pitch = fd_resource_pitch(rsc, psurf->u.tex.level);
 
 	debug_assert(psurf->u.tex.first_layer == psurf->u.tex.last_layer);
 
@@ -174,8 +171,8 @@ emit_gmem2mem_surf(struct fd_batch *batch, bool stencil,
 	OUT_RING(ring, A4XX_RB_COPY_CONTROL_MSAA_RESOLVE(MSAA_ONE) |
 			A4XX_RB_COPY_CONTROL_MODE(RB_COPY_RESOLVE) |
 			A4XX_RB_COPY_CONTROL_GMEM_BASE(base));
-	OUT_RELOCW(ring, rsc->bo, offset, 0, 0);   /* RB_COPY_DEST_BASE */
-	OUT_RING(ring, A4XX_RB_COPY_DEST_PITCH_PITCH(slice->pitch));
+	OUT_RELOC(ring, rsc->bo, offset, 0, 0);   /* RB_COPY_DEST_BASE */
+	OUT_RING(ring, A4XX_RB_COPY_DEST_PITCH_PITCH(pitch));
 	OUT_RING(ring, A4XX_RB_COPY_DEST_INFO_TILE(TILE4_LINEAR) |
 			A4XX_RB_COPY_DEST_INFO_FORMAT(fd4_pipe2color(pformat)) |
 			A4XX_RB_COPY_DEST_INFO_COMPONENT_ENABLE(0xf) |
@@ -197,9 +194,6 @@ fd4_emit_tile_gmem2mem(struct fd_batch *batch, const struct fd_tile *tile)
 			.debug = &ctx->debug,
 			.vtx = &ctx->solid_vbuf_state,
 			.prog = &ctx->solid_prog,
-			.key = {
-				.half_precision = true,
-			},
 	};
 
 	OUT_PKT0(ring, REG_A4XX_RB_DEPTH_CONTROL, 1);
@@ -337,9 +331,6 @@ fd4_emit_tile_mem2gmem(struct fd_batch *batch, const struct fd_tile *tile)
 			.sprite_coord_enable = 1,
 			/* NOTE: They all use the same VP, this is for vtx bufs. */
 			.prog = &ctx->blit_prog[0],
-			.key = {
-				.half_precision = fd_half_precision(pfb),
-			},
 			.no_decode_srgb = true,
 	};
 	unsigned char mrt_comp[A4XX_MAX_RENDER_TARGETS] = {0};
@@ -355,7 +346,7 @@ fd4_emit_tile_mem2gmem(struct fd_batch *batch, const struct fd_tile *tile)
 	y1 = ((float)tile->yoff + bin_h) / ((float)pfb->height);
 
 	OUT_PKT3(ring, CP_MEM_WRITE, 5);
-	OUT_RELOCW(ring, fd_resource(ctx->blit_texcoord_vbuf)->bo, 0, 0, 0);
+	OUT_RELOC(ring, fd_resource(ctx->blit_texcoord_vbuf)->bo, 0, 0, 0);
 	OUT_RING(ring, fui(x0));
 	OUT_RING(ring, fui(y0));
 	OUT_RING(ring, fui(x1));
@@ -470,7 +461,6 @@ fd4_emit_tile_mem2gmem(struct fd_batch *batch, const struct fd_tile *tile)
 		case PIPE_FORMAT_Z32_FLOAT:
 			emit.prog = (pfb->zsbuf->format == PIPE_FORMAT_Z32_FLOAT) ?
 					&ctx->blit_z : &ctx->blit_zs;
-			emit.key.half_precision = false;
 
 			OUT_PKT0(ring, REG_A4XX_RB_DEPTH_CONTROL, 1);
 			OUT_RING(ring, A4XX_RB_DEPTH_CONTROL_Z_ENABLE |
@@ -490,7 +480,6 @@ fd4_emit_tile_mem2gmem(struct fd_batch *batch, const struct fd_tile *tile)
 			 * components, so half precision is always sufficient.
 			 */
 			emit.prog = &ctx->blit_prog[0];
-			emit.key.half_precision = true;
 			break;
 		}
 		emit.fs = NULL;      /* frag shader changed so clear cache */
@@ -567,7 +556,7 @@ update_vsc_pipe(struct fd_batch *batch)
 	int i;
 
 	OUT_PKT0(ring, REG_A4XX_VSC_SIZE_ADDRESS, 1);
-	OUT_RELOCW(ring, fd4_ctx->vsc_size_mem, 0, 0, 0); /* VSC_SIZE_ADDRESS */
+	OUT_RELOC(ring, fd4_ctx->vsc_size_mem, 0, 0, 0); /* VSC_SIZE_ADDRESS */
 
 	OUT_PKT0(ring, REG_A4XX_VSC_PIPE_CONFIG_REG(0), 8);
 	for (i = 0; i < 8; i++) {
@@ -584,7 +573,7 @@ update_vsc_pipe(struct fd_batch *batch)
 			ctx->vsc_pipe_bo[i] = fd_bo_new(ctx->dev, 0x40000,
 					DRM_FREEDRENO_GEM_TYPE_KMEM, "vsc_pipe[%u]", i);
 		}
-		OUT_RELOCW(ring, ctx->vsc_pipe_bo[i], 0, 0, 0);       /* VSC_PIPE_DATA_ADDRESS[i] */
+		OUT_RELOC(ring, ctx->vsc_pipe_bo[i], 0, 0, 0);       /* VSC_PIPE_DATA_ADDRESS[i] */
 	}
 
 	OUT_PKT0(ring, REG_A4XX_VSC_PIPE_DATA_LENGTH_REG(0), 8);
@@ -778,8 +767,8 @@ fd4_emit_tile_renderprep(struct fd_batch *batch, const struct fd_tile *tile)
 				A4XX_PC_VSTREAM_CONTROL_N(tile->n));
 
 		OUT_PKT3(ring, CP_SET_BIN_DATA, 2);
-		OUT_RELOCW(ring, pipe_bo, 0, 0, 0);     /* BIN_DATA_ADDR <- VSC_PIPE[p].DATA_ADDRESS */
-		OUT_RELOCW(ring, fd4_ctx->vsc_size_mem, /* BIN_SIZE_ADDR <- VSC_SIZE_ADDRESS + (p * 4) */
+		OUT_RELOC(ring, pipe_bo, 0, 0, 0);     /* BIN_DATA_ADDR <- VSC_PIPE[p].DATA_ADDRESS */
+		OUT_RELOC(ring, fd4_ctx->vsc_size_mem, /* BIN_SIZE_ADDR <- VSC_SIZE_ADDRESS + (p * 4) */
 				(tile->p * 4), 0, 0);
 	} else {
 		OUT_PKT0(ring, REG_A4XX_PC_VSTREAM_CONTROL, 1);

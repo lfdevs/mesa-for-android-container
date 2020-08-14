@@ -39,9 +39,10 @@
 
 #include "loader.h"
 #include "target-helpers/drm_helper_public.h"
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 #include "pipe_loader_priv.h"
 
+#include "util/os_file.h"
 #include "util/u_memory.h"
 #include "util/u_dl.h"
 #include "util/u_debug.h"
@@ -239,7 +240,7 @@ pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd)
    bool ret;
    int new_fd;
 
-   if (fd < 0 || (new_fd = fcntl(fd, F_DUPFD_CLOEXEC, 3)) < 0)
+   if (fd < 0 || (new_fd = os_dupfd_cloexec(fd)) < 0)
      return false;
 
    ret = pipe_loader_drm_probe_fd_nodup(dev, new_fd);

@@ -1443,7 +1443,7 @@ union packed_tex_data {
    uint32_t u32;
    struct {
       enum glsl_sampler_dim sampler_dim:4;
-      nir_alu_type dest_type:8;
+      unsigned dest_type:8;
       unsigned coord_components:3;
       unsigned is_array:1;
       unsigned is_shadow:1;
@@ -2013,12 +2013,7 @@ nir_serialize(struct blob *blob, const nir_shader *nir, bool strip)
    info.name = info.label = NULL;
    blob_write_bytes(blob, (uint8_t *) &info, sizeof(info));
 
-   write_var_list(&ctx, &nir->uniforms);
-   write_var_list(&ctx, &nir->inputs);
-   write_var_list(&ctx, &nir->outputs);
-   write_var_list(&ctx, &nir->shared);
-   write_var_list(&ctx, &nir->globals);
-   write_var_list(&ctx, &nir->system_values);
+   write_var_list(&ctx, &nir->variables);
 
    blob_write_uint32(blob, nir->num_inputs);
    blob_write_uint32(blob, nir->num_uniforms);
@@ -2071,12 +2066,7 @@ nir_deserialize(void *mem_ctx,
 
    ctx.nir->info = info;
 
-   read_var_list(&ctx, &ctx.nir->uniforms);
-   read_var_list(&ctx, &ctx.nir->inputs);
-   read_var_list(&ctx, &ctx.nir->outputs);
-   read_var_list(&ctx, &ctx.nir->shared);
-   read_var_list(&ctx, &ctx.nir->globals);
-   read_var_list(&ctx, &ctx.nir->system_values);
+   read_var_list(&ctx, &ctx.nir->variables);
 
    ctx.nir->num_inputs = blob_read_uint32(blob);
    ctx.nir->num_uniforms = blob_read_uint32(blob);

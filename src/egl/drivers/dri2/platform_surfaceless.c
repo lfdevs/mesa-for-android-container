@@ -34,7 +34,6 @@
 #include <unistd.h>
 
 #include "egl_dri2.h"
-#include "egl_dri2_fallbacks.h"
 #include "loader.h"
 
 static __DRIimage*
@@ -109,7 +108,7 @@ surfaceless_image_get_buffers(__DRIdrawable *driDrawable,
 }
 
 static _EGLSurface *
-dri2_surfaceless_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
+dri2_surfaceless_create_surface(const _EGLDriver *drv, _EGLDisplay *disp, EGLint type,
                         _EGLConfig *conf, const EGLint *attrib_list)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
@@ -154,7 +153,7 @@ dri2_surfaceless_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
 }
 
 static EGLBoolean
-surfaceless_destroy_surface(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf)
+surfaceless_destroy_surface(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surf);
@@ -169,7 +168,7 @@ surfaceless_destroy_surface(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *sur
 }
 
 static _EGLSurface *
-dri2_surfaceless_create_pbuffer_surface(_EGLDriver *drv, _EGLDisplay *disp,
+dri2_surfaceless_create_pbuffer_surface(const _EGLDriver *drv, _EGLDisplay *disp,
                                 _EGLConfig *conf, const EGLint *attrib_list)
 {
    return dri2_surfaceless_create_surface(drv, disp, EGL_PBUFFER_BIT, conf,
@@ -177,16 +176,9 @@ dri2_surfaceless_create_pbuffer_surface(_EGLDriver *drv, _EGLDisplay *disp,
 }
 
 static const struct dri2_egl_display_vtbl dri2_surfaceless_display_vtbl = {
-   .create_pixmap_surface = dri2_fallback_create_pixmap_surface,
    .create_pbuffer_surface = dri2_surfaceless_create_pbuffer_surface,
    .destroy_surface = surfaceless_destroy_surface,
    .create_image = dri2_create_image_khr,
-   .swap_buffers_region = dri2_fallback_swap_buffers_region,
-   .post_sub_buffer = dri2_fallback_post_sub_buffer,
-   .copy_buffers = dri2_fallback_copy_buffers,
-   .query_buffer_age = dri2_fallback_query_buffer_age,
-   .create_wayland_buffer_from_image = dri2_fallback_create_wayland_buffer_from_image,
-   .get_sync_values = dri2_fallback_get_sync_values,
    .get_dri_drawable = dri2_surface_get_dri_drawable,
 };
 
@@ -234,7 +226,7 @@ surfaceless_probe_device(_EGLDisplay *disp, bool swrast)
 {
 #define MAX_DRM_DEVICES 64
    const unsigned node_type = swrast ? DRM_NODE_PRIMARY : DRM_NODE_RENDER;
-   struct dri2_egl_display *dri2_dpy = disp->DriverData;
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    drmDevicePtr device, devices[MAX_DRM_DEVICES] = { NULL };
    int i, num_devices;
 
@@ -300,7 +292,7 @@ surfaceless_probe_device(_EGLDisplay *disp, bool swrast)
 static bool
 surfaceless_probe_device_sw(_EGLDisplay *disp)
 {
-   struct dri2_egl_display *dri2_dpy = disp->DriverData;
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
 
    dri2_dpy->fd = -1;
    disp->Device = _eglAddDevice(dri2_dpy->fd, true);
@@ -321,7 +313,7 @@ surfaceless_probe_device_sw(_EGLDisplay *disp)
 }
 
 EGLBoolean
-dri2_initialize_surfaceless(_EGLDriver *drv, _EGLDisplay *disp)
+dri2_initialize_surfaceless(const _EGLDriver *drv, _EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy;
    const char* err;

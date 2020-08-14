@@ -40,7 +40,7 @@
 
 
 static enum pipe_error
-emit_hw_vs_vdecl(struct svga_context *svga, unsigned dirty)
+emit_hw_vs_vdecl(struct svga_context *svga, uint64_t dirty)
 {
    const struct pipe_vertex_element *ve = svga->curr.velems->velem;
    SVGA3dVertexDecl decls[SVGA3D_INPUTREG_MAX];
@@ -136,7 +136,7 @@ emit_hw_vs_vdecl(struct svga_context *svga, unsigned dirty)
 
 
 static enum pipe_error
-emit_hw_vdecl(struct svga_context *svga, unsigned dirty)
+emit_hw_vdecl(struct svga_context *svga, uint64_t dirty)
 {
    /* SVGA_NEW_NEED_SWTNL
     */

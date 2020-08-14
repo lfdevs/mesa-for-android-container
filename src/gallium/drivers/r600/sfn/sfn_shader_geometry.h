@@ -35,7 +35,7 @@ namespace r600 {
 class GeometryShaderFromNir : public VertexStage
 {
 public:
-   GeometryShaderFromNir(r600_pipe_shader *sh, r600_pipe_shader_selector& sel, const r600_shader_key& key);
+   GeometryShaderFromNir(r600_pipe_shader *sh, r600_pipe_shader_selector& sel, const r600_shader_key& key, enum chip_class chip_class);
    bool do_emit_load_deref(const nir_variable *in_var, nir_intrinsic_instr* instr) override;
    bool do_emit_store_deref(const nir_variable *out_var, nir_intrinsic_instr* instr) override;
    bool scan_sysvalue_access(nir_instr *instr) override;
@@ -48,7 +48,7 @@ private:
    };
 
    bool do_process_inputs(nir_variable *input) override;
-   bool allocate_reserved_registers() override;
+   bool do_allocate_reserved_registers() override;
    bool do_process_outputs(nir_variable *output) override;
    bool emit_deref_instruction_override(nir_deref_instr* instr) override;
    bool emit_intrinsic_instruction_override(nir_intrinsic_instr* instr) override;
@@ -74,6 +74,8 @@ private:
    int m_num_clip_dist;
    unsigned m_cur_ring_output;
    bool m_gs_tri_strip_adj_fix;
+
+   std::map<int, MemRingOutIntruction *> streamout_data;
 };
 
 }

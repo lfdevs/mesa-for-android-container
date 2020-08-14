@@ -43,6 +43,13 @@ etna_blend_state_create(struct pipe_context *pctx,
    struct etna_blend_state *co = CALLOC_STRUCT(etna_blend_state);
    bool alpha_enable, logicop_enable;
 
+   /* pipe_blend_func happens to match the hardware. */
+   STATIC_ASSERT(PIPE_BLEND_ADD == BLEND_EQ_ADD);
+   STATIC_ASSERT(PIPE_BLEND_SUBTRACT == BLEND_EQ_SUBTRACT);
+   STATIC_ASSERT(PIPE_BLEND_REVERSE_SUBTRACT == BLEND_EQ_REVERSE_SUBTRACT);
+   STATIC_ASSERT(PIPE_BLEND_MIN == BLEND_EQ_MIN);
+   STATIC_ASSERT(PIPE_BLEND_MAX == BLEND_EQ_MAX);
+
    if (!co)
       return NULL;
 
@@ -79,8 +86,8 @@ etna_blend_state_create(struct pipe_context *pctx,
          VIVS_PE_ALPHA_CONFIG_SRC_FUNC_ALPHA(translate_blend_factor(rt0->alpha_src_factor)) |
          VIVS_PE_ALPHA_CONFIG_DST_FUNC_COLOR(translate_blend_factor(rt0->rgb_dst_factor)) |
          VIVS_PE_ALPHA_CONFIG_DST_FUNC_ALPHA(translate_blend_factor(rt0->alpha_dst_factor)) |
-         VIVS_PE_ALPHA_CONFIG_EQ_COLOR(translate_blend(rt0->rgb_func)) |
-         VIVS_PE_ALPHA_CONFIG_EQ_ALPHA(translate_blend(rt0->alpha_func));
+         VIVS_PE_ALPHA_CONFIG_EQ_COLOR(rt0->rgb_func) |
+         VIVS_PE_ALPHA_CONFIG_EQ_ALPHA(rt0->alpha_func);
    } else {
       co->PE_ALPHA_CONFIG = 0;
    }

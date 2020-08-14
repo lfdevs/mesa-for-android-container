@@ -179,7 +179,7 @@ lp_sampler_static_sampler_state(struct lp_static_sampler_state *state,
     * spurious recompiles, as the sampler static state is part of the shader
     * key.
     *
-    * Ideally the state tracker or cso_cache module would make all state
+    * Ideally gallium frontends or cso_cache module would make all state
     * canonical, but until that happens it's better to be safe than sorry here.
     *
     * XXX: Actually there's much more than can be done here, especially
@@ -282,7 +282,7 @@ lp_build_rho(struct lp_build_sample_context *bld,
     */
 
    first_level = bld->dynamic_state->first_level(bld->dynamic_state, bld->gallivm,
-                                                 bld->context_ptr, texture_unit);
+                                                 bld->context_ptr, texture_unit, NULL);
    first_level_vec = lp_build_broadcast_scalar(int_size_bld, first_level);
    int_size = lp_build_minify(int_size_bld, bld->int_size, first_level_vec, TRUE);
    float_size = lp_build_int_to_float(float_size_bld, int_size);
@@ -848,13 +848,15 @@ lp_build_lod_selector(struct lp_build_sample_context *bld,
             lod = lp_build_log2(lodf_bld, rho);
          }
          else {
+            /* get more accurate results if we just sqaure rho always */
+            if (!rho_squared)
+               rho = lp_build_mul(lodf_bld, rho, rho);
             lod = lp_build_fast_log2(lodf_bld, rho);
          }
-         if (rho_squared) {
-            /* log2(x^2) == 0.5*log2(x) */
-            lod = lp_build_mul(lodf_bld, lod,
-                               lp_build_const_vec(bld->gallivm, lodf_bld->type, 0.5F));
-         }
+
+         /* log2(x^2) == 0.5*log2(x) */
+         lod = lp_build_mul(lodf_bld, lod,
+                            lp_build_const_vec(bld->gallivm, lodf_bld->type, 0.5F));
 
          /* add shader lod bias */
          if (lod_bias) {
@@ -947,9 +949,9 @@ lp_build_nearest_mip_level(struct lp_build_sample_context *bld,
    LLVMValueRef first_level, last_level, level;
 
    first_level = dynamic_state->first_level(dynamic_state, bld->gallivm,
-                                            bld->context_ptr, texture_unit);
+                                            bld->context_ptr, texture_unit, NULL);
    last_level = dynamic_state->last_level(dynamic_state, bld->gallivm,
-                                          bld->context_ptr, texture_unit);
+                                          bld->context_ptr, texture_unit, NULL);
    first_level = lp_build_broadcast_scalar(leveli_bld, first_level);
    last_level = lp_build_broadcast_scalar(leveli_bld, last_level);
 
@@ -1009,9 +1011,9 @@ lp_build_linear_mip_levels(struct lp_build_sample_context *bld,
    assert(bld->num_lods == bld->num_mips);
 
    first_level = dynamic_state->first_level(dynamic_state, bld->gallivm,
-                                            bld->context_ptr, texture_unit);
+                                            bld->context_ptr, texture_unit, NULL);
    last_level = dynamic_state->last_level(dynamic_state, bld->gallivm,
-                                          bld->context_ptr, texture_unit);
+                                          bld->context_ptr, texture_unit, NULL);
    first_level = lp_build_broadcast_scalar(leveli_bld, first_level);
    last_level = lp_build_broadcast_scalar(leveli_bld, last_level);
 

@@ -36,6 +36,7 @@ struct fd4_rasterizer_stateobj {
 	uint32_t gras_su_point_size;
 	uint32_t gras_su_poly_offset_scale;
 	uint32_t gras_su_poly_offset_offset;
+	uint32_t gras_su_poly_offset_clamp;
 
 	uint32_t gras_su_mode_control;
 	uint32_t gras_cl_clip_cntl;

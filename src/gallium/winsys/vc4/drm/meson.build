@@ -36,5 +36,6 @@ libvc4winsys = static_library(
     inc_src, inc_include,
     inc_gallium, inc_gallium_aux, inc_gallium_drivers, inc_gallium_winsys,
   ],
-  c_args : [c_vis_args, vc4_winsys_c_args],
+  c_args : [vc4_winsys_c_args],
+  gnu_symbol_visibility : 'hidden',
 )

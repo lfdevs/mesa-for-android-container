@@ -120,6 +120,13 @@
 /* Does the op convert types between int- and float- space (i2f/f2u/etc) */
 #define OP_TYPE_CONVERT (1 << 4)
 
+/* Is this opcode the first in a f2x (rte, rtz, rtn, rtp) sequence? If so,
+ * takes a roundmode argument in the IR. This has the semantic of rounding the
+ * source (it's all fused in), which is why it doesn't necessarily make sense
+ * for i2f (though folding there might be necessary for OpenCL reasons). Comes
+ * up in format conversion, i.e. f2u_rte */
+#define MIDGARD_ROUNDS (1 << 5)
+
 /* Vector-independant shorthands for the above; these numbers are arbitrary and
  * not from the ISA. Convert to the above with unit_enum_to_midgard */
 
@@ -136,6 +143,9 @@
 /* Uniforms are begin at (REGISTER_UNIFORMS - uniform_count) */
 #define REGISTER_UNIFORMS 24
 
+/* r24 and r25 are special registers that only exist during the pipeline,
+ * by using them when we don't care about the register we skip a roundtrip
+ * to the register file. */
 #define REGISTER_UNUSED 24
 #define REGISTER_CONSTANT 26
 #define REGISTER_LDST_BASE 26
@@ -240,13 +250,13 @@ struct mir_tag_props {
  * which is used for vector units */
 
 static inline unsigned
-expand_writemask(unsigned mask, unsigned channels)
+expand_writemask(unsigned mask, unsigned log2_channels)
 {
         unsigned o = 0;
-        unsigned factor = 8 / channels;
+        unsigned factor = 8 >> log2_channels;
         unsigned expanded = (1 << factor) - 1;
 
-        for (unsigned i = 0; i < channels; ++i)
+        for (unsigned i = 0; i < (1 << log2_channels); ++i)
                 if (mask & (1 << i))
                         o |= (expanded << (factor * i));
 
@@ -320,6 +330,10 @@ midgard_is_branch_unit(unsigned unit)
 {
         return (unit == ALU_ENAB_BRANCH) || (unit == ALU_ENAB_BR_COMPACT);
 }
+
+/* Packs ALU mod argument */
+struct midgard_instruction;
+unsigned mir_pack_mod(struct midgard_instruction *ins, unsigned i, bool scalar);
 
 void
 mir_print_constant_component(FILE *fp, const midgard_constants *consts,

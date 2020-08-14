@@ -21,6 +21,7 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include "zink_context.h"
 #include "zink_framebuffer.h"
 
 #include "zink_render_pass.h"
@@ -30,6 +31,34 @@
 #include "util/u_memory.h"
 #include "util/u_string.h"
 
+static struct pipe_surface *
+framebuffer_null_surface_init(struct zink_context *ctx, struct zink_framebuffer_state *state)
+{
+   struct pipe_surface surf_templ = {};
+   unsigned idx = util_logbase2_ceil(MAX2(state->samples, 1));
+
+   if (!ctx->null_buffers[idx]) {
+      struct pipe_resource *pres;
+      struct pipe_resource templ = {};
+      templ.width0 = state->width;
+      templ.height0 = state->height;
+      templ.depth0 = 1;
+      templ.format = PIPE_FORMAT_R8_UINT;
+      templ.target = PIPE_TEXTURE_2D;
+      templ.bind = PIPE_BIND_RENDER_TARGET;
+      templ.nr_samples = state->samples;
+
+      pres = ctx->base.screen->resource_create(ctx->base.screen, &templ);
+      if (!pres)
+         return NULL;
+
+      ctx->null_buffers[idx] = pres;
+   }
+   surf_templ.format = PIPE_FORMAT_R8_UINT;
+   surf_templ.nr_samples = state->samples;
+   return ctx->base.create_surface(&ctx->base, ctx->null_buffers[idx], &surf_templ);
+}
+
 void
 zink_destroy_framebuffer(struct zink_screen *screen,
                          struct zink_framebuffer *fbuf)
@@ -38,13 +67,15 @@ zink_destroy_framebuffer(struct zink_screen *screen,
    for (int i = 0; i < ARRAY_SIZE(fbuf->surfaces); ++i)
       pipe_surface_reference(fbuf->surfaces + i, NULL);
 
+   pipe_surface_reference(&fbuf->null_surface, NULL);
+
    zink_render_pass_reference(screen, &fbuf->rp, NULL);
 
    FREE(fbuf);
 }
 
 struct zink_framebuffer *
-zink_create_framebuffer(struct zink_screen *screen,
+zink_create_framebuffer(struct zink_context *ctx, struct zink_screen *screen,
                         struct zink_framebuffer_state *fb)
 {
    struct zink_framebuffer *fbuf = CALLOC_STRUCT(zink_framebuffer);
@@ -53,9 +84,14 @@ zink_create_framebuffer(struct zink_screen *screen,
 
    pipe_reference_init(&fbuf->reference, 1);
 
-   VkImageView attachments[ARRAY_SIZE(fb->attachments)];
+   if (fb->has_null_attachments)
+      fbuf->null_surface = framebuffer_null_surface_init(ctx, fb);
+
+   VkImageView attachments[ARRAY_SIZE(fb->attachments)] = {};
    for (int i = 0; i < fb->num_attachments; i++) {
       struct zink_surface *surf = fb->attachments[i];
+      if (!surf)
+         surf = zink_surface(fbuf->null_surface);
       pipe_surface_reference(fbuf->surfaces + i, &surf->base);
       attachments[i] = surf->image_view;
    }

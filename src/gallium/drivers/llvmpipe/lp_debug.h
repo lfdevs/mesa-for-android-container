@@ -47,6 +47,7 @@
 #define DEBUG_CS            0x10000
 #define DEBUG_TGSI_IR       0x20000
 #define DEBUG_CL            0x40000
+#define DEBUG_CACHE_STATS   0x80000
 
 /* Performance flags.  These are active even on release builds.
  */

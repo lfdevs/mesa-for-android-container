@@ -634,6 +634,7 @@ intel_image_target_texture(struct gl_context *ctx, GLenum target,
 
    struct intel_texture_object *intel_texobj = intel_texture_object(texObj);
    intel_texobj->planar_format = image->planar_format;
+   intel_texobj->yuv_color_space = image->yuv_color_space;
 
    GLenum internal_format =
       image->internal_format != 0 ?

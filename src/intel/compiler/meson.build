@@ -85,6 +85,7 @@ libintel_compiler_files = files(
   'brw_nir_lower_alpha_to_coverage.c',
   'brw_nir_lower_image_load_store.c',
   'brw_nir_lower_mem_access_bit_sizes.c',
+  'brw_nir_lower_scoped_barriers.c',
   'brw_nir_opt_peephole_ffma.c',
   'brw_nir_tcs_workarounds.c',
   'brw_nir_clamp_image_1d_2d_array_sizes.c',
@@ -142,8 +143,8 @@ libintel_compiler = static_library(
   'intel_compiler',
   [libintel_compiler_files, brw_nir_trig, ir_expression_operation_h],
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
-  c_args : [c_vis_args, no_override_init_args],
-  cpp_args : [cpp_vis_args],
+  c_args : [no_override_init_args],
+  gnu_symbol_visibility : 'hidden',
   dependencies : idep_nir_headers,
   build_by_default : false,
 )

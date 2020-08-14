@@ -163,9 +163,8 @@ brw_nir_lower_vs_inputs(nir_shader *nir,
                         const uint8_t *vs_attrib_wa_flags)
 {
    /* Start with the location of the variable's base. */
-   foreach_list_typed(nir_variable, var, node, &nir->inputs) {
+   nir_foreach_shader_in_variable(var, nir)
       var->data.driver_location = var->data.location;
-   }
 
    /* Now use nir_lower_io to walk dereference chains.  Attribute arrays are
     * loaded as one vec4 or dvec4 per element (or matrix column), depending on
@@ -290,9 +289,8 @@ void
 brw_nir_lower_vue_inputs(nir_shader *nir,
                          const struct brw_vue_map *vue_map)
 {
-   foreach_list_typed(nir_variable, var, node, &nir->inputs) {
+   nir_foreach_shader_in_variable(var, nir)
       var->data.driver_location = var->data.location;
-   }
 
    /* Inputs are stored in vec4 slots, so use type_size_vec4(). */
    nir_lower_io(nir, nir_var_shader_in, type_size_vec4,
@@ -343,9 +341,8 @@ brw_nir_lower_vue_inputs(nir_shader *nir,
 void
 brw_nir_lower_tes_inputs(nir_shader *nir, const struct brw_vue_map *vue_map)
 {
-   foreach_list_typed(nir_variable, var, node, &nir->inputs) {
+   nir_foreach_shader_in_variable(var, nir)
       var->data.driver_location = var->data.location;
-   }
 
    nir_lower_io(nir, nir_var_shader_in, type_size_vec4,
                 nir_lower_io_lower_64bit_to_32);
@@ -372,7 +369,7 @@ brw_nir_lower_fs_inputs(nir_shader *nir,
                         const struct gen_device_info *devinfo,
                         const struct brw_wm_prog_key *key)
 {
-   foreach_list_typed(nir_variable, var, node, &nir->inputs) {
+   nir_foreach_shader_in_variable(var, nir) {
       var->data.driver_location = var->data.location;
 
       /* Apply default interpolation mode.
@@ -416,7 +413,7 @@ brw_nir_lower_fs_inputs(nir_shader *nir,
 void
 brw_nir_lower_vue_outputs(nir_shader *nir)
 {
-   nir_foreach_variable(var, &nir->outputs) {
+   nir_foreach_shader_out_variable(var, nir) {
       var->data.driver_location = var->data.location;
    }
 
@@ -428,7 +425,7 @@ void
 brw_nir_lower_tcs_outputs(nir_shader *nir, const struct brw_vue_map *vue_map,
                           GLenum tes_primitive_mode)
 {
-   nir_foreach_variable(var, &nir->outputs) {
+   nir_foreach_shader_out_variable(var, nir) {
       var->data.driver_location = var->data.location;
    }
 
@@ -454,7 +451,7 @@ brw_nir_lower_tcs_outputs(nir_shader *nir, const struct brw_vue_map *vue_map,
 void
 brw_nir_lower_fs_outputs(nir_shader *nir)
 {
-   nir_foreach_variable(var, &nir->outputs) {
+   nir_foreach_shader_out_variable(var, nir) {
       var->data.driver_location =
          SET_FIELD(var->data.index, BRW_NIR_FRAG_OUTPUT_INDEX) |
          SET_FIELD(var->data.location, BRW_NIR_FRAG_OUTPUT_LOCATION);
@@ -519,6 +516,8 @@ brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler,
 
       if (is_scalar) {
          OPT(nir_lower_alu_to_scalar, NULL, NULL);
+      } else {
+         OPT(nir_opt_shrink_vectors);
       }
 
       OPT(nir_copy_prop);
@@ -597,7 +596,7 @@ brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler,
    /* Workaround Gfxbench unused local sampler variable which will trigger an
     * assert in the opt_large_constants pass.
     */
-   OPT(nir_remove_dead_variables, nir_var_function_temp);
+   OPT(nir_remove_dead_variables, nir_var_function_temp, NULL);
 }
 
 static unsigned
@@ -691,7 +690,7 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
    brw_nir_optimize(nir, compiler, is_scalar, true);
 
    OPT(nir_lower_doubles, softfp64, nir->options->lower_doubles_options);
-   OPT(nir_lower_int64, nir->options->lower_int64_options);
+   OPT(nir_lower_int64);
 
    OPT(nir_lower_bit_size, lower_bit_size_callback, (void *)compiler);
 
@@ -785,8 +784,8 @@ brw_nir_link_shaders(const struct brw_compiler *compiler,
    if (nir_link_opt_varyings(producer, consumer))
       brw_nir_optimize(consumer, compiler, c_is_scalar, false);
 
-   NIR_PASS_V(producer, nir_remove_dead_variables, nir_var_shader_out);
-   NIR_PASS_V(consumer, nir_remove_dead_variables, nir_var_shader_in);
+   NIR_PASS_V(producer, nir_remove_dead_variables, nir_var_shader_out, NULL);
+   NIR_PASS_V(consumer, nir_remove_dead_variables, nir_var_shader_in, NULL);
 
    if (nir_remove_unused_varyings(producer, consumer)) {
       NIR_PASS_V(producer, nir_lower_global_vars_to_local);
@@ -881,7 +880,8 @@ brw_vectorize_lower_mem_access(nir_shader *nir,
       OPT(nir_opt_load_store_vectorize,
           nir_var_mem_ubo | nir_var_mem_ssbo |
           nir_var_mem_global | nir_var_mem_shared,
-          brw_nir_should_vectorize_mem);
+          brw_nir_should_vectorize_mem,
+          (nir_variable_mode)0);
    }
 
    OPT(brw_nir_lower_mem_access_bit_sizes, devinfo);
@@ -915,6 +915,7 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
 
    UNUSED bool progress; /* Written by OPT */
 
+   OPT(brw_nir_lower_scoped_barriers);
    OPT(nir_opt_combine_memory_barriers, combine_all_barriers, NULL);
 
    do {
@@ -926,7 +927,7 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
 
    brw_vectorize_lower_mem_access(nir, compiler, is_scalar);
 
-   if (OPT(nir_lower_int64, nir->options->lower_int64_options))
+   if (OPT(nir_lower_int64))
       brw_nir_optimize(nir, compiler, is_scalar, false);
 
    if (devinfo->gen >= 6) {
@@ -1074,6 +1075,8 @@ brw_nir_apply_sampler_key(nir_shader *nir,
    tex_options.lower_xy_uxvx_external = key_tex->xy_uxvx_image_mask;
    tex_options.lower_ayuv_external = key_tex->ayuv_image_mask;
    tex_options.lower_xyuv_external = key_tex->xyuv_image_mask;
+   tex_options.bt709_external = key_tex->bt709_mask;
+   tex_options.bt2020_external = key_tex->bt2020_mask;
 
    /* Setup array of scaling factors for each texture. */
    memcpy(&tex_options.scale_factors, &key_tex->scale_factors,

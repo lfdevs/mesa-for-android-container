@@ -584,7 +584,7 @@ swr_create_vertex_elements_state(struct pipe_context *pipe,
    assert(num_elements <= PIPE_MAX_ATTRIBS);
    velems = new swr_vertex_element_state;
    if (velems) {
-      memset(&velems->fsState, 0, sizeof(velems->fsState));
+      memset((void*)&velems->fsState, 0, sizeof(velems->fsState));
       velems->fsState.bVertexIDOffsetEnable = true;
       velems->fsState.numAttribs = num_elements;
       for (unsigned i = 0; i < num_elements; i++) {
@@ -887,6 +887,8 @@ swr_update_texture_state(struct swr_context *ctx,
          jit_tex->width = res->width0;
          jit_tex->height = res->height0;
          jit_tex->base_ptr = (uint8_t*)swr->xpBaseAddress;
+         jit_tex->num_samples = swr->numSamples;
+         jit_tex->sample_stride = 0;
          if (view->target != PIPE_BUFFER) {
             jit_tex->first_level = view->u.tex.first_level;
             jit_tex->last_level = view->u.tex.last_level;

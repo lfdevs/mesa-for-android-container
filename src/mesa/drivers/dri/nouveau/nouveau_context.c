@@ -217,7 +217,7 @@ nouveau_context_deinit(struct gl_context *ctx)
 	nouveau_object_del(&nctx->hw.chan);
 
 	nouveau_scratch_destroy(ctx);
-	_mesa_free_context_data(ctx);
+	_mesa_free_context_data(ctx, true);
 }
 
 void

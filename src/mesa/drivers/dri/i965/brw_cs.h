@@ -29,8 +29,14 @@
 extern "C" {
 #endif
 
-uint32_t
-brw_cs_group_size(const struct brw_context *brw);
+struct brw_cs_parameters {
+   unsigned group_size;
+   unsigned simd_size;
+   unsigned threads;
+};
+
+struct brw_cs_parameters
+brw_cs_get_parameters(const struct brw_context *brw);
 
 void
 brw_upload_cs_prog(struct brw_context *brw);

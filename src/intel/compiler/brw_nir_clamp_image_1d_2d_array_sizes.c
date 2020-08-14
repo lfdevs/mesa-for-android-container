@@ -132,6 +132,8 @@ brw_nir_clamp_image_1d_2d_array_sizes(nir_shader *shader)
          nir_metadata_preserve(func->impl, nir_metadata_block_index |
                                            nir_metadata_dominance);
          progress = function_progress;
+      } else {
+         nir_metadata_preserve(func->impl, nir_metadata_all);
       }
    }
 

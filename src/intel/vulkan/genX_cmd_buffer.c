@@ -34,7 +34,10 @@
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
 
-/* We reserve GPR 14 and 15 for conditional rendering */
+/* We reserve :
+ *    - GPR 14 for secondary command buffer returns
+ *    - GPR 15 for conditional rendering
+ */
 #define GEN_MI_BUILDER_NUM_ALLOC_GPRS 14
 #define __gen_get_batch_dwords anv_batch_emit_dwords
 #define __gen_address_offset anv_address_add
@@ -1539,7 +1542,8 @@ genX(BeginCommandBuffer)(
     * ensured that we have the table even if this command buffer doesn't
     * initialize any images.
     */
-   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_AUX_TABLE_INVALIDATE_BIT;
+   if (cmd_buffer->device->info.has_aux_map)
+      cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_AUX_TABLE_INVALIDATE_BIT;
 
    /* We send an "Indirect State Pointers Disable" packet at
     * EndCommandBuffer, so all push contant packets are ignored during a
@@ -1755,6 +1759,11 @@ genX(CmdExecuteCommands)(
       }
 
       anv_cmd_buffer_add_secondary(primary, secondary);
+
+      assert(secondary->perf_query_pool == NULL || primary->perf_query_pool == NULL ||
+             secondary->perf_query_pool == primary->perf_query_pool);
+      if (secondary->perf_query_pool)
+         primary->perf_query_pool = secondary->perf_query_pool;
    }
 
    /* The secondary isn't counted in our VF cache tracking so we need to
@@ -1796,7 +1805,7 @@ void
 genX(cmd_buffer_config_l3)(struct anv_cmd_buffer *cmd_buffer,
                            const struct gen_l3_config *cfg)
 {
-   assert(cfg);
+   assert(cfg || GEN_GEN >= 12);
    if (cfg == cmd_buffer->state.current_l3_config)
       return;
 
@@ -2125,10 +2134,7 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
          if (bits & ANV_PIPE_END_OF_PIPE_SYNC_BIT) {
             pipe.CommandStreamerStallEnable = true;
             pipe.PostSyncOperation = WriteImmediateData;
-            pipe.Address = (struct anv_address) {
-               .bo = cmd_buffer->device->workaround_bo,
-               .offset = 0
-            };
+            pipe.Address = cmd_buffer->device->workaround_address;
          }
 
          /*
@@ -2198,10 +2204,7 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
           */
          anv_batch_emit(&cmd_buffer->batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
             lrm.RegisterAddress  = 0x243C; /* GEN7_3DPRIM_START_INSTANCE */
-            lrm.MemoryAddress = (struct anv_address) {
-               .bo = cmd_buffer->device->workaround_bo,
-               .offset = 0
-            };
+            lrm.MemoryAddress = cmd_buffer->device->workaround_address;
          }
       }
 
@@ -2243,8 +2246,7 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
           */
          if (GEN_GEN == 9 && pipe.VFCacheInvalidationEnable) {
             pipe.PostSyncOperation = WriteImmediateData;
-            pipe.Address =
-               (struct anv_address) { cmd_buffer->device->workaround_bo, 0 };
+            pipe.Address = cmd_buffer->device->workaround_address;
          }
       }
 
@@ -3029,7 +3031,21 @@ cmd_buffer_emit_push_constant(struct anv_cmd_buffer *cmd_buffer,
          const struct anv_pipeline_bind_map *bind_map =
             &pipeline->shaders[stage]->bind_map;
 
-#if GEN_GEN >= 12
+#if GEN_GEN >= 9
+         /* This field exists since Gen8.  However, the Broadwell PRM says:
+          *
+          *    "Constant Buffer Object Control State must be always programmed
+          *    to zero."
+          *
+          * This restriction does not exist on any newer platforms.
+          *
+          * We only have one MOCS field for the whole packet, not one per
+          * buffer.  We could go out of our way here to walk over all of the
+          * buffers and see if any of them are used externally and use the
+          * external MOCS.  However, the notion that someone would use the
+          * same bit of memory for both scanout and a UBO is nuts.  Let's not
+          * bother and assume it's all internal.
+          */
          c.MOCS = cmd_buffer->device->isl_dev.mocs.internal;
 #endif
 
@@ -3247,6 +3263,46 @@ cmd_buffer_flush_push_constants(struct anv_cmd_buffer *cmd_buffer,
    cmd_buffer->state.push_constants_dirty &= ~flushed;
 }
 
+static void
+cmd_buffer_emit_clip(struct anv_cmd_buffer *cmd_buffer)
+{
+   const uint32_t clip_states =
+#if GEN_GEN <= 7
+      ANV_CMD_DIRTY_DYNAMIC_FRONT_FACE |
+      ANV_CMD_DIRTY_DYNAMIC_CULL_MODE |
+#endif
+      ANV_CMD_DIRTY_DYNAMIC_VIEWPORT |
+      ANV_CMD_DIRTY_PIPELINE;
+
+   if ((cmd_buffer->state.gfx.dirty & clip_states) == 0)
+      return;
+
+#if GEN_GEN <= 7
+   const struct anv_dynamic_state *d = &cmd_buffer->state.gfx.dynamic;
+#endif
+   struct GENX(3DSTATE_CLIP) clip = {
+      GENX(3DSTATE_CLIP_header),
+#if GEN_GEN <= 7
+      .FrontWinding = genX(vk_to_gen_front_face)[d->front_face],
+      .CullMode     = genX(vk_to_gen_cullmode)[d->cull_mode],
+#endif
+   };
+   uint32_t dwords[GENX(3DSTATE_CLIP_length)];
+
+   struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
+   const struct brw_vue_prog_data *last =
+      anv_pipeline_get_last_vue_prog_data(pipeline);
+   if (last->vue_map.slots_valid & VARYING_BIT_VIEWPORT) {
+      clip.MaximumVPIndex =
+         cmd_buffer->state.gfx.dynamic.viewport.count > 0 ?
+         cmd_buffer->state.gfx.dynamic.viewport.count - 1 : 0;
+   }
+
+   GENX(3DSTATE_CLIP_pack)(NULL, dwords, &clip);
+   anv_batch_emit_merge(&cmd_buffer->batch, dwords,
+                        pipeline->gen7.clip);
+}
+
 void
 genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
 {
@@ -3282,6 +3338,17 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
          struct anv_buffer *buffer = cmd_buffer->state.vertex_bindings[vb].buffer;
          uint32_t offset = cmd_buffer->state.vertex_bindings[vb].offset;
 
+         /* If dynamic, use stride/size from vertex binding, otherwise use
+          * stride/size that was setup in the pipeline object.
+          */
+         bool dynamic_stride = cmd_buffer->state.gfx.dynamic.dyn_vbo_stride;
+         bool dynamic_size = cmd_buffer->state.gfx.dynamic.dyn_vbo_size;
+
+         uint32_t stride = dynamic_stride ?
+            cmd_buffer->state.vertex_bindings[vb].stride : pipeline->vb[vb].stride;
+         uint32_t size = dynamic_size ?
+            cmd_buffer->state.vertex_bindings[vb].size : buffer->size;
+
          struct GENX(VERTEX_BUFFER_STATE) state;
          if (buffer) {
             state = (struct GENX(VERTEX_BUFFER_STATE)) {
@@ -3292,16 +3359,15 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
                .BufferAccessType = pipeline->vb[vb].instanced ? INSTANCEDATA : VERTEXDATA,
                .InstanceDataStepRate = pipeline->vb[vb].instance_divisor,
 #endif
-
                .AddressModifyEnable = true,
-               .BufferPitch = pipeline->vb[vb].stride,
+               .BufferPitch = stride,
                .BufferStartingAddress = anv_address_add(buffer->address, offset),
                .NullVertexBuffer = offset >= buffer->size,
 
 #if GEN_GEN >= 8
-               .BufferSize = buffer->size - offset
+               .BufferSize = size - offset
 #else
-               .EndAddress = anv_address_add(buffer->address, buffer->size - 1),
+               .EndAddress = anv_address_add(buffer->address, size - 1),
 #endif
             };
          } else {
@@ -3366,6 +3432,9 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
       cmd_buffer_alloc_push_constants(cmd_buffer);
    }
 
+   if (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_PIPELINE)
+      cmd_buffer->state.gfx.primitive_topology = pipeline->topology;
+
 #if GEN_GEN <= 7
    if (cmd_buffer->state.descriptors_dirty & VK_SHADER_STAGE_VERTEX_BIT ||
        cmd_buffer->state.push_constants_dirty & VK_SHADER_STAGE_VERTEX_BIT) {
@@ -3382,8 +3451,7 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
       anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
          pc.DepthStallEnable  = true;
          pc.PostSyncOperation = WriteImmediateData;
-         pc.Address           =
-            (struct anv_address) { cmd_buffer->device->workaround_bo, 0 };
+         pc.Address           = cmd_buffer->device->workaround_address;
       }
    }
 #endif
@@ -3418,6 +3486,8 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
 
    if (dirty)
       cmd_buffer_emit_descriptor_pointers(cmd_buffer, dirty);
+
+   cmd_buffer_emit_clip(cmd_buffer);
 
    if (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_DYNAMIC_VIEWPORT)
       gen8_cmd_buffer_emit_viewport(cmd_buffer);
@@ -3566,7 +3636,7 @@ void genX(CmdDraw)(
    anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
       prim.PredicateEnable          = cmd_buffer->state.conditional_render_enabled;
       prim.VertexAccessType         = SEQUENTIAL;
-      prim.PrimitiveTopologyType    = pipeline->topology;
+      prim.PrimitiveTopologyType    = cmd_buffer->state.gfx.primitive_topology;
       prim.VertexCountPerInstance   = vertexCount;
       prim.StartVertexLocation      = firstVertex;
       prim.InstanceCount            = instanceCount;
@@ -3617,7 +3687,7 @@ void genX(CmdDrawIndexed)(
    anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
       prim.PredicateEnable          = cmd_buffer->state.conditional_render_enabled;
       prim.VertexAccessType         = RANDOM;
-      prim.PrimitiveTopologyType    = pipeline->topology;
+      prim.PrimitiveTopologyType    = cmd_buffer->state.gfx.primitive_topology;
       prim.VertexCountPerInstance   = indexCount;
       prim.StartVertexLocation      = firstIndex;
       prim.InstanceCount            = instanceCount;
@@ -3697,7 +3767,7 @@ void genX(CmdDrawIndirectByteCountEXT)(
    anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
       prim.IndirectParameterEnable  = true;
       prim.VertexAccessType         = SEQUENTIAL;
-      prim.PrimitiveTopologyType    = pipeline->topology;
+      prim.PrimitiveTopologyType    = cmd_buffer->state.gfx.primitive_topology;
    }
 
    update_dirty_vbs_for_gen8_vb_flush(cmd_buffer, SEQUENTIAL);
@@ -3782,7 +3852,7 @@ void genX(CmdDrawIndirect)(
          prim.IndirectParameterEnable  = true;
          prim.PredicateEnable          = cmd_buffer->state.conditional_render_enabled;
          prim.VertexAccessType         = SEQUENTIAL;
-         prim.PrimitiveTopologyType    = pipeline->topology;
+         prim.PrimitiveTopologyType    = cmd_buffer->state.gfx.primitive_topology;
       }
 
       update_dirty_vbs_for_gen8_vb_flush(cmd_buffer, SEQUENTIAL);
@@ -3832,7 +3902,7 @@ void genX(CmdDrawIndexedIndirect)(
          prim.IndirectParameterEnable  = true;
          prim.PredicateEnable          = cmd_buffer->state.conditional_render_enabled;
          prim.VertexAccessType         = RANDOM;
-         prim.PrimitiveTopologyType    = pipeline->topology;
+         prim.PrimitiveTopologyType    = cmd_buffer->state.gfx.primitive_topology;
       }
 
       update_dirty_vbs_for_gen8_vb_flush(cmd_buffer, RANDOM);
@@ -3841,41 +3911,39 @@ void genX(CmdDrawIndexedIndirect)(
    }
 }
 
-#define TMP_DRAW_COUNT_REG 0x2670 /* MI_ALU_REG14 */
-
-static void
+static struct gen_mi_value
 prepare_for_draw_count_predicate(struct anv_cmd_buffer *cmd_buffer,
+                                 struct gen_mi_builder *b,
                                  struct anv_address count_address,
                                  const bool conditional_render_enabled)
 {
-   struct gen_mi_builder b;
-   gen_mi_builder_init(&b, &cmd_buffer->batch);
+   struct gen_mi_value ret = gen_mi_imm(0);
 
    if (conditional_render_enabled) {
 #if GEN_GEN >= 8 || GEN_IS_HASWELL
-      gen_mi_store(&b, gen_mi_reg64(TMP_DRAW_COUNT_REG),
-                       gen_mi_mem32(count_address));
+      ret = gen_mi_new_gpr(b);
+      gen_mi_store(b, gen_mi_value_ref(b, ret), gen_mi_mem32(count_address));
 #endif
    } else {
       /* Upload the current draw count from the draw parameters buffer to
        * MI_PREDICATE_SRC0.
        */
-      gen_mi_store(&b, gen_mi_reg64(MI_PREDICATE_SRC0),
-                       gen_mi_mem32(count_address));
+      gen_mi_store(b, gen_mi_reg64(MI_PREDICATE_SRC0),
+                      gen_mi_mem32(count_address));
 
-      gen_mi_store(&b, gen_mi_reg32(MI_PREDICATE_SRC1 + 4), gen_mi_imm(0));
+      gen_mi_store(b, gen_mi_reg32(MI_PREDICATE_SRC1 + 4), gen_mi_imm(0));
    }
+
+   return ret;
 }
 
 static void
 emit_draw_count_predicate(struct anv_cmd_buffer *cmd_buffer,
+                          struct gen_mi_builder *b,
                           uint32_t draw_index)
 {
-   struct gen_mi_builder b;
-   gen_mi_builder_init(&b, &cmd_buffer->batch);
-
    /* Upload the index of the current primitive to MI_PREDICATE_SRC1. */
-   gen_mi_store(&b, gen_mi_reg32(MI_PREDICATE_SRC1), gen_mi_imm(draw_index));
+   gen_mi_store(b, gen_mi_reg32(MI_PREDICATE_SRC1), gen_mi_imm(draw_index));
 
    if (draw_index == 0) {
       anv_batch_emit(&cmd_buffer->batch, GENX(MI_PREDICATE), mip) {
@@ -3903,24 +3971,22 @@ emit_draw_count_predicate(struct anv_cmd_buffer *cmd_buffer,
 static void
 emit_draw_count_predicate_with_conditional_render(
                           struct anv_cmd_buffer *cmd_buffer,
-                          uint32_t draw_index)
+                          struct gen_mi_builder *b,
+                          uint32_t draw_index,
+                          struct gen_mi_value max)
 {
-   struct gen_mi_builder b;
-   gen_mi_builder_init(&b, &cmd_buffer->batch);
-
-   struct gen_mi_value pred = gen_mi_ult(&b, gen_mi_imm(draw_index),
-                                         gen_mi_reg64(TMP_DRAW_COUNT_REG));
-   pred = gen_mi_iand(&b, pred, gen_mi_reg64(ANV_PREDICATE_RESULT_REG));
+   struct gen_mi_value pred = gen_mi_ult(b, gen_mi_imm(draw_index), max);
+   pred = gen_mi_iand(b, pred, gen_mi_reg64(ANV_PREDICATE_RESULT_REG));
 
 #if GEN_GEN >= 8
-   gen_mi_store(&b, gen_mi_reg64(MI_PREDICATE_RESULT), pred);
+   gen_mi_store(b, gen_mi_reg64(MI_PREDICATE_RESULT), pred);
 #else
    /* MI_PREDICATE_RESULT is not whitelisted in i915 command parser
     * so we emit MI_PREDICATE to set it.
     */
 
-   gen_mi_store(&b, gen_mi_reg64(MI_PREDICATE_SRC0), pred);
-   gen_mi_store(&b, gen_mi_reg64(MI_PREDICATE_SRC1), gen_mi_imm(0));
+   gen_mi_store(b, gen_mi_reg64(MI_PREDICATE_SRC0), pred);
+   gen_mi_store(b, gen_mi_reg64(MI_PREDICATE_SRC1), gen_mi_imm(0));
 
    anv_batch_emit(&cmd_buffer->batch, GENX(MI_PREDICATE), mip) {
       mip.LoadOperation    = LOAD_LOADINV;
@@ -3952,23 +4018,26 @@ void genX(CmdDrawIndirectCount)(
 
    genX(cmd_buffer_flush_state)(cmd_buffer);
 
+   struct gen_mi_builder b;
+   gen_mi_builder_init(&b, &cmd_buffer->batch);
    struct anv_address count_address =
       anv_address_add(count_buffer->address, countBufferOffset);
-
-   prepare_for_draw_count_predicate(cmd_buffer, count_address,
-                                    cmd_state->conditional_render_enabled);
+   struct gen_mi_value max =
+      prepare_for_draw_count_predicate(cmd_buffer, &b, count_address,
+                                       cmd_state->conditional_render_enabled);
 
    for (uint32_t i = 0; i < maxDrawCount; i++) {
       struct anv_address draw = anv_address_add(buffer->address, offset);
 
 #if GEN_GEN >= 8 || GEN_IS_HASWELL
       if (cmd_state->conditional_render_enabled) {
-         emit_draw_count_predicate_with_conditional_render(cmd_buffer, i);
+         emit_draw_count_predicate_with_conditional_render(
+            cmd_buffer, &b, i, gen_mi_value_ref(&b, max));
       } else {
-         emit_draw_count_predicate(cmd_buffer, i);
+         emit_draw_count_predicate(cmd_buffer, &b, i);
       }
 #else
-      emit_draw_count_predicate(cmd_buffer, i);
+      emit_draw_count_predicate(cmd_buffer, &b, i);
 #endif
 
       if (vs_prog_data->uses_firstvertex ||
@@ -3988,13 +4057,15 @@ void genX(CmdDrawIndirectCount)(
          prim.IndirectParameterEnable  = true;
          prim.PredicateEnable          = true;
          prim.VertexAccessType         = SEQUENTIAL;
-         prim.PrimitiveTopologyType    = pipeline->topology;
+         prim.PrimitiveTopologyType    = cmd_buffer->state.gfx.primitive_topology;
       }
 
       update_dirty_vbs_for_gen8_vb_flush(cmd_buffer, SEQUENTIAL);
 
       offset += stride;
    }
+
+   gen_mi_value_unref(&b, max);
 }
 
 void genX(CmdDrawIndexedIndirectCount)(
@@ -4018,23 +4089,26 @@ void genX(CmdDrawIndexedIndirectCount)(
 
    genX(cmd_buffer_flush_state)(cmd_buffer);
 
+   struct gen_mi_builder b;
+   gen_mi_builder_init(&b, &cmd_buffer->batch);
    struct anv_address count_address =
       anv_address_add(count_buffer->address, countBufferOffset);
-
-   prepare_for_draw_count_predicate(cmd_buffer, count_address,
-                                    cmd_state->conditional_render_enabled);
+   struct gen_mi_value max =
+      prepare_for_draw_count_predicate(cmd_buffer, &b, count_address,
+                                       cmd_state->conditional_render_enabled);
 
    for (uint32_t i = 0; i < maxDrawCount; i++) {
       struct anv_address draw = anv_address_add(buffer->address, offset);
 
 #if GEN_GEN >= 8 || GEN_IS_HASWELL
       if (cmd_state->conditional_render_enabled) {
-         emit_draw_count_predicate_with_conditional_render(cmd_buffer, i);
+         emit_draw_count_predicate_with_conditional_render(
+            cmd_buffer, &b, i, gen_mi_value_ref(&b, max));
       } else {
-         emit_draw_count_predicate(cmd_buffer, i);
+         emit_draw_count_predicate(cmd_buffer, &b, i);
       }
 #else
-      emit_draw_count_predicate(cmd_buffer, i);
+      emit_draw_count_predicate(cmd_buffer, &b, i);
 #endif
 
       /* TODO: We need to stomp base vertex to 0 somehow */
@@ -4055,13 +4129,15 @@ void genX(CmdDrawIndexedIndirectCount)(
          prim.IndirectParameterEnable  = true;
          prim.PredicateEnable          = true;
          prim.VertexAccessType         = RANDOM;
-         prim.PrimitiveTopologyType    = pipeline->topology;
+         prim.PrimitiveTopologyType    = cmd_buffer->state.gfx.primitive_topology;
       }
 
       update_dirty_vbs_for_gen8_vb_flush(cmd_buffer, RANDOM);
 
       offset += stride;
    }
+
+   gen_mi_value_unref(&b, max);
 }
 
 void genX(CmdBeginTransformFeedbackEXT)(
@@ -4300,6 +4376,34 @@ void genX(CmdDispatch)(
    genX(CmdDispatchBase)(commandBuffer, 0, 0, 0, x, y, z);
 }
 
+static inline void
+emit_gpgpu_walker(struct anv_cmd_buffer *cmd_buffer,
+                  const struct anv_compute_pipeline *pipeline, bool indirect,
+                  const struct brw_cs_prog_data *prog_data,
+                  uint32_t groupCountX, uint32_t groupCountY,
+                  uint32_t groupCountZ)
+{
+   bool predicate = (GEN_GEN <= 7 && indirect) ||
+      cmd_buffer->state.conditional_render_enabled;
+   const struct anv_cs_parameters cs_params = anv_cs_parameters(pipeline);
+
+   anv_batch_emit(&cmd_buffer->batch, GENX(GPGPU_WALKER), ggw) {
+      ggw.IndirectParameterEnable      = indirect;
+      ggw.PredicateEnable              = predicate;
+      ggw.SIMDSize                     = cs_params.simd_size / 16;
+      ggw.ThreadDepthCounterMaximum    = 0;
+      ggw.ThreadHeightCounterMaximum   = 0;
+      ggw.ThreadWidthCounterMaximum    = cs_params.threads - 1;
+      ggw.ThreadGroupIDXDimension      = groupCountX;
+      ggw.ThreadGroupIDYDimension      = groupCountY;
+      ggw.ThreadGroupIDZDimension      = groupCountZ;
+      ggw.RightExecutionMask           = pipeline->cs_right_mask;
+      ggw.BottomExecutionMask          = 0xffffffff;
+   }
+
+   anv_batch_emit(&cmd_buffer->batch, GENX(MEDIA_STATE_FLUSH), msf);
+}
+
 void genX(CmdDispatchBase)(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    baseGroupX,
@@ -4340,20 +4444,8 @@ void genX(CmdDispatchBase)(
    if (cmd_buffer->state.conditional_render_enabled)
       genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
 
-   anv_batch_emit(&cmd_buffer->batch, GENX(GPGPU_WALKER), ggw) {
-      ggw.PredicateEnable              = cmd_buffer->state.conditional_render_enabled;
-      ggw.SIMDSize                     = prog_data->simd_size / 16;
-      ggw.ThreadDepthCounterMaximum    = 0;
-      ggw.ThreadHeightCounterMaximum   = 0;
-      ggw.ThreadWidthCounterMaximum    = anv_cs_threads(pipeline) - 1;
-      ggw.ThreadGroupIDXDimension      = groupCountX;
-      ggw.ThreadGroupIDYDimension      = groupCountY;
-      ggw.ThreadGroupIDZDimension      = groupCountZ;
-      ggw.RightExecutionMask           = pipeline->cs_right_mask;
-      ggw.BottomExecutionMask          = 0xffffffff;
-   }
-
-   anv_batch_emit(&cmd_buffer->batch, GENX(MEDIA_STATE_FLUSH), msf);
+   emit_gpgpu_walker(cmd_buffer, pipeline, false, prog_data, groupCountX,
+                     groupCountY, groupCountZ);
 }
 
 #define GPGPU_DISPATCHDIMX 0x2500
@@ -4370,7 +4462,7 @@ void genX(CmdDispatchIndirect)(
    struct anv_compute_pipeline *pipeline = cmd_buffer->state.compute.pipeline;
    const struct brw_cs_prog_data *prog_data = get_cs_prog_data(pipeline);
    struct anv_address addr = anv_address_add(buffer->address, offset);
-   struct anv_batch *batch = &cmd_buffer->batch;
+   UNUSED struct anv_batch *batch = &cmd_buffer->batch;
 
    anv_cmd_buffer_push_base_group_id(cmd_buffer, 0, 0, 0);
 
@@ -4454,19 +4546,7 @@ void genX(CmdDispatchIndirect)(
       genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
 #endif
 
-   anv_batch_emit(batch, GENX(GPGPU_WALKER), ggw) {
-      ggw.IndirectParameterEnable      = true;
-      ggw.PredicateEnable              = GEN_GEN <= 7 ||
-                                         cmd_buffer->state.conditional_render_enabled;
-      ggw.SIMDSize                     = prog_data->simd_size / 16;
-      ggw.ThreadDepthCounterMaximum    = 0;
-      ggw.ThreadHeightCounterMaximum   = 0;
-      ggw.ThreadWidthCounterMaximum    = anv_cs_threads(pipeline) - 1;
-      ggw.RightExecutionMask           = pipeline->cs_right_mask;
-      ggw.BottomExecutionMask          = 0xffffffff;
-   }
-
-   anv_batch_emit(batch, GENX(MEDIA_STATE_FLUSH), msf);
+   emit_gpgpu_walker(cmd_buffer, pipeline, true, prog_data, 0, 0, 0);
 }
 
 static void
@@ -4922,8 +5002,7 @@ cmd_buffer_emit_depth_stencil(struct anv_cmd_buffer *cmd_buffer)
        */
       anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
          pc.PostSyncOperation = WriteImmediateData;
-         pc.Address =
-            (struct anv_address) { cmd_buffer->device->workaround_bo, 0 };
+         pc.Address = cmd_buffer->device->workaround_address;
       }
    }
    cmd_buffer->state.hiz_enabled = isl_aux_usage_has_hiz(info.hiz_usage);

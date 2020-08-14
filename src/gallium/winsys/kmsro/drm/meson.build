@@ -45,7 +45,8 @@ libkmsrowinsys = static_library(
     inc_src, inc_include,
     inc_gallium, inc_gallium_aux, inc_gallium_winsys,
   ],
-  c_args : [c_vis_args, kmsro_c_args],
+  c_args : [kmsro_c_args],
+  gnu_symbol_visibility : 'hidden',
   dependencies: dep_libdrm,
 )
 

@@ -1012,7 +1012,7 @@ public:
 
 class alu_node : public node {
 protected:
-	alu_node() : node(NT_OP, NST_ALU_INST) { memset(&bc, 0, sizeof(bc_alu)); }
+	alu_node() : node(NT_OP, NST_ALU_INST) {  }
 public:
 	bc_alu bc;
 

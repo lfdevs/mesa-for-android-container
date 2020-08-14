@@ -33,8 +33,7 @@ endif
 libomx_gallium = shared_library(
   'omx_mesa',
   'target.c',
-  c_args : c_vis_args,
-  cpp_args : cpp_vis_args,
+  gnu_symbol_visibility : 'hidden',
   link_args : [omx_link_args, ld_args_gc_sections],
   include_directories : [
     inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_util, inc_gallium_winsys, inc_gallium_drivers,
@@ -45,7 +44,7 @@ libomx_gallium = shared_library(
     libpipe_loader_static, libws_null, libwsw, libswdri, libswkmsdri,
   ],
   link_depends : omx_link_depends,
-  dependencies : [idep_mesautil, idep_xmlconfig_headers, driver_r600, driver_radeonsi, driver_nouveau],
+  dependencies : [idep_mesautil, driver_r600, driver_radeonsi, driver_nouveau],
   install : true,
   install_dir : omx_drivers_path,
 )

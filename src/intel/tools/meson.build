@@ -24,7 +24,8 @@ libaub = static_library(
   include_directories : [inc_include, inc_src, inc_intel],
   dependencies : idep_mesautil,
   link_with : [libintel_common, libintel_dev],
-  c_args : [c_vis_args, no_override_init_args],
+  c_args : [no_override_init_args],
+  gnu_symbol_visibility : 'hidden',
   install : false
 )
 
@@ -34,7 +35,8 @@ aubinator = executable(
   dependencies : [idep_mesautil, dep_expat, dep_zlib, dep_dl, dep_thread, dep_m],
   include_directories : [inc_include, inc_src, inc_intel],
   link_with : [libintel_common, libintel_compiler, libintel_dev, libaub],
-  c_args : [c_vis_args, no_override_init_args],
+  c_args : [no_override_init_args],
+  gnu_symbol_visibility : 'hidden',
   install : true
 )
 
@@ -44,7 +46,8 @@ aubinator_error_decode = executable(
   dependencies : [idep_mesautil, dep_zlib, dep_thread],
   include_directories : [inc_include, inc_src, inc_intel],
   link_with : [libintel_common, libintel_compiler, libintel_dev],
-  c_args : [c_vis_args, no_override_init_args],
+  c_args : [no_override_init_args],
+  gnu_symbol_visibility : 'hidden',
   install : true
 )
 
@@ -54,7 +57,8 @@ i965_disasm = executable(
   dependencies : [idep_mesautil, dep_thread],
   include_directories : [inc_include, inc_src, inc_mesa, inc_intel],
   link_with : [libintel_common, libintel_compiler, libintel_dev],
-  c_args : [c_vis_args, no_override_init_args],
+  c_args : [no_override_init_args],
+  gnu_symbol_visibility : 'hidden',
   install : true
 )
 
@@ -64,7 +68,8 @@ error2aub = executable(
   dependencies : [dep_zlib, dep_dl, dep_thread, dep_m],
   include_directories : [inc_include, inc_src, inc_intel],
   link_with : [libintel_dev],
-  c_args : [c_vis_args, no_override_init_args],
+  c_args : [no_override_init_args],
+  gnu_symbol_visibility : 'hidden',
   install : true
 )
 
@@ -72,6 +77,10 @@ sanitize_data = configuration_data()
 sanitize_data.set(
   'install_libexecdir',
   join_paths(get_option('prefix'), get_option('libexecdir'))
+)
+sanitize_data.set(
+  'install_libdir',
+  join_paths(get_option('prefix'), get_option('libdir'))
 )
 configure_file(
   input : 'intel_sanitize_gpu.in',
@@ -87,7 +96,8 @@ libintel_sanitize_gpu = shared_library(
   dependencies : [idep_mesautil, dep_dl, dep_thread],
   include_directories : [inc_include, inc_src, inc_intel],
   link_with : libintel_common,
-  c_args : [c_vis_args, no_override_init_args, c_sse2_args],
+  c_args : [no_override_init_args, c_sse2_args],
+  gnu_symbol_visibility : 'hidden',
   install_dir : get_option('libexecdir'),
   install : true
 )
@@ -109,10 +119,31 @@ libintel_dump_gpu = shared_library(
   dependencies : dep_dl,
   include_directories : [inc_include, inc_src, inc_intel],
   link_with : libintel_dev,
-  c_args : [c_vis_args, no_override_init_args],
+  c_args : [no_override_init_args],
+  gnu_symbol_visibility : 'hidden',
   install_dir : get_option('libexecdir'),
   install : true
 )
+
+if with_tools.contains('drm-shim')
+  configure_file(
+    input : 'intel_stub_gpu.in',
+    output : '@BASENAME@',
+    install_dir : get_option('bindir'),
+    configuration : sanitize_data,
+    install : true
+  )
+
+  libintel_stub_gpu = shared_library(
+    ['intel_noop_drm_shim'],
+    'intel_noop_drm_shim.c',
+    include_directories: [inc_include, inc_src, inc_intel],
+    link_with: libintel_dev,
+    dependencies: [dep_libdrm, dep_drm_shim, idep_mesautil, idep_libintel_common],
+    gnu_symbol_visibility : 'hidden',
+    install : true,
+  )
+endif
 
 if with_tools.contains('intel-ui')
   subdir('imgui')
@@ -123,54 +154,65 @@ if with_tools.contains('intel-ui')
     dependencies : [idep_mesautil, dep_zlib, dep_dl, dep_thread, dep_m, libintel_imgui_gtk_dep],
     include_directories : [inc_include, inc_src, inc_intel],
     link_with : [libintel_common, libintel_compiler, libintel_dev, libaub],
-    c_args : [c_vis_args, no_override_init_args],
+    c_args : [no_override_init_args],
+    gnu_symbol_visibility : 'hidden',
     cpp_args : ['-fpermissive', '-Wno-parentheses', '-Wno-class-memaccess'],
     install : true
   )
 endif
 
 i965_gram_tab = custom_target(
-   'i965_gram.tab.[ch]',
-   input : 'i965_gram.y',
-   output : ['i965_gram.tab.c', 'i965_gram.tab.h'],
-   command : [
-      prog_bison, '@INPUT@', '--defines=@OUTPUT1@',
-      '--output=@OUTPUT0@'
-   ]
+  'i965_gram.tab.[ch]',
+  input : 'i965_gram.y',
+  output : ['i965_gram.tab.c', 'i965_gram.tab.h'],
+  command : [
+    prog_bison, '@INPUT@', '--defines=@OUTPUT1@',
+    '--output=@OUTPUT0@'
+  ]
 )
 
 i965_lex_yy_c = custom_target(
-   'i965_lex.yy.c',
-   input : 'i965_lex.l',
-   output : 'i965_lex.yy.c',
-   command : [prog_flex, '-o', '@OUTPUT@', '@INPUT@']
+  'i965_lex.yy.c',
+  input : 'i965_lex.l',
+  output : 'i965_lex.yy.c',
+  command : [prog_flex, '-o', '@OUTPUT@', '@INPUT@']
 )
 
 i965_asm = executable(
-   'i965_asm',
-   ['i965_asm.c', i965_gram_tab[0], i965_gram_tab[1], i965_lex_yy_c],
-   dependencies : [idep_mesautil, dep_thread],
-   include_directories : [inc_include, inc_src, inc_mesa, inc_intel],
-   link_with : [libintel_common, libintel_compiler, libintel_dev],
-   c_args : [c_vis_args, no_override_init_args],
-   install : true
+  'i965_asm',
+  ['i965_asm.c', i965_gram_tab[0], i965_gram_tab[1], i965_lex_yy_c],
+  dependencies : [idep_mesautil, dep_thread],
+  include_directories : [inc_include, inc_src, inc_mesa, inc_intel],
+  link_with : [libintel_common, libintel_compiler, libintel_dev],
+  c_args : [no_override_init_args],
+  gnu_symbol_visibility : 'hidden',
+  install : true
 )
 
 asm_testcases = [
-   ['brw', 'tests/gen4'],
-   ['g4x', 'tests/gen4.5'],
-   ['ilk', 'tests/gen5'],
-   ['snb', 'tests/gen6'],
-   ['ivb', 'tests/gen7'],
-   ['hsw', 'tests/gen7.5'],
-   ['bdw', 'tests/gen8'],
-   ['skl', 'tests/gen9'],
-   ['icl', 'tests/gen11'],
+  ['brw', 'gen4'],
+  ['g4x', 'gen4.5'],
+  ['ilk', 'gen5'],
+  ['snb', 'gen6'],
+  ['ivb', 'gen7'],
+  ['hsw', 'gen7.5'],
+  ['bdw', 'gen8'],
+  ['skl', 'gen9'],
+  ['icl', 'gen11'],
 ]
 
-test_runner = find_program('tests/run-test.sh')
+test_runner = find_program('tests/run-test.py')
 foreach testcase : asm_testcases
-   test('i965_asm : ' + testcase[1], test_runner,
-        args : [i965_asm, testcase[1], testcase[0]],
-        env : ['srcdir=' + meson.current_source_dir()])
+  _gen_name = testcase[0]
+  _gen_num = testcase[1]
+  _gen_folder = join_paths(meson.current_source_dir(), 'tests', _gen_num)
+  test(
+    'i965_asm : ' + _gen_num, test_runner,
+    args : [
+      '--i965_asm', i965_asm,
+      '--gen_name', _gen_name,
+      '--gen_folder', _gen_folder,
+    ],
+    suite : 'intel',
+  )
 endforeach

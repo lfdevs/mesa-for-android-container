@@ -21,11 +21,7 @@
 if dep_llvm.type_name() == 'internal'
   _irbuilder_h = subproject('llvm').get_variable('irbuilder_h')
 else
-  if meson.version().version_compare('>=0.51')
-    _llvm_includedir = dep_llvm.get_variable(configtool : 'includedir', cmake : 'LLVM_INCLUDE_DIR')
-  else
-    _llvm_includedir = dep_llvm.get_configtool_variable('includedir')
-  endif
+  _llvm_includedir = dep_llvm.get_variable(configtool : 'includedir', cmake : 'LLVM_INCLUDE_DIR')
   _irbuilder_h = join_paths(_llvm_includedir, 'llvm', 'IR', 'IRBuilder.h')
 endif
 

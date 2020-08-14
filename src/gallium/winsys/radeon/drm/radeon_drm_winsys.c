@@ -29,6 +29,7 @@
 #include "radeon_drm_cs.h"
 #include "radeon_drm_public.h"
 
+#include "util/os_file.h"
 #include "util/u_cpu_detect.h"
 #include "util/u_memory.h"
 #include "util/u_hash_table.h"
@@ -532,7 +533,8 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
    radeon_get_drm_value(ws->fd, RADEON_INFO_MAX_SH_PER_SE, NULL,
                         &ws->info.max_sh_per_se);
    if (ws->gen == DRV_SI) {
-      ws->info.num_good_cu_per_sh = ws->info.num_good_compute_units /
+      ws->info.max_good_cu_per_sa =
+      ws->info.min_good_cu_per_sa = ws->info.num_good_compute_units /
                                     (ws->info.max_se * ws->info.max_sh_per_se);
    }
 
@@ -569,7 +571,7 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
                                     (ws->info.family == CHIP_HAWAII &&
                                      ws->accel_working2 < 3);
    ws->info.tcc_cache_line_size = 64; /* TC L2 line size on GCN */
-   ws->info.ib_start_alignment = 4096;
+   ws->info.ib_alignment = 4096;
    ws->info.kernel_flushes_hdp_before_ib = ws->info.drm_minor >= 40;
    /* HTILE is broken with 1D tiling on old kernels and GFX7. */
    ws->info.htile_cmask_support_1d_tiling = ws->info.chip_class != GFX7 ||
@@ -801,6 +803,20 @@ static void radeon_pin_threads_to_L3_cache(struct radeon_winsys *ws,
    }
 }
 
+static bool radeon_ws_is_secure(struct radeon_winsys* ws)
+{
+    return false;
+}
+
+static bool radeon_cs_is_secure(struct radeon_cmdbuf* cs)
+{
+    return false;
+}
+
+static void radeon_cs_set_secure(struct radeon_cmdbuf* cs, bool enable)
+{
+}
+
 PUBLIC struct radeon_winsys *
 radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
                          radeon_screen_create_t screen_create)
@@ -825,7 +841,7 @@ radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
       return NULL;
    }
 
-   ws->fd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
+   ws->fd = os_dupfd_cloexec(fd);
 
    if (!do_winsys_init(ws))
       goto fail1;
@@ -872,6 +888,9 @@ radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
    ws->base.cs_request_feature = radeon_cs_request_feature;
    ws->base.query_value = radeon_query_value;
    ws->base.read_registers = radeon_read_registers;
+    ws->base.ws_is_secure = radeon_ws_is_secure;
+    ws->base.cs_is_secure = radeon_cs_is_secure;
+    ws->base.cs_set_secure = radeon_cs_set_secure;
 
    radeon_drm_bo_init_functions(ws);
    radeon_drm_cs_init_functions(ws);

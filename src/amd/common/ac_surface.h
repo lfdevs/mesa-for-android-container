@@ -69,7 +69,7 @@ enum radeon_micro_mode {
 #define RADEON_SURF_DISABLE_DCC                 (1 << 22)
 #define RADEON_SURF_TC_COMPATIBLE_HTILE         (1 << 23)
 #define RADEON_SURF_IMPORTED                    (1 << 24)
-/* gap */
+#define RADEON_SURF_CONTIGUOUS_DCC_LAYERS       (1 << 25)
 #define RADEON_SURF_SHAREABLE                   (1 << 26)
 #define RADEON_SURF_NO_RENDER_TARGET            (1 << 27)
 /* Force a swizzle mode (gfx9+) or tile mode (gfx6-8).
@@ -150,8 +150,6 @@ struct gfx9_surf_layout {
     struct gfx9_surf_flags      stencil; /* added to surf_size, use stencil_offset */
 
     struct gfx9_surf_meta_flags dcc;   /* metadata of color */
-    struct gfx9_surf_meta_flags htile; /* metadata of depth and stencil */
-    struct gfx9_surf_meta_flags cmask; /* metadata of fmask */
 
     enum gfx9_resource_type     resource_type; /* 1D, 2D or 3D */
     uint16_t                    surf_pitch; /* in blocks */
@@ -166,6 +164,10 @@ struct gfx9_surf_layout {
     uint16_t                    pitch[RADEON_SURF_MAX_LEVELS];
 
     uint64_t                    stencil_offset; /* separate stencil */
+
+    uint8_t                     dcc_block_width;
+    uint8_t                     dcc_block_height;
+    uint8_t                     dcc_block_depth;
 
     /* Displayable DCC. This is always rb_aligned=0 and pipe_aligned=0.
      * The 3D engine doesn't support that layout except for chips with 1 RB.
@@ -245,6 +247,7 @@ struct radeon_surf {
     uint64_t                    display_dcc_offset;
     uint64_t                    dcc_retile_map_offset;
     uint64_t                    total_size;
+    uint32_t                    alignment;
 
     union {
         /* Return values for GFX8 and older.
@@ -288,6 +291,30 @@ int ac_compute_surface(struct ac_addrlib *addrlib, const struct radeon_info *inf
 		       const struct ac_surf_config * config,
 		       enum radeon_surf_mode mode,
 		       struct radeon_surf *surf);
+void ac_surface_zero_dcc_fields(struct radeon_surf *surf);
+
+void ac_surface_set_bo_metadata(const struct radeon_info *info,
+                                struct radeon_surf *surf, uint64_t tiling_flags,
+                                enum radeon_surf_mode *mode);
+void ac_surface_get_bo_metadata(const struct radeon_info *info,
+                                struct radeon_surf *surf, uint64_t *tiling_flags);
+
+bool ac_surface_set_umd_metadata(const struct radeon_info *info,
+                                 struct radeon_surf *surf,
+                                 unsigned num_storage_samples,
+                                 unsigned num_mipmap_levels,
+                                 unsigned size_metadata,
+                                 uint32_t metadata[64]);
+void ac_surface_get_umd_metadata(const struct radeon_info *info,
+                                 struct radeon_surf *surf,
+                                 unsigned num_mipmap_levels,
+                                 uint32_t desc[8],
+                                 unsigned *size_metadata, uint32_t metadata[64]);
+
+void ac_surface_override_offset_stride(const struct radeon_info *info,
+                                       struct radeon_surf *surf,
+                                       unsigned num_mipmap_levels,
+                                       uint64_t offset, unsigned pitch);
 
 #ifdef __cplusplus
 }

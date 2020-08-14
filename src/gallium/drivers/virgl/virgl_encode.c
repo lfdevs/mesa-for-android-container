@@ -338,13 +338,19 @@ int virgl_encode_blend_state(struct virgl_context *ctx,
    virgl_encoder_write_dword(ctx->cbuf, tmp);
 
    for (i = 0; i < VIRGL_MAX_COLOR_BUFS; i++) {
+      /* We use alpha src factor to pass the advanced blend equation value
+       * to the host. By doing so, we don't have to change the protocol.
+       */
+      uint32_t alpha = (i == 0 && blend_state->advanced_blend_func)
+                        ? blend_state->advanced_blend_func
+                        : blend_state->rt[i].alpha_src_factor;
       tmp =
          VIRGL_OBJ_BLEND_S2_RT_BLEND_ENABLE(blend_state->rt[i].blend_enable) |
          VIRGL_OBJ_BLEND_S2_RT_RGB_FUNC(blend_state->rt[i].rgb_func) |
          VIRGL_OBJ_BLEND_S2_RT_RGB_SRC_FACTOR(blend_state->rt[i].rgb_src_factor) |
          VIRGL_OBJ_BLEND_S2_RT_RGB_DST_FACTOR(blend_state->rt[i].rgb_dst_factor)|
          VIRGL_OBJ_BLEND_S2_RT_ALPHA_FUNC(blend_state->rt[i].alpha_func) |
-         VIRGL_OBJ_BLEND_S2_RT_ALPHA_SRC_FACTOR(blend_state->rt[i].alpha_src_factor) |
+         VIRGL_OBJ_BLEND_S2_RT_ALPHA_SRC_FACTOR(alpha) |
          VIRGL_OBJ_BLEND_S2_RT_ALPHA_DST_FACTOR(blend_state->rt[i].alpha_dst_factor) |
          VIRGL_OBJ_BLEND_S2_RT_COLORMASK(blend_state->rt[i].colormask);
       virgl_encoder_write_dword(ctx->cbuf, tmp);
@@ -579,6 +585,38 @@ int virgl_encode_clear(struct virgl_context *ctx,
    return 0;
 }
 
+int virgl_encode_clear_texture(struct virgl_context *ctx,
+                               struct virgl_resource *res,
+                               unsigned int level,
+                               const struct pipe_box *box,
+                               const void *data)
+{
+   const struct util_format_description *desc = util_format_description(res->u.b.format);
+   unsigned block_bits = desc->block.bits;
+   uint32_t arr[4] = {0};
+   /* The spec describe <data> as a pointer to an array of between one
+    * and four components of texel data that will be used as the source
+    * for the constant fill value.
+    * Here, we are just copying the memory into <arr>. We do not try to
+    * re-create the data array. The host part will take care of interpreting
+    * the memory and applying the correct format to the clear call.
+    */
+   memcpy(&arr, data, block_bits / 8);
+
+   virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_CLEAR_TEXTURE, 0, VIRGL_CLEAR_TEXTURE_SIZE));
+   virgl_encoder_write_res(ctx, res);
+   virgl_encoder_write_dword(ctx->cbuf, level);
+   virgl_encoder_write_dword(ctx->cbuf, box->x);
+   virgl_encoder_write_dword(ctx->cbuf, box->y);
+   virgl_encoder_write_dword(ctx->cbuf, box->z);
+   virgl_encoder_write_dword(ctx->cbuf, box->width);
+   virgl_encoder_write_dword(ctx->cbuf, box->height);
+   virgl_encoder_write_dword(ctx->cbuf, box->depth);
+   for (unsigned i = 0; i < 4; i++)
+      virgl_encoder_write_dword(ctx->cbuf, arr[i]);
+   return 0;
+}
+
 int virgl_encoder_set_framebuffer_state(struct virgl_context *ctx,
                                        const struct pipe_framebuffer_state *state)
 {
@@ -763,7 +801,7 @@ static void virgl_encoder_transfer3d_common(struct virgl_screen *vs,
    if (encode_stride == virgl_transfer3d_explicit_stride) {
       stride = transfer->stride;
       layer_stride = transfer->layer_stride;
-   } else if (virgl_transfer3d_host_inferred_stride) {
+   } else if (encode_stride == virgl_transfer3d_host_inferred_stride) {
       stride = 0;
       layer_stride = 0;
    } else {

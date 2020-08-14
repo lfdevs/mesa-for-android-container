@@ -189,7 +189,7 @@ int egcm_load_index_reg(struct r600_bytecode *bc, unsigned id, bool inside_alu_c
 	memset(&alu, 0, sizeof(alu));
 	alu.op = ALU_OP1_MOVA_INT;
 	alu.src[0].sel = bc->index_reg[id];
-	alu.src[0].chan = 0;
+	alu.src[0].chan = bc->index_reg_chan[id];
 	if (bc->chip_class == CAYMAN)
 		alu.dst.sel = id == 0 ? CM_V_SQ_MOVA_DST_CF_IDX0 : CM_V_SQ_MOVA_DST_CF_IDX1;
 

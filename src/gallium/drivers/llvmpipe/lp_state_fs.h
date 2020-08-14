@@ -83,9 +83,15 @@ struct lp_fragment_shader_variant_key
    unsigned occlusion_count:1;
    unsigned resource_1d:1;
    unsigned depth_clamp:1;
+   unsigned multisample:1;
 
    enum pipe_format zsbuf_format;
    enum pipe_format cbuf_format[PIPE_MAX_COLOR_BUFS];
+
+   uint8_t cbuf_nr_samples[PIPE_MAX_COLOR_BUFS];
+   uint8_t zsbuf_nr_samples;
+   uint8_t coverage_samples;
+   uint8_t min_samples;
 
    struct lp_sampler_static_state samplers[1];
    /* followed by variable number of images */

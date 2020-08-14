@@ -73,6 +73,8 @@ private:
    bool emit_tex_txl(nir_tex_instr* instr, TexInputs& src);
    bool emit_tex_txs(nir_tex_instr* instr, TexInputs& src,
                      const std::array<int, 4> &dest_swz);
+   bool emit_tex_texture_samples(nir_tex_instr* instr, TexInputs& src,
+                                 const std::array<int, 4> &dest_swz);
    bool emit_tex_lod(nir_tex_instr* instr, TexInputs& src);
    bool emit_tex_tg4(nir_tex_instr* instr, TexInputs& src);
    bool emit_tex_txf_ms(nir_tex_instr* instr, TexInputs& src);

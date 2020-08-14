@@ -31,50 +31,27 @@ fd2_setup_slices(struct fd_resource *rsc)
 {
 	struct pipe_resource *prsc = &rsc->base;
 	enum pipe_format format = rsc->base.format;
+	uint32_t height0 = util_format_get_nblocksy(format, prsc->height0);
 	uint32_t level, size = 0;
-	uint32_t width = prsc->width0;
-	uint32_t height = prsc->height0;
-	uint32_t depth = prsc->depth0;
+
+	/* 32 pixel alignment */
+	fdl_set_pitchalign(&rsc->layout, fdl_cpp_shift(&rsc->layout) + 5);
 
 	for (level = 0; level <= prsc->last_level; level++) {
 		struct fdl_slice *slice = fd_resource_slice(rsc, level);
-		uint32_t blocks;
-
-		/* 32 * 32 block alignment */
-		switch (prsc->target) {
-		default: assert(0);
-		case PIPE_TEXTURE_2D:
-		case PIPE_TEXTURE_2D_ARRAY:
-		case PIPE_TEXTURE_RECT:
-		case PIPE_TEXTURE_CUBE:
-			height = align(height, 32 * util_format_get_blockheight(format));
-		case PIPE_TEXTURE_1D:
-		case PIPE_TEXTURE_1D_ARRAY:
-			width = align(width, 32 * util_format_get_blockwidth(format));
-		case PIPE_BUFFER:
-			break;
-		}
+		uint32_t pitch = fdl2_pitch(&rsc->layout, level);
+		uint32_t nblocksy = align(u_minify(height0, level), 32);
 
 		/* mipmaps have power of two sizes in memory */
-		if (level) {
-			width = util_next_power_of_two(width);
-			height = util_next_power_of_two(height);
-		}
+		if (level)
+			nblocksy = util_next_power_of_two(nblocksy);
 
-		slice->pitch = util_format_get_nblocksx(format, width) * rsc->layout.cpp;
 		slice->offset = size;
+		slice->size0 = align(pitch * nblocksy, 4096);
 
-		blocks = util_format_get_nblocks(format, width, height);
-
-		/* 4k aligned size */
-		slice->size0 = align(blocks * rsc->layout.cpp, 4096);
-
-		size += slice->size0 * depth * prsc->array_size;
-
-		width = u_minify(width, 1);
-		height = u_minify(height, 1);
-		depth = u_minify(depth, 1);
+		size += slice->size0 * u_minify(prsc->depth0, level) * prsc->array_size;
 	}
+
 	return size;
 }
 

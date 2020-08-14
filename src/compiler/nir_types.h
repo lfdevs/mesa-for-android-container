@@ -55,6 +55,8 @@ glsl_get_struct_field_data(const struct glsl_type *type, unsigned index);
 enum glsl_interface_packing
 glsl_get_internal_ifc_packing(const struct glsl_type *type,
                               bool std430_supported);
+enum glsl_interface_packing
+glsl_get_ifc_packing(const struct glsl_type *type);
 
 unsigned glsl_get_std140_base_alignment(const struct glsl_type *type,
                                         bool row_major);
@@ -150,6 +152,7 @@ bool glsl_type_is_integer(const struct glsl_type *type);
 bool glsl_type_contains_64bit(const struct glsl_type *type);
 bool glsl_sampler_type_is_shadow(const struct glsl_type *type);
 bool glsl_sampler_type_is_array(const struct glsl_type *type);
+bool glsl_struct_type_is_packed(const struct glsl_type *type);
 bool glsl_contains_atomic(const struct glsl_type *type);
 bool glsl_contains_opaque(const struct glsl_type *type);
 
@@ -210,6 +213,8 @@ const struct glsl_type *glsl_transposed_type(const struct glsl_type *type);
 const struct glsl_type *glsl_channel_type(const struct glsl_type *type);
 
 const struct glsl_type *glsl_float16_type(const struct glsl_type *type);
+const struct glsl_type *glsl_int16_type(const struct glsl_type *type);
+const struct glsl_type *glsl_uint16_type(const struct glsl_type *type);
 
 void glsl_get_natural_size_align_bytes(const struct glsl_type *type,
                                        unsigned *size, unsigned *align);

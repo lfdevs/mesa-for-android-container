@@ -179,12 +179,13 @@ blorp_vf_invalidate_for_vb_48b_transitions(struct blorp_batch *batch,
 }
 
 UNUSED static struct blorp_address
-blorp_get_workaround_page(struct blorp_batch *batch)
+blorp_get_workaround_address(struct blorp_batch *batch)
 {
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
 
    return (struct blorp_address) {
-      .buffer = cmd_buffer->device->workaround_bo,
+      .buffer = cmd_buffer->device->workaround_address.bo,
+      .offset = cmd_buffer->device->workaround_address.offset,
    };
 }
 

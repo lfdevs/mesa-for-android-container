@@ -26,6 +26,7 @@
 
 #include <libsync.h>
 
+#include "util/os_file.h"
 #include "util/u_inlines.h"
 
 #include "freedreno_fence.h"
@@ -122,7 +123,7 @@ void fd_create_fence_fd(struct pipe_context *pctx,
 		enum pipe_fd_type type)
 {
 	assert(type == PIPE_FD_TYPE_NATIVE_SYNC);
-	*pfence = fence_create(fd_context(pctx), NULL, 0, dup(fd));
+	*pfence = fence_create(fd_context(pctx), NULL, 0, os_dupfd_cloexec(fd));
 }
 
 void fd_fence_server_sync(struct pipe_context *pctx,
@@ -146,7 +147,12 @@ int fd_fence_get_fd(struct pipe_screen *pscreen,
 		struct pipe_fence_handle *fence)
 {
 	fence_flush(fence);
-	return dup(fence->fence_fd);
+	return os_dupfd_cloexec(fence->fence_fd);
+}
+
+bool fd_fence_is_fd(struct pipe_fence_handle *fence)
+{
+	return fence->fence_fd != -1;
 }
 
 struct pipe_fence_handle * fd_fence_create(struct fd_batch *batch)

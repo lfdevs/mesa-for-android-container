@@ -22,6 +22,6 @@
 libswdri = static_library(
   'swdri',
   files('dri_sw_winsys.c', 'dri_sw_winsys.h'),
-  c_args : c_vis_args,
+  gnu_symbol_visibility : 'hidden',
   include_directories : [inc_gallium, inc_include, inc_src, inc_gallium_aux],
 )

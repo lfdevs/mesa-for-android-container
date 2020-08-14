@@ -29,6 +29,7 @@
 #include "main/accum.h"
 #include "main/api_exec.h"
 #include "main/context.h"
+#include "main/debug_output.h"
 #include "main/glthread.h"
 #include "main/samplerobj.h"
 #include "main/shaderobj.h"
@@ -219,13 +220,6 @@ st_invalidate_state(struct gl_context *ctx)
 
       if (new_state & _NEW_FOG)
          st->dirty |= ST_NEW_FS_STATE;
-
-      if (new_state & _NEW_FRAG_CLAMP) {
-         if (st->clamp_frag_color_in_shader)
-            st->dirty |= ST_NEW_FS_STATE;
-         else
-            st->dirty |= ST_NEW_RASTERIZER;
-      }
    }
 
    if (new_state & (_NEW_LIGHT |
@@ -541,6 +535,12 @@ st_init_driver_flags(struct st_context *st)
 
    f->NewClipControl = ST_NEW_VIEWPORT | ST_NEW_RASTERIZER;
    f->NewClipPlane = ST_NEW_CLIP_STATE;
+
+   if (st->clamp_frag_color_in_shader) {
+      f->NewFragClamp = ST_NEW_FS_STATE;
+   } else {
+      f->NewFragClamp = ST_NEW_RASTERIZER;
+   }
 
    if (st->clamp_frag_depth_in_shader) {
       f->NewClipControl |= ST_NEW_VS_STATE | ST_NEW_GS_STATE |
@@ -1104,12 +1104,18 @@ st_destroy_context(struct st_context *st)
 
    st_destroy_program_variants(st);
 
-   _mesa_free_context_data(ctx);
+   /* Do not release debug_output yet because it might be in use by other threads.
+    * These threads will be terminated by _mesa_free_context_data and
+    * st_destroy_context_priv.
+    */
+   _mesa_free_context_data(ctx, false);
 
    /* This will free the st_context too, so 'st' must not be accessed
     * afterwards. */
    st_destroy_context_priv(st, true);
    st = NULL;
+
+   _mesa_destroy_debug_output(ctx);
 
    free(ctx);
 

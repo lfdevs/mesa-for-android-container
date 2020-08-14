@@ -36,6 +36,8 @@ LOCAL_SRC_FILES := \
 	ir/gp/reduce_scheduler.c \
 	ir/gp/scheduler.c \
 	ir/lima_ir.h \
+	ir/lima_nir_duplicate_consts.c \
+	ir/lima_nir_duplicate_intrinsic.c \
 	ir/lima_nir_lower_uniform_to_scalar.c \
 	ir/lima_nir_split_load_input.c \
 	ir/pp/codegen.c \

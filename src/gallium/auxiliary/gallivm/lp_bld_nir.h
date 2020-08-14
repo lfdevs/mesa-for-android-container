@@ -175,6 +175,14 @@ struct lp_build_nir_context
 
    void (*vote)(struct lp_build_nir_context *bld_base, LLVMValueRef src, nir_intrinsic_instr *instr, LLVMValueRef dst[4]);
    void (*helper_invocation)(struct lp_build_nir_context *bld_base, LLVMValueRef *dst);
+
+   void (*interp_at)(struct lp_build_nir_context *bld_base,
+                     unsigned num_components,
+                     nir_variable *var,
+                     bool centroid, bool sample,
+                     unsigned const_index,
+                     LLVMValueRef indir_index,
+                     LLVMValueRef offsets[2], LLVMValueRef dst[4]);
 //   LLVMValueRef main_function
 };
 
@@ -210,6 +218,7 @@ struct lp_build_nir_soa_context
    const struct lp_build_gs_iface *gs_iface;
    const struct lp_build_tcs_iface *tcs_iface;
    const struct lp_build_tes_iface *tes_iface;
+   const struct lp_build_fs_iface *fs_iface;
    LLVMValueRef emitted_prims_vec_ptr[PIPE_MAX_VERTEX_STREAMS];
    LLVMValueRef total_emitted_vertices_vec_ptr[PIPE_MAX_VERTEX_STREAMS];
    LLVMValueRef emitted_vertices_vec_ptr[PIPE_MAX_VERTEX_STREAMS];
@@ -226,6 +235,7 @@ struct lp_build_nir_soa_context
    LLVMValueRef inputs_array;
 
    LLVMValueRef kernel_args_ptr;
+   unsigned gs_vertex_streams;
 };
 
 bool

@@ -25,11 +25,11 @@ entrypoints set.
 
 As part of initialization, the dispatch table in _EGLDriver->API must be
 populated with all the EGL entrypoints. Some functions like
-driver->API.Initialize and driver->API.Terminate _must_ be implemented
+driver->Initialize and driver->Terminate _must_ be implemented
 with driver-specific code (no default/fallback function is possible).
 
 
-Shortly after, the driver->API.Initialize() function is executed.  Any additional
+Shortly after, the driver->Initialize() function is executed.  Any additional
 driver initialization that wasn't done in the driver entry point should be
 done at this point.  Typically, this will involve setting up visual configs, etc.
 
@@ -54,7 +54,7 @@ defaults/fallbacks.  Same thing for the eglGet/Query functions.
 
 Teardown:
 
-When eglTerminate() is called, the driver->API.Terminate() function is
+When eglTerminate() is called, the driver->Terminate() function is
 called.  The driver should clean up after itself.  eglTerminate() will
 then close/unload the driver (shared library).
 

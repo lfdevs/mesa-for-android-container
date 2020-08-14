@@ -29,7 +29,12 @@ LOCAL_MODULE := libmesa_intel_dev
 
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 
-LOCAL_C_INCLUDES := $(MESA_TOP)/include
+LOCAL_STATIC_LIBRARIES := \
+	libmesa_git_sha1
+
+LOCAL_C_INCLUDES := \
+	$(MESA_TOP)/include \
+	$(MESA_TOP)/src
 
 LOCAL_SRC_FILES := $(DEV_FILES)
 

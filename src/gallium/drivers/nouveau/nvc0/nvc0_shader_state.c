@@ -65,6 +65,22 @@ nvc0_program_validate(struct nvc0_context *nvc0, struct nvc0_program *prog)
 }
 
 void
+nvc0_program_sp_start_id(struct nvc0_context *nvc0, int stage,
+                         struct nvc0_program *prog)
+{
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+
+   if (nvc0->screen->eng3d->oclass < GV100_3D_CLASS) {
+      BEGIN_NVC0(push, NVC0_3D(SP_START_ID(stage)), 1);
+      PUSH_DATA (push, prog->code_base);
+   } else {
+      BEGIN_NVC0(push, SUBC_3D(GV100_3D_SP_ADDRESS_HIGH(stage)), 2);
+      PUSH_DATAh(push, nvc0->screen->text->offset + prog->code_base);
+      PUSH_DATA (push, nvc0->screen->text->offset + prog->code_base);
+   }
+}
+
+void
 nvc0_vertprog_validate(struct nvc0_context *nvc0)
 {
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
@@ -74,9 +90,9 @@ nvc0_vertprog_validate(struct nvc0_context *nvc0)
          return;
    nvc0_program_update_context_state(nvc0, vp, 0);
 
-   BEGIN_NVC0(push, NVC0_3D(SP_SELECT(1)), 2);
+   BEGIN_NVC0(push, NVC0_3D(SP_SELECT(1)), 1);
    PUSH_DATA (push, 0x11);
-   PUSH_DATA (push, vp->code_base);
+   nvc0_program_sp_start_id(nvc0, 1, vp);
    BEGIN_NVC0(push, NVC0_3D(SP_GPR_ALLOC(1)), 1);
    PUSH_DATA (push, vp->num_gprs);
 
@@ -152,9 +168,9 @@ nvc0_fragprog_validate(struct nvc0_context *nvc0)
                  fp->fp.post_depth_coverage);
    }
 
-   BEGIN_NVC0(push, NVC0_3D(SP_SELECT(5)), 2);
+   BEGIN_NVC0(push, NVC0_3D(SP_SELECT(5)), 1);
    PUSH_DATA (push, 0x51);
-   PUSH_DATA (push, fp->code_base);
+   nvc0_program_sp_start_id(nvc0, 5, fp);
    BEGIN_NVC0(push, NVC0_3D(SP_GPR_ALLOC(5)), 1);
    PUSH_DATA (push, fp->num_gprs);
 
@@ -176,9 +192,9 @@ nvc0_tctlprog_validate(struct nvc0_context *nvc0)
          BEGIN_NVC0(push, NVC0_3D(TESS_MODE), 1);
          PUSH_DATA (push, tp->tp.tess_mode);
       }
-      BEGIN_NVC0(push, NVC0_3D(SP_SELECT(2)), 2);
+      BEGIN_NVC0(push, NVC0_3D(SP_SELECT(2)), 1);
       PUSH_DATA (push, 0x21);
-      PUSH_DATA (push, tp->code_base);
+      nvc0_program_sp_start_id(nvc0, 2, tp);
       BEGIN_NVC0(push, NVC0_3D(SP_GPR_ALLOC(2)), 1);
       PUSH_DATA (push, tp->num_gprs);
    } else {
@@ -186,9 +202,9 @@ nvc0_tctlprog_validate(struct nvc0_context *nvc0)
       /* not a whole lot we can do to handle this failure */
       if (!nvc0_program_validate(nvc0, tp))
          assert(!"unable to validate empty tcp");
-      BEGIN_NVC0(push, NVC0_3D(SP_SELECT(2)), 2);
+      BEGIN_NVC0(push, NVC0_3D(SP_SELECT(2)), 1);
       PUSH_DATA (push, 0x20);
-      PUSH_DATA (push, tp->code_base);
+      nvc0_program_sp_start_id(nvc0, 2, tp);
    }
    nvc0_program_update_context_state(nvc0, tp, 1);
 }
@@ -206,8 +222,7 @@ nvc0_tevlprog_validate(struct nvc0_context *nvc0)
       }
       BEGIN_NVC0(push, NVC0_3D(MACRO_TEP_SELECT), 1);
       PUSH_DATA (push, 0x31);
-      BEGIN_NVC0(push, NVC0_3D(SP_START_ID(3)), 1);
-      PUSH_DATA (push, tp->code_base);
+      nvc0_program_sp_start_id(nvc0, 3, tp);
       BEGIN_NVC0(push, NVC0_3D(SP_GPR_ALLOC(3)), 1);
       PUSH_DATA (push, tp->num_gprs);
    } else {
@@ -227,8 +242,7 @@ nvc0_gmtyprog_validate(struct nvc0_context *nvc0)
    if (gp && nvc0_program_validate(nvc0, gp) && gp->code_size) {
       BEGIN_NVC0(push, NVC0_3D(MACRO_GP_SELECT), 1);
       PUSH_DATA (push, 0x41);
-      BEGIN_NVC0(push, NVC0_3D(SP_START_ID(4)), 1);
-      PUSH_DATA (push, gp->code_base);
+      nvc0_program_sp_start_id(nvc0, 4, gp);
       BEGIN_NVC0(push, NVC0_3D(SP_GPR_ALLOC(4)), 1);
       PUSH_DATA (push, gp->num_gprs);
    } else {

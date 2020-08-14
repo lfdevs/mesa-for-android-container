@@ -47,7 +47,7 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
    ASSERTED unsigned old_num_vertex_buffers;
    unsigned i;
    const void *map;
-   enum pipe_error ret;
+   boolean retried;
 
    SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_SWTNLDRAWVBO);
 
@@ -58,12 +58,9 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
    /* Make sure that the need_swtnl flag does not go away */
    svga->state.sw.in_swtnl_draw = TRUE;
 
-   ret = svga_update_state(svga, SVGA_STATE_SWTNL_DRAW);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = svga_update_state(svga, SVGA_STATE_SWTNL_DRAW);
+   SVGA_RETRY_CHECK(svga, svga_update_state(svga, SVGA_STATE_SWTNL_DRAW), retried);
+   if (retried) {
       svga->swtnl.new_vbuf = TRUE;
-      assert(ret == PIPE_OK);
    }
 
    /*
@@ -148,7 +145,7 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
    svga->dirty |= SVGA_NEW_NEED_PIPELINE | SVGA_NEW_NEED_SWVFETCH;
 
    SVGA_STATS_TIME_POP(svga_sws(svga));
-   return ret;
+   return PIPE_OK;
 }
 
 

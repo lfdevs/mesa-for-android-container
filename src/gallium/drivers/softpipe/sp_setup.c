@@ -33,6 +33,7 @@
  */
 
 #include "sp_context.h"
+#include "sp_screen.h"
 #include "sp_quad.h"
 #include "sp_quad_pipe.h"
 #include "sp_setup.h"
@@ -808,7 +809,8 @@ sp_setup_tri(struct setup_context *setup,
    print_vertex(setup, v2);
 #endif
 
-   if (setup->softpipe->no_rast || setup->softpipe->rasterizer->rasterizer_discard)
+   if (unlikely(sp_debug & SP_DBG_NO_RAST) ||
+       setup->softpipe->rasterizer->rasterizer_discard)
       return;
    
    det = calc_det(v0, v1, v2);
@@ -1093,7 +1095,8 @@ sp_setup_line(struct setup_context *setup,
    print_vertex(setup, v1);
 #endif
 
-   if (setup->softpipe->no_rast || setup->softpipe->rasterizer->rasterizer_discard)
+   if (unlikely(sp_debug & SP_DBG_NO_RAST) ||
+       setup->softpipe->rasterizer->rasterizer_discard)
       return;
 
    if (dx == 0 && dy == 0)
@@ -1240,7 +1243,8 @@ sp_setup_point(struct setup_context *setup,
 
    assert(sinfo->valid);
 
-   if (setup->softpipe->no_rast || setup->softpipe->rasterizer->rasterizer_discard)
+   if (unlikely(sp_debug & SP_DBG_NO_RAST) ||
+       setup->softpipe->rasterizer->rasterizer_discard)
       return;
 
    assert(setup->softpipe->reduced_prim == PIPE_PRIM_POINTS);

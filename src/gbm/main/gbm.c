@@ -534,6 +534,11 @@ gbm_bo_import(struct gbm_device *gbm,
  * This function maps a region of a gbm bo for cpu read and/or write
  * access.
  *
+ * The mapping exposes a linear view of the buffer object even if the buffer
+ * has a non-linear modifier.
+ *
+ * This function may require intermediate buffer copies (ie. it may be slow).
+ *
  * \param bo The buffer object
  * \param x The X (top left origin) starting position of the mapped region for
  * the buffer

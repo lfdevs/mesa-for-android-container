@@ -14,10 +14,13 @@ struct nouveau_bo;
  *
  * USER_MEMORY: resource->data is a pointer to client memory and may change
  *  between GL calls
+ *
+ * USER_PTR: bo is backed by user memory mapped into the GPUs VM
  */
 #define NOUVEAU_BUFFER_STATUS_GPU_READING (1 << 0)
 #define NOUVEAU_BUFFER_STATUS_GPU_WRITING (1 << 1)
 #define NOUVEAU_BUFFER_STATUS_DIRTY       (1 << 2)
+#define NOUVEAU_BUFFER_STATUS_USER_PTR    (1 << 6)
 #define NOUVEAU_BUFFER_STATUS_USER_MEMORY (1 << 7)
 
 #define NOUVEAU_BUFFER_STATUS_REALLOC_MASK NOUVEAU_BUFFER_STATUS_USER_MEMORY
@@ -90,6 +93,11 @@ nouveau_resource_mapped_by_gpu(struct pipe_resource *resource)
 struct pipe_resource *
 nouveau_buffer_create(struct pipe_screen *pscreen,
                       const struct pipe_resource *templ);
+
+struct pipe_resource *
+nouveau_buffer_create_from_user(struct pipe_screen *pscreen,
+                                const struct pipe_resource *templ,
+                                void *user_ptr);
 
 struct pipe_resource *
 nouveau_user_buffer_create(struct pipe_screen *screen, void *ptr,

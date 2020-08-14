@@ -3,7 +3,7 @@
 
 #include "drm-uapi/i915_drm.h"
 
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 
 #include "i915_drm_winsys.h"
 #include "i915_drm_public.h"

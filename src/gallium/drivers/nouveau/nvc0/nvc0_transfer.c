@@ -140,9 +140,9 @@ nve4_m2mf_transfer_rect(struct nvc0_context *nvc0,
    nouveau_pushbuf_bufctx(push, bctx);
    nouveau_pushbuf_validate(push);
 
-   exec = 0x400 /* REMAP_ENABLE */ | 0x200 /* 2D_ENABLE */ | 0x6 /* UNK */;
+   exec = NVE4_COPY_EXEC_SWIZZLE_ENABLE | NVE4_COPY_EXEC_2D_ENABLE | NVE4_COPY_EXEC_FLUSH | NVE4_COPY_EXEC_COPY_MODE_NON_PIPELINED;
 
-   BEGIN_NVC0(push, SUBC_COPY(0x0708), 1);
+   BEGIN_NVC0(push, NVE4_COPY(SWIZZLE), 1);
    PUSH_DATA (push, (cpbs[dst->cpp].nc - 1) << 24 |
                     (cpbs[src->cpp].nc - 1) << 20 |
                     (cpbs[src->cpp].cs - 1) << 16 |
@@ -152,8 +152,8 @@ nve4_m2mf_transfer_rect(struct nvc0_context *nvc0,
                     0 <<  0 /* DST_X = SRC_X */);
 
    if (nouveau_bo_memtype(dst->bo)) {
-      BEGIN_NVC0(push, SUBC_COPY(0x070c), 6);
-      PUSH_DATA (push, 0x1000 | dst->tile_mode);
+      BEGIN_NVC0(push, NVE4_COPY(DST_BLOCK_DIMENSIONS), 6);
+      PUSH_DATA (push, dst->tile_mode | NVE4_COPY_SRC_BLOCK_DIMENSIONS_GOB_HEIGHT_FERMI_8);
       PUSH_DATA (push, dst->width);
       PUSH_DATA (push, dst->height);
       PUSH_DATA (push, dst->depth);
@@ -162,12 +162,12 @@ nve4_m2mf_transfer_rect(struct nvc0_context *nvc0,
    } else {
       assert(!dst->z);
       dst_base += dst->y * dst->pitch + dst->x * dst->cpp;
-      exec |= 0x100; /* DST_MODE_2D_LINEAR */
+      exec |= NVE4_COPY_EXEC_DST_LAYOUT_BLOCKLINEAR;
    }
 
    if (nouveau_bo_memtype(src->bo)) {
-      BEGIN_NVC0(push, SUBC_COPY(0x0728), 6);
-      PUSH_DATA (push, 0x1000 | src->tile_mode);
+      BEGIN_NVC0(push, NVE4_COPY(SRC_BLOCK_DIMENSIONS), 6);
+      PUSH_DATA (push, src->tile_mode | NVE4_COPY_SRC_BLOCK_DIMENSIONS_GOB_HEIGHT_FERMI_8);
       PUSH_DATA (push, src->width);
       PUSH_DATA (push, src->height);
       PUSH_DATA (push, src->depth);
@@ -176,10 +176,10 @@ nve4_m2mf_transfer_rect(struct nvc0_context *nvc0,
    } else {
       assert(!src->z);
       src_base += src->y * src->pitch + src->x * src->cpp;
-      exec |= 0x080; /* SRC_MODE_2D_LINEAR */
+      exec |= NVE4_COPY_EXEC_SRC_LAYOUT_BLOCKLINEAR;
    }
 
-   BEGIN_NVC0(push, SUBC_COPY(0x0400), 8);
+   BEGIN_NVC0(push, NVE4_COPY(SRC_ADDRESS_HIGH), 8);
    PUSH_DATAh(push, src->bo->offset + src_base);
    PUSH_DATA (push, src->bo->offset + src_base);
    PUSH_DATAh(push, dst->bo->offset + dst_base);
@@ -189,7 +189,7 @@ nve4_m2mf_transfer_rect(struct nvc0_context *nvc0,
    PUSH_DATA (push, nblocksx);
    PUSH_DATA (push, nblocksy);
 
-   BEGIN_NVC0(push, SUBC_COPY(0x0300), 1);
+   BEGIN_NVC0(push, NVE4_COPY(EXEC), 1);
    PUSH_DATA (push, exec);
 
    nouveau_bufctx_reset(bctx, 0);
@@ -329,15 +329,18 @@ nve4_m2mf_copy_linear(struct nouveau_context *nv,
    nouveau_pushbuf_bufctx(push, bctx);
    nouveau_pushbuf_validate(push);
 
-   BEGIN_NVC0(push, SUBC_COPY(0x0400), 4);
+   BEGIN_NVC0(push, NVE4_COPY(SRC_ADDRESS_HIGH), 4);
    PUSH_DATAh(push, src->offset + srcoff);
    PUSH_DATA (push, src->offset + srcoff);
    PUSH_DATAh(push, dst->offset + dstoff);
    PUSH_DATA (push, dst->offset + dstoff);
-   BEGIN_NVC0(push, SUBC_COPY(0x0418), 1);
+   BEGIN_NVC0(push, NVE4_COPY(X_COUNT), 1);
    PUSH_DATA (push, size);
-   BEGIN_NVC0(push, SUBC_COPY(0x0300), 1);
-   PUSH_DATA (push, 0x186);
+   BEGIN_NVC0(push, NVE4_COPY(EXEC), 1);
+   PUSH_DATA (push, NVE4_COPY_EXEC_COPY_MODE_NON_PIPELINED |
+		    NVE4_COPY_EXEC_FLUSH |
+		    NVE4_COPY_EXEC_SRC_LAYOUT_BLOCKLINEAR |
+		    NVE4_COPY_EXEC_DST_LAYOUT_BLOCKLINEAR);
 
    nouveau_bufctx_reset(bctx, 0);
 }

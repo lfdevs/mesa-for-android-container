@@ -33,7 +33,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 **************************************************************************/
 
 #include "radeon_common.h"
-#include "util/xmlpool.h"		/* for symbolic values of enum-type options */
+#include "util/driconf.h"		/* for symbolic values of enum-type options */
 #include "utils.h"
 #include "drivers/common/meta.h"
 #include "main/context.h"
@@ -270,7 +270,7 @@ void radeonDestroyContext(__DRIcontext *driContextPriv )
 
 	/* free atom list */
 	/* free the Mesa context data */
-	_mesa_free_context_data(&radeon->glCtx);
+	_mesa_free_context_data(&radeon->glCtx, true);
 
 	/* free the option cache */
 	driDestroyOptionCache(&radeon->optionCache);

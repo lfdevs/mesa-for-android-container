@@ -7,33 +7,54 @@
 namespace aco {
 
 static const char *reduce_ops[] = {
+   [iadd8] = "iadd8",
+   [iadd16] = "iadd16",
    [iadd32] = "iadd32",
    [iadd64] = "iadd64",
+   [imul8] = "imul8",
+   [imul16] = "imul16",
    [imul32] = "imul32",
    [imul64] = "imul64",
+   [fadd16] = "fadd16",
    [fadd32] = "fadd32",
    [fadd64] = "fadd64",
+   [fmul16] = "fmul16",
    [fmul32] = "fmul32",
    [fmul64] = "fmul64",
+   [imin8] = "imin8",
+   [imin16] = "imin16",
    [imin32] = "imin32",
    [imin64] = "imin64",
+   [imax8] = "imax8",
+   [imax16] = "imax16",
    [imax32] = "imax32",
    [imax64] = "imax64",
+   [umin8] = "umin8",
+   [umin16] = "umin16",
    [umin32] = "umin32",
    [umin64] = "umin64",
+   [umax8] = "umax8",
+   [umax16] = "umax16",
    [umax32] = "umax32",
    [umax64] = "umax64",
+   [fmin16] = "fmin16",
    [fmin32] = "fmin32",
    [fmin64] = "fmin64",
+   [fmax16] = "fmax16",
    [fmax32] = "fmax32",
    [fmax64] = "fmax64",
+   [iand8] = "iand8",
+   [iand16] = "iand16",
    [iand32] = "iand32",
    [iand64] = "iand64",
+   [ior8] = "ior8",
+   [ior16] = "ior16",
    [ior32] = "ior32",
    [ior64] = "ior64",
+   [ixor8] = "ixor8",
+   [ixor16] = "ixor16",
    [ixor32] = "ixor32",
    [ixor64] = "ixor64",
-   [gfx10_wave64_bpermute] = "gfx10_wave64_bpermute",
 };
 
 static void print_reg_class(const RegClass rc, FILE *output)
@@ -132,8 +153,13 @@ static void print_constant(uint8_t reg, FILE *output)
 
 static void print_operand(const Operand *operand, FILE *output)
 {
-   if (operand->isLiteral()) {
-      fprintf(output, "0x%x", operand->constantValue());
+   if (operand->isLiteral() || (operand->isConstant() && operand->bytes() == 1)) {
+      if (operand->bytes() == 1)
+         fprintf(output, "0x%.2x", operand->constantValue());
+      else if (operand->bytes() == 2)
+         fprintf(output, "0x%.4x", operand->constantValue());
+      else
+         fprintf(output, "0x%x", operand->constantValue());
    } else if (operand->isConstant()) {
       print_constant(operand->physReg().reg(), output);
    } else if (operand->isUndefined()) {
@@ -153,29 +179,83 @@ static void print_operand(const Operand *operand, FILE *output)
 static void print_definition(const Definition *definition, FILE *output)
 {
    print_reg_class(definition->regClass(), output);
+   if (definition->isPrecise())
+      fprintf(output, "(precise)");
+   if (definition->isNUW())
+      fprintf(output, "(nuw)");
    fprintf(output, "%%%d", definition->tempId());
 
    if (definition->isFixed())
       print_physReg(definition->physReg(), definition->bytes(), output);
 }
 
-static void print_barrier_reorder(bool can_reorder, barrier_interaction barrier, FILE *output)
+static void print_storage(storage_class storage, FILE *output)
 {
-   if (can_reorder)
-      fprintf(output, " reorder");
+   fprintf(output, " storage:");
+   int printed = 0;
+   if (storage & storage_buffer)
+      printed += fprintf(output, "%sbuffer", printed ? "," : "");
+   if (storage & storage_atomic_counter)
+      printed += fprintf(output, "%satomic_counter", printed ? "," : "");
+   if (storage & storage_image)
+      printed += fprintf(output, "%simage", printed ? "," : "");
+   if (storage & storage_shared)
+      printed += fprintf(output, "%sshared", printed ? "," : "");
+   if (storage & storage_vmem_output)
+      printed += fprintf(output, "%svmem_output", printed ? "," : "");
+   if (storage & storage_scratch)
+      printed += fprintf(output, "%sscratch", printed ? "," : "");
+   if (storage & storage_vgpr_spill)
+      printed += fprintf(output, "%svgpr_spill", printed ? "," : "");
+}
 
-   if (barrier & barrier_buffer)
-      fprintf(output, " buffer");
-   if (barrier & barrier_image)
-      fprintf(output, " image");
-   if (barrier & barrier_atomic)
-      fprintf(output, " atomic");
-   if (barrier & barrier_shared)
-      fprintf(output, " shared");
-   if (barrier & barrier_gs_data)
-      fprintf(output, " gs_data");
-   if (barrier & barrier_gs_sendmsg)
-      fprintf(output, " gs_sendmsg");
+static void print_semantics(memory_semantics sem, FILE *output)
+{
+   fprintf(output, " semantics:");
+   int printed = 0;
+   if (sem & semantic_acquire)
+      printed += fprintf(output, "%sacquire", printed ? "," : "");
+   if (sem & semantic_release)
+      printed += fprintf(output, "%srelease", printed ? "," : "");
+   if (sem & semantic_volatile)
+      printed += fprintf(output, "%svolatile", printed ? "," : "");
+   if (sem & semantic_private)
+      printed += fprintf(output, "%sprivate", printed ? "," : "");
+   if (sem & semantic_can_reorder)
+      printed += fprintf(output, "%sreorder", printed ? "," : "");
+   if (sem & semantic_atomic)
+      printed += fprintf(output, "%satomic", printed ? "," : "");
+   if (sem & semantic_rmw)
+      printed += fprintf(output, "%srmw", printed ? "," : "");
+}
+
+static void print_scope(sync_scope scope, FILE *output, const char *prefix="scope")
+{
+   fprintf(output, " %s:", prefix);
+   switch (scope) {
+   case scope_invocation:
+      fprintf(output, "invocation");
+      break;
+   case scope_subgroup:
+      fprintf(output, "subgroup");
+      break;
+   case scope_workgroup:
+      fprintf(output, "workgroup");
+      break;
+   case scope_queuefamily:
+      fprintf(output, "queuefamily");
+      break;
+   case scope_device:
+      fprintf(output, "device");
+      break;
+   }
+}
+
+static void print_sync(memory_sync_info sync, FILE *output)
+{
+   print_storage(sync.storage, output);
+   print_semantics(sync.semantics, output);
+   print_scope(sync.scope, output);
 }
 
 static void print_instr_format_specific(const Instruction *instr, FILE *output)
@@ -262,7 +342,7 @@ static void print_instr_format_specific(const Instruction *instr, FILE *output)
          fprintf(output, " dlc");
       if (smem->nv)
          fprintf(output, " nv");
-      print_barrier_reorder(smem->can_reorder, smem->barrier, output);
+      print_sync(smem->sync, output);
       break;
    }
    case Format::VINTRP: {
@@ -278,6 +358,7 @@ static void print_instr_format_specific(const Instruction *instr, FILE *output)
          fprintf(output, " offset1:%u", ds->offset1);
       if (ds->gds)
          fprintf(output, " gds");
+      print_sync(ds->sync, output);
       break;
    }
    case Format::MUBUF: {
@@ -302,7 +383,7 @@ static void print_instr_format_specific(const Instruction *instr, FILE *output)
          fprintf(output, " lds");
       if (mubuf->disable_wqm)
          fprintf(output, " disable_wqm");
-      print_barrier_reorder(mubuf->can_reorder, mubuf->barrier, output);
+      print_sync(mubuf->sync, output);
       break;
    }
    case Format::MIMG: {
@@ -362,7 +443,7 @@ static void print_instr_format_specific(const Instruction *instr, FILE *output)
          fprintf(output, " d16");
       if (mimg->disable_wqm)
          fprintf(output, " disable_wqm");
-      print_barrier_reorder(mimg->can_reorder, mimg->barrier, output);
+      print_sync(mimg->sync, output);
       break;
    }
    case Format::EXP: {
@@ -409,6 +490,12 @@ static void print_instr_format_specific(const Instruction *instr, FILE *output)
          fprintf(output, " cluster_size:%u", reduce->cluster_size);
       break;
    }
+   case Format::PSEUDO_BARRIER: {
+      const Pseudo_barrier_instruction* barrier = static_cast<const Pseudo_barrier_instruction*>(instr);
+      print_sync(barrier->sync, output);
+      print_scope(barrier->exec_scope, output, "exec_scope");
+      break;
+   }
    case Format::FLAT:
    case Format::GLOBAL:
    case Format::SCRATCH: {
@@ -427,7 +514,7 @@ static void print_instr_format_specific(const Instruction *instr, FILE *output)
          fprintf(output, " nv");
       if (flat->disable_wqm)
          fprintf(output, " disable_wqm");
-      print_barrier_reorder(flat->can_reorder, flat->barrier, output);
+      print_sync(flat->sync, output);
       break;
    }
    case Format::MTBUF: {
@@ -477,7 +564,7 @@ static void print_instr_format_specific(const Instruction *instr, FILE *output)
          fprintf(output, " tfe");
       if (mtbuf->disable_wqm)
          fprintf(output, " disable_wqm");
-      print_barrier_reorder(mtbuf->can_reorder, mtbuf->barrier, output);
+      print_sync(mtbuf->sync, output);
       break;
    }
    case Format::VOP3P: {

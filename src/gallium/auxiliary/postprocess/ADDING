@@ -6,7 +6,7 @@ These shaders may be written in any supported language, but are added here in TG
 assembly.
 
 You can translate GLSL/ARB fairly easily via llvmpipe (LP_DEBUG=tgsi). I don't know the
-status of the D3D state tracker, but if/when that works, I'd assume HLSL would be possible
+status of the D3D gallium frontend, but if/when that works, I'd assume HLSL would be possible
 too.
 
 
@@ -61,11 +61,11 @@ main function as is.
 ---------------------------
 
 First time outside of auxiliary/postprocess. First, add a suitable description to
-drivers/dri/common/xmlpool/t_options.h, and regenerate options.h by running make in that
-directory. Use the name you put into filters.h as the config option name.
+src/util/driconf.h.
+Use the name you put into filters.h as the config option name.
 
 With driconf aware of the option, make Gallium aware of it too. Add it to
-state_trackers/dri/common/dri_screen.c in a proper section, specifying its default value and
+frontends/dri/common/dri_screen.c in a proper section, specifying its default value and
 the accepted range (if applicable).
 
 Do check that __driNConfigOptions is still correct after the addition.

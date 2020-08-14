@@ -29,7 +29,7 @@
 
 struct name_offset {
    const char *name;
-   int offset;
+   unsigned int offset;
 };
 
 extern const struct name_offset linux_gl_abi[];

@@ -113,7 +113,7 @@ i915_create_blend_state(struct pipe_context *pipe,
       unsigned dstA   = blend->rt[0].alpha_dst_factor;
 
       /* Special handling for MIN/MAX filter modes handled at
-       * state_tracker level.
+       * frontend level.
        */
 
       if (srcA != srcRGB ||
@@ -432,7 +432,7 @@ i915_prepare_vertex_sampling(struct i915_context *i915)
                                  i,
                                  tex->width0, tex->height0, tex->depth0,
                                  view->u.tex.first_level, tex->last_level,
-                                 addr,
+                                 0, 0, addr,
                                  row_stride, img_stride, mip_offsets);
       } else
          i915->mapped_vs_tex[i] = NULL;
@@ -888,7 +888,7 @@ static void i915_set_clip_state( struct pipe_context *pipe,
 
 
 
-/* Called when driver state tracker notices changes to the viewport
+/* Called when gallium frontends notice changes to the viewport
  * matrix:
  */
 static void i915_set_viewport_states( struct pipe_context *pipe,

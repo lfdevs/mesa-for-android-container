@@ -5,11 +5,11 @@ namespace r600 {
 void LDSReadInstruction::do_print(std::ostream& os) const
 {
    os << "LDS Read  [";
-   for (unsigned i = 0; i < m_address.size(); ++i)
-      os << *m_dest_value[i] << " ";
+   for (auto& v : m_dest_value)
+      os << *v << " ";
    os << "], ";
-   for (unsigned i = 0; i < m_address.size(); ++i)
-      os << *m_address[i] << " ";
+   for (auto& a : m_address)
+      os << *a << " ";
 }
 
 LDSReadInstruction::LDSReadInstruction(std::vector<PValue>& address, std::vector<PValue>& value):
@@ -45,6 +45,47 @@ bool LDSReadInstruction::is_equal_to(const Instruction& lhs) const
    auto& other = static_cast<const LDSReadInstruction&>(lhs);
    return m_address == other.m_address &&
          m_dest_value == other.m_dest_value;
+}
+
+LDSAtomicInstruction::LDSAtomicInstruction(PValue& dest, PValue& src0, PValue src1, PValue& address, unsigned op):
+   Instruction(lds_atomic),
+   m_address(address),
+   m_dest_value(dest),
+   m_src0_value(src0),
+   m_src1_value(src1),
+   m_opcode(op)
+{
+   add_remappable_src_value(&m_src0_value);
+   add_remappable_src_value(&m_src1_value);
+   add_remappable_src_value(&m_address);
+   add_remappable_dst_value(&m_dest_value);
+}
+
+LDSAtomicInstruction::LDSAtomicInstruction(PValue& dest, PValue& src0, PValue& address, unsigned op):
+   LDSAtomicInstruction(dest, src0, PValue(), address, op)
+{
+
+}
+
+
+void LDSAtomicInstruction::do_print(std::ostream& os) const
+{
+   os << "LDS " << m_opcode << " " << *m_dest_value << " ";
+   os << "[" << *m_address << "] " << *m_src0_value;
+   if (m_src1_value)
+      os << ", " << *m_src1_value;
+}
+
+bool LDSAtomicInstruction::is_equal_to(const Instruction& lhs) const
+{
+   auto& other = static_cast<const LDSAtomicInstruction&>(lhs);
+
+   return m_opcode == other.m_opcode &&
+         *m_dest_value == *other.m_dest_value &&
+         *m_src0_value == *other.m_src0_value &&
+         *m_address == *other.m_address &&
+         ((m_src1_value && other.m_src1_value && (*m_src1_value == *other.m_src1_value)) ||
+          (!m_src1_value && !other.m_src1_value));
 }
 
 LDSWriteInstruction::LDSWriteInstruction(PValue address, unsigned idx_offset, PValue value0):

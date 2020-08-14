@@ -49,6 +49,8 @@ struct zink_resource {
 
    struct sw_displaytarget *dt;
    unsigned dt_stride;
+
+   bool needs_xfb_barrier;
 };
 
 struct zink_transfer {

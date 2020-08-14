@@ -277,9 +277,12 @@ brw_nir_opt_peephole_ffma_impl(nir_function_impl *impl)
       progress |= brw_nir_opt_peephole_ffma_block(&builder, block);
    }
 
-   if (progress)
+   if (progress) {
       nir_metadata_preserve(impl, nir_metadata_block_index |
                                   nir_metadata_dominance);
+   } else {
+      nir_metadata_preserve(impl, nir_metadata_all);
+   }
 
    return progress;
 }

@@ -62,12 +62,12 @@ midgard_is_integer_out_op(int op)
 /* Determines effective writemask, taking quirks and expansion into account */
 
 static inline unsigned
-effective_writemask(midgard_vector_alu *alu, unsigned existing_mask)
+effective_writemask(midgard_alu_op op, unsigned existing_mask)
 {
         /* Channel count is off-by-one to fit in two-bits (0 channel makes no
          * sense) */
 
-        unsigned channel_count = GET_CHANNEL_COUNT(alu_opcode_props[alu->op].props);
+        unsigned channel_count = GET_CHANNEL_COUNT(alu_opcode_props[op].props);
 
         /* If there is a fixed channel count, construct the appropriate mask */
 

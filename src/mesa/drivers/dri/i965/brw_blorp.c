@@ -831,6 +831,8 @@ brw_blorp_framebuffer(struct brw_context *brw,
       }
    }
 
+   /* try_blorp_blit should always be successful for color blits. */
+   assert(!(mask & GL_COLOR_BUFFER_BIT));
    return mask;
 }
 

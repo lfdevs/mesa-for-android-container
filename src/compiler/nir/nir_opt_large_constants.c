@@ -176,14 +176,15 @@ nir_opt_large_constants(nir_shader *shader,
    /* This pass can only be run once */
    assert(shader->constant_data == NULL && shader->constant_data_size == 0);
 
-   unsigned num_locals = exec_list_length(&impl->locals);
-   nir_index_vars(shader, impl, nir_var_function_temp);
+   unsigned num_locals = nir_function_impl_index_vars(impl);
 
-   if (num_locals == 0)
+   if (num_locals == 0) {
+      nir_shader_preserve_all_metadata(shader);
       return false;
+   }
 
    struct var_info *var_infos = ralloc_array(NULL, struct var_info, num_locals);
-   nir_foreach_variable(var, &impl->locals) {
+   nir_foreach_function_temp_variable(var, impl) {
       var_infos[var->index] = (struct var_info) {
          .var = var,
          .is_constant = true,
@@ -302,6 +303,7 @@ nir_opt_large_constants(nir_shader *shader,
    }
 
    if (shader->constant_data_size == 0) {
+      nir_shader_preserve_all_metadata(shader);
       ralloc_free(var_infos);
       return false;
    }

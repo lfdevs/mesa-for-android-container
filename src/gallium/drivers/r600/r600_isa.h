@@ -36,6 +36,7 @@ extern "C" {
 /* ALU flags */
 enum alu_op_flags
 {
+	AF_NONE = 0,
 	AF_V		= (1<<0),    /* allowed in vector slots */
 
 	/* allowed in scalar(trans) slot (slots xyz on cayman, may be replicated

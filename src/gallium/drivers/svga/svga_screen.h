@@ -50,10 +50,13 @@ struct svga_screen
    /** Device caps */
    boolean haveProvokingVertex;
    boolean haveLineStipple, haveLineSmooth;
+   boolean haveBlendLogicops;
    float maxLineWidth, maxLineWidthAA;
    float maxPointSize;
+   float pointSmoothThreshold; /** Disable point AA for sizes less than this */
    unsigned max_color_buffers;
    unsigned max_const_buffers;
+   unsigned max_viewports;
    unsigned ms_samples;
 
    struct {

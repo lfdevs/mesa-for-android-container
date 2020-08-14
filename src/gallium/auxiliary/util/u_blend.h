@@ -82,12 +82,12 @@ util_blend_factor_to_shader(enum pipe_blendfactor factor)
          return BLEND_FACTOR_CONSTANT_ALPHA;
 
       case PIPE_BLENDFACTOR_SRC1_COLOR:
-      case PIPE_BLENDFACTOR_SRC1_ALPHA:
       case PIPE_BLENDFACTOR_INV_SRC1_COLOR:
+         return BLEND_FACTOR_SRC1_COLOR;
+
       case PIPE_BLENDFACTOR_INV_SRC1_ALPHA:
-         /* unimplemented */
-         assert(0);
-         return BLEND_FACTOR_ZERO;
+      case PIPE_BLENDFACTOR_SRC1_ALPHA:
+         return BLEND_FACTOR_SRC1_ALPHA;
 
       default:
          unreachable("Invalid factor");

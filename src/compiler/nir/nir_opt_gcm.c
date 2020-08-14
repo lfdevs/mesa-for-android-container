@@ -162,6 +162,8 @@ is_src_scalarizable(nir_src *src)
       default:
          break;
       }
+
+      return false;
    }
 
    default:
@@ -199,11 +201,12 @@ gcm_pin_instructions(nir_function_impl *impl, struct gcm_state *state)
                instr->pass_flags = GCM_INSTR_SCHEDULE_EARLIER_ONLY;
                break;
 
-         case nir_op_mov:
-            if (!is_src_scalarizable(&(nir_instr_as_alu(instr)->src[0].src))) {
-               instr->pass_flags = GCM_INSTR_PINNED;
-               break;
-            }
+            case nir_op_mov:
+               if (!is_src_scalarizable(&(nir_instr_as_alu(instr)->src[0].src))) {
+                  instr->pass_flags = GCM_INSTR_PINNED;
+                  break;
+               }
+               /* fallthrough */
 
             default:
                instr->pass_flags = 0;

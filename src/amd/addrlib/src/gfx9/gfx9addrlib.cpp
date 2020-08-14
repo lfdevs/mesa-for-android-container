@@ -766,7 +766,6 @@ ADDR_E_RETURNCODE Gfx9Lib::HwlComputeCmaskAddrFromCoord(
     ADDR2_COMPUTE_CMASK_INFO_INPUT input = {0};
     input.size            = sizeof(input);
     input.cMaskFlags      = pIn->cMaskFlags;
-    input.colorFlags      = pIn->colorFlags;
     input.unalignedWidth  = Max(pIn->unalignedWidth, 1u);
     input.unalignedHeight = Max(pIn->unalignedHeight, 1u);
     input.numSlices       = Max(pIn->numSlices, 1u);
@@ -1046,7 +1045,7 @@ BOOL_32 Gfx9Lib::HwlInitGlobalParams(
 
     if (m_settings.isArcticIsland)
     {
-        GB_ADDR_CONFIG gbAddrConfig;
+        GB_ADDR_CONFIG_gfx9 gbAddrConfig;
 
         gbAddrConfig.u32All = pCreateIn->regValue.gbAddrConfig;
 

@@ -551,7 +551,7 @@ wsi_wl_surface_get_capabilities(VkIcdSurfaceBase *surface,
    /* There is no real maximum */
    caps->maxImageCount = 0;
 
-   caps->currentExtent = (VkExtent2D) { -1, -1 };
+   caps->currentExtent = (VkExtent2D) { UINT32_MAX, UINT32_MAX };
    caps->minImageExtent = (VkExtent2D) { 1, 1 };
    caps->maxImageExtent = (VkExtent2D) {
       wsi_device->maxImageDimension2D,
@@ -695,7 +695,7 @@ wsi_wl_surface_get_present_rectangles(VkIcdSurfaceBase *surface,
       /* We don't know a size so just return the usual "I don't know." */
       *rect = (VkRect2D) {
          .offset = { 0, 0 },
-         .extent = { -1, -1 },
+         .extent = { UINT32_MAX, UINT32_MAX },
       };
    }
 
@@ -755,7 +755,8 @@ struct wsi_wl_swapchain {
 
    struct wsi_wl_image                          images[0];
 };
-WSI_DEFINE_NONDISP_HANDLE_CASTS(wsi_wl_swapchain, VkSwapchainKHR)
+VK_DEFINE_NONDISP_HANDLE_CASTS(wsi_wl_swapchain, base.base, VkSwapchainKHR,
+                               VK_OBJECT_TYPE_SWAPCHAIN_KHR)
 
 static struct wsi_image *
 wsi_wl_swapchain_get_wsi_image(struct wsi_swapchain *wsi_chain,
@@ -1075,7 +1076,7 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       /* If we have an oldSwapchain parameter, copy the display struct over
        * from the old one so we don't have to fully re-initialize it.
        */
-      WSI_FROM_HANDLE(wsi_wl_swapchain, old_chain, pCreateInfo->oldSwapchain);
+      VK_FROM_HANDLE(wsi_wl_swapchain, old_chain, pCreateInfo->oldSwapchain);
       chain->display = wsi_wl_display_ref(old_chain->display);
    } else {
       chain->display = NULL;

@@ -151,6 +151,7 @@ public:
                   bool ack);
 
    PValue rat_id_offset() const { return m_rat_id_offset;}
+   int  rat_id() const { return m_rat_id;}
 
    ERatOp rat_op() const {return m_rat_op;}
 

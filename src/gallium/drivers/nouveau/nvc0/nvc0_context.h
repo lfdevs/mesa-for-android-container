@@ -27,6 +27,7 @@
 #include "nvc0/nvc0_3d.xml.h"
 #include "nv50/nv50_2d.xml.h"
 #include "nvc0/nvc0_m2mf.xml.h"
+#include "nvc0/nve4_copy.xml.h"
 #include "nvc0/nve4_p2mf.xml.h"
 #include "nvc0/nvc0_compute.xml.h"
 #include "nvc0/nvc0_macros.h"

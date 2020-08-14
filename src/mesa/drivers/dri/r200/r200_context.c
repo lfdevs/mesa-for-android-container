@@ -65,7 +65,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "radeon_span.h"
 
 #include "utils.h"
-#include "util/xmlpool.h" /* for symbolic values of enum-type options */
+#include "util/driconf.h" /* for symbolic values of enum-type options */
 
 /* Return various strings for glGetString().
  */

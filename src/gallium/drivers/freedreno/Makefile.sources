@@ -40,7 +40,6 @@ C_SOURCES := \
 	freedreno_util.h
 
 a2xx_SOURCES := \
-	a2xx/disasm-a2xx.c \
 	a2xx/fd2_blend.c \
 	a2xx/fd2_blend.h \
 	a2xx/fd2_context.c \
@@ -123,6 +122,8 @@ a4xx_SOURCES := \
 	a4xx/fd4_query.h \
 	a4xx/fd4_rasterizer.c \
 	a4xx/fd4_rasterizer.h \
+	a4xx/fd4_resource.c \
+	a4xx/fd4_resource.h \
 	a4xx/fd4_screen.c \
 	a4xx/fd4_screen.h \
 	a4xx/fd4_texture.c \
@@ -171,6 +172,8 @@ a6xx_SOURCES := \
 	a6xx/fd6_blitter.h \
 	a6xx/fd6_compute.c \
 	a6xx/fd6_compute.h \
+	a6xx/fd6_const.c \
+	a6xx/fd6_const.h \
 	a6xx/fd6_context.c \
 	a6xx/fd6_context.h \
 	a6xx/fd6_draw.c \
@@ -203,6 +206,7 @@ a6xx_SOURCES := \
 ir3_SOURCES := \
 	ir3/ir3_cache.c \
 	ir3/ir3_cache.h \
+	ir3/ir3_const.h \
 	ir3/ir3_gallium.c \
 	ir3/ir3_gallium.h
 

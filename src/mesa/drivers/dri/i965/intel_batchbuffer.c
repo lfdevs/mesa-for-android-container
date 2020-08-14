@@ -130,7 +130,11 @@ intel_batchbuffer_init(struct brw_context *brw)
    struct intel_batchbuffer *batch = &brw->batch;
    const struct gen_device_info *devinfo = &screen->devinfo;
 
-   batch->use_shadow_copy = !devinfo->has_llc;
+   if (unlikely(INTEL_DEBUG & DEBUG_BATCH)) {
+      /* The shadow doesn't get relocs written so state decode fails. */
+      batch->use_shadow_copy = false;
+   } else
+      batch->use_shadow_copy = !devinfo->has_llc;
 
    init_reloc_list(&batch->batch_relocs, 250);
    init_reloc_list(&batch->state_relocs, 250);
@@ -273,6 +277,13 @@ intel_batchbuffer_reset(struct brw_context *brw)
 
    if (batch->state_batch_sizes)
       _mesa_hash_table_u64_clear(batch->state_batch_sizes, NULL);
+
+   /* Always add workaround_bo which contains a driver identifier to be
+    * recorded in error states.
+    */
+   struct brw_bo *identifier_bo = brw->workaround_bo;
+   if (identifier_bo)
+      add_exec_bo(batch, identifier_bo);
 }
 
 static void

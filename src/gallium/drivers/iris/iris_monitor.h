@@ -25,19 +25,6 @@
 
 #include "pipe/p_screen.h"
 
-struct iris_monitor_counter {
-   int group;
-   int counter;
-};
-
-struct iris_monitor_config {
-   struct gen_perf_config *perf_cfg;
-
-   /* gallium requires an index for each counter */
-   int num_counters;
-   struct iris_monitor_counter *counters;
-};
-
 int iris_get_monitor_info(struct pipe_screen *pscreen, unsigned index,
                           struct pipe_driver_query_info *info);
 int iris_get_monitor_group_info(struct pipe_screen *pscreen,

@@ -71,11 +71,15 @@ bi_combine_sel16(bi_context *ctx, bi_instruction *parent, unsigned comp, unsigne
                 .dest_offset = comp >> 1,
                 .src = { parent->src[comp], parent->src[comp + 1] },
                 .src_types = { nir_type_uint16, nir_type_uint16 },
-                .swizzle = { {
-                        parent->swizzle[comp][0],
-                        parent->swizzle[comp + 1][0],
-                } }
+                .swizzle = {
+                        { parent->swizzle[comp][0] },
+                        { parent->swizzle[comp + 1][0] },
+                }
         };
+
+        /* In case we have a combine from a vec3 */
+        if (!sel.src[1])
+                sel.src[1] = BIR_INDEX_ZERO;
 
         bi_emit_before(ctx, parent, sel);
 }
@@ -85,6 +89,7 @@ bi_combine_sel16(bi_context *ctx, bi_instruction *parent, unsigned comp, unsigne
  * If this pass is slow, this cost can be avoided in favour for better
  * bookkeeping. */
 
+#if 0
 static bi_instruction *
 bi_get_parent(bi_context *ctx, unsigned idx)
 {
@@ -95,6 +100,7 @@ bi_get_parent(bi_context *ctx, unsigned idx)
 
         return NULL;
 }
+#endif
 
 /* Rewrites uses of an index. Again, this could be O(n) to the program but is
  * currently O(nc) to the program and number of combines, so the pass becomes
@@ -120,6 +126,7 @@ bi_rewrite_uses(bi_context *ctx,
 
 /* Checks if we have a nicely aligned vector prefix */
 
+#if 0
 static bool
 bi_is_aligned_vec32(bi_instruction *combine, unsigned s, bi_instruction *io,
                 unsigned *count)
@@ -154,7 +161,6 @@ bi_is_aligned_vec32(bi_instruction *combine, unsigned s, bi_instruction *io,
         return true;
 }
 
-#if 0
 /* Tries to lower a given source of a combine to an appropriate rewrite,
  * returning true if successful, and false with no changes otherwise. */
 
@@ -197,7 +203,9 @@ bi_lower_combine(bi_context *ctx, bi_block *block)
         bi_foreach_instr_in_block_safe(block, ins) {
                 if (ins->type != BI_COMBINE) continue;
 
-                unsigned R = bi_make_temp_reg(ctx);
+                bool needs_rewrite = !(ins->dest & PAN_IS_REG);
+                unsigned R = needs_rewrite ? bi_make_temp_reg(ctx) : ins->dest;
+                unsigned sz = nir_alu_type_get_type_size(ins->dest_type);
 
                 bi_foreach_src(ins, s) {
                         /* We're done early for vec2/3 */
@@ -215,16 +223,19 @@ bi_lower_combine(bi_context *ctx, bi_block *block)
                                 bi_insert_combine_mov(ctx, ins, s, R);
                         }
 #endif
-                        if (ins->dest_type == nir_type_uint32)
+                        if (sz == 32)
                                 bi_combine_mov32(ctx, ins, s, R);
-                        else {
+                        else if (sz == 16) {
                                 bi_combine_sel16(ctx, ins, s, R);
                                 s++;
+                        } else {
+                                unreachable("Unknown COMBINE size");
                         }
                 }
 
+                if (needs_rewrite)
+                        bi_rewrite_uses(ctx, ins->dest, 0, R, 0);
 
-                bi_rewrite_uses(ctx, ins->dest, 0, R, 0);
                 bi_remove_instruction(ins);
         }
 }

@@ -334,7 +334,7 @@ pstip_stage_from_pipe(struct pipe_context *pipe)
 
 /**
  * This function overrides the driver's create_fs_state() function and
- * will typically be called by the state tracker.
+ * will typically be called by the gallium frontend.
  */
 static void *
 pstip_create_fs_state(struct pipe_context *pipe,

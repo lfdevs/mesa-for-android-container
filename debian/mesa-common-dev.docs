@@ -1,4 +1,4 @@
-docs/*.html
+docs/*.rst
 docs/relnotes/*
-docs/specs/*.spec
-docs/specs/OLD/*.spec
+docs/_extra/specs/*.spec
+docs/_extra/specs/OLD/*.spec

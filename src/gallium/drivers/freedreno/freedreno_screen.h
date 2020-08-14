@@ -34,7 +34,7 @@
 #include "pipe/p_screen.h"
 #include "util/u_memory.h"
 #include "util/slab.h"
-#include "os/os_thread.h"
+#include "util/simple_mtx.h"
 #include "renderonly/renderonly.h"
 
 #include "freedreno_batch_cache.h"
@@ -48,7 +48,7 @@ struct fd_screen {
 
 	struct list_head context_list;
 
-	mtx_t lock;
+	simple_mtx_t lock;
 
 	/* it would be tempting to use pipe_reference here, but that
 	 * really doesn't work well if it isn't the first member of
@@ -70,7 +70,8 @@ struct fd_screen {
 	uint32_t max_freq;
 	uint32_t ram_size;
 	uint32_t max_rts;        /* max # of render targets */
-	uint32_t gmem_alignw, gmem_alignh;
+	uint32_t gmem_alignw, gmem_alignh; /* gmem load/store granularity */
+	uint32_t tile_alignw, tile_alignh; /* alignment for tile sizes */
 	uint32_t num_vsc_pipes;
 	uint32_t priority_mask;
 	bool has_timestamp;
@@ -97,14 +98,6 @@ struct fd_screen {
 	unsigned (*tile_mode)(const struct pipe_resource *prsc);
 	int (*layout_resource_for_modifier)(struct fd_resource *rsc, uint64_t modifier);
 
-	/* constant emit:  (note currently not used/needed for a2xx) */
-	void (*emit_const)(struct fd_ringbuffer *ring, gl_shader_stage type,
-			uint32_t regid, uint32_t offset, uint32_t sizedwords,
-			const uint32_t *dwords, struct pipe_resource *prsc);
-	/* emit bo addresses as constant: */
-	void (*emit_const_bo)(struct fd_ringbuffer *ring, gl_shader_stage type, boolean write,
-			uint32_t regid, uint32_t num, struct pipe_resource **prscs, uint32_t *offsets);
-
 	/* indirect-branch emit: */
 	void (*emit_ib)(struct fd_ringbuffer *ring, struct fd_ringbuffer *target);
 
@@ -126,12 +119,35 @@ struct fd_screen {
 	const uint64_t *supported_modifiers;
 
 	struct renderonly *ro;
+
+	/* when BATCH_DEBUG is enabled, tracking for fd_batch's which are not yet
+	 * freed:
+	 */
+	struct set *live_batches;
 };
 
 static inline struct fd_screen *
 fd_screen(struct pipe_screen *pscreen)
 {
 	return (struct fd_screen *)pscreen;
+}
+
+static inline void
+fd_screen_lock(struct fd_screen *screen)
+{
+	simple_mtx_lock(&screen->lock);
+}
+
+static inline void
+fd_screen_unlock(struct fd_screen *screen)
+{
+	simple_mtx_unlock(&screen->lock);
+}
+
+static inline void
+fd_screen_assert_locked(struct fd_screen *screen)
+{
+	simple_mtx_assert_locked(&screen->lock);
 }
 
 bool fd_screen_bo_get_handle(struct pipe_screen *pscreen,
@@ -187,6 +203,12 @@ static inline boolean
 is_a6xx(struct fd_screen *screen)
 {
 	return (screen->gpu_id >= 600) && (screen->gpu_id < 700);
+}
+
+static inline boolean
+is_a650(struct fd_screen *screen)
+{
+	return screen->gpu_id == 650;
 }
 
 /* is it using the ir3 compiler (shader isa introduced with a3xx)? */

@@ -24,7 +24,7 @@
 #include "anv_private.h"
 #include "test_common.h"
 
-int main(int argc, char **argv)
+int main(void)
 {
    struct anv_physical_device physical_device = {
       .use_softpin = true,

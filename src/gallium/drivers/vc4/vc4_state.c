@@ -387,7 +387,7 @@ vc4_set_constant_buffer(struct pipe_context *pctx,
         struct vc4_context *vc4 = vc4_context(pctx);
         struct vc4_constbuf_stateobj *so = &vc4->constbuf[shader];
 
-        /* Note that the state tracker can unbind constant buffers by
+        /* Note that the gallium frontend can unbind constant buffers by
          * passing NULL here.
          */
         if (unlikely(!cb)) {

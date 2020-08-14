@@ -940,6 +940,21 @@ brw_dmask_reg()
 }
 
 static inline struct brw_reg
+brw_mask_stack_reg(unsigned subnr)
+{
+   return suboffset(retype(brw_vec16_reg(BRW_ARCHITECTURE_REGISTER_FILE,
+                                         BRW_ARF_MASK_STACK, 0),
+                           BRW_REGISTER_TYPE_UB), subnr);
+}
+
+static inline struct brw_reg
+brw_mask_stack_depth_reg(unsigned subnr)
+{
+   return brw_uw1_reg(BRW_ARCHITECTURE_REGISTER_FILE,
+                      BRW_ARF_MASK_STACK_DEPTH, subnr);
+}
+
+static inline struct brw_reg
 brw_message_reg(unsigned nr)
 {
    return brw_vec8_reg(BRW_MESSAGE_REGISTER_FILE, nr, 0);

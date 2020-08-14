@@ -34,19 +34,52 @@
 #include "freedreno_context.h"
 #include "freedreno_util.h"
 
+/**
+ * Since the sample-mask is part of the hw blend state, we need to have state
+ * variants per sample-mask value.  But we don't expect the sample-mask state
+ * to change frequently.
+ */
+struct fd6_blend_variant {
+	unsigned sample_mask;
+	struct fd_ringbuffer *stateobj;
+};
+
 struct fd6_blend_stateobj {
 	struct pipe_blend_state base;
 
-	uint32_t rb_blend_cntl;
-
-	bool lrz_write;
-	struct fd_ringbuffer *stateobj;
+	struct fd_context *ctx;
+	bool reads_dest;
+	struct util_dynarray variants;
 };
 
 static inline struct fd6_blend_stateobj *
 fd6_blend_stateobj(struct pipe_blend_state *blend)
 {
 	return (struct fd6_blend_stateobj *)blend;
+}
+
+struct fd6_blend_variant * __fd6_setup_blend_variant(
+		struct fd6_blend_stateobj *blend, unsigned sample_mask);
+
+static inline struct fd6_blend_variant *
+fd6_blend_variant(struct pipe_blend_state *cso,
+		unsigned nr_samples, unsigned sample_mask)
+{
+	struct fd6_blend_stateobj *blend = fd6_blend_stateobj(cso);
+	unsigned mask = BITFIELD_MASK(nr_samples);
+
+	util_dynarray_foreach(&blend->variants, struct fd6_blend_variant *, vp) {
+		struct fd6_blend_variant *v = *vp;
+
+		/* mask out sample-mask bits that we don't care about to avoid
+		 * creating unnecessary variants
+		 */
+		if ((mask & v->sample_mask) == (mask & sample_mask)) {
+			return v;
+		}
+	}
+
+	return __fd6_setup_blend_variant(blend, sample_mask);
 }
 
 void * fd6_blend_state_create(struct pipe_context *pctx,

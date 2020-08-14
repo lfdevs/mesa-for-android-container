@@ -570,10 +570,10 @@ brw_saturate_immediate(enum brw_reg_type type, struct brw_reg *reg)
       /* Nothing to do. */
       return false;
    case BRW_REGISTER_TYPE_F:
-      sat_imm.f = CLAMP(imm.f, 0.0f, 1.0f);
+      sat_imm.f = SATURATE(imm.f);
       break;
    case BRW_REGISTER_TYPE_DF:
-      sat_imm.df = CLAMP(imm.df, 0.0, 1.0);
+      sat_imm.df = SATURATE(imm.df);
       break;
    case BRW_REGISTER_TYPE_UB:
    case BRW_REGISTER_TYPE_B:

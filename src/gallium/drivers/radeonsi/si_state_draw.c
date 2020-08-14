@@ -761,7 +761,8 @@ static void si_emit_draw_packets(struct si_context *sctx, const struct pipe_draw
 
    /* draw packet */
    if (index_size) {
-      if (index_size != sctx->last_index_size) {
+      /* Register shadowing doesn't shadow INDEX_TYPE. */
+      if (index_size != sctx->last_index_size || sctx->shadowed_regs) {
          unsigned index_type;
 
          /* index type */
@@ -880,7 +881,9 @@ static void si_emit_draw_packets(struct si_context *sctx, const struct pipe_draw
    } else {
       int base_vertex;
 
-      if (sctx->last_instance_count == SI_INSTANCE_COUNT_UNKNOWN ||
+      /* Register shadowing requires that we always emit PKT3_NUM_INSTANCES. */
+      if (sctx->shadowed_regs ||
+          sctx->last_instance_count == SI_INSTANCE_COUNT_UNKNOWN ||
           sctx->last_instance_count != instance_count) {
          radeon_emit(cs, PKT3(PKT3_NUM_INSTANCES, 0, 0));
          radeon_emit(cs, instance_count);
@@ -1863,13 +1866,15 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 
    /* Update NGG culling settings. */
    if (sctx->ngg && !dispatch_prim_discard_cs && rast_prim == PIPE_PRIM_TRIANGLES &&
-       (sctx->screen->always_use_ngg_culling ||
+       !sctx->gs_shader.cso && /* GS doesn't support NGG culling. */
+       (sctx->screen->always_use_ngg_culling_all ||
+        (sctx->tes_shader.cso && sctx->screen->always_use_ngg_culling_tess) ||
         /* At least 1024 non-indexed vertices (8 subgroups) are needed
          * per draw call (no TES/GS) to enable NGG culling.
          */
         (!index_size && direct_count >= 1024 &&
          (prim == PIPE_PRIM_TRIANGLES || prim == PIPE_PRIM_TRIANGLE_STRIP) &&
-         !sctx->tes_shader.cso && !sctx->gs_shader.cso)) &&
+         !sctx->tes_shader.cso)) &&
        si_get_vs(sctx)->cso->ngg_culling_allowed) {
       unsigned ngg_culling = 0;
 
@@ -1918,6 +1923,15 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
       goto return_cleanup;
 
    si_need_gfx_cs_space(sctx);
+
+   /* If we're using a secure context, determine if cs must be secure or not */
+   if (unlikely(sctx->ws->ws_is_secure(sctx->ws))) {
+      bool secure = si_gfx_resources_check_encrypted(sctx);
+      if (secure != sctx->ws->cs_is_secure(sctx->gfx_cs)) {
+         si_flush_gfx_cs(sctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
+         sctx->ws->cs_set_secure(sctx->gfx_cs, secure);
+      }
+   }
 
    if (sctx->bo_list_add_all_gfx_resources)
       si_gfx_resources_add_all_to_bo_list(sctx);

@@ -32,7 +32,7 @@
 
 #include "ir2.h"
 #include "fd2_program.h"
-#include "instr-a2xx.h"
+#include "ir2/instr-a2xx.h"
 
 enum ir2_src_type {
 	IR2_SRC_SSA,

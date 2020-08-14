@@ -85,7 +85,7 @@ _mesa_glthread_has_non_vbo_vertices_or_indices(const struct gl_context *ctx)
 
    return ctx->API != API_OPENGL_CORE &&
           (vao->CurrentElementBufferName == 0 ||
-           (vao->UserPointerMask & vao->Enabled));
+           (vao->UserPointerMask & vao->BufferEnabled));
 }
 
 static inline bool
@@ -95,7 +95,7 @@ _mesa_glthread_has_non_vbo_vertices(const struct gl_context *ctx)
    const struct glthread_vao *vao = glthread->CurrentVAO;
 
    return ctx->API != API_OPENGL_CORE &&
-          (vao->UserPointerMask & vao->Enabled);
+          (vao->UserPointerMask & vao->BufferEnabled);
 }
 
 static inline bool
@@ -106,7 +106,7 @@ _mesa_glthread_has_non_vbo_vertices_or_indirect(const struct gl_context *ctx)
 
    return ctx->API != API_OPENGL_CORE &&
           (glthread->CurrentDrawIndirectBufferName == 0 ||
-           (vao->UserPointerMask & vao->Enabled));
+           (vao->UserPointerMask & vao->BufferEnabled));
 }
 
 static inline bool
@@ -118,7 +118,7 @@ _mesa_glthread_has_non_vbo_vertices_or_indices_or_indirect(const struct gl_conte
    return ctx->API != API_OPENGL_CORE &&
           (glthread->CurrentDrawIndirectBufferName == 0 ||
            vao->CurrentElementBufferName == 0 ||
-           (vao->UserPointerMask & vao->Enabled));
+           (vao->UserPointerMask & vao->BufferEnabled));
 }
 
 
@@ -399,6 +399,8 @@ _mesa_array_to_attrib(struct gl_context *ctx, GLenum array)
       return VERT_ATTRIB_COLOR1;
    case GL_POINT_SIZE_ARRAY_OES:
       return VERT_ATTRIB_POINT_SIZE;
+   case GL_PRIMITIVE_RESTART_NV:
+      return VERT_ATTRIB_PRIMITIVE_RESTART_NV;
    default:
       if (array >= GL_TEXTURE0 && array <= GL_TEXTURE7)
          return VERT_ATTRIB_TEX(array - GL_TEXTURE0);

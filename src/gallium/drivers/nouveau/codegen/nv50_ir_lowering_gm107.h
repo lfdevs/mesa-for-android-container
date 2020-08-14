@@ -21,6 +21,7 @@ class GM107LegalizeSSA : public NVC0LegalizeSSA
 private:
    virtual bool visit(Instruction *);
 
+protected:
    void handlePFETCH(Instruction *);
    void handleLOAD(Instruction *);
 };

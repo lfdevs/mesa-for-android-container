@@ -50,6 +50,7 @@ struct svga_query {
    SVGA3dQueryType svga_type;      /**< SVGA3D_QUERYTYPE_x or unused */
 
    unsigned id;                    /** Per-context query identifier */
+   boolean active;                 /** TRUE if query is active */
 
    struct pipe_fence_handle *fence;
 
@@ -118,11 +119,10 @@ define_query_vgpu9(struct svga_context *svga,
    return PIPE_OK;
 }
 
-static enum pipe_error
+static void
 begin_query_vgpu9(struct svga_context *svga, struct svga_query *sq)
 {
    struct svga_winsys_screen *sws = svga_screen(svga->pipe.screen)->sws;
-   enum pipe_error ret = PIPE_OK;
 
    if (sq->queryResult->state == SVGA3D_QUERYSTATE_PENDING) {
       /* The application doesn't care for the pending query result.
@@ -140,28 +140,16 @@ begin_query_vgpu9(struct svga_context *svga, struct svga_query *sq)
    sq->queryResult->state = SVGA3D_QUERYSTATE_NEW;
    sws->fence_reference(sws, &sq->fence, NULL);
 
-   ret = SVGA3D_BeginQuery(svga->swc, sq->svga_type);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_BeginQuery(svga->swc, sq->svga_type);
-   }
-   return ret;
+   SVGA_RETRY(svga, SVGA3D_BeginQuery(svga->swc, sq->svga_type));
 }
 
-static enum pipe_error
+static void
 end_query_vgpu9(struct svga_context *svga, struct svga_query *sq)
 {
-   enum pipe_error ret = PIPE_OK;
-
    /* Set to PENDING before sending EndQuery. */
    sq->queryResult->state = SVGA3D_QUERYSTATE_PENDING;
 
-   ret = SVGA3D_EndQuery(svga->swc, sq->svga_type, sq->hwbuf);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_EndQuery(svga->swc, sq->svga_type, sq->hwbuf);
-   }
-   return ret;
+   SVGA_RETRY(svga, SVGA3D_EndQuery(svga->swc, sq->svga_type, sq->hwbuf));
 }
 
 static bool
@@ -169,7 +157,6 @@ get_query_result_vgpu9(struct svga_context *svga, struct svga_query *sq,
                        bool wait, uint64_t *result)
 {
    struct svga_winsys_screen *sws = svga_screen(svga->pipe.screen)->sws;
-   enum pipe_error ret;
    SVGA3dQueryState state;
 
    if (!sq->fence) {
@@ -177,12 +164,8 @@ get_query_result_vgpu9(struct svga_context *svga, struct svga_query *sq,
        * SVGA_3D_CMD_WAIT_FOR_QUERY is emitted. Unfortunately this will cause
        * a synchronous wait on the host.
        */
-      ret = SVGA3D_WaitForQuery(svga->swc, sq->svga_type, sq->hwbuf);
-      if (ret != PIPE_OK) {
-         svga_context_flush(svga, NULL);
-         ret = SVGA3D_WaitForQuery(svga->swc, sq->svga_type, sq->hwbuf);
-      }
-      assert (ret == PIPE_OK);
+      SVGA_RETRY(svga, SVGA3D_WaitForQuery(svga->swc, sq->svga_type,
+                                           sq->hwbuf));
       svga_context_flush(svga, &sq->fence);
       assert(sq->fence);
    }
@@ -214,10 +197,10 @@ get_query_result_vgpu9(struct svga_context *svga, struct svga_query *sq,
  * will hold queries of the same type. Multiple memory blocks can be allocated
  * for a particular query type.
  *
- * Currently each memory block is of 184 bytes. We support up to 128
+ * Currently each memory block is of 184 bytes. We support up to 512
  * memory blocks. The query memory size is arbitrary right now.
  * Each occlusion query takes about 8 bytes. One memory block can accomodate
- * 23 occlusion queries. 128 of those blocks can support up to 2944 occlusion
+ * 23 occlusion queries. 512 of those blocks can support up to 11K occlusion
  * queries. That seems reasonable for now. If we think this limit is
  * not enough, we can increase the limit or try to grow the mob in runtime.
  * Note, SVGA device does not impose one mob per context for queries,
@@ -228,7 +211,7 @@ get_query_result_vgpu9(struct svga_context *svga, struct svga_query *sq,
  * following commands: DXMoveQuery, DXBindAllQuery & DXReadbackAllQuery.
  */
 #define SVGA_QUERY_MEM_BLOCK_SIZE    (sizeof(SVGADXQueryResultUnion) * 2)
-#define SVGA_QUERY_MEM_SIZE          (128 * SVGA_QUERY_MEM_BLOCK_SIZE)
+#define SVGA_QUERY_MEM_SIZE          (512 * SVGA_QUERY_MEM_BLOCK_SIZE)
 
 struct svga_qmem_alloc_entry
 {
@@ -243,31 +226,34 @@ struct svga_qmem_alloc_entry
 
 /**
  * Allocate a memory block from the query object memory
- * \return -1 if out of memory, else index of the query memory block
+ * \return NULL if out of memory, else pointer to the query memory block
  */
-static int
+static struct svga_qmem_alloc_entry *
 allocate_query_block(struct svga_context *svga)
 {
    int index;
    unsigned offset;
+   struct svga_qmem_alloc_entry *alloc_entry = NULL;
 
    /* Find the next available query block */
    index = util_bitmask_add(svga->gb_query_alloc_mask);
 
    if (index == UTIL_BITMASK_INVALID_INDEX)
-      return -1;
+      return NULL;
 
    offset = index * SVGA_QUERY_MEM_BLOCK_SIZE;
    if (offset >= svga->gb_query_len) {
       unsigned i;
 
+      /* Deallocate the out-of-range index */
+      util_bitmask_clear(svga->gb_query_alloc_mask, index);
+      index = -1;
+
       /**
        * All the memory blocks are allocated, lets see if there is
        * any empty memory block around that can be freed up.
        */
-      index = -1;
       for (i = 0; i < SVGA3D_QUERYTYPE_MAX && index == -1; i++) {
-         struct svga_qmem_alloc_entry *alloc_entry;
          struct svga_qmem_alloc_entry *prev_alloc_entry = NULL;
 
          alloc_entry = svga->gb_query_map[i];
@@ -286,9 +272,20 @@ allocate_query_block(struct svga_context *svga)
             }
          }
       }
+
+      if (index == -1) {
+         debug_printf("Query memory object is full\n");
+         return NULL;
+      }
    }
 
-   return index;
+   if (!alloc_entry) {
+      assert(index != -1);
+      alloc_entry = CALLOC_STRUCT(svga_qmem_alloc_entry);
+      alloc_entry->block_index = index;
+   }
+
+   return alloc_entry;
 }
 
 /**
@@ -346,17 +343,14 @@ allocate_query_block_entry(struct svga_context *svga,
                            unsigned len)
 {
    struct svga_qmem_alloc_entry *alloc_entry;
-   int block_index = -1;
 
-   block_index = allocate_query_block(svga);
-   if (block_index == -1)
-      return NULL;
-   alloc_entry = CALLOC_STRUCT(svga_qmem_alloc_entry);
+   alloc_entry = allocate_query_block(svga);
    if (!alloc_entry)
       return NULL;
 
-   alloc_entry->block_index = block_index;
-   alloc_entry->start_offset = block_index * SVGA_QUERY_MEM_BLOCK_SIZE;
+   assert(alloc_entry->block_index != -1);
+   alloc_entry->start_offset =
+      alloc_entry->block_index * SVGA_QUERY_MEM_BLOCK_SIZE;
    alloc_entry->nquery = 0;
    alloc_entry->alloc_mask = util_bitmask_create();
    alloc_entry->next = NULL;
@@ -498,26 +492,21 @@ define_query_vgpu10(struct svga_context *svga,
       svga->gb_query_alloc_mask = util_bitmask_create();
 
       /* Bind the query object to the context */
-      if (svga->swc->query_bind(svga->swc, svga->gb_query,
-                                SVGA_QUERY_FLAG_SET) != PIPE_OK) {
-         svga_context_flush(svga, NULL);
-         svga->swc->query_bind(svga->swc, svga->gb_query,
-                               SVGA_QUERY_FLAG_SET);
-      }
+      SVGA_RETRY(svga, svga->swc->query_bind(svga->swc, svga->gb_query,
+                                             SVGA_QUERY_FLAG_SET));
    }
 
    sq->gb_query = svga->gb_query;
 
-   /* Allocate an integer ID for this query */
-   sq->id = util_bitmask_add(svga->query_id_bm);
-   if (sq->id == UTIL_BITMASK_INVALID_INDEX)
-      return PIPE_ERROR_OUT_OF_MEMORY;
+   /* Make sure query length is in multiples of 8 bytes */
+   qlen = align(resultLen + sizeof(SVGA3dQueryState), 8);
 
    /* Find a slot for this query in the gb object */
-   qlen = resultLen + sizeof(SVGA3dQueryState);
    sq->offset = allocate_query(svga, sq->svga_type, qlen);
    if (sq->offset == -1)
       return PIPE_ERROR_OUT_OF_MEMORY;
+
+   assert((sq->offset & 7) == 0);
 
    SVGA_DBG(DEBUG_QUERY, "   query type=%d qid=0x%x offset=%d\n",
             sq->svga_type, sq->id, sq->offset);
@@ -525,42 +514,26 @@ define_query_vgpu10(struct svga_context *svga,
    /**
     * Send SVGA3D commands to define the query
     */
-   ret = SVGA3D_vgpu10_DefineQuery(svga->swc, sq->id, sq->svga_type, sq->flags);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_vgpu10_DefineQuery(svga->swc, sq->id, sq->svga_type, sq->flags);
-   }
+   SVGA_RETRY_OOM(svga, ret, SVGA3D_vgpu10_DefineQuery(svga->swc, sq->id,
+                                                       sq->svga_type,
+                                                       sq->flags));
    if (ret != PIPE_OK)
       return PIPE_ERROR_OUT_OF_MEMORY;
 
-   ret = SVGA3D_vgpu10_BindQuery(svga->swc, sq->gb_query, sq->id);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_vgpu10_BindQuery(svga->swc, sq->gb_query, sq->id);
-   }
-   assert(ret == PIPE_OK);
-
-   ret = SVGA3D_vgpu10_SetQueryOffset(svga->swc, sq->id, sq->offset);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_vgpu10_SetQueryOffset(svga->swc, sq->id, sq->offset);
-   }
-   assert(ret == PIPE_OK);
+   SVGA_RETRY(svga, SVGA3D_vgpu10_BindQuery(svga->swc, sq->gb_query, sq->id));
+   SVGA_RETRY(svga, SVGA3D_vgpu10_SetQueryOffset(svga->swc, sq->id,
+                                                 sq->offset));
 
    return PIPE_OK;
 }
 
-static enum pipe_error
+static void
 destroy_query_vgpu10(struct svga_context *svga, struct svga_query *sq)
 {
-   enum pipe_error ret;
-
-   ret = SVGA3D_vgpu10_DestroyQuery(svga->swc, sq->id);
+   SVGA_RETRY(svga, SVGA3D_vgpu10_DestroyQuery(svga->swc, sq->id));
 
    /* Deallocate the memory slot allocated for this query */
    deallocate_query(svga, sq);
-
-   return ret;
 }
 
 
@@ -570,13 +543,8 @@ destroy_query_vgpu10(struct svga_context *svga, struct svga_query *sq)
 static void
 rebind_vgpu10_query(struct svga_context *svga)
 {
-   if (svga->swc->query_bind(svga->swc, svga->gb_query,
-                             SVGA_QUERY_FLAG_REF) != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      svga->swc->query_bind(svga->swc, svga->gb_query,
-                            SVGA_QUERY_FLAG_REF);
-   }
-
+   SVGA_RETRY(svga, svga->swc->query_bind(svga->swc, svga->gb_query,
+                                          SVGA_QUERY_FLAG_REF));
    svga->rebind.flags.query = FALSE;
 }
 
@@ -585,7 +553,6 @@ static enum pipe_error
 begin_query_vgpu10(struct svga_context *svga, struct svga_query *sq)
 {
    struct svga_winsys_screen *sws = svga_screen(svga->pipe.screen)->sws;
-   enum pipe_error ret = PIPE_OK;
    int status = 0;
 
    sws->fence_reference(sws, &sq->fence, NULL);
@@ -600,30 +567,18 @@ begin_query_vgpu10(struct svga_context *svga, struct svga_query *sq)
    }
 
    /* Send the BeginQuery command to the device */
-   ret = SVGA3D_vgpu10_BeginQuery(svga->swc, sq->id);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_vgpu10_BeginQuery(svga->swc, sq->id);
-   }
-   return ret;
+   SVGA_RETRY(svga, SVGA3D_vgpu10_BeginQuery(svga->swc, sq->id));
+   return PIPE_OK;
 }
 
-static enum pipe_error
+static void
 end_query_vgpu10(struct svga_context *svga, struct svga_query *sq)
 {
-   enum pipe_error ret = PIPE_OK;
-
    if (svga->rebind.flags.query) {
       rebind_vgpu10_query(svga);
    }
 
-   ret = SVGA3D_vgpu10_EndQuery(svga->swc, sq->id);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_vgpu10_EndQuery(svga->swc, sq->id);
-   }
-
-   return ret;
+   SVGA_RETRY(svga, SVGA3D_vgpu10_EndQuery(svga->swc, sq->id));
 }
 
 static bool
@@ -731,7 +686,19 @@ svga_create_query(struct pipe_context *pipe,
    case PIPE_QUERY_PRIMITIVES_EMITTED:
    case PIPE_QUERY_SO_STATISTICS:
       assert(svga_have_vgpu10(svga));
-      sq->svga_type = SVGA3D_QUERYTYPE_STREAMOUTPUTSTATS;
+
+      /* Until the device supports the new query type for multiple streams,
+       * we will use the single stream query type for stream 0.
+       */
+      if (svga_have_sm5(svga) && index > 0) {
+         assert(index < 4);
+
+         sq->svga_type = SVGA3D_QUERYTYPE_SOSTATS_STREAM0 + index;
+      }
+      else {
+         assert(index == 0);
+         sq->svga_type = SVGA3D_QUERYTYPE_STREAMOUTPUTSTATS;
+      }
       ret = define_query_vgpu10(svga, sq,
                                 sizeof(SVGADXStreamOutStatisticsQueryResult));
       if (ret != PIPE_OK)
@@ -752,6 +719,7 @@ svga_create_query(struct pipe_context *pipe,
    case SVGA_QUERY_NUM_BUFFERS_MAPPED:
    case SVGA_QUERY_NUM_TEXTURES_MAPPED:
    case SVGA_QUERY_NUM_BYTES_UPLOADED:
+   case SVGA_QUERY_NUM_COMMAND_BUFFERS:
    case SVGA_QUERY_COMMAND_BUFFER_SIZE:
    case SVGA_QUERY_SURFACE_WRITE_FLUSHES:
    case SVGA_QUERY_MEMORY_USED:
@@ -767,12 +735,16 @@ svga_create_query(struct pipe_context *pipe,
    case SVGA_QUERY_NUM_CONST_UPDATES:
    case SVGA_QUERY_NUM_FAILED_ALLOCATIONS:
    case SVGA_QUERY_NUM_COMMANDS_PER_DRAW:
+   case SVGA_QUERY_NUM_SHADER_RELOCATIONS:
+   case SVGA_QUERY_NUM_SURFACE_RELOCATIONS:
+   case SVGA_QUERY_SHADER_MEM_USED:
       break;
    case SVGA_QUERY_FLUSH_TIME:
    case SVGA_QUERY_MAP_BUFFER_TIME:
       /* These queries need os_time_get() */
       svga->hud.uses_time = TRUE;
       break;
+
    default:
       assert(!"unexpected query type in svga_create_query()");
    }
@@ -833,6 +805,7 @@ svga_destroy_query(struct pipe_context *pipe, struct pipe_query *q)
    case SVGA_QUERY_NUM_BUFFERS_MAPPED:
    case SVGA_QUERY_NUM_TEXTURES_MAPPED:
    case SVGA_QUERY_NUM_BYTES_UPLOADED:
+   case SVGA_QUERY_NUM_COMMAND_BUFFERS:
    case SVGA_QUERY_COMMAND_BUFFER_SIZE:
    case SVGA_QUERY_FLUSH_TIME:
    case SVGA_QUERY_SURFACE_WRITE_FLUSHES:
@@ -849,6 +822,9 @@ svga_destroy_query(struct pipe_context *pipe, struct pipe_query *q)
    case SVGA_QUERY_NUM_CONST_UPDATES:
    case SVGA_QUERY_NUM_FAILED_ALLOCATIONS:
    case SVGA_QUERY_NUM_COMMANDS_PER_DRAW:
+   case SVGA_QUERY_NUM_SHADER_RELOCATIONS:
+   case SVGA_QUERY_NUM_SURFACE_RELOCATIONS:
+   case SVGA_QUERY_SHADER_MEM_USED:
       /* nothing */
       break;
    default:
@@ -867,13 +843,10 @@ svga_begin_query(struct pipe_context *pipe, struct pipe_query *q)
 {
    struct svga_context *svga = svga_context(pipe);
    struct svga_query *sq = svga_query(q);
-   enum pipe_error ret;
+   enum pipe_error ret = PIPE_OK;
 
    assert(sq);
    assert(sq->type < SVGA_QUERY_MAX);
-
-   SVGA_DBG(DEBUG_QUERY, "%s sq=0x%x id=%d\n", __FUNCTION__,
-            sq, sq->id);
 
    /* Need to flush out buffered drawing commands so that they don't
     * get counted in the query results.
@@ -894,7 +867,7 @@ svga_begin_query(struct pipe_context *pipe, struct pipe_query *q)
             (void) status;
          }
       } else {
-         ret = begin_query_vgpu9(svga, sq);
+         begin_query_vgpu9(svga, sq);
       }
       assert(ret == PIPE_OK);
       (void) ret;
@@ -931,6 +904,9 @@ svga_begin_query(struct pipe_context *pipe, struct pipe_query *q)
    case SVGA_QUERY_NUM_BYTES_UPLOADED:
       sq->begin_count = svga->hud.num_bytes_uploaded;
       break;
+   case SVGA_QUERY_NUM_COMMAND_BUFFERS:
+      sq->begin_count = svga->swc->num_command_buffers;
+      break;
    case SVGA_QUERY_COMMAND_BUFFER_SIZE:
       sq->begin_count = svga->hud.command_buffer_size;
       break;
@@ -955,6 +931,12 @@ svga_begin_query(struct pipe_context *pipe, struct pipe_query *q)
    case SVGA_QUERY_NUM_CONST_UPDATES:
       sq->begin_count = svga->hud.num_const_updates;
       break;
+   case SVGA_QUERY_NUM_SHADER_RELOCATIONS:
+      sq->begin_count = svga->swc->num_shader_reloc;
+      break;
+   case SVGA_QUERY_NUM_SURFACE_RELOCATIONS:
+      sq->begin_count = svga->swc->num_surf_reloc;
+      break;
    case SVGA_QUERY_MEMORY_USED:
    case SVGA_QUERY_NUM_SHADERS:
    case SVGA_QUERY_NUM_RESOURCES:
@@ -963,13 +945,17 @@ svga_begin_query(struct pipe_context *pipe, struct pipe_query *q)
    case SVGA_QUERY_NUM_GENERATE_MIPMAP:
    case SVGA_QUERY_NUM_FAILED_ALLOCATIONS:
    case SVGA_QUERY_NUM_COMMANDS_PER_DRAW:
+   case SVGA_QUERY_SHADER_MEM_USED:
       /* nothing */
       break;
    default:
       assert(!"unexpected query type in svga_begin_query()");
    }
 
-   svga->sq[sq->type] = sq;
+   SVGA_DBG(DEBUG_QUERY, "%s sq=0x%x id=%d type=%d svga_type=%d\n",
+            __FUNCTION__, sq, sq->id, sq->type, sq->svga_type);
+
+   sq->active = TRUE;
 
    return true;
 }
@@ -980,47 +966,43 @@ svga_end_query(struct pipe_context *pipe, struct pipe_query *q)
 {
    struct svga_context *svga = svga_context(pipe);
    struct svga_query *sq = svga_query(q);
-   enum pipe_error ret;
 
    assert(sq);
    assert(sq->type < SVGA_QUERY_MAX);
 
-   SVGA_DBG(DEBUG_QUERY, "%s sq=0x%x id=%d\n", __FUNCTION__,
-            sq, sq->id);
+   SVGA_DBG(DEBUG_QUERY, "%s sq=0x%x type=%d\n",
+            __FUNCTION__, sq, sq->type);
 
-   if (sq->type == PIPE_QUERY_TIMESTAMP && svga->sq[sq->type] != sq)
+   if (sq->type == PIPE_QUERY_TIMESTAMP && !sq->active)
       svga_begin_query(pipe, q);
+
+   SVGA_DBG(DEBUG_QUERY, "%s sq=0x%x id=%d type=%d svga_type=%d\n",
+            __FUNCTION__, sq, sq->id, sq->type, sq->svga_type);
 
    svga_hwtnl_flush_retry(svga);
 
-   assert(svga->sq[sq->type] == sq);
+   assert(sq->active);
 
    switch (sq->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
    case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       if (svga_have_vgpu10(svga)) {
-         ret = end_query_vgpu10(svga, sq);
+         end_query_vgpu10(svga, sq);
          /* also need to end the associated occlusion predicate query */
          if (sq->predicate) {
-            enum pipe_error status;
-            status = end_query_vgpu10(svga, svga_query(sq->predicate));
-            assert(status == PIPE_OK);
-            (void) status;
+            end_query_vgpu10(svga, svga_query(sq->predicate));
          }
       } else {
-         ret = end_query_vgpu9(svga, sq);
+         end_query_vgpu9(svga, sq);
       }
-      assert(ret == PIPE_OK);
-      (void) ret;
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:
    case PIPE_QUERY_PRIMITIVES_EMITTED:
    case PIPE_QUERY_SO_STATISTICS:
    case PIPE_QUERY_TIMESTAMP:
       assert(svga_have_vgpu10(svga));
-      ret = end_query_vgpu10(svga, sq);
-      assert(ret == PIPE_OK);
+      end_query_vgpu10(svga, sq);
       break;
    case SVGA_QUERY_NUM_DRAW_CALLS:
       sq->end_count = svga->hud.num_draw_calls;
@@ -1046,6 +1028,9 @@ svga_end_query(struct pipe_context *pipe, struct pipe_query *q)
    case SVGA_QUERY_NUM_BYTES_UPLOADED:
       sq->end_count = svga->hud.num_bytes_uploaded;
       break;
+   case SVGA_QUERY_NUM_COMMAND_BUFFERS:
+      sq->end_count = svga->swc->num_command_buffers;
+      break;
    case SVGA_QUERY_COMMAND_BUFFER_SIZE:
       sq->end_count = svga->hud.command_buffer_size;
       break;
@@ -1070,6 +1055,12 @@ svga_end_query(struct pipe_context *pipe, struct pipe_query *q)
    case SVGA_QUERY_NUM_CONST_UPDATES:
       sq->end_count = svga->hud.num_const_updates;
       break;
+   case SVGA_QUERY_NUM_SHADER_RELOCATIONS:
+      sq->end_count = svga->swc->num_shader_reloc;
+      break;
+   case SVGA_QUERY_NUM_SURFACE_RELOCATIONS:
+      sq->end_count = svga->swc->num_surf_reloc;
+      break;
    case SVGA_QUERY_MEMORY_USED:
    case SVGA_QUERY_NUM_SHADERS:
    case SVGA_QUERY_NUM_RESOURCES:
@@ -1078,12 +1069,13 @@ svga_end_query(struct pipe_context *pipe, struct pipe_query *q)
    case SVGA_QUERY_NUM_GENERATE_MIPMAP:
    case SVGA_QUERY_NUM_FAILED_ALLOCATIONS:
    case SVGA_QUERY_NUM_COMMANDS_PER_DRAW:
+   case SVGA_QUERY_SHADER_MEM_USED:
       /* nothing */
       break;
    default:
       assert(!"unexpected query type in svga_end_query()");
    }
-   svga->sq[sq->type] = NULL;
+   sq->active = FALSE;
    return true;
 }
 
@@ -1178,6 +1170,7 @@ svga_get_query_result(struct pipe_context *pipe,
    case SVGA_QUERY_NUM_BUFFERS_MAPPED:
    case SVGA_QUERY_NUM_TEXTURES_MAPPED:
    case SVGA_QUERY_NUM_BYTES_UPLOADED:
+   case SVGA_QUERY_NUM_COMMAND_BUFFERS:
    case SVGA_QUERY_COMMAND_BUFFER_SIZE:
    case SVGA_QUERY_FLUSH_TIME:
    case SVGA_QUERY_SURFACE_WRITE_FLUSHES:
@@ -1186,6 +1179,8 @@ svga_get_query_result(struct pipe_context *pipe,
    case SVGA_QUERY_NUM_BUFFER_UPLOADS:
    case SVGA_QUERY_NUM_CONST_BUF_UPDATES:
    case SVGA_QUERY_NUM_CONST_UPDATES:
+   case SVGA_QUERY_NUM_SHADER_RELOCATIONS:
+   case SVGA_QUERY_NUM_SURFACE_RELOCATIONS:
       vresult->u64 = sq->end_count - sq->begin_count;
       break;
    /* These are running total counters */
@@ -1219,6 +1214,9 @@ svga_get_query_result(struct pipe_context *pipe,
       vresult->f = (float) svga->swc->num_commands
          / (float) svga->swc->num_draw_commands;
       break;
+   case SVGA_QUERY_SHADER_MEM_USED:
+      vresult->u64 = svga->hud.shader_mem_used;
+      break;
    default:
       assert(!"unexpected query type in svga_get_query_result");
    }
@@ -1236,7 +1234,6 @@ svga_render_condition(struct pipe_context *pipe, struct pipe_query *q,
    struct svga_winsys_screen *sws = svga_screen(svga->pipe.screen)->sws;
    struct svga_query *sq = svga_query(q);
    SVGA3dQueryId queryId;
-   enum pipe_error ret;
 
    SVGA_DBG(DEBUG_QUERY, "%s\n", __FUNCTION__);
 
@@ -1270,13 +1267,8 @@ svga_render_condition(struct pipe_context *pipe, struct pipe_query *q,
     * This is probably acceptable for the typical case of occlusion culling.
     */
    if (sws->have_set_predication_cmd) {
-      ret = SVGA3D_vgpu10_SetPredication(svga->swc, queryId,
-                                         (uint32) condition);
-      if (ret != PIPE_OK) {
-         svga_context_flush(svga, NULL);
-         ret = SVGA3D_vgpu10_SetPredication(svga->swc, queryId,
-                                            (uint32) condition);
-      }
+      SVGA_RETRY(svga, SVGA3D_vgpu10_SetPredication(svga->swc, queryId,
+                                                    (uint32) condition));
       svga->pred.query_id = queryId;
       svga->pred.cond = condition;
    }
@@ -1324,7 +1316,6 @@ svga_toggle_render_condition(struct svga_context *svga,
                              boolean on)
 {
    SVGA3dQueryId query_id;
-   enum pipe_error ret;
 
    if (render_condition_enabled ||
        svga->pred.query_id == SVGA3D_INVALID_ID) {
@@ -1339,14 +1330,8 @@ svga_toggle_render_condition(struct svga_context *svga,
     */
    query_id = on ? svga->pred.query_id : SVGA3D_INVALID_ID;
 
-   ret = SVGA3D_vgpu10_SetPredication(svga->swc, query_id,
-                                      (uint32) svga->pred.cond);
-   if (ret == PIPE_ERROR_OUT_OF_MEMORY) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_vgpu10_SetPredication(svga->swc, query_id,
-                                         (uint32) svga->pred.cond);
-      assert(ret == PIPE_OK);
-   }
+   SVGA_RETRY(svga, SVGA3D_vgpu10_SetPredication(svga->swc, query_id,
+                                                 (uint32) svga->pred.cond));
 }
 
 

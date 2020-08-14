@@ -224,6 +224,24 @@ tgsi_transform_immediate_decl(struct tgsi_transform_context *ctx,
 }
 
 static inline void
+tgsi_transform_immediate_int_decl(struct tgsi_transform_context *ctx,
+                                  int x, int y, int z, int w)
+{
+   struct tgsi_full_immediate immed;
+   unsigned size = 4;
+
+   immed = tgsi_default_full_immediate();
+   immed.Immediate.DataType = TGSI_IMM_INT32;
+   immed.Immediate.NrTokens = 1 + size; /* one for the token itself */
+   immed.u[0].Int = x;
+   immed.u[1].Int = y;
+   immed.u[2].Int = z;
+   immed.u[3].Int = w;
+
+   ctx->emit_immediate(ctx, &immed);
+}
+
+static inline void
 tgsi_transform_dst_reg(struct tgsi_full_dst_register *reg,
                        unsigned file, unsigned index, unsigned writemask)
 {

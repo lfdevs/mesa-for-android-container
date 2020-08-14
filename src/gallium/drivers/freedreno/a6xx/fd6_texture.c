@@ -220,7 +220,6 @@ fd6_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 {
 	struct fd6_pipe_sampler_view *so = CALLOC_STRUCT(fd6_pipe_sampler_view);
 	struct fd_resource *rsc = fd_resource(prsc);
-	struct fdl_slice *slice = NULL;
 	enum pipe_format format = cso->format;
 	unsigned lvl, layers = 0;
 
@@ -256,7 +255,6 @@ fd6_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 		unsigned miplevels;
 
 		lvl = fd_sampler_first_level(cso);
-		slice = fd_resource_slice(rsc, lvl);
 		miplevels = fd_sampler_last_level(cso) - lvl;
 		layers = cso->u.tex.last_layer - cso->u.tex.first_layer + 1;
 
@@ -265,8 +263,8 @@ fd6_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 			A6XX_TEX_CONST_1_WIDTH(u_minify(prsc->width0, lvl)) |
 			A6XX_TEX_CONST_1_HEIGHT(u_minify(prsc->height0, lvl));
 		so->texconst2 =
-			A6XX_TEX_CONST_2_FETCHSIZE(fd6_pipe2fetchsize(format)) |
-			A6XX_TEX_CONST_2_PITCH(slice->pitch);
+			A6XX_TEX_CONST_2_PITCHALIGN(rsc->layout.pitchalign - 6) |
+			A6XX_TEX_CONST_2_PITCH(fd_resource_pitch(rsc, lvl));
 		so->offset = fd_resource_offset(rsc, lvl, cso->u.tex.first_layer);
 		so->ubwc_offset = fd_resource_ubwc_offset(rsc, lvl, cso->u.tex.first_layer);
 		so->ubwc_enabled = fd_resource_ubwc_enabled(rsc, lvl);
@@ -305,7 +303,7 @@ fd6_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 		so->texconst3 =
 			A6XX_TEX_CONST_3_MIN_LAYERSZ(
 				fd_resource_slice(rsc, prsc->last_level)->size0) |
-			A6XX_TEX_CONST_3_ARRAY_PITCH(slice->size0);
+			A6XX_TEX_CONST_3_ARRAY_PITCH(fd_resource_slice(rsc, lvl)->size0);
 		so->texconst5 =
 			A6XX_TEX_CONST_5_DEPTH(u_minify(prsc->depth0, lvl));
 		break;
@@ -314,15 +312,13 @@ fd6_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	}
 
 	if (so->ubwc_enabled) {
-		struct fdl_slice *ubwc_base_slice = &rsc->layout.ubwc_slices[lvl];
-
 		uint32_t block_width, block_height;
 		fdl6_get_ubwc_blockwidth(&rsc->layout, &block_width, &block_height);
 
 		so->texconst3 |= A6XX_TEX_CONST_3_FLAG | A6XX_TEX_CONST_3_TILE_ALL;
 		so->texconst9 |= A6XX_TEX_CONST_9_FLAG_BUFFER_ARRAY_PITCH(rsc->layout.ubwc_layer_size >> 2);
 		so->texconst10 |=
-			A6XX_TEX_CONST_10_FLAG_BUFFER_PITCH(ubwc_base_slice->pitch) |
+			A6XX_TEX_CONST_10_FLAG_BUFFER_PITCH(fdl_ubwc_pitch(&rsc->layout, lvl)) |
 			A6XX_TEX_CONST_10_FLAG_BUFFER_LOGW(util_logbase2_ceil(DIV_ROUND_UP(u_minify(prsc->width0, lvl), block_width))) |
 			A6XX_TEX_CONST_10_FLAG_BUFFER_LOGH(util_logbase2_ceil(DIV_ROUND_UP(u_minify(prsc->height0, lvl), block_height)));
 	}
@@ -359,9 +355,7 @@ static uint32_t
 key_hash(const void *_key)
 {
 	const struct fd6_texture_key *key = _key;
-	uint32_t hash = _mesa_fnv32_1a_offset_bias;
-	hash = _mesa_fnv32_1a_accumulate_block(hash, key, sizeof(*key));
-	return hash;
+	return XXH32(key, sizeof(*key), 0);
 }
 
 static bool

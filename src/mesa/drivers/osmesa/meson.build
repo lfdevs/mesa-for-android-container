@@ -27,8 +27,7 @@ endif
 libosmesa = shared_library(
   osmesa_lib_name,
   ['osmesa.c', glapitable_h, glapitemp_h],
-  c_args : c_vis_args,
-  cpp_args : cpp_vis_args,
+  gnu_symbol_visibility : 'hidden',
   link_args : ld_args_gc_sections,
   include_directories : [
     inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux,

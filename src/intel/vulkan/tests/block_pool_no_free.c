@@ -144,7 +144,7 @@ static void run_test()
    pthread_mutex_destroy(&device.mutex);
 }
 
-int main(int argc, char **argv)
+int main(void)
 {
    for (unsigned i = 0; i < NUM_RUNS; i++)
       run_test();

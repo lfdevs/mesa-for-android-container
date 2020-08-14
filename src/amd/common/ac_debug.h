@@ -56,6 +56,7 @@ struct ac_wave_info {
 
 typedef void *(*ac_debug_addr_callback)(void *data, uint64_t addr);
 
+const char *ac_get_register_name(enum chip_class chip_class, unsigned offset);
 void ac_dump_reg(FILE *file, enum chip_class chip_class, unsigned offset,
 		 uint32_t value, uint32_t field_mask);
 void ac_parse_ib_chunk(FILE *f, uint32_t *ib, int num_dw, const int *trace_ids,

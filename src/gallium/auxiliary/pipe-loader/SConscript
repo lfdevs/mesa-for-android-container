@@ -7,7 +7,6 @@ env.MSVC2013Compat()
 env.Append(CPPPATH = [
     '#/src/loader',
     '#/src/gallium/winsys',
-    xmlpool_options.dir.dir,
 ])
 
 env.Append(CPPDEFINES = [

@@ -29,7 +29,7 @@
 #include "pipe/p_format.h"
 #include "pipe/p_state.h"
 
-#include "state_tracker/sw_winsys.h"
+#include "frontend/sw_winsys.h"
 
 #include "util/u_memory.h"
 #include "util/u_inlines.h"

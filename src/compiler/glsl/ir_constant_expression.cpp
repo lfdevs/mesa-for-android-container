@@ -340,7 +340,7 @@ pack_unorm_1x8(float x)
      *
      *       packUnorm4x8: round(clamp(c, 0, +1) * 255.0)
      */
-   return (uint8_t) (int) _mesa_roundevenf(CLAMP(x, 0.0f, 1.0f) * 255.0f);
+   return (uint8_t) (int) _mesa_roundevenf(SATURATE(x) * 255.0f);
 }
 
 /**
@@ -359,7 +359,7 @@ pack_unorm_1x16(float x)
      *       packUnorm2x16: round(clamp(c, 0, +1) * 65535.0)
      */
    return (uint16_t) (int)
-          _mesa_roundevenf(CLAMP(x, 0.0f, 1.0f) * 65535.0f);
+          _mesa_roundevenf(SATURATE(x) * 65535.0f);
 }
 
 /**
@@ -694,6 +694,7 @@ ir_expression::constant_expression_value(void *mem_ctx,
    if (this->type->is_error())
       return NULL;
 
+   const glsl_type *return_type = this->type;
    ir_constant *op[ARRAY_SIZE(this->operands)] = { NULL, };
    ir_constant_data data;
 
@@ -708,20 +709,83 @@ ir_expression::constant_expression_value(void *mem_ctx,
    }
 
    for (unsigned operand = 0; operand < this->num_operands; operand++) {
-      if (op[operand]->type->base_type == GLSL_TYPE_FLOAT16) {
+      switch (op[operand]->type->base_type) {
+      case GLSL_TYPE_FLOAT16: {
          const struct glsl_type *float_type =
-            glsl_type::get_instance(GLSL_TYPE_FLOAT,
-                                    op[operand]->type->vector_elements,
-                                    op[operand]->type->matrix_columns,
-                                    op[operand]->type->explicit_stride,
-                                    op[operand]->type->interface_row_major);
+               glsl_type::get_instance(GLSL_TYPE_FLOAT,
+                                       op[operand]->type->vector_elements,
+                                       op[operand]->type->matrix_columns,
+                                       op[operand]->type->explicit_stride,
+                                       op[operand]->type->interface_row_major);
 
          ir_constant_data f;
          for (unsigned i = 0; i < ARRAY_SIZE(f.f); i++)
             f.f[i] = _mesa_half_to_float(op[operand]->value.f16[i]);
 
          op[operand] = new(mem_ctx) ir_constant(float_type, &f);
+         break;
       }
+      case GLSL_TYPE_INT16: {
+         const struct glsl_type *int_type =
+            glsl_type::get_instance(GLSL_TYPE_INT,
+                                    op[operand]->type->vector_elements,
+                                    op[operand]->type->matrix_columns,
+                                    op[operand]->type->explicit_stride,
+                                    op[operand]->type->interface_row_major);
+
+         ir_constant_data d;
+         for (unsigned i = 0; i < ARRAY_SIZE(d.i); i++)
+            d.i[i] = op[operand]->value.i16[i];
+
+         op[operand] = new(mem_ctx) ir_constant(int_type, &d);
+         break;
+      }
+      case GLSL_TYPE_UINT16: {
+         const struct glsl_type *uint_type =
+            glsl_type::get_instance(GLSL_TYPE_UINT,
+                                    op[operand]->type->vector_elements,
+                                    op[operand]->type->matrix_columns,
+                                    op[operand]->type->explicit_stride,
+                                    op[operand]->type->interface_row_major);
+
+         ir_constant_data d;
+         for (unsigned i = 0; i < ARRAY_SIZE(d.u); i++)
+            d.u[i] = op[operand]->value.u16[i];
+
+         op[operand] = new(mem_ctx) ir_constant(uint_type, &d);
+         break;
+      }
+      default:
+         /* nothing to do */
+         break;
+      }
+   }
+
+   switch (return_type->base_type) {
+   case GLSL_TYPE_FLOAT16:
+      return_type = glsl_type::get_instance(GLSL_TYPE_FLOAT,
+                                            return_type->vector_elements,
+                                            return_type->matrix_columns,
+                                            return_type->explicit_stride,
+                                            return_type->interface_row_major);
+      break;
+   case GLSL_TYPE_INT16:
+      return_type = glsl_type::get_instance(GLSL_TYPE_INT,
+                                            return_type->vector_elements,
+                                            return_type->matrix_columns,
+                                            return_type->explicit_stride,
+                                            return_type->interface_row_major);
+      break;
+   case GLSL_TYPE_UINT16:
+      return_type = glsl_type::get_instance(GLSL_TYPE_UINT,
+                                            return_type->vector_elements,
+                                            return_type->matrix_columns,
+                                            return_type->explicit_stride,
+                                            return_type->interface_row_major);
+      break;
+   default:
+      /* nothing to do */
+      break;
    }
 
    if (op[1] != NULL)
@@ -772,16 +836,31 @@ ir_expression::constant_expression_value(void *mem_ctx,
 
 #include "ir_expression_operation_constant.h"
 
-   if (this->type->base_type == GLSL_TYPE_FLOAT16) {
+   switch (type->base_type) {
+   case GLSL_TYPE_FLOAT16: {
       ir_constant_data f;
       for (unsigned i = 0; i < ARRAY_SIZE(f.f16); i++)
          f.f16[i] = _mesa_float_to_half(data.f[i]);
 
       return new(mem_ctx) ir_constant(this->type, &f);
    }
+   case GLSL_TYPE_INT16: {
+      ir_constant_data d;
+      for (unsigned i = 0; i < ARRAY_SIZE(d.i16); i++)
+         d.i16[i] = data.i[i];
 
+      return new(mem_ctx) ir_constant(this->type, &d);
+   }
+   case GLSL_TYPE_UINT16: {
+      ir_constant_data d;
+      for (unsigned i = 0; i < ARRAY_SIZE(d.u16); i++)
+         d.u16[i] = data.u[i];
 
-   return new(mem_ctx) ir_constant(this->type, &data);
+      return new(mem_ctx) ir_constant(this->type, &d);
+   }
+   default:
+      return new(mem_ctx) ir_constant(this->type, &data);
+   }
 }
 
 
@@ -811,6 +890,8 @@ ir_swizzle::constant_expression_value(void *mem_ctx,
 
       for (unsigned i = 0; i < this->mask.num_components; i++) {
          switch (v->type->base_type) {
+         case GLSL_TYPE_UINT16:
+         case GLSL_TYPE_INT16: data.u16[i] = v->value.u16[swiz_idx[i]]; break;
          case GLSL_TYPE_UINT:
          case GLSL_TYPE_INT:   data.u[i] = v->value.u[swiz_idx[i]]; break;
          case GLSL_TYPE_FLOAT: data.f[i] = v->value.f[swiz_idx[i]]; break;
@@ -882,10 +963,9 @@ ir_dereference_array::constant_expression_value(void *mem_ctx,
          ir_constant_data data = { { 0 } };
 
          switch (column_type->base_type) {
-         case GLSL_TYPE_UINT:
-         case GLSL_TYPE_INT:
+         case GLSL_TYPE_FLOAT16:
             for (unsigned i = 0; i < column_type->vector_elements; i++)
-               data.u[i] = array->value.u[mat_idx + i];
+               data.f16[i] = array->value.f16[mat_idx + i];
 
             break;
 
@@ -902,8 +982,7 @@ ir_dereference_array::constant_expression_value(void *mem_ctx,
             break;
 
          default:
-            assert(!"Should not get here.");
-            break;
+            unreachable("Matrix types are either float or double.");
          }
 
          return new(mem_ctx) ir_constant(column_type, &data);

@@ -59,9 +59,9 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
 	/* In some sequence of events, we can end up with a last_fence that is
 	 * not an "fd" fence, which results in eglDupNativeFenceFDANDROID()
 	 * errors.
-	 *
 	 */
-	if (flags & PIPE_FLUSH_FENCE_FD)
+	if ((flags & PIPE_FLUSH_FENCE_FD) && ctx->last_fence &&
+			!fd_fence_is_fd(ctx->last_fence))
 		fd_fence_ref(&ctx->last_fence, NULL);
 
 	/* if no rendering since last flush, ie. app just decided it needed
@@ -69,17 +69,23 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
 	 */
 	if (ctx->last_fence) {
 		fd_fence_ref(&fence, ctx->last_fence);
+		fd_bc_dump(ctx->screen, "%p: reuse last_fence, remaining:\n", ctx);
 		goto out;
 	}
 
-	if (!batch)
+	if (!batch) {
+		fd_bc_dump(ctx->screen, "%p: NULL batch, remaining:\n", ctx);
 		return;
+	}
 
 	/* Take a ref to the batch's fence (batch can be unref'd when flushed: */
 	fd_fence_ref(&fence, batch->fence);
 
 	if (flags & PIPE_FLUSH_FENCE_FD)
 		batch->needs_out_fence_fd = true;
+
+	fd_bc_dump(ctx->screen, "%p: flushing %p<%u>, flags=0x%x, pending:\n",
+			ctx, batch, batch->seqno, flags);
 
 	if (!ctx->screen->reorder) {
 		fd_batch_flush(batch);
@@ -88,6 +94,8 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
 	} else {
 		fd_bc_flush(&ctx->screen->batch_cache, ctx);
 	}
+
+	fd_bc_dump(ctx->screen, "%p: remaining:\n", ctx);
 
 out:
 	if (fencep)
@@ -131,31 +139,11 @@ fd_memory_barrier(struct pipe_context *pctx, unsigned flags)
 	/* TODO do we need to check for persistently mapped buffers and fd_bo_cpu_prep()?? */
 }
 
-/**
- * emit marker string as payload of a no-op packet, which can be
- * decoded by cffdump.
- */
 static void
-fd_emit_string_marker(struct pipe_context *pctx, const char *string, int len)
+emit_string_tail(struct fd_ringbuffer *ring, const char *string, int len)
 {
-	struct fd_context *ctx = fd_context(pctx);
-	struct fd_ringbuffer *ring;
 	const uint32_t *buf = (const void *)string;
 
-	if (!ctx->batch)
-		return;
-
-	ctx->batch->needs_flush = true;
-
-	ring = ctx->batch->draw;
-
-	/* max packet size is 0x3fff dwords: */
-	len = MIN2(len, 0x3fff * 4);
-
-	if (ctx->screen->gpu_id >= 500)
-		OUT_PKT7(ring, CP_NOP, align(len, 4) / 4);
-	else
-		OUT_PKT3(ring, CP_NOP, align(len, 4) / 4);
 	while (len >= 4) {
 		OUT_RING(ring, *buf);
 		buf++;
@@ -170,6 +158,51 @@ fd_emit_string_marker(struct pipe_context *pctx, const char *string, int len)
 	}
 }
 
+/* for prior to a5xx: */
+void
+fd_emit_string(struct fd_ringbuffer *ring,
+		const char *string, int len)
+{
+	/* max packet size is 0x3fff+1 dwords: */
+	len = MIN2(len, 0x4000 * 4);
+
+	OUT_PKT3(ring, CP_NOP, align(len, 4) / 4);
+	emit_string_tail(ring, string, len);
+}
+
+/* for a5xx+ */
+void
+fd_emit_string5(struct fd_ringbuffer *ring,
+		const char *string, int len)
+{
+	/* max packet size is 0x3fff dwords: */
+	len = MIN2(len, 0x3fff * 4);
+
+	OUT_PKT7(ring, CP_NOP, align(len, 4) / 4);
+	emit_string_tail(ring, string, len);
+}
+
+/**
+ * emit marker string as payload of a no-op packet, which can be
+ * decoded by cffdump.
+ */
+static void
+fd_emit_string_marker(struct pipe_context *pctx, const char *string, int len)
+{
+	struct fd_context *ctx = fd_context(pctx);
+
+	if (!ctx->batch)
+		return;
+
+	ctx->batch->needs_flush = true;
+
+	if (ctx->screen->gpu_id >= 500) {
+		fd_emit_string5(ctx->batch->draw, string, len);
+	} else {
+		fd_emit_string(ctx->batch->draw, string, len);
+	}
+}
+
 void
 fd_context_destroy(struct pipe_context *pctx)
 {
@@ -178,9 +211,9 @@ fd_context_destroy(struct pipe_context *pctx)
 
 	DBG("");
 
-	mtx_lock(&ctx->screen->lock);
+	fd_screen_lock(ctx->screen);
 	list_del(&ctx->node);
-	mtx_unlock(&ctx->screen->lock);
+	fd_screen_unlock(ctx->screen);
 
 	fd_log_process(ctx, true);
 	assert(list_is_empty(&ctx->log_chunks));
@@ -380,7 +413,7 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 
 	(void) mtx_init(&ctx->gmem_lock, mtx_plain);
 
-	/* need some sane default in case state tracker doesn't
+	/* need some sane default in case gallium frontends don't
 	 * set some state:
 	 */
 	ctx->sample_mask = 0xffff;
@@ -423,9 +456,11 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 	list_inithead(&ctx->acc_active_queries);
 	list_inithead(&ctx->log_chunks);
 
-	mtx_lock(&ctx->screen->lock);
+	fd_screen_lock(ctx->screen);
 	list_add(&ctx->node, &ctx->screen->context_list);
-	mtx_unlock(&ctx->screen->lock);
+	fd_screen_unlock(ctx->screen);
+
+	ctx->current_scissor = &ctx->disabled_scissor;
 
 	ctx->log_out = stdout;
 

@@ -104,6 +104,12 @@ anv_gem_set_tiling(struct anv_device *device,
 }
 
 int
+anv_gem_get_tiling(struct anv_device *device, uint32_t gem_handle)
+{
+   return 0;
+}
+
+int
 anv_gem_set_caching(struct anv_device *device, uint32_t gem_handle,
                     uint32_t caching)
 {
@@ -155,12 +161,6 @@ anv_gem_get_context_param(int fd, int context, uint32_t param, uint64_t *value)
 
 bool
 anv_gem_has_context_priority(int fd)
-{
-   unreachable("Unused");
-}
-
-int
-anv_gem_get_aperture(int fd, uint64_t *size)
 {
    unreachable("Unused");
 }
@@ -248,8 +248,7 @@ anv_gem_syncobj_wait(struct anv_device *device,
 }
 
 int
-anv_gem_reg_read(struct anv_device *device,
-                 uint32_t offset, uint64_t *result)
+anv_gem_reg_read(int fd, uint32_t offset, uint64_t *result)
 {
    unreachable("Unused");
 }

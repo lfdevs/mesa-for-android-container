@@ -808,6 +808,11 @@ driswBindExtensions(struct drisw_screen *psc, const __DRIextension **extensions)
          psc->rendererQuery = (__DRI2rendererQueryExtension *) extensions[i];
          __glXEnableDirectExtension(&psc->base, "GLX_MESA_query_renderer");
       }
+
+      if (strcmp(extensions[i]->name, __DRI2_ROBUSTNESS) == 0)
+         __glXEnableDirectExtension(&psc->base,
+                                    "GLX_ARB_create_context_robustness");
+
       if (strcmp(extensions[i]->name, __DRI2_FLUSH_CONTROL) == 0) {
 	  __glXEnableDirectExtension(&psc->base,
 				     "GLX_ARB_context_flush_control");

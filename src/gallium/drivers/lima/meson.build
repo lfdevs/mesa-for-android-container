@@ -46,6 +46,8 @@ files_lima = files(
   'ir/pp/node_to_instr.c',
   'ir/pp/disasm.c',
 
+  'ir/lima_nir_duplicate_consts.c',
+  'ir/lima_nir_duplicate_intrinsic.c',
   'ir/lima_nir_lower_uniform_to_scalar.c',
   'ir/lima_nir_split_load_input.c',
 

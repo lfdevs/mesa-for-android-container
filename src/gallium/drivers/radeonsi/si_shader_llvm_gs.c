@@ -474,7 +474,8 @@ struct si_shader *si_generate_gs_copy_shader(struct si_screen *sscreen,
    shader->is_gs_copy_shader = true;
 
    si_llvm_context_init(&ctx, sscreen, compiler,
-                        si_get_wave_size(sscreen, PIPE_SHADER_VERTEX, false, false, false));
+                        si_get_wave_size(sscreen, PIPE_SHADER_VERTEX,
+                                         false, false, false, false));
    ctx.shader = shader;
    ctx.type = PIPE_SHADER_VERTEX;
 

@@ -98,6 +98,19 @@ nvc0_surface_create(struct pipe_context *pipe,
    return nvc0_miptree_surface_new(pipe, pres, templ);
 }
 
+static struct pipe_resource *
+nvc0_resource_from_user_memory(struct pipe_screen *pipe,
+                               const struct pipe_resource *templ,
+                               void *user_memory)
+{
+   struct nouveau_screen *screen = nouveau_screen(pipe);
+
+   assert(screen->has_svm);
+   assert(templ->target == PIPE_BUFFER);
+
+   return nouveau_buffer_create_from_user(pipe, templ, user_memory);
+}
+
 void
 nvc0_init_resource_functions(struct pipe_context *pcontext)
 {
@@ -120,4 +133,5 @@ nvc0_screen_init_resource_functions(struct pipe_screen *pscreen)
    pscreen->resource_from_handle = nvc0_resource_from_handle;
    pscreen->resource_get_handle = u_resource_get_handle_vtbl;
    pscreen->resource_destroy = u_resource_destroy_vtbl;
+   pscreen->resource_from_user_memory = nvc0_resource_from_user_memory;
 }

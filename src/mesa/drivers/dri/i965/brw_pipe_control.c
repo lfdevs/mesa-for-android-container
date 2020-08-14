@@ -124,7 +124,8 @@ gen7_emit_vs_workaround_flush(struct brw_context *brw)
    brw_emit_pipe_control_write(brw,
                                PIPE_CONTROL_WRITE_IMMEDIATE
                                | PIPE_CONTROL_DEPTH_STALL,
-                               brw->workaround_bo, 0, 0);
+                               brw->workaround_bo,
+                               brw->workaround_bo_offset, 0);
 }
 
 /**
@@ -192,7 +193,8 @@ gen7_emit_cs_stall_flush(struct brw_context *brw)
    brw_emit_pipe_control_write(brw,
                                PIPE_CONTROL_CS_STALL
                                | PIPE_CONTROL_WRITE_IMMEDIATE,
-                               brw->workaround_bo, 0, 0);
+                               brw->workaround_bo,
+                               brw->workaround_bo_offset, 0);
 }
 
 /**
@@ -240,7 +242,8 @@ brw_emit_post_sync_nonzero_flush(struct brw_context *brw)
                                PIPE_CONTROL_STALL_AT_SCOREBOARD);
 
    brw_emit_pipe_control_write(brw, PIPE_CONTROL_WRITE_IMMEDIATE,
-                               brw->workaround_bo, 0, 0);
+                               brw->workaround_bo,
+                               brw->workaround_bo_offset, 0);
 }
 
 /*
@@ -298,7 +301,8 @@ brw_emit_end_of_pipe_sync(struct brw_context *brw, uint32_t flags)
       brw_emit_pipe_control_write(brw,
                                   flags | PIPE_CONTROL_CS_STALL |
                                   PIPE_CONTROL_WRITE_IMMEDIATE,
-                                  brw->workaround_bo, 0, 0);
+                                  brw->workaround_bo,
+                                  brw->workaround_bo_offset, 0);
 
       if (devinfo->is_haswell) {
          /* Haswell needs addition work-arounds:
@@ -335,7 +339,7 @@ brw_emit_end_of_pipe_sync(struct brw_context *brw, uint32_t flags)
           * 3DPRIMITIVE when needed anyway.
           */
          brw_load_register_mem(brw, GEN7_3DPRIM_START_INSTANCE,
-                               brw->workaround_bo, 0);
+                               brw->workaround_bo, brw->workaround_bo_offset);
       }
    } else {
       /* On gen4-5, a regular pipe control seems to suffice. */
@@ -365,6 +369,27 @@ brw_emit_mi_flush(struct brw_context *brw)
                PIPE_CONTROL_CS_STALL;
    }
    brw_emit_pipe_control_flush(brw, flags);
+}
+
+static bool
+init_identifier_bo(struct brw_context *brw)
+{
+   void *bo_map;
+
+   if (!can_do_exec_capture(brw->screen))
+      return true;
+
+   bo_map = brw_bo_map(NULL, brw->workaround_bo, MAP_READ | MAP_WRITE);
+   if (!bo_map)
+      return false;
+
+   brw->workaround_bo->kflags |= EXEC_OBJECT_CAPTURE;
+   brw->workaround_bo_offset =
+      ALIGN(intel_debug_write_identifiers(bo_map, 4096, "i965") + 8, 8);
+
+   brw_bo_unmap(brw->workaround_bo);
+
+   return true;
 }
 
 int
@@ -414,6 +439,10 @@ brw_init_pipe_control(struct brw_context *brw,
    if (brw->workaround_bo == NULL)
       return -ENOMEM;
 
+   if (!init_identifier_bo(brw))
+      return -ENOMEM; /* Couldn't map workaround_bo?? */
+
+   brw->workaround_bo_offset = 0;
    brw->pipe_controls_since_last_cs_stall = 0;
 
    return 0;

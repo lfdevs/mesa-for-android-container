@@ -52,7 +52,8 @@ static const unsigned svga_hw_prims =
     (1 << PIPE_PRIM_LINES_ADJACENCY) |
     (1 << PIPE_PRIM_LINE_STRIP_ADJACENCY) |
     (1 << PIPE_PRIM_TRIANGLES_ADJACENCY) |
-    (1 << PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY));
+    (1 << PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY) |
+    (1 << PIPE_PRIM_PATCHES));
 
 
 /**
@@ -64,7 +65,8 @@ static const unsigned svga_hw_prims =
  * those to other types of primitives with index/translation code.
  */
 static inline SVGA3dPrimitiveType
-svga_translate_prim(unsigned mode, unsigned vcount, unsigned *prim_count)
+svga_translate_prim(unsigned mode, unsigned vcount, unsigned *prim_count,
+                    ubyte vertices_per_patch)
 {
    switch (mode) {
    case PIPE_PRIM_POINTS:
@@ -106,6 +108,13 @@ svga_translate_prim(unsigned mode, unsigned vcount, unsigned *prim_count)
    case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
       *prim_count = vcount / 2 - 2 ;
       return SVGA3D_PRIMITIVE_TRIANGLESTRIP_ADJ;
+
+   case PIPE_PRIM_PATCHES:
+      *prim_count = vcount / vertices_per_patch ;
+      assert(vertices_per_patch >= 1);
+      assert(vertices_per_patch <= 32);
+      return (SVGA3D_PRIMITIVE_1_CONTROL_POINT_PATCH - 1)
+             + vertices_per_patch;
 
    default:
       assert(0);
@@ -218,7 +227,9 @@ svga_hwtnl_prim(struct svga_hwtnl *hwtnl,
                 unsigned min_index,
                 unsigned max_index,
                 struct pipe_resource *ib,
-                unsigned start_instance, unsigned instance_count);
+                unsigned start_instance, unsigned instance_count,
+                const struct pipe_draw_indirect_info *indirect,
+                const struct pipe_stream_output_target *so_vertex_count);
 
 enum pipe_error
 svga_hwtnl_simple_draw_range_elements(struct svga_hwtnl *hwtnl,
@@ -231,6 +242,7 @@ svga_hwtnl_simple_draw_range_elements(struct svga_hwtnl *hwtnl,
                                       unsigned start,
                                       unsigned count,
                                       unsigned start_instance,
-                                      unsigned instance_count);
+                                      unsigned instance_count,
+                                      ubyte vertices_per_patch);
 
 #endif

@@ -836,22 +836,13 @@ brw_initialize_cs_context_constants(struct brw_context *brw)
    ctx->Const.MaxComputeWorkGroupInvocations = max_invocations;
    ctx->Const.MaxComputeSharedMemorySize = 64 * 1024;
 
-   /* Constants used for ARB_compute_variable_group_size.  The compiler will
-    * use the maximum to decide which SIMDs can be used.  If we top this like
-    * max_invocations, that would prevent SIMD8 / SIMD16 to be considered.
-    *
-    * TODO: To avoid the trade off above between having the lower maximum
-    * vs. always using SIMD32, keep all three shader variants (for each SIMD)
-    * and select a suitable one at dispatch time.
-    */
+   /* Constants used for ARB_compute_variable_group_size. */
    if (devinfo->gen >= 7) {
-      const uint32_t max_var_invocations =
-         (max_threads >= 64 ? 8 : (max_threads >= 32 ? 16 : 32)) * max_threads;
-      assert(max_var_invocations >= 512);
-      ctx->Const.MaxComputeVariableGroupSize[0] = max_var_invocations;
-      ctx->Const.MaxComputeVariableGroupSize[1] = max_var_invocations;
-      ctx->Const.MaxComputeVariableGroupSize[2] = max_var_invocations;
-      ctx->Const.MaxComputeVariableGroupInvocations = max_var_invocations;
+      assert(max_invocations >= 512);
+      ctx->Const.MaxComputeVariableGroupSize[0] = max_invocations;
+      ctx->Const.MaxComputeVariableGroupSize[1] = max_invocations;
+      ctx->Const.MaxComputeVariableGroupSize[2] = max_invocations;
+      ctx->Const.MaxComputeVariableGroupInvocations = max_invocations;
    }
 }
 
@@ -924,7 +915,7 @@ brw_process_driconf_options(struct brw_context *brw)
    ctx->Const.ForceGLSLAbsSqrt =
       driQueryOptionb(options, "force_glsl_abs_sqrt");
 
-   ctx->Const.GLSLZeroInit = driQueryOptionb(options, "glsl_zero_init");
+   ctx->Const.GLSLZeroInit = driQueryOptionb(options, "glsl_zero_init") ? 1 : 0;
 
    brw->dual_color_blend_by_location =
       driQueryOptionb(options, "dual_color_blend_by_location");
@@ -1251,7 +1242,7 @@ intelDestroyContext(__DRIcontext * driContextPriv)
    driDestroyOptionCache(&brw->optionCache);
 
    /* free the Mesa context */
-   _mesa_free_context_data(&brw->ctx);
+   _mesa_free_context_data(&brw->ctx, true);
 
    ralloc_free(brw);
    driContextPriv->driverPrivate = NULL;

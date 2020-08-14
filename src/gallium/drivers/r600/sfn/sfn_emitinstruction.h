@@ -28,6 +28,7 @@
 #define EMITINSTRUCTION_H
 
 #include "compiler/nir/nir.h"
+#include "sfn_defines.h"
 #include "sfn_value.h"
 #include "sfn_instruction_alu.h"
 
@@ -66,7 +67,7 @@ protected:
 
    int allocate_temp_register();
 
-   PValue get_temp_register();
+   PValue get_temp_register(int channel = -1);
    GPRVector get_temp_vec4();
 
    // forwards from ShaderFromNirProcessor
@@ -75,14 +76,22 @@ protected:
                          std::vector<PValue> src0,
                          const std::set<AluModifiers>& m_flags);
 
-   PValue from_nir_with_fetch_constant(const nir_src& src, unsigned component);
-   GPRVector *vec_from_nir_with_fetch_constant(const nir_src& src, unsigned mask,
-                                               const GPRVector::Swizzle& swizzle);
+   PValue from_nir_with_fetch_constant(const nir_src& src, unsigned component, int channel = -1);
+   GPRVector vec_from_nir_with_fetch_constant(const nir_src& src, unsigned mask,
+                                              const GPRVector::Swizzle& swizzle, bool match = false);
 
+   void add_uniform(unsigned index, const PValue &value);
    void load_uniform(const nir_alu_src& src);
    const nir_variable *get_deref_location(const nir_src& v) const;
 
+   enum chip_class get_chip_class(void) const;
 
+   PValue literal(uint32_t value);
+
+   GPRVector vec_from_nir(const nir_dest& dst, int num_components);
+
+   bool inject_register(unsigned sel, unsigned swizzle,
+                        const PValue& reg, bool map);
 
 private:
 

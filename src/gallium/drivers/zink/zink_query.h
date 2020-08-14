@@ -26,11 +26,16 @@
 
 struct zink_batch;
 struct zink_context;
+struct zink_fence;
+struct zink_screen;
 
 void
 zink_suspend_queries(struct zink_context *ctx, struct zink_batch *batch);
 
 void
 zink_resume_queries(struct zink_context *ctx, struct zink_batch *batch);
+
+void
+zink_prune_queries(struct zink_screen *screen, struct zink_fence *fence);
 
 #endif

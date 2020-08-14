@@ -89,7 +89,6 @@ svga_delete_gs_state(struct pipe_context *pipe, void *shader)
    struct svga_geometry_shader *gs = (struct svga_geometry_shader *)shader;
    struct svga_geometry_shader *next_gs;
    struct svga_shader_variant *variant, *tmp;
-   enum pipe_error ret;
 
    svga_hwtnl_flush_retry(svga);
 
@@ -111,12 +110,7 @@ svga_delete_gs_state(struct pipe_context *pipe, void *shader)
 
          /* Check if deleting currently bound shader */
          if (variant == svga->state.hw_draw.gs) {
-            ret = svga_set_shader(svga, SVGA3D_SHADERTYPE_GS, NULL);
-            if (ret != PIPE_OK) {
-               svga_context_flush(svga, NULL);
-               ret = svga_set_shader(svga, SVGA3D_SHADERTYPE_GS, NULL);
-               assert(ret == PIPE_OK);
-            }
+            SVGA_RETRY(svga, svga_set_shader(svga, SVGA3D_SHADERTYPE_GS, NULL));
             svga->state.hw_draw.gs = NULL;
          }
 

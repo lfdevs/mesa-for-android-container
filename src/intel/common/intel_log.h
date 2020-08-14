@@ -72,7 +72,7 @@ intel_log_v(enum intel_log_level, const char *tag, const char *format,
 #ifndef DEBUG
 /* Suppres -Wunused */
 static inline void PRINTFLIKE(1, 2)
-__intel_log_use_args(const char *format, ...) { }
+__intel_log_use_args(UNUSED const char *format, ...) { }
 #endif
 
 #ifdef __cplusplus

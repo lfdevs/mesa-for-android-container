@@ -29,6 +29,7 @@
 
 #include "util/u_half.h"
 #include "adreno_common.xml.h"
+#include "adreno_pm4.xml.h"
 #include "a6xx.xml.h"
 
 #define REG(_x) REG_A6XX_ ## _x

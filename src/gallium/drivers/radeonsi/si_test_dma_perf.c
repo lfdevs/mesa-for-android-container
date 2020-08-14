@@ -45,10 +45,10 @@ void si_test_dma_perf(struct si_screen *sscreen)
    struct si_context *sctx = (struct si_context *)ctx;
    const uint32_t clear_value = 0x12345678;
    static const unsigned cs_dwords_per_thread_list[] = {64, 32, 16, 8, 4, 2, 1};
-   static const unsigned cs_waves_per_sh_list[] = {1, 2, 4, 8, 16, 0};
+   static const unsigned cs_waves_per_sh_list[] = {0, 2, 4, 8, 16};
 
 #define NUM_SHADERS ARRAY_SIZE(cs_dwords_per_thread_list)
-#define NUM_METHODS (4 + 2 * NUM_SHADERS * ARRAY_SIZE(cs_waves_per_sh_list))
+#define NUM_METHODS (4 + 3 * NUM_SHADERS * ARRAY_SIZE(cs_waves_per_sh_list))
 
    static const char *method_str[] = {
       "CP MC   ",
@@ -103,12 +103,11 @@ void si_test_dma_perf(struct si_screen *sscreen)
          bool test_sdma = method == 3;
          bool test_cs = method >= 4;
          unsigned cs_method = method - 4;
-         STATIC_ASSERT(L2_STREAM + 1 == L2_LRU);
          unsigned cs_waves_per_sh =
-            test_cs ? cs_waves_per_sh_list[cs_method / (2 * NUM_SHADERS)] : 0;
-         cs_method %= 2 * NUM_SHADERS;
+            test_cs ? cs_waves_per_sh_list[cs_method / (3 * NUM_SHADERS)] : 0;
+         cs_method %= 3 * NUM_SHADERS;
          unsigned cache_policy =
-            test_cp ? method % 3 : test_cs ? L2_STREAM + (cs_method / NUM_SHADERS) : 0;
+            test_cp ? method % 3 : test_cs ? (cs_method / NUM_SHADERS) : 0;
          unsigned cs_dwords_per_thread =
             test_cs ? cs_dwords_per_thread_list[cs_method % NUM_SHADERS] : 0;
 
@@ -123,6 +122,12 @@ void si_test_dma_perf(struct si_screen *sscreen)
             if (test_cs && cs_waves_per_sh % 16 != 0)
                continue;
          }
+
+         /* SI_RESOURCE_FLAG_UNCACHED setting RADEON_FLAG_UNCACHED doesn't affect
+          * chips before gfx9.
+          */
+         if (test_cs && cache_policy && sctx->chip_class < GFX9)
+            continue;
 
          printf("%s ,", placement_str[placement]);
          if (test_cs) {
@@ -149,6 +154,7 @@ void si_test_dma_perf(struct si_screen *sscreen)
             struct pipe_resource *dst, *src;
             struct pipe_query *q[NUM_RUNS];
             unsigned query_type = PIPE_QUERY_TIME_ELAPSED;
+            unsigned flags = cache_policy == L2_BYPASS ? SI_RESOURCE_FLAG_UNCACHED : 0;
 
             if (test_sdma) {
                if (sctx->chip_class == GFX6)
@@ -167,8 +173,8 @@ void si_test_dma_perf(struct si_screen *sscreen)
             else
                src_usage = PIPE_USAGE_STREAM;
 
-            dst = pipe_buffer_create(screen, 0, dst_usage, size);
-            src = is_copy ? pipe_buffer_create(screen, 0, src_usage, size) : NULL;
+            dst = pipe_aligned_buffer_create(screen, flags, dst_usage, size, 256);
+            src = is_copy ? pipe_aligned_buffer_create(screen, flags, src_usage, size, 256) : NULL;
 
             /* Run tests. */
             for (unsigned iter = 0; iter < NUM_RUNS; iter++) {
@@ -446,17 +452,17 @@ void si_test_dma_perf(struct si_screen *sscreen)
             printf("return ");
 
             assert(best);
+            const char *cache_policy_str =
+               best->cache_policy == L2_BYPASS ? "L2_BYPASS" :
+               best->cache_policy == L2_LRU ? "L2_LRU   " : "L2_STREAM";
+
             if (best->is_cp) {
-               printf("CP_DMA(%s);\n",
-                      best->cache_policy == L2_BYPASS
-                         ? "L2_BYPASS"
-                         : best->cache_policy == L2_LRU ? "L2_LRU   " : "L2_STREAM");
+               printf("CP_DMA(%s);\n", cache_policy_str);
             }
             if (best->is_sdma)
                printf("SDMA;\n");
             if (best->is_cs) {
-               printf("COMPUTE(%s, %u, %u);\n",
-                      best->cache_policy == L2_LRU ? "L2_LRU   " : "L2_STREAM",
+               printf("COMPUTE(%s, %u, %u);\n", cache_policy_str,
                       best->dwords_per_thread, best->waves_per_sh);
             }
          }

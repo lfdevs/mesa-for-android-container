@@ -574,7 +574,7 @@ etna_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 
    /* context ctxate setup */
    ctx->screen = screen;
-   /* need some sane default in case state tracker doesn't set some state: */
+   /* need some sane default in case gallium frontends don't set some state: */
    ctx->sample_mask = 0xffff;
 
    /*  Set sensible defaults for state */

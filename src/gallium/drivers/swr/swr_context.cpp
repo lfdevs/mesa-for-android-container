@@ -491,7 +491,7 @@ swr_create_context(struct pipe_screen *p_screen, void *priv, unsigned flags)
 {
    struct swr_context *ctx = (struct swr_context *)
       AlignedMalloc(sizeof(struct swr_context), KNOB_SIMD_BYTES);
-   memset(ctx, 0, sizeof(struct swr_context));
+   memset((void*)ctx, 0, sizeof(struct swr_context));
 
    swr_screen(p_screen)->pfnSwrGetInterface(ctx->api);
    swr_screen(p_screen)->pfnSwrGetTileInterface(ctx->tileApi);

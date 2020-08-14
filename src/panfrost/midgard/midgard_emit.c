@@ -23,6 +23,39 @@
 
 #include "compiler.h"
 #include "midgard_ops.h"
+#include "midgard_quirks.h"
+
+static midgard_int_mod
+mir_get_imod(bool shift, nir_alu_type T, bool half, bool scalar)
+{
+        if (!half) {
+                assert(!shift);
+                /* Sign-extension, really... */
+                return scalar ? 0 : midgard_int_normal;
+        }
+
+        if (shift)
+                return midgard_int_shift;
+
+        if (nir_alu_type_get_base_type(T) == nir_type_int)
+                return midgard_int_sign_extend;
+        else
+                return midgard_int_zero_extend;
+}
+
+unsigned
+mir_pack_mod(midgard_instruction *ins, unsigned i, bool scalar)
+{
+        bool integer = midgard_is_integer_op(ins->op);
+        unsigned base_size = max_bitsize_for_alu(ins);
+        unsigned sz = nir_alu_type_get_type_size(ins->src_types[i]);
+        bool half = (sz == (base_size >> 1));
+
+        return integer ?
+                mir_get_imod(ins->src_shift[i], ins->src_types[i], half, scalar) :
+                ((ins->src_abs[i] << 0) |
+                 ((ins->src_neg[i] << 1)));
+}
 
 /* Midgard IR only knows vector ALU types, but we sometimes need to actually
  * use scalar ALU instructions, for functional or performance reasons. To do
@@ -41,40 +74,13 @@ component_from_mask(unsigned mask)
 }
 
 static unsigned
-vector_to_scalar_source(unsigned u, bool is_int, bool is_full,
-                unsigned component)
+mir_pack_scalar_source(unsigned mod, bool is_full, unsigned component)
 {
-        midgard_vector_alu_src v;
-        memcpy(&v, &u, sizeof(v));
-
-        /* TODO: Integers */
-
-        midgard_scalar_alu_src s = { 0 };
-
-        if (is_full) {
-                /* For a 32-bit op, just check the source half flag */
-                s.full = !v.half;
-        } else if (!v.half) {
-                /* For a 16-bit op that's not subdivided, never full */
-                s.full = false;
-        } else {
-                /* We can't do 8-bit scalar, abort! */
-                assert(0);
-        }
-
-        /* Component indexing takes size into account */
-
-        if (s.full)
-                s.component = component << 1;
-        else
-                s.component = component;
-
-        if (is_int) {
-                /* TODO */
-        } else {
-                s.abs = v.mod & MIDGARD_FLOAT_MOD_ABS;
-                s.negate = v.mod & MIDGARD_FLOAT_MOD_NEG;
-        }
+        midgard_scalar_alu_src s = {
+                .mod = mod,
+                .full = is_full,
+                .component = component << (is_full ? 1 : 0)
+        };
 
         unsigned o;
         memcpy(&o, &s, sizeof(s));
@@ -85,17 +91,22 @@ vector_to_scalar_source(unsigned u, bool is_int, bool is_full,
 static midgard_scalar_alu
 vector_to_scalar_alu(midgard_vector_alu v, midgard_instruction *ins)
 {
-        bool is_int = midgard_is_integer_op(v.op);
-        bool is_full = v.reg_mode == midgard_reg_mode_32;
-        bool is_inline_constant = ins->has_inline_constant;
+        bool is_full = nir_alu_type_get_type_size(ins->dest_type) == 32;
 
+        bool half_0 = nir_alu_type_get_type_size(ins->src_types[0]) == 16;
+        bool half_1 = nir_alu_type_get_type_size(ins->src_types[1]) == 16;
         unsigned comp = component_from_mask(ins->mask);
+
+        unsigned packed_src[2] = {
+                mir_pack_scalar_source(mir_pack_mod(ins, 0, true), !half_0, ins->swizzle[0][comp]),
+                mir_pack_scalar_source(mir_pack_mod(ins, 1, true), !half_1, ins->swizzle[1][comp])
+        };
 
         /* The output component is from the mask */
         midgard_scalar_alu s = {
                 .op = v.op,
-                .src1 = vector_to_scalar_source(v.src1, is_int, is_full, ins->swizzle[0][comp]),
-                .src2 = !is_inline_constant ? vector_to_scalar_source(v.src2, is_int, is_full, ins->swizzle[1][comp]) : 0,
+                .src1 = packed_src[0],
+                .src2 = packed_src[1],
                 .unknown = 0,
                 .outmod = v.outmod,
                 .output_full = is_full,
@@ -153,7 +164,7 @@ mir_pack_swizzle_64(unsigned *swizzle, unsigned max_component)
 }
 
 static void
-mir_pack_mask_alu(midgard_instruction *ins)
+mir_pack_mask_alu(midgard_instruction *ins, midgard_vector_alu *alu)
 {
         unsigned effective = ins->mask;
 
@@ -161,102 +172,148 @@ mir_pack_mask_alu(midgard_instruction *ins)
          * override to the lower or upper half, shifting the effective mask in
          * the latter, so AAAA.... becomes AAAA */
 
-        unsigned upper_shift = mir_upper_override(ins);
+        unsigned inst_size = max_bitsize_for_alu(ins);
+        signed upper_shift = mir_upper_override(ins, inst_size);
 
-        if (upper_shift) {
+        if (upper_shift >= 0) {
                 effective >>= upper_shift;
-                ins->alu.dest_override = midgard_dest_override_upper;
+                alu->dest_override = upper_shift ?
+                        midgard_dest_override_upper :
+                        midgard_dest_override_lower;
+        } else {
+                alu->dest_override = midgard_dest_override_none;
         }
 
-        if (ins->alu.reg_mode == midgard_reg_mode_32)
-                ins->alu.mask = expand_writemask(effective, 4);
-        else if (ins->alu.reg_mode == midgard_reg_mode_64)
-                ins->alu.mask = expand_writemask(effective, 2);
+        if (inst_size == 32)
+                alu->mask = expand_writemask(effective, 2);
+        else if (inst_size == 64)
+                alu->mask = expand_writemask(effective, 1);
         else
-                ins->alu.mask = effective;
+                alu->mask = effective;
+}
+
+static unsigned
+mir_pack_swizzle(unsigned mask, unsigned *swizzle,
+                nir_alu_type T, midgard_reg_mode reg_mode,
+                bool op_channeled, bool *rep_low, bool *rep_high)
+{
+        unsigned packed = 0;
+        unsigned sz = nir_alu_type_get_type_size(T);
+
+        if (reg_mode == midgard_reg_mode_64) {
+                assert(sz == 64 || sz == 32);
+                unsigned components = (sz == 32) ? 4 : 2;
+
+                packed = mir_pack_swizzle_64(swizzle, components);
+
+                if (sz == 32) {
+                        bool lo = swizzle[0] >= COMPONENT_Z;
+                        bool hi = swizzle[1] >= COMPONENT_Z;
+
+                        if (mask & 0x1) {
+                                /* We can't mix halves... */
+                                if (mask & 2)
+                                        assert(lo == hi);
+
+                                *rep_low = lo;
+                        } else {
+                                *rep_low = hi;
+                        }
+                } else if (sz < 32) {
+                        unreachable("Cannot encode 8/16 swizzle in 64-bit");
+                }
+        } else {
+                /* For 32-bit, swizzle packing is stupid-simple. For 16-bit,
+                 * the strategy is to check whether the nibble we're on is
+                 * upper or lower. We need all components to be on the same
+                 * "side"; that much is enforced by the ISA and should have
+                 * been lowered. TODO: 8-bit packing. TODO: vec8 */
+
+                unsigned first = mask ? ffs(mask) - 1 : 0;
+                bool upper = swizzle[first] > 3;
+
+                if (upper && mask)
+                        assert(sz <= 16);
+
+                bool dest_up = !op_channeled && (first >= 4);
+
+                for (unsigned c = (dest_up ? 4 : 0); c < (dest_up ? 8 : 4); ++c) {
+                        unsigned v = swizzle[c];
+
+                        bool t_upper = v > 3;
+
+                        /* Ensure we're doing something sane */
+
+                        if (mask & (1 << c)) {
+                                assert(t_upper == upper);
+                                assert(v <= 7);
+                        }
+
+                        /* Use the non upper part */
+                        v &= 0x3;
+
+                        packed |= v << (2 * (c % 4));
+                }
+
+
+                /* Replicate for now.. should really pick a side for
+                 * dot products */
+
+                if (reg_mode == midgard_reg_mode_16 && sz == 16) {
+                        *rep_low = !upper;
+                        *rep_high = upper;
+                } else if (reg_mode == midgard_reg_mode_16 && sz == 8) {
+                        *rep_low = upper;
+                        *rep_high = upper;
+                } else if (reg_mode == midgard_reg_mode_32) {
+                        *rep_low = upper;
+                } else {
+                        unreachable("Unhandled reg mode");
+                }
+        }
+
+        return packed;
 }
 
 static void
-mir_pack_swizzle_alu(midgard_instruction *ins)
+mir_pack_vector_srcs(midgard_instruction *ins, midgard_vector_alu *alu)
 {
-        midgard_vector_alu_src src[] = {
-                vector_alu_from_unsigned(ins->alu.src1),
-                vector_alu_from_unsigned(ins->alu.src2)
-        };
+        bool channeled = GET_CHANNEL_COUNT(alu_opcode_props[ins->op].props);
+
+        unsigned base_size = max_bitsize_for_alu(ins);
 
         for (unsigned i = 0; i < 2; ++i) {
-                unsigned packed = 0;
+                if (ins->has_inline_constant && (i == 1))
+                        continue;
 
-                if (ins->alu.reg_mode == midgard_reg_mode_64) {
-                        midgard_reg_mode mode = mir_srcsize(ins, i);
-                        unsigned components = 16 / mir_bytes_for_mode(mode);
+                if (ins->src[i] == ~0)
+                        continue;
 
-                        packed = mir_pack_swizzle_64(ins->swizzle[i], components);
+                bool rep_lo = false, rep_hi = false;
+                unsigned sz = nir_alu_type_get_type_size(ins->src_types[i]);
+                bool half = (sz == (base_size >> 1));
 
-                        if (mode == midgard_reg_mode_32) {
-                                bool lo = ins->swizzle[i][0] >= COMPONENT_Z;
-                                bool hi = ins->swizzle[i][1] >= COMPONENT_Z;
-                                unsigned mask = mir_bytemask(ins);
+                assert((sz == base_size) || half);
 
-                                if (mask & 0xFF) {
-                                        /* We can't mix halves... */
-                                        if (mask & 0xFF00)
-                                                assert(lo == hi);
+                unsigned swizzle = mir_pack_swizzle(ins->mask, ins->swizzle[i],
+                                ins->src_types[i], reg_mode_for_bitsize(base_size),
+                                channeled, &rep_lo, &rep_hi);
 
-                                        src[i].rep_low |= lo;
-                                } else {
-                                        src[i].rep_low |= hi;
-                                }
-                        } else if (mode < midgard_reg_mode_32) {
-                                unreachable("Cannot encode 8/16 swizzle in 64-bit");
-                        }
-                } else {
-                        /* For 32-bit, swizzle packing is stupid-simple. For 16-bit,
-                         * the strategy is to check whether the nibble we're on is
-                         * upper or lower. We need all components to be on the same
-                         * "side"; that much is enforced by the ISA and should have
-                         * been lowered. TODO: 8-bit packing. TODO: vec8 */
+                midgard_vector_alu_src pack = {
+                        .mod = mir_pack_mod(ins, i, false),
+                        .rep_low = rep_lo,
+                        .rep_high = rep_hi,
+                        .half = half,
+                        .swizzle = swizzle
+                };
 
-                        unsigned first = ins->mask ? ffs(ins->mask) - 1 : 0;
-                        bool upper = ins->swizzle[i][first] > 3;
-
-                        if (upper && ins->mask)
-                                assert(mir_srcsize(ins, i) <= midgard_reg_mode_16);
-
-                        for (unsigned c = 0; c < 4; ++c) {
-                                unsigned v = ins->swizzle[i][c];
-
-                                bool t_upper = v > 3;
-
-                                /* Ensure we're doing something sane */
-
-                                if (ins->mask & (1 << c)) {
-                                        assert(t_upper == upper);
-                                        assert(v <= 7);
-                                }
-
-                                /* Use the non upper part */
-                                v &= 0x3;
-
-                                packed |= v << (2 * c);
-                        }
-
-                        src[i].rep_high = upper;
-
-                        /* Replicate for now.. should really pick a side for
-                         * dot products */
-
-                        if (ins->alu.reg_mode == midgard_reg_mode_16)
-                                src[i].rep_low = true;
-                }
-
-                src[i].swizzle = packed;
+                unsigned p = vector_alu_srco_unsigned(pack);
+                
+                if (i == 0)
+                        alu->src1 = p;
+                else
+                        alu->src2 = p;
         }
-
-        ins->alu.src1 = vector_alu_srco_unsigned(src[0]);
-
-        if (!ins->has_inline_constant)
-                ins->alu.src2 = vector_alu_srco_unsigned(src[1]);
 }
 
 static void
@@ -299,6 +356,50 @@ mir_pack_swizzle_tex(midgard_instruction *ins)
         /* TODO: bias component */
 }
 
+/* Up to 3 { ALU, LDST } bundles can execute in parallel with a texture op.
+ * Given a texture op, lookahead to see how many such bundles we can flag for
+ * OoO execution */
+
+static bool
+mir_can_run_ooo(midgard_block *block, midgard_bundle *bundle,
+                unsigned dependency)
+{
+        /* Don't read out of bounds */
+        if (bundle >= (midgard_bundle *) ((char *) block->bundles.data + block->bundles.size))
+                return false;
+
+        /* Texture ops can't execute with other texture ops */
+        if (!IS_ALU(bundle->tag) && bundle->tag != TAG_LOAD_STORE_4)
+                return false;
+
+        /* Ensure there is no read-after-write dependency */
+
+        for (unsigned i = 0; i < bundle->instruction_count; ++i) {
+                midgard_instruction *ins = bundle->instructions[i];
+
+                mir_foreach_src(ins, s) {
+                        if (ins->src[s] == dependency)
+                                return false;
+                }
+        }
+
+        /* Otherwise, we're okay */
+        return true;
+}
+
+static void
+mir_pack_tex_ooo(midgard_block *block, midgard_bundle *bundle, midgard_instruction *ins)
+{
+        unsigned count = 0;
+
+        for (count = 0; count < 3; ++count) {
+                if (!mir_can_run_ooo(block, bundle + count + 1, ins->dest))
+                        break;
+        }
+
+        ins->texture.out_of_order = count;
+}
+
 /* Load store masks are 4-bits. Load/store ops pack for that. vec4 is the
  * natural mask width; vec8 is constrained to be in pairs, vec2 is duplicated. TODO: 8-bit?
  */
@@ -306,13 +407,13 @@ mir_pack_swizzle_tex(midgard_instruction *ins)
 static void
 mir_pack_ldst_mask(midgard_instruction *ins)
 {
-        midgard_reg_mode mode = mir_typesize(ins);
+        unsigned sz = nir_alu_type_get_type_size(ins->dest_type);
         unsigned packed = ins->mask;
 
-        if (mode == midgard_reg_mode_64) {
+        if (sz == 64) {
                 packed = ((ins->mask & 0x2) ? (0x8 | 0x4) : 0) |
                          ((ins->mask & 0x1) ? (0x2 | 0x1) : 0);
-        } else if (mode == midgard_reg_mode_16) {
+        } else if (sz == 16) {
                 packed = 0;
 
                 for (unsigned i = 0; i < 4; ++i) {
@@ -323,13 +424,304 @@ mir_pack_ldst_mask(midgard_instruction *ins)
 
                         packed |= (u << i);
                 }
+        } else {
+                assert(sz == 32);
         }
 
         ins->load_store.mask = packed;
 }
 
 static void
+mir_lower_inverts(midgard_instruction *ins)
+{
+        bool inv[3] = {
+                ins->src_invert[0],
+                ins->src_invert[1],
+                ins->src_invert[2]
+        };
+
+        switch (ins->op) {
+        case midgard_alu_op_iand:
+                /* a & ~b = iandnot(a, b) */
+                /* ~a & ~b = ~(a | b) = inor(a, b) */
+
+                if (inv[0] && inv[1])
+                        ins->op = midgard_alu_op_inor;
+                else if (inv[1])
+                        ins->op = midgard_alu_op_iandnot;
+
+                break;
+        case midgard_alu_op_ior:
+                /*  a | ~b = iornot(a, b) */
+                /* ~a | ~b = ~(a & b) = inand(a, b) */
+
+                if (inv[0] && inv[1])
+                        ins->op = midgard_alu_op_inand;
+                else if (inv[1])
+                        ins->op = midgard_alu_op_iornot;
+
+                break;
+
+        case midgard_alu_op_ixor:
+                /* ~a ^ b = a ^ ~b = ~(a ^ b) = inxor(a, b) */
+                /* ~a ^ ~b = a ^ b */
+
+                if (inv[0] ^ inv[1])
+                        ins->op = midgard_alu_op_inxor;
+
+                break;
+
+        default:
+                break;
+        }
+}
+
+/* Opcodes with ROUNDS are the base (rte/0) type so we can just add */
+
+static void
+mir_lower_roundmode(midgard_instruction *ins)
+{
+        if (alu_opcode_props[ins->op].props & MIDGARD_ROUNDS) {
+                assert(ins->roundmode <= 0x3);
+                ins->op += ins->roundmode;
+        }
+}
+
+static midgard_load_store_word
+load_store_from_instr(midgard_instruction *ins)
+{
+        midgard_load_store_word ldst = ins->load_store;
+        ldst.op = ins->op;
+
+        if (OP_IS_STORE(ldst.op)) {
+                ldst.reg = SSA_REG_FROM_FIXED(ins->src[0]) & 1;
+        } else {
+                ldst.reg = SSA_REG_FROM_FIXED(ins->dest);
+        }
+
+        if (ins->src[1] != ~0) {
+                unsigned src = SSA_REG_FROM_FIXED(ins->src[1]);
+                ldst.arg_1 |= midgard_ldst_reg(src, ins->swizzle[1][0]);
+        }
+
+        if (ins->src[2] != ~0) {
+                unsigned src = SSA_REG_FROM_FIXED(ins->src[2]);
+                ldst.arg_2 |= midgard_ldst_reg(src, ins->swizzle[2][0]);
+        }
+
+        return ldst;
+}
+
+static midgard_texture_word
+texture_word_from_instr(midgard_instruction *ins)
+{
+        midgard_texture_word tex = ins->texture;
+        tex.op = ins->op;
+
+        unsigned src1 = ins->src[1] == ~0 ? REGISTER_UNUSED : SSA_REG_FROM_FIXED(ins->src[1]);
+        tex.in_reg_select = src1 & 1;
+
+        unsigned dest = ins->dest == ~0 ? REGISTER_UNUSED : SSA_REG_FROM_FIXED(ins->dest);
+        tex.out_reg_select = dest & 1;
+
+        if (ins->src[2] != ~0) {
+                midgard_tex_register_select sel = {
+                        .select = SSA_REG_FROM_FIXED(ins->src[2]) & 1,
+                        .full = 1,
+                        .component = ins->swizzle[2][0]
+                };
+                uint8_t packed;
+                memcpy(&packed, &sel, sizeof(packed));
+                tex.bias = packed;
+        }
+
+        if (ins->src[3] != ~0) {
+                unsigned x = ins->swizzle[3][0];
+                unsigned y = x + 1;
+                unsigned z = x + 2;
+
+                /* Check range, TODO: half-registers */
+                assert(z < 4);
+
+                unsigned offset_reg = SSA_REG_FROM_FIXED(ins->src[3]);
+                tex.offset =
+                        (1)                   | /* full */
+                        (offset_reg & 1) << 1 | /* select */
+                        (0 << 2)              | /* upper */
+                        (x << 3)              | /* swizzle */
+                        (y << 5)              | /* swizzle */
+                        (z << 7);               /* swizzle */
+        }
+
+        return tex;
+}
+
+static midgard_vector_alu
+vector_alu_from_instr(midgard_instruction *ins)
+{
+        midgard_vector_alu alu = {
+                .op = ins->op,
+                .outmod = ins->outmod,
+                .reg_mode = reg_mode_for_bitsize(max_bitsize_for_alu(ins))
+        };
+
+        if (ins->has_inline_constant) {
+                /* Encode inline 16-bit constant. See disassembler for
+                 * where the algorithm is from */
+
+                int lower_11 = ins->inline_constant & ((1 << 12) - 1);
+                uint16_t imm = ((lower_11 >> 8) & 0x7) |
+                               ((lower_11 & 0xFF) << 3);
+
+                alu.src2 = imm << 2;
+        }
+
+        return alu;
+}
+
+static midgard_branch_extended
+midgard_create_branch_extended( midgard_condition cond,
+                                midgard_jmp_writeout_op op,
+                                unsigned dest_tag,
+                                signed quadword_offset)
+{
+        /* The condition code is actually a LUT describing a function to
+         * combine multiple condition codes. However, we only support a single
+         * condition code at the moment, so we just duplicate over a bunch of
+         * times. */
+
+        uint16_t duplicated_cond =
+                (cond << 14) |
+                (cond << 12) |
+                (cond << 10) |
+                (cond << 8) |
+                (cond << 6) |
+                (cond << 4) |
+                (cond << 2) |
+                (cond << 0);
+
+        midgard_branch_extended branch = {
+                .op = op,
+                .dest_tag = dest_tag,
+                .offset = quadword_offset,
+                .cond = duplicated_cond
+        };
+
+        return branch;
+}
+
+static void
+emit_branch(midgard_instruction *ins,
+            compiler_context *ctx,
+            midgard_block *block,
+            midgard_bundle *bundle,
+            struct util_dynarray *emission)
+{
+        /* Parse some basic branch info */
+        bool is_compact = ins->unit == ALU_ENAB_BR_COMPACT;
+        bool is_conditional = ins->branch.conditional;
+        bool is_inverted = ins->branch.invert_conditional;
+        bool is_discard = ins->branch.target_type == TARGET_DISCARD;
+        bool is_tilebuf_wait = ins->branch.target_type == TARGET_TILEBUF_WAIT;
+        bool is_special = is_discard || is_tilebuf_wait;
+        bool is_writeout = ins->writeout;
+
+        /* Determine the block we're jumping to */
+        int target_number = ins->branch.target_block;
+
+        /* Report the destination tag */
+        int dest_tag = is_discard ? 0 :
+                is_tilebuf_wait ? bundle->tag :
+                midgard_get_first_tag_from_block(ctx, target_number);
+
+        /* Count up the number of quadwords we're
+         * jumping over = number of quadwords until
+         * (br_block_idx, target_number) */
+
+        int quadword_offset = 0;
+
+        if (is_discard) {
+                /* Ignored */
+        } else if (is_tilebuf_wait) {
+                quadword_offset = -1;
+        } else if (target_number > block->base.name) {
+                /* Jump forward */
+
+                for (int idx = block->base.name+1; idx < target_number; ++idx) {
+                        midgard_block *blk = mir_get_block(ctx, idx);
+                        assert(blk);
+
+                        quadword_offset += blk->quadword_count;
+                }
+        } else {
+                /* Jump backwards */
+
+                for (int idx = block->base.name; idx >= target_number; --idx) {
+                        midgard_block *blk = mir_get_block(ctx, idx);
+                        assert(blk);
+
+                        quadword_offset -= blk->quadword_count;
+                }
+        }
+
+        /* Unconditional extended branches (far jumps)
+         * have issues, so we always use a conditional
+         * branch, setting the condition to always for
+         * unconditional. For compact unconditional
+         * branches, cond isn't used so it doesn't
+         * matter what we pick. */
+
+        midgard_condition cond =
+                !is_conditional ? midgard_condition_always :
+                is_inverted ? midgard_condition_false :
+                midgard_condition_true;
+
+        midgard_jmp_writeout_op op =
+                is_discard ? midgard_jmp_writeout_op_discard :
+                is_tilebuf_wait ? midgard_jmp_writeout_op_tilebuffer_pending :
+                is_writeout ? midgard_jmp_writeout_op_writeout :
+                (is_compact && !is_conditional) ?
+                midgard_jmp_writeout_op_branch_uncond :
+                midgard_jmp_writeout_op_branch_cond;
+
+        if (is_compact) {
+                unsigned size = sizeof(midgard_branch_cond);
+
+                if (is_conditional || is_special) {
+                        midgard_branch_cond branch = {
+                                .op = op,
+                                .dest_tag = dest_tag,
+                                .offset = quadword_offset,
+                                .cond = cond
+                        };
+                        memcpy(util_dynarray_grow_bytes(emission, size, 1), &branch, size);
+                } else {
+                        assert(op == midgard_jmp_writeout_op_branch_uncond);
+                        midgard_branch_uncond branch = {
+                                .op = op,
+                                .dest_tag = dest_tag,
+                                .offset = quadword_offset,
+                                .unknown = 1
+                        };
+                        assert(branch.offset == quadword_offset);
+                        memcpy(util_dynarray_grow_bytes(emission, size, 1), &branch, size);
+                }
+        } else { /* `ins->compact_branch`,  misnomer */
+                unsigned size = sizeof(midgard_branch_extended);
+
+                midgard_branch_extended branch =
+                        midgard_create_branch_extended(
+                                        cond, op,
+                                        dest_tag,
+                                        quadword_offset);
+
+                memcpy(util_dynarray_grow_bytes(emission, size, 1), &branch, size);
+        }
+}
+
+static void
 emit_alu_bundle(compiler_context *ctx,
+                midgard_block *block,
                 midgard_bundle *bundle,
                 struct util_dynarray *emission,
                 unsigned lookahead)
@@ -344,9 +736,25 @@ emit_alu_bundle(compiler_context *ctx,
                 /* Check if this instruction has registers */
                 if (ins->compact_branch) continue;
 
+                unsigned src2_reg = REGISTER_UNUSED;
+                if (ins->has_inline_constant)
+                        src2_reg = ins->inline_constant >> 11;
+                else if (ins->src[1] != ~0)
+                        src2_reg = SSA_REG_FROM_FIXED(ins->src[1]);
+
                 /* Otherwise, just emit the registers */
                 uint16_t reg_word = 0;
-                memcpy(&reg_word, &ins->registers, sizeof(uint16_t));
+                midgard_reg_info registers = {
+                        .src1_reg = (ins->src[0] == ~0 ?
+                                        REGISTER_UNUSED :
+                                        SSA_REG_FROM_FIXED(ins->src[0])),
+                        .src2_reg = src2_reg,
+                        .src2_imm = ins->has_inline_constant,
+                        .out_reg = (ins->dest == ~0 ?
+                                        REGISTER_UNUSED :
+                                        SSA_REG_FROM_FIXED(ins->dest)),
+                };
+                memcpy(&reg_word, &registers, sizeof(uint16_t));
                 util_dynarray_append(emission, uint16_t, reg_word);
         }
 
@@ -354,31 +762,24 @@ emit_alu_bundle(compiler_context *ctx,
         for (unsigned i = 0; i < bundle->instruction_count; ++i) {
                 midgard_instruction *ins = bundle->instructions[i];
 
-                /* Where is this body */
-                unsigned size = 0;
-                void *source = NULL;
-
-                /* In case we demote to a scalar */
-                midgard_scalar_alu scalarized;
-
-                if (ins->unit & UNITS_ANY_VECTOR) {
-                        mir_pack_mask_alu(ins);
-                        mir_pack_swizzle_alu(ins);
-                        size = sizeof(midgard_vector_alu);
-                        source = &ins->alu;
-                } else if (ins->unit == ALU_ENAB_BR_COMPACT) {
-                        size = sizeof(midgard_branch_cond);
-                        source = &ins->br_compact;
-                } else if (ins->compact_branch) { /* misnomer */
-                        size = sizeof(midgard_branch_extended);
-                        source = &ins->branch_extended;
-                } else {
-                        size = sizeof(midgard_scalar_alu);
-                        scalarized = vector_to_scalar_alu(ins->alu, ins);
-                        source = &scalarized;
+                if (!ins->compact_branch) {
+                        mir_lower_inverts(ins);
+                        mir_lower_roundmode(ins);
                 }
 
-                memcpy(util_dynarray_grow_bytes(emission, size, 1), source, size);
+                if (midgard_is_branch_unit(ins->unit)) {
+                        emit_branch(ins, ctx, block, bundle, emission);
+                } else if (ins->unit & UNITS_ANY_VECTOR) {
+                        midgard_vector_alu source = vector_alu_from_instr(ins);
+                        mir_pack_mask_alu(ins, &source);
+                        mir_pack_vector_srcs(ins, &source);
+                        unsigned size = sizeof(source);
+                        memcpy(util_dynarray_grow_bytes(emission, size, 1), &source, size);
+                } else {
+                        midgard_scalar_alu source = vector_to_scalar_alu(vector_alu_from_instr(ins), ins);
+                        unsigned size = sizeof(source);
+                        memcpy(util_dynarray_grow_bytes(emission, size, 1), &source, size);
+                }
         }
 
         /* Emit padding (all zero) */
@@ -422,6 +823,7 @@ midgard_sampler_type(nir_alu_type t) {
 
 void
 emit_binary_bundle(compiler_context *ctx,
+                   midgard_block *block,
                    midgard_bundle *bundle,
                    struct util_dynarray *emission,
                    int next_tag)
@@ -437,7 +839,7 @@ emit_binary_bundle(compiler_context *ctx,
         case TAG_ALU_8 + 4:
         case TAG_ALU_12 + 4:
         case TAG_ALU_16 + 4:
-                emit_alu_bundle(ctx, bundle, emission, lookahead);
+                emit_alu_bundle(ctx, block, bundle, emission, lookahead);
                 break;
 
         case TAG_LOAD_STORE_4: {
@@ -456,7 +858,7 @@ emit_binary_bundle(compiler_context *ctx,
                         unsigned offset = bundle->instructions[i]->constants.u32[0];
 
                         if (offset) {
-                                unsigned shift = mir_ldst_imm_shift(bundle->instructions[i]->load_store.op);
+                                unsigned shift = mir_ldst_imm_shift(bundle->instructions[i]->op);
                                 unsigned upper_shift = 10 - shift;
 
                                 bundle->instructions[i]->load_store.varying_parameters |= (offset & ((1 << upper_shift) - 1)) << shift;
@@ -464,10 +866,15 @@ emit_binary_bundle(compiler_context *ctx,
                         }
                 }
 
-                memcpy(&current64, &bundle->instructions[0]->load_store, sizeof(current64));
+                midgard_load_store_word ldst0 =
+                        load_store_from_instr(bundle->instructions[0]);
+                memcpy(&current64, &ldst0, sizeof(current64));
 
-                if (bundle->instruction_count == 2)
-                        memcpy(&next64, &bundle->instructions[1]->load_store, sizeof(next64));
+                if (bundle->instruction_count == 2) {
+                        midgard_load_store_word ldst1 =
+                                load_store_from_instr(bundle->instructions[1]);
+                        memcpy(&next64, &ldst1, sizeof(next64));
+                }
 
                 midgard_load_store instruction = {
                         .type = bundle->tag,
@@ -492,8 +899,24 @@ emit_binary_bundle(compiler_context *ctx,
 
                 ins->texture.type = bundle->tag;
                 ins->texture.next_type = next_tag;
-                ins->texture.mask = ins->mask;
+
+                /* Nothing else to pack for barriers */
+                if (ins->op == TEXTURE_OP_BARRIER) {
+                        ins->texture.cont = ins->texture.last = 1;
+                        util_dynarray_append(emission, midgard_texture_word, ins->texture);
+                        return;
+                }
+
+                signed override = mir_upper_override(ins, 32);
+
+                ins->texture.mask = override > 0 ?
+                        ins->mask >> override :
+                        ins->mask;
+
                 mir_pack_swizzle_tex(ins);
+
+                if (!(ctx->quirks & MIDGARD_NO_OOO))
+                        mir_pack_tex_ooo(block, bundle, ins);
 
                 unsigned osz = nir_alu_type_get_type_size(ins->dest_type);
                 unsigned isz = nir_alu_type_get_type_size(ins->src_types[1]);
@@ -502,27 +925,20 @@ emit_binary_bundle(compiler_context *ctx,
                 assert(isz == 32 || isz == 16);
 
                 ins->texture.out_full = (osz == 32);
+                ins->texture.out_upper = override > 0;
                 ins->texture.in_reg_full = (isz == 32);
                 ins->texture.sampler_type = midgard_sampler_type(ins->dest_type);
+                ins->texture.outmod = ins->outmod;
 
-                ctx->texture_op_count--;
-
-                if (mir_op_computes_derivatives(ctx->stage, ins->texture.op)) {
-                        bool continues = ctx->texture_op_count > 0;
-
-                        /* Control flow complicates helper invocation
-                         * lifespans, so for now just keep helper threads
-                         * around indefinitely with loops. TODO: Proper
-                         * analysis */
-                        continues |= ctx->loop_count > 0;
-
-                        ins->texture.cont = continues;
-                        ins->texture.last = !continues;
+                if (mir_op_computes_derivatives(ctx->stage, ins->op)) {
+                        ins->texture.cont = !ins->helper_terminate;
+                        ins->texture.last = ins->helper_terminate || ins->helper_execute;
                 } else {
                         ins->texture.cont = ins->texture.last = 1;
                 }
 
-                util_dynarray_append(emission, midgard_texture_word, ins->texture);
+                midgard_texture_word texture = texture_word_from_instr(ins);
+                util_dynarray_append(emission, midgard_texture_word, texture);
                 break;
         }
 

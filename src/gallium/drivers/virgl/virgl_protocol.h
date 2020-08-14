@@ -98,6 +98,7 @@ enum virgl_context_cmd {
    VIRGL_CCMD_END_TRANSFERS,
    VIRGL_CCMD_COPY_TRANSFER3D,
    VIRGL_CCMD_SET_TWEAKS,
+   VIRGL_CCMD_CLEAR_TEXTURE,
 };
 
 /*
@@ -597,5 +598,20 @@ enum vrend_tweak_type {
    virgl_tweak_gles_tf3_samples_passes_multiplier,
    virgl_tweak_undefined
 };
+
+/* Clear texture */
+#define VIRGL_CLEAR_TEXTURE_SIZE 12
+#define VIRGL_TEXTURE_HANDLE 1
+#define VIRGL_TEXTURE_LEVEL 2
+#define VIRGL_TEXTURE_SRC_X 3
+#define VIRGL_TEXTURE_SRC_Y 4
+#define VIRGL_TEXTURE_SRC_Z 5
+#define VIRGL_TEXTURE_SRC_W 6
+#define VIRGL_TEXTURE_SRC_H 7
+#define VIRGL_TEXTURE_SRC_D 8
+#define VIRGL_TEXTURE_ARRAY_A 9
+#define VIRGL_TEXTURE_ARRAY_B 10
+#define VIRGL_TEXTURE_ARRAY_C 11
+#define VIRGL_TEXTURE_ARRAY_D 12
 
 #endif

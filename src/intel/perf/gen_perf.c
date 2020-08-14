@@ -47,6 +47,7 @@
 #include "perf/gen_perf_private.h"
 
 #include "util/bitscan.h"
+#include "util/macros.h"
 #include "util/mesa-sha1.h"
 #include "util/u_math.h"
 
@@ -78,6 +79,9 @@ get_sysfs_dev_dir(struct gen_perf_config *perf, int fd)
    int len;
 
    perf->sysfs_dev_dir[0] = '\0';
+
+   if (unlikely(INTEL_DEBUG & DEBUG_NO_OACONFIG))
+      return true;
 
    if (fstat(fd, &sb)) {
       DBG("Failed to stat DRM fd\n");
@@ -170,6 +174,7 @@ read_sysfs_drm_device_file_uint64(struct gen_perf_config *perf,
 
 static void
 register_oa_config(struct gen_perf_config *perf,
+                   const struct gen_device_info *devinfo,
                    const struct gen_perf_query_info *query,
                    uint64_t config_id)
 {
@@ -177,13 +182,16 @@ register_oa_config(struct gen_perf_config *perf,
       gen_perf_append_query_info(perf, 0);
 
    *registered_query = *query;
+   registered_query->oa_format = devinfo->gen >= 8 ?
+      I915_OA_FORMAT_A32u40_A4u32_B8_C8 : I915_OA_FORMAT_A45_B8_C8;
    registered_query->oa_metrics_set_id = config_id;
    DBG("metric set registered: id = %" PRIu64", guid = %s\n",
        registered_query->oa_metrics_set_id, query->guid);
 }
 
 static void
-enumerate_sysfs_metrics(struct gen_perf_config *perf)
+enumerate_sysfs_metrics(struct gen_perf_config *perf,
+                        const struct gen_device_info *devinfo)
 {
    DIR *metricsdir = NULL;
    struct dirent *metric_entry;
@@ -218,12 +226,23 @@ enumerate_sysfs_metrics(struct gen_perf_config *perf)
             continue;
          }
 
-         register_oa_config(perf, (const struct gen_perf_query_info *)entry->data, id);
+         register_oa_config(perf, devinfo,
+                            (const struct gen_perf_query_info *)entry->data, id);
       } else
          DBG("metric set not known by mesa (skipping)\n");
    }
 
    closedir(metricsdir);
+}
+
+static void
+add_all_metrics(struct gen_perf_config *perf,
+                const struct gen_device_info *devinfo)
+{
+   hash_table_foreach(perf->oa_metrics_table, entry) {
+      const struct gen_perf_query_info *query = entry->data;
+      register_oa_config(perf, devinfo, query, 0);
+   }
 }
 
 static bool
@@ -309,20 +328,21 @@ i915_add_config(struct gen_perf_config *perf, int fd,
    memcpy(i915_config.uuid, guid, sizeof(i915_config.uuid));
 
    i915_config.n_mux_regs = config->n_mux_regs;
-   i915_config.mux_regs_ptr = to_user_pointer(config->mux_regs);
+   i915_config.mux_regs_ptr = to_const_user_pointer(config->mux_regs);
 
    i915_config.n_boolean_regs = config->n_b_counter_regs;
-   i915_config.boolean_regs_ptr = to_user_pointer(config->b_counter_regs);
+   i915_config.boolean_regs_ptr = to_const_user_pointer(config->b_counter_regs);
 
    i915_config.n_flex_regs = config->n_flex_regs;
-   i915_config.flex_regs_ptr = to_user_pointer(config->flex_regs);
+   i915_config.flex_regs_ptr = to_const_user_pointer(config->flex_regs);
 
    int ret = gen_ioctl(fd, DRM_IOCTL_I915_PERF_ADD_CONFIG, &i915_config);
    return ret > 0 ? ret : 0;
 }
 
 static void
-init_oa_configs(struct gen_perf_config *perf, int fd)
+init_oa_configs(struct gen_perf_config *perf, int fd,
+                const struct gen_device_info *devinfo)
 {
    hash_table_foreach(perf->oa_metrics_table, entry) {
       const struct gen_perf_query_info *query = entry->data;
@@ -330,7 +350,7 @@ init_oa_configs(struct gen_perf_config *perf, int fd)
 
       if (gen_perf_load_metric_id(perf, query->guid, &config_id)) {
          DBG("metric set: %s (already loaded)\n", query->guid);
-         register_oa_config(perf, query, config_id);
+         register_oa_config(perf, devinfo, query, config_id);
          continue;
       }
 
@@ -341,7 +361,7 @@ init_oa_configs(struct gen_perf_config *perf, int fd)
          continue;
       }
 
-      register_oa_config(perf, query, ret);
+      register_oa_config(perf, devinfo, query, ret);
       DBG("metric set: %s (added)\n", query->guid);
    }
 }
@@ -387,11 +407,16 @@ init_oa_sys_vars(struct gen_perf_config *perf, const struct gen_device_info *dev
 {
    uint64_t min_freq_mhz = 0, max_freq_mhz = 0;
 
-   if (!read_sysfs_drm_device_file_uint64(perf, "gt_min_freq_mhz", &min_freq_mhz))
-      return false;
+   if (likely(!(INTEL_DEBUG & DEBUG_NO_OACONFIG))) {
+      if (!read_sysfs_drm_device_file_uint64(perf, "gt_min_freq_mhz", &min_freq_mhz))
+         return false;
 
-   if (!read_sysfs_drm_device_file_uint64(perf,  "gt_max_freq_mhz", &max_freq_mhz))
-      return false;
+      if (!read_sysfs_drm_device_file_uint64(perf,  "gt_max_freq_mhz", &max_freq_mhz))
+         return false;
+   } else {
+      min_freq_mhz = 300;
+      max_freq_mhz = 1000;
+   }
 
    memset(&perf->sys_vars, 0, sizeof(perf->sys_vars));
    perf->sys_vars.gt_min_freq = min_freq_mhz * 1000000;
@@ -566,9 +591,79 @@ i915_get_sseu(int drm_fd, struct drm_i915_gem_context_param_sseu *sseu)
    gen_ioctl(drm_fd, DRM_IOCTL_I915_GEM_CONTEXT_GETPARAM, &arg);
 }
 
+static int
+compare_counters(const void *_c1, const void *_c2)
+{
+   const struct gen_perf_query_counter_info *c1 = _c1, *c2 = _c2;
+   return strcmp(c1->counter->symbol_name, c2->counter->symbol_name);
+}
+
+static void
+build_unique_counter_list(struct gen_perf_config *perf)
+{
+   assert(perf->n_queries < 64);
+
+   size_t max_counters = 0;
+
+   for (int q = 0; q < perf->n_queries; q++)
+      max_counters += perf->queries[q].n_counters;
+
+   /*
+    * Allocate big enough array to hold maximum possible number of counters.
+    * We can't alloc it small and realloc when needed because the hash table
+    * below contains pointers to this array.
+    */
+   struct gen_perf_query_counter_info *counter_infos =
+         ralloc_array_size(perf, sizeof(counter_infos[0]), max_counters);
+
+   perf->n_counters = 0;
+
+   struct hash_table *counters_table =
+      _mesa_hash_table_create(perf,
+                              _mesa_hash_string,
+                              _mesa_key_string_equal);
+   struct hash_entry *entry;
+   for (int q = 0; q < perf->n_queries ; q++) {
+      struct gen_perf_query_info *query = &perf->queries[q];
+
+      for (int c = 0; c < query->n_counters; c++) {
+         struct gen_perf_query_counter *counter;
+         struct gen_perf_query_counter_info *counter_info;
+
+         counter = &query->counters[c];
+         entry = _mesa_hash_table_search(counters_table, counter->symbol_name);
+
+         if (entry) {
+            counter_info = entry->data;
+            counter_info->query_mask |= BITFIELD64_BIT(q);
+            continue;
+         }
+         assert(perf->n_counters < max_counters);
+
+         counter_info = &counter_infos[perf->n_counters++];
+         counter_info->counter = counter;
+         counter_info->query_mask = BITFIELD64_BIT(q);
+
+         counter_info->location.group_idx = q;
+         counter_info->location.counter_idx = c;
+
+         _mesa_hash_table_insert(counters_table, counter->symbol_name, counter_info);
+      }
+   }
+
+   _mesa_hash_table_destroy(counters_table, NULL);
+
+   /* Now we can realloc counter_infos array because hash table doesn't exist. */
+   perf->counter_infos = reralloc_array_size(perf, counter_infos,
+         sizeof(counter_infos[0]), perf->n_counters);
+
+   qsort(perf->counter_infos, perf->n_counters, sizeof(perf->counter_infos[0]),
+         compare_counters);
+}
+
 static bool
 load_oa_metrics(struct gen_perf_config *perf, int fd,
-                         const struct gen_device_info *devinfo)
+                const struct gen_device_info *devinfo)
 {
    perf_register_oa_queries_t oa_register = get_register_queries_function(devinfo);
    bool i915_perf_oa_available = false;
@@ -598,6 +693,8 @@ load_oa_metrics(struct gen_perf_config *perf, int fd,
          if (paranoid == 0 || geteuid() == 0)
             i915_perf_oa_available = true;
       }
+
+      perf->platform_supported = oa_register != NULL;
    }
 
    if (!i915_perf_oa_available ||
@@ -615,11 +712,16 @@ load_oa_metrics(struct gen_perf_config *perf, int fd,
     */
    oa_register(perf);
 
-   if (likely((INTEL_DEBUG & DEBUG_NO_OACONFIG) == 0) &&
-       kernel_has_dynamic_config_support(perf, fd))
-      init_oa_configs(perf, fd);
-   else
-      enumerate_sysfs_metrics(perf);
+   if (likely(!(INTEL_DEBUG & DEBUG_NO_OACONFIG))) {
+      if (kernel_has_dynamic_config_support(perf, fd))
+         init_oa_configs(perf, fd, devinfo);
+      else
+         enumerate_sysfs_metrics(perf, devinfo);
+   } else {
+      add_all_metrics(perf, devinfo);
+   }
+
+   build_unique_counter_list(perf);
 
    return true;
 }
@@ -646,9 +748,9 @@ gen_perf_load_configuration(struct gen_perf_config *perf_cfg, int fd, const char
     * struct gen_perf_query_register_prog maps exactly to the tuple of
     * (register offset, register value) returned by the i915.
     */
-   i915_config.flex_regs_ptr = to_user_pointer(config->flex_regs);
-   i915_config.mux_regs_ptr = to_user_pointer(config->mux_regs);
-   i915_config.boolean_regs_ptr = to_user_pointer(config->b_counter_regs);
+   i915_config.flex_regs_ptr = to_const_user_pointer(config->flex_regs);
+   i915_config.mux_regs_ptr = to_const_user_pointer(config->mux_regs);
+   i915_config.boolean_regs_ptr = to_const_user_pointer(config->b_counter_regs);
    if (!i915_query_perf_config_data(perf_cfg, fd, guid, &i915_config)) {
       ralloc_free(config);
       return NULL;
@@ -703,6 +805,82 @@ gen_perf_store_configuration(struct gen_perf_config *perf_cfg, int fd,
       return id;
 
    return i915_add_config(perf_cfg, fd, config, generated_guid);
+}
+
+static uint64_t
+get_passes_mask(struct gen_perf_config *perf,
+                const uint32_t *counter_indices,
+                uint32_t counter_indices_count)
+{
+   uint64_t queries_mask = 0;
+
+   assert(perf->n_queries < 64);
+
+   /* Compute the number of passes by going through all counters N times (with
+    * N the number of queries) to make sure we select the most constraining
+    * counters first and look at the more flexible ones (that could be
+    * obtained from multiple queries) later. That way we minimize the number
+    * of passes required.
+    */
+   for (uint32_t q = 0; q < perf->n_queries; q++) {
+      for (uint32_t i = 0; i < counter_indices_count; i++) {
+         assert(counter_indices[i] < perf->n_counters);
+
+         uint32_t idx = counter_indices[i];
+         if (__builtin_popcount(perf->counter_infos[idx].query_mask) != (q + 1))
+            continue;
+
+         if (queries_mask & perf->counter_infos[idx].query_mask)
+            continue;
+
+         queries_mask |= BITFIELD64_BIT(ffsll(perf->counter_infos[idx].query_mask) - 1);
+      }
+   }
+
+   return queries_mask;
+}
+
+uint32_t
+gen_perf_get_n_passes(struct gen_perf_config *perf,
+                      const uint32_t *counter_indices,
+                      uint32_t counter_indices_count,
+                      struct gen_perf_query_info **pass_queries)
+{
+   uint64_t queries_mask = get_passes_mask(perf, counter_indices, counter_indices_count);
+
+   if (pass_queries) {
+      uint32_t pass = 0;
+      for (uint32_t q = 0; q < perf->n_queries; q++) {
+         if ((1ULL << q) & queries_mask)
+            pass_queries[pass++] = &perf->queries[q];
+      }
+   }
+
+   return __builtin_popcount(queries_mask);
+}
+
+void
+gen_perf_get_counters_passes(struct gen_perf_config *perf,
+                             const uint32_t *counter_indices,
+                             uint32_t counter_indices_count,
+                             struct gen_perf_counter_pass *counter_pass)
+{
+   uint64_t queries_mask = get_passes_mask(perf, counter_indices, counter_indices_count);
+   ASSERTED uint32_t n_passes = __builtin_popcount(queries_mask);
+
+   for (uint32_t i = 0; i < counter_indices_count; i++) {
+      assert(counter_indices[i] < perf->n_counters);
+
+      uint32_t idx = counter_indices[i];
+      counter_pass[i].counter = perf->counter_infos[idx].counter;
+
+      uint32_t query_idx = ffsll(perf->counter_infos[idx].query_mask & queries_mask) - 1;
+      counter_pass[i].query = &perf->queries[query_idx];
+
+      uint32_t clear_bits = 63 - query_idx;
+      counter_pass[i].pass = __builtin_popcount((queries_mask << clear_bits) >> clear_bits) - 1;
+      assert(counter_pass[i].pass < n_passes);
+   }
 }
 
 /* Accumulate 32bits OA counters */
@@ -797,7 +975,7 @@ gen_perf_query_result_accumulate(struct gen_perf_query_result *result,
                                  const uint32_t *start,
                                  const uint32_t *end)
 {
-   int i, idx = 0;
+   int i;
 
    if (result->hw_id == OA_REPORT_INVALID_CTX_ID &&
        start[2] != OA_REPORT_INVALID_CTX_ID)
@@ -808,27 +986,43 @@ gen_perf_query_result_accumulate(struct gen_perf_query_result *result,
 
    switch (query->oa_format) {
    case I915_OA_FORMAT_A32u40_A4u32_B8_C8:
-      accumulate_uint32(start + 1, end + 1, result->accumulator + idx++); /* timestamp */
-      accumulate_uint32(start + 3, end + 3, result->accumulator + idx++); /* clock */
+      accumulate_uint32(start + 1, end + 1,
+                        result->accumulator + query->gpu_time_offset); /* timestamp */
+      accumulate_uint32(start + 3, end + 3,
+                        result->accumulator + query->gpu_clock_offset); /* clock */
 
       /* 32x 40bit A counters... */
-      for (i = 0; i < 32; i++)
-         accumulate_uint40(i, start, end, result->accumulator + idx++);
+      for (i = 0; i < 32; i++) {
+         accumulate_uint40(i, start, end,
+                           result->accumulator + query->a_offset + i);
+      }
 
       /* 4x 32bit A counters... */
-      for (i = 0; i < 4; i++)
-         accumulate_uint32(start + 36 + i, end + 36 + i, result->accumulator + idx++);
+      for (i = 0; i < 4; i++) {
+         accumulate_uint32(start + 36 + i, end + 36 + i,
+                           result->accumulator + query->a_offset + 32 + i);
+      }
 
-      /* 8x 32bit B counters + 8x 32bit C counters... */
-      for (i = 0; i < 16; i++)
-         accumulate_uint32(start + 48 + i, end + 48 + i, result->accumulator + idx++);
+      /* 8x 32bit B counters */
+      for (i = 0; i < 8; i++) {
+         accumulate_uint32(start + 48 + i, end + 48 + i,
+                           result->accumulator + query->b_offset + i);
+      }
+
+      /* 8x 32bit C counters... */
+      for (i = 0; i < 8; i++) {
+         accumulate_uint32(start + 56 + i, end + 56 + i,
+                           result->accumulator + query->c_offset + i);
+      }
       break;
 
    case I915_OA_FORMAT_A45_B8_C8:
       accumulate_uint32(start + 1, end + 1, result->accumulator); /* timestamp */
 
-      for (i = 0; i < 61; i++)
-         accumulate_uint32(start + 3 + i, end + 3 + i, result->accumulator + 1 + i);
+      for (i = 0; i < 61; i++) {
+         accumulate_uint32(start + 3 + i, end + 3 + i,
+                           result->accumulator + query->a_offset + i);
+      }
       break;
 
    default:
@@ -847,10 +1041,13 @@ gen_perf_query_result_clear(struct gen_perf_query_result *result)
 void
 gen_perf_init_metrics(struct gen_perf_config *perf_cfg,
                       const struct gen_device_info *devinfo,
-                      int drm_fd)
+                      int drm_fd,
+                      bool include_pipeline_statistics)
 {
-   load_pipeline_statistic_metrics(perf_cfg, devinfo);
-   gen_perf_register_mdapi_statistic_query(perf_cfg, devinfo);
+   if (include_pipeline_statistics) {
+      load_pipeline_statistic_metrics(perf_cfg, devinfo);
+      gen_perf_register_mdapi_statistic_query(perf_cfg, devinfo);
+   }
    if (load_oa_metrics(perf_cfg, drm_fd, devinfo))
       gen_perf_register_mdapi_oa_query(perf_cfg, devinfo);
 }

@@ -63,7 +63,7 @@ fd3_rasterizer_state_create(struct pipe_context *pctx,
 	if (cso->multisample)
 		TODO
 */
-	so->gras_cl_clip_cntl = A3XX_GRAS_CL_CLIP_CNTL_IJ_PERSP_CENTER /* ??? */ |
+	so->gras_cl_clip_cntl =
 		COND(cso->clip_halfz, A3XX_GRAS_CL_CLIP_CNTL_ZERO_GB_SCALE_Z);
 	so->gras_su_point_minmax =
 			A3XX_GRAS_SU_POINT_MINMAX_MIN(psize_min) |

@@ -43,7 +43,7 @@
 #include "dri_util.h"
 #include "utils.h"
 #include "util/u_endian.h"
-#include "util/xmlpool.h"
+#include "util/driconf.h"
 #include "main/mtypes.h"
 #include "main/framebuffer.h"
 #include "main/version.h"

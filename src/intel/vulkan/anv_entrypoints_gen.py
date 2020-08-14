@@ -513,7 +513,7 @@ anv_get_device_entry_name(int index)
    return device_entry_name(index);
 }
 
-static void * __attribute__ ((noinline))
+void * __attribute__ ((noinline))
 anv_resolve_device_entrypoint(const struct gen_device_info *devinfo, uint32_t index)
 {
    const struct anv_device_dispatch_table *genX_table;

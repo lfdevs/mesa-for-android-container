@@ -84,7 +84,9 @@
 /*
  * Maximum number of array indexes in a GB surface (with DX enabled).
  */
-#define SVGA3D_MAX_SURFACE_ARRAYSIZE 512
+#define SVGA3D_SM4_MAX_SURFACE_ARRAYSIZE 512
+#define SVGA3D_SM5_MAX_SURFACE_ARRAYSIZE 2048
+#define SVGA3D_MAX_SURFACE_ARRAYSIZE SVGA3D_SM5_MAX_SURFACE_ARRAYSIZE
 
 /*
  * The maximum number of vertex arrays we're guaranteed to support in
@@ -98,4 +100,9 @@
  */
 #define SVGA3D_MAX_DRAW_PRIMITIVE_RANGES 32
 
-#endif /* _SVGA3D_LIMITS_H_ */
+/*
+ * The maximum number of samples that can be contained in a surface.
+ */
+#define SVGA3D_MAX_SAMPLES 8
+
+#endif // _SVGA3D_LIMITS_H_

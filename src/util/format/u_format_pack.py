@@ -593,7 +593,7 @@ def generate_pack_kernel(format, src_channel, src_native_type):
     def pack_into_struct(channels, swizzles):
         inv_swizzle = inv_swizzles(swizzles)
 
-        print('         struct util_format_%s pixel;' % format.short_name())
+        print('         struct util_format_%s pixel = {0};' % format.short_name())
     
         for i in range(4):
             dst_channel = channels[i]
@@ -624,8 +624,13 @@ def generate_format_unpack(format, dst_channel, dst_native_type, dst_suffix):
 
     name = format.short_name()
 
+    if "8unorm" in dst_suffix:
+        dst_proto_type = dst_native_type
+    else:
+        dst_proto_type = 'void'
+
     print('static inline void')
-    print('util_format_%s_unpack_%s(%s *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)' % (name, dst_suffix, dst_native_type))
+    print('util_format_%s_unpack_%s(%s *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)' % (name, dst_suffix, dst_proto_type))
     print('{')
 
     if is_format_supported(format):
@@ -641,7 +646,7 @@ def generate_format_unpack(format, dst_channel, dst_native_type, dst_suffix):
         print('         dst += 4;')
         print('      }')
         print('      src_row += src_stride;')
-        print('      dst_row += dst_stride/sizeof(*dst_row);')
+        print('      dst_row = (uint8_t *)dst_row + dst_stride;')
         print('   }')
 
     print('}')

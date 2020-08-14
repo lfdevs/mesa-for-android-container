@@ -401,10 +401,14 @@ static void
 radv_thread_trace_init_cs(struct radv_device *device)
 {
 	struct radeon_winsys *ws = device->ws;
+	VkResult result;
 
 	/* Thread trace start CS. */
 	for (int family = 0; family < 2; ++family) {
 		device->thread_trace_start_cs[family] = ws->cs_create(ws, family);
+		if (!device->thread_trace_start_cs[family])
+			return;
+
 		switch (family) {
 		case RADV_QUEUE_GENERAL:
 			radeon_emit(device->thread_trace_start_cs[family], PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
@@ -434,12 +438,17 @@ radv_thread_trace_init_cs(struct radv_device *device)
 					     device->thread_trace_start_cs[family],
 					     family);
 
-		ws->cs_finalize(device->thread_trace_start_cs[family]);
+		result = ws->cs_finalize(device->thread_trace_start_cs[family]);
+		if (result != VK_SUCCESS)
+			return;
 	}
 
 	/* Thread trace stop CS. */
 	for (int family = 0; family < 2; ++family) {
 		device->thread_trace_stop_cs[family] = ws->cs_create(ws, family);
+		if (!device->thread_trace_stop_cs[family])
+			return;
+
 		switch (family) {
 		case RADV_QUEUE_GENERAL:
 			radeon_emit(device->thread_trace_stop_cs[family], PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
@@ -469,7 +478,9 @@ radv_thread_trace_init_cs(struct radv_device *device)
 					  device->thread_trace_stop_cs[family],
 					  false);
 
-		ws->cs_finalize(device->thread_trace_stop_cs[family]);
+		result = ws->cs_finalize(device->thread_trace_stop_cs[family]);
+		if (result != VK_SUCCESS)
+			return;
 	}
 }
 

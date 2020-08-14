@@ -50,6 +50,10 @@ svga_link_shaders(const struct tgsi_shader_info *outshader_info,
       linkage->input_map[i] = INVALID_INDEX;
    }
 
+   for (i = 0; i < ARRAY_SIZE(linkage->prevShader.output_map); i++) {
+      linkage->prevShader.output_map[i] = INVALID_INDEX;
+   }
+
    /* Assign input slots for input shader inputs.
     * Basically, we want to use the same index for the output shader's outputs
     * and the input shader's inputs that should be linked together.
@@ -65,44 +69,64 @@ svga_link_shaders(const struct tgsi_shader_info *outshader_info,
       enum tgsi_semantic sem_name = inshader_info->input_semantic_name[i];
       unsigned sem_index = inshader_info->input_semantic_index[i];
       unsigned j;
+      unsigned out_index;
+
+      /* search output shader outputs for same item */
+      for (j = 0; j < outshader_info->num_outputs; j++) {
+         assert(j < ARRAY_SIZE(outshader_info->output_semantic_name));
+         if (outshader_info->output_semantic_name[j] == sem_name &&
+             outshader_info->output_semantic_index[j] == sem_index) {
+            linkage->input_map[i] = j;
+            linkage->prevShader.output_map[j] = i;
+            break;
+         }
+      }
+
       /**
-       * Get the clip distance inputs from the output shader's
-       * clip distance shadow copy.
+       * The clip distance inputs come from the output shader's
+       * clip distance shadow copy, so mark the input index to match
+       * the index of the shadow copy.
        */
       if (sem_name == TGSI_SEMANTIC_CLIPDIST) {
-         linkage->input_map[i] = outshader_info->num_outputs + 1 + sem_index;
+         out_index = outshader_info->num_outputs + 1 + sem_index;
+         linkage->input_map[i] = out_index;
+         linkage->prevShader.output_map[out_index] = i;
          /* make sure free_slot includes this extra output */
          free_slot = MAX2(free_slot, linkage->input_map[i] + 1);
       }
-      else {
-         /* search output shader outputs for same item */
-         for (j = 0; j < outshader_info->num_outputs; j++) {
-            assert(j < ARRAY_SIZE(outshader_info->output_semantic_name));
-            if (outshader_info->output_semantic_name[j] == sem_name &&
-                outshader_info->output_semantic_index[j] == sem_index) {
-               linkage->input_map[i] = j;
-               break;
-            }
-         }
+   }
+
+   /* Find the index for position */
+   linkage->position_index = 0;
+   for (i = 0; i < outshader_info->num_outputs; i++) {
+      if (outshader_info->output_semantic_name[i] == TGSI_SEMANTIC_POSITION) {
+         linkage->position_index = i;
+         break;
       }
    }
 
    linkage->num_inputs = inshader_info->num_inputs;
+   linkage->prevShader.num_outputs = outshader_info->num_outputs;
 
    /* Things like the front-face register are handled here */
    for (i = 0; i < inshader_info->num_inputs; i++) {
       if (linkage->input_map[i] == INVALID_INDEX) {
          unsigned j = free_slot++;
          linkage->input_map[i] = j;
+         linkage->prevShader.output_map[j] = i;
       }
    }
    linkage->input_map_max = free_slot - 1;
 
    /* Debug */
    if (SVGA_DEBUG & DEBUG_TGSI) {
-      unsigned reg = 0;
-      debug_printf("### linkage info: num_inputs=%d input_map_max=%d\n",
-                   linkage->num_inputs, linkage->input_map_max);
+      uint64_t reg = 0;
+      uint64_t one = 1;
+
+      debug_printf(
+      "### linkage info: num_inputs=%d input_map_max=%d prevShader.num_outputs=%d\n",
+                   linkage->num_inputs, linkage->input_map_max,
+                   linkage->prevShader.num_outputs);
 
       for (i = 0; i < linkage->num_inputs; i++) {
 
@@ -116,10 +140,8 @@ svga_link_shaders(const struct tgsi_shader_info *outshader_info,
                       tgsi_interpolate_names[inshader_info->input_interpolate[i]]);
 
          /* make sure no repeating register index */
-         if (reg & 1 << linkage->input_map[i]) {
-            assert(0);
-         }
-         reg |= 1 << linkage->input_map[i];
+         assert((reg & (one << linkage->input_map[i])) == 0);
+         reg |= one << linkage->input_map[i];
       }
    }
 }

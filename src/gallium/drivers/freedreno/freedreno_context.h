@@ -131,7 +131,6 @@ enum fd_dirty_3d_state {
 	FD_DIRTY_VTXSTATE    = BIT(9),
 	FD_DIRTY_VTXBUF      = BIT(10),
 	FD_DIRTY_MIN_SAMPLES = BIT(11),
-
 	FD_DIRTY_SCISSOR     = BIT(12),
 	FD_DIRTY_STREAMOUT   = BIT(13),
 	FD_DIRTY_UCP         = BIT(14),
@@ -148,6 +147,11 @@ enum fd_dirty_3d_state {
 
 	/* only used by a2xx.. possibly can be removed.. */
 	FD_DIRTY_TEXSTATE    = BIT(21),
+
+	/* fine grained state changes, for cases where state is not orthogonal
+	 * from hw perspective:
+	 */
+	FD_DIRTY_RASTERIZER_DISCARD = BIT(24),
 };
 
 /* per shader-stage dirty state: */
@@ -273,6 +277,9 @@ struct fd_context {
 	 * For example, in case of texture upload + gen-mipmaps.
 	 */
 	bool in_discard_blit : 1;
+
+	/* points to either scissor or disabled_scissor depending on rast state: */
+	struct pipe_scissor_state *current_scissor;
 
 	struct pipe_scissor_state scissor;
 
@@ -403,6 +410,7 @@ struct fd_context {
 		uint32_t index_start;
 		uint32_t instance_start;
 		uint32_t restart_index;
+		uint32_t streamout_mask;
 	} last;
 };
 
@@ -415,19 +423,19 @@ fd_context(struct pipe_context *pctx)
 static inline void
 fd_context_assert_locked(struct fd_context *ctx)
 {
-	pipe_mutex_assert_locked(ctx->screen->lock);
+	fd_screen_assert_locked(ctx->screen);
 }
 
 static inline void
 fd_context_lock(struct fd_context *ctx)
 {
-	mtx_lock(&ctx->screen->lock);
+	fd_screen_lock(ctx->screen);
 }
 
 static inline void
 fd_context_unlock(struct fd_context *ctx)
 {
-	mtx_unlock(&ctx->screen->lock);
+	fd_screen_unlock(ctx->screen);
 }
 
 /* mark all state dirty: */
@@ -443,6 +451,7 @@ fd_context_all_dirty(struct fd_context *ctx)
 static inline void
 fd_context_all_clean(struct fd_context *ctx)
 {
+	ctx->last.dirty = false;
 	ctx->dirty = 0;
 	for (unsigned i = 0; i < PIPE_SHADER_TYPES; i++) {
 		/* don't mark compute state as clean, since it is not emitted
@@ -459,9 +468,7 @@ fd_context_all_clean(struct fd_context *ctx)
 static inline struct pipe_scissor_state *
 fd_context_get_scissor(struct fd_context *ctx)
 {
-	if (ctx->rasterizer && ctx->rasterizer->scissor)
-		return &ctx->scissor;
-	return &ctx->disabled_scissor;
+	return ctx->current_scissor;
 }
 
 static inline bool
@@ -496,6 +503,8 @@ fd_batch_set_stage(struct fd_batch *batch, enum fd_render_stage stage)
 
 void fd_context_setup_common_vbos(struct fd_context *ctx);
 void fd_context_cleanup_common_vbos(struct fd_context *ctx);
+void fd_emit_string(struct fd_ringbuffer *ring, const char *string, int len);
+void fd_emit_string5(struct fd_ringbuffer *ring, const char *string, int len);
 
 struct pipe_context * fd_context_init(struct fd_context *ctx,
 		struct pipe_screen *pscreen, const uint8_t *primtypes,

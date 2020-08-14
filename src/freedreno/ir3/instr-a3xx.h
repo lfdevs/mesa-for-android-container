@@ -31,6 +31,22 @@
 #include <stdbool.h>
 #include <assert.h>
 
+void ir3_assert_handler(const char *expr, const char *file, int line,
+		const char *func) __attribute__((weak)) __attribute__ ((__noreturn__));
+
+/* A wrapper for assert() that allows overriding handling of a failed
+ * assert.  This is needed for tools like crashdec which can want to
+ * attempt to disassemble memory that might not actually be valid
+ * instructions.
+ */
+#define ir3_assert(expr) do { \
+		if (!(expr)) { \
+			if (ir3_assert_handler) { \
+				ir3_assert_handler(#expr, __FILE__, __LINE__, __func__); \
+			} \
+			assert(expr); \
+		} \
+	} while (0)
 /* size of largest OPC field of all the instruction categories: */
 #define NOPC_BITS 6
 
@@ -39,7 +55,7 @@
 typedef enum {
 	/* category 0: */
 	OPC_NOP             = _OPC(0, 0),
-	OPC_BR              = _OPC(0, 1),
+	OPC_B               = _OPC(0, 1),
 	OPC_JUMP            = _OPC(0, 2),
 	OPC_CALL            = _OPC(0, 3),
 	OPC_RET             = _OPC(0, 4),
@@ -51,9 +67,19 @@ typedef enum {
 	OPC_CHSH            = _OPC(0, 10),
 	OPC_FLOW_REV        = _OPC(0, 11),
 
-	OPC_IF              = _OPC(0, 13),
-	OPC_ELSE            = _OPC(0, 14),
-	OPC_ENDIF           = _OPC(0, 15),
+	OPC_BKT             = _OPC(0, 16),
+	OPC_STKS            = _OPC(0, 17),
+	OPC_STKR            = _OPC(0, 18),
+	OPC_XSET            = _OPC(0, 19),
+	OPC_XCLR            = _OPC(0, 20),
+	OPC_GETONE          = _OPC(0, 21),
+	OPC_DBG             = _OPC(0, 22),
+	OPC_SHPS            = _OPC(0, 23),   /* shader prologue start */
+	OPC_SHPE            = _OPC(0, 24),   /* shader prologue end */
+
+	OPC_PREDT           = _OPC(0, 29),   /* predicated true */
+	OPC_PREDF           = _OPC(0, 30),   /* predicated false */
+	OPC_PREDE           = _OPC(0, 31),   /* predicated end */
 
 	/* category 1: */
 	OPC_MOV             = _OPC(1, 0),
@@ -175,6 +201,9 @@ typedef enum {
 	OPC_DSYPP_1         = _OPC(5, 25),
 	OPC_RGETPOS         = _OPC(5, 26),
 	OPC_RGETINFO        = _OPC(5, 27),
+	/* cat5 meta instructions, placed above the cat5 opc field's size */
+	OPC_DSXPP_MACRO     = _OPC(5, 32),
+	OPC_DSYPP_MACRO     = _OPC(5, 33),
 
 	/* category 6: */
 	OPC_LDG             = _OPC(6, 0),        /* load-global */
@@ -236,6 +265,8 @@ typedef enum {
 #define opc_cat(opc) ((int)((opc) >> NOPC_BITS))
 #define opc_op(opc)  ((unsigned)((opc) & ((1 << NOPC_BITS) - 1)))
 
+const char *disasm_a3xx_instr_name(opc_t opc);
+
 typedef enum {
 	TYPE_F16 = 0,
 	TYPE_F32 = 1,
@@ -262,7 +293,7 @@ static inline uint32_t type_size(type_t type)
 	case TYPE_S8:
 		return 8;
 	default:
-		assert(0); /* invalid type */
+		ir3_assert(0); /* invalid type */
 		return 0;
 	}
 }
@@ -302,6 +333,21 @@ typedef union PACKED {
 	int32_t  idummy8   : 8;
 } reg_t;
 
+/* comp:
+ *   0 - x
+ *   1 - y
+ *   2 - z
+ *   3 - w
+ */
+static inline uint32_t regid(int num, int comp)
+{
+	return (num << 2) | (comp & 0x3);
+}
+
+#define INVALID_REG      regid(63, 0)
+#define VALIDREG(r)      ((r) != INVALID_REG)
+#define CONDREG(r, val)  COND(VALIDREG(r), (val))
+
 /* special registers: */
 #define REG_A0 61       /* address register */
 #define REG_P0 62       /* predicate register */
@@ -310,6 +356,16 @@ static inline int reg_special(reg_t reg)
 {
 	return (reg.num == REG_A0) || (reg.num == REG_P0);
 }
+
+typedef enum {
+	BRANCH_PLAIN = 0,   /* br */
+	BRANCH_OR    = 1,   /* brao */
+	BRANCH_AND   = 2,   /* braa */
+	BRANCH_CONST = 3,   /* brac */
+	BRANCH_ANY   = 4,   /* bany */
+	BRANCH_ALL   = 5,   /* ball */
+	BRANCH_X     = 6,   /* brax ??? */
+} brtype_t;
 
 typedef struct PACKED {
 	/* dword0: */
@@ -328,13 +384,18 @@ typedef struct PACKED {
 	};
 
 	/* dword1: */
-	uint32_t dummy2   : 8;
+	uint32_t idx      : 5;  /* brac.N index */
+	uint32_t brtype   : 3;  /* branch type, see brtype_t */
 	uint32_t repeat   : 3;
 	uint32_t dummy3   : 1;
 	uint32_t ss       : 1;
-	uint32_t dummy4   : 7;
-	uint32_t inv      : 1;
-	uint32_t comp     : 2;
+	uint32_t inv1     : 1;
+	uint32_t comp1    : 2;
+	uint32_t eq       : 1;
+	uint32_t opc_hi   : 1;  /* at least one bit */
+	uint32_t dummy4   : 2;
+	uint32_t inv0     : 1;
+	uint32_t comp0    : 2;  /* component for first src */
 	uint32_t opc      : 4;
 	uint32_t jmp_tgt  : 1;
 	uint32_t sync     : 1;
@@ -687,7 +748,8 @@ typedef struct PACKED {
 typedef struct PACKED {
 	/* dword0: */
 	uint32_t mustbe0  : 1;
-	uint32_t src1     : 13;
+	uint32_t src1     : 8;
+	uint32_t pad      : 5;
 	uint32_t ignore0  : 8;
 	uint32_t src1_im  : 1;
 	uint32_t src2_im  : 1;
@@ -700,15 +762,11 @@ typedef struct PACKED {
 /* dword1 encoding for dst_off: */
 typedef struct PACKED {
 	/* dword0: */
-	uint32_t dword0;
+	uint32_t dw0_pad1 : 9;
+	int32_t off_high : 5;
+	uint32_t dw0_pad2 : 18;
 
-	/* note: there is some weird stuff going on where sometimes
-	 * cat6->a.off is involved.. but that seems like a bug in
-	 * the blob, since it is used even if !cat6->src_off
-	 * It would make sense for there to be some more bits to
-	 * bring us to 11 bits worth of offset, but not sure..
-	 */
-	int32_t off       : 8;
+	uint32_t off      : 8;
 	uint32_t mustbe1  : 1;
 	uint32_t dst      : 8;
 	uint32_t pad1     : 15;
@@ -749,7 +807,7 @@ typedef struct PACKED {
 	uint32_t src_ssbo : 8;
 	uint32_t pad2     : 3;  // type
 	uint32_t g        : 1;
-	uint32_t pad3     : 1;
+	uint32_t src_ssbo_im : 1;
 	uint32_t pad4     : 10; // opc/jmp_tgt/sync/opc_cat
 } instr_cat6ldgb_t;
 
@@ -804,10 +862,12 @@ typedef union PACKED {
 /* Similar to cat5_desc_mode_t, describes how the descriptor is loaded.
  */
 typedef enum {
-	/* Use old GL binding model with an immediate index.
-	 * TODO: find CAT6_UNIFORM and CAT6_NONUNIFORM
-	 */
+	/* Use old GL binding model with an immediate index. */
 	CAT6_IMM = 0,
+
+	CAT6_UNIFORM = 1,
+
+	CAT6_NONUNIFORM = 2,
 
 	/* Use the bindless model, with an immediate index.
 	 */
@@ -952,8 +1012,8 @@ static inline bool is_cat6_legacy(instr_t *instr, unsigned gpu_id)
 	 * in all cases.  So we can use this to detect new encoding:
 	 */
 	if ((cat6->pad3 & 0x8) && (cat6->pad5 & 0x2)) {
-		assert(gpu_id >= 600);
-		assert(instr->cat6.opc == 0);
+		ir3_assert(gpu_id >= 600);
+		ir3_assert(instr->cat6.opc == 0);
 		return false;
 	}
 
@@ -963,7 +1023,7 @@ static inline bool is_cat6_legacy(instr_t *instr, unsigned gpu_id)
 static inline uint32_t instr_opc(instr_t *instr, unsigned gpu_id)
 {
 	switch (instr->opc_cat) {
-	case 0:  return instr->cat0.opc;
+	case 0:  return instr->cat0.opc | instr->cat0.opc_hi << 4;
 	case 1:  return 0;
 	case 2:  return instr->cat2.opc;
 	case 3:  return instr->cat3.opc;
@@ -1086,7 +1146,5 @@ static inline bool is_cat3_float(opc_t opc)
 		return false;
 	}
 }
-
-int disasm_a3xx(uint32_t *dwords, int sizedwords, int level, FILE *out, unsigned gpu_id);
 
 #endif /* INSTR_A3XX_H_ */

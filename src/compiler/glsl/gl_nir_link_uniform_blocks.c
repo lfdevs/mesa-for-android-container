@@ -302,8 +302,10 @@ nir_interstage_cross_validate_uniform_blocks(struct gl_shader_program *prog,
 
    if (block_type == BLOCK_SSBO)
       prog->data->ShaderStorageBlocks = blks;
-   else
+   else {
+      prog->data->NumUniformBlocks = *num_blks;
       prog->data->UniformBlocks = blks;
+   }
 
    return true;
 }
@@ -415,7 +417,7 @@ allocate_uniform_blocks(void *mem_ctx,
    *num_variables = 0;
    *num_blocks = 0;
 
-   nir_foreach_variable(var, &shader->Program->nir->uniforms) {
+   nir_foreach_variable_in_shader(var, shader->Program->nir) {
       if (block_type == BLOCK_UBO && !nir_variable_is_in_ubo(var))
          continue;
 
@@ -555,7 +557,7 @@ link_linked_shader_uniform_blocks(void *mem_ctx,
    unsigned variable_index = 0;
    struct gl_uniform_block *blks = *blocks;
 
-   nir_foreach_variable(var, &shader->Program->nir->uniforms) {
+   nir_foreach_variable_in_shader(var, shader->Program->nir) {
       if (block_type == BLOCK_UBO && !nir_variable_is_in_ubo(var))
          continue;
 
@@ -610,6 +612,7 @@ gl_nir_link_uniform_blocks(struct gl_context *ctx,
       linked->Program->sh.UniformBlocks =
          ralloc_array(linked, struct gl_uniform_block *, num_ubo_blocks);
       ralloc_steal(linked, ubo_blocks);
+      linked->Program->sh.NumUniformBlocks = num_ubo_blocks;
       for (unsigned i = 0; i < num_ubo_blocks; i++) {
          linked->Program->sh.UniformBlocks[i] = &ubo_blocks[i];
       }

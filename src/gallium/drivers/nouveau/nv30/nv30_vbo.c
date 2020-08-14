@@ -47,7 +47,7 @@ nv30_emit_vtxattr(struct nv30_context *nv30, struct pipe_vertex_buffer *vb,
    data = nouveau_resource_map_offset(&nv30->base, res, vb->buffer_offset +
                                       ve->src_offset, NOUVEAU_BO_RD);
 
-   util_format_unpack_rgba_float(ve->src_format, v, data, 1);
+   util_format_unpack_rgba(ve->src_format, v, data, 1);
 
    switch (nc) {
    case 4:

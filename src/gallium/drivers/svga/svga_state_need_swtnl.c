@@ -33,7 +33,7 @@
 
 
 static enum pipe_error
-update_need_swvfetch(struct svga_context *svga, unsigned dirty)
+update_need_swvfetch(struct svga_context *svga, uint64_t dirty)
 {
    if (!svga->curr.velems) {
       /* No vertex elements bound. */
@@ -58,7 +58,7 @@ struct svga_tracked_state svga_update_need_swvfetch =
 
 
 static enum pipe_error
-update_need_pipeline(struct svga_context *svga, unsigned dirty)
+update_need_pipeline(struct svga_context *svga, uint64_t dirty)
 {
    boolean need_pipeline = FALSE;
    struct svga_vertex_shader *vs = svga->curr.vs;
@@ -156,7 +156,7 @@ struct svga_tracked_state svga_update_need_pipeline =
 
 
 static enum pipe_error
-update_need_swtnl(struct svga_context *svga, unsigned dirty)
+update_need_swtnl(struct svga_context *svga, uint64_t dirty)
 {
    boolean need_swtnl;
 

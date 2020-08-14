@@ -51,6 +51,18 @@ enum pipe_error
 util_draw_vbo_without_prim_restart(struct pipe_context *context,
                                    const struct pipe_draw_info *info);
 
+static inline unsigned
+util_prim_restart_index_from_size(unsigned index_size)
+{
+   if (index_size == 1)
+      return 0xff;
+   if (index_size == 2)
+      return 0xffff;
+   if (index_size == 4)
+      return 0xffffffff;
+   unreachable("unknown index size passed");
+   return 0;
+}
 
 #ifdef __cplusplus
 }

@@ -312,11 +312,52 @@ SVGA3dCmdDXDrawIndexedInstanced; /* SVGA_3D_CMD_DX_DRAW_INDEXED_INSTANCED */
 
 typedef
 #include "vmware_pack_begin.h"
+struct SVGA3dCmdDXDrawIndexedInstancedIndirect {
+   SVGA3dSurfaceId argsBufferSid;
+   uint32 byteOffsetForArgs;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdDXDrawIndexedInstancedIndirect;
+/* SVGA_3D_CMD_DX_DRAW_INDEXED_INSTANCED_INDIRECT */
+
+typedef
+#include "vmware_pack_begin.h"
+struct SVGA3dCmdDXDrawInstancedIndirect {
+   SVGA3dSurfaceId argsBufferSid;
+   uint32 byteOffsetForArgs;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdDXDrawInstancedIndirect;
+/* SVGA_3D_CMD_DX_DRAW_INSTANCED_INDIRECT */
+
+typedef
+#include "vmware_pack_begin.h"
 struct SVGA3dCmdDXDrawAuto {
    uint32 pad0;
 }
 #include "vmware_pack_end.h"
 SVGA3dCmdDXDrawAuto; /* SVGA_3D_CMD_DX_DRAW_AUTO */
+
+typedef
+#include "vmware_pack_begin.h"
+struct SVGA3dCmdDXDispatch {
+   uint32 threadGroupCountX;
+   uint32 threadGroupCountY;
+   uint32 threadGroupCountZ;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdDXDispatch;
+/* SVGA_3D_CMD_DX_DISPATCH */
+
+typedef
+#include "vmware_pack_begin.h"
+struct SVGA3dCmdDXDispatchIndirect {
+   SVGA3dSurfaceId argsBufferSid;
+   uint32 byteOffsetForArgs;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdDXDispatchIndirect;
+/* SVGA_3D_CMD_DX_DISPATCH_INDIRECT */
 
 typedef
 #include "vmware_pack_begin.h"
@@ -1367,6 +1408,72 @@ struct SVGA3dCmdDXDestroySamplerState {
 #include "vmware_pack_end.h"
 SVGA3dCmdDXDestroySamplerState; /* SVGA_3D_CMD_DX_DESTROY_SAMPLER_STATE */
 
+
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_UNDEFINED                          0
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_POSITION                           1
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_CLIP_DISTANCE                      2
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_CULL_DISTANCE                      3
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_RENDER_TARGET_ARRAY_INDEX          4
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_VIEWPORT_ARRAY_INDEX               5
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_VERTEX_ID                          6
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_PRIMITIVE_ID                       7
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_INSTANCE_ID                        8
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_IS_FRONT_FACE                      9
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_SAMPLE_INDEX                       10
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_FINAL_QUAD_U_EQ_0_EDGE_TESSFACTOR  11
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_FINAL_QUAD_V_EQ_0_EDGE_TESSFACTOR  12
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_FINAL_QUAD_U_EQ_1_EDGE_TESSFACTOR  13
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_FINAL_QUAD_V_EQ_1_EDGE_TESSFACTOR  14
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_FINAL_QUAD_U_INSIDE_TESSFACTOR     15
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_FINAL_QUAD_V_INSIDE_TESSFACTOR     16
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_FINAL_TRI_U_EQ_0_EDGE_TESSFACTOR   17
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_FINAL_TRI_V_EQ_0_EDGE_TESSFACTOR   18
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_FINAL_TRI_W_EQ_0_EDGE_TESSFACTOR   19
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_FINAL_TRI_INSIDE_TESSFACTOR        20
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_FINAL_LINE_DETAIL_TESSFACTOR       21
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_FINAL_LINE_DENSITY_TESSFACTOR      22
+#define SVGADX_SIGNATURE_SEMANTIC_NAME_MAX                                23
+typedef uint32 SVGA3dDXSignatureSemanticName;
+
+#define SVGADX_SIGNATURE_REGISTER_COMPONENT_UNKNOWN 0
+typedef uint32 SVGA3dDXSignatureRegisterComponentType;
+
+#define SVGADX_SIGNATURE_MIN_PRECISION_DEFAULT 0
+typedef uint32 SVGA3dDXSignatureMinPrecision;
+
+typedef
+#include "vmware_pack_begin.h"
+struct SVGA3dDXSignatureEntry {
+   uint32 registerIndex;
+   SVGA3dDXSignatureSemanticName semanticName;
+   uint32 mask; /* Lower 4 bits represent X, Y, Z, W channels */
+   SVGA3dDXSignatureRegisterComponentType componentType;
+   SVGA3dDXSignatureMinPrecision minPrecision;
+}
+#include "vmware_pack_end.h"
+SVGA3dDXShaderSignatureEntry;
+
+#define SVGADX_SIGNATURE_HEADER_VERSION_0 0x08a92d12
+
+/*
+ * The SVGA3dDXSignatureHeader structure is added after the shader
+ * body in the mob that is bound to the shader.  It is followed by the
+ * specified number of SVGA3dDXSignatureEntry structures for each of
+ * the three types of signatures in the order (input, output, patch
+ * constants).
+ */
+typedef
+#include "vmware_pack_begin.h"
+struct SVGA3dDXSignatureHeader {
+   uint32 headerVersion;
+   uint32 numInputSignatures;
+   uint32 numOutputSignatures;
+   uint32 numPatchConstantSignatures;
+}
+#include "vmware_pack_end.h"
+SVGA3dDXShaderSignatureHeader;
+
+
 typedef
 #include "vmware_pack_begin.h"
 struct SVGA3dCmdDXDefineShader {
@@ -1430,7 +1537,8 @@ SVGA3dCmdDXCondBindAllShader;   /* SVGA_3D_CMD_DX_COND_BIND_ALL_SHADER */
 /*
  * The maximum number of streamout decl's in each streamout entry.
  */
-#define SVGA3D_MAX_STREAMOUT_DECLS 64
+#define SVGA3D_MAX_DX10_STREAMOUT_DECLS 64
+#define SVGA3D_MAX_STREAMOUT_DECLS 512
 
 typedef
 #include "vmware_pack_begin.h"
@@ -1449,10 +1557,16 @@ typedef
 #include "vmware_pack_begin.h"
 struct SVGAOTableStreamOutputEntry {
    uint32 numOutputStreamEntries;
-   SVGA3dStreamOutputDeclarationEntry decl[SVGA3D_MAX_STREAMOUT_DECLS];
+   SVGA3dStreamOutputDeclarationEntry decl[SVGA3D_MAX_DX10_STREAMOUT_DECLS];
    uint32 streamOutputStrideInBytes[SVGA3D_DX_MAX_SOTARGETS];
    uint32 rasterizedStream;
-   uint32 pad[250];
+   uint32 numOutputStreamStrides;
+   uint32 mobid;
+   uint32 offsetInBytes;
+   uint8 usesMob;
+   uint8 pad0;
+   uint16 pad1;
+   uint32 pad2[246];
 }
 #include "vmware_pack_end.h"
 SVGACOTableDXStreamOutputEntry;
@@ -1462,12 +1576,46 @@ typedef
 struct SVGA3dCmdDXDefineStreamOutput {
    SVGA3dStreamOutputId soid;
    uint32 numOutputStreamEntries;
-   SVGA3dStreamOutputDeclarationEntry decl[SVGA3D_MAX_STREAMOUT_DECLS];
+   SVGA3dStreamOutputDeclarationEntry decl[SVGA3D_MAX_DX10_STREAMOUT_DECLS];
    uint32 streamOutputStrideInBytes[SVGA3D_DX_MAX_SOTARGETS];
    uint32 rasterizedStream;
 }
 #include "vmware_pack_end.h"
 SVGA3dCmdDXDefineStreamOutput; /* SVGA_3D_CMD_DX_DEFINE_STREAMOUTPUT */
+
+/*
+ * Version 2 needed in order to start validating and using the
+ * rasterizedStream field.  Unfortunately the device wasn't validating
+ * or using this field and the driver wasn't initializing it in shipped
+ * code, so a new version of the command is needed to allow that code
+ * to continue to work.  Also added new numOutputStreamStrides field.
+ */
+
+#define SVGA3D_DX_SO_NO_RASTERIZED_STREAM 0xFFFFFFFF
+
+typedef
+#include "vmware_pack_begin.h"
+struct SVGA3dCmdDXDefineStreamOutputWithMob {
+   SVGA3dStreamOutputId soid;
+   uint32 numOutputStreamEntries;
+   uint32 numOutputStreamStrides;
+   uint32 streamOutputStrideInBytes[SVGA3D_DX_MAX_SOTARGETS];
+   uint32 rasterizedStream;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdDXDefineStreamOutputWithMob;
+/* SVGA_3D_CMD_DX_DEFINE_STREAMOUTPUT_WITH_MOB */
+
+typedef
+#include "vmware_pack_begin.h"
+struct SVGA3dCmdDXBindStreamOutput {
+   SVGA3dStreamOutputId soid;
+   uint32 mobid;
+   uint32 offsetInBytes;
+   uint32 sizeInBytes;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdDXBindStreamOutput; /* SVGA_3D_CMD_DX_BIND_STREAMOUTPUT */
 
 typedef
 #include "vmware_pack_begin.h"
@@ -1484,6 +1632,15 @@ struct SVGA3dCmdDXSetStreamOutput {
 }
 #include "vmware_pack_end.h"
 SVGA3dCmdDXSetStreamOutput; /* SVGA_3D_CMD_DX_SET_STREAMOUTPUT */
+
+typedef
+#include "vmware_pack_begin.h"
+struct SVGA3dCmdDXSetMinLOD {
+   SVGA3dSurfaceId sid;
+   float minLOD;
+}
+#include "vmware_pack_end.h"
+SVGA3dCmdDXSetMinLOD; /* SVGA_3D_CMD_DX_SET_MIN_LOD */
 
 typedef
 #include "vmware_pack_begin.h"

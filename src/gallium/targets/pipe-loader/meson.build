@@ -73,8 +73,9 @@ foreach x : pipe_loaders
     shared_library(
       'pipe_@0@'.format(x[1]),
       'pipe_@0@.c'.format(x[1]),
-      c_args : [pipe_loader_comp_args, c_vis_args],
-      cpp_args : [pipe_loader_comp_args, cpp_vis_args],
+      c_args : [pipe_loader_comp_args],
+      cpp_args : [pipe_loader_comp_args],
+      gnu_symbol_visibility : 'hidden',
       link_args : pipe_loader_link_args,
       link_depends : pipe_loader_link_deps,
       include_directories : pipe_loader_incs,

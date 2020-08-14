@@ -76,6 +76,7 @@ void gen_perf_delete_query(struct gen_perf_context *perf_ctx,
                            struct gen_perf_query_object *query);
 void gen_perf_get_query_data(struct gen_perf_context *perf_ctx,
                              struct gen_perf_query_object *query,
+                             void *current_batch,
                              int data_size,
                              unsigned *data,
                              unsigned *bytes_written);

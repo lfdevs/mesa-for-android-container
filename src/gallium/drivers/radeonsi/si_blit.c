@@ -359,6 +359,18 @@ static void si_decompress_depth(struct si_context *sctx, struct si_texture *tex,
             tex->stencil_dirty_level_mask &= ~levels_s;
       }
 
+      /* We just had to completely decompress Z/S for texturing. Enable
+       * TC-compatible HTILE on the next clear, so that the decompression
+       * doesn't have to be done for this texture ever again.
+       *
+       * TC-compatible HTILE might slightly reduce Z/S performance, but
+       * the decompression is much worse.
+       */
+      if (has_htile && !tc_compat_htile &&
+          tex->surface.flags & RADEON_SURF_TC_COMPATIBLE_HTILE &&
+          (inplace_planes & PIPE_MASK_Z || !tex->htile_stencil_disabled))
+         tex->enable_tc_compatible_htile_next_clear = true;
+
       /* Only in-place decompression needs to flush DB caches, or
        * when we don't decompress but TC-compatible planes are dirty.
        */
@@ -419,9 +431,10 @@ static void si_blit_decompress_color(struct si_context *sctx, struct si_texture 
                    first_level, last_level, level_mask);
 
    if (need_dcc_decompress) {
+      assert(sctx->chip_class == GFX8);
       custom_blend = sctx->custom_blend_dcc_decompress;
 
-      assert(tex->surface.dcc_offset);
+      assert(vi_dcc_enabled(tex, first_level));
 
       /* disable levels without DCC */
       for (int i = first_level; i <= last_level; i++) {
@@ -492,7 +505,8 @@ static void si_decompress_color_texture(struct si_context *sctx, struct si_textu
                                         bool need_fmask_expand)
 {
    /* CMASK or DCC can be discarded and we can still end up here. */
-   if (!tex->cmask_buffer && !tex->surface.fmask_size && !tex->surface.dcc_offset)
+   if (!tex->cmask_buffer && !tex->surface.fmask_size &&
+       !vi_dcc_enabled(tex, first_level))
       return;
 
    si_blit_decompress_color(sctx, tex, first_level, last_level, 0,
@@ -549,7 +563,7 @@ static void si_check_render_feedback_texture(struct si_context *sctx, struct si_
 {
    bool render_feedback = false;
 
-   if (!tex->surface.dcc_offset)
+   if (!vi_dcc_enabled(tex, first_level))
       return;
 
    for (unsigned j = 0; j < sctx->framebuffer.state.nr_cbufs; ++j) {
@@ -781,7 +795,8 @@ void si_decompress_subresource(struct pipe_context *ctx, struct pipe_resource *t
          si_update_fb_dirtiness_after_rendering(sctx);
 
       si_decompress_depth(sctx, stex, planes, level, level, first_layer, last_layer);
-   } else if (stex->surface.fmask_size || stex->cmask_buffer || stex->surface.dcc_offset) {
+   } else if (stex->surface.fmask_size || stex->cmask_buffer ||
+              vi_dcc_enabled(stex, level)) {
       /* If we've rendered into the framebuffer and it's a blitting
        * source, make sure the decompression pass is invoked
        * by dirtying the framebuffer.
@@ -809,6 +824,28 @@ struct texture_orig_info {
    unsigned npix0_y;
 };
 
+static void si_use_compute_copy_for_float_formats(struct si_context *sctx,
+                                                  struct pipe_resource *texture,
+                                                  unsigned level) {
+   struct si_texture *tex = (struct si_texture *)texture;
+
+   /* If we are uploading into FP16 or R11G11B10_FLOAT via a blit, CB clobbers NaNs,
+    * so in order to preserve them exactly, we have to use the compute blit.
+    * The compute blit is used only when the destination doesn't have DCC, so
+    * disable it here, which is kinda a hack.
+    * If we are uploading into 32-bit floats with DCC via a blit, NaNs will also get
+    * lost so we need to disable DCC as well.
+    *
+    * This makes KHR-GL45.texture_view.view_classes pass on gfx9.
+    * gfx10 has the same issue, but the test doesn't use a large enough texture
+    * to enable DCC and fail, so it always passes.
+    */
+   if (vi_dcc_enabled(tex, level) &&
+       util_format_is_float(texture->format)) {
+      si_texture_disable_dcc(sctx, tex);
+   }
+}
+
 void si_resource_copy_region(struct pipe_context *ctx, struct pipe_resource *dst,
                              unsigned dst_level, unsigned dstx, unsigned dsty, unsigned dstz,
                              struct pipe_resource *src, unsigned src_level,
@@ -829,12 +866,15 @@ void si_resource_copy_region(struct pipe_context *ctx, struct pipe_resource *dst
       return;
    }
 
+   si_use_compute_copy_for_float_formats(sctx, dst, dst_level);
+
    if (!util_format_is_compressed(src->format) && !util_format_is_compressed(dst->format) &&
        !util_format_is_depth_or_stencil(src->format) && src->nr_samples <= 1 &&
-       !sdst->surface.dcc_offset &&
+       !vi_dcc_enabled(sdst, dst_level) &&
        !(dst->target != src->target &&
          (src->target == PIPE_TEXTURE_1D_ARRAY || dst->target == PIPE_TEXTURE_1D_ARRAY))) {
-      si_compute_copy_image(sctx, dst, dst_level, src, src_level, dstx, dsty, dstz, src_box);
+      si_compute_copy_image(sctx, dst, dst_level, src, src_level, dstx, dsty, dstz,
+                            src_box, false);
       return;
    }
 
@@ -1177,7 +1217,7 @@ static void si_flush_resource(struct pipe_context *ctx, struct pipe_resource *re
    if (tex->dcc_separate_buffer && !tex->separate_dcc_dirty)
       return;
 
-   if (!tex->is_depth && (tex->cmask_buffer || tex->surface.dcc_offset)) {
+   if (!tex->is_depth && (tex->cmask_buffer || vi_dcc_enabled(tex, 0))) {
       si_blit_decompress_color(sctx, tex, 0, res->last_level, 0, util_max_layer(res, 0),
                                tex->dcc_separate_buffer != NULL, false);
 
@@ -1226,8 +1266,29 @@ void si_decompress_dcc(struct si_context *sctx, struct si_texture *tex)
    if (!tex->surface.dcc_offset || !sctx->has_graphics)
       return;
 
-   si_blit_decompress_color(sctx, tex, 0, tex->buffer.b.b.last_level, 0,
-                            util_max_layer(&tex->buffer.b.b, 0), true, false);
+   if (sctx->chip_class == GFX8) {
+      si_blit_decompress_color(sctx, tex, 0, tex->buffer.b.b.last_level, 0,
+                               util_max_layer(&tex->buffer.b.b, 0), true, false);
+   } else {
+      struct pipe_resource *ptex = &tex->buffer.b.b;
+
+      /* DCC decompression using a compute shader. */
+      for (unsigned level = 0; level < tex->surface.num_dcc_levels; level++) {
+         struct pipe_box box;
+
+         u_box_3d(0, 0, 0, u_minify(ptex->width0, level),
+                  u_minify(ptex->height0, level),
+                  util_num_layers(ptex, level), &box);
+         si_compute_copy_image(sctx, ptex, level, ptex, level, 0, 0, 0, &box,
+                               true);
+      }
+
+      /* Now clear DCC metadata to uncompressed. */
+      uint32_t clear_value = DCC_UNCOMPRESSED;
+      si_clear_buffer(sctx, ptex, tex->surface.dcc_offset,
+                      tex->surface.dcc_size, &clear_value, 4,
+                      SI_COHERENCY_CB_META, false);
+   }
 }
 
 void si_init_blit_functions(struct si_context *sctx)

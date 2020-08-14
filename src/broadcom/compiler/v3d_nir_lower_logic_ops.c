@@ -352,7 +352,7 @@ v3d_nir_lower_logic_ops_block(nir_block *block, struct v3d_compile *c)
                 if (intr->intrinsic != nir_intrinsic_store_output)
                         continue;
 
-                nir_foreach_variable(var, &c->s->outputs) {
+                nir_foreach_shader_out_variable(var, c->s) {
                         const int driver_loc = var->data.driver_location;
                         if (driver_loc != nir_intrinsic_base(intr))
                                 continue;

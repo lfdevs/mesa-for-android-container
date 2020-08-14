@@ -348,7 +348,7 @@ brw_meta_convert_fast_clear_color(const struct brw_context *brw,
    switch (_mesa_get_format_base_format(mt->format)) {
    case GL_INTENSITY:
       override_color.u32[3] = override_color.u32[0];
-      /* flow through */
+      /* fallthrough */
    case GL_LUMINANCE:
    case GL_LUMINANCE_ALPHA:
       override_color.u32[1] = override_color.u32[0];
@@ -365,7 +365,7 @@ brw_meta_convert_fast_clear_color(const struct brw_context *brw,
    switch (_mesa_get_format_datatype(mt->format)) {
    case GL_UNSIGNED_NORMALIZED:
       for (int i = 0; i < 4; i++)
-         override_color.f32[i] = CLAMP(override_color.f32[i], 0.0f, 1.0f);
+         override_color.f32[i] = SATURATE(override_color.f32[i]);
       break;
 
    case GL_SIGNED_NORMALIZED:

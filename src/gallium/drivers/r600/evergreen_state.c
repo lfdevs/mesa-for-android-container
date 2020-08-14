@@ -514,15 +514,13 @@ static void *evergreen_create_rs_state(struct pipe_context *ctx,
 	}
 
 	spi_interp = S_0286D4_FLAT_SHADE_ENA(1);
-	if (state->sprite_coord_enable) {
-		spi_interp |= S_0286D4_PNT_SPRITE_ENA(1) |
-			      S_0286D4_PNT_SPRITE_OVRD_X(2) |
-			      S_0286D4_PNT_SPRITE_OVRD_Y(3) |
-			      S_0286D4_PNT_SPRITE_OVRD_Z(0) |
-			      S_0286D4_PNT_SPRITE_OVRD_W(1);
-		if (state->sprite_coord_mode != PIPE_SPRITE_COORD_UPPER_LEFT) {
-			spi_interp |= S_0286D4_PNT_SPRITE_TOP_1(1);
-		}
+	spi_interp |= S_0286D4_PNT_SPRITE_ENA(1) |
+		S_0286D4_PNT_SPRITE_OVRD_X(2) |
+		S_0286D4_PNT_SPRITE_OVRD_Y(3) |
+		S_0286D4_PNT_SPRITE_OVRD_Z(0) |
+		S_0286D4_PNT_SPRITE_OVRD_W(1);
+	if (state->sprite_coord_mode != PIPE_SPRITE_COORD_UPPER_LEFT) {
+		spi_interp |= S_0286D4_PNT_SPRITE_TOP_1(1);
 	}
 
 	r600_store_context_reg_seq(&rs->buffer, R_028A00_PA_SU_POINT_SIZE, 3);
@@ -576,6 +574,8 @@ static void *evergreen_create_sampler_state(struct pipe_context *ctx,
 	unsigned max_aniso = rscreen->force_aniso >= 0 ? rscreen->force_aniso
 						       : state->max_anisotropy;
 	unsigned max_aniso_ratio = r600_tex_aniso_filter(max_aniso);
+	bool trunc_coord = state->min_img_filter == PIPE_TEX_FILTER_NEAREST &&
+			   state->mag_img_filter == PIPE_TEX_FILTER_NEAREST;
 	float max_lod = state->max_lod;
 
 	if (!ss) {
@@ -610,6 +610,7 @@ static void *evergreen_create_sampler_state(struct pipe_context *ctx,
 	ss->tex_sampler_words[2] =
 		S_03C008_LOD_BIAS(S_FIXED(CLAMP(state->lod_bias, -16, 16), 8)) |
 		(state->seamless_cube_map ? 0 : S_03C008_DISABLE_CUBE_WRAP(1)) |
+		S_03C008_TRUNCATE_COORD(trunc_coord) |
 		S_03C008_TYPE(1);
 
 	if (ss->border_color_use) {
@@ -3389,8 +3390,9 @@ void evergreen_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader
 				tmp |= S_028644_FLAT_SHADE(1);
 			}
 
-			if (rshader->input[i].name == TGSI_SEMANTIC_GENERIC &&
-			    (sprite_coord_enable & (1 << rshader->input[i].sid))) {
+			if (rshader->input[i].name == TGSI_SEMANTIC_PCOORD ||
+			    (rshader->input[i].name == TGSI_SEMANTIC_TEXCOORD &&
+			     (sprite_coord_enable & (1 << rshader->input[i].sid)))) {
 				tmp |= S_028644_PT_SPRITE_TEX(1);
 			}
 

@@ -100,7 +100,7 @@ vc4_blend_channel_f(nir_builder *b,
                 return nir_load_system_value(b,
                                              nir_intrinsic_load_blend_const_color_r_float +
                                              channel,
-                                             0, 32);
+                                             0, 1, 32);
         case PIPE_BLENDFACTOR_CONST_ALPHA:
                 return nir_load_blend_const_color_a_float(b);
         case PIPE_BLENDFACTOR_ZERO:
@@ -118,7 +118,7 @@ vc4_blend_channel_f(nir_builder *b,
                                 nir_load_system_value(b,
                                                       nir_intrinsic_load_blend_const_color_r_float +
                                                       channel,
-                                                      0, 32));
+                                                      0, 1, 32));
         case PIPE_BLENDFACTOR_INV_CONST_ALPHA:
                 return nir_fsub(b, nir_imm_float(b, 1.0),
                                 nir_load_blend_const_color_a_float(b));
@@ -589,7 +589,7 @@ vc4_nir_lower_blend_block(nir_block *block, struct vc4_compile *c)
                         continue;
 
                 nir_variable *output_var = NULL;
-                nir_foreach_variable(var, &c->s->outputs) {
+                nir_foreach_shader_out_variable(var, c->s) {
                         if (var->data.driver_location ==
                             nir_intrinsic_base(intr)) {
                                 output_var = var;

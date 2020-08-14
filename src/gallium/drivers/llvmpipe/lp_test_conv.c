@@ -221,7 +221,7 @@ test_one(unsigned verbose,
    }
 
    context = LLVMContextCreate();
-   gallivm = gallivm_create("test_module", context);
+   gallivm = gallivm_create("test_module", context, NULL);
 
    func = add_conv_test(gallivm, src_type, num_srcs, dst_type, num_dsts);
 

@@ -114,26 +114,6 @@ translate_stencil_op(unsigned stencil_op)
 }
 
 static inline uint32_t
-translate_blend(unsigned blend)
-{
-   switch (blend) {
-   case PIPE_BLEND_ADD:
-      return BLEND_EQ_ADD;
-   case PIPE_BLEND_SUBTRACT:
-      return BLEND_EQ_SUBTRACT;
-   case PIPE_BLEND_REVERSE_SUBTRACT:
-      return BLEND_EQ_REVERSE_SUBTRACT;
-   case PIPE_BLEND_MIN:
-      return BLEND_EQ_MIN;
-   case PIPE_BLEND_MAX:
-      return BLEND_EQ_MAX;
-   default:
-      DBG("Unhandled blend: %i", blend);
-      return ETNA_NO_MATCH;
-   }
-}
-
-static inline uint32_t
 translate_blend_factor(unsigned blend_factor)
 {
    switch (blend_factor) {

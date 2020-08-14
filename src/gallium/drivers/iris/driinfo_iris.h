@@ -10,7 +10,7 @@ DRI_CONF_SECTION_PERFORMANCE
 
 //= BEGIN VERBATIM
    DRI_CONF_OPT_BEGIN_V(bo_reuse, enum, 1, "0:1")
-      DRI_CONF_DESC(en, "Buffer object reuse")
+      DRI_CONF_DESC("Buffer object reuse")
    DRI_CONF_OPT_END
 //= END VERBATIM
 

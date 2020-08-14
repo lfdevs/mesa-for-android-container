@@ -19,11 +19,11 @@
 * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 * IN THE SOFTWARE.
-* 
+*
 * @file StoreTile.h
-* 
+*
 * @brief Functionality for Store.
-* 
+*
 ******************************************************************************/
 #pragma once
 
@@ -347,8 +347,8 @@ struct ConvertPixelsSOAtoAOS
     {
         static const uint32_t MAX_RASTER_TILE_BYTES = 16 * 16; // 16 pixels * 16 bytes per pixel
 
-        OSALIGNSIMD16(uint8_t) soaTile[MAX_RASTER_TILE_BYTES];
-        OSALIGNSIMD16(uint8_t) aosTile[MAX_RASTER_TILE_BYTES];
+        OSALIGNSIMD16(uint8_t) soaTile[MAX_RASTER_TILE_BYTES] = {0};
+        OSALIGNSIMD16(uint8_t) aosTile[MAX_RASTER_TILE_BYTES] = {0};
 
         // Convert from SrcFormat --> DstFormat
         simd16vector src;
@@ -580,10 +580,10 @@ INLINE static void FlatConvert(const uint8_t* pSrc, uint8_t* pDst, uint8_t* pDst
     static const uint32_t offset = sizeof(simdscalar);
 
     // swizzle rgba -> bgra while we load
-    simdscalar vComp0 = _simd_load_ps((const float*)(pSrc + (FormatTraits<DstFormat>::swizzle(0))*offset)); // float32 rrrrrrrr 
+    simdscalar vComp0 = _simd_load_ps((const float*)(pSrc + (FormatTraits<DstFormat>::swizzle(0))*offset)); // float32 rrrrrrrr
     simdscalar vComp1 = _simd_load_ps((const float*)(pSrc + (FormatTraits<DstFormat>::swizzle(1))*offset)); // float32 gggggggg
-    simdscalar vComp2 = _simd_load_ps((const float*)(pSrc + (FormatTraits<DstFormat>::swizzle(2))*offset)); // float32 bbbbbbbb 
-    simdscalar vComp3 = _simd_load_ps((const float*)(pSrc + (FormatTraits<DstFormat>::swizzle(3))*offset)); // float32 aaaaaaaa 
+    simdscalar vComp2 = _simd_load_ps((const float*)(pSrc + (FormatTraits<DstFormat>::swizzle(2))*offset)); // float32 bbbbbbbb
+    simdscalar vComp3 = _simd_load_ps((const float*)(pSrc + (FormatTraits<DstFormat>::swizzle(3))*offset)); // float32 aaaaaaaa
 
     // clamp
     vComp0 = _simd_max_ps(vComp0, _simd_setzero_ps());
@@ -607,15 +607,15 @@ INLINE static void FlatConvert(const uint8_t* pSrc, uint8_t* pDst, uint8_t* pDst
     }
 
     // convert float components from 0.0f .. 1.0f to correct scale for 0 .. 255 dest format
-    vComp0 = _simd_mul_ps(vComp0, _simd_set1_ps(FormatTraits<DstFormat>::fromFloat(0))); 
+    vComp0 = _simd_mul_ps(vComp0, _simd_set1_ps(FormatTraits<DstFormat>::fromFloat(0)));
     vComp1 = _simd_mul_ps(vComp1, _simd_set1_ps(FormatTraits<DstFormat>::fromFloat(1)));
     vComp2 = _simd_mul_ps(vComp2, _simd_set1_ps(FormatTraits<DstFormat>::fromFloat(2)));
     vComp3 = _simd_mul_ps(vComp3, _simd_set1_ps(FormatTraits<DstFormat>::fromFloat(3)));
 
     // moving to 8 wide integer vector types
     simdscalari src0 = _simd_cvtps_epi32(vComp0); // padded byte rrrrrrrr
-    simdscalari src1 = _simd_cvtps_epi32(vComp1); // padded byte gggggggg 
-    simdscalari src2 = _simd_cvtps_epi32(vComp2); // padded byte bbbbbbbb 
+    simdscalari src1 = _simd_cvtps_epi32(vComp1); // padded byte gggggggg
+    simdscalari src2 = _simd_cvtps_epi32(vComp2); // padded byte bbbbbbbb
     simdscalari src3 = _simd_cvtps_epi32(vComp3); // padded byte aaaaaaaa
 
 #if KNOB_ARCH <= KNOB_ARCH_AVX
@@ -743,9 +743,9 @@ INLINE static void FlatConvertNoAlpha(const uint8_t* pSrc, uint8_t* pDst, uint8_
     static const uint32_t offset = sizeof(simdscalar);
 
     // swizzle rgba -> bgra while we load
-    simdscalar vComp0 = _simd_load_ps((const float*)(pSrc + (FormatTraits<DstFormat>::swizzle(0))*offset)); // float32 rrrrrrrr 
+    simdscalar vComp0 = _simd_load_ps((const float*)(pSrc + (FormatTraits<DstFormat>::swizzle(0))*offset)); // float32 rrrrrrrr
     simdscalar vComp1 = _simd_load_ps((const float*)(pSrc + (FormatTraits<DstFormat>::swizzle(1))*offset)); // float32 gggggggg
-    simdscalar vComp2 = _simd_load_ps((const float*)(pSrc + (FormatTraits<DstFormat>::swizzle(2))*offset)); // float32 bbbbbbbb 
+    simdscalar vComp2 = _simd_load_ps((const float*)(pSrc + (FormatTraits<DstFormat>::swizzle(2))*offset)); // float32 bbbbbbbb
                                                                                                             // clamp
     vComp0 = _simd_max_ps(vComp0, _simd_setzero_ps());
     vComp0 = _simd_min_ps(vComp0, _simd_set1_ps(1.0f));
@@ -771,8 +771,8 @@ INLINE static void FlatConvertNoAlpha(const uint8_t* pSrc, uint8_t* pDst, uint8_
 
     // moving to 8 wide integer vector types
     simdscalari src0 = _simd_cvtps_epi32(vComp0); // padded byte rrrrrrrr
-    simdscalari src1 = _simd_cvtps_epi32(vComp1); // padded byte gggggggg 
-    simdscalari src2 = _simd_cvtps_epi32(vComp2); // padded byte bbbbbbbb 
+    simdscalari src1 = _simd_cvtps_epi32(vComp1); // padded byte gggggggg
+    simdscalari src2 = _simd_cvtps_epi32(vComp2); // padded byte bbbbbbbb
 
 #if KNOB_ARCH <= KNOB_ARCH_AVX
 
@@ -1062,13 +1062,13 @@ struct OptStoreRasterTile< TilingTraits<SWR_TILE_NONE, 8>, SrcFormat, DstFormat>
             return GenericStoreTile::Store(pSrc, pDstSurface, x, y, sampleNum, renderTargetArrayIndex);
         }
 
-        uint8_t *pDst = (uint8_t*)ComputeSurfaceAddress<false, false>(x, y, pDstSurface->arrayIndex + renderTargetArrayIndex, 
+        uint8_t *pDst = (uint8_t*)ComputeSurfaceAddress<false, false>(x, y, pDstSurface->arrayIndex + renderTargetArrayIndex,
             pDstSurface->arrayIndex + renderTargetArrayIndex, sampleNum, pDstSurface->lod, pDstSurface);
 
         const uint32_t dx = SIMD16_TILE_X_DIM * DST_BYTES_PER_PIXEL;
         const uint32_t dy = SIMD16_TILE_Y_DIM * pDstSurface->pitch - KNOB_TILE_X_DIM * DST_BYTES_PER_PIXEL;
 
-        uint8_t* ppDsts[] = 
+        uint8_t* ppDsts[] =
         {
             pDst,                                           // row 0, col 0
             pDst + pDstSurface->pitch,                      // row 1, col 0
@@ -1127,7 +1127,7 @@ struct OptStoreRasterTile< TilingTraits<SWR_TILE_NONE, 16>, SrcFormat, DstFormat
             return GenericStoreTile::Store(pSrc, pDstSurface, x, y, sampleNum, renderTargetArrayIndex);
         }
 
-        uint8_t *pDst = (uint8_t*)ComputeSurfaceAddress<false, false>(x, y, pDstSurface->arrayIndex + renderTargetArrayIndex, 
+        uint8_t *pDst = (uint8_t*)ComputeSurfaceAddress<false, false>(x, y, pDstSurface->arrayIndex + renderTargetArrayIndex,
             pDstSurface->arrayIndex + renderTargetArrayIndex, sampleNum, pDstSurface->lod, pDstSurface);
 
         const uint32_t dx = SIMD16_TILE_X_DIM * DST_BYTES_PER_PIXEL;

@@ -72,14 +72,16 @@ svga_winsys_buffer_create( struct svga_context *svga,
    struct svga_winsys_buffer *buf;
 
    /* Just try */
-   buf = sws->buffer_create(sws, alignment, usage, size);
+   buf = SVGA_TRY_PTR(sws->buffer_create(sws, alignment, usage, size));
    if (!buf) {
       SVGA_DBG(DEBUG_DMA|DEBUG_PERF, "flushing context to find %d bytes GMR\n",
                size);
 
       /* Try flushing all pending DMAs */
+      svga_retry_enter(svga);
       svga_context_flush(svga, NULL);
       buf = sws->buffer_create(sws, alignment, usage, size);
+      svga_retry_exit(svga);
    }
 
    return buf;
@@ -175,6 +177,11 @@ svga_buffer_create_host_surface(struct svga_screen *ss,
       if (bind_flags & PIPE_BIND_SAMPLER_VIEW)
          sbuf->key.flags |= SVGA3D_SURFACE_BIND_SHADER_RESOURCE;
 
+      if (bind_flags & PIPE_BIND_COMMAND_ARGS_BUFFER) {
+         assert(ss->sws->have_sm5);
+         sbuf->key.flags |= SVGA3D_SURFACE_DRAWINDIRECT_ARGS;
+      }
+
       if (!bind_flags && sbuf->b.b.usage == PIPE_USAGE_STAGING) {
          /* This surface is to be used with the
           * SVGA3D_CMD_DX_TRANSFER_FROM_BUFFER command, and no other
@@ -224,6 +231,12 @@ svga_buffer_create_host_surface(struct svga_screen *ss,
                                          bind_flags);
    }
 
+   if (ss->sws->have_gb_objects) {
+      /* Initialize the surface with zero */
+      ss->sws->surface_init(ss->sws, sbuf->handle, svga_surface_size(&sbuf->key),
+                            sbuf->key.flags);
+   }
+
    return ret;
 }
 
@@ -250,14 +263,9 @@ svga_buffer_recreate_host_surface(struct svga_context *svga,
    if (ret == PIPE_OK) {
       /* Copy the surface data */
       assert(sbuf->handle);
-      ret = SVGA3D_vgpu10_BufferCopy(svga->swc, old_handle, sbuf->handle,
-                                     0, 0, sbuf->b.b.width0);
-      if (ret != PIPE_OK) {
-         svga_context_flush(svga, NULL);
-         ret = SVGA3D_vgpu10_BufferCopy(svga->swc, old_handle, sbuf->handle,
-                                        0, 0, sbuf->b.b.width0);
-         assert(ret == PIPE_OK);
-      }
+      SVGA_RETRY(svga, SVGA3D_vgpu10_BufferCopy(svga->swc, old_handle,
+                                                sbuf->handle,
+                                                0, 0, sbuf->b.b.width0));
    }
 
    /* Set the new bind flags for this buffer resource */
@@ -339,8 +347,6 @@ svga_buffer_bind_host_surface(struct svga_context *svga,
                               struct svga_buffer *sbuf,
                               struct svga_buffer_surface *bufsurf)
 {
-   enum pipe_error ret;
-
    /* Update the to-bind surface */
    assert(bufsurf->handle);
    assert(sbuf->handle);
@@ -349,14 +355,9 @@ svga_buffer_bind_host_surface(struct svga_context *svga,
     * make sure to copy the buffer content.
     */
    if (sbuf->bind_flags & PIPE_BIND_STREAM_OUTPUT) {
-      ret = SVGA3D_vgpu10_BufferCopy(svga->swc, sbuf->handle, bufsurf->handle,
-                                     0, 0, sbuf->b.b.width0);
-      if (ret != PIPE_OK) {
-         svga_context_flush(svga, NULL);
-         ret = SVGA3D_vgpu10_BufferCopy(svga->swc, sbuf->handle, bufsurf->handle,
-                                        0, 0, sbuf->b.b.width0);
-         assert(ret == PIPE_OK);
-      }
+      SVGA_RETRY(svga, SVGA3D_vgpu10_BufferCopy(svga->swc, sbuf->handle,
+                                                bufsurf->handle,
+                                                0, 0, sbuf->b.b.width0));
    }
 
    /* Set this surface as the current one */
@@ -938,7 +939,6 @@ svga_buffer_upload_piecewise(struct svga_screen *ss,
       while (offset < range->end) {
          struct svga_winsys_buffer *hwbuf;
          uint8_t *map;
-         enum pipe_error ret;
 
          if (offset + size > range->end)
             size = range->end - offset;
@@ -963,19 +963,10 @@ svga_buffer_upload_piecewise(struct svga_screen *ss,
             sws->buffer_unmap(sws, hwbuf);
          }
 
-         ret = SVGA3D_BufferDMA(svga->swc,
-                                hwbuf, sbuf->handle,
-                                SVGA3D_WRITE_HOST_VRAM,
-                                size, 0, offset, sbuf->dma.flags);
-         if (ret != PIPE_OK) {
-            svga_context_flush(svga, NULL);
-            ret =  SVGA3D_BufferDMA(svga->swc,
-                                    hwbuf, sbuf->handle,
-                                    SVGA3D_WRITE_HOST_VRAM,
-                                    size, 0, offset, sbuf->dma.flags);
-            assert(ret == PIPE_OK);
-         }
-
+         SVGA_RETRY(svga, SVGA3D_BufferDMA(svga->swc,
+                                           hwbuf, sbuf->handle,
+                                           SVGA3D_WRITE_HOST_VRAM,
+                                           size, 0, offset, sbuf->dma.flags));
          sbuf->dma.flags.discard = FALSE;
 
          sws->buffer_destroy(sws, hwbuf);
@@ -1056,12 +1047,7 @@ svga_buffer_handle(struct svga_context *svga, struct pipe_resource *buf,
          ret = svga_buffer_update_hw(svga, sbuf, sbuf->bind_flags);
          if (ret == PIPE_OK) {
             /* Emit DMA or UpdateGBImage commands */
-            ret = svga_buffer_upload_command(svga, sbuf);
-            if (ret == PIPE_ERROR_OUT_OF_MEMORY) {
-               svga_context_flush(svga, NULL);
-               ret = svga_buffer_upload_command(svga, sbuf);
-               assert(ret == PIPE_OK);
-            }
+            SVGA_RETRY_OOM(svga, ret, svga_buffer_upload_command(svga, sbuf));
             if (ret == PIPE_OK) {
                sbuf->dma.pending = TRUE;
                assert(!sbuf->head.prev && !sbuf->head.next);

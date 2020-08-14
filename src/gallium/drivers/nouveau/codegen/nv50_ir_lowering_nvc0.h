@@ -64,12 +64,14 @@ private:
    void handleDIV(Instruction *); // integer division, modulus
    void handleRCPRSQLib(Instruction *, Value *[]);
    void handleRCPRSQ(Instruction *); // double precision float recip/rsqrt
-   void handleFTZ(Instruction *);
    void handleSET(CmpInstruction *);
    void handleTEXLOD(TexInstruction *);
    void handleShift(Instruction *);
+   void handleBREV(Instruction *);
 
 protected:
+   void handleFTZ(Instruction *);
+
    BuildUtil bld;
 };
 

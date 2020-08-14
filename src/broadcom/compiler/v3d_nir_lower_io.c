@@ -81,10 +81,17 @@ v3d_nir_store_output(nir_builder *b, int base, nir_ssa_def *offset,
         intr->num_components = 1;
 
         intr->src[0] = nir_src_for_ssa(chan);
-        if (offset)
-                intr->src[1] = nir_src_for_ssa(offset);
-        else
+        if (offset) {
+                /* When generating the VIR instruction, the base and the offset
+                 * are just going to get added together with an ADD instruction
+                 * so we might as well do the add here at the NIR level instead
+                 * and let the constant folding do its magic.
+                 */
+                intr->src[1] = nir_src_for_ssa(nir_iadd_imm(b, offset, base));
+                base = 0;
+        } else {
                 intr->src[1] = nir_src_for_ssa(nir_imm_int(b, 0));
+        }
 
         nir_intrinsic_set_base(intr, base);
         nir_intrinsic_set_write_mask(intr, 0x1);
@@ -165,13 +172,14 @@ v3d_nir_lower_vpm_output(struct v3d_compile *c, nir_builder *b,
         int start_comp = nir_intrinsic_component(intr);
         nir_ssa_def *src = nir_ssa_for_src(b, intr->src[0],
                                            intr->num_components);
-
         nir_variable *var = NULL;
-        nir_foreach_variable(scan_var, &c->s->outputs) {
+        nir_foreach_shader_out_variable(scan_var, c->s) {
+                int components = scan_var->data.compact ?
+                        glsl_get_length(scan_var->type) :
+                        glsl_get_components(scan_var->type);
                 if (scan_var->data.driver_location != nir_intrinsic_base(intr) ||
                     start_comp < scan_var->data.location_frac ||
-                    start_comp >= scan_var->data.location_frac +
-                    glsl_get_components(scan_var->type)) {
+                    start_comp >= scan_var->data.location_frac + components) {
                         continue;
                 }
                 var = scan_var;
@@ -219,7 +227,6 @@ v3d_nir_lower_vpm_output(struct v3d_compile *c, nir_builder *b,
                 nir_intrinsic_instr *load =
                         nir_intrinsic_instr_create(b->shader,
                                                    nir_intrinsic_load_fb_layers_v3d);
-                load->num_components = 1;
                 nir_ssa_dest_init(&load->instr, &load->dest, 1, 32, NULL);
                 nir_builder_instr_insert(b, &load->instr);
                 nir_ssa_def *fb_layers = &load->dest.ssa;
@@ -246,6 +253,9 @@ v3d_nir_lower_vpm_output(struct v3d_compile *c, nir_builder *b,
 
                 if (vpm_offset == -1)
                         continue;
+
+                if (var->data.compact)
+                    vpm_offset += nir_src_as_uint(intr->src[1]) * 4;
 
                 BITSET_SET(state->varyings_stored, vpm_offset);
 
@@ -358,7 +368,7 @@ static void
 v3d_nir_lower_io_update_output_var_base(struct v3d_compile *c,
                                         struct v3d_nir_lower_io_state *state)
 {
-        nir_foreach_variable_safe(var, &c->s->outputs) {
+        nir_foreach_shader_out_variable_safe(var, c->s) {
                 if (var->data.location == VARYING_SLOT_POS &&
                     state->pos_vpm_offset != -1) {
                         var->data.driver_location = state->pos_vpm_offset;

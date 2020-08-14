@@ -377,6 +377,12 @@ extern void GLAPIENTRY
 _mesa_BindVertexBuffers(GLuint first, GLsizei count, const GLuint *buffers,
                         const GLintptr *offsets, const GLsizei *strides);
 
+void
+_mesa_InternalBindVertexBuffers(struct gl_context *ctx,
+                                const struct glthread_attrib_binding *buffers,
+                                GLbitfield buffer_mask,
+                                GLboolean restore_pointers);
+
 void GLAPIENTRY
 _mesa_VertexArrayVertexBuffers_no_error(GLuint vaobj, GLuint first,
                                         GLsizei count, const GLuint *buffers,

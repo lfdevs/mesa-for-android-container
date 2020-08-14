@@ -34,8 +34,9 @@ namespace r600 {
 FragmentShaderFromNir::FragmentShaderFromNir(const nir_shader& nir,
                                              r600_shader& sh,
                                              r600_pipe_shader_selector &sel,
-                                             const r600_shader_key &key):
-   ShaderFromNirProcessor(PIPE_SHADER_FRAGMENT, sel, sh, nir.scratch_size),
+                                             const r600_shader_key &key,
+                                             enum chip_class chip_class):
+   ShaderFromNirProcessor(PIPE_SHADER_FRAGMENT, sel, sh, nir.scratch_size, chip_class, 0),
    m_max_color_exports(MAX2(key.ps.nr_cbufs,1)),
    m_max_counted_color_exports(0),
    m_two_sided_color(key.ps.color_two_side),
@@ -46,7 +47,8 @@ FragmentShaderFromNir::FragmentShaderFromNir(const nir_shader& nir,
    m_need_back_color(false),
    m_front_face_loaded(false),
    m_depth_exports(0),
-   m_enable_centroid_interpolators(false)
+   m_enable_centroid_interpolators(false),
+   m_apply_sample_mask(key.ps.apply_sample_id_mask)
 {
    for (auto&  i: m_interpolator) {
       i.enabled = false;
@@ -65,22 +67,15 @@ bool FragmentShaderFromNir::do_process_inputs(nir_variable *input)
            << " interpolation:" << input->data.interpolation
            << "\n";
 
-   unsigned name, sid;
-
    if (input->data.location == VARYING_SLOT_FACE) {
       m_sv_values.set(es_face);
       return true;
    }
 
-   tgsi_get_gl_varying_semantic(static_cast<gl_varying_slot>(input->data.location),
-                                true, &name, &sid);
-
-   /* Work around the mixed tgsi/nir semantic problems, this fixes
-    * dEQP-GLES2.functional.shaders.builtin_variable.pointcoord */
-   if (input->data.location == VARYING_SLOT_PNTC) {
-      name = TGSI_SEMANTIC_GENERIC;
-      sid = 8;
-   }
+   unsigned name, sid;
+   auto semantic = r600_get_varying_semantic(input->data.location);
+   name = semantic.first;
+   sid = semantic.second;
 
    tgsi_semantic sname = static_cast<tgsi_semantic>(name);
 
@@ -126,6 +121,9 @@ bool FragmentShaderFromNir::scan_sysvalue_access(nir_instr *instr)
       case nir_intrinsic_load_sample_mask_in:
          m_sv_values.set(es_sample_mask_in);
          break;
+      case nir_intrinsic_load_sample_pos:
+         m_sv_values.set(es_sample_pos);
+         /* fallthrough */
       case nir_intrinsic_load_sample_id:
          m_sv_values.set(es_sample_id);
          break;
@@ -143,11 +141,12 @@ bool FragmentShaderFromNir::scan_sysvalue_access(nir_instr *instr)
    return true;
 }
 
-bool FragmentShaderFromNir::allocate_reserved_registers()
+bool FragmentShaderFromNir::do_allocate_reserved_registers()
 {
    assert(!m_reserved_registers);
 
    int face_reg_index = -1;
+   int sample_id_index = -1;
    // enabled interpolators based on inputs
    for (auto& i: m_shaderio.inputs()) {
       int ij = i->ij_index();
@@ -223,16 +222,17 @@ bool FragmentShaderFromNir::allocate_reserved_registers()
       m_shaderio.add_input(new ShaderInputSystemValue(TGSI_SEMANTIC_SAMPLEMASK, face_reg_index));
    }
 
-   if (m_sv_values.test(es_sample_id)) {
-      if (face_reg_index < 0)
-         face_reg_index = m_reserved_registers++;
+   if (m_sv_values.test(es_sample_id) ||
+       m_sv_values.test(es_sample_mask_in)) {
+      if (sample_id_index < 0)
+         sample_id_index = m_reserved_registers++;
 
-      auto smi = new GPRValue(face_reg_index, 3);
+      auto smi = new GPRValue(sample_id_index, 3);
       smi->set_as_input();
       m_sample_id_reg.reset(smi);
       sfn_log << SfnLog::io << "Set sample id register to " <<  *m_sample_id_reg << "\n";
       sh_info().nsys_inputs++;
-      m_shaderio.add_input(new ShaderInputSystemValue(TGSI_SEMANTIC_SAMPLEID, face_reg_index));
+      m_shaderio.add_input(new ShaderInputSystemValue(TGSI_SEMANTIC_SAMPLEID, sample_id_index));
    }
 
    // The back color handling is not emmited in the code, so we have
@@ -288,7 +288,8 @@ bool FragmentShaderFromNir::do_emit_store_deref(const nir_variable *out_var, nir
    if ((out_var->data.location >= FRAG_RESULT_DATA0 &&
         out_var->data.location <= FRAG_RESULT_DATA7) ||
        out_var->data.location == FRAG_RESULT_DEPTH ||
-       out_var->data.location == FRAG_RESULT_STENCIL)
+       out_var->data.location == FRAG_RESULT_STENCIL ||
+       out_var->data.location == FRAG_RESULT_SAMPLE_MASK)
       return emit_export_pixel(out_var, instr, false);
 
    sfn_log << SfnLog::err << "r600-NIR: Unimplemented store_deref for " <<
@@ -329,7 +330,8 @@ bool FragmentShaderFromNir::do_process_outputs(nir_variable *output)
       return true;
    }
    if (output->data.location == FRAG_RESULT_DEPTH ||
-       output->data.location == FRAG_RESULT_STENCIL) {
+       output->data.location == FRAG_RESULT_STENCIL ||
+       output->data.location == FRAG_RESULT_SAMPLE_MASK) {
       io.write_mask = 15;
       return true;
    }
@@ -337,11 +339,25 @@ bool FragmentShaderFromNir::do_process_outputs(nir_variable *output)
    return false;
 }
 
+bool FragmentShaderFromNir::emit_load_sample_mask_in(nir_intrinsic_instr* instr)
+{
+   auto dest = from_nir(instr->dest, 0);
+   assert(m_sample_id_reg);
+   assert(m_sample_mask_reg);
+
+   emit_instruction(new AluInstruction(op2_lshl_int, dest, Value::one_i, m_sample_id_reg, EmitInstruction::last_write));
+   emit_instruction(new AluInstruction(op2_and_int, dest, dest, m_sample_mask_reg, EmitInstruction::last_write));
+   return true;
+}
+
 bool FragmentShaderFromNir::emit_intrinsic_instruction_override(nir_intrinsic_instr* instr)
 {
    switch (instr->intrinsic) {
    case nir_intrinsic_load_sample_mask_in:
-      return load_preloaded_value(instr->dest, 0, m_sample_mask_reg);
+      if (m_apply_sample_mask) {
+         return emit_load_sample_mask_in(instr);
+      } else
+         return load_preloaded_value(instr->dest, 0, m_sample_mask_reg);
    case nir_intrinsic_load_sample_id:
       return load_preloaded_value(instr->dest, 0, m_sample_id_reg);
    case nir_intrinsic_load_front_face:
@@ -352,6 +368,9 @@ bool FragmentShaderFromNir::emit_intrinsic_instruction_override(nir_intrinsic_in
       return emit_interp_deref_at_offset(instr);
    case nir_intrinsic_interp_deref_at_centroid:
       return emit_interp_deref_at_centroid(instr);
+   case nir_intrinsic_load_sample_pos:
+      return emit_load_sample_pos(instr);
+
    default:
       return false;
    }
@@ -367,6 +386,34 @@ void FragmentShaderFromNir::load_front_face()
                                 Value::zero, {alu_write, alu_last_instr});
    m_front_face_loaded = true;
    emit_instruction(ir);
+}
+
+bool FragmentShaderFromNir::emit_load_sample_pos(nir_intrinsic_instr* instr)
+{
+   GPRVector dest = vec_from_nir(instr->dest, nir_dest_num_components(instr->dest));
+   auto fetch = new FetchInstruction(vc_fetch,
+                                     no_index_offset,
+                                     fmt_32_32_32_32_float,
+                                     vtx_nf_scaled,
+                                     vtx_es_none,
+                                     m_sample_id_reg,
+                                     dest,
+                                     0,
+                                     false,
+                                     0xf,
+                                     R600_BUFFER_INFO_CONST_BUFFER,
+                                     0,
+                                     bim_none,
+                                     false,
+                                     false,
+                                     0,
+                                     0,
+                                     0,
+                                     PValue(),
+                                     {0,1,2,3});
+   fetch->set_flag(vtx_srf_mode);
+   emit_instruction(fetch);
+   return true;
 }
 
 bool FragmentShaderFromNir::emit_interp_deref_at_sample(nir_intrinsic_instr* instr)
@@ -670,17 +717,28 @@ bool FragmentShaderFromNir::emit_export_pixel(const nir_variable *out_var, nir_i
 
    std::array<uint32_t,4> swizzle;
    unsigned writemask = nir_intrinsic_write_mask(instr);
-   if (out_var->data.location != FRAG_RESULT_STENCIL) {
+   switch (out_var->data.location) {
+   case FRAG_RESULT_DEPTH:
+      writemask = 1;
+      swizzle = {0,7,7,7};
+      break;
+   case FRAG_RESULT_STENCIL:
+      writemask = 2;
+      swizzle = {7,0,7,7};
+      break;
+   case FRAG_RESULT_SAMPLE_MASK:
+      writemask = 4;
+      swizzle = {7,7,0,7};
+      break;
+   default:
       for (int i = 0; i < 4; ++i) {
          swizzle[i] = (i < instr->num_components) ? i : 7;
       }
-   } else {
-      swizzle = {7,0,7,7};
    }
 
-   GPRVector *value = vec_from_nir_with_fetch_constant(instr->src[1], writemask, swizzle);
+   auto value = vec_from_nir_with_fetch_constant(instr->src[1], writemask, swizzle);
 
-   set_output(out_var->data.driver_location, PValue(value));
+   set_output(out_var->data.driver_location, value.sel());
 
    if (out_var->data.location == FRAG_RESULT_COLOR ||
        (out_var->data.location >= FRAG_RESULT_DATA0 &&
@@ -694,7 +752,7 @@ bool FragmentShaderFromNir::emit_export_pixel(const nir_variable *out_var, nir_i
             continue;
          }
 
-         m_last_pixel_export = new ExportInstruction(location, *value, ExportInstruction::et_pixel);
+         m_last_pixel_export = new ExportInstruction(location, value, ExportInstruction::et_pixel);
 
          if (sh_info().ps_export_highest < location)
             sh_info().ps_export_highest = location;
@@ -707,16 +765,14 @@ bool FragmentShaderFromNir::emit_export_pixel(const nir_variable *out_var, nir_i
          emit_export_instruction(m_last_pixel_export);
          ++m_max_counted_color_exports;
       };
-   } else if (out_var->data.location == FRAG_RESULT_DEPTH) {
+   } else if (out_var->data.location == FRAG_RESULT_DEPTH ||
+              out_var->data.location == FRAG_RESULT_STENCIL ||
+              out_var->data.location == FRAG_RESULT_SAMPLE_MASK) {
       m_depth_exports++;
-      emit_export_instruction(new ExportInstruction(61, *value, ExportInstruction::et_pixel));
-   } else if (out_var->data.location == FRAG_RESULT_STENCIL) {
-      m_depth_exports++;
-      emit_export_instruction(new ExportInstruction(61, *value, ExportInstruction::et_pixel));
+      emit_export_instruction(new ExportInstruction(61, value, ExportInstruction::et_pixel));
    } else {
       return false;
    }
-
    return true;
 }
 

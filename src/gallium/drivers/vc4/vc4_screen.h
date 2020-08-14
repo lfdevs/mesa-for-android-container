@@ -27,7 +27,7 @@
 #include "pipe/p_screen.h"
 #include "renderonly/renderonly.h"
 #include "os/os_thread.h"
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 #include "util/list.h"
 #include "util/slab.h"
 

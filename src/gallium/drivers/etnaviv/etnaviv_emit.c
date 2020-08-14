@@ -534,17 +534,17 @@ etna_emit_state(struct etna_context *ctx)
    else
       emit_pre_halti5_state(ctx);
 
-   ctx->emit_texture_state(ctx);
-
-   /* Insert a FE/PE stall as changing the shader instructions (and maybe
-    * the uniforms) can corrupt the previous in-progress draw operation.
-    * Observed with amoeba on GC2000 during the right-to-left rendering
-    * of PI, and can cause GPU hangs immediately after.
-    * I summise that this is because the "new" locations at 0xc000 are not
-    * properly protected against updates as other states seem to be. Hence,
-    * we detect the "new" vertex shader instruction offset to apply this. */
-   if (ctx->dirty & (ETNA_DIRTY_SHADER | ETNA_DIRTY_CONSTBUF) && screen->specs.vs_offset > 0x4000)
+   /* Beginning from Halti0 some of the new shader and sampler states are not
+    * self-synchronizing anymore. Thus we need to stall the FE on PE completion
+    * before loading the new states to avoid corrupting the state of the
+    * in-flight draw.
+    */
+   if (screen->specs.halti >= 0 &&
+       (ctx->dirty & (ETNA_DIRTY_SHADER | ETNA_DIRTY_CONSTBUF |
+                      ETNA_DIRTY_SAMPLERS | ETNA_DIRTY_SAMPLER_VIEWS)))
       etna_stall(ctx->stream, SYNC_RECIPIENT_FE, SYNC_RECIPIENT_PE);
+
+   ctx->emit_texture_state(ctx);
 
    /* We need to update the uniform cache only if one of the following bits are
     * set in ctx->dirty:

@@ -112,8 +112,9 @@ static bool si_sdma_v4_copy_texture(struct si_context *sctx, struct pipe_resourc
          return false;
 
       radeon_emit(
-         cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY, CIK_SDMA_COPY_SUB_OPCODE_LINEAR_SUB_WINDOW, 0) |
-                (util_logbase2(bpp) << 29));
+         cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY, CIK_SDMA_COPY_SUB_OPCODE_LINEAR_SUB_WINDOW,
+                             sctx->ws->cs_is_secure(cs) ? (1u << 2) : 0) |
+                             (util_logbase2(bpp) << 29));
       radeon_emit(cs, src_address);
       radeon_emit(cs, src_address >> 32);
       radeon_emit(cs, srcx | (srcy << 16));
@@ -159,10 +160,9 @@ static bool si_sdma_v4_copy_texture(struct si_context *sctx, struct pipe_resourc
       /* Check if everything fits into the bitfields */
       if (!(tiled_x <= (1 << 14) && tiled_y <= (1 << 14) && tiled_z <= (1 << 11) &&
             tiled_width <= (1 << 14) && tiled_height <= (1 << 14) && tiled_depth <= (1 << 11) &&
-            tiled->surface.u.gfx9.surf.epitch <= (1 << 16) && linear_x <= (1 << 14) &&
-            linear_y <= (1 << 14) && linear_z <= (1 << 11) && linear_pitch <= (1 << 14) &&
-            linear_slice_pitch <= (1 << 28) && copy_width <= (1 << 14) &&
-            copy_height <= (1 << 14) && copy_depth <= (1 << 11)))
+            linear_x <= (1 << 14) && linear_y <= (1 << 14) && linear_z <= (1 << 11) &&
+            linear_pitch <= (1 << 14) && linear_slice_pitch <= (1 << 28) &&
+            copy_width <= (1 << 14) && copy_height <= (1 << 14) && copy_depth <= (1 << 11)))
          return false;
 
       /* Check alignments */
@@ -173,9 +173,10 @@ static bool si_sdma_v4_copy_texture(struct si_context *sctx, struct pipe_resourc
       si_need_dma_space(sctx, 14, &sdst->buffer, &ssrc->buffer);
 
       radeon_emit(
-         cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY, CIK_SDMA_COPY_SUB_OPCODE_TILED_SUB_WINDOW, 0) |
-                tiled->buffer.b.b.last_level << 20 | tiled_level << 24 |
-                (linear == sdst ? 1u : 0) << 31);
+         cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY, CIK_SDMA_COPY_SUB_OPCODE_TILED_SUB_WINDOW,
+                             sctx->ws->cs_is_secure(cs) ? (1u << 2) : 0) |
+             tiled->buffer.b.b.last_level << 20 | tiled_level << 24 |
+             (linear == sdst ? 1u : 0) << 31);
       radeon_emit(cs, (uint32_t)tiled_address);
       radeon_emit(cs, (uint32_t)(tiled_address >> 32));
       radeon_emit(cs, tiled_x | (tiled_y << 16));

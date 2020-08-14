@@ -228,7 +228,11 @@ nvc0_push_setup_vertex_array(struct nvc0_context *nvc0, const unsigned count)
    BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_START_HIGH(0)), 2);
    PUSH_DATAh(push, va);
    PUSH_DATA (push, va);
-   BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_LIMIT_HIGH(0)), 2);
+
+   if (nvc0->screen->eng3d->oclass < TU102_3D_CLASS)
+      BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_LIMIT_HIGH(0)), 2);
+   else
+      BEGIN_NVC0(push, SUBC_3D(TU102_3D_VERTEX_ARRAY_LIMIT_HIGH(0)), 2);
    PUSH_DATAh(push, va + size - 1);
    PUSH_DATA (push, va + size - 1);
 
@@ -771,7 +775,11 @@ nvc0_push_upload_vertex_ids(struct push_context *ctx,
    PUSH_DATA (push, NVC0_3D_VERTEX_ARRAY_FETCH_ENABLE | index_size);
    PUSH_DATAh(push, va);
    PUSH_DATA (push, va);
-   BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_LIMIT_HIGH(1)), 2);
+
+   if (nvc0->screen->eng3d->oclass < TU102_3D_CLASS)
+      BEGIN_NVC0(push, NVC0_3D(VERTEX_ARRAY_LIMIT_HIGH(1)), 2);
+   else
+      BEGIN_NVC0(push, SUBC_3D(TU102_3D_VERTEX_ARRAY_LIMIT_HIGH(1)), 2);
    PUSH_DATAh(push, va + info->count * index_size - 1);
    PUSH_DATA (push, va + info->count * index_size - 1);
 

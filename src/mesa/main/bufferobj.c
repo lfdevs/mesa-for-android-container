@@ -1228,6 +1228,19 @@ _mesa_BindBuffer(GLenum target, GLuint buffer)
    bind_buffer_object(ctx, bindTarget, buffer);
 }
 
+void
+_mesa_InternalBindElementBuffer(struct gl_context *ctx,
+                                struct gl_buffer_object *buf)
+{
+   struct gl_buffer_object **bindTarget =
+      get_buffer_target(ctx, GL_ELEMENT_ARRAY_BUFFER);
+
+   /* Move the buffer reference from the parameter to the bind point. */
+   _mesa_reference_buffer_object(ctx, bindTarget, NULL);
+   if (buf)
+      *bindTarget = buf;
+}
+
 /**
  * Binds a buffer object to a binding point.
  *
@@ -3157,6 +3170,47 @@ _mesa_CopyNamedBufferSubData(GLuint readBuffer, GLuint writeBuffer,
 
    copy_buffer_sub_data(ctx, src, dst, readOffset, writeOffset, size,
                         "glCopyNamedBufferSubData");
+}
+
+void GLAPIENTRY
+_mesa_InternalBufferSubDataCopyMESA(GLintptr srcBuffer, GLuint srcOffset,
+                                    GLuint dstTargetOrName, GLintptr dstOffset,
+                                    GLsizeiptr size, GLboolean named,
+                                    GLboolean ext_dsa)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   struct gl_buffer_object *src = (struct gl_buffer_object *)srcBuffer;
+   struct gl_buffer_object *dst;
+   const char *func;
+
+   /* Handle behavior for all 3 variants. */
+   if (named && ext_dsa) {
+      func = "glNamedBufferSubDataEXT";
+      dst = _mesa_lookup_bufferobj(ctx, dstTargetOrName);
+      if (!_mesa_handle_bind_buffer_gen(ctx, dstTargetOrName, &dst, func))
+         goto done;
+   } else if (named) {
+      func = "glNamedBufferSubData";
+      dst = _mesa_lookup_bufferobj_err(ctx, dstTargetOrName, func);
+      if (!dst)
+         goto done;
+   } else {
+      assert(!ext_dsa);
+      func = "glBufferSubData";
+      dst = get_buffer(ctx, func, dstTargetOrName, GL_INVALID_OPERATION);
+      if (!dst)
+         goto done;
+   }
+
+   if (!validate_buffer_sub_data(ctx, dst, dstOffset, size, func))
+      goto done; /* the error is already set */
+
+   dst->MinMaxCacheDirty = true;
+   ctx->Driver.CopyBufferSubData(ctx, src, dst, srcOffset, dstOffset, size);
+
+done:
+   /* The caller passes the reference to this function, so unreference it. */
+   _mesa_reference_buffer_object(ctx, &src, NULL);
 }
 
 static bool

@@ -79,7 +79,7 @@ softpipe_set_blend_color(struct pipe_context *pipe,
    /* save clamped color too */
    for (i = 0; i < 4; i++)
       softpipe->blend_color_clamped.color[i] =
-         CLAMP(blend_color->color[i], 0.0f, 1.0f);
+         SATURATE(blend_color->color[i]);
 
    softpipe->dirty |= SP_NEW_BLEND;
 }

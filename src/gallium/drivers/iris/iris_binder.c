@@ -98,7 +98,8 @@ binder_realloc(struct iris_context *ice)
     * We do this here so that iris_binder_reserve_3d correctly gets a new
     * larger total_size when making the updated reservation.
     */
-   ice->state.dirty |= IRIS_ALL_DIRTY_BINDINGS;
+   ice->state.dirty |= IRIS_DIRTY_RENDER_BUFFER;
+   ice->state.stage_dirty |= IRIS_ALL_STAGE_DIRTY_BINDINGS;
 }
 
 static uint32_t
@@ -142,7 +143,8 @@ iris_binder_reserve_3d(struct iris_context *ice)
    unsigned total_size;
 
    /* If nothing is dirty, skip all this. */
-   if (!(ice->state.dirty & IRIS_ALL_DIRTY_BINDINGS))
+   if (!(ice->state.dirty & IRIS_DIRTY_RENDER_BUFFER) &&
+       !(ice->state.stage_dirty & IRIS_ALL_STAGE_DIRTY_BINDINGS))
       return;
 
    /* Get the binding table sizes for each stage */
@@ -158,7 +160,7 @@ iris_binder_reserve_3d(struct iris_context *ice)
    while (true) {
       total_size = 0;
       for (int stage = 0; stage <= MESA_SHADER_FRAGMENT; stage++) {
-         if (ice->state.dirty & (IRIS_DIRTY_BINDINGS_VS << stage))
+         if (ice->state.stage_dirty & (IRIS_STAGE_DIRTY_BINDINGS_VS << stage))
             total_size += sizes[stage];
       }
 
@@ -181,7 +183,7 @@ iris_binder_reserve_3d(struct iris_context *ice)
    uint32_t offset = binder_insert(binder, total_size);
 
    for (int stage = 0; stage <= MESA_SHADER_FRAGMENT; stage++) {
-      if (ice->state.dirty & (IRIS_DIRTY_BINDINGS_VS << stage)) {
+      if (ice->state.stage_dirty & (IRIS_STAGE_DIRTY_BINDINGS_VS << stage)) {
          binder->bt_offset[stage] = sizes[stage] > 0 ? offset : 0;
          iris_record_state_size(ice->state.sizes,
                                 binder->bo->gtt_offset + offset, sizes[stage]);
@@ -193,7 +195,7 @@ iris_binder_reserve_3d(struct iris_context *ice)
 void
 iris_binder_reserve_compute(struct iris_context *ice)
 {
-   if (!(ice->state.dirty & IRIS_DIRTY_BINDINGS_CS))
+   if (!(ice->state.stage_dirty & IRIS_STAGE_DIRTY_BINDINGS_CS))
       return;
 
    struct iris_binder *binder = &ice->state.binder;

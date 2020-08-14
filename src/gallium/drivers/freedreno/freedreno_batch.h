@@ -33,6 +33,12 @@
 
 #include "freedreno_util.h"
 
+#ifdef DEBUG
+#  define BATCH_DEBUG (fd_mesa_debug & FD_DBG_MSGS)
+#else
+#  define BATCH_DEBUG 0
+#endif
+
 struct fd_context;
 struct fd_resource;
 enum fd_resource_status;
@@ -184,6 +190,9 @@ struct fd_batch {
 	/** tiling/gmem (IB0) cmdstream: */
 	struct fd_ringbuffer *gmem;
 
+	/** epilogue cmdstream: */
+	struct fd_ringbuffer *epilogue;
+
 	// TODO maybe more generically split out clear and clear_binning rings?
 	struct fd_ringbuffer *lrz_clear;
 	struct fd_ringbuffer *tile_setup;
@@ -256,7 +265,8 @@ struct fd_batch * fd_batch_create(struct fd_context *ctx, bool nondraw);
 void fd_batch_reset(struct fd_batch *batch);
 void fd_batch_flush(struct fd_batch *batch);
 void fd_batch_add_dep(struct fd_batch *batch, struct fd_batch *dep);
-void fd_batch_resource_used(struct fd_batch *batch, struct fd_resource *rsc, bool write);
+void fd_batch_resource_write(struct fd_batch *batch, struct fd_resource *rsc);
+void fd_batch_resource_read_slowpath(struct fd_batch *batch, struct fd_resource *rsc);
 void fd_batch_check_size(struct fd_batch *batch);
 
 /* not called directly: */
@@ -334,5 +344,15 @@ fd_event_write(struct fd_batch *batch, struct fd_ringbuffer *ring,
 	OUT_RING(ring, evt);
 	fd_reset_wfi(batch);
 }
+
+static inline struct fd_ringbuffer *
+fd_batch_get_epilogue(struct fd_batch *batch)
+{
+	if (batch->epilogue == NULL)
+		batch->epilogue = fd_submit_new_ringbuffer(batch->submit, 0x1000, 0);
+
+	return batch->epilogue;
+}
+
 
 #endif /* FREEDRENO_BATCH_H_ */

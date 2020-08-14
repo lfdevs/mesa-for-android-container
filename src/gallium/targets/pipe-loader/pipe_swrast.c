@@ -1,7 +1,7 @@
 
 #include "target-helpers/inline_sw_helper.h"
 #include "target-helpers/inline_debug_helper.h"
-#include "state_tracker/sw_driver.h"
+#include "frontend/sw_driver.h"
 #include "sw/dri/dri_sw_winsys.h"
 #include "sw/kms-dri/kms_dri_sw_winsys.h"
 #include "sw/null/null_sw_winsys.h"

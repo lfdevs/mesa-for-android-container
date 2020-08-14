@@ -44,6 +44,7 @@
 #include "svga_debug.h"
 #include "svga_state.h"
 #include "svga_winsys.h"
+#include "svga_streamout.h"
 
 #define CONST0_UPLOAD_DEFAULT_SIZE 65536
 
@@ -74,10 +75,15 @@ svga_destroy(struct pipe_context *pipe)
 
    /* free HW constant buffers */
    for (shader = 0; shader < ARRAY_SIZE(svga->state.hw_draw.constbuf); shader++) {
-      pipe_resource_reference(&svga->state.hw_draw.constbuf[shader], NULL);
+      for (i = 0; i < ARRAY_SIZE(svga->state.hw_draw.constbuf[0]); i++) {
+         pipe_resource_reference(&svga->state.hw_draw.constbuf[shader][i], NULL);
+      }
    }
 
    pipe->delete_blend_state(pipe, svga->noop_blend);
+
+   /* destroy stream output statistics queries */
+   svga_destroy_stream_output_queries(svga);
 
    /* free query gb object */
    if (svga->gb_query) {
@@ -91,6 +97,7 @@ svga_destroy(struct pipe_context *pipe)
    svga_cleanup_framebuffer(svga);
    svga_cleanup_tss_binding(svga);
    svga_cleanup_vertex_state(svga);
+   svga_cleanup_tcs_state(svga);
 
    svga_destroy_swtnl(svga);
    svga_hwtnl_destroy(svga->hwtnl);
@@ -174,12 +181,14 @@ svga_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
    svga_init_fs_functions(svga);
    svga_init_vs_functions(svga);
    svga_init_gs_functions(svga);
+   svga_init_ts_functions(svga);
    svga_init_vertex_functions(svga);
    svga_init_constbuffer_functions(svga);
    svga_init_query_functions(svga);
    svga_init_surface_functions(svga);
    svga_init_stream_output_functions(svga);
    svga_init_clear_functions(svga);
+   svga_init_tracked_state(svga);
 
    /* init misc state */
    svga->curr.sample_mask = ~0;
@@ -250,6 +259,7 @@ svga_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
    memset(&svga->state.hw_clear, 0xcd, sizeof(svga->state.hw_clear));
    memset(&svga->state.hw_clear.framebuffer, 0x0,
           sizeof(svga->state.hw_clear.framebuffer));
+   memset(&svga->state.hw_clear.rtv, 0, sizeof(svga->state.hw_clear.rtv));
    svga->state.hw_clear.num_rendertargets = 0;
    svga->state.hw_clear.dsv = NULL;
 
@@ -269,6 +279,8 @@ svga_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
    svga->state.hw_draw.vs = NULL;
    svga->state.hw_draw.gs = NULL;
    svga->state.hw_draw.fs = NULL;
+   svga->state.hw_draw.tcs = NULL;
+   svga->state.hw_draw.tes = NULL;
 
    /* Initialize the currently bound buffer resources */
    memset(svga->state.hw_draw.constbuf, 0,
@@ -303,9 +315,15 @@ svga_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
       svga->noop_blend = svga->pipe.create_blend_state(&svga->pipe, &noop_tmpl);
    }
 
-   svga->dirty = ~0;
+   svga->dirty = SVGA_NEW_ALL;
    svga->pred.query_id = SVGA3D_INVALID_ID;
    svga->disable_rasterizer = FALSE;
+
+   /**
+    * Create stream output statistics queries used in the workaround for auto
+    * draw with stream instancing.
+    */
+   svga_create_stream_output_queries(svga);
 
    goto done;
 
@@ -398,6 +416,11 @@ svga_context_flush(struct svga_context *svga,
       svga->rebind.flags.fs = TRUE;
       svga->rebind.flags.gs = TRUE;
 
+      if (svga_have_sm5(svga)) {
+         svga->rebind.flags.tcs = TRUE;
+         svga->rebind.flags.tes = TRUE;
+      }
+
       if (svga_need_to_rebind_resources(svga)) {
          svga->rebind.flags.query = TRUE;
       }
@@ -447,12 +470,7 @@ svga_hwtnl_flush_retry(struct svga_context *svga)
 {
    enum pipe_error ret = PIPE_OK;
 
-   ret = svga_hwtnl_flush(svga->hwtnl);
-   if (ret == PIPE_ERROR_OUT_OF_MEMORY) {
-      svga_context_flush(svga, NULL);
-      ret = svga_hwtnl_flush(svga->hwtnl);
-   }
-
+   SVGA_RETRY_OOM(svga, ret, svga_hwtnl_flush(svga->hwtnl));
    assert(ret == PIPE_OK);
 }
 

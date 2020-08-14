@@ -7,7 +7,7 @@
 #include "util/u_debug.h"
 #include "util/u_debug_image.h"
 #include "util/u_memory.h"
-#include "state_tracker/graw.h"
+#include "frontend/graw.h"
 
 
 /* Helper functions.  These are the same for all graw implementations.

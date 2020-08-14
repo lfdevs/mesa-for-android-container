@@ -125,9 +125,9 @@ public:
    bool run_tcs();
    bool run_tes();
    bool run_gs();
-   bool run_cs(unsigned min_dispatch_width);
+   bool run_cs(bool allow_spilling);
    void optimize();
-   void allocate_registers(unsigned min_dispatch_width, bool allow_spilling);
+   void allocate_registers(bool allow_spilling);
    void setup_fs_payload_gen4();
    void setup_fs_payload_gen6();
    void setup_vs_payload();
@@ -175,7 +175,6 @@ public:
    bool remove_duplicate_mrf_writes();
    bool remove_extra_rounding_modes();
 
-   bool opt_sampler_eot();
    void schedule_instructions(instruction_scheduler_mode mode);
    void insert_gen4_send_dependency_workarounds();
    void insert_gen4_pre_send_dependency_workarounds(bblock_t *block,

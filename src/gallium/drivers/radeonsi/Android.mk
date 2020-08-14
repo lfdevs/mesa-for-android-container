@@ -66,20 +66,6 @@ $(intermediates)/radeonsi/si_driinfo.h: $(MERGE_DRIINFO) $(GEN_DRIINFO_INPUTS)
 	@echo "Gen Header: $(PRIVATE_MODULE) <= $(notdir $(@))"
 	$(hide) $(MESA_PYTHON2) $(MERGE_DRIINFO) $(GEN_DRIINFO_INPUTS) > $@ || ($(RM) $@; false)
 
-GEN10_FORMAT_TABLE_INPUTS := \
-	$(MESA_TOP)/src/util/format/u_format.csv \
-	$(MESA_TOP)/src/amd/registers/gfx10-rsrc.json
-
-GEN10_FORMAT_TABLE_DEP := \
-	$(MESA_TOP)/src/amd/registers/regdb.py
-
-GEN10_FORMAT_TABLE := $(LOCAL_PATH)/gfx10_format_table.py
-
-$(intermediates)/radeonsi/gfx10_format_table.h: $(GEN10_FORMAT_TABLE) $(GEN10_FORMAT_TABLE_INPUTS) $(GEN10_FORMAT_TABLE_DEP)
-	@mkdir -p $(dir $@)
-	@echo "Gen Header: $(PRIVATE_MODULE) <= $(notdir $(@))"
-	$(hide) $(MESA_PYTHON2) $(GEN10_FORMAT_TABLE) $(GEN10_FORMAT_TABLE_INPUTS) > $@ || ($(RM) $@; false)
-
 LOCAL_C_INCLUDES += $(intermediates)/radeonsi
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(intermediates)

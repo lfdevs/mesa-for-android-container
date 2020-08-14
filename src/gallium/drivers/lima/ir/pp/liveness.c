@@ -129,11 +129,10 @@ ppir_liveness_instr_srcs(ppir_compiler *comp, ppir_instr *instr)
 
          /* if some other op on this same instruction is writing,
           * we just need to reserve a register for this particular
-          * instruction. Add the register to live_out to make that
-          * interference happen without propagating its liveness. */
+          * instruction. */
          if (src->node && src->node->instr == instr) {
-            instr->live_out[reg->regalloc_index].reg = reg;
-            _mesa_set_add(instr->live_out_set, &instr->live_out[reg->regalloc_index]);
+            instr->live_internal[reg->regalloc_index].reg = reg;
+            _mesa_set_add(instr->live_internal_set, &instr->live_internal[reg->regalloc_index]);
             continue;
          }
 
@@ -179,7 +178,6 @@ ppir_liveness_instr_dest(ppir_compiler *comp, ppir_instr *instr)
       switch(node->op) {
          case ppir_op_const:
          case ppir_op_undef:
-         case ppir_op_store_color: /* never clear dest if its store output */
             continue;
          default:
             break;
@@ -199,8 +197,8 @@ ppir_liveness_instr_dest(ppir_compiler *comp, ppir_instr *instr)
        * either dead code or a bug. For now, assign an interference to it to
        * ensure it doesn't get assigned a live register and overwrites it. */
       if (!live) {
-         instr->live_out[reg->regalloc_index].reg = reg;
-         _mesa_set_add(instr->live_out_set, &instr->live_out[reg->regalloc_index]);
+         instr->live_internal[reg->regalloc_index].reg = reg;
+         _mesa_set_add(instr->live_internal_set, &instr->live_internal[reg->regalloc_index]);
          continue;
       }
 

@@ -33,7 +33,7 @@
 #include "util/u_dl.h"
 #include "util/u_file.h"
 #include "util/xmlconfig.h"
-#include "util/xmlpool.h"
+#include "util/driconf.h"
 
 #include <string.h>
 

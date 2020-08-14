@@ -146,6 +146,8 @@ static inline SVGA3dResourceType
 svga_resource_type(enum pipe_texture_target target)
 {
    switch (target) {
+   case PIPE_BUFFER:
+      return SVGA3D_RESOURCE_BUFFER;
    case PIPE_TEXTURE_1D:
    case PIPE_TEXTURE_1D_ARRAY:
       return SVGA3D_RESOURCE_TEXTURE1D;

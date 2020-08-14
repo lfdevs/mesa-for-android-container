@@ -425,7 +425,7 @@ draw_pt_arrays_restart(struct draw_context *draw,
    }
    else {
       /* Non-indexed prims (draw_arrays).
-       * Primitive restart should have been handled in the state tracker.
+       * Primitive restart should have been handled in gallium frontends.
        */
       draw_pt_arrays(draw, prim, start, count);
    }
@@ -556,7 +556,7 @@ draw_vbo(struct draw_context *draw,
 
    /*
     * TODO: We could use draw->pt.max_index to further narrow
-    * the min_index/max_index hints given by the state tracker.
+    * the min_index/max_index hints given by gallium frontends.
     */
 
    for (instance = 0; instance < info->instance_count; instance++) {

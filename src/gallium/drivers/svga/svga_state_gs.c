@@ -109,33 +109,44 @@ make_gs_key(struct svga_context *svga, struct svga_compile_key *key)
    /*
     * SVGA_NEW_TEXTURE_BINDING | SVGA_NEW_SAMPLER
     */
-   svga_init_shader_key_common(svga, PIPE_SHADER_GEOMETRY, key);
+   svga_init_shader_key_common(svga, PIPE_SHADER_GEOMETRY, &gs->base, key);
 
    memcpy(key->generic_remap_table, gs->generic_remap_table,
           sizeof(gs->generic_remap_table));
 
    key->gs.vs_generic_outputs = svga->curr.vs->generic_outputs;
 
-   key->gs.need_prescale = svga->state.hw_clear.prescale.enabled;
+   key->gs.need_prescale = svga->state.hw_clear.prescale[0].enabled;
 
    key->gs.writes_psize = gs->base.info.writes_psize;
    key->gs.wide_point = gs->wide_point;
+   key->gs.writes_viewport_index = gs->base.info.writes_viewport_index;
+   if (key->gs.writes_viewport_index) {
+      key->gs.num_prescale = svga->state.hw_clear.num_prescale;
+   } else {
+      key->gs.num_prescale = 1;
+   }
    key->sprite_coord_enable = svga->curr.rast->templ.sprite_coord_enable;
    key->sprite_origin_lower_left = (svga->curr.rast->templ.sprite_coord_mode
                                     == PIPE_SPRITE_COORD_LOWER_LEFT);
 
    /* SVGA_NEW_RAST */
    key->clip_plane_enable = svga->curr.rast->templ.clip_plane_enable;
+
+   /* Mark this as the last shader in the vertex processing stage */
+   key->last_vertex_stage = 1;
 }
 
 
 static enum pipe_error
-emit_hw_gs(struct svga_context *svga, unsigned dirty)
+emit_hw_gs(struct svga_context *svga, uint64_t dirty)
 {
    struct svga_shader_variant *variant;
    struct svga_geometry_shader *gs = svga->curr.gs;
    enum pipe_error ret = PIPE_OK;
    struct svga_compile_key key;
+
+   assert(svga_have_vgpu10(svga));
 
    SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_EMITGS);
 

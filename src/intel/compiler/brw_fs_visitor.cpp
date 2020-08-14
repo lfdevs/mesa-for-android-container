@@ -242,6 +242,9 @@ brw_rnd_mode_from_nir(unsigned mode, unsigned *mask)
    if (mode == FLOAT_CONTROLS_DEFAULT_FLOAT_CONTROL_MODE)
       *mask |= BRW_CR0_FP_MODE_MASK;
 
+   if (*mask != 0)
+      assert((*mask & brw_mode) == brw_mode);
+
    return brw_mode;
 }
 
@@ -253,8 +256,11 @@ fs_visitor::emit_shader_float_controls_execution_mode()
       return;
 
    fs_builder abld = bld.annotate("shader floats control execution mode");
-   unsigned mask = 0;
-   unsigned mode = brw_rnd_mode_from_nir(execution_mode, &mask);
+   unsigned mask, mode = brw_rnd_mode_from_nir(execution_mode, &mask);
+
+   if (mask == 0)
+      return;
+
    abld.emit(SHADER_OPCODE_FLOAT_CONTROL_MODE, bld.null_reg_ud(),
              brw_imm_d(mode), brw_imm_d(mask));
 }

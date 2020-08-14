@@ -94,6 +94,11 @@ struct svga_buffer
    boolean user;
 
    /**
+    * Whether swbuf is used for this buffer.
+    */
+   boolean use_swbuf;
+
+   /**
     * Creation key for the host surface handle.
     *
     * This structure describes all the host surface characteristics so that it
@@ -323,16 +328,10 @@ svga_buffer_hw_storage_unmap(struct svga_context *svga,
    if (sws->have_gb_objects) {
       struct svga_winsys_context *swc = svga->swc;
       boolean rebind;
+
       swc->surface_unmap(swc, sbuf->handle, &rebind);
       if (rebind) {
-         enum pipe_error ret;
-         ret = SVGA3D_BindGBSurface(swc, sbuf->handle);
-         if (ret != PIPE_OK) {
-            /* flush and retry */
-            svga_context_flush(svga, NULL);
-            ret = SVGA3D_BindGBSurface(swc, sbuf->handle);
-            assert(ret == PIPE_OK);
-         }
+         SVGA_RETRY(svga, SVGA3D_BindGBSurface(swc, sbuf->handle));
       }
    } else
       sws->buffer_unmap(sws, sbuf->hwbuf);

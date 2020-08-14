@@ -65,6 +65,7 @@
 #define VMW_MAX_SURF_MEM_FACTOR 2
 
 
+
 struct vmw_buffer_relocation
 {
    struct pb_buffer *buffer;
@@ -701,20 +702,19 @@ vmw_svga_winsys_vgpu10_shader_create(struct svga_winsys_context *swc,
                                      uint32 shaderId,
                                      SVGA3dShaderType shaderType,
                                      const uint32 *bytecode,
-                                     uint32 bytecodeLen)
+                                     uint32 bytecodeLen,
+                                     const SVGA3dDXShaderSignatureHeader *sgnInfo,
+                                     uint32 sgnLen)
 {
    struct vmw_svga_winsys_context *vswc = vmw_svga_winsys_context(swc);
    struct vmw_svga_winsys_shader *shader;
-   struct svga_winsys_gb_shader *gb_shader =
-      vmw_svga_winsys_shader_create(&vswc->vws->base, shaderType, bytecode,
-                                    bytecodeLen);
-   if (!gb_shader)
+   shader = vmw_svga_shader_create(&vswc->vws->base, shaderType, bytecode,
+                                   bytecodeLen, sgnInfo, sgnLen);
+   if (!shader)
       return NULL;
 
-   shader = vmw_svga_winsys_shader(gb_shader);
    shader->shid = shaderId;
-
-   return gb_shader;
+   return svga_winsys_shader(shader);
 }
 
 /**

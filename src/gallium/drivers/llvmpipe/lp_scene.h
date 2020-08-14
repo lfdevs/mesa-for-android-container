@@ -60,7 +60,7 @@ struct lp_rast_state;
 
 /* Scene temporary storage is clamped to this size:
  */
-#define LP_SCENE_MAX_SIZE (9*1024*1024)
+#define LP_SCENE_MAX_SIZE (36*1024*1024)
 
 /* The maximum amount of texture storage referenced by a scene is
  * clamped to this size:
@@ -143,10 +143,18 @@ struct lp_scene {
       unsigned stride;
       unsigned layer_stride;
       unsigned format_bytes;
+      unsigned sample_stride;
+      unsigned nr_samples;
    } zsbuf, cbufs[PIPE_MAX_COLOR_BUFS];
 
    /* The amount of layers in the fb (minimum of all attachments) */
    unsigned fb_max_layer;
+
+   /* fixed point sample positions. */
+   int32_t fixed_sample_pos[LP_MAX_SAMPLES][2];
+
+   /* max samples for bound framebuffer */
+   unsigned fb_max_samples;
 
    /** the framebuffer to render the scene into */
    struct pipe_framebuffer_state fb;

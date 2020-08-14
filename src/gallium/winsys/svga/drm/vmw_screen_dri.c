@@ -36,7 +36,7 @@
 #include "svga_drm_public.h"
 #include "svga3d_surfacedefs.h"
 
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 
 #include "vmwgfx_drm.h"
 #include <xf86drm.h>

@@ -29,7 +29,10 @@
 #include "util/u_simple_shaders.h"
 #include "tgsi/tgsi_ureg.h"
 #include "tgsi/tgsi_point_sprite.h"
+#include "tgsi/tgsi_dynamic_indexing.h"
+#include "tgsi/tgsi_vpos.h"
 #include "tgsi/tgsi_dump.h"
+#include "tgsi/tgsi_info.h"
 
 #include "svga_context.h"
 #include "svga_shader.h"
@@ -46,6 +49,171 @@ bind_gs_state(struct svga_context *svga,
 {
    svga->curr.gs = gs;
    svga->dirty |= SVGA_NEW_GS;
+}
+
+
+static void
+insert_at_head(struct svga_shader *head, struct svga_shader *shader)
+{
+   shader->parent = head;
+   shader->next = head->next;
+   head->next = shader;
+}
+
+
+/**
+ * Bind shader
+ */
+static void
+bind_shader(struct svga_context *svga,
+            const enum pipe_shader_type shader_type,
+            struct svga_shader *shader)
+{
+   switch (shader_type) {
+   case PIPE_SHADER_VERTEX:
+      svga->pipe.bind_vs_state(&svga->pipe, shader);
+      break;
+   case PIPE_SHADER_FRAGMENT:
+      /**
+       * Avoid pipe->bind_fs_state call because it goes through aapoint
+       * layer. We loose linked list of all transformed shaders if aapoint
+       * is used.
+       */
+      svga_bind_fs_state(&svga->pipe, shader);
+      break;
+   case PIPE_SHADER_GEOMETRY:
+      svga->pipe.bind_gs_state(&svga->pipe, shader);
+      break;
+   case PIPE_SHADER_TESS_CTRL:
+      svga->pipe.bind_tcs_state(&svga->pipe, shader);
+      break;
+   case PIPE_SHADER_TESS_EVAL:
+      svga->pipe.bind_tes_state(&svga->pipe, shader);
+      break;
+   default:
+      return;
+   }
+}
+
+
+
+/**
+ * Create shader
+ */
+static void *
+create_shader(struct svga_context *svga,
+              const enum pipe_shader_type shader_type,
+              struct pipe_shader_state *state)
+{
+   switch (shader_type) {
+   case PIPE_SHADER_VERTEX:
+      return svga->pipe.create_vs_state(&svga->pipe, state);
+   case PIPE_SHADER_FRAGMENT:
+      /**
+       * Avoid pipe->create_fs_state call because it goes through aapoint
+       * layer. We loose linked list of all transformed shaders if aapoint
+       * is used.
+       */
+      return svga_create_fs_state(&svga->pipe, state);
+   case PIPE_SHADER_GEOMETRY:
+      return svga->pipe.create_gs_state(&svga->pipe, state);
+   case PIPE_SHADER_TESS_CTRL:
+      return svga->pipe.create_tcs_state(&svga->pipe, state);
+   case PIPE_SHADER_TESS_EVAL:
+      return svga->pipe.create_tes_state(&svga->pipe, state);
+   default:
+      return NULL;
+   }
+}
+
+
+static void
+write_vpos(struct svga_context *svga,
+           struct svga_shader *shader)
+{
+   struct svga_token_key key;
+   boolean use_existing = FALSE;
+   struct svga_shader *transform_shader;
+   const struct tgsi_shader_info *info = &shader->info;
+
+   /* Create a token key */
+   memset(&key, 0, sizeof key);
+   key.vs.write_position = 1;
+
+   if (shader->next) {
+      transform_shader = svga_search_shader_token_key(shader->next, &key);
+      if (transform_shader) {
+         use_existing = TRUE;
+      }
+   }
+
+   if (!use_existing) {
+      struct pipe_shader_state state;
+      struct tgsi_token *new_tokens = NULL;
+
+      new_tokens = tgsi_write_vpos(shader->tokens,
+                                   info->immediate_count);
+      if (!new_tokens)
+         return;
+
+      pipe_shader_state_from_tgsi(&state, new_tokens);
+
+      transform_shader = create_shader(svga, info->processor, &state);
+      insert_at_head(shader, transform_shader);
+      FREE(new_tokens);
+   }
+   transform_shader->token_key = key;
+   bind_shader(svga, info->processor, transform_shader);
+}
+
+
+/**
+ * transform_dynamic_indexing searches shader variant list to see if
+ * we have transformed shader for dynamic indexing and reuse/bind it. If we
+ * don't have transformed shader, then it will create new shader from which
+ * dynamic indexing will be removed. It will also be added to the shader
+ * variant list and this new shader will be bind to current svga state.
+ */
+static void
+transform_dynamic_indexing(struct svga_context *svga,
+                           struct svga_shader *shader)
+{
+   struct svga_token_key key;
+   boolean use_existing = FALSE;
+   struct svga_shader *transform_shader;
+   const struct tgsi_shader_info *info = &shader->info;
+
+   /* Create a token key */
+   memset(&key, 0, sizeof key);
+   key.dynamic_indexing = 1;
+
+   if (shader->next) {
+      transform_shader = svga_search_shader_token_key(shader->next, &key);
+      if (transform_shader) {
+         use_existing = TRUE;
+      }
+   }
+
+   struct tgsi_token *new_tokens = NULL;
+
+   if (!use_existing) {
+      struct pipe_shader_state state;
+      new_tokens = tgsi_remove_dynamic_indexing(shader->tokens,
+                                                info->const_buffers_declared,
+                                                info->samplers_declared,
+                                                info->immediate_count);
+      if (!new_tokens)
+         return;
+
+      pipe_shader_state_from_tgsi(&state, new_tokens);
+
+      transform_shader = create_shader(svga, info->processor, &state);
+      insert_at_head(shader, transform_shader);
+   }
+   transform_shader->token_key = key;
+   bind_shader(svga, info->processor, transform_shader);
+   if (new_tokens)
+      FREE(new_tokens);
 }
 
 
@@ -233,18 +401,49 @@ add_point_sprite_shader(struct svga_context *svga)
    return &new_gs->base;
 }
 
+
+static boolean
+has_dynamic_indexing(const struct tgsi_shader_info *info)
+{
+   return (info->dim_indirect_files & (1u << TGSI_FILE_CONSTANT)) ||
+      (info->indirect_files & (1u << TGSI_FILE_SAMPLER));
+}
+
+
 /* update_tgsi_transform provides a hook to transform a shader if needed.
  */
 static enum pipe_error
-update_tgsi_transform(struct svga_context *svga, unsigned dirty)
+update_tgsi_transform(struct svga_context *svga, uint64_t dirty)
 {
    struct svga_geometry_shader *gs = svga->curr.user_gs;   /* current gs */
    struct svga_vertex_shader *vs = svga->curr.vs;     /* currently bound vs */
+   struct svga_fragment_shader *fs = svga->curr.fs;   /* currently bound fs */
+   struct svga_tcs_shader *tcs = svga->curr.tcs;      /* currently bound tcs */
+   struct svga_tes_shader *tes = svga->curr.tes;      /* currently bound tes */
    struct svga_shader *orig_gs;                       /* original gs */
    struct svga_shader *new_gs;                        /* new gs */
 
-   if (!svga_have_vgpu10(svga))
-      return PIPE_OK;
+   assert(svga_have_vgpu10(svga));
+
+   if (vs->base.info.num_outputs == 0) {
+      write_vpos(svga, &vs->base);
+   }
+
+   if (vs && has_dynamic_indexing(&vs->base.info)) {
+      transform_dynamic_indexing(svga, &vs->base);
+   }
+   if (fs && has_dynamic_indexing(&fs->base.info)) {
+      transform_dynamic_indexing(svga, &fs->base);
+   }
+   if (gs && has_dynamic_indexing(&gs->base.info)) {
+      transform_dynamic_indexing(svga, &gs->base);
+   }
+   if (tcs && has_dynamic_indexing(&tcs->base.info)) {
+      transform_dynamic_indexing(svga, &tcs->base);
+   }
+   if (tes && has_dynamic_indexing(&tes->base.info)) {
+      transform_dynamic_indexing(svga, &tes->base);
+   }
 
    if (svga->curr.reduced_prim == PIPE_PRIM_POINTS) {
       /* If the current prim type is POINTS and the current geometry shader

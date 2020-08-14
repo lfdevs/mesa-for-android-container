@@ -34,7 +34,68 @@
 #include "vmw_context.h"
 #include "pipebuffer/pb_bufmgr.h"
 
+void
+vmw_svga_winsys_surface_init(struct svga_winsys_screen *sws,
+                             struct svga_winsys_surface *srf,
+                             unsigned surf_size, SVGA3dSurfaceAllFlags flags)
+{
+   struct vmw_svga_winsys_surface *vsrf = vmw_svga_winsys_surface(srf);
+   void *data = NULL;
+   struct pb_buffer *pb_buf;
+   uint32_t pb_flags;
+   struct vmw_winsys_screen *vws = vsrf->screen;
+   pb_flags = PIPE_TRANSFER_READ_WRITE | PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE;
 
+   struct pb_manager *provider;
+   struct pb_desc desc;
+
+   data = vmw_svga_winsys_buffer_map(&vws->base, vsrf->buf,
+                                     PIPE_TRANSFER_DONTBLOCK | pb_flags);
+   if (data)
+      goto out_unlock;
+
+   provider = vws->pools.mob_fenced;
+   memset(&desc, 0, sizeof(desc));
+   desc.alignment = 4096;
+   pb_buf = provider->create_buffer(provider, vsrf->size, &desc);
+   if (pb_buf != NULL) {
+      struct svga_winsys_buffer *vbuf =
+         vmw_svga_winsys_buffer_wrap(pb_buf);
+
+      data = vmw_svga_winsys_buffer_map(&vws->base, vbuf, pb_flags);
+      if (data) {
+         if (vsrf->buf) {
+            vmw_svga_winsys_buffer_destroy(&vws->base, vsrf->buf);
+            vsrf->buf = vbuf;
+            goto out_unlock;
+         } else
+            vmw_svga_winsys_buffer_destroy(&vws->base, vbuf);
+      }
+   }
+
+   data = vmw_svga_winsys_buffer_map(&vws->base, vsrf->buf, pb_flags);
+   if (data == NULL)
+      goto out_unlock;
+
+out_unlock:
+   mtx_unlock(&vsrf->mutex);
+
+   if (data)
+   {
+      if (flags & SVGA3D_SURFACE_BIND_STREAM_OUTPUT) {
+         memset(data, 0, surf_size + sizeof(SVGA3dDXSOState));
+      }
+      else {
+         memset(data, 0, surf_size);
+      }
+   }
+   mtx_lock(&vsrf->mutex);
+   vmw_svga_winsys_buffer_unmap(&vsrf->screen->base, vsrf->buf);
+   mtx_unlock(&vsrf->mutex);
+}
+
+ 
+ 
 void *
 vmw_svga_winsys_surface_map(struct svga_winsys_context *swc,
                             struct svga_winsys_surface *srf,

@@ -154,6 +154,26 @@ coro_free(char *ptr)
    os_free_aligned(ptr);
 }
 
+void lp_build_coro_add_malloc_hooks(struct gallivm_state *gallivm)
+{
+   assert(gallivm->engine);
+
+   assert(gallivm->coro_malloc_hook);
+   assert(gallivm->coro_free_hook);
+   LLVMAddGlobalMapping(gallivm->engine, gallivm->coro_malloc_hook, coro_malloc);
+   LLVMAddGlobalMapping(gallivm->engine, gallivm->coro_free_hook, coro_free);
+}
+
+void lp_build_coro_declare_malloc_hooks(struct gallivm_state *gallivm)
+{
+   LLVMTypeRef int32_type = LLVMInt32TypeInContext(gallivm->context);
+   LLVMTypeRef mem_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
+   LLVMTypeRef malloc_type = LLVMFunctionType(mem_ptr_type, &int32_type, 1, 0);
+   gallivm->coro_malloc_hook = LLVMAddFunction(gallivm->module, "coro_malloc", malloc_type);
+   LLVMTypeRef free_type = LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context), &mem_ptr_type, 1, 0);
+   gallivm->coro_free_hook = LLVMAddFunction(gallivm->module, "coro_free", free_type);
+}
+
 LLVMValueRef lp_build_coro_begin_alloc_mem(struct gallivm_state *gallivm, LLVMValueRef coro_id)
 {
    LLVMValueRef do_alloc = lp_build_coro_alloc(gallivm, coro_id);
@@ -163,13 +183,9 @@ LLVMValueRef lp_build_coro_begin_alloc_mem(struct gallivm_state *gallivm, LLVMVa
    lp_build_if(&if_state_coro, gallivm, do_alloc);
    LLVMValueRef coro_size = lp_build_coro_size(gallivm);
    LLVMValueRef alloc_mem;
-   LLVMTypeRef int32_type = LLVMInt32TypeInContext(gallivm->context);
 
-   LLVMTypeRef malloc_type = LLVMFunctionType(mem_ptr_type, &int32_type, 1, 0);
-
-   LLVMValueRef func_malloc = lp_build_const_int_pointer(gallivm, func_to_pointer((func_pointer)coro_malloc));
-   func_malloc = LLVMBuildBitCast(gallivm->builder, func_malloc, LLVMPointerType(malloc_type, 0), "coro_malloc");
-   alloc_mem = LLVMBuildCall(gallivm->builder, func_malloc, &coro_size, 1, "");
+   assert(gallivm->coro_malloc_hook);
+   alloc_mem = LLVMBuildCall(gallivm->builder, gallivm->coro_malloc_hook, &coro_size, 1, "");
 
    LLVMBuildStore(gallivm->builder, alloc_mem, alloc_mem_store);
    lp_build_endif(&if_state_coro);
@@ -181,11 +197,9 @@ LLVMValueRef lp_build_coro_begin_alloc_mem(struct gallivm_state *gallivm, LLVMVa
 void lp_build_coro_free_mem(struct gallivm_state *gallivm, LLVMValueRef coro_id, LLVMValueRef coro_hdl)
 {
    LLVMValueRef alloc_mem = lp_build_coro_free(gallivm, coro_id, coro_hdl);
-   LLVMTypeRef ptr_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
-   LLVMTypeRef free_type = LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context), &ptr_type, 1, 0);
-   LLVMValueRef func_free = lp_build_const_int_pointer(gallivm, func_to_pointer((func_pointer)coro_free));
-   func_free = LLVMBuildBitCast(gallivm->builder, func_free, LLVMPointerType(free_type, 0), "coro_free");
-   alloc_mem = LLVMBuildCall(gallivm->builder, func_free, &alloc_mem, 1, "");
+
+   assert(gallivm->coro_malloc_hook);
+   alloc_mem = LLVMBuildCall(gallivm->builder, gallivm->coro_free_hook, &alloc_mem, 1, "");
 }
 
 void lp_build_coro_suspend_switch(struct gallivm_state *gallivm, const struct lp_build_coro_suspend_info *sus_info,

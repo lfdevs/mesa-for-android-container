@@ -39,6 +39,7 @@
 #include <zlib.h>
 
 #include "common/gen_decoder.h"
+#include "dev/gen_debug.h"
 #include "util/macros.h"
 
 #define CSI "\e["
@@ -633,6 +634,22 @@ read_data_file(FILE *file)
       }
       sections[s].data_offset = ring_head;
       sections[s].dword_count = (ring_tail - ring_head) / sizeof(uint32_t);
+   }
+
+   for (int s = 0; s < num_sections; s++) {
+      if (sections[s].dword_count * 4 > intel_debug_identifier_size() &&
+          memcmp(sections[s].data, intel_debug_identifier(),
+                 intel_debug_identifier_size()) == 0) {
+         const struct gen_debug_block_driver *driver_desc =
+            intel_debug_get_identifier_block(sections[s].data,
+                                             sections[s].dword_count * 4,
+                                             GEN_DEBUG_BLOCK_TYPE_DRIVER);
+         if (driver_desc) {
+            printf("Driver identifier: %s\n",
+                   (const char *) driver_desc->description);
+         }
+         break;
+      }
    }
 
    enum gen_batch_decode_flags batch_flags = 0;

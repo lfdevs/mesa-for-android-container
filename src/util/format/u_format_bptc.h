@@ -45,7 +45,7 @@ util_format_bptc_rgba_unorm_pack_rgba_8unorm(uint8_t *dst_row, unsigned dst_stri
                                              const uint8_t *src_row, unsigned src_stride,
                                              unsigned width, unsigned height);
 void
-util_format_bptc_rgba_unorm_unpack_rgba_float(float *dst_row, unsigned dst_stride,
+util_format_bptc_rgba_unorm_unpack_rgba_float(void *dst_row, unsigned dst_stride,
                                               const uint8_t *src_row, unsigned src_stride,
                                               unsigned width, unsigned height);
 void
@@ -65,7 +65,7 @@ util_format_bptc_srgba_pack_rgba_8unorm(uint8_t *dst_row, unsigned dst_stride,
                                         const uint8_t *src_row, unsigned src_stride,
                                         unsigned width, unsigned height);
 void
-util_format_bptc_srgba_unpack_rgba_float(float *dst_row, unsigned dst_stride,
+util_format_bptc_srgba_unpack_rgba_float(void *dst_row, unsigned dst_stride,
                                          const uint8_t *src_row, unsigned src_stride,
                                          unsigned width, unsigned height);
 void
@@ -85,7 +85,7 @@ util_format_bptc_rgb_float_pack_rgba_8unorm(uint8_t *dst_row, unsigned dst_strid
                                             const uint8_t *src_row, unsigned src_stride,
                                             unsigned width, unsigned height);
 void
-util_format_bptc_rgb_float_unpack_rgba_float(float *dst_row, unsigned dst_stride,
+util_format_bptc_rgb_float_unpack_rgba_float(void *dst_row, unsigned dst_stride,
                                              const uint8_t *src_row, unsigned src_stride,
                                              unsigned width, unsigned height);
 void
@@ -105,7 +105,7 @@ util_format_bptc_rgb_ufloat_pack_rgba_8unorm(uint8_t *dst_row, unsigned dst_stri
                                              const uint8_t *src_row, unsigned src_stride,
                                              unsigned width, unsigned height);
 void
-util_format_bptc_rgb_ufloat_unpack_rgba_float(float *dst_row, unsigned dst_stride,
+util_format_bptc_rgb_ufloat_unpack_rgba_float(void *dst_row, unsigned dst_stride,
                                               const uint8_t *src_row, unsigned src_stride,
                                               unsigned width, unsigned height);
 void

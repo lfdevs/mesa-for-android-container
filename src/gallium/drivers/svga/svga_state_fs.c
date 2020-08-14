@@ -196,8 +196,10 @@ make_fs_key(const struct svga_context *svga,
     */
    if (svga->curr.gs) {
       key->fs.gs_generic_outputs = svga->curr.gs->generic_outputs;
+      key->fs.layer_to_zero = !svga->curr.gs->base.info.writes_layer;
    } else {
       key->fs.vs_generic_outputs = svga->curr.vs->generic_outputs;
+      key->fs.layer_to_zero = 1;
    }
 
    /* Only need fragment shader fixup for twoside lighting if doing
@@ -208,16 +210,34 @@ make_fs_key(const struct svga_context *svga,
    if (!svga->state.sw.need_swtnl) {
       /* SVGA_NEW_RAST, SVGA_NEW_REDUCED_PRIMITIVE
        */
+      enum pipe_prim_type prim_mode;
+      struct svga_shader *shader;
+
+      /* Find the last shader in the vertex pipeline and the output primitive mode
+       * from that shader.
+       */
+      if (svga->curr.tes) {
+         shader = &svga->curr.tes->base;
+         prim_mode = shader->info.properties[TGSI_PROPERTY_TES_PRIM_MODE];
+      } else if (svga->curr.gs) {
+         shader = &svga->curr.gs->base;
+         prim_mode = shader->info.properties[TGSI_PROPERTY_GS_OUTPUT_PRIM];
+      } else {
+         shader = &svga->curr.vs->base;
+         prim_mode = svga->curr.reduced_prim;
+      }
+
       key->fs.light_twoside = svga->curr.rast->templ.light_twoside;
       key->fs.front_ccw = svga->curr.rast->templ.front_ccw;
       key->fs.pstipple = (svga->curr.rast->templ.poly_stipple_enable &&
-                          svga->curr.reduced_prim == PIPE_PRIM_TRIANGLES);
+                          prim_mode == PIPE_PRIM_TRIANGLES);
+
       key->fs.aa_point = (svga->curr.rast->templ.point_smooth &&
-                          svga->curr.reduced_prim == PIPE_PRIM_POINTS &&
+                          prim_mode == PIPE_PRIM_POINTS &&
                           (svga->curr.rast->pointsize > 1.0 ||
-                           svga->curr.vs->base.info.writes_psize));
-      if (key->fs.aa_point) {
-         assert(svga->curr.gs != NULL);
+                           shader->info.writes_psize));
+
+      if (key->fs.aa_point && svga->curr.gs) {
          assert(svga->curr.gs->aa_point_coord_index != -1);
          key->fs.aa_point_coord_index = svga->curr.gs->aa_point_coord_index;
       }
@@ -276,7 +296,7 @@ make_fs_key(const struct svga_context *svga,
     *
     * SVGA_NEW_TEXTURE_BINDING | SVGA_NEW_SAMPLER
     */
-   svga_init_shader_key_common(svga, shader, key);
+   svga_init_shader_key_common(svga, shader, &fs->base, key);
 
    for (i = 0; i < svga->curr.num_samplers[shader]; ++i) {
       struct pipe_sampler_view *view = svga->curr.sampler_views[shader][i];
@@ -316,15 +336,6 @@ make_fs_key(const struct svga_context *svga,
                else if (sampler->compare_func != PIPE_FUNC_LEQUAL) {
                   debug_warn_once("Unsupported shadow compare function");
                }
-            }
-            else {
-               /* For other texture formats, just use the compare func/mode
-                * as-is.  Should be no-ops for color textures.  For depth
-                * textures, we do not get automatic depth compare.  We have
-                * to do it ourselves in the shader.  And we don't get PCF.
-                */
-               key->tex[i].compare_mode = sampler->compare_mode;
-               key->tex[i].compare_func = sampler->compare_func;
             }
          }
       }
@@ -401,22 +412,26 @@ svga_reemit_fs_bindings(struct svga_context *svga)
 
 
 static enum pipe_error
-emit_hw_fs(struct svga_context *svga, unsigned dirty)
+emit_hw_fs(struct svga_context *svga, uint64_t dirty)
 {
    struct svga_shader_variant *variant = NULL;
    enum pipe_error ret = PIPE_OK;
    struct svga_fragment_shader *fs = svga->curr.fs;
    struct svga_compile_key key;
+   struct svga_shader *prevShader = NULL;   /* shader in the previous stage */
 
    SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_EMITFS);
+
+   prevShader = svga->curr.gs ?
+      &svga->curr.gs->base : (svga->curr.tes ?
+      &svga->curr.tes->base : &svga->curr.vs->base);
 
    /* Disable rasterization if rasterizer_discard flag is set or
     * vs/gs does not output position.
     */
    svga->disable_rasterizer =
       svga->curr.rast->templ.rasterizer_discard ||
-      (svga->curr.gs && !svga->curr.gs->base.info.writes_position) ||
-      (!svga->curr.gs && !svga->curr.vs->base.info.writes_position);
+      !prevShader->info.writes_position;
 
    /* Set FS to NULL when rasterization is to be disabled */
    if (svga->disable_rasterizer) {

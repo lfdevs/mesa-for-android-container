@@ -148,6 +148,7 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_TEXTURE_MULTISAMPLE:
         case PIPE_CAP_TEXTURE_SWIZZLE:
         case PIPE_CAP_TEXTURE_BARRIER:
+        case PIPE_CAP_TGSI_TEXCOORD:
                 return 1;
 
         case PIPE_CAP_NATIVE_FENCE_FD:
@@ -277,6 +278,9 @@ vc4_screen_get_shader_param(struct pipe_screen *pscreen,
                 return 1;
         case PIPE_SHADER_CAP_INT64_ATOMICS:
         case PIPE_SHADER_CAP_FP16:
+        case PIPE_SHADER_CAP_FP16_DERIVATIVES:
+        case PIPE_SHADER_CAP_INT16:
+        case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
         case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
         case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
         case PIPE_SHADER_CAP_TGSI_LDEXP_SUPPORTED:

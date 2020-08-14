@@ -72,6 +72,7 @@ struct cmd_bin;
 
 struct lp_rasterizer_task;
 
+extern const float lp_sample_pos_4x[4][2];
 
 /**
  * Rasterization state.
@@ -303,7 +304,18 @@ lp_rast_arg_null( void )
 #define LP_RAST_OP_TRIANGLE_32_3_16  0x1b
 #define LP_RAST_OP_TRIANGLE_32_4_16  0x1c
 
-#define LP_RAST_OP_MAX               0x1d
+#define LP_RAST_OP_MS_TRIANGLE_1     0x1d
+#define LP_RAST_OP_MS_TRIANGLE_2     0x1e
+#define LP_RAST_OP_MS_TRIANGLE_3     0x1f
+#define LP_RAST_OP_MS_TRIANGLE_4     0x20
+#define LP_RAST_OP_MS_TRIANGLE_5     0x21
+#define LP_RAST_OP_MS_TRIANGLE_6     0x22
+#define LP_RAST_OP_MS_TRIANGLE_7     0x23
+#define LP_RAST_OP_MS_TRIANGLE_8     0x24
+#define LP_RAST_OP_MS_TRIANGLE_3_4   0x25
+#define LP_RAST_OP_MS_TRIANGLE_3_16  0x26
+#define LP_RAST_OP_MS_TRIANGLE_4_16  0x27
+#define LP_RAST_OP_MAX               0x28
 #define LP_RAST_OP_MASK              0xff
 
 void

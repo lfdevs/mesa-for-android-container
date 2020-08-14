@@ -89,9 +89,6 @@ public:
    virtual void invalidate_analysis(brw::analysis_dependency_class c);
 };
 
-bool brw_texture_offset(const nir_tex_instr *tex, unsigned src,
-                        uint32_t *offset_bits);
-
 #else
 struct backend_shader;
 #endif /* __cplusplus */
@@ -127,6 +124,9 @@ brw_get_scratch_size(int size)
 {
    return MAX2(1024, util_next_power_of_two(size));
 }
+
+bool brw_texture_offset(const nir_tex_instr *tex, unsigned src,
+                        uint32_t *offset_bits);
 
 /**
  * Scratch data used when compiling a GLSL geometry shader.

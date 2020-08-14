@@ -31,6 +31,7 @@
 #include "etnaviv_context.h"
 #include "etnaviv_screen.h"
 
+#include "util/os_file.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 
@@ -79,7 +80,7 @@ etna_create_fence_fd(struct pipe_context *pctx,
                      enum pipe_fd_type type)
 {
    assert(type == PIPE_FD_TYPE_NATIVE_SYNC);
-   *pfence = etna_fence_create(pctx, dup(fd));
+   *pfence = etna_fence_create(pctx, os_dupfd_cloexec(fd));
 }
 
 void
@@ -96,7 +97,7 @@ static int
 etna_screen_fence_get_fd(struct pipe_screen *pscreen,
                          struct pipe_fence_handle *pfence)
 {
-   return dup(pfence->fence_fd);
+   return os_dupfd_cloexec(pfence->fence_fd);
 }
 
 struct pipe_fence_handle *

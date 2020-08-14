@@ -38,7 +38,8 @@ protected:
    nir_intrinsic_instr *get_intrinsic(nir_intrinsic_op intrinsic,
                                       unsigned index);
 
-   bool run_vectorizer(nir_variable_mode modes, bool cse=false);
+   bool run_vectorizer(nir_variable_mode modes, bool cse=false,
+                       nir_variable_mode robust_modes = (nir_variable_mode)0);
 
    nir_ssa_def *get_resource(uint32_t binding, bool ssbo);
 
@@ -134,11 +135,13 @@ nir_load_store_vectorize_test::get_intrinsic(nir_intrinsic_op intrinsic,
 }
 
 bool
-nir_load_store_vectorize_test::run_vectorizer(nir_variable_mode modes, bool cse)
+nir_load_store_vectorize_test::run_vectorizer(nir_variable_mode modes,
+                                              bool cse,
+                                              nir_variable_mode robust_modes)
 {
    if (modes & nir_var_mem_shared)
       nir_lower_vars_to_explicit_types(b->shader, nir_var_mem_shared, shared_type_info);
-   bool progress = nir_opt_load_store_vectorize(b->shader, modes, mem_vectorize_callback);
+   bool progress = nir_opt_load_store_vectorize(b->shader, modes, mem_vectorize_callback, robust_modes);
    if (progress) {
       nir_validate_shader(b->shader, NULL);
       if (cse)
@@ -899,23 +902,19 @@ TEST_F(nir_load_store_vectorize_test, ssbo_load_adjacent_32_32_64_64)
    ASSERT_EQ(loads[0x3]->src.ssa, &load->dest.ssa);
    ASSERT_EQ(loads[0x3]->swizzle[0], 2);
 
-   /* pack_64_2x32(unpack_64_2x32()) is created because the 32-bit and first
-    * 64-bit loads are combined before the second 64-bit load is even considered. */
    nir_ssa_def *val = loads[0x2]->src.ssa;
    ASSERT_EQ(val->bit_size, 64);
    ASSERT_EQ(val->num_components, 1);
-   ASSERT_TRUE(test_alu(val->parent_instr, nir_op_pack_64_2x32));
-   nir_alu_instr *pack = nir_instr_as_alu(val->parent_instr);
-   ASSERT_TRUE(test_alu(pack->src[0].src.ssa->parent_instr, nir_op_unpack_64_2x32));
-   nir_alu_instr *unpack = nir_instr_as_alu(pack->src[0].src.ssa->parent_instr);
-   ASSERT_EQ(unpack->src[0].src.ssa, &load->dest.ssa);
-   ASSERT_EQ(unpack->src[0].swizzle[0], 1);
+   ASSERT_TRUE(test_alu(val->parent_instr, nir_op_mov));
+   nir_alu_instr *mov = nir_instr_as_alu(val->parent_instr);
+   ASSERT_EQ(mov->src[0].src.ssa, &load->dest.ssa);
+   ASSERT_EQ(mov->src[0].swizzle[0], 1);
 
    val = loads[0x1]->src.ssa;
    ASSERT_EQ(val->bit_size, 32);
    ASSERT_EQ(val->num_components, 2);
    ASSERT_TRUE(test_alu(val->parent_instr, nir_op_unpack_64_2x32));
-   unpack = nir_instr_as_alu(val->parent_instr);
+   nir_alu_instr *unpack = nir_instr_as_alu(val->parent_instr);
    ASSERT_EQ(unpack->src[0].src.ssa, &load->dest.ssa);
    ASSERT_EQ(unpack->src[0].swizzle[0], 0);
 }
@@ -1770,6 +1769,19 @@ TEST_F(nir_load_store_vectorize_test, ssbo_load_distant_indirect_64bit)
    ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ssbo), 2);
 
    EXPECT_TRUE(run_vectorizer(nir_var_mem_ssbo));
+
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ssbo), 2);
+}
+
+TEST_F(nir_load_store_vectorize_test, ssbo_offset_overflow_robust)
+{
+   create_load(nir_var_mem_ssbo, 0, 0xfffffffc, 0x1);
+   create_load(nir_var_mem_ssbo, 0, 0x0, 0x2);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ssbo), 2);
+
+   EXPECT_FALSE(run_vectorizer(nir_var_mem_ssbo, false, nir_var_mem_ssbo));
 
    ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ssbo), 2);
 }

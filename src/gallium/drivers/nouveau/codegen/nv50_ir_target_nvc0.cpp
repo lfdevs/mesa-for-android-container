@@ -30,7 +30,7 @@ Target *getTargetNVC0(unsigned int chipset)
 }
 
 TargetNVC0::TargetNVC0(unsigned int card) :
-   Target(card < 0x110, false, card >= 0xe4)
+   Target(card < 0x110, false, card >= 0xe4 && card < 0x140)
 {
    chipset = card;
    initOpInfo();
@@ -85,7 +85,7 @@ TargetNVC0::getBuiltinOffset(int builtin) const
    }
 }
 
-struct opProperties
+struct nvc0_opProperties
 {
    operation op;
    unsigned int mNeg   : 4;
@@ -96,7 +96,7 @@ struct opProperties
    unsigned int fImmd  : 4; // last bit indicates if full immediate is suppoted
 };
 
-static const struct opProperties _initProps[] =
+static const struct nvc0_opProperties _initProps[] =
 {
    //           neg  abs  not  sat  c[]  imm
    { OP_ADD,    0x3, 0x3, 0x0, 0x8, 0x2, 0x2 | 0x8 },
@@ -146,7 +146,7 @@ static const struct opProperties _initProps[] =
    { OP_PINTERP, 0x0, 0x0, 0x0, 0x8, 0x0, 0x0 },
 };
 
-static const struct opProperties _initPropsNVE4[] = {
+static const struct nvc0_opProperties _initPropsNVE4[] = {
    { OP_SULDB,   0x0, 0x0, 0x0, 0x0, 0x2, 0x0 },
    { OP_SUSTB,   0x0, 0x0, 0x0, 0x0, 0x2, 0x0 },
    { OP_SUSTP,   0x0, 0x0, 0x0, 0x0, 0x2, 0x0 },
@@ -155,7 +155,7 @@ static const struct opProperties _initPropsNVE4[] = {
    { OP_SUEAU,   0x0, 0x0, 0x0, 0x0, 0x6, 0x2 }
 };
 
-static const struct opProperties _initPropsGM107[] = {
+static const struct nvc0_opProperties _initPropsGM107[] = {
    { OP_SULDB,   0x0, 0x0, 0x0, 0x0, 0x0, 0x2 },
    { OP_SULDP,   0x0, 0x0, 0x0, 0x0, 0x0, 0x2 },
    { OP_SUSTB,   0x0, 0x0, 0x0, 0x0, 0x0, 0x4 },
@@ -165,10 +165,10 @@ static const struct opProperties _initPropsGM107[] = {
    { OP_XMAD,    0x0, 0x0, 0x0, 0x0, 0x6, 0x2 },
 };
 
-void TargetNVC0::initProps(const struct opProperties *props, int size)
+void TargetNVC0::initProps(const struct nvc0_opProperties *props, int size)
 {
    for (int i = 0; i < size; ++i) {
-      const struct opProperties *prop = &props[i];
+      const struct nvc0_opProperties *prop = &props[i];
 
       for (int s = 0; s < 3; ++s) {
          if (prop->mNeg & (1 << s))

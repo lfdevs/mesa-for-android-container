@@ -43,23 +43,13 @@
 /* This memory region should not be mapped to the CPU */
 #define PAN_BO_INVISIBLE          (1 << 2)
 
-/* This memory region will be used for varyings and needs to have the cache
- * bits twiddled accordingly */
-#define PAN_BO_COHERENT_LOCAL     (1 << 3)
-
 /* This region may not be used immediately and will not mmap on allocate
  * (semantically distinct from INVISIBLE, which cannot never be mmaped) */
-#define PAN_BO_DELAY_MMAP         (1 << 4)
+#define PAN_BO_DELAY_MMAP         (1 << 3)
 
-/* Some BOs shouldn't be returned back to the reuse BO cache, use this flag to
- * let the BO logic know about this contraint. */
-#define PAN_BO_DONT_REUSE         (1 << 5)
-
-/* BO has been imported */
-#define PAN_BO_IMPORTED           (1 << 6)
-
-/* BO has been exported */
-#define PAN_BO_EXPORTED           (1 << 7)
+/* BO is shared across processes (imported or exported) and therefore cannot be
+ * cached locally */
+#define PAN_BO_SHARED             (1 << 4)
 
 /* GPU access flags */
 
@@ -117,8 +107,7 @@ struct panfrost_bo {
 };
 
 bool
-panfrost_bo_wait(struct panfrost_bo *bo, int64_t timeout_ns,
-                 uint32_t access_type);
+panfrost_bo_wait(struct panfrost_bo *bo, int64_t timeout_ns, bool wait_readers);
 void
 panfrost_bo_reference(struct panfrost_bo *bo);
 void

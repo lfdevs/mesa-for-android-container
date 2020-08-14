@@ -159,5 +159,8 @@ svga_screen_surface_destroy(struct svga_screen *svgascreen,
 void
 svga_screen_cache_dump(const struct svga_screen *svgascreen);
 
+unsigned
+svga_surface_size(const struct svga_host_surface_cache_key *key);
+
 
 #endif /* SVGA_SCREEN_CACHE_H_ */

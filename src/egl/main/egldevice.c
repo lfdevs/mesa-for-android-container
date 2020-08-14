@@ -239,8 +239,8 @@ _eglQueryDeviceStringEXT(_EGLDevice *dev, EGLint name)
    case EGL_DRM_DEVICE_FILE_EXT:
       if (_eglDeviceSupports(dev, _EGL_DEVICE_DRM))
          return dev->device->nodes[DRM_NODE_PRIMARY];
-      /* fall through */
 #endif
+      /* fall through */
    default:
       _eglError(EGL_BAD_PARAMETER, "eglQueryDeviceStringEXT");
       return NULL;

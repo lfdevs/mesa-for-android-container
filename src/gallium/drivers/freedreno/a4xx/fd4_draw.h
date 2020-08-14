@@ -51,7 +51,7 @@ fd4_draw(struct fd_batch *batch, struct fd_ringbuffer *ring,
 		enum pc_di_vis_cull_mode vismode,
 		enum pc_di_src_sel src_sel, uint32_t count,
 		uint32_t instances, enum a4xx_index_size idx_type,
-		uint32_t idx_size, uint32_t idx_offset,
+		uint32_t max_indices, uint32_t idx_offset,
 		struct pipe_resource *idx_buffer)
 {
 	/* for debug after a lock up, write a unique counter value
@@ -77,7 +77,7 @@ fd4_draw(struct fd_batch *batch, struct fd_ringbuffer *ring,
 	if (idx_buffer) {
 		OUT_RING(ring, 0x0);           /* XXX */
 		OUT_RELOC(ring, fd_resource(idx_buffer)->bo, idx_offset, 0, 0);
-		OUT_RING (ring, idx_size);
+		OUT_RING (ring, max_indices);
 	}
 
 	emit_marker(ring, 7);

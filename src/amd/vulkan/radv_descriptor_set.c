@@ -102,17 +102,20 @@ VkResult radv_CreateDescriptorSetLayout(
 		}
 	}
 
-	uint32_t samplers_offset = sizeof(struct radv_descriptor_set_layout) +
-		(max_binding + 1) * sizeof(set_layout->binding[0]);
+	uint32_t samplers_offset =
+			offsetof(struct radv_descriptor_set_layout, binding[max_binding + 1]);
 	size_t size = samplers_offset + immutable_sampler_count * 4 * sizeof(uint32_t);
 	if (ycbcr_sampler_count > 0) {
 		size += ycbcr_sampler_count * sizeof(struct radv_sampler_ycbcr_conversion) + (max_binding + 1) * sizeof(uint32_t);
 	}
 
-	set_layout = vk_zalloc2(&device->alloc, pAllocator, size, 8,
+	set_layout = vk_zalloc2(&device->vk.alloc, pAllocator, size, 8,
 	                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 	if (!set_layout)
 		return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+	vk_object_base_init(&device->vk, &set_layout->base,
+			    VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT);
 
 	set_layout->flags = pCreateInfo->flags;
 	set_layout->layout_size = size;
@@ -132,7 +135,8 @@ VkResult radv_CreateDescriptorSetLayout(
 	VkDescriptorSetLayoutBinding *bindings = create_sorted_bindings(pCreateInfo->pBindings,
 	                                                                pCreateInfo->bindingCount);
 	if (!bindings) {
-		vk_free2(&device->alloc, pAllocator, set_layout);
+		vk_object_base_finish(&set_layout->base);
+		vk_free2(&device->vk.alloc, pAllocator, set_layout);
 		return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
 	}
 
@@ -141,8 +145,6 @@ VkResult radv_CreateDescriptorSetLayout(
 	set_layout->dynamic_shader_stages = 0;
 	set_layout->has_immutable_samplers = false;
 	set_layout->size = 0;
-
-	memset(set_layout->binding, 0, size - sizeof(struct radv_descriptor_set_layout));
 
 	uint32_t buffer_count = 0;
 	uint32_t dynamic_offset_count = 0;
@@ -295,7 +297,8 @@ void radv_DestroyDescriptorSetLayout(
 	if (!set_layout)
 		return;
 
-	vk_free2(&device->alloc, pAllocator, set_layout);
+	vk_object_base_finish(&set_layout->base);
+	vk_free2(&device->vk.alloc, pAllocator, set_layout);
 }
 
 void radv_GetDescriptorSetLayoutSupport(VkDevice device,
@@ -408,10 +411,13 @@ VkResult radv_CreatePipelineLayout(
 
 	assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO);
 
-	layout = vk_alloc2(&device->alloc, pAllocator, sizeof(*layout), 8,
+	layout = vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*layout), 8,
 			     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 	if (layout == NULL)
 		return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+	vk_object_base_init(&device->vk, &layout->base,
+			    VK_OBJECT_TYPE_PIPELINE_LAYOUT);
 
 	layout->num_sets = pCreateInfo->setLayoutCount;
 
@@ -462,7 +468,9 @@ void radv_DestroyPipelineLayout(
 
 	if (!pipeline_layout)
 		return;
-	vk_free2(&device->alloc, pAllocator, pipeline_layout);
+
+	vk_object_base_finish(&pipeline_layout->base);
+	vk_free2(&device->vk.alloc, pAllocator, pipeline_layout);
 }
 
 #define EMPTY 1
@@ -496,7 +504,7 @@ radv_descriptor_set_create(struct radv_device *device,
 		set = (struct radv_descriptor_set*)pool->host_memory_ptr;
 		pool->host_memory_ptr += mem_size;
 	} else {
-		set = vk_alloc2(&device->alloc, NULL, mem_size, 8,
+		set = vk_alloc2(&device->vk.alloc, NULL, mem_size, 8,
 		                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
 		if (!set)
@@ -504,6 +512,9 @@ radv_descriptor_set_create(struct radv_device *device,
 	}
 
 	memset(set, 0, mem_size);
+
+	vk_object_base_init(&device->vk, &set->base,
+			    VK_OBJECT_TYPE_DESCRIPTOR_SET);
 
 	if (layout->dynamic_offset_count) {
 		set->dynamic_descriptors = (struct radv_descriptor_range*)((uint8_t*)set + range_offset);
@@ -526,7 +537,7 @@ radv_descriptor_set_create(struct radv_device *device,
 		set->size = layout_size;
 
 		if (!pool->host_memory_base && pool->entry_count == pool->max_entry_count) {
-			vk_free2(&device->alloc, NULL, set);
+			vk_free2(&device->vk.alloc, NULL, set);
 			return vk_error(device->instance, VK_ERROR_OUT_OF_POOL_MEMORY);
 		}
 
@@ -555,7 +566,7 @@ radv_descriptor_set_create(struct radv_device *device,
 			}
 
 			if (pool->size - offset < layout_size) {
-				vk_free2(&device->alloc, NULL, set);
+				vk_free2(&device->vk.alloc, NULL, set);
 				return vk_error(device->instance, VK_ERROR_OUT_OF_POOL_MEMORY);
 			}
 			set->bo = pool->bo;
@@ -612,7 +623,8 @@ radv_descriptor_set_destroy(struct radv_device *device,
 			}
 		}
 	}
-	vk_free2(&device->alloc, NULL, set);
+	vk_object_base_finish(&set->base);
+	vk_free2(&device->vk.alloc, NULL, set);
 }
 
 static void radv_destroy_descriptor_pool(struct radv_device *device,
@@ -628,7 +640,8 @@ static void radv_destroy_descriptor_pool(struct radv_device *device,
 	if (pool->bo)
 		device->ws->buffer_destroy(pool->bo);
 
-	vk_free2(&device->alloc, pAllocator, pool);
+	vk_object_base_finish(&pool->base);
+	vk_free2(&device->vk.alloc, pAllocator, pool);
 }
 
 VkResult radv_CreateDescriptorPool(
@@ -700,12 +713,15 @@ VkResult radv_CreateDescriptorPool(
 		size += sizeof(struct radv_descriptor_pool_entry) * pCreateInfo->maxSets;
 	}
 
-	pool = vk_alloc2(&device->alloc, pAllocator, size, 8,
+	pool = vk_alloc2(&device->vk.alloc, pAllocator, size, 8,
 	                 VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 	if (!pool)
 		return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
 
 	memset(pool, 0, sizeof(*pool));
+
+	vk_object_base_init(&device->vk, &pool->base,
+			    VK_OBJECT_TYPE_DESCRIPTOR_POOL);
 
 	if (!(pCreateInfo->flags & VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT)) {
 		pool->host_memory_base = (uint8_t*)pool + sizeof(struct radv_descriptor_pool);
@@ -885,22 +901,25 @@ static void write_buffer_descriptor(struct radv_device *device,
 	range = align(range, 4);
 
 	va += buffer_info->offset + buffer->offset;
+
+	uint32_t rsrc_word3 = S_008F0C_DST_SEL_X(V_008F0C_SQ_SEL_X) |
+			      S_008F0C_DST_SEL_Y(V_008F0C_SQ_SEL_Y) |
+			      S_008F0C_DST_SEL_Z(V_008F0C_SQ_SEL_Z) |
+			      S_008F0C_DST_SEL_W(V_008F0C_SQ_SEL_W);
+
+	if (device->physical_device->rad_info.chip_class >= GFX10) {
+		rsrc_word3 |= S_008F0C_FORMAT(V_008F0C_IMG_FORMAT_32_FLOAT) |
+			      S_008F0C_OOB_SELECT(V_008F0C_OOB_SELECT_RAW) |
+			      S_008F0C_RESOURCE_LEVEL(1);
+	} else {
+		rsrc_word3 |= S_008F0C_NUM_FORMAT(V_008F0C_BUF_NUM_FORMAT_FLOAT) |
+			      S_008F0C_DATA_FORMAT(V_008F0C_BUF_DATA_FORMAT_32);
+	}
+
 	dst[0] = va;
 	dst[1] = S_008F04_BASE_ADDRESS_HI(va >> 32);
 	dst[2] = range;
-	dst[3] = S_008F0C_DST_SEL_X(V_008F0C_SQ_SEL_X) |
-		S_008F0C_DST_SEL_Y(V_008F0C_SQ_SEL_Y) |
-		S_008F0C_DST_SEL_Z(V_008F0C_SQ_SEL_Z) |
-		S_008F0C_DST_SEL_W(V_008F0C_SQ_SEL_W);
-
-	if (device->physical_device->rad_info.chip_class >= GFX10) {
-		dst[3] |= S_008F0C_FORMAT(V_008F0C_IMG_FORMAT_32_FLOAT) |
-			  S_008F0C_OOB_SELECT(V_008F0C_OOB_SELECT_RAW) |
-			  S_008F0C_RESOURCE_LEVEL(1);
-	} else {
-		dst[3] |= S_008F0C_NUM_FORMAT(V_008F0C_BUF_NUM_FORMAT_FLOAT) |
-			  S_008F0C_DATA_FORMAT(V_008F0C_BUF_DATA_FORMAT_32);
-	}
+	dst[3] = rsrc_word3;
 
 	if (cmd_buffer)
 		radv_cs_add_buffer(device->ws, cmd_buffer->cs, buffer->bo);
@@ -1195,9 +1214,12 @@ VkResult radv_CreateDescriptorUpdateTemplate(VkDevice _device,
 	struct radv_descriptor_update_template *templ;
 	uint32_t i;
 
-	templ = vk_alloc2(&device->alloc, pAllocator, size, 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+	templ = vk_alloc2(&device->vk.alloc, pAllocator, size, 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 	if (!templ)
 		return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+	vk_object_base_init(&device->vk, &templ->base,
+			    VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE);
 
 	templ->entry_count = entry_count;
 
@@ -1282,7 +1304,8 @@ void radv_DestroyDescriptorUpdateTemplate(VkDevice _device,
 	if (!templ)
 		return;
 
-	vk_free2(&device->alloc, pAllocator, templ);
+	vk_object_base_finish(&templ->base);
+	vk_free2(&device->vk.alloc, pAllocator, templ);
 }
 
 void radv_update_descriptor_set_with_template(struct radv_device *device,
@@ -1378,11 +1401,14 @@ VkResult radv_CreateSamplerYcbcrConversion(VkDevice _device,
 	RADV_FROM_HANDLE(radv_device, device, _device);
 	struct radv_sampler_ycbcr_conversion *conversion = NULL;
 
-	conversion = vk_zalloc2(&device->alloc, pAllocator, sizeof(*conversion), 8,
+	conversion = vk_zalloc2(&device->vk.alloc, pAllocator, sizeof(*conversion), 8,
 	                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
 	if (conversion == NULL)
 		return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+	vk_object_base_init(&device->vk, &conversion->base,
+			    VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION);
 
 	conversion->format = pCreateInfo->format;
 	conversion->ycbcr_model = pCreateInfo->ycbcrModel;
@@ -1404,6 +1430,9 @@ void radv_DestroySamplerYcbcrConversion(VkDevice _device,
 	RADV_FROM_HANDLE(radv_device, device, _device);
 	RADV_FROM_HANDLE(radv_sampler_ycbcr_conversion, ycbcr_conversion, ycbcrConversion);
 
-	if (ycbcr_conversion)
-		vk_free2(&device->alloc, pAllocator, ycbcr_conversion);
+	if (!ycbcr_conversion)
+		return;
+
+	vk_object_base_finish(&ycbcr_conversion->base);
+	vk_free2(&device->vk.alloc, pAllocator, ycbcr_conversion);
 }

@@ -58,7 +58,6 @@ svga_transfer_dma_band(struct svga_context *svga,
 {
    struct svga_texture *texture = svga_texture(st->base.resource);
    SVGA3dCopyBox box;
-   enum pipe_error ret;
 
    assert(!st->use_direct_map);
 
@@ -87,12 +86,7 @@ svga_transfer_dma_band(struct svga_context *svga,
             (util_format_get_blockwidth(texture->b.b.format)
              * util_format_get_blockheight(texture->b.b.format)));
 
-   ret = SVGA3D_SurfaceDMA(svga->swc, st, transfer, &box, 1, flags);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_SurfaceDMA(svga->swc, st, transfer, &box, 1, flags);
-      assert(ret == PIPE_OK);
-   }
+   SVGA_RETRY(svga, SVGA3D_SurfaceDMA(svga->swc, st, transfer, &box, 1, flags));
 }
 
 
@@ -133,26 +127,25 @@ svga_transfer_dma(struct svga_context *svga,
       }
    }
    else {
-      int y, h, y_max;
+      int y, h, srcy;
       unsigned blockheight =
          util_format_get_blockheight(st->base.resource->format);
 
       h = st->hw_nblocksy * blockheight;
-      y_max = st->box.y + st->box.h;
+      srcy = 0;
 
-      for (y = st->box.y; y < y_max; y += h) {
+      for (y = 0; y < st->box.h; y += h) {
          unsigned offset, length;
          void *hw, *sw;
 
-         if (y + h > y_max)
-            h = y_max - y;
+         if (y + h > st->box.h)
+            h = st->box.h - y;
 
          /* Transfer band must be aligned to pixel block boundaries */
          assert(y % blockheight == 0);
          assert(h % blockheight == 0);
 
-         /* First band starts at the top of the SW buffer. */
-         offset = (y - st->box.y) * st->base.stride / blockheight;
+         offset = y * st->base.stride / blockheight;
          length = h * st->base.stride / blockheight;
 
          sw = (uint8_t *) st->swbuf + offset;
@@ -160,9 +153,9 @@ svga_transfer_dma(struct svga_context *svga,
          if (transfer == SVGA3D_WRITE_HOST_VRAM) {
             unsigned usage = PIPE_TRANSFER_WRITE;
 
-            /* Don't write to an in-flight DMA buffer. Synchronize or
-             * discard in-flight storage. */
-            if (y != st->box.y) {
+            /* Wait for the previous DMAs to complete */
+            /* TODO: keep one DMA (at half the size) in the background */
+            if (y) {
                svga_context_flush(svga, NULL);
                usage |= PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE;
             }
@@ -178,7 +171,7 @@ svga_transfer_dma(struct svga_context *svga,
          svga_transfer_dma_band(svga, st, transfer,
                                 st->box.x, y, st->box.z,
                                 st->box.w, h, st->box.d,
-                                0, 0, 0, flags);
+                                0, srcy, 0, flags);
 
          /*
           * Prevent the texture contents to be discarded on the next band
@@ -275,40 +268,28 @@ need_tex_readback(struct svga_transfer *st)
 }
 
 
-static enum pipe_error
+static void
 readback_image_vgpu9(struct svga_context *svga,
                    struct svga_winsys_surface *surf,
                    unsigned slice,
                    unsigned level)
 {
-   enum pipe_error ret;
-
-   ret = SVGA3D_ReadbackGBImage(svga->swc, surf, slice, level);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_ReadbackGBImage(svga->swc, surf, slice, level);
-   }
-   return ret;
+   SVGA_RETRY(svga, SVGA3D_ReadbackGBImage(svga->swc, surf, slice, level));
 }
 
 
-static enum pipe_error
+static void
 readback_image_vgpu10(struct svga_context *svga,
                     struct svga_winsys_surface *surf,
                     unsigned slice,
                     unsigned level,
                     unsigned numMipLevels)
 {
-   enum pipe_error ret;
    unsigned subResource;
 
    subResource = slice * numMipLevels + level;
-   ret = SVGA3D_vgpu10_ReadbackSubResource(svga->swc, surf, subResource);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_vgpu10_ReadbackSubResource(svga->swc, surf, subResource);
-   }
-   return ret;
+   SVGA_RETRY(svga, SVGA3D_vgpu10_ReadbackSubResource(svga->swc, surf,
+                                                      subResource));
 }
 
 
@@ -398,24 +379,19 @@ svga_texture_transfer_map_direct(struct svga_context *svga,
    unsigned usage = st->base.usage;
 
    if (need_tex_readback(st)) {
-      enum pipe_error ret;
-
       svga_surfaces_flush(svga);
 
       if (!svga->swc->force_coherent || tex->imported) {
          for (i = 0; i < st->box.d; i++) {
             if (svga_have_vgpu10(svga)) {
-               ret = readback_image_vgpu10(svga, surf, st->slice + i, level,
-                                           tex->b.b.last_level + 1);
+               readback_image_vgpu10(svga, surf, st->slice + i, level,
+                                     tex->b.b.last_level + 1);
             } else {
-               ret = readback_image_vgpu9(svga, surf, st->slice + i, level);
+               readback_image_vgpu9(svga, surf, st->slice + i, level);
             }
          }
          svga->hud.num_readbacks++;
          SVGA_STATS_COUNT_INC(sws, SVGA_STATS_COUNT_TEXREADBACK);
-
-         assert(ret == PIPE_OK);
-         (void) ret;
 
          svga_context_flush(svga, NULL);
       }
@@ -466,16 +442,21 @@ svga_texture_transfer_map_direct(struct svga_context *svga,
          usage |= PIPE_TRANSFER_PERSISTENT | PIPE_TRANSFER_COHERENT;
       }
 
-      map = swc->surface_map(swc, surf, usage, &retry, &rebind);
+      map = SVGA_TRY_MAP(svga->swc->surface_map
+                         (svga->swc, surf, usage, &retry, &rebind), retry);
+
       if (map == NULL && retry) {
          /*
           * At this point, the svga_surfaces_flush() should already have
           * called in svga_texture_get_transfer().
           */
          svga->hud.surface_write_flushes++;
+         svga_retry_enter(svga);
          svga_context_flush(svga, NULL);
-         map = swc->surface_map(swc, surf, usage, &retry, &rebind);
+         map = svga->swc->surface_map(svga->swc, surf, usage, &retry, &rebind);
+         svga_retry_exit(svga);
       }
+
       if (map && rebind) {
          enum pipe_error ret;
 
@@ -615,9 +596,12 @@ svga_texture_transfer_map(struct pipe_context *pipe,
    pipe_resource_reference(&st->base.resource, texture);
 
    /* If this is the first time mapping to the surface in this
-    * command buffer, clear the dirty masks of this surface.
+    * command buffer and there is no pending primitives, clear
+    * the dirty masks of this surface.
     */
-   if (sws->surface_is_flushed(sws, surf)) {
+   if (sws->surface_is_flushed(sws, surf) &&
+       (svga_have_vgpu10(svga) ||
+        !svga_hwtnl_has_pending_prim(svga->hwtnl))) {
       svga_clear_texture_dirty(tex);
    }
 
@@ -705,37 +689,23 @@ svga_texture_surface_unmap(struct svga_context *svga,
 
    swc->surface_unmap(swc, surf, &rebind);
    if (rebind) {
-      enum pipe_error ret;
-      ret = SVGA3D_BindGBSurface(swc, surf);
-      if (ret != PIPE_OK) {
-         /* flush and retry */
-         svga_context_flush(svga, NULL);
-         ret = SVGA3D_BindGBSurface(swc, surf);
-         assert(ret == PIPE_OK);
-      }
+      SVGA_RETRY(svga, SVGA3D_BindGBSurface(swc, surf));
    }
 }
 
 
-static enum pipe_error
+static void
 update_image_vgpu9(struct svga_context *svga,
                    struct svga_winsys_surface *surf,
                    const SVGA3dBox *box,
                    unsigned slice,
                    unsigned level)
 {
-   enum pipe_error ret;
-
-   ret = SVGA3D_UpdateGBImage(svga->swc, surf, box, slice, level);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_UpdateGBImage(svga->swc, surf, box, slice, level);
-   }
-   return ret;
+   SVGA_RETRY(svga, SVGA3D_UpdateGBImage(svga->swc, surf, box, slice, level));
 }
 
 
-static enum pipe_error
+static void
 update_image_vgpu10(struct svga_context *svga,
                     struct svga_winsys_surface *surf,
                     const SVGA3dBox *box,
@@ -743,17 +713,12 @@ update_image_vgpu10(struct svga_context *svga,
                     unsigned level,
                     unsigned numMipLevels)
 {
-   enum pipe_error ret;
    unsigned subResource;
 
    subResource = slice * numMipLevels + level;
 
-   ret = SVGA3D_vgpu10_UpdateSubResource(svga->swc, surf, box, subResource);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_vgpu10_UpdateSubResource(svga->swc, surf, box, subResource);
-   }
-   return ret;
+   SVGA_RETRY(svga, SVGA3D_vgpu10_UpdateSubResource(svga->swc, surf, box,
+                                                    subResource));
 }
 
 
@@ -808,7 +773,6 @@ svga_texture_transfer_unmap_direct(struct svga_context *svga,
    /* Now send an update command to update the content in the backend. */
    if (st->base.usage & PIPE_TRANSFER_WRITE) {
       struct svga_winsys_surface *surf = tex->handle;
-      enum pipe_error ret;
 
       assert(svga_have_gb_objects(svga));
 
@@ -840,19 +804,16 @@ svga_texture_transfer_unmap_direct(struct svga_context *svga,
             unsigned i;
 
             for (i = 0; i < nlayers; i++) {
-               ret = update_image_vgpu10(svga, surf, &box,
-                                         st->slice + i, transfer->level,
-                                         tex->b.b.last_level + 1);
-               assert(ret == PIPE_OK);
+               update_image_vgpu10(svga, surf, &box,
+                                   st->slice + i, transfer->level,
+                                   tex->b.b.last_level + 1);
             }
          } else {
             assert(nlayers == 1);
-            ret = update_image_vgpu9(svga, surf, &box, st->slice,
-                                     transfer->level);
-            assert(ret == PIPE_OK);
+            update_image_vgpu9(svga, surf, &box, st->slice,
+                               transfer->level);
          }
       }
-      (void) ret;
    }
 }
 
@@ -937,7 +898,7 @@ svga_texture_create(struct pipe_screen *screen,
 
    /* Verify the number of mipmap levels isn't impossibly large.  For example,
     * if the base 2D image is 16x16, we can't have 8 mipmap levels.
-    * The state tracker should never ask us to create a resource with invalid
+    * the gallium frontend should never ask us to create a resource with invalid
     * parameters.
     */
    {
@@ -1119,7 +1080,7 @@ svga_texture_create(struct pipe_screen *screen,
     * and it always requests PIPE_BIND_RENDER_TARGET, therefore
     * passing the SVGA3D_SURFACE_HINT_RENDERTARGET here defeats its purpose.
     *
-    * However, this was changed since other state trackers
+    * However, this was changed since other gallium frontends
     * (XA for example) uses it accurately and certain device versions
     * relies on it in certain situations to render correctly.
     */
@@ -1300,7 +1261,6 @@ svga_texture_generate_mipmap(struct pipe_context *pipe,
    struct svga_pipe_sampler_view *sv;
    struct svga_context *svga = svga_context(pipe);
    struct svga_texture *tex = svga_texture(pt);
-   enum pipe_error ret;
 
    assert(svga_have_vgpu10(svga));
 
@@ -1331,18 +1291,9 @@ svga_texture_generate_mipmap(struct pipe_context *pipe,
       return false;
 
    sv = svga_pipe_sampler_view(psv);
-   ret = svga_validate_pipe_sampler_view(svga, sv);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = svga_validate_pipe_sampler_view(svga, sv);
-      assert(ret == PIPE_OK);
-   }
+   SVGA_RETRY(svga, svga_validate_pipe_sampler_view(svga, sv));
 
-   ret = SVGA3D_vgpu10_GenMips(svga->swc, sv->id, tex->handle);
-   if (ret != PIPE_OK) {
-      svga_context_flush(svga, NULL);
-      ret = SVGA3D_vgpu10_GenMips(svga->swc, sv->id, tex->handle);
-   }
+   SVGA_RETRY(svga, SVGA3D_vgpu10_GenMips(svga->swc, sv->id, tex->handle));
    pipe_sampler_view_reference(&psv, NULL);
 
    svga->hud.num_generate_mipmap++;
@@ -1510,7 +1461,6 @@ svga_texture_transfer_unmap_upload(struct svga_context *svga,
    struct svga_winsys_surface *dstsurf;
    struct pipe_resource *texture = st->base.resource;
    struct svga_texture *tex = svga_texture(texture);
-   enum pipe_error ret;
    unsigned subResource;
    unsigned numMipLevels;
    unsigned i, layer;
@@ -1534,22 +1484,12 @@ svga_texture_transfer_unmap_upload(struct svga_context *svga,
       /* send a transferFromBuffer command to update the host texture surface */
       assert((offset & 15) == 0);
 
-      ret = SVGA3D_vgpu10_TransferFromBuffer(svga->swc, srcsurf,
-                                             offset,
-                                             st->base.stride,
-                                             st->base.layer_stride,
-                                             dstsurf, subResource,
-                                             &st->upload.box);
-      if (ret != PIPE_OK) {
-         svga_context_flush(svga, NULL);
-         ret = SVGA3D_vgpu10_TransferFromBuffer(svga->swc, srcsurf,
-                                                offset,
-                                                st->base.stride,
-                                                st->base.layer_stride,
-                                                dstsurf, subResource,
-                                                &st->upload.box);
-         assert(ret == PIPE_OK);
-      }
+      SVGA_RETRY(svga, SVGA3D_vgpu10_TransferFromBuffer(svga->swc, srcsurf,
+                                                        offset,
+                                                        st->base.stride,
+                                                        st->base.layer_stride,
+                                                        dstsurf, subResource,
+                                                        &st->upload.box));
       offset += st->base.layer_stride;
 
       /* Set rendered-to flag */

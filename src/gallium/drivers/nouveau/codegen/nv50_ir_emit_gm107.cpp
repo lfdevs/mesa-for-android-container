@@ -23,6 +23,7 @@
  */
 
 #include "codegen/nv50_ir_target_gm107.h"
+#include "codegen/nv50_ir_sched_gm107.h"
 
 //#define GM107_DEBUG_SCHED_DATA
 
@@ -170,6 +171,7 @@ private:
    void emitBFI();
    void emitBFE();
    void emitFLO();
+   void emitPRMT();
 
    void emitLDSTs(int, DataType);
    void emitLDSTc(int);
@@ -2371,6 +2373,33 @@ CodeEmitterGM107::emitFLO()
    emitGPR  (0x00, insn->def(0));
 }
 
+void
+CodeEmitterGM107::emitPRMT()
+{
+   switch (insn->src(1).getFile()) {
+   case FILE_GPR:
+      emitInsn(0x5bc00000);
+      emitGPR (0x14, insn->src(1));
+      break;
+   case FILE_MEMORY_CONST:
+      emitInsn(0x4bc00000);
+      emitCBUF(0x22, -1, 0x14, 16, 2, insn->src(1));
+      break;
+   case FILE_IMMEDIATE:
+      emitInsn(0x36c00000);
+      emitIMMD(0x14, 19, insn->src(1));
+      break;
+   default:
+      assert(!"bad src1 file");
+      break;
+   }
+
+   emitField(0x30, 3, insn->subOp);
+   emitGPR  (0x27, insn->src(2));
+   emitGPR  (0x08, insn->src(0));
+   emitGPR  (0x00, insn->def(0));
+}
+
 /*******************************************************************************
  * memory
  ******************************************************************************/
@@ -3537,6 +3566,9 @@ CodeEmitterGM107::emitInstruction(Instruction *i)
    case OP_BFIND:
       emitFLO();
       break;
+   case OP_PERMT:
+      emitPRMT();
+      break;
    case OP_SLCT:
       if (isFloatType(insn->dType))
          emitFCMP();
@@ -3741,156 +3773,6 @@ CodeEmitterGM107::getMinEncodingSize(const Instruction *i) const
 /*******************************************************************************
  * sched data calculator
  ******************************************************************************/
-
-class SchedDataCalculatorGM107 : public Pass
-{
-public:
-   SchedDataCalculatorGM107(const TargetGM107 *targ) : targ(targ) {}
-
-private:
-   struct RegScores
-   {
-      struct ScoreData {
-         int r[256];
-         int p[8];
-         int c;
-      } rd, wr;
-      int base;
-
-      void rebase(const int base)
-      {
-         const int delta = this->base - base;
-         if (!delta)
-            return;
-         this->base = 0;
-
-         for (int i = 0; i < 256; ++i) {
-            rd.r[i] += delta;
-            wr.r[i] += delta;
-         }
-         for (int i = 0; i < 8; ++i) {
-            rd.p[i] += delta;
-            wr.p[i] += delta;
-         }
-         rd.c += delta;
-         wr.c += delta;
-      }
-      void wipe()
-      {
-         memset(&rd, 0, sizeof(rd));
-         memset(&wr, 0, sizeof(wr));
-      }
-      int getLatest(const ScoreData& d) const
-      {
-         int max = 0;
-         for (int i = 0; i < 256; ++i)
-            if (d.r[i] > max)
-               max = d.r[i];
-         for (int i = 0; i < 8; ++i)
-            if (d.p[i] > max)
-               max = d.p[i];
-         if (d.c > max)
-            max = d.c;
-         return max;
-      }
-      inline int getLatestRd() const
-      {
-         return getLatest(rd);
-      }
-      inline int getLatestWr() const
-      {
-         return getLatest(wr);
-      }
-      inline int getLatest() const
-      {
-         return MAX2(getLatestRd(), getLatestWr());
-      }
-      void setMax(const RegScores *that)
-      {
-         for (int i = 0; i < 256; ++i) {
-            rd.r[i] = MAX2(rd.r[i], that->rd.r[i]);
-            wr.r[i] = MAX2(wr.r[i], that->wr.r[i]);
-         }
-         for (int i = 0; i < 8; ++i) {
-            rd.p[i] = MAX2(rd.p[i], that->rd.p[i]);
-            wr.p[i] = MAX2(wr.p[i], that->wr.p[i]);
-         }
-         rd.c = MAX2(rd.c, that->rd.c);
-         wr.c = MAX2(wr.c, that->wr.c);
-      }
-      void print(int cycle)
-      {
-         for (int i = 0; i < 256; ++i) {
-            if (rd.r[i] > cycle)
-               INFO("rd $r%i @ %i\n", i, rd.r[i]);
-            if (wr.r[i] > cycle)
-               INFO("wr $r%i @ %i\n", i, wr.r[i]);
-         }
-         for (int i = 0; i < 8; ++i) {
-            if (rd.p[i] > cycle)
-               INFO("rd $p%i @ %i\n", i, rd.p[i]);
-            if (wr.p[i] > cycle)
-               INFO("wr $p%i @ %i\n", i, wr.p[i]);
-         }
-         if (rd.c > cycle)
-            INFO("rd $c @ %i\n", rd.c);
-         if (wr.c > cycle)
-            INFO("wr $c @ %i\n", wr.c);
-      }
-   };
-
-   RegScores *score; // for current BB
-   std::vector<RegScores> scoreBoards;
-
-   const TargetGM107 *targ;
-   bool visit(Function *);
-   bool visit(BasicBlock *);
-
-   void commitInsn(const Instruction *, int);
-   int calcDelay(const Instruction *, int) const;
-   void setDelay(Instruction *, int, const Instruction *);
-   void recordWr(const Value *, int, int);
-   void checkRd(const Value *, int, int&) const;
-
-   inline void emitYield(Instruction *);
-   inline void emitStall(Instruction *, uint8_t);
-   inline void emitReuse(Instruction *, uint8_t);
-   inline void emitWrDepBar(Instruction *, uint8_t);
-   inline void emitRdDepBar(Instruction *, uint8_t);
-   inline void emitWtDepBar(Instruction *, uint8_t);
-
-   inline int getStall(const Instruction *) const;
-   inline int getWrDepBar(const Instruction *) const;
-   inline int getRdDepBar(const Instruction *) const;
-   inline int getWtDepBar(const Instruction *) const;
-
-   void setReuseFlag(Instruction *);
-
-   inline void printSchedInfo(int, const Instruction *) const;
-
-   struct LiveBarUse {
-      LiveBarUse(Instruction *insn, Instruction *usei)
-         : insn(insn), usei(usei) { }
-      Instruction *insn;
-      Instruction *usei;
-   };
-
-   struct LiveBarDef {
-      LiveBarDef(Instruction *insn, Instruction *defi)
-         : insn(insn), defi(defi) { }
-      Instruction *insn;
-      Instruction *defi;
-   };
-
-   bool insertBarriers(BasicBlock *);
-
-   bool doesInsnWriteTo(const Instruction *insn, const Value *val) const;
-   Instruction *findFirstUse(const Instruction *) const;
-   Instruction *findFirstDef(const Instruction *) const;
-
-   bool needRdDepBar(const Instruction *) const;
-   bool needWrDepBar(const Instruction *) const;
-};
 
 inline void
 SchedDataCalculatorGM107::emitStall(Instruction *insn, uint8_t cnt)

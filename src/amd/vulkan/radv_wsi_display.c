@@ -276,20 +276,18 @@ radv_RegisterDeviceEventEXT(VkDevice                    _device,
 	struct radv_fence            *fence;
 	VkResult                     ret;
 
-	fence = vk_alloc2(&device->instance->alloc, allocator, sizeof (*fence),
-			  8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+	fence = vk_zalloc2(&device->instance->alloc, allocator, sizeof (*fence),
+			   8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 	if (!fence)
 		return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-	fence->fence = NULL;
-	fence->syncobj = 0;
-	fence->temp_syncobj = 0;
+	fence->permanent.kind = RADV_FENCE_WSI;
 
 	ret = wsi_register_device_event(_device,
 					&device->physical_device->wsi_device,
 					device_event_info,
 					allocator,
-					&fence->fence_wsi);
+					&fence->permanent.fence_wsi);
 	if (ret == VK_SUCCESS)
 		*_fence = radv_fence_to_handle(fence);
 	else
@@ -309,21 +307,19 @@ radv_RegisterDisplayEventEXT(VkDevice                           _device,
 	struct radv_fence            *fence;
 	VkResult                     ret;
 
-	fence = vk_alloc2(&device->instance->alloc, allocator, sizeof (*fence),
-			  8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+	fence = vk_zalloc2(&device->instance->alloc, allocator, sizeof (*fence),
+			   8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 	if (!fence)
 		return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-	fence->fence = NULL;
-	fence->syncobj = 0;
-	fence->temp_syncobj = 0;
+	fence->permanent.kind = RADV_FENCE_WSI;
 
 	ret = wsi_register_display_event(_device,
 					 &device->physical_device->wsi_device,
 					 display,
 					 display_event_info,
 					 allocator,
-					 &(fence->fence_wsi));
+					 &(fence->permanent.fence_wsi));
 
 	if (ret == VK_SUCCESS)
 		*_fence = radv_fence_to_handle(fence);

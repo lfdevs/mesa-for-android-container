@@ -34,8 +34,7 @@ endif
 libxvmc_gallium = shared_library(
   'XvMCgallium',
   'target.c',
-  c_args : c_vis_args,
-  cpp_args : cpp_vis_args,
+  gnu_symbol_visibility : 'hidden',
   link_args : [xvmc_link_args, ld_args_gc_sections],
   include_directories : [
     inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_util, inc_gallium_winsys, inc_gallium_drivers,
@@ -45,7 +44,7 @@ libxvmc_gallium = shared_library(
     libgalliumvlwinsys, libgalliumvl, libgallium,
     libpipe_loader_static, libws_null, libwsw, libswdri, libswkmsdri,
   ],
-  dependencies : [idep_mesautil, idep_xmlconfig_headers, driver_r600, driver_nouveau],
+  dependencies : [idep_mesautil, driver_r600, driver_nouveau],
   link_depends : xvmc_link_depends,
   # Will be deleted during installation, see install_megadrivers.py
   install : true,

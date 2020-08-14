@@ -64,8 +64,7 @@ enum ac_target_machine_options {
 	AC_TM_CHECK_IR = (1 << 4),
 	AC_TM_ENABLE_GLOBAL_ISEL = (1 << 5),
 	AC_TM_CREATE_LOW_OPT = (1 << 6),
-	AC_TM_NO_LOAD_STORE_OPT = (1 << 7),
-	AC_TM_WAVE32 = (1 << 8),
+	AC_TM_WAVE32 = (1 << 7),
 };
 
 enum ac_float_mode {
@@ -96,6 +95,7 @@ struct ac_llvm_compiler {
 
 const char *ac_get_llvm_processor_name(enum radeon_family family);
 void ac_add_attr_dereferenceable(LLVMValueRef val, uint64_t bytes);
+void ac_add_attr_alignment(LLVMValueRef val, uint64_t bytes);
 bool ac_is_sgpr_param(LLVMValueRef param);
 void ac_add_function_attr(LLVMContextRef ctx, LLVMValueRef function,
                           int attr_idx, enum ac_func_attr attr);

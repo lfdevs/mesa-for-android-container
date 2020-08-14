@@ -46,7 +46,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "r200_tex.h"
 
 #include "util/u_memory.h"
-#include "util/xmlpool.h"
+#include "util/driconf.h"
 
 
 

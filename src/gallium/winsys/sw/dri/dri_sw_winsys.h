@@ -29,7 +29,7 @@
 #ifndef DRI_SW_WINSYS
 #define DRI_SW_WINSYS
 
-#include "state_tracker/drisw_api.h"
+#include "frontend/drisw_api.h"
 
 struct sw_winsys;
 

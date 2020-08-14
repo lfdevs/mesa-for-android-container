@@ -44,7 +44,7 @@
 #include "sp_texture.h"
 #include "sp_screen.h"
 
-#include "state_tracker/sw_winsys.h"
+#include "frontend/sw_winsys.h"
 
 
 /**

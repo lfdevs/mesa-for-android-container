@@ -105,7 +105,7 @@
 #define SI_MAP_BUFFER_ALIGNMENT           64
 #define SI_MAX_VARIABLE_THREADS_PER_BLOCK 1024
 
-#define SI_RESOURCE_FLAG_TRANSFER          (PIPE_RESOURCE_FLAG_DRV_PRIV << 0)
+#define SI_RESOURCE_FLAG_FORCE_LINEAR      (PIPE_RESOURCE_FLAG_DRV_PRIV << 0)
 #define SI_RESOURCE_FLAG_FLUSHED_DEPTH     (PIPE_RESOURCE_FLAG_DRV_PRIV << 1)
 #define SI_RESOURCE_FLAG_FORCE_MSAA_TILING (PIPE_RESOURCE_FLAG_DRV_PRIV << 2)
 #define SI_RESOURCE_FLAG_DISABLE_DCC       (PIPE_RESOURCE_FLAG_DRV_PRIV << 3)
@@ -122,6 +122,7 @@
    (((x)&0x3) << SI_RESOURCE_FLAG_MICRO_TILE_MODE_SHIFT)
 #define SI_RESOURCE_FLAG_MICRO_TILE_MODE_GET(x)                                                    \
    (((x) >> SI_RESOURCE_FLAG_MICRO_TILE_MODE_SHIFT) & 0x3)
+#define SI_RESOURCE_FLAG_UNCACHED          (PIPE_RESOURCE_FLAG_DRV_PRIV << 12)
 
 enum si_clear_code
 {
@@ -134,6 +135,7 @@ enum si_clear_code
 };
 
 #define SI_IMAGE_ACCESS_AS_BUFFER (1 << 7)
+#define SI_IMAGE_ACCESS_DCC_OFF   (1 << 8)
 
 /* Debug flags. */
 enum
@@ -159,6 +161,7 @@ enum
    DBG_W64_GE,
    DBG_W64_PS,
    DBG_W64_CS,
+   DBG_KILL_PS_INF_INTERP,
 
    /* Shader compiler options (with no effect on the shader cache): */
    DBG_CHECK_IR,
@@ -181,11 +184,13 @@ enum
    DBG_CHECK_VM,
    DBG_RESERVE_VMID,
    DBG_ZERO_VRAM,
+   DBG_SHADOW_REGS,
 
    /* 3D engine options: */
    DBG_NO_GFX,
    DBG_NO_NGG,
-   DBG_ALWAYS_NGG_CULLING,
+   DBG_ALWAYS_NGG_CULLING_ALL,
+   DBG_ALWAYS_NGG_CULLING_TESS,
    DBG_NO_NGG_CULLING,
    DBG_ALWAYS_PD,
    DBG_PD,
@@ -237,6 +242,7 @@ enum si_coherency
    SI_COHERENCY_NONE, /* no cache flushes needed */
    SI_COHERENCY_SHADER,
    SI_COHERENCY_CB_META,
+   SI_COHERENCY_DB_META,
    SI_COHERENCY_CP,
 };
 
@@ -334,6 +340,7 @@ struct si_texture {
    uint8_t stencil_clear_value;
    bool fmask_is_identity : 1;
    bool tc_compatible_htile : 1;
+   bool enable_tc_compatible_htile_next_clear : 1;
    bool htile_stencil_disabled : 1;
    bool depth_cleared : 1;   /* if it was cleared at least once */
    bool stencil_cleared : 1; /* if it was cleared at least once */
@@ -426,7 +433,7 @@ struct si_mmio_counter {
 };
 
 union si_mmio_counters {
-   struct {
+   struct si_mmio_counters_named {
       /* For global GPU load including SDMA. */
       struct si_mmio_counter gpu;
 
@@ -457,7 +464,8 @@ union si_mmio_counters {
       struct si_mmio_counter cp_dma;
       struct si_mmio_counter scratch_ram;
    } named;
-   unsigned array[0];
+
+   unsigned array[sizeof(struct si_mmio_counters_named) / sizeof(unsigned)];
 };
 
 struct si_memory_object {
@@ -512,7 +520,8 @@ struct si_screen {
    bool llvm_has_working_vgpr_indexing;
    bool use_ngg;
    bool use_ngg_culling;
-   bool always_use_ngg_culling;
+   bool always_use_ngg_culling_all;
+   bool always_use_ngg_culling_tess;
    bool use_ngg_streamout;
 
    struct {
@@ -704,6 +713,8 @@ struct si_framebuffer {
    bool CB_has_shader_readable_metadata;
    bool DB_has_shader_readable_metadata;
    bool all_DCC_pipe_aligned;
+   bool color_big_page;
+   bool zs_big_page;
 };
 
 enum si_quant_mode
@@ -902,6 +913,7 @@ struct si_context {
    struct u_log_context *log;
    void *query_result_shader;
    void *sh_query_result_shader;
+   struct si_resource *shadowed_regs;
 
    void (*emit_cache_flush)(struct si_context *ctx);
 
@@ -926,6 +938,7 @@ struct si_context {
    void *cs_clear_render_target;
    void *cs_clear_render_target_1d_array;
    void *cs_clear_12bytes_buffer;
+   void *cs_dcc_decompress;
    void *cs_dcc_retile;
    void *cs_fmask_expand[3][2]; /* [log2(samples)-1][is_array] */
    struct si_screen *screen;
@@ -1003,9 +1016,9 @@ struct si_context {
    struct pipe_scissor_state window_rectangles[4];
 
    /* Precomputed states. */
-   struct si_pm4_state *init_config;
-   struct si_pm4_state *init_config_gs_rings;
-   bool init_config_has_vgt_flush;
+   struct si_pm4_state *cs_preamble_state;
+   struct si_pm4_state *cs_preamble_gs_rings;
+   bool cs_preamble_has_vgt_flush;
    struct si_pm4_state *vgt_shader_config[SI_NUM_VGT_STAGES_STATES];
 
    /* shaders */
@@ -1024,6 +1037,8 @@ struct si_context {
    unsigned cs_max_waves_per_sh;
    bool flatshade;
    bool do_update_shaders;
+   bool compute_shaderbuf_sgprs_dirty;
+   bool compute_image_sgprs_dirty;
 
    /* shader descriptors */
    struct si_descriptors descriptors[SI_NUM_DESCS];
@@ -1315,7 +1330,8 @@ void si_copy_buffer(struct si_context *sctx, struct pipe_resource *dst, struct p
                     uint64_t dst_offset, uint64_t src_offset, unsigned size);
 void si_compute_copy_image(struct si_context *sctx, struct pipe_resource *dst, unsigned dst_level,
                            struct pipe_resource *src, unsigned src_level, unsigned dstx,
-                           unsigned dsty, unsigned dstz, const struct pipe_box *src_box);
+                           unsigned dsty, unsigned dstz, const struct pipe_box *src_box,
+                           bool is_dcc_decompress);
 void si_compute_clear_render_target(struct pipe_context *ctx, struct pipe_surface *dstsurf,
                                     const union pipe_color_union *color, unsigned dstx,
                                     unsigned dsty, unsigned width, unsigned height,
@@ -1330,9 +1346,10 @@ void si_init_compute_blit_functions(struct si_context *sctx);
 #define SI_CPDMA_SKIP_SYNC_BEFORE    (1 << 2) /* don't wait for DMA before the copy (RAW hazards) */
 #define SI_CPDMA_SKIP_GFX_SYNC       (1 << 3) /* don't flush caches and don't wait for PS/CS */
 #define SI_CPDMA_SKIP_BO_LIST_UPDATE (1 << 4) /* don't update the BO list */
+#define SI_CPDMA_SKIP_TMZ            (1 << 5) /* don't update tmz state */
 #define SI_CPDMA_SKIP_ALL                                                                          \
    (SI_CPDMA_SKIP_CHECK_CS_SPACE | SI_CPDMA_SKIP_SYNC_AFTER | SI_CPDMA_SKIP_SYNC_BEFORE |          \
-    SI_CPDMA_SKIP_GFX_SYNC | SI_CPDMA_SKIP_BO_LIST_UPDATE)
+    SI_CPDMA_SKIP_GFX_SYNC | SI_CPDMA_SKIP_BO_LIST_UPDATE | SI_CPDMA_SKIP_TMZ)
 
 void si_cp_dma_wait_for_idle(struct si_context *sctx);
 void si_cp_dma_clear_buffer(struct si_context *sctx, struct radeon_cmdbuf *cs,
@@ -1352,6 +1369,9 @@ void si_cp_write_data(struct si_context *sctx, struct si_resource *buf, unsigned
 void si_cp_copy_data(struct si_context *sctx, struct radeon_cmdbuf *cs, unsigned dst_sel,
                      struct si_resource *dst, unsigned dst_offset, unsigned src_sel,
                      struct si_resource *src, unsigned src_offset);
+
+/* si_cp_reg_shadowing.c */
+void si_init_cp_reg_shadowing(struct si_context *sctx);
 
 /* si_debug.c */
 void si_save_cs(struct radeon_winsys *ws, struct radeon_cmdbuf *cs, struct radeon_saved_cs *saved,
@@ -1399,7 +1419,8 @@ void si_init_screen_get_functions(struct si_screen *sscreen);
 /* si_gfx_cs.c */
 void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_handle **fence);
 void si_allocate_gds(struct si_context *ctx);
-void si_begin_new_gfx_cs(struct si_context *ctx);
+void si_set_tracked_regs_to_clear_state(struct si_context *ctx);
+void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs);
 void si_need_gfx_cs_space(struct si_context *ctx);
 void si_unref_sdma_uploads(struct si_context *sctx);
 
@@ -1454,6 +1475,7 @@ void *si_create_dma_compute_shader(struct pipe_context *ctx, unsigned num_dwords
                                    bool dst_stream_cache_policy, bool is_copy);
 void *si_create_copy_image_compute_shader(struct pipe_context *ctx);
 void *si_create_copy_image_compute_shader_1d_array(struct pipe_context *ctx);
+void *si_create_dcc_decompress_cs(struct pipe_context *ctx);
 void *si_clear_render_target_shader(struct pipe_context *ctx);
 void *si_clear_render_target_shader_1d_array(struct pipe_context *ctx);
 void *si_clear_12bytes_buffer_shader(struct pipe_context *ctx);
@@ -1866,12 +1888,14 @@ static inline bool si_compute_prim_discard_enabled(struct si_context *sctx)
 
 static inline unsigned si_get_wave_size(struct si_screen *sscreen,
                                         enum pipe_shader_type shader_type, bool ngg, bool es,
-                                        bool prim_discard_cs)
+                                        bool gs_fast_launch, bool prim_discard_cs)
 {
    if (shader_type == PIPE_SHADER_COMPUTE)
       return sscreen->compute_wave_size;
    else if (shader_type == PIPE_SHADER_FRAGMENT)
       return sscreen->ps_wave_size;
+   else if (gs_fast_launch)
+      return 32; /* GS fast launch hangs with Wave64, so always use Wave32. */
    else if ((shader_type == PIPE_SHADER_VERTEX && prim_discard_cs) || /* only Wave64 implemented */
             (shader_type == PIPE_SHADER_VERTEX && es && !ngg) ||
             (shader_type == PIPE_SHADER_TESS_EVAL && es && !ngg) ||
@@ -1884,7 +1908,9 @@ static inline unsigned si_get_wave_size(struct si_screen *sscreen,
 static inline unsigned si_get_shader_wave_size(struct si_shader *shader)
 {
    return si_get_wave_size(shader->selector->screen, shader->selector->type, shader->key.as_ngg,
-                           shader->key.as_es, shader->key.opt.vs_as_prim_discard_cs);
+                           shader->key.as_es,
+                           shader->key.opt.ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_ALL,
+                           shader->key.opt.vs_as_prim_discard_cs);
 }
 
 #define PRINT_ERR(fmt, args...)                                                                    \

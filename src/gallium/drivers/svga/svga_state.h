@@ -39,8 +39,8 @@ void svga_destroy_state( struct svga_context *svga );
 
 struct svga_tracked_state {
    const char *name;
-   unsigned dirty;
-   enum pipe_error (*update)( struct svga_context *svga, unsigned dirty );
+   uint64_t dirty;
+   enum pipe_error (*update)( struct svga_context *svga, uint64_t dirty );
 };
 
 /* NEED_SWTNL
@@ -61,6 +61,8 @@ extern struct svga_tracked_state svga_need_tgsi_transform;
 extern struct svga_tracked_state svga_hw_vs;
 extern struct svga_tracked_state svga_hw_fs;
 extern struct svga_tracked_state svga_hw_gs;
+extern struct svga_tracked_state svga_hw_tcs;
+extern struct svga_tracked_state svga_hw_tes;
 extern struct svga_tracked_state svga_hw_rss;
 extern struct svga_tracked_state svga_hw_pstipple;
 extern struct svga_tracked_state svga_hw_sampler;
@@ -72,6 +74,13 @@ extern struct svga_tracked_state svga_hw_vdecl;
 extern struct svga_tracked_state svga_hw_fs_constants;
 extern struct svga_tracked_state svga_hw_gs_constants;
 extern struct svga_tracked_state svga_hw_vs_constants;
+extern struct svga_tracked_state svga_hw_tes_constants;
+extern struct svga_tracked_state svga_hw_tcs_constants;
+extern struct svga_tracked_state svga_hw_fs_constbufs;
+extern struct svga_tracked_state svga_hw_vs_constbufs;
+extern struct svga_tracked_state svga_hw_gs_constbufs;
+extern struct svga_tracked_state svga_hw_tcs_constbufs;
+extern struct svga_tracked_state svga_hw_tes_constbufs;
 
 /* SWTNL_DRAW
  */
@@ -104,5 +113,16 @@ enum pipe_error svga_reemit_tss_bindings( struct svga_context *svga );
 enum pipe_error svga_reemit_vs_bindings(struct svga_context *svga);
 
 enum pipe_error svga_reemit_fs_bindings(struct svga_context *svga);
+
+void svga_init_tracked_state(struct svga_context *svga);
+
+void *
+svga_create_fs_state(struct pipe_context *pipe,
+                     const struct pipe_shader_state *templ);
+
+void
+svga_bind_fs_state(struct pipe_context *pipe, void *shader);
+
+bool svga_update_compute_state(struct svga_context *svga);
 
 #endif

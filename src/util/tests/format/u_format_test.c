@@ -235,16 +235,16 @@ test_format_fetch_rgba_float(const struct util_format_description *format_desc,
 
 
 static boolean
-test_format_unpack_rgba_float(const struct util_format_description *format_desc,
-                              const struct util_format_test_case *test)
+test_format_unpack_rgba(const struct util_format_description *format_desc,
+                        const struct util_format_test_case *test)
 {
    float unpacked[UTIL_FORMAT_MAX_UNPACKED_HEIGHT][UTIL_FORMAT_MAX_UNPACKED_WIDTH][4] = { { { 0 } } };
    unsigned i, j, k;
    boolean success;
 
-   format_desc->unpack_rgba_float(&unpacked[0][0][0], sizeof unpacked[0],
-                             test->packed, 0,
-                             format_desc->block.width, format_desc->block.height);
+   format_desc->unpack_rgba(&unpacked[0][0][0], sizeof unpacked[0],
+                            test->packed, 0,
+                            format_desc->block.width, format_desc->block.height);
 
    success = TRUE;
    for (i = 0; i < format_desc->block.height; ++i) {
@@ -358,6 +358,9 @@ test_format_unpack_rgba_8unorm(const struct util_format_description *format_desc
    uint8_t expected[UTIL_FORMAT_MAX_UNPACKED_HEIGHT][UTIL_FORMAT_MAX_UNPACKED_WIDTH][4] = { { { 0 } } };
    unsigned i, j, k;
    boolean success;
+
+   if (util_format_is_pure_integer(format_desc->format))
+      return FALSE;
 
    format_desc->unpack_rgba_8unorm(&unpacked[0][0][0], sizeof unpacked[0],
                               test->packed, 0,
@@ -788,7 +791,7 @@ test_all(void)
 
       TEST_ONE_FUNC(fetch_rgba_float);
       TEST_ONE_FUNC(pack_rgba_float);
-      TEST_ONE_FUNC(unpack_rgba_float);
+      TEST_ONE_FUNC(unpack_rgba);
       TEST_ONE_FUNC(pack_rgba_8unorm);
       TEST_ONE_FUNC(unpack_rgba_8unorm);
 

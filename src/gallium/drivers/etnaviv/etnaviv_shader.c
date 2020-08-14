@@ -34,6 +34,7 @@
 
 #include "tgsi/tgsi_parse.h"
 #include "nir/tgsi_to_nir.h"
+#include "util/u_atomic.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
@@ -395,18 +396,19 @@ etna_create_shader_state(struct pipe_context *pctx,
 {
    struct etna_context *ctx = etna_context(pctx);
    struct etna_screen *screen = ctx->screen;
+   struct etna_compiler *compiler = screen->compiler;
    struct etna_shader *shader = CALLOC_STRUCT(etna_shader);
 
    if (!shader)
       return NULL;
 
-   static uint32_t id;
-   shader->id = id++;
+   shader->id = p_atomic_inc_return(&compiler->shader_count);
    shader->specs = &screen->specs;
+   shader->compiler = screen->compiler;
 
    if (DBG_ENABLED(ETNA_DBG_NIR))
       shader->nir = (pss->type == PIPE_SHADER_IR_NIR) ? pss->ir.nir :
-                     tgsi_to_nir(pss->tokens, pctx->screen);
+                     tgsi_to_nir(pss->tokens, pctx->screen, false);
    else
       shader->tokens = tgsi_dup_tokens(pss->tokens);
 

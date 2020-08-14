@@ -277,6 +277,7 @@ texture_use_int_filter(const struct pipe_sampler_view *sv,
    case PIPE_TEXTURE_2D_ARRAY:
       if (tex_desc)
          break;
+      /* fallthrough */
    case PIPE_TEXTURE_3D:
       return false;
    default:

@@ -165,7 +165,7 @@ static bool lower_coord_shift_unnormalized(nir_builder& b, nir_tex_instr *tex)
 }
 
 static bool
-r600_nir_lower_int_tg4_impl(nir_function_impl *impl, const std::vector<bool>& lower)
+r600_nir_lower_int_tg4_impl(nir_function_impl *impl)
 {
    nir_builder b;
    nir_builder_init(&b, impl);
@@ -177,7 +177,7 @@ r600_nir_lower_int_tg4_impl(nir_function_impl *impl, const std::vector<bool>& lo
             nir_tex_instr *tex = nir_instr_as_tex(instr);
             if (tex->op == nir_texop_tg4 &&
                 tex->sampler_dim != GLSL_SAMPLER_DIM_CUBE) {
-               if (lower[tex->sampler_index]) {
+               if (nir_alu_type_get_base_type(tex->dest_type) != nir_type_float) {
                   if (tex->sampler_dim != GLSL_SAMPLER_DIM_RECT)
                      lower_coord_shift_normalized(b, tex);
                   else
@@ -207,24 +207,17 @@ bool r600_nir_lower_int_tg4(nir_shader *shader)
    bool progress = false;
    bool need_lowering = false;
 
-   int i = 0;
-
-   std::vector<bool> lower_sampler(shader->uniforms.length(), false);
-   auto is = lower_sampler.begin();
-
-   nir_foreach_variable(var, &shader->uniforms) {
+   nir_foreach_uniform_variable(var, shader) {
       if (var->type->is_sampler()) {
          if (glsl_base_type_is_integer(var->type->sampled_type)) {
-            need_lowering = *is = true;
+            need_lowering = true;
          }
-         ++i;
-         ++is;
       }
    }
 
    if (need_lowering) {
       nir_foreach_function(function, shader) {
-         if (function->impl && r600_nir_lower_int_tg4_impl(function->impl, lower_sampler))
+         if (function->impl && r600_nir_lower_int_tg4_impl(function->impl))
             progress = true;
       }
    }

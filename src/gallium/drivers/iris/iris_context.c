@@ -95,7 +95,9 @@ iris_lost_context_state(struct iris_batch *batch)
    }
 
    ice->state.dirty = ~0ull;
+   ice->state.stage_dirty = ~0ull;
    ice->state.current_hash_scale = 0;
+   memset(ice->state.last_block, 0, sizeof(ice->state.last_block));
    memset(ice->state.last_grid, 0, sizeof(ice->state.last_grid));
    batch->last_surface_base_address = ~0ull;
    batch->last_aux_map_state = 0;
@@ -202,11 +204,11 @@ iris_destroy_context(struct pipe_context *ctx)
    u_upload_destroy(ice->state.dynamic_uploader);
    u_upload_destroy(ice->query_buffer_uploader);
 
-   slab_destroy_child(&ice->transfer_pool);
-
    iris_batch_free(&ice->batches[IRIS_BATCH_RENDER]);
    iris_batch_free(&ice->batches[IRIS_BATCH_COMPUTE]);
    iris_destroy_binder(&ice->state.binder);
+
+   slab_destroy_child(&ice->transfer_pool);
 
    ralloc_free(ice);
 }
@@ -304,9 +306,7 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
       ice->state.sizes = _mesa_hash_table_u64_create(ice);
 
    for (int i = 0; i < IRIS_BATCH_COUNT; i++) {
-      iris_init_batch(&ice->batches[i], screen, &ice->dbg,
-                      &ice->reset, ice->state.sizes,
-                      ice->batches, (enum iris_batch_name) i, priority);
+      iris_init_batch(ice, (enum iris_batch_name) i, priority);
    }
 
    screen->vtbl.init_render_context(&ice->batches[IRIS_BATCH_RENDER]);

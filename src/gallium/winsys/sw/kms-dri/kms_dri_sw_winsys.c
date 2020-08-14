@@ -50,8 +50,8 @@
 #include "util/u_memory.h"
 #include "util/list.h"
 
-#include "state_tracker/sw_winsys.h"
-#include "state_tracker/drm_driver.h"
+#include "frontend/sw_winsys.h"
+#include "frontend/drm_driver.h"
 #include "kms_dri_sw_winsys.h"
 
 #ifdef DEBUG

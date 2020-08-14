@@ -178,8 +178,8 @@ instr_is_invariant(nir_instr *instr, nir_loop *loop)
       nir_intrinsic_instr *intrinsic = nir_instr_as_intrinsic(instr);
       if (!(nir_intrinsic_infos[intrinsic->intrinsic].flags & NIR_INTRINSIC_CAN_REORDER))
          return not_invariant;
-      /* fallthrough */
    }
+   /* fallthrough */
    default:
       return nir_foreach_src(instr, src_is_invariant, loop) ? invariant : not_invariant;
    }
@@ -397,9 +397,7 @@ nir_convert_to_lcssa(nir_shader *shader, bool skip_invariants, bool skip_bool_in
          nir_metadata_preserve(function->impl, nir_metadata_block_index |
                                                nir_metadata_dominance);
       } else {
-#ifndef NDEBUG
-         function->impl->valid_metadata &= ~nir_metadata_not_properly_reset;
-#endif
+         nir_metadata_preserve(function->impl, nir_metadata_all);
       }
    }
 

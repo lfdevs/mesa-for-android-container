@@ -16,9 +16,12 @@ C_SOURCES :=  \
 	etnaviv_blt.h \
 	etnaviv_clear_blit.c \
 	etnaviv_clear_blit.h \
+	etnaviv_compiler.c \
 	etnaviv_compiler.h \
 	etnaviv_compiler_nir.c \
-	etnaviv_compiler_nir_emit.h \
+	etnaviv_compiler_nir_emit.c \
+	etnaviv_compiler_nir_liveness.c \
+	etnaviv_compiler_nir_ra.c \
 	etnaviv_compiler_tgsi.c \
 	etnaviv_context.c \
 	etnaviv_context.h \
@@ -34,6 +37,8 @@ C_SOURCES :=  \
 	etnaviv_format.c \
 	etnaviv_format.h \
 	etnaviv_internal.h \
+	etnaviv_nir.c \
+	etnaviv_nir.h \
 	etnaviv_perfmon.c \
 	etnaviv_perfmon.h \
 	etnaviv_query.c \

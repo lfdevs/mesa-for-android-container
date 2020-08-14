@@ -32,6 +32,7 @@ LOCAL_C_INCLUDES := \
 	$(MESA_TOP)/src/panfrost/include/
 
 LOCAL_STATIC_LIBRARIES := \
+	libmesa_nir
 
 LOCAL_GENERATED_SOURCES := \
 

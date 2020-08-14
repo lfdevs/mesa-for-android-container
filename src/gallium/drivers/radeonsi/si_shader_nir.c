@@ -610,7 +610,7 @@ void si_nir_scan_shader(const struct nir_shader *nir, struct si_shader_info *inf
 
    i = 0;
    uint64_t processed_inputs = 0;
-   nir_foreach_variable (variable, &nir->inputs) {
+   nir_foreach_shader_in_variable (variable, nir) {
       unsigned semantic_name, semantic_index;
 
       const struct glsl_type *type = variable->type;
@@ -691,7 +691,7 @@ void si_nir_scan_shader(const struct nir_shader *nir, struct si_shader_info *inf
       }
    }
 
-   nir_foreach_variable (variable, &nir->outputs) {
+   nir_foreach_shader_out_variable (variable, nir) {
       const struct glsl_type *type = variable->type;
       if (nir_is_per_vertex_io(variable, nir->info.stage)) {
          assert(glsl_type_is_array(type));
@@ -714,11 +714,10 @@ void si_nir_scan_shader(const struct nir_shader *nir, struct si_shader_info *inf
 
    info->constbuf0_num_slots = nir->num_uniforms;
    info->shader_buffers_declared = u_bit_consecutive(0, nir->info.num_ssbos);
-   info->const_buffers_declared = u_bit_consecutive(1, nir->info.num_ubos);
-   if (nir->num_uniforms > 0)
-      info->const_buffers_declared |= 1;
+   info->const_buffers_declared = u_bit_consecutive(0, nir->info.num_ubos);
    info->images_declared = u_bit_consecutive(0, nir->info.num_images);
-   info->msaa_images_declared = u_bit_consecutive(0, nir->info.last_msaa_image + 1);
+   info->msaa_images_declared = nir->info.msaa_images;
+   info->image_buffers = nir->info.image_buffers;
    info->samplers_declared = nir->info.textures_used;
 
    info->num_written_clipdistance = nir->info.clip_distance_array_size;
@@ -740,32 +739,53 @@ void si_nir_scan_shader(const struct nir_shader *nir, struct si_shader_info *inf
    }
 }
 
-static void si_nir_opts(struct nir_shader *nir)
+static void si_nir_opts(struct nir_shader *nir, bool first)
 {
    bool progress;
 
+   NIR_PASS_V(nir, nir_lower_vars_to_ssa);
+   NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL, NULL);
+   NIR_PASS_V(nir, nir_lower_phis_to_scalar);
+
    do {
       progress = false;
+      bool lower_alu_to_scalar = false;
+      bool lower_phis_to_scalar = false;
 
-      NIR_PASS_V(nir, nir_lower_vars_to_ssa);
+      if (first) {
+         bool opt_find_array_copies = false;
 
-      NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
+         NIR_PASS(progress, nir, nir_split_array_vars, nir_var_function_temp);
+         NIR_PASS(lower_alu_to_scalar, nir, nir_shrink_vec_array_vars, nir_var_function_temp);
+         NIR_PASS(opt_find_array_copies, nir, nir_opt_find_array_copies);
+         NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
+
+         /* Call nir_lower_var_copies() to remove any copies introduced
+          * by nir_opt_find_array_copies().
+          */
+         if (opt_find_array_copies)
+            NIR_PASS(progress, nir, nir_lower_var_copies);
+         progress |= opt_find_array_copies;
+      } else {
+         NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
+      }
+
       NIR_PASS(progress, nir, nir_opt_dead_write_vars);
 
-      NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL, NULL);
-      NIR_PASS_V(nir, nir_lower_phis_to_scalar);
-
+      NIR_PASS(lower_alu_to_scalar, nir, nir_opt_trivial_continues);
       /* (Constant) copy propagation is needed for txf with offsets. */
       NIR_PASS(progress, nir, nir_copy_prop);
       NIR_PASS(progress, nir, nir_opt_remove_phis);
       NIR_PASS(progress, nir, nir_opt_dce);
-      if (nir_opt_trivial_continues(nir)) {
-         progress = true;
-         NIR_PASS(progress, nir, nir_copy_prop);
-         NIR_PASS(progress, nir, nir_opt_dce);
-      }
-      NIR_PASS(progress, nir, nir_opt_if, true);
+      NIR_PASS(lower_phis_to_scalar, nir, nir_opt_if, true);
       NIR_PASS(progress, nir, nir_opt_dead_cf);
+
+      if (lower_alu_to_scalar)
+         NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL, NULL);
+      if (lower_phis_to_scalar)
+         NIR_PASS_V(nir, nir_lower_phis_to_scalar);
+      progress |= lower_alu_to_scalar | lower_phis_to_scalar;
+
       NIR_PASS(progress, nir, nir_opt_cse);
       NIR_PASS(progress, nir, nir_opt_peephole_select, 8, true, true);
 
@@ -870,16 +890,16 @@ static void si_nir_lower_ps_inputs(struct nir_shader *nir)
 
 void si_nir_adjust_driver_locations(struct nir_shader *nir)
 {
-   /* Adjust the driver location of inputs and outputs. The state tracker
+   /* Adjust the driver location of inputs and outputs. the gallium frontend
     * interprets them as slots, while the ac/nir backend interprets them
     * as individual components.
     */
    if (nir->info.stage != MESA_SHADER_FRAGMENT) {
-      nir_foreach_variable (variable, &nir->inputs)
+      nir_foreach_shader_in_variable (variable, nir)
          variable->data.driver_location *= 4;
    }
 
-   nir_foreach_variable (variable, &nir->outputs)
+   nir_foreach_shader_out_variable (variable, nir)
       variable->data.driver_location *= 4;
 }
 
@@ -917,7 +937,7 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
    NIR_PASS_V(nir, nir_lower_var_copies);
    NIR_PASS_V(nir, nir_lower_pack);
    NIR_PASS_V(nir, nir_opt_access);
-   si_nir_opts(nir);
+   si_nir_opts(nir, true);
 
    /* Lower large variables that are always constant with load_constant
     * intrinsics, which get turned into PC-relative loads from a data
@@ -932,10 +952,10 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
 
    changed |= ac_lower_indirect_derefs(nir, sscreen->info.chip_class);
    if (changed)
-      si_nir_opts(nir);
+      si_nir_opts(nir, false);
 
    NIR_PASS_V(nir, nir_lower_bool_to_int32);
-   NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp);
+   NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
 
    if (sscreen->debug_flags & DBG(FS_CORRECT_DERIVS_AFTER_KILL))
       NIR_PASS_V(nir, nir_lower_discard_to_demote);

@@ -318,26 +318,6 @@ void MoveState::upwards_skip()
    source_idx++;
 }
 
-bool can_reorder(Instruction* candidate)
-{
-   switch (candidate->format) {
-   case Format::SMEM:
-      return static_cast<SMEM_instruction*>(candidate)->can_reorder;
-   case Format::MUBUF:
-      return static_cast<MUBUF_instruction*>(candidate)->can_reorder;
-   case Format::MIMG:
-      return static_cast<MIMG_instruction*>(candidate)->can_reorder;
-   case Format::MTBUF:
-      return static_cast<MTBUF_instruction*>(candidate)->can_reorder;
-   case Format::FLAT:
-   case Format::GLOBAL:
-   case Format::SCRATCH:
-      return static_cast<FLAT_instruction*>(candidate)->can_reorder;
-   default:
-      return true;
-   }
-}
-
 bool is_gs_or_done_sendmsg(const Instruction *instr)
 {
    if (instr->opcode == aco_opcode::s_sendmsg) {
@@ -357,96 +337,96 @@ bool is_done_sendmsg(const Instruction *instr)
    return false;
 }
 
-barrier_interaction get_barrier_interaction(const Instruction* instr)
+memory_sync_info get_sync_info_with_hack(const Instruction* instr)
 {
-   switch (instr->format) {
-   case Format::SMEM:
-      return static_cast<const SMEM_instruction*>(instr)->barrier;
-   case Format::MUBUF:
-      return static_cast<const MUBUF_instruction*>(instr)->barrier;
-   case Format::MIMG:
-      return static_cast<const MIMG_instruction*>(instr)->barrier;
-   case Format::MTBUF:
-      return static_cast<const MTBUF_instruction*>(instr)->barrier;
-   case Format::FLAT:
-   case Format::GLOBAL:
-   case Format::SCRATCH:
-      return static_cast<const FLAT_instruction*>(instr)->barrier;
-   case Format::DS:
-      return barrier_shared;
-   case Format::SOPP:
-      if (is_done_sendmsg(instr))
-         return (barrier_interaction)(barrier_gs_data | barrier_gs_sendmsg);
-      else if (is_gs_or_done_sendmsg(instr))
-         return barrier_gs_sendmsg;
-      else
-         return barrier_none;
-   case Format::PSEUDO_BARRIER:
-      return barrier_barrier;
-   default:
-      return barrier_none;
+   memory_sync_info sync = get_sync_info(instr);
+   if (instr->format == Format::SMEM && !instr->operands.empty() && instr->operands[0].bytes() == 16) {
+      // FIXME: currently, it doesn't seem beneficial to omit this due to how our scheduler works
+      sync.storage = (storage_class)(sync.storage | storage_buffer);
+      sync.semantics = (memory_semantics)(sync.semantics | semantic_private);
    }
+   return sync;
 }
 
-barrier_interaction parse_barrier(Instruction *instr)
-{
-   if (instr->format == Format::PSEUDO_BARRIER) {
-      switch (instr->opcode) {
-      case aco_opcode::p_memory_barrier_atomic:
-         return barrier_atomic;
-      /* For now, buffer and image barriers are treated the same. this is because of
-       * dEQP-VK.memory_model.message_passing.core11.u32.coherent.fence_fence.atomicwrite.device.payload_nonlocal.buffer.guard_nonlocal.image.comp
-       * which seems to use an image load to determine if the result of a buffer load is valid. So the ordering of the two loads is important.
-       * I /think/ we should probably eventually expand the meaning of a buffer barrier so that all buffer operations before it, must stay before it
-       * and that both image and buffer operations after it, must stay after it. We should also do the same for image barriers.
-       * Or perhaps the problem is that we don't have a combined barrier instruction for both buffers and images, but the CTS test expects us to?
-       * Either way, this solution should work. */
-      case aco_opcode::p_memory_barrier_buffer:
-      case aco_opcode::p_memory_barrier_image:
-         return (barrier_interaction)(barrier_image | barrier_buffer);
-      case aco_opcode::p_memory_barrier_shared:
-         return barrier_shared;
-      case aco_opcode::p_memory_barrier_common:
-         return (barrier_interaction)(barrier_image | barrier_buffer | barrier_shared | barrier_atomic);
-      case aco_opcode::p_memory_barrier_gs_data:
-         return barrier_gs_data;
-      case aco_opcode::p_memory_barrier_gs_sendmsg:
-         return barrier_gs_sendmsg;
-      default:
-         break;
-      }
-   } else if (instr->opcode == aco_opcode::s_barrier) {
-      return (barrier_interaction)(barrier_barrier | barrier_image | barrier_buffer | barrier_shared | barrier_atomic);
-   }
-   return barrier_none;
-}
+struct memory_event_set {
+   bool has_control_barrier;
+
+   unsigned bar_acquire;
+   unsigned bar_release;
+   unsigned bar_classes;
+
+   unsigned access_acquire;
+   unsigned access_release;
+   unsigned access_relaxed;
+   unsigned access_atomic;
+};
 
 struct hazard_query {
    bool contains_spill;
-   int barriers;
-   int barrier_interaction;
-   bool can_reorder_vmem;
-   bool can_reorder_smem;
+   bool contains_sendmsg;
+   memory_event_set mem_events;
+   unsigned aliasing_storage; /* storage classes which are accessed (non-SMEM) */
+   unsigned aliasing_storage_smem; /* storage classes which are accessed (SMEM) */
 };
 
 void init_hazard_query(hazard_query *query) {
    query->contains_spill = false;
-   query->barriers = 0;
-   query->barrier_interaction = 0;
-   query->can_reorder_vmem = true;
-   query->can_reorder_smem = true;
+   query->contains_sendmsg = false;
+   memset(&query->mem_events, 0, sizeof(query->mem_events));
+   query->aliasing_storage = 0;
+   query->aliasing_storage_smem = 0;
+}
+
+void add_memory_event(memory_event_set *set, Instruction *instr, memory_sync_info *sync)
+{
+   set->has_control_barrier |= is_done_sendmsg(instr);
+   if (instr->opcode == aco_opcode::p_barrier) {
+      Pseudo_barrier_instruction *bar = static_cast<Pseudo_barrier_instruction*>(instr);
+      if (bar->sync.semantics & semantic_acquire)
+         set->bar_acquire |= bar->sync.storage;
+      if (bar->sync.semantics & semantic_release)
+         set->bar_release |= bar->sync.storage;
+      set->bar_classes |= bar->sync.storage;
+
+      set->has_control_barrier |= bar->exec_scope > scope_invocation;
+   }
+
+   if (!sync->storage)
+      return;
+
+   if (sync->semantics & semantic_acquire)
+      set->access_acquire |= sync->storage;
+   if (sync->semantics & semantic_release)
+      set->access_release |= sync->storage;
+
+   if (!(sync->semantics & semantic_private)) {
+      if (sync->semantics & semantic_atomic)
+         set->access_atomic |= sync->storage;
+      else
+         set->access_relaxed |= sync->storage;
+   }
 }
 
 void add_to_hazard_query(hazard_query *query, Instruction *instr)
 {
-   query->barriers |= parse_barrier(instr);
-   query->barrier_interaction |= get_barrier_interaction(instr);
    if (instr->opcode == aco_opcode::p_spill || instr->opcode == aco_opcode::p_reload)
       query->contains_spill = true;
+   query->contains_sendmsg |= instr->opcode == aco_opcode::s_sendmsg;
 
-   bool can_reorder_instr = can_reorder(instr);
-   query->can_reorder_smem &= instr->format != Format::SMEM || can_reorder_instr;
-   query->can_reorder_vmem &= !(instr->isVMEM() || instr->isFlatOrGlobal()) || can_reorder_instr;
+   memory_sync_info sync = get_sync_info_with_hack(instr);
+
+   add_memory_event(&query->mem_events, instr, &sync);
+
+   if (!(sync.semantics & semantic_can_reorder)) {
+      unsigned storage = sync.storage;
+      /* images and buffer/global memory can alias */ //TODO: more precisely, buffer images and buffer/global memory can alias
+      if (storage & (storage_buffer | storage_image))
+         storage |= storage_buffer | storage_image;
+      if (instr->format == Format::SMEM)
+         query->aliasing_storage_smem |= storage;
+      else
+         query->aliasing_storage |= storage;
+   }
 }
 
 enum HazardResult {
@@ -463,10 +443,8 @@ enum HazardResult {
    hazard_fail_unreorderable,
 };
 
-HazardResult perform_hazard_query(hazard_query *query, Instruction *instr)
+HazardResult perform_hazard_query(hazard_query *query, Instruction *instr, bool upwards)
 {
-   bool can_reorder_candidate = can_reorder(instr);
-
    if (instr->opcode == aco_opcode::p_exit_early_if)
       return hazard_fail_exec;
    for (const Definition& def : instr->definitions) {
@@ -481,26 +459,65 @@ HazardResult perform_hazard_query(hazard_query *query, Instruction *instr)
    /* don't move non-reorderable instructions */
    if (instr->opcode == aco_opcode::s_memtime ||
        instr->opcode == aco_opcode::s_memrealtime ||
-       instr->opcode == aco_opcode::s_setprio)
+       instr->opcode == aco_opcode::s_setprio ||
+       instr->opcode == aco_opcode::s_getreg_b32)
       return hazard_fail_unreorderable;
 
-   if (query->barrier_interaction && (query->barrier_interaction & parse_barrier(instr)))
+   memory_event_set instr_set;
+   memset(&instr_set, 0, sizeof(instr_set));
+   memory_sync_info sync = get_sync_info_with_hack(instr);
+   add_memory_event(&instr_set, instr, &sync);
+
+   memory_event_set *first = &instr_set;
+   memory_event_set *second = &query->mem_events;
+   if (upwards)
+      std::swap(first, second);
+
+   /* everything after barrier(acquire) happens after the atomics/control_barriers before
+    * everything after load(acquire) happens after the load
+    */
+   if ((first->has_control_barrier || first->access_atomic) && second->bar_acquire)
       return hazard_fail_barrier;
-   if (query->barriers && (query->barriers & get_barrier_interaction(instr)))
+   if (((first->access_acquire || first->bar_acquire) && second->bar_classes) ||
+       ((first->access_acquire | first->bar_acquire) & (second->access_relaxed | second->access_atomic)))
       return hazard_fail_barrier;
 
-   if (!query->can_reorder_smem && instr->format == Format::SMEM && !can_reorder_candidate)
+   /* everything before barrier(release) happens before the atomics/control_barriers after *
+    * everything before store(release) happens before the store
+    */
+   if (first->bar_release && (second->has_control_barrier || second->access_atomic))
+      return hazard_fail_barrier;
+   if ((first->bar_classes && (second->bar_release || second->access_release)) ||
+       ((first->access_relaxed | first->access_atomic) & (second->bar_release | second->access_release)))
+      return hazard_fail_barrier;
+
+   /* don't move memory barriers around other memory barriers */
+   if (first->bar_classes && second->bar_classes)
+      return hazard_fail_barrier;
+
+   /* Don't move memory accesses to before control barriers. I don't think
+    * this is necessary for the Vulkan memory model, but it might be for GLSL450. */
+   unsigned control_classes = storage_buffer | storage_atomic_counter | storage_image | storage_shared;
+   if (first->has_control_barrier && ((second->access_atomic | second->access_relaxed) & control_classes))
+      return hazard_fail_barrier;
+
+   /* don't move memory loads/stores past potentially aliasing loads/stores */
+   unsigned aliasing_storage = instr->format == Format::SMEM ?
+                               query->aliasing_storage_smem :
+                               query->aliasing_storage;
+   if ((sync.storage & aliasing_storage) && !(sync.semantics & semantic_can_reorder)) {
+      unsigned intersect = sync.storage & aliasing_storage;
+      if (intersect & storage_shared)
+         return hazard_fail_reorder_ds;
       return hazard_fail_reorder_vmem_smem;
-   if (!query->can_reorder_vmem && (instr->isVMEM() || instr->isFlatOrGlobal()) && !can_reorder_candidate)
-      return hazard_fail_reorder_vmem_smem;
-   if ((query->barrier_interaction & barrier_shared) && instr->format == Format::DS)
-      return hazard_fail_reorder_ds;
-   if (is_gs_or_done_sendmsg(instr) && (query->barrier_interaction & get_barrier_interaction(instr)))
-      return hazard_fail_reorder_sendmsg;
+   }
 
    if ((instr->opcode == aco_opcode::p_spill || instr->opcode == aco_opcode::p_reload) &&
        query->contains_spill)
       return hazard_fail_spill;
+
+   if (instr->opcode == aco_opcode::s_sendmsg && query->contains_sendmsg)
+      return hazard_fail_reorder_sendmsg;
 
    return hazard_success;
 }
@@ -543,7 +560,7 @@ void schedule_SMEM(sched_ctx& ctx, Block* block,
 
       bool can_move_down = true;
 
-      HazardResult haz = perform_hazard_query(&hq, candidate.get());
+      HazardResult haz = perform_hazard_query(&hq, candidate.get(), false);
       if (haz == hazard_fail_reorder_ds || haz == hazard_fail_spill || haz == hazard_fail_reorder_sendmsg || haz == hazard_fail_barrier || haz == hazard_fail_export)
          can_move_down = false;
       else if (haz != hazard_success)
@@ -591,7 +608,7 @@ void schedule_SMEM(sched_ctx& ctx, Block* block,
          break;
 
       if (found_dependency) {
-         HazardResult haz = perform_hazard_query(&hq, candidate.get());
+         HazardResult haz = perform_hazard_query(&hq, candidate.get(), true);
          if (haz == hazard_fail_reorder_ds || haz == hazard_fail_spill ||
              haz == hazard_fail_reorder_sendmsg || haz == hazard_fail_barrier ||
              haz == hazard_fail_export)
@@ -683,7 +700,7 @@ void schedule_VMEM(sched_ctx& ctx, Block* block,
       /* if current depends on candidate, add additional dependencies and continue */
       bool can_move_down = !is_vmem || part_of_clause;
 
-      HazardResult haz = perform_hazard_query(part_of_clause ? &clause_hq : &indep_hq, candidate.get());
+      HazardResult haz = perform_hazard_query(part_of_clause ? &clause_hq : &indep_hq, candidate.get(), false);
       if (haz == hazard_fail_reorder_ds || haz == hazard_fail_spill ||
           haz == hazard_fail_reorder_sendmsg || haz == hazard_fail_barrier ||
           haz == hazard_fail_export)
@@ -698,6 +715,7 @@ void schedule_VMEM(sched_ctx& ctx, Block* block,
          continue;
       }
 
+      Instruction *candidate_ptr = candidate.get();
       MoveResult res = ctx.mv.downwards_move(part_of_clause);
       if (res == move_fail_ssa || res == move_fail_rar) {
          add_to_hazard_query(&indep_hq, candidate.get());
@@ -707,6 +725,8 @@ void schedule_VMEM(sched_ctx& ctx, Block* block,
       } else if (res == move_fail_pressure) {
          break;
       }
+      if (part_of_clause)
+         add_to_hazard_query(&indep_hq, candidate_ptr);
       k++;
       if (candidate_idx < ctx.last_SMEM_dep_idx)
          ctx.last_SMEM_stall++;
@@ -729,7 +749,7 @@ void schedule_VMEM(sched_ctx& ctx, Block* block,
       /* check if candidate depends on current */
       bool is_dependency = false;
       if (found_dependency) {
-         HazardResult haz = perform_hazard_query(&indep_hq, candidate.get());
+         HazardResult haz = perform_hazard_query(&indep_hq, candidate.get(), true);
          if (haz == hazard_fail_reorder_ds || haz == hazard_fail_spill ||
              haz == hazard_fail_reorder_vmem_smem || haz == hazard_fail_reorder_sendmsg ||
              haz == hazard_fail_barrier || haz == hazard_fail_export)
@@ -796,7 +816,7 @@ void schedule_position_export(sched_ctx& ctx, Block* block,
       if (candidate->isVMEM() || candidate->format == Format::SMEM || candidate->isFlatOrGlobal())
          break;
 
-      HazardResult haz = perform_hazard_query(&hq, candidate.get());
+      HazardResult haz = perform_hazard_query(&hq, candidate.get(), false);
       if (haz == hazard_fail_exec || haz == hazard_fail_unreorderable)
          break;
 
@@ -869,6 +889,11 @@ void schedule_block(sched_ctx& ctx, Program *program, Block* block, live& live_v
 
 void schedule_program(Program *program, live& live_vars)
 {
+   /* don't use program->max_reg_demand because that is affected by max_waves_per_simd */
+   RegisterDemand demand;
+   for (Block& block : program->blocks)
+      demand.update(block.register_demand);
+
    sched_ctx ctx;
    ctx.mv.depends_on.resize(program->peekAllocationId());
    ctx.mv.RAR_dependencies.resize(program->peekAllocationId());
@@ -878,15 +903,14 @@ void schedule_program(Program *program, live& live_vars)
     * seem to hurt anything else. */
    if (program->num_waves <= 5)
       ctx.num_waves = program->num_waves;
-   else if (program->max_reg_demand.vgpr >= 32)
+   else if (demand.vgpr >= 29)
       ctx.num_waves = 5;
-   else if (program->max_reg_demand.vgpr >= 28)
+   else if (demand.vgpr >= 25)
       ctx.num_waves = 6;
-   else if (program->max_reg_demand.vgpr >= 24)
-      ctx.num_waves = 7;
    else
-      ctx.num_waves = 8;
+      ctx.num_waves = 7;
    ctx.num_waves = std::max<uint16_t>(ctx.num_waves, program->min_waves);
+   ctx.num_waves = std::min<uint16_t>(ctx.num_waves, program->max_waves);
 
    assert(ctx.num_waves > 0 && ctx.num_waves <= program->num_waves);
    ctx.mv.max_registers = { int16_t(get_addr_vgpr_from_waves(program, ctx.num_waves) - 2),

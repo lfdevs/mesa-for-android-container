@@ -278,6 +278,7 @@ struct r600_bytecode {
 	unsigned        r6xx_nop_after_rel_dst;
 	bool            index_loaded[2];
 	unsigned        index_reg[2]; /* indexing register CF_INDEX_[01] */
+	unsigned        index_reg_chan[2]; /* indexing register chanel CF_INDEX_[01] */
 	unsigned        debug_id;
 	struct r600_isa* isa;
 	struct r600_bytecode_output pending_outputs[5];

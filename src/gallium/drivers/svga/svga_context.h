@@ -43,7 +43,7 @@
 #include "svga_winsys.h"
 #include "svga_hw_reg.h"
 #include "svga3d_shaderdefs.h"
-
+#include "svga_debug.h"
 
 /** Non-GPU queries for gallium HUD */
 enum svga_hud {
@@ -56,6 +56,7 @@ enum svga_hud {
    SVGA_QUERY_NUM_BUFFERS_MAPPED,
    SVGA_QUERY_NUM_TEXTURES_MAPPED,
    SVGA_QUERY_NUM_BYTES_UPLOADED,
+   SVGA_QUERY_NUM_COMMAND_BUFFERS,
    SVGA_QUERY_COMMAND_BUFFER_SIZE,
    SVGA_QUERY_FLUSH_TIME,
    SVGA_QUERY_SURFACE_WRITE_FLUSHES,
@@ -64,6 +65,8 @@ enum svga_hud {
    SVGA_QUERY_NUM_BUFFER_UPLOADS,
    SVGA_QUERY_NUM_CONST_BUF_UPDATES,
    SVGA_QUERY_NUM_CONST_UPDATES,
+   SVGA_QUERY_NUM_SHADER_RELOCATIONS,
+   SVGA_QUERY_NUM_SURFACE_RELOCATIONS,
 
 /* running total counters */
    SVGA_QUERY_MEMORY_USED,
@@ -74,6 +77,7 @@ enum svga_hud {
    SVGA_QUERY_NUM_GENERATE_MIPMAP,
    SVGA_QUERY_NUM_FAILED_ALLOCATIONS,
    SVGA_QUERY_NUM_COMMANDS_PER_DRAW,
+   SVGA_QUERY_SHADER_MEM_USED,
 
 /*SVGA_QUERY_MAX has to be last because it is size of an array*/
    SVGA_QUERY_MAX
@@ -109,6 +113,8 @@ struct svga_blend_state {
    unsigned alpha_to_coverage:1;
    unsigned alpha_to_one:1;
    unsigned blend_color_alpha:1;  /**< set blend color to alpha value */
+   unsigned logicop_enabled:1;
+   unsigned logicop_mode:5;
 
    /** Per-render target state */
    struct {
@@ -252,6 +258,10 @@ struct svga_velems_state {
    SVGA3dElementLayoutId id; /**< VGPU10 */
 };
 
+struct svga_constant_buffer {
+   struct svga_winsys_surface *handle;
+   unsigned size;
+};
 
 /* Use to calculate differences between state emitted to hardware and
  * current driver-calculated state.
@@ -269,6 +279,11 @@ struct svga_state
    struct svga_vertex_shader *vs;
    struct svga_geometry_shader *user_gs; /* user-specified GS */
    struct svga_geometry_shader *gs;      /* derived GS */
+   /* derived tessellation control shader */
+   struct svga_tcs_shader *tcs;
+   /* derived tessellation evaluation shader */
+   struct svga_tes_shader *tes;
+   struct svga_compute_shader *cs;
 
    struct pipe_vertex_buffer vb[PIPE_MAX_ATTRIBS];
    /** Constant buffers for each shader.
@@ -286,16 +301,18 @@ struct svga_state
    int nr_fbs;
 
    struct pipe_poly_stipple poly_stipple;
-   struct pipe_scissor_state scissor;
+   struct pipe_scissor_state scissor[SVGA3D_DX_MAX_VIEWPORTS];
    struct pipe_blend_color blend_color;
    struct pipe_stencil_ref stencil_ref;
    struct pipe_clip_state clip;
-   struct pipe_viewport_state viewport;
+   struct pipe_viewport_state viewport[SVGA3D_DX_MAX_VIEWPORTS];
 
    unsigned num_samplers[PIPE_SHADER_TYPES];
    unsigned num_sampler_views[PIPE_SHADER_TYPES];
    unsigned num_vertex_buffers;
    enum pipe_prim_type reduced_prim;
+
+   unsigned vertex_id_bias;
 
    struct {
       unsigned flag_1d;
@@ -303,6 +320,14 @@ struct svga_state
    } tex_flags;
 
    unsigned sample_mask;
+   unsigned vertices_per_patch;
+   float default_tesslevels[6]; /* tessellation (outer[4] + inner[2]) levels */
+   struct {
+      /* Determine the layout of the grid (in block units) to be used. */
+      unsigned size[3];
+      /* If DispatchIndirect is used, this will has grid size info*/
+      struct pipe_resource *indirect;
+   } grid_info;
 };
 
 struct svga_prescale {
@@ -311,21 +336,27 @@ struct svga_prescale {
    boolean enabled;
 };
 
+struct svga_depthrange {
+   float zmin;
+   float zmax;
+};
 
 /* Updated by calling svga_update_state( SVGA_STATE_HW_CLEAR )
  */
 struct svga_hw_clear_state
 {
-   SVGA3dRect viewport;
-
-   struct {
-      float zmin, zmax;
-   } depthrange;
-
    struct pipe_framebuffer_state framebuffer;
-   struct svga_prescale prescale;
+
+   /* VGPU9 only */
+   SVGA3dRect viewport;
+   struct svga_depthrange depthrange;
 
    /* VGPU10 state */
+   SVGA3dViewport viewports[SVGA3D_DX_MAX_VIEWPORTS];
+   struct svga_prescale prescale[SVGA3D_DX_MAX_VIEWPORTS];
+   struct pipe_scissor_state scissors[SVGA3D_DX_MAX_VIEWPORTS];
+   unsigned num_prescale;
+
    unsigned num_rendertargets;
    struct pipe_surface *rtv[SVGA3D_MAX_RENDER_TARGETS];
    struct pipe_surface *dsv;
@@ -361,9 +392,13 @@ struct svga_hw_draw_state
    struct svga_shader_variant *fs;
    struct svga_shader_variant *vs;
    struct svga_shader_variant *gs;
+   struct svga_shader_variant *tcs;
+   struct svga_shader_variant *tes;
+   struct svga_shader_variant *cs;
 
    /** Currently bound constant buffer, per shader stage */
-   struct pipe_resource *constbuf[PIPE_SHADER_TYPES];
+   struct pipe_resource *constbuf[PIPE_SHADER_TYPES][SVGA_MAX_CONST_BUFS];
+   struct svga_constant_buffer constbufoffsets[PIPE_SHADER_TYPES][SVGA_MAX_CONST_BUFS];
 
    /** Bitmask of enabled constant buffers */
    unsigned enabled_constbufs[PIPE_SHADER_TYPES];
@@ -452,7 +487,7 @@ struct svga_context
       boolean no_line_width;
       boolean force_hw_line_stipple;
 
-      /** To report perf/conformance/etc issues to the state tracker */
+      /** To report perf/conformance/etc issues to the gallium frontend */
       struct pipe_debug_callback callback;
    } debug;
 
@@ -495,7 +530,7 @@ struct svga_context
    struct util_bitmask *query_id_bm;
 
    struct {
-      unsigned dirty[SVGA_STATE_MAX];
+      uint64_t dirty[SVGA_STATE_MAX];
 
       /** bitmasks of which const buffers are changed */
       unsigned dirty_constbufs[PIPE_SHADER_TYPES];
@@ -507,8 +542,8 @@ struct svga_context
       struct svga_hw_clear_state    hw_clear;
    } state;
 
-   struct svga_state curr;      /* state from the state tracker */
-   unsigned dirty;              /* statechanges since last update_state() */
+   struct svga_state curr;      /* state from the gallium frontend */
+   uint64_t dirty;              /* statechanges since last update_state() */
 
    union {
       struct {
@@ -518,6 +553,9 @@ struct svga_context
          unsigned vs:1;
          unsigned fs:1;
          unsigned gs:1;
+         unsigned tcs:1;
+         unsigned tes:1;
+         unsigned cs:1;
          unsigned query:1;
       } flags;
       unsigned val;
@@ -531,7 +569,10 @@ struct svga_context
    struct util_bitmask *gb_query_alloc_mask;  /**< gb query object allocation mask */
    struct svga_qmem_alloc_entry *gb_query_map[SVGA_QUERY_MAX];
                                               /**< query mem block mapping */
-   struct svga_query *sq[SVGA_QUERY_MAX];     /**< queries currently in progress */
+   struct svga_query *sq[SVGA_QUERY_MAX+12];  /**< queries currently in progress */
+                                              /* The last 12 entries are for streamout
+                                               * queries for stream 0..3
+                                               */
 
    /** List of buffers with queued transfers */
    struct list_head dirty_buffers;
@@ -545,6 +586,7 @@ struct svga_context
       uint64_t map_buffer_time;         /**< SVGA_QUERY_MAP_BUFFER_TIME */
       uint64_t num_buffers_mapped;      /**< SVGA_QUERY_NUM_BUFFERS_MAPPED */
       uint64_t num_textures_mapped;     /**< SVGA_QUERY_NUM_TEXTURES_MAPPED */
+      uint64_t num_command_buffers;     /**< SVGA_QUERY_NUM_COMMAND_BUFFERS */
       uint64_t command_buffer_size;     /**< SVGA_QUERY_COMMAND_BUFFER_SIZE */
       uint64_t flush_time;              /**< SVGA_QUERY_FLUSH_TIME */
       uint64_t surface_write_flushes;   /**< SVGA_QUERY_SURFACE_WRITE_FLUSHES */
@@ -566,15 +608,27 @@ struct svga_context
       uint64_t num_surface_views;       /**< SVGA_QUERY_NUM_SURFACE_VIEWS */
       uint64_t num_bytes_uploaded;      /**< SVGA_QUERY_NUM_BYTES_UPLOADED */
       uint64_t num_generate_mipmap;     /**< SVGA_QUERY_NUM_GENERATE_MIPMAP */
+      uint64_t shader_mem_used;         /**< SVGA_QUERY_SHADER_MEM_USED */
 
       boolean uses_time;                /**< os_time_get() calls needed? */
    } hud;
 
    /** The currently bound stream output targets */
+   boolean in_streamout;                /* Set if streamout is active */
    unsigned num_so_targets;
    struct svga_winsys_surface *so_surfaces[SVGA3D_DX_MAX_SOTARGETS];
    struct pipe_stream_output_target *so_targets[SVGA3D_DX_MAX_SOTARGETS];
    struct svga_stream_output *current_so;
+
+   /**
+    * The following states are used in the workaround for auto draw with
+    * stream instancing.
+    */
+
+   /* Last bound SO targets that can be used to get vertex count */
+   struct pipe_stream_output_target *vcount_so_targets[SVGA3D_DX_MAX_SOTARGETS];
+   unsigned vcount_buffer_stream;       /* SO buffer to stream index mask */
+   struct pipe_query *so_queries[4];    /* SO stat queries for each stream */
 
    /** A blend state with blending disabled, for falling back to when blending
     * is illegal (e.g. an integer texture is bound)
@@ -601,41 +655,68 @@ struct svga_context
 
    boolean render_condition;
    boolean disable_rasterizer; /* Set if to disable rasterization */
+
+   struct {
+      struct svga_tcs_shader *passthrough_tcs;
+      struct svga_vertex_shader *vs;
+      struct svga_tes_shader *tes;
+      unsigned vertices_per_patch;
+      boolean passthrough;
+   } tcs;
+
 };
 
-/* A flag for each state_tracker state object:
+/* A flag for each frontend state object:
  */
-#define SVGA_NEW_BLEND               0x1
-#define SVGA_NEW_DEPTH_STENCIL_ALPHA 0x2
-#define SVGA_NEW_RAST                0x4
-#define SVGA_NEW_SAMPLER             0x8
-#define SVGA_NEW_TEXTURE             0x10
-#define SVGA_NEW_VBUFFER             0x20
-#define SVGA_NEW_VELEMENT            0x40
-#define SVGA_NEW_FS                  0x80
-#define SVGA_NEW_VS                  0x100
-#define SVGA_NEW_FS_CONST_BUFFER     0x200
-#define SVGA_NEW_VS_CONST_BUFFER     0x400
-#define SVGA_NEW_FRAME_BUFFER        0x800
-#define SVGA_NEW_STIPPLE             0x1000
-#define SVGA_NEW_SCISSOR             0x2000
-#define SVGA_NEW_BLEND_COLOR         0x4000
-#define SVGA_NEW_CLIP                0x8000
-#define SVGA_NEW_VIEWPORT            0x10000
-#define SVGA_NEW_PRESCALE            0x20000
-#define SVGA_NEW_REDUCED_PRIMITIVE   0x40000
-#define SVGA_NEW_TEXTURE_BINDING     0x80000
-#define SVGA_NEW_NEED_PIPELINE       0x100000
-#define SVGA_NEW_NEED_SWVFETCH       0x200000
-#define SVGA_NEW_NEED_SWTNL          0x400000
-#define SVGA_NEW_FS_VARIANT          0x800000
-#define SVGA_NEW_VS_VARIANT          0x1000000
-#define SVGA_NEW_TEXTURE_FLAGS       0x4000000
-#define SVGA_NEW_STENCIL_REF         0x8000000
-#define SVGA_NEW_GS                  0x10000000
-#define SVGA_NEW_GS_CONST_BUFFER     0x20000000
-#define SVGA_NEW_GS_VARIANT          0x40000000
-#define SVGA_NEW_TEXTURE_CONSTS      0x80000000
+#define SVGA_NEW_BLEND               ((uint64_t) 0x1)
+#define SVGA_NEW_DEPTH_STENCIL_ALPHA ((uint64_t) 0x2)
+#define SVGA_NEW_RAST                ((uint64_t) 0x4)
+#define SVGA_NEW_SAMPLER             ((uint64_t) 0x8)
+#define SVGA_NEW_TEXTURE             ((uint64_t) 0x10)
+#define SVGA_NEW_VBUFFER             ((uint64_t) 0x20)
+#define SVGA_NEW_VELEMENT            ((uint64_t) 0x40)
+#define SVGA_NEW_FS                  ((uint64_t) 0x80)
+#define SVGA_NEW_VS                  ((uint64_t) 0x100)
+#define SVGA_NEW_FS_CONST_BUFFER     ((uint64_t) 0x200)
+#define SVGA_NEW_VS_CONST_BUFFER     ((uint64_t) 0x400)
+#define SVGA_NEW_FRAME_BUFFER        ((uint64_t) 0x800)
+#define SVGA_NEW_STIPPLE             ((uint64_t) 0x1000)
+#define SVGA_NEW_SCISSOR             ((uint64_t) 0x2000)
+#define SVGA_NEW_BLEND_COLOR         ((uint64_t) 0x4000)
+#define SVGA_NEW_CLIP                ((uint64_t) 0x8000)
+#define SVGA_NEW_VIEWPORT            ((uint64_t) 0x10000)
+#define SVGA_NEW_PRESCALE            ((uint64_t) 0x20000)
+#define SVGA_NEW_REDUCED_PRIMITIVE   ((uint64_t) 0x40000)
+#define SVGA_NEW_TEXTURE_BINDING     ((uint64_t) 0x80000)
+#define SVGA_NEW_NEED_PIPELINE       ((uint64_t) 0x100000)
+#define SVGA_NEW_NEED_SWVFETCH       ((uint64_t) 0x200000)
+#define SVGA_NEW_NEED_SWTNL          ((uint64_t) 0x400000)
+#define SVGA_NEW_FS_VARIANT          ((uint64_t) 0x800000)
+#define SVGA_NEW_VS_VARIANT          ((uint64_t) 0x1000000)
+#define SVGA_NEW_TEXTURE_FLAGS       ((uint64_t) 0x4000000)
+#define SVGA_NEW_STENCIL_REF         ((uint64_t) 0x8000000)
+#define SVGA_NEW_GS                  ((uint64_t) 0x10000000)
+#define SVGA_NEW_GS_CONST_BUFFER     ((uint64_t) 0x20000000)
+#define SVGA_NEW_GS_VARIANT          ((uint64_t) 0x40000000)
+#define SVGA_NEW_TEXTURE_CONSTS      ((uint64_t) 0x80000000)
+#define SVGA_NEW_TCS                 ((uint64_t) 0x100000000)
+#define SVGA_NEW_TES                 ((uint64_t) 0x200000000)
+#define SVGA_NEW_TCS_VARIANT         ((uint64_t) 0x400000000)
+#define SVGA_NEW_TES_VARIANT         ((uint64_t) 0x800000000)
+#define SVGA_NEW_TCS_CONST_BUFFER    ((uint64_t) 0x1000000000)
+#define SVGA_NEW_TES_CONST_BUFFER    ((uint64_t) 0x2000000000)
+#define SVGA_NEW_TCS_PARAM           ((uint64_t) 0x4000000000)
+#define SVGA_NEW_FS_CONSTS           ((uint64_t) 0x8000000000)
+#define SVGA_NEW_VS_CONSTS           ((uint64_t) 0x10000000000)
+#define SVGA_NEW_GS_CONSTS           ((uint64_t) 0x20000000000)
+#define SVGA_NEW_TCS_CONSTS          ((uint64_t) 0x40000000000)
+#define SVGA_NEW_TES_CONSTS          ((uint64_t) 0x800000000000)
+#define SVGA_NEW_ALL                 ((uint64_t) 0xFFFFFFFFFFFFFFFF)
+
+#define SVGA_NEW_CONST_BUFFER \
+   (SVGA_NEW_FS_CONST_BUFFER | SVGA_NEW_VS_CONST_BUFFER | \
+    SVGA_NEW_GS_CONST_BUFFER | \
+    SVGA_NEW_TCS_CONST_BUFFER | SVGA_NEW_TES_CONST_BUFFER)
 
 
 void svga_init_state_functions( struct svga_context *svga );
@@ -648,9 +729,11 @@ void svga_init_depth_stencil_functions( struct svga_context *svga );
 void svga_init_misc_functions( struct svga_context *svga );
 void svga_init_rasterizer_functions( struct svga_context *svga );
 void svga_init_sampler_functions( struct svga_context *svga );
+void svga_init_cs_functions( struct svga_context *svga );
 void svga_init_fs_functions( struct svga_context *svga );
 void svga_init_vs_functions( struct svga_context *svga );
 void svga_init_gs_functions( struct svga_context *svga );
+void svga_init_ts_functions( struct svga_context *svga );
 void svga_init_vertex_functions( struct svga_context *svga );
 void svga_init_constbuffer_functions( struct svga_context *svga );
 void svga_init_draw_functions( struct svga_context *svga );
@@ -663,6 +746,7 @@ void svga_cleanup_vertex_state( struct svga_context *svga );
 void svga_cleanup_sampler_state( struct svga_context *svga );
 void svga_cleanup_tss_binding( struct svga_context *svga );
 void svga_cleanup_framebuffer( struct svga_context *svga );
+void svga_cleanup_tcs_state( struct svga_context *svga );
 
 void svga_context_flush( struct svga_context *svga,
                          struct pipe_fence_handle **pfence );
@@ -672,6 +756,7 @@ void svga_context_finish(struct svga_context *svga);
 void svga_hwtnl_flush_retry( struct svga_context *svga );
 void svga_hwtnl_flush_buffer( struct svga_context *svga,
                               struct pipe_resource *buffer );
+boolean svga_hwtnl_has_pending_prim(struct svga_hwtnl *);
 
 void svga_surfaces_flush(struct svga_context *svga);
 
@@ -724,6 +809,12 @@ svga_have_sm4_1(const struct svga_context *svga)
 }
 
 static inline boolean
+svga_have_sm5(const struct svga_context *svga)
+{
+   return svga_screen(svga->pipe.screen)->sws->have_sm5;
+}
+
+static inline boolean
 svga_need_to_rebind_resources(const struct svga_context *svga)
 {
    return svga_screen(svga->pipe.screen)->sws->need_to_rebind_resources;
@@ -745,5 +836,107 @@ svga_get_time(struct svga_context *svga)
    return svga->hud.uses_time ? os_time_get() : 0;
 }
 
+/*
+ * The SVGA_TRY_XX family of macros can be used to optionally replace a
+ * function call with an error value, the purpose is to trigger and test
+ * retry path handling.
+ */
+#ifdef DEBUG
+
+/*
+ * Optionally replace a function call with a PIPE_ERROR_OUT_OF_MEMORY
+ * return value
+ */
+#define SVGA_TRY(_func) \
+   ((SVGA_DEBUG & DEBUG_RETRY) ? PIPE_ERROR_OUT_OF_MEMORY : (_func))
+
+/* Optionally replace a function call with a NULL return value */
+#define SVGA_TRY_PTR(_func) \
+   ((SVGA_DEBUG & DEBUG_RETRY) ? NULL : (_func))
+
+/*
+ * Optionally replace a function call with a NULL return value, and set
+ * the _retry parameter to TRUE.
+ */
+#define SVGA_TRY_MAP(_func, _retry) \
+   ((SVGA_DEBUG & DEBUG_RETRY) ? (_retry) = TRUE, NULL : (_func))
+#else
+
+#define SVGA_TRY(_func) (_func)
+
+#define SVGA_TRY_PTR(_func) (_func)
+
+#define SVGA_TRY_MAP(_func, _retry) (_func)
+#endif
+
+/**
+ * Enter retry processing after hitting out-of-command space
+ */
+static inline void
+svga_retry_enter(struct svga_context *svga)
+{
+   /* We shouldn't nest retries, but currently we do. */
+   if ((SVGA_DEBUG & DEBUG_RETRY) && svga->swc->in_retry) {
+      debug_printf("WARNING: Recursive retry. Level: %u.\n",
+                   svga->swc->in_retry);
+   }
+   svga->swc->in_retry++;
+}
+
+/**
+ * Exit retry processing after hitting out-of-command space
+ */
+static inline void
+svga_retry_exit(struct svga_context *svga)
+{
+   assert(svga->swc->in_retry > 0);
+   svga->swc->in_retry--;
+}
+
+/**
+ * Perform a function call, and on failure flush the context and retry,
+ * asserting that the retry succeeded. On return, the boolean argument
+ * _retried indicates whether the function call was retried or not.
+ */
+#define SVGA_RETRY_CHECK(_svga, _func, _retried)       \
+   do {                                                \
+      enum pipe_error ret;                             \
+                                                       \
+      ret = SVGA_TRY(_func);                           \
+      (_retried) = (ret != PIPE_OK);                   \
+      if (_retried) {                                  \
+         svga_retry_enter(_svga);                      \
+         svga_context_flush(_svga, NULL);              \
+         ret = (_func);                                \
+         assert(ret == PIPE_OK);                       \
+         svga_retry_exit(_svga);                       \
+      }                                                \
+   } while(0)
+
+/**
+ * Perform a function call, and on failure flush the context and retry,
+ * asserting that the retry succeeded.
+ */
+#define SVGA_RETRY(_svga, _func)                \
+   do {                                         \
+      UNUSED boolean retried;                   \
+                                                \
+      SVGA_RETRY_CHECK(_svga, _func, retried);  \
+   } while(0)
+
+/**
+ * Perform a function call, and on out-of-memory, flush the context and
+ * retry. The retry return value is stored in _ret for reuse.
+ */
+#define SVGA_RETRY_OOM(_svga, _ret, _func)              \
+   do {                                                 \
+      (_ret) = SVGA_TRY(_func);                         \
+      if ((_ret) == PIPE_ERROR_OUT_OF_MEMORY) {         \
+         svga_retry_enter(_svga);                       \
+         svga_context_flush(_svga, NULL);               \
+         (_ret) = (_func);                              \
+         svga_retry_exit(_svga);                        \
+      }                                                 \
+   } while (0);
 
 #endif

@@ -24,18 +24,19 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "tgsi/tgsi_from_mesa.h"
 #include "sfn_shader_geometry.h"
 #include "sfn_instruction_misc.h"
 #include "sfn_instruction_fetch.h"
+#include "sfn_shaderio.h"
 
 namespace r600 {
 
 GeometryShaderFromNir::GeometryShaderFromNir(r600_pipe_shader *sh,
                                              r600_pipe_shader_selector &sel,
-                                             const r600_shader_key &key):
+                                             const r600_shader_key &key,
+                                             enum chip_class chip_class):
    VertexStage(PIPE_SHADER_GEOMETRY, sel, sh->shader,
-               sh->scratch_space_needed),
+               sh->scratch_space_needed, chip_class, key.gs.first_atomic_counter),
    m_pipe_shader(sh),
    m_so_info(&sel.so),
    m_first_vertex_emitted(false),
@@ -56,19 +57,17 @@ bool GeometryShaderFromNir::do_emit_load_deref(UNUSED const nir_variable *in_var
 
 bool GeometryShaderFromNir::do_emit_store_deref(const nir_variable *out_var, nir_intrinsic_instr* instr)
 {
-   uint32_t write_mask =  (1 << instr->num_components) - 1;
-   GPRVector::Swizzle swz = swizzle_from_mask(instr->num_components);
-   std::unique_ptr<GPRVector> vec(vec_from_nir_with_fetch_constant(instr->src[1], write_mask, swz));
+   uint32_t write_mask = nir_intrinsic_write_mask(instr);
+   GPRVector::Swizzle swz = swizzle_from_mask(write_mask);
+   auto out_value = vec_from_nir_with_fetch_constant(instr->src[1], write_mask, swz, true);
 
-   GPRVector out_value  = *vec;
-
-   sh_info().output[out_var->data.driver_location].write_mask =
-         (1 << instr->num_components) - 1;
+   sh_info().output[out_var->data.driver_location].write_mask = write_mask;
 
    auto ir = new MemRingOutIntruction(cf_mem_ring, mem_write_ind, out_value,
                                       4 * out_var->data.driver_location,
-                                      4, m_export_base);
-   emit_instruction(ir);
+                                      instr->num_components, m_export_base);
+
+   streamout_data[out_var->data.location] = ir;
 
    return true;
 }
@@ -83,19 +82,25 @@ bool GeometryShaderFromNir::do_process_inputs(nir_variable *input)
 
    if (input->data.location == VARYING_SLOT_POS ||
        input->data.location == VARYING_SLOT_PSIZ ||
+       input->data.location == VARYING_SLOT_FOGC ||
        input->data.location == VARYING_SLOT_CLIP_VERTEX ||
        input->data.location == VARYING_SLOT_CLIP_DIST0 ||
        input->data.location == VARYING_SLOT_CLIP_DIST1 ||
        input->data.location == VARYING_SLOT_COL0 ||
        input->data.location == VARYING_SLOT_COL1 ||
+       input->data.location == VARYING_SLOT_BFC0 ||
+       input->data.location == VARYING_SLOT_BFC1 ||
+       input->data.location == VARYING_SLOT_PNTC ||
        (input->data.location >= VARYING_SLOT_VAR0 &&
        input->data.location <= VARYING_SLOT_VAR31) ||
        (input->data.location >= VARYING_SLOT_TEX0 &&
        input->data.location <= VARYING_SLOT_TEX7)) {
 
       r600_shader_io& io = sh_info().input[input->data.driver_location];
-      tgsi_get_gl_varying_semantic(static_cast<gl_varying_slot>( input->data.location),
-                                   true, &io.name, &io.sid);
+      auto semantic = r600_get_varying_semantic(input->data.location);
+      io.name = semantic.first;
+      io.sid = semantic.second;
+
       io.ring_offset = 16 * input->data.driver_location;
       ++sh_info().ninput;
       m_next_input_ring_offset += 16;
@@ -115,6 +120,7 @@ bool GeometryShaderFromNir::do_process_outputs(nir_variable *output)
        output->data.location <= VARYING_SLOT_TEX7) ||
        output->data.location == VARYING_SLOT_BFC0 ||
        output->data.location == VARYING_SLOT_BFC1 ||
+       output->data.location == VARYING_SLOT_PNTC ||
        output->data.location == VARYING_SLOT_CLIP_VERTEX ||
        output->data.location == VARYING_SLOT_CLIP_DIST0 ||
        output->data.location == VARYING_SLOT_CLIP_DIST1 ||
@@ -126,8 +132,10 @@ bool GeometryShaderFromNir::do_process_outputs(nir_variable *output)
        output->data.location == VARYING_SLOT_FOGC) {
       r600_shader_io& io = sh_info().output[output->data.driver_location];
 
-      tgsi_get_gl_varying_semantic(static_cast<gl_varying_slot>( output->data.location),
-                                   true, &io.name, &io.sid);
+      auto semantic = r600_get_varying_semantic(output->data.location);
+      io.name = semantic.first;
+      io.sid = semantic.second;
+
       evaluate_spi_sid(io);
       ++sh_info().noutput;
 
@@ -135,13 +143,18 @@ bool GeometryShaderFromNir::do_process_outputs(nir_variable *output)
           output->data.location == VARYING_SLOT_CLIP_DIST1) {
          m_num_clip_dist += 4;
       }
+
+      if (output->data.location == VARYING_SLOT_VIEWPORT) {
+         sh_info().vs_out_viewport = 1;
+         sh_info().vs_out_misc_write = 1;
+      }
       return true;
    }
    return false;
 }
 
 
-bool GeometryShaderFromNir::allocate_reserved_registers()
+bool GeometryShaderFromNir::do_allocate_reserved_registers()
 {
    const int sel[6] = {0, 0 ,0, 1, 1, 1};
    const int chan[6] = {0, 1 ,3, 0, 1, 2};
@@ -255,6 +268,14 @@ bool GeometryShaderFromNir::emit_vertex(nir_intrinsic_instr* instr, bool cut)
    int stream = nir_intrinsic_stream_id(instr);
    assert(stream < 4);
 
+   for(auto v: streamout_data) {
+      if (stream == 0 || v.first != VARYING_SLOT_POS) {
+         v.second->patch_ring(stream);
+         emit_instruction(v.second);
+      } else
+         delete v.second;
+   }
+   streamout_data.clear();
    emit_instruction(new EmitVertex(stream, cut));
 
    if (!cut)

@@ -66,7 +66,7 @@ TargetNV50::getBuiltinOffset(int builtin) const
    return 0;
 }
 
-struct opProperties
+struct nv50_opProperties
 {
    operation op;
    unsigned int mNeg    : 4;
@@ -79,7 +79,7 @@ struct opProperties
    unsigned int fImm    : 3;
 };
 
-static const struct opProperties _initProps[] =
+static const struct nv50_opProperties _initProps[] =
 {
    //           neg  abs  not  sat  c[]  s[], a[], imm
    { OP_ADD,    0x3, 0x0, 0x0, 0x8, 0x2, 0x1, 0x1, 0x2 },
@@ -172,7 +172,7 @@ void TargetNV50::initOpInfo()
       opInfo[noPredList[i]].predicate = 0;
 
    for (i = 0; i < ARRAY_SIZE(_initProps); ++i) {
-      const struct opProperties *prop = &_initProps[i];
+      const struct nv50_opProperties *prop = &_initProps[i];
 
       for (int s = 0; s < 3; ++s) {
          if (prop->mNeg & (1 << s))

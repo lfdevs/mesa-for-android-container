@@ -36,7 +36,7 @@
 #include "util/u_memory.h"
 
 #include "pipe/p_screen.h"
-#include "state_tracker/winsys_handle.h"
+#include "frontend/winsys_handle.h"
 
 /* These formats are supported by swapping their bytes.
  * The swizzles must be set exactly like their non-swapped counterparts,
@@ -274,6 +274,7 @@ uint32_t r300_translate_texformat(enum pipe_format format,
             case PIPE_FORMAT_RGTC1_SNORM:
             case PIPE_FORMAT_LATC1_SNORM:
                 result |= sign_bit[0];
+                /* fallthrough */
             case PIPE_FORMAT_LATC1_UNORM:
             case PIPE_FORMAT_RGTC1_UNORM:
                 return R500_TX_FORMAT_ATI1N | result;
@@ -281,6 +282,7 @@ uint32_t r300_translate_texformat(enum pipe_format format,
             case PIPE_FORMAT_RGTC2_SNORM:
             case PIPE_FORMAT_LATC2_SNORM:
                 result |= sign_bit[1] | sign_bit[0];
+                /* fallthrough */
             case PIPE_FORMAT_RGTC2_UNORM:
             case PIPE_FORMAT_LATC2_UNORM:
                 return R400_TX_FORMAT_ATI2N | result;
@@ -1141,7 +1143,7 @@ r300_texture_create_object(struct r300_screen *rscreen,
     tiling.u.legacy.microtile = tex->tex.microtile;
     tiling.u.legacy.macrotile = tex->tex.macrotile[0];
     tiling.u.legacy.stride = tex->tex.stride_in_bytes[0];
-    rws->buffer_set_metadata(tex->buf, &tiling);
+    rws->buffer_set_metadata(tex->buf, &tiling, NULL);
 
     return tex;
 
@@ -1196,7 +1198,7 @@ struct pipe_resource *r300_texture_from_handle(struct pipe_screen *screen,
     if (!buffer)
         return NULL;
 
-    rws->buffer_get_metadata(buffer, &tiling);
+    rws->buffer_get_metadata(buffer, &tiling, NULL);
 
     /* Enforce a microtiled zbuffer. */
     if (util_format_is_depth_or_stencil(base->format) &&

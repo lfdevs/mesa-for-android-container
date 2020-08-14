@@ -92,6 +92,10 @@ enum mali_func {
 /* Flags apply to unknown2_3? */
 
 #define MALI_HAS_MSAA		(1 << 0)
+
+/* Execute fragment shader per-sample if set (e.g. to implement gl_SampleID
+ * reads) */
+#define MALI_PER_SAMPLE         (1 << 2)
 #define MALI_CAN_DISCARD 	(1 << 5)
 
 /* Applies on SFBD systems, specifying that programmable blending is in use */
@@ -104,11 +108,13 @@ enum mali_func {
 
 #define MALI_DEPTH_WRITEMASK    (1 << 11)
 
+#define MALI_DEPTH_CLIP_NEAR    (1 << 12)
+#define MALI_DEPTH_CLIP_FAR     (1 << 13)
+
 /* Next flags to unknown2_4 */
 #define MALI_STENCIL_TEST      	(1 << 0)
 
-/* What?! */
-#define MALI_SAMPLE_ALPHA_TO_COVERAGE_NO_BLEND_SHADER (1 << 1)
+#define MALI_ALPHA_TO_COVERAGE (1 << 1)
 
 #define MALI_NO_DITHER		(1 << 9)
 #define MALI_DEPTH_RANGE_A	(1 << 12)
@@ -251,11 +257,13 @@ struct mali_channel_swizzle {
  * for Bifrost framebuffer output.
  */
 #define MALI_FORMAT_SPECIAL2 (7 << 5)
+#define MALI_EXTRACT_TYPE(fmt) ((fmt) & 0xe0)
 
 /* If the high 3 bits are 3 to 6 these two bits say how many components
  * there are.
  */
 #define MALI_NR_CHANNELS(n) ((n - 1) << 3)
+#define MALI_EXTRACT_CHANNELS(fmt) ((((fmt) >> 3) & 3) + 1)
 
 /* If the high 3 bits are 3 to 6, then the low 3 bits say how big each
  * component is, except the special MALI_CHANNEL_FLOAT which overrides what the
@@ -274,17 +282,38 @@ struct mali_channel_swizzle {
  * MALI_FORMAT_UNORM, it means a 32-bit float.
  */
 #define MALI_CHANNEL_FLOAT 7
+#define MALI_EXTRACT_BITS(fmt) (fmt & 0x7)
 
 enum mali_format {
+        /* Not all formats are in fact available, need to query dynamically to
+         * check. Factory settings for Juno enables only ETC2 and ASTC, no
+         * DXT/RGTC formats.
+         * */
+
+        /* 0x0 invalid */
 	MALI_ETC2_RGB8       = MALI_FORMAT_COMPRESSED | 0x1,
 	MALI_ETC2_R11_UNORM  = MALI_FORMAT_COMPRESSED | 0x2,
 	MALI_ETC2_RGBA8      = MALI_FORMAT_COMPRESSED | 0x3,
 	MALI_ETC2_RG11_UNORM = MALI_FORMAT_COMPRESSED | 0x4,
-	MALI_ETC2_R11_SNORM  = MALI_FORMAT_COMPRESSED | 0x11,
-	MALI_ETC2_RG11_SNORM = MALI_FORMAT_COMPRESSED | 0x12,
+        /* 0x5 reserved */
+        MALI_NXR             = MALI_FORMAT_COMPRESSED | 0x6, /* Nokia eXtended Range */
+        MALI_BC1_UNORM       = MALI_FORMAT_COMPRESSED | 0x7, /* DXT1 */
+        MALI_BC2_UNORM       = MALI_FORMAT_COMPRESSED | 0x8, /* DXT3 */
+        MALI_BC3_UNORM       = MALI_FORMAT_COMPRESSED | 0x9, /* DXT5 */
+        MALI_BC4_UNORM       = MALI_FORMAT_COMPRESSED | 0xA, /* RGTC1_UNORM */
+        MALI_BC4_SNORM       = MALI_FORMAT_COMPRESSED | 0xB, /* RGTC1_SNORM */
+        MALI_BC5_UNORM       = MALI_FORMAT_COMPRESSED | 0xC, /* RGTC2_UNORM */
+        MALI_BC5_SNORM       = MALI_FORMAT_COMPRESSED | 0xD, /* RGTC2_SNORM */
+        MALI_BC6H_UF16       = MALI_FORMAT_COMPRESSED | 0xE,
+        MALI_BC6H_SF16       = MALI_FORMAT_COMPRESSED | 0xF,
+        MALI_BC7_UNORM       = MALI_FORMAT_COMPRESSED | 0x10,
+	MALI_ETC2_R11_SNORM  = MALI_FORMAT_COMPRESSED | 0x11, /* EAC_SNORM */
+	MALI_ETC2_RG11_SNORM = MALI_FORMAT_COMPRESSED | 0x12, /* EAC_SNORM */
 	MALI_ETC2_RGB8A1     = MALI_FORMAT_COMPRESSED | 0x13,
-	MALI_ASTC_SRGB_SUPP  = MALI_FORMAT_COMPRESSED | 0x16,
-	MALI_ASTC_HDR_SUPP   = MALI_FORMAT_COMPRESSED | 0x17,
+	MALI_ASTC_3D_LDR     = MALI_FORMAT_COMPRESSED | 0x14,
+	MALI_ASTC_3D_HDR     = MALI_FORMAT_COMPRESSED | 0x15,
+	MALI_ASTC_2D_LDR     = MALI_FORMAT_COMPRESSED | 0x16,
+	MALI_ASTC_2D_HDR     = MALI_FORMAT_COMPRESSED | 0x17,
 
 	MALI_RGB565         = MALI_FORMAT_SPECIAL | 0x0,
 	MALI_RGB5_X1_UNORM  = MALI_FORMAT_SPECIAL | 0x1,
@@ -297,7 +326,7 @@ enum mali_format {
 	MALI_RGB332_UNORM   = MALI_FORMAT_SPECIAL | 0xb,
 	MALI_RGB233_UNORM   = MALI_FORMAT_SPECIAL | 0xc,
 
-	MALI_Z32_UNORM      = MALI_FORMAT_SPECIAL | 0xd,
+	MALI_Z24X8_UNORM    = MALI_FORMAT_SPECIAL | 0xd,
 	MALI_R32_FIXED      = MALI_FORMAT_SPECIAL | 0x11,
 	MALI_RG32_FIXED     = MALI_FORMAT_SPECIAL | 0x12,
 	MALI_RGB32_FIXED    = MALI_FORMAT_SPECIAL | 0x13,
@@ -378,23 +407,16 @@ enum mali_format {
 };
 
 
-/* Alpha coverage is encoded as 4-bits (from a clampf), with inversion
- * literally performing a bitwise invert. This function produces slightly wrong
- * results and I'm not sure why; some rounding issue I suppose... */
-
-#define MALI_ALPHA_COVERAGE(clampf) ((uint16_t) (int) (clampf * 15.0f))
-#define MALI_GET_ALPHA_COVERAGE(nibble) ((float) nibble / 15.0f)
-
 /* Applies to midgard1.flags_lo */
 
 /* Should be set when the fragment shader updates the depth value. */
 #define MALI_WRITES_Z (1 << 4)
 
-/* Should the hardware perform early-Z testing? Normally should be set
- * for performance reasons. Clear if you use: discard,
- * alpha-to-coverage... * It's also possible this disables
- * forward-pixel kill; we're not quite sure which bit is which yet.
- * TODO: How does this interact with blending?*/
+/* Should the hardware perform early-Z testing? Set if the shader does not use
+ * discard, alpha-to-coverage, shader depth writes, and if the shader has no
+ * side effects (writes to global memory or images) unless early-z testing is
+ * forced in the shader.
+ */
 
 #define MALI_EARLY_Z (1 << 6)
 
@@ -408,12 +430,51 @@ enum mali_format {
  * it might read depth/stencil in particular, also set MALI_READS_ZS */
 
 #define MALI_READS_ZS (1 << 8)
-#define MALI_READS_TILEBUFFER (1 << 12)
+
+/* The shader might write to global memory (via OpenCL, SSBOs, or images).
+ * Reading is okay, as are ordinary writes to the tilebuffer/varyings. Setting
+ * incurs a performance penalty. On a fragment shader, this bit implies there
+ * are side effects, hence it interacts with early-z. */
+#define MALI_WRITES_GLOBAL (1 << 9)
+
+#define MALI_READS_TILEBUFFER (1 << 10)
 
 /* Applies to midgard1.flags_hi */
 
 /* Should be set when the fragment shader updates the stencil value. */
 #define MALI_WRITES_S (1 << 2)
+
+/* Mode to suppress generation of Infinity and NaN values by clamping inf
+ * (-inf) to MAX_FLOAT (-MIN_FLOAT) and flushing NaN to 0.0
+ *
+ * Compare suppress_inf/suppress_nan flags on the Bifrost clause header for the
+ * same functionality.
+ *
+ * This is not conformant on GLES3 or OpenCL, but is optional on GLES2, where
+ * it works around app bugs (e.g. in glmark2-es2 -bterrain with FP16).
+ */
+#define MALI_SUPPRESS_INF_NAN (1 << 3)
+
+/* Flags for bifrost1.unk1 */
+
+/* Shader uses less than 32 registers, partitioned as [R0, R15] U [R48, R63],
+ * allowing for full thread count. If clear, the full [R0, R63] register set is
+ * available at half thread count */
+#define MALI_BIFROST_FULL_THREAD (1 << 9)
+
+/* Enable early-z testing (presumably). This flag may not be set if the shader:
+ *
+ *  - Uses blending
+ *  - Uses discard
+ *  - Writes gl_FragDepth
+ *
+ * This differs from Midgard which sets the MALI_EARLY_Z flag even with
+ * blending, although I've begun to suspect that flag does not in fact enable
+ * EARLY_Z alone. */
+#define MALI_BIFROST_EARLY_Z (1 << 15)
+
+/* First clause type is ATEST */
+#define MALI_BIFROST_FIRST_ATEST (1 << 26)
 
 /* The raw Midgard blend payload can either be an equation or a shader
  * address, depending on the context */
@@ -457,6 +518,17 @@ struct midgard_blend_rt {
 /* On Bifrost systems (all MRT), each render target gets one of these
  * descriptors */
 
+enum bifrost_shader_type {
+        BIFROST_BLEND_F16 = 0,
+        BIFROST_BLEND_F32 = 1,
+        BIFROST_BLEND_I32 = 2,
+        BIFROST_BLEND_U32 = 3,
+        BIFROST_BLEND_I16 = 4,
+        BIFROST_BLEND_U16 = 5,
+};
+
+#define BIFROST_MAX_RENDER_TARGET_COUNT 8
+
 struct bifrost_blend_rt {
         /* This is likely an analogue of the flags on
          * midgard_blend_rt */
@@ -473,57 +545,53 @@ struct bifrost_blend_rt {
          * constant_hi = int(f / 255)
          * constant_lo = 65535*f - (65535/255) * constant_hi
          */
-
         u16 constant;
 
         struct mali_blend_equation equation;
+
         /*
          * - 0x19 normally
          * - 0x3 when this slot is unused (everything else is 0 except the index)
          * - 0x11 when this is the fourth slot (and it's used)
-+	 * - 0 when there is a blend shader
+         * - 0 when there is a blend shader
          */
         u16 unk2;
+
         /* increments from 0 to 3 */
         u16 index;
 
-	union {
-		struct {
-			/* So far, I've only seen:
-			 * - R001 for 1-component formats
-			 * - RG01 for 2-component formats
-			 * - RGB1 for 3-component formats
-			 * - RGBA for 4-component formats
-			 */
-			u32 swizzle : 12;
-			enum mali_format format : 8;
+        union {
+                struct {
+                        /* So far, I've only seen:
+                         * - R001 for 1-component formats
+                         * - RG01 for 2-component formats
+                         * - RGB1 for 3-component formats
+                         * - RGBA for 4-component formats
+                         */
+                        u32 swizzle : 12;
+                        enum mali_format format : 8;
 
-			/* Type of the shader output variable. Note, this can
-			 * be different from the format.
-			 *
-			 * 0: f16 (mediump float)
-			 * 1: f32 (highp float)
-			 * 2: i32 (highp int)
-			 * 3: u32 (highp uint)
-			 * 4: i16 (mediump int)
-			 * 5: u16 (mediump uint)
-			 */
-			u32 shader_type : 3;
-			u32 zero : 9;
-		};
+                        /* Type of the shader output variable. Note, this can
+                          * be different from the format.
+                          * enum bifrost_shader_type
+                         */
+                        u32 zero1 : 4;
+                        u32 shader_type : 3;
+                        u32 zero2 : 5;
+                };
 
-		/* Only the low 32 bits of the blend shader are stored, the
-		 * high 32 bits are implicitly the same as the original shader.
-		 * According to the kernel driver, the program counter for
-		 * shaders is actually only 24 bits, so shaders cannot cross
-		 * the 2^24-byte boundary, and neither can the blend shader.
-		 * The blob handles this by allocating a 2^24 byte pool for
-		 * shaders, and making sure that any blend shaders are stored
-		 * in the same pool as the original shader. The kernel will
-		 * make sure this allocation is aligned to 2^24 bytes.
-		 */
-		u32 shader;
-	};
+                /* Only the low 32 bits of the blend shader are stored, the
+                 * high 32 bits are implicitly the same as the original shader.
+                 * According to the kernel driver, the program counter for
+                 * shaders is actually only 24 bits, so shaders cannot cross
+                 * the 2^24-byte boundary, and neither can the blend shader.
+                 * The blob handles this by allocating a 2^24 byte pool for
+                 * shaders, and making sure that any blend shaders are stored
+                 * in the same pool as the original shader. The kernel will
+                 * make sure this allocation is aligned to 2^24 bytes.
+                 */
+                u32 shader;
+        };
 } __attribute__((packed));
 
 /* Descriptor for the shader. Following this is at least one, up to four blend
@@ -558,7 +626,11 @@ struct mali_shader_meta {
 
         u32 unknown2_2;
 
-        u16 alpha_coverage;
+        /* Generated from SAMPLE_COVERAGE_VALUE and SAMPLE_COVERAGE_INVERT. See
+         * 13.8.3 ("Multisample Fragment Operations") in the OpenGL ES 3.2
+         * specification. Only matters when multisampling is enabled. */
+        u16 coverage_mask;
+
         u16 unknown2_3;
 
         u8 stencil_mask_front;
@@ -1034,12 +1106,13 @@ struct bifrost_tiler_heap_meta {
 } __attribute__((packed));
 
 struct bifrost_tiler_meta {
-        u64 zero0;
+        u32 tiler_heap_next_start;  /* To be written by the GPU */
+        u32 used_hierarchy_mask;  /* To be written by the GPU */
         u16 hierarchy_mask; /* Five values observed: 0xa, 0x14, 0x28, 0x50, 0xa0 */
         u16 flags;
         u16 width;
         u16 height;
-        u64 zero1;
+        u64 zero0;
         mali_ptr tiler_heap_meta;
         /* TODO what is this used for? */
         u64 zeros[20];
@@ -1245,7 +1318,8 @@ struct mali_texture_descriptor {
 struct bifrost_texture_descriptor {
         unsigned format_unk : 4; /* 2 */
         enum mali_texture_type type : 2;
-        unsigned format_unk2 : 16; /* 0 */
+        unsigned zero : 4;
+        unsigned format_swizzle : 12;
         enum mali_format format : 8;
         unsigned srgb : 1;
         unsigned format_unk3 : 1; /* 0 */
@@ -1257,7 +1331,7 @@ struct bifrost_texture_descriptor {
         unsigned swizzle : 12;
         enum mali_texture_layout layout : 4;
         uint8_t levels : 8; /* Number of levels-1 if mipmapped, 0 if not */
-        unsigned unk1 : 4;
+        unsigned unk1 : 8;
 
         unsigned levels_unk : 24; /* 0 */
         unsigned level_2 : 8; /* Number of levels, again? */
@@ -1340,25 +1414,25 @@ struct mali_sampler_descriptor {
 struct bifrost_sampler_descriptor {
         uint8_t unk1;
 
-        enum mali_wrap_mode wrap_s : 4;
-        enum mali_wrap_mode wrap_t : 4;
         enum mali_wrap_mode wrap_r : 4;
+        enum mali_wrap_mode wrap_t : 4;
+        enum mali_wrap_mode wrap_s : 4;
         uint8_t unk8 : 4;
 
-        uint8_t unk2 : 3;
-        uint8_t min_filter : 1;
+        uint8_t unk2 : 1;
         uint8_t norm_coords : 1;
+        uint8_t unk3 : 1;
+        uint8_t min_filter : 1;
         uint8_t zero1 : 1;
-        uint8_t mip_filter : 1;
         uint8_t mag_filter : 1;
+        uint8_t mip_filter : 1;
 
         int16_t min_lod;
         int16_t max_lod;
-        int8_t zero2;
-        int8_t zero3;
 
-        uint32_t zero4;
-        uint32_t zero5;
+        uint64_t zero2;
+        uint64_t zero3;
+        uint64_t zero4;
 } __attribute__((packed));
 
 /* viewport0/viewport1 form the arguments to glViewport. viewport1 is
@@ -1619,10 +1693,22 @@ struct mali_single_framebuffer {
         /* More below this, maybe */
 } __attribute__((packed));
 
-/* Format bits for the render target flags */
 
-#define MALI_MFBD_FORMAT_MSAA 	  (1 << 1)
-#define MALI_MFBD_FORMAT_SRGB 	  (1 << 2)
+/* SINGLE to disable multisampling, AVERAGE for
+ * EXT_multisampled_render_to_texture operation where multiple tilebuffer
+ * samples are implicitly resolved before writeout, MULTIPLE to write multiple
+ * samples inline, and LAYERED for ES3-style multisampling with each sample in
+ * a different buffer.
+ */
+
+enum mali_msaa_mode {
+        MALI_MSAA_SINGLE = 0,
+        MALI_MSAA_AVERAGE = 1,
+        MALI_MSAA_MULTIPLE = 2,
+        MALI_MSAA_LAYERED = 3,
+};
+
+#define MALI_MFBD_FORMAT_SRGB 	  (1 << 0)
 
 struct mali_rt_format {
         unsigned unk1 : 32;
@@ -1630,9 +1716,11 @@ struct mali_rt_format {
 
         unsigned nr_channels : 2; /* MALI_POSITIVE */
 
-        unsigned unk3 : 5;
+        unsigned unk3 : 4;
+        unsigned unk4 : 1;
         enum mali_block_format block : 2;
-        unsigned flags : 4;
+        enum mali_msaa_mode msaa : 2;
+        unsigned flags : 2;
 
         unsigned swizzle : 12;
 
@@ -1647,6 +1735,13 @@ struct mali_rt_format {
 
         unsigned no_preload : 1;
 } __attribute__((packed));
+
+/* Flags for afbc.flags and ds_afbc.flags */
+
+#define MALI_AFBC_FLAGS 0x10009
+
+/* Lossless RGB and RGBA colorspace transform */
+#define MALI_AFBC_YTR (1 << 17)
 
 struct mali_render_target {
         struct mali_rt_format format;
@@ -1666,14 +1761,14 @@ struct mali_render_target {
 
                 mali_ptr metadata;
                 u32 stride; // stride in units of tiles
-                u32 unk; // = 0x20000
+                u32 flags; // = 0x20000
         } afbc;
 
         mali_ptr framebuffer;
 
         u32 zero2 : 4;
-        u32 framebuffer_stride : 28; // in units of bytes
-        u32 zero3;
+        u32 framebuffer_stride : 28; // in units of bytes, row to next
+        u32 layer_stride; /* For multisample rendering */
 
         u32 clear_color_1; // RGBA8888 from glClear, actually used by hardware
         u32 clear_color_2; // always equal, but unclear function?
@@ -1691,7 +1786,7 @@ struct mali_render_target {
  */
 
 /* flags_hi */
-#define MALI_EXTRA_PRESENT      (0x10)
+#define MALI_EXTRA_PRESENT      (0x1)
 
 /* flags_lo */
 #define MALI_EXTRA_ZS           (0x4)
@@ -1703,14 +1798,18 @@ struct mali_framebuffer_extra  {
 
         unsigned flags_lo : 4;
         enum mali_block_format zs_block : 2;
-        unsigned flags_hi : 26;
+
+        /* Number of samples in Z/S attachment, MALI_POSITIVE. So zero for
+         * 1-sample (non-MSAA), 0x3 for MSAA 4x, etc */
+        unsigned zs_samples : 4;
+        unsigned flags_hi : 22;
 
         union {
                 /* Note: AFBC is only allowed for 24/8 combined depth/stencil. */
                 struct {
                         mali_ptr depth_stencil_afbc_metadata;
                         u32 depth_stencil_afbc_stride; // in units of tiles
-                        u32 zero1;
+                        u32 flags;
 
                         mali_ptr depth_stencil;
 
@@ -1722,12 +1821,12 @@ struct mali_framebuffer_extra  {
                         mali_ptr depth;
                         u32 depth_stride_zero : 4;
                         u32 depth_stride : 28;
-                        u32 zero1;
+                        u32 depth_layer_stride;
 
                         mali_ptr stencil;
                         u32 stencil_stride_zero : 4;
                         u32 stencil_stride : 28;
-                        u32 zero2;
+                        u32 stencil_layer_stride;
                 } ds_linear;
         };
 
@@ -1759,8 +1858,8 @@ struct mali_framebuffer {
         u32 zero3;
         u16 width2, height2;
         u32 unk1 : 19; // = 0x01000
-        u32 rt_count_1 : 2; // off-by-one (use MALI_POSITIVE)
-        u32 unk2 : 3; // = 0
+        u32 rt_count_1 : 3; // off-by-one (use MALI_POSITIVE)
+        u32 unk2 : 2; // = 0
         u32 rt_count_2 : 3; // no off-by-one
         u32 zero4 : 5;
         /* 0x30 */

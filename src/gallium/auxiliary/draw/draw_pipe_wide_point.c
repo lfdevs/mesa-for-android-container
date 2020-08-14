@@ -47,7 +47,7 @@
  * that varies .x from 0 to 1 horizontally across the point and varies .y
  * vertically from 0 to 1 down the sprite.
  *
- * With geometry shaders, the state tracker could create a GS to do
+ * With geometry shaders, the gallium frontends could create a GS to do
  * most/all of this.
  */
 

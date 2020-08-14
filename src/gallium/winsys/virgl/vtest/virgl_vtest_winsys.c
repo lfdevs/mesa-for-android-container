@@ -26,7 +26,7 @@
 #include "util/format/u_format.h"
 #include "util/u_inlines.h"
 #include "util/os_time.h"
-#include "state_tracker/sw_winsys.h"
+#include "frontend/sw_winsys.h"
 #include "os/os_mman.h"
 
 #include "virgl_vtest_winsys.h"

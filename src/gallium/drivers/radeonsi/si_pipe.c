@@ -33,6 +33,7 @@
 #include "si_public.h"
 #include "si_shader_internal.h"
 #include "sid.h"
+#include "ac_shadowed_regs.h"
 #include "util/disk_cache.h"
 #include "util/u_log.h"
 #include "util/u_memory.h"
@@ -67,6 +68,7 @@ static const struct debug_named_value debug_options[] = {
    {"w64ge", DBG(W64_GE), "Use Wave64 for vertex, tessellation, and geometry shaders."},
    {"w64ps", DBG(W64_PS), "Use Wave64 for pixel shaders."},
    {"w64cs", DBG(W64_CS), "Use Wave64 for computes shaders."},
+   {"noinfinterp", DBG(KILL_PS_INF_INTERP), "Kill PS with infinite interp coeff"},
 
    /* Shader compiler options (with no effect on the shader cache): */
    {"checkir", DBG(CHECK_IR), "Enable additional sanity checks on shader IR"},
@@ -89,11 +91,13 @@ static const struct debug_named_value debug_options[] = {
    {"check_vm", DBG(CHECK_VM), "Check VM faults and dump debug info."},
    {"reserve_vmid", DBG(RESERVE_VMID), "Force VMID reservation per context."},
    {"zerovram", DBG(ZERO_VRAM), "Clear VRAM allocations."},
+   {"shadowregs", DBG(SHADOW_REGS), "Enable CP register shadowing."},
 
    /* 3D engine options: */
    {"nogfx", DBG(NO_GFX), "Disable graphics. Only multimedia compute paths can be used."},
    {"nongg", DBG(NO_NGG), "Disable NGG and use the legacy pipeline."},
-   {"nggc", DBG(ALWAYS_NGG_CULLING), "Always use NGG culling even when it can hurt."},
+   {"nggc", DBG(ALWAYS_NGG_CULLING_ALL), "Always use NGG culling even when it can hurt."},
+   {"nggctess", DBG(ALWAYS_NGG_CULLING_TESS), "Always use NGG culling for tessellation."},
    {"nonggc", DBG(NO_NGG_CULLING), "Disable NGG culling."},
    {"alwayspd", DBG(ALWAYS_PD), "Always enable the primitive discard compute shader."},
    {"pd", DBG(PD), "Enable the primitive discard compute shader for large draw calls."},
@@ -140,8 +144,8 @@ void si_init_compiler(struct si_screen *sscreen, struct ac_llvm_compiler *compil
 
    enum ac_target_machine_options tm_options =
       (sscreen->debug_flags & DBG(GISEL) ? AC_TM_ENABLE_GLOBAL_ISEL : 0) |
-      (sscreen->info.chip_class >= GFX9 ? AC_TM_FORCE_ENABLE_XNACK : 0) |
-      (sscreen->info.chip_class < GFX9 ? AC_TM_FORCE_DISABLE_XNACK : 0) |
+      (sscreen->info.chip_class <= GFX8 ? AC_TM_FORCE_DISABLE_XNACK :
+       sscreen->info.chip_class <= GFX10 ? AC_TM_FORCE_ENABLE_XNACK : 0) |
       (!sscreen->llvm_has_working_vgpr_indexing ? AC_TM_PROMOTE_ALLOCA_TO_SCRATCH : 0) |
       (sscreen->debug_flags & DBG(CHECK_IR) ? AC_TM_CHECK_IR : 0) |
       (create_low_opt_compiler ? AC_TM_CREATE_LOW_OPT : 0);
@@ -193,9 +197,10 @@ static void si_destroy_context(struct pipe_context *context)
    si_resource_reference(&sctx->wait_mem_scratch, NULL);
    si_resource_reference(&sctx->small_prim_cull_info_buf, NULL);
 
-   si_pm4_free_state(sctx, sctx->init_config, ~0);
-   if (sctx->init_config_gs_rings)
-      si_pm4_free_state(sctx, sctx->init_config_gs_rings, ~0);
+   if (sctx->cs_preamble_state)
+      si_pm4_free_state(sctx, sctx->cs_preamble_state, ~0);
+   if (sctx->cs_preamble_gs_rings)
+      si_pm4_free_state(sctx, sctx->cs_preamble_gs_rings, ~0);
    for (i = 0; i < ARRAY_SIZE(sctx->vgt_shader_config); i++)
       si_pm4_delete_state(sctx, vgt_shader_config, sctx->vgt_shader_config[i]);
 
@@ -235,6 +240,8 @@ static void si_destroy_context(struct pipe_context *context)
       sctx->b.delete_compute_state(&sctx->b, sctx->cs_clear_render_target_1d_array);
    if (sctx->cs_clear_12bytes_buffer)
       sctx->b.delete_compute_state(&sctx->b, sctx->cs_clear_12bytes_buffer);
+   if (sctx->cs_dcc_decompress)
+      sctx->b.delete_compute_state(&sctx->b, sctx->cs_dcc_decompress);
    if (sctx->cs_dcc_retile)
       sctx->b.delete_compute_state(&sctx->b, sctx->cs_dcc_retile);
 
@@ -292,6 +299,7 @@ static void si_destroy_context(struct pipe_context *context)
    si_resource_reference(&sctx->index_ring, NULL);
    si_resource_reference(&sctx->barrier_buf, NULL);
    si_resource_reference(&sctx->last_ib_barrier_buf, NULL);
+   si_resource_reference(&sctx->shadowed_regs, NULL);
    pb_reference(&sctx->gds, NULL);
    pb_reference(&sctx->gds_oa, NULL);
 
@@ -319,7 +327,7 @@ static enum pipe_reset_status si_get_reset_status(struct pipe_context *ctx)
    enum pipe_reset_status status = sctx->ws->ctx_query_reset_status(sctx->ctx);
 
    if (status != PIPE_NO_RESET) {
-      /* Call the state tracker to set a no-op API dispatch. */
+      /* Call the gallium frontend to set a no-op API dispatch. */
       if (sctx->device_reset_callback.reset) {
          sctx->device_reset_callback.reset(sctx->device_reset_callback.data, status);
       }
@@ -603,13 +611,12 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, unsign
    }
 
    if (sctx->chip_class >= GFX9 || si_compute_prim_discard_enabled(sctx)) {
-      sctx->wait_mem_scratch = si_resource(pipe_buffer_create(screen, 0, PIPE_USAGE_DEFAULT, 8));
+      sctx->wait_mem_scratch =
+           si_aligned_buffer_create(screen, SI_RESOURCE_FLAG_UNMAPPABLE,
+                                    PIPE_USAGE_DEFAULT, 8,
+                                    sscreen->info.tcc_cache_line_size);
       if (!sctx->wait_mem_scratch)
          goto fail;
-
-      /* Initialize the memory. */
-      si_cp_write_data(sctx, sctx->wait_mem_scratch, 0, 4, V_370_MEM, V_370_ME,
-                       &sctx->wait_mem_number);
    }
 
    /* GFX7 cannot unbind a constant buffer (S_BUFFER_LOAD doesn't skip loads
@@ -670,8 +677,21 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, unsign
    pipe_buffer_write(&sctx->b, sctx->sample_pos_buffer, 0, sizeof(sctx->sample_positions),
                      &sctx->sample_positions);
 
-   /* this must be last */
-   si_begin_new_gfx_cs(sctx);
+   /* The remainder of this function initializes the gfx CS and must be last. */
+   assert(sctx->gfx_cs->current.cdw == 0);
+
+   if (sctx->has_graphics) {
+      si_init_cp_reg_shadowing(sctx);
+   }
+
+   si_begin_new_gfx_cs(sctx, true);
+   assert(sctx->gfx_cs->current.cdw == sctx->initial_gfx_cs_size);
+
+   /* Initialize per-context buffers. */
+   if (sctx->wait_mem_scratch) {
+      si_cp_write_data(sctx, sctx->wait_mem_scratch, 0, 4, V_370_MEM, V_370_ME,
+                       &sctx->wait_mem_number);
+   }
 
    if (sctx->chip_class == GFX7) {
       /* Clear the NULL constant buffer, because loads should return zeros.
@@ -682,6 +702,8 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, unsign
       si_clear_buffer(sctx, sctx->null_const_buf.buffer, 0, sctx->null_const_buf.buffer->width0,
                       &clear_value, 4, SI_COHERENCY_SHADER, true);
    }
+
+   sctx->initial_gfx_cs_size = sctx->gfx_cs->current.cdw;
    return &sctx->b;
 fail:
    fprintf(stderr, "radeonsi: Failed to create a context.\n");
@@ -858,7 +880,7 @@ static void si_test_gds_memory_management(struct si_context *sctx, unsigned allo
             SI_CPDMA_SKIP_BO_LIST_UPDATE | SI_CPDMA_SKIP_CHECK_CS_SPACE | SI_CPDMA_SKIP_GFX_SYNC, 0,
             0);
 
-         ws->cs_add_buffer(cs[i], gds_bo[i], domain, RADEON_USAGE_READWRITE, 0);
+         ws->cs_add_buffer(cs[i], gds_bo[i], RADEON_USAGE_READWRITE, domain, 0);
          ws->cs_flush(cs[i], PIPE_FLUSH_ASYNC, NULL);
       }
    }
@@ -885,7 +907,7 @@ static void si_disk_cache_create(struct si_screen *sscreen)
    disk_cache_format_hex_id(cache_id, sha1, 20 * 2);
 
 /* These flags affect shader compilation. */
-#define ALL_FLAGS (DBG(GISEL))
+#define ALL_FLAGS (DBG(GISEL) | DBG(KILL_PS_INF_INTERP))
    uint64_t shader_debug_flags = sscreen->debug_flags & ALL_FLAGS;
 
    /* Add the high bits of 32-bit addresses, which affects
@@ -929,6 +951,12 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
 
    sscreen->ws = ws;
    ws->query_info(ws, &sscreen->info);
+
+   if (sscreen->info.chip_class == GFX10_3 && LLVM_VERSION_MAJOR < 11) {
+      fprintf(stderr, "radeonsi: GFX 10.3 requires LLVM 11 or higher\n");
+      FREE(sscreen);
+      return NULL;
+   }
 
    if (sscreen->info.chip_class == GFX10 && LLVM_VERSION_MAJOR < 9) {
       fprintf(stderr, "radeonsi: Navi family support requires LLVM 9 or higher\n");
@@ -1000,6 +1028,10 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
 #define OPT_BOOL(name, dflt, description)                                                          \
    sscreen->options.name = driQueryOptionb(config->options, "radeonsi_" #name);
 #include "si_debug_options.h"
+   }
+
+   if (sscreen->options.no_infinite_interp) {
+      sscreen->debug_flags |= DBG(KILL_PS_INF_INTERP);
    }
 
    si_disk_cache_create(sscreen);
@@ -1089,7 +1121,11 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
    sscreen->tess_factor_ring_size = 32768 * sscreen->info.max_se;
    sscreen->tess_offchip_ring_size = max_offchip_buffers * sscreen->tess_offchip_block_dw_size * 4;
 
-   if (sscreen->info.chip_class >= GFX7) {
+   if (sscreen->info.chip_class >= GFX10_3) {
+      sscreen->vgt_hs_offchip_param =
+            S_03093C_OFFCHIP_BUFFERING_GFX103(max_offchip_buffers - 1) |
+            S_03093C_OFFCHIP_GRANULARITY_GFX103(offchip_granularity);
+   } else if (sscreen->info.chip_class >= GFX7) {
       if (sscreen->info.chip_class >= GFX8)
          --max_offchip_buffers;
       sscreen->vgt_hs_offchip_param = S_03093C_OFFCHIP_BUFFERING(max_offchip_buffers) |
@@ -1119,14 +1155,16 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
    sscreen->use_ngg = sscreen->info.chip_class >= GFX10 && sscreen->info.family != CHIP_NAVI14 &&
                       !(sscreen->debug_flags & DBG(NO_NGG));
    sscreen->use_ngg_culling = sscreen->use_ngg && !(sscreen->debug_flags & DBG(NO_NGG_CULLING));
-   sscreen->always_use_ngg_culling =
-      sscreen->use_ngg_culling && sscreen->debug_flags & DBG(ALWAYS_NGG_CULLING);
+   sscreen->always_use_ngg_culling_all =
+      sscreen->use_ngg_culling && sscreen->debug_flags & DBG(ALWAYS_NGG_CULLING_ALL);
+   sscreen->always_use_ngg_culling_tess =
+      sscreen->use_ngg_culling && sscreen->debug_flags & DBG(ALWAYS_NGG_CULLING_TESS);
    sscreen->use_ngg_streamout = false;
 
    /* Only enable primitive binning on APUs by default. */
    if (sscreen->info.chip_class >= GFX10) {
       sscreen->dpbb_allowed = true;
-      sscreen->dfsm_allowed = !sscreen->info.has_dedicated_vram;
+      /* DFSM is not supported on GFX 10.3 and not beneficial on Navi1x. */
    } else if (sscreen->info.chip_class == GFX9) {
       sscreen->dpbb_allowed = !sscreen->info.has_dedicated_vram;
       sscreen->dfsm_allowed = !sscreen->info.has_dedicated_vram;
@@ -1196,11 +1234,15 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
    sscreen->compute_wave_size = 64;
 
    if (sscreen->info.chip_class >= GFX10) {
-      /* Pixels shaders: Wave64 is recommended.
-       * Compute shaders: There are piglit failures with Wave32.
+      /* Pixel shaders: Wave64 is always fastest.
+       * Vertex shaders: Wave64 is probably better, because:
+       * - greater chance of L0 cache hits, because more threads are assigned
+       *   to the same CU
+       * - scalar instructions are only executed once for 64 threads instead of twice
+       * - VGPR allocation granularity is half of Wave32, so 1 Wave64 can
+       *   sometimes use fewer VGPRs than 2 Wave32
+       * - TessMark X64 with NGG culling is faster with Wave64
        */
-      sscreen->ge_wave_size = 32;
-
       if (sscreen->debug_flags & DBG(W32_GE))
          sscreen->ge_wave_size = 32;
       if (sscreen->debug_flags & DBG(W32_PS))
@@ -1247,6 +1289,8 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
       si_test_gds_memory_management((struct si_context *)sscreen->aux_context, 4, 1,
                                     RADEON_DOMAIN_OA);
    }
+
+   ac_print_shadowed_regs(&sscreen->info);
 
    STATIC_ASSERT(sizeof(union si_vgt_stages_key) == 4);
    return &sscreen->b;

@@ -66,4 +66,7 @@ void lp_build_coro_suspend_switch(struct gallivm_state *gallivm,
                                   const struct lp_build_coro_suspend_info *sus_info,
                                   LLVMBasicBlockRef resume_block,
                                   bool final_suspend);
+
+void lp_build_coro_add_malloc_hooks(struct gallivm_state *gallivm);
+void lp_build_coro_declare_malloc_hooks(struct gallivm_state *gallivm);
 #endif

@@ -172,7 +172,7 @@ lower_multiview_with_primitive_replication(nir_shader *shader,
 
    /* Update position to refer to an array. */
    nir_variable *pos_var = NULL;
-   nir_foreach_variable(var, &shader->outputs) {
+   nir_foreach_shader_out_variable(var, shader) {
       if (var->data.location == VARYING_SLOT_POS) {
          assert(var->type == glsl_vec4_type());
          var->type = glsl_array_type(glsl_vec4_type(), view_count, 0);
@@ -571,7 +571,7 @@ anv_check_for_primitive_replication(nir_shader **shaders,
       return false;
 
    bool vs_writes_position = false;
-   nir_foreach_variable(var, &shaders[MESA_SHADER_VERTEX]->outputs) {
+   nir_foreach_shader_out_variable(var, shaders[MESA_SHADER_VERTEX]) {
       if (var->data.location == VARYING_SLOT_POS) {
          vs_writes_position = true;
          break;

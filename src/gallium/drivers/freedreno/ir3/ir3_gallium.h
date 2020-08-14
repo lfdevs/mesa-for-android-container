@@ -44,48 +44,30 @@ struct ir3_shader_variant * ir3_shader_variant(struct ir3_shader *shader,
 		struct ir3_shader_key key, bool binning_pass,
 		struct pipe_debug_callback *debug);
 
-struct fd_ringbuffer;
-struct fd_context;
-struct fd_screen;
-struct fd_constbuf_stateobj;
-struct fd_shaderbuf_stateobj;
-struct fd_shaderimg_stateobj;
-
-void ir3_user_consts_size(struct ir3_ubo_analysis_state *state,
-		unsigned *packets, unsigned *size);
-void ir3_emit_user_consts(struct fd_screen *screen, const struct ir3_shader_variant *v,
-		struct fd_ringbuffer *ring, struct fd_constbuf_stateobj *constbuf);
-void ir3_emit_ubos(struct fd_screen *screen, const struct ir3_shader_variant *v,
-		struct fd_ringbuffer *ring, struct fd_constbuf_stateobj *constbuf);
-void ir3_emit_ssbo_sizes(struct fd_screen *screen, const struct ir3_shader_variant *v,
-		struct fd_ringbuffer *ring, struct fd_shaderbuf_stateobj *sb);
-void ir3_emit_image_dims(struct fd_screen *screen, const struct ir3_shader_variant *v,
-		struct fd_ringbuffer *ring, struct fd_shaderimg_stateobj *si);
-void ir3_emit_immediates(struct fd_screen *screen, const struct ir3_shader_variant *v,
-		struct fd_ringbuffer *ring);
-void ir3_emit_link_map(struct fd_screen *screen,
-		const struct ir3_shader_variant *producer,
-		const struct ir3_shader_variant *v, struct fd_ringbuffer *ring);
-
-static inline bool
-ir3_needs_vs_driver_params(const struct ir3_shader_variant *v)
-{
-	const struct ir3_const_state *const_state = &v->shader->const_state;
-	uint32_t offset = const_state->offsets.driver_param;
-
-	return v->constlen > offset;
-}
-
-void ir3_emit_vs_driver_params(const struct ir3_shader_variant *v,
-		struct fd_ringbuffer *ring, struct fd_context *ctx,
-		const struct pipe_draw_info *info);
-void ir3_emit_vs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
-		struct fd_context *ctx, const struct pipe_draw_info *info);
-void ir3_emit_fs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
-		struct fd_context *ctx);
-void ir3_emit_cs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
-		struct fd_context *ctx, const struct pipe_grid_info *info);
+void * ir3_shader_state_create(struct pipe_context *pctx, const struct pipe_shader_state *cso);
+void ir3_shader_state_delete(struct pipe_context *pctx, void *hwcso);
 
 void ir3_prog_init(struct pipe_context *pctx);
+void ir3_screen_init(struct pipe_screen *pscreen);
+
+/**
+ * A helper to determine if a fs input 'i' is point/sprite coord, given
+ * the specified sprite_coord_enable mask
+ */
+static inline bool
+ir3_point_sprite(const struct ir3_shader_variant *fs, int i,
+		uint32_t sprite_coord_enable, bool *coord_mode)
+{
+	gl_varying_slot slot = fs->inputs[i].slot;
+	switch (slot) {
+	case VARYING_SLOT_PNTC:
+		*coord_mode = true;
+		return true;
+	case VARYING_SLOT_TEX0 ... VARYING_SLOT_TEX7:
+		return !!(sprite_coord_enable & BITFIELD_BIT(slot - VARYING_SLOT_TEX0));
+	default:
+		return false;
+	}
+}
 
 #endif /* IR3_GALLIUM_H_ */

@@ -102,8 +102,19 @@ si_emit_compute(struct radv_physical_device *physical_device,
 			    S_00B858_SH1_CU_EN(0xffff));
 	}
 
-	if (physical_device->rad_info.chip_class >= GFX10)
+	if (physical_device->rad_info.chip_class >= GFX9) {
+		radeon_set_uconfig_reg(cs, R_0301EC_CP_COHER_START_DELAY,
+				       physical_device->rad_info.chip_class >= GFX10 ? 0x20 : 0);
+	}
+
+	if (physical_device->rad_info.chip_class >= GFX10) {
+		radeon_set_sh_reg(cs, R_00B890_COMPUTE_USER_ACCUM_0, 0);
+		radeon_set_sh_reg(cs, R_00B894_COMPUTE_USER_ACCUM_1, 0);
+		radeon_set_sh_reg(cs, R_00B898_COMPUTE_USER_ACCUM_2, 0);
+		radeon_set_sh_reg(cs, R_00B89C_COMPUTE_USER_ACCUM_3, 0);
 		radeon_set_sh_reg(cs, R_00B8A0_COMPUTE_PGM_RSRC3, 0);
+		radeon_set_sh_reg(cs, R_00B9F4_COMPUTE_DISPATCH_TUNNEL, 0);
+	}
 
 	/* This register has been moved to R_00CD20_COMPUTE_MAX_WAVE_ID
 	 * and is now per pipe, so it should be handled in the
@@ -293,8 +304,8 @@ si_emit_graphics(struct radv_device *device,
 		}
 
 		/* Compute LATE_ALLOC_VS.LIMIT. */
-		unsigned num_cu_per_sh = physical_device->rad_info.num_good_cu_per_sh;
-		unsigned late_alloc_wave64 = 0; /* The limit is per SH. */
+		unsigned num_cu_per_sh = physical_device->rad_info.min_good_cu_per_sa;
+		unsigned late_alloc_wave64 = 0; /* The limit is per SA. */
 		unsigned late_alloc_wave64_gs = 0;
 		unsigned cu_mask_vs = 0xffff;
 		unsigned cu_mask_gs = 0xffff;
@@ -325,11 +336,15 @@ si_emit_graphics(struct radv_device *device,
 				late_alloc_wave64_gs = 0;
 				cu_mask_gs = 0xffff;
 			}
+
+			/* Limit LATE_ALLOC_GS for prevent a hang (hw bug). */
+			if (physical_device->rad_info.chip_class == GFX10)
+				late_alloc_wave64_gs = MIN2(late_alloc_wave64_gs, 64);
 		} else {
 			if (!physical_device->rad_info.use_late_alloc) {
 				late_alloc_wave64 = 0;
 			} else if (num_cu_per_sh <= 4) {
-				/* Too few available compute units per SH.
+				/* Too few available compute units per SA.
 				 * Disallowing VS to run on one CU could hurt
 				 * us more than late VS allocation would help.
 				 *
@@ -413,10 +428,32 @@ si_emit_graphics(struct radv_device *device,
 				       S_028410_COLOR_RD_POLICY(V_028410_CACHE_NOA_RD));
 		radeon_set_context_reg(cs, R_028428_CB_COVERAGE_OUT_CONTROL, 0);
 
+		radeon_set_sh_reg(cs, R_00B0C8_SPI_SHADER_USER_ACCUM_PS_0, 0);
+		radeon_set_sh_reg(cs, R_00B0CC_SPI_SHADER_USER_ACCUM_PS_1, 0);
+		radeon_set_sh_reg(cs, R_00B0D0_SPI_SHADER_USER_ACCUM_PS_2, 0);
+		radeon_set_sh_reg(cs, R_00B0D4_SPI_SHADER_USER_ACCUM_PS_3, 0);
+		radeon_set_sh_reg(cs, R_00B1C8_SPI_SHADER_USER_ACCUM_VS_0, 0);
+		radeon_set_sh_reg(cs, R_00B1CC_SPI_SHADER_USER_ACCUM_VS_1, 0);
+		radeon_set_sh_reg(cs, R_00B1D0_SPI_SHADER_USER_ACCUM_VS_2, 0);
+		radeon_set_sh_reg(cs, R_00B1D4_SPI_SHADER_USER_ACCUM_VS_3, 0);
+		radeon_set_sh_reg(cs, R_00B2C8_SPI_SHADER_USER_ACCUM_ESGS_0, 0);
+		radeon_set_sh_reg(cs, R_00B2CC_SPI_SHADER_USER_ACCUM_ESGS_1, 0);
+		radeon_set_sh_reg(cs, R_00B2D0_SPI_SHADER_USER_ACCUM_ESGS_2, 0);
+		radeon_set_sh_reg(cs, R_00B2D4_SPI_SHADER_USER_ACCUM_ESGS_3, 0);
+		radeon_set_sh_reg(cs, R_00B4C8_SPI_SHADER_USER_ACCUM_LSHS_0, 0);
+		radeon_set_sh_reg(cs, R_00B4CC_SPI_SHADER_USER_ACCUM_LSHS_1, 0);
+		radeon_set_sh_reg(cs, R_00B4D0_SPI_SHADER_USER_ACCUM_LSHS_2, 0);
+		radeon_set_sh_reg(cs, R_00B4D4_SPI_SHADER_USER_ACCUM_LSHS_3, 0);
+
 		radeon_set_sh_reg(cs, R_00B0C0_SPI_SHADER_REQ_CTRL_PS,
 				  S_00B0C0_SOFT_GROUPING_EN(1) |
 				  S_00B0C0_NUMBER_OF_REQUESTS_PER_CU(4 - 1));
 		radeon_set_sh_reg(cs, R_00B1C0_SPI_SHADER_REQ_CTRL_VS, 0);
+
+		if (physical_device->rad_info.chip_class >= GFX10_3) {
+			radeon_set_context_reg(cs, R_028750_SX_PS_DOWNCONVERT_CONTROL_GFX103, 0xff);
+			radeon_set_context_reg(cs, 0x28848, 1 << 9); /* This fixes sample shading. */
+		}
 
 		if (physical_device->rad_info.chip_class == GFX10) {
 			/* SQ_NON_EVENT must be emitted before GE_PC_ALLOC is written. */
@@ -456,6 +493,16 @@ si_emit_graphics(struct radv_device *device,
 		radeon_set_context_reg(cs, R_028C5C_VGT_OUT_DEALLOC_CNTL, 16);
 	}
 
+	if (device->border_color_data.bo) {
+		uint64_t border_color_va = radv_buffer_get_va(device->border_color_data.bo);
+
+		radeon_set_context_reg(cs, R_028080_TA_BC_BASE_ADDR, border_color_va >> 8);
+		if (physical_device->rad_info.chip_class >= GFX7) {
+			radeon_set_context_reg(cs, R_028084_TA_BC_BASE_ADDR_HI,
+					       S_028084_ADDRESS(border_color_va >> 40));
+		}
+	}
+
 	if (physical_device->rad_info.chip_class >= GFX9) {
 		radeon_set_context_reg(cs, R_028C48_PA_SC_BINNER_CNTL_1,
 				       S_028C48_MAX_ALLOC_COUNT(physical_device->rad_info.pbb_max_alloc_count - 1) |
@@ -470,7 +517,7 @@ si_emit_graphics(struct radv_device *device,
 	radeon_emit(cs, S_028A00_HEIGHT(tmp) | S_028A00_WIDTH(tmp));
 	radeon_set_context_reg_seq(cs, R_028A04_PA_SU_POINT_MINMAX, 1);
 	radeon_emit(cs, S_028A04_MIN_SIZE(radv_pack_float_12p4(0)) |
-		    S_028A04_MAX_SIZE(radv_pack_float_12p4(8192/2)));
+		    S_028A04_MAX_SIZE(radv_pack_float_12p4(8191.875/2)));
 
 	if (!has_clear_state) {
 		radeon_set_context_reg(cs, R_028004_DB_COUNT_CONTROL,
@@ -492,6 +539,26 @@ si_emit_graphics(struct radv_device *device,
 				       small_prim_filter_cntl);
 	}
 
+	radeon_set_context_reg(cs, R_0286D4_SPI_INTERP_CONTROL_0,
+	                       S_0286D4_FLAT_SHADE_ENA(1) |
+	                       S_0286D4_PNT_SPRITE_ENA(1) |
+	                       S_0286D4_PNT_SPRITE_OVRD_X(V_0286D4_SPI_PNT_SPRITE_SEL_S) |
+	                       S_0286D4_PNT_SPRITE_OVRD_Y(V_0286D4_SPI_PNT_SPRITE_SEL_T) |
+	                       S_0286D4_PNT_SPRITE_OVRD_Z(V_0286D4_SPI_PNT_SPRITE_SEL_0) |
+	                       S_0286D4_PNT_SPRITE_OVRD_W(V_0286D4_SPI_PNT_SPRITE_SEL_1) |
+	                       S_0286D4_PNT_SPRITE_TOP_1(0)); /* vulkan is top to bottom - 1.0 at bottom */
+
+	radeon_set_context_reg(cs, R_028BE4_PA_SU_VTX_CNTL,
+	                       S_028BE4_PIX_CENTER(1) |
+	                       S_028BE4_ROUND_MODE(V_028BE4_X_ROUND_TO_EVEN) |
+	                       S_028BE4_QUANT_MODE(V_028BE4_X_16_8_FIXED_POINT_1_256TH));
+
+	radeon_set_context_reg(cs, R_028818_PA_CL_VTE_CNTL,
+			       S_028818_VTX_W0_FMT(1) |
+			       S_028818_VPORT_X_SCALE_ENA(1) | S_028818_VPORT_X_OFFSET_ENA(1) |
+			       S_028818_VPORT_Y_SCALE_ENA(1) | S_028818_VPORT_Y_OFFSET_ENA(1) |
+			       S_028818_VPORT_Z_SCALE_ENA(1) | S_028818_VPORT_Z_OFFSET_ENA(1));
+
 	si_emit_compute(physical_device, cs);
 }
 
@@ -506,9 +573,9 @@ cik_create_gfx_config(struct radv_device *device)
 
 	while (cs->cdw & 7) {
 		if (device->physical_device->rad_info.gfx_ib_pad_with_type2)
-			radeon_emit(cs, 0x80000000);
+			radeon_emit(cs, PKT2_NOP_PAD);
 		else
-			radeon_emit(cs, 0xffff1000);
+			radeon_emit(cs, PKT3_NOP_PAD);
 	}
 
 	device->gfx_init = device->ws->buffer_create(device->ws,
@@ -516,7 +583,8 @@ cik_create_gfx_config(struct radv_device *device)
 						     RADEON_DOMAIN_GTT,
 						     RADEON_FLAG_CPU_ACCESS|
 						     RADEON_FLAG_NO_INTERPROCESS_SHARING |
-						     RADEON_FLAG_READ_ONLY,
+						     RADEON_FLAG_READ_ONLY |
+						     RADEON_FLAG_GTT_WC,
 						     RADV_BO_PRIORITY_CS);
 	if (!device->gfx_init)
 		goto fail;
@@ -675,11 +743,30 @@ radv_prims_for_vertices(struct radv_prim_vertex_count *info, unsigned num)
 	return 1 + ((num - info->min) / info->incr);
 }
 
+static const struct radv_prim_vertex_count prim_size_table[] = {
+	[V_008958_DI_PT_NONE] = {0, 0},
+	[V_008958_DI_PT_POINTLIST] = {1, 1},
+	[V_008958_DI_PT_LINELIST] = {2, 2},
+	[V_008958_DI_PT_LINESTRIP] = {2, 1},
+	[V_008958_DI_PT_TRILIST] = {3, 3},
+	[V_008958_DI_PT_TRIFAN] = {3, 1},
+	[V_008958_DI_PT_TRISTRIP] = {3, 1},
+	[V_008958_DI_PT_LINELIST_ADJ] = {4, 4},
+	[V_008958_DI_PT_LINESTRIP_ADJ] = {4, 1},
+	[V_008958_DI_PT_TRILIST_ADJ] = {6, 6},
+	[V_008958_DI_PT_TRISTRIP_ADJ] = {6, 2},
+	[V_008958_DI_PT_RECTLIST] = {3, 3},
+	[V_008958_DI_PT_LINELOOP] = {2, 1},
+	[V_008958_DI_PT_POLYGON] = {3, 1},
+	[V_008958_DI_PT_2D_TRI_STRIP] = {0, 0},
+};
+
 uint32_t
 si_get_ia_multi_vgt_param(struct radv_cmd_buffer *cmd_buffer,
 			  bool instanced_draw, bool indirect_draw,
 			  bool count_from_stream_output,
-			  uint32_t draw_vertex_count)
+			  uint32_t draw_vertex_count,
+			  unsigned topology)
 {
 	enum chip_class chip_class = cmd_buffer->device->physical_device->rad_info.chip_class;
 	enum radeon_family family = cmd_buffer->device->physical_device->rad_info.family;
@@ -692,10 +779,18 @@ si_get_ia_multi_vgt_param(struct radv_cmd_buffer *cmd_buffer,
 	bool partial_vs_wave = false;
 	bool partial_es_wave = cmd_buffer->state.pipeline->graphics.ia_multi_vgt_param.partial_es_wave;
 	bool multi_instances_smaller_than_primgroup;
+	struct radv_prim_vertex_count prim_vertex_count = prim_size_table[topology];
+
+	if (radv_pipeline_has_tess(cmd_buffer->state.pipeline)) {
+		if (topology == V_008958_DI_PT_PATCH) {
+			prim_vertex_count.min = cmd_buffer->state.pipeline->graphics.tess_patch_control_points;
+			prim_vertex_count.incr = 1;
+		}
+	}
 
 	multi_instances_smaller_than_primgroup = indirect_draw;
 	if (!multi_instances_smaller_than_primgroup && instanced_draw) {
-		uint32_t num_prims = radv_prims_for_vertices(&cmd_buffer->state.pipeline->graphics.prim_vertex_count, draw_vertex_count);
+		uint32_t num_prims = radv_prims_for_vertices(&prim_vertex_count, draw_vertex_count);
 		if (num_prims < cmd_buffer->state.pipeline->graphics.ia_multi_vgt_param.primgroup_size)
 			multi_instances_smaller_than_primgroup = true;
 	}
@@ -704,7 +799,19 @@ si_get_ia_multi_vgt_param(struct radv_cmd_buffer *cmd_buffer,
 	partial_vs_wave = cmd_buffer->state.pipeline->graphics.ia_multi_vgt_param.partial_vs_wave;
 
 	if (chip_class >= GFX7) {
-		wd_switch_on_eop = cmd_buffer->state.pipeline->graphics.ia_multi_vgt_param.wd_switch_on_eop;
+		/* WD_SWITCH_ON_EOP has no effect on GPUs with less than
+		 * 4 shader engines. Set 1 to pass the assertion below.
+		 * The other cases are hardware requirements. */
+		if (cmd_buffer->device->physical_device->rad_info.max_se < 4 ||
+		    topology == V_008958_DI_PT_POLYGON ||
+		    topology == V_008958_DI_PT_LINELOOP ||
+		    topology == V_008958_DI_PT_TRIFAN ||
+		    topology == V_008958_DI_PT_TRISTRIP_ADJ ||
+		    (cmd_buffer->state.pipeline->graphics.prim_restart_enable &&
+		     (cmd_buffer->device->physical_device->rad_info.family < CHIP_POLARIS10 ||
+		      (topology != V_008958_DI_PT_POINTLIST &&
+		       topology != V_008958_DI_PT_LINESTRIP))))
+			wd_switch_on_eop = true;
 
 		/* Hawaii hangs if instancing is enabled and WD_SWITCH_ON_EOP is 0.
 		 * We don't know that for indirect drawing, so treat it as
@@ -761,13 +868,24 @@ si_get_ia_multi_vgt_param(struct radv_cmd_buffer *cmd_buffer,
 		if (family == CHIP_HAWAII && ia_switch_on_eoi) {
 			bool set_vgt_flush = indirect_draw;
 			if (!set_vgt_flush && instanced_draw) {
-				uint32_t num_prims = radv_prims_for_vertices(&cmd_buffer->state.pipeline->graphics.prim_vertex_count, draw_vertex_count);
+				uint32_t num_prims = radv_prims_for_vertices(&prim_vertex_count, draw_vertex_count);
 				if (num_prims <= 1)
 					set_vgt_flush = true;
 			}
 			if (set_vgt_flush)
 				cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_VGT_FLUSH;
 		}
+	}
+
+	/* Workaround for a VGT hang when strip primitive types are used with
+	 * primitive restart.
+	 */
+	if (cmd_buffer->state.pipeline->graphics.prim_restart_enable &&
+	    (topology == V_008958_DI_PT_LINESTRIP ||
+	     topology == V_008958_DI_PT_TRISTRIP ||
+	     topology == V_008958_DI_PT_LINESTRIP_ADJ ||
+	     topology == V_008958_DI_PT_TRISTRIP_ADJ)) {
+		partial_vs_wave = true;
 	}
 
 	return cmd_buffer->state.pipeline->graphics.ia_multi_vgt_param.base |

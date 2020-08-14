@@ -40,6 +40,8 @@
 #include "v3d_screen.h"
 #include "broadcom/common/v3d_limits.h"
 
+#include "broadcom/simulator/v3d_simulator.h"
+
 struct v3d_job;
 struct v3d_bo;
 void v3d_job_add_bo(struct v3d_job *job, struct v3d_bo *bo);
@@ -615,12 +617,6 @@ void v3d_program_init(struct pipe_context *pctx);
 void v3d_program_fini(struct pipe_context *pctx);
 void v3d_query_init(struct pipe_context *pctx);
 
-void v3d_simulator_init(struct v3d_screen *screen);
-void v3d_simulator_destroy(struct v3d_screen *screen);
-uint32_t v3d_simulator_get_spill(uint32_t spill_size);
-int v3d_simulator_ioctl(int fd, unsigned long request, void *arg);
-void v3d_simulator_open_from_handle(int fd, int handle, uint32_t size);
-
 static inline int
 v3d_ioctl(int fd, unsigned long request, void *arg)
 {
@@ -702,6 +698,10 @@ bool v3d_generate_mipmap(struct pipe_context *pctx,
 struct v3d_fence *v3d_fence_create(struct v3d_context *v3d);
 
 void v3d_update_primitive_counters(struct v3d_context *v3d);
+
+bool v3d_line_smoothing_enabled(struct v3d_context *v3d);
+
+float v3d_get_real_line_width(struct v3d_context *v3d);
 
 #ifdef v3dX
 #  include "v3dx_context.h"

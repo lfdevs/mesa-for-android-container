@@ -32,8 +32,16 @@
 #include "si_pipe.h"
 #include "sid.h"
 
+#if 0
+#include "ac_shadowed_regs.h"
+#define SI_CHECK_SHADOWED_REGS(reg_offset, count) ac_check_shadowed_regs(GFX10, CHIP_NAVI14, reg_offset, count)
+#else
+#define SI_CHECK_SHADOWED_REGS(reg_offset, count)
+#endif
+
 static inline void radeon_set_config_reg_seq(struct radeon_cmdbuf *cs, unsigned reg, unsigned num)
 {
+   SI_CHECK_SHADOWED_REGS(reg, num);
    assert(reg < SI_CONTEXT_REG_OFFSET);
    assert(cs->current.cdw + 2 + num <= cs->current.max_dw);
    radeon_emit(cs, PKT3(PKT3_SET_CONFIG_REG, num, 0));
@@ -48,6 +56,7 @@ static inline void radeon_set_config_reg(struct radeon_cmdbuf *cs, unsigned reg,
 
 static inline void radeon_set_context_reg_seq(struct radeon_cmdbuf *cs, unsigned reg, unsigned num)
 {
+   SI_CHECK_SHADOWED_REGS(reg, num);
    assert(reg >= SI_CONTEXT_REG_OFFSET);
    assert(cs->current.cdw + 2 + num <= cs->current.max_dw);
    radeon_emit(cs, PKT3(PKT3_SET_CONTEXT_REG, num, 0));
@@ -60,9 +69,17 @@ static inline void radeon_set_context_reg(struct radeon_cmdbuf *cs, unsigned reg
    radeon_emit(cs, value);
 }
 
+static inline void radeon_set_context_reg_seq_array(struct radeon_cmdbuf *cs, unsigned reg,
+                                                    unsigned num, const uint32_t *values)
+{
+   radeon_set_context_reg_seq(cs, reg, num);
+   radeon_emit_array(cs, values, num);
+}
+
 static inline void radeon_set_context_reg_idx(struct radeon_cmdbuf *cs, unsigned reg, unsigned idx,
                                               unsigned value)
 {
+   SI_CHECK_SHADOWED_REGS(reg, 1);
    assert(reg >= SI_CONTEXT_REG_OFFSET);
    assert(cs->current.cdw + 3 <= cs->current.max_dw);
    radeon_emit(cs, PKT3(PKT3_SET_CONTEXT_REG, 1, 0));
@@ -72,6 +89,7 @@ static inline void radeon_set_context_reg_idx(struct radeon_cmdbuf *cs, unsigned
 
 static inline void radeon_set_sh_reg_seq(struct radeon_cmdbuf *cs, unsigned reg, unsigned num)
 {
+   SI_CHECK_SHADOWED_REGS(reg, num);
    assert(reg >= SI_SH_REG_OFFSET && reg < SI_SH_REG_END);
    assert(cs->current.cdw + 2 + num <= cs->current.max_dw);
    radeon_emit(cs, PKT3(PKT3_SET_SH_REG, num, 0));
@@ -86,6 +104,7 @@ static inline void radeon_set_sh_reg(struct radeon_cmdbuf *cs, unsigned reg, uns
 
 static inline void radeon_set_uconfig_reg_seq(struct radeon_cmdbuf *cs, unsigned reg, unsigned num)
 {
+   SI_CHECK_SHADOWED_REGS(reg, num);
    assert(reg >= CIK_UCONFIG_REG_OFFSET && reg < CIK_UCONFIG_REG_END);
    assert(cs->current.cdw + 2 + num <= cs->current.max_dw);
    radeon_emit(cs, PKT3(PKT3_SET_UCONFIG_REG, num, 0));
@@ -101,6 +120,7 @@ static inline void radeon_set_uconfig_reg(struct radeon_cmdbuf *cs, unsigned reg
 static inline void radeon_set_uconfig_reg_idx(struct radeon_cmdbuf *cs, struct si_screen *screen,
                                               unsigned reg, unsigned idx, unsigned value)
 {
+   SI_CHECK_SHADOWED_REGS(reg, 1);
    assert(reg >= CIK_UCONFIG_REG_OFFSET && reg < CIK_UCONFIG_REG_END);
    assert(cs->current.cdw + 3 <= cs->current.max_dw);
    assert(idx != 0);
@@ -116,6 +136,7 @@ static inline void radeon_set_uconfig_reg_idx(struct radeon_cmdbuf *cs, struct s
 static inline void radeon_set_context_reg_rmw(struct radeon_cmdbuf *cs, unsigned reg,
                                               unsigned value, unsigned mask)
 {
+   SI_CHECK_SHADOWED_REGS(reg, 1);
    assert(reg >= SI_CONTEXT_REG_OFFSET);
    assert(cs->current.cdw + 4 <= cs->current.max_dw);
    radeon_emit(cs, PKT3(PKT3_CONTEXT_REG_RMW, 2, 0));

@@ -71,12 +71,12 @@ fd5_screen_is_format_supported(struct pipe_screen *pscreen,
 		return false;
 
 	if ((usage & PIPE_BIND_VERTEX_BUFFER) &&
-			(fd5_pipe2vtx(format) != (enum a5xx_vtx_fmt)~0)) {
+			(fd5_pipe2vtx(format) != VFMT5_NONE)) {
 		retval |= PIPE_BIND_VERTEX_BUFFER;
 	}
 
 	if ((usage & (PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SHADER_IMAGE)) &&
-			(fd5_pipe2tex(format) != (enum a5xx_tex_fmt)~0) &&
+			(fd5_pipe2tex(format) != TFMT5_NONE) &&
 			(target == PIPE_BUFFER ||
 			 util_format_get_blocksize(format) != 12)) {
 		retval |= usage & (PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SHADER_IMAGE);
@@ -87,8 +87,8 @@ fd5_screen_is_format_supported(struct pipe_screen *pscreen,
 				PIPE_BIND_SCANOUT |
 				PIPE_BIND_SHARED |
 				PIPE_BIND_COMPUTE_RESOURCE)) &&
-			(fd5_pipe2color(format) != (enum a5xx_color_fmt)~0) &&
-			(fd5_pipe2tex(format) != (enum a5xx_tex_fmt)~0)) {
+			(fd5_pipe2color(format) != RB5_NONE) &&
+			(fd5_pipe2tex(format) != TFMT5_NONE)) {
 		retval |= usage & (PIPE_BIND_RENDER_TARGET |
 				PIPE_BIND_DISPLAY_TARGET |
 				PIPE_BIND_SCANOUT |
@@ -103,7 +103,7 @@ fd5_screen_is_format_supported(struct pipe_screen *pscreen,
 
 	if ((usage & PIPE_BIND_DEPTH_STENCIL) &&
 			(fd5_pipe2depth(format) != (enum a5xx_depth_format)~0) &&
-			(fd5_pipe2tex(format) != (enum a5xx_tex_fmt)~0)) {
+			(fd5_pipe2tex(format) != TFMT5_NONE)) {
 		retval |= PIPE_BIND_DEPTH_STENCIL;
 	}
 
@@ -135,4 +135,5 @@ fd5_screen_init(struct pipe_screen *pscreen)
 		screen->tile_mode = fd5_tile_mode;
 
 	fd5_emit_init_screen(pscreen);
+	ir3_screen_init(pscreen);
 }

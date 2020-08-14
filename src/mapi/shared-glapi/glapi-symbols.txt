@@ -15,6 +15,6 @@ _glapi_set_context
 _glapi_set_dispatch
 _glapi_set_nop_handler
 _glapi_set_warning_func
-_glapi_tls_Context
-_glapi_tls_Dispatch
+(optional) _glapi_tls_Context
+(optional) _glapi_tls_Dispatch
 _glthread_GetID

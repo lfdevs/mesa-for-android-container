@@ -26,6 +26,8 @@
 
 #include "util/ralloc.h"
 #include "util/hash_table.h"
+#define XXH_INLINE_ALL
+#include "util/xxhash.h"
 
 #include "ir3_cache.h"
 #include "ir3_gallium.h"
@@ -35,9 +37,7 @@ static uint32_t
 key_hash(const void *_key)
 {
 	const struct ir3_cache_key *key = _key;
-	uint32_t hash = _mesa_fnv32_1a_offset_bias;
-	hash = _mesa_fnv32_1a_accumulate_block(hash, key, sizeof(*key));
-	return hash;
+	return  XXH32(key, sizeof(*key), 0);
 }
 
 static bool
@@ -93,41 +93,64 @@ ir3_cache_lookup(struct ir3_cache *cache, const struct ir3_cache_key *key,
 		return entry->data;
 	}
 
-	struct ir3_shader_variant *vs = ir3_shader_variant(key->vs, key->key, false, debug);
-	if (!vs)
-		return NULL;
-
-	struct ir3_shader_variant *hs = NULL, *ds = NULL;
-	if (key->hs) {
+	if (key->hs)
 		debug_assert(key->ds);
-		hs = ir3_shader_variant(key->hs, key->key, false, debug);
-		ds = ir3_shader_variant(key->ds, key->key, false, debug);
-		if (!hs || ! ds)
-			return NULL;
+
+	struct ir3_shader *shaders[MESA_SHADER_STAGES] = {
+		[MESA_SHADER_VERTEX] = key->vs,
+		[MESA_SHADER_TESS_CTRL] = key->hs,
+		[MESA_SHADER_TESS_EVAL] = key->ds,
+		[MESA_SHADER_GEOMETRY] = key->gs,
+		[MESA_SHADER_FRAGMENT] = key->fs,
+	};
+
+	struct ir3_shader_variant *variants[MESA_SHADER_STAGES];
+	struct ir3_shader_key shader_key = key->key;
+
+	for (gl_shader_stage stage = MESA_SHADER_VERTEX;
+		 stage < MESA_SHADER_STAGES; stage++) {
+		if (shaders[stage]) {
+			variants[stage] =
+				ir3_shader_variant(shaders[stage], shader_key, false, debug);
+			if (!variants[stage])
+				return NULL;
+		} else {
+			variants[stage] = NULL;
+		}
 	}
 
-	/* For tessellation, the binning shader is derived from the DS. */
+	uint32_t safe_constlens = ir3_trim_constlen(variants, key->vs->compiler);
+	shader_key.safe_constlen = true;
+
+	for (gl_shader_stage stage = MESA_SHADER_VERTEX;
+		 stage < MESA_SHADER_STAGES; stage++) {
+		if (safe_constlens & (1 << stage)) {
+			variants[stage] =
+				ir3_shader_variant(shaders[stage], shader_key, false, debug);
+			if (!variants[stage])
+				return NULL;
+		}
+	}
+
 	struct ir3_shader_variant *bs;
-	if (key->ds)
-		bs = ir3_shader_variant(key->ds, key->key, true, debug);
-	else
+
+	if (ir3_has_binning_vs(&key->key)) {
+		shader_key.safe_constlen = !!(safe_constlens & (1 << MESA_SHADER_VERTEX));
 		bs = ir3_shader_variant(key->vs, key->key, true, debug);
-	if (!bs)
-		return NULL;
-
-	struct ir3_shader_variant *gs = NULL;
-	if (key->gs) {
-		gs = ir3_shader_variant(key->gs, key->key, false, debug);
-		if (!gs)
+		if (!bs)
 			return NULL;
+	} else {
+		bs = variants[MESA_SHADER_VERTEX];
 	}
-
-	struct ir3_shader_variant *fs = ir3_shader_variant(key->fs, key->key, false, debug);
-	if (!fs)
-		return NULL;
 
 	struct ir3_program_state *state =
-		cache->funcs->create_state(cache->data, bs, vs, hs, ds, gs, fs, &key->key);
+		cache->funcs->create_state(cache->data, bs,
+								   variants[MESA_SHADER_VERTEX],
+								   variants[MESA_SHADER_TESS_CTRL],
+								   variants[MESA_SHADER_TESS_EVAL],
+								   variants[MESA_SHADER_GEOMETRY],
+								   variants[MESA_SHADER_FRAGMENT],
+								   &key->key);
 	state->key = *key;
 
 	/* NOTE: uses copy of key in state obj, because pointer passed by caller

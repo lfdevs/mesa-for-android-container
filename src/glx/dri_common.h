@@ -36,6 +36,8 @@
 #ifndef _DRI_COMMON_H
 #define _DRI_COMMON_H
 
+#ifdef GLX_DIRECT_RENDERING
+
 #include <GL/internal/dri_interface.h>
 #include <stdbool.h>
 #include "loader.h"
@@ -82,5 +84,7 @@ extern bool
 dri2_check_no_error(uint32_t flags, struct glx_context *share_context,
                     int major, unsigned *error);
 
+
+#endif /* GLX_DIRECT_RENDERING */
 
 #endif /* _DRI_COMMON_H */

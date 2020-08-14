@@ -95,7 +95,7 @@ fd5_emit_flush(struct fd_context *ctx, struct fd_ringbuffer *ring)
 {
 	OUT_PKT7(ring, CP_EVENT_WRITE, 4);
 	OUT_RING(ring, CACHE_FLUSH_TS);
-	OUT_RELOCW(ring, fd5_context(ctx)->blit_mem, 0, 0, 0);  /* ADDR_LO/HI */
+	OUT_RELOC(ring, fd5_context(ctx)->blit_mem, 0, 0, 0);  /* ADDR_LO/HI */
 	OUT_RING(ring, 0x00000000);
 
 	OUT_WFI5(ring);

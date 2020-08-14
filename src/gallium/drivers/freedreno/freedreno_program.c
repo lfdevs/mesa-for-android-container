@@ -90,16 +90,6 @@ static const char *solid_vs =
 	"  0: MOV OUT[0], IN[0]                      \n"
 	"  1: END                                    \n";
 
-static const char *blit_vs =
-	"VERT                                        \n"
-	"DCL IN[0]                                   \n"
-	"DCL IN[1]                                   \n"
-	"DCL OUT[0], GENERIC[0]                      \n"
-	"DCL OUT[1], POSITION                        \n"
-	"  0: MOV OUT[0], IN[0]                      \n"
-	"  0: MOV OUT[1], IN[1]                      \n"
-	"  1: END                                    \n";
-
 static void * assemble_tgsi(struct pipe_context *pctx,
 		const char *src, bool frag)
 {
@@ -117,8 +107,44 @@ static void * assemble_tgsi(struct pipe_context *pctx,
 		return pctx->create_vs_state(pctx, &cso);
 }
 
+/* the correct semantic to use for the texcoord varying depends on pipe-cap: */
+static enum tgsi_semantic
+texcoord_semantic(struct pipe_context *pctx)
+{
+	struct pipe_screen *pscreen = pctx->screen;
+
+	if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_TEXCOORD)) {
+		return TGSI_SEMANTIC_TEXCOORD;
+	} else {
+		return TGSI_SEMANTIC_GENERIC;
+	}
+}
+
 static void *
-fd_prog_blit(struct pipe_context *pctx, int rts, bool depth)
+fd_prog_blit_vs(struct pipe_context *pctx)
+{
+	struct ureg_program *ureg;
+
+	ureg = ureg_create(PIPE_SHADER_VERTEX);
+	if (!ureg)
+		return NULL;
+
+	struct ureg_src in0 = ureg_DECL_vs_input(ureg, 0);
+	struct ureg_src in1 = ureg_DECL_vs_input(ureg, 1);
+
+	struct ureg_dst out0 = ureg_DECL_output(ureg, texcoord_semantic(pctx), 0);
+	struct ureg_dst out1 = ureg_DECL_output(ureg, TGSI_SEMANTIC_POSITION, 1);
+
+	ureg_MOV(ureg, out0, in0);
+	ureg_MOV(ureg, out1, in1);
+
+	ureg_END(ureg);
+
+	return ureg_create_shader_and_destroy(ureg, pctx);
+}
+
+static void *
+fd_prog_blit_fs(struct pipe_context *pctx, int rts, bool depth)
 {
 	int i;
 	struct ureg_src tc;
@@ -131,7 +157,7 @@ fd_prog_blit(struct pipe_context *pctx, int rts, bool depth)
 		return NULL;
 
 	tc = ureg_DECL_fs_input(
-			ureg, TGSI_SEMANTIC_GENERIC, 0, TGSI_INTERPOLATE_PERSPECTIVE);
+			ureg, texcoord_semantic(pctx), 0, TGSI_INTERPOLATE_PERSPECTIVE);
 	for (i = 0; i < rts; i++)
 		ureg_TEX(ureg, ureg_DECL_output(ureg, TGSI_SEMANTIC_COLOR, i),
 				 TGSI_TEXTURE_2D, tc, ureg_DECL_sampler(ureg, i));
@@ -165,21 +191,21 @@ void fd_prog_init(struct pipe_context *pctx)
 	if (ctx->screen->gpu_id >= 500)
 		return;
 
-	ctx->blit_prog[0].vs = assemble_tgsi(pctx, blit_vs, false);
-	ctx->blit_prog[0].fs = fd_prog_blit(pctx, 1, false);
+	ctx->blit_prog[0].vs = fd_prog_blit_vs(pctx);
+	ctx->blit_prog[0].fs = fd_prog_blit_fs(pctx, 1, false);
 
 	if (ctx->screen->gpu_id < 300)
 		return;
 
 	for (i = 1; i < ctx->screen->max_rts; i++) {
 		ctx->blit_prog[i].vs = ctx->blit_prog[0].vs;
-		ctx->blit_prog[i].fs = fd_prog_blit(pctx, i + 1, false);
+		ctx->blit_prog[i].fs = fd_prog_blit_fs(pctx, i + 1, false);
 	}
 
 	ctx->blit_z.vs = ctx->blit_prog[0].vs;
-	ctx->blit_z.fs = fd_prog_blit(pctx, 0, true);
+	ctx->blit_z.fs = fd_prog_blit_fs(pctx, 0, true);
 	ctx->blit_zs.vs = ctx->blit_prog[0].vs;
-	ctx->blit_zs.fs = fd_prog_blit(pctx, 1, true);
+	ctx->blit_zs.fs = fd_prog_blit_fs(pctx, 1, true);
 }
 
 void fd_prog_fini(struct pipe_context *pctx)

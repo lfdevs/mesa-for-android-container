@@ -49,7 +49,9 @@ set_exponent(nir_builder *b, nir_ssa_def *src, nir_ssa_def *exp)
    /* The exponent is bits 52-62, or 20-30 of the high word, so set the exponent
     * to 1023
     */
-   nir_ssa_def *new_hi = nir_bfi(b, nir_imm_int(b, 0x7ff00000), exp, hi);
+   nir_ssa_def *new_hi = nir_bitfield_insert(b, hi, exp,
+                                             nir_imm_int(b, 20),
+                                             nir_imm_int(b, 11));
    /* recombine */
    return nir_pack_64_2x32_split(b, lo, new_hi);
 }
@@ -469,17 +471,15 @@ lower_doubles_instr_to_soft(nir_builder *b, nir_alu_instr *instr,
 
    switch (instr->op) {
    case nir_op_f2i64:
-      if (instr->src[0].src.ssa->bit_size == 64)
-         name = "__fp64_to_int64";
-      else
-         name = "__fp32_to_int64";
+      if (instr->src[0].src.ssa->bit_size != 64)
+         return false;
+      name = "__fp64_to_int64";
       return_type = glsl_int64_t_type();
       break;
    case nir_op_f2u64:
-      if (instr->src[0].src.ssa->bit_size == 64)
-         name = "__fp64_to_uint64";
-      else
-         name = "__fp32_to_uint64";
+      if (instr->src[0].src.ssa->bit_size != 64)
+         return false;
+      name = "__fp64_to_uint64";
       break;
    case nir_op_f2f64:
       name = "__fp32_to_fp64";
@@ -503,18 +503,6 @@ lower_doubles_instr_to_soft(nir_builder *b, nir_alu_instr *instr,
       break;
    case nir_op_b2f64:
       name = "__bool_to_fp64";
-      break;
-   case nir_op_i2f32:
-      if (instr->src[0].src.ssa->bit_size != 64)
-         return false;
-      name = "__int64_to_fp32";
-      return_type = glsl_float_type();
-      break;
-   case nir_op_u2f32:
-      if (instr->src[0].src.ssa->bit_size != 64)
-         return false;
-      name = "__uint64_to_fp32";
-      return_type = glsl_float_type();
       break;
    case nir_op_i2f64:
       if (instr->src[0].src.ssa->bit_size == 64)
@@ -756,11 +744,9 @@ nir_lower_doubles_impl(nir_function_impl *impl,
    } else if (progress) {
       nir_metadata_preserve(impl, nir_metadata_block_index |
                                   nir_metadata_dominance);
-    } else {
-#ifndef NDEBUG
-      impl->valid_metadata &= ~nir_metadata_not_properly_reset;
-#endif
-    }
+   } else {
+      nir_metadata_preserve(impl, nir_metadata_all);
+   }
 
    return progress;
 }

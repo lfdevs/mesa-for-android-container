@@ -64,23 +64,7 @@ fd4_blend_state_create(struct pipe_context *pctx,
 
 	if (cso->logicop_enable) {
 		rop = cso->logicop_func;  /* maps 1:1 */
-
-		switch (cso->logicop_func) {
-		case PIPE_LOGICOP_NOR:
-		case PIPE_LOGICOP_AND_INVERTED:
-		case PIPE_LOGICOP_AND_REVERSE:
-		case PIPE_LOGICOP_INVERT:
-		case PIPE_LOGICOP_XOR:
-		case PIPE_LOGICOP_NAND:
-		case PIPE_LOGICOP_AND:
-		case PIPE_LOGICOP_EQUIV:
-		case PIPE_LOGICOP_NOOP:
-		case PIPE_LOGICOP_OR_INVERTED:
-		case PIPE_LOGICOP_OR_REVERSE:
-		case PIPE_LOGICOP_OR:
-			reads_dest = true;
-			break;
-		}
+		reads_dest = util_logicop_reads_dest(cso->logicop_func);
 	}
 
 	so = CALLOC_STRUCT(fd4_blend_stateobj);

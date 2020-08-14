@@ -460,7 +460,7 @@ void si_build_prim_discard_compute_shader(struct si_shader_context *ctx)
    if (key->opt.cs_indexed) {
       for (unsigned i = 0; i < 3; i++) {
          index[i] = ac_build_buffer_load_format(&ctx->ac, input_indexbuf, index[i], ctx->ac.i32_0,
-                                                1, 0, true);
+                                                1, 0, true, false);
          index[i] = ac_to_integer(&ctx->ac, index[i]);
       }
    }
@@ -825,7 +825,7 @@ void si_build_prim_discard_compute_shader(struct si_shader_context *ctx)
       if (!ac_has_vec3_support(ctx->ac.chip_class, true))
          vdata = ac_build_expand_to_vec4(&ctx->ac, vdata, 3);
 
-      ac_build_buffer_store_format(&ctx->ac, output_indexbuf, vdata, vindex, ctx->ac.i32_0, 3,
+      ac_build_buffer_store_format(&ctx->ac, output_indexbuf, vdata, vindex, ctx->ac.i32_0,
                                    ac_glc | (INDEX_STORES_USE_SLC ? ac_slc : 0));
    }
    ac_build_endif(&ctx->ac, 16607);

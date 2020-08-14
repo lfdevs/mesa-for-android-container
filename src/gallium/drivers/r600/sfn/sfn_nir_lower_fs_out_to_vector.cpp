@@ -84,7 +84,7 @@ protected:
    InstrSet m_block_io;
    int m_next_index;
 private:
-   virtual exec_list *get_io_list(nir_shader *shader) const  = 0;
+   virtual nir_variable_mode get_io_mode(nir_shader *shader) const  = 0;
    virtual bool instr_can_rewrite_type(nir_intrinsic_instr *intr) const  = 0;
    virtual bool var_can_rewrite_slot(nir_variable *var) const = 0;
    virtual void create_new_io(nir_builder *b, nir_intrinsic_instr *intr, nir_variable *var,
@@ -98,7 +98,7 @@ public:
    NirLowerFSOutToVector();
 
 private:
-   exec_list *get_io_list(nir_shader *shader) const  override;
+   nir_variable_mode get_io_mode(nir_shader *shader) const  override;
    bool var_can_rewrite_slot(nir_variable *var) const override;
    void create_new_io(nir_builder *b, nir_intrinsic_instr *intr, nir_variable *var,
                          nir_ssa_def **srcs, unsigned first_comp, unsigned num_comps) override;
@@ -150,16 +150,19 @@ bool NirLowerIOToVector::run(nir_function_impl *impl)
 
 void NirLowerIOToVector::create_new_io_vars(nir_shader *shader)
 {
-   struct exec_list *io_list = get_io_list(shader);
-   if (exec_list_is_empty(io_list))
-      return;
+   nir_variable_mode mode = get_io_mode(shader);
 
-   nir_foreach_variable(var, io_list) {
+   bool can_rewrite_vars = false;
+   nir_foreach_variable_with_modes(var, shader, mode) {
       if (var_can_rewrite(var)) {
+         can_rewrite_vars = true;
          unsigned loc = var->data.location - m_base_slot;
          m_vars[loc][var->data.location_frac] = var;
       }
    }
+
+   if (!can_rewrite_vars)
+      return;
 
    /* We don't handle combining vars of different type e.g. different array
     * lengths.
@@ -385,9 +388,9 @@ bool NirLowerIOToVector::vec_instr_stack_pop(nir_builder *b, InstrSubSet &ir_set
    return true;
 }
 
-exec_list *NirLowerFSOutToVector::get_io_list(nir_shader *shader) const
+nir_variable_mode NirLowerFSOutToVector::get_io_mode(nir_shader *shader) const
 {
-   return &shader->outputs;
+   return nir_var_shader_out;
 }
 
 void

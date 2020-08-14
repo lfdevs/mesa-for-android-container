@@ -26,6 +26,7 @@
 #include <sys/stat.h>
 
 #include "c11/threads.h"
+#include "util/os_file.h"
 #include "util/u_hash_table.h"
 #include "util/u_pointer.h"
 #include "renderonly/renderonly.h"
@@ -73,7 +74,7 @@ lima_drm_screen_create(int fd)
    if (pscreen) {
       lima_screen(pscreen)->refcnt++;
    } else {
-      int dup_fd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
+      int dup_fd = os_dupfd_cloexec(fd);
 
       pscreen = lima_screen_create(dup_fd, NULL);
       if (pscreen) {
@@ -96,5 +97,5 @@ unlock:
 struct pipe_screen *
 lima_drm_screen_create_renderonly(struct renderonly *ro)
 {
-   return lima_screen_create(fcntl(ro->gpu_fd, F_DUPFD_CLOEXEC, 3), ro);
+   return lima_screen_create(os_dupfd_cloexec(ro->gpu_fd), ro);
 }

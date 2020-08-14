@@ -35,7 +35,7 @@
 #include "util/u_drm.h"
 #include "renderonly/renderonly.h"
 
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 
 #include "drm-uapi/drm_fourcc.h"
 #include "drm-uapi/lima_drm.h"

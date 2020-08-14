@@ -86,14 +86,14 @@ iris_update_draw_info(struct iris_context *ice,
 
       /* 8_PATCH TCS needs this for key->input_vertices */
       if (compiler->use_tcs_8_patch)
-         ice->state.dirty |= IRIS_DIRTY_UNCOMPILED_TCS;
+         ice->state.stage_dirty |= IRIS_STAGE_DIRTY_UNCOMPILED_TCS;
 
       /* Flag constants dirty for gl_PatchVerticesIn if needed. */
       const struct shader_info *tcs_info =
          iris_get_shader_info(ice, MESA_SHADER_TESS_CTRL);
       if (tcs_info &&
           tcs_info->system_values_read & (1ull << SYSTEM_VALUE_VERTICES_IN)) {
-         ice->state.dirty |= IRIS_DIRTY_CONSTANTS_TCS;
+         ice->state.stage_dirty |= IRIS_STAGE_DIRTY_CONSTANTS_TCS;
          ice->state.shaders[MESA_SHADER_TESS_CTRL].sysvals_need_upload = true;
       }
    }
@@ -182,7 +182,8 @@ iris_indirect_draw_vbo(struct iris_context *ice,
       batch->screen->vtbl.load_register_reg64(batch, CS_GPR(15), MI_PREDICATE_RESULT);
    }
 
-   uint64_t orig_dirty = ice->state.dirty;
+   const uint64_t orig_dirty = ice->state.dirty;
+   const uint64_t orig_stage_dirty = ice->state.stage_dirty;
 
    for (int i = 0; i < info.indirect->draw_count; i++) {
       info.drawid = i;
@@ -194,6 +195,7 @@ iris_indirect_draw_vbo(struct iris_context *ice,
       batch->screen->vtbl.upload_render_state(ice, batch, &info);
 
       ice->state.dirty &= ~IRIS_ALL_DIRTY_FOR_RENDER;
+      ice->state.stage_dirty &= ~IRIS_ALL_STAGE_DIRTY_FOR_RENDER;
 
       info.indirect->offset += info.indirect->stride;
    }
@@ -206,6 +208,7 @@ iris_indirect_draw_vbo(struct iris_context *ice,
 
    /* Put this back for post-draw resolves, we'll clear it again after. */
    ice->state.dirty = orig_dirty;
+   ice->state.stage_dirty = orig_stage_dirty;
 }
 
 static void
@@ -238,8 +241,10 @@ iris_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
    /* We can't safely re-emit 3DSTATE_SO_BUFFERS because it may zero the
     * write offsets, changing the behavior.
     */
-   if (unlikely(INTEL_DEBUG & DEBUG_REEMIT))
+   if (unlikely(INTEL_DEBUG & DEBUG_REEMIT)) {
       ice->state.dirty |= IRIS_ALL_DIRTY_FOR_RENDER & ~IRIS_DIRTY_SO_BUFFERS;
+      ice->state.stage_dirty |= IRIS_ALL_STAGE_DIRTY_FOR_RENDER;
+   }
 
    iris_update_draw_info(ice, info);
 
@@ -274,6 +279,7 @@ iris_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
    iris_postdraw_update_resolve_tracking(ice, batch);
 
    ice->state.dirty &= ~IRIS_ALL_DIRTY_FOR_RENDER;
+   ice->state.stage_dirty &= ~IRIS_ALL_STAGE_DIRTY_FOR_RENDER;
 }
 
 static void
@@ -328,7 +334,7 @@ iris_update_grid_size_resource(struct iris_context *ice,
                          .stride_B = 1,
                          .mocs = iris_mocs(grid_bo, isl_dev));
 
-   ice->state.dirty |= IRIS_DIRTY_BINDINGS_CS;
+   ice->state.stage_dirty |= IRIS_STAGE_DIRTY_BINDINGS_CS;
 }
 
 void
@@ -340,20 +346,23 @@ iris_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info *grid)
    if (ice->state.predicate == IRIS_PREDICATE_STATE_DONT_RENDER)
       return;
 
-   if (unlikely(INTEL_DEBUG & DEBUG_REEMIT))
+   if (unlikely(INTEL_DEBUG & DEBUG_REEMIT)) {
       ice->state.dirty |= IRIS_ALL_DIRTY_FOR_COMPUTE;
-
-   /* We can't do resolves on the compute engine, so awkwardly, we have to
-    * do them on the render batch...
-    */
-   if (ice->state.dirty & IRIS_DIRTY_COMPUTE_RESOLVES_AND_FLUSHES) {
-      iris_predraw_resolve_inputs(ice, &ice->batches[IRIS_BATCH_RENDER], NULL,
-                                  MESA_SHADER_COMPUTE, false);
+      ice->state.stage_dirty |= IRIS_ALL_STAGE_DIRTY_FOR_COMPUTE;
    }
+
+   if (ice->state.dirty & IRIS_DIRTY_COMPUTE_RESOLVES_AND_FLUSHES)
+      iris_predraw_resolve_inputs(ice, batch, NULL, MESA_SHADER_COMPUTE, false);
 
    iris_batch_maybe_flush(batch, 1500);
 
    iris_update_compiled_compute_shader(ice);
+
+   if (memcmp(ice->state.last_block, grid->block, sizeof(grid->block)) != 0) {
+      memcpy(ice->state.last_block, grid->block, sizeof(grid->block));
+      ice->state.stage_dirty |= IRIS_STAGE_DIRTY_CONSTANTS_CS;
+      ice->state.shaders[MESA_SHADER_COMPUTE].sysvals_need_upload = true;
+   }
 
    iris_update_grid_size_resource(ice, grid);
 
@@ -373,6 +382,7 @@ iris_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info *grid)
    iris_handle_always_flush_cache(batch);
 
    ice->state.dirty &= ~IRIS_ALL_DIRTY_FOR_COMPUTE;
+   ice->state.stage_dirty &= ~IRIS_ALL_STAGE_DIRTY_FOR_COMPUTE;
 
    /* Note: since compute shaders can't access the framebuffer, there's
     * no need to call iris_postdraw_update_resolve_tracking.

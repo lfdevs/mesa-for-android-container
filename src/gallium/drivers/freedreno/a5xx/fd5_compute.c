@@ -64,7 +64,7 @@ static void
 fd5_delete_compute_state(struct pipe_context *pctx, void *hwcso)
 {
 	struct fd5_compute_stateobj *so = hwcso;
-	ir3_shader_destroy(so->shader);
+	ir3_shader_state_delete(pctx, so->shader);
 	free(so);
 }
 
@@ -122,7 +122,8 @@ cs_program_emit(struct fd_ringbuffer *ring, struct ir3_shader_variant *v,
 		A5XX_SP_CS_CONFIG_SHADEROBJOFFSET(0) |
 		A5XX_SP_CS_CONFIG_ENABLED);
 
-	unsigned constlen = align(v->constlen, 4) / 4;
+	assert(v->constlen % 4 == 0);
+	unsigned constlen = v->constlen / 4;
 	OUT_PKT4(ring, REG_A5XX_HLSQ_CS_CONSTLEN, 2);
 	OUT_RING(ring, constlen);          /* HLSQ_CS_CONSTLEN */
 	OUT_RING(ring, instrlen);          /* HLSQ_CS_INSTRLEN */
@@ -184,7 +185,7 @@ fd5_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info)
 	struct ir3_shader_key key = {};
 	struct ir3_shader_variant *v;
 	struct fd_ringbuffer *ring = ctx->batch->draw;
-	unsigned i, nglobal = 0;
+	unsigned nglobal = 0;
 
 	emit_setup(ctx);
 
@@ -196,7 +197,7 @@ fd5_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info)
 		cs_program_emit(ring, v, info);
 
 	fd5_emit_cs_state(ctx, ring, v);
-	ir3_emit_cs_consts(v, ring, ctx, info);
+	fd5_emit_cs_consts(v, ring, ctx, info);
 
 	foreach_bit(i, ctx->global_bindings.enabled_mask)
 		nglobal++;
@@ -211,7 +212,7 @@ fd5_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info)
 		OUT_PKT7(ring, CP_NOP, 2 * nglobal);
 		foreach_bit(i, ctx->global_bindings.enabled_mask) {
 			struct pipe_resource *prsc = ctx->global_bindings.buf[i];
-			OUT_RELOCW(ring, fd_resource(prsc)->bo, 0, 0, 0);
+			OUT_RELOC(ring, fd_resource(prsc)->bo, 0, 0, 0);
 		}
 	}
 

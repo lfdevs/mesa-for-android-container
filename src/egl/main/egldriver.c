@@ -46,47 +46,15 @@
 
 #include "util/debug.h"
 
-static mtx_t _eglModuleMutex = _MTX_INITIALIZER_NP;
-static _EGLDriver *_eglDriver;
-
-static _EGLDriver *
-_eglGetDriver(void)
-{
-   mtx_lock(&_eglModuleMutex);
-
-   if (!_eglDriver) {
-      _eglDriver = calloc(1, sizeof(*_eglDriver));
-      if (!_eglDriver) {
-         mtx_unlock(&_eglModuleMutex);
-         return NULL;
-      }
-      _eglInitDriver(_eglDriver);
-   }
-
-   mtx_unlock(&_eglModuleMutex);
-
-   return _eglDriver;
-}
-
-static _EGLDriver *
-_eglMatchAndInitialize(_EGLDisplay *disp)
-{
-   if (_eglGetDriver())
-      if (_eglDriver->API.Initialize(_eglDriver, disp))
-         return _eglDriver;
-
-   return NULL;
-}
+extern const _EGLDriver _eglDriver;
 
 /**
- * Match a display to a driver.  The matching is done by finding the first
- * driver that can initialize the display.
+ * Initialize the display using the driver's function.
+ * If the initialisation fails, try again using only software rendering.
  */
-_EGLDriver *
-_eglMatchDriver(_EGLDisplay *disp)
+bool
+_eglInitializeDisplay(_EGLDisplay *disp)
 {
-   _EGLDriver *best_drv;
-
    assert(!disp->Initialized);
 
    /* set options */
@@ -95,36 +63,29 @@ _eglMatchDriver(_EGLDisplay *disp)
    if (disp->Options.ForceSoftware)
       _eglLog(_EGL_DEBUG, "Found 'LIBGL_ALWAYS_SOFTWARE' set, will use a CPU renderer");
 
-   best_drv = _eglMatchAndInitialize(disp);
-   if (!best_drv && !disp->Options.ForceSoftware) {
-      disp->Options.ForceSoftware = EGL_TRUE;
-      best_drv = _eglMatchAndInitialize(disp);
-   }
-
-   if (best_drv) {
-      disp->Driver = best_drv;
+   if (_eglDriver.Initialize(&_eglDriver, disp)) {
+      disp->Driver = &_eglDriver;
       disp->Initialized = EGL_TRUE;
+      return true;
    }
 
-   return best_drv;
+   if (disp->Options.ForceSoftware)
+      return false;
+
+   disp->Options.ForceSoftware = EGL_TRUE;
+   if (!_eglDriver.Initialize(&_eglDriver, disp))
+      return false;
+
+   disp->Driver = &_eglDriver;
+   disp->Initialized = EGL_TRUE;
+   return true;
 }
 
 __eglMustCastToProperFunctionPointerType
 _eglGetDriverProc(const char *procname)
 {
-   if (_eglGetDriver() && _eglDriver->API.GetProcAddress)
-      return _eglDriver->API.GetProcAddress(_eglDriver, procname);
+   if (_eglDriver.GetProcAddress)
+      return _eglDriver.GetProcAddress(&_eglDriver, procname);
 
    return NULL;
-}
-
-/**
- * Unload all drivers.
- */
-void
-_eglUnloadDrivers(void)
-{
-   /* this is called at atexit time */
-   free(_eglDriver);
-   _eglDriver = NULL;
 }

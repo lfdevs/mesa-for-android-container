@@ -23,32 +23,35 @@
  */
 
 #include "si_pipe.h"
+#include "si_build_pm4.h"
 #include "sid.h"
 #include "util/u_memory.h"
 
-void si_pm4_cmd_begin(struct si_pm4_state *state, unsigned opcode)
+static void si_pm4_cmd_begin(struct si_pm4_state *state, unsigned opcode)
 {
+   assert(state->ndw < SI_PM4_MAX_DW);
    state->last_opcode = opcode;
    state->last_pm4 = state->ndw++;
 }
 
 void si_pm4_cmd_add(struct si_pm4_state *state, uint32_t dw)
 {
+   assert(state->ndw < SI_PM4_MAX_DW);
    state->pm4[state->ndw++] = dw;
 }
 
-void si_pm4_cmd_end(struct si_pm4_state *state, bool predicate)
+static void si_pm4_cmd_end(struct si_pm4_state *state, bool predicate)
 {
    unsigned count;
    count = state->ndw - state->last_pm4 - 2;
    state->pm4[state->last_pm4] = PKT3(state->last_opcode, count, predicate);
-
-   assert(state->ndw <= SI_PM4_MAX_DW);
 }
 
 void si_pm4_set_reg(struct si_pm4_state *state, unsigned reg, uint32_t val)
 {
    unsigned opcode;
+
+   SI_CHECK_SHADOWED_REGS(reg, 1);
 
    if (reg >= SI_CONFIG_REG_OFFSET && reg < SI_CONFIG_REG_END) {
       opcode = PKT3_SET_CONFIG_REG;
@@ -83,23 +86,8 @@ void si_pm4_set_reg(struct si_pm4_state *state, unsigned reg, uint32_t val)
    si_pm4_cmd_end(state, false);
 }
 
-void si_pm4_add_bo(struct si_pm4_state *state, struct si_resource *bo, enum radeon_bo_usage usage,
-                   enum radeon_bo_priority priority)
-{
-   unsigned idx = state->nbo++;
-   assert(idx < SI_PM4_MAX_BO);
-
-   si_resource_reference(&state->bo[idx], bo);
-   state->bo_usage[idx] = usage;
-   state->bo_priority[idx] = priority;
-}
-
 void si_pm4_clear_state(struct si_pm4_state *state)
 {
-   for (int i = 0; i < state->nbo; ++i)
-      si_resource_reference(&state->bo[i], NULL);
-   si_resource_reference(&state->indirect_buffer, NULL);
-   state->nbo = 0;
    state->ndw = 0;
 }
 
@@ -120,61 +108,34 @@ void si_pm4_emit(struct si_context *sctx, struct si_pm4_state *state)
 {
    struct radeon_cmdbuf *cs = sctx->gfx_cs;
 
-   for (int i = 0; i < state->nbo; ++i) {
-      radeon_add_to_buffer_list(sctx, sctx->gfx_cs, state->bo[i], state->bo_usage[i],
-                                state->bo_priority[i]);
+   if (state->shader) {
+      radeon_add_to_buffer_list(sctx, sctx->gfx_cs, state->shader->bo,
+                                RADEON_USAGE_READ, RADEON_PRIO_SHADER_BINARY);
    }
 
-   if (!state->indirect_buffer) {
-      radeon_emit_array(cs, state->pm4, state->ndw);
-   } else {
-      struct si_resource *ib = state->indirect_buffer;
-
-      radeon_add_to_buffer_list(sctx, sctx->gfx_cs, ib, RADEON_USAGE_READ, RADEON_PRIO_IB2);
-
-      radeon_emit(cs, PKT3(PKT3_INDIRECT_BUFFER_CIK, 2, 0));
-      radeon_emit(cs, ib->gpu_address);
-      radeon_emit(cs, ib->gpu_address >> 32);
-      radeon_emit(cs, (ib->b.b.width0 >> 2) & 0xfffff);
-   }
+   radeon_emit_array(cs, state->pm4, state->ndw);
 
    if (state->atom.emit)
       state->atom.emit(sctx);
 }
 
-void si_pm4_reset_emitted(struct si_context *sctx)
+void si_pm4_reset_emitted(struct si_context *sctx, bool first_cs)
 {
-   memset(&sctx->emitted, 0, sizeof(sctx->emitted));
-   sctx->dirty_states |= u_bit_consecutive(0, SI_NUM_STATES);
-}
+   if (!first_cs && sctx->shadowed_regs) {
+      /* Only dirty states that contain buffers, so that they are
+       * added to the buffer list on the next draw call.
+       */
+      for (unsigned i = 0; i < SI_NUM_STATES; i++) {
+         struct si_pm4_state *state = sctx->emitted.array[i];
 
-void si_pm4_upload_indirect_buffer(struct si_context *sctx, struct si_pm4_state *state)
-{
-   struct pipe_screen *screen = sctx->b.screen;
-   unsigned aligned_ndw = align(state->ndw, 8);
-
-   /* only supported on GFX7 and later */
-   if (sctx->chip_class < GFX7)
+         if (state && state->shader) {
+            sctx->emitted.array[i] = NULL;
+            sctx->dirty_states |= 1 << i;
+         }
+      }
       return;
-
-   assert(state->ndw);
-   assert(aligned_ndw <= SI_PM4_MAX_DW);
-
-   si_resource_reference(&state->indirect_buffer, NULL);
-   /* TODO: this hangs with 1024 or higher alignment on GFX9. */
-   state->indirect_buffer =
-      si_aligned_buffer_create(screen, 0, PIPE_USAGE_DEFAULT, aligned_ndw * 4, 256);
-   if (!state->indirect_buffer)
-      return;
-
-   /* Pad the IB to 8 DWs to meet CP fetch alignment requirements. */
-   if (sctx->screen->info.gfx_ib_pad_with_type2) {
-      for (int i = state->ndw; i < aligned_ndw; i++)
-         state->pm4[i] = 0x80000000; /* type2 nop packet */
-   } else {
-      for (int i = state->ndw; i < aligned_ndw; i++)
-         state->pm4[i] = 0xffff1000; /* type3 nop packet */
    }
 
-   pipe_buffer_write(&sctx->b, &state->indirect_buffer->b.b, 0, aligned_ndw * 4, state->pm4);
+   memset(&sctx->emitted, 0, sizeof(sctx->emitted));
+   sctx->dirty_states |= u_bit_consecutive(0, SI_NUM_STATES);
 }

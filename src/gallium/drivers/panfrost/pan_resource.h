@@ -28,17 +28,21 @@
 
 #include <panfrost-job.h>
 #include "pan_screen.h"
-#include "pan_allocate.h"
+#include "pan_pool.h"
 #include "pan_minmax_cache.h"
 #include "pan_texture.h"
+#include "pan_partial_update.h"
 #include "drm-uapi/drm.h"
 #include "util/u_range.h"
+
+#define LAYOUT_CONVERT_THRESHOLD 8
 
 struct panfrost_resource {
         struct pipe_resource base;
         struct {
-                struct pipe_box biggest_rect;
                 struct pipe_scissor_state extent;
+                struct pan_rect *inverted_rects;
+                unsigned inverted_len;
         } damage;
 
         struct panfrost_bo *bo;
@@ -57,8 +61,14 @@ struct panfrost_resource {
         /* Internal layout (tiled?) */
         enum mali_texture_layout layout;
 
+        /* Whether the layout can be changed */
+        bool layout_constant;
+
         /* Is transaciton elimination enabled? */
         bool checksummed;
+
+        /* Used to decide when to convert to another layout */
+        uint16_t layout_updates;
 
         enum pipe_format internal_format;
 
@@ -86,7 +96,7 @@ pan_transfer(struct pipe_transfer *p)
 mali_ptr
 panfrost_get_texture_address(
         struct panfrost_resource *rsrc,
-        unsigned level, unsigned face);
+        unsigned level, unsigned face, unsigned sample);
 
 void panfrost_resource_screen_init(struct pipe_screen *screen);
 
@@ -110,16 +120,36 @@ panfrost_blit_wallpaper(struct panfrost_context *ctx,
                         struct pipe_box *box);
 
 void
-panfrost_resource_reset_damage(struct panfrost_resource *pres);
-
-void
 panfrost_resource_set_damage_region(struct pipe_screen *screen,
                                     struct pipe_resource *res,
                                     unsigned int nrects,
                                     const struct pipe_box *rects);
 
+static inline enum mali_texture_type
+panfrost_translate_texture_type(enum pipe_texture_target t) {
+        switch (t)
+        {
+        case PIPE_BUFFER:
+        case PIPE_TEXTURE_1D:
+        case PIPE_TEXTURE_1D_ARRAY:
+                return MALI_TEX_1D;
 
-struct panfrost_bo *
-pan_bo_create(struct panfrost_device *dev, size_t size, uint32_t flags);
+        case PIPE_TEXTURE_2D:
+        case PIPE_TEXTURE_2D_ARRAY:
+        case PIPE_TEXTURE_RECT:
+                return MALI_TEX_2D;
+
+        case PIPE_TEXTURE_3D:
+                return MALI_TEX_3D;
+
+        case PIPE_TEXTURE_CUBE:
+        case PIPE_TEXTURE_CUBE_ARRAY:
+                return MALI_TEX_CUBE;
+
+        default:
+                unreachable("Unknown target");
+        }
+}
+
 
 #endif /* PAN_RESOURCE_H */

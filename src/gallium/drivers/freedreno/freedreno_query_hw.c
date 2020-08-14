@@ -373,7 +373,7 @@ fd_hw_query_prepare_tile(struct fd_batch *batch, uint32_t n,
 
 	fd_wfi(batch, ring);
 	OUT_PKT0 (ring, HW_QUERY_BASE_REG, 1);
-	OUT_RELOCW(ring, fd_resource(batch->query_buf)->bo, offset, 0, 0);
+	OUT_RELOC(ring, fd_resource(batch->query_buf)->bo, offset, 0, 0);
 }
 
 void

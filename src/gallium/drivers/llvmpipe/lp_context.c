@@ -46,6 +46,7 @@
 #include "lp_surface.h"
 #include "lp_query.h"
 #include "lp_setup.h"
+#include "lp_screen.h"
 
 /* This is only safe if there's just one concurrent context */
 #ifdef EMBEDDED_DEVICE
@@ -131,6 +132,34 @@ llvmpipe_render_condition(struct pipe_context *pipe,
    llvmpipe->render_cond_cond = condition;
 }
 
+static void
+llvmpipe_texture_barrier(struct pipe_context *pipe, unsigned flags)
+{
+   llvmpipe_flush(pipe, NULL, __FUNCTION__);
+}
+
+static void lp_draw_disk_cache_find_shader(void *cookie,
+                                           struct lp_cached_code *cache,
+                                           unsigned char ir_sha1_cache_key[20])
+{
+   struct llvmpipe_screen *screen = cookie;
+   lp_disk_cache_find_shader(screen, cache, ir_sha1_cache_key);
+}
+
+static void lp_draw_disk_cache_insert_shader(void *cookie,
+                                             struct lp_cached_code *cache,
+                                             unsigned char ir_sha1_cache_key[20])
+{
+   struct llvmpipe_screen *screen = cookie;
+   lp_disk_cache_insert_shader(screen, cache, ir_sha1_cache_key);
+}
+
+static enum pipe_reset_status
+llvmpipe_get_device_reset_status(struct pipe_context *pipe)
+{
+   return PIPE_NO_RESET;
+}
+
 struct pipe_context *
 llvmpipe_create_context(struct pipe_screen *screen, void *priv,
                         unsigned flags)
@@ -159,9 +188,11 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
    llvmpipe->pipe.set_framebuffer_state = llvmpipe_set_framebuffer_state;
    llvmpipe->pipe.clear = llvmpipe_clear;
    llvmpipe->pipe.flush = do_flush;
+   llvmpipe->pipe.texture_barrier = llvmpipe_texture_barrier;
 
    llvmpipe->pipe.render_condition = llvmpipe_render_condition;
 
+   llvmpipe->pipe.get_device_reset_status = llvmpipe_get_device_reset_status;
    llvmpipe_init_blend_funcs(llvmpipe);
    llvmpipe_init_clip_funcs(llvmpipe);
    llvmpipe_init_draw_funcs(llvmpipe);
@@ -194,6 +225,13 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
                                                   llvmpipe->context);
    if (!llvmpipe->draw)
       goto fail;
+
+   draw_set_disk_cache_callbacks(llvmpipe->draw,
+                                 llvmpipe_screen(screen),
+                                 lp_draw_disk_cache_find_shader,
+                                 lp_draw_disk_cache_insert_shader);
+
+   draw_set_constant_buffer_stride(llvmpipe->draw, lp_get_constant_buffer_stride(screen));
 
    /* FIXME: devise alternative to draw_texture_samplers */
 

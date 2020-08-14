@@ -35,6 +35,8 @@
 #endif
 #endif
 
+#include "util/os_file.h"
+
 #include "radv_private.h"
 #include "vk_util.h"
 
@@ -117,7 +119,6 @@ radv_image_from_gralloc(VkDevice device_h,
 	RADV_FROM_HANDLE(radv_device, device, device_h);
 	VkImage image_h = VK_NULL_HANDLE;
 	struct radv_image *image = NULL;
-	struct radv_bo *bo = NULL;
 	VkResult result;
 
 	if (gralloc_info->handle->numFds != 1) {
@@ -137,7 +138,7 @@ radv_image_from_gralloc(VkDevice device_h,
 	const VkImportMemoryFdInfoKHR import_info = {
 		.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
 		.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
-		.fd = dup(dma_buf),
+		.fd = os_dupfd_cloexec(dma_buf),
 	};
 
 	/* Find the first VRAM memory type, or GART for PRIME images. */
@@ -389,7 +390,7 @@ radv_AcquireImageANDROID(
 	VkResult semaphore_result = VK_SUCCESS, fence_result = VK_SUCCESS;
 
 	if (semaphore != VK_NULL_HANDLE) {
-		int semaphore_fd = nativeFenceFd >= 0 ? dup(nativeFenceFd) : nativeFenceFd;
+		int semaphore_fd = nativeFenceFd >= 0 ? os_dupfd_cloexec(nativeFenceFd) : nativeFenceFd;
 		semaphore_result = radv_ImportSemaphoreFdKHR(device,
 		                                             &(VkImportSemaphoreFdInfoKHR) {
 		                                                 .sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR,
@@ -401,7 +402,7 @@ radv_AcquireImageANDROID(
 	}
 
 	if (fence != VK_NULL_HANDLE) {
-		int fence_fd = nativeFenceFd >= 0 ? dup(nativeFenceFd) : nativeFenceFd;
+		int fence_fd = nativeFenceFd >= 0 ? os_dupfd_cloexec(nativeFenceFd) : nativeFenceFd;
 		fence_result = radv_ImportFenceFdKHR(device,
 		                                     &(VkImportFenceFdInfoKHR) {
 		                                         .sType = VK_STRUCTURE_TYPE_IMPORT_FENCE_FD_INFO_KHR,

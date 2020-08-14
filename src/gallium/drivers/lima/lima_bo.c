@@ -34,7 +34,7 @@
 #include "util/os_time.h"
 #include "os/os_mman.h"
 
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 
 #include "lima_screen.h"
 #include "lima_bo.h"

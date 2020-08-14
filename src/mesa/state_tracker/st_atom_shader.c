@@ -133,7 +133,7 @@ st_update_fp( struct st_context *st )
       key.lower_two_sided_color = st->lower_two_sided_color &&
          _mesa_vertex_program_two_side_enabled(st->ctx);
 
-      /* _NEW_FRAG_CLAMP */
+      /* gl_driver_flags::NewFragClamp */
       key.clamp_color = st->clamp_frag_color_in_shader &&
                         st->ctx->Color._ClampFragmentColor;
 

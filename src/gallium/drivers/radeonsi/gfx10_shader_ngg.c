@@ -671,7 +671,7 @@ static void load_bitmasks_2x64(struct si_shader_context *ctx, LLVMValueRef lds_p
  * and return the per-wave thread count.
  *
  * \param new_num_threads    Total thread count on the input, per-wave thread count on the output.
- * \param tg_info	     tg_info SGPR value
+ * \param tg_info            tg_info SGPR value
  * \param tg_info_num_bits   the bit size of thread count field in tg_info
  * \param tg_info_shift      the bit offset of the thread count field in tg_info
  * \param wave_info          merged_wave_info SGPR value
@@ -713,14 +713,22 @@ static void update_thread_counts(struct si_shader_context *ctx, LLVMValueRef *ne
  * Also return the position, which is passed to the shader as an input,
  * so that we don't compute it twice.
  */
-void gfx10_emit_ngg_culling_epilogue_4x_wave32(struct ac_shader_abi *abi, unsigned max_outputs,
-                                               LLVMValueRef *addrs)
+void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_outputs,
+                                     LLVMValueRef *addrs)
 {
    struct si_shader_context *ctx = si_shader_context_from_abi(abi);
    struct si_shader *shader = ctx->shader;
    struct si_shader_selector *sel = shader->selector;
    struct si_shader_info *info = &sel->info;
    LLVMBuilderRef builder = ctx->ac.builder;
+   unsigned max_waves = ctx->ac.wave_size == 64 ? 2 : 4;
+   LLVMValueRef ngg_scratch = ctx->gs_ngg_scratch;
+
+   if (ctx->ac.wave_size == 64) {
+      ngg_scratch =  LLVMBuildPointerCast(builder, ngg_scratch,
+                                          LLVMPointerType(LLVMArrayType(ctx->ac.i64, max_waves),
+                                                          AC_ADDR_SPACE_LDS), "");
+   }
 
    assert(shader->key.opt.ngg_culling);
    assert(shader->key.as_ngg);
@@ -799,19 +807,20 @@ void gfx10_emit_ngg_culling_epilogue_4x_wave32(struct ac_shader_abi *abi, unsign
 
    LLVMValueRef tid = ac_get_thread_id(&ctx->ac);
 
-   /* Initialize the last 3 gs_ngg_scratch dwords to 0, because we may have less
-    * than 4 waves, but we always read all 4 values. This is where the thread
-    * bitmasks of unculled threads will be stored.
+   /* Initialize all but the first element of ngg_scratch to 0, because we may have less
+    * than the maximum number of waves, but we always read all values. This is where
+    * the thread bitmasks of unculled threads will be stored.
     *
-    * gs_ngg_scratch layout: esmask[0..3]
+    * ngg_scratch layout: iN_wavemask esmask[0..n]
     */
    ac_build_ifcc(&ctx->ac,
                  LLVMBuildICmp(builder, LLVMIntULT, get_thread_id_in_tg(ctx),
-                               LLVMConstInt(ctx->ac.i32, 3, 0), ""),
+                               LLVMConstInt(ctx->ac.i32, max_waves - 1, 0), ""),
                  16101);
    {
       LLVMValueRef index = LLVMBuildAdd(builder, tid, ctx->ac.i32_1, "");
-      LLVMBuildStore(builder, ctx->ac.i32_0, ac_build_gep0(&ctx->ac, ctx->gs_ngg_scratch, index));
+      LLVMBuildStore(builder, LLVMConstInt(ctx->ac.iN_wavemask, 0, 0),
+                     ac_build_gep0(&ctx->ac, ngg_scratch, index));
    }
    ac_build_endif(&ctx->ac, 16101);
    ac_build_s_barrier(&ctx->ac);
@@ -952,7 +961,7 @@ void gfx10_emit_ngg_culling_epilogue_4x_wave32(struct ac_shader_abi *abi, unsign
       ac_build_ifcc(&ctx->ac, LLVMBuildICmp(builder, LLVMIntEQ, tid, ctx->ac.i32_0, ""), 16008);
       {
          LLVMBuildStore(builder, es_mask,
-                        ac_build_gep0(&ctx->ac, ctx->gs_ngg_scratch, get_wave_id_in_tg(ctx)));
+                        ac_build_gep0(&ctx->ac, ngg_scratch, get_wave_id_in_tg(ctx)));
       }
       ac_build_endif(&ctx->ac, 16008);
    }
@@ -961,7 +970,7 @@ void gfx10_emit_ngg_culling_epilogue_4x_wave32(struct ac_shader_abi *abi, unsign
 
    /* Load the vertex masks and compute the new ES thread count. */
    LLVMValueRef es_mask[2], new_num_es_threads, kill_wave;
-   load_bitmasks_2x64(ctx, ctx->gs_ngg_scratch, 0, es_mask, &new_num_es_threads);
+   load_bitmasks_2x64(ctx, ngg_scratch, 0, es_mask, &new_num_es_threads);
    new_num_es_threads = ac_build_readlane_no_opt_barrier(&ctx->ac, new_num_es_threads, NULL);
 
    /* ES threads compute their prefix sum, which is the new ES thread ID.
@@ -1878,13 +1887,23 @@ static void clamp_gsprims_to_esverts(unsigned *max_gsprims, unsigned max_esverts
    *max_gsprims = MIN2(*max_gsprims, 1 + max_reuse);
 }
 
+unsigned gfx10_ngg_get_scratch_dw_size(struct si_shader *shader)
+{
+   const struct si_shader_selector *sel = shader->selector;
+
+   if (sel->type == PIPE_SHADER_GEOMETRY && sel->so.num_outputs)
+      return 44;
+
+   return 8;
+}
+
 /**
  * Determine subgroup information like maximum number of vertices and prims.
  *
  * This happens before the shader is uploaded, since LDS relocations during
  * upload depend on the subgroup size.
  */
-void gfx10_ngg_calculate_subgroup_info(struct si_shader *shader)
+bool gfx10_ngg_calculate_subgroup_info(struct si_shader *shader)
 {
    const struct si_shader_selector *gs_sel = shader->selector;
    const struct si_shader_selector *es_sel =
@@ -1898,19 +1917,15 @@ void gfx10_ngg_calculate_subgroup_info(struct si_shader *shader)
    const unsigned min_verts_per_prim = gs_type == PIPE_SHADER_GEOMETRY ? max_verts_per_prim : 1;
 
    /* All these are in dwords: */
-   /* We can't allow using the whole LDS, because GS waves compete with
-    * other shader stages for LDS space.
-    *
-    * TODO: We should really take the shader's internal LDS use into
-    *       account. The linker will fail if the size is greater than
-    *       8K dwords.
+   /* GE can only use 8K dwords (32KB) of LDS per workgroup.
     */
-   const unsigned max_lds_size = 8 * 1024 - 768;
+   const unsigned max_lds_size = 8 * 1024 - gfx10_ngg_get_scratch_dw_size(shader);
    const unsigned target_lds_size = max_lds_size;
    unsigned esvert_lds_size = 0;
    unsigned gsprim_lds_size = 0;
 
    /* All these are per subgroup: */
+   const unsigned min_esverts = gs_sel->screen->info.chip_class >= GFX10_3 ? 29 : 24;
    bool max_vert_out_per_gs_instance = false;
    unsigned max_gsprims_base = 128; /* default prim group size clamp */
    unsigned max_esverts_base = 128;
@@ -1934,9 +1949,11 @@ void gfx10_ngg_calculate_subgroup_info(struct si_shader *shader)
    max_esverts_base = MIN2(max_esverts_base, 251 + max_verts_per_prim - 1);
 
    if (gs_type == PIPE_SHADER_GEOMETRY) {
+      bool force_multi_cycling = false;
       unsigned max_out_verts_per_gsprim = gs_sel->gs_max_out_vertices * gs_num_invocations;
 
-      if (max_out_verts_per_gsprim <= 256) {
+retry_select_mode:
+      if (max_out_verts_per_gsprim <= 256 && !force_multi_cycling) {
          if (max_out_verts_per_gsprim) {
             max_gsprims_base = MIN2(max_gsprims_base, 256 / max_out_verts_per_gsprim);
          }
@@ -1951,6 +1968,13 @@ void gfx10_ngg_calculate_subgroup_info(struct si_shader *shader)
 
       esvert_lds_size = es_sel->esgs_itemsize / 4;
       gsprim_lds_size = (gs_sel->gsvs_vertex_size / 4 + 1) * max_out_verts_per_gsprim;
+
+      if (gsprim_lds_size > target_lds_size && !force_multi_cycling) {
+         if (gs_sel->tess_turns_off_ngg || es_sel->type != PIPE_SHADER_TESS_EVAL) {
+            force_multi_cycling = true;
+            goto retry_select_mode;
+         }
+      }
    } else {
       /* VS and TES. */
       /* LDS size for passing data from ES to GS. */
@@ -1990,7 +2014,7 @@ void gfx10_ngg_calculate_subgroup_info(struct si_shader *shader)
 
    /* Round up towards full wave sizes for better ALU utilization. */
    if (!max_vert_out_per_gs_instance) {
-      const unsigned wavesize = gs_sel->screen->ge_wave_size;
+      const unsigned wavesize = si_get_shader_wave_size(shader);
       unsigned orig_max_esverts;
       unsigned orig_max_gsprims;
       do {
@@ -2003,19 +2027,30 @@ void gfx10_ngg_calculate_subgroup_info(struct si_shader *shader)
             max_esverts =
                MIN2(max_esverts, (max_lds_size - max_gsprims * gsprim_lds_size) / esvert_lds_size);
          max_esverts = MIN2(max_esverts, max_gsprims * max_verts_per_prim);
+         /* Hardware restriction: minimum value of max_esverts */
+         max_esverts = MAX2(max_esverts, min_esverts - 1 + max_verts_per_prim);
 
          max_gsprims = align(max_gsprims, wavesize);
          max_gsprims = MIN2(max_gsprims, max_gsprims_base);
-         if (gsprim_lds_size)
+         if (gsprim_lds_size) {
+            /* Don't count unusable vertices to the LDS size. Those are vertices above
+             * the maximum number of vertices that can occur in the workgroup,
+             * which is e.g. max_gsprims * 3 for triangles.
+             */
+            unsigned usable_esverts = MIN2(max_esverts, max_gsprims * max_verts_per_prim);
             max_gsprims =
-               MIN2(max_gsprims, (max_lds_size - max_esverts * esvert_lds_size) / gsprim_lds_size);
+               MIN2(max_gsprims, (max_lds_size - usable_esverts * esvert_lds_size) / gsprim_lds_size);
+         }
          clamp_gsprims_to_esverts(&max_gsprims, max_esverts, min_verts_per_prim, use_adjacency);
          assert(max_esverts >= max_verts_per_prim && max_gsprims >= 1);
       } while (orig_max_esverts != max_esverts || orig_max_gsprims != max_gsprims);
-   }
 
-   /* Hardware restriction: minimum value of max_esverts */
-   max_esverts = MAX2(max_esverts, 23 + max_verts_per_prim);
+      /* Verify the restriction. */
+      assert(max_esverts >= min_esverts - 1 + max_verts_per_prim);
+   } else {
+      /* Hardware restriction: minimum value of max_esverts */
+      max_esverts = MAX2(max_esverts, min_esverts - 1 + max_verts_per_prim);
+   }
 
    unsigned max_out_vertices =
       max_vert_out_per_gs_instance
@@ -2043,8 +2078,15 @@ void gfx10_ngg_calculate_subgroup_info(struct si_shader *shader)
    shader->ngg.prim_amp_factor = prim_amp_factor;
    shader->ngg.max_vert_out_per_gs_instance = max_vert_out_per_gs_instance;
 
-   shader->gs_info.esgs_ring_size = 4 * max_esverts * esvert_lds_size;
+   /* Don't count unusable vertices. */
+   shader->gs_info.esgs_ring_size = MIN2(max_esverts, max_gsprims * max_verts_per_prim) *
+                                    esvert_lds_size;
    shader->ngg.ngg_emit_size = max_gsprims * gsprim_lds_size;
 
-   assert(shader->ngg.hw_max_esverts >= 24); /* HW limitation */
+   assert(shader->ngg.hw_max_esverts >= min_esverts); /* HW limitation */
+
+   /* If asserts are disabled, we use the same conditions to return false */
+   return max_esverts >= max_verts_per_prim && max_gsprims >= 1 &&
+          max_out_vertices <= 256 &&
+          shader->ngg.hw_max_esverts >= min_esverts;
 }

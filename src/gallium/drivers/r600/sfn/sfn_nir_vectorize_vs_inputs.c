@@ -26,6 +26,8 @@
 #include "nir_deref.h"
 #include "util/u_dynarray.h"
 #include "util/u_math.h"
+#define XXH_INLINE_ALL
+#include "util/xxhash.h"
 
 /** @file nir_opt_vectorize_io.c
  *
@@ -221,7 +223,7 @@ r600_cmp_func(const void *data1, const void *data2)
    return r600_io_access_same_var(instr1, instr2);
 }
 
-#define HASH(hash, data) _mesa_fnv32_1a_accumulate((hash), (data))
+#define HASH(hash, data) XXH32(&(data), sizeof(data), (hash))
 
 static uint32_t
 r600_hash_instr(const nir_instr *instr)
@@ -232,7 +234,7 @@ r600_hash_instr(const nir_instr *instr)
    nir_variable *var =
       nir_deref_instr_get_variable(nir_src_as_deref(intr->src[0]));
 
-   uint32_t hash = _mesa_fnv32_1a_offset_bias;
+   uint32_t hash = 0;
 
    hash = HASH(hash, var->type);
    return HASH(hash, var->data.location);
@@ -374,18 +376,20 @@ r600_variables_can_merge(const nir_variable *lhs, const nir_variable *rhs)
 }
 
 static void
-r600_create_new_io_vars(nir_shader *shader, struct exec_list *io_list,
+r600_create_new_io_vars(nir_shader *shader, nir_variable_mode mode,
                    nir_variable *vars[16][4])
 {
-   if (exec_list_is_empty(io_list))
-      return;
-
-   nir_foreach_variable(var, io_list) {
+   bool can_rewrite_vars = false;
+   nir_foreach_variable_with_modes(var, shader, mode) {
       if (r600_variable_can_rewrite(var)) {
+         can_rewrite_vars = true;
          unsigned loc = r600_correct_location(var);
          vars[loc][var->data.location_frac] = var;
       }
    }
+
+   if (!can_rewrite_vars)
+      return;
 
    /* We don't handle combining vars of different type e.g. different array
     * lengths.
@@ -430,7 +434,7 @@ r600_vectorize_io_impl(nir_function_impl *impl)
    nir_shader *shader = impl->function->shader;
    nir_variable *updated_vars[16][4] = {0};
 
-   r600_create_new_io_vars(shader, &shader->inputs, updated_vars);
+   r600_create_new_io_vars(shader, nir_var_shader_in, updated_vars);
 
    struct set *instr_set = r600_vec_instr_set_create();
    bool progress = r600_vectorize_block(&b, nir_start_block(impl), instr_set,

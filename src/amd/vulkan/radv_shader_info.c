@@ -537,6 +537,17 @@ gather_info_output_decl_ps(const nir_shader *nir, const nir_variable *var,
 	default:
 		break;
 	}
+
+	if (idx >= FRAG_RESULT_DATA0 && idx <= FRAG_RESULT_DATA7) {
+		unsigned num_components = glsl_get_component_slots(glsl_without_array(var->type));
+		unsigned num_slots = glsl_count_attribute_slots(var->type, false);
+		unsigned write_mask = (1 << num_components) - 1;
+		unsigned slot = idx - FRAG_RESULT_DATA0;
+
+		for (unsigned i = 0; i < num_slots; i++) {
+			info->ps.cb_shader_mask |= write_mask << ((slot + i) * 4);
+		}
+	}
 }
 
 static void
@@ -657,7 +668,7 @@ radv_nir_shader_info_pass(const struct nir_shader *nir,
 			  const struct radv_pipeline_layout *layout,
 			  const struct radv_shader_variant_key *key,
 			  struct radv_shader_info *info,
-			  bool use_aco)
+			  bool use_llvm)
 {
 	struct nir_function *func =
 		(struct nir_function *)exec_list_get_head_const(&nir->functions);
@@ -668,14 +679,14 @@ radv_nir_shader_info_pass(const struct nir_shader *nir,
 		info->loads_dynamic_offsets = true;
 	}
 
-	nir_foreach_variable(variable, &nir->inputs)
+	nir_foreach_shader_in_variable(variable, nir)
 		gather_info_input_decl(nir, variable, info, key);
 
 	nir_foreach_block(block, func->impl) {
 		gather_info_block(nir, block, info);
 	}
 
-	nir_foreach_variable(variable, &nir->outputs)
+	nir_foreach_shader_out_variable(variable, nir)
 		gather_info_output_decl(nir, variable, info, key);
 
 	if (nir->info.stage == MESA_SHADER_VERTEX ||
@@ -811,13 +822,7 @@ radv_nir_shader_info_pass(const struct nir_shader *nir,
 		struct radv_es_output_info *es_info =
 			nir->info.stage == MESA_SHADER_VERTEX ? &info->vs.es_info : &info->tes.es_info;
 
-		if (use_aco) {
-			/* The outputs don't contain gaps, se we can use the number of outputs */
-			uint32_t num_outputs_written = nir->info.stage == MESA_SHADER_VERTEX
-				? info->vs.num_linked_outputs
-				: info->tes.num_linked_outputs;
-			es_info->esgs_itemsize = num_outputs_written * 16;
-		} else {
+		if (use_llvm) {
 			/* The outputs may contain gaps, use the highest output index + 1 */
 			uint32_t max_output_written = 0;
 			uint64_t output_mask = nir->info.outputs_written;
@@ -828,10 +833,33 @@ radv_nir_shader_info_pass(const struct nir_shader *nir,
 
 				max_output_written = MAX2(param_index, max_output_written);
 			}
-
 			es_info->esgs_itemsize = (max_output_written + 1) * 16;
+		} else {
+			/* The outputs don't contain gaps, se we can use the number of outputs */
+			uint32_t num_outputs_written = nir->info.stage == MESA_SHADER_VERTEX
+				? info->vs.num_linked_outputs
+				: info->tes.num_linked_outputs;
+			es_info->esgs_itemsize = num_outputs_written * 16;
 		}
 	}
 
 	info->float_controls_mode = nir->info.float_controls_execution_mode;
+
+	if (nir->info.stage == MESA_SHADER_FRAGMENT) {
+		/* If the i-th output is used, all previous outputs must be
+		 * non-zero to match the target format.
+		 * TODO: compact MRT to avoid holes and to remove this
+		 * workaround.
+		 */
+		unsigned num_targets = (util_last_bit(info->ps.cb_shader_mask) + 3) / 4;
+		for (unsigned i = 0; i < num_targets; i++) {
+			if (!(info->ps.cb_shader_mask & (0xf << (i * 4)))) {
+				info->ps.cb_shader_mask |= 0xf << (i * 4);
+			}
+		}
+
+		if (key->fs.is_dual_src) {
+			info->ps.cb_shader_mask |= (info->ps.cb_shader_mask & 0xf) << 4;
+		}
+	}
 }

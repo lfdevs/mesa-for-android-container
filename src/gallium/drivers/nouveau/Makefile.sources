@@ -140,17 +140,31 @@ NV50_CODEGEN_SOURCES := \
 NVC0_CODEGEN_SOURCES := \
 	codegen/nv50_ir_emit_gk110.cpp \
 	codegen/nv50_ir_emit_gm107.cpp \
+	codegen/nv50_ir_emit_gv100.cpp \
+	codegen/nv50_ir_emit_gv100.h \
 	codegen/nv50_ir_emit_nvc0.cpp \
 	codegen/nv50_ir_lowering_gm107.cpp \
 	codegen/nv50_ir_lowering_gm107.h \
+	codegen/nv50_ir_lowering_gv100.cpp \
+	codegen/nv50_ir_lowering_gv100.h \
 	codegen/nv50_ir_lowering_nvc0.cpp \
 	codegen/nv50_ir_lowering_nvc0.h \
 	codegen/nv50_ir_target_gm107.cpp \
 	codegen/nv50_ir_target_gm107.h \
+	codegen/nv50_ir_target_gv100.cpp \
+	codegen/nv50_ir_target_gv100.h \
 	codegen/nv50_ir_target_nvc0.cpp \
 	codegen/nv50_ir_target_nvc0.h
 
 NVC0_C_SOURCES := \
+	nvc0/cla0c0qmd.h \
+	nvc0/clc0c0qmd.h \
+	nvc0/clc3c0qmd.h \
+	nvc0/drf.h \
+	nvc0/qmd.h \
+	nvc0/qmda0c0.c \
+	nvc0/qmdc0c0.c \
+	nvc0/qmdc3c0.c \
 	nvc0/gm107_texture.xml.h \
 	nvc0/nvc0_3d.xml.h \
 	nvc0/nvc0_compute.c \
@@ -195,4 +209,5 @@ NVC0_C_SOURCES := \
 	nvc0/nve4_compute.c \
 	nvc0/nve4_compute.h \
 	nvc0/nve4_compute.xml.h \
+	nvc0/nve4_copy.xml.h \
 	nvc0/nve4_p2mf.xml.h

@@ -29,13 +29,14 @@
 #include <sys/stat.h>
 
 #include "os/os_mman.h"
+#include "util/os_file.h"
 #include "util/os_time.h"
 #include "util/u_memory.h"
 #include "util/format/u_format.h"
 #include "util/u_hash_table.h"
 #include "util/u_inlines.h"
 #include "util/u_pointer.h"
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 #include "virgl/virgl_screen.h"
 #include "virgl/virgl_public.h"
 
@@ -663,7 +664,7 @@ virgl_drm_fence_create(struct virgl_winsys *vws, int fd, bool external)
    assert(vws->supports_fences);
 
    if (external) {
-      fd = dup(fd);
+      fd = os_dupfd_cloexec(fd);
       if (fd < 0)
          return NULL;
    }
@@ -890,7 +891,7 @@ static int virgl_fence_get_fd(struct virgl_winsys *vws,
    if (!vws->supports_fences)
       return -1;
 
-   return dup(fence->fd);
+   return os_dupfd_cloexec(fence->fd);
 }
 
 static int virgl_drm_get_version(int fd)
@@ -1046,7 +1047,7 @@ virgl_drm_screen_create(int fd, const struct pipe_screen_config *config)
       virgl_screen(pscreen)->refcnt++;
    } else {
       struct virgl_winsys *vws;
-      int dup_fd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
+      int dup_fd = os_dupfd_cloexec(fd);
 
       vws = virgl_drm_winsys_create(dup_fd);
       if (!vws) {

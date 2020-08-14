@@ -28,8 +28,9 @@
 
 #include "util/u_dynarray.h"
 #include "pipe/p_state.h"
-#include "pan_allocate.h"
+#include "pan_pool.h"
 #include "pan_resource.h"
+#include "pan_scoreboard.h"
 
 /* panfrost_batch_fence is the out fence of a batch that users or other batches
  * might want to wait on. The batch fence lifetime is different from the batch
@@ -45,20 +46,6 @@ struct panfrost_batch_fence {
          * batch has been flushed or not.
          */
         struct panfrost_batch *batch;
-
-        /* Context this fence is attached to. We need both ctx and batch, as
-         * the batch will go away after it's been submitted, but the fence
-         * will stay a bit longer.
-         */
-        struct panfrost_context *ctx;
-
-        /* Sync object backing this fence. */
-        uint32_t syncobj;
-
-        /* Cached value of the signaled state to avoid calling WAIT_SYNCOBJs
-         * when we know the fence has already been signaled.
-         */
-        bool signaled;
 };
 
 #define PAN_REQ_MSAA            (1 << 0)
@@ -73,6 +60,9 @@ struct panfrost_batch {
 
         /* Buffers cleared (PIPE_CLEAR_* bitmask) */
         unsigned clear;
+
+        /* Buffers drawn */
+        unsigned draws;
 
         /* Packed clear values, indexed by both render target as well as word.
          * Essentially, a single pixel is packed, with some padding to bring it
@@ -99,30 +89,14 @@ struct panfrost_batch {
         unsigned minx, miny;
         unsigned maxx, maxy;
 
-        /* The first job in the batch */
-        mali_ptr first_job;
-
-        /* The number of jobs in the primary batch, essentially */
-        unsigned job_index;
-
-        /* A CPU-side pointer to the previous job for next_job linking */
-        struct mali_job_descriptor_header *prev_job;
-
-        /* The dependency for tiler jobs (i.e. the index of the last emitted
-         * tiler job, or zero if none have been emitted) */
-        unsigned tiler_dep;
-
-        /* The job index of the WRITE_VALUE job (before it has been created) */
-        unsigned write_value_index;
-
-        /* BOs referenced -- will be used for flushing logic */
+        /* BOs referenced not in the pool */
         struct hash_table *bos;
 
-        /* Current transient BO */
-	struct panfrost_bo *transient_bo;
+        /* Pool owned by this batch (released when the batch is released) used for temporary descriptors */
+        struct pan_pool pool;
 
-        /* Within the topmost transient BO, how much has been used? */
-        unsigned transient_offset;
+        /* Job scoreboarding state */
+        struct pan_scoreboard scoreboard;
 
         /* Polygon list bound to the batch, or NULL if none bound yet */
         struct panfrost_bo *polygon_list;
@@ -180,7 +154,7 @@ panfrost_batch_create_bo(struct panfrost_batch *batch, size_t size,
                          uint32_t create_flags, uint32_t access_flags);
 
 void
-panfrost_flush_all_batches(struct panfrost_context *ctx, bool wait);
+panfrost_flush_all_batches(struct panfrost_context *ctx, uint32_t out_sync);
 
 bool
 panfrost_pending_batches_access_bo(struct panfrost_context *ctx,
@@ -188,7 +162,7 @@ panfrost_pending_batches_access_bo(struct panfrost_context *ctx,
 
 void
 panfrost_flush_batches_accessing_bo(struct panfrost_context *ctx,
-                                    struct panfrost_bo *bo, uint32_t flags);
+                                    struct panfrost_bo *bo, bool flush_readers);
 
 void
 panfrost_batch_set_requirements(struct panfrost_batch *batch);
@@ -227,23 +201,13 @@ panfrost_batch_intersection_scissor(struct panfrost_batch *batch,
                                     unsigned minx, unsigned miny,
                                     unsigned maxx, unsigned maxy);
 
-/* Scoreboarding */
-
-unsigned
-panfrost_new_job(
-                struct panfrost_batch *batch,
-                enum mali_job_type type,
-                bool barrier,
-                unsigned local_dep,
-                void *payload, size_t payload_size,
-                bool inject);
-
-void panfrost_scoreboard_initialize_tiler(struct panfrost_batch *batch);
-
 bool
 panfrost_batch_is_scanout(struct panfrost_batch *batch);
 
 mali_ptr
 panfrost_batch_get_tiler_meta(struct panfrost_batch *batch, unsigned vertex_count);
+
+mali_ptr
+panfrost_batch_reserve_framebuffer(struct panfrost_batch *batch);
 
 #endif

@@ -108,45 +108,6 @@ namespace SwrJit
         return (uint16_t)tmpVal;
     }
 
-    //////////////////////////////////////////////////////////////////////////
-    /// @brief Convert an IEEE 754 16-bit float to an 32-bit single precision
-    ///        float
-    /// @param val - 16-bit float
-    /// @todo Maybe move this outside of this file into a header?
-    static float ConvertFloat16ToFloat32(uint32_t val)
-    {
-        uint32_t result;
-        if ((val & 0x7fff) == 0)
-        {
-            result = ((uint32_t)(val & 0x8000)) << 16;
-        }
-        else if ((val & 0x7c00) == 0x7c00)
-        {
-            result = ((val & 0x3ff) == 0) ? 0x7f800000 : 0x7fc00000;
-            result |= ((uint32_t)val & 0x8000) << 16;
-        }
-        else
-        {
-            uint32_t sign = (val & 0x8000) << 16;
-            uint32_t mant = (val & 0x3ff) << 13;
-            uint32_t exp  = (val >> 10) & 0x1f;
-            if ((exp == 0) && (mant != 0)) // Adjust exponent and mantissa for denormals
-            {
-                mant <<= 1;
-                while (mant < (0x400 << 13))
-                {
-                    exp--;
-                    mant <<= 1;
-                }
-                mant &= (0x3ff << 13);
-            }
-            exp    = ((exp - 15 + 127) & 0xff) << 23;
-            result = sign | exp | mant;
-        }
-
-        return *(float*)&result;
-    }
-
     Constant* Builder::C(bool i) { return ConstantInt::get(IRB()->getInt1Ty(), (i ? 1 : 0)); }
 
     Constant* Builder::C(char i) { return ConstantInt::get(IRB()->getInt8Ty(), i); }

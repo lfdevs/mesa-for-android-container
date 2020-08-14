@@ -30,7 +30,7 @@
 #include "svga3d_reg.h"
 
 
-#define MAX_VGPU10_ADDR_REGS 2
+#define MAX_VGPU10_ADDR_REGS 4
 
 struct svga_compile_key;
 struct svga_context;

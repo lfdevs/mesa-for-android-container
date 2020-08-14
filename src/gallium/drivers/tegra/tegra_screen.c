@@ -37,7 +37,7 @@
 #include "util/u_debug.h"
 #include "util/u_inlines.h"
 
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 
 #include "nouveau/drm/nouveau_drm_public.h"
 

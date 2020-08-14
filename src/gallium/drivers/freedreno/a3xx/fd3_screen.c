@@ -56,12 +56,12 @@ fd3_screen_is_format_supported(struct pipe_screen *pscreen,
 		return false;
 
 	if ((usage & PIPE_BIND_VERTEX_BUFFER) &&
-			(fd3_pipe2vtx(format) != (enum a3xx_vtx_fmt)~0)) {
+			(fd3_pipe2vtx(format) != VFMT_NONE)) {
 		retval |= PIPE_BIND_VERTEX_BUFFER;
 	}
 
 	if ((usage & PIPE_BIND_SAMPLER_VIEW) &&
-			(fd3_pipe2tex(format) != (enum a3xx_tex_fmt)~0)) {
+			(fd3_pipe2tex(format) != TFMT_NONE)) {
 		retval |= PIPE_BIND_SAMPLER_VIEW;
 	}
 
@@ -70,8 +70,8 @@ fd3_screen_is_format_supported(struct pipe_screen *pscreen,
 				PIPE_BIND_SCANOUT |
 				PIPE_BIND_SHARED |
 				PIPE_BIND_BLENDABLE)) &&
-			(fd3_pipe2color(format) != (enum a3xx_color_fmt)~0) &&
-			(fd3_pipe2tex(format) != (enum a3xx_tex_fmt)~0)) {
+			(fd3_pipe2color(format) != RB_NONE) &&
+			(fd3_pipe2tex(format) != TFMT_NONE)) {
 		retval |= usage & (PIPE_BIND_RENDER_TARGET |
 				PIPE_BIND_DISPLAY_TARGET |
 				PIPE_BIND_SCANOUT |
@@ -82,7 +82,7 @@ fd3_screen_is_format_supported(struct pipe_screen *pscreen,
 
 	if ((usage & PIPE_BIND_DEPTH_STENCIL) &&
 			(fd_pipe2depth(format) != (enum adreno_rb_depth_format)~0) &&
-			(fd3_pipe2tex(format) != (enum a3xx_tex_fmt)~0)) {
+			(fd3_pipe2tex(format) != TFMT_NONE)) {
 		retval |= PIPE_BIND_DEPTH_STENCIL;
 	}
 
@@ -109,6 +109,7 @@ fd3_screen_init(struct pipe_screen *pscreen)
 	pscreen->context_create = fd3_context_create;
 	pscreen->is_format_supported = fd3_screen_is_format_supported;
 	fd3_emit_init_screen(pscreen);
+	ir3_screen_init(pscreen);
 
 	screen->setup_slices = fd3_setup_slices;
 	if (fd_mesa_debug & FD_DBG_TTILE)

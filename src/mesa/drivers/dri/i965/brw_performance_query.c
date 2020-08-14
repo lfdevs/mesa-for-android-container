@@ -323,7 +323,7 @@ brw_get_perf_query_data(struct gl_context *ctx,
     */
    assert(o->Ready);
 
-   gen_perf_get_query_data(brw->perf_ctx, obj,
+   gen_perf_get_query_data(brw->perf_ctx, obj, &brw->batch,
                            data_size, data, bytes_written);
 }
 
@@ -506,7 +506,8 @@ brw_init_perf_query_info(struct gl_context *ctx)
 
    gen_perf_init_context(perf_ctx, perf_cfg, brw, brw->bufmgr, devinfo,
                          brw->hw_ctx, brw->screen->fd);
-   gen_perf_init_metrics(perf_cfg, devinfo, brw->screen->fd);
+   gen_perf_init_metrics(perf_cfg, devinfo, brw->screen->fd,
+                         true /* pipeline stats */);
 
    return perf_cfg->n_queries;
 }

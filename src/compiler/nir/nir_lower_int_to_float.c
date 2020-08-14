@@ -86,6 +86,8 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
    case nir_op_ineg: alu->op = nir_op_fneg; break;
    case nir_op_imax: alu->op = nir_op_fmax; break;
    case nir_op_imin: alu->op = nir_op_fmin; break;
+   case nir_op_umax: alu->op = nir_op_fmax; break;
+   case nir_op_umin: alu->op = nir_op_fmin; break;
 
    case nir_op_ball_iequal2:  alu->op = nir_op_ball_fequal2; break;
    case nir_op_ball_iequal3:  alu->op = nir_op_ball_fequal3; break;

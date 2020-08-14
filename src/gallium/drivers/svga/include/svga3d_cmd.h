@@ -103,13 +103,13 @@ typedef enum {
    SVGA_3D_CMD_SCREEN_DMA                                 = 1082,
    SVGA_3D_CMD_DEAD1                                      = 1083,
    SVGA_3D_CMD_DEAD2                                      = 1084,
-
-   SVGA_3D_CMD_LOGICOPS_BITBLT                            = 1085,
-   SVGA_3D_CMD_LOGICOPS_TRANSBLT                          = 1086,
-   SVGA_3D_CMD_LOGICOPS_STRETCHBLT                        = 1087,
-   SVGA_3D_CMD_LOGICOPS_COLORFILL                         = 1088,
-   SVGA_3D_CMD_LOGICOPS_ALPHABLEND                        = 1089,
-   SVGA_3D_CMD_LOGICOPS_CLEARTYPEBLEND                    = 1090,
+   
+   SVGA_3D_CMD_DEAD12                                     = 1085,
+   SVGA_3D_CMD_DEAD13                                     = 1086,
+   SVGA_3D_CMD_DEAD14                                     = 1087,
+   SVGA_3D_CMD_DEAD15                                     = 1088,
+   SVGA_3D_CMD_DEAD16                                     = 1089,
+   SVGA_3D_CMD_DEAD17                                     = 1090,
 
    SVGA_3D_CMD_SET_OTABLE_BASE                            = 1091,
    SVGA_3D_CMD_READBACK_OTABLE                            = 1092,
@@ -218,7 +218,7 @@ typedef enum {
    SVGA_3D_CMD_DX_CLEAR_DEPTHSTENCIL_VIEW                 = 1177,
    SVGA_3D_CMD_DX_PRED_COPY_REGION                        = 1178,
    SVGA_3D_CMD_DX_PRED_COPY                               = 1179,
-   SVGA_3D_CMD_DX_STRETCHBLT                              = 1180,
+   SVGA_3D_CMD_DX_PRESENTBLT                              = 1180,
    SVGA_3D_CMD_DX_GENMIPS                                 = 1181,
    SVGA_3D_CMD_DX_UPDATE_SUBRESOURCE                      = 1182,
    SVGA_3D_CMD_DX_READBACK_SUBRESOURCE                    = 1183,
@@ -261,13 +261,9 @@ typedef enum {
    SVGA_3D_CMD_DX_SET_VS_CONSTANT_BUFFER_OFFSET           = 1220,
    SVGA_3D_CMD_DX_SET_PS_CONSTANT_BUFFER_OFFSET           = 1221,
    SVGA_3D_CMD_DX_SET_GS_CONSTANT_BUFFER_OFFSET           = 1222,
-
-   /*
-    * Reserve some IDs to be used for the DX11 shader types.
-    */
-   SVGA_3D_CMD_DX_RESERVED1                               = 1223,
-   SVGA_3D_CMD_DX_RESERVED2                               = 1224,
-   SVGA_3D_CMD_DX_RESERVED3                               = 1225,
+   SVGA_3D_CMD_DX_SET_HS_CONSTANT_BUFFER_OFFSET           = 1223,
+   SVGA_3D_CMD_DX_SET_DS_CONSTANT_BUFFER_OFFSET           = 1224,
+   SVGA_3D_CMD_DX_SET_CS_CONSTANT_BUFFER_OFFSET           = 1225,
 
    SVGA_3D_CMD_DX_COND_BIND_ALL_SHADER                    = 1226,
    SVGA_3D_CMD_DX_MAX                                     = 1227,
@@ -293,8 +289,46 @@ typedef enum {
    SVGA_3D_CMD_DX_PRED_RESOLVE_COPY                       = 1241,
    SVGA_3D_CMD_DX_PRED_CONVERT_REGION                     = 1242,
    SVGA_3D_CMD_DX_PRED_CONVERT                            = 1243,
+   SVGA_3D_CMD_WHOLE_SURFACE_COPY                         = 1244,
 
-   SVGA_3D_CMD_MAX                                        = 1244,
+   SVGA_3D_CMD_DX_DEFINE_UA_VIEW                          = 1245,
+   SVGA_3D_CMD_DX_DESTROY_UA_VIEW                         = 1246,
+   SVGA_3D_CMD_DX_CLEAR_UA_VIEW_UINT                      = 1247,
+   SVGA_3D_CMD_DX_CLEAR_UA_VIEW_FLOAT                     = 1248,
+   SVGA_3D_CMD_DX_COPY_STRUCTURE_COUNT                    = 1249,
+   SVGA_3D_CMD_DX_SET_UA_VIEWS                            = 1250,
+
+   SVGA_3D_CMD_DX_DRAW_INDEXED_INSTANCED_INDIRECT         = 1251,
+   SVGA_3D_CMD_DX_DRAW_INSTANCED_INDIRECT                 = 1252,
+   SVGA_3D_CMD_DX_DISPATCH                                = 1253,
+   SVGA_3D_CMD_DX_DISPATCH_INDIRECT                       = 1254,
+
+   SVGA_3D_CMD_WRITE_ZERO_SURFACE                         = 1255,
+   SVGA_3D_CMD_HINT_ZERO_SURFACE                          = 1256,
+   SVGA_3D_CMD_DX_TRANSFER_TO_BUFFER                      = 1257,
+   SVGA_3D_CMD_DX_SET_STRUCTURE_COUNT                     = 1258,
+
+   SVGA_3D_CMD_LOGICOPS_BITBLT                            = 1259,
+   SVGA_3D_CMD_LOGICOPS_TRANSBLT                          = 1260,
+   SVGA_3D_CMD_LOGICOPS_STRETCHBLT                        = 1261,
+   SVGA_3D_CMD_LOGICOPS_COLORFILL                         = 1262,
+   SVGA_3D_CMD_LOGICOPS_ALPHABLEND                        = 1263,
+   SVGA_3D_CMD_LOGICOPS_CLEARTYPEBLEND                    = 1264,
+
+   SVGA_3D_CMD_DX_COPY_COTABLE_INTO_MOB                   = 1265,
+
+   SVGA_3D_CMD_UPDATE_GB_SCREENTARGET_V2                  = 1266,
+   SVGA_3D_CMD_DEFINE_GB_SURFACE_V4                       = 1267,
+   SVGA_3D_CMD_DX_SET_CS_UA_VIEWS                         = 1268,
+   SVGA_3D_CMD_DX_SET_MIN_LOD                             = 1269,
+   SVGA_3D_CMD_DX_CLEAR_RENDERTARGET_VIEW_BOX             = 1270,
+   SVGA_3D_CMD_DX_CLEAR_UA_VIEW_BOX                       = 1271,
+   SVGA_3D_CMD_DX_DEFINE_DEPTHSTENCIL_VIEW_V2             = 1272,
+   SVGA_3D_CMD_DX_DEFINE_STREAMOUTPUT_WITH_MOB            = 1273,
+   SVGA_3D_CMD_DX_SET_SHADER_IFACE                        = 1274,
+   SVGA_3D_CMD_DX_BIND_STREAMOUTPUT                       = 1275,
+
+   SVGA_3D_CMD_MAX                                        = 1276,
    SVGA_3D_CMD_FUTURE_MAX                                 = 3000
 } SVGAFifo3dCmdId;
 

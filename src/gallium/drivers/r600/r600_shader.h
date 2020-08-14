@@ -136,6 +136,7 @@ union r600_shader_key {
 		unsigned        image_size_const_offset:5;
 		unsigned	color_two_side:1;
 		unsigned	alpha_to_one:1;
+		unsigned        apply_sample_id_mask:1;
 	} ps;
 	struct {
 		unsigned	prim_id_out:8;
@@ -189,7 +190,7 @@ struct r600_pipe_shader {
  TGSI_INTERPOLATE_LOC_CENTER/SAMPLE/COUNT. Other input values return -1. */
 int eg_get_interpolator_index(unsigned interpolate, unsigned location);
 
-int r600_get_lds_unique_index(unsigned semantic_name, unsigned index, bool texcoord_semantics);
+int r600_get_lds_unique_index(unsigned semantic_name, unsigned index);
 
 int generate_gs_copy_shader(struct r600_context *rctx,
                             struct r600_pipe_shader *gs,

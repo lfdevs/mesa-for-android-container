@@ -221,10 +221,19 @@ bool ppir_instr_insert_node(ppir_instr *instr, ppir_node *node)
                continue;
          }
 
+         /* ^fmul dests (e.g. condition for select) can only be
+          * scheduled to ALU_SCL_MUL */
+         if (pos == PPIR_INSTR_SLOT_ALU_SCL_ADD) {
+            ppir_dest *dest = ppir_node_get_dest(node);
+            if (dest && dest->type == ppir_target_pipeline &&
+                dest->pipeline == ppir_pipeline_reg_fmul)
+            continue;
+         }
+
          if (pos == PPIR_INSTR_SLOT_ALU_SCL_MUL ||
              pos == PPIR_INSTR_SLOT_ALU_SCL_ADD) {
             ppir_dest *dest = ppir_node_get_dest(node);
-            if (!ppir_target_is_scaler(dest))
+            if (!ppir_target_is_scalar(dest))
                continue;
          }
 

@@ -121,11 +121,11 @@ files_r300 = files(
 libr300 = static_library(
   'r300',
   files_r300,
-  c_args : [c_vis_args],
   include_directories : [
     inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_gallium_drivers,
     inc_mesa,
   ],
+  gnu_symbol_visibility : 'hidden',
   dependencies : [dep_libdrm_radeon, dep_llvm],
 )
 

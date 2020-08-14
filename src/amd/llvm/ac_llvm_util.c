@@ -78,10 +78,9 @@ static void ac_init_llvm_target()
 	LLVMParseCommandLineOptions(ARRAY_SIZE(argv), argv, NULL);
 }
 
-static once_flag ac_init_llvm_target_once_flag = ONCE_FLAG_INIT;
-
-void ac_init_llvm_once(void)
+PUBLIC void ac_init_llvm_once(void)
 {
+	static once_flag ac_init_llvm_target_once_flag = ONCE_FLAG_INIT;
 	call_once(&ac_init_llvm_target_once_flag, ac_init_llvm_target);
 }
 
@@ -157,6 +156,9 @@ const char *ac_get_llvm_processor_name(enum radeon_family family)
 		return "gfx1011";
 	case CHIP_NAVI14:
 		return "gfx1012";
+	case CHIP_SIENNA_CICHLID:
+	case CHIP_NAVY_FLOUNDER:
+		return "gfx1030";
 	default:
 		return "";
 	}
@@ -173,14 +175,13 @@ static LLVMTargetMachineRef ac_create_target_machine(enum radeon_family family,
 	LLVMTargetRef target = ac_get_llvm_target(triple);
 
 	snprintf(features, sizeof(features),
-		 "+DumpCode%s%s%s%s%s%s",
+		 "+DumpCode%s%s%s%s%s",
 		 LLVM_VERSION_MAJOR >= 11 ? "" : ",-fp32-denormals,+fp64-denormals",
 		 family >= CHIP_NAVI10 && !(tm_options & AC_TM_WAVE32) ?
 			 ",+wavefrontsize64,-wavefrontsize32" : "",
-		 tm_options & AC_TM_FORCE_ENABLE_XNACK ? ",+xnack" : "",
-		 tm_options & AC_TM_FORCE_DISABLE_XNACK ? ",-xnack" : "",
-		 tm_options & AC_TM_PROMOTE_ALLOCA_TO_SCRATCH ? ",-promote-alloca" : "",
-		 tm_options & AC_TM_NO_LOAD_STORE_OPT ? ",-load-store-opt" : "");
+		 family <= CHIP_NAVI14 && tm_options & AC_TM_FORCE_ENABLE_XNACK ? ",+xnack" : "",
+		 family <= CHIP_NAVI14 && tm_options & AC_TM_FORCE_DISABLE_XNACK ? ",-xnack" : "",
+		 tm_options & AC_TM_PROMOTE_ALLOCA_TO_SCRATCH ? ",-promote-alloca" : "");
 
 	LLVMTargetMachineRef tm = LLVMCreateTargetMachine(
 	                             target,

@@ -50,7 +50,7 @@
 #include "dri2_priv.h"
 #include "loader.h"
 
-/* From xmlpool/options.h, user exposed so should be stable */
+/* From driconf.h, user exposed so should be stable */
 #define DRI_CONF_VBLANK_NEVER 0
 #define DRI_CONF_VBLANK_DEF_INTERVAL_0 1
 #define DRI_CONF_VBLANK_DEF_INTERVAL_1 2

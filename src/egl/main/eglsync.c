@@ -120,7 +120,7 @@ _eglInitSync(_EGLSync *sync, _EGLDisplay *disp, EGLenum type,
 
 
 EGLBoolean
-_eglGetSyncAttrib(_EGLDriver *drv, _EGLDisplay *disp, _EGLSync *sync,
+_eglGetSyncAttrib(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSync *sync,
                   EGLint attribute, EGLAttrib *value)
 {
    switch (attribute) {
@@ -134,7 +134,7 @@ _eglGetSyncAttrib(_EGLDriver *drv, _EGLDisplay *disp, _EGLSync *sync,
            sync->Type == EGL_SYNC_CL_EVENT_KHR ||
            sync->Type == EGL_SYNC_REUSABLE_KHR ||
            sync->Type == EGL_SYNC_NATIVE_FENCE_ANDROID))
-         drv->API.ClientWaitSyncKHR(drv, disp, sync, 0, 0);
+         drv->ClientWaitSyncKHR(drv, disp, sync, 0, 0);
 
       *value = sync->SyncStatus;
       break;

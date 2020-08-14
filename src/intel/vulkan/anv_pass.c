@@ -259,7 +259,7 @@ VkResult anv_CreateRenderPass(
    }
    anv_multialloc_add(&ma, &subpass_attachments, subpass_attachment_count);
 
-   if (!anv_multialloc_alloc2(&ma, &device->alloc, pAllocator,
+   if (!anv_multialloc_alloc2(&ma, &device->vk.alloc, pAllocator,
                               VK_SYSTEM_ALLOCATION_SCOPE_OBJECT))
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
@@ -267,6 +267,7 @@ VkResult anv_CreateRenderPass(
     * each array member of anv_subpass must be a valid pointer if not NULL.
     */
    memset(pass, 0, ma.size);
+   vk_object_base_init(&device->vk, &pass->base, VK_OBJECT_TYPE_RENDER_PASS);
    pass->attachment_count = pCreateInfo->attachmentCount;
    pass->subpass_count = pCreateInfo->subpassCount;
    pass->attachments = attachments;
@@ -433,7 +434,7 @@ VkResult anv_CreateRenderPass2(
    }
    anv_multialloc_add(&ma, &subpass_attachments, subpass_attachment_count);
 
-   if (!anv_multialloc_alloc2(&ma, &device->alloc, pAllocator,
+   if (!anv_multialloc_alloc2(&ma, &device->vk.alloc, pAllocator,
                               VK_SYSTEM_ALLOCATION_SCOPE_OBJECT))
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
@@ -441,6 +442,7 @@ VkResult anv_CreateRenderPass2(
     * each array member of anv_subpass must be a valid pointer if not NULL.
     */
    memset(pass, 0, ma.size);
+   vk_object_base_init(&device->vk, &pass->base, VK_OBJECT_TYPE_RENDER_PASS);
    pass->attachment_count = pCreateInfo->attachmentCount;
    pass->subpass_count = pCreateInfo->subpassCount;
    pass->attachments = attachments;
@@ -591,7 +593,11 @@ void anv_DestroyRenderPass(
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_render_pass, pass, _pass);
 
-   vk_free2(&device->alloc, pAllocator, pass);
+   if (!pass)
+      return;
+
+   vk_object_base_finish(&pass->base);
+   vk_free2(&device->vk.alloc, pAllocator, pass);
 }
 
 void anv_GetRenderAreaGranularity(

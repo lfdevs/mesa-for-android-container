@@ -58,6 +58,8 @@ struct draw_jit_texture
    uint32_t first_level;
    uint32_t last_level;
    uint32_t mip_offsets[PIPE_MAX_TEXTURE_LEVELS];
+   uint32_t num_samples;
+   uint32_t sample_stride;
 };
 
 
@@ -95,6 +97,8 @@ struct draw_jit_image
    const void *base;
    uint32_t row_stride;
    uint32_t img_stride;
+   uint32_t num_samples;
+   uint32_t sample_stride;
 };
 
 enum {
@@ -107,6 +111,8 @@ enum {
    DRAW_JIT_TEXTURE_FIRST_LEVEL,
    DRAW_JIT_TEXTURE_LAST_LEVEL,
    DRAW_JIT_TEXTURE_MIP_OFFSETS,
+   DRAW_JIT_TEXTURE_NUM_SAMPLES,
+   DRAW_JIT_TEXTURE_SAMPLE_STRIDE,
    DRAW_JIT_TEXTURE_NUM_FIELDS  /* number of fields above */
 };
 
@@ -133,6 +139,8 @@ enum {
    DRAW_JIT_IMAGE_BASE,
    DRAW_JIT_IMAGE_ROW_STRIDE,
    DRAW_JIT_IMAGE_IMG_STRIDE,
+   DRAW_JIT_IMAGE_NUM_SAMPLES,
+   DRAW_JIT_IMAGE_SAMPLE_STRIDE,
    DRAW_JIT_IMAGE_NUM_FIELDS  /* number of fields above */
 };
 
@@ -882,10 +890,12 @@ void
 draw_tes_llvm_dump_variant_key(struct draw_tes_llvm_variant_key *key);
 
 struct lp_build_sampler_soa *
-draw_llvm_sampler_soa_create(const struct draw_sampler_static_state *static_state);
+draw_llvm_sampler_soa_create(const struct draw_sampler_static_state *static_state,
+                             unsigned nr_samplers);
 
 struct lp_build_image_soa *
-draw_llvm_image_soa_create(const struct draw_image_static_state *static_state);
+draw_llvm_image_soa_create(const struct draw_image_static_state *static_state,
+                           unsigned nr_images);
 
 void
 draw_llvm_set_sampler_state(struct draw_context *draw,
@@ -897,6 +907,8 @@ draw_llvm_set_mapped_texture(struct draw_context *draw,
                              unsigned sview_idx,
                              uint32_t width, uint32_t height, uint32_t depth,
                              uint32_t first_level, uint32_t last_level,
+                             uint32_t num_samples,
+                             uint32_t sample_stride,
                              const void *base_ptr,
                              uint32_t row_stride[PIPE_MAX_TEXTURE_LEVELS],
                              uint32_t img_stride[PIPE_MAX_TEXTURE_LEVELS],
@@ -909,5 +921,7 @@ draw_llvm_set_mapped_image(struct draw_context *draw,
                            uint32_t width, uint32_t height, uint32_t depth,
                            const void *base_ptr,
                            uint32_t row_stride,
-                           uint32_t img_stride);
+                           uint32_t img_stride,
+                           uint32_t num_samples,
+                           uint32_t sample_stride);
 #endif

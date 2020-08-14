@@ -99,10 +99,37 @@ static void print_named_value(FILE *file, const char *name, uint32_t value,
 	print_value(file, value, bits);
 }
 
-static const struct si_reg *find_register(const struct si_reg *table,
-					  unsigned table_size,
-					  unsigned offset)
+static const struct si_reg *find_register(enum chip_class chip_class, unsigned offset)
 {
+	const struct si_reg *table;
+	unsigned table_size;
+
+	switch (chip_class) {
+	case GFX10_3:
+	case GFX10:
+		table = gfx10_reg_table;
+		table_size = ARRAY_SIZE(gfx10_reg_table);
+		break;
+	case GFX9:
+		table = gfx9_reg_table;
+		table_size = ARRAY_SIZE(gfx9_reg_table);
+		break;
+	case GFX8:
+		table = gfx8_reg_table;
+		table_size = ARRAY_SIZE(gfx8_reg_table);
+		break;
+	case GFX7:
+		table = gfx7_reg_table;
+		table_size = ARRAY_SIZE(gfx7_reg_table);
+		break;
+	case GFX6:
+		table = gfx6_reg_table;
+		table_size = ARRAY_SIZE(gfx6_reg_table);
+		break;
+	default:
+		return NULL;
+	}
+
 	for (unsigned i = 0; i < table_size; i++) {
 		const struct si_reg *reg = &table[i];
 
@@ -113,21 +140,17 @@ static const struct si_reg *find_register(const struct si_reg *table,
 	return NULL;
 }
 
+const char *ac_get_register_name(enum chip_class chip_class, unsigned offset)
+{
+	const struct si_reg *reg = find_register(chip_class, offset);
+
+	return reg ? sid_strings + reg->name_offset : "(no name)";
+}
+
 void ac_dump_reg(FILE *file, enum chip_class chip_class, unsigned offset,
 		 uint32_t value, uint32_t field_mask)
 {
-	const struct si_reg *reg = NULL;
-
-	if (chip_class >= GFX10)
-		reg = find_register(gfx10_reg_table, ARRAY_SIZE(gfx10_reg_table), offset);
-	else if (chip_class >= GFX9)
-		reg = find_register(gfx9_reg_table, ARRAY_SIZE(gfx9_reg_table), offset);
-	else if (chip_class >= GFX8)
-		reg = find_register(gfx8_reg_table, ARRAY_SIZE(gfx8_reg_table), offset);
-	else if (chip_class >= GFX7)
-		reg = find_register(gfx7_reg_table, ARRAY_SIZE(gfx7_reg_table), offset);
-	else
-		reg = find_register(gfx6_reg_table, ARRAY_SIZE(gfx6_reg_table), offset);
+	const struct si_reg *reg = find_register(chip_class, offset);
 
 	if (reg) {
 		const char *reg_name = sid_strings + reg->name_offset;
@@ -441,7 +464,7 @@ static void ac_parse_packet3(FILE *f, uint32_t header, struct ac_ib_parser *ib,
 	case PKT3_PFP_SYNC_ME:
 		break;
 	case PKT3_NOP:
-		if (header == 0xffff1000) {
+		if (header == PKT3_NOP_PAD) {
 			count = -1; /* One dword NOP. */
 		} else if (count == 0 && ib->cur_dw < ib->num_dw &&
 			   AC_IS_TRACE_POINT(ib->ib[ib->cur_dw])) {

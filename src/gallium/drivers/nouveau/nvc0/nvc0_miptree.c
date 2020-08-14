@@ -24,7 +24,7 @@
 
 #include "pipe/p_state.h"
 #include "pipe/p_defines.h"
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 #include "util/u_inlines.h"
 #include "util/format/u_format.h"
 
@@ -35,6 +35,55 @@ static uint32_t
 nvc0_tex_choose_tile_dims(unsigned nx, unsigned ny, unsigned nz, bool is_3d)
 {
    return nv50_tex_choose_tile_dims_helper(nx, ny, nz, is_3d);
+}
+
+static uint32_t
+tu102_mt_choose_storage_type(struct nv50_miptree *mt, bool compressed)
+{
+   uint32_t kind;
+
+   if (unlikely(mt->base.base.bind & PIPE_BIND_CURSOR))
+      return 0;
+   if (unlikely(mt->base.base.flags & NOUVEAU_RESOURCE_FLAG_LINEAR))
+      return 0;
+
+   switch (mt->base.base.format) {
+   case PIPE_FORMAT_Z16_UNORM:
+      if (compressed)
+         kind = 0x0b; // NV_MMU_PTE_KIND_Z16_COMPRESSIBLE_DISABLE_PLC
+      else
+         kind = 0x01; // NV_MMU_PTE_KIND_Z16
+      break;
+   case PIPE_FORMAT_X8Z24_UNORM:
+   case PIPE_FORMAT_S8X24_UINT:
+   case PIPE_FORMAT_S8_UINT_Z24_UNORM:
+      if (compressed)
+         kind = 0x0e; // NV_MMU_PTE_KIND_Z24S8_COMPRESSIBLE_DISABLE_PLC
+      else
+         kind = 0x05; // NV_MMU_PTE_KIND_Z24S8
+      break;
+   case PIPE_FORMAT_X24S8_UINT:
+   case PIPE_FORMAT_Z24X8_UNORM:
+   case PIPE_FORMAT_Z24_UNORM_S8_UINT:
+      if (compressed)
+         kind = 0x0c; // NV_MMU_PTE_KIND_S8Z24_COMPRESSIBLE_DISABLE_PLC
+      else
+         kind = 0x03; // NV_MMU_PTE_KIND_S8Z24
+      break;
+   case PIPE_FORMAT_X32_S8X24_UINT:
+   case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+      if (compressed)
+         kind = 0x0d; // NV_MMU_PTE_KIND_ZF32_X24S8_COMPRESSIBLE_DISABLE_PLC
+      else
+         kind = 0x04; // NV_MMU_PTE_KIND_ZF32_X24S8
+      break;
+   case PIPE_FORMAT_Z32_FLOAT:
+   default:
+      kind = 0x06;
+      break;
+   }
+
+   return kind;
 }
 
 static uint32_t
@@ -357,7 +406,10 @@ nvc0_miptree_create(struct pipe_screen *pscreen,
    if (pt->bind & PIPE_BIND_LINEAR)
       pt->flags |= NOUVEAU_RESOURCE_FLAG_LINEAR;
 
-   bo_config.nvc0.memtype = nvc0_mt_choose_storage_type(mt, compressed);
+   if (dev->chipset < 0x160)
+      bo_config.nvc0.memtype = nvc0_mt_choose_storage_type(mt, compressed);
+   else
+      bo_config.nvc0.memtype = tu102_mt_choose_storage_type(mt, compressed);
 
    if (!nvc0_miptree_init_ms_mode(mt)) {
       FREE(mt);

@@ -1,6 +1,6 @@
 // DriConf options specific to virgl
 // To add a new tweak:
-//   1. Define the tweak in util/xmlpool/t_options.h and also add
+//   1. Define the tweak in util/driconf.h and also add
 //      the tweak name as define to virgl_protocol.h
 //   2. Add the tweak here with the appropriated default value
 //   3. Add the code to query the tweak in virgl_create_screen

@@ -256,7 +256,7 @@ static uint32_t *ac_parse_packet3(FILE *f, uint32_t *ib, int *num_dw,
 					COLOR_RESET "\n");
 			break;
 		}
-		/* fall through, print all dwords */
+		/* fallthrough *//* print all dwords */
 	default:
 		for (i = 0; i < count+1; i++) {
 			print_spaces(f, INDENT_PKT);

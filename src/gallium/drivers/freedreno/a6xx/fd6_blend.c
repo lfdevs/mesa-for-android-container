@@ -56,49 +56,29 @@ blend_func(unsigned func)
 	}
 }
 
-void *
-fd6_blend_state_create(struct pipe_context *pctx,
-		const struct pipe_blend_state *cso)
+struct fd6_blend_variant *
+__fd6_setup_blend_variant(struct fd6_blend_stateobj *blend, unsigned sample_mask)
 {
-	struct fd_context *ctx = fd_context(pctx);
-	struct fd6_blend_stateobj *so;
+	const struct pipe_blend_state *cso = &blend->base;
+	struct fd6_blend_variant *so;
 	enum a3xx_rop_code rop = ROP_COPY;
 	bool reads_dest = false;
-	unsigned i, mrt_blend = 0;
+	unsigned mrt_blend = 0;
 
 	if (cso->logicop_enable) {
 		rop = cso->logicop_func;  /* maps 1:1 */
-
-		switch (cso->logicop_func) {
-		case PIPE_LOGICOP_NOR:
-		case PIPE_LOGICOP_AND_INVERTED:
-		case PIPE_LOGICOP_AND_REVERSE:
-		case PIPE_LOGICOP_INVERT:
-		case PIPE_LOGICOP_XOR:
-		case PIPE_LOGICOP_NAND:
-		case PIPE_LOGICOP_AND:
-		case PIPE_LOGICOP_EQUIV:
-		case PIPE_LOGICOP_NOOP:
-		case PIPE_LOGICOP_OR_INVERTED:
-		case PIPE_LOGICOP_OR_REVERSE:
-		case PIPE_LOGICOP_OR:
-			reads_dest = true;
-			break;
-		}
+		reads_dest = util_logicop_reads_dest(cso->logicop_func);
 	}
 
-	so = CALLOC_STRUCT(fd6_blend_stateobj);
+	so = rzalloc_size(blend, sizeof(*so));
 	if (!so)
 		return NULL;
 
-	so->base = *cso;
-	struct fd_ringbuffer *ring = fd_ringbuffer_new_object(ctx->pipe,
-			((A6XX_MAX_RENDER_TARGETS * 4) + 4) * 4);
+	struct fd_ringbuffer *ring = fd_ringbuffer_new_object(blend->ctx->pipe,
+			((A6XX_MAX_RENDER_TARGETS * 4) + 6) * 4);
 	so->stateobj = ring;
 
-	so->lrz_write = true;  /* unless blend enabled for any MRT */
-
-	for (i = 0; i < A6XX_MAX_RENDER_TARGETS; i++) {
+	for (unsigned i = 0; i <= cso->max_rt; i++) {
 		const struct pipe_rt_blend_state *rt;
 
 		if (cso->independent_blend_enable)
@@ -125,12 +105,10 @@ fd6_blend_state_create(struct pipe_context *pctx,
 
 		if (rt->blend_enable) {
 			mrt_blend |= (1 << i);
-			so->lrz_write = false;
 		}
 
 		if (reads_dest) {
 			mrt_blend |= (1 << i);
-			so->lrz_write = false;
 		}
 	}
 
@@ -145,15 +123,55 @@ fd6_blend_state_create(struct pipe_context *pctx,
 			.dither_mode_mrt7 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
 		));
 
-	so->rb_blend_cntl = A6XX_RB_BLEND_CNTL_ENABLE_BLEND(mrt_blend) |
-		COND(cso->alpha_to_coverage, A6XX_RB_BLEND_CNTL_ALPHA_TO_COVERAGE) |
-		COND(cso->independent_blend_enable, A6XX_RB_BLEND_CNTL_INDEPENDENT_BLEND);
-
 	OUT_REG(ring, A6XX_SP_BLEND_CNTL(
 			.unk8              = true,
 			.alpha_to_coverage = cso->alpha_to_coverage,
 			.enabled           = !!mrt_blend,
 		));
+
+	OUT_REG(ring, A6XX_RB_BLEND_CNTL(
+			.enable_blend      = mrt_blend,
+			.alpha_to_coverage = cso->alpha_to_coverage,
+			.alpha_to_one = cso->alpha_to_one,
+			.independent_blend = cso->independent_blend_enable,
+			.sample_mask       = sample_mask
+		));
+
+	so->sample_mask = sample_mask;
+
+	util_dynarray_append(&blend->variants, struct fd6_blend_variant *, so);
+
+	return so;
+}
+
+void *
+fd6_blend_state_create(struct pipe_context *pctx,
+		const struct pipe_blend_state *cso)
+{
+	struct fd6_blend_stateobj *so;
+
+	so = rzalloc_size(NULL, sizeof(*so));
+	if (!so)
+		return NULL;
+
+	so->base = *cso;
+	so->ctx = fd_context(pctx);
+
+	if (cso->logicop_enable) {
+		so->reads_dest |= util_logicop_reads_dest(cso->logicop_func);
+	}
+
+	unsigned nr = cso->independent_blend_enable ? cso->max_rt : 0;
+	for (unsigned i = 0; i <= nr; i++) {
+		const struct pipe_rt_blend_state *rt = &cso->rt[i];
+
+		so->reads_dest |= rt->blend_enable;
+		if (rt->blend_enable) {
+			so->reads_dest = true;
+		}
+	}
+
+	util_dynarray_init(&so->variants, so);
 
 	return so;
 }
@@ -163,7 +181,10 @@ fd6_blend_state_delete(struct pipe_context *pctx, void *hwcso)
 {
 	struct fd6_blend_stateobj *so = hwcso;
 
-	fd_ringbuffer_del(so->stateobj);
+	util_dynarray_foreach(&so->variants, struct fd6_blend_variant *, vp) {
+		struct fd6_blend_variant *v = *vp;
+		fd_ringbuffer_del(v->stateobj);
+	}
 
-	FREE(hwcso);
+	ralloc_free(so);
 }

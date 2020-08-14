@@ -29,42 +29,26 @@ static uint32_t
 setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format format)
 {
 	struct pipe_resource *prsc = &rsc->base;
-	struct fd_screen *screen = fd_screen(prsc->screen);
-	uint32_t pitchalign = screen->gmem_alignw;
 	uint32_t level, size = 0;
-	uint32_t width = prsc->width0;
-	uint32_t height = prsc->height0;
-	uint32_t depth = prsc->depth0;
+	uint32_t width0 = prsc->width0;
+
+	if (rsc->layout.tile_mode && prsc->target != PIPE_TEXTURE_CUBE)
+		width0 = util_next_power_of_two(width0);
+
+	/* 32 pixel alignment */
+	fdl_set_pitchalign(&rsc->layout, fdl_cpp_shift(&rsc->layout) + 5);
 
 	for (level = 0; level <= prsc->last_level; level++) {
 		struct fdl_slice *slice = fd_resource_slice(rsc, level);
-		uint32_t blocks;
-
+		uint32_t pitch = fdl_pitch(&rsc->layout, level);
+		uint32_t height = u_minify(prsc->height0, level);
 		if (rsc->layout.tile_mode) {
-			if (prsc->target != PIPE_TEXTURE_CUBE) {
-				if (level == 0) {
-					width = util_next_power_of_two(width);
-					height = util_next_power_of_two(height);
-				}
-				width = MAX2(width, 8);
-				height = MAX2(height, 4);
-				// Multiplying by 4 is the result of the 4x4 tiling pattern.
-				slice->pitch = width * 4;
-				blocks = util_format_get_nblocks(format, width, height);
-			} else {
-				uint32_t twidth, theight;
-				twidth = align(width, 8);
-				theight = align(height, 4);
-				// Multiplying by 4 is the result of the 4x4 tiling pattern.
-				slice->pitch = twidth * 4;
-				blocks = util_format_get_nblocks(format, twidth, theight);
-			}
-		} else {
-			slice->pitch = width = align(width, pitchalign);
-			blocks = util_format_get_nblocks(format, slice->pitch, height);
+			height = align(height, 4);
+			if (prsc->target != PIPE_TEXTURE_CUBE)
+				height = util_next_power_of_two(height);
 		}
-		slice->pitch = util_format_get_nblocksx(format, slice->pitch) *
-			rsc->layout.cpp;
+
+		uint32_t nblocksy = util_format_get_nblocksy(format, height);
 
 		slice->offset = size;
 		/* 1d array and 2d array textures must all have the same layer size
@@ -76,17 +60,13 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 		if (prsc->target == PIPE_TEXTURE_3D && (
 					level == 1 ||
 					(level > 1 && fd_resource_slice(rsc, level - 1)->size0 > 0xf000)))
-			slice->size0 = align(blocks * rsc->layout.cpp, alignment);
+			slice->size0 = align(nblocksy * pitch, alignment);
 		else if (level == 0 || alignment == 1)
-			slice->size0 = align(blocks * rsc->layout.cpp, alignment);
+			slice->size0 = align(nblocksy * pitch, alignment);
 		else
 			slice->size0 = fd_resource_slice(rsc, level - 1)->size0;
 
-		size += slice->size0 * depth * prsc->array_size;
-
-		width = u_minify(width, 1);
-		height = u_minify(height, 1);
-		depth = u_minify(depth, 1);
+		size += slice->size0 * u_minify(prsc->depth0, level) * prsc->array_size;
 	}
 
 	return size;
@@ -116,7 +96,7 @@ ok_format(enum pipe_format pfmt)
 {
 	enum a3xx_color_fmt fmt = fd3_pipe2color(pfmt);
 
-	if (fmt == ~0)
+	if (fmt == RB_NONE)
 		return false;
 
 	switch (pfmt) {

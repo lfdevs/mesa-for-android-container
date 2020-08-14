@@ -289,7 +289,7 @@ struct i915_context {
    struct blitter_context* blitter;
 };
 
-/* A flag for each state_tracker state object:
+/* A flag for each frontend state object:
  */
 #define I915_NEW_VIEWPORT      0x1
 #define I915_NEW_RASTERIZER    0x2

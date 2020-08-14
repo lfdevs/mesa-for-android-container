@@ -123,6 +123,42 @@ extern uint64_t intel_debug_flag_for_shader_stage(gl_shader_stage stage);
 
 extern void brw_process_intel_debug_variable(void);
 
+/* Below is a list of structure located in the identifier buffer. The driver
+ * can fill those in for debug purposes.
+ */
+
+enum gen_debug_block_type {
+   /* End of the debug blocks */
+   GEN_DEBUG_BLOCK_TYPE_END = 1,
+
+   /* Driver identifier (struct gen_debug_block_driver) */
+   GEN_DEBUG_BLOCK_TYPE_DRIVER,
+
+   /* Internal, never to be written out */
+   GEN_DEBUG_BLOCK_TYPE_MAX,
+};
+
+struct gen_debug_block_base {
+   uint32_t type; /* enum gen_debug_block_type */
+   uint32_t length; /* inclusive of this structure size */
+};
+
+struct gen_debug_block_driver {
+   struct gen_debug_block_base base;
+   uint8_t description[];
+};
+
+extern void *intel_debug_identifier(void);
+extern uint32_t intel_debug_identifier_size(void);
+
+extern uint32_t intel_debug_write_identifiers(void *output,
+                                              uint32_t output_size,
+                                              const char *driver_name);
+
+extern void *intel_debug_get_identifier_block(void *buffer,
+                                              uint32_t buffer_size,
+                                              enum gen_debug_block_type type);
+
 #ifdef __cplusplus
 }
 #endif

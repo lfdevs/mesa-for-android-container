@@ -40,9 +40,16 @@ svga_set_scissor_states(struct pipe_context *pipe,
                         unsigned num_scissors,
                         const struct pipe_scissor_state *scissors)
 {
+   ASSERTED struct svga_screen *svgascreen = svga_screen(pipe->screen);
    struct svga_context *svga = svga_context(pipe);
+   unsigned i, num_sc;
 
-   memcpy(&svga->curr.scissor, scissors, sizeof(*scissors));
+   assert(start_slot + num_scissors <= svgascreen->max_viewports);
+
+   for (i = 0, num_sc = start_slot; i < num_scissors; i++)  {
+      svga->curr.scissor[num_sc++] = scissors[i]; /* struct copy */
+   }
+
    svga->dirty |= SVGA_NEW_SCISSOR;
 }
 
@@ -199,8 +206,14 @@ svga_set_viewport_states(struct pipe_context *pipe,
                          const struct pipe_viewport_state *viewports)
 {
    struct svga_context *svga = svga_context(pipe);
+   ASSERTED struct svga_screen *svgascreen = svga_screen(pipe->screen);
+   unsigned i, num_vp;
 
-   svga->curr.viewport = *viewports; /* struct copy */
+   assert(start_slot + num_viewports <= svgascreen->max_viewports);
+
+   for (i = 0, num_vp = start_slot; i < num_viewports; i++)  {
+      svga->curr.viewport[num_vp++] = viewports[i]; /* struct copy */
+   }
 
    svga->dirty |= SVGA_NEW_VIEWPORT;
 }
@@ -208,7 +221,7 @@ svga_set_viewport_states(struct pipe_context *pipe,
 
 /**
  * Called by state tracker to specify a callback function the driver
- * can use to report info back to the state tracker.
+ * can use to report info back to the gallium frontend.
  */
 static void
 svga_set_debug_callback(struct pipe_context *pipe,

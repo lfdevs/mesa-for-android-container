@@ -24,28 +24,15 @@ COPYRIGHT = """\
  */
 """
 
-import copy
-import re
+import os.path
+import sys
 
-def _bool_to_c_expr(b):
-    if b is True:
-        return 'true'
-    if b is False:
-        return 'false'
-    return b
+VULKAN_UTIL = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../vulkan/util'))
+sys.path.append(VULKAN_UTIL)
 
-class Extension:
-    def __init__(self, name, ext_version, enable):
-        self.name = name
-        self.ext_version = int(ext_version)
-        self.enable = _bool_to_c_expr(enable)
+from vk_extensions import *
 
-class ApiVersion:
-    def __init__(self, version, enable):
-        self.version = version
-        self.enable = _bool_to_c_expr(enable)
-
-API_PATCH_VERSION = 131
+API_PATCH_VERSION = 145
 
 # Supported API versions.  Each one is the maximum patch version for the given
 # version.  Version come in increasing order and each version is available if
@@ -54,7 +41,7 @@ API_PATCH_VERSION = 131
 API_VERSIONS = [
     ApiVersion('1.0',   True),
     ApiVersion('1.1',   True),
-    ApiVersion('1.2',   True),
+    ApiVersion('1.2',   '!ANDROID'),
 ]
 
 MAX_API_VERSION = None # Computed later
@@ -68,8 +55,7 @@ EXTENSIONS = [
     Extension('VK_KHR_8bit_storage',                      1, 'device->info.gen >= 8'),
     Extension('VK_KHR_16bit_storage',                     1, 'device->info.gen >= 8'),
     Extension('VK_KHR_bind_memory2',                      1, True),
-    Extension('VK_KHR_buffer_device_address',             1,
-              'device->has_a64_buffer_access && device->info.gen < 12'),
+    Extension('VK_KHR_buffer_device_address',             1, 'device->has_a64_buffer_access'),
     Extension('VK_KHR_create_renderpass2',                1, True),
     Extension('VK_KHR_dedicated_allocation',              1, True),
     Extension('VK_KHR_depth_stencil_resolve',             1, True),
@@ -101,6 +87,10 @@ EXTENSIONS = [
     Extension('VK_KHR_maintenance2',                      1, True),
     Extension('VK_KHR_maintenance3',                      1, True),
     Extension('VK_KHR_multiview',                         1, True),
+    Extension('VK_KHR_performance_query',                 1,
+              'device->use_softpin && device->perf && ' +
+              'device->perf->i915_perf_version >= 3 && ' +
+              'device->use_call_secondary'),
     Extension('VK_KHR_pipeline_executable_properties',    1, True),
     Extension('VK_KHR_push_descriptor',                   1, True),
     Extension('VK_KHR_relaxed_block_layout',              1, True),
@@ -128,11 +118,12 @@ EXTENSIONS = [
     Extension('VK_KHR_wayland_surface',                   6, 'VK_USE_PLATFORM_WAYLAND_KHR'),
     Extension('VK_KHR_xcb_surface',                       6, 'VK_USE_PLATFORM_XCB_KHR'),
     Extension('VK_KHR_xlib_surface',                      6, 'VK_USE_PLATFORM_XLIB_KHR'),
+    Extension('VK_EXT_4444_formats',                      1, True),
     Extension('VK_EXT_acquire_xlib_display',              1, 'VK_USE_PLATFORM_XLIB_XRANDR_EXT'),
-    Extension('VK_EXT_buffer_device_address',             1,
-              'device->has_a64_buffer_access && device->info.gen < 12'),
-    Extension('VK_EXT_calibrated_timestamps',             1, True),
+    Extension('VK_EXT_buffer_device_address',             1, 'device->has_a64_buffer_access'),
+    Extension('VK_EXT_calibrated_timestamps',             1, 'device->has_reg_timestamp'),
     Extension('VK_EXT_conditional_rendering',             1, 'device->info.gen >= 8 || device->info.is_haswell'),
+    Extension('VK_EXT_custom_border_color',               12, 'device->info.gen >= 8'),
     Extension('VK_EXT_debug_report',                      8, True),
     Extension('VK_EXT_depth_clip_enable',                 1, True),
     Extension('VK_EXT_descriptor_indexing',               2,
@@ -140,6 +131,7 @@ EXTENSIONS = [
     Extension('VK_EXT_direct_mode_display',               1, 'VK_USE_PLATFORM_DISPLAY_KHR'),
     Extension('VK_EXT_display_control',                   1, 'VK_USE_PLATFORM_DISPLAY_KHR'),
     Extension('VK_EXT_display_surface_counter',           1, 'VK_USE_PLATFORM_DISPLAY_KHR'),
+    Extension('VK_EXT_extended_dynamic_state',            1, True),
     Extension('VK_EXT_external_memory_dma_buf',           1, True),
     Extension('VK_EXT_external_memory_host',              1, True),
     Extension('VK_EXT_fragment_shader_interlock',         1, 'device->info.gen >= 9'),
@@ -147,18 +139,22 @@ EXTENSIONS = [
               'device->has_context_priority'),
     Extension('VK_EXT_host_query_reset',                  1, True),
     Extension('VK_EXT_image_drm_format_modifier',         1, False),
+    Extension('VK_EXT_image_robustness',                  1, True),
     Extension('VK_EXT_index_type_uint8',                  1, True),
     Extension('VK_EXT_inline_uniform_block',              1, True),
     Extension('VK_EXT_line_rasterization',                1, True),
     Extension('VK_EXT_memory_budget',                     1, 'device->has_mem_available'),
     Extension('VK_EXT_pci_bus_info',                      2, True),
+    Extension('VK_EXT_pipeline_creation_cache_control',   3, True),
     Extension('VK_EXT_pipeline_creation_feedback',        1, True),
     Extension('VK_EXT_post_depth_coverage',               1, 'device->info.gen >= 9'),
+    Extension('VK_EXT_private_data',                      1, True),
     Extension('VK_EXT_queue_family_foreign',              1, 'ANDROID'),
     Extension('VK_EXT_robustness2',                       1, True),
     Extension('VK_EXT_sampler_filter_minmax',             1, 'device->info.gen >= 9'),
     Extension('VK_EXT_scalar_block_layout',               1, True),
     Extension('VK_EXT_separate_stencil_usage',            1, True),
+    Extension('VK_EXT_shader_atomic_float',               1, True),
     Extension('VK_EXT_shader_demote_to_helper_invocation', 1, True),
     Extension('VK_EXT_shader_stencil_export',             1, 'device->info.gen >= 9'),
     Extension('VK_EXT_shader_subgroup_ballot',            1, True),
@@ -198,50 +194,6 @@ for i in range(len(EXTENSIONS) - 1):
     if extension_order(EXTENSIONS[i + 1]) < extension_order(EXTENSIONS[i]):
         print(EXTENSIONS[i + 1].name + ' should come before ' + EXTENSIONS[i].name)
         exit(1)
-
-class VkVersion:
-    def __init__(self, string):
-        split = string.split('.')
-        self.major = int(split[0])
-        self.minor = int(split[1])
-        if len(split) > 2:
-            assert len(split) == 3
-            self.patch = int(split[2])
-        else:
-            self.patch = None
-
-        # Sanity check.  The range bits are required by the definition of the
-        # VK_MAKE_VERSION macro
-        assert self.major < 1024 and self.minor < 1024
-        assert self.patch is None or self.patch < 4096
-        assert str(self) == string
-
-    def __str__(self):
-        ver_list = [str(self.major), str(self.minor)]
-        if self.patch is not None:
-            ver_list.append(str(self.patch))
-        return '.'.join(ver_list)
-
-    def c_vk_version(self):
-        patch = self.patch if self.patch is not None else 0
-        ver_list = [str(self.major), str(self.minor), str(patch)]
-        return 'VK_MAKE_VERSION(' + ', '.join(ver_list) + ')'
-
-    def __int_ver(self):
-        # This is just an expansion of VK_VERSION
-        patch = self.patch if self.patch is not None else 0
-        return (self.major << 22) | (self.minor << 12) | patch
-
-    def __gt__(self, other):
-        # If only one of them has a patch version, "ignore" it by making
-        # other's patch version match self.
-        if (self.patch is None) != (other.patch is None):
-            other = copy.copy(other)
-            other.patch = self.patch
-
-        return self.__int_ver() > other.__int_ver()
-
-
 
 MAX_API_VERSION = VkVersion('0.0.0')
 for version in API_VERSIONS:

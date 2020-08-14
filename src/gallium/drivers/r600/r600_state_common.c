@@ -819,6 +819,7 @@ static inline void r600_shader_selector_key(const struct pipe_context *ctx,
 				      rctx->rasterizer && rctx->rasterizer->multisample_enable &&
 				      !rctx->framebuffer.cb0_is_integer;
 		key->ps.nr_cbufs = rctx->framebuffer.state.nr_cbufs;
+                key->ps.apply_sample_id_mask = (rctx->ps_iter_samples > 1) || !rctx->rasterizer->multisample_enable;
 		/* Dual-source blending only makes sense with nr_cbufs == 1. */
 		if (key->ps.nr_cbufs == 1 && rctx->dual_src_blend)
 			key->ps.nr_cbufs = 2;
@@ -956,7 +957,6 @@ static void *r600_create_shader_state(struct pipe_context *ctx,
 	case PIPE_SHADER_TESS_CTRL:
 		sel->lds_patch_outputs_written_mask = 0;
 		sel->lds_outputs_written_mask = 0;
-		bool texxcoord_semantic = ctx->screen->get_param(ctx->screen, PIPE_CAP_TGSI_TEXCOORD);
 
 		for (i = 0; i < sel->info.num_outputs; i++) {
 			unsigned name = sel->info.output_semantic_name[i];
@@ -967,11 +967,11 @@ static void *r600_create_shader_state(struct pipe_context *ctx,
 			case TGSI_SEMANTIC_TESSOUTER:
 			case TGSI_SEMANTIC_PATCH:
 				sel->lds_patch_outputs_written_mask |=
-					1ull << r600_get_lds_unique_index(name, index, texxcoord_semantic);
+					1ull << r600_get_lds_unique_index(name, index);
 				break;
 			default:
 				sel->lds_outputs_written_mask |=
-					1ull << r600_get_lds_unique_index(name, index, texxcoord_semantic);
+					1ull << r600_get_lds_unique_index(name, index);
 			}
 		}
 		break;
@@ -1191,7 +1191,7 @@ static void r600_set_constant_buffer(struct pipe_context *ctx,
 	struct pipe_constant_buffer *cb;
 	const uint8_t *ptr;
 
-	/* Note that the state tracker can unbind constant buffers by
+	/* Note that the gallium frontend can unbind constant buffers by
 	 * passing NULL here.
 	 */
 	if (unlikely(!input || (!input->buffer && !input->user_buffer))) {
@@ -1871,7 +1871,7 @@ static bool r600_update_derived_state(struct r600_context *rctx)
 	 * to LS slots and won't reflect what is dirty as VS stage even if the
 	 * TES didn't overwrite it. The story for re-enabled TES is similar.
 	 * In any case, we're not allowed to submit any TES state when
-	 * TES is disabled (the state tracker may not do this but this looks
+	 * TES is disabled (the gallium frontend may not do this but this looks
 	 * like an optimization to me, not something which can be relied on).
 	 */
 
@@ -2782,6 +2782,7 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 		case PIPE_FORMAT_RGTC1_SNORM:
 		case PIPE_FORMAT_LATC1_SNORM:
 			word4 |= sign_bit[0];
+			/* fallthrough */
 		case PIPE_FORMAT_RGTC1_UNORM:
 		case PIPE_FORMAT_LATC1_UNORM:
 			result = FMT_BC4;
@@ -2789,6 +2790,7 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 		case PIPE_FORMAT_RGTC2_SNORM:
 		case PIPE_FORMAT_LATC2_SNORM:
 			word4 |= sign_bit[0] | sign_bit[1];
+			/* fallthrough */
 		case PIPE_FORMAT_RGTC2_UNORM:
 		case PIPE_FORMAT_LATC2_UNORM:
 			result = FMT_BC5;

@@ -239,9 +239,8 @@ GM107LoweringPass::handlePFETCH(Instruction *i)
    Value *tmp1 = bld.getScratch();
    Value *tmp2 = bld.getScratch();
    bld.mkOp1(OP_RDSV, TYPE_U32, tmp0, bld.mkSysVal(SV_INVOCATION_INFO, 0));
-   bld.mkOp2(OP_SHR , TYPE_U32, tmp1, tmp0, bld.mkImm(16));
-   bld.mkOp2(OP_AND , TYPE_U32, tmp0, tmp0, bld.mkImm(0xff));
-   bld.mkOp2(OP_AND , TYPE_U32, tmp1, tmp1, bld.mkImm(0xff));
+   bld.mkOp3(OP_PERMT, TYPE_U32, tmp1, tmp0, bld.mkImm(0x4442), bld.mkImm(0));
+   bld.mkOp3(OP_PERMT, TYPE_U32, tmp0, tmp0, bld.mkImm(0x4440), bld.mkImm(0));
    if (i->getSrc(1))
       bld.mkOp2(OP_ADD , TYPE_U32, tmp2, i->getSrc(0), i->getSrc(1));
    else

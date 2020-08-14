@@ -30,6 +30,8 @@
 #include "anv_private.h"
 
 #include "genxml/gen8_pack.h"
+#include "genxml/genX_bits.h"
+#include "perf/gen_perf.h"
 
 #include "util/debug.h"
 
@@ -288,6 +290,17 @@ anv_batch_emit_reloc(struct anv_batch *batch,
    return address_u64;
 }
 
+struct anv_address
+anv_batch_address(struct anv_batch *batch, void *batch_location)
+{
+   assert(batch->start < batch_location);
+
+   /* Allow a jump at the current location of the batch. */
+   assert(batch->next >= batch_location);
+
+   return anv_address_add(batch->start_addr, batch_location - batch->start);
+}
+
 void
 anv_batch_emit_batch(struct anv_batch *batch, struct anv_batch *other)
 {
@@ -396,8 +409,8 @@ static void
 anv_batch_bo_start(struct anv_batch_bo *bbo, struct anv_batch *batch,
                    size_t batch_padding)
 {
-   batch->next = batch->start = bbo->bo->map;
-   batch->end = bbo->bo->map + bbo->bo->size - batch_padding;
+   anv_batch_set_storage(batch, (struct anv_address) { .bo = bbo->bo, },
+                         bbo->bo->map, bbo->bo->size - batch_padding);
    batch->relocs = &bbo->relocs;
    anv_reloc_list_clear(&bbo->relocs);
 }
@@ -406,6 +419,7 @@ static void
 anv_batch_bo_continue(struct anv_batch_bo *bbo, struct anv_batch *batch,
                       size_t batch_padding)
 {
+   batch->start_addr = (struct anv_address) { .bo = bbo->bo, };
    batch->start = bbo->bo->map;
    batch->next = bbo->bo->map + bbo->length;
    batch->end = bbo->bo->map + bbo->bo->size - batch_padding;
@@ -539,10 +553,11 @@ anv_cmd_buffer_current_batch_bo(struct anv_cmd_buffer *cmd_buffer)
 struct anv_address
 anv_cmd_buffer_surface_base_address(struct anv_cmd_buffer *cmd_buffer)
 {
+   struct anv_state_pool *pool = anv_binding_table_pool(cmd_buffer->device);
    struct anv_state *bt_block = u_vector_head(&cmd_buffer->bt_block_states);
    return (struct anv_address) {
-      .bo = anv_binding_table_pool(cmd_buffer->device)->block_pool.bo,
-      .offset = bt_block->offset,
+      .bo = pool->block_pool.bo,
+      .offset = bt_block->offset - pool->start_offset,
    };
 }
 
@@ -708,7 +723,6 @@ struct anv_state
 anv_cmd_buffer_alloc_binding_table(struct anv_cmd_buffer *cmd_buffer,
                                    uint32_t entries, uint32_t *state_offset)
 {
-   struct anv_device *device = cmd_buffer->device;
    struct anv_state *bt_block = u_vector_head(&cmd_buffer->bt_block_states);
 
    uint32_t bt_size = align_u32(entries * 4, 32);
@@ -722,14 +736,8 @@ anv_cmd_buffer_alloc_binding_table(struct anv_cmd_buffer *cmd_buffer,
    cmd_buffer->bt_next.map += bt_size;
    cmd_buffer->bt_next.alloc_size -= bt_size;
 
-   if (device->physical->use_softpin) {
-      assert(bt_block->offset >= 0);
-      *state_offset = device->surface_state_pool.block_pool.start_address -
-         device->binding_table_pool.block_pool.start_address - bt_block->offset;
-   } else {
-      assert(bt_block->offset < 0);
-      *state_offset = -bt_block->offset;
-   }
+   assert(bt_block->offset < 0);
+   *state_offset = -bt_block->offset;
 
    return state;
 }
@@ -920,6 +928,29 @@ anv_cmd_buffer_end_batch_buffer(struct anv_cmd_buffer *cmd_buffer)
       const uint32_t length = cmd_buffer->batch.next - cmd_buffer->batch.start;
       if (!cmd_buffer->device->can_chain_batches) {
          cmd_buffer->exec_mode = ANV_CMD_BUFFER_EXEC_MODE_GROW_AND_EMIT;
+      } else if (cmd_buffer->device->physical->use_call_secondary) {
+         cmd_buffer->exec_mode = ANV_CMD_BUFFER_EXEC_MODE_CALL_AND_RETURN;
+         /* If the secondary command buffer begins & ends in the same BO and
+          * its length is less than the length of CS prefetch, add some NOOPs
+          * instructions so the last MI_BATCH_BUFFER_START is outside the CS
+          * prefetch.
+          */
+         if (cmd_buffer->batch_bos.next == cmd_buffer->batch_bos.prev) {
+            int32_t batch_len =
+               cmd_buffer->batch.next - cmd_buffer->batch.start;
+
+            for (int32_t i = 0; i < (512 - batch_len); i += 4)
+               anv_batch_emit(&cmd_buffer->batch, GEN8_MI_NOOP, noop);
+         }
+
+         void *jump_addr =
+            anv_batch_emitn(&cmd_buffer->batch,
+                            GEN8_MI_BATCH_BUFFER_START_length,
+                            GEN8_MI_BATCH_BUFFER_START,
+                            .AddressSpaceIndicator = ASI_PPGTT,
+                            .SecondLevelBatchBuffer = Firstlevelbatch) +
+            (GEN8_MI_BATCH_BUFFER_START_BatchBufferStartAddress_start / 8);
+         cmd_buffer->return_addr = anv_batch_address(&cmd_buffer->batch, jump_addr);
       } else if ((cmd_buffer->batch_bos.next == cmd_buffer->batch_bos.prev) &&
                  (length < ANV_CMD_BUFFER_BATCH_SIZE / 2)) {
          /* If the secondary has exactly one batch buffer in its list *and*
@@ -1029,6 +1060,26 @@ anv_cmd_buffer_add_secondary(struct anv_cmd_buffer *primary,
                             GEN8_MI_BATCH_BUFFER_START_length * 4);
       break;
    }
+   case ANV_CMD_BUFFER_EXEC_MODE_CALL_AND_RETURN: {
+      struct anv_batch_bo *first_bbo =
+         list_first_entry(&secondary->batch_bos, struct anv_batch_bo, link);
+
+      uint64_t *write_return_addr =
+         anv_batch_emitn(&primary->batch,
+                         GEN8_MI_STORE_DATA_IMM_length + 1 /* QWord write */,
+                         GEN8_MI_STORE_DATA_IMM,
+                         .Address = secondary->return_addr)
+         + (GEN8_MI_STORE_DATA_IMM_ImmediateData_start / 8);
+
+      emit_batch_buffer_start(primary, first_bbo->bo, 0);
+
+      *write_return_addr =
+         anv_address_physical(anv_batch_address(&primary->batch,
+                                                primary->batch.next));
+
+      anv_cmd_buffer_add_seen_bbos(primary, &secondary->batch_bos);
+      break;
+   }
    default:
       assert(!"Invalid execution mode");
    }
@@ -1051,6 +1102,8 @@ struct anv_execbuf {
 
    const VkAllocationCallbacks *             alloc;
    VkSystemAllocationScope                   alloc_scope;
+
+   int                                       perf_query_pass;
 };
 
 static void
@@ -1324,6 +1377,9 @@ static bool
 relocate_cmd_buffer(struct anv_cmd_buffer *cmd_buffer,
                     struct anv_execbuf *exec)
 {
+   if (cmd_buffer->perf_query_pool)
+      return false;
+
    if (!exec->has_relocs)
       return true;
 
@@ -1621,8 +1677,15 @@ anv_queue_execbuf_locked(struct anv_queue *queue,
    anv_execbuf_init(&execbuf);
    execbuf.alloc = submit->alloc;
    execbuf.alloc_scope = submit->alloc_scope;
+   execbuf.perf_query_pass = submit->perf_query_pass;
 
-   VkResult result;
+   /* Always add the workaround BO as it includes a driver identifier for the
+    * error_state.
+    */
+   VkResult result =
+      anv_execbuf_add_bo(device, &execbuf, device->workaround_bo, NULL, 0);
+   if (result != VK_SUCCESS)
+      goto error;
 
    for (uint32_t i = 0; i < submit->fence_bo_count; i++) {
       int signaled;
@@ -1657,10 +1720,26 @@ anv_queue_execbuf_locked(struct anv_queue *queue,
    if (result != VK_SUCCESS)
       goto error;
 
+   const bool has_perf_query =
+      submit->perf_query_pass >= 0 &&
+      submit->cmd_buffer &&
+      submit->cmd_buffer->perf_query_pool;
+
    if (unlikely(INTEL_DEBUG & DEBUG_BATCH)) {
       if (submit->cmd_buffer) {
-         struct anv_batch_bo **bo = u_vector_tail(&submit->cmd_buffer->seen_bbos);
+         if (has_perf_query) {
+            struct anv_query_pool *query_pool = submit->cmd_buffer->perf_query_pool;
+            struct anv_bo *pass_batch_bo = query_pool->bo;
+            uint64_t pass_batch_offset =
+               khr_perf_query_preamble_offset(query_pool,
+                                              submit->perf_query_pass);
 
+            gen_print_batch(&device->decoder_ctx,
+                            pass_batch_bo->map + pass_batch_offset, 64,
+                            pass_batch_bo->offset + pass_batch_offset, false);
+         }
+
+         struct anv_batch_bo **bo = u_vector_tail(&submit->cmd_buffer->seen_bbos);
          device->cmd_buffer_being_decoded = submit->cmd_buffer;
          gen_print_batch(&device->decoder_ctx, (*bo)->bo->map,
                          (*bo)->bo->size, (*bo)->bo->offset, false);
@@ -1690,6 +1769,49 @@ anv_queue_execbuf_locked(struct anv_queue *queue,
 
    if (submit->need_out_fence)
       execbuf.execbuf.flags |= I915_EXEC_FENCE_OUT;
+
+   if (has_perf_query) {
+      struct anv_query_pool *query_pool = submit->cmd_buffer->perf_query_pool;
+      assert(submit->perf_query_pass < query_pool->n_passes);
+      struct gen_perf_query_info *query_info =
+         query_pool->pass_query[submit->perf_query_pass];
+
+      /* Some performance queries just the pipeline statistic HW, no need for
+       * OA in that case, so no need to reconfigure.
+       */
+      if (likely((INTEL_DEBUG & DEBUG_NO_OACONFIG) == 0) &&
+          (query_info->kind == GEN_PERF_QUERY_TYPE_OA ||
+           query_info->kind == GEN_PERF_QUERY_TYPE_RAW)) {
+         int ret = gen_ioctl(device->perf_fd, I915_PERF_IOCTL_CONFIG,
+                             (void *)(uintptr_t) query_info->oa_metrics_set_id);
+         if (ret < 0) {
+            result = anv_device_set_lost(device,
+                                         "i915-perf config failed: %s",
+                                         strerror(ret));
+         }
+      }
+
+      struct anv_bo *pass_batch_bo = query_pool->bo;
+
+      struct drm_i915_gem_exec_object2 query_pass_object = {
+         .handle = pass_batch_bo->gem_handle,
+         .offset = pass_batch_bo->offset,
+         .flags  = pass_batch_bo->flags,
+      };
+      struct drm_i915_gem_execbuffer2 query_pass_execbuf = {
+         .buffers_ptr = (uintptr_t) &query_pass_object,
+         .buffer_count = 1,
+         .batch_start_offset = khr_perf_query_preamble_offset(query_pool,
+                                                              submit->perf_query_pass),
+         .flags = I915_EXEC_HANDLE_LUT | I915_EXEC_RENDER,
+         .rsvd1 = device->context_id,
+      };
+
+      int ret = queue->device->no_hw ? 0 :
+         anv_gem_execbuffer(queue->device, &query_pass_execbuf);
+      if (ret)
+         result = anv_queue_set_lost(queue, "execbuf2 failed: %m");
+   }
 
    int ret = queue->device->no_hw ? 0 :
       anv_gem_execbuffer(queue->device, &execbuf.execbuf);

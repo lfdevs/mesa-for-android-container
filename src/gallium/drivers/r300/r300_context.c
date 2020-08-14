@@ -262,7 +262,7 @@ static boolean r300_setup_atoms(struct r300_context* r300)
     return TRUE;
 }
 
-/* Not every state tracker calls every driver function before the first draw
+/* Not every gallium frontend calls every driver function before the first draw
  * call and we must initialize the command buffers somehow. */
 static void r300_init_states(struct pipe_context *pipe)
 {

@@ -1,6 +1,6 @@
 #include "sfn_vertexstageexport.h"
 
-#include "tgsi/tgsi_from_mesa.h"
+#include "sfn_shaderio.h"
 
 namespace r600 {
 
@@ -33,21 +33,6 @@ VertexStageExportForFS::VertexStageExportForFS(VertexStage& proc,
 {
 }
 
-void VertexStageExportBase::setup_paramn_map()
-{
-   priority_queue<int, std::vector<int>, std::greater<int>>  q;
-   for (auto a: m_param_map) {
-      q.push(a.first);
-   }
-
-   int next_param = 0;
-   while (!q.empty()) {
-      int loc = q.top();
-      q.pop();
-      m_param_map[loc] = next_param++;
-   }
-}
-
 bool VertexStageExportBase::do_process_outputs(nir_variable *output)
 {
    if (output->data.location == VARYING_SLOT_COL0 ||
@@ -70,8 +55,9 @@ bool VertexStageExportBase::do_process_outputs(nir_variable *output)
        ) {
 
       r600_shader_io& io = m_proc.sh_info().output[output->data.driver_location];
-      tgsi_get_gl_varying_semantic(static_cast<gl_varying_slot>( output->data.location),
-                                   true, &io.name, &io.sid);
+      auto semantic = r600_get_varying_semantic(output->data.location);
+      io.name = semantic.first;
+      io.sid = semantic.second;
 
       m_proc.evaluate_spi_sid(io);
       io.write_mask = ((1 << glsl_get_components(output->type)) - 1)
@@ -80,7 +66,7 @@ bool VertexStageExportBase::do_process_outputs(nir_variable *output)
 
       if (output->data.location == VARYING_SLOT_PSIZ ||
           output->data.location == VARYING_SLOT_EDGE ||
-          output->data.location == VARYING_SLOT_LAYER)
+          output->data.location == VARYING_SLOT_LAYER) // VIEWPORT?
             m_cur_clip_pos = 2;
 
       if (output->data.location != VARYING_SLOT_POS &&
@@ -109,6 +95,11 @@ bool VertexStageExportForFS::store_deref(const nir_variable *out_var, nir_intrin
       std::array<uint32_t, 4> swizzle_override = {7 ,0, 7, 7};
       return emit_varying_pos(out_var, instr, &swizzle_override);
    }
+   case VARYING_SLOT_VIEWPORT: {
+      std::array<uint32_t, 4> swizzle_override = {7, 7, 7, 0};
+      return emit_varying_pos(out_var, instr, &swizzle_override) &&
+            emit_varying_param(out_var, instr);
+   }
    case VARYING_SLOT_CLIP_VERTEX:
       return emit_clip_vertices(out_var, instr);
    case VARYING_SLOT_CLIP_DIST0:
@@ -127,9 +118,6 @@ bool VertexStageExportForFS::store_deref(const nir_variable *out_var, nir_intrin
             emit_varying_param(out_var, instr);
 
    default:
-      if (out_var->data.location <= VARYING_SLOT_VAR31 ||
-          (out_var->data.location >= VARYING_SLOT_TEX0 &&
-           out_var->data.location <= VARYING_SLOT_TEX7))
          return emit_varying_param(out_var, instr);
    }
 
@@ -158,8 +146,8 @@ bool VertexStageExportForFS::emit_varying_pos(const nir_variable *out_var, nir_i
 
    m_proc.sh_info().output[out_var->data.driver_location].write_mask = write_mask;
 
-   GPRVector *value = m_proc.vec_from_nir_with_fetch_constant(instr->src[1], write_mask, swizzle);
-   m_proc.set_output(out_var->data.driver_location, PValue(value));
+   GPRVector value = m_proc.vec_from_nir_with_fetch_constant(instr->src[1], write_mask, swizzle);
+   m_proc.set_output(out_var->data.driver_location, value.sel());
 
    int export_slot = 0;
 
@@ -167,13 +155,18 @@ bool VertexStageExportForFS::emit_varying_pos(const nir_variable *out_var, nir_i
    case VARYING_SLOT_EDGE: {
       m_proc.sh_info().vs_out_misc_write = 1;
       m_proc.sh_info().vs_out_edgeflag = 1;
-      m_proc.emit_instruction(op1_mov, value->reg_i(1), {value->reg_i(1)}, {alu_write, alu_dst_clamp, alu_last_instr});
-      m_proc.emit_instruction(op1_flt_to_int, value->reg_i(1), {value->reg_i(1)}, {alu_write, alu_last_instr});
+      m_proc.emit_instruction(op1_mov, value.reg_i(1), {value.reg_i(1)}, {alu_write, alu_dst_clamp, alu_last_instr});
+      m_proc.emit_instruction(op1_flt_to_int, value.reg_i(1), {value.reg_i(1)}, {alu_write, alu_last_instr});
       m_proc.sh_info().output[out_var->data.driver_location].write_mask = 0xf;
    }
       /* fallthrough */
    case VARYING_SLOT_PSIZ:
    case VARYING_SLOT_LAYER:
+      export_slot = 1;
+      break;
+   case VARYING_SLOT_VIEWPORT:
+      m_proc.sh_info().vs_out_misc_write = 1;
+      m_proc.sh_info().vs_out_viewport = 1;
       export_slot = 1;
       break;
    case VARYING_SLOT_POS:
@@ -188,7 +181,7 @@ bool VertexStageExportForFS::emit_varying_pos(const nir_variable *out_var, nir_i
       return false;
    }
 
-   m_last_pos_export = new ExportInstruction(export_slot, *value, ExportInstruction::et_pos);
+   m_last_pos_export = new ExportInstruction(export_slot, value, ExportInstruction::et_pos);
    m_proc.emit_export_instruction(m_last_pos_export);
    m_proc.add_param_output_reg(out_var->data.driver_location, m_last_pos_export->gpr_ptr());
    return true;
@@ -206,16 +199,16 @@ bool VertexStageExportForFS::emit_varying_param(const nir_variable *out_var, nir
 
    m_proc.sh_info().output[out_var->data.driver_location].write_mask = write_mask;
 
-   GPRVector *value = m_proc.vec_from_nir_with_fetch_constant(instr->src[1], write_mask, swizzle);
-   m_proc.sh_info().output[out_var->data.driver_location].gpr = value->sel();
+   GPRVector value = m_proc.vec_from_nir_with_fetch_constant(instr->src[1], write_mask, swizzle, true);
+   m_proc.sh_info().output[out_var->data.driver_location].gpr = value.sel();
 
    /* This should use the registers!! */
-   m_proc.set_output(out_var->data.driver_location, PValue(value));
+   m_proc.set_output(out_var->data.driver_location, value.sel());
 
    auto param_loc = m_param_map.find(out_var->data.location);
    assert(param_loc != m_param_map.end());
 
-   m_last_param_export = new ExportInstruction(param_loc->second, *value, ExportInstruction::et_param);
+   m_last_param_export = new ExportInstruction(param_loc->second, value, ExportInstruction::et_param);
    m_proc.emit_export_instruction(m_last_param_export);
    m_proc.add_param_output_reg(out_var->data.driver_location, m_last_param_export->gpr_ptr());
    return true;
@@ -226,7 +219,8 @@ bool VertexStageExportForFS::emit_clip_vertices(const nir_variable *out_var, nir
    m_proc.sh_info().cc_dist_mask = 0xff;
    m_proc.sh_info().clip_dist_write = 0xff;
 
-   std::unique_ptr<GPRVector> clip_vertex(m_proc.vec_from_nir_with_fetch_constant(instr->src[1], 0xf, {0,1,2,3}));
+   m_clip_vertex = m_proc.vec_from_nir_with_fetch_constant(instr->src[1], 0xf, {0,1,2,3});
+   m_proc.add_param_output_reg(out_var->data.driver_location, &m_clip_vertex);
 
    for (int i = 0; i < 4; ++i)
       m_proc.sh_info().output[out_var->data.driver_location].write_mask |= 1 << i;
@@ -238,7 +232,7 @@ bool VertexStageExportForFS::emit_clip_vertices(const nir_variable *out_var, nir
       int ochan = i & 3;
       AluInstruction *ir = nullptr;
       for (int j = 0; j < 4; j++) {
-         ir = new AluInstruction(op2_dot4_ieee, clip_dist[oreg].reg_i(j), clip_vertex->reg_i(j),
+         ir = new AluInstruction(op2_dot4_ieee, clip_dist[oreg].reg_i(j), m_clip_vertex.reg_i(j),
                                  PValue(new UniformValue(512 + i, j, R600_BUFFER_INFO_CONST_BUFFER)),
                                  (j == ochan) ? EmitInstruction::write : EmitInstruction::empty);
          m_proc.emit_instruction(ir);
@@ -407,8 +401,11 @@ bool VertexStageExportForGS::store_deref(const nir_variable *out_var, nir_intrin
       }
    }
 
-   if (out_var->data.location == VARYING_SLOT_VIEWPORT)
+   if (out_var->data.location == VARYING_SLOT_VIEWPORT) {
+      m_proc.sh_info().vs_out_viewport = 1;
+      m_proc.sh_info().vs_out_misc_write = 1;
       return true;
+   }
 
    if (ring_offset == -1) {
       sfn_log << SfnLog::err << "VS defines output at "
@@ -419,10 +416,10 @@ bool VertexStageExportForGS::store_deref(const nir_variable *out_var, nir_intrin
 
    uint32_t write_mask =  (1 << instr->num_components) - 1;
 
-   std::unique_ptr<GPRVector> value(m_proc.vec_from_nir_with_fetch_constant(instr->src[1], write_mask,
-                                    swizzle_from_mask(instr->num_components)));
+   GPRVector value = m_proc.vec_from_nir_with_fetch_constant(instr->src[1], write_mask,
+         swizzle_from_comps(instr->num_components), true);
 
-   auto ir = new MemRingOutIntruction(cf_mem_ring, mem_write, *value,
+   auto ir = new MemRingOutIntruction(cf_mem_ring, mem_write, value,
                                       ring_offset >> 2, 4, PValue());
    m_proc.emit_export_instruction(ir);
 

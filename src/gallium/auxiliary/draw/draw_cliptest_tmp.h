@@ -43,13 +43,17 @@ static boolean TAG(do_cliptest)( struct pt_post_vs *pvs,
    unsigned j;
    unsigned i;
    bool have_cd = false;
+   bool uses_vp_idx = draw_current_shader_uses_viewport_index(pvs->draw);
    unsigned viewport_index_output =
       draw_current_shader_viewport_index_output(pvs->draw);
-   int viewport_index = 
-      draw_current_shader_uses_viewport_index(pvs->draw) ?
-      u_bitcast_f2u(out->data[viewport_index_output][0]): 0;
+   int viewport_index = 0;
    int num_written_clipdistance =
       draw_current_shader_num_written_clipdistances(pvs->draw);
+
+   if (uses_vp_idx) {
+      viewport_index = u_bitcast_f2u(out->data[viewport_index_output][0]);
+      viewport_index = draw_clamp_viewport_idx(viewport_index);
+   }
 
    cd[0] = draw_current_shader_ccdistance_output(pvs->draw, 0);
    cd[1] = draw_current_shader_ccdistance_output(pvs->draw, 1);
@@ -65,22 +69,23 @@ static boolean TAG(do_cliptest)( struct pt_post_vs *pvs,
    }
 
    assert(pos != -1);
+   unsigned prim_idx = 0, prim_vert_idx = 0;
    for (j = 0; j < info->count; j++) {
       float *position = out->data[pos];
       unsigned mask = 0x0;
-      float *scale = pvs->draw->viewports[0].scale;
-      float *trans = pvs->draw->viewports[0].translate;
-      if (draw_current_shader_uses_viewport_index(pvs->draw)) {
-         unsigned verts_per_prim = u_vertices_per_prim(prim_info->prim);
+
+      if (uses_vp_idx) {
          /* only change the viewport_index for the leading vertex */
-         if (!(j % verts_per_prim)) {
+         if (prim_vert_idx == (prim_info->primitive_lengths[prim_idx])) {
+            prim_idx++;
+            prim_vert_idx = 0;
             viewport_index = u_bitcast_f2u(out->data[viewport_index_output][0]);
             viewport_index = draw_clamp_viewport_idx(viewport_index);
          }
-         scale = pvs->draw->viewports[viewport_index].scale;
-         trans = pvs->draw->viewports[viewport_index].translate;
+         prim_vert_idx++;
       }
-  
+      float *scale = pvs->draw->viewports[viewport_index].scale;
+      float *trans = pvs->draw->viewports[viewport_index].translate;
       initialize_vertex_header(out);
 
       if (flags & (DO_CLIP_XY | DO_CLIP_XY_GUARD_BAND |

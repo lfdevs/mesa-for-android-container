@@ -520,15 +520,13 @@ static void *r600_create_rs_state(struct pipe_context *ctx,
 	}
 
 	spi_interp = S_0286D4_FLAT_SHADE_ENA(1);
-	if (state->sprite_coord_enable) {
-		spi_interp |= S_0286D4_PNT_SPRITE_ENA(1) |
-			      S_0286D4_PNT_SPRITE_OVRD_X(2) |
-			      S_0286D4_PNT_SPRITE_OVRD_Y(3) |
-			      S_0286D4_PNT_SPRITE_OVRD_Z(0) |
-			      S_0286D4_PNT_SPRITE_OVRD_W(1);
-		if (state->sprite_coord_mode != PIPE_SPRITE_COORD_UPPER_LEFT) {
-			spi_interp |= S_0286D4_PNT_SPRITE_TOP_1(1);
-		}
+	spi_interp |= S_0286D4_PNT_SPRITE_ENA(1) |
+		S_0286D4_PNT_SPRITE_OVRD_X(2) |
+		S_0286D4_PNT_SPRITE_OVRD_Y(3) |
+		S_0286D4_PNT_SPRITE_OVRD_Z(0) |
+		S_0286D4_PNT_SPRITE_OVRD_W(1);
+	if (state->sprite_coord_mode != PIPE_SPRITE_COORD_UPPER_LEFT) {
+		spi_interp |= S_0286D4_PNT_SPRITE_TOP_1(1);
 	}
 
 	r600_store_context_reg_seq(&rs->buffer, R_028A00_PA_SU_POINT_SIZE, 3);
@@ -2474,8 +2472,9 @@ void r600_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader *sha
 				rctx->rasterizer && rctx->rasterizer->flatshade))
 			tmp |= S_028644_FLAT_SHADE(1);
 
-		if (rshader->input[i].name == TGSI_SEMANTIC_GENERIC &&
-		    sprite_coord_enable & (1 << rshader->input[i].sid)) {
+		if (rshader->input[i].name == TGSI_SEMANTIC_PCOORD ||
+		    (rshader->input[i].name == TGSI_SEMANTIC_TEXCOORD &&
+		     sprite_coord_enable & (1 << rshader->input[i].sid))) {
 			tmp |= S_028644_PT_SPRITE_TEX(1);
 		}
 

@@ -1223,6 +1223,7 @@ static void si_get_hw_query_params(struct si_context *sctx, struct si_query_hw *
    case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
       params->pair_count = SI_MAX_STREAMS;
       params->pair_stride = 32;
+      /* fallthrough */
    case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
       params->start_offset = 0;
       params->end_offset = 16;
@@ -1331,20 +1332,20 @@ static void si_query_hw_add_result(struct si_screen *sscreen, struct si_query_hw
       result->pipeline_statistics.ds_invocations += si_query_read_result(buffer, 18, 40, false);
       result->pipeline_statistics.cs_invocations += si_query_read_result(buffer, 20, 42, false);
 #if 0 /* for testing */
-		printf("Pipeline stats: IA verts=%llu, IA prims=%llu, VS=%llu, HS=%llu, "
-		       "DS=%llu, GS=%llu, GS prims=%llu, Clipper=%llu, "
-		       "Clipper prims=%llu, PS=%llu, CS=%llu\n",
-		       result->pipeline_statistics.ia_vertices,
-		       result->pipeline_statistics.ia_primitives,
-		       result->pipeline_statistics.vs_invocations,
-		       result->pipeline_statistics.hs_invocations,
-		       result->pipeline_statistics.ds_invocations,
-		       result->pipeline_statistics.gs_invocations,
-		       result->pipeline_statistics.gs_primitives,
-		       result->pipeline_statistics.c_invocations,
-		       result->pipeline_statistics.c_primitives,
-		       result->pipeline_statistics.ps_invocations,
-		       result->pipeline_statistics.cs_invocations);
+      printf("Pipeline stats: IA verts=%llu, IA prims=%llu, VS=%llu, HS=%llu, "
+             "DS=%llu, GS=%llu, GS prims=%llu, Clipper=%llu, "
+             "Clipper prims=%llu, PS=%llu, CS=%llu\n",
+             result->pipeline_statistics.ia_vertices,
+             result->pipeline_statistics.ia_primitives,
+             result->pipeline_statistics.vs_invocations,
+             result->pipeline_statistics.hs_invocations,
+             result->pipeline_statistics.ds_invocations,
+             result->pipeline_statistics.gs_invocations,
+             result->pipeline_statistics.gs_primitives,
+             result->pipeline_statistics.c_invocations,
+             result->pipeline_statistics.c_primitives,
+             result->pipeline_statistics.ps_invocations,
+             result->pipeline_statistics.cs_invocations);
 #endif
       break;
    default:

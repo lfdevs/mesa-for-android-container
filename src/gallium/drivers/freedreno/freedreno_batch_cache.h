@@ -32,6 +32,7 @@
 struct fd_resource;
 struct fd_batch;
 struct fd_context;
+struct fd_screen;
 
 struct hash_table;
 
@@ -64,6 +65,7 @@ void fd_bc_fini(struct fd_batch_cache *cache);
 
 void fd_bc_flush(struct fd_batch_cache *cache, struct fd_context *ctx);
 void fd_bc_flush_deferred(struct fd_batch_cache *cache, struct fd_context *ctx);
+void fd_bc_dump(struct fd_screen *screen, const char *fmt, ...)  _util_printf_format(2, 3);
 
 void fd_bc_invalidate_context(struct fd_context *ctx);
 void fd_bc_invalidate_batch(struct fd_batch *batch, bool destroy);

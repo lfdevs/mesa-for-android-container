@@ -304,8 +304,9 @@ _mesa_lookup_vao_err(struct gl_context *ctx, GLuint id,
  * to any buffer objects (VBOs).
  * This is done just prior to array object destruction.
  */
-static void
-unbind_array_object_vbos(struct gl_context *ctx, struct gl_vertex_array_object *obj)
+void
+_mesa_unbind_array_object_vbos(struct gl_context *ctx,
+                               struct gl_vertex_array_object *obj)
 {
    GLuint i;
 
@@ -333,7 +334,7 @@ _mesa_new_vao(struct gl_context *ctx, GLuint name)
 void
 _mesa_delete_vao(struct gl_context *ctx, struct gl_vertex_array_object *obj)
 {
-   unbind_array_object_vbos(ctx, obj);
+   _mesa_unbind_array_object_vbos(ctx, obj);
    _mesa_reference_buffer_object(ctx, &obj->IndexBufferObj, NULL);
    free(obj->Label);
    free(obj);
@@ -545,6 +546,17 @@ _mesa_update_vao_derived_arrays(struct gl_context *ctx,
    vao->_EffEnabledVBO = _mesa_vao_enable_to_vp_inputs(mode, enabled & vbos);
    vao->_EffEnabledNonZeroDivisor =
       _mesa_vao_enable_to_vp_inputs(mode, enabled & divisor_is_nonzero);
+
+   /* Fast path when the VAO is updated too often. */
+   if (vao->IsDynamic)
+      return;
+
+   /* More than 4 updates turn the VAO to dynamic. */
+   if (ctx->Const.AllowDynamicVAOFastPath && ++vao->NumUpdates > 4) {
+      vao->IsDynamic = true;
+      return;
+   }
+
    /* Walk those enabled arrays that have a real vbo attached */
    GLbitfield mask = enabled;
    while (mask) {

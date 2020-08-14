@@ -35,8 +35,6 @@ files_libv3d = files(
   'v3d_resource.h',
   'v3d_screen.c',
   'v3d_screen.h',
-  'v3d_simulator.c',
-  'v3d_simulator_wrapper.cpp',
   'v3d_uniforms.c',
 )
 
@@ -46,7 +44,6 @@ files_per_version = files(
   'v3dx_format_table.c',
   'v3dx_job.c',
   'v3dx_rcl.c',
-  'v3dx_simulator.c',
   'v3dx_state.c',
 )
 
@@ -78,8 +75,8 @@ foreach ver : v3d_versions
       inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_broadcom,
       inc_gallium_drivers,
     ],
-    c_args : [c_vis_args, v3d_args, '-DV3D_VERSION=' + ver],
-    cpp_args : [cpp_vis_args],
+    c_args : [v3d_args, '-DV3D_VERSION=' + ver],
+    gnu_symbol_visibility : 'hidden',
     dependencies : [dep_v3dv3, dep_libdrm, dep_valgrind, idep_nir_headers],
 )
 
@@ -97,7 +94,8 @@ libv3d_neon = static_library(
     inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_broadcom,
     inc_gallium_drivers,
   ],
-  c_args : [c_vis_args, v3d_args, v3d_neon_c_args],
+  c_args : [v3d_args, v3d_neon_c_args],
+  gnu_symbol_visibility : 'hidden',
   dependencies : [dep_v3dv3, dep_libdrm, dep_valgrind, idep_nir_headers],
 )
 
@@ -110,10 +108,11 @@ libv3d = static_library(
   ],
   include_directories : [
     inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_broadcom,
-    inc_gallium_drivers,
+    inc_simulator, inc_gallium_drivers,
   ],
-  c_args : [c_vis_args, v3d_args],
-  cpp_args : [cpp_vis_args, v3d_args],
+  c_args : [v3d_args],
+  cpp_args : [v3d_args],
+  gnu_symbol_visibility : 'hidden',
   dependencies : [dep_v3dv3, dep_libdrm, dep_valgrind, idep_nir_headers],
   link_with: [per_version_libs, libv3d_neon],
 )

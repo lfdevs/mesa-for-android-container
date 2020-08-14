@@ -31,20 +31,21 @@
 
 extern FILE *pandecode_dump_stream;
 
+void pandecode_dump_file_open(void);
+
 struct pandecode_mapped_memory {
-        struct list_head node;
-
         size_t length;
-
         void *addr;
         uint64_t gpu_va;
-
+        bool ro;
         char name[32];
 };
 
 char *pointer_as_memory_reference(uint64_t ptr);
 
 struct pandecode_mapped_memory *pandecode_find_mapped_gpu_mem_containing(uint64_t addr);
+
+void pandecode_map_read_write(void);
 
 static inline void *
 __pandecode_fetch_gpu_mem(const struct pandecode_mapped_memory *mem,

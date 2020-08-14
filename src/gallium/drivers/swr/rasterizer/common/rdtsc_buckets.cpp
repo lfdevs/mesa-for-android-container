@@ -106,7 +106,7 @@ void BucketManager::PrintBucket(
     std::string str = arrows[level];
     str += desc.name;
     char hier[80];
-    strcpy_s(hier, sizeof(hier), str.c_str());
+    strcpy_s(hier, sizeof(hier)-1, str.c_str());
 
     // print out
     fprintf(f,

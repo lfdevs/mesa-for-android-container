@@ -36,6 +36,14 @@
 #include "freedreno_util.h"
 #include "freedreno/fdl/freedreno_layout.h"
 
+enum fd_lrz_direction {
+	FD_LRZ_UNKNOWN,
+	/* Depth func less/less-than: */
+	FD_LRZ_LESS,
+	/* Depth func greater/greater-than: */
+	FD_LRZ_GREATER,
+};
+
 struct fd_resource {
 	struct pipe_resource base;
 	struct fd_bo *bo;
@@ -86,6 +94,7 @@ struct fd_resource {
 	 * fdl_layout
 	 */
 	bool lrz_valid : 1;
+	enum fd_lrz_direction lrz_direction : 2;
 	uint16_t lrz_width;  // for lrz clear, does this differ from lrz_pitch?
 	uint16_t lrz_height;
 	uint16_t lrz_pitch;
@@ -145,6 +154,11 @@ fd_resource_set_usage(struct pipe_resource *prsc, enum fd_dirty_3d_state usage)
 	if (!prsc)
 		return;
 	struct fd_resource *rsc = fd_resource(prsc);
+	/* Bits are only ever ORed in, and we expect many set_usage() per
+	 * resource, so do the quick check outside of the lock.
+	 */
+	if (likely(rsc->dirty & usage))
+		return;
 	fd_resource_lock(rsc);
 	rsc->dirty |= usage;
 	fd_resource_unlock(rsc);
@@ -181,6 +195,16 @@ static inline uint32_t
 fd_resource_layer_stride(struct fd_resource *rsc, unsigned level)
 {
 	return fdl_layer_stride(&rsc->layout, level);
+}
+
+/* get pitch (in bytes) for specified mipmap level */
+static inline uint32_t
+fd_resource_pitch(struct fd_resource *rsc, unsigned level)
+{
+	if (is_a2xx(fd_screen(rsc->base.screen)))
+		return fdl2_pitch(&rsc->layout, level);
+
+	return fdl_pitch(&rsc->layout, level);
 }
 
 /* get offset for specified mipmap level and texture/array layer */
@@ -239,5 +263,23 @@ void fd_resource_resize(struct pipe_resource *prsc, uint32_t sz);
 void fd_resource_uncompress(struct fd_context *ctx, struct fd_resource *rsc);
 
 bool fd_render_condition_check(struct pipe_context *pctx);
+
+static inline bool
+fd_batch_references_resource(struct fd_batch *batch, struct fd_resource *rsc)
+{
+	return rsc->batch_mask & (1 << batch->idx);
+}
+
+static inline void
+fd_batch_resource_read(struct fd_batch *batch,
+		struct fd_resource *rsc)
+{
+	/* Fast path: if we hit this then we know we don't have anyone else
+	 * writing to it (since both _write and _read flush other writers), and
+	 * that we've already recursed for stencil.
+	 */
+	if (unlikely(!fd_batch_references_resource(batch, rsc)))
+		fd_batch_resource_read_slowpath(batch, rsc);
+}
 
 #endif /* FREEDRENO_RESOURCE_H_ */

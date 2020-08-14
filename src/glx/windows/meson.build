@@ -63,6 +63,6 @@ libwindowsglx = static_library(
   'glxwindows',
   [files_libwindowsglx, files_windowsdriproto],
   include_directories: [inc_include, inc_src, inc_glapi],
-  c_args : [c_vis_args],
+  gnu_symbol_visibility : 'hidden',
   build_by_default: false,
 )

@@ -34,6 +34,7 @@ struct zink_screen;
 struct zink_fence {
    struct pipe_reference reference;
    VkFence fence;
+   struct set *active_queries; /* zink_query objects which were active at some point in this batch */
 };
 
 static inline struct zink_fence *
@@ -43,7 +44,7 @@ zink_fence(struct pipe_fence_handle *pfence)
 }
 
 struct zink_fence *
-zink_create_fence(struct pipe_screen *pscreen);
+zink_create_fence(struct pipe_screen *pscreen, struct zink_batch *batch);
 
 void
 zink_fence_reference(struct zink_screen *screen,

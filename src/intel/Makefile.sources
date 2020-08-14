@@ -18,6 +18,7 @@ COMMON_FILES = \
 	common/gen_disasm.c \
 	common/gen_disasm.h \
 	common/gen_defines.h \
+	common/gen_gem.c \
 	common/gen_gem.h \
 	common/gen_guardband.h \
 	common/gen_l3_config.c \
@@ -93,6 +94,7 @@ COMPILER_FILES = \
 	compiler/brw_nir_lower_cs_intrinsics.c \
 	compiler/brw_nir_lower_image_load_store.c \
 	compiler/brw_nir_lower_mem_access_bit_sizes.c \
+	compiler/brw_nir_lower_scoped_barriers.c \
 	compiler/brw_nir_opt_peephole_ffma.c \
 	compiler/brw_nir_tcs_workarounds.c \
 	compiler/brw_packed_float.c \

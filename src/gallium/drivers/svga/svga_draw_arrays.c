@@ -175,13 +175,14 @@ done:
 static enum pipe_error
 simple_draw_arrays(struct svga_hwtnl *hwtnl,
                    enum pipe_prim_type prim, unsigned start, unsigned count,
-                   unsigned start_instance, unsigned instance_count)
+                   unsigned start_instance, unsigned instance_count,
+                   ubyte vertices_per_patch)
 {
    SVGA3dPrimitiveRange range;
    unsigned hw_prim;
    unsigned hw_count;
 
-   hw_prim = svga_translate_prim(prim, count, &hw_count);
+   hw_prim = svga_translate_prim(prim, count, &hw_count, vertices_per_patch);
    if (hw_count == 0)
       return PIPE_ERROR_BAD_INPUT;
 
@@ -200,14 +201,16 @@ simple_draw_arrays(struct svga_hwtnl *hwtnl,
     */
    return svga_hwtnl_prim(hwtnl, &range, count,
                           0, count - 1, NULL,
-                          start_instance, instance_count);
+                          start_instance, instance_count,
+                          NULL, NULL);
 }
 
 
 enum pipe_error
 svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
                        enum pipe_prim_type prim, unsigned start, unsigned count,
-                       unsigned start_instance, unsigned instance_count)
+                       unsigned start_instance, unsigned instance_count,
+                       ubyte vertices_per_patch)
 {
    enum pipe_prim_type gen_prim;
    unsigned gen_size, gen_nr;
@@ -225,7 +228,7 @@ svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
    }
 
    if (svga->curr.rast->templ.flatshade &&
-       svga->state.hw_draw.fs->constant_color_output) {
+         svga_fs_variant(svga->state.hw_draw.fs)->constant_color_output) {
       /* The fragment color is a constant, not per-vertex so the whole
        * primitive will be the same color (except for possible blending).
        * We can ignore the current provoking vertex state and use whatever
@@ -273,7 +276,8 @@ svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
 
    if (gen_type == U_GENERATE_LINEAR) {
       ret = simple_draw_arrays(hwtnl, gen_prim, start, count,
-                                start_instance, instance_count);
+                               start_instance, instance_count,
+                               vertices_per_patch);
    }
    else {
       struct pipe_resource *gen_buf = NULL;
@@ -299,7 +303,8 @@ svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
                                                      count - 1,
                                                      gen_prim, 0, gen_nr,
                                                      start_instance,
-                                                     instance_count);
+                                                     instance_count,
+                                                     vertices_per_patch);
       }
 
       if (gen_buf) {

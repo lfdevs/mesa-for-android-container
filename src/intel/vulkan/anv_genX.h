@@ -28,13 +28,23 @@
 /*
  * Gen-specific function declarations.  This header must *not* be included
  * directly.  Instead, it is included multiple times by anv_private.h.
- * 
+ *
  * In this header file, the usual genx() macro is available.
  */
 
 #ifndef ANV_PRIVATE_H
 #error This file is included by means other than anv_private.h
 #endif
+
+extern const uint32_t genX(vk_to_gen_cullmode)[];
+
+extern const uint32_t genX(vk_to_gen_front_face)[];
+
+extern const uint32_t genX(vk_to_gen_primitive_type)[];
+
+extern const uint32_t genX(vk_to_gen_compare_op)[];
+
+extern const uint32_t genX(vk_to_gen_stencil_op)[];
 
 VkResult genX(init_device_state)(struct anv_device *device);
 

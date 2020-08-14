@@ -28,7 +28,7 @@
 
 #include "gdi/gdi_sw_winsys.h"
 #include "pipe/p_screen.h"
-#include "state_tracker/graw.h"
+#include "frontend/graw.h"
 #include "target-helpers/inline_debug_helper.h"
 #include "target-helpers/inline_sw_helper.h"
 #include <windows.h>
@@ -87,7 +87,7 @@ graw_create_window_and_screen(int x,
    wc.cbSize = sizeof wc;
    wc.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
    wc.lpfnWndProc = window_proc;
-   wc.lpszClassName = "graw-gdi";
+   wc.lpszClassName = TEXT("graw-gdi");
    wc.hInstance = GetModuleHandle(NULL);
    wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
    wc.hCursor = LoadCursor(NULL, IDC_ARROW);

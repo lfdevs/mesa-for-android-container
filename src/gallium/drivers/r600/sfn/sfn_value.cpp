@@ -203,13 +203,8 @@ bool InlineConstValue::is_equal_to(const Value& other) const
 UniformValue::UniformValue(uint32_t sel, uint32_t chan, uint32_t kcache_bank):
    Value(Value::kconst, chan)
 {
-   if (sel < 512) {
-      m_index = sel & 0x1f;
-      m_kcache_bank = ((sel >> 5) & 1) |  ((sel >> 7) & 2);
-   } else {
-      m_index = sel;
-      m_kcache_bank = kcache_bank;
-   }
+   m_index = sel;
+   m_kcache_bank = kcache_bank;
 }
 
 UniformValue::UniformValue(uint32_t sel, uint32_t chan, PValue addr):

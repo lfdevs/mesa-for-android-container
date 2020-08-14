@@ -135,6 +135,18 @@ variables_can_merge(const nir_shader *shader,
        a->data.index != b->data.index)
       return false;
 
+   /* It's tricky to merge XFB-outputs correctly, because we need there
+    * to not be any overlaps when we get to
+    * nir_gather_xfb_info_with_varyings later on. We'll end up
+    * triggering an assert there if we merge here.
+    */
+   if ((shader->info.stage == MESA_SHADER_VERTEX ||
+        shader->info.stage == MESA_SHADER_TESS_EVAL ||
+        shader->info.stage == MESA_SHADER_GEOMETRY) &&
+       a->data.mode == nir_var_shader_out &&
+       (a->data.explicit_xfb_buffer || b->data.explicit_xfb_buffer))
+      return false;
+
    return true;
 }
 
@@ -194,19 +206,21 @@ get_flat_type(const nir_shader *shader, nir_variable *old_vars[MAX_SLOTS][4],
 }
 
 static bool
-create_new_io_vars(nir_shader *shader, struct exec_list *io_list,
+create_new_io_vars(nir_shader *shader, nir_variable_mode mode,
                    nir_variable *new_vars[MAX_SLOTS][4],
                    bool flat_vars[MAX_SLOTS])
 {
-   if (exec_list_is_empty(io_list))
-      return false;
-
    nir_variable *old_vars[MAX_SLOTS][4] = {{0}};
 
-   nir_foreach_variable(var, io_list) {
+   bool has_io_var = false;
+   nir_foreach_variable_with_modes(var, shader, mode) {
       unsigned frac = var->data.location_frac;
       old_vars[get_slot(var)][frac] = var;
+      has_io_var = true;
    }
+
+   if (!has_io_var)
+      return false;
 
    bool merged_any_vars = false;
 
@@ -378,7 +392,7 @@ nir_lower_io_to_vector_impl(nir_function_impl *impl, nir_variable_mode modes)
       /* If we don't actually merge any variables, remove that bit from modes
        * so we don't bother doing extra non-work.
        */
-      if (!create_new_io_vars(shader, &shader->inputs,
+      if (!create_new_io_vars(shader, nir_var_shader_in,
                               new_inputs, flat_inputs))
          modes &= ~nir_var_shader_in;
    }
@@ -387,7 +401,7 @@ nir_lower_io_to_vector_impl(nir_function_impl *impl, nir_variable_mode modes)
       /* If we don't actually merge any variables, remove that bit from modes
        * so we don't bother doing extra non-work.
        */
-      if (!create_new_io_vars(shader, &shader->outputs,
+      if (!create_new_io_vars(shader, nir_var_shader_out,
                               new_outputs, flat_outputs))
          modes &= ~nir_var_shader_out;
    }

@@ -118,7 +118,7 @@ gdi_present(struct pipe_screen *screen,
             HDC hDC)
 {
    /* This will fail if any interposing layer (trace, debug, etc) has
-    * been introduced between the state-trackers and the pipe driver.
+    * been introduced between the gallium frontends and the pipe driver.
     *
     * Ideally this would get replaced with a call to
     * pipe_screen::flush_frontbuffer().

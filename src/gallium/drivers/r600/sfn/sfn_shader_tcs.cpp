@@ -6,9 +6,10 @@ namespace r600 {
 
 TcsShaderFromNir::TcsShaderFromNir(r600_pipe_shader *sh,
                                    r600_pipe_shader_selector& sel,
-                                   const r600_shader_key& key):
+                                   const r600_shader_key& key,
+                                   enum chip_class chip_class):
    ShaderFromNirProcessor (PIPE_SHADER_TESS_CTRL, sel, sh->shader,
-                           sh->scratch_space_needed),
+                           sh->scratch_space_needed, chip_class, key.tcs.first_atomic_counter),
    m_reserved_registers(0)
 {
    sh_info().tcs_prim_mode = key.tcs.prim_mode;
@@ -55,7 +56,7 @@ bool TcsShaderFromNir::do_process_outputs(nir_variable *output)
    return true;
 }
 
-bool TcsShaderFromNir::allocate_reserved_registers()
+bool TcsShaderFromNir::do_allocate_reserved_registers()
 {
    if (m_sv_values.test(es_primitive_id)) {
       m_reserved_registers = 1;
@@ -112,9 +113,9 @@ bool TcsShaderFromNir::store_tess_factor(nir_intrinsic_instr* instr)
 {
    const GPRVector::Swizzle& swizzle = (instr->src[0].ssa->num_components == 4) ?
             GPRVector::Swizzle({0, 1, 2, 3}) : GPRVector::Swizzle({0, 1, 7, 7});
-   std::unique_ptr<GPRVector> val(vec_from_nir_with_fetch_constant(instr->src[0],
-                                  0xf, swizzle));
-   emit_instruction(new GDSStoreTessFactor(*val));
+   auto val = vec_from_nir_with_fetch_constant(instr->src[0],
+         (1 << instr->src[0].ssa->num_components) - 1, swizzle);
+   emit_instruction(new GDSStoreTessFactor(val));
    return true;
 }
 

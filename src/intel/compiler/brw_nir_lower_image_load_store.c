@@ -689,6 +689,7 @@ brw_nir_lower_image_load_store(nir_shader *shader,
       if (function->impl == NULL)
          continue;
 
+      bool impl_progress = false;
       nir_foreach_block_safe(block, function->impl) {
          nir_builder b;
          nir_builder_init(&b, function->impl);
@@ -701,12 +702,12 @@ brw_nir_lower_image_load_store(nir_shader *shader,
             switch (intrin->intrinsic) {
             case nir_intrinsic_image_deref_load:
                if (lower_image_load_instr(&b, devinfo, intrin))
-                  progress = true;
+                  impl_progress = true;
                break;
 
             case nir_intrinsic_image_deref_store:
                if (lower_image_store_instr(&b, devinfo, intrin))
-                  progress = true;
+                  impl_progress = true;
                break;
 
             case nir_intrinsic_image_deref_atomic_add:
@@ -722,12 +723,12 @@ brw_nir_lower_image_load_store(nir_shader *shader,
                if (uses_atomic_load_store)
                   *uses_atomic_load_store = true;
                if (lower_image_atomic_instr(&b, devinfo, intrin))
-                  progress = true;
+                  impl_progress = true;
                break;
 
             case nir_intrinsic_image_deref_size:
                if (lower_image_size_instr(&b, devinfo, intrin))
-                  progress = true;
+                  impl_progress = true;
                break;
 
             default:
@@ -737,8 +738,12 @@ brw_nir_lower_image_load_store(nir_shader *shader,
          }
       }
 
-      if (progress)
+      if (impl_progress) {
+         progress = true;
          nir_metadata_preserve(function->impl, nir_metadata_none);
+      } else {
+         nir_metadata_preserve(function->impl, nir_metadata_all);
+      }
    }
 
    return progress;

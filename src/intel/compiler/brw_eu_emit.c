@@ -237,7 +237,7 @@ brw_set_src0(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
       assert(reg.file != BRW_IMMEDIATE_VALUE);
       assert(reg.address_mode == BRW_ADDRESS_DIRECT);
       assert(reg.subnr == 0);
-      assert(brw_inst_exec_size(devinfo, inst) == BRW_EXECUTE_1 ||
+      assert(has_scalar_region(reg) ||
              (reg.hstride == BRW_HORIZONTAL_STRIDE_1 &&
               reg.vstride == reg.width + 1));
       assert(!reg.negate && !reg.abs);
@@ -249,8 +249,9 @@ brw_set_src0(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
       assert(reg.file == BRW_GENERAL_REGISTER_FILE);
       assert(reg.address_mode == BRW_ADDRESS_DIRECT);
       assert(reg.subnr % 16 == 0);
-      assert(reg.hstride == BRW_HORIZONTAL_STRIDE_1 &&
-             reg.vstride == reg.width + 1);
+      assert(has_scalar_region(reg) ||
+             (reg.hstride == BRW_HORIZONTAL_STRIDE_1 &&
+              reg.vstride == reg.width + 1));
       assert(!reg.negate && !reg.abs);
       brw_inst_set_src0_da_reg_nr(devinfo, inst, reg.nr);
       brw_inst_set_src0_da16_subreg_nr(devinfo, inst, reg.subnr / 16);
@@ -357,7 +358,7 @@ brw_set_src1(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
              reg.file == BRW_ARCHITECTURE_REGISTER_FILE);
       assert(reg.address_mode == BRW_ADDRESS_DIRECT);
       assert(reg.subnr == 0);
-      assert(brw_inst_exec_size(devinfo, inst) == BRW_EXECUTE_1 ||
+      assert(has_scalar_region(reg) ||
              (reg.hstride == BRW_HORIZONTAL_STRIDE_1 &&
               reg.vstride == reg.width + 1));
       assert(!reg.negate && !reg.abs);
@@ -890,7 +891,7 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
                                             dest.file == BRW_MESSAGE_REGISTER_FILE);
       }
       brw_inst_set_3src_dst_reg_nr(devinfo, inst, dest.nr);
-      brw_inst_set_3src_a16_dst_subreg_nr(devinfo, inst, dest.subnr / 16);
+      brw_inst_set_3src_a16_dst_subreg_nr(devinfo, inst, dest.subnr / 4);
       brw_inst_set_3src_a16_dst_writemask(devinfo, inst, dest.writemask);
 
       assert(src0.file == BRW_GENERAL_REGISTER_FILE);
@@ -1035,6 +1036,7 @@ ALU3(CSEL)
 ALU1(FRC)
 ALU1(RNDD)
 ALU1(RNDE)
+ALU1(RNDU)
 ALU1(RNDZ)
 ALU2(MAC)
 ALU2(MACH)
@@ -1725,14 +1727,23 @@ brw_CONT(struct brw_codegen *p)
 }
 
 brw_inst *
-gen6_HALT(struct brw_codegen *p)
+brw_HALT(struct brw_codegen *p)
 {
    const struct gen_device_info *devinfo = p->devinfo;
    brw_inst *insn;
 
    insn = next_insn(p, BRW_OPCODE_HALT);
    brw_set_dest(p, insn, retype(brw_null_reg(), BRW_REGISTER_TYPE_D));
-   if (devinfo->gen < 8) {
+   if (devinfo->gen < 6) {
+      /* From the Gen4 PRM:
+       *
+       *    "IP register must be put (for example, by the assembler) at <dst>
+       *    and <src0> locations.
+       */
+      brw_set_dest(p, insn, brw_ip_reg());
+      brw_set_src0(p, insn, brw_ip_reg());
+      brw_set_src1(p, insn, brw_imm_d(0x0)); /* exitcode updated later. */
+   } else if (devinfo->gen < 8) {
       brw_set_src0(p, insn, retype(brw_null_reg(), BRW_REGISTER_TYPE_D));
       brw_set_src1(p, insn, brw_imm_d(0x0)); /* UIP and JIP, updated later. */
    } else if (devinfo->gen < 12) {

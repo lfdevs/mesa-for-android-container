@@ -60,6 +60,8 @@ struct lp_jit_texture
    uint32_t first_level;
    uint32_t last_level;
    uint32_t mip_offsets[LP_MAX_TEXTURE_LEVELS];
+   uint32_t num_samples;
+   uint32_t sample_stride;
 };
 
 
@@ -87,6 +89,8 @@ struct lp_jit_image
    const void *base;
    uint32_t row_stride;
    uint32_t img_stride;
+   uint32_t num_samples;
+   uint32_t sample_stride;
 };
 
 enum {
@@ -99,6 +103,8 @@ enum {
    LP_JIT_TEXTURE_FIRST_LEVEL,
    LP_JIT_TEXTURE_LAST_LEVEL,
    LP_JIT_TEXTURE_MIP_OFFSETS,
+   LP_JIT_TEXTURE_NUM_SAMPLES,
+   LP_JIT_TEXTURE_SAMPLE_STRIDE,
    LP_JIT_TEXTURE_NUM_FIELDS  /* number of fields above */
 };
 
@@ -125,6 +131,8 @@ enum {
    LP_JIT_IMAGE_BASE,
    LP_JIT_IMAGE_ROW_STRIDE,
    LP_JIT_IMAGE_IMG_STRIDE,
+   LP_JIT_IMAGE_NUM_SAMPLES,
+   LP_JIT_IMAGE_SAMPLE_STRIDE,
    LP_JIT_IMAGE_NUM_FIELDS  /* number of fields above */
 };
 /**
@@ -158,6 +166,8 @@ struct lp_jit_context
 
    const uint32_t *ssbos[LP_MAX_TGSI_SHADER_BUFFERS];
    int num_ssbos[LP_MAX_TGSI_SHADER_BUFFERS];
+
+   uint32_t sample_mask;
 };
 
 
@@ -179,6 +189,7 @@ enum {
    LP_JIT_CTX_VIEWPORTS,
    LP_JIT_CTX_SSBOS,
    LP_JIT_CTX_NUM_SSBOS,
+   LP_JIT_CTX_SAMPLE_MASK,
    LP_JIT_CTX_COUNT
 };
 
@@ -221,6 +232,9 @@ enum {
 
 #define lp_jit_context_num_ssbos(_gallivm, _ptr) \
    lp_build_struct_get_ptr(_gallivm, _ptr, LP_JIT_CTX_NUM_SSBOS, "num_ssbos")
+
+#define lp_jit_context_sample_mask(_gallivm, _ptr) \
+   lp_build_struct_get_ptr(_gallivm, _ptr, LP_JIT_CTX_SAMPLE_MASK, "sample_mask")
 
 struct lp_jit_thread_data
 {
@@ -272,7 +286,7 @@ enum {
  * @param dady          shader input dady
  * @param color         color buffer
  * @param depth         depth buffer
- * @param mask          mask of visible pixels in block
+ * @param mask          mask of visible pixels in block (16-bits per sample)
  * @param thread_data   task thread data
  * @param stride        color buffer row stride in bytes
  * @param depth_stride  depth buffer row stride in bytes
@@ -287,10 +301,12 @@ typedef void
                     const void *dady,
                     uint8_t **color,
                     uint8_t *depth,
-                    uint32_t mask,
+                    uint64_t mask,
                     struct lp_jit_thread_data *thread_data,
                     unsigned *stride,
-                    unsigned depth_stride);
+                    unsigned depth_stride,
+                    unsigned *color_sample_stride,
+                    unsigned depth_sample_stride);
 
 
 struct lp_jit_cs_thread_data

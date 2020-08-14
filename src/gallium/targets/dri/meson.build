@@ -42,10 +42,9 @@ libgallium_dri = shared_library(
   files('target.c'),
   include_directories : [
     inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_util, inc_dri_common, inc_gallium_drivers,
-    inc_gallium_winsys, include_directories('../../state_trackers/dri'),
+    inc_gallium_winsys, include_directories('../../frontends/dri'),
   ],
-  c_args : [c_vis_args],
-  cpp_args : [cpp_vis_args],
+  gnu_symbol_visibility : 'hidden',
   link_args : [ld_args_build_id, ld_args_gc_sections, gallium_dri_ld_args],
   link_depends : gallium_dri_link_depends,
   link_with : [

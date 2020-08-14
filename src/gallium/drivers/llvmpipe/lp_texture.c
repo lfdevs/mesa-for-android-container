@@ -51,7 +51,7 @@
 #include "lp_state.h"
 #include "lp_rast.h"
 
-#include "state_tracker/sw_winsys.h"
+#include "frontend/sw_winsys.h"
 
 
 #ifdef DEBUG
@@ -76,6 +76,8 @@ llvmpipe_texture_layout(struct llvmpipe_screen *screen,
    unsigned depth = pt->depth0;
    uint64_t total_size = 0;
    unsigned layers = pt->array_size;
+   unsigned num_samples = util_res_sample_count(pt);
+
    /* XXX:
     * This alignment here (same for displaytarget) was added for the purpose of
     * ARB_map_buffer_alignment. I am not convinced it's needed for non-buffer
@@ -165,6 +167,9 @@ llvmpipe_texture_layout(struct llvmpipe_screen *screen,
       height = u_minify(height, 1);
       depth = u_minify(depth, 1);
    }
+
+   lpr->sample_stride = total_size;
+   total_size *= num_samples;
 
    if (allocate) {
       lpr->tex_data = align_malloc(total_size, mip_align);
@@ -504,13 +509,14 @@ llvmpipe_resource_get_handle(struct pipe_screen *screen,
 }
 
 
-static void *
-llvmpipe_transfer_map( struct pipe_context *pipe,
-                       struct pipe_resource *resource,
-                       unsigned level,
-                       unsigned usage,
-                       const struct pipe_box *box,
-                       struct pipe_transfer **transfer )
+void *
+llvmpipe_transfer_map_ms( struct pipe_context *pipe,
+                          struct pipe_resource *resource,
+                          unsigned level,
+                          unsigned usage,
+                          unsigned sample,
+                          const struct pipe_box *box,
+                          struct pipe_transfer **transfer )
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
    struct llvmpipe_screen *screen = llvmpipe_screen(pipe->screen);
@@ -539,7 +545,7 @@ llvmpipe_transfer_map( struct pipe_context *pipe,
                                    do_not_block,
                                    __FUNCTION__)) {
          /*
-          * It would have blocked, but state tracker requested no to.
+          * It would have blocked, but gallium frontend requested no to.
           */
          assert(do_not_block);
          return NULL;
@@ -615,9 +621,20 @@ llvmpipe_transfer_map( struct pipe_context *pipe,
       box->y / util_format_get_blockheight(format) * pt->stride +
       box->x / util_format_get_blockwidth(format) * util_format_get_blocksize(format);
 
+   map += sample * lpr->sample_stride;
    return map;
 }
 
+static void *
+llvmpipe_transfer_map( struct pipe_context *pipe,
+                       struct pipe_resource *resource,
+                       unsigned level,
+                       unsigned usage,
+                       const struct pipe_box *box,
+                       struct pipe_transfer **transfer )
+{
+   return llvmpipe_transfer_map_ms(pipe, resource, level, usage, 0, box, transfer);
+}
 
 static void
 llvmpipe_transfer_unmap(struct pipe_context *pipe,

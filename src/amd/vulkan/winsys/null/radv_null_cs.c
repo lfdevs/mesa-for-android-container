@@ -78,9 +78,9 @@ radv_null_cs_create(struct radeon_winsys *ws,
 	return &cs->base;
 }
 
-static bool radv_null_cs_finalize(struct radeon_cmdbuf *_cs)
+static VkResult radv_null_cs_finalize(struct radeon_cmdbuf *_cs)
 {
-	return true;
+	return VK_SUCCESS;
 }
 
 static void radv_null_cs_destroy(struct radeon_cmdbuf *rcs)

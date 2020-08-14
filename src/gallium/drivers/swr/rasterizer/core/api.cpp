@@ -142,8 +142,8 @@ HANDLE SwrCreateContext(SWR_CREATECONTEXT_INFO* pCreateInfo)
         pContext->workerPrivateState = *pCreateInfo->pWorkerPrivateState;
     }
 
-    memset(&pContext->WaitLock, 0, sizeof(pContext->WaitLock));
-    memset(&pContext->FifosNotEmpty, 0, sizeof(pContext->FifosNotEmpty));
+    memset((void*)&pContext->WaitLock, 0, sizeof(pContext->WaitLock));
+    memset((void*)&pContext->FifosNotEmpty, 0, sizeof(pContext->FifosNotEmpty));
     new (&pContext->WaitLock) std::mutex();
     new (&pContext->FifosNotEmpty) std::condition_variable();
 
@@ -230,7 +230,7 @@ HANDLE SwrCreateContext(SWR_CREATECONTEXT_INFO* pCreateInfo)
 
 void CopyState(DRAW_STATE& dst, const DRAW_STATE& src)
 {
-    memcpy(&dst.state, &src.state, sizeof(API_STATE));
+    memcpy((void*)&dst.state, (void*)&src.state, sizeof(API_STATE));
 }
 
 template <bool IsDraw>
@@ -489,7 +489,7 @@ void SWR_API SwrRestoreState(HANDLE hContext, const void* pStateBlock, size_t me
     auto         pDst     = GetDrawState(pContext);
     assert(pStateBlock && memSize >= sizeof(*pDst));
 
-    memcpy(pDst, pStateBlock, sizeof(*pDst));
+    memcpy((void*)pDst, (void*)pStateBlock, sizeof(*pDst));
 }
 
 void SetupDefaultState(SWR_CONTEXT* pContext)
@@ -748,7 +748,7 @@ void SwrSetRastState(HANDLE hContext, const SWR_RASTSTATE* pRastState)
     SWR_CONTEXT* pContext = GetContext(hContext);
     API_STATE*   pState   = GetDrawState(pContext);
 
-    memcpy(&pState->rastState, pRastState, sizeof(SWR_RASTSTATE));
+    memcpy((void*)&pState->rastState, (void*)pRastState, sizeof(SWR_RASTSTATE));
 }
 
 void SwrSetViewports(HANDLE                       hContext,

@@ -246,6 +246,7 @@ NIR_FILES = \
 	nir/nir_lower_clamp_color_outputs.c \
 	nir/nir_lower_clip.c \
 	nir/nir_lower_clip_cull_distance_arrays.c \
+	nir/nir_lower_clip_disable.c \
 	nir/nir_lower_clip_halfz.c \
 	nir/nir_lower_variable_initializers.c \
 	nir/nir_lower_discard_to_demote.c \
@@ -272,6 +273,7 @@ NIR_FILES = \
 	nir/nir_lower_io_to_scalar.c \
 	nir/nir_lower_io_to_vector.c \
 	nir/nir_lower_mediump_outputs.c \
+	nir/nir_lower_memory_model.c \
 	nir/nir_lower_non_uniform_access.c \
 	nir/nir_lower_packing.c \
 	nir/nir_lower_passthrough_edgeflags.c \
@@ -296,6 +298,7 @@ NIR_FILES = \
 	nir/nir_lower_viewport_transform.c \
 	nir/nir_lower_wpos_center.c \
 	nir/nir_lower_wpos_ytransform.c \
+	nir/nir_lower_wrmasks.c \
 	nir/nir_metadata.c \
 	nir/nir_move_vec_src_uses_to_dest.c \
 	nir/nir_normalize_cubemap_coords.c \
@@ -323,7 +326,7 @@ NIR_FILES = \
 	nir/nir_opt_peephole_select.c \
 	nir/nir_opt_rematerialize_compares.c \
 	nir/nir_opt_remove_phis.c \
-	nir/nir_opt_shrink_load.c \
+	nir/nir_opt_shrink_vectors.c \
 	nir/nir_opt_sink.c \
 	nir/nir_opt_trivial_continues.c \
 	nir/nir_opt_undef.c \
@@ -337,6 +340,7 @@ NIR_FILES = \
 	nir/nir_remove_dead_variables.c \
 	nir/nir_repair_ssa.c \
 	nir/nir_schedule.c \
+	nir/nir_schedule.h \
 	nir/nir_search.c \
 	nir/nir_search.h \
 	nir/nir_search_helpers.h \

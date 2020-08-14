@@ -67,6 +67,8 @@ enum radeon_bo_flag
   RADEON_FLAG_NO_INTERPROCESS_SHARING = (1 << 4),
   RADEON_FLAG_READ_ONLY = (1 << 5),
   RADEON_FLAG_32BIT = (1 << 6),
+  RADEON_FLAG_ENCRYPTED = (1 << 7),
+  RADEON_FLAG_UNCACHED = (1 << 8), /* only gfx9 and newer */
 };
 
 enum radeon_dependency_flag
@@ -217,22 +219,9 @@ struct radeon_bo_metadata {
          unsigned stride;
          bool scanout;
       } legacy;
-
-      struct {
-         /* surface flags */
-         unsigned swizzle_mode : 5;
-
-         /* DCC flags */
-         /* [31:8]: max offset = 4GB - 256; 0 = DCC disabled */
-         unsigned dcc_offset_256B : 24;
-         unsigned dcc_pitch_max : 14; /* (mip chain pitch - 1) for DCN */
-         unsigned dcc_independent_64B : 1;
-         unsigned dcc_independent_128B : 1;
-         unsigned dcc_max_compressed_block_size : 2;
-
-         bool scanout;
-      } gfx9;
    } u;
+
+   enum radeon_surf_mode mode;   /* Output from buffer_get_metadata */
 
    /* Additional metadata associated with the buffer, in bytes.
     * The maximum size is 64 * 4. This is opaque for the winsys & kernel.
@@ -351,7 +340,8 @@ struct radeon_winsys {
     * \param buf       A winsys buffer object to get the flags from.
     * \param md        Metadata
     */
-   void (*buffer_get_metadata)(struct pb_buffer *buf, struct radeon_bo_metadata *md);
+   void (*buffer_get_metadata)(struct pb_buffer *buf, struct radeon_bo_metadata *md,
+                               struct radeon_surf *surf);
 
    /**
     * Set buffer metadata.
@@ -360,7 +350,8 @@ struct radeon_winsys {
     * \param buf       A winsys buffer object to set the flags for.
     * \param md        Metadata
     */
-   void (*buffer_set_metadata)(struct pb_buffer *buf, struct radeon_bo_metadata *md);
+   void (*buffer_set_metadata)(struct pb_buffer *buf, struct radeon_bo_metadata *md,
+                               struct radeon_surf *surf);
 
    /**
     * Get a winsys buffer from a winsys handle. The internal structure
@@ -506,6 +497,16 @@ struct radeon_winsys {
     */
    struct radeon_cmdbuf *(*cs_add_parallel_compute_ib)(struct radeon_cmdbuf *cs,
                                                        bool uses_gds_ordered_append);
+
+   /**
+    * Set up and enable mid command buffer preemption for the command stream.
+    *
+    * \param cs               Command stream
+    * \param preamble_ib      Non-preemptible preamble IB for the context.
+    * \param preamble_num_dw  Number of dwords in the preamble IB.
+    */
+   bool (*cs_setup_preemption)(struct radeon_cmdbuf *cs, const uint32_t *preamble_ib,
+                               unsigned preamble_num_dw);
 
    /**
     * Destroy a command stream.
@@ -684,6 +685,13 @@ struct radeon_winsys {
 
    bool (*read_registers)(struct radeon_winsys *ws, unsigned reg_offset, unsigned num_registers,
                           uint32_t *out);
+
+   /**
+    * Secure context
+    */
+   bool (*ws_is_secure)(struct radeon_winsys *ws);
+   bool (*cs_is_secure)(struct radeon_cmdbuf *cs);
+   void (*cs_set_secure)(struct radeon_cmdbuf *cs, bool secure);
 };
 
 static inline bool radeon_emitted(struct radeon_cmdbuf *cs, unsigned num_dw)
@@ -715,6 +723,11 @@ enum radeon_heap
    RADEON_HEAP_GTT_WC_READ_ONLY_32BIT,
    RADEON_HEAP_GTT_WC_32BIT,
    RADEON_HEAP_GTT,
+   RADEON_HEAP_GTT_UNCACHED_WC,
+   RADEON_HEAP_GTT_UNCACHED_WC_READ_ONLY,
+   RADEON_HEAP_GTT_UNCACHED_WC_READ_ONLY_32BIT,
+   RADEON_HEAP_GTT_UNCACHED_WC_32BIT,
+   RADEON_HEAP_GTT_UNCACHED,
    RADEON_MAX_SLAB_HEAPS,
    RADEON_MAX_CACHED_HEAPS = RADEON_MAX_SLAB_HEAPS,
 };
@@ -733,6 +746,11 @@ static inline enum radeon_bo_domain radeon_domain_from_heap(enum radeon_heap hea
    case RADEON_HEAP_GTT_WC_READ_ONLY_32BIT:
    case RADEON_HEAP_GTT_WC_32BIT:
    case RADEON_HEAP_GTT:
+   case RADEON_HEAP_GTT_UNCACHED_WC:
+   case RADEON_HEAP_GTT_UNCACHED_WC_READ_ONLY:
+   case RADEON_HEAP_GTT_UNCACHED_WC_READ_ONLY_32BIT:
+   case RADEON_HEAP_GTT_UNCACHED_WC_32BIT:
+   case RADEON_HEAP_GTT_UNCACHED:
       return RADEON_DOMAIN_GTT;
    default:
       assert(0);
@@ -742,36 +760,69 @@ static inline enum radeon_bo_domain radeon_domain_from_heap(enum radeon_heap hea
 
 static inline unsigned radeon_flags_from_heap(enum radeon_heap heap)
 {
-   unsigned flags =
-      RADEON_FLAG_NO_INTERPROCESS_SHARING | (heap != RADEON_HEAP_GTT ? RADEON_FLAG_GTT_WC : 0);
+   unsigned flags = RADEON_FLAG_NO_INTERPROCESS_SHARING;
+
+   switch (heap) {
+   case RADEON_HEAP_GTT:
+   case RADEON_HEAP_GTT_UNCACHED:
+      break;
+   default:
+      flags |= RADEON_FLAG_GTT_WC;
+   }
+
+   switch (heap) {
+   case RADEON_HEAP_GTT_UNCACHED_WC:
+   case RADEON_HEAP_GTT_UNCACHED_WC_READ_ONLY:
+   case RADEON_HEAP_GTT_UNCACHED_WC_READ_ONLY_32BIT:
+   case RADEON_HEAP_GTT_UNCACHED_WC_32BIT:
+   case RADEON_HEAP_GTT_UNCACHED:
+      flags |= RADEON_FLAG_UNCACHED;
+      break;
+   default:
+      break;
+   }
+
+   switch (heap) {
+   case RADEON_HEAP_VRAM_READ_ONLY:
+   case RADEON_HEAP_VRAM_READ_ONLY_32BIT:
+   case RADEON_HEAP_GTT_WC_READ_ONLY:
+   case RADEON_HEAP_GTT_WC_READ_ONLY_32BIT:
+   case RADEON_HEAP_GTT_UNCACHED_WC_READ_ONLY:
+   case RADEON_HEAP_GTT_UNCACHED_WC_READ_ONLY_32BIT:
+      flags |= RADEON_FLAG_READ_ONLY;
+      break;
+   default:
+      break;
+   }
+
+   switch (heap) {
+   case RADEON_HEAP_VRAM_READ_ONLY_32BIT:
+   case RADEON_HEAP_VRAM_32BIT:
+   case RADEON_HEAP_GTT_WC_READ_ONLY_32BIT:
+   case RADEON_HEAP_GTT_WC_32BIT:
+   case RADEON_HEAP_GTT_UNCACHED_WC_READ_ONLY_32BIT:
+   case RADEON_HEAP_GTT_UNCACHED_WC_32BIT:
+      flags |= RADEON_FLAG_32BIT;
+   default:
+      break;
+   }
 
    switch (heap) {
    case RADEON_HEAP_VRAM_NO_CPU_ACCESS:
-      return flags | RADEON_FLAG_NO_CPU_ACCESS;
-
-   case RADEON_HEAP_VRAM_READ_ONLY:
-   case RADEON_HEAP_GTT_WC_READ_ONLY:
-      return flags | RADEON_FLAG_READ_ONLY;
-
-   case RADEON_HEAP_VRAM_READ_ONLY_32BIT:
-   case RADEON_HEAP_GTT_WC_READ_ONLY_32BIT:
-      return flags | RADEON_FLAG_READ_ONLY | RADEON_FLAG_32BIT;
-
-   case RADEON_HEAP_VRAM_32BIT:
-   case RADEON_HEAP_GTT_WC_32BIT:
-      return flags | RADEON_FLAG_32BIT;
-
-   case RADEON_HEAP_VRAM:
-   case RADEON_HEAP_GTT_WC:
-   case RADEON_HEAP_GTT:
+      flags |= RADEON_FLAG_NO_CPU_ACCESS;
+      break;
    default:
-      return flags;
+      break;
    }
+
+   return flags;
 }
 
 /* Return the heap index for winsys allocators, or -1 on failure. */
 static inline int radeon_get_heap_index(enum radeon_bo_domain domain, enum radeon_bo_flag flags)
 {
+   bool uncached;
+
    /* VRAM implies WC (write combining) */
    assert(!(domain & RADEON_DOMAIN_VRAM) || flags & RADEON_FLAG_GTT_WC);
    /* NO_CPU_ACCESS implies VRAM only. */
@@ -782,7 +833,7 @@ static inline int radeon_get_heap_index(enum radeon_bo_domain domain, enum radeo
       return -1;
 
    /* Unsupported flags: NO_SUBALLOC, SPARSE. */
-   if (flags & ~(RADEON_FLAG_GTT_WC | RADEON_FLAG_NO_CPU_ACCESS |
+   if (flags & ~(RADEON_FLAG_GTT_WC | RADEON_FLAG_NO_CPU_ACCESS | RADEON_FLAG_UNCACHED |
                  RADEON_FLAG_NO_INTERPROCESS_SHARING | RADEON_FLAG_READ_ONLY | RADEON_FLAG_32BIT))
       return -1;
 
@@ -809,15 +860,20 @@ static inline int radeon_get_heap_index(enum radeon_bo_domain domain, enum radeo
       }
       break;
    case RADEON_DOMAIN_GTT:
+      uncached = flags & RADEON_FLAG_UNCACHED;
+
       switch (flags & (RADEON_FLAG_GTT_WC | RADEON_FLAG_READ_ONLY | RADEON_FLAG_32BIT)) {
       case RADEON_FLAG_GTT_WC | RADEON_FLAG_READ_ONLY | RADEON_FLAG_32BIT:
-         return RADEON_HEAP_GTT_WC_READ_ONLY_32BIT;
+         return uncached ? RADEON_HEAP_GTT_UNCACHED_WC_READ_ONLY_32BIT
+                         : RADEON_HEAP_GTT_WC_READ_ONLY_32BIT;
       case RADEON_FLAG_GTT_WC | RADEON_FLAG_READ_ONLY:
-         return RADEON_HEAP_GTT_WC_READ_ONLY;
+         return uncached ? RADEON_HEAP_GTT_UNCACHED_WC_READ_ONLY
+                         : RADEON_HEAP_GTT_WC_READ_ONLY;
       case RADEON_FLAG_GTT_WC | RADEON_FLAG_32BIT:
-         return RADEON_HEAP_GTT_WC_32BIT;
+         return uncached ? RADEON_HEAP_GTT_UNCACHED_WC_32BIT
+                         : RADEON_HEAP_GTT_WC_32BIT;
       case RADEON_FLAG_GTT_WC:
-         return RADEON_HEAP_GTT_WC;
+         return uncached ? RADEON_HEAP_GTT_UNCACHED_WC : RADEON_HEAP_GTT_WC;
       case RADEON_FLAG_READ_ONLY | RADEON_FLAG_32BIT:
       case RADEON_FLAG_READ_ONLY:
          assert(!"READ_ONLY without WC is disallowed");
@@ -826,7 +882,7 @@ static inline int radeon_get_heap_index(enum radeon_bo_domain domain, enum radeo
          assert(!"32BIT without WC is disallowed");
          return -1;
       case 0:
-         return RADEON_HEAP_GTT;
+         return uncached ? RADEON_HEAP_GTT_UNCACHED : RADEON_HEAP_GTT;
       }
       break;
    default:

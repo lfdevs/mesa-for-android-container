@@ -719,7 +719,7 @@ bool expr_handler::fold_assoc(alu_node *n) {
 			n->src[0] = n->src[2];
 			n->bc.src[0] = n->bc.src[2];
 			n->src[1] = sh.get_const_value(cr);
-			memset(&n->bc.src[1], 0, sizeof(bc_alu_src));
+			n->bc.src[1].clear();
 
 			n->src.resize(2);
 			n->bc.set_op(ALU_OP2_ADD);
@@ -729,7 +729,7 @@ bool expr_handler::fold_assoc(alu_node *n) {
 		n->bc.src[0] = a->bc.src[last_arg];
 		n->bc.src[0].neg ^= cur_neg;
 		n->src[1] = sh.get_const_value(cr);
-		memset(&n->bc.src[1], 0, sizeof(bc_alu_src));
+		n->bc.src[1].clear();
 	}
 
 	return false;
@@ -770,7 +770,7 @@ bool expr_handler::fold_alu_op2(alu_node& n) {
 			case ALU_OP2_ADD:  // (ADD x, x) => (MUL x, 2)
 				if (!sh.safe_math) {
 					n.src[1] = sh.get_const_value(2.0f);
-					memset(&n.bc.src[1], 0, sizeof(bc_alu_src));
+					n.bc.src[1].clear();
 					n.bc.set_op(ALU_OP2_MUL);
 					return fold_alu_op2(n);
 				}
@@ -1070,7 +1070,7 @@ bool expr_handler::fold_alu_op3(alu_node& n) {
 				}
 
 				n.src[1] = t;
-				memset(&n.bc.src[1], 0, sizeof(bc_alu_src));
+				n.bc.src[1].clear();
 
 				n.src.resize(2);
 
@@ -1101,7 +1101,7 @@ bool expr_handler::fold_alu_op3(alu_node& n) {
 				dv = cv0.f * cv1.f;
 				n.bc.set_op(ALU_OP2_ADD);
 				n.src[0] = sh.get_const_value(dv);
-				memset(&n.bc.src[0], 0, sizeof(bc_alu_src));
+				n.bc.src[0].clear();
 				n.src[1] = n.src[2];
 				n.bc.src[1] = n.bc.src[2];
 				n.src.resize(2);

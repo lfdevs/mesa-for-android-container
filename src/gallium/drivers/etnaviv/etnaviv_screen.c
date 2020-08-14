@@ -45,7 +45,7 @@
 #include "util/u_screen.h"
 #include "util/u_string.h"
 
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 
 #include "drm-uapi/drm_fourcc.h"
 
@@ -87,6 +87,9 @@ etna_screen_destroy(struct pipe_screen *pscreen)
 
    if (screen->perfmon)
       etna_perfmon_del(screen->perfmon);
+
+   if (screen->compiler)
+      etna_compiler_destroy(screen->compiler);
 
    if (screen->pipe)
       etna_pipe_del(screen->pipe);
@@ -174,6 +177,7 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_ANISOTROPIC_FILTER:
    case PIPE_CAP_TEXTURE_SWIZZLE:
    case PIPE_CAP_PRIMITIVE_RESTART:
+   case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
       return VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
 
    /* Unsupported features. */
@@ -222,11 +226,9 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
       return screen->specs.seamless_cube_map;
 
-   /* Timer queries. */
+   /* Queries. */
    case PIPE_CAP_OCCLUSION_QUERY:
       return VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
-   case PIPE_CAP_QUERY_TIMESTAMP:
-      return 1;
 
    /* Preferences */
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
@@ -351,6 +353,9 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
       return VIV_FEATURE(screen, chipMinorFeatures0, HAS_SQRT_TRIG);
    case PIPE_SHADER_CAP_INT64_ATOMICS:
    case PIPE_SHADER_CAP_FP16:
+   case PIPE_SHADER_CAP_FP16_DERIVATIVES:
+   case PIPE_SHADER_CAP_INT16:
+   case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
       return 0;
    case PIPE_SHADER_CAP_INTEGERS:
       return DBG_ENABLED(ETNA_DBG_NIR) && screen->specs.halti >= 2;
@@ -461,16 +466,9 @@ gpu_supports_render_format(struct etna_screen *screen, enum pipe_format format,
    if (fmt == ETNA_NO_MATCH)
       return false;
 
-   /* Validate MSAA; number of samples must be allowed, and render target
-    * must have MSAA'able format. */
-   if (sample_count > 1) {
-      if (!VIV_FEATURE(screen, chipFeatures, MSAA))
+   /* MSAA is broken */
+   if (sample_count > 1)
          return false;
-      if (!translate_samples_to_xyscale(sample_count, NULL, NULL))
-         return false;
-      if (translate_ts_format(format) == ETNA_NO_MATCH)
-         return false;
-   }
 
    if (format == PIPE_FORMAT_R8_UNORM)
       return VIV_FEATURE(screen, chipMinorFeatures5, HALTI5);
@@ -1038,6 +1036,10 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
    pscreen->context_create = etna_context_create;
    pscreen->is_format_supported = etna_screen_is_format_supported;
    pscreen->query_dmabuf_modifiers = etna_screen_query_dmabuf_modifiers;
+
+   screen->compiler = etna_compiler_create();
+   if (!screen->compiler)
+      goto fail;
 
    etna_fence_screen_init(pscreen);
    etna_query_screen_init(pscreen);

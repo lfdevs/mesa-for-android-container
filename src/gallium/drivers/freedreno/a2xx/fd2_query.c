@@ -107,7 +107,7 @@ perfcntr_resume(struct fd_acc_query *aq, struct fd_batch *batch)
 
 		OUT_PKT3(ring, CP_REG_TO_MEM, 2);
 		OUT_RING(ring, counter->counter_reg_lo | CP_REG_TO_MEM_0_ACCUMULATE);
-		OUT_RELOCW(ring, query_sample_idx(aq, i, start));
+		OUT_RELOC(ring, query_sample_idx(aq, i, start));
 	}
 }
 
@@ -134,7 +134,7 @@ perfcntr_pause(struct fd_acc_query *aq, struct fd_batch *batch)
 
 		OUT_PKT3(ring, CP_REG_TO_MEM, 2);
 		OUT_RING(ring, counter->counter_reg_lo | CP_REG_TO_MEM_0_ACCUMULATE);
-		OUT_RELOCW(ring, query_sample_idx(aq, i, stop));
+		OUT_RELOC(ring, query_sample_idx(aq, i, stop));
 	}
 }
 

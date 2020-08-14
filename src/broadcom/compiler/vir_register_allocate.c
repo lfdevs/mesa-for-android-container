@@ -678,14 +678,6 @@ v3d_register_allocate(struct v3d_compile *c, bool *spilled)
                         temp_registers[i].magic = false;
                         temp_registers[i].index = ra_reg - PHYS_INDEX;
                 }
-
-                /* If the value's never used, just write to the NOP register
-                 * for clarity in debug output.
-                 */
-                if (c->temp_start[i] == c->temp_end[i]) {
-                        temp_registers[i].magic = true;
-                        temp_registers[i].index = V3D_QPU_WADDR_NOP;
-                }
         }
 
         ralloc_free(g);

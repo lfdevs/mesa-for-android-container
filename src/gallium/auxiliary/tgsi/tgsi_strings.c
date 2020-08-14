@@ -164,6 +164,7 @@ const char *tgsi_property_names[TGSI_PROPERTY_COUNT] =
    "VS_BLIT_SGPRS_AMD",
    "CS_USER_DATA_COMPONENTS_AMD",
    "LAYER_VIEWPORT_RELATIVE",
+   "FS_BLEND_EQUATION_ADVANCED",
 };
 
 const char *tgsi_return_type_names[TGSI_RETURN_TYPE_COUNT] =

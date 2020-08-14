@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <libsync.h>
 
+#include "util/os_file.h"
 #include <util/u_memory.h>
 #include <util/u_inlines.h>
 
@@ -46,7 +47,7 @@ lima_create_fence_fd(struct pipe_context *pctx,
                      int fd, enum pipe_fd_type type)
 {
    assert(type == PIPE_FD_TYPE_NATIVE_SYNC);
-   *fence = lima_fence_create(fcntl(fd, F_DUPFD_CLOEXEC, 3));
+   *fence = lima_fence_create(os_dupfd_cloexec(fd));
 }
 
 static void
@@ -83,7 +84,7 @@ static int
 lima_fence_get_fd(struct pipe_screen *pscreen,
                   struct pipe_fence_handle *fence)
 {
-   return fcntl(fence->fd, F_DUPFD_CLOEXEC, 3);
+   return os_dupfd_cloexec(fence->fd);
 }
 
 static void

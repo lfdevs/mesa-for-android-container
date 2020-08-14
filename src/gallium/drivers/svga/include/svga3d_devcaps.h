@@ -324,7 +324,7 @@ typedef enum {
    SVGA3D_DEVCAP_DXFMT_UYVY                        = 141,
    SVGA3D_DEVCAP_DXFMT_YUY2                        = 142,
    SVGA3D_DEVCAP_DXFMT_NV12                        = 143,
-   SVGA3D_DEVCAP_DXFMT_AYUV                        = 144,
+   SVGA3D_DEVCAP_FORMAT_DEAD2                       = 144,
    SVGA3D_DEVCAP_DXFMT_R32G32B32A32_TYPELESS       = 145,
    SVGA3D_DEVCAP_DXFMT_R32G32B32A32_UINT           = 146,
    SVGA3D_DEVCAP_DXFMT_R32G32B32A32_SINT           = 147,
@@ -424,21 +424,25 @@ typedef enum {
    SVGA3D_DEVCAP_DXFMT_B8G8R8X8_UNORM              = 241,
    SVGA3D_DEVCAP_DXFMT_BC4_UNORM                   = 242,
    SVGA3D_DEVCAP_DXFMT_BC5_UNORM                   = 243,
-
-   /*
-    * Advertises shaderModel 4.1 support, independent blend-states,
-    * cube-map arrays, and a higher vertex input registers limit.
-    *
-    * (ie DX10.1 era rendering)
-    *
-    * (See documentation on SVGA3D_DEVCAP_DX_MAX_VERTEXBUFFERS.)
-    */
+ 
    SVGA3D_DEVCAP_SM41                              = 244,
-
    SVGA3D_DEVCAP_MULTISAMPLE_2X                    = 245,
    SVGA3D_DEVCAP_MULTISAMPLE_4X                    = 246,
+   SVGA3D_DEVCAP_MS_FULL_QUALITY                   = 247,
+   SVGA3D_DEVCAP_LOGICOPS                          = 248,
+   SVGA3D_DEVCAP_LOGIC_BLENDOPS                    = 249,
+   SVGA3D_DEVCAP_DXFMT_B4G4R4A4_UNORM              = 250,
+   SVGA3D_DEVCAP_DXFMT_BC6H_UF16                   = 252,
+   SVGA3D_DEVCAP_DXFMT_BC6H_SF16                   = 253,
+   SVGA3D_DEVCAP_DXFMT_BC7_TYPELESS                = 254,
+   SVGA3D_DEVCAP_DXFMT_BC7_UNORM                   = 255,
+   SVGA3D_DEVCAP_DXFMT_BC7_UNORM_SRGB              = 256,
+   SVGA3D_DEVCAP_DXFMT_AYUV                        = 257,
+   SVGA3D_DEVCAP_SM5                               = 258,
+   SVGA3D_DEVCAP_MULTISAMPLE_8X                    = 259,
+   SVGA3D_DEVCAP_FORCED_SAMPLE_COUNT_1             = 260,
+   SVGA3D_DEVCAP_MAX                               = 261,
 
-   SVGA3D_DEVCAP_MAX                       /* This must be the last index. */
 } SVGA3dDevCapIndex;
 
 /*

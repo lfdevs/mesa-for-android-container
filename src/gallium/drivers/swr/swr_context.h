@@ -77,6 +77,8 @@ struct swr_jit_texture {
    uint32_t first_level;
    uint32_t last_level;
    const uint8_t *base_ptr;
+   uint32_t num_samples;
+   uint32_t sample_stride;
    uint32_t row_stride[PIPE_MAX_TEXTURE_LEVELS];
    uint32_t img_stride[PIPE_MAX_TEXTURE_LEVELS];
    uint32_t mip_offsets[PIPE_MAX_TEXTURE_LEVELS];

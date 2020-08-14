@@ -1,6 +1,6 @@
 
 #include "target-helpers/inline_debug_helper.h"
-#include "state_tracker/drm_driver.h"
+#include "frontend/drm_driver.h"
 #include "kmsro/drm/kmsro_drm_public.h"
 
 static struct pipe_screen *

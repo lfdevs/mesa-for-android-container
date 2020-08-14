@@ -11,7 +11,7 @@ DRI_CONF_SECTION_DEBUG
 //= BEGIN VERBATIM
 #define OPT_BOOL(name, dflt, description)                                                          \
    DRI_CONF_OPT_BEGIN_B(radeonsi_##name, #dflt)                                                    \
-   DRI_CONF_DESC(en, description)                                                                  \
+   DRI_CONF_DESC(description)                                                                  \
    DRI_CONF_OPT_END
 
 #include "radeonsi/si_debug_options.h"
