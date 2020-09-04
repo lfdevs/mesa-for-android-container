@@ -320,6 +320,8 @@ struct radv_instance {
 
 	uint32_t                                    apiVersion;
 
+	char *                                      applicationName;
+	uint32_t                                    applicationVersion;
 	char *                                      engineName;
 	uint32_t                                    engineVersion;
 
@@ -1416,7 +1418,7 @@ bool radv_cmd_buffer_uses_mec(struct radv_cmd_buffer *cmd_buffer);
 
 void si_emit_graphics(struct radv_device *device,
 		      struct radeon_cmdbuf *cs);
-void si_emit_compute(struct radv_physical_device *physical_device,
+void si_emit_compute(struct radv_device *device,
 		      struct radeon_cmdbuf *cs);
 
 void cik_create_gfx_config(struct radv_device *device);

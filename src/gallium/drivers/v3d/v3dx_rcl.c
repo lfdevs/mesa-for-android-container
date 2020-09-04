@@ -440,6 +440,13 @@ v3d_rcl_emit_generic_per_tile_list(struct v3d_job *job, int layer)
                 fmt.primitive_type = LIST_TRIANGLES;
         }
 
+#if V3D_VERSION >= 41
+        /* PTB assumes that value to be 0, but hw will not set it. */
+        cl_emit(cl, SET_INSTANCEID, set) {
+           set.instance_id = 0;
+        }
+#endif
+
         cl_emit(cl, BRANCH_TO_IMPLICIT_TILE_LIST, branch);
 
         v3d_rcl_emit_stores(job, cl, layer);

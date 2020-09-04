@@ -1803,7 +1803,7 @@ void lower_to_hw_instr(Program* program)
                //TODO: exec can be zero here with block_kind_discard
 
                assert(instr->operands[0].physReg() == scc);
-               bld.sopp(aco_opcode::s_cbranch_scc0, instr->operands[0], discard_block->index);
+               bld.sopp(aco_opcode::s_cbranch_scc0, Definition(exec, s2), instr->operands[0], discard_block->index);
 
                discard_block->linear_preds.push_back(block->index);
                block->linear_succs.push_back(discard_block->index);
@@ -1873,28 +1873,28 @@ void lower_to_hw_instr(Program* program)
             switch (instr->opcode) {
                case aco_opcode::p_branch:
                   assert(block->linear_succs[0] == branch->target[0]);
-                  bld.sopp(aco_opcode::s_branch, branch->target[0]);
+                  bld.sopp(aco_opcode::s_branch, branch->definitions[0], branch->target[0]);
                   break;
                case aco_opcode::p_cbranch_nz:
                   assert(block->linear_succs[1] == branch->target[0]);
                   if (branch->operands[0].physReg() == exec)
-                     bld.sopp(aco_opcode::s_cbranch_execnz, branch->target[0]);
+                     bld.sopp(aco_opcode::s_cbranch_execnz, branch->definitions[0], branch->target[0]);
                   else if (branch->operands[0].physReg() == vcc)
-                     bld.sopp(aco_opcode::s_cbranch_vccnz, branch->target[0]);
+                     bld.sopp(aco_opcode::s_cbranch_vccnz, branch->definitions[0], branch->target[0]);
                   else {
                      assert(branch->operands[0].physReg() == scc);
-                     bld.sopp(aco_opcode::s_cbranch_scc1, branch->target[0]);
+                     bld.sopp(aco_opcode::s_cbranch_scc1, branch->definitions[0], branch->target[0]);
                   }
                   break;
                case aco_opcode::p_cbranch_z:
                   assert(block->linear_succs[1] == branch->target[0]);
                   if (branch->operands[0].physReg() == exec)
-                     bld.sopp(aco_opcode::s_cbranch_execz, branch->target[0]);
+                     bld.sopp(aco_opcode::s_cbranch_execz, branch->definitions[0], branch->target[0]);
                   else if (branch->operands[0].physReg() == vcc)
-                     bld.sopp(aco_opcode::s_cbranch_vccz, branch->target[0]);
+                     bld.sopp(aco_opcode::s_cbranch_vccz, branch->definitions[0], branch->target[0]);
                   else {
                      assert(branch->operands[0].physReg() == scc);
-                     bld.sopp(aco_opcode::s_cbranch_scc0, branch->target[0]);
+                     bld.sopp(aco_opcode::s_cbranch_scc0, branch->definitions[0], branch->target[0]);
                   }
                   break;
                default:

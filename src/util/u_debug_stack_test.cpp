@@ -24,9 +24,10 @@
 #include <stdio.h>
 #include <gtest/gtest.h>
 
+#include "util/macros.h"
 #include "util/u_debug_stack.h"
 
-static void __attribute__((noinline))
+static void ATTRIBUTE_NOINLINE
 func_a(void)
 {
    struct debug_stack_frame backtrace[16];
@@ -36,7 +37,7 @@ func_a(void)
    debug_backtrace_dump(backtrace, 16);
 }
 
-static void __attribute__((noinline))
+static void ATTRIBUTE_NOINLINE
 func_b(void)
 {
    struct debug_stack_frame backtrace[16];
@@ -48,7 +49,7 @@ func_b(void)
    debug_backtrace_dump(backtrace, 16);
 }
 
-static void __attribute__((noinline))
+static void ATTRIBUTE_NOINLINE
 func_c(struct debug_stack_frame *frames)
 {
    debug_backtrace_capture(frames, 0, 16);
@@ -106,6 +107,9 @@ TEST(u_debug_stack_test, capture_not_overwritten)
    if (size > 0) {
       EXPECT_STRNE(bt1, bt2);
    }
+
+   free(bt1);
+   free(bt2);
 }
 
 #endif

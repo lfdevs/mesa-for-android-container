@@ -509,8 +509,8 @@ llvmpipe_remove_cs_shader_variant(struct llvmpipe_context *lp,
 
    /* remove from context's list */
    remove_from_list(&variant->list_item_global);
-   lp->nr_fs_variants--;
-   lp->nr_fs_instrs -= variant->nr_instrs;
+   lp->nr_cs_variants--;
+   lp->nr_cs_instrs -= variant->nr_instrs;
 
    FREE(variant);
 }

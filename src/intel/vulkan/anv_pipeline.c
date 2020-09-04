@@ -1505,13 +1505,38 @@ anv_pipeline_compile_graphics(struct anv_graphics_pipeline *pipeline,
 
       void *stage_ctx = ralloc_context(NULL);
 
+      anv_pipeline_lower_nir(&pipeline->base, stage_ctx, &stages[s], layout);
+
+      if (prev_stage && compiler->glsl_compiler_options[s].NirOptions->unify_interfaces) {
+         prev_stage->nir->info.outputs_written |= stages[s].nir->info.inputs_read &
+                  ~(VARYING_BIT_TESS_LEVEL_INNER | VARYING_BIT_TESS_LEVEL_OUTER);
+         stages[s].nir->info.inputs_read |= prev_stage->nir->info.outputs_written &
+                  ~(VARYING_BIT_TESS_LEVEL_INNER | VARYING_BIT_TESS_LEVEL_OUTER);
+         prev_stage->nir->info.patch_outputs_written |= stages[s].nir->info.patch_inputs_read;
+         stages[s].nir->info.patch_inputs_read |= prev_stage->nir->info.patch_outputs_written;
+      }
+
+      ralloc_free(stage_ctx);
+
+      stages[s].feedback.duration += os_time_get_nano() - stage_start;
+
+      prev_stage = &stages[s];
+   }
+
+   prev_stage = NULL;
+   for (unsigned s = 0; s < MESA_SHADER_STAGES; s++) {
+      if (!stages[s].entrypoint)
+         continue;
+
+      int64_t stage_start = os_time_get_nano();
+
+      void *stage_ctx = ralloc_context(NULL);
+
       nir_xfb_info *xfb_info = NULL;
       if (s == MESA_SHADER_VERTEX ||
           s == MESA_SHADER_TESS_EVAL ||
           s == MESA_SHADER_GEOMETRY)
          xfb_info = nir_gather_xfb_info(stages[s].nir, stage_ctx);
-
-      anv_pipeline_lower_nir(&pipeline->base, stage_ctx, &stages[s], layout);
 
       switch (s) {
       case MESA_SHADER_VERTEX:

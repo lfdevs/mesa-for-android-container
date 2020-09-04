@@ -131,7 +131,7 @@ libvulkan_freedreno = shared_library(
   ],
   c_args : [no_override_init_args, tu_flags],
   gnu_symbol_visibility : 'hidden',
-  link_args : [ld_args_bsymbolic, ld_args_gc_sections],
+  link_args : [ld_args_bsymbolic, ld_args_gc_sections, ld_args_build_id],
   install : true,
 )
 

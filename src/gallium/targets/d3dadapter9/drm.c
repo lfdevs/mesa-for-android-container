@@ -251,7 +251,7 @@ drm_create_adapter( int fd,
 
     driParseOptionInfo(&defaultInitOptions, __driConfigOptionsNine);
     driParseConfigFiles(&userInitOptions, &defaultInitOptions, 0,
-                        "nine", NULL, NULL, 0);
+                        "nine", NULL, NULL, 0, NULL, 0);
     if (driCheckOption(&userInitOptions, "throttle_value", DRI_INT)) {
         throttling_value_user = driQueryOptioni(&userInitOptions, "throttle_value");
         if (throttling_value_user == -1)

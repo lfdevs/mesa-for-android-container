@@ -92,7 +92,6 @@ struct disasm_ctx {
 	/* tracking for register usage */
 	struct {
 		regmask_t used;
-		regmask_t used_merged;
 		regmask_t rbw;      /* read before write */
 		regmask_t war;      /* write after read */
 		unsigned max_const;
@@ -248,11 +247,6 @@ static void print_reg_stats(struct disasm_ctx *ctx)
 	fprintf(ctx->out, "%s- used (full):", levels[ctx->level]);
 	fullreg = print_regs(ctx, &ctx->regs.used, true);
 	fprintf(ctx->out, "\n");
-	if (ctx->gpu_id >= 600) {
-		fprintf(ctx->out, "%s- used (merged):", levels[ctx->level]);
-		print_regs(ctx, &ctx->regs.used_merged, false);
-		fprintf(ctx->out, "\n");
-	}
 	fprintf(ctx->out, "%s- input (half):", levels[ctx->level]);
 	print_regs(ctx, &ctx->regs.rbw, false);
 	fprintf(ctx->out, "\n");
@@ -299,15 +293,6 @@ static void process_reg_dst(struct disasm_ctx *ctx)
 
 		regmask_set(&ctx->regs.war, dst, ctx->last_dst_full);
 		regmask_set(&ctx->regs.used, dst, ctx->last_dst_full);
-
-		if (ctx->gpu_id >= 600) {
-			if (ctx->last_dst_full) {
-				regmask_set(&ctx->regs.used_merged, (dst*2)+0, false);
-				regmask_set(&ctx->regs.used_merged, (dst*2)+1, false);
-			} else {
-				regmask_set(&ctx->regs.used_merged, dst, false);
-			}
-		}
 	}
 
 	ctx->last_dst_valid = false;
@@ -356,13 +341,6 @@ static void print_src(struct disasm_ctx *ctx, struct reginfo *info)
 
 			regmask_clear(&ctx->regs.war, src, info->full);
 			regmask_set(&ctx->regs.used, src, info->full);
-
-			if (info->full) {
-				regmask_set(&ctx->regs.used_merged, (src*2)+0, false);
-				regmask_set(&ctx->regs.used_merged, (src*2)+1, false);
-			} else {
-				regmask_set(&ctx->regs.used_merged, src, false);
-			}
 
 			if (!info->r)
 				break;
@@ -1628,6 +1606,11 @@ int disasm_a3xx_stat(uint32_t *dwords, int sizedwords, int level, FILE *out,
 	ctx.level = level;
 	ctx.gpu_id = gpu_id;
 	ctx.stats = stats;
+	if (gpu_id >= 600) {
+		ctx.regs.used.mergedregs = true;
+		ctx.regs.rbw.mergedregs = true;
+		ctx.regs.war.mergedregs = true;
+	}
 	memset(ctx.stats, 0, sizeof(*ctx.stats));
 
 	for (i = 0; i < sizedwords; i += 2) {

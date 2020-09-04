@@ -150,7 +150,7 @@ driCreateNewScreen2(int scrn, int fd,
     /* Option parsing before ->InitScreen(), as some options apply there. */
     driParseOptionInfo(&psp->optionInfo, __dri2ConfigOptions);
     driParseConfigFiles(&psp->optionCache, &psp->optionInfo, psp->myNum,
-                        "dri2", NULL, NULL, 0);
+                        "dri2", NULL, NULL, 0, NULL, 0);
 
     *driver_configs = psp->driver->InitScreen(psp);
     if (*driver_configs == NULL) {
@@ -890,7 +890,7 @@ static const struct {
    {
       .image_format    = __DRI_IMAGE_FORMAT_XRGB8888,
       .mesa_format     =        MESA_FORMAT_B8G8R8X8_UNORM,
-      .internal_format =        GL_RGBA8,
+      .internal_format =        GL_RGB8,
    },
    {
       .image_format    = __DRI_IMAGE_FORMAT_ABGR16161616F,

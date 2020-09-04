@@ -423,8 +423,10 @@ else
 endif
 
 # Android uses emutls for versions <= P/28. For USE_ELF_TLS we need ELF TLS.
-if not ['windows', 'freebsd'].contains(host_machine.system()) and (not with_platform_android or get_option('platform-sdk-version') >= 29)
+use_elf_tls = false
+if not ['windows', 'freebsd', 'openbsd'].contains(host_machine.system()) and (not with_platform_android or get_option('platform-sdk-version') >= 29)
   pre_args += '-DUSE_ELF_TLS'
+  use_elf_tls = true
 endif
 
 if with_glx != 'disabled'
@@ -958,6 +960,8 @@ elif host_machine.system() == 'windows'
   else
     pre_args += ['-D__MSVCRT_VERSION__=0x0700']
   endif
+elif host_machine.system() == 'openbsd'
+  pre_args += '-D_ISOC11_SOURCE'
 endif
 
 # Check for generic C arguments
@@ -1207,7 +1211,7 @@ if not ['linux'].contains(host_machine.system())
   endif
 endif
 
-foreach h : ['xlocale.h', 'linux/futex.h', 'endian.h', 'dlfcn.h', 'execinfo.h', 'sys/shm.h', 'cet.h']
+foreach h : ['xlocale.h', 'linux/futex.h', 'endian.h', 'dlfcn.h', 'execinfo.h', 'sys/shm.h', 'cet.h', 'pthread_np.h']
   if cc.check_header(h)
     pre_args += '-DHAVE_@0@'.format(h.to_upper().underscorify())
   endif
@@ -1509,6 +1513,7 @@ endif
 if with_llvm
   pre_args += '-DLLVM_AVAILABLE'
   pre_args += '-DMESA_LLVM_VERSION_STRING="@0@"'.format(dep_llvm.version())
+  pre_args += '-DLLVM_IS_SHARED=@0@'.format(_shared_llvm.to_int())
 
   # LLVM can be built without rtti, turning off rtti changes the ABI of C++
   # programs, so we need to build all C++ code in mesa without rtti as well to
@@ -1706,7 +1711,7 @@ if with_platform_x11
     dep_x11 = dependency('x11')
     dep_xext = dependency('xext')
     dep_xdamage = dependency('xdamage', version : '>= 1.1')
-    dep_xfixes = dependency('xfixes')
+    dep_xfixes = dependency('xfixes', version : '>= 2.0')
     dep_xcb_glx = dependency('xcb-glx', version : '>= 1.8.1')
   endif
   if (with_any_vk or with_glx == 'dri' or with_egl or
@@ -1761,10 +1766,10 @@ endif
 _sensors = get_option('lmsensors')
 if _sensors == 'true'
   _sensors = 'enabled'
-  warning('sensors option "true" deprecated, please use "enabled" instead.')
+  warning('lmsensors option "true" deprecated, please use "enabled" instead.')
 elif _sensors == 'false'
   _sensors = 'disabled'
-  warning('sensors option "false" deprecated, please use "disabled" instead.')
+  warning('lmsensors option "false" deprecated, please use "disabled" instead.')
 endif
 if _sensors != 'disabled'
   dep_lmsensors = cc.find_library('sensors', required : _sensors == 'enabled')
@@ -1824,6 +1829,12 @@ if dep_m.found()
 endif
 if dep_dl.found()
   gl_priv_libs += '-ldl'
+endif
+
+# FIXME: autotools lists this as incomplete
+gbm_priv_libs = []
+if dep_dl.found()
+  gbm_priv_libs += '-ldl'
 endif
 
 pkg = import('pkgconfig')

@@ -929,6 +929,11 @@ void add_branch_code(exec_ctx& ctx, Block* block)
                             has_discard);
    }
 
+   /* For normal breaks, this is the exec mask. For discard+break, it's the
+    * old exec mask before it was zero'd.
+    */
+   Operand break_cond = bld.exec(ctx.info[idx].exec.back().first);
+
    if (block->kind & block_kind_discard) {
 
       assert(block->instructions.back()->format == Format::PSEUDO_BRANCH);
@@ -961,8 +966,7 @@ void add_branch_code(exec_ctx& ctx, Block* block)
       }
       assert(!ctx.handle_wqm || (ctx.info[block->index].exec[0].second & mask_type_wqm) == 0);
 
-      if ((block->kind & (block_kind_break | block_kind_uniform)) == block_kind_break)
-         ctx.info[idx].exec.back().first = cond;
+      break_cond = Operand(cond);
       bld.insert(std::move(branch));
       /* no return here as it can be followed by a divergent break */
    }
@@ -981,7 +985,7 @@ void add_branch_code(exec_ctx& ctx, Block* block)
 
       if (need_parallelcopy)
          ctx.info[idx].exec.back().first = bld.pseudo(aco_opcode::p_parallelcopy, bld.def(bld.lm, exec), ctx.info[idx].exec.back().first);
-      bld.branch(aco_opcode::p_cbranch_nz, bld.exec(ctx.info[idx].exec.back().first), block->linear_succs[1], block->linear_succs[0]);
+      bld.branch(aco_opcode::p_cbranch_nz, bld.hint_vcc(bld.def(s2)), bld.exec(ctx.info[idx].exec.back().first), block->linear_succs[1], block->linear_succs[0]);
       return;
    }
 
@@ -1028,7 +1032,7 @@ void add_branch_code(exec_ctx& ctx, Block* block)
       /* add next current exec to the stack */
       ctx.info[idx].exec.emplace_back(then_mask, mask_type);
 
-      bld.branch(aco_opcode::p_cbranch_z, bld.exec(then_mask), block->linear_succs[1], block->linear_succs[0]);
+      bld.branch(aco_opcode::p_cbranch_z, bld.hint_vcc(bld.def(s2)), bld.exec(then_mask), block->linear_succs[1], block->linear_succs[0]);
       return;
    }
 
@@ -1046,7 +1050,7 @@ void add_branch_code(exec_ctx& ctx, Block* block)
       /* add next current exec to the stack */
       ctx.info[idx].exec.emplace_back(else_mask, mask_type);
 
-      bld.branch(aco_opcode::p_cbranch_z, bld.exec(else_mask), block->linear_succs[1], block->linear_succs[0]);
+      bld.branch(aco_opcode::p_cbranch_z, bld.hint_vcc(bld.def(s2)), bld.exec(else_mask), block->linear_succs[1], block->linear_succs[0]);
       return;
    }
 
@@ -1055,13 +1059,12 @@ void add_branch_code(exec_ctx& ctx, Block* block)
       assert(block->instructions.back()->opcode == aco_opcode::p_branch);
       block->instructions.pop_back();
 
-      Temp current_exec = ctx.info[idx].exec.back().first;
       Temp cond = Temp();
       for (int exec_idx = ctx.info[idx].exec.size() - 2; exec_idx >= 0; exec_idx--) {
          cond = bld.tmp(s1);
          Temp exec_mask = ctx.info[idx].exec[exec_idx].first;
          exec_mask = bld.sop2(Builder::s_andn2, bld.def(bld.lm), bld.scc(Definition(cond)),
-                              exec_mask, bld.exec(current_exec));
+                              exec_mask, break_cond);
          ctx.info[idx].exec[exec_idx].first = exec_mask;
          if (ctx.info[idx].exec[exec_idx].second & mask_type_loop)
             break;
@@ -1075,7 +1078,7 @@ void add_branch_code(exec_ctx& ctx, Block* block)
          ctx.info[idx].exec.back().first = bld.sop1(Builder::s_mov, bld.def(bld.lm, exec), Operand(0u));
       }
 
-      bld.branch(aco_opcode::p_cbranch_nz, bld.scc(cond), block->linear_succs[1], block->linear_succs[0]);
+      bld.branch(aco_opcode::p_cbranch_nz, bld.hint_vcc(bld.def(s2)), bld.scc(cond), block->linear_succs[1], block->linear_succs[0]);
       return;
    }
 
@@ -1104,7 +1107,7 @@ void add_branch_code(exec_ctx& ctx, Block* block)
          ctx.info[idx].exec.back().first = bld.sop1(Builder::s_mov, bld.def(bld.lm, exec), Operand(0u));
       }
 
-      bld.branch(aco_opcode::p_cbranch_nz, bld.scc(cond), block->linear_succs[1], block->linear_succs[0]);
+      bld.branch(aco_opcode::p_cbranch_nz, bld.hint_vcc(bld.def(s2)), bld.scc(cond), block->linear_succs[1], block->linear_succs[0]);
       return;
    }
 }

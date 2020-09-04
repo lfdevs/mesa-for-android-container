@@ -6,7 +6,7 @@
 		# due to LLVM being initialized multiple times.
 		radeon_drm_winsys_create;
 		amdgpu_winsys_create;
-		ac_init_llvm_once;
+		ac_init_shared_llvm_once;
 	local:
 		*;
 };

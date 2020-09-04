@@ -165,7 +165,7 @@ panfrost_delete_blend_state(struct pipe_context *pipe,
 {
         struct panfrost_blend_state *blend = (struct panfrost_blend_state *) cso;
 
-        for (unsigned c = 0; c < 4; ++c) {
+        for (unsigned c = 0; c < PIPE_MAX_COLOR_BUFS; ++c) {
                 struct panfrost_blend_rt *rt = &blend->rt[c];
                 _mesa_hash_table_u64_clear(rt->shaders, panfrost_delete_blend_shader);
         }

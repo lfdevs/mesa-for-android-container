@@ -1342,7 +1342,7 @@ bifrost_compile_shader_nir(nir_shader *nir, panfrost_program *program, unsigned 
                 nir_print_shader(nir, stdout);
         }
 
-        panfrost_nir_assign_sysvals(&ctx->sysvals, nir);
+        panfrost_nir_assign_sysvals(&ctx->sysvals, ctx, nir);
         program->sysval_count = ctx->sysvals.sysval_count;
         memcpy(program->sysvals, ctx->sysvals.sysvals, sizeof(ctx->sysvals.sysvals[0]) * ctx->sysvals.sysval_count);
         ctx->blend_types = program->blend_types;

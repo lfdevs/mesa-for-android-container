@@ -1226,6 +1226,9 @@ fd6_emit_tile(struct fd_batch *batch, const struct fd_tile *tile)
 	} else {
 		emit_conditional_ib(batch, tile, batch->draw);
 	}
+
+	if (batch->epilogue)
+		fd6_emit_ib(batch->gmem, batch->epilogue);
 }
 
 static void
@@ -1266,9 +1269,6 @@ static void
 fd6_emit_tile_fini(struct fd_batch *batch)
 {
 	struct fd_ringbuffer *ring = batch->gmem;
-
-	if (batch->epilogue)
-		fd6_emit_ib(batch->gmem, batch->epilogue);
 
 	OUT_PKT4(ring, REG_A6XX_GRAS_LRZ_CNTL, 1);
 	OUT_RING(ring, A6XX_GRAS_LRZ_CNTL_ENABLE);

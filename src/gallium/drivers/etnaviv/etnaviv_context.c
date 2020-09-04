@@ -93,6 +93,7 @@ etna_context_destroy(struct pipe_context *pctx)
    struct etna_context *ctx = etna_context(pctx);
 
    mtx_lock(&ctx->lock);
+
    if (ctx->used_resources_read) {
 
       /*
@@ -103,7 +104,9 @@ etna_context_destroy(struct pipe_context *pctx)
       set_foreach(ctx->used_resources_read, entry) {
          struct etna_resource *rsc = (struct etna_resource *)entry->key;
 
+         mtx_lock(&rsc->lock);
          _mesa_set_remove_key(rsc->pending_ctx, ctx);
+         mtx_unlock(&rsc->lock);
       }
       _mesa_set_destroy(ctx->used_resources_read, NULL);
 
@@ -118,7 +121,9 @@ etna_context_destroy(struct pipe_context *pctx)
       set_foreach(ctx->used_resources_write, entry) {
          struct etna_resource *rsc = (struct etna_resource *)entry->key;
 
+         mtx_lock(&rsc->lock);
          _mesa_set_remove_key(rsc->pending_ctx, ctx);
+         mtx_unlock(&rsc->lock);
       }
       _mesa_set_destroy(ctx->used_resources_write, NULL);
 
@@ -487,11 +492,15 @@ etna_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
       struct etna_resource *rsc = (struct etna_resource *)entry->key;
       struct pipe_resource *referenced = &rsc->base;
 
+      mtx_lock(&rsc->lock);
+
       _mesa_set_remove_key(rsc->pending_ctx, ctx);
 
       /* if resource has no pending ctx's reset its status */
       if (_mesa_set_next_entry(rsc->pending_ctx, NULL) == NULL)
          rsc->status &= ~ETNA_PENDING_READ;
+
+      mtx_unlock(&rsc->lock);
 
       pipe_resource_reference(&referenced, NULL);
    }
@@ -501,11 +510,13 @@ etna_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
       struct etna_resource *rsc = (struct etna_resource *)entry->key;
       struct pipe_resource *referenced = &rsc->base;
 
+      mtx_lock(&rsc->lock);
       _mesa_set_remove_key(rsc->pending_ctx, ctx);
 
       /* if resource has no pending ctx's reset its status */
       if (_mesa_set_next_entry(rsc->pending_ctx, NULL) == NULL)
          rsc->status &= ~ETNA_PENDING_WRITE;
+      mtx_unlock(&rsc->lock);
 
       pipe_resource_reference(&referenced, NULL);
    }

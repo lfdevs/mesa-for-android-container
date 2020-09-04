@@ -64,7 +64,7 @@ pkg.generate(
   description : 'Mesa gbm library',
   version : meson.project_version(),
   libraries : libgbm,
-  libraries_private : '-ldl',  # FIXME: autotools lists this a incomplete
+  libraries_private : gbm_priv_libs,
 )
 
 if with_symbols_check

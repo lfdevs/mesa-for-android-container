@@ -6,7 +6,7 @@
 		radeon_drm_winsys_create;
 		amdgpu_winsys_create;
 		fd_drm_screen_create;
-		ac_init_llvm_once;
+		ac_init_shared_llvm_once;
 	local:
 		*;
 };

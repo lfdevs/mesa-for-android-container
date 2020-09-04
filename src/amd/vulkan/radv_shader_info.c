@@ -403,7 +403,7 @@ gather_info_input_decl_vs(const nir_shader *nir, const nir_variable *var,
 	unsigned attrib_count = glsl_count_attribute_slots(var->type, true);
 	int idx = var->data.location;
 
-	if (idx >= VERT_ATTRIB_GENERIC0 && idx <= VERT_ATTRIB_GENERIC15)
+	if (idx >= VERT_ATTRIB_GENERIC0 && idx < VERT_ATTRIB_GENERIC0 + MAX_VERTEX_ATTRIBS)
 		info->vs.has_vertex_buffers = true;
 
 	for (unsigned i = 0; i < attrib_count; ++i) {

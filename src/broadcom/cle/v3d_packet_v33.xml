@@ -630,11 +630,11 @@
   </packet>
 
   <packet code="54" name="Set InstanceID" cl="B" min_ver="41">
-    <field name="Instance ID" size="32" start="32" type="uint"/>
+    <field name="Instance ID" size="32" start="0" type="uint"/>
   </packet>
 
   <packet code="55" name="Set PrimitiveID" cl="B" min_ver="41">
-    <field name="Primitive ID" size="32" start="32" type="uint"/>
+    <field name="Primitive ID" size="32" start="0" type="uint"/>
   </packet>
 
   <packet code="56" name="Prim List Format">

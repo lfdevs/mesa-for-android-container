@@ -869,7 +869,7 @@ dri2_get_modifier_num_planes(uint64_t modifier, int fourcc)
    case I915_FORMAT_MOD_X_TILED:
    case I915_FORMAT_MOD_Y_TILED:
    case DRM_FORMAT_MOD_INVALID:
-      return map->nplanes;
+      return util_format_get_num_planes(map->pipe_format);
    default:
       return 0;
    }
@@ -886,22 +886,12 @@ dri2_create_image_from_fd(__DRIscreen *_screen,
    const struct dri2_format_mapping *map = dri2_get_mapping_by_fourcc(fourcc);
    __DRIimage *img = NULL;
    unsigned err = __DRI_IMAGE_ERROR_SUCCESS;
-   int i, expected_num_fds;
-   int num_handles = dri2_get_modifier_num_planes(modifier, fourcc);
+   int i;
+   const int expected_num_fds = dri2_get_modifier_num_planes(modifier, fourcc);
 
-   if (!map || num_handles == 0) {
+   if (!map || expected_num_fds == 0) {
       err = __DRI_IMAGE_ERROR_BAD_MATCH;
       goto exit;
-   }
-
-   switch (fourcc) {
-   case DRM_FORMAT_YUYV:
-   case DRM_FORMAT_UYVY:
-      expected_num_fds = 1;
-      break;
-   default:
-      expected_num_fds = num_handles;
-      break;
    }
 
    if (num_fds != expected_num_fds) {

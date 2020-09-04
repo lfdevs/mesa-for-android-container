@@ -299,8 +299,8 @@ meta_emit_blit(struct radv_cmd_buffer *cmd_buffer,
                struct radv_image *src_image,
                struct radv_image_view *src_iview,
 	       VkImageLayout src_image_layout,
-               VkOffset3D src_offset_0,
-               VkOffset3D src_offset_1,
+               float src_offset_0[3],
+               float src_offset_1[3],
                struct radv_image *dest_image,
                struct radv_image_view *dest_iview,
 	       VkImageLayout dest_image_layout,
@@ -319,11 +319,11 @@ meta_emit_blit(struct radv_cmd_buffer *cmd_buffer,
 	assert(src_image->info.samples == dest_image->info.samples);
 
 	float vertex_push_constants[5] = {
-		(float)src_offset_0.x / (float)src_width,
-		(float)src_offset_0.y / (float)src_height,
-		(float)src_offset_1.x / (float)src_width,
-		(float)src_offset_1.y / (float)src_height,
-		(float)src_offset_0.z / (float)src_depth,
+		src_offset_0[0] / (float)src_width,
+		src_offset_0[1] / (float)src_height,
+		src_offset_1[0] / (float)src_width,
+		src_offset_1[1] / (float)src_height,
+		src_offset_0[2] / (float)src_depth,
 	};
 
 	radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer),
@@ -599,12 +599,19 @@ void radv_CmdBlitImage(
 		}
 
 		bool flip_z = flip_coords(&src_start, &src_end, &dst_start, &dst_end);
-		float src_z_step = (float)(src_end + 1 - src_start) /
-			(float)(dst_end + 1 - dst_start);
+		float src_z_step = (float)(src_end - src_start) /
+			(float)(dst_end - dst_start);
+
+		/* There is no interpolation to the pixel center during
+		 * rendering, so add the 0.5 offset ourselves here. */
+		float depth_center_offset = 0;
+		if (src_image->type == VK_IMAGE_TYPE_3D)
+			depth_center_offset = 0.5 / (dst_end - dst_start) * (src_end - src_start);
 
 		if (flip_z) {
 			src_start = src_end;
 			src_z_step *= -1;
+			depth_center_offset *= -1;
 		}
 
 		unsigned src_x0 = pRegions[r].srcOffsets[0].x;
@@ -635,15 +642,16 @@ void radv_CmdBlitImage(
 				.x = dst_x1,
 				.y = dst_y1,
 			};
-			VkOffset3D src_offset_0 = {
-				.x = src_x0,
-				.y = src_y0,
-				.z = src_start + i * src_z_step,
+
+			float src_offset_0[3] = {
+				src_x0,
+				src_y0,
+				src_start + i * src_z_step + depth_center_offset,
 			};
-			VkOffset3D src_offset_1 = {
-				.x = src_x1,
-				.y = src_y1,
-				.z = src_start + i * src_z_step,
+			float src_offset_1[3] = {
+				src_x1,
+				src_y1,
+				src_start + i * src_z_step + depth_center_offset,
 			};
 			const uint32_t dest_array_slice = dst_start + i;
 

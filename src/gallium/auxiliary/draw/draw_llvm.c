@@ -1128,7 +1128,7 @@ fetch_vector(struct gallivm_state *gallivm,
    }
 
    /* out-of-bound fetches return all zeros */
-   for (i = 0; i < TGSI_NUM_CHANNELS; i++) {
+   for (i = 0; i < format_desc->nr_channels; i++) {
       inputs[i] = LLVMBuildBitCast(builder, inputs[i], blduivec.vec_type, "");
       inputs[i] = LLVMBuildAnd(builder, inputs[i], valid_mask, "");
       inputs[i] = LLVMBuildBitCast(builder, inputs[i],

@@ -82,6 +82,8 @@ struct gpu_info {
 	uint32_t gpu_id;
 	uint32_t gmem_alignw;
 	uint32_t gmem_alignh;
+	uint32_t tile_alignw;
+	uint32_t tile_alignh;
 	uint32_t num_vsc_pipes;
 	uint8_t  gmem_page_align;
 	uint32_t gmemsize_bytes;
@@ -94,11 +96,12 @@ struct gpu_info {
 
 /* keep sorted by gpu name: */
 static const struct gpu_info gpu_infos[] = {
-	{ "a306", 307, 32, 32,  8, 4, SZ_128K },
-	{ "a405", 405, 32, 32,  8, 4, SZ_256K },
-	{ "a530", 530, 64, 32, 16, 4, SZ_1M   },
-	{ "a618", 618, 32, 32, 32, 1, SZ_512K },
-	{ "a630", 630, 32, 32, 32, 1, SZ_1M   },
+	{ "a306", 307, 32, 32, 32, 32,  8, 4, SZ_128K },
+	{ "a405", 405, 32, 32, 32, 32,  8, 4, SZ_256K },
+	{ "a530", 530, 64, 32, 64, 32, 16, 4, SZ_1M   },
+	{ "a618", 618, 16,  4, 32, 32, 32, 1, SZ_512K },
+	{ "a630", 630, 16,  4, 32, 32, 32, 1, SZ_1M   },
+	{ "a650", 630, 16,  4, 96, 32, 32, 1, SZ_1M + SZ_128K },
 };
 
 
@@ -167,6 +170,8 @@ main(int argc, char **argv)
 		.gpu_id         = gpu_info->gpu_id,
 		.gmem_alignw    = gpu_info->gmem_alignw,
 		.gmem_alignh    = gpu_info->gmem_alignh,
+		.tile_alignw    = gpu_info->tile_alignw,
+		.tile_alignh    = gpu_info->tile_alignh,
 		.num_vsc_pipes  = gpu_info->num_vsc_pipes,
 		.gmemsize_bytes = gpu_info->gmemsize_bytes,
 	};

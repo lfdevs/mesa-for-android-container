@@ -4442,6 +4442,14 @@ anv_get_subpass_id(const struct anv_cmd_state * const cmd_state)
    return subpass_id;
 }
 
+struct anv_performance_configuration_intel {
+   struct vk_object_base      base;
+
+   struct gen_perf_registers *register_config;
+
+   uint64_t                   config_id;
+};
+
 struct gen_perf_config *anv_get_perf(const struct gen_device_info *devinfo, int fd);
 void anv_device_perf_init(struct anv_device *device);
 void anv_perf_write_pass_results(struct gen_perf_config *perf,
@@ -4504,6 +4512,9 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(anv_shader_module, base, VkShaderModule,
 VK_DEFINE_NONDISP_HANDLE_CASTS(anv_ycbcr_conversion, base,
                                VkSamplerYcbcrConversion,
                                VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION)
+VK_DEFINE_NONDISP_HANDLE_CASTS(anv_performance_configuration_intel, base,
+                               VkPerformanceConfigurationINTEL,
+                               VK_OBJECT_TYPE_PERFORMANCE_CONFIGURATION_INTEL)
 
 /* Gen-specific function declarations */
 #ifdef genX

@@ -1377,9 +1377,6 @@ static bool
 relocate_cmd_buffer(struct anv_cmd_buffer *cmd_buffer,
                     struct anv_execbuf *exec)
 {
-   if (cmd_buffer->perf_query_pool)
-      return false;
-
    if (!exec->has_relocs)
       return true;
 

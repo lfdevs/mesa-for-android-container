@@ -79,7 +79,7 @@ void process_block(dce_ctx& ctx, Block& block)
 
 bool is_dead(const std::vector<uint16_t>& uses, Instruction *instr)
 {
-   if (instr->definitions.empty())
+   if (instr->definitions.empty() || instr->format == Format::PSEUDO_BRANCH)
       return false;
    if (std::any_of(instr->definitions.begin(), instr->definitions.end(),
           [&uses] (const Definition& def) { return uses[def.tempId()];}))

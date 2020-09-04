@@ -3445,8 +3445,9 @@ shader-blocks:
 	:5:0010:0022[a4827242x_46248300x] gather4b.a (s8)(y)hr16.z, hr32.x, s#1, t#35
 	:4:0011:0023[82342205x_cd064d21x] (rpt2)(ul)unknown(4,17) r1.y, (neg)c<a0.x + 289>
 	:5:0012:0026[a923bf8bx_81f95908x] (jp)samb.3d.a.p (u32)(xyzw)r34.w, hr33.x, hr43.x, s#15, t#64
+	:1:0013:0027[3dda8123x_a0d91ccdx] (sy)(jp)(rpt1)cov.u8u16 (even)(pos_infinity)hr<a0.x + 35>, 0xa0d91ccd
 
-../src/freedreno/ir3/disasm-a3xx.c:173: regmask_set: Assertion `num < MAX_REG' failed.
+../src/freedreno/ir3/instr-a3xx.h:1016: is_cat6_legacy: Assertion `instr->cat6.opc == 0' failed.
 	-----------------------------------------------
 	8192 (0x2000) bytes
 	000000: a018c54a 0600e824 11fa09c3 edc6145b	|J...$.......[...|
@@ -4125,7 +4126,7 @@ shader-blocks:
 	:2:0000:0000[40846422x_d81251c5x] (sat)(ul)sign.f r8.z, (neg)hc113.y
 	:4:0001:0001[938a16e2x_520c369ax] (sy)(ss)(sat)(rpt2)unknown(4,28) hr56.z, -358
 	:1:0002:0004[200a00c1x_094864d2x] cov.u16f16 hr<a0.x + 193>, 
-../src/freedreno/ir3/disasm-a3xx.c:185: regmask_get: Assertion `num < MAX_REG' failed.
+../src/freedreno/ir3/disasm-a3xx.c:184: regmask_get: Assertion `num < MAX_REG' failed.
 	-----------------------------------------------
 	8192 (0x2000) bytes
 	000000: d81251c5 40846422 520c369a 938a16e2	|.Q.."d.@.6.R....|
@@ -4644,8 +4645,1028 @@ shader-blocks:
       size: 2048
 	:0:0000:0000[00000000x_00003002x] nop
 	:0:0001:0001[00000000x_00000000x] nop
-	:6:0002:0002[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[
-../src/freedreno/ir3/disasm-a3xx.c:173: regmask_set: Assertion `num < MAX_REG' failed.
+	:6:0002:0002[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0003:0003[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0004:0004[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0005:0005[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0006:0006[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0007:0007[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0008:0008[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0009:0009[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0010:0010[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0011:0011[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0012:0012[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0013:0013[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0014:0014[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0015:0015[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0016:0016[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0017:0017[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0018:0018[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0019:0019[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0020:0020[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0021:0021[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0022:0022[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0023:0023[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0024:0024[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0025:0025[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0026:0026[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0027:0027[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0028:0028[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0029:0029[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0030:0030[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0031:0031[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0032:0032[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0033:0033[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0034:0034[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0035:0035[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0036:0036[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0037:0037[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0038:0038[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0039:0039[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0040:0040[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0041:0041[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0042:0042[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0043:0043[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0044:0044[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0045:0045[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0046:0046[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0047:0047[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0048:0048[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0049:0049[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0050:0050[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0051:0051[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0052:0052[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0053:0053[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0054:0054[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0055:0055[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0056:0056[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0057:0057[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0058:0058[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0059:0059[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0060:0060[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0061:0061[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0062:0062[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0063:0063[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0064:0064[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0065:0065[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0066:0066[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0067:0067[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0068:0068[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0069:0069[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0070:0070[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0071:0071[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0072:0072[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0073:0073[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0074:0074[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0075:0075[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0076:0076[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0077:0077[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0078:0078[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0079:0079[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0080:0080[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0081:0081[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0082:0082[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0083:0083[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0084:0084[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0085:0085[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0086:0086[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0087:0087[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0088:0088[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0089:0089[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0090:0090[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0091:0091[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0092:0092[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0093:0093[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0094:0094[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0095:0095[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0096:0096[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0097:0097[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0098:0098[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0099:0099[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0100:0100[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0101:0101[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0102:0102[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0103:0103[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0104:0104[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0105:0105[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0106:0106[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0107:0107[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0108:0108[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0109:0109[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0110:0110[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0111:0111[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0112:0112[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0113:0113[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0114:0114[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0115:0115[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0116:0116[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0117:0117[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0118:0118[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0119:0119[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0120:0120[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0121:0121[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0122:0122[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0123:0123[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0124:0124[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0125:0125[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0126:0126[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0127:0127[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0128:0128[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0129:0129[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0130:0130[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0131:0131[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0132:0132[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0133:0133[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0134:0134[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0135:0135[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0136:0136[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0137:0137[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0138:0138[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0139:0139[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0140:0140[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0141:0141[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0142:0142[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0143:0143[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0144:0144[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0145:0145[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0146:0146[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0147:0147[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0148:0148[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0149:0149[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0150:0150[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0151:0151[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0152:0152[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0153:0153[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0154:0154[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0155:0155[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0156:0156[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0157:0157[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0158:0158[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0159:0159[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0160:0160[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0161:0161[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0162:0162[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0163:0163[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0164:0164[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0165:0165[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0166:0166[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0167:0167[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0168:0168[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0169:0169[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0170:0170[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0171:0171[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0172:0172[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0173:0173[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0174:0174[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0175:0175[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0176:0176[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0177:0177[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0178:0178[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0179:0179[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0180:0180[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0181:0181[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0182:0182[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0183:0183[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0184:0184[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0185:0185[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0186:0186[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0187:0187[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0188:0188[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0189:0189[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0190:0190[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0191:0191[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0192:0192[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0193:0193[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0194:0194[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0195:0195[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0196:0196[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0197:0197[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0198:0198[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0199:0199[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0200:0200[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0201:0201[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0202:0202[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0203:0203[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0204:0204[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0205:0205[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0206:0206[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0207:0207[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0208:0208[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0209:0209[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0210:0210[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0211:0211[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0212:0212[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0213:0213[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0214:0214[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0215:0215[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0216:0216[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0217:0217[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0218:0218[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0219:0219[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0220:0220[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0221:0221[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0222:0222[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0223:0223[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0224:0224[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0225:0225[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0226:0226[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0227:0227[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0228:0228[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0229:0229[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0230:0230[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0231:0231[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0232:0232[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0233:0233[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0234:0234[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0235:0235[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0236:0236[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0237:0237[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0238:0238[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0239:0239[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0240:0240[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0241:0241[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0242:0242[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0243:0243[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0244:0244[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0245:0245[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0246:0246[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0247:0247[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0248:0248[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0249:0249[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0250:0250[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0251:0251[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0252:0252[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0253:0253[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0254:0254[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0255:0255[deadbeefx_deadbeefx] (sy)(jp)atomic.xor.typed.4d.u8.4.l hr59.w, l[r45.z], 222
+	:6:0256:0256[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0257:0257[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0258:0258[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0259:0259[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0260:0260[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0261:0261[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0262:0262[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0263:0263[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0264:0264[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0265:0265[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0266:0266[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0267:0267[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0268:0268[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0269:0269[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0270:0270[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0271:0271[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0272:0272[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0273:0273[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0274:0274[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0275:0275[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0276:0276[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0277:0277[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0278:0278[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0279:0279[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0280:0280[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0281:0281[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0282:0282[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0283:0283[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0284:0284[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0285:0285[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0286:0286[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0287:0287[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0288:0288[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0289:0289[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0290:0290[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0291:0291[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0292:0292[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0293:0293[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0294:0294[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0295:0295[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0296:0296[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0297:0297[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0298:0298[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0299:0299[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0300:0300[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0301:0301[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0302:0302[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0303:0303[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0304:0304[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0305:0305[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0306:0306[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0307:0307[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0308:0308[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0309:0309[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0310:0310[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0311:0311[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0312:0312[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0313:0313[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0314:0314[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0315:0315[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0316:0316[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0317:0317[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0318:0318[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0319:0319[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0320:0320[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0321:0321[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0322:0322[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0323:0323[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0324:0324[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0325:0325[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0326:0326[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0327:0327[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0328:0328[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0329:0329[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0330:0330[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0331:0331[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0332:0332[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0333:0333[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0334:0334[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0335:0335[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0336:0336[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0337:0337[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0338:0338[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0339:0339[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0340:0340[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0341:0341[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0342:0342[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0343:0343[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0344:0344[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0345:0345[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0346:0346[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0347:0347[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0348:0348[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0349:0349[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0350:0350[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0351:0351[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0352:0352[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0353:0353[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0354:0354[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0355:0355[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0356:0356[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0357:0357[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0358:0358[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0359:0359[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0360:0360[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0361:0361[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0362:0362[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0363:0363[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0364:0364[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0365:0365[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0366:0366[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0367:0367[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0368:0368[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0369:0369[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0370:0370[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0371:0371[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0372:0372[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0373:0373[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0374:0374[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0375:0375[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0376:0376[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0377:0377[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0378:0378[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0379:0379[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0380:0380[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0381:0381[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0382:0382[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0383:0383[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0384:0384[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0385:0385[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0386:0386[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0387:0387[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0388:0388[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0389:0389[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0390:0390[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0391:0391[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0392:0392[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0393:0393[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0394:0394[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0395:0395[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0396:0396[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0397:0397[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0398:0398[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0399:0399[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0400:0400[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0401:0401[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0402:0402[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0403:0403[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0404:0404[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0405:0405[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0406:0406[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0407:0407[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0408:0408[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0409:0409[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0410:0410[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0411:0411[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0412:0412[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0413:0413[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0414:0414[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0415:0415[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0416:0416[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0417:0417[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0418:0418[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0419:0419[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0420:0420[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0421:0421[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0422:0422[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0423:0423[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0424:0424[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0425:0425[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0426:0426[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0427:0427[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0428:0428[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0429:0429[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0430:0430[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0431:0431[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0432:0432[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0433:0433[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0434:0434[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0435:0435[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0436:0436[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0437:0437[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0438:0438[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0439:0439[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0440:0440[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0441:0441[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0442:0442[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0443:0443[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0444:0444[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0445:0445[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0446:0446[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0447:0447[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0448:0448[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0449:0449[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0450:0450[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0451:0451[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0452:0452[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0453:0453[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0454:0454[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0455:0455[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0456:0456[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0457:0457[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0458:0458[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0459:0459[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0460:0460[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0461:0461[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0462:0462[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0463:0463[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0464:0464[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0465:0465[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0466:0466[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0467:0467[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0468:0468[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0469:0469[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0470:0470[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0471:0471[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0472:0472[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0473:0473[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0474:0474[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0475:0475[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0476:0476[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0477:0477[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0478:0478[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0479:0479[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0480:0480[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0481:0481[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0482:0482[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0483:0483[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0484:0484[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0485:0485[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0486:0486[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0487:0487[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0488:0488[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0489:0489[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0490:0490[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0491:0491[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0492:0492[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0493:0493[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0494:0494[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0495:0495[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0496:0496[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0497:0497[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0498:0498[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0499:0499[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0500:0500[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0501:0501[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0502:0502[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0503:0503[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0504:0504[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0505:0505[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0506:0506[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0507:0507[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0508:0508[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0509:0509[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0510:0510[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:6:0511:0511[deafbeadx_deafbeadx] (sy)(jp)atomic.xor.typed.4d.s8.4.l hr43.y, l[r47.z], 222
+	:0:0512:0512[00500240x_00024000x] (rpt2)nop
+	:0:0513:0515[00402020x_00000000x] nop
+	:0:0514:0516[00000040x_00001000x] nop
+	:0:0515:0517[00510401x_00024020x] (eq)(rpt4)nop
+	:0:0516:0522[00100080x_00000008x] nop
+	:0:0517:0523[00000044x_00002080x] nop
+	:0:0518:0524[00001000x_00000000x] (ss)nop
+	:0:0519:0525[00200000x_00000008x] nop
+	:0:0520:0526[00000044x_00048110x] nop
+	:0:0521:0527[00000040x_00508000x] nop
+	:0:0522:0528[00010200x_00020044x] (eq)(rpt2)nop
+	:0:0523:0531[00000000x_00201014x] nop
+	:0:0524:0532[00012100x_00101100x] (eq)(rpt1)nop
+	:0:0525:0534[00000012x_00005000x] nop
+	:0:0526:0535[00000010x_00005000x] nop
+	:0:0527:0536[00040000x_00000020x] nop
+	:0:0528:0537[00002101x_00082514x] (rpt1)nop
+	:0:0529:0539[00000000x_00210020x] nop
+	:0:0530:0540[00440004x_00010002x] nop
+	:0:0531:0541[00000002x_00000250x] nop
+	:0:0532:0542[00000040x_00100000x] nop
+	:0:0533:0543[00000000x_00020014x] nop
+	:0:0534:0544[000400a0x_00050020x] nop
+	:0:0535:0545[00100000x_00000000x] nop
+	:0:0536:0546[00000000x_00044081x] nop
+	:0:0537:0547[00000000x_00000000x] nop
+	:0:0538:0548[00200048x_00000100x] nop
+	:0:0539:0549[00080020x_00000000x] nop
+	:0:0540:0550[00200002x_00200001x] nop
+	:0:0541:0551[002000a4x_00000404x] nop
+	:0:0542:0552[00440246x_00000004x] (rpt2)nop
+	:0:0543:0555[0008c040x_00442000x] nop
+	:0:0544:0556[002112a0x_00200000x] (ss)(eq)(rpt2)nop
+	:0:0545:0559[00000000x_00000000x] nop
+	:0:0546:0560[00000240x_00400001x] (rpt2)nop
+	:0:0547:0563[00000000x_00040400x] nop
+	:0:0548:0564[0000a100x_00104010x] (rpt1)nop
+	:0:0549:0566[00008480x_00002001x] (rpt4)nop
+	:0:0550:0571[00000001x_00000040x] nop
+	:0:0551:0572[00040001x_00040400x] nop
+	:0:0552:0573[00200000x_00040600x] nop
+	:0:0553:0574[00000100x_00100000x] (rpt1)nop
+	:0:0554:0576[00504180x_0020a200x] (rpt1)nop
+	:0:0555:0578[00000000x_00000000x] nop
+	:0:0556:0579[00000024x_00004000x] nop
+	:0:0557:0580[00200000x_00100008x] nop
+	:0:0558:0581[00010080x_00000000x] (eq)nop
+	:0:0559:0582[00080000x_00000000x] nop
+	:0:0560:0583[00084000x_00500400x] nop
+	:0:0561:0584[00004000x_00008000x] nop
+	:0:0562:0585[00200000x_00000300x] nop
+	:0:0563:0586[00000042x_00020001x] nop
+	:0:0564:0587[00005600x_00400088x] (ss)(rpt6)nop
+	:0:0565:0594[00000002x_00000000x] nop
+	:0:0566:0595[0002005ex_00400008x] bkt #8
+	:0:0567:0596[00020020x_00200000x] bkt #0
+	:0:0568:0597[001e0414x_00055480x] (rpt4)bkt #21632
+	:0:0569:0602[00000000x_00000000x] nop
+	:0:0570:0603[00000442x_00000480x] (rpt4)nop
+	:0:0571:0608[00000200x_00080000x] (rpt2)nop
+	:0:0572:0611[00520000x_00600400x] bkt #1024
+	:0:0573:0612[00001200x_00000008x] (ss)(rpt2)nop
+	:0:0574:0615[00400114x_00201000x] (rpt1)nop
+	:0:0575:0617[00110100x_00100002x] (eq)(rpt1)nop
+	:0:0576:0619[00404200x_00200683x] (rpt2)nop
+	:0:0577:0622[00000090x_00000004x] nop
+	:0:0578:0623[00502000x_00002000x] nop
+	:0:0579:0624[00000004x_00000020x] nop
+	:0:0580:0625[00103100x_00600010x] (ss)(rpt1)nop
+	:0:0581:0627[00000002x_00000010x] nop
+	:0:0582:0628[00004000x_00021200x] nop
+	:0:0583:0629[00000000x_00000000x] nop
+	:0:0584:0630[00201400x_0010220ax] (ss)(rpt4)nop
+	:0:0585:0635[00000000x_00030000x] nop
+	:0:0586:0636[00080040x_00400000x] nop
+	:0:0587:0637[00000080x_00000002x] nop
+	:0:0588:0638[00000580x_00000400x] (rpt5)nop
+	:0:0589:0644[00000200x_00000022x] (rpt2)nop
+	:0:0590:0647[00080000x_00300042x] nop
+	:0:0591:0648[00008000x_00040200x] nop
+	:0:0592:0649[00000000x_00040000x] nop
+	:0:0593:0650[0012008ax_00000010x] bkt #16
+	:0:0594:0651[00000100x_00000000x] (rpt1)nop
+	:0:0595:0653[00010000x_00010018x] (eq)nop
+	:0:0596:0654[00500011x_00440020x] nop
+	:0:0597:0655[00100000x_00000000x] nop
+	:0:0598:0656[00008200x_0004020cx] (rpt2)nop
+	:0:0599:0659[00000400x_00100010x] (rpt4)nop
+	:0:0600:0664[00000004x_00118000x] nop
+	:0:0601:0665[00000002x_00004200x] nop
+	:0:0602:0666[00026300x_00000210x] (rpt3)bkt #528
+	:0:0603:0670[0000a002x_00000040x] nop
+	:0:0604:0671[00081100x_00004082x] (ss)(rpt1)nop
+	:0:0605:0673[00000008x_00210000x] nop
+	:0:0606:0674[00020004x_00020000x] bkt #0
+	:0:0607:0675[00020000x_00064108x] bkt #16648
+	:0:0608:0676[00000084x_00020000x] nop
+	:0:0609:0677[00000181x_00000430x] (rpt1)nop
+	:0:0610:0679[001c8100x_00100002x] (rpt1)nop
+	:0:0611:0681[00000000x_00200020x] nop
+	:0:0612:0682[00100081x_00002000x] nop
+	:0:0613:0683[00000000x_00000008x] nop
+	:0:0614:0684[00009420x_00000024x] (ss)(rpt4)nop
+	:0:0615:0689[00000100x_00002010x] (rpt1)nop
+	:0:0616:0691[00004188x_00000000x] (rpt1)nop
+	:0:0617:0693[00100000x_00002000x] nop
+	:0:0618:0694[00120102x_00040000x] (rpt1)bkt #0
+	:0:0619:0696[00040002x_00000000x] nop
+	:0:0620:0697[00224200x_00210201x] (rpt2)bkt #513
+	:0:0621:0700[00000200x_00040000x] (rpt2)nop
+	:0:0622:0703[0000000cx_00000000x] nop
+	:0:0623:0704[00000000x_00005000x] nop
+	:0:0624:0705[00082208x_00010200x] (rpt2)nop
+	:0:0625:0708[00194011x_00000000x] (eq)nop
+	:0:0626:0709[00012100x_00000502x] (eq)(rpt1)nop
+	:0:0627:0711[00000240x_00040050x] (rpt2)nop
+	:0:0628:0714[00080211x_00004180x] (rpt2)nop
+	:0:0629:0717[00000000x_00001008x] nop
+	:0:0630:0718[00020490x_002004a0x] (rpt4)bkt #1184
+	:0:0631:0723[00210004x_00001080x] (eq)nop
+	:0:0632:0724[00000000x_00300040x] nop
+	:0:0633:0725[00008002x_00000020x] nop
+	:0:0634:0726[00000000x_00041098x] nop
+	:0:0635:0727[002000a0x_00000000x] nop
+	:0:0636:0728[00000000x_000c0400x] nop
+	:0:0637:0729[00000401x_00000402x] (rpt4)nop
+	:0:0638:0734[00002000x_00200400x] nop
+	:0:0639:0735[00000101x_00001000x] (rpt1)nop
+	:0:0640:0737[00500240x_00024000x] (rpt2)nop
+	:0:0641:0740[00402020x_00000000x] nop
+	:0:0642:0741[00000040x_00001000x] nop
+	:0:0643:0742[00510401x_00024020x] (eq)(rpt4)nop
+	:0:0644:0747[00100080x_00000008x] nop
+	:0:0645:0748[00000044x_00002080x] nop
+	:0:0646:0749[00001000x_00000000x] (ss)nop
+	:0:0647:0750[00200000x_00000008x] nop
+	:0:0648:0751[00000044x_00048110x] nop
+	:0:0649:0752[00000040x_00508000x] nop
+	:0:0650:0753[00010200x_00020044x] (eq)(rpt2)nop
+	:0:0651:0756[00000000x_00201014x] nop
+	:0:0652:0757[00012100x_00101100x] (eq)(rpt1)nop
+	:0:0653:0759[00000012x_00005000x] nop
+	:0:0654:0760[00000010x_00005000x] nop
+	:0:0655:0761[00040000x_00000020x] nop
+	:0:0656:0762[00002101x_00082514x] (rpt1)nop
+	:0:0657:0764[00000000x_00210020x] nop
+	:0:0658:0765[00440004x_00010002x] nop
+	:0:0659:0766[00000002x_00000250x] nop
+	:0:0660:0767[00000040x_00100000x] nop
+	:0:0661:0768[00000000x_00020014x] nop
+	:0:0662:0769[000400a0x_00050020x] nop
+	:0:0663:0770[00100000x_00000000x] nop
+	:0:0664:0771[00000000x_00044081x] nop
+	:0:0665:0772[00000000x_00000000x] nop
+	:0:0666:0773[00200048x_00000100x] nop
+	:0:0667:0774[00080020x_00000000x] nop
+	:0:0668:0775[00200002x_00200001x] nop
+	:0:0669:0776[002000a4x_00000404x] nop
+	:0:0670:0777[00440246x_00000004x] (rpt2)nop
+	:0:0671:0780[0008c040x_00442000x] nop
+	:0:0672:0781[002112a0x_00200000x] (ss)(eq)(rpt2)nop
+	:0:0673:0784[00000000x_00000000x] nop
+	:0:0674:0785[00000240x_00400001x] (rpt2)nop
+	:0:0675:0788[00000000x_00040400x] nop
+	:0:0676:0789[0000a100x_00104010x] (rpt1)nop
+	:0:0677:0791[00008480x_00002001x] (rpt4)nop
+	:0:0678:0796[00000001x_00000040x] nop
+	:0:0679:0797[00040001x_00040400x] nop
+	:0:0680:0798[00200000x_00040600x] nop
+	:0:0681:0799[00000100x_00100000x] (rpt1)nop
+	:0:0682:0801[00504180x_0020a200x] (rpt1)nop
+	:0:0683:0803[00000000x_00000000x] nop
+	:0:0684:0804[00000024x_00004000x] nop
+	:0:0685:0805[00200000x_00100008x] nop
+	:0:0686:0806[00010080x_00000000x] (eq)nop
+	:0:0687:0807[00080000x_00000000x] nop
+	:0:0688:0808[00084000x_00500400x] nop
+	:0:0689:0809[00004000x_00008000x] nop
+	:0:0690:0810[00200000x_00000300x] nop
+	:0:0691:0811[00000042x_00020001x] nop
+	:0:0692:0812[00005600x_00400088x] (ss)(rpt6)nop
+	:0:0693:0819[00000002x_00000000x] nop
+	:0:0694:0820[0002005ex_00400008x] bkt #8
+	:0:0695:0821[00020020x_00200000x] bkt #0
+	:0:0696:0822[001e0414x_00055480x] (rpt4)bkt #21632
+	:0:0697:0827[00000000x_00000000x] nop
+	:0:0698:0828[00000442x_00000480x] (rpt4)nop
+	:0:0699:0833[00000200x_00080000x] (rpt2)nop
+	:0:0700:0836[00520000x_00600400x] bkt #1024
+	:0:0701:0837[00001200x_00000008x] (ss)(rpt2)nop
+	:0:0702:0840[00400114x_00201000x] (rpt1)nop
+	:0:0703:0842[00110100x_00100002x] (eq)(rpt1)nop
+	:0:0704:0844[00404200x_00200683x] (rpt2)nop
+	:0:0705:0847[00000090x_00000004x] nop
+	:0:0706:0848[00502000x_00002000x] nop
+	:0:0707:0849[00000004x_00000020x] nop
+	:0:0708:0850[00103100x_00600010x] (ss)(rpt1)nop
+	:0:0709:0852[00000002x_00000010x] nop
+	:0:0710:0853[00004000x_00021200x] nop
+	:0:0711:0854[00000000x_00000000x] nop
+	:0:0712:0855[00201400x_0010220ax] (ss)(rpt4)nop
+	:0:0713:0860[00000000x_00030000x] nop
+	:0:0714:0861[00080040x_00400000x] nop
+	:0:0715:0862[00000080x_00000002x] nop
+	:0:0716:0863[00000580x_00000400x] (rpt5)nop
+	:0:0717:0869[00000200x_00000022x] (rpt2)nop
+	:0:0718:0872[00080000x_00300042x] nop
+	:0:0719:0873[00008000x_00040200x] nop
+	:0:0720:0874[00000000x_00040000x] nop
+	:0:0721:0875[0012008ax_00000010x] bkt #16
+	:0:0722:0876[00000100x_00000000x] (rpt1)nop
+	:0:0723:0878[00010000x_00010018x] (eq)nop
+	:0:0724:0879[00500011x_00440020x] nop
+	:0:0725:0880[00100000x_00000000x] nop
+	:0:0726:0881[00008200x_0004020cx] (rpt2)nop
+	:0:0727:0884[00000400x_00100010x] (rpt4)nop
+	:0:0728:0889[00000004x_00118000x] nop
+	:0:0729:0890[00000002x_00004200x] nop
+	:0:0730:0891[00026300x_00000210x] (rpt3)bkt #528
+	:0:0731:0895[0000a002x_00000040x] nop
+	:0:0732:0896[00081100x_00004082x] (ss)(rpt1)nop
+	:0:0733:0898[00000008x_00210000x] nop
+	:0:0734:0899[00020004x_00020000x] bkt #0
+	:0:0735:0900[00020000x_00064108x] bkt #16648
+	:0:0736:0901[00000084x_00020000x] nop
+	:0:0737:0902[00000181x_00000430x] (rpt1)nop
+	:0:0738:0904[001c8100x_00100002x] (rpt1)nop
+	:0:0739:0906[00000000x_00200020x] nop
+	:0:0740:0907[00100081x_00002000x] nop
+	:0:0741:0908[00000000x_00000008x] nop
+	:0:0742:0909[00009420x_00000024x] (ss)(rpt4)nop
+	:0:0743:0914[00000100x_00002010x] (rpt1)nop
+	:0:0744:0916[00004188x_00000000x] (rpt1)nop
+	:0:0745:0918[00100000x_00002000x] nop
+	:0:0746:0919[00120102x_00040000x] (rpt1)bkt #0
+	:0:0747:0921[00040002x_00000000x] nop
+	:0:0748:0922[00224200x_00210201x] (rpt2)bkt #513
+	:0:0749:0925[00000200x_00040000x] (rpt2)nop
+	:0:0750:0928[0000000cx_00000000x] nop
+	:0:0751:0929[00000000x_00005000x] nop
+	:0:0752:0930[00082208x_00010200x] (rpt2)nop
+	:0:0753:0933[00194011x_00000000x] (eq)nop
+	:0:0754:0934[00012100x_00000502x] (eq)(rpt1)nop
+	:0:0755:0936[00000240x_00040050x] (rpt2)nop
+	:0:0756:0939[00080211x_00004180x] (rpt2)nop
+	:0:0757:0942[00000000x_00001008x] nop
+	:0:0758:0943[00020490x_002004a0x] (rpt4)bkt #1184
+	:0:0759:0948[00210004x_00001080x] (eq)nop
+	:0:0760:0949[00000000x_00300040x] nop
+	:0:0761:0950[00008002x_00000020x] nop
+	:0:0762:0951[00000000x_00041098x] nop
+	:0:0763:0952[002000a0x_00000000x] nop
+	:0:0764:0953[00000000x_000c0400x] nop
+	:0:0765:0954[00000401x_00000402x] (rpt4)nop
+	:0:0766:0959[00002000x_00200400x] nop
+	:0:0767:0960[00000101x_00001000x] (rpt1)nop
+	:0:0768:0962[00000000x_00000000x] nop
+	:0:0769:0963[00000000x_00000000x] nop
+	:0:0770:0964[00000000x_00000000x] nop
+	:0:0771:0965[00000000x_00000000x] nop
+	:0:0772:0966[00000000x_00000000x] nop
+	:0:0773:0967[00000000x_00000000x] nop
+	:0:0774:0968[00000000x_00000000x] nop
+	:0:0775:0969[00000000x_00000000x] nop
+	:0:0776:0970[00000000x_00000000x] nop
+	:0:0777:0971[00000000x_00000000x] nop
+	:0:0778:0972[00000000x_00000000x] nop
+	:0:0779:0973[00000000x_00000000x] nop
+	:0:0780:0974[00000000x_00000000x] nop
+	:0:0781:0975[00000000x_00000000x] nop
+	:0:0782:0976[00000000x_00000000x] nop
+	:0:0783:0977[00000000x_00000000x] nop
+	:0:0784:0978[00000000x_00000000x] nop
+	:0:0785:0979[00000000x_00000000x] nop
+	:0:0786:0980[00000000x_00000000x] nop
+	:0:0787:0981[00000000x_00000000x] nop
+	:0:0788:0982[00000000x_00000000x] nop
+	:0:0789:0983[00000000x_00000000x] nop
+	:0:0790:0984[00000000x_00000000x] nop
+	:0:0791:0985[00000000x_00000000x] nop
+	:0:0792:0986[00000000x_00000000x] nop
+	:0:0793:0987[00000000x_00000000x] nop
+	:0:0794:0988[00000000x_00000000x] nop
+	:0:0795:0989[00000000x_00000000x] nop
+	:0:0796:0990[00000000x_00000000x] nop
+	:0:0797:0991[00000000x_00000000x] nop
+	:0:0798:0992[00000000x_00000000x] nop
+	:0:0799:0993[00000000x_00000000x] nop
+	:0:0800:0994[00000000x_00000000x] nop
+	:0:0801:0995[00000000x_00000000x] nop
+	:0:0802:0996[00000000x_00000000x] nop
+	:0:0803:0997[00000000x_00000000x] nop
+	:0:0804:0998[00000000x_00000000x] nop
+	:0:0805:0999[00000000x_00000000x] nop
+	:0:0806:1000[00000000x_00000000x] nop
+	:0:0807:1001[00000000x_00000000x] nop
+	:0:0808:1002[00000000x_00000000x] nop
+	:0:0809:1003[00000000x_00000000x] nop
+	:0:0810:1004[00000000x_00000000x] nop
+	:0:0811:1005[00000000x_00000000x] nop
+	:0:0812:1006[00000000x_00000000x] nop
+	:0:0813:1007[00000000x_00000000x] nop
+	:0:0814:1008[00000000x_00000000x] nop
+	:0:0815:1009[00000000x_00000000x] nop
+	:0:0816:1010[00000000x_00000000x] nop
+	:0:0817:1011[00000000x_00000000x] nop
+	:0:0818:1012[00000000x_00000000x] nop
+	:0:0819:1013[00000000x_00000000x] nop
+	:0:0820:1014[00000000x_00000000x] nop
+	:0:0821:1015[00000000x_00000000x] nop
+	:0:0822:1016[00000000x_00000000x] nop
+	:0:0823:1017[00000000x_00000000x] nop
+	:0:0824:1018[00000000x_00000000x] nop
+	:0:0825:1019[00000000x_00000000x] nop
+	:0:0826:1020[00000000x_00000000x] nop
+	:0:0827:1021[00000000x_00000000x] nop
+	:0:0828:1022[00000000x_00000000x] nop
+	:0:0829:1023[00000000x_00000000x] nop
+	:0:0830:1024[00000000x_00000000x] nop
+	:0:0831:1025[00000000x_00000000x] nop
+	:0:0832:1026[00000000x_00000000x] nop
+	:0:0833:1027[00000000x_00000000x] nop
+	:0:0834:1028[00000000x_00000000x] nop
+	:0:0835:1029[00000000x_00000000x] nop
+	:0:0836:1030[00000000x_00000000x] nop
+	:0:0837:1031[00000000x_00000000x] nop
+	:0:0838:1032[00000000x_00000000x] nop
+	:0:0839:1033[00000000x_00000000x] nop
+	:0:0840:1034[00000000x_00000000x] nop
+	:0:0841:1035[00000000x_00000000x] nop
+	:0:0842:1036[00000000x_00000000x] nop
+	:0:0843:1037[00000000x_00000000x] nop
+	:0:0844:1038[00000000x_00000000x] nop
+	:0:0845:1039[00000000x_00000000x] nop
+	:0:0846:1040[00000000x_00000000x] nop
+	:0:0847:1041[00000000x_00000000x] nop
+	:0:0848:1042[00000000x_00000000x] nop
+	:0:0849:1043[00000000x_00000000x] nop
+	:0:0850:1044[00000000x_00000000x] nop
+	:0:0851:1045[00000000x_00000000x] nop
+	:0:0852:1046[00000000x_00000000x] nop
+	:0:0853:1047[00000000x_00000000x] nop
+	:0:0854:1048[00000000x_00000000x] nop
+	:0:0855:1049[00000000x_00000000x] nop
+	:0:0856:1050[00000000x_00000000x] nop
+	:0:0857:1051[00000000x_00000000x] nop
+	:0:0858:1052[00000000x_00000000x] nop
+	:0:0859:1053[00000000x_00000000x] nop
+	:0:0860:1054[00000000x_00000000x] nop
+	:0:0861:1055[00000000x_00000000x] nop
+	:0:0862:1056[00000000x_00000000x] nop
+	:0:0863:1057[00000000x_00000000x] nop
+	:0:0864:1058[00000000x_00000000x] nop
+	:0:0865:1059[00000000x_00000000x] nop
+	:0:0866:1060[00000000x_00000000x] nop
+	:0:0867:1061[00000000x_00000000x] nop
+	:0:0868:1062[00000000x_00000000x] nop
+	:0:0869:1063[00000000x_00000000x] nop
+	:0:0870:1064[00000000x_00000000x] nop
+	:0:0871:1065[00000000x_00000000x] nop
+	:0:0872:1066[00000000x_00000000x] nop
+	:0:0873:1067[00000000x_00000000x] nop
+	:0:0874:1068[00000000x_00000000x] nop
+	:0:0875:1069[00000000x_00000000x] nop
+	:0:0876:1070[00000000x_00000000x] nop
+	:0:0877:1071[00000000x_00000000x] nop
+	:0:0878:1072[00000000x_00000000x] nop
+	:0:0879:1073[00000000x_00000000x] nop
+	:0:0880:1074[00000000x_00000000x] nop
+	:0:0881:1075[00000000x_00000000x] nop
+	:0:0882:1076[00000000x_00000000x] nop
+	:0:0883:1077[00000000x_00000000x] nop
+	:0:0884:1078[00000000x_00000000x] nop
+	:0:0885:1079[00000000x_00000000x] nop
+	:0:0886:1080[00000000x_00000000x] nop
+	:0:0887:1081[00000000x_00000000x] nop
+	:0:0888:1082[00000000x_00000000x] nop
+	:0:0889:1083[00000000x_00000000x] nop
+	:0:0890:1084[00000000x_00000000x] nop
+	:0:0891:1085[00000000x_00000000x] nop
+	:0:0892:1086[00000000x_00000000x] nop
+	:0:0893:1087[00000000x_00000000x] nop
+	:0:0894:1088[00000000x_00000000x] nop
+	:0:0895:1089[00000000x_00000000x] nop
+	:0:0896:1090[00000000x_00000000x] nop
+	:0:0897:1091[00000000x_00000000x] nop
+	:0:0898:1092[00000000x_00000000x] nop
+	:0:0899:1093[00000000x_00000000x] nop
+	:0:0900:1094[00000000x_00000000x] nop
+	:0:0901:1095[00000000x_00000000x] nop
+	:0:0902:1096[00000000x_00000000x] nop
+	:0:0903:1097[00000000x_00000000x] nop
+	:0:0904:1098[00000000x_00000000x] nop
+	:0:0905:1099[00000000x_00000000x] nop
+	:0:0906:1100[00000000x_00000000x] nop
+	:0:0907:1101[00000000x_00000000x] nop
+	:0:0908:1102[00000000x_00000000x] nop
+	:0:0909:1103[00000000x_00000000x] nop
+	:0:0910:1104[00000000x_00000000x] nop
+	:0:0911:1105[00000000x_00000000x] nop
+	:0:0912:1106[00000000x_00000000x] nop
+	:0:0913:1107[00000000x_00000000x] nop
+	:0:0914:1108[00000000x_00000000x] nop
+	:0:0915:1109[00000000x_00000000x] nop
+	:0:0916:1110[00000000x_00000000x] nop
+	:0:0917:1111[00000000x_00000000x] nop
+	:0:0918:1112[00000000x_00000000x] nop
+	:0:0919:1113[00000000x_00000000x] nop
+	:0:0920:1114[00000000x_00000000x] nop
+	:0:0921:1115[00000000x_00000000x] nop
+	:0:0922:1116[00000000x_00000000x] nop
+	:0:0923:1117[00000000x_00000000x] nop
+	:0:0924:1118[00000000x_00000000x] nop
+	:0:0925:1119[00000000x_00000000x] nop
+	:0:0926:1120[00000000x_00000000x] nop
+	:0:0927:1121[00000000x_00000000x] nop
+	:0:0928:1122[00000000x_00000000x] nop
+	:0:0929:1123[00000000x_00000000x] nop
+	:0:0930:1124[00000000x_00000000x] nop
+	:0:0931:1125[00000000x_00000000x] nop
+	:0:0932:1126[00000000x_00000000x] nop
+	:0:0933:1127[00000000x_00000000x] nop
+	:0:0934:1128[00000000x_00000000x] nop
+	:0:0935:1129[00000000x_00000000x] nop
+	:0:0936:1130[00000000x_00000000x] nop
+	:0:0937:1131[00000000x_00000000x] nop
+	:0:0938:1132[00000000x_00000000x] nop
+	:0:0939:1133[00000000x_00000000x] nop
+	:0:0940:1134[00000000x_00000000x] nop
+	:0:0941:1135[00000000x_00000000x] nop
+	:0:0942:1136[00000000x_00000000x] nop
+	:0:0943:1137[00000000x_00000000x] nop
+	:0:0944:1138[00000000x_00000000x] nop
+	:0:0945:1139[00000000x_00000000x] nop
+	:0:0946:1140[00000000x_00000000x] nop
+	:0:0947:1141[00000000x_00000000x] nop
+	:0:0948:1142[00000000x_00000000x] nop
+	:0:0949:1143[00000000x_00000000x] nop
+	:0:0950:1144[00000000x_00000000x] nop
+	:0:0951:1145[00000000x_00000000x] nop
+	:0:0952:1146[00000000x_00000000x] nop
+	:0:0953:1147[00000000x_00000000x] nop
+	:0:0954:1148[00000000x_00000000x] nop
+	:0:0955:1149[00000000x_00000000x] nop
+	:0:0956:1150[00000000x_00000000x] nop
+	:0:0957:1151[00000000x_00000000x] nop
+	:0:0958:1152[00000000x_00000000x] nop
+	:0:0959:1153[00000000x_00000000x] nop
+	:0:0960:1154[00000000x_00000000x] nop
+	:0:0961:1155[00000000x_00000000x] nop
+	:0:0962:1156[00000000x_00000000x] nop
+	:0:0963:1157[00000000x_00000000x] nop
+	:0:0964:1158[00000000x_00000000x] nop
+	:0:0965:1159[00000000x_00000000x] nop
+	:0:0966:1160[00000000x_00000000x] nop
+	:0:0967:1161[00000000x_00000000x] nop
+	:0:0968:1162[00000000x_00000000x] nop
+	:0:0969:1163[00000000x_00000000x] nop
+	:0:0970:1164[00000000x_00000000x] nop
+	:0:0971:1165[00000000x_00000000x] nop
+	:0:0972:1166[00000000x_00000000x] nop
+	:0:0973:1167[00000000x_00000000x] nop
+	:0:0974:1168[00000000x_00000000x] nop
+	:0:0975:1169[00000000x_00000000x] nop
+	:0:0976:1170[00000000x_00000000x] nop
+	:0:0977:1171[00000000x_00000000x] nop
+	:0:0978:1172[00000000x_00000000x] nop
+	:0:0979:1173[00000000x_00000000x] nop
+	:0:0980:1174[00000000x_00000000x] nop
+	:0:0981:1175[00000000x_00000000x] nop
+	:0:0982:1176[00000000x_00000000x] nop
+	:0:0983:1177[00000000x_00000000x] nop
+	:0:0984:1178[00000000x_00000000x] nop
+	:0:0985:1179[00000000x_00000000x] nop
+	:0:0986:1180[00000000x_00000000x] nop
+	:0:0987:1181[00000000x_00000000x] nop
+	:0:0988:1182[00000000x_00000000x] nop
+	:0:0989:1183[00000000x_00000000x] nop
+	:0:0990:1184[00000000x_00000000x] nop
+	:0:0991:1185[00000000x_00000000x] nop
+	:0:0992:1186[00000000x_00000000x] nop
+	:0:0993:1187[00000000x_00000000x] nop
+	:0:0994:1188[00000000x_00000000x] nop
+	:0:0995:1189[00000000x_00000000x] nop
+	:0:0996:1190[00000000x_00000000x] nop
+	:0:0997:1191[00000000x_00000000x] nop
+	:0:0998:1192[00000000x_00000000x] nop
+	:0:0999:1193[00000000x_00000000x] nop
+	:0:1000:1194[00000000x_00000000x] nop
+	:0:1001:1195[00000000x_00000000x] nop
+	:0:1002:1196[00000000x_00000000x] nop
+	:0:1003:1197[00000000x_00000000x] nop
+	:0:1004:1198[00000000x_00000000x] nop
+	:0:1005:1199[00000000x_00000000x] nop
+	:0:1006:1200[00000000x_00000000x] nop
+	:0:1007:1201[00000000x_00000000x] nop
+	:0:1008:1202[00000000x_00000000x] nop
+	:0:1009:1203[00000000x_00000000x] nop
+	:0:1010:1204[00000000x_00000000x] nop
+	:0:1011:1205[00000000x_00000000x] nop
+	:0:1012:1206[00000000x_00000000x] nop
+	:0:1013:1207[00000000x_00000000x] nop
+	:0:1014:1208[00000000x_00000000x] nop
+	:0:1015:1209[00000000x_00000000x] nop
+	:0:1016:1210[00000000x_00000000x] nop
+	:0:1017:1211[00000000x_00000000x] nop
+	:0:1018:1212[00000000x_00000000x] nop
+	:0:1019:1213[00000000x_00000000x] nop
+	:0:1020:1214[00000000x_00000000x] nop
+	:0:1021:1215[00000000x_00000000x] nop
+	:0:1022:1216[00000000x_00000000x] nop
+	:0:1023:1217[00000000x_00000000x] nop
 	-----------------------------------------------
 	8192 (0x2000) bytes
 	000000: 00003002 00000000 00000000 00000000	|.0..............|

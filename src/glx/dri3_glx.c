@@ -593,7 +593,7 @@ dri3_swap_buffers(__GLXDRIdrawable *pdraw, int64_t target_msc, int64_t divisor,
 
    return loader_dri3_swap_buffers_msc(&priv->loader_drawable,
                                        target_msc, divisor, remainder,
-                                       flags, false);
+                                       flags, NULL, 0, false);
 }
 
 static int

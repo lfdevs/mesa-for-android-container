@@ -35,7 +35,7 @@
 
 #ifdef HAVE_PTHREAD
 #include <signal.h>
-#ifdef PTHREAD_SETAFFINITY_IN_NP_HEADER
+#ifdef HAVE_PTHREAD_NP_H
 #include <pthread_np.h>
 #endif
 #endif

@@ -56,100 +56,134 @@
  *  1.0000 1111111111111111
  */
 static nir_ssa_def *
-build_dither_mask(nir_builder b, nir_intrinsic_instr *store_instr)
+build_dither_mask(nir_builder *b, nir_ssa_def *color)
 {
-   nir_ssa_def *alpha =
-      nir_channel(&b, nir_ssa_for_src(&b, store_instr->src[0], 4), 3);
+   assert(color->num_components == 4);
+   nir_ssa_def *alpha = nir_channel(b, color, 3);
 
    nir_ssa_def *m =
-      nir_f2i32(&b, nir_fmul_imm(&b, nir_fsat(&b, alpha), 16.0));
+      nir_f2i32(b, nir_fmul_imm(b, nir_fsat(b, alpha), 16.0));
 
    nir_ssa_def *part_a =
-      nir_iand(&b,
-               nir_imm_int(&b, 0xf),
-               nir_ushr(&b,
-                        nir_imm_int(&b, 0xfea80),
-                        nir_iand(&b, m, nir_imm_int(&b, ~3))));
+      nir_iand(b,
+               nir_imm_int(b, 0xf),
+               nir_ushr(b,
+                        nir_imm_int(b, 0xfea80),
+                        nir_iand(b, m, nir_imm_int(b, ~3))));
 
-   nir_ssa_def *part_b = nir_iand(&b, m, nir_imm_int(&b, 2));
+   nir_ssa_def *part_b = nir_iand(b, m, nir_imm_int(b, 2));
 
-   nir_ssa_def *part_c = nir_iand(&b, m, nir_imm_int(&b, 1));
+   nir_ssa_def *part_c = nir_iand(b, m, nir_imm_int(b, 1));
 
-   return nir_ior(&b,
-                  nir_imul_imm(&b, part_a, 0x1111),
-                  nir_ior(&b,
-                          nir_imul_imm(&b, part_b, 0x0808),
-                          nir_imul_imm(&b, part_c, 0x0100)));
+   return nir_ior(b,
+                  nir_imul_imm(b, part_a, 0x1111),
+                  nir_ior(b,
+                          nir_imul_imm(b, part_b, 0x0808),
+                          nir_imul_imm(b, part_c, 0x0100)));
 }
 
-void
+bool
 brw_nir_lower_alpha_to_coverage(nir_shader *shader)
 {
    assert(shader->info.stage == MESA_SHADER_FRAGMENT);
+   nir_function_impl *impl = nir_shader_get_entrypoint(shader);
 
-   /* Bail out early if we don't have gl_SampleMask */
-   if (!nir_find_variable_with_location(shader, nir_var_shader_out,
-                                        FRAG_RESULT_SAMPLE_MASK))
-      return;
+   const uint64_t outputs_written = shader->info.outputs_written;
+   if (!(outputs_written & BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK)) ||
+       !(outputs_written & (BITFIELD64_BIT(FRAG_RESULT_COLOR) |
+                            BITFIELD64_BIT(FRAG_RESULT_DATA0))))
+      goto skip;
 
-   nir_foreach_function(function, shader) {
-      nir_function_impl *impl = function->impl;
-      nir_builder b;
-      nir_builder_init(&b, impl);
+   nir_intrinsic_instr *sample_mask_write = NULL;
+   nir_intrinsic_instr *color0_write = NULL;
+   bool sample_mask_write_first = false;
 
-      nir_foreach_block(block, impl) {
-         nir_intrinsic_instr *sample_mask_instr = NULL;
-         nir_intrinsic_instr *store_instr = NULL;
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
 
-         nir_foreach_instr_safe(instr, block) {
-            if (instr->type == nir_instr_type_intrinsic) {
-               nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-               nir_variable *out = NULL;
+         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+         if (intrin->intrinsic != nir_intrinsic_store_output)
+            continue;
 
-               switch (intr->intrinsic) {
-               case nir_intrinsic_store_output:
-                  out = nir_find_variable_with_driver_location(shader, nir_var_shader_out,
-                                                               nir_intrinsic_base(intr));
-                  assert(out->data.mode == nir_var_shader_out);
+         /* We call nir_lower_io_to_temporaries to lower FS outputs to
+          * temporaries with a copy at the end so this should be the last
+          * block in the shader.
+          */
+         assert(block->cf_node.parent == &impl->cf_node);
+         assert(nir_cf_node_is_last(&block->cf_node));
 
-                  /* save gl_SampleMask instruction pointer */
-                  if (out->data.location == FRAG_RESULT_SAMPLE_MASK) {
-                     assert(!sample_mask_instr);
-                     sample_mask_instr = intr;
-                  }
+         /* See store_output in fs_visitor::nir_emit_fs_intrinsic */
+         const unsigned store_offset = nir_src_as_uint(intrin->src[1]);
+         const unsigned driver_location = nir_intrinsic_base(intrin) +
+            SET_FIELD(store_offset, BRW_NIR_FRAG_OUTPUT_LOCATION);
 
-                  /* save out_color[0] instruction pointer */
-                  if ((out->data.location == FRAG_RESULT_COLOR ||
-                      out->data.location == FRAG_RESULT_DATA0)) {
-                     nir_src *offset_src = nir_get_io_offset_src(intr);
-                     if (nir_src_is_const(*offset_src) && nir_src_as_uint(*offset_src) == 0) {
-                        assert(!store_instr);
-                        store_instr = intr;
-                     }
-                  }
-                  break;
-               default:
-                  continue;
-               }
-            }
+         /* Extract the FRAG_RESULT */
+         const unsigned location =
+            GET_FIELD(driver_location, BRW_NIR_FRAG_OUTPUT_LOCATION);
+
+         if (location == FRAG_RESULT_SAMPLE_MASK) {
+            assert(sample_mask_write == NULL);
+            sample_mask_write = intrin;
+            sample_mask_write_first = (color0_write == NULL);
          }
 
-         if (sample_mask_instr && store_instr) {
-            b.cursor = nir_before_instr(&store_instr->instr);
-            nir_ssa_def *dither_mask = build_dither_mask(b, store_instr);
-
-            /* Combine dither_mask and reorder gl_SampleMask store instruction
-             * after render target 0 store instruction.
-             */
-            nir_instr_remove(&sample_mask_instr->instr);
-            dither_mask = nir_iand(&b, sample_mask_instr->src[0].ssa, dither_mask);
-            nir_instr_insert_after(&store_instr->instr, &sample_mask_instr->instr);
-            nir_instr_rewrite_src(&sample_mask_instr->instr,
-                                  &sample_mask_instr->src[0],
-                                  nir_src_for_ssa(dither_mask));
+         if (location == FRAG_RESULT_COLOR ||
+             location == FRAG_RESULT_DATA0) {
+            assert(color0_write == NULL);
+            color0_write = intrin;
          }
       }
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                            nir_metadata_dominance);
    }
+
+   /* It's possible that shader_info may be out-of-date and the writes to
+    * either gl_SampleMask or the first color value may have been removed.
+    * This can happen if, for instance a nir_ssa_undef is written to the
+    * color value.  In that case, just bail and don't do anything rather
+    * than crashing.
+    */
+   if (color0_write == NULL || sample_mask_write == NULL)
+      goto skip;
+
+   /* It's possible that the color value isn't actually a vec4.  In this case,
+    * assuming an alpha of 1.0 and letting the sample mask pass through
+    * unaltered seems like the kindest thing to do to apps.
+    */
+   assert(color0_write->src[0].is_ssa);
+   nir_ssa_def *color0 = color0_write->src[0].ssa;
+   if (color0->num_components < 4)
+      goto skip;
+
+   assert(sample_mask_write->src[0].is_ssa);
+   nir_ssa_def *sample_mask = sample_mask_write->src[0].ssa;
+
+   if (sample_mask_write_first) {
+      /* If the sample mask write comes before the write to color0, we need
+       * to move it because it's going to use the value from color0 to
+       * compute the sample mask.
+       */
+      nir_instr_remove(&sample_mask_write->instr);
+      nir_instr_insert(nir_after_instr(&color0_write->instr),
+                       &sample_mask_write->instr);
+   }
+
+   nir_builder b;
+   nir_builder_init(&b, impl);
+
+   /* Combine dither_mask and the gl_SampleMask value */
+   b.cursor = nir_before_instr(&sample_mask_write->instr);
+   nir_ssa_def *dither_mask = build_dither_mask(&b, color0);
+   dither_mask = nir_iand(&b, sample_mask, dither_mask);
+   nir_instr_rewrite_src(&sample_mask_write->instr,
+                         &sample_mask_write->src[0],
+                         nir_src_for_ssa(dither_mask));
+
+   nir_metadata_preserve(impl, nir_metadata_block_index |
+                               nir_metadata_dominance);
+   return true;
+
+skip:
+   nir_metadata_preserve(impl, nir_metadata_all);
+   return false;
 }

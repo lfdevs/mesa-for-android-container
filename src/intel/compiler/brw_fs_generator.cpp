@@ -468,7 +468,15 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
 
       reg.nr = imm_byte_offset / REG_SIZE;
       reg.subnr = imm_byte_offset % REG_SIZE;
-      brw_MOV(p, dst, reg);
+      if (type_sz(reg.type) > 4 && !devinfo->has_64bit_float) {
+         brw_MOV(p, subscript(dst, BRW_REGISTER_TYPE_D, 0),
+                    subscript(reg, BRW_REGISTER_TYPE_D, 0));
+         brw_set_default_swsb(p, tgl_swsb_null());
+         brw_MOV(p, subscript(dst, BRW_REGISTER_TYPE_D, 1),
+                    subscript(reg, BRW_REGISTER_TYPE_D, 1));
+      } else {
+         brw_MOV(p, dst, reg);
+      }
    } else {
       /* Prior to Broadwell, there are only 8 address registers. */
       assert(inst->exec_size <= 8 || devinfo->gen >= 8);

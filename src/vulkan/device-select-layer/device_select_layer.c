@@ -137,14 +137,17 @@ static VkResult device_select_CreateInstance(const VkInstanceCreateInfo *pCreate
    PFN_vkCreateInstance fpCreateInstance =
       (PFN_vkCreateInstance)info->GetInstanceProcAddr(NULL, "vkCreateInstance");
    if (fpCreateInstance == NULL) {
+      free(info);
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
    chain_info->u.pLayerInfo = chain_info->u.pLayerInfo->pNext;
 
    VkResult result = fpCreateInstance(pCreateInfo, pAllocator, pInstance);
-   if (result != VK_SUCCESS)
+   if (result != VK_SUCCESS) {
+      free(info);
       return result;
+   }
 
    for (unsigned i = 0; i < pCreateInfo->enabledExtensionCount; i++) {
       if (!strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))

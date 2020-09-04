@@ -812,14 +812,13 @@ t4					write SP_VS_OBJ_START_LO (a81c)
 							:0:0008:0011[00000000x_00000000x] nop
 							:0:0009:0012[00000000x_00000000x] nop
 							Register Stats:
-							- used (half): (cnt=0, max=0)
+							- used (half): 8-23 (cnt=16, max=23)
 							- used (full): 4-11 (cnt=8, max=11)
-							- used (merged): 8-23 (cnt=16, max=23)
-							- input (half): (cnt=0, max=0)
+							- input (half): 8-19 (cnt=12, max=19)
 							- input (full): 4-9 (cnt=6, max=9)
 							- max const: 5
 
-							- output (half): (cnt=0, max=0)  (estimated)
+							- output (half): 16-23 (cnt=8, max=23)  (estimated)
 							- output (full): 8-11 (cnt=4, max=11)  (estimated)
 							- shaderdb: 13 instructions, 7 nops, 6 non-nops, (10 instlen), 0 half, 3 full
 							- shaderdb: 0 (ss), 0 (sy)
@@ -839,14 +838,13 @@ t7					opcode: CP_LOAD_STATE6_GEOM (32) (4 dwords)
 						:0:0008:0011[00000000x_00000000x] nop
 						:0:0009:0012[00000000x_00000000x] nop
 						Register Stats:
-						- used (half): (cnt=0, max=0)
+						- used (half): 8-23 (cnt=16, max=23)
 						- used (full): 4-11 (cnt=8, max=11)
-						- used (merged): 8-23 (cnt=16, max=23)
-						- input (half): (cnt=0, max=0)
+						- input (half): 8-19 (cnt=12, max=19)
 						- input (full): 4-9 (cnt=6, max=9)
 						- max const: 5
 
-						- output (half): (cnt=0, max=0)  (estimated)
+						- output (half): 16-23 (cnt=8, max=23)  (estimated)
 						- output (full): 8-11 (cnt=4, max=11)  (estimated)
 						- shaderdb: 13 instructions, 7 nops, 6 non-nops, (10 instlen), 0 half, 3 full
 						- shaderdb: 0 (ss), 0 (sy)
@@ -904,14 +902,13 @@ t4					write SP_FS_OBJ_START_LO (a983)
 							:0:0007:0007[00000000x_00000000x] nop
 							:0:0008:0008[00000000x_00000000x] nop
 							Register Stats:
-							- used (half): (cnt=0, max=0)
+							- used (half): 0-1 4-11 (cnt=10, max=11)
 							- used (full): 0 2-5 (cnt=5, max=5)
-							- used (merged): 0-1 4-11 (cnt=10, max=11)
-							- input (half): (cnt=0, max=0)
+							- input (half): 0-1 (cnt=2, max=1)
 							- input (full): 0 (cnt=1, max=0)
 							- max const: 0
 
-							- output (half): (cnt=0, max=0)  (estimated)
+							- output (half): 4-11 (cnt=8, max=11)  (estimated)
 							- output (full): 2-5 (cnt=4, max=5)  (estimated)
 							- shaderdb: 9 instructions, 4 nops, 5 non-nops, (9 instlen), 0 half, 2 full
 							- shaderdb: 0 (ss), 0 (sy)
@@ -930,14 +927,13 @@ t7					opcode: CP_LOAD_STATE6_FRAG (34) (4 dwords)
 						:0:0007:0007[00000000x_00000000x] nop
 						:0:0008:0008[00000000x_00000000x] nop
 						Register Stats:
-						- used (half): (cnt=0, max=0)
+						- used (half): 0-1 4-11 (cnt=10, max=11)
 						- used (full): 0 2-5 (cnt=5, max=5)
-						- used (merged): 0-1 4-11 (cnt=10, max=11)
-						- input (half): (cnt=0, max=0)
+						- input (half): 0-1 (cnt=2, max=1)
 						- input (full): 0 (cnt=1, max=0)
 						- max const: 0
 
-						- output (half): (cnt=0, max=0)  (estimated)
+						- output (half): 4-11 (cnt=8, max=11)  (estimated)
 						- output (full): 2-5 (cnt=4, max=5)  (estimated)
 						- shaderdb: 9 instructions, 4 nops, 5 non-nops, (9 instlen), 0 half, 2 full
 						- shaderdb: 0 (ss), 0 (sy)
@@ -1498,14 +1494,13 @@ t7			opcode: CP_DRAW_INDIRECT_MULTI (2a) (12 dwords)
 				:0:0008:0011[00000000x_00000000x] nop
 				:0:0009:0012[00000000x_00000000x] nop
 				Register Stats:
-				- used (half): (cnt=0, max=0)
+				- used (half): 8-23 (cnt=16, max=23)
 				- used (full): 4-11 (cnt=8, max=11)
-				- used (merged): 8-23 (cnt=16, max=23)
-				- input (half): (cnt=0, max=0)
+				- input (half): 8-19 (cnt=12, max=19)
 				- input (full): 4-9 (cnt=6, max=9)
 				- max const: 5
 
-				- output (half): (cnt=0, max=0)  (estimated)
+				- output (half): 16-23 (cnt=8, max=23)  (estimated)
 				- output (full): 8-11 (cnt=4, max=11)  (estimated)
 				- shaderdb: 13 instructions, 7 nops, 6 non-nops, (10 instlen), 0 half, 3 full
 				- shaderdb: 0 (ss), 0 (sy)
@@ -1533,14 +1528,13 @@ t7			opcode: CP_DRAW_INDIRECT_MULTI (2a) (12 dwords)
 				:0:0007:0007[00000000x_00000000x] nop
 				:0:0008:0008[00000000x_00000000x] nop
 				Register Stats:
-				- used (half): (cnt=0, max=0)
+				- used (half): 0-1 4-11 (cnt=10, max=11)
 				- used (full): 0 2-5 (cnt=5, max=5)
-				- used (merged): 0-1 4-11 (cnt=10, max=11)
-				- input (half): (cnt=0, max=0)
+				- input (half): 0-1 (cnt=2, max=1)
 				- input (full): 0 (cnt=1, max=0)
 				- max const: 0
 
-				- output (half): (cnt=0, max=0)  (estimated)
+				- output (half): 4-11 (cnt=8, max=11)  (estimated)
 				- output (full): 2-5 (cnt=4, max=5)  (estimated)
 				- shaderdb: 9 instructions, 4 nops, 5 non-nops, (9 instlen), 0 half, 2 full
 				- shaderdb: 0 (ss), 0 (sy)

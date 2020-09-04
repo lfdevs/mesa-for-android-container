@@ -637,7 +637,6 @@ t4					write SP_VS_OBJ_START_LO (a81c)
 							Register Stats:
 							- used (half): (cnt=0, max=0)
 							- used (full): (cnt=0, max=0)
-							- used (merged): (cnt=0, max=0)
 							- input (half): (cnt=0, max=0)
 							- input (full): (cnt=0, max=0)
 							- max const: 0
@@ -659,7 +658,6 @@ t7					opcode: CP_LOAD_STATE6_GEOM (32) (4 dwords)
 						Register Stats:
 						- used (half): (cnt=0, max=0)
 						- used (full): (cnt=0, max=0)
-						- used (merged): (cnt=0, max=0)
 						- input (half): (cnt=0, max=0)
 						- input (full): (cnt=0, max=0)
 						- max const: 0
@@ -1107,7 +1105,6 @@ t7			opcode: CP_DRAW_INDX_OFFSET (38) (4 dwords)
 				Register Stats:
 				- used (half): (cnt=0, max=0)
 				- used (full): (cnt=0, max=0)
-				- used (merged): (cnt=0, max=0)
 				- input (half): (cnt=0, max=0)
 				- input (full): (cnt=0, max=0)
 				- max const: 0
@@ -1952,7 +1949,6 @@ t4					write SP_VS_OBJ_START_LO (a81c)
 							Register Stats:
 							- used (half): (cnt=0, max=0)
 							- used (full): (cnt=0, max=0)
-							- used (merged): (cnt=0, max=0)
 							- input (half): (cnt=0, max=0)
 							- input (full): (cnt=0, max=0)
 							- max const: 0
@@ -1974,7 +1970,6 @@ t7					opcode: CP_LOAD_STATE6_GEOM (32) (4 dwords)
 						Register Stats:
 						- used (half): (cnt=0, max=0)
 						- used (full): (cnt=0, max=0)
-						- used (merged): (cnt=0, max=0)
 						- input (half): (cnt=0, max=0)
 						- input (full): (cnt=0, max=0)
 						- max const: 0
@@ -3493,14 +3488,13 @@ t4					write SP_FS_OBJ_START_LO (a983)
 							:0:1404:2412[00000000x_00000000x] nop
 							:0:1405:2413[00000000x_00000000x] nop
 							Register Stats:
-							- used (half): (cnt=0, max=0)
+							- used (half): 0-147 (cnt=148, max=147)
 							- used (full): 0-73 (cnt=74, max=73)
-							- used (merged): 0-147 (cnt=148, max=147)
-							- input (half): (cnt=0, max=0)
+							- input (half): 38-41 (cnt=4, max=41)
 							- input (full): 19-20 (cnt=2, max=20)
 							- max const: 113
 
-							- output (half): (cnt=0, max=0)  (estimated)
+							- output (half): 8-15 (cnt=8, max=15)  (estimated)
 							- output (full): 4-7 (cnt=4, max=7)  (estimated)
 							- shaderdb: 2414 instructions, 1355 nops, 1059 non-nops, (1406 instlen), 0 half, 19 full
 							- shaderdb: 140 (ss), 0 (sy)
@@ -4916,14 +4910,13 @@ t7					opcode: CP_LOAD_STATE6_FRAG (34) (4 dwords)
 						:0:1404:2412[00000000x_00000000x] nop
 						:0:1405:2413[00000000x_00000000x] nop
 						Register Stats:
-						- used (half): (cnt=0, max=0)
+						- used (half): 0-147 (cnt=148, max=147)
 						- used (full): 0-73 (cnt=74, max=73)
-						- used (merged): 0-147 (cnt=148, max=147)
-						- input (half): (cnt=0, max=0)
+						- input (half): 38-41 (cnt=4, max=41)
 						- input (full): 19-20 (cnt=2, max=20)
 						- max const: 113
 
-						- output (half): (cnt=0, max=0)  (estimated)
+						- output (half): 8-15 (cnt=8, max=15)  (estimated)
 						- output (full): 4-7 (cnt=4, max=7)  (estimated)
 						- shaderdb: 2414 instructions, 1355 nops, 1059 non-nops, (1406 instlen), 0 half, 19 full
 						- shaderdb: 140 (ss), 0 (sy)
@@ -5332,7 +5325,6 @@ t7			opcode: CP_DRAW_INDX_OFFSET (38) (4 dwords)
 				Register Stats:
 				- used (half): (cnt=0, max=0)
 				- used (full): (cnt=0, max=0)
-				- used (merged): (cnt=0, max=0)
 				- input (half): (cnt=0, max=0)
 				- input (full): (cnt=0, max=0)
 				- max const: 0
@@ -6768,14 +6760,13 @@ t7			opcode: CP_DRAW_INDX_OFFSET (38) (4 dwords)
 				:0:1404:2412[00000000x_00000000x] nop
 				:0:1405:2413[00000000x_00000000x] nop
 				Register Stats:
-				- used (half): (cnt=0, max=0)
+				- used (half): 0-147 (cnt=148, max=147)
 				- used (full): 0-73 (cnt=74, max=73)
-				- used (merged): 0-147 (cnt=148, max=147)
-				- input (half): (cnt=0, max=0)
+				- input (half): 38-41 (cnt=4, max=41)
 				- input (full): 19-20 (cnt=2, max=20)
 				- max const: 113
 
-				- output (half): (cnt=0, max=0)  (estimated)
+				- output (half): 8-15 (cnt=8, max=15)  (estimated)
 				- output (full): 4-7 (cnt=4, max=7)  (estimated)
 				- shaderdb: 2414 instructions, 1355 nops, 1059 non-nops, (1406 instlen), 0 half, 19 full
 				- shaderdb: 140 (ss), 0 (sy)

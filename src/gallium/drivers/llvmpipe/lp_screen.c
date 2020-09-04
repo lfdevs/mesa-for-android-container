@@ -204,7 +204,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_GLSL_FEATURE_LEVEL: {
       struct llvmpipe_screen *lscreen = llvmpipe_screen(screen);
-      return lscreen->use_tgsi ? 330 : 430;
+      return lscreen->use_tgsi ? 330 : 450;
    }
    case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
       return 140;

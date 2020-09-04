@@ -439,11 +439,6 @@ clover::llvm::compile_to_spirv(const std::string &source,
       debug::log(".ll", print_module_bitcode(*mod));
 
    std::string error_msg;
-   if (!::llvm::regularizeLlvmForSpirv(mod.get(), error_msg)) {
-      r_log += "Failed to regularize LLVM IR for SPIR-V: " + error_msg + ".\n";
-      throw error(CL_INVALID_VALUE);
-   }
-
    std::ostringstream os;
    if (!::llvm::writeSpirv(mod.get(), os, error_msg)) {
       r_log += "Translation from LLVM IR to SPIR-V failed: " + error_msg + ".\n";

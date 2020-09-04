@@ -1046,7 +1046,7 @@ iris_resource_from_handle(struct pipe_screen *pscreen,
       else
          tiling = -1;
       res->bo = iris_bo_import_dmabuf(bufmgr, whandle->handle,
-                                      tiling, whandle->stride);
+                                      tiling);
       break;
    case WINSYS_HANDLE_TYPE_SHARED:
       res->bo = iris_bo_gem_create_from_name(bufmgr, "winsys image",

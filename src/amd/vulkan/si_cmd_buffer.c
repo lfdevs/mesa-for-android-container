@@ -78,7 +78,7 @@ si_write_harvested_raster_configs(struct radv_physical_device *physical_device,
 }
 
 void
-si_emit_compute(struct radv_physical_device *physical_device,
+si_emit_compute(struct radv_device *device,
                 struct radeon_cmdbuf *cs)
 {
 	radeon_set_sh_reg_seq(cs, R_00B810_COMPUTE_START_X, 3);
@@ -92,7 +92,7 @@ si_emit_compute(struct radv_physical_device *physical_device,
 	radeon_emit(cs, S_00B858_SH0_CU_EN(0xffff) | S_00B858_SH1_CU_EN(0xffff));
 	radeon_emit(cs, S_00B858_SH0_CU_EN(0xffff) | S_00B858_SH1_CU_EN(0xffff));
 
-	if (physical_device->rad_info.chip_class >= GFX7) {
+	if (device->physical_device->rad_info.chip_class >= GFX7) {
 		/* Also set R_00B858_COMPUTE_STATIC_THREAD_MGMT_SE2 / SE3 */
 		radeon_set_sh_reg_seq(cs,
 				      R_00B864_COMPUTE_STATIC_THREAD_MGMT_SE2, 2);
@@ -100,14 +100,22 @@ si_emit_compute(struct radv_physical_device *physical_device,
 			    S_00B858_SH1_CU_EN(0xffff));
 		radeon_emit(cs, S_00B858_SH0_CU_EN(0xffff) |
 			    S_00B858_SH1_CU_EN(0xffff));
+
+		if (device->border_color_data.bo) {
+			uint64_t bc_va = radv_buffer_get_va(device->border_color_data.bo);
+
+			radeon_set_uconfig_reg_seq(cs, R_030E00_TA_CS_BC_BASE_ADDR, 2);
+			radeon_emit(cs, bc_va >> 8);
+			radeon_emit(cs, S_030E04_ADDRESS(bc_va >> 40));
+		}
 	}
 
-	if (physical_device->rad_info.chip_class >= GFX9) {
+	if (device->physical_device->rad_info.chip_class >= GFX9) {
 		radeon_set_uconfig_reg(cs, R_0301EC_CP_COHER_START_DELAY,
-				       physical_device->rad_info.chip_class >= GFX10 ? 0x20 : 0);
+				       device->physical_device->rad_info.chip_class >= GFX10 ? 0x20 : 0);
 	}
 
-	if (physical_device->rad_info.chip_class >= GFX10) {
+	if (device->physical_device->rad_info.chip_class >= GFX10) {
 		radeon_set_sh_reg(cs, R_00B890_COMPUTE_USER_ACCUM_0, 0);
 		radeon_set_sh_reg(cs, R_00B894_COMPUTE_USER_ACCUM_1, 0);
 		radeon_set_sh_reg(cs, R_00B898_COMPUTE_USER_ACCUM_2, 0);
@@ -121,12 +129,17 @@ si_emit_compute(struct radv_physical_device *physical_device,
 	 * kernel if we want to use something other than the default value,
 	 * which is now 0x22f.
 	 */
-	if (physical_device->rad_info.chip_class <= GFX6) {
+	if (device->physical_device->rad_info.chip_class <= GFX6) {
 		/* XXX: This should be:
 		 * (number of compute units) * 4 * (waves per simd) - 1 */
 
 		radeon_set_sh_reg(cs, R_00B82C_COMPUTE_MAX_WAVE_ID,
 		                  0x190 /* Default value */);
+
+		if (device->border_color_data.bo) {
+			uint64_t bc_va = radv_buffer_get_va(device->border_color_data.bo);
+			radeon_set_config_reg(cs, R_00950C_TA_CS_BC_BASE_ADDR, bc_va >> 8);
+		}
 	}
 }
 
@@ -559,7 +572,7 @@ si_emit_graphics(struct radv_device *device,
 			       S_028818_VPORT_Y_SCALE_ENA(1) | S_028818_VPORT_Y_OFFSET_ENA(1) |
 			       S_028818_VPORT_Z_SCALE_ENA(1) | S_028818_VPORT_Z_OFFSET_ENA(1));
 
-	si_emit_compute(physical_device, cs);
+	si_emit_compute(device, cs);
 }
 
 void

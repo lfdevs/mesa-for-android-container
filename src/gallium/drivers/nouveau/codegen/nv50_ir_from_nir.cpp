@@ -2090,6 +2090,8 @@ Converter::visit(nir_intrinsic_instr *insn)
       Symbol *sym = mkSymbol(FILE_MEMORY_GLOBAL, 0, dType, offset);
       Instruction *atom =
          mkOp2(OP_ATOM, dType, newDefs[0], sym, getSrc(&insn->src[1], 0));
+      if (op == nir_intrinsic_global_atomic_comp_swap)
+         atom->setSrc(2, getSrc(&insn->src[2], 0));
       atom->setIndirect(0, 0, address);
       atom->subOp = getSubOp(op);
 

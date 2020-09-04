@@ -714,35 +714,30 @@ lower_2f(nir_builder *b, nir_ssa_def *x, unsigned dest_bit_size,
       unreachable("Invalid dest_bit_size");
    }
 
-   /* We keep one more bit than can fit in the significand field to let the
-    * u2f32 conversion do the rounding for us.
-    */
    nir_ssa_def *discard =
-      nir_imax(b, nir_isub(b, exp, nir_imm_int(b, significand_bits + 1)),
+      nir_imax(b, nir_isub(b, exp, nir_imm_int(b, significand_bits)),
                   nir_imm_int(b, 0));
+   nir_ssa_def *significand =
+      COND_LOWER_CAST(b, u2u32, COND_LOWER_OP(b, ushr, x, discard));
 
-   /* Part of the "round to nearest" has to be taken care of before we discard
-    * the LSB, and that's what this extra iadd is for.
-    * "Round to nearest even" is handled by u2f. That works because the
-    * shifted value either fits in the significand field (which means no
-    * rounding is required) or contains one extra bit that forces the
-    * conversion op to round things properly.
+   /* Round-to-nearest-even implementation:
+    * - if the non-representable part of the significand is higher than half
+    *   the minimum representable significand, we round-up
+    * - if the non-representable part of the significand is equal to half the
+    *   minimum representable significand and the representable part of the
+    *   significand is odd, we round-up
+    * - in any other case, we round-down
     */
-   nir_ssa_def *add = COND_LOWER_OP(b, ishl, nir_imm_int64(b, 1), discard);
-   add = COND_LOWER_OP(b, isub, add, nir_imm_int64(b, 1));
-   nir_ssa_def *rounded_x = COND_LOWER_OP(b, iadd, x, add);
-
-   /* Signed Values can't overflow because we've saved the sign and promoted
-    * them to unsigned values.
-    */
-   if (!src_is_signed) {
-      nir_ssa_def *overflow = COND_LOWER_CMP(b, ult, rounded_x, x);
-      rounded_x = COND_LOWER_OP(b, bcsel, overflow,
-                                nir_imm_int64(b, UINT64_MAX), rounded_x);
-   }
-
-   nir_ssa_def *significand = COND_LOWER_OP(b, ushr, rounded_x, discard);
-   significand = COND_LOWER_CAST(b, u2u32, significand);
+   nir_ssa_def *lsb_mask = COND_LOWER_OP(b, ishl, nir_imm_int64(b, 1), discard);
+   nir_ssa_def *rem_mask = COND_LOWER_OP(b, isub, lsb_mask, nir_imm_int64(b, 1));
+   nir_ssa_def *half = COND_LOWER_OP(b, ishr, lsb_mask, nir_imm_int(b, 1));
+   nir_ssa_def *rem = COND_LOWER_OP(b, iand, x, rem_mask);
+   nir_ssa_def *halfway = nir_iand(b, COND_LOWER_CMP(b, ieq, rem, half),
+                                   nir_ine(b, discard, nir_imm_int(b, 0)));
+   nir_ssa_def *is_odd = nir_i2b(b, nir_iand(b, significand, nir_imm_int(b, 1)));
+   nir_ssa_def *round_up = nir_ior(b, COND_LOWER_CMP(b, ilt, half, rem),
+                                   nir_iand(b, halfway, is_odd));
+   significand = nir_iadd(b, significand, nir_b2i32(b, round_up));
 
    nir_ssa_def *res;
 

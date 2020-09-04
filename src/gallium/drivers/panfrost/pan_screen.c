@@ -191,6 +191,10 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_CONDITIONAL_RENDER:
                 return is_gl3;
 
+        /* TODO: Where does this req come from in practice? */
+        case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
+                return 1;
+
         case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
                 return 4096;
         case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:

@@ -1381,7 +1381,7 @@ bo_set_tiling_internal(struct iris_bo *bo, uint32_t tiling_mode,
 
 struct iris_bo *
 iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd,
-                      int tiling, uint32_t stride)
+                      int tiling)
 {
    uint32_t handle;
    struct iris_bo *bo;
@@ -1441,23 +1441,16 @@ iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd,
    bo->gem_handle = handle;
    _mesa_hash_table_insert(bufmgr->handle_table, &bo->gem_handle, bo);
 
-   struct drm_i915_gem_get_tiling get_tiling = { .handle = bo->gem_handle };
-   if (!bufmgr->has_tiling_uapi)
-      get_tiling.tiling_mode = I915_TILING_NONE;
-   else if (gen_ioctl(bufmgr->fd, DRM_IOCTL_I915_GEM_GET_TILING, &get_tiling))
-      goto err;
-
-   if (tiling == -1) {
-      bo->tiling_mode = get_tiling.tiling_mode;
-      /* XXX stride is unknown */
-   } else {
+   if (tiling != -1) {
       /* Modifiers path */
-      if (get_tiling.tiling_mode == tiling || !bufmgr->has_tiling_uapi) {
-         bo->tiling_mode = tiling;
-         bo->stride = stride;
-      } else if (bo_set_tiling_internal(bo, tiling, stride)) {
+      bo->tiling_mode = tiling;
+   } else if (bufmgr->has_tiling_uapi) {
+      struct drm_i915_gem_get_tiling get_tiling = { .handle = bo->gem_handle };
+      if (gen_ioctl(bufmgr->fd, DRM_IOCTL_I915_GEM_GET_TILING, &get_tiling))
          goto err;
-      }
+      bo->tiling_mode = get_tiling.tiling_mode;
+   } else {
+      bo->tiling_mode = I915_TILING_NONE;
    }
 
 out:

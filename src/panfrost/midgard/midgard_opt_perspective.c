@@ -88,6 +88,7 @@ midgard_opt_combine_projection(compiler_context *ctx, midgard_block *block)
                 }
 
                 if (!frcp_found) continue;
+                if (frcp_from != ins->src[0]) continue;
                 if (frcp_component != COMPONENT_W && frcp_component != COMPONENT_Z) continue;
                 if (!mir_single_use(ctx, frcp)) continue;
 

@@ -1152,6 +1152,11 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
       driQueryOptionb(config->options, "radeonsi_commutative_blend_add") ||
       driQueryOptionb(config->options, "allow_draw_out_of_order");
 
+   /* TODO: Find out why NGG culling hangs on gfx10.3 */
+   if (sscreen->info.chip_class == GFX10_3 &&
+       !(sscreen->debug_flags & (DBG(ALWAYS_NGG_CULLING_ALL) | DBG(ALWAYS_NGG_CULLING_TESS))))
+      sscreen->debug_flags |= DBG(NO_NGG_CULLING);
+
    sscreen->use_ngg = sscreen->info.chip_class >= GFX10 && sscreen->info.family != CHIP_NAVI14 &&
                       !(sscreen->debug_flags & DBG(NO_NGG));
    sscreen->use_ngg_culling = sscreen->use_ngg && !(sscreen->debug_flags & DBG(NO_NGG_CULLING));

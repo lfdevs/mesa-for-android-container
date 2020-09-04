@@ -177,6 +177,8 @@ panfrost_free_batch(struct panfrost_batch *batch)
                 panfrost_batch_fence_unreference(*dep);
         }
 
+        util_dynarray_fini(&batch->dependencies);
+
         /* The out_sync fence lifetime is different from the the batch one
          * since other batches might want to wait on a fence of already
          * submitted/signaled batch. All we need to do here is make sure the

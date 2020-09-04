@@ -77,7 +77,7 @@ struct panfrost_sysvals {
 };
 
 void
-panfrost_nir_assign_sysvals(struct panfrost_sysvals *ctx, nir_shader *shader);
+panfrost_nir_assign_sysvals(struct panfrost_sysvals *ctx, void *memctx, nir_shader *shader);
 
 int
 panfrost_sysval_for_instr(nir_instr *instr, nir_dest *dest);

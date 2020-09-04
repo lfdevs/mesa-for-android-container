@@ -508,4 +508,8 @@ DRI_CONF_OPT_BEGIN_B(radv_no_dynamic_bounds, def) \
         DRI_CONF_DESC("Disabling bounds checking for dynamic buffer descriptors") \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_RADV_OVERRIDE_UNIFORM_OFFSET_ALIGNMENT(def) \
+DRI_CONF_OPT_BEGIN_V(radv_override_uniform_offset_alignment, int, def, "0:128") \
+        DRI_CONF_DESC("Override the minUniformBufferOffsetAlignment exposed to the application. (0 = default)") \
+DRI_CONF_OPT_END
 #endif

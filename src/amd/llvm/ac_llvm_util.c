@@ -78,10 +78,27 @@ static void ac_init_llvm_target()
 	LLVMParseCommandLineOptions(ARRAY_SIZE(argv), argv, NULL);
 }
 
-PUBLIC void ac_init_llvm_once(void)
+PUBLIC void ac_init_shared_llvm_once(void)
 {
 	static once_flag ac_init_llvm_target_once_flag = ONCE_FLAG_INIT;
 	call_once(&ac_init_llvm_target_once_flag, ac_init_llvm_target);
+}
+
+#if !LLVM_IS_SHARED
+static once_flag ac_init_static_llvm_target_once_flag = ONCE_FLAG_INIT;
+static void ac_init_static_llvm_once(void)
+{
+	call_once(&ac_init_static_llvm_target_once_flag, ac_init_llvm_target);
+}
+#endif
+
+void ac_init_llvm_once(void)
+{
+#if LLVM_IS_SHARED
+	ac_init_shared_llvm_once();
+#else
+	ac_init_static_llvm_once();
+#endif
 }
 
 static LLVMTargetRef ac_get_llvm_target(const char *triple)

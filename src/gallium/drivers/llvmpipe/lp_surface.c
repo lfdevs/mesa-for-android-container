@@ -132,6 +132,15 @@ static void lp_blit(struct pipe_context *pipe,
       return;
    }
 
+   /* for 32-bit unorm depth, avoid the conversions to float and back,
+      which can introduce accuracy errors. */
+   if (blit_info->src.format == PIPE_FORMAT_Z32_UNORM &&
+       blit_info->dst.format == PIPE_FORMAT_Z32_UNORM && info.filter == PIPE_TEX_FILTER_NEAREST) {
+      info.src.format = PIPE_FORMAT_R32_UINT;
+      info.dst.format = PIPE_FORMAT_R32_UINT;
+      info.mask = PIPE_MASK_R;
+   }
+
    /* XXX turn off occlusion and streamout queries */
 
    util_blitter_save_vertex_buffer_slot(lp->blitter, lp->vertex_buffer);

@@ -391,12 +391,14 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
           (!trans->rsc &&
            (((usage & PIPE_TRANSFER_READ) && (rsc->status & ETNA_PENDING_WRITE)) ||
            ((usage & PIPE_TRANSFER_WRITE) && rsc->status)))) {
+         mtx_lock(&rsc->lock);
          set_foreach(rsc->pending_ctx, entry) {
             struct etna_context *pend_ctx = (struct etna_context *)entry->key;
             struct pipe_context *pend_pctx = &pend_ctx->base;
 
             pend_pctx->flush(pend_pctx, NULL, 0);
          }
+         mtx_unlock(&rsc->lock);
       }
 
       mtx_unlock(&ctx->lock);

@@ -30,6 +30,7 @@
 #include <xcb/xcb.h>
 #include <xcb/dri3.h>
 #include <xcb/present.h>
+#include <xcb/xfixes.h>
 
 #include <X11/Xlib-xcb.h>
 
@@ -908,6 +909,7 @@ int64_t
 loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
                              int64_t target_msc, int64_t divisor,
                              int64_t remainder, unsigned flush_flags,
+                             const int *rects, int n_rects,
                              bool force_copy)
 {
    struct loader_dri3_buffer *back;
@@ -1006,12 +1008,29 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
 #endif
       back->busy = 1;
       back->last_swap = draw->send_sbc;
+
+      xcb_xfixes_region_t region = 0;
+      xcb_rectangle_t xcb_rects[64];
+
+      if (n_rects > 0 && n_rects <= ARRAY_SIZE(xcb_rects)) {
+         for (int i = 0; i < n_rects; i++) {
+            const int *rect = &rects[i * 4];
+            xcb_rects[i].x = rect[0];
+            xcb_rects[i].y = draw->height - rect[1] - rect[3];
+            xcb_rects[i].width = rect[2];
+            xcb_rects[i].height = rect[3];
+         }
+
+         region = xcb_generate_id(draw->conn);
+         xcb_xfixes_create_region(draw->conn, region, n_rects, xcb_rects);
+      }
+
       xcb_present_pixmap(draw->conn,
                          draw->drawable,
                          back->pixmap,
                          (uint32_t) draw->send_sbc,
                          0,                                    /* valid */
-                         0,                                    /* update */
+                         region,                               /* update */
                          0,                                    /* x_off */
                          0,                                    /* y_off */
                          None,                                 /* target_crtc */
@@ -1022,6 +1041,9 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
                          divisor,
                          remainder, 0, NULL);
       ret = (int64_t) draw->send_sbc;
+
+      if (region)
+         xcb_xfixes_destroy_region(draw->conn, region);
 
       /* Schedule a server-side back-preserving blit if necessary.
        * This happens iff all conditions below are satisfied:

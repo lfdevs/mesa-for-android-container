@@ -124,10 +124,10 @@ panfrost_nir_assign_sysval_body(struct panfrost_sysvals *ctx, nir_instr *instr)
 }
 
 void
-panfrost_nir_assign_sysvals(struct panfrost_sysvals *ctx, nir_shader *shader)
+panfrost_nir_assign_sysvals(struct panfrost_sysvals *ctx, void *memctx, nir_shader *shader)
 {
         ctx->sysval_count = 0;
-        ctx->sysval_to_id = _mesa_hash_table_u64_create(NULL);
+        ctx->sysval_to_id = _mesa_hash_table_u64_create(memctx);
 
         nir_foreach_function(function, shader) {
                 if (!function->impl) continue;

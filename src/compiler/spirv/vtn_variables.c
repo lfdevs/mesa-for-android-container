@@ -125,6 +125,18 @@ vtn_mode_uses_ssa_offset(struct vtn_builder *b,
 }
 
 static bool
+vtn_mode_is_cross_invocation(struct vtn_builder *b,
+                             enum vtn_variable_mode mode)
+{
+   return mode == vtn_variable_mode_ssbo ||
+          mode == vtn_variable_mode_ubo ||
+          mode == vtn_variable_mode_phys_ssbo ||
+          mode == vtn_variable_mode_push_constant ||
+          mode == vtn_variable_mode_workgroup ||
+          mode == vtn_variable_mode_cross_workgroup;
+}
+
+static bool
 vtn_pointer_is_external_block(struct vtn_builder *b,
                               struct vtn_pointer *ptr)
 {
@@ -1074,11 +1086,11 @@ _vtn_variable_load_store(struct vtn_builder *b, bool load,
       if (glsl_type_is_vector_or_scalar(ptr->type->type)) {
          /* We hit a vector or scalar; go ahead and emit the load[s] */
          nir_deref_instr *deref = vtn_pointer_to_deref(b, ptr);
-         if (vtn_pointer_is_external_block(b, ptr)) {
-            /* If it's external, we call nir_load/store_deref directly.  The
-             * vtn_local_load/store helpers are too clever and do magic to
-             * avoid array derefs of vectors.  That magic is both less
-             * efficient than the direct load/store and, in the case of
+         if (vtn_mode_is_cross_invocation(b, ptr->mode)) {
+            /* If it's cross-invocation, we call nir_load/store_deref
+             * directly.  The vtn_local_load/store helpers are too clever and
+             * do magic to avoid array derefs of vectors.  That magic is both
+             * less efficient than the direct load/store and, in the case of
              * stores, is broken because it creates a race condition if two
              * threads are writing to different components of the same vector
              * due to the load+insert+store it uses to emulate the array
@@ -1155,7 +1167,8 @@ static void
 _vtn_variable_copy(struct vtn_builder *b, struct vtn_pointer *dest,
                    struct vtn_pointer *src)
 {
-   vtn_assert(src->type->type == dest->type->type);
+   vtn_assert(glsl_get_bare_type(src->type->type) ==
+              glsl_get_bare_type(dest->type->type));
    enum glsl_base_type base_type = glsl_get_base_type(src->type->type);
    switch (base_type) {
    case GLSL_TYPE_UINT:

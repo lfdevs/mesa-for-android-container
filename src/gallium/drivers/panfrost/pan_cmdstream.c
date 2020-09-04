@@ -345,7 +345,7 @@ panfrost_shader_meta_init(struct panfrost_context *ctx,
                 meta->midgard1.flags_lo = 0x20;
                 meta->midgard1.uniform_buffer_count = panfrost_ubo_count(ctx, st);
 
-                SET_BIT(meta->midgard1.flags_hi, MALI_WRITES_GLOBAL, ss->writes_global);
+                SET_BIT(meta->midgard1.flags_lo, MALI_WRITES_GLOBAL, ss->writes_global);
         }
 }
 

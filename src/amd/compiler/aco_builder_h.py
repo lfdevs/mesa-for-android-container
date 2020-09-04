@@ -317,7 +317,8 @@ public:
 % for fixed in ['m0', 'vcc', 'exec', 'scc']:
    Operand ${fixed}(Temp tmp) {
        % if fixed == 'vcc' or fixed == 'exec':
-          assert(tmp.regClass() == lm);
+          //vcc_hi and exec_hi can still be used in wave32
+          assert(tmp.type() == RegType::sgpr && tmp.bytes() <= 8);
        % endif
        Operand op(tmp);
        op.setFixed(aco::${fixed});
@@ -326,7 +327,8 @@ public:
 
    Definition ${fixed}(Definition def) {
        % if fixed == 'vcc' or fixed == 'exec':
-          assert(def.regClass() == lm);
+          //vcc_hi and exec_hi can still be used in wave32
+          assert(def.regClass().type() == RegType::sgpr && def.bytes() <= 8);
        % endif
        def.setFixed(aco::${fixed});
        return def;
@@ -334,7 +336,8 @@ public:
 
    Definition hint_${fixed}(Definition def) {
        % if fixed == 'vcc' or fixed == 'exec':
-          assert(def.regClass() == lm);
+          //vcc_hi and exec_hi can still be used in wave32
+          assert(def.regClass().type() == RegType::sgpr && def.bytes() <= 8);
        % endif
        def.setHint(aco::${fixed});
        return def;
@@ -531,10 +534,10 @@ public:
 <%
 import itertools
 formats = [("pseudo", [Format.PSEUDO], 'Pseudo_instruction', list(itertools.product(range(5), range(5))) + [(8, 1), (1, 8)]),
-           ("sop1", [Format.SOP1], 'SOP1_instruction', [(1, 1), (2, 1), (3, 2)]),
+           ("sop1", [Format.SOP1], 'SOP1_instruction', [(0, 1), (1, 0), (1, 1), (2, 1), (3, 2)]),
            ("sop2", [Format.SOP2], 'SOP2_instruction', itertools.product([1, 2], [2, 3])),
            ("sopk", [Format.SOPK], 'SOPK_instruction', itertools.product([0, 1, 2], [0, 1])),
-           ("sopp", [Format.SOPP], 'SOPP_instruction', [(0, 0), (0, 1)]),
+           ("sopp", [Format.SOPP], 'SOPP_instruction', itertools.product([0, 1], [0, 1])),
            ("sopc", [Format.SOPC], 'SOPC_instruction', [(1, 2)]),
            ("smem", [Format.SMEM], 'SMEM_instruction', [(0, 4), (0, 3), (1, 0), (1, 3), (1, 2), (0, 0)]),
            ("ds", [Format.DS], 'DS_instruction', [(1, 1), (1, 2), (0, 3), (0, 4)]),
@@ -542,7 +545,7 @@ formats = [("pseudo", [Format.PSEUDO], 'Pseudo_instruction', list(itertools.prod
            ("mtbuf", [Format.MTBUF], 'MTBUF_instruction', [(0, 4), (1, 3)]),
            ("mimg", [Format.MIMG], 'MIMG_instruction', [(0, 3), (1, 3)]),
            ("exp", [Format.EXP], 'Export_instruction', [(0, 4)]),
-           ("branch", [Format.PSEUDO_BRANCH], 'Pseudo_branch_instruction', itertools.product([0], [0, 1])),
+           ("branch", [Format.PSEUDO_BRANCH], 'Pseudo_branch_instruction', itertools.product([1], [0, 1])),
            ("barrier", [Format.PSEUDO_BARRIER], 'Pseudo_barrier_instruction', [(0, 0)]),
            ("reduction", [Format.PSEUDO_REDUCTION], 'Pseudo_reduction_instruction', [(3, 2)]),
            ("vop1", [Format.VOP1], 'VOP1_instruction', [(1, 1), (2, 2)]),

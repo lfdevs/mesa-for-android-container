@@ -513,13 +513,19 @@ static void si_nir_store_output_tcs(struct ac_shader_abi *abi, const struct nir_
 {
    struct si_shader_context *ctx = si_shader_context_from_abi(abi);
    struct si_shader_info *info = &ctx->shader->selector->info;
-   const unsigned component = var->data.location_frac;
+   unsigned component = var->data.location_frac;
    unsigned driver_location = var->data.driver_location;
    LLVMValueRef dw_addr, stride;
    LLVMValueRef buffer, base, addr;
    LLVMValueRef values[8];
    bool skip_lds_store;
    bool is_tess_factor = false, is_tess_inner = false;
+
+   if (var->data.compact) {
+      component += const_index;
+      writemask <<= const_index;
+      const_index = 0;
+   }
 
    driver_location = driver_location / 4;
    ubyte name = info->output_semantic_name[driver_location];

@@ -104,10 +104,11 @@ void driParseOptionInfo (driOptionCache *info,
 /** \brief Initialize option cache from info and parse configuration files
  *
  * To be called in <driver>CreateContext. screenNum, driverName,
- * kernelDriverName and engineName select device sections. */
+ * kernelDriverName, applicationName and engineName select device sections. */
 void driParseConfigFiles (driOptionCache *cache, const driOptionCache *info,
 			  int screenNum, const char *driverName,
 			  const char *kernelDriverName,
+			  const char *applicationName, uint32_t applicationVersion,
 			  const char *engineName, uint32_t engineVersion);
 /** \brief Destroy option info
  *

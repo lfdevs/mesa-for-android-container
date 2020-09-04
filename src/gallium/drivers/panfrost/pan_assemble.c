@@ -287,4 +287,8 @@ panfrost_shader_compile(struct panfrost_context *ctx,
                                         var->data.precision, var->data.location_frac);
                 }
         }
+
+        /* In both clone and tgsi_to_nir paths, the shader is ralloc'd against
+         * a NULL context */
+        ralloc_free(s);
 }
