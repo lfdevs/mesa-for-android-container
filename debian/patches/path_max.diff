@@ -19,3 +19,16 @@
     }
  
     expect_true(sub_dirs_created, "create sub dirs");
+--- a/src/util/process_test.c
++++ b/src/util/process_test.c
+@@ -36,6 +36,10 @@
+ #define PATH_MAX MAX_PATH
+ #endif
+ 
++#if !defined(PATH_MAX) && defined(__GNU__)
++#define PATH_MAX (4096)
++#endif
++
+ bool error = false;
+ 
+ static void

@@ -12,6 +12,9 @@ DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
 DEB_HOST_ARCH_CPU  ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
 
+# for finding the correct llvm-config when meson doesn't know about it yet
+export PATH:=/usr/lib/llvm-11/bin/:$(PATH)
+
 ifeq (,$(filter $(DEB_HOST_ARCH), armhf sh3 sh4))
 buildflags = \
 	$(shell DEB_CFLAGS_MAINT_APPEND=-Wall DEB_CXXFLAGS_MAINT_APPEND=-Wall dpkg-buildflags --export=configure)
