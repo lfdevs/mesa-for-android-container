@@ -460,6 +460,7 @@ bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *nir)
    ctx->abi.clamp_shadow_reference = true;
    ctx->abi.robust_buffer_access = true;
    ctx->abi.convert_undef_to_zero = true;
+   ctx->abi.clamp_div_by_zero = ctx->screen->options.clamp_div_by_zero;
 
    if (ctx->shader->selector->info.properties[TGSI_PROPERTY_CS_LOCAL_SIZE]) {
       assert(gl_shader_stage_is_compute(nir->info.stage));

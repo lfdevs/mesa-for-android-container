@@ -163,6 +163,7 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_DRAW_INFO_START_WITH_USER_INDICES:
    case PIPE_CAP_ALPHA_TO_COVERAGE_DITHER_CONTROL:
    case PIPE_CAP_MAP_UNSYNCHRONIZED_THREAD_SAFE:
+   case PIPE_CAP_NO_CLIP_ON_COPY_TEX:
       return 1;
 
    case PIPE_CAP_GLSL_ZERO_INIT:

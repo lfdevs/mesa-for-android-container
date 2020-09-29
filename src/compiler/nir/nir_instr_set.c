@@ -474,7 +474,7 @@ nir_alu_srcs_negative_equal(const nir_alu_instr *alu1,
       return true;
    }
 
-   uint8_t alu1_swizzle[4] = {0};
+   uint8_t alu1_swizzle[NIR_MAX_VEC_COMPONENTS] = {0};
    nir_src alu1_actual_src;
    nir_alu_instr *neg1 = get_neg_instr(alu1->src[src1].src);
 
@@ -491,7 +491,7 @@ nir_alu_srcs_negative_equal(const nir_alu_instr *alu1,
          alu1_swizzle[i] = i;
    }
 
-   uint8_t alu2_swizzle[4] = {0};
+   uint8_t alu2_swizzle[NIR_MAX_VEC_COMPONENTS] = {0};
    nir_src alu2_actual_src;
    nir_alu_instr *neg2 = get_neg_instr(alu2->src[src2].src);
 

@@ -25,6 +25,8 @@
  * @brief Implementation for archrast.
  *
  ******************************************************************************/
+#include <sys/stat.h>
+
 #include <atomic>
 #include <map>
 

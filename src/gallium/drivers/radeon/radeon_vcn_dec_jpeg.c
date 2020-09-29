@@ -288,6 +288,7 @@ void send_cmd_jpeg(struct radeon_decoder *dec, struct pipe_video_buffer *target,
 
    memset(dec->bs_ptr, 0, align(dec->bs_size, 128) - dec->bs_size);
    dec->ws->buffer_unmap(bs_buf->res->buf);
+   dec->bs_ptr = NULL;
 
    dt = radeon_jpeg_get_decode_param(dec, target, picture);
 

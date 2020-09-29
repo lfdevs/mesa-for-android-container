@@ -543,7 +543,7 @@ radv_pipeline_compute_spi_color_formats(struct radv_pipeline *pipeline,
 	 */
 	num_targets = (util_last_bit(col_format) + 3) / 4;
 	for (unsigned i = 0; i < num_targets; i++) {
-		if (!(col_format & (0xf << (i * 4)))) {
+		if (!(col_format & (0xfu << (i * 4)))) {
 			col_format |= V_028714_SPI_SHADER_32_R << (i * 4);
 		}
 	}
@@ -681,7 +681,7 @@ radv_pipeline_init_blend_state(struct radv_pipeline *pipeline,
 				continue;
 
 			blend.cb_target_mask |= (unsigned)att->colorWriteMask << (4 * i);
-			blend.cb_target_enabled_4bit |= 0xf << (4 * i);
+			blend.cb_target_enabled_4bit |= 0xfu << (4 * i);
 			if (!att->blendEnable) {
 				blend.cb_blend_control[i] = blend_cntl;
 				continue;
@@ -701,9 +701,9 @@ radv_pipeline_init_blend_state(struct radv_pipeline *pipeline,
 			}
 
 			radv_blend_check_commutativity(&blend, eqRGB, srcRGB, dstRGB,
-						       0x7 << (4 * i));
+						       0x7u << (4 * i));
 			radv_blend_check_commutativity(&blend, eqA, srcA, dstA,
-						       0x8 << (4 * i));
+						       0x8u << (4 * i));
 
 			/* Blending optimizations for RB+.
 			 * These transformations don't change the behavior.

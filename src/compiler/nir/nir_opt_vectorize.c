@@ -196,7 +196,7 @@ instr_try_combine(struct nir_shader *nir, nir_instr *instr1, nir_instr *instr2)
          nir_const_value *c1 = nir_src_as_const_value(alu1->src[i].src);
          nir_const_value *c2 = nir_src_as_const_value(alu2->src[i].src);
          assert(c1 && c2);
-         nir_const_value value[4];
+         nir_const_value value[NIR_MAX_VEC_COMPONENTS];
          unsigned bit_size = alu1->src[i].src.ssa->bit_size;
 
          for (unsigned j = 0; j < total_components; j++) {
@@ -225,7 +225,9 @@ instr_try_combine(struct nir_shader *nir, nir_instr *instr1, nir_instr *instr2)
 
    nir_builder_instr_insert(&b, &new_alu->instr);
 
-   unsigned swiz[4] = {0, 1, 2, 3};
+   unsigned swiz[NIR_MAX_VEC_COMPONENTS];
+   for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
+      swiz[i] = i;
    nir_ssa_def *new_alu1 = nir_swizzle(&b, &new_alu->dest.dest.ssa, swiz,
                                        alu1_components);
 

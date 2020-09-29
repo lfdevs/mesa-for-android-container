@@ -114,42 +114,11 @@ LLVMBuilderRef ac_create_builder(LLVMContextRef ctx,
 		 */
 		flags.setAllowReciprocal(); /* arcp */
 
-		/* Allow floating-point contraction (e.g. fusing a multiply
-		 * followed by an addition into a fused multiply-and-add).
-		 */
-		flags.setAllowContract(); /* contract */
-
 		llvm::unwrap(builder)->setFastMathFlags(flags);
 		break;
 	}
 
 	return builder;
-}
-
-/* Return the original state of inexact math. */
-bool ac_disable_inexact_math(LLVMBuilderRef builder)
-{
-	auto *b = llvm::unwrap(builder);
-	llvm::FastMathFlags flags = b->getFastMathFlags();
-
-	if (!flags.allowContract())
-		return false;
-
-	flags.setAllowContract(false);
-	b->setFastMathFlags(flags);
-	return true;
-}
-
-void ac_restore_inexact_math(LLVMBuilderRef builder, bool value)
-{
-	auto *b = llvm::unwrap(builder);
-	llvm::FastMathFlags flags = b->getFastMathFlags();
-
-	if (flags.allowContract() == value)
-		return;
-
-	flags.setAllowContract(value);
-	b->setFastMathFlags(flags);
 }
 
 LLVMTargetLibraryInfoRef

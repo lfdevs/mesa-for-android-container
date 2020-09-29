@@ -1656,7 +1656,7 @@ ac_build_opencoded_load_format(struct ac_llvm_context *ctx,
 	}
 
 	int log_recombine = 0;
-	if ((ctx->chip_class == GFX6 || ctx->chip_class == GFX10) && !known_aligned) {
+	if ((ctx->chip_class == GFX6 || ctx->chip_class >= GFX10) && !known_aligned) {
 		/* Avoid alignment restrictions by loading one byte at a time. */
 		load_num_channels <<= load_log_size;
 		log_recombine = load_log_size;

@@ -49,7 +49,11 @@
 #undef MemoryFence
 #endif
 
+#if defined(_MSC_VER)
 #define OSALIGN(RWORD, WIDTH) __declspec(align(WIDTH)) RWORD
+#elif defined(__GNUC__)
+#define OSALIGN(RWORD, WIDTH) RWORD __attribute__((aligned(WIDTH)))
+#endif
 
 #if defined(_DEBUG)
 // We compile Debug builds with inline function expansion enabled.  This allows

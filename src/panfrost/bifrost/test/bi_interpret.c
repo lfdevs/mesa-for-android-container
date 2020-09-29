@@ -434,18 +434,18 @@ bit_step(struct bit_state *s, bi_instruction *ins, bool FMA)
                 unsigned sz = nir_alu_type_get_type_size(T);
 
                 if (sz == 32 || sz == 64) {
-                        dest.u32 = bit_cmp(ins->cond, srcs[0], srcs[1], T, 0, 0, false);
+                        dest.u32 = bit_cmp(ins->cond, srcs[0], srcs[1], T, 0, 0, true);
                 } else if (sz == 16) {
                         for (unsigned c = 0; c < 2; ++c) {
                                 dest.u16[c] = bit_cmp(ins->cond, srcs[0], srcs[1],
                                                 T, ins->swizzle[0][c], ins->swizzle[1][c],
-                                                false);
+                                                true);
                         }
                 } else if (sz == 8) {
                         for (unsigned c = 0; c < 4; ++c) {
                                 dest.u8[c] = bit_cmp(ins->cond, srcs[0], srcs[1],
                                                 T, ins->swizzle[0][c], ins->swizzle[1][c],
-                                                false);
+                                                true);
                         }
                 } else {
                         unreachable("Invalid");

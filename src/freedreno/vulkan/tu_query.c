@@ -532,7 +532,7 @@ emit_begin_occlusion_query(struct tu_cmd_buffer *cmdbuf,
                    A6XX_RB_SAMPLE_COUNT_CONTROL(.copy = true));
 
    tu_cs_emit_regs(cs,
-                   A6XX_RB_SAMPLE_COUNT_ADDR_LO(begin_iova));
+                   A6XX_RB_SAMPLE_COUNT_ADDR(.qword = begin_iova));
 
    tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 1);
    tu_cs_emit(cs, ZPASS_DONE);
@@ -547,7 +547,7 @@ emit_begin_xfb_query(struct tu_cmd_buffer *cmdbuf,
    struct tu_cs *cs = cmdbuf->state.pass ? &cmdbuf->draw_cs : &cmdbuf->cs;
    uint64_t begin_iova = primitive_query_iova(pool, query, begin[0], 0);
 
-   tu_cs_emit_regs(cs, A6XX_VPC_SO_STREAM_COUNTS_LO(begin_iova));
+   tu_cs_emit_regs(cs, A6XX_VPC_SO_STREAM_COUNTS(.qword = begin_iova));
    tu6_emit_event_write(cmdbuf, cs, WRITE_PRIMITIVE_COUNTS);
 }
 
@@ -640,7 +640,7 @@ emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
                    A6XX_RB_SAMPLE_COUNT_CONTROL(.copy = true));
 
    tu_cs_emit_regs(cs,
-                   A6XX_RB_SAMPLE_COUNT_ADDR_LO(end_iova));
+                   A6XX_RB_SAMPLE_COUNT_ADDR(.qword = end_iova));
 
    tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 1);
    tu_cs_emit(cs, ZPASS_DONE);
@@ -694,7 +694,7 @@ emit_end_xfb_query(struct tu_cmd_buffer *cmdbuf,
    uint64_t end_generated_iova = primitive_query_iova(pool, query, end[stream_id], 1);
    uint64_t available_iova = query_available_iova(pool, query);
 
-   tu_cs_emit_regs(cs, A6XX_VPC_SO_STREAM_COUNTS_LO(end_iova));
+   tu_cs_emit_regs(cs, A6XX_VPC_SO_STREAM_COUNTS(.qword = end_iova));
    tu6_emit_event_write(cmdbuf, cs, WRITE_PRIMITIVE_COUNTS);
 
    tu_cs_emit_wfi(cs);

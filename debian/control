@@ -44,6 +44,7 @@ Build-Depends:
  libwayland-egl-backend-dev (>= 1.15.0) [linux-any],
  llvm-11-dev (>= 1:11.0.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64],
  libclang-11-dev (>= 1:11.0.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64],
+ libclang-cpp11-dev (>= 1:11.0.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64],
  libclc-dev (>= 0.2.0+git20190827-7~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64],
  wayland-protocols (>= 1.9),
  zlib1g-dev,

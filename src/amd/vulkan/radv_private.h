@@ -727,7 +727,7 @@ struct radv_queue {
 struct radv_bo_list {
 	struct radv_winsys_bo_list list;
 	unsigned capacity;
-	pthread_mutex_t mutex;
+	pthread_rwlock_t rwlock;
 };
 
 VkResult radv_bo_list_add(struct radv_device *device,

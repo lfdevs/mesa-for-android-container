@@ -2880,7 +2880,7 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
    if (gallivm_perf & GALLIVM_PERF_NO_RHO_APPROX || op_is_lodq) {
       bld.no_rho_approx = TRUE;
    }
-   if (gallivm_perf & GALLIVM_PERF_NO_BRILINEAR || op_is_lodq) {
+   if (gallivm_perf & GALLIVM_PERF_NO_BRILINEAR || op_is_lodq || lod_bias || explicit_lod) {
       bld.no_brilinear = TRUE;
    }
 

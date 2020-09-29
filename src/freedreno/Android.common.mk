@@ -37,5 +37,7 @@ LOCAL_C_INCLUDES := \
 
 LOCAL_MODULE := libfreedreno_common
 
+LOCAL_STATIC_LIBRARIES := libmesa_git_sha1
+
 include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)

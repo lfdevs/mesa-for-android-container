@@ -184,6 +184,8 @@ struct vtn_if {
 struct vtn_case {
    struct vtn_cf_node node;
 
+   struct vtn_block *block;
+
    enum vtn_branch_type type;
    struct list_head body;
 
@@ -580,6 +582,12 @@ struct vtn_image_pointer {
 
 struct vtn_value {
    enum vtn_value_type value_type;
+
+   /* Workaround for https://gitlab.freedesktop.org/mesa/mesa/-/issues/3406
+    * Only set for OpImage / OpSampledImage. Note that this is in addition
+    * the existence of a NonUniform decoration on this value.*/
+   uint32_t propagated_non_uniform : 1;
+
    const char *name;
    struct vtn_decoration *decoration;
    struct vtn_type *type;
@@ -673,6 +681,7 @@ struct vtn_builder {
    unsigned func_param_idx;
 
    bool has_loop_continue;
+   bool has_kill;
 
    /* false by default, set to true by the ContractionOff execution mode */
    bool exact;

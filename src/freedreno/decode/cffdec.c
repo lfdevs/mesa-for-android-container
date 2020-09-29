@@ -403,8 +403,10 @@ dump_shader(const char *ext, void *buf, int bufsz)
 		int fd;
 		sprintf(filename, "%04d.%s", n++, ext);
 		fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
-		write(fd, buf, bufsz);
-		close(fd);
+		if (fd != -1) {
+			write(fd, buf, bufsz);
+			close(fd);
+		}
 	}
 }
 

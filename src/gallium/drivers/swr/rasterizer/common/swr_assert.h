@@ -71,7 +71,7 @@
     while (0)          \
     _SWR_WARN_RESTORE
 
-#if defined(_WIN32)
+#if defined(_MSC_VER)
 #define SWR_ASSUME(e, ...)        \
     _SWR_MACRO_START __assume(e); \
     _SWR_MACRO_END

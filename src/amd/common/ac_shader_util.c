@@ -64,7 +64,7 @@ ac_get_cb_shader_mask(unsigned spi_shader_col_format)
 			cb_shader_mask |= 0x3 << (i * 4);
 			break;
 		case V_028714_SPI_SHADER_32_AR:
-			cb_shader_mask |= 0x9 << (i * 4);
+			cb_shader_mask |= 0x9u << (i * 4);
 			break;
 		case V_028714_SPI_SHADER_FP16_ABGR:
 		case V_028714_SPI_SHADER_UNORM16_ABGR:
@@ -72,7 +72,7 @@ ac_get_cb_shader_mask(unsigned spi_shader_col_format)
 		case V_028714_SPI_SHADER_UINT16_ABGR:
 		case V_028714_SPI_SHADER_SINT16_ABGR:
 		case V_028714_SPI_SHADER_32_ABGR:
-			cb_shader_mask |= 0xf << (i * 4);
+			cb_shader_mask |= 0xfu << (i * 4);
 			break;
 		default:
 			assert(0);

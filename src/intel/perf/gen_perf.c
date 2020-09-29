@@ -476,6 +476,22 @@ get_register_queries_function(const struct gen_device_info *devinfo)
    return NULL;
 }
 
+static int
+gen_perf_compare_counter_names(const void *v1, const void *v2)
+{
+   const struct gen_perf_query_counter *c1 = v1;
+   const struct gen_perf_query_counter *c2 = v2;
+
+   return strcmp(c1->name, c2->name);
+}
+
+static void
+sort_query(struct gen_perf_query_info *q)
+{
+   qsort(q->counters, q->n_counters, sizeof(q->counters[0]),
+         gen_perf_compare_counter_names);
+}
+
 static void
 load_pipeline_statistic_metrics(struct gen_perf_config *perf_cfg,
                                 const struct gen_device_info *devinfo)
@@ -560,6 +576,8 @@ load_pipeline_statistic_metrics(struct gen_perf_config *perf_cfg,
    }
 
    query->data_size = sizeof(uint64_t) * query->n_counters;
+
+   sort_query(query);
 }
 
 static int
@@ -591,11 +609,31 @@ i915_get_sseu(int drm_fd, struct drm_i915_gem_context_param_sseu *sseu)
    gen_ioctl(drm_fd, DRM_IOCTL_I915_GEM_CONTEXT_GETPARAM, &arg);
 }
 
-static int
-compare_counters(const void *_c1, const void *_c2)
+static inline int
+compare_str_or_null(const char *s1, const char *s2)
 {
-   const struct gen_perf_query_counter_info *c1 = _c1, *c2 = _c2;
-   return strcmp(c1->counter->symbol_name, c2->counter->symbol_name);
+   if (s1 == NULL && s2 == NULL)
+      return 0;
+   if (s1 == NULL)
+      return -1;
+   if (s2 == NULL)
+      return 1;
+
+   return strcmp(s1, s2);
+}
+
+static int
+compare_counter_categories_and_names(const void *_c1, const void *_c2)
+{
+   const struct gen_perf_query_counter_info *c1 = (const struct gen_perf_query_counter_info *)_c1;
+   const struct gen_perf_query_counter_info *c2 = (const struct gen_perf_query_counter_info *)_c2;
+
+   /* pipeline counters don't have an assigned category */
+   int r = compare_str_or_null(c1->counter->category, c2->counter->category);
+   if (r)
+      return r;
+
+   return strcmp(c1->counter->name, c2->counter->name);
 }
 
 static void
@@ -658,12 +696,12 @@ build_unique_counter_list(struct gen_perf_config *perf)
          sizeof(counter_infos[0]), perf->n_counters);
 
    qsort(perf->counter_infos, perf->n_counters, sizeof(perf->counter_infos[0]),
-         compare_counters);
+         compare_counter_categories_and_names);
 }
 
 static bool
-load_oa_metrics(struct gen_perf_config *perf, int fd,
-                const struct gen_device_info *devinfo)
+oa_metrics_available(struct gen_perf_config *perf, int fd,
+      const struct gen_device_info *devinfo)
 {
    perf_register_oa_queries_t oa_register = get_register_queries_function(devinfo);
    bool i915_perf_oa_available = false;
@@ -697,11 +735,19 @@ load_oa_metrics(struct gen_perf_config *perf, int fd,
       perf->platform_supported = oa_register != NULL;
    }
 
-   if (!i915_perf_oa_available ||
-       !oa_register ||
-       !get_sysfs_dev_dir(perf, fd) ||
-       !init_oa_sys_vars(perf, devinfo))
-      return false;
+   return i915_perf_oa_available &&
+          oa_register &&
+          get_sysfs_dev_dir(perf, fd) &&
+          init_oa_sys_vars(perf, devinfo);
+}
+
+static void
+load_oa_metrics(struct gen_perf_config *perf, int fd,
+                const struct gen_device_info *devinfo)
+{
+   int existing_queries = perf->n_queries;
+
+   perf_register_oa_queries_t oa_register = get_register_queries_function(devinfo);
 
    perf->oa_metrics_table =
       _mesa_hash_table_create(perf, _mesa_hash_string,
@@ -721,9 +767,22 @@ load_oa_metrics(struct gen_perf_config *perf, int fd,
       add_all_metrics(perf, devinfo);
    }
 
-   build_unique_counter_list(perf);
+   /* sort counters in each individual group created by this function by name */
+   for (int i = existing_queries; i < perf->n_queries; ++i)
+      sort_query(&perf->queries[i]);
 
-   return true;
+   /* Select a fallback OA metric. Look for the TestOa metric or use the last
+    * one if no present (on HSW).
+    */
+   for (int i = existing_queries; i < perf->n_queries; i++) {
+      if (perf->queries[i].symbol_name &&
+          strcmp(perf->queries[i].symbol_name, "TestOa") == 0) {
+         perf->fallback_raw_oa_metric = perf->queries[i].oa_metrics_set_id;
+         break;
+      }
+   }
+   if (perf->fallback_raw_oa_metric == 0)
+      perf->fallback_raw_oa_metric = perf->queries[perf->n_queries - 1].oa_metrics_set_id;
 }
 
 struct gen_perf_registers *
@@ -1038,6 +1097,15 @@ gen_perf_query_result_clear(struct gen_perf_query_result *result)
    result->hw_id = OA_REPORT_INVALID_CTX_ID; /* invalid */
 }
 
+static int
+gen_perf_compare_query_names(const void *v1, const void *v2)
+{
+   const struct gen_perf_query_info *q1 = v1;
+   const struct gen_perf_query_info *q2 = v2;
+
+   return strcmp(q1->name, q2->name);
+}
+
 void
 gen_perf_init_metrics(struct gen_perf_config *perf_cfg,
                       const struct gen_device_info *devinfo,
@@ -1048,6 +1116,17 @@ gen_perf_init_metrics(struct gen_perf_config *perf_cfg,
       load_pipeline_statistic_metrics(perf_cfg, devinfo);
       gen_perf_register_mdapi_statistic_query(perf_cfg, devinfo);
    }
-   if (load_oa_metrics(perf_cfg, drm_fd, devinfo))
+
+   bool oa_metrics = oa_metrics_available(perf_cfg, drm_fd, devinfo);
+   if (oa_metrics)
+      load_oa_metrics(perf_cfg, drm_fd, devinfo);
+
+   /* sort query groups by name */
+   qsort(perf_cfg->queries, perf_cfg->n_queries,
+         sizeof(perf_cfg->queries[0]), gen_perf_compare_query_names);
+
+   build_unique_counter_list(perf_cfg);
+
+   if (oa_metrics)
       gen_perf_register_mdapi_oa_query(perf_cfg, devinfo);
 }

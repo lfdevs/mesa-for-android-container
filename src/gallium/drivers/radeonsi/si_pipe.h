@@ -162,6 +162,7 @@ enum
    DBG_W64_PS,
    DBG_W64_CS,
    DBG_KILL_PS_INF_INTERP,
+   DBG_CLAMP_DIV_BY_ZERO,
 
    /* Shader compiler options (with no effect on the shader cache): */
    DBG_CHECK_IR,

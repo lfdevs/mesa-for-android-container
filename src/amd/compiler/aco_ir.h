@@ -429,7 +429,7 @@ public:
       if (v <= 64)
          setFixed(PhysReg{128u + v});
       else if (v >= 0xFFF0) /* [-16 .. -1] */
-         setFixed(PhysReg{192u + (0xFFFF - v)});
+         setFixed(PhysReg{(unsigned)(192 - (int16_t)v)});
       else if (v == 0x3800) /* 0.5 */
          setFixed(PhysReg{240});
       else if (v == 0xB800) /* -0.5 */

@@ -430,10 +430,17 @@ void byte_align_scalar(isel_context *ctx, Temp vec, Operand offset, Temp dst)
          emit_split_vector(ctx, dst, 2);
       else
          emit_extract_vector(ctx, tmp, 0, dst);
-   } else if (vec.size() == 4) {
-      Temp lo = bld.tmp(s2), hi = bld.tmp(s2);
-      bld.pseudo(aco_opcode::p_split_vector, Definition(lo), Definition(hi), vec);
-      hi = bld.pseudo(aco_opcode::p_extract_vector, bld.def(s1), hi, Operand(0u));
+   } else if (vec.size() == 3 || vec.size() == 4) {
+      Temp lo = bld.tmp(s2), hi;
+      if (vec.size() == 3) {
+         /* this can happen if we use VMEM for a uniform load */
+         hi = bld.tmp(s1);
+         bld.pseudo(aco_opcode::p_split_vector, Definition(lo), Definition(hi), vec);
+      } else {
+         hi = bld.tmp(s2);
+         bld.pseudo(aco_opcode::p_split_vector, Definition(lo), Definition(hi), vec);
+         hi = bld.pseudo(aco_opcode::p_extract_vector, bld.def(s1), hi, Operand(0u));
+      }
       if (select != Temp())
          hi = bld.sop2(aco_opcode::s_cselect_b32, bld.def(s1), hi, Operand(0u), bld.scc(select));
       lo = bld.sop2(aco_opcode::s_lshr_b64, bld.def(s2), bld.def(s1, scc), lo, shift);
@@ -4658,7 +4665,7 @@ bool check_vertex_fetch_size(isel_context *ctx, const ac_data_format_info *vtx_i
    unsigned vertex_byte_size = vtx_info->chan_byte_size * channels;
    if (vtx_info->chan_byte_size != 4 && channels == 3)
       return false;
-   return (ctx->options->chip_class != GFX6 && ctx->options->chip_class != GFX10) ||
+   return (ctx->options->chip_class >= GFX7 && ctx->options->chip_class <= GFX9) ||
           (offset % vertex_byte_size == 0 && stride % vertex_byte_size == 0);
 }
 
@@ -7212,6 +7219,7 @@ Temp emit_boolean_reduce(isel_context *ctx, nir_op op, unsigned cluster_size, Te
 Temp emit_boolean_exclusive_scan(isel_context *ctx, nir_op op, Temp src)
 {
    Builder bld(ctx->program, ctx->block);
+   assert(src.regClass() == bld.lm);
 
    //subgroupExclusiveAnd(val) -> mbcnt(exec & ~val) == 0
    //subgroupExclusiveOr(val) -> mbcnt(val & exec) != 0
@@ -7220,7 +7228,7 @@ Temp emit_boolean_exclusive_scan(isel_context *ctx, nir_op op, Temp src)
    if (op == nir_op_iand)
       tmp = bld.sop2(Builder::s_andn2, bld.def(bld.lm), bld.def(s1, scc), Operand(exec, bld.lm), src);
    else
-      tmp = bld.sop2(Builder::s_and, bld.def(s2), bld.def(s1, scc), src, Operand(exec, bld.lm));
+      tmp = bld.sop2(Builder::s_and, bld.def(bld.lm), bld.def(s1, scc), src, Operand(exec, bld.lm));
 
    Builder::Result lohi = bld.pseudo(aco_opcode::p_split_vector, bld.def(s1), bld.def(s1), tmp);
    Temp lo = lohi.def(0).getTemp();
@@ -10060,7 +10068,10 @@ static void create_vs_exports(isel_context *ctx)
 
    if (outinfo->export_prim_id && !(ctx->stage & hw_ngg_gs)) {
       ctx->outputs.mask[VARYING_SLOT_PRIMITIVE_ID] |= 0x1;
-      ctx->outputs.temps[VARYING_SLOT_PRIMITIVE_ID * 4u] = get_arg(ctx, ctx->args->vs_prim_id);
+      if (ctx->stage & sw_tes)
+         ctx->outputs.temps[VARYING_SLOT_PRIMITIVE_ID * 4u] = get_arg(ctx, ctx->args->ac.tes_patch_id);
+      else
+         ctx->outputs.temps[VARYING_SLOT_PRIMITIVE_ID * 4u] = get_arg(ctx, ctx->args->vs_prim_id);
    }
 
    if (ctx->options->key.has_multiview_view_index) {

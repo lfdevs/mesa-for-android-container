@@ -1,3 +1,10 @@
+mesa (20.2.0-1) experimental; urgency=medium
+
+  * New upstream release.
+  * control: Add libclang-cpp11-dev to build-depends. (Closes: #954849)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 29 Sep 2020 11:07:13 +0300
+
 mesa (20.2.0~rc4-2) experimental; urgency=medium
 
   * Migrate to llvm/clang-11.

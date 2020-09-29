@@ -392,6 +392,9 @@ class Expression(Value):
       self.sources = [ Value.create(src, "{0}_{1}".format(name_base, i), varset)
                        for (i, src) in enumerate(expr[1:]) ]
 
+      # nir_search_expression::srcs is hard-coded to 4
+      assert len(self.sources) <= 4
+
       if self.opcode in conv_opcode_types:
          assert self._bit_size is None, \
                 'Expression cannot use an unsized conversion opcode with ' \

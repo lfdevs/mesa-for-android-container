@@ -667,7 +667,8 @@ emit_pipeline_select(struct iris_batch *batch, uint32_t pipeline)
 
    iris_emit_cmd(batch, GENX(PIPELINE_SELECT), sel) {
 #if GEN_GEN >= 9
-      sel.MaskBits = 3;
+      sel.MaskBits = GEN_GEN >= 12 ? 0x13 : 3;
+      sel.MediaSamplerDOPClockGateEnable = GEN_GEN >= 12;
 #endif
       sel.PipelineSelection = pipeline;
    }
@@ -6658,7 +6659,8 @@ iris_upload_gpgpu_walker(struct iris_context *ice,
    }
 
    /* TODO: Combine subgroup-id with cbuf0 so we can push regular uniforms */
-   if (stage_dirty & IRIS_STAGE_DIRTY_CS) {
+   if ((stage_dirty & IRIS_STAGE_DIRTY_CS) ||
+       cs_prog_data->local_size[0] == 0 /* Variable local group size */) {
       uint32_t curbe_data_offset = 0;
       assert(cs_prog_data->push.cross_thread.dwords == 0 &&
              cs_prog_data->push.per_thread.dwords == 1 &&

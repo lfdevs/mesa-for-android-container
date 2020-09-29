@@ -107,12 +107,29 @@ brw_nir_clamp_image_1d_2d_array_sizes(nir_shader *shader)
             b.cursor = nir_after_instr(instr);
 
             nir_ssa_def *components[4];
+            /* OR all the sizes for all components but the last. */
+            nir_ssa_def *or_components = nir_imm_int(&b, 0);
             for (int i = 0; i < image_size->num_components; i++) {
                if (i == (image_size->num_components - 1)) {
-                  components[i] = nir_imax(&b, nir_channel(&b, image_size, i),
-                                               nir_imm_int(&b, 1));
+                  nir_ssa_def *null_or_size[2] = {
+                     nir_imm_int(&b, 0),
+                     nir_imax(&b, nir_channel(&b, image_size, i),
+                                  nir_imm_int(&b, 1)),
+                  };
+                  nir_ssa_def *vec2_null_or_size = nir_vec(&b, null_or_size, 2);
+
+                  /* Using the ORed sizes select either the element 0 or 1
+                   * from this vec2. For NULL textures which have a size of
+                   * 0x0x0, we'll select the first element which is 0 and for
+                   * the rest MAX(depth, 1).
+                   */
+                  components[i] =
+                     nir_vector_extract(&b, vec2_null_or_size,
+                                            nir_imin(&b, or_components,
+                                                         nir_imm_int(&b, 1)));
                } else {
                   components[i] = nir_channel(&b, image_size, i);
+                  or_components = nir_ior(&b, components[i], or_components);
                }
             }
             nir_ssa_def *image_size_replacement =

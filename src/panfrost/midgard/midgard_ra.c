@@ -865,7 +865,7 @@ mir_spill_register(
                                 st = v_mov(spill_node, spill_slot);
                                 st.no_spill |= (1 << spill_class);
                                 st.mask = ins->mask;
-                                st.dest_type = st.src_types[0] = ins->dest_type;
+                                st.dest_type = st.src_types[1] = ins->dest_type;
                         } else {
                                 ins->dest = spill_index++;
                                 ins->no_spill |= (1 << spill_class);

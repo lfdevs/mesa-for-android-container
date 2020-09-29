@@ -239,6 +239,7 @@ if with_swr_arches.contains('skx')
       version : '0.0.0',
       soversion : host_machine.system() == 'windows' ? '' : '0',
       install : true,
+      name_prefix : host_machine.system() == 'windows' ? '' : 'lib',
     )
   else
     swr_arch_libs += static_library(
@@ -280,6 +281,7 @@ if with_swr_arches.contains('knl')
       version : '0.0.0',
       soversion : host_machine.system() == 'windows' ? '' : '0',
       install : true,
+      name_prefix : host_machine.system() == 'windows' ? '' : 'lib',
     )
   else
     swr_arch_libs += static_library(
@@ -326,6 +328,7 @@ if with_swr_arches.contains('avx2')
       version : '0.0.0',
       soversion : host_machine.system() == 'windows' ? '' : '0',
       install : true,
+      name_prefix : host_machine.system() == 'windows' ? '' : 'lib',
     )
   else
     swr_arch_libs += static_library(
@@ -360,6 +363,7 @@ if with_swr_arches.contains('avx')
       version : '0.0.0',
       soversion : host_machine.system() == 'windows' ? '' : '0',
       install : true,
+      name_prefix : host_machine.system() == 'windows' ? '' : 'lib',
     )
   else
     swr_arch_libs += static_library(

@@ -321,11 +321,12 @@ vtn_get_image(struct vtn_builder *b, uint32_t value_id)
 
 static void
 vtn_push_image(struct vtn_builder *b, uint32_t value_id,
-               nir_deref_instr *deref)
+               nir_deref_instr *deref, bool propagate_non_uniform)
 {
    struct vtn_type *type = vtn_get_value_type(b, value_id);
    vtn_assert(type->base_type == vtn_base_type_image);
-   vtn_push_nir_ssa(b, value_id, &deref->dest.ssa);
+   struct vtn_value *value = vtn_push_nir_ssa(b, value_id, &deref->dest.ssa);
+   value->propagated_non_uniform = propagate_non_uniform;
 }
 
 static nir_deref_instr *
@@ -346,11 +347,13 @@ vtn_sampled_image_to_nir_ssa(struct vtn_builder *b,
 
 static void
 vtn_push_sampled_image(struct vtn_builder *b, uint32_t value_id,
-                       struct vtn_sampled_image si)
+                       struct vtn_sampled_image si, bool propagate_non_uniform)
 {
    struct vtn_type *type = vtn_get_value_type(b, value_id);
    vtn_assert(type->base_type == vtn_base_type_sampled_image);
-   vtn_push_nir_ssa(b, value_id, vtn_sampled_image_to_nir_ssa(b, si));
+   struct vtn_value *value = vtn_push_nir_ssa(b, value_id,
+                                              vtn_sampled_image_to_nir_ssa(b, si));
+   value->propagated_non_uniform = propagate_non_uniform;
 }
 
 static struct vtn_sampled_image
@@ -2471,11 +2474,23 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
          .image = vtn_get_image(b, w[3]),
          .sampler = vtn_get_sampler(b, w[4]),
       };
-      vtn_push_sampled_image(b, w[2], si);
+
+      enum gl_access_qualifier access = 0;
+      vtn_foreach_decoration(b, vtn_untyped_value(b, w[3]),
+                             non_uniform_decoration_cb, &access);
+      vtn_foreach_decoration(b, vtn_untyped_value(b, w[4]),
+                             non_uniform_decoration_cb, &access);
+
+      vtn_push_sampled_image(b, w[2], si, access & ACCESS_NON_UNIFORM);
       return;
    } else if (opcode == SpvOpImage) {
       struct vtn_sampled_image si = vtn_get_sampled_image(b, w[3]);
-      vtn_push_image(b, w[2], si.image);
+
+      enum gl_access_qualifier access = 0;
+      vtn_foreach_decoration(b, vtn_untyped_value(b, w[3]),
+                             non_uniform_decoration_cb, &access);
+
+      vtn_push_image(b, w[2], si.image, access & ACCESS_NON_UNIFORM);
       return;
    }
 
@@ -2783,6 +2798,9 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
     */
    enum gl_access_qualifier access = 0;
    vtn_foreach_decoration(b, sampled_val, non_uniform_decoration_cb, &access);
+
+   if (sampled_val->propagated_non_uniform)
+      access |= ACCESS_NON_UNIFORM;
 
    if (image && (access & ACCESS_NON_UNIFORM))
       instr->texture_non_uniform = true;

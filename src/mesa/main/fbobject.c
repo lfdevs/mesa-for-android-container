@@ -344,6 +344,7 @@ get_fb0_attachment(struct gl_context *ctx, struct gl_framebuffer *fb,
    }
 
    switch (attachment) {
+   case GL_FRONT:
    case GL_FRONT_LEFT:
       /* Front buffers can be allocated on the first use, but
        * glGetFramebufferAttachmentParameteriv must work even if that

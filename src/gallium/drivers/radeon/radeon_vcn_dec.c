@@ -964,6 +964,7 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
                                    PIPE_TRANSFER_WRITE | RADEON_TRANSFER_TEMPORARY);
          fill_probs_table(ptr);
          dec->ws->buffer_unmap(dec->ctx.res->buf);
+         dec->bs_ptr = NULL;
       }
       break;
    }
@@ -1077,6 +1078,7 @@ static void send_msg_buf(struct radeon_decoder *dec)
 
    /* unmap the buffer */
    dec->ws->buffer_unmap(buf->res->buf);
+   dec->bs_ptr = NULL;
    dec->msg = NULL;
    dec->fb = NULL;
    dec->it = NULL;
@@ -1367,6 +1369,7 @@ static void radeon_dec_decode_bitstream(struct pipe_video_codec *decoder,
 
       if (new_size > buf->res->buf->size) {
          dec->ws->buffer_unmap(buf->res->buf);
+         dec->bs_ptr = NULL;
          if (!si_vid_resize_buffer(dec->screen, dec->cs, buf, new_size)) {
             RVID_ERR("Can't resize bitstream buffer!");
             return;
@@ -1400,6 +1403,7 @@ void send_cmd_dec(struct radeon_decoder *dec, struct pipe_video_buffer *target,
 
    memset(dec->bs_ptr, 0, align(dec->bs_size, 128) - dec->bs_size);
    dec->ws->buffer_unmap(bs_buf->res->buf);
+   dec->bs_ptr = NULL;
 
    map_msg_fb_it_probs_buf(dec);
    dt = rvcn_dec_message_decode(dec, target, picture);
@@ -1559,6 +1563,7 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
          ptr += FB_BUFFER_OFFSET + FB_BUFFER_SIZE;
          fill_probs_table(ptr);
          dec->ws->buffer_unmap(buf->res->buf);
+         dec->bs_ptr = NULL;
       }
    }
 

@@ -721,3 +721,8 @@ gallivm_jit_function(struct gallivm_state *gallivm,
 
    return jit_func;
 }
+
+unsigned gallivm_get_perf_flags(void)
+{
+   return gallivm_perf;
+}

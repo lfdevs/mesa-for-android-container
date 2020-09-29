@@ -180,7 +180,7 @@ svga_create_stream_output(struct svga_context *svga,
    memset(strides, 0, sizeof(strides));
    memset(dstOffset, 0, sizeof(dstOffset));
 
-   SVGA_DBG(DEBUG_STREAMOUT, "%s: num_outputs\n",
+   SVGA_DBG(DEBUG_STREAMOUT, "%s: num_outputs=%d\n",
             __FUNCTION__, info->num_outputs);
 
    for (i = 0, numDecls = 0; i < info->num_outputs; i++, numDecls++) {

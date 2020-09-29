@@ -476,6 +476,74 @@ vtn_add_cfg_work_item(struct vtn_builder *b,
    list_addtail(&work->link, work_list);
 }
 
+/* returns the default block */
+static void
+vtn_parse_switch(struct vtn_builder *b,
+                 struct vtn_switch *swtch,
+                 const uint32_t *branch,
+                 struct list_head *case_list)
+{
+   const uint32_t *branch_end = branch + (branch[0] >> SpvWordCountShift);
+
+   struct vtn_value *sel_val = vtn_untyped_value(b, branch[1]);
+   vtn_fail_if(!sel_val->type ||
+               sel_val->type->base_type != vtn_base_type_scalar,
+               "Selector of OpSwitch must have a type of OpTypeInt");
+
+   nir_alu_type sel_type =
+      nir_get_nir_type_for_glsl_type(sel_val->type->type);
+   vtn_fail_if(nir_alu_type_get_base_type(sel_type) != nir_type_int &&
+               nir_alu_type_get_base_type(sel_type) != nir_type_uint,
+               "Selector of OpSwitch must have a type of OpTypeInt");
+
+   struct hash_table *block_to_case = _mesa_pointer_hash_table_create(b);
+
+   bool is_default = true;
+   const unsigned bitsize = nir_alu_type_get_type_size(sel_type);
+   for (const uint32_t *w = branch + 2; w < branch_end;) {
+      uint64_t literal = 0;
+      if (!is_default) {
+         if (bitsize <= 32) {
+            literal = *(w++);
+         } else {
+            assert(bitsize == 64);
+            literal = vtn_u64_literal(w);
+            w += 2;
+         }
+      }
+      struct vtn_block *case_block = vtn_block(b, *(w++));
+
+      struct hash_entry *case_entry =
+         _mesa_hash_table_search(block_to_case, case_block);
+
+      struct vtn_case *cse;
+      if (case_entry) {
+         cse = case_entry->data;
+      } else {
+         cse = rzalloc(b, struct vtn_case);
+
+         cse->node.type = vtn_cf_node_type_case;
+         cse->node.parent = swtch ? &swtch->node : NULL;
+         cse->block = case_block;
+         list_inithead(&cse->body);
+         util_dynarray_init(&cse->values, b);
+
+         list_addtail(&cse->node.link, case_list);
+         _mesa_hash_table_insert(block_to_case, case_block, cse);
+      }
+
+      if (is_default) {
+         cse->is_default = true;
+      } else {
+         util_dynarray_append(&cse->values, uint64_t, literal);
+      }
+
+      is_default = false;
+   }
+
+   _mesa_hash_table_destroy(block_to_case, NULL);
+}
+
 /* Processes a block and returns the next block to process or NULL if we've
  * reached the end of the construct.
  */
@@ -616,6 +684,7 @@ vtn_process_block(struct vtn_builder *b,
       return NULL;
 
    case SpvOpKill:
+      b->has_kill = true;
       block->branch_type = vtn_branch_type_discard;
       return NULL;
 
@@ -679,17 +748,6 @@ vtn_process_block(struct vtn_builder *b,
    }
 
    case SpvOpSwitch: {
-      struct vtn_value *sel_val = vtn_untyped_value(b, block->branch[1]);
-      vtn_fail_if(!sel_val->type ||
-                  sel_val->type->base_type != vtn_base_type_scalar,
-                  "Selector of OpSwitch must have a type of OpTypeInt");
-
-      nir_alu_type sel_type =
-         nir_get_nir_type_for_glsl_type(sel_val->type->type);
-      vtn_fail_if(nir_alu_type_get_base_type(sel_type) != nir_type_int &&
-                  nir_alu_type_get_base_type(sel_type) != nir_type_uint,
-                  "Selector of OpSwitch must have a type of OpTypeInt");
-
       struct vtn_switch *swtch = rzalloc(b, struct vtn_switch);
 
       swtch->node.type = vtn_cf_node_type_switch;
@@ -710,81 +768,38 @@ vtn_process_block(struct vtn_builder *b,
       }
 
       /* First, we go through and record all of the cases. */
-      const uint32_t *branch_end =
-         block->branch + (block->branch[0] >> SpvWordCountShift);
+      vtn_parse_switch(b, swtch, block->branch, &swtch->cases);
 
-      struct hash_table *block_to_case = _mesa_pointer_hash_table_create(b);
+      /* Gather the branch types for the switch */
+      vtn_foreach_cf_node(case_node, &swtch->cases) {
+         struct vtn_case *cse = vtn_cf_node_as_case(case_node);
 
-      bool is_default = true;
-      const unsigned bitsize = nir_alu_type_get_type_size(sel_type);
-      for (const uint32_t *w = block->branch + 2; w < branch_end;) {
-         uint64_t literal = 0;
-         if (!is_default) {
-            if (bitsize <= 32) {
-               literal = *(w++);
-            } else {
-               assert(bitsize == 64);
-               literal = vtn_u64_literal(w);
-               w += 2;
-            }
+         cse->type = vtn_handle_branch(b, &swtch->node, cse->block);
+         switch (cse->type) {
+         case vtn_branch_type_none:
+            /* This is a "real" cases which has stuff in it */
+            vtn_fail_if(cse->block->switch_case != NULL,
+                        "OpSwitch has a case which is also in another "
+                        "OpSwitch construct");
+            cse->block->switch_case = cse;
+            vtn_add_cfg_work_item(b, work_list, &cse->node,
+                                  &cse->body, cse->block);
+            break;
+
+         case vtn_branch_type_switch_break:
+         case vtn_branch_type_loop_break:
+         case vtn_branch_type_loop_continue:
+            /* Switch breaks as well as loop breaks and continues can be
+             * used to break out of a switch construct or as direct targets
+             * of the OpSwitch.
+             */
+            break;
+
+         default:
+            vtn_fail("Target of OpSwitch is not a valid structured exit "
+                     "from the switch construct.");
          }
-         struct vtn_block *case_block = vtn_block(b, *(w++));
-
-         struct hash_entry *case_entry =
-            _mesa_hash_table_search(block_to_case, case_block);
-
-         struct vtn_case *cse;
-         if (case_entry) {
-            cse = case_entry->data;
-         } else {
-            cse = rzalloc(b, struct vtn_case);
-
-            cse->node.type = vtn_cf_node_type_case;
-            cse->node.parent = &swtch->node;
-            list_inithead(&cse->body);
-            util_dynarray_init(&cse->values, b);
-
-            cse->type = vtn_handle_branch(b, &swtch->node, case_block);
-            switch (cse->type) {
-            case vtn_branch_type_none:
-               /* This is a "real" cases which has stuff in it */
-               vtn_fail_if(case_block->switch_case != NULL,
-                           "OpSwitch has a case which is also in another "
-                           "OpSwitch construct");
-               case_block->switch_case = cse;
-               vtn_add_cfg_work_item(b, work_list, &cse->node,
-                                     &cse->body, case_block);
-               break;
-
-            case vtn_branch_type_switch_break:
-            case vtn_branch_type_loop_break:
-            case vtn_branch_type_loop_continue:
-               /* Switch breaks as well as loop breaks and continues can be
-                * used to break out of a switch construct or as direct targets
-                * of the OpSwitch.
-                */
-               break;
-
-            default:
-               vtn_fail("Target of OpSwitch is not a valid structured exit "
-                        "from the switch construct.");
-            }
-
-            list_addtail(&cse->node.link, &swtch->cases);
-
-            _mesa_hash_table_insert(block_to_case, case_block, cse);
-         }
-
-         if (is_default) {
-            cse->is_default = true;
-         } else {
-            util_dynarray_append(&cse->values, uint64_t, literal);
-         }
-
-         is_default = false;
       }
-
-      _mesa_hash_table_destroy(block_to_case, NULL);
 
       return swtch->break_block;
    }
@@ -1138,6 +1153,13 @@ vtn_emit_cf_list(struct vtn_builder *b, struct list_head *cf_list,
          vtn_foreach_cf_node(case_node, &vtn_switch->cases) {
             struct vtn_case *cse = vtn_cf_node_as_case(case_node);
 
+            /* If this case jumps directly to the break block, we don't have
+             * to handle the case as the body is empty and doesn't fall
+             * through.
+             */
+            if (cse->block == vtn_switch->break_block)
+               continue;
+
             /* Figure out the condition */
             nir_ssa_def *cond =
                vtn_switch_case_condition(b, vtn_switch, sel, cse);
@@ -1185,7 +1207,7 @@ vtn_function_emit(struct vtn_builder *b, struct vtn_function *func,
     * but instructions in the continue may use SSA defs in the loop body.
     * Therefore, we need to repair SSA to insert the needed phi nodes.
     */
-   if (b->has_loop_continue)
+   if (b->has_loop_continue || b->has_kill)
       nir_repair_ssa_impl(func->impl);
 
    func->emitted = true;

@@ -105,8 +105,6 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
 
             Core* pCore = nullptr;
 
-            uint32_t numThreads = (uint32_t)_mm_popcount_sizeT(gmask.Mask);
-
             while (BitScanForwardSizeT((unsigned long*)&threadId, gmask.Mask))
             {
                 // clear mask
@@ -147,8 +145,6 @@ void CalculateProcessorTopology(CPUNumaNodes& out_nodes, uint32_t& out_numThread
                 }
                 auto& numaNode  = out_nodes[numaId];
                 numaNode.numaId = numaId;
-
-                uint32_t coreId = 0;
 
                 if (nullptr == pCore)
                 {
@@ -980,14 +976,14 @@ DWORD workerThreadMain<false, false>(LPVOID) = delete;
 template <bool IsFEThread, bool IsBEThread>
 DWORD workerThreadInit(LPVOID pData)
 {
-#if defined(_WIN32)
+#if defined(_MSC_VER)
     __try
 #endif // _WIN32
     {
         return workerThreadMain<IsFEThread, IsBEThread>(pData);
     }
 
-#if defined(_WIN32)
+#if defined(_MSC_VER)
     __except (EXCEPTION_CONTINUE_SEARCH)
     {
     }

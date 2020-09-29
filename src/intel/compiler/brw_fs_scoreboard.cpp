@@ -77,6 +77,7 @@ namespace {
       case BRW_OPCODE_DO:
       case SHADER_OPCODE_UNDEF:
       case FS_OPCODE_PLACEHOLDER_HALT:
+      case FS_OPCODE_SCHEDULING_FENCE:
          return 0;
       default:
          /* Note that the following is inaccurate for virtual instructions

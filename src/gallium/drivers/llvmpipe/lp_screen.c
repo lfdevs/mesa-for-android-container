@@ -793,6 +793,7 @@ llvmpipe_get_timestamp(struct pipe_screen *_screen)
 static void lp_disk_cache_create(struct llvmpipe_screen *screen)
 {
    struct mesa_sha1 ctx;
+   unsigned gallivm_perf = gallivm_get_perf_flags();
    unsigned char sha1[20];
    char cache_id[20 * 2 + 1];
    _mesa_sha1_init(&ctx);
@@ -801,6 +802,7 @@ static void lp_disk_cache_create(struct llvmpipe_screen *screen)
        !disk_cache_get_function_identifier(LLVMLinkInMCJIT, &ctx))
       return;
 
+   _mesa_sha1_update(&ctx, &gallivm_perf, sizeof(gallivm_perf));
    _mesa_sha1_final(&ctx, sha1);
    disk_cache_format_hex_id(cache_id, sha1, 20 * 2);
 

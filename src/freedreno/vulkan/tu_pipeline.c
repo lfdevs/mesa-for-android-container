@@ -470,7 +470,7 @@ tu6_emit_xs_config(struct tu_cs *cs,
 static void
 tu6_emit_cs_config(struct tu_cs *cs, const struct tu_shader *shader,
                    const struct ir3_shader_variant *v,
-                   uint32_t binary_iova)
+                   uint64_t binary_iova)
 {
    tu_cs_emit_regs(cs, A6XX_HLSQ_INVALIDATE_CMD(
          .cs_state = true,

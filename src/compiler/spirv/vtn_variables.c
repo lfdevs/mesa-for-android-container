@@ -2438,6 +2438,53 @@ nir_sloppy_bitcast(nir_builder *b, nir_ssa_def *val,
    return nir_shrink_zero_pad_vec(b, val, num_components);
 }
 
+static bool
+vtn_get_mem_operands(struct vtn_builder *b, const uint32_t *w, unsigned count,
+                     unsigned *idx, SpvMemoryAccessMask *access, unsigned *alignment,
+                     SpvScope *dest_scope, SpvScope *src_scope)
+{
+   *access = 0;
+   *alignment = 0;
+   if (*idx >= count)
+      return false;
+
+   *access = w[(*idx)++];
+   if (*access & SpvMemoryAccessAlignedMask) {
+      vtn_assert(*idx < count);
+      *alignment = w[(*idx)++];
+   }
+
+   if (*access & SpvMemoryAccessMakePointerAvailableMask) {
+      vtn_assert(*idx < count);
+      vtn_assert(dest_scope);
+      *dest_scope = vtn_constant_uint(b, w[(*idx)++]);
+   }
+
+   if (*access & SpvMemoryAccessMakePointerVisibleMask) {
+      vtn_assert(*idx < count);
+      vtn_assert(src_scope);
+      *src_scope = vtn_constant_uint(b, w[(*idx)++]);
+   }
+
+   return true;
+}
+
+static void
+ptr_nonuniform_workaround_cb(struct vtn_builder *b, struct vtn_value *val,
+                  int member, const struct vtn_decoration *dec, void *void_ptr)
+{
+   enum gl_access_qualifier *access = void_ptr;
+
+   switch (dec->decoration) {
+   case SpvDecorationNonUniformEXT:
+      *access |= ACCESS_NON_UNIFORM;
+      break;
+
+   default:
+      break;
+   }
+}
+
 void
 vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
                      const uint32_t *w, unsigned count)
@@ -2495,12 +2542,20 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
             chain->link[idx].mode = vtn_access_mode_id;
             chain->link[idx].id = w[i];
          }
+
+         /* Workaround for https://gitlab.freedesktop.org/mesa/mesa/-/issues/3406 */
+         vtn_foreach_decoration(b, link_val, ptr_nonuniform_workaround_cb, &access);
+
          idx++;
       }
 
       struct vtn_type *ptr_type = vtn_get_type(b, w[1]);
       struct vtn_pointer *base =
          vtn_value(b, w[3], vtn_value_type_pointer)->pointer;
+
+      /* Workaround for https://gitlab.freedesktop.org/mesa/mesa/-/issues/3406 */
+      access |= base->access & ACCESS_NON_UNIFORM;
+
       struct vtn_pointer *ptr = vtn_pointer_dereference(b, base, chain);
       ptr->ptr_type = ptr_type;
       ptr->access |= access;
@@ -2525,20 +2580,15 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
 
       vtn_assert_types_equal(b, opcode, res_type, src_val->type->deref);
 
-      if (count > 4) {
-         unsigned idx = 5;
-         SpvMemoryAccessMask access = w[4];
-         if (access & SpvMemoryAccessAlignedMask)
-            idx++;
-
-         if (access & SpvMemoryAccessMakePointerVisibleMask) {
-            SpvMemorySemanticsMask semantics =
-               SpvMemorySemanticsMakeVisibleMask |
-               vtn_storage_class_to_memory_semantics(src->ptr_type->storage_class);
-
-            SpvScope scope = vtn_constant_uint(b, w[idx]);
-            vtn_emit_memory_barrier(b, scope, semantics);
-         }
+      unsigned idx = 4, alignment;
+      SpvMemoryAccessMask access;
+      SpvScope scope;
+      vtn_get_mem_operands(b, w, count, &idx, &access, &alignment, NULL, &scope);
+      if (access & SpvMemoryAccessMakePointerVisibleMask) {
+         SpvMemorySemanticsMask semantics =
+            SpvMemorySemanticsMakeVisibleMask |
+            vtn_storage_class_to_memory_semantics(src->ptr_type->storage_class);
+         vtn_emit_memory_barrier(b, scope, semantics);
       }
 
       vtn_push_ssa_value(b, w[2], vtn_variable_load(b, src));
@@ -2575,23 +2625,19 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
 
       vtn_assert_types_equal(b, opcode, dest_val->type->deref, src_val->type);
 
+      unsigned idx = 3, alignment;
+      SpvMemoryAccessMask access;
+      SpvScope scope;
+      vtn_get_mem_operands(b, w, count, &idx, &access, &alignment, &scope, NULL);
+
       struct vtn_ssa_value *src = vtn_ssa_value(b, w[2]);
       vtn_variable_store(b, src, dest);
 
-      if (count > 3) {
-         unsigned idx = 4;
-         SpvMemoryAccessMask access = w[3];
-
-         if (access & SpvMemoryAccessAlignedMask)
-            idx++;
-
-         if (access & SpvMemoryAccessMakePointerAvailableMask) {
-            SpvMemorySemanticsMask semantics =
-               SpvMemorySemanticsMakeAvailableMask |
-               vtn_storage_class_to_memory_semantics(dest->ptr_type->storage_class);
-            SpvScope scope = vtn_constant_uint(b, w[idx]);
-            vtn_emit_memory_barrier(b, scope, semantics);
-         }
+      if (access & SpvMemoryAccessMakePointerAvailableMask) {
+         SpvMemorySemanticsMask semantics =
+            SpvMemorySemanticsMakeAvailableMask |
+            vtn_storage_class_to_memory_semantics(dest->ptr_type->storage_class);
+         vtn_emit_memory_barrier(b, scope, semantics);
       }
       break;
    }

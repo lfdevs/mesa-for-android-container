@@ -679,6 +679,7 @@ def main():
             c("\n")
             c("query->kind = GEN_PERF_QUERY_TYPE_OA;\n")
             c("query->name = \"" + set.name + "\";\n")
+            c("query->symbol_name = \"" + set.symbol_name + "\";\n")
             c("query->guid = \"" + set.hw_config_guid + "\";\n")
 
             c("query->counters = rzalloc_array(query, struct gen_perf_query_counter, %u);" % len(counters))

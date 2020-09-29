@@ -85,6 +85,8 @@ func_pointer
 gallivm_jit_function(struct gallivm_state *gallivm,
                      LLVMValueRef func);
 
+unsigned gallivm_get_perf_flags(void);
+
 #ifdef __cplusplus
 }
 #endif

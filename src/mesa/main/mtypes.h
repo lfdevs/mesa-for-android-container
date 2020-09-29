@@ -4209,6 +4209,12 @@ struct gl_constants
 
    /** Buffer size used to upload vertices from glBegin/glEnd. */
    unsigned glBeginEndBufferSize;
+
+   /** Whether the driver doesn't want x/y/width/height clipped based on src size
+    *  when doing a copy texture operation (eg: may want out-of-bounds reads that
+    *  produce 0 instead of leaving the texture content undefined).
+    */
+   bool NoClippingOnCopyTex;
 };
 
 

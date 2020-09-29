@@ -30,7 +30,7 @@
 
 #pragma once
 
-#if defined(_WIN32)
+#if defined(_MSC_VER)
 #pragma warning(disable : 4146 4244 4267 4800 4996)
 #endif
 

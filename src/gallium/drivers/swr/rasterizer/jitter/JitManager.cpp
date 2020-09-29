@@ -159,7 +159,7 @@ JitManager::JitManager(uint32_t simdWidth, const char* arch, const char* core) :
 
     mFetchShaderTy = FunctionType::get(Type::getVoidTy(mContext), fsArgs, false);
 
-#if defined(_WIN32)
+#if defined(_MSC_VER)
     // explicitly instantiate used symbols from potentially staticly linked libs
     sys::DynamicLibrary::AddSymbol("exp2f", &exp2f);
     sys::DynamicLibrary::AddSymbol("log2f", &log2f);

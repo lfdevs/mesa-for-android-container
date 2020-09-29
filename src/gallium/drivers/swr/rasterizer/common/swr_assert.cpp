@@ -30,7 +30,7 @@
 
 #if SWR_ENABLE_ASSERTS || SWR_ENABLE_REL_ASSERTS
 
-#if defined(_WIN32)
+#if defined(_MSC_VER)
 #pragma comment(lib, "user32.lib")
 #endif // _WIN32
 

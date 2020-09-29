@@ -589,6 +589,7 @@ The integer capabilities:
 * ``PIPE_CAP_MAP_UNSYNCHRONIZED_THREAD_SAFE``: Whether mapping a buffer as unsynchronized from any thread is safe.
 * ``PIPE_CAP_GLSL_ZERO_INIT``: Choose a default zero initialization some glsl variables. If `1`, then all glsl shader variables and gl_FragColor are initialized to zero. If `2`, then shader out variables are not initialized but function out variables are.
 * ``PIPE_CAP_BLEND_EQUATION_ADVANCED``: Driver supports blend equation advanced without necessarily supporting FBFETCH.
+* ``PIPE_CAP_NO_CLIP_ON_COPY_TEX``: Driver doesn't want x/y/width/height clipped based on src size when doing a copy texture operation (eg: may want out-of-bounds reads that produce 0 instead of leaving the texture content undefined)
 
 .. _pipe_capf:
 

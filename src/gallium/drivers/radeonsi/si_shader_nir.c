@@ -753,23 +753,11 @@ static void si_nir_opts(struct nir_shader *nir, bool first)
       bool lower_phis_to_scalar = false;
 
       if (first) {
-         bool opt_find_array_copies = false;
-
          NIR_PASS(progress, nir, nir_split_array_vars, nir_var_function_temp);
          NIR_PASS(lower_alu_to_scalar, nir, nir_shrink_vec_array_vars, nir_var_function_temp);
-         NIR_PASS(opt_find_array_copies, nir, nir_opt_find_array_copies);
-         NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
-
-         /* Call nir_lower_var_copies() to remove any copies introduced
-          * by nir_opt_find_array_copies().
-          */
-         if (opt_find_array_copies)
-            NIR_PASS(progress, nir, nir_lower_var_copies);
-         progress |= opt_find_array_copies;
-      } else {
-         NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
+         NIR_PASS(progress, nir, nir_opt_find_array_copies);
       }
-
+      NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
       NIR_PASS(progress, nir, nir_opt_dead_write_vars);
 
       NIR_PASS(lower_alu_to_scalar, nir, nir_opt_trivial_continues);
@@ -819,6 +807,8 @@ static void si_nir_opts(struct nir_shader *nir, bool first)
          NIR_PASS(progress, nir, nir_opt_loop_unroll, 0);
       }
    } while (progress);
+
+   NIR_PASS_V(nir, nir_lower_var_copies);
 }
 
 static int type_size_vec4(const struct glsl_type *type, bool bindless)

@@ -405,7 +405,10 @@ static void dump_raw_shader(uint32_t *dwords, uint32_t sizedwords, int n, char *
 
 	sprintf(filename, "%.*s-%d.%s", (int)strlen(infile)-3, infile, n, ext);
 	fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT, 0644);
-	write(fd, dwords, sizedwords * 4);
+	if (fd != -1) {
+		write(fd, dwords, sizedwords * 4);
+		close(fd);
+	}
 }
 
 static void dump_shaders_a2xx(struct state *state)

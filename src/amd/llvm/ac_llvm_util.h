@@ -109,8 +109,6 @@ LLVMModuleRef ac_create_module(LLVMTargetMachineRef tm, LLVMContextRef ctx);
 
 LLVMBuilderRef ac_create_builder(LLVMContextRef ctx,
 				 enum ac_float_mode float_mode);
-bool ac_disable_inexact_math(LLVMBuilderRef builder);
-void ac_restore_inexact_math(LLVMBuilderRef builder, bool value);
 
 void
 ac_llvm_add_target_dep_function_attr(LLVMValueRef F,

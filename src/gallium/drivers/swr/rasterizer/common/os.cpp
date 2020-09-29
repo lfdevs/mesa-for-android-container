@@ -34,7 +34,7 @@
 #include <pthread.h>
 #endif // Linux
 
-#if defined(_WIN32)
+#if defined(_MSC_VER)
 static const DWORD MS_VC_EXCEPTION = 0x406D1388;
 
 #pragma pack(push, 8)
@@ -76,7 +76,7 @@ void LegacySetThreadName(const char* pThreadName)
 
 void SWR_API SetCurrentThreadName(const char* pThreadName)
 {
-#if defined(_WIN32)
+#if defined(_MSC_VER)
     // The SetThreadDescription API was brought in version 1607 of Windows 10.
     typedef HRESULT(WINAPI * PFNSetThreadDescription)(HANDLE hThread, PCWSTR lpThreadDescription);
     // The SetThreadDescription API works even if no debugger is attached.

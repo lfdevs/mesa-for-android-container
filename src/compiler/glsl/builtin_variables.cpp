@@ -319,7 +319,7 @@ public:
    const glsl_type *construct_interface_instance() const;
 
 private:
-   glsl_struct_field fields[11];
+   glsl_struct_field fields[14];
    unsigned num_fields;
 };
 

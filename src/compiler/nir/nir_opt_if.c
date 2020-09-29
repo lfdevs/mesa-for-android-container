@@ -1126,7 +1126,7 @@ propagate_condition_eval(nir_builder *b, nir_if *nif, nir_src *use_src,
    if (!evaluate_if_condition(nif, b->cursor, &bool_value))
       return false;
 
-   nir_ssa_def *def[4] = {0};
+   nir_ssa_def *def[NIR_MAX_VEC_COMPONENTS] = {0};
    for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; i++) {
       if (alu->src[i].src.ssa == use_src->ssa) {
          def[i] = nir_imm_bool(b, bool_value);
@@ -1273,6 +1273,13 @@ opt_if_merge(nir_if *nif)
           */
          if (nif->condition.ssa == next_if->condition.ssa &&
              exec_list_is_empty(&next_blk->instr_list)) {
+
+            /* This optimization isn't made to work in this case and
+             * opt_if_evaluate_condition_use will optimize it later.
+             */
+            if (nir_block_ends_in_jump(nir_if_last_then_block(nif)) ||
+                nir_block_ends_in_jump(nir_if_last_else_block(nif)))
+               return false;
 
             simple_merge_if(nif, next_if, true, true);
             simple_merge_if(nif, next_if, false, false);

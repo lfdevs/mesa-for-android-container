@@ -192,6 +192,9 @@ struct ac_shader_abi {
 
 	/* Whether undef values must be converted to zero */
 	bool convert_undef_to_zero;
+
+	/* Clamp div by 0 (so it won't produce NaN) */
+	bool clamp_div_by_zero;
 };
 
 #endif /* AC_SHADER_ABI_H */

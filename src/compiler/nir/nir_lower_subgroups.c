@@ -120,7 +120,7 @@ lower_subgroup_op_to_scalar(nir_builder *b, nir_intrinsic_instr *intrin,
 
    nir_ssa_def *value = nir_ssa_for_src(b, intrin->src[0],
                                            intrin->num_components);
-   nir_ssa_def *reads[4];
+   nir_ssa_def *reads[NIR_MAX_VEC_COMPONENTS];
 
    for (unsigned i = 0; i < intrin->num_components; i++) {
       nir_intrinsic_instr *chan_intrin =

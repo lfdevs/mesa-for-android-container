@@ -423,7 +423,7 @@ get_metric_id(struct gen_perf_config *perf,
    if (!gen_perf_load_metric_id(perf, query->guid,
                                 &raw_query->oa_metrics_set_id)) {
       DBG("Unable to read query guid=%s ID, falling back to test config\n", query->guid);
-      raw_query->oa_metrics_set_id = 1ULL;
+      raw_query->oa_metrics_set_id = perf->fallback_raw_oa_metric;
    } else {
       DBG("Raw query '%s'guid=%s loaded ID: %"PRIu64"\n",
           query->name, query->guid, query->oa_metrics_set_id);

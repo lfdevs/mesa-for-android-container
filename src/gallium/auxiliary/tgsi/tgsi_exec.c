@@ -1181,14 +1181,8 @@ tgsi_exec_machine_bind_shader(
                                    * sizeof(struct tgsi_full_declaration));
             maxDeclarations += 10;
          }
-         if (parse.FullToken.FullDeclaration.Declaration.File == TGSI_FILE_OUTPUT) {
-            unsigned reg;
-            for (reg = parse.FullToken.FullDeclaration.Range.First;
-                 reg <= parse.FullToken.FullDeclaration.Range.Last;
-                 ++reg) {
-               ++mach->NumOutputs;
-            }
-         }
+         if (parse.FullToken.FullDeclaration.Declaration.File == TGSI_FILE_OUTPUT)
+            mach->NumOutputs = MAX2(mach->NumOutputs, parse.FullToken.FullDeclaration.Range.Last + 1);
          else if (parse.FullToken.FullDeclaration.Declaration.File == TGSI_FILE_SYSTEM_VALUE) {
             const struct tgsi_full_declaration *decl = &parse.FullToken.FullDeclaration;
             mach->SysSemanticToIndex[decl->Semantic.Name] = decl->Range.First;

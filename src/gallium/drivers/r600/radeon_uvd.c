@@ -178,6 +178,7 @@ static void send_msg_buf(struct ruvd_decoder *dec)
 
 	/* unmap the buffer */
 	dec->ws->buffer_unmap(buf->res->buf);
+	dec->bs_ptr = NULL;
 	dec->msg = NULL;
 	dec->fb = NULL;
 	dec->it = NULL;
@@ -888,6 +889,7 @@ static void ruvd_decode_bitstream(struct pipe_video_codec *decoder,
 
 		if (new_size > buf->res->buf->size) {
 			dec->ws->buffer_unmap(buf->res->buf);
+			dec->bs_ptr = NULL;
 			if (!rvid_resize_buffer(dec->screen, dec->cs, buf, new_size)) {
 				RVID_ERR("Can't resize bitstream buffer!");
 				return;
@@ -938,6 +940,7 @@ static void ruvd_end_frame(struct pipe_video_codec *decoder,
 	bs_size = align(dec->bs_size, 128);
 	memset(dec->bs_ptr, 0, bs_size - dec->bs_size);
 	dec->ws->buffer_unmap(bs_buf->res->buf);
+	dec->bs_ptr = NULL;
 
 	map_msg_fb_it_buf(dec);
 	dec->msg->size = sizeof(*dec->msg);

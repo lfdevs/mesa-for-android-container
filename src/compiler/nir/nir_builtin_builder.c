@@ -74,6 +74,8 @@ nir_fast_length(nir_builder *b, nir_ssa_def *vec)
    case 2: return nir_fsqrt(b, nir_fdot2(b, vec, vec));
    case 3: return nir_fsqrt(b, nir_fdot3(b, vec, vec));
    case 4: return nir_fsqrt(b, nir_fdot4(b, vec, vec));
+   case 8: return nir_fsqrt(b, nir_fdot8(b, vec, vec));
+   case 16: return nir_fsqrt(b, nir_fdot16(b, vec, vec));
    default:
       unreachable("Invalid number of components");
    }

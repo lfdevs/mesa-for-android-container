@@ -1109,6 +1109,10 @@ glsl_type::record_compare(const glsl_type *b, bool match_name,
    if (this->interface_row_major != b->interface_row_major)
       return false;
 
+
+   if (this->packed != b->packed)
+      return false;
+
    /* From the GLSL 4.20 specification (Sec 4.2):
     *
     *     "Structures must have the same name, sequence of type names, and

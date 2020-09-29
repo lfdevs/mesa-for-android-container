@@ -126,8 +126,11 @@ class Bitset(object):
 		if prefix == None:
 			prefix = self.name
 
+		value_name = "dword"
 		print("struct %s {" % prefix)
 		for f in self.fields:
+			if f.type == "waddress":
+				value_name = "qword"
 			if f.type in [ "address", "waddress" ]:
 				tab_to("    __bo_type", "bo;")
 				tab_to("    uint32_t", "bo_offset;")
@@ -137,8 +140,12 @@ class Bitset(object):
 			type, val = f.ctype("var")
 
 			tab_to("    %s" % type, "%s;" % name)
-		tab_to("    uint32_t", "unknown;")
-		tab_to("    uint32_t", "dword;")
+		if value_name == "qword":
+			tab_to("    uint64_t", "unknown;")
+			tab_to("    uint64_t", "qword;")
+		else:
+			tab_to("    uint32_t", "unknown;")
+			tab_to("    uint32_t", "dword;")
 		print("};\n")
 
 		address = None;
@@ -176,7 +183,7 @@ class Bitset(object):
 			else:
 				type, val = f.ctype("fields.%s" % field_name(prefix, f.name))
 				print("            (%-40s << %2d) |" % (val, f.low))
-		print("            fields.unknown | fields.dword,")
+		print("            fields.unknown | fields.%s," % (value_name,))
 
 		if address:
 			print("        .is_address = true,")

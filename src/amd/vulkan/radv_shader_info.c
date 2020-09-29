@@ -29,7 +29,7 @@
 static void mark_sampler_desc(const nir_variable *var,
 			      struct radv_shader_info *info)
 {
-	info->desc_set_used_mask |= (1 << var->data.descriptor_set);
+	info->desc_set_used_mask |= (1u << var->data.descriptor_set);
 }
 
 static void mark_ls_output(struct radv_shader_info *info,
@@ -288,7 +288,7 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr,
 		gather_push_constant_info(nir, instr, info);
 		break;
 	case nir_intrinsic_vulkan_resource_index:
-		info->desc_set_used_mask |= (1 << nir_intrinsic_desc_set(instr));
+		info->desc_set_used_mask |= (1u << nir_intrinsic_desc_set(instr));
 		break;
 	case nir_intrinsic_image_deref_load:
 	case nir_intrinsic_image_deref_store:
@@ -853,8 +853,8 @@ radv_nir_shader_info_pass(const struct nir_shader *nir,
 		 */
 		unsigned num_targets = (util_last_bit(info->ps.cb_shader_mask) + 3) / 4;
 		for (unsigned i = 0; i < num_targets; i++) {
-			if (!(info->ps.cb_shader_mask & (0xf << (i * 4)))) {
-				info->ps.cb_shader_mask |= 0xf << (i * 4);
+			if (!(info->ps.cb_shader_mask & (0xfu << (i * 4)))) {
+				info->ps.cb_shader_mask |= 0xfu << (i * 4);
 			}
 		}
 

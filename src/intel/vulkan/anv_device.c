@@ -25,7 +25,6 @@
 #include <stdbool.h>
 #include <string.h>
 #include <sys/mman.h>
-#include <sys/sysinfo.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <xf86drm.h>
@@ -37,6 +36,7 @@
 #include "util/disk_cache.h"
 #include "util/mesa-sha1.h"
 #include "util/os_file.h"
+#include "util/os_misc.h"
 #include "util/u_atomic.h"
 #include "util/u_string.h"
 #include "util/driconf.h"
@@ -106,10 +106,9 @@ static uint64_t
 anv_compute_heap_size(int fd, uint64_t gtt_size)
 {
    /* Query the total ram from the system */
-   struct sysinfo info;
-   sysinfo(&info);
-
-   uint64_t total_ram = (uint64_t)info.totalram * (uint64_t)info.mem_unit;
+   uint64_t total_ram;
+   if (!os_get_total_physical_memory(&total_ram))
+      return 0;
 
    /* We don't want to burn too much ram with the GPU.  If the user has 4GiB
     * or less, we use at most half.  If they have more than 4GiB, we use 3/4.
@@ -308,29 +307,6 @@ anv_physical_device_free_disk_cache(struct anv_physical_device *device)
 #endif
 }
 
-static uint64_t
-get_available_system_memory()
-{
-   char *meminfo = os_read_file("/proc/meminfo", NULL);
-   if (!meminfo)
-      return 0;
-
-   char *str = strstr(meminfo, "MemAvailable:");
-   if (!str) {
-      free(meminfo);
-      return 0;
-   }
-
-   uint64_t kb_mem_available;
-   if (sscanf(str, "MemAvailable: %" PRIx64, &kb_mem_available) == 1) {
-      free(meminfo);
-      return kb_mem_available << 10;
-   }
-
-   free(meminfo);
-   return 0;
-}
-
 static VkResult
 anv_physical_device_try_create(struct anv_instance *instance,
                                drmDevicePtr drm_device,
@@ -484,7 +460,8 @@ anv_physical_device_try_create(struct anv_instance *instance,
    device->has_reg_timestamp = anv_gem_reg_read(fd, TIMESTAMP | I915_REG_READ_8B_WA,
                                                 &u64_ignore) == 0;
 
-   device->has_mem_available = get_available_system_memory() != 0;
+   uint64_t avail_mem;
+   device->has_mem_available = os_get_available_system_memory(&avail_mem);
 
    device->always_flush_cache =
       driQueryOptionb(&instance->dri_options, "always_flush_cache");
@@ -2229,8 +2206,10 @@ anv_get_memory_budget(VkPhysicalDevice physicalDevice,
                       VkPhysicalDeviceMemoryBudgetPropertiesEXT *memoryBudget)
 {
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
-   uint64_t sys_available = get_available_system_memory();
-   assert(sys_available > 0);
+   uint64_t sys_available;
+   ASSERTED bool has_available_memory =
+      os_get_available_system_memory(&sys_available);
+   assert(has_available_memory);
 
    VkDeviceSize total_heaps_size = 0;
    for (size_t i = 0; i < device->memory.heap_count; i++)
@@ -4424,7 +4403,9 @@ void anv_DestroyFramebuffer(
 static const VkTimeDomainEXT anv_time_domains[] = {
    VK_TIME_DOMAIN_DEVICE_EXT,
    VK_TIME_DOMAIN_CLOCK_MONOTONIC_EXT,
+#ifdef CLOCK_MONOTONIC_RAW
    VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT,
+#endif
 };
 
 VkResult anv_GetPhysicalDeviceCalibrateableTimeDomainsEXT(
@@ -4451,8 +4432,10 @@ anv_clock_gettime(clockid_t clock_id)
    int ret;
 
    ret = clock_gettime(clock_id, &current);
+#ifdef CLOCK_MONOTONIC_RAW
    if (ret < 0 && clock_id == CLOCK_MONOTONIC_RAW)
       ret = clock_gettime(CLOCK_MONOTONIC, &current);
+#endif
    if (ret < 0)
       return 0;
 
@@ -4473,7 +4456,11 @@ VkResult anv_GetCalibratedTimestampsEXT(
    uint64_t begin, end;
    uint64_t max_clock_period = 0;
 
+#ifdef CLOCK_MONOTONIC_RAW
    begin = anv_clock_gettime(CLOCK_MONOTONIC_RAW);
+#else
+   begin = anv_clock_gettime(CLOCK_MONOTONIC);
+#endif
 
    for (d = 0; d < timestampCount; d++) {
       switch (pTimestampInfos[d].timeDomain) {
@@ -4493,16 +4480,22 @@ VkResult anv_GetCalibratedTimestampsEXT(
          max_clock_period = MAX2(max_clock_period, 1);
          break;
 
+#ifdef CLOCK_MONOTONIC_RAW
       case VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT:
          pTimestamps[d] = begin;
          break;
+#endif
       default:
          pTimestamps[d] = 0;
          break;
       }
    }
 
+#ifdef CLOCK_MONOTONIC_RAW
    end = anv_clock_gettime(CLOCK_MONOTONIC_RAW);
+#else
+   end = anv_clock_gettime(CLOCK_MONOTONIC);
+#endif
 
     /*
      * The maximum deviation is the sum of the interval over which we

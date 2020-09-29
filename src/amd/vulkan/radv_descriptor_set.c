@@ -947,8 +947,10 @@ static void write_dynamic_buffer_descriptor(struct radv_device *device,
 	uint64_t va;
 	unsigned size;
 
-	if (!buffer)
+	if (!buffer) {
+		range->va = 0;
 		return;
+	}
 
 	va = radv_buffer_get_va(buffer->bo);
 	size = buffer_info->range;

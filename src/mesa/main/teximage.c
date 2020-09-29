@@ -4210,7 +4210,8 @@ copy_texture_sub_image(struct gl_context *ctx, GLuint dims,
       xoffset += texImage->Border;
    }
 
-   if (_mesa_clip_copytexsubimage(ctx, &xoffset, &yoffset, &x, &y,
+   if (ctx->Const.NoClippingOnCopyTex ||
+       _mesa_clip_copytexsubimage(ctx, &xoffset, &yoffset, &x, &y,
                                   &width, &height)) {
       struct gl_renderbuffer *srcRb =
          get_copy_tex_image_source(ctx, texImage->TexFormat);
@@ -4416,7 +4417,8 @@ copyteximage(struct gl_context *ctx, GLuint dims, struct gl_texture_object *texO
             /* Allocate texture memory (no pixel data yet) */
             ctx->Driver.AllocTextureImageBuffer(ctx, texImage);
 
-            if (_mesa_clip_copytexsubimage(ctx, &dstX, &dstY, &srcX, &srcY,
+            if (ctx->Const.NoClippingOnCopyTex ||
+                _mesa_clip_copytexsubimage(ctx, &dstX, &dstY, &srcX, &srcY,
                                            &width, &height)) {
                struct gl_renderbuffer *srcRb =
                   get_copy_tex_image_source(ctx, texImage->TexFormat);

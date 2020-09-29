@@ -394,7 +394,7 @@ bool brw_try_override_assembly(struct brw_codegen *p, int start_offset,
    p->store = (brw_inst *)reralloc_size(p->mem_ctx, p->store, p->next_insn_offset);
    assert(p->store);
 
-   ssize_t ret = read(fd, p->store + start_offset, sb.st_size);
+   ssize_t ret = read(fd, (char *)p->store + start_offset, sb.st_size);
    close(fd);
    if (ret != sb.st_size) {
       return false;

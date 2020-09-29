@@ -26,20 +26,10 @@
  */
 
 #include "dirent.h"
-#include <errno.h>
-#include <fcntl.h>
-#include <linux/audit.h>
-#include <linux/bpf.h>
-#include <linux/filter.h>
-#include <linux/seccomp.h>
-#include <linux/unistd.h>
+
 #include <stdatomic.h>
 #include <stdbool.h>
-#include <stddef.h>
-#include <stdio.h>
 #include <string.h>
-#include <sys/prctl.h>
-#include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -2381,7 +2371,7 @@ radv_queue_finish(struct radv_queue *queue)
 static void
 radv_bo_list_init(struct radv_bo_list *bo_list)
 {
-	pthread_mutex_init(&bo_list->mutex, NULL);
+	pthread_rwlock_init(&bo_list->rwlock, NULL);
 	bo_list->list.count = bo_list->capacity = 0;
 	bo_list->list.bos = NULL;
 }
@@ -2390,7 +2380,7 @@ static void
 radv_bo_list_finish(struct radv_bo_list *bo_list)
 {
 	free(bo_list->list.bos);
-	pthread_mutex_destroy(&bo_list->mutex);
+	pthread_rwlock_destroy(&bo_list->rwlock);
 }
 
 VkResult radv_bo_list_add(struct radv_device *device,
@@ -2404,13 +2394,13 @@ VkResult radv_bo_list_add(struct radv_device *device,
 	if (unlikely(!device->use_global_bo_list))
 		return VK_SUCCESS;
 
-	pthread_mutex_lock(&bo_list->mutex);
+	pthread_rwlock_wrlock(&bo_list->rwlock);
 	if (bo_list->list.count == bo_list->capacity) {
 		unsigned capacity = MAX2(4, bo_list->capacity * 2);
 		void *data = realloc(bo_list->list.bos, capacity * sizeof(struct radeon_winsys_bo*));
 
 		if (!data) {
-			pthread_mutex_unlock(&bo_list->mutex);
+			pthread_rwlock_unlock(&bo_list->rwlock);
 			return VK_ERROR_OUT_OF_HOST_MEMORY;
 		}
 
@@ -2419,7 +2409,7 @@ VkResult radv_bo_list_add(struct radv_device *device,
 	}
 
 	bo_list->list.bos[bo_list->list.count++] = bo;
-	pthread_mutex_unlock(&bo_list->mutex);
+	pthread_rwlock_unlock(&bo_list->rwlock);
 	return VK_SUCCESS;
 }
 
@@ -2434,7 +2424,7 @@ void radv_bo_list_remove(struct radv_device *device,
 	if (unlikely(!device->use_global_bo_list))
 		return;
 
-	pthread_mutex_lock(&bo_list->mutex);
+	pthread_rwlock_wrlock(&bo_list->rwlock);
 	/* Loop the list backwards so we find the most recently added
 	 * memory first. */
 	for(unsigned i = bo_list->list.count; i-- > 0;) {
@@ -2444,7 +2434,7 @@ void radv_bo_list_remove(struct radv_device *device,
 			break;
 		}
 	}
-	pthread_mutex_unlock(&bo_list->mutex);
+	pthread_rwlock_unlock(&bo_list->rwlock);
 }
 
 static void
@@ -4322,6 +4312,12 @@ radv_queue_enqueue_submission(struct radv_deferred_queue_submission *submission,
 	 * submitted, but if the queue was empty, we decrement ourselves as there is no previous
 	 * submission. */
 	uint32_t decrement = submission->wait_semaphore_count - wait_cnt + (is_first ? 1 : 0);
+
+	/* if decrement is zero, then we don't have a refcounted reference to the
+	 * submission anymore, so it is not safe to access the submission. */
+	if (!decrement)
+		return VK_SUCCESS;
+
 	return radv_queue_trigger_submission(submission, decrement, processing_list);
 }
 
@@ -4451,7 +4447,7 @@ radv_queue_submit_deferred(struct radv_deferred_queue_submission *submission,
 			sem_info.cs_emit_signal = j + advance == submission->cmd_buffer_count;
 
 			if (unlikely(queue->device->use_global_bo_list)) {
-				pthread_mutex_lock(&queue->device->bo_list.mutex);
+				pthread_rwlock_rdlock(&queue->device->bo_list.rwlock);
 				bo_list = &queue->device->bo_list.list;
 			}
 
@@ -4461,7 +4457,7 @@ radv_queue_submit_deferred(struct radv_deferred_queue_submission *submission,
 							      can_patch, base_fence);
 
 			if (unlikely(queue->device->use_global_bo_list))
-				pthread_mutex_unlock(&queue->device->bo_list.mutex);
+				pthread_rwlock_unlock(&queue->device->bo_list.rwlock);
 
 			if (result != VK_SUCCESS)
 				goto fail;
@@ -7789,7 +7785,9 @@ radv_GetDeviceGroupPeerMemoryFeatures(
 static const VkTimeDomainEXT radv_time_domains[] = {
 	VK_TIME_DOMAIN_DEVICE_EXT,
 	VK_TIME_DOMAIN_CLOCK_MONOTONIC_EXT,
+#ifdef CLOCK_MONOTONIC_RAW
 	VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT,
+#endif
 };
 
 VkResult radv_GetPhysicalDeviceCalibrateableTimeDomainsEXT(
@@ -7816,8 +7814,10 @@ radv_clock_gettime(clockid_t clock_id)
 	int ret;
 
 	ret = clock_gettime(clock_id, &current);
+#ifdef CLOCK_MONOTONIC_RAW
 	if (ret < 0 && clock_id == CLOCK_MONOTONIC_RAW)
 		ret = clock_gettime(CLOCK_MONOTONIC, &current);
+#endif
 	if (ret < 0)
 		return 0;
 
@@ -7837,7 +7837,11 @@ VkResult radv_GetCalibratedTimestampsEXT(
 	uint64_t begin, end;
         uint64_t max_clock_period = 0;
 
+#ifdef CLOCK_MONOTONIC_RAW
 	begin = radv_clock_gettime(CLOCK_MONOTONIC_RAW);
+#else
+	begin = radv_clock_gettime(CLOCK_MONOTONIC);
+#endif
 
 	for (d = 0; d < timestampCount; d++) {
 		switch (pTimestampInfos[d].timeDomain) {
@@ -7852,16 +7856,22 @@ VkResult radv_GetCalibratedTimestampsEXT(
                         max_clock_period = MAX2(max_clock_period, 1);
 			break;
 
+#ifdef CLOCK_MONOTONIC_RAW
 		case VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT:
 			pTimestamps[d] = begin;
 			break;
+#endif
 		default:
 			pTimestamps[d] = 0;
 			break;
 		}
 	}
 
+#ifdef CLOCK_MONOTONIC_RAW
 	end = radv_clock_gettime(CLOCK_MONOTONIC_RAW);
+#else
+	end = radv_clock_gettime(CLOCK_MONOTONIC);
+#endif
 
         /*
          * The maximum deviation is the sum of the interval over which we

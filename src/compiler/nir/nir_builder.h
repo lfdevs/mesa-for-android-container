@@ -929,7 +929,7 @@ nir_ssa_for_src(nir_builder *build, nir_src src, int num_components)
 
    nir_alu_src alu = { NIR_SRC_INIT };
    alu.src = src;
-   for (int j = 0; j < 4; j++)
+   for (int j = 0; j < NIR_MAX_VEC_COMPONENTS; j++)
       alu.swizzle[j] = j;
 
    return nir_mov_alu(build, alu, num_components);
