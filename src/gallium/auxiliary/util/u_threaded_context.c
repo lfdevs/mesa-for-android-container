@@ -1608,9 +1608,9 @@ tc_transfer_unmap(struct pipe_context *_pipe, struct pipe_transfer *transfer)
                                   PIPE_TRANSFER_DISCARD_RANGE)));
 
       struct pipe_context *pipe = tc->pipe;
-      pipe->transfer_unmap(pipe, transfer);
       util_range_add(&tres->b, tres->base_valid_buffer_range,
                       transfer->box.x, transfer->box.x + transfer->box.width);
+      pipe->transfer_unmap(pipe, transfer);
       return;
    }
 

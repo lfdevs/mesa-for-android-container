@@ -769,7 +769,8 @@ vl_mpeg12_end_frame(struct pipe_video_codec *decoder,
 
    vl_vb_unmap(&buf->vertex_stream, dec->context);
 
-   dec->context->transfer_unmap(dec->context, buf->tex_transfer);
+   if (buf->tex_transfer)
+      dec->context->transfer_unmap(dec->context, buf->tex_transfer);
 
    vb[0] = dec->quads;
    vb[1] = dec->pos;
@@ -982,28 +983,28 @@ init_idct(struct vl_mpeg12_decoder *dec, const struct format_config* format_conf
       nr_of_idct_render_targets = 1;
 
    formats[0] = formats[1] = formats[2] = format_config->idct_source_format;
-   assert(pipe_format_to_chroma_format(formats[0]) == dec->base.chroma_format);
    memset(&templat, 0, sizeof(templat));
    templat.width = dec->base.width / 4;
    templat.height = dec->base.height;
    dec->idct_source = vl_video_buffer_create_ex
    (
       dec->context, &templat,
-      formats, 1, 1, PIPE_USAGE_DEFAULT
+      formats, 1, 1, PIPE_USAGE_DEFAULT,
+      PIPE_VIDEO_CHROMA_FORMAT_420
    );
 
    if (!dec->idct_source)
       goto error_idct_source;
 
    formats[0] = formats[1] = formats[2] = format_config->mc_source_format;
-   assert(pipe_format_to_chroma_format(formats[0]) == dec->base.chroma_format);
    memset(&templat, 0, sizeof(templat));
    templat.width = dec->base.width / nr_of_idct_render_targets;
    templat.height = dec->base.height / 4;
    dec->mc_source = vl_video_buffer_create_ex
    (
       dec->context, &templat,
-      formats, nr_of_idct_render_targets, 1, PIPE_USAGE_DEFAULT
+      formats, nr_of_idct_render_targets, 1, PIPE_USAGE_DEFAULT,
+      PIPE_VIDEO_CHROMA_FORMAT_420
    );
 
    if (!dec->mc_source)
@@ -1054,9 +1055,10 @@ init_mc_source_widthout_idct(struct vl_mpeg12_decoder *dec, const struct format_
    dec->mc_source = vl_video_buffer_create_ex
    (
       dec->context, &templat,
-      formats, 1, 1, PIPE_USAGE_DEFAULT
+      formats, 1, 1, PIPE_USAGE_DEFAULT,
+      PIPE_VIDEO_CHROMA_FORMAT_420
    );
-      
+
    return dec->mc_source != NULL;
 }
 

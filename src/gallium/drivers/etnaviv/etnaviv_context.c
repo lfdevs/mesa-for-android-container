@@ -130,6 +130,9 @@ etna_context_destroy(struct pipe_context *pctx)
    }
    mtx_unlock(&ctx->lock);
 
+   if (ctx->dummy_desc_bo)
+      etna_bo_del(ctx->dummy_desc_bo);
+
    if (ctx->dummy_rt)
       etna_bo_del(ctx->dummy_rt);
 

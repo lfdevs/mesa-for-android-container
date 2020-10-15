@@ -1,3 +1,9 @@
+mesa (20.2.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 15 Oct 2020 12:38:36 +0300
+
 mesa (20.2.0-1) experimental; urgency=medium
 
   * New upstream release.
@@ -27,6 +33,19 @@ mesa (20.2.0~rc2-1) experimental; urgency=medium
   * Update mesa-common-dev.docs.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Fri, 14 Aug 2020 18:30:42 +0300
+
+mesa (20.1.9-1) unstable; urgency=medium
+
+  * New upstream release.
+  * control: Add libclang-cpp11-dev to build-depends. (Closes: #954849)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 01 Oct 2020 10:12:00 +0300
+
+mesa (20.1.8-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 17 Sep 2020 11:23:02 +0300
 
 mesa (20.1.7-1) unstable; urgency=medium
 

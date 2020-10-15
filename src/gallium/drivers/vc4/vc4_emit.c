@@ -50,13 +50,13 @@ vc4_emit_state(struct pipe_context *pctx)
                 if (!vc4->rasterizer->base.scissor) {
                         minx = MAX2(vp_minx, 0);
                         miny = MAX2(vp_miny, 0);
-                        maxx = MIN2(vp_maxx, job->draw_width);
-                        maxy = MIN2(vp_maxy, job->draw_height);
+                        maxx = MAX2(MIN2(vp_maxx, job->draw_width), minx);
+                        maxy = MAX2(MIN2(vp_maxy, job->draw_height), miny);
                 } else {
                         minx = MAX2(vp_minx, vc4->scissor.minx);
                         miny = MAX2(vp_miny, vc4->scissor.miny);
-                        maxx = MIN2(vp_maxx, vc4->scissor.maxx);
-                        maxy = MIN2(vp_maxy, vc4->scissor.maxy);
+                        maxx = MAX2(MIN2(vp_maxx, vc4->scissor.maxx), minx);
+                        maxy = MAX2(MIN2(vp_maxy, vc4->scissor.maxy), miny);
                 }
 
                 cl_emit(&job->bcl, CLIP_WINDOW, clip) {

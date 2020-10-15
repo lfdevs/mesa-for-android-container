@@ -53,6 +53,9 @@ dup_mem_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
    }
 
    dup->num_components = num_components;
+   if (intrin->intrinsic == nir_intrinsic_load_scratch ||
+       intrin->intrinsic == nir_intrinsic_store_scratch)
+      assert(num_components == 1);
 
    for (unsigned i = 0; i < info->num_indices; i++)
       dup->const_index[i] = intrin->const_index[i];
@@ -92,7 +95,7 @@ lower_mem_load_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
 
    nir_ssa_def *result;
    nir_src *offset_src = nir_get_io_offset_src(intrin);
-   if (bit_size < 32 && nir_src_is_const(*offset_src)) {
+   if (bit_size < 32 && !needs_scalar && nir_src_is_const(*offset_src)) {
       /* The offset is constant so we can use a 32-bit load and just shift it
        * around as needed.
        */

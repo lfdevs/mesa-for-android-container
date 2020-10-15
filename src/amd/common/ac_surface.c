@@ -128,13 +128,14 @@ ac_compute_dcc_retile_tile_indices(struct ac_addrlib *addrlib,
                                    unsigned bpp, unsigned swizzle_mode,
                                    bool rb_aligned, bool pipe_aligned)
 {
-   struct dcc_retile_tile_key key = (struct dcc_retile_tile_key) {
-      .family = info->family,
-      .bpp = bpp,
-      .swizzle_mode = swizzle_mode,
-      .rb_aligned = rb_aligned,
-      .pipe_aligned = pipe_aligned
-   };
+   struct dcc_retile_tile_key key;
+   memset(&key, 0, sizeof(key));
+
+   key.family = info->family;
+   key.bpp = bpp;
+   key.swizzle_mode = swizzle_mode;
+   key.rb_aligned = rb_aligned;
+   key.pipe_aligned = pipe_aligned;
 
    struct hash_entry *entry = _mesa_hash_table_search(addrlib->dcc_retile_tile_indices, &key);
    if (entry)
@@ -1492,6 +1493,9 @@ static int gfx9_compute_miptree(struct ac_addrlib *addrlib,
          surf->u.gfx9.pitch[i] = mip_info[i].pitch;
       }
    }
+
+   surf->u.gfx9.base_mip_width = mip_info[0].pitch;
+   surf->u.gfx9.base_mip_height = mip_info[0].height;
 
    if (in->flags.depth) {
       assert(in->swizzleMode != ADDR_SW_LINEAR);

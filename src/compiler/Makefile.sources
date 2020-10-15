@@ -360,7 +360,8 @@ NIR_FILES = \
 
 SPIRV_GENERATED_FILES = \
 	spirv/spirv_info.c \
-	spirv/vtn_gather_types.c
+	spirv/vtn_gather_types.c \
+	spirv/vtn_generator_ids.h
 
 SPIRV_FILES = \
 	spirv/GLSL.ext.AMD.h \

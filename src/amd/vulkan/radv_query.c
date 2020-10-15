@@ -34,6 +34,7 @@
 #include "radv_private.h"
 #include "radv_cs.h"
 #include "sid.h"
+#include "util/u_atomic.h"
 
 #define TIMESTAMP_NOT_READY UINT64_MAX
 
@@ -1376,31 +1377,32 @@ VkResult radv_GetQueryPoolResults(
 
 		switch (pool->type) {
 		case VK_QUERY_TYPE_TIMESTAMP: {
-			volatile uint64_t const *src64 = (volatile uint64_t const *)src;
-			available = *src64 != TIMESTAMP_NOT_READY;
+			uint64_t const *src64 = (uint64_t const *)src;
+			uint64_t value;
 
-			if (flags & VK_QUERY_RESULT_WAIT_BIT) {
-				while (*src64 == TIMESTAMP_NOT_READY)
-					;
-				available = true;
-			}
+			do {
+				value = p_atomic_read(src64);
+			} while (value == TIMESTAMP_NOT_READY &&
+			         (flags & VK_QUERY_RESULT_WAIT_BIT));
+
+			available = value != TIMESTAMP_NOT_READY;
 
 			if (!available && !(flags & VK_QUERY_RESULT_PARTIAL_BIT))
 				result = VK_NOT_READY;
 
 			if (flags & VK_QUERY_RESULT_64_BIT) {
 				if (available || (flags & VK_QUERY_RESULT_PARTIAL_BIT))
-					*(uint64_t*)dest = *src64;
+					*(uint64_t*)dest = value;
 				dest += 8;
 			} else {
 				if (available || (flags & VK_QUERY_RESULT_PARTIAL_BIT))
-					*(uint32_t*)dest = *(volatile uint32_t*)src;
+					*(uint32_t*)dest = (uint32_t)value;
 				dest += 4;
 			}
 			break;
 		}
 		case VK_QUERY_TYPE_OCCLUSION: {
-			volatile uint64_t const *src64 = (volatile uint64_t const *)src;
+			uint64_t const *src64 = (uint64_t const *)src;
 			uint32_t db_count = device->physical_device->rad_info.num_render_backends;
 			uint32_t enabled_rb_mask = device->physical_device->rad_info.enabled_rb_mask;
 			uint64_t sample_count = 0;
@@ -1413,8 +1415,8 @@ VkResult radv_GetQueryPoolResults(
 					continue;
 
 				do {
-					start = src64[2 * i];
-					end = src64[2 * i + 1];
+					start = p_atomic_read(src64 + 2 * i);
+					end = p_atomic_read(src64 + 2 * i + 1);
 				} while ((!(start & (1ull << 63)) || !(end & (1ull << 63))) && (flags & VK_QUERY_RESULT_WAIT_BIT));
 
 				if (!(start & (1ull << 63)) || !(end & (1ull << 63)))
@@ -1439,16 +1441,17 @@ VkResult radv_GetQueryPoolResults(
 			break;
 		}
 		case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
-			if (flags & VK_QUERY_RESULT_WAIT_BIT)
-				while(!*(volatile uint32_t*)(pool->ptr + pool->availability_offset + 4 * query))
-					;
-			available = *(volatile uint32_t*)(pool->ptr + pool->availability_offset + 4 * query);
+			const uint32_t *avail_ptr = (const uint32_t*)(pool->ptr + pool->availability_offset + 4 * query);
+
+			do {
+				available = p_atomic_read(avail_ptr);
+			} while (!available && (flags & VK_QUERY_RESULT_WAIT_BIT));
 
 			if (!available && !(flags & VK_QUERY_RESULT_PARTIAL_BIT))
 				result = VK_NOT_READY;
 
-			const volatile uint64_t *start = (uint64_t*)src;
-			const volatile uint64_t *stop = (uint64_t*)(src + pipelinestat_block_size);
+			const uint64_t *start = (uint64_t*)src;
+			const uint64_t *stop = (uint64_t*)(src + pipelinestat_block_size);
 			if (flags & VK_QUERY_RESULT_64_BIT) {
 				uint64_t *dst = (uint64_t*)dest;
 				dest += util_bitcount(pool->pipeline_stats_mask) * 8;
@@ -1476,7 +1479,7 @@ VkResult radv_GetQueryPoolResults(
 			break;
 		}
 		case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {
-			volatile uint64_t const *src64 = (volatile uint64_t const *)src;
+			uint64_t const *src64 = (uint64_t const *)src;
 			uint64_t num_primitives_written;
 			uint64_t primitive_storage_needed;
 
@@ -1488,7 +1491,7 @@ VkResult radv_GetQueryPoolResults(
 			 */
 			available = 1;
 			for (int j = 0; j < 4; j++) {
-				if (!(src64[j] & 0x8000000000000000UL))
+				if (!(p_atomic_read(src64 + j) & 0x8000000000000000UL))
 					available = 0;
 			}
 

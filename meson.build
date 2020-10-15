@@ -752,7 +752,7 @@ _power8 = get_option('power8')
 if _power8 == 'true'
   _power8 = 'enabled'
   warning('power8 option "true" deprecated, please use "enabled" instead.')
-elif _power8 == 'disabled'
+elif _power8 == 'false'
   _power8 = 'disabled'
   warning('power8 option "false" deprecated, please use "disabled" instead.')
 endif

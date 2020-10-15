@@ -68,7 +68,7 @@ struct etna_sampler_view {
    uint32_t TE_SAMPLER_SIZE;
    uint32_t TE_SAMPLER_LOG_SIZE;
    uint32_t TE_SAMPLER_ASTC0;
-   uint32_t TE_SAMPLER_LINEAR_STRIDE[VIVS_TE_SAMPLER_LINEAR_STRIDE__LEN];
+   uint32_t TE_SAMPLER_LINEAR_STRIDE;  /* only LOD0 */
    struct etna_reloc TE_SAMPLER_LOD_ADDR[VIVS_TE_SAMPLER_LOD_ADDR__LEN];
    unsigned min_lod, max_lod; /* 5.5 fixp */
 
@@ -211,12 +211,11 @@ etna_create_sampler_view_state(struct pipe_context *pctx, struct pipe_resource *
    if (res->layout == ETNA_LAYOUT_LINEAR && !util_format_is_compressed(so->format)) {
       sv->TE_SAMPLER_CONFIG0 |= VIVS_TE_SAMPLER_CONFIG0_ADDRESSING_MODE(TEXTURE_ADDRESSING_MODE_LINEAR);
 
-      for (int lod = 0; lod <= res->base.last_level; ++lod)
-         sv->TE_SAMPLER_LINEAR_STRIDE[lod] = res->levels[lod].stride;
-
+      assert(res->base.last_level == 0);
+      sv->TE_SAMPLER_LINEAR_STRIDE = res->levels[0].stride;
    } else {
       sv->TE_SAMPLER_CONFIG0 |= VIVS_TE_SAMPLER_CONFIG0_ADDRESSING_MODE(TEXTURE_ADDRESSING_MODE_TILED);
-      memset(&sv->TE_SAMPLER_LINEAR_STRIDE, 0, sizeof(sv->TE_SAMPLER_LINEAR_STRIDE));
+      sv->TE_SAMPLER_LINEAR_STRIDE = 0;
    }
 
    sv->TE_SAMPLER_CONFIG1 |= COND(ext, VIVS_TE_SAMPLER_CONFIG1_FORMAT_EXT(format)) |
@@ -406,12 +405,11 @@ etna_emit_texture_state(struct etna_context *ctx)
       }
    }
    if (unlikely(dirty & (ETNA_DIRTY_SAMPLER_VIEWS))) {
-      for (int y = 0; y < VIVS_TE_SAMPLER_LINEAR_STRIDE__LEN; ++y) {
-         for (int x = 0; x < VIVS_TE_SAMPLER__LEN; ++x) {
-            if ((1 << x) & active_samplers) {
-               struct etna_sampler_view *sv = etna_sampler_view(ctx->sampler_view[x]);
-               /*02C00*/ EMIT_STATE(TE_SAMPLER_LINEAR_STRIDE(x, y), sv->TE_SAMPLER_LINEAR_STRIDE[y]);
-            }
+      /* only LOD0 is valid for this register */
+      for (int x = 0; x < VIVS_TE_SAMPLER__LEN; ++x) {
+         if ((1 << x) & active_samplers) {
+            struct etna_sampler_view *sv = etna_sampler_view(ctx->sampler_view[x]);
+            /*02C00*/ EMIT_STATE(TE_SAMPLER_LINEAR_STRIDE(0, x), sv->TE_SAMPLER_LINEAR_STRIDE);
          }
       }
    }

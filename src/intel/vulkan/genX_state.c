@@ -131,6 +131,8 @@ genX(init_device_state)(struct anv_device *device)
    anv_pack_struct(&cache_mode_1, GENX(CACHE_MODE_1),
                    .FloatBlendOptimizationEnable = true,
                    .FloatBlendOptimizationEnableMask = true,
+                   .MSCRAWHazardAvoidanceBit = true,
+                   .MSCRAWHazardAvoidanceBitMask = true,
                    .PartialResolveDisableInVC = true,
                    .PartialResolveDisableInVCMask = true);
 

@@ -352,11 +352,13 @@ vl_vb_unmap(struct vl_vertex_buffer *buffer, struct pipe_context *pipe)
    assert(buffer && pipe);
 
    for (i = 0; i < VL_NUM_COMPONENTS; ++i) {
-      pipe_buffer_unmap(pipe, buffer->ycbcr[i].transfer);
+      if (buffer->ycbcr[i].transfer)
+         pipe_buffer_unmap(pipe, buffer->ycbcr[i].transfer);
    }
 
    for (i = 0; i < VL_MAX_REF_FRAMES; ++i) {
-      pipe_buffer_unmap(pipe, buffer->mv[i].transfer);
+      if (buffer->mv[i].transfer)
+         pipe_buffer_unmap(pipe, buffer->mv[i].transfer);
    }
 }
 

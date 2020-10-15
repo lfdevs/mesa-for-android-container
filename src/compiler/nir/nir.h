@@ -3017,6 +3017,12 @@ typedef struct nir_shader_compiler_options {
    /** enables rules to lower fsign to fsub and flt */
    bool lower_fsign;
 
+   /** enable rules that avoid generating umax from signed integer ops */
+   bool lower_umax;
+
+   /** enable rules that avoid generating umin from signed integer ops */
+   bool lower_umin;
+
    /* lower fdph to fdot4 */
    bool lower_fdph;
 

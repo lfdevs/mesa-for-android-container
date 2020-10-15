@@ -237,7 +237,8 @@ static int si_init_surface(struct si_screen *sscreen, struct radeon_surf *surfac
    if (!is_flushed_depth && is_depth) {
       flags |= RADEON_SURF_ZBUFFER;
 
-      if (sscreen->debug_flags & DBG(NO_HYPERZ)) {
+      if ((sscreen->debug_flags & DBG(NO_HYPERZ)) ||
+          (ptex->bind & PIPE_BIND_SHARED) || is_imported) {
          flags |= RADEON_SURF_NO_HTILE;
       } else if (tc_compatible_htile &&
                  (sscreen->info.chip_class >= GFX9 || array_mode == RADEON_SURF_MODE_2D)) {

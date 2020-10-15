@@ -588,6 +588,8 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, unsign
       si_initialize_prim_discard_tunables(sscreen, is_aux_context,
                                           &sctx->prim_discard_vertex_count_threshold,
                                           &sctx->index_ring_size_per_ib);
+   } else {
+      sctx->prim_discard_vertex_count_threshold = UINT_MAX;
    }
 
    /* Initialize SDMA functions. */

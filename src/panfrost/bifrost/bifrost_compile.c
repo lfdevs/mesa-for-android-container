@@ -751,9 +751,8 @@ emit_alu(bi_context *ctx, nir_alu_instr *instr)
         assert((alu.type != BI_SPECIAL) || !(ctx->quirks & BIFROST_NO_FAST_OP));
 
         unsigned comps = nir_dest_num_components(instr->dest.dest);
-
-        if (alu.type != BI_COMBINE)
-                assert(comps <= MAX2(1, 32 / comps));
+        bool vector = comps > MAX2(1, 32 / nir_dest_bit_size(instr->dest.dest));
+        assert(!vector || alu.type == BI_COMBINE || alu.type == BI_MOV);
 
         if (!instr->dest.dest.is_ssa) {
                 for (unsigned i = 0; i < comps; ++i)
@@ -910,6 +909,15 @@ emit_alu(bi_context *ctx, nir_alu_instr *instr)
                 break;
         }
 
+        if (alu.type == BI_MOV && vector) {
+                alu.type = BI_COMBINE;
+
+                for (unsigned i = 0; i < comps; ++i) {
+                        alu.src[i] = alu.src[0];
+                        alu.swizzle[i][0] = instr->src[0].swizzle[i];
+                }
+        }
+
         if (alu.type == BI_CSEL) {
                 /* Default to csel3 */
                 alu.cond = BI_COND_NE;
@@ -970,32 +978,24 @@ emit_tex_full(bi_context *ctx, nir_tex_instr *instr)
         unreachable("stub");
 }
 
-/* Normal textures ops are tex for frag shaders and txl for vertex shaders with
- * lod a constant 0. Anything else needs a full texture op. */
+/* Simple textures ops correspond to NIR tex or txl with LOD = 0. Anything else
+ * needs a complete texture op. */
 
 static bool
 bi_is_normal_tex(gl_shader_stage stage, nir_tex_instr *instr)
 {
-        if (stage == MESA_SHADER_FRAGMENT)
-                return instr->op == nir_texop_tex;
+        if (instr->op == nir_texop_tex)
+                return true;
 
         if (instr->op != nir_texop_txl)
                 return false;
 
-        for (unsigned i = 0; i < instr->num_srcs; ++i) {
-                if (instr->src[i].src_type != nir_tex_src_lod)
-                        continue;
+        int lod_idx = nir_tex_instr_src_index(instr, nir_tex_src_lod);
+        if (lod_idx < 0)
+                return true;
 
-                nir_src src = instr->src[i].src;
-
-                if (!nir_src_is_const(src))
-                        continue;
-
-                if (nir_src_as_uint(src) != 0)
-                        continue;
-        }
-
-        return true;
+        nir_src lod = instr->src[lod_idx].src;
+        return nir_src_is_const(lod) && nir_src_as_uint(lod) == 0;
 }
 
 static void

@@ -637,6 +637,12 @@ add_parameter(struct gl_uniform_storage *uniform,
               const struct glsl_type *type,
               struct nir_link_uniforms_state *state)
 {
+   /* Builtin uniforms are backed by PROGRAM_STATE_VAR, so don't add them as
+    * uniforms.
+    */
+   if (uniform->builtin)
+      return;
+
    if (!state->params || uniform->is_shader_storage ||
        (glsl_contains_opaque(type) && !state->current_var->data.bindless))
       return;

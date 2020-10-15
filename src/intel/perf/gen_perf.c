@@ -781,7 +781,7 @@ load_oa_metrics(struct gen_perf_config *perf, int fd,
          break;
       }
    }
-   if (perf->fallback_raw_oa_metric == 0)
+   if (perf->fallback_raw_oa_metric == 0 && perf->n_queries > 0)
       perf->fallback_raw_oa_metric = perf->queries[perf->n_queries - 1].oa_metrics_set_id;
 }
 

@@ -2857,8 +2857,10 @@ void visit_alu_instr(isel_context *ctx, nir_alu_instr *instr)
       }
       break;
    }
+   case nir_op_unpack_half_2x16_split_x_flush_to_zero:
    case nir_op_unpack_half_2x16_split_x: {
       if (dst.regClass() == v1) {
+         assert(ctx->block->fp_mode.must_flush_denorms16_64 == (instr->op == nir_op_unpack_half_2x16_split_x_flush_to_zero));
          bld.vop1(aco_opcode::v_cvt_f32_f16, Definition(dst), get_alu_src(ctx, instr->src[0]));
       } else {
          fprintf(stderr, "Unimplemented NIR instr bit size: ");
@@ -2867,8 +2869,10 @@ void visit_alu_instr(isel_context *ctx, nir_alu_instr *instr)
       }
       break;
    }
+   case nir_op_unpack_half_2x16_split_y_flush_to_zero:
    case nir_op_unpack_half_2x16_split_y: {
       if (dst.regClass() == v1) {
+         assert(ctx->block->fp_mode.must_flush_denorms16_64 == (instr->op == nir_op_unpack_half_2x16_split_y_flush_to_zero));
          /* TODO: use SDWA here */
          bld.vop1(aco_opcode::v_cvt_f32_f16, Definition(dst),
                   bld.vop2(aco_opcode::v_lshrrev_b32, bld.def(v1), Operand(16u), as_vgpr(ctx, get_alu_src(ctx, instr->src[0]))));

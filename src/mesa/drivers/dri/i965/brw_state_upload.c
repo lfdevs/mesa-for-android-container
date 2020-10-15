@@ -206,8 +206,10 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
        */
       brw_load_register_imm32(brw, GEN7_CACHE_MODE_1,
                               REG_MASK(GEN9_FLOAT_BLEND_OPTIMIZATION_ENABLE) |
+                              REG_MASK(GEN9_MSC_RAW_HAZARD_AVOIDANCE_BIT) |
                               REG_MASK(GEN9_PARTIAL_RESOLVE_DISABLE_IN_VC) |
                               GEN9_FLOAT_BLEND_OPTIMIZATION_ENABLE |
+                              GEN9_MSC_RAW_HAZARD_AVOIDANCE_BIT |
                               GEN9_PARTIAL_RESOLVE_DISABLE_IN_VC);
    }
 

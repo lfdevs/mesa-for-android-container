@@ -703,27 +703,26 @@ static void si_setup_nir_user_data(struct si_context *sctx, const struct pipe_gr
                              12 * sel->info.uses_grid_size;
    unsigned cs_user_data_reg = block_size_reg + 12 * program->reads_variable_block_size;
 
-   if (info->indirect) {
-      if (sel->info.uses_grid_size) {
+   if (sel->info.uses_grid_size) {
+      if (info->indirect) {
          for (unsigned i = 0; i < 3; ++i) {
             si_cp_copy_data(sctx, sctx->gfx_cs, COPY_DATA_REG, NULL, (grid_size_reg >> 2) + i,
                             COPY_DATA_SRC_MEM, si_resource(info->indirect),
                             info->indirect_offset + 4 * i);
          }
-      }
-   } else {
-      if (sel->info.uses_grid_size) {
+      } else {
          radeon_set_sh_reg_seq(cs, grid_size_reg, 3);
          radeon_emit(cs, info->grid[0]);
          radeon_emit(cs, info->grid[1]);
          radeon_emit(cs, info->grid[2]);
       }
-      if (program->reads_variable_block_size) {
-         radeon_set_sh_reg_seq(cs, block_size_reg, 3);
-         radeon_emit(cs, info->block[0]);
-         radeon_emit(cs, info->block[1]);
-         radeon_emit(cs, info->block[2]);
-      }
+   }
+
+   if (program->reads_variable_block_size) {
+      radeon_set_sh_reg_seq(cs, block_size_reg, 3);
+      radeon_emit(cs, info->block[0]);
+      radeon_emit(cs, info->block[1]);
+      radeon_emit(cs, info->block[2]);
    }
 
    if (program->num_cs_user_data_dwords) {

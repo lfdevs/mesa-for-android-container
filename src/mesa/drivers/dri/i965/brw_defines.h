@@ -1561,6 +1561,7 @@ enum brw_pixel_shader_coverage_mask_mode {
 #define GEN7_CACHE_MODE_0               0x7000
 #define GEN7_CACHE_MODE_1               0x7004
 # define GEN9_FLOAT_BLEND_OPTIMIZATION_ENABLE (1 << 4)
+# define GEN9_MSC_RAW_HAZARD_AVOIDANCE_BIT    (1 << 9)
 # define GEN8_HIZ_NP_PMA_FIX_ENABLE        (1 << 11)
 # define GEN8_HIZ_NP_EARLY_Z_FAILS_DISABLE (1 << 13)
 # define GEN9_PARTIAL_RESOLVE_DISABLE_IN_VC (1 << 1)

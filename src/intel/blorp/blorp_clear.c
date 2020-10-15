@@ -834,11 +834,12 @@ blorp_can_hiz_clear_depth(const struct gen_device_info *devinfo,
       const bool unaligned = (slice_x0 + x0) % 16 || (slice_y0 + y0) % 8 ||
                              (max_x1_y1 ? haligned_x1 % 16 || valigned_y1 % 8 :
                               x1 % 16 || y1 % 8);
-      const bool alignment_used = surf->levels > 1 ||
-                                  surf->logical_level0_px.depth > 1 ||
-                                  surf->logical_level0_px.array_len > 1;
+      const bool partial_clear = x0 > 0 || y0 > 0 || !max_x1_y1;
+      const bool multislice_surf = surf->levels > 1 ||
+                                   surf->logical_level0_px.depth > 1 ||
+                                   surf->logical_level0_px.array_len > 1;
 
-      if (unaligned && alignment_used)
+      if (unaligned && (partial_clear || multislice_surf))
          return false;
    }
 

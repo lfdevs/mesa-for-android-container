@@ -250,6 +250,15 @@ search_for_use_after_instr(nir_instr *start, nir_ssa_def *def)
          return true;
       node = node->next;
    }
+
+   /* If uses are considered to be in the block immediately preceding the if
+    * so we need to also check the following if condition, if any.
+    */
+   nir_if *following_if = nir_block_get_following_if(start->block);
+   if (following_if && following_if->condition.is_ssa &&
+       following_if->condition.ssa == def)
+      return true;
+
    return false;
 }
 

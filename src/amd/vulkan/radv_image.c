@@ -261,6 +261,7 @@ static inline bool
 radv_use_htile_for_image(const struct radv_image *image)
 {
 	return image->info.levels == 1 &&
+	       !image->shareable &&
 	       image->info.width * image->info.height >= 8 * 8;
 }
 
@@ -1651,26 +1652,15 @@ radv_image_view_init(struct radv_image_view *iview,
 		 *
 		 * This means that mip2 will be missing texels.
 		 *
-		 * Fix this by calculating the base mip's width and height, then convert that, and round it
-		 * back up to get the level 0 size.
-		 * Clamp the converted size between the original values, and next power of two, which
-		 * means we don't oversize the image.
+		 * Fix it by taking the actual extent addrlib assigned to the base mip level.
 		 */
-		 if (device->physical_device->rad_info.chip_class >= GFX9 &&
+		if (device->physical_device->rad_info.chip_class >= GFX9 &&
 		     vk_format_is_compressed(image->vk_format) &&
-		     !vk_format_is_compressed(iview->vk_format)) {
-			 unsigned lvl_width  = radv_minify(image->info.width , range->baseMipLevel);
-			 unsigned lvl_height = radv_minify(image->info.height, range->baseMipLevel);
-
-			 lvl_width = round_up_u32(lvl_width * view_bw, img_bw);
-			 lvl_height = round_up_u32(lvl_height * view_bh, img_bh);
-
-			 lvl_width <<= range->baseMipLevel;
-			 lvl_height <<= range->baseMipLevel;
-
-			 iview->extent.width = CLAMP(lvl_width, iview->extent.width, iview->image->planes[0].surface.u.gfx9.surf_pitch);
-			 iview->extent.height = CLAMP(lvl_height, iview->extent.height, iview->image->planes[0].surface.u.gfx9.surf_height);
-		 }
+		     !vk_format_is_compressed(iview->vk_format) &&
+		     iview->image->info.levels > 1) {
+			iview->extent.width = iview->image->planes[0].surface.u.gfx9.base_mip_width;
+			iview->extent.height = iview->image->planes[0].surface.u.gfx9.base_mip_height;
+		}
 	}
 
 	iview->base_layer = range->baseArrayLayer;

@@ -901,6 +901,11 @@ enum surface_logical_srcs {
    SURFACE_LOGICAL_SRC_IMM_DIMS,
    /** Per-opcode immediate argument.  For atomics, this is the atomic opcode */
    SURFACE_LOGICAL_SRC_IMM_ARG,
+   /**
+    * Some instructions with side-effects should not be predicated on
+    * sample mask, e.g. lowered stores to scratch.
+    */
+   SURFACE_LOGICAL_SRC_ALLOW_SAMPLE_MASK,
 
    SURFACE_LOGICAL_NUM_SRCS
 };

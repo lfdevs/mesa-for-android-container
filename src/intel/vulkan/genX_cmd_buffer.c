@@ -571,7 +571,7 @@ transition_depth_buffer(struct anv_cmd_buffer *cmd_buffer,
        cmd_buffer->device->physical->has_implicit_ccs &&
        cmd_buffer->device->info.has_aux_map) {
       anv_image_init_aux_tt(cmd_buffer, image, VK_IMAGE_ASPECT_DEPTH_BIT,
-                            0, 1, 0, 1);
+                            0, 1, base_layer, layer_count);
    }
 #endif
 

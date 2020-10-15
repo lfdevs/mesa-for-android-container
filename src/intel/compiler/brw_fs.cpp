@@ -5366,7 +5366,10 @@ lower_surface_logical_send(const fs_builder &bld, fs_inst *inst)
    const fs_reg &surface_handle = inst->src[SURFACE_LOGICAL_SRC_SURFACE_HANDLE];
    const UNUSED fs_reg &dims = inst->src[SURFACE_LOGICAL_SRC_IMM_DIMS];
    const fs_reg &arg = inst->src[SURFACE_LOGICAL_SRC_IMM_ARG];
+   const fs_reg &allow_sample_mask =
+      inst->src[SURFACE_LOGICAL_SRC_ALLOW_SAMPLE_MASK];
    assert(arg.file == IMM);
+   assert(allow_sample_mask.file == IMM);
 
    /* We must have exactly one of surface and surface_handle */
    assert((surface.file == BAD_FILE) != (surface_handle.file == BAD_FILE));
@@ -5390,8 +5393,9 @@ lower_surface_logical_send(const fs_builder &bld, fs_inst *inst)
                               surface.ud == GEN8_BTI_STATELESS_NON_COHERENT);
 
    const bool has_side_effects = inst->has_side_effects();
-   fs_reg sample_mask = has_side_effects ? sample_mask_reg(bld) :
-                                           fs_reg(brw_imm_d(0xffff));
+
+   fs_reg sample_mask = allow_sample_mask.ud ? sample_mask_reg(bld) :
+                                               fs_reg(brw_imm_d(0xffff));
 
    /* From the BDW PRM Volume 7, page 147:
     *

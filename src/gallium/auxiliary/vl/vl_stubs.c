@@ -85,7 +85,8 @@ vl_video_buffer_template(struct pipe_resource *templ,
                          const struct pipe_video_buffer *tmpl,
                          enum pipe_format resource_format,
                          unsigned depth, unsigned array_size,
-                         unsigned usage, unsigned plane)
+                         unsigned usage, unsigned plane,
+                         enum pipe_video_chroma_format chroma_format)
 {
    assert(0);
 }

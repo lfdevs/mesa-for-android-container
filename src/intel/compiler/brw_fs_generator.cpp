@@ -650,15 +650,54 @@ fs_generator::generate_shuffle(fs_inst *inst,
             group_idx = retype(spread(group_idx, 2), BRW_REGISTER_TYPE_W);
          }
 
+         uint32_t src_start_offset = src.nr * REG_SIZE + src.subnr;
+
+         /* From the Haswell PRM:
+          *
+          *    "When a sequence of NoDDChk and NoDDClr are used, the last
+          *    instruction that completes the scoreboard clear must have a
+          *    non-zero execution mask. This means, if any kind of predication
+          *    can change the execution mask or channel enable of the last
+          *    instruction, the optimization must be avoided.  This is to
+          *    avoid instructions being shot down the pipeline when no writes
+          *    are required."
+          *
+          * Whenever predication is enabled or the instructions being emitted
+          * aren't the full width, it's possible that it will be run with zero
+          * channels enabled so we can't use dependency control without
+          * running the risk of a hang if an instruction gets shot down.
+          */
+         const bool use_dep_ctrl = !inst->predicate &&
+                                   lower_width == dispatch_width;
+         brw_inst *insn;
+
+         /* Due to a hardware bug some platforms (particularly Gen11+) seem
+          * to require the address components of all channels to be valid
+          * whether or not they're active, which causes issues if we use VxH
+          * addressing under non-uniform control-flow.  We can easily work
+          * around that by initializing the whole address register with a
+          * pipelined NoMask MOV instruction.
+          */
+         insn = brw_MOV(p, addr, brw_imm_uw(src_start_offset));
+         brw_inst_set_mask_control(devinfo, insn, BRW_MASK_DISABLE);
+         brw_inst_set_pred_control(devinfo, insn, BRW_PREDICATE_NONE);
+         if (devinfo->gen >= 12)
+            brw_set_default_swsb(p, tgl_swsb_null());
+         else
+            brw_inst_set_no_dd_clear(devinfo, insn, use_dep_ctrl);
+
          /* Take into account the component size and horizontal stride. */
          assert(src.vstride == src.hstride + src.width);
-         brw_SHL(p, addr, group_idx,
-                 brw_imm_uw(util_logbase2(type_sz(src.type)) +
-                            src.hstride - 1));
+         insn = brw_SHL(p, addr, group_idx,
+                        brw_imm_uw(util_logbase2(type_sz(src.type)) +
+                                   src.hstride - 1));
+         if (devinfo->gen >= 12)
+            brw_set_default_swsb(p, tgl_swsb_regdist(1));
+         else
+            brw_inst_set_no_dd_check(devinfo, insn, use_dep_ctrl);
 
          /* Add on the register start offset */
-         brw_set_default_swsb(p, tgl_swsb_regdist(1));
-         brw_ADD(p, addr, addr, brw_imm_uw(src.nr * REG_SIZE + src.subnr));
+         brw_ADD(p, addr, addr, brw_imm_uw(src_start_offset));
 
          if (type_sz(src.type) > 4 &&
              ((devinfo->gen == 7 && !devinfo->is_haswell) ||

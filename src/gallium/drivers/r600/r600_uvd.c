@@ -66,6 +66,8 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 	struct pipe_video_buffer template;
 	struct pipe_resource templ;
 	unsigned i, array_size;
+	enum pipe_video_chroma_format chroma_format =
+		pipe_format_to_chroma_format(tmpl->buffer_format);
 
 	assert(pipe);
 
@@ -77,7 +79,8 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 	template.width = align(tmpl->width, VL_MACROBLOCK_WIDTH);
 	template.height = align(tmpl->height / array_size, VL_MACROBLOCK_HEIGHT);
 
-	vl_video_buffer_template(&templ, &template, resource_formats[0], 1, array_size, PIPE_USAGE_DEFAULT, 0);
+	vl_video_buffer_template(&templ, &template, resource_formats[0], 1, array_size,
+									 PIPE_USAGE_DEFAULT, 0, chroma_format);
 	if (ctx->b.chip_class < EVERGREEN || tmpl->interlaced || !R600_UVD_ENABLE_TILING)
 		templ.bind = PIPE_BIND_LINEAR;
 	resources[0] = (struct r600_texture *)
@@ -86,7 +89,8 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 		goto error;
 
 	if (resource_formats[1] != PIPE_FORMAT_NONE) {
-		vl_video_buffer_template(&templ, &template, resource_formats[1], 1, array_size, PIPE_USAGE_DEFAULT, 1);
+		vl_video_buffer_template(&templ, &template, resource_formats[1], 1, array_size,
+										 PIPE_USAGE_DEFAULT, 1, chroma_format);
 		if (ctx->b.chip_class < EVERGREEN || tmpl->interlaced || !R600_UVD_ENABLE_TILING)
 			templ.bind = PIPE_BIND_LINEAR;
 		resources[1] = (struct r600_texture *)
@@ -96,7 +100,8 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 	}
 
 	if (resource_formats[2] != PIPE_FORMAT_NONE) {
-		vl_video_buffer_template(&templ, &template, resource_formats[2], 1, array_size, PIPE_USAGE_DEFAULT, 2);
+		vl_video_buffer_template(&templ, &template, resource_formats[2], 1, array_size,
+										 PIPE_USAGE_DEFAULT, 2, chroma_format);
 		if (ctx->b.chip_class < EVERGREEN || tmpl->interlaced || !R600_UVD_ENABLE_TILING)
 			templ.bind = PIPE_BIND_LINEAR;
 		resources[2] = (struct r600_texture *)

@@ -709,11 +709,11 @@ new_bitsize_acceptable(struct vectorize_ctx *ctx, unsigned new_bit_size,
          return false;
 
       unsigned write_mask = nir_intrinsic_write_mask(low->intrin);
-      if (!writemask_representable(write_mask, low_size, new_bit_size))
+      if (!writemask_representable(write_mask, get_bit_size(low), new_bit_size))
          return false;
 
       write_mask = nir_intrinsic_write_mask(high->intrin);
-      if (!writemask_representable(write_mask, high_size, new_bit_size))
+      if (!writemask_representable(write_mask, get_bit_size(high), new_bit_size))
          return false;
    }
 

@@ -25,8 +25,7 @@
 from __future__ import unicode_literals
 import argparse
 import io
-import string
-import sys
+import os
 
 
 def get_args():
