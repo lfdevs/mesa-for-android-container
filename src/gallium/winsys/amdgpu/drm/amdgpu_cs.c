@@ -810,7 +810,6 @@ static bool amdgpu_get_new_ib(struct amdgpu_winsys *ws, struct amdgpu_cs *cs,
 
    ib_size = ib->big_ib_buffer->size - ib->used_ib_space;
    ib->base.current.max_dw = ib_size / 4 - amdgpu_cs_epilog_dws(cs);
-   assert(ib->base.current.max_dw >= ib->max_check_space_size / 4);
    ib->base.gpu_address = info->va_start;
    return true;
 }
@@ -1178,7 +1177,6 @@ static bool amdgpu_cs_check_space(struct radeon_cmdbuf *rcs, unsigned dw,
 
    ib->base.current.buf = (uint32_t*)(ib->ib_mapped + ib->used_ib_space);
    ib->base.current.max_dw = ib->big_ib_buffer->size / 4 - cs_epilog_dw;
-   assert(ib->base.current.max_dw >= ib->max_check_space_size / 4);
    ib->base.gpu_address = va;
 
    amdgpu_cs_add_buffer(&cs->main.base, ib->big_ib_buffer,

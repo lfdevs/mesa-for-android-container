@@ -668,23 +668,25 @@ static void gfx10_emit_ge_cntl(struct si_context *sctx, unsigned num_patches)
    if (sctx->ngg) {
       if (sctx->tes_shader.cso) {
          ge_cntl = S_03096C_PRIM_GRP_SIZE(num_patches) |
-                   S_03096C_VERT_GRP_SIZE(256) | /* 256 = disable vertex grouping */
+                   S_03096C_VERT_GRP_SIZE(0) |
                    S_03096C_BREAK_WAVE_AT_EOI(key.u.tess_uses_prim_id);
       } else {
          ge_cntl = si_get_vs_state(sctx)->ge_cntl;
       }
    } else {
       unsigned primgroup_size;
-      unsigned vertgroup_size = 256; /* 256 = disable vertex grouping */
-      ;
+      unsigned vertgroup_size;
 
       if (sctx->tes_shader.cso) {
          primgroup_size = num_patches; /* must be a multiple of NUM_PATCHES */
+         vertgroup_size = 0;
       } else if (sctx->gs_shader.cso) {
          unsigned vgt_gs_onchip_cntl = sctx->gs_shader.current->ctx_reg.gs.vgt_gs_onchip_cntl;
          primgroup_size = G_028A44_GS_PRIMS_PER_SUBGRP(vgt_gs_onchip_cntl);
+         vertgroup_size = G_028A44_ES_VERTS_PER_SUBGRP(vgt_gs_onchip_cntl);
       } else {
          primgroup_size = 128; /* recommended without a GS and tess */
+         vertgroup_size = 0;
       }
 
       ge_cntl = S_03096C_PRIM_GRP_SIZE(primgroup_size) | S_03096C_VERT_GRP_SIZE(vertgroup_size) |

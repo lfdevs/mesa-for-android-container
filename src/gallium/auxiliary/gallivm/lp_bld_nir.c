@@ -555,6 +555,7 @@ static LLVMValueRef do_alu_action(struct lp_build_nir_context *bld_base,
    case nir_op_flog2:
       result = lp_build_log2_safe(&bld_base->base, src[0]);
       break;
+   case nir_op_flt:
    case nir_op_flt32:
       result = fcmp32(bld_base, PIPE_FUNC_LESS, src_bit_size[0], src);
       break;
@@ -1975,8 +1976,8 @@ bool lp_build_nir_llvm(
 
    nir_foreach_register(reg, &func->impl->registers) {
       LLVMTypeRef type = get_register_type(bld_base, reg);
-      LLVMValueRef reg_alloc = lp_build_alloca_undef(bld_base->base.gallivm,
-                                                     type, "reg");
+      LLVMValueRef reg_alloc = lp_build_alloca(bld_base->base.gallivm,
+                                               type, "reg");
       _mesa_hash_table_insert(bld_base->regs, reg, reg_alloc);
    }
    nir_index_ssa_defs(func->impl);

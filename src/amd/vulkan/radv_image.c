@@ -1597,6 +1597,11 @@ radv_image_view_init(struct radv_image_view *iview,
 	iview->aspect_mask = pCreateInfo->subresourceRange.aspectMask;
 	iview->multiple_planes = vk_format_get_plane_count(image->vk_format) > 1 && iview->aspect_mask == VK_IMAGE_ASPECT_COLOR_BIT;
 
+	iview->base_layer = range->baseArrayLayer;
+	iview->layer_count = radv_get_layerCount(image, range);
+	iview->base_mip = range->baseMipLevel;
+	iview->level_count = radv_get_levelCount(image, range);
+
 	iview->vk_format = pCreateInfo->format;
 
 	/* If the image has an Android external format, pCreateInfo->format will be
@@ -1652,21 +1657,43 @@ radv_image_view_init(struct radv_image_view *iview,
 		 *
 		 * This means that mip2 will be missing texels.
 		 *
-		 * Fix it by taking the actual extent addrlib assigned to the base mip level.
+		 * Fix this by calculating the base mip's width and height, then convert
+		 * that, and round it back up to get the level 0 size. Clamp the
+		 * converted size between the original values, and the physical extent
+		 * of the base mipmap.
+		 *
+		 * On GFX10 we have to take care to not go over the physical extent
+		 * of the base mipmap as otherwise the GPU computes a different layout.
+		 * Note that the GPU does use the same base-mip dimensions for both a
+		 * block compatible format and the compressed format, so even if we take
+		 * the plain converted dimensions the physical layout is correct.
 		 */
 		if (device->physical_device->rad_info.chip_class >= GFX9 &&
-		     vk_format_is_compressed(image->vk_format) &&
-		     !vk_format_is_compressed(iview->vk_format) &&
-		     iview->image->info.levels > 1) {
-			iview->extent.width = iview->image->planes[0].surface.u.gfx9.base_mip_width;
-			iview->extent.height = iview->image->planes[0].surface.u.gfx9.base_mip_height;
-		}
-	}
+		    vk_format_is_compressed(image->vk_format) &&
+		    !vk_format_is_compressed(iview->vk_format)) {
+			/* If we have multiple levels in the view we should ideally take the last level,
+			 * but the mip calculation has a max(..., 1) so walking back to the base mip in an
+			 * useful way is hard. */
+			if (iview->level_count > 1) {
+				iview->extent.width = iview->image->planes[0].surface.u.gfx9.base_mip_width;
+				iview->extent.height = iview->image->planes[0].surface.u.gfx9.base_mip_height;
+			} else {
+				unsigned lvl_width  = radv_minify(image->info.width , range->baseMipLevel);
+				unsigned lvl_height = radv_minify(image->info.height, range->baseMipLevel);
 
-	iview->base_layer = range->baseArrayLayer;
-	iview->layer_count = radv_get_layerCount(image, range);
-	iview->base_mip = range->baseMipLevel;
-	iview->level_count = radv_get_levelCount(image, range);
+				lvl_width = round_up_u32(lvl_width * view_bw, img_bw);
+				lvl_height = round_up_u32(lvl_height * view_bh, img_bh);
+
+				lvl_width <<= range->baseMipLevel;
+				lvl_height <<= range->baseMipLevel;
+
+				iview->extent.width = CLAMP(lvl_width, iview->extent.width,
+							    iview->image->planes[0].surface.u.gfx9.base_mip_width);
+				iview->extent.height = CLAMP(lvl_height, iview->extent.height,
+							     iview->image->planes[0].surface.u.gfx9.base_mip_height);
+			}
+		 }
+	}
 
 	bool disable_compression = extra_create_info ? extra_create_info->disable_compression: false;
 	for (unsigned i = 0; i < (iview->multiple_planes ? vk_format_get_plane_count(image->vk_format) : 1); ++i) {

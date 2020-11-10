@@ -355,6 +355,8 @@ nir_schedule_intrinsic_deps(nir_deps_state *state,
 
    case nir_intrinsic_discard:
    case nir_intrinsic_discard_if:
+   case nir_intrinsic_demote:
+   case nir_intrinsic_demote_if:
       /* We are adding two dependencies:
        *
        * * A individual one that we could use to add a read_dep while handling

@@ -31,22 +31,21 @@ else
 endif
 
 DRI_DRIVERS =
+EGL_PLATFORMS = x11
 GALLIUM_DRIVERS =
 VULKAN_DRIVERS =
 
-confflags_DRI3 = -Ddri3=false
+confflags_DRI3 = -Ddri3=disabled
 
 # hurd doesn't do direct rendering
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
 	DRI_DRIVERS = swrast
-	EGL_PLATFORMS = x11
 
 	confflags_DIRECT_RENDERING = -Dglx-direct=false
-	confflags_GBM = -Dgbm=false
+	confflags_GBM = -Dgbm=disabled
 	confflags_OSMESA = -Dosmesa=classic
 else
 	DRI_DRIVERS += r200,r100
-	EGL_PLATFORMS = drm,surfaceless,x11
 	GALLIUM_DRIVERS += r600,r300
 
   # radv needs LLVM and the Vulkan loader, so only build on the subset of
@@ -74,7 +73,7 @@ else
 	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 i386 x32))
 		GALLIUM_DRIVERS += ,svga,zink
 		# svga needs xa state tracker
-		confflags_GALLIUM += -Dgallium-xa=true
+		confflags_GALLIUM += -Dgallium-xa=enabled
 		VULKAN_DRIVERS += ,intel
 	endif
 
@@ -82,7 +81,7 @@ else
 	EGL_PLATFORMS += ,wayland
 
 	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x))
-		confflags_VALGRIND += -Dvalgrind=true
+		confflags_VALGRIND += -Dvalgrind=enabled
 	endif
   endif
 
@@ -96,7 +95,7 @@ else
   # It's also required for building OpenCL support.
   ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64))
 	GALLIUM_DRIVERS += ,radeonsi,swrast
-	confflags_GALLIUM += -Dllvm=true
+	confflags_GALLIUM += -Dllvm=enabled
 	confflags_GALLIUM += -Dgallium-opencl=icd
 	confflags_OSMESA = -Dosmesa=gallium
 
@@ -106,7 +105,7 @@ else
 	endif
   else
 	DRI_DRIVERS += ,swrast
-	confflags_GALLIUM += -Dllvm=false
+	confflags_GALLIUM += -Dllvm=disabled
 	confflags_OSMESA = -Dosmesa=classic
   endif
 
@@ -117,18 +116,18 @@ else
   endif
 
 	confflags_DIRECT_RENDERING = -Dglx-direct=true
-	confflags_GBM = -Dgbm=true
+	confflags_GBM = -Dgbm=enabled
 	confflags_GALLIUM += -Dgallium-extra-hud=true
-	confflags_GALLIUM += -Dgallium-vdpau=true
-	confflags_GALLIUM += -Dlmsensors=true
+	confflags_GALLIUM += -Dgallium-vdpau=enabled
+	confflags_GALLIUM += -Dlmsensors=enabled
 
   ifeq (,$(filter pkg.mesa.nolibva,$(DEB_BUILD_PROFILES)))
-        confflags_GALLIUM += -Dgallium-va=true
+        confflags_GALLIUM += -Dgallium-va=enabled
   endif
 endif
 
 confflags_EGL = -Dplatforms="$(EGL_PLATFORMS)"
-confflags_GLES = -Dgles1=false -Dgles2=true
+confflags_GLES = -Dgles1=disabled -Dgles2=enabled
 confflags_GALLIUM += -Dgallium-drivers="$(GALLIUM_DRIVERS)"
 
 confflags += \
@@ -137,8 +136,8 @@ confflags += \
 	-Ddri-search-path='/usr/lib/$(DEB_HOST_MULTIARCH)/dri:\$$$${ORIGIN}/dri:/usr/lib/dri' \
 	-Dvulkan-drivers="$(VULKAN_DRIVERS)" \
 	-Dglvnd=true \
-	-Dshared-glapi=true \
-	-Dgallium-xvmc=false \
+	-Dshared-glapi=enabled \
+	-Dgallium-xvmc=disabled \
 	-Dgallium-omx=disabled \
 	-Db_ndebug=true \
 	-Dbuild-tests=true \

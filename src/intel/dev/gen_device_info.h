@@ -38,7 +38,7 @@ struct drm_i915_query_topology_info;
 
 #define GEN_DEVICE_MAX_SLICES           (6)  /* Maximum on gen10 */
 #define GEN_DEVICE_MAX_SUBSLICES        (8)  /* Maximum on gen11 */
-#define GEN_DEVICE_MAX_EUS_PER_SUBSLICE (10) /* Maximum on Haswell */
+#define GEN_DEVICE_MAX_EUS_PER_SUBSLICE (16) /* Maximum on gen12 */
 #define GEN_DEVICE_MAX_PIXEL_PIPES      (2)  /* Maximum on gen11 */
 
 /**

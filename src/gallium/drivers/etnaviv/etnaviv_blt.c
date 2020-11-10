@@ -229,7 +229,7 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, struct pipe_surface *dst,
    if (surf->surf.ts_size) {
       clr.dest.use_ts = 1;
       clr.dest.ts_addr.bo = res->ts_bo;
-      clr.dest.ts_addr.offset = 0;
+      clr.dest.ts_addr.offset = surf->level->ts_offset;
       clr.dest.ts_addr.flags = ETNA_RELOC_WRITE;
       clr.dest.ts_clear_value[0] = new_clear_value;
       clr.dest.ts_clear_value[1] = new_clear_value >> 32;
@@ -308,7 +308,7 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
    if (surf->surf.ts_size) {
       clr.dest.use_ts = 1;
       clr.dest.ts_addr.bo = res->ts_bo;
-      clr.dest.ts_addr.offset = 0;
+      clr.dest.ts_addr.offset = surf->level->ts_offset;
       clr.dest.ts_addr.flags = ETNA_RELOC_WRITE;
       clr.dest.ts_clear_value[0] = surf->level->clear_value;
       clr.dest.ts_clear_value[1] = surf->level->clear_value;

@@ -61,7 +61,7 @@ struct brw_blorp_surface_info
    struct isl_view view;
 
    /* Z offset into a 3-D texture or slice of a 2-D array texture. */
-   uint32_t z_offset;
+   float z_offset;
 
    uint32_t tile_x_sa, tile_y_sa;
 };
@@ -70,7 +70,7 @@ void
 brw_blorp_surface_info_init(struct blorp_context *blorp,
                             struct brw_blorp_surface_info *info,
                             const struct blorp_surf *surf,
-                            unsigned int level, unsigned int layer,
+                            unsigned int level, float layer,
                             enum isl_format format, bool is_render_target);
 void
 blorp_surf_convert_to_single_slice(const struct isl_device *isl_dev,
@@ -148,7 +148,7 @@ struct brw_blorp_wm_inputs
    /* Minimum layer setting works for all the textures types but texture_3d
     * for which the setting has no effect. Use the z-coordinate instead.
     */
-   uint32_t src_z;
+   float src_z;
 
    /* Pad out to an integral number of registers */
    uint32_t pad[1];

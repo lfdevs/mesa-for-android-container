@@ -1272,7 +1272,6 @@ unpack_channel(union isl_color_value *value,
 
    switch (layout->type) {
    case ISL_UNORM:
-      unpacked.f32 = _mesa_unorm_to_float(packed, layout->bits);
       if (colorspace == ISL_COLORSPACE_SRGB) {
          if (layout->bits == 8) {
             unpacked.f32 = util_format_srgb_8unorm_to_linear_float(packed);

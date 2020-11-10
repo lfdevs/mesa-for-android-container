@@ -234,19 +234,19 @@ static const struct format_mapping format_map[] = {
         DEFAULT_RGB_FORMATS }
    },
    {
-      { GL_RGB4 },
+      { GL_RGB4, 0 },
       { PIPE_FORMAT_B4G4R4X4_UNORM, PIPE_FORMAT_B4G4R4A4_UNORM,
         PIPE_FORMAT_A4B4G4R4_UNORM,
         DEFAULT_RGB_FORMATS }
    },
    {
-      { GL_RGB5 },
+      { GL_RGB5, 0 },
       { PIPE_FORMAT_B5G5R5X1_UNORM, PIPE_FORMAT_X1B5G5R5_UNORM,
         PIPE_FORMAT_B5G5R5A1_UNORM, PIPE_FORMAT_A1B5G5R5_UNORM,
         DEFAULT_RGB_FORMATS }
    },
    {
-      { GL_RGB565 },
+      { GL_RGB565, 0 },
       { PIPE_FORMAT_B5G6R5_UNORM, DEFAULT_RGB_FORMATS }
    },
 

@@ -1219,6 +1219,11 @@ handle_barrier(struct vectorize_ctx *ctx, bool *progress, nir_function_impl *imp
       case nir_intrinsic_discard:
          modes = nir_var_all;
          break;
+      case nir_intrinsic_demote_if:
+      case nir_intrinsic_demote:
+         acquire = false;
+         modes = nir_var_all;
+         break;
       case nir_intrinsic_memory_barrier_buffer:
          modes = nir_var_mem_ssbo | nir_var_mem_global;
          break;

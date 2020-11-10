@@ -933,8 +933,12 @@ fd_resource_create_with_modifiers(struct pipe_screen *pscreen,
 	 * should.)
 	 */
 	bool allow_ubwc = drm_find_modifier(DRM_FORMAT_MOD_INVALID, modifiers, count);
-	if (tmpl->bind & PIPE_BIND_SHARED)
+	if (tmpl->bind & PIPE_BIND_SHARED) {
 		allow_ubwc = drm_find_modifier(DRM_FORMAT_MOD_QCOM_COMPRESSED, modifiers, count);
+		if (!allow_ubwc) {
+			linear = true;
+		}
+	}
 
 	allow_ubwc &= !(fd_mesa_debug & FD_DBG_NOUBWC);
 

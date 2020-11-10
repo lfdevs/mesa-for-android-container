@@ -146,7 +146,8 @@ struct loader_dri3_drawable {
 
    struct loader_dri3_buffer *buffers[LOADER_DRI3_NUM_BUFFERS];
    int cur_back;
-   int num_back;
+   int cur_num_back;
+   int max_num_back;
    int cur_blit_source;
 
    uint32_t *stamp;

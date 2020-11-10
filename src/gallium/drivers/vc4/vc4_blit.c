@@ -299,6 +299,7 @@ static void *vc4_get_yuv_fs(struct pipe_context *pctx, int cpp)
    nir_ssa_dest_init(&load->instr, &load->dest, load->num_components, 32, NULL);
    load->src[0] = nir_src_for_ssa(one);
    load->src[1] = nir_src_for_ssa(nir_iadd(&b, x_offset, y_offset));
+   nir_intrinsic_set_align(load,  4, 0);
    nir_builder_instr_insert(&b, &load->instr);
 
    nir_store_var(&b, color_out,

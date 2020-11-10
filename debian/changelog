@@ -1,3 +1,12 @@
+mesa (20.2.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * control: Enable libdrm-dev for Hurd. (Closes: #973673)
+  * rules: Rework EGL_PLATFORMS to match current upstream defaults.
+  * rules: Fix warnings from deprecated options. (Closes: #973675)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 10 Nov 2020 22:38:16 +0200
+
 mesa (20.2.1-1) unstable; urgency=medium
 
   * New upstream release.

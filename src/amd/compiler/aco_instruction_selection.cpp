@@ -6194,7 +6194,7 @@ void get_buffer_size(isel_context *ctx, Temp desc, Temp dst, bool in_elements)
       Temp size = emit_extract_vector(ctx, desc, 2, s1);
 
       Temp size_div3 = bld.vop3(aco_opcode::v_mul_hi_u32, bld.def(v1), bld.copy(bld.def(v1), Operand(0xaaaaaaabu)), size);
-      size_div3 = bld.sop2(aco_opcode::s_lshr_b32, bld.def(s1), bld.as_uniform(size_div3), Operand(1u));
+      size_div3 = bld.sop2(aco_opcode::s_lshr_b32, bld.def(s1), bld.def(s1, scc), bld.as_uniform(size_div3), Operand(1u));
 
       Temp stride = emit_extract_vector(ctx, desc, 1, s1);
       stride = bld.sop2(aco_opcode::s_bfe_u32, bld.def(s1), bld.def(s1, scc), stride, Operand((5u << 16) | 16u));
@@ -8514,9 +8514,7 @@ void visit_tex(isel_context *ctx, nir_tex_instr *instr)
          has_bias = true;
          break;
       case nir_tex_src_lod: {
-         nir_const_value *val = nir_src_as_const_value(instr->src[i].src);
-
-         if (val && val->f32 <= 0.0) {
+         if (nir_src_is_const(instr->src[i].src) && nir_src_as_uint(instr->src[i].src) == 0) {
             level_zero = true;
          } else {
             lod = get_ssa_temp(ctx, instr->src[i].src.ssa);
@@ -9433,7 +9431,7 @@ static Operand create_continue_phis(isel_context *ctx, unsigned first, unsigned 
          continue;
       }
 
-      if (block.kind & block_kind_continue) {
+      if ((block.kind & block_kind_continue) && block.index != last) {
          vals[idx - first] = header_phi->operands[next_pred];
          next_pred++;
          continue;
@@ -10082,6 +10080,11 @@ static void create_vs_exports(isel_context *ctx)
       ctx->outputs.mask[VARYING_SLOT_LAYER] |= 0x1;
       ctx->outputs.temps[VARYING_SLOT_LAYER * 4u] = as_vgpr(ctx, get_arg(ctx, ctx->args->ac.view_index));
    }
+
+   /* Hardware requires position data to always be exported, even if the
+    * application did not write gl_Position.
+    */
+   ctx->outputs.mask[VARYING_SLOT_POS] = 0xf;
 
    /* the order these position exports are created is important */
    int next_pos = 0;

@@ -63,7 +63,7 @@ void
 brw_blorp_surface_info_init(struct blorp_context *blorp,
                             struct brw_blorp_surface_info *info,
                             const struct blorp_surf *surf,
-                            unsigned int level, unsigned int layer,
+                            unsigned int level, float layer,
                             enum isl_format format, bool is_render_target)
 {
    memset(info, 0, sizeof(*info));

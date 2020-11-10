@@ -2185,7 +2185,7 @@ execsize:
 	| LPAREN exp2 RPAREN
 	{
 		if ($2 > 32 || !isPowerofTwo($2))
-			error(&@2, "Invalid execution size %d\n", $2);
+			error(&@2, "Invalid execution size %llu\n", $2);
 
 		$$ = cvt($2) - 1;
 	}

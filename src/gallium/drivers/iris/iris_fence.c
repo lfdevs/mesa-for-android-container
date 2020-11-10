@@ -154,7 +154,7 @@ clear_stale_syncobjs(struct iris_batch *batch)
 
       if (syncobj != nth_syncobj) {
          *syncobj = *nth_syncobj;
-         memcpy(nth_fence, fence, sizeof(*fence));
+         memcpy(fence, nth_fence, sizeof(*fence));
       }
    }
 }
