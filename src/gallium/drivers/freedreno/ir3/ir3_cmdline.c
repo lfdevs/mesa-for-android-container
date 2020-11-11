@@ -185,6 +185,8 @@ load_glsl(unsigned num_files, char* const* files, gl_shader_stage stage)
 			ir3_glsl_type_size);
 
 	NIR_PASS_V(nir, nir_lower_system_values);
+	NIR_PASS_V(nir, nir_lower_compute_system_values, NULL);
+
 	NIR_PASS_V(nir, nir_lower_frexp);
 	NIR_PASS_V(nir, nir_lower_io,
 	           nir_var_shader_in | nir_var_shader_out | nir_var_uniform,
@@ -241,7 +243,6 @@ load_spirv(const char *filename, const char *entry, gl_shader_stage stage)
 			.int64 = true,
 			.variable_pointers = true,
 		},
-		.lower_ubo_ssbo_access_to_offsets = true,
 		.debug = {
 			.func = debug_func,
 		}
@@ -401,6 +402,7 @@ main(int argc, char **argv)
 		/* TODO do this somewhere else */
 		nir_lower_int64(nir);
 		nir_lower_system_values(nir);
+		nir_lower_compute_system_values(nir, NULL);
 	} else if (num_files > 0) {
 		nir = load_glsl(num_files, filenames, stage);
 	} else {

@@ -59,7 +59,7 @@ static void set_random_pixels(struct pipe_context *ctx,
 	uint8_t *map;
 	unsigned x,y,z;
 
-	map = pipe_transfer_map_3d(ctx, tex, 0, PIPE_TRANSFER_WRITE,
+	map = pipe_transfer_map_3d(ctx, tex, 0, PIPE_MAP_WRITE,
 				   0, 0, 0, tex->width0, tex->height0,
 				   tex->array_size, &t);
 	assert(map);
@@ -94,7 +94,7 @@ static bool compare_textures(struct pipe_context *ctx,
 	int y,z;
 	bool pass = true;
 
-	map = pipe_transfer_map_3d(ctx, tex, 0, PIPE_TRANSFER_READ,
+	map = pipe_transfer_map_3d(ctx, tex, 0, PIPE_MAP_READ,
 				   0, 0, 0, tex->width0, tex->height0,
 				   tex->array_size, &t);
 	assert(map);

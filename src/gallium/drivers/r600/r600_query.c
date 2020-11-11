@@ -527,8 +527,8 @@ static bool r600_query_hw_prepare_buffer(struct r600_common_screen *rscreen,
 {
 	/* Callers ensure that the buffer is currently unused by the GPU. */
 	uint32_t *results = rscreen->ws->buffer_map(buffer->buf, NULL,
-						   PIPE_TRANSFER_WRITE |
-						   PIPE_TRANSFER_UNSYNCHRONIZED);
+						   PIPE_MAP_WRITE |
+						   PIPE_MAP_UNSYNCHRONIZED);
 	if (!results)
 		return false;
 
@@ -1337,8 +1337,8 @@ bool r600_query_hw_get_result(struct r600_common_context *rctx,
 	query->ops->clear_result(query, result);
 
 	for (qbuf = &query->buffer; qbuf; qbuf = qbuf->previous) {
-		unsigned usage = PIPE_TRANSFER_READ |
-				 (wait ? 0 : PIPE_TRANSFER_DONTBLOCK);
+		unsigned usage = PIPE_MAP_READ |
+				 (wait ? 0 : PIPE_MAP_DONTBLOCK);
 		unsigned results_base = 0;
 		void *map;
 
@@ -1896,7 +1896,7 @@ void r600_query_fix_enabled_rb_mask(struct r600_common_screen *rscreen)
 		return;
 
 	/* initialize buffer with zeroes */
-	results = r600_buffer_map_sync_with_rings(ctx, buffer, PIPE_TRANSFER_WRITE);
+	results = r600_buffer_map_sync_with_rings(ctx, buffer, PIPE_MAP_WRITE);
 	if (results) {
 		memset(results, 0, max_rbs * 4 * 4);
 
@@ -1910,7 +1910,7 @@ void r600_query_fix_enabled_rb_mask(struct r600_common_screen *rscreen)
                                 RADEON_USAGE_WRITE, RADEON_PRIO_QUERY);
 
 		/* analyze results */
-		results = r600_buffer_map_sync_with_rings(ctx, buffer, PIPE_TRANSFER_READ);
+		results = r600_buffer_map_sync_with_rings(ctx, buffer, PIPE_MAP_READ);
 		if (results) {
 			for(i = 0; i < max_rbs; i++) {
 				/* at least highest bit will be set if backend is used */

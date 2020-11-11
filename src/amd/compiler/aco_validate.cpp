@@ -27,39 +27,77 @@
 #include <array>
 #include <map>
 
+#include "util/memstream.h"
+
 namespace aco {
 
-#ifndef NDEBUG
-void perfwarn(bool cond, const char *msg, Instruction *instr)
+static void aco_log(Program *program, enum radv_compiler_debug_level level,
+                    const char *prefix, const char *file, unsigned line,
+                    const char *fmt, va_list args)
 {
-   if (cond) {
-      fprintf(stderr, "ACO performance warning: %s\n", msg);
-      if (instr) {
-         fprintf(stderr, "instruction: ");
-         aco_print_instr(instr, stderr);
-         fprintf(stderr, "\n");
-      }
+   char *msg;
 
-      if (debug_flags & DEBUG_PERFWARN)
-         exit(1);
-   }
+   msg = ralloc_strdup(NULL, prefix);
+
+   ralloc_asprintf_append(&msg, "    In file %s:%u\n", file, line);
+   ralloc_asprintf_append(&msg, "    ");
+   ralloc_vasprintf_append(&msg, fmt, args);
+
+   if (program->debug.func)
+      program->debug.func(program->debug.private_data, level, msg);
+
+   fprintf(stderr, "%s\n", msg);
+
+   ralloc_free(msg);
 }
-#endif
 
-bool validate(Program* program, FILE *output)
+void _aco_perfwarn(Program *program, const char *file, unsigned line,
+                   const char *fmt, ...)
+{
+   va_list args;
+
+   va_start(args, fmt);
+   aco_log(program, RADV_COMPILER_DEBUG_LEVEL_PERFWARN,
+           "ACO PERFWARN:\n", file, line, fmt, args);
+   va_end(args);
+}
+
+void _aco_err(Program *program, const char *file, unsigned line,
+              const char *fmt, ...)
+{
+   va_list args;
+
+   va_start(args, fmt);
+   aco_log(program, RADV_COMPILER_DEBUG_LEVEL_ERROR,
+           "ACO ERROR:\n", file, line, fmt, args);
+   va_end(args);
+}
+
+bool validate_ir(Program* program)
 {
    bool is_valid = true;
-   auto check = [&output, &is_valid](bool check, const char * msg, aco::Instruction * instr) -> void {
+   auto check = [&program, &is_valid](bool check, const char * msg, aco::Instruction * instr) -> void {
       if (!check) {
-         fprintf(output, "%s: ", msg);
-         aco_print_instr(instr, output);
-         fprintf(output, "\n");
+         char *out;
+         size_t outsize;
+         struct u_memstream mem;
+         u_memstream_open(&mem, &out, &outsize);
+         FILE *const memf = u_memstream_get(&mem);
+
+         fprintf(memf, "%s: ", msg);
+         aco_print_instr(instr, memf);
+         u_memstream_close(&mem);
+
+         aco_err(program, "%s", out);
+         free(out);
+
          is_valid = false;
       }
    };
-   auto check_block = [&output, &is_valid](bool check, const char * msg, aco::Block * block) -> void {
+
+   auto check_block = [&program, &is_valid](bool check, const char * msg, aco::Block * block) -> void {
       if (!check) {
-         fprintf(output, "%s: BB%u\n", msg, block->index);
+         aco_err(program, "%s: BB%u", msg, block->index);
          is_valid = false;
       }
    };
@@ -289,23 +327,33 @@ bool validate(Program* program, FILE *output)
 
          switch (instr->format) {
          case Format::PSEUDO: {
-            bool is_subdword = false;
-            bool has_const_sgpr = false;
-            bool has_literal = false;
-            for (Definition def : instr->definitions)
-               is_subdword |= def.regClass().is_subdword();
-            for (unsigned i = 0; i < instr->operands.size(); i++) {
-               if (instr->opcode == aco_opcode::p_extract_vector && i == 1)
-                  continue;
-               Operand op = instr->operands[i];
-               is_subdword |= op.hasRegClass() && op.regClass().is_subdword();
-               has_const_sgpr |= op.isConstant() || (op.hasRegClass() && op.regClass().type() == RegType::sgpr);
-               has_literal |= op.isLiteral();
-            }
+            if (instr->opcode == aco_opcode::p_parallelcopy) {
+               for (unsigned i = 0; i < instr->operands.size(); i++) {
+                  if (!instr->definitions[i].regClass().is_subdword())
+                     continue;
+                  Operand op = instr->operands[i];
+                  check(program->chip_class >= GFX9 || !op.isLiteral(), "Sub-dword copies cannot take literals", instr.get());
+                  if (op.isConstant() || (op.hasRegClass() && op.regClass().type() == RegType::sgpr))
+                     check(program->chip_class >= GFX9, "Sub-dword pseudo instructions can only take constants or SGPRs on GFX9+", instr.get());
+               }
+            } else {
+               bool is_subdword = false;
+               bool has_const_sgpr = false;
+               bool has_literal = false;
+               for (Definition def : instr->definitions)
+                  is_subdword |= def.regClass().is_subdword();
+               for (unsigned i = 0; i < instr->operands.size(); i++) {
+                  if (instr->opcode == aco_opcode::p_extract_vector && i == 1)
+                     continue;
+                  Operand op = instr->operands[i];
+                  is_subdword |= op.hasRegClass() && op.regClass().is_subdword();
+                  has_const_sgpr |= op.isConstant() || (op.hasRegClass() && op.regClass().type() == RegType::sgpr);
+                  has_literal |= op.isLiteral();
+               }
 
-            check(!is_subdword || !has_const_sgpr || program->chip_class >= GFX9,
-                  "Sub-dword pseudo instructions can only take constants or SGPRs on GFX9+", instr.get());
-            check(!is_subdword || !has_literal, "Sub-dword pseudo instructions cannot take literals", instr.get());
+               check(!is_subdword || !has_const_sgpr || program->chip_class >= GFX9,
+                     "Sub-dword pseudo instructions can only take constants or SGPRs on GFX9+", instr.get());
+            }
 
             if (instr->opcode == aco_opcode::p_create_vector) {
                unsigned size = 0;
@@ -324,6 +372,17 @@ bool validate(Program* program, FILE *output)
                check((instr->operands[1].constantValue() + 1) * instr->definitions[0].bytes() <= instr->operands[0].bytes(), "Index out of range", instr.get());
                check(instr->definitions[0].getTemp().type() == RegType::vgpr || instr->operands[0].regClass().type() == RegType::sgpr,
                      "Cannot extract SGPR value from VGPR vector", instr.get());
+            } else if (instr->opcode == aco_opcode::p_split_vector) {
+               check(instr->operands[0].isTemp(), "Operand must be a temporary", instr.get());
+               unsigned size = 0;
+               for (const Definition& def : instr->definitions) {
+                  size += def.bytes();
+               }
+               check(size == instr->operands[0].bytes(), "Operand size does not match definition sizes", instr.get());
+               if (instr->operands[0].getTemp().type() == RegType::vgpr) {
+                  for (const Definition& def : instr->definitions)
+                     check(def.regClass().type() == RegType::vgpr, "Wrong Definition type for VGPR split_vector", instr.get());
+               }
             } else if (instr->opcode == aco_opcode::p_parallelcopy) {
                check(instr->definitions.size() == instr->operands.size(), "Number of Operands does not match number of Definitions", instr.get());
                for (unsigned i = 0; i < instr->operands.size(); i++) {
@@ -342,9 +401,23 @@ bool validate(Program* program, FILE *output)
             }
             break;
          }
+         case Format::PSEUDO_REDUCTION: {
+            for (const Operand &op : instr->operands)
+               check(op.regClass().type() == RegType::vgpr, "All operands of PSEUDO_REDUCTION instructions must be in VGPRs.", instr.get());
+
+            unsigned cluster_size = static_cast<Pseudo_reduction_instruction *>(instr.get())->cluster_size;
+
+            if (instr->opcode == aco_opcode::p_reduce && cluster_size == program->wave_size)
+               check(instr->definitions[0].regClass().type() == RegType::sgpr, "The result of unclustered reductions must go into an SGPR.", instr.get());
+            else
+               check(instr->definitions[0].regClass().type() == RegType::vgpr, "The result of scans and clustered reductions must go into a VGPR.", instr.get());
+
+            break;
+         }
          case Format::SMEM: {
             if (instr->operands.size() >= 1)
-               check(instr->operands[0].isTemp() && instr->operands[0].regClass().type() == RegType::sgpr, "SMEM operands must be sgpr", instr.get());
+               check((instr->operands[0].isFixed() && !instr->operands[0].isConstant()) ||
+                     (instr->operands[0].isTemp() && instr->operands[0].regClass().type() == RegType::sgpr), "SMEM operands must be sgpr", instr.get());
             if (instr->operands.size() >= 2)
                check(instr->operands[1].isConstant() || (instr->operands[1].isTemp() && instr->operands[1].regClass().type() == RegType::sgpr),
                      "SMEM offset must be constant or sgpr", instr.get());
@@ -455,25 +528,35 @@ struct Assignment {
    PhysReg reg;
 };
 
-bool ra_fail(FILE *output, Location loc, Location loc2, const char *fmt, ...) {
+bool ra_fail(Program *program, Location loc, Location loc2, const char *fmt, ...) {
    va_list args;
    va_start(args, fmt);
    char msg[1024];
    vsprintf(msg, fmt, args);
    va_end(args);
 
-   fprintf(stderr, "RA error found at instruction in BB%d:\n", loc.block->index);
+   char *out;
+   size_t outsize;
+   struct u_memstream mem;
+   u_memstream_open(&mem, &out, &outsize);
+   FILE *const memf = u_memstream_get(&mem);
+
+   fprintf(memf, "RA error found at instruction in BB%d:\n", loc.block->index);
    if (loc.instr) {
-      aco_print_instr(loc.instr, stderr);
-      fprintf(stderr, "\n%s", msg);
+      aco_print_instr(loc.instr, memf);
+      fprintf(memf, "\n%s", msg);
    } else {
-      fprintf(stderr, "%s", msg);
+      fprintf(memf, "%s", msg);
    }
    if (loc2.block) {
-      fprintf(stderr, " in BB%d:\n", loc2.block->index);
-      aco_print_instr(loc2.instr, stderr);
+      fprintf(memf, " in BB%d:\n", loc2.block->index);
+      aco_print_instr(loc2.instr, memf);
    }
-   fprintf(stderr, "\n\n");
+   fprintf(memf, "\n\n");
+   u_memstream_close(&mem);
+
+   aco_err(program, "%s", out);
+   free(out);
 
    return true;
 }
@@ -610,12 +693,12 @@ unsigned get_subdword_bytes_written(Program *program, const aco_ptr<Instruction>
 
 } /* end namespace */
 
-bool validate_ra(Program *program, const struct radv_nir_compiler_options *options, FILE *output) {
+bool validate_ra(Program *program) {
    if (!(debug_flags & DEBUG_VALIDATE_RA))
       return false;
 
    bool err = false;
-   aco::live live_vars = aco::live_var_analysis(program, options);
+   aco::live live_vars = aco::live_var_analysis(program);
    std::vector<std::vector<Temp>> phi_sgpr_ops(program->blocks.size());
 
    std::map<unsigned, Assignment> assignments;
@@ -638,16 +721,16 @@ bool validate_ra(Program *program, const struct radv_nir_compiler_options *optio
             if (!op.isTemp())
                continue;
             if (!op.isFixed())
-               err |= ra_fail(output, loc, Location(), "Operand %d is not assigned a register", i);
+               err |= ra_fail(program, loc, Location(), "Operand %d is not assigned a register", i);
             if (assignments.count(op.tempId()) && assignments[op.tempId()].reg != op.physReg())
-               err |= ra_fail(output, loc, assignments.at(op.tempId()).firstloc, "Operand %d has an inconsistent register assignment with instruction", i);
+               err |= ra_fail(program, loc, assignments.at(op.tempId()).firstloc, "Operand %d has an inconsistent register assignment with instruction", i);
             if ((op.getTemp().type() == RegType::vgpr && op.physReg().reg_b + op.bytes() > (256 + program->config->num_vgprs) * 4) ||
                 (op.getTemp().type() == RegType::sgpr && op.physReg() + op.size() > program->config->num_sgprs && op.physReg() < program->sgpr_limit))
-               err |= ra_fail(output, loc, assignments.at(op.tempId()).firstloc, "Operand %d has an out-of-bounds register assignment", i);
+               err |= ra_fail(program, loc, assignments.at(op.tempId()).firstloc, "Operand %d has an out-of-bounds register assignment", i);
             if (op.physReg() == vcc && !program->needs_vcc)
-               err |= ra_fail(output, loc, Location(), "Operand %d fixed to vcc but needs_vcc=false", i);
+               err |= ra_fail(program, loc, Location(), "Operand %d fixed to vcc but needs_vcc=false", i);
             if (op.regClass().is_subdword() && !validate_subdword_operand(program->chip_class, instr, i))
-               err |= ra_fail(output, loc, Location(), "Operand %d not aligned correctly", i);
+               err |= ra_fail(program, loc, Location(), "Operand %d not aligned correctly", i);
             if (!assignments[op.tempId()].firstloc.block)
                assignments[op.tempId()].firstloc = loc;
             if (!assignments[op.tempId()].defloc.block)
@@ -659,16 +742,16 @@ bool validate_ra(Program *program, const struct radv_nir_compiler_options *optio
             if (!def.isTemp())
                continue;
             if (!def.isFixed())
-               err |= ra_fail(output, loc, Location(), "Definition %d is not assigned a register", i);
+               err |= ra_fail(program, loc, Location(), "Definition %d is not assigned a register", i);
             if (assignments[def.tempId()].defloc.block)
-               err |= ra_fail(output, loc, assignments.at(def.tempId()).defloc, "Temporary %%%d also defined by instruction", def.tempId());
+               err |= ra_fail(program, loc, assignments.at(def.tempId()).defloc, "Temporary %%%d also defined by instruction", def.tempId());
             if ((def.getTemp().type() == RegType::vgpr && def.physReg().reg_b + def.bytes() > (256 + program->config->num_vgprs) * 4) ||
                 (def.getTemp().type() == RegType::sgpr && def.physReg() + def.size() > program->config->num_sgprs && def.physReg() < program->sgpr_limit))
-               err |= ra_fail(output, loc, assignments.at(def.tempId()).firstloc, "Definition %d has an out-of-bounds register assignment", i);
+               err |= ra_fail(program, loc, assignments.at(def.tempId()).firstloc, "Definition %d has an out-of-bounds register assignment", i);
             if (def.physReg() == vcc && !program->needs_vcc)
-               err |= ra_fail(output, loc, Location(), "Definition %d fixed to vcc but needs_vcc=false", i);
+               err |= ra_fail(program, loc, Location(), "Definition %d fixed to vcc but needs_vcc=false", i);
             if (def.regClass().is_subdword() && !validate_subdword_definition(program->chip_class, instr))
-               err |= ra_fail(output, loc, Location(), "Definition %d not aligned correctly", i);
+               err |= ra_fail(program, loc, Location(), "Definition %d not aligned correctly", i);
             if (!assignments[def.tempId()].firstloc.block)
                assignments[def.tempId()].firstloc = loc;
             assignments[def.tempId()].defloc = loc;
@@ -685,7 +768,8 @@ bool validate_ra(Program *program, const struct radv_nir_compiler_options *optio
       regs.fill(0);
 
       std::set<Temp> live;
-      live.insert(live_vars.live_out[block.index].begin(), live_vars.live_out[block.index].end());
+      for (unsigned id : live_vars.live_out[block.index])
+         live.insert(Temp(id, program->temp_rc[id]));
       /* remove killed p_phi sgpr operands */
       for (Temp tmp : phi_sgpr_ops[block.index])
          live.erase(tmp);
@@ -695,7 +779,7 @@ bool validate_ra(Program *program, const struct radv_nir_compiler_options *optio
          PhysReg reg = assignments.at(tmp.id()).reg;
          for (unsigned i = 0; i < tmp.bytes(); i++) {
             if (regs[reg.reg_b + i]) {
-               err |= ra_fail(output, loc, Location(), "Assignment of element %d of %%%d already taken by %%%d in live-out", i, tmp.id(), regs[reg.reg_b + i]);
+               err |= ra_fail(program, loc, Location(), "Assignment of element %d of %%%d already taken by %%%d in live-out", i, tmp.id(), regs[reg.reg_b + i]);
             }
             regs[reg.reg_b + i] = tmp.id();
          }
@@ -711,7 +795,7 @@ bool validate_ra(Program *program, const struct radv_nir_compiler_options *optio
                PhysReg reg = assignments.at(tmp.id()).reg;
                for (unsigned i = 0; i < tmp.bytes(); i++) {
                   if (regs[reg.reg_b + i])
-                     err |= ra_fail(output, loc, Location(), "Assignment of element %d of %%%d already taken by %%%d in live-out", i, tmp.id(), regs[reg.reg_b + i]);
+                     err |= ra_fail(program, loc, Location(), "Assignment of element %d of %%%d already taken by %%%d in live-out", i, tmp.id(), regs[reg.reg_b + i]);
                }
                live.emplace(tmp);
             }
@@ -771,7 +855,7 @@ bool validate_ra(Program *program, const struct radv_nir_compiler_options *optio
             PhysReg reg = assignments.at(tmp.id()).reg;
             for (unsigned j = 0; j < tmp.bytes(); j++) {
                if (regs[reg.reg_b + j])
-                  err |= ra_fail(output, loc, assignments.at(regs[reg.reg_b + j]).defloc, "Assignment of element %d of %%%d already taken by %%%d from instruction", i, tmp.id(), regs[reg.reg_b + j]);
+                  err |= ra_fail(program, loc, assignments.at(regs[reg.reg_b + j]).defloc, "Assignment of element %d of %%%d already taken by %%%d from instruction", i, tmp.id(), regs[reg.reg_b + j]);
                regs[reg.reg_b + j] = tmp.id();
             }
             if (def.regClass().is_subdword() && def.bytes() < 4) {
@@ -780,7 +864,7 @@ bool validate_ra(Program *program, const struct radv_nir_compiler_options *optio
                for (unsigned j = reg.byte() & ~(written - 1); j < written; j++) {
                   unsigned written_reg = reg.reg() * 4u + j;
                   if (regs[written_reg] && regs[written_reg] != def.tempId())
-                     err |= ra_fail(output, loc, assignments.at(regs[written_reg]).defloc, "Assignment of element %d of %%%d overwrites the full register taken by %%%d from instruction", i, tmp.id(), regs[written_reg]);
+                     err |= ra_fail(program, loc, assignments.at(regs[written_reg]).defloc, "Assignment of element %d of %%%d overwrites the full register taken by %%%d from instruction", i, tmp.id(), regs[written_reg]);
                }
             }
          }

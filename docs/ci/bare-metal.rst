@@ -1,15 +1,15 @@
 Bare-metal CI
 =============
 
-The bare-metal scripts run on a system with gitlab-runner and docker,
+The bare-metal scripts run on a system with gitlab-runner and Docker,
 connected to potentially multiple bare-metal boards that run tests of
 Mesa.  Currently only "fastboot" and "ChromeOS Servo" devices are
 supported.
 
 In comparison with LAVA, this doesn't involve maintaining a separate
-webservice with its own job scheduler and replicating jobs between the
-two.  It also places more of the board support in git, instead of
-webservice configuration.  On the other hand, the serial interactions
+web service with its own job scheduler and replicating jobs between the
+two.  It also places more of the board support in Git, instead of
+web service configuration.  On the other hand, the serial interactions
 and bootloader support are more primitive.
 
 Requirements (fastboot)
@@ -29,7 +29,7 @@ gitlab-runner system, since the initramfs is what contains the Mesa
 testing payload.
 
 The boards should have networking, so that we can extract the dEQP .xml
-results to artifacts on gitlab.
+results to artifacts on GitLab.
 
 Requirements (servo)
 --------------------
@@ -71,7 +71,7 @@ call "servo"::
 Setup
 -----
 
-Each board will be registered in fd.o gitlab.  You'll want something
+Each board will be registered in fd.o GitLab.  You'll want something
 like this to register a fastboot board:
 
 .. code-block:: console
@@ -91,7 +91,7 @@ like this to register a fastboot board:
 For a servo board, you'll need to also volume mount the board's NFS
 root dir at /nfs and TFTP kernel directory at /tftp.
 
-The registration token has to come from a fd.o gitlab admin going to
+The registration token has to come from a fd.o GitLab admin going to
 https://gitlab.freedesktop.org/admin/runners
 
 The name scheme for Google's lab is google-freedreno-boardname-n, and
@@ -120,7 +120,7 @@ required by your bare-metal script, something like::
 
 If you want to collect the results for fastboot you need to add the following
 two board-specific environment variables ``BM_WEBDAV_IP`` and ``BM_WEBDAV_PORT``.
-These represent the IP address of the docker host and the board specific port number
+These represent the IP address of the Docker host and the board specific port number
 that gets used to start a nginx server.
 
 Once you've updated your runners' configs, restart with ``sudo service

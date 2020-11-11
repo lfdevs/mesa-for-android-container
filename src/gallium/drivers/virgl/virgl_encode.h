@@ -27,7 +27,7 @@
 #include "pipe/p_state.h"
 
 #include "virgl_winsys.h"
-#include "virgl_protocol.h"
+#include "virtio-gpu/virgl_protocol.h"
 
 struct tgsi_token;
 

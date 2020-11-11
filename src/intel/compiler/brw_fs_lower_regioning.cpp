@@ -256,6 +256,12 @@ namespace brw {
    lower_src_modifiers(fs_visitor *v, bblock_t *block, fs_inst *inst, unsigned i)
    {
       assert(inst->components_read(i) == 1);
+      assert(v->devinfo->has_integer_dword_mul ||
+             inst->opcode != BRW_OPCODE_MUL ||
+             brw_reg_type_is_floating_point(get_exec_type(inst)) ||
+             MIN2(type_sz(inst->src[0].type), type_sz(inst->src[1].type)) >= 4 ||
+             type_sz(inst->src[i].type) == get_exec_type_size(inst));
+
       const fs_builder ibld(v, block, inst);
       const fs_reg tmp = ibld.vgrf(get_exec_type(inst));
 

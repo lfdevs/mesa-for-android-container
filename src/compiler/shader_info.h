@@ -32,6 +32,8 @@
 extern "C" {
 #endif
 
+#define MAX_INLINABLE_UNIFORMS 4
+
 struct spirv_supported_capabilities {
    bool address;
    bool atomic_storage;
@@ -47,20 +49,27 @@ struct spirv_supported_capabilities {
    bool float64_atomic_add;
    bool fragment_shader_sample_interlock;
    bool fragment_shader_pixel_interlock;
+   bool generic_pointers;
    bool geometry_streams;
    bool image_ms_array;
    bool image_read_without_format;
    bool image_write_without_format;
+   bool image_atomic_int64;
    bool int8;
    bool int16;
    bool int64;
    bool int64_atomics;
    bool integer_functions2;
    bool kernel;
+   bool kernel_image;
+   bool literal_sampler;
    bool min_lod;
    bool multiview;
    bool physical_storage_buffer_address;
    bool post_depth_coverage;
+   bool ray_tracing;
+   bool ray_query;
+   bool ray_traversal_primitive_culling;
    bool runtime_descriptor_array;
    bool float_controls;
    bool shader_clock;
@@ -88,6 +97,9 @@ struct spirv_supported_capabilities {
    bool amd_image_read_write_lod;
    bool amd_shader_explicit_vertex_parameter;
    bool amd_image_gather_bias_lod;
+
+   bool intel_subgroup_shuffle;
+   bool intel_subgroup_buffer_block_io;
 };
 
 typedef struct shader_info {
@@ -95,6 +107,9 @@ typedef struct shader_info {
 
    /* Descriptive name provided by the client; may be NULL */
    const char *label;
+
+   /* Shader is internal, and should be ignored by things like NIR_PRINT */
+   bool internal;
 
    /** The shader stage, such as MESA_SHADER_VERTEX. */
    gl_shader_stage stage:8;
@@ -160,6 +175,9 @@ typedef struct shader_info {
    /* SPV_KHR_float_controls: execution mode for floating point ops */
    uint16_t float_controls_execution_mode;
 
+   uint16_t inlinable_uniform_dw_offsets[MAX_INLINABLE_UNIFORMS];
+   uint8_t num_inlinable_uniforms:4;
+
    /* The size of the gl_ClipDistance[] array, if declared. */
    uint8_t clip_distance_array_size:4;
 
@@ -176,10 +194,9 @@ typedef struct shader_info {
     */
    bool uses_fddx_fddy:1;
 
-   /**
-    * True if this shader uses 64-bit ALU operations
-    */
-   bool uses_64bit:1;
+   /* Bitmask of bit-sizes used with ALU instructions. */
+   uint8_t bit_sizes_float;
+   uint8_t bit_sizes_int;
 
    /* Whether the first UBO is the default uniform buffer, i.e. uniforms. */
    bool first_ubo_is_default_ubo:1;
@@ -192,6 +209,11 @@ typedef struct shader_info {
 
    /* Whether flrp has been lowered. */
    bool flrp_lowered:1;
+
+   /* Whether nir_lower_io has been called to lower derefs.
+    * nir_variables for inputs and outputs might not be present in the IR.
+    */
+   bool io_lowered:1;
 
    /* Whether the shader writes memory, including transform feedback. */
    bool writes_memory:1;
@@ -234,13 +256,15 @@ typedef struct shader_info {
          /** Whether or not this shader uses EndPrimitive */
          bool uses_end_primitive:1;
 
-         /** Whether or not this shader uses non-zero streams */
-         bool uses_streams:1;
+         /** The streams used in this shaders (max. 4) */
+         uint8_t active_stream_mask:4;
       } gs;
 
       struct {
          bool uses_discard:1;
          bool uses_demote:1;
+         bool uses_fbfetch_output:1;
+         bool color_is_dual_source:1;
 
          /**
           * True if this fragment shader requires helper invocations.  This
@@ -302,6 +326,17 @@ typedef struct shader_info {
 
          /** gl_FragDepth layout for ARB_conservative_depth. */
          enum gl_frag_depth_layout depth_layout:3;
+
+         /**
+          * Interpolation qualifiers for drivers that lowers color inputs
+          * to system values.
+          */
+         unsigned color0_interp:3; /* glsl_interp_mode */
+         bool color0_sample:1;
+         bool color0_centroid:1;
+         unsigned color1_interp:3; /* glsl_interp_mode */
+         bool color1_sample:1;
+         bool color1_centroid:1;
       } fs;
 
       struct {

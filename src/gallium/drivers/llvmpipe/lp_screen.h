@@ -62,6 +62,7 @@ struct llvmpipe_screen
    mtx_t cs_mutex;
 
    bool use_tgsi;
+   bool allow_cl;
 
    struct disk_cache *disk_shader_cache;
    unsigned num_disk_shader_cache_hits;

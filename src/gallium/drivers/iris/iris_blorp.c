@@ -183,7 +183,8 @@ blorp_alloc_vertex_buffer(struct blorp_batch *blorp_batch,
    *addr = (struct blorp_address) {
       .buffer = bo,
       .offset = offset,
-      .mocs = iris_mocs(bo, &batch->screen->isl_dev),
+      .mocs = iris_mocs(bo, &batch->screen->isl_dev,
+                        ISL_SURF_USAGE_VERTEX_BUFFER_BIT),
    };
 
    return map;

@@ -703,6 +703,12 @@ bool v3d_line_smoothing_enabled(struct v3d_context *v3d);
 
 float v3d_get_real_line_width(struct v3d_context *v3d);
 
+void v3d_flag_dirty_sampler_state(struct v3d_context *v3d,
+                                  enum pipe_shader_type shader);
+
+void v3d_create_texture_shader_state_bo(struct v3d_context *v3d,
+                                        struct v3d_sampler_view *so);
+
 #ifdef v3dX
 #  include "v3dx_context.h"
 #else

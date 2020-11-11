@@ -27,13 +27,18 @@
 #include "zink_context.h"
 #include "zink_screen.h"
 
+#include "vulkan/wsi/wsi_common.h"
+
 #include "util/slab.h"
 #include "util/u_debug.h"
 #include "util/format/u_format.h"
+#include "util/u_transfer_helper.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 
 #include "frontend/sw_winsys.h"
+
+#include "drm-uapi/drm_fourcc.h"
 
 static void
 zink_resource_destroy(struct pipe_screen *pscreen,
@@ -57,7 +62,7 @@ get_memory_type_index(struct zink_screen *screen,
 {
    for (uint32_t i = 0u; i < VK_MAX_MEMORY_TYPES; i++) {
       if (((reqs->memoryTypeBits >> i) & 1) == 1) {
-         if ((screen->mem_props.memoryTypes[i].propertyFlags & props) == props) {
+         if ((screen->info.mem_props.memoryTypes[i].propertyFlags & props) == props) {
             return i;
             break;
          }
@@ -99,6 +104,8 @@ resource_create(struct pipe_screen *pscreen,
 
    VkMemoryRequirements reqs;
    VkMemoryPropertyFlags flags = 0;
+
+   res->internal_format = templ->format;
    if (templ->target == PIPE_BUFFER) {
       VkBufferCreateInfo bci = {};
       bci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -107,8 +114,13 @@ resource_create(struct pipe_screen *pscreen,
       bci.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
                   VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
+      if (templ->bind & PIPE_BIND_SAMPLER_VIEW)
+         bci.usage |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+
       if (templ->bind & PIPE_BIND_VERTEX_BUFFER)
-         bci.usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+         bci.usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                      VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                      VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
 
       if (templ->bind & PIPE_BIND_INDEX_BUFFER)
          bci.usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
@@ -215,6 +227,15 @@ resource_create(struct pipe_screen *pscreen,
       ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
       res->layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
+      struct wsi_image_create_info image_wsi_info = {
+         VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA,
+         NULL,
+         .scanout = true,
+      };
+
+      if (templ->bind & PIPE_BIND_SCANOUT)
+         ici.pNext = &image_wsi_info;
+
       VkResult result = vkCreateImage(screen->dev, &ici, NULL, &res->image);
       if (result != VK_SUCCESS) {
          FREE(res);
@@ -240,6 +261,8 @@ resource_create(struct pipe_screen *pscreen,
    if (templ->bind & PIPE_BIND_SHARED) {
       emai.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
       emai.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+
+      emai.pNext = mai.pNext;
       mai.pNext = &emai;
    }
 
@@ -253,7 +276,20 @@ resource_create(struct pipe_screen *pscreen,
       imfi.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
       imfi.fd = whandle->handle;
 
+      imfi.pNext = mai.pNext;
       emai.pNext = &imfi;
+   }
+
+   struct wsi_memory_allocate_info memory_wsi_info = {
+      VK_STRUCTURE_TYPE_WSI_MEMORY_ALLOCATE_INFO_MESA,
+      NULL,
+   };
+
+   if (templ->bind & PIPE_BIND_SCANOUT) {
+      memory_wsi_info.implicit_sync = true;
+
+      memory_wsi_info.pNext = mai.pNext;
+      mai.pNext = &memory_wsi_info;
    }
 
    if (vkAllocateMemory(screen->dev, &mai, NULL, &res->mem) != VK_SUCCESS)
@@ -331,6 +367,7 @@ zink_resource_get_handle(struct pipe_screen *pscreen,
       if (result != VK_SUCCESS)
          return false;
       whandle->handle = fd;
+      whandle->modifier = DRM_FORMAT_MOD_INVALID;
    }
    return true;
 }
@@ -341,19 +378,10 @@ zink_resource_from_handle(struct pipe_screen *pscreen,
                  struct winsys_handle *whandle,
                  unsigned usage)
 {
+   if (whandle->modifier != DRM_FORMAT_MOD_INVALID)
+      return NULL;
+
    return resource_create(pscreen, templ, whandle, usage);
-}
-
-void
-zink_screen_resource_init(struct pipe_screen *pscreen)
-{
-   pscreen->resource_create = zink_resource_create;
-   pscreen->resource_destroy = zink_resource_destroy;
-
-   if (zink_screen(pscreen)->have_KHR_external_memory_fd) {
-      pscreen->resource_get_handle = zink_resource_get_handle;
-      pscreen->resource_from_handle = zink_resource_from_handle;
-   }
 }
 
 static bool
@@ -397,14 +425,34 @@ zink_transfer_copy_bufimage(struct zink_context *ctx,
    copyRegion.imageExtent.width = trans->base.box.width;
    copyRegion.imageExtent.height = trans->base.box.height;
 
-   zink_batch_reference_resoure(batch, res);
-   zink_batch_reference_resoure(batch, staging_res);
+   zink_batch_reference_resource_rw(batch, res, buf2img);
+   zink_batch_reference_resource_rw(batch, staging_res, !buf2img);
 
-   unsigned aspects = res->aspect;
+   /* we're using u_transfer_helper_deinterleave, which means we'll be getting PIPE_MAP_* usage
+    * to indicate whether to copy either the depth or stencil aspects
+    */
+   unsigned aspects = 0;
+   assert((trans->base.usage & (PIPE_MAP_DEPTH_ONLY | PIPE_MAP_STENCIL_ONLY)) !=
+          (PIPE_MAP_DEPTH_ONLY | PIPE_MAP_STENCIL_ONLY));
+   if (trans->base.usage & PIPE_MAP_DEPTH_ONLY)
+      aspects = VK_IMAGE_ASPECT_DEPTH_BIT;
+   else if (trans->base.usage & PIPE_MAP_STENCIL_ONLY)
+      aspects = VK_IMAGE_ASPECT_STENCIL_BIT;
+   else {
+      aspects = aspect_from_format(res->base.format);
+   }
    while (aspects) {
       int aspect = 1 << u_bit_scan(&aspects);
       copyRegion.imageSubresource.aspectMask = aspect;
 
+      /* this may or may not work with multisampled depth/stencil buffers depending on the driver implementation:
+       *
+       * srcImage must have a sample count equal to VK_SAMPLE_COUNT_1_BIT
+       * - vkCmdCopyImageToBuffer spec
+       *
+       * dstImage must have a sample count equal to VK_SAMPLE_COUNT_1_BIT
+       * - vkCmdCopyBufferToImage spec
+       */
       if (buf2img)
          vkCmdCopyBufferToImage(batch->cmdbuf, staging_res->buffer, res->image, res->layout, 1, &copyRegion);
       else
@@ -412,6 +460,15 @@ zink_transfer_copy_bufimage(struct zink_context *ctx,
    }
 
    return true;
+}
+
+static uint32_t
+get_resource_usage(struct zink_resource *res)
+{
+   uint32_t batch_uses = 0;
+   for (unsigned i = 0; i < 4; i++)
+      batch_uses |= p_atomic_read(&res->batch_uses[i]) << i;
+   return batch_uses;
 }
 
 static void *
@@ -425,6 +482,7 @@ zink_transfer_map(struct pipe_context *pctx,
    struct zink_context *ctx = zink_context(pctx);
    struct zink_screen *screen = zink_screen(pctx->screen);
    struct zink_resource *res = zink_resource(pres);
+   uint32_t batch_uses = get_resource_usage(res);
 
    struct zink_transfer *trans = slab_alloc(&ctx->transfer_pool);
    if (!trans)
@@ -440,17 +498,14 @@ zink_transfer_map(struct pipe_context *pctx,
 
    void *ptr;
    if (pres->target == PIPE_BUFFER) {
-      if (usage & PIPE_TRANSFER_READ) {
-         /* need to wait for rendering to finish
-          * TODO: optimize/fix this to be much less obtrusive
-          * mesa/mesa#2966
-          */
-         struct pipe_fence_handle *fence = NULL;
-         pctx->flush(pctx, &fence, PIPE_FLUSH_HINT_FINISH);
-         if (fence) {
-            pctx->screen->fence_finish(pctx->screen, NULL, fence,
-                                       PIPE_TIMEOUT_INFINITE);
-            pctx->screen->fence_reference(pctx->screen, &fence, NULL);
+      if (!(usage & PIPE_MAP_UNSYNCHRONIZED)) {
+         if ((usage & PIPE_MAP_READ && batch_uses >= ZINK_RESOURCE_ACCESS_WRITE) ||
+             (usage & PIPE_MAP_WRITE && batch_uses)) {
+            /* need to wait for rendering to finish
+             * TODO: optimize/fix this to be much less obtrusive
+             * mesa/mesa#2966
+             */
+            zink_fence_wait(pctx);
          }
       }
 
@@ -459,17 +514,42 @@ zink_transfer_map(struct pipe_context *pctx,
       if (result != VK_SUCCESS)
          return NULL;
 
+#if defined(__APPLE__)
+      if (!(usage & PIPE_MAP_DISCARD_WHOLE_RESOURCE)) {
+         // Work around for MoltenVk limitation
+         // MoltenVk returns blank memory ranges when there should be data present
+         // This is a known limitation of MoltenVK.
+         // See https://github.com/KhronosGroup/MoltenVK/blob/master/Docs/MoltenVK_Runtime_UserGuide.md#known-moltenvk-limitations
+         VkMappedMemoryRange range = {
+            VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            NULL,
+            res->mem,
+            res->offset,
+            res->size
+         };
+         result = vkFlushMappedMemoryRanges(screen->dev, 1, &range);
+         if (result != VK_SUCCESS)
+            return NULL;
+      }
+#endif
+
       trans->base.stride = 0;
       trans->base.layer_stride = 0;
       ptr = ((uint8_t *)ptr) + box->x;
    } else {
       if (res->optimial_tiling || ((res->base.usage != PIPE_USAGE_STAGING))) {
-         trans->base.stride = util_format_get_stride(pres->format, box->width);
-         trans->base.layer_stride = util_format_get_2d_size(pres->format,
+         enum pipe_format format = pres->format;
+         if (usage & PIPE_MAP_DEPTH_ONLY)
+            format = util_format_get_depth_only(pres->format);
+         else if (usage & PIPE_MAP_STENCIL_ONLY)
+            format = PIPE_FORMAT_S8_UINT;
+         trans->base.stride = util_format_get_stride(format, box->width);
+         trans->base.layer_stride = util_format_get_2d_size(format,
                                                             trans->base.stride,
                                                             box->height);
 
          struct pipe_resource templ = *pres;
+         templ.format = format;
          templ.usage = PIPE_USAGE_STAGING;
          templ.target = PIPE_BUFFER;
          templ.bind = 0;
@@ -485,7 +565,7 @@ zink_transfer_map(struct pipe_context *pctx,
 
          struct zink_resource *staging_res = zink_resource(trans->staging_res);
 
-         if (usage & PIPE_TRANSFER_READ) {
+         if (usage & PIPE_MAP_READ) {
             struct zink_context *ctx = zink_context(pctx);
             bool ret = zink_transfer_copy_bufimage(ctx, res,
                                                    staging_res, trans,
@@ -494,13 +574,7 @@ zink_transfer_map(struct pipe_context *pctx,
                return NULL;
 
             /* need to wait for rendering to finish */
-            struct pipe_fence_handle *fence = NULL;
-            pctx->flush(pctx, &fence, PIPE_FLUSH_HINT_FINISH);
-            if (fence) {
-               pctx->screen->fence_finish(pctx->screen, NULL, fence,
-                                          PIPE_TIMEOUT_INFINITE);
-               pctx->screen->fence_reference(pctx->screen, &fence, NULL);
-            }
+            zink_fence_wait(pctx);
          }
 
          VkResult result = vkMapMemory(screen->dev, staging_res->mem,
@@ -511,6 +585,8 @@ zink_transfer_map(struct pipe_context *pctx,
 
       } else {
          assert(!res->optimial_tiling);
+         if (batch_uses >= ZINK_RESOURCE_ACCESS_WRITE)
+            zink_fence_wait(pctx);
          VkResult result = vkMapMemory(screen->dev, res->mem, res->offset, res->size, 0, &ptr);
          if (result != VK_SUCCESS)
             return NULL;
@@ -545,9 +621,11 @@ zink_transfer_unmap(struct pipe_context *pctx,
       struct zink_resource *staging_res = zink_resource(trans->staging_res);
       vkUnmapMemory(screen->dev, staging_res->mem);
 
-      if (trans->base.usage & PIPE_TRANSFER_WRITE) {
+      if (trans->base.usage & PIPE_MAP_WRITE) {
          struct zink_context *ctx = zink_context(pctx);
-
+         uint32_t batch_uses = get_resource_usage(res);
+         if (batch_uses >= ZINK_RESOURCE_ACCESS_WRITE)
+            zink_fence_wait(pctx);
          zink_transfer_copy_bufimage(ctx, res, staging_res, trans, true);
       }
 
@@ -559,13 +637,119 @@ zink_transfer_unmap(struct pipe_context *pctx,
    slab_free(&ctx->transfer_pool, ptrans);
 }
 
+static struct pipe_resource *
+zink_resource_get_separate_stencil(struct pipe_resource *pres)
+{
+   /* For packed depth-stencil, we treat depth as the primary resource
+    * and store S8 as the "second plane" resource.
+    */
+   if (pres->next && pres->next->format == PIPE_FORMAT_S8_UINT)
+      return pres->next;
+
+   return NULL;
+
+}
+
+void
+zink_resource_setup_transfer_layouts(struct zink_batch *batch, struct zink_resource *src, struct zink_resource *dst)
+{
+   if (src == dst) {
+      /* The Vulkan 1.1 specification says the following about valid usage
+       * of vkCmdBlitImage:
+       *
+       * "srcImageLayout must be VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR,
+       *  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL or VK_IMAGE_LAYOUT_GENERAL"
+       *
+       * and:
+       *
+       * "dstImageLayout must be VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR,
+       *  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL or VK_IMAGE_LAYOUT_GENERAL"
+       *
+       * Since we cant have the same image in two states at the same time,
+       * we're effectively left with VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR or
+       * VK_IMAGE_LAYOUT_GENERAL. And since this isn't a present-related
+       * operation, VK_IMAGE_LAYOUT_GENERAL seems most appropriate.
+       */
+      if (src->layout != VK_IMAGE_LAYOUT_GENERAL)
+         zink_resource_barrier(batch->cmdbuf, src, src->aspect,
+                               VK_IMAGE_LAYOUT_GENERAL);
+   } else {
+      if (src->layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+         zink_resource_barrier(batch->cmdbuf, src, src->aspect,
+                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+      if (dst->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+         zink_resource_barrier(batch->cmdbuf, dst, dst->aspect,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+   }
+}
+
+void
+zink_get_depth_stencil_resources(struct pipe_resource *res,
+                                 struct zink_resource **out_z,
+                                 struct zink_resource **out_s)
+{
+   if (!res) {
+      if (out_z) *out_z = NULL;
+      if (out_s) *out_s = NULL;
+      return;
+   }
+
+   if (res->format != PIPE_FORMAT_S8_UINT) {
+      if (out_z) *out_z = zink_resource(res);
+      if (out_s) *out_s = zink_resource(zink_resource_get_separate_stencil(res));
+   } else {
+      if (out_z) *out_z = NULL;
+      if (out_s) *out_s = zink_resource(res);
+   }
+}
+
+static void
+zink_resource_set_separate_stencil(struct pipe_resource *pres,
+                                   struct pipe_resource *stencil)
+{
+   assert(util_format_has_depth(util_format_description(pres->format)));
+   pipe_resource_reference(&pres->next, stencil);
+}
+
+static enum pipe_format
+zink_resource_get_internal_format(struct pipe_resource *pres)
+{
+   struct zink_resource *res = zink_resource(pres);
+   return res->internal_format;
+}
+
+static const struct u_transfer_vtbl transfer_vtbl = {
+   .resource_create       = zink_resource_create,
+   .resource_destroy      = zink_resource_destroy,
+   .transfer_map          = zink_transfer_map,
+   .transfer_unmap        = zink_transfer_unmap,
+   .transfer_flush_region = u_default_transfer_flush_region,
+   .get_internal_format   = zink_resource_get_internal_format,
+   .set_stencil           = zink_resource_set_separate_stencil,
+   .get_stencil           = zink_resource_get_separate_stencil,
+};
+
+void
+zink_screen_resource_init(struct pipe_screen *pscreen)
+{
+   pscreen->resource_create = zink_resource_create;
+   pscreen->resource_destroy = zink_resource_destroy;
+   pscreen->transfer_helper = u_transfer_helper_create(&transfer_vtbl, true, true, false, false);
+
+   if (zink_screen(pscreen)->info.have_KHR_external_memory_fd) {
+      pscreen->resource_get_handle = zink_resource_get_handle;
+      pscreen->resource_from_handle = zink_resource_from_handle;
+   }
+}
+
 void
 zink_context_resource_init(struct pipe_context *pctx)
 {
-   pctx->transfer_map = zink_transfer_map;
-   pctx->transfer_unmap = zink_transfer_unmap;
+   pctx->transfer_map = u_transfer_helper_deinterleave_transfer_map;
+   pctx->transfer_unmap = u_transfer_helper_deinterleave_transfer_unmap;
 
-   pctx->transfer_flush_region = u_default_transfer_flush_region;
+   pctx->transfer_flush_region = u_transfer_helper_transfer_flush_region;
    pctx->buffer_subdata = u_default_buffer_subdata;
    pctx->texture_subdata = u_default_texture_subdata;
 }

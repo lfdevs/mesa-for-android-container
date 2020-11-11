@@ -29,6 +29,7 @@ sources = ['libgl_gdi.c']
 drivers = []
 
 if True:
+    env.Append(CPPDEFINES = ['GALLIUM_SOFTPIPE'])
     drivers += [softpipe]
 
 if env['llvm']:

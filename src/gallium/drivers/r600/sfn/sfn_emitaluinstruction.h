@@ -51,7 +51,7 @@ private:
 
    bool do_emit(nir_instr* instr) override;
 
-   void split_constants(const nir_alu_instr& instr);
+   void split_constants(const nir_alu_instr& instr, unsigned nsrc_comp);
 
    bool emit_mov(const nir_alu_instr& instr);
    bool emit_alu_op1(const nir_alu_instr& instr, EAluOp opcode, const AluOpFlags &flags = 0);
@@ -86,6 +86,7 @@ private:
    bool emit_discard_if(const nir_intrinsic_instr *instr);
 
    bool emit_find_msb(const nir_alu_instr& instr, bool sgn);
+   bool emit_alu_f2b32(const nir_alu_instr& instr);
    bool emit_b2i32(const nir_alu_instr& instr);
    bool emit_alu_f2i32_or_u32(const nir_alu_instr& instr, EAluOp op);
    bool emit_pack_64_2x32_split(const nir_alu_instr& instr);
@@ -100,10 +101,15 @@ private:
 
 private:
    void make_last(AluInstruction *ir) const;
-   void split_alu_modifiers(const nir_alu_src &src, GPRVector::Values& s, GPRVector::Values& v, int ncomp);
+   void split_alu_modifiers(const nir_alu_src &src, const GPRVector::Values& v,
+                            GPRVector::Values& out, int ncomp);
+
+   void preload_src(const nir_alu_instr& instr);
+   unsigned num_src_comp(const nir_alu_instr& instr);
 
    using vreg = std::array<PValue, 4>;
 
+   std::array<PValue, 4> m_src[4];
 };
 
 inline void EmitAluInstruction::make_last(AluInstruction *ir) const

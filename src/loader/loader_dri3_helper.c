@@ -1009,7 +1009,7 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
        */
       ++draw->send_sbc;
       if (target_msc == 0 && divisor == 0 && remainder == 0)
-         target_msc = draw->msc + draw->swap_interval *
+         target_msc = draw->msc + abs(draw->swap_interval) *
                       (draw->send_sbc - draw->recv_sbc);
       else if (divisor == 0 && remainder > 0) {
          /* From the GLX_OML_sync_control spec:
@@ -1029,11 +1029,19 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
        *     "If <interval> is set to a value of 0, buffer swaps are not
        *      synchronized to a video frame."
        *
+       * From GLX_EXT_swap_control_tear:
+       *
+       *     "If <interval> is negative, the minimum number of video frames
+       *      between buffer swaps is the absolute value of <interval>. In this
+       *      case, if abs(<interval>) video frames have already passed from
+       *      the previous swap when the swap is ready to be performed, the
+       *      swap will occur without synchronization to a video frame."
+       *
        * Implementation note: It is possible to enable triple buffering
        * behaviour by not using XCB_PRESENT_OPTION_ASYNC, but this should not be
        * the default.
        */
-      if (draw->swap_interval == 0)
+      if (draw->swap_interval <= 0)
           options |= XCB_PRESENT_OPTION_ASYNC;
 
       /* If we need to populate the new back, but need to reuse the back
@@ -1411,7 +1419,9 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int format,
                                                        format,
                                                        __DRI_IMAGE_USE_SHARE |
                                                        __DRI_IMAGE_USE_SCANOUT |
-                                                       __DRI_IMAGE_USE_BACKBUFFER,
+                                                       __DRI_IMAGE_USE_BACKBUFFER |
+                                                       (draw->is_protected_content ?
+                                                         __DRI_IMAGE_USE_PROTECTED : 0),
                                                        buffer);
 
       pixmap_buffer = buffer->image;

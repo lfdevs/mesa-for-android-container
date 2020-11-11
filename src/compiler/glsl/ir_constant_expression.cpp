@@ -955,6 +955,19 @@ ir_dereference_array::constant_expression_value(void *mem_ctx,
 
          const glsl_type *const column_type = array->type->column_type();
 
+         /* Section 5.11 (Out-of-Bounds Accesses) of the GLSL 4.60 spec says:
+          *
+          *    In the subsections described above for array, vector, matrix and
+          *    structure accesses, any out-of-bounds access produced undefined
+          *    behavior....Out-of-bounds reads return undefined values, which
+          *    include values from other variables of the active program or zero.
+          */
+         if (idx->value.i[0] < 0 || column >= array->type->matrix_columns) {
+            ir_constant_data data = { { 0 } };
+
+            return new(mem_ctx) ir_constant(column_type, &data);
+         }
+
          /* Offset in the constant matrix to the first element of the column
           * to be extracted.
           */

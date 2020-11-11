@@ -43,7 +43,6 @@ LAYERS = [
     'gen75',
     'gen8',
     'gen9',
-    'gen10',
     'gen11',
     'gen12',
 ]
@@ -523,9 +522,6 @@ anv_resolve_device_entrypoint(const struct gen_device_info *devinfo, uint32_t in
       break;
    case 11:
       genX_table = &gen11_device_dispatch_table;
-      break;
-   case 10:
-      genX_table = &gen10_device_dispatch_table;
       break;
    case 9:
       genX_table = &gen9_device_dispatch_table;

@@ -107,6 +107,7 @@
 #define RDECODE_MESSAGE_NOT_SUPPORTED                       0x00000000
 #define RDECODE_MESSAGE_CREATE                              0x00000001
 #define RDECODE_MESSAGE_DECODE                              0x00000002
+#define RDECODE_MESSAGE_DRM                                 0x00000003
 #define RDECODE_MESSAGE_AVC                                 0x00000006
 #define RDECODE_MESSAGE_VC1                                 0x00000007
 #define RDECODE_MESSAGE_MPEG2_VLD                           0x0000000A
@@ -249,6 +250,49 @@
 #define RDECODE_FRAME_HDR_INFO_VP9_FRAME_TYPE_MASK                   (0x00000002)
 #define RDECODE_FRAME_HDR_INFO_VP9_SHOW_EXISTING_FRAME_MASK          (0x00000001)
 
+/* Drm definitions */
+#define DRM_CMD_KEY_SHIFT              0
+#define DRM_CMD_CNT_KEY_SHIFT          1
+#define DRM_CMD_CNT_DATA_SHIFT         2
+#define DRM_CMD_OFFSET_SHIFT           3
+#define DRM_CMD_SESSION_SEL_SHIFT      4
+#define DRM_CMD_UNWRAP_KEY_SHIFT       8
+#define DRM_CMD_GEN_MASK_SHIFT         9
+#define DRM_CMD_ALGORITHM_SHIFT        10
+#define DRM_CMD_BYTE_MASK_SHIFT        16
+#define DRM_CMD_DRM_BYPASS_SHIFT       31
+
+#define DRM_CMD_KEY_MASK               (0x00000001)
+#define DRM_CMD_CNT_KEY_MASK           (0x00000002)
+#define DRM_CMD_CNT_DATA_MASK          (0x00000004)
+#define DRM_CMD_OFFSET_MASK            (0x00000008)
+#define DRM_CMD_SESSION_SEL_MASK       (0x000000F0)
+#define DRM_CMD_UNWRAP_KEY_MASK        (0x00000100)
+#define DRM_CMD_GEN_MASK_MASK          (0x00000200)
+#define DRM_CMD_ALGORITHM_MASK         (0x00000C00)
+#define DRM_CMD_BYTE_MASK_MASK         (0x00FF0000)
+#define DRM_CMD_DRM_BYPASS_MASK        (0x80000000)
+
+/* Drm_cntl definitions */
+#define DRM_CNTL_ENC_BYTECNT_SHIFT     (6)
+#define DRM_CNTL_CLR_BYTECNT_SHIFT     (16)
+#define DRM_CNTL_BYPASS_SHIFT          (24)
+#define DRM_CNTL_PARTIAL_MODE_SHIFT    (25)
+#define DRM_CNTL_OFFSET_MODE_SHIFT     (26)
+#define DRM_CNTL_HEADER_MODE_SHIFT     (27)
+#define DRM_CNTL_HEADER_BYTECNT_SHIFT  (28)
+
+#define DRM_CNTL_ENC_BYTECNT_MASK      (0x00000FC0)
+#define DRM_CNTL_CLR_BYTECNT_MASK      (0x003F0000)
+#define DRM_CNTL_BYPASS_MASK           (0x01000000)
+#define DRM_CNTL_PARTIAL_MODE_MASK     (0x02000000)
+#define DRM_CNTL_OFFSET_MODE_MASK      (0x04000000)
+#define DRM_CNTL_HEADER_MODE_MASK      (0x08000000)
+#define DRM_CNTL_HEADER_BYTECNT_MASK   (0xF0000000)
+
+#define SAMU_DRM_DISABLE 0x00000000
+#define SAMU_DRM_ENABLE  0x00000001
+
 typedef struct rvcn_dec_message_index_s {
    unsigned int message_id;
    unsigned int offset;
@@ -320,6 +364,16 @@ typedef struct rvcn_dec_message_decode_s {
    unsigned char dpbCurArraySlice;
    unsigned char dpbReserved[3];
 } rvcn_dec_message_decode_t;
+
+typedef struct rvcn_dec_message_drm_s {
+   unsigned int	drm_key[4];
+   unsigned int	drm_counter[4];
+   unsigned int	drm_wrapped_key[4];
+   unsigned int	drm_offset;
+   unsigned int	drm_cmd;
+   unsigned int	drm_cntl;
+   unsigned int	drm_reserved;
+} rvcn_dec_message_drm_t;
 
 typedef struct {
    unsigned short viewOrderIndex;

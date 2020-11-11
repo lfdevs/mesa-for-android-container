@@ -64,6 +64,7 @@ enum sp_debug_flag {
    SP_DBG_CS              = BITFIELD_BIT(5),
    SP_DBG_USE_LLVM        = BITFIELD_BIT(6),
    SP_DBG_NO_RAST         = BITFIELD_BIT(7),
+   SP_DBG_USE_TGSI        = BITFIELD_BIT(8),
 };
 
 extern int sp_debug;

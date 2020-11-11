@@ -566,18 +566,18 @@ parse_rsw(FILE *fp, uint32_t *value, int i, uint32_t *helper)
       int val, j;
       /* 0 - 5 */
       for (j = 0; j < 6; j++) {
-         val = *value & (0x07 << (j * 3));
+         val = (*value >> (j * 3)) & 0x07;
          fprintf(fp, "val %d-%d, ", j, val);
       }
       /* 6 - 9 */
       /* add a few tabs for alignment */
       fprintf(fp, "\n\t\t\t\t\t\t/* %s(2): ", render_state_infos[i].info);
       for (j = 6; j < 10; j++) {
-         val = *value & (0x07 << (j * 3));
+         val = (*value >> (j * 3)) & 0x07;
          fprintf(fp, "val %d-%d, ", j, val);
       }
       /* 10 */
-      val = ((*value & 0x0c000000) >> 30) | ((*helper & 0x00000001) << 2);
+      val = ((*value & 0xc0000000) >> 30) | ((*helper & 0x00000001) << 2);
       fprintf(fp, "val %d-%d, ", j, val);
       j++;
       /* 11 */

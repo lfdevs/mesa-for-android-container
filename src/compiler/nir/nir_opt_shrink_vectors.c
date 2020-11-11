@@ -110,7 +110,31 @@ opt_shrink_vectors_alu(nir_builder *b, nir_alu_instr *instr)
 }
 
 static bool
-opt_shrink_vectors_intrinsic(nir_intrinsic_instr *instr)
+opt_shrink_vectors_image_store(nir_builder *b, nir_intrinsic_instr *instr)
+{
+   enum pipe_format format;
+   if (instr->intrinsic == nir_intrinsic_image_deref_store) {
+      nir_deref_instr *deref = nir_src_as_deref(instr->src[0]);
+      format = nir_deref_instr_get_variable(deref)->data.image.format;
+   } else {
+      format = nir_intrinsic_format(instr);
+   }
+   if (format == PIPE_FORMAT_NONE)
+      return false;
+
+   unsigned components = util_format_get_nr_components(format);
+   if (components >= instr->num_components)
+      return false;
+
+   nir_ssa_def *data = nir_channels(b, instr->src[3].ssa, BITSET_MASK(components));
+   nir_instr_rewrite_src(&instr->instr, &instr->src[3], nir_src_for_ssa(data));
+   instr->num_components = components;
+
+   return true;
+}
+
+static bool
+opt_shrink_vectors_intrinsic(nir_builder *b, nir_intrinsic_instr *instr)
 {
    switch (instr->intrinsic) {
    case nir_intrinsic_load_uniform:
@@ -123,20 +147,50 @@ opt_shrink_vectors_intrinsic(nir_intrinsic_instr *instr)
    case nir_intrinsic_load_push_constant:
    case nir_intrinsic_load_constant:
    case nir_intrinsic_load_global:
+   case nir_intrinsic_load_global_constant:
    case nir_intrinsic_load_kernel_input:
    case nir_intrinsic_load_scratch:
+   case nir_intrinsic_store_output:
+   case nir_intrinsic_store_per_vertex_output:
+   case nir_intrinsic_store_ssbo:
+   case nir_intrinsic_store_shared:
+   case nir_intrinsic_store_global:
+   case nir_intrinsic_store_scratch:
       break;
+   case nir_intrinsic_bindless_image_store:
+   case nir_intrinsic_image_deref_store:
+   case nir_intrinsic_image_store:
+      return opt_shrink_vectors_image_store(b, instr);
    default:
       return false;
    }
 
-   assert(nir_intrinsic_infos[instr->intrinsic].has_dest);
    /* Must be a vectorized intrinsic that we can resize. */
    assert(instr->num_components != 0);
 
-   if (shrink_dest_to_read_mask(&instr->dest.ssa)) {
-      instr->num_components = instr->dest.ssa.num_components;
-      return true;
+   if (nir_intrinsic_infos[instr->intrinsic].has_dest) {
+      /* loads: Trim the dest to the used channels */
+
+      if (shrink_dest_to_read_mask(&instr->dest.ssa)) {
+         instr->num_components = instr->dest.ssa.num_components;
+         return true;
+      }
+   } else {
+      /* Stores: trim the num_components stored according to the write
+       * mask.
+       */
+      unsigned write_mask = nir_intrinsic_write_mask(instr);
+      unsigned last_bit = util_last_bit(write_mask);
+      if (last_bit < instr->num_components && instr->src[0].is_ssa) {
+         nir_ssa_def *def = nir_channels(b, instr->src[0].ssa,
+                                         BITSET_MASK(last_bit));
+         nir_instr_rewrite_src(&instr->instr,
+                               &instr->src[0],
+                               nir_src_for_ssa(def));
+         instr->num_components = last_bit;
+
+         return true;
+      }
    }
 
    return false;
@@ -164,7 +218,7 @@ opt_shrink_vectors_instr(nir_builder *b, nir_instr *instr)
       return opt_shrink_vectors_alu(b, nir_instr_as_alu(instr));
 
    case nir_instr_type_intrinsic:
-      return opt_shrink_vectors_intrinsic(nir_instr_as_intrinsic(instr));
+      return opt_shrink_vectors_intrinsic(b, nir_instr_as_intrinsic(instr));
 
    case nir_instr_type_load_const:
       return opt_shrink_vectors_load_const(nir_instr_as_load_const(instr));

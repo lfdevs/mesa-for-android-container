@@ -226,9 +226,6 @@ _isl_memcpy_tiled_to_linear_sse41(uint32_t xt1, uint32_t xt2,
 #  define genX(x) gen9_##x
 #  include "isl_genX_priv.h"
 #  undef genX
-#  define genX(x) gen10_##x
-#  include "isl_genX_priv.h"
-#  undef genX
 #  define genX(x) gen11_##x
 #  include "isl_genX_priv.h"
 #  undef genX

@@ -551,6 +551,7 @@ swr_tcs_llvm_fetch_input(const struct lp_build_tcs_iface *tcs_iface,
                          LLVMValueRef vertex_index,
                          boolean is_aindex_indirect,
                          LLVMValueRef attrib_index,
+                         boolean is_sindex_indirect,
                          LLVMValueRef swizzle_index)
 {
     swr_tcs_llvm_iface *iface = (swr_tcs_llvm_iface*)tcs_iface;
@@ -571,6 +572,7 @@ swr_tcs_llvm_fetch_output(const struct lp_build_tcs_iface *tcs_iface,
                           LLVMValueRef vertex_index,
                           boolean is_aindex_indirect,
                           LLVMValueRef attrib_index,
+                          boolean is_sindex_indirect,
                           LLVMValueRef swizzle_index,
                           uint32_t name)
 {
@@ -611,6 +613,7 @@ void swr_tcs_llvm_store_output(const struct lp_build_tcs_iface *tcs_iface,
                          LLVMValueRef vertex_index,
                          boolean is_aindex_indirect,
                          LLVMValueRef attrib_index,
+                         boolean is_sindex_indirect,
                          LLVMValueRef swizzle_index,
                          LLVMValueRef value,
                          LLVMValueRef mask_vec)
@@ -648,6 +651,7 @@ swr_tes_llvm_fetch_vtx_input(const struct lp_build_tes_iface *tes_iface,
                              LLVMValueRef vertex_index,
                              boolean is_aindex_indirect,
                              LLVMValueRef attrib_index,
+                             boolean is_sindex_indirect,
                              LLVMValueRef swizzle_index)
 {
     swr_tes_llvm_iface *iface = (swr_tes_llvm_iface*)tes_iface;
@@ -756,7 +760,7 @@ BuilderSWR::swr_gs_llvm_emit_vertex(const struct lp_build_gs_iface *gs_base,
     Value *pVertexOffset = MUL(unwrap(emitted_vertices_vec), VIMMED1(vertSize));
 
     Value *vMask = LOAD(iface->pGsCtx, {0, SWR_GS_CONTEXT_mask});
-    Value *vMask1 = TRUNC(vMask, VectorType::get(mInt1Ty, mVWidth));
+    Value *vMask1 = TRUNC(vMask, getVectorType(mInt1Ty, mVWidth));
 
     Value *pStack = STACKSAVE();
     Value *pTmpPtr = ALLOCA(mFP32Ty, C(4)); // used for dummy write for lane masking
@@ -879,7 +883,7 @@ BuilderSWR::swr_gs_llvm_end_primitive(const struct lp_build_gs_iface *gs_base,
     IRB()->SetInsertPoint(unwrap(LLVMGetInsertBlock(gallivm->builder)));
 
     Value *vMask = LOAD(iface->pGsCtx, { 0, SWR_GS_CONTEXT_mask });
-    Value *vMask1 = TRUNC(vMask, VectorType::get(mInt1Ty, 8));
+    Value *vMask1 = TRUNC(vMask, getVectorType(mInt1Ty, 8));
 
     uint32_t vertsPerPrim = iface->num_verts_per_prim;
 
@@ -892,13 +896,13 @@ BuilderSWR::swr_gs_llvm_end_primitive(const struct lp_build_gs_iface *gs_base,
     Value *mask = unwrap(mask_vec);
     Value *cmpMask = VMASK(ICMP_NE(unwrap(verts_per_prim_vec), VIMMED1(0)));
     mask = AND(mask, cmpMask);
-    vMask1 = TRUNC(mask, VectorType::get(mInt1Ty, 8));
+    vMask1 = TRUNC(mask, getVectorType(mInt1Ty, 8));
 
     vCount = SUB(vCount, VIMMED1(1));
     Value *vOffset = ADD(UDIV(vCount, VIMMED1(8)), VIMMED1(VERTEX_COUNT_SIZE));
     Value *vValue = SHL(VIMMED1(1), UREM(vCount, VIMMED1(8)));
 
-    vValue = TRUNC(vValue, VectorType::get(mInt8Ty, 8));
+    vValue = TRUNC(vValue, getVectorType(mInt8Ty, 8));
 
     Value *pStack = STACKSAVE();
     Value *pTmpPtr = ALLOCA(mInt8Ty, C(4)); // used for dummy read/write for lane masking
@@ -1835,7 +1839,7 @@ BuilderSWR::CompileTES(struct swr_context *ctx, swr_jit_tes_key &key)
    Value* pTessFactors = GEP(pPatch, {C(0), C(ScalarPatch_tessFactors)});
 
    assert(SWR_NUM_OUTER_TESS_FACTORS == 4);
-   Value* sys_value_outer_factors = UndefValue::get(VectorType::get(mFP32Ty, 4));
+   Value* sys_value_outer_factors = UndefValue::get(getVectorType(mFP32Ty, 4));
    for (unsigned i = 0; i < SWR_NUM_OUTER_TESS_FACTORS; i++) {
       Value* v = LOAD(pTessFactors, {0, SWR_TESSELLATION_FACTORS_OuterTessFactors, i});
       sys_value_outer_factors = VINSERT(sys_value_outer_factors, v, i, "gl_TessLevelOuter");
@@ -1843,7 +1847,7 @@ BuilderSWR::CompileTES(struct swr_context *ctx, swr_jit_tes_key &key)
    system_values.tess_outer = wrap(sys_value_outer_factors);
 
    assert(SWR_NUM_INNER_TESS_FACTORS == 2);
-   Value* sys_value_inner_factors = UndefValue::get(VectorType::get(mFP32Ty, 4));
+   Value* sys_value_inner_factors = UndefValue::get(getVectorType(mFP32Ty, 4));
    for (unsigned i = 0; i < SWR_NUM_INNER_TESS_FACTORS; i++) {
       Value* v = LOAD(pTessFactors, {0, SWR_TESSELLATION_FACTORS_InnerTessFactors, i});
       sys_value_inner_factors = VINSERT(sys_value_inner_factors, v, i, "gl_TessLevelInner");

@@ -70,8 +70,8 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
       if (svga->curr.vb[i].buffer.resource) {
          map = pipe_buffer_map(&svga->pipe,
                                svga->curr.vb[i].buffer.resource,
-                               PIPE_TRANSFER_READ |
-                               PIPE_TRANSFER_UNSYNCHRONIZED,
+                               PIPE_MAP_READ |
+                               PIPE_MAP_UNSYNCHRONIZED,
                                &vb_transfer[i]);
 
          draw_set_mapped_vertex_buffer(draw, i, map, ~0);
@@ -86,8 +86,8 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
          map = (ubyte *) info->index.user;
       } else {
          map = pipe_buffer_map(&svga->pipe, info->index.resource,
-                               PIPE_TRANSFER_READ |
-                               PIPE_TRANSFER_UNSYNCHRONIZED, &ib_transfer);
+                               PIPE_MAP_READ |
+                               PIPE_MAP_UNSYNCHRONIZED, &ib_transfer);
       }
       draw_set_indexes(draw,
                        (const ubyte *) map,
@@ -102,8 +102,8 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
 
       map = pipe_buffer_map(&svga->pipe,
                             svga->curr.constbufs[PIPE_SHADER_VERTEX][i].buffer,
-                            PIPE_TRANSFER_READ |
-                            PIPE_TRANSFER_UNSYNCHRONIZED,
+                            PIPE_MAP_READ |
+                            PIPE_MAP_UNSYNCHRONIZED,
                             &cb_transfer[i]);
       assert(map);
       draw_set_mapped_constant_buffer(

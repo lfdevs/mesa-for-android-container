@@ -22,6 +22,7 @@
 
 #include "codegen/nv50_ir.h"
 #include "codegen/nv50_ir_target.h"
+#include "codegen/nv50_ir_driver.h"
 
 #include <inttypes.h>
 
@@ -862,3 +863,157 @@ Function::printLiveIntervals() const
 }
 
 } // namespace nv50_ir
+
+extern void
+nv50_ir_prog_info_out_print(struct nv50_ir_prog_info_out *info_out)
+{
+   int i;
+
+   INFO("{\n");
+   INFO("   \"target\":\"%d\",\n", info_out->target);
+   INFO("   \"type\":\"%d\",\n", info_out->type);
+
+   // Bin
+   INFO("   \"bin\":{\n");
+   INFO("      \"maxGPR\":\"%d\",\n", info_out->bin.maxGPR);
+   INFO("      \"tlsSpace\":\"%d\",\n", info_out->bin.tlsSpace);
+   INFO("      \"smemSize\":\"%d\",\n", info_out->bin.smemSize);
+   INFO("      \"codeSize\":\"%d\",\n", info_out->bin.codeSize);
+   INFO("      \"instructions\":\"%d\",\n", info_out->bin.instructions);
+
+   // RelocInfo
+   INFO("      \"RelocInfo\":");
+   if (!info_out->bin.relocData) {
+      INFO("\"NULL\",\n");
+   } else {
+      nv50_ir::RelocInfo *reloc = (nv50_ir::RelocInfo *)info_out->bin.relocData;
+      INFO("{\n");
+      INFO("         \"codePos\":\"%d\",\n", reloc->codePos);
+      INFO("         \"libPos\":\"%d\",\n", reloc->libPos);
+      INFO("         \"dataPos\":\"%d\",\n", reloc->dataPos);
+      INFO("         \"count\":\"%d\",\n", reloc->count);
+      INFO("         \"RelocEntry\":[\n");
+      for (unsigned int i = 0; i < reloc->count; i++) {
+         INFO("            {\"data\":\"%d\",\t\"mask\":\"%d\",\t\"offset\":\"%d\",\t\"bitPos\":\"%d\",\t\"type\":\"%d\"}",
+                   reloc->entry[i].data, reloc->entry[i].mask, reloc->entry[i].offset, reloc->entry[i].bitPos, reloc->entry[i].type
+                   );
+      }
+      INFO("\n");
+      INFO("         ]\n");
+      INFO("      },\n");
+   }
+
+   // FixupInfo
+   INFO("      \"FixupInfo\":");
+   if (!info_out->bin.fixupData) {
+      INFO("\"NULL\"\n");
+   } else {
+      nv50_ir::FixupInfo *fixup = (nv50_ir::FixupInfo *)info_out->bin.fixupData;
+      INFO("{\n");
+      INFO("         \"count\":\"%d\"\n", fixup->count);
+      INFO("         \"FixupEntry\":[\n");
+      for (unsigned int i = 0; i < fixup->count; i++) {
+         INFO("            {\"apply\":\"%p\",\t\"ipa\":\"%d\",\t\"reg\":\"%d\",\t\"loc\":\"%d\"}\n",
+                   fixup->entry[i].apply, fixup->entry[i].ipa, fixup->entry[i].reg, fixup->entry[i].loc);
+      }
+      INFO("\n");
+      INFO("         ]\n");
+      INFO("      }\n");
+
+      INFO("   },\n");
+   }
+
+   if (info_out->numSysVals) {
+      INFO("   \"sv\":[\n");
+      for (i = 0; i < info_out->numSysVals; i++) {
+         if (&(info_out->sv[i])) {
+            INFO("      {\"id\":\"%d\", \"sn\":\"%d\", \"si\":\"%d\"}\n",
+                   info_out->sv[i].id, info_out->sv[i].sn, info_out->sv[i].si);
+         }
+      }
+      INFO("\n   ],\n");
+   }
+   if (info_out->numInputs) {
+      INFO("   \"in\":[\n");
+      for (i = 0; i < info_out->numInputs; i++) {
+         if (&(info_out->in[i])) {
+            INFO("      {\"id\":\"%d\",\t\"sn\":\"%d\",\t\"si\":\"%d\"}\n",
+                info_out->in[i].id, info_out->in[i].sn, info_out->in[i].si);
+         }
+      }
+      INFO("\n   ],\n");
+   }
+   if (info_out->numOutputs) {
+      INFO("   \"out\":[\n");
+      for (i = 0; i < info_out->numOutputs; i++) {
+         if (&(info_out->out[i])) {
+            INFO("      {\"id\":\"%d\",\t\"sn\":\"%d\",\t\"si\":\"%d\"}\n",
+                   info_out->out[i].id, info_out->out[i].sn, info_out->out[i].si);
+         }
+      }
+      INFO("\n   ],\n");
+   }
+
+   INFO("   \"numInputs\":\"%d\",\n", info_out->numInputs);
+   INFO("   \"numOutputs\":\"%d\",\n", info_out->numOutputs);
+   INFO("   \"numPatchConstants\":\"%d\",\n", info_out->numPatchConstants);
+   INFO("   \"numSysVals\":\"%d\",\n", info_out->numSysVals);
+
+   INFO("   \"prop\":{\n");
+   switch (info_out->type) {
+      case PIPE_SHADER_VERTEX:
+         INFO("      \"vp\": {\"usesDrawParameters\":\"%s\"}\n",
+               info_out->prop.vp.usesDrawParameters ? "true" : "false");
+         break;
+      case PIPE_SHADER_TESS_CTRL:
+      case PIPE_SHADER_TESS_EVAL:
+         INFO("      \"tp\":{\n");
+         INFO("         \"outputPatchSize\":\"%d\"\n", info_out->prop.tp.outputPatchSize);
+         INFO("         \"partitioning\":\"%d\"\n", info_out->prop.tp.partitioning);
+         INFO("         \"winding\":\"%d\"\n", info_out->prop.tp.winding);
+         INFO("         \"domain\":\"%d\"\n", info_out->prop.tp.domain);
+         INFO("         \"outputPrim\":\"%d\"\n", info_out->prop.tp.outputPrim);
+         break;
+      case PIPE_SHADER_GEOMETRY:
+         INFO("      \"gp\":{\n");
+         INFO("         \"outputPrim\":\"%d\"\n", info_out->prop.gp.outputPrim);
+         INFO("         \"instancesCount\":\"%d\"\n", info_out->prop.gp.instanceCount);
+         INFO("         \"maxVertices\":\"%d\"\n", info_out->prop.gp.maxVertices);
+         break;
+      case PIPE_SHADER_FRAGMENT:
+         INFO("      \"fp\":{\n");
+         INFO("         \"numColourResults\":\"%d\"\n", info_out->prop.fp.numColourResults);
+         INFO("         \"writesDepth\":\"%s\"\n", info_out->prop.fp.writesDepth ? "true" : "false");
+         INFO("         \"earlyFragTests\":\"%s\"\n", info_out->prop.fp.earlyFragTests ? "true" : "false");
+         INFO("         \"postDepthCoverage\":\"%s\"\n", info_out->prop.fp.postDepthCoverage ? "true" : "false");
+         INFO("         \"usesDiscard\":\"%s\"\n", info_out->prop.fp.usesDiscard ? "true" : "false");
+         INFO("         \"usesSampleMaskIn\":\"%s\"\n", info_out->prop.fp.usesSampleMaskIn ? "true" : "false");
+         INFO("         \"readsFramebuffer\":\"%s\"\n", info_out->prop.fp.readsFramebuffer ? "true" : "false");
+         INFO("         \"readsSampleLocations\":\"%s\"\n", info_out->prop.fp.readsSampleLocations ? "true" : "false");
+         INFO("         \"separateFragData\":\"%s\"\n", info_out->prop.fp.separateFragData ? "true" : "false");
+         break;
+      default:
+         assert("!unhandled pipe shader type\n");
+   }
+   INFO("      }\n");
+   INFO("   }\n");
+
+   INFO("   \"io\":{\n");
+   INFO("      \"clipDistances\":\"%d\"\n", info_out->io.clipDistances);
+   INFO("      \"cullDistances\":\"%d\"\n", info_out->io.cullDistances);
+   INFO("      \"genUserClip\":\"%d\"\n", info_out->io.genUserClip);
+   INFO("      \"instanceId\":\"%d\"\n", info_out->io.instanceId);
+   INFO("      \"vertexId\":\"%d\"\n", info_out->io.vertexId);
+   INFO("      \"edgeFlagIn\":\"%d\"\n", info_out->io.edgeFlagIn);
+   INFO("      \"edgeFlagOut\":\"%d\"\n", info_out->io.edgeFlagOut);
+   INFO("      \"fragDepth\":\"%d\"\n", info_out->io.fragDepth);
+   INFO("      \"sampleMask\":\"%d\"\n", info_out->io.sampleMask);
+   INFO("      \"globalAccess\":\"%d\"\n", info_out->io.globalAccess);
+   INFO("      \"fp64\":\"%s\"\n", info_out->io.fp64 ? "true" : "false");
+   INFO("      \"layer_viewport_relative\":\"%s\"\n", info_out->io.layer_viewport_relative ? "true" : "false");
+   INFO("   \"}\n");
+   INFO("   \"numBarriers\":\"%d\"\n", info_out->numBarriers);
+   INFO("   \"driverPriv\":\"%p\"\n", info_out->driverPriv);
+
+   INFO("}\n");
+}

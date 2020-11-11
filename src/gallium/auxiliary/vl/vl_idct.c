@@ -711,8 +711,8 @@ vl_idct_upload_matrix(struct pipe_context *pipe, float scale)
       goto error_matrix;
 
    f = pipe->transfer_map(pipe, matrix, 0,
-                                     PIPE_TRANSFER_WRITE |
-                                     PIPE_TRANSFER_DISCARD_RANGE,
+                                     PIPE_MAP_WRITE |
+                                     PIPE_MAP_DISCARD_RANGE,
                                      &rect, &buf_transfer);
    if (!f)
       goto error_map;

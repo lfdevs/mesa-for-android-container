@@ -138,10 +138,10 @@ svga_vbuf_render_map_vertices(struct vbuf_render *render)
    if (svga_render->vbuf) {
       char *ptr = (char*)pipe_buffer_map(&svga->pipe,
                                          svga_render->vbuf,
-                                         PIPE_TRANSFER_WRITE |
-                                         PIPE_TRANSFER_FLUSH_EXPLICIT |
-                                         PIPE_TRANSFER_DISCARD_RANGE |
-                                         PIPE_TRANSFER_UNSYNCHRONIZED,
+                                         PIPE_MAP_WRITE |
+                                         PIPE_MAP_FLUSH_EXPLICIT |
+                                         PIPE_MAP_DISCARD_RANGE |
+                                         PIPE_MAP_UNSYNCHRONIZED,
                                          &svga_render->vbuf_transfer);
       if (ptr) {
          svga_render->vbuf_ptr = ptr;

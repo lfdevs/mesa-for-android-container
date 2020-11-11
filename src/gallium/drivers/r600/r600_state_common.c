@@ -821,8 +821,10 @@ static inline void r600_shader_selector_key(const struct pipe_context *ctx,
 		key->ps.nr_cbufs = rctx->framebuffer.state.nr_cbufs;
                 key->ps.apply_sample_id_mask = (rctx->ps_iter_samples > 1) || !rctx->rasterizer->multisample_enable;
 		/* Dual-source blending only makes sense with nr_cbufs == 1. */
-		if (key->ps.nr_cbufs == 1 && rctx->dual_src_blend)
+		if (key->ps.nr_cbufs == 1 && rctx->dual_src_blend) {
 			key->ps.nr_cbufs = 2;
+			key->ps.dual_source_blend = 1;
+		}
 		break;
 	}
 	case PIPE_SHADER_TESS_EVAL:
@@ -2062,7 +2064,7 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 	unsigned index_size = info->index_size;
 	int index_bias;
 	struct r600_shader_atomic combined_atomics[8];
-	uint8_t atomic_used_mask;
+	uint8_t atomic_used_mask = 0;
 
 	if (!info->indirect && !info->count && (index_size || !info->count_from_stream_output)) {
 		return;
@@ -2143,7 +2145,7 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 				/* Have to get start/count from indirect buffer, slow path ahead... */
 				struct r600_resource *indirect_resource = (struct r600_resource *)info->indirect->buffer;
 				unsigned *data = r600_buffer_map_sync_with_rings(&rctx->b, indirect_resource,
-					PIPE_TRANSFER_READ);
+					PIPE_MAP_READ);
 				if (data) {
 					data += info->indirect->offset / sizeof(unsigned);
 					start = data[2] * index_size;

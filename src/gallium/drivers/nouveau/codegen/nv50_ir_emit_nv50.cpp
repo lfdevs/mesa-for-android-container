@@ -881,8 +881,8 @@ CodeEmitterNV50::emitPFETCH(const Instruction *i)
    emitFlagsRd(i);
 }
 
-static void
-interpApply(const FixupEntry *entry, uint32_t *code, const FixupData& data)
+void
+nv50_interpApply(const FixupEntry *entry, uint32_t *code, const FixupData& data)
 {
    int ipa = entry->ipa;
    int encSize = entry->reg;
@@ -934,7 +934,7 @@ CodeEmitterNV50::emitINTERP(const Instruction *i)
       emitFlagsRd(i);
    }
 
-   addInterp(i->ipa, i->encSize, interpApply);
+   addInterp(i->ipa, i->encSize, nv50_interpApply);
 }
 
 void

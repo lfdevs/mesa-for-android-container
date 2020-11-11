@@ -207,8 +207,8 @@ read_and_upload(struct brw_context *brw, struct disk_cache *cache,
       fprintf(stderr, "Native code for %s %s shader %s from disk cache:\n",
               nir->info.label ? nir->info.label : "unnamed",
               _mesa_shader_stage_to_string(nir->info.stage), nir->info.name);
-      brw_disassemble(&brw->screen->devinfo, program, 0,
-                      prog_data->program_size, stderr);
+      brw_disassemble_with_labels(&brw->screen->devinfo, program, 0,
+                                  prog_data->program_size, stderr);
    }
 
    brw_upload_cache(&brw->cache, cache_id, &prog_key, brw_prog_key_size(stage),

@@ -236,10 +236,9 @@ struct gen_batch_decode_ctx {
    void *user_data;
 
    FILE *fp;
+   struct gen_device_info devinfo;
    struct gen_spec *spec;
    enum gen_batch_decode_flags flags;
-
-   struct gen_disasm *disasm;
 
    uint64_t surface_base;
    uint64_t dynamic_base;

@@ -501,23 +501,11 @@ namespace brw {
       LRP(const dst_reg &dst, const src_reg &x, const src_reg &y,
           const src_reg &a) const
       {
-         if (shader->devinfo->gen >= 6 && shader->devinfo->gen <= 10) {
-            /* The LRP instruction actually does op1 * op0 + op2 * (1 - op0), so
-             * we need to reorder the operands.
-             */
-            return emit(BRW_OPCODE_LRP, dst, a, y, x);
-
-         } else {
-            /* We can't use the LRP instruction.  Emit x*(1-a) + y*a. */
-            const dst_reg y_times_a = vgrf(dst.type);
-            const dst_reg one_minus_a = vgrf(dst.type);
-            const dst_reg x_times_one_minus_a = vgrf(dst.type);
-
-            MUL(y_times_a, y, a);
-            ADD(one_minus_a, negate(a), brw_imm_f(1.0f));
-            MUL(x_times_one_minus_a, x, src_reg(one_minus_a));
-            return ADD(dst, src_reg(x_times_one_minus_a), src_reg(y_times_a));
-         }
+         /* The LRP instruction actually does op1 * op0 + op2 * (1 - op0), so
+          * we need to reorder the operands.
+          */
+         assert(shader->devinfo->gen >= 6 && shader->devinfo->gen <= 9);
+         return emit(BRW_OPCODE_LRP, dst, a, y, x);
       }
 
       backend_shader *shader;

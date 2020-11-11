@@ -190,11 +190,12 @@ struct fd_batch {
 	/** tiling/gmem (IB0) cmdstream: */
 	struct fd_ringbuffer *gmem;
 
-	/** epilogue cmdstream: */
+	/** preemble cmdstream (executed once before first tile): */
+	struct fd_ringbuffer *prologue;
+
+	/** epilogue cmdstream (executed after each tile): */
 	struct fd_ringbuffer *epilogue;
 
-	// TODO maybe more generically split out clear and clear_binning rings?
-	struct fd_ringbuffer *lrz_clear;
 	struct fd_ringbuffer *tile_setup;
 	struct fd_ringbuffer *tile_fini;
 
@@ -345,6 +346,7 @@ fd_event_write(struct fd_batch *batch, struct fd_ringbuffer *ring,
 	fd_reset_wfi(batch);
 }
 
+/* Get per-tile epilogue */
 static inline struct fd_ringbuffer *
 fd_batch_get_epilogue(struct fd_batch *batch)
 {
@@ -354,5 +356,6 @@ fd_batch_get_epilogue(struct fd_batch *batch)
 	return batch->epilogue;
 }
 
+struct fd_ringbuffer * fd_batch_get_prologue(struct fd_batch *batch);
 
 #endif /* FREEDRENO_BATCH_H_ */

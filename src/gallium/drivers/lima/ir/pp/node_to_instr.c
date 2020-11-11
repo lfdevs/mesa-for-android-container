@@ -88,7 +88,7 @@ static bool ppir_do_one_node_to_instr(ppir_block *block, ppir_node *node)
        * by using pipeline reg ^vmul/^fmul */
       ppir_alu_node *alu = ppir_node_to_alu(node);
       if (alu->dest.type == ppir_target_ssa &&
-          ppir_node_has_single_src_succ(node)) {
+          ppir_node_has_single_succ(node)) {
          ppir_node *succ = ppir_node_first_succ(node);
          if (succ->instr_pos == PPIR_INSTR_SLOT_ALU_VEC_ADD) {
             node->instr_pos = PPIR_INSTR_SLOT_ALU_VEC_MUL;

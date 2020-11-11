@@ -584,7 +584,7 @@ void radv_meta_build_resolve_shader_core(nir_builder *b,
 {
 	/* do a txf_ms on each sample */
 	nir_ssa_def *tmp;
-	nir_if *outer_if = NULL;
+	bool inserted_if = false;
 
 	nir_ssa_def *input_img_deref = &nir_build_deref_var(b, input_img)->dest.ssa;
 
@@ -614,19 +614,15 @@ void radv_meta_build_resolve_shader_core(nir_builder *b,
 		tex_all_same->src[0].src = nir_src_for_ssa(img_coord);
 		tex_all_same->src[1].src_type = nir_tex_src_texture_deref;
 		tex_all_same->src[1].src = nir_src_for_ssa(input_img_deref);
-		tex_all_same->dest_type = nir_type_float;
+		tex_all_same->dest_type = nir_type_uint;
 		tex_all_same->is_array = false;
 		tex_all_same->coord_components = 2;
 
-		nir_ssa_dest_init(&tex_all_same->instr, &tex_all_same->dest, 1, 32, "tex");
+		nir_ssa_dest_init(&tex_all_same->instr, &tex_all_same->dest, 1, 1, "tex");
 		nir_builder_instr_insert(b, &tex_all_same->instr);
 
-		nir_ssa_def *all_same = nir_ieq(b, &tex_all_same->dest.ssa, nir_imm_int(b, 0));
-		nir_if *if_stmt = nir_if_create(b->shader);
-		if_stmt->condition = nir_src_for_ssa(all_same);
-		nir_cf_node_insert(b->cursor, &if_stmt->cf_node);
-
-		b->cursor = nir_after_cf_list(&if_stmt->then_list);
+		nir_ssa_def *all_same = nir_ieq(b, &tex_all_same->dest.ssa, nir_imm_bool(b, false));
+		nir_push_if(b, all_same);
 		for (int i = 1; i < samples; i++) {
 			nir_tex_instr *tex_add = nir_tex_instr_create(b->shader, 3);
 			tex_add->sampler_dim = GLSL_SAMPLER_DIM_MS;
@@ -649,11 +645,28 @@ void radv_meta_build_resolve_shader_core(nir_builder *b,
 
 		tmp = nir_fdiv(b, tmp, nir_imm_float(b, samples));
 		nir_store_var(b, color, tmp, 0xf);
-		b->cursor = nir_after_cf_list(&if_stmt->else_list);
-		outer_if = if_stmt;
+		nir_push_else(b, NULL);
+		inserted_if = true;
 	}
 	nir_store_var(b, color, &tex->dest.ssa, 0xf);
 
-	if (outer_if)
-		b->cursor = nir_after_cf_node(&outer_if->cf_node);
+	if (inserted_if)
+		nir_pop_if(b, NULL);
+}
+
+nir_ssa_def *
+radv_meta_load_descriptor(nir_builder *b, unsigned desc_set, unsigned binding)
+{
+	nir_intrinsic_instr *rsrc =
+		nir_intrinsic_instr_create(b->shader,
+					   nir_intrinsic_vulkan_resource_index);
+
+	rsrc->src[0] = nir_src_for_ssa(nir_imm_int(b, 0));
+	rsrc->num_components = 2;
+	nir_intrinsic_set_desc_set(rsrc, desc_set);
+	nir_intrinsic_set_binding(rsrc, binding);
+	nir_ssa_dest_init(&rsrc->instr, &rsrc->dest, rsrc->num_components, 32, NULL);
+	nir_builder_instr_insert(b, &rsrc->instr);
+
+	return nir_channel(b, &rsrc->dest.ssa, 0);
 }

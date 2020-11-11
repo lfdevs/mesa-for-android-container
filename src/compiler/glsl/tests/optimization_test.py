@@ -92,6 +92,11 @@ def main():
             out, err = proc.communicate(source.encode('utf-8'))
             out = out.decode('utf-8')
             err = err.decode('utf-8')
+
+            if proc.returncode == 255:
+                print("Test returned general error, possibly missing linker")
+                sys.exit(77)
+
             if err:
                 print('FAIL')
                 print('Unexpected output on stderr: {}'.format(err),

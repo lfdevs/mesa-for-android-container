@@ -155,7 +155,7 @@ __feq64(uint64_t a, uint64_t b)
  * performed according to the IEEE Standard for Floating-Point Arithmetic.
  */
 bool
-__fne64(uint64_t a, uint64_t b)
+__fneu64(uint64_t a, uint64_t b)
 {
    if (__is_nan(a) || __is_nan(b))
       return true;
@@ -206,16 +206,16 @@ __flt64_nonnan(uint64_t __a, uint64_t __b)
     *
     * This is equivalent to
     *
-    *    fne(a, b) && (both_negative(a, b) ? a >= b : a < b)
+    *    fneu(a, b) && (both_negative(a, b) ? a >= b : a < b)
     *
-    *    fne(a, b) && (both_negative(a, b) ? !(a < b) : a < b)
+    *    fneu(a, b) && (both_negative(a, b) ? !(a < b) : a < b)
     *
-    *    fne(a, b) && ((both_negative(a, b) && !(a < b)) ||
+    *    fneu(a, b) && ((both_negative(a, b) && !(a < b)) ||
     *                  (!both_negative(a, b) && (a < b)))
     *
     * (A!|B)&(A|!B) is (A xor B) which is implemented here using !=.
     *
-    *    fne(a, b) && (both_negative(a, b) != (a < b))
+    *    fneu(a, b) && (both_negative(a, b) != (a < b))
     */
    bool lt = ilt64(a.y, a.x, b.y, b.x);
    bool both_negative = (a.y & b.y & 0x80000000u) != 0;

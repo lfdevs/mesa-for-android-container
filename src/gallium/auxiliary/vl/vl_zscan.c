@@ -410,7 +410,7 @@ vl_zscan_layout(struct pipe_context *pipe, const int layout[64], unsigned blocks
       goto error_resource;
 
    f = pipe->transfer_map(pipe, res,
-                          0, PIPE_TRANSFER_WRITE | PIPE_TRANSFER_DISCARD_RANGE,
+                          0, PIPE_MAP_WRITE | PIPE_MAP_DISCARD_RANGE,
                           &rect, &buf_transfer);
    if (!f)
       goto error_map;
@@ -576,8 +576,8 @@ vl_zscan_upload_quant(struct vl_zscan *zscan, struct vl_zscan_buffer *buffer,
    rect.width *= zscan->blocks_per_line;
 
    data = pipe->transfer_map(pipe, buffer->quant->texture,
-                             0, PIPE_TRANSFER_WRITE |
-                             PIPE_TRANSFER_DISCARD_RANGE,
+                             0, PIPE_MAP_WRITE |
+                             PIPE_MAP_DISCARD_RANGE,
                              &rect, &buf_transfer);
    if (!data)
       return;

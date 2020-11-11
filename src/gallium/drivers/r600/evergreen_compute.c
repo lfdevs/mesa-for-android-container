@@ -458,7 +458,7 @@ static void *evergreen_create_compute_state(struct pipe_context *ctx,
 							shader->bc.ndw * 4);
 	p = r600_buffer_map_sync_with_rings(
 		&rctx->b, shader->code_bo,
-		PIPE_TRANSFER_WRITE | RADEON_TRANSFER_TEMPORARY);
+		PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
 	//TODO: use util_memcpy_cpu_to_le32 ?
 	memcpy(p, shader->bc.bytecode, shader->bc.ndw * 4);
 	rctx->b.ws->buffer_unmap(shader->code_bo->buf);
@@ -557,7 +557,7 @@ static void evergreen_compute_upload_input(struct pipe_context *ctx,
 	u_box_1d(0, input_size, &box);
 	num_work_groups_start = ctx->transfer_map(ctx,
 			(struct pipe_resource*)shader->kernel_param,
-			0, PIPE_TRANSFER_WRITE | PIPE_TRANSFER_DISCARD_RANGE,
+			0, PIPE_MAP_WRITE | PIPE_MAP_DISCARD_RANGE,
 			&box, &transfer);
 	global_size_start = num_work_groups_start + (3 * (sizeof(uint) /4));
 	local_size_start = global_size_start + (3 * (sizeof(uint)) / 4);
@@ -758,7 +758,7 @@ static void compute_emit_cs(struct r600_context *rctx,
 
 		if (info->indirect) {
 			struct r600_resource *indirect_resource = (struct r600_resource *)info->indirect;
-			unsigned *data = r600_buffer_map_sync_with_rings(&rctx->b, indirect_resource, PIPE_TRANSFER_READ);
+			unsigned *data = r600_buffer_map_sync_with_rings(&rctx->b, indirect_resource, PIPE_MAP_READ);
 			unsigned offset = info->indirect_offset / 4;
 			indirect_grid[0] = data[offset];
 			indirect_grid[1] = data[offset + 1];
@@ -1258,7 +1258,7 @@ static void *r600_compute_global_transfer_map(struct pipe_context *ctx,
 
 	dst = (struct pipe_resource*)item->real_buffer;
 
-	if (usage & PIPE_TRANSFER_READ)
+	if (usage & PIPE_MAP_READ)
 		buffer->chunk->status |= ITEM_MAPPED_FOR_READING;
 
 	COMPUTE_DBG(rctx->screen, "* r600_compute_global_transfer_map()\n"

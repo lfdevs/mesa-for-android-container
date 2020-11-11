@@ -702,9 +702,7 @@ intel_miptree_set_clear_color(struct brw_context *brw,
 
 /* Get a clear color suitable for filling out an ISL surface state. */
 union isl_color_value
-intel_miptree_get_clear_color(const struct gen_device_info *devinfo,
-                              const struct intel_mipmap_tree *mt,
-                              enum isl_format view_format, bool sampling,
+intel_miptree_get_clear_color(const struct intel_mipmap_tree *mt,
                               struct brw_bo **clear_color_bo,
                               uint64_t *clear_color_offset);
 

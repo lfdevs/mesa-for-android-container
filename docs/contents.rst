@@ -27,8 +27,6 @@
 
    lists
    bugs
-   webmaster
-   Mesa/DRI Wiki <https://dri.freedesktop.org/>
 
 .. toctree::
    :maxdepth: 1
@@ -43,10 +41,22 @@
    debugging
    perf
    extensions
-   vmware-guest
    application-issues
    viewperf
    xlibdriver
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Drivers
+   :hidden:
+
+   drivers/freedreno
+   drivers/llvmpipe
+   drivers/openswr
+   drivers/v3d
+   drivers/vc4
+   drivers/vmware-guest
+   drivers/zink
 
 .. toctree::
    :maxdepth: 1
@@ -65,6 +75,8 @@
    sourcedocs
    dispatch
    gallium/index
+   android
+   Linux Kernel Drivers <https://www.kernel.org/doc/html/latest/gpu/>
 
 .. toctree::
    :maxdepth: 1
@@ -81,7 +93,6 @@
 
    OpenGL Website <https://www.opengl.org>
    DRI Website <https://dri.freedesktop.org>
-   freedesktop.org <https://www.freedesktop.org>
    Developer Blogs <https://planet.freedesktop.org>
 
 .. toctree::
@@ -89,4 +100,4 @@
    :caption: Hosted by:
    :hidden:
 
-   freedesktop.org <https://planet.freedesktop.org>
+   freedesktop.org <https://www.freedesktop.org>

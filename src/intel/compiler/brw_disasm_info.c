@@ -31,12 +31,16 @@ __attribute__((weak)) void nir_print_instr(UNUSED const nir_instr *instr,
                                            UNUSED FILE *fp) {}
 
 void
-dump_assembly(void *assembly, struct disasm_info *disasm,
-              const unsigned *block_latency)
+dump_assembly(void *assembly, int start_offset, int end_offset,
+              struct disasm_info *disasm, const unsigned *block_latency)
 {
    const struct gen_device_info *devinfo = disasm->devinfo;
    const char *last_annotation_string = NULL;
    const void *last_annotation_ir = NULL;
+
+   void *mem_ctx = ralloc_context(NULL);
+   const struct brw_label *root_label =
+      brw_label_assembly(devinfo, assembly, start_offset, end_offset, mem_ctx);
 
    foreach_list_typed(struct inst_group, group, link, &disasm->group_list) {
       struct exec_node *next_node = exec_node_get_next(&group->link);
@@ -77,7 +81,8 @@ dump_assembly(void *assembly, struct disasm_info *disasm,
             fprintf(stderr, "   %s\n", last_annotation_string);
       }
 
-      brw_disassemble(devinfo, assembly, start_offset, end_offset, stderr);
+      brw_disassemble(devinfo, assembly, start_offset, end_offset,
+                      root_label, stderr);
 
       if (group->error) {
          fputs(group->error, stderr);
@@ -94,6 +99,8 @@ dump_assembly(void *assembly, struct disasm_info *disasm,
       }
    }
    fprintf(stderr, "\n");
+
+   ralloc_free(mem_ctx);
 }
 
 struct disasm_info *

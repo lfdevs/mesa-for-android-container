@@ -28,6 +28,8 @@ C_SOURCES :=  \
 	etnaviv_debug.h \
 	etnaviv_disasm.c \
 	etnaviv_disasm.h \
+	etnaviv_disk_cache.c \
+	etnaviv_disk_cache.h \
 	etnaviv_emit.c \
 	etnaviv_emit.h \
 	etnaviv_etc2.c \

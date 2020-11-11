@@ -220,6 +220,8 @@ fd_set_framebuffer_state(struct pipe_context *pctx,
 		framebuffer->width, framebuffer->height,
 		framebuffer->layers, framebuffer->samples);
 
+	fd_context_switch_from(ctx);
+
 	cso = &ctx->framebuffer;
 
 	if (util_framebuffer_state_equal(cso, framebuffer))

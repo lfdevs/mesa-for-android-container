@@ -152,7 +152,7 @@ static uint32_t
 hash_deref(uint32_t hash, const nir_deref_instr *instr)
 {
    hash = HASH(hash, instr->deref_type);
-   hash = HASH(hash, instr->mode);
+   hash = HASH(hash, instr->modes);
    hash = HASH(hash, instr->type);
 
    if (instr->deref_type == nir_deref_type_var)
@@ -172,6 +172,8 @@ hash_deref(uint32_t hash, const nir_deref_instr *instr)
 
    case nir_deref_type_cast:
       hash = HASH(hash, instr->cast.ptr_stride);
+      hash = HASH(hash, instr->cast.align_mul);
+      hash = HASH(hash, instr->cast.align_offset);
       break;
 
    case nir_deref_type_var:
@@ -247,6 +249,10 @@ hash_intrinsic(uint32_t hash, const nir_intrinsic_instr *instr)
    }
 
    hash = XXH32(instr->const_index, info->num_indices * sizeof(instr->const_index[0]), hash);
+
+   for (unsigned i = 0; i < nir_intrinsic_infos[instr->intrinsic].num_srcs; i++)
+      hash = hash_src(hash, &instr->src[i]);
+
    return hash;
 }
 
@@ -596,7 +602,7 @@ nir_instrs_equal(const nir_instr *instr1, const nir_instr *instr2)
       nir_deref_instr *deref2 = nir_instr_as_deref(instr2);
 
       if (deref1->deref_type != deref2->deref_type ||
-          deref1->mode != deref2->mode ||
+          deref1->modes != deref2->modes ||
           deref1->type != deref2->type)
          return false;
 
@@ -619,7 +625,9 @@ nir_instrs_equal(const nir_instr *instr1, const nir_instr *instr2)
          break;
 
       case nir_deref_type_cast:
-         if (deref1->cast.ptr_stride != deref2->cast.ptr_stride)
+         if (deref1->cast.ptr_stride != deref2->cast.ptr_stride ||
+             deref1->cast.align_mul != deref2->cast.align_mul ||
+             deref1->cast.align_offset != deref2->cast.align_offset)
             return false;
          break;
 

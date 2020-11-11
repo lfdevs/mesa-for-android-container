@@ -24,6 +24,7 @@
 
 #include "compiler/nir/nir.h"
 #include "tgsi/tgsi_ureg.h"
+#include "util/blob.h"
 
 #include "nvc0/nvc0_context.h"
 
@@ -90,7 +91,7 @@ nvc0_shader_output_address(unsigned sn, unsigned si)
 }
 
 static int
-nvc0_vp_assign_input_slots(struct nv50_ir_prog_info *info)
+nvc0_vp_assign_input_slots(struct nv50_ir_prog_info_out *info)
 {
    unsigned i, c, n;
 
@@ -114,7 +115,7 @@ nvc0_vp_assign_input_slots(struct nv50_ir_prog_info *info)
 }
 
 static int
-nvc0_sp_assign_input_slots(struct nv50_ir_prog_info *info)
+nvc0_sp_assign_input_slots(struct nv50_ir_prog_info_out *info)
 {
    unsigned offset;
    unsigned i, c;
@@ -130,7 +131,7 @@ nvc0_sp_assign_input_slots(struct nv50_ir_prog_info *info)
 }
 
 static int
-nvc0_fp_assign_output_slots(struct nv50_ir_prog_info *info)
+nvc0_fp_assign_output_slots(struct nv50_ir_prog_info_out *info)
 {
    unsigned count = info->prop.fp.numColourResults * 4;
    unsigned i, c;
@@ -163,7 +164,7 @@ nvc0_fp_assign_output_slots(struct nv50_ir_prog_info *info)
 }
 
 static int
-nvc0_sp_assign_output_slots(struct nv50_ir_prog_info *info)
+nvc0_sp_assign_output_slots(struct nv50_ir_prog_info_out *info)
 {
    unsigned offset;
    unsigned i, c;
@@ -179,7 +180,7 @@ nvc0_sp_assign_output_slots(struct nv50_ir_prog_info *info)
 }
 
 static int
-nvc0_program_assign_varying_slots(struct nv50_ir_prog_info *info)
+nvc0_program_assign_varying_slots(struct nv50_ir_prog_info_out *info)
 {
    int ret;
 
@@ -211,7 +212,7 @@ nvc0_vtgp_hdr_update_oread(struct nvc0_program *vp, uint8_t slot)
 
 /* Common part of header generation for VP, TCP, TEP and GP. */
 static int
-nvc0_vtgp_gen_header(struct nvc0_program *vp, struct nv50_ir_prog_info *info)
+nvc0_vtgp_gen_header(struct nvc0_program *vp, struct nv50_ir_prog_info_out *info)
 {
    unsigned i, c, a;
 
@@ -278,7 +279,7 @@ nvc0_vtgp_gen_header(struct nvc0_program *vp, struct nv50_ir_prog_info *info)
 }
 
 static int
-nvc0_vp_gen_header(struct nvc0_program *vp, struct nv50_ir_prog_info *info)
+nvc0_vp_gen_header(struct nvc0_program *vp, struct nv50_ir_prog_info_out *info)
 {
    vp->hdr[0] = 0x20061 | (1 << 10);
    vp->hdr[4] = 0xff000;
@@ -287,7 +288,7 @@ nvc0_vp_gen_header(struct nvc0_program *vp, struct nv50_ir_prog_info *info)
 }
 
 static void
-nvc0_tp_get_tess_mode(struct nvc0_program *tp, struct nv50_ir_prog_info *info)
+nvc0_tp_get_tess_mode(struct nvc0_program *tp, struct nv50_ir_prog_info_out *info)
 {
    if (info->prop.tp.outputPrim == PIPE_PRIM_MAX) {
       tp->tp.tess_mode = ~0;
@@ -341,7 +342,7 @@ nvc0_tp_get_tess_mode(struct nvc0_program *tp, struct nv50_ir_prog_info *info)
 }
 
 static int
-nvc0_tcp_gen_header(struct nvc0_program *tcp, struct nv50_ir_prog_info *info)
+nvc0_tcp_gen_header(struct nvc0_program *tcp, struct nv50_ir_prog_info_out *info)
 {
    unsigned opcs = 6; /* output patch constants (at least the TessFactors) */
 
@@ -372,7 +373,7 @@ nvc0_tcp_gen_header(struct nvc0_program *tcp, struct nv50_ir_prog_info *info)
 }
 
 static int
-nvc0_tep_gen_header(struct nvc0_program *tep, struct nv50_ir_prog_info *info)
+nvc0_tep_gen_header(struct nvc0_program *tep, struct nv50_ir_prog_info_out *info)
 {
    tep->hdr[0] = 0x20061 | (3 << 10);
    tep->hdr[4] = 0xff000;
@@ -387,7 +388,7 @@ nvc0_tep_gen_header(struct nvc0_program *tep, struct nv50_ir_prog_info *info)
 }
 
 static int
-nvc0_gp_gen_header(struct nvc0_program *gp, struct nv50_ir_prog_info *info)
+nvc0_gp_gen_header(struct nvc0_program *gp, struct nv50_ir_prog_info_out *info)
 {
    gp->hdr[0] = 0x20061 | (4 << 10);
 
@@ -432,7 +433,7 @@ nvc0_hdr_interp_mode(const struct nv50_ir_varying *var)
 }
 
 static int
-nvc0_fp_gen_header(struct nvc0_program *fp, struct nv50_ir_prog_info *info)
+nvc0_fp_gen_header(struct nvc0_program *fp, struct nv50_ir_prog_info_out *info)
 {
    unsigned i, c, a, m;
 
@@ -509,7 +510,7 @@ nvc0_fp_gen_header(struct nvc0_program *fp, struct nv50_ir_prog_info *info)
 }
 
 static struct nvc0_transform_feedback_state *
-nvc0_program_create_tfb_state(const struct nv50_ir_prog_info *info,
+nvc0_program_create_tfb_state(const struct nv50_ir_prog_info_out *info,
                               const struct pipe_stream_output_info *pso)
 {
    struct nvc0_transform_feedback_state *tfb;
@@ -570,10 +571,17 @@ nvc0_program_dump(struct nvc0_program *prog)
 
 bool
 nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset,
+                       struct disk_cache *disk_shader_cache,
                        struct pipe_debug_callback *debug)
 {
+   struct blob blob;
+   size_t cache_size;
    struct nv50_ir_prog_info *info;
-   int ret;
+   struct nv50_ir_prog_info_out info_out = {};
+
+   int ret = 0;
+   cache_key key;
+   bool shader_loaded = false;
 
    info = CALLOC_STRUCT(nv50_ir_prog_info);
    if (!info)
@@ -633,51 +641,81 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset,
 
    info->assignSlots = nvc0_program_assign_varying_slots;
 
-   ret = nv50_ir_generate_code(info);
-   if (ret) {
-      NOUVEAU_ERR("shader translation failed: %i\n", ret);
-      goto out;
+   blob_init(&blob);
+
+   if (disk_shader_cache) {
+      if (nv50_ir_prog_info_serialize(&blob, info)) {
+         void *cached_data = NULL;
+
+         disk_cache_compute_key(disk_shader_cache, blob.data, blob.size, key);
+         cached_data = disk_cache_get(disk_shader_cache, key, &cache_size);
+
+         if (cached_data && cache_size >= blob.size) { // blob.size is the size of serialized "info"
+            /* Blob contains only "info". In disk cache, "info_out" comes right after it */
+            size_t offset = blob.size;
+            if (nv50_ir_prog_info_out_deserialize(cached_data, cache_size, offset, &info_out))
+               shader_loaded = true;
+            else
+               debug_printf("WARNING: Couldn't deserialize shaders");
+         }
+         free(cached_data);
+      } else {
+         debug_printf("WARNING: Couldn't serialize input shaders");
+      }
    }
-   if (prog->type != PIPE_SHADER_COMPUTE)
-      FREE(info->bin.syms);
+   if (!shader_loaded) {
+      cache_size = 0;
+      ret = nv50_ir_generate_code(info, &info_out);
+      if (ret) {
+         NOUVEAU_ERR("shader translation failed: %i\n", ret);
+         goto out;
+      }
+      if (disk_shader_cache) {
+         if (nv50_ir_prog_info_out_serialize(&blob, &info_out)) {
+            disk_cache_put(disk_shader_cache, key, blob.data, blob.size, NULL);
+            cache_size = blob.size;
+         } else {
+            debug_printf("WARNING: Couldn't serialize shaders");
+         }
+      }
+   }
+   blob_finish(&blob);
 
-   prog->code = info->bin.code;
-   prog->code_size = info->bin.codeSize;
-   prog->relocs = info->bin.relocData;
-   prog->fixups = info->bin.fixupData;
-   if (info->target >= NVISA_GV100_CHIPSET)
-      prog->num_gprs = MIN2(info->bin.maxGPR + 5, 256); //XXX: why?
+   prog->code = info_out.bin.code;
+   prog->code_size = info_out.bin.codeSize;
+   prog->relocs = info_out.bin.relocData;
+   prog->fixups = info_out.bin.fixupData;
+   if (info_out.target >= NVISA_GV100_CHIPSET)
+      prog->num_gprs = MIN2(info_out.bin.maxGPR + 5, 256); //XXX: why?
    else
-      prog->num_gprs = MAX2(4, (info->bin.maxGPR + 1));
-   prog->cp.smem_size = info->bin.smemSize;
-   prog->num_barriers = info->numBarriers;
+      prog->num_gprs = MAX2(4, (info_out.bin.maxGPR + 1));
+   prog->cp.smem_size = info_out.bin.smemSize;
+   prog->num_barriers = info_out.numBarriers;
 
-   prog->vp.need_vertex_id = info->io.vertexId < PIPE_MAX_SHADER_INPUTS;
-   prog->vp.need_draw_parameters = info->prop.vp.usesDrawParameters;
+   prog->vp.need_vertex_id = info_out.io.vertexId < PIPE_MAX_SHADER_INPUTS;
+   prog->vp.need_draw_parameters = info_out.prop.vp.usesDrawParameters;
 
-   if (info->io.edgeFlagOut < PIPE_MAX_ATTRIBS)
-      info->out[info->io.edgeFlagOut].mask = 0; /* for headergen */
-   prog->vp.edgeflag = info->io.edgeFlagIn;
+   if (info_out.io.edgeFlagOut < PIPE_MAX_ATTRIBS)
+      info_out.out[info_out.io.edgeFlagOut].mask = 0; /* for headergen */
+   prog->vp.edgeflag = info_out.io.edgeFlagIn;
 
    switch (prog->type) {
    case PIPE_SHADER_VERTEX:
-      ret = nvc0_vp_gen_header(prog, info);
+      ret = nvc0_vp_gen_header(prog, &info_out);
       break;
    case PIPE_SHADER_TESS_CTRL:
-      ret = nvc0_tcp_gen_header(prog, info);
+      ret = nvc0_tcp_gen_header(prog, &info_out);
       break;
    case PIPE_SHADER_TESS_EVAL:
-      ret = nvc0_tep_gen_header(prog, info);
+      ret = nvc0_tep_gen_header(prog, &info_out);
       break;
    case PIPE_SHADER_GEOMETRY:
-      ret = nvc0_gp_gen_header(prog, info);
+      ret = nvc0_gp_gen_header(prog, &info_out);
       break;
    case PIPE_SHADER_FRAGMENT:
-      ret = nvc0_fp_gen_header(prog, info);
+      ret = nvc0_fp_gen_header(prog, &info_out);
       break;
    case PIPE_SHADER_COMPUTE:
-      prog->cp.syms = info->bin.syms;
-      prog->cp.num_syms = info->bin.numSyms;
       break;
    default:
       ret = -1;
@@ -687,10 +725,10 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset,
    if (ret)
       goto out;
 
-   if (info->bin.tlsSpace) {
-      assert(info->bin.tlsSpace < (1 << 24));
+   if (info_out.bin.tlsSpace) {
+      assert(info_out.bin.tlsSpace < (1 << 24));
       prog->hdr[0] |= 1 << 26;
-      prog->hdr[1] |= align(info->bin.tlsSpace, 0x10); /* l[] size */
+      prog->hdr[1] |= align(info_out.bin.tlsSpace, 0x10); /* l[] size */
       prog->need_tls = true;
    }
    /* TODO: factor 2 only needed where joinat/precont is used,
@@ -702,22 +740,22 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset,
       prog->need_tls = true;
    }
    */
-   if (info->io.globalAccess)
+   if (info_out.io.globalAccess)
       prog->hdr[0] |= 1 << 26;
-   if (info->io.globalAccess & 0x2)
+   if (info_out.io.globalAccess & 0x2)
       prog->hdr[0] |= 1 << 16;
-   if (info->io.fp64)
+   if (info_out.io.fp64)
       prog->hdr[0] |= 1 << 27;
 
    if (prog->pipe.stream_output.num_outputs)
-      prog->tfb = nvc0_program_create_tfb_state(info,
+      prog->tfb = nvc0_program_create_tfb_state(&info_out,
                                                 &prog->pipe.stream_output);
 
    pipe_debug_message(debug, SHADER_INFO,
-                      "type: %d, local: %d, shared: %d, gpr: %d, inst: %d, bytes: %d",
-                      prog->type, info->bin.tlsSpace, info->bin.smemSize,
-                      prog->num_gprs, info->bin.instructions,
-                      info->bin.codeSize);
+                      "type: %d, local: %d, shared: %d, gpr: %d, inst: %d, bytes: %d, cached: %zd",
+                      prog->type, info_out.bin.tlsSpace, info_out.bin.smemSize,
+                      prog->num_gprs, info_out.bin.instructions,
+                      info_out.bin.codeSize, cache_size);
 
 #ifndef NDEBUG
    if (debug_get_option("NV50_PROG_CHIPSET", NULL) && info->dbgFlags)
@@ -956,8 +994,6 @@ nvc0_program_destroy(struct nvc0_context *nvc0, struct nvc0_program *prog)
    FREE(prog->code); /* may be 0 for hardcoded shaders */
    FREE(prog->relocs);
    FREE(prog->fixups);
-   if (prog->type == PIPE_SHADER_COMPUTE && prog->cp.syms)
-      FREE(prog->cp.syms);
    if (prog->tfb) {
       if (nvc0->state.tfb == prog->tfb)
          nvc0->state.tfb = NULL;
@@ -968,21 +1004,6 @@ nvc0_program_destroy(struct nvc0_context *nvc0, struct nvc0_program *prog)
 
    prog->pipe = pipe;
    prog->type = type;
-}
-
-uint32_t
-nvc0_program_symbol_offset(const struct nvc0_program *prog, uint32_t label)
-{
-   const struct nv50_ir_prog_symbol *syms =
-      (const struct nv50_ir_prog_symbol *)prog->cp.syms;
-   unsigned base = 0;
-   unsigned i;
-   if (prog->type != PIPE_SHADER_COMPUTE)
-      base = GF100_SHADER_HEADER_SIZE;
-   for (i = 0; i < prog->cp.num_syms; ++i)
-      if (syms[i].label == label)
-         return prog->code_base + base + syms[i].offset;
-   return prog->code_base; /* no symbols or symbol not found */
 }
 
 void

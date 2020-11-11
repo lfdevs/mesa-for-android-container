@@ -89,7 +89,7 @@ brw_setup_vue_interpolation(struct brw_vue_map *vue_map, nir_shader *nir,
       }
    }
 
-   bool debug = false;
+   const bool debug = false;
    if (debug) {
       fprintf(stderr, "VUE map:\n");
       for (int i = 0; i < vue_map->num_slots; i++) {

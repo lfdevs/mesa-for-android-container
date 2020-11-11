@@ -363,6 +363,13 @@ const unsigned *brw_get_program( struct brw_codegen *p,
    return (const unsigned *)p->store;
 }
 
+const brw_shader_reloc *
+brw_get_shader_relocs(struct brw_codegen *p, unsigned *num_relocs)
+{
+   *num_relocs = p->num_relocs;
+   return p->relocs;
+}
+
 bool brw_try_override_assembly(struct brw_codegen *p, int start_offset,
                                const char *identifier)
 {
@@ -409,15 +416,132 @@ bool brw_try_override_assembly(struct brw_codegen *p, int start_offset,
    return true;
 }
 
+const struct brw_label *
+brw_find_label(const struct brw_label *root, int offset)
+{
+   const struct brw_label *curr = root;
+
+   if (curr != NULL)
+   {
+      do {
+         if (curr->offset == offset)
+            return curr;
+
+         curr = curr->next;
+      } while (curr != NULL);
+   }
+
+   return curr;
+}
+
+void
+brw_create_label(struct brw_label **labels, int offset, void *mem_ctx)
+{
+   if (*labels != NULL) {
+      struct brw_label *curr = *labels;
+      struct brw_label *prev;
+
+      do {
+         prev = curr;
+
+         if (curr->offset == offset)
+            return;
+
+         curr = curr->next;
+      } while (curr != NULL);
+
+      curr = ralloc(mem_ctx, struct brw_label);
+      curr->offset = offset;
+      curr->number = prev->number + 1;
+      curr->next = NULL;
+      prev->next = curr;
+   } else {
+      struct brw_label *root = ralloc(mem_ctx, struct brw_label);
+      root->number = 0;
+      root->offset = offset;
+      root->next = NULL;
+      *labels = root;
+   }
+}
+
+const struct brw_label *
+brw_label_assembly(const struct gen_device_info *devinfo,
+                   const void *assembly, int start, int end, void *mem_ctx)
+{
+   struct brw_label *root_label = NULL;
+
+   int to_bytes_scale = sizeof(brw_inst) / brw_jump_scale(devinfo);
+
+   for (int offset = start; offset < end;) {
+      const brw_inst *inst = (const brw_inst *) ((const char *) assembly + offset);
+      brw_inst uncompacted;
+
+      bool is_compact = brw_inst_cmpt_control(devinfo, inst);
+
+      if (is_compact) {
+         brw_compact_inst *compacted = (brw_compact_inst *)inst;
+         brw_uncompact_instruction(devinfo, &uncompacted, compacted);
+         inst = &uncompacted;
+      }
+
+      if (brw_has_uip(devinfo, brw_inst_opcode(devinfo, inst))) {
+         /* Instructions that have UIP also have JIP. */
+         brw_create_label(&root_label,
+            offset + brw_inst_uip(devinfo, inst) * to_bytes_scale, mem_ctx);
+         brw_create_label(&root_label,
+            offset + brw_inst_jip(devinfo, inst) * to_bytes_scale, mem_ctx);
+      } else if (brw_has_jip(devinfo, brw_inst_opcode(devinfo, inst))) {
+         int jip;
+         if (devinfo->gen >= 7) {
+            jip = brw_inst_jip(devinfo, inst);
+         } else {
+            jip = brw_inst_gen6_jump_count(devinfo, inst);
+         }
+
+         brw_create_label(&root_label, offset + jip * to_bytes_scale, mem_ctx);
+      }
+
+      if (is_compact) {
+         offset += sizeof(brw_compact_inst);
+      } else {
+         offset += sizeof(brw_inst);
+      }
+   }
+
+   return root_label;
+}
+
+void
+brw_disassemble_with_labels(const struct gen_device_info *devinfo,
+                            const void *assembly, int start, int end, FILE *out)
+{
+   void *mem_ctx = ralloc_context(NULL);
+   const struct brw_label *root_label =
+      brw_label_assembly(devinfo, assembly, start, end, mem_ctx);
+
+   brw_disassemble(devinfo, assembly, start, end, root_label, out);
+
+   ralloc_free(mem_ctx);
+}
+
 void
 brw_disassemble(const struct gen_device_info *devinfo,
-                const void *assembly, int start, int end, FILE *out)
+                const void *assembly, int start, int end,
+                const struct brw_label *root_label, FILE *out)
 {
    bool dump_hex = (INTEL_DEBUG & DEBUG_HEX) != 0;
 
    for (int offset = start; offset < end;) {
       const brw_inst *insn = (const brw_inst *)((char *)assembly + offset);
       brw_inst uncompacted;
+
+      if (root_label != NULL) {
+        const struct brw_label *label = brw_find_label(root_label, offset);
+        if (label != NULL) {
+           fprintf(out, "\nLABEL%d:\n", label->number);
+        }
+      }
+
       bool compacted = brw_inst_cmpt_control(devinfo, insn);
       if (0)
          fprintf(out, "0x%08x: ", offset);
@@ -442,8 +566,6 @@ brw_disassemble(const struct gen_device_info *devinfo,
 
          brw_uncompact_instruction(devinfo, &uncompacted, compacted);
          insn = &uncompacted;
-         offset += 8;
-      } else {
          if (dump_hex) {
             unsigned char * insn_ptr = ((unsigned char *)&insn[0]);
             for (int i = 0 ; i < 16; i = i + 4) {
@@ -454,10 +576,15 @@ brw_disassemble(const struct gen_device_info *devinfo,
                        insn_ptr[i + 3]);
             }
          }
-         offset += 16;
       }
 
-      brw_disassemble_inst(out, devinfo, insn, compacted);
+      brw_disassemble_inst(out, devinfo, insn, compacted, offset, root_label);
+
+      if (compacted) {
+         offset += sizeof(brw_compact_inst);
+      } else {
+         offset += sizeof(brw_inst);
+      }
    }
 }
 
@@ -530,7 +657,7 @@ static const struct opcode_desc opcode_descs[] = {
    { BRW_OPCODE_FORK,     46,  "fork",    0,    0,    GEN6 },
    { BRW_OPCODE_GOTO,     46,  "goto",    0,    0,    GEN_GE(GEN8) },
    { BRW_OPCODE_POP,      47,  "pop",     2,    0,    GEN_LE(GEN5) },
-   { BRW_OPCODE_WAIT,     48,  "wait",    1,    0,    GEN_LT(GEN12) },
+   { BRW_OPCODE_WAIT,     48,  "wait",    0,    1,    GEN_LT(GEN12) },
    { BRW_OPCODE_SEND,     49,  "send",    1,    1,    GEN_LT(GEN12) },
    { BRW_OPCODE_SENDC,    50,  "sendc",   1,    1,    GEN_LT(GEN12) },
    { BRW_OPCODE_SEND,     49,  "send",    2,    1,    GEN_GE(GEN12) },

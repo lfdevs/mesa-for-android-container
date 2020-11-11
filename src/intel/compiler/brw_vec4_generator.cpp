@@ -130,7 +130,7 @@ generate_tex(struct brw_codegen *p,
       case SHADER_OPCODE_TXD:
          if (inst->shadow_compare) {
             /* Gen7.5+.  Otherwise, lowered by brw_lower_texture_gradients(). */
-            assert(devinfo->gen >= 8 || devinfo->is_haswell);
+            assert(devinfo->is_haswell);
             msg_type = HSW_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE;
          } else {
             msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_DERIVS;
@@ -139,10 +139,6 @@ generate_tex(struct brw_codegen *p,
       case SHADER_OPCODE_TXF:
 	 msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_LD;
 	 break;
-      case SHADER_OPCODE_TXF_CMS_W:
-         assert(devinfo->gen >= 9);
-         msg_type = GEN9_SAMPLER_MESSAGE_SAMPLE_LD2DMS_W;
-         break;
       case SHADER_OPCODE_TXF_CMS:
          if (devinfo->gen >= 7)
             msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_LD2DMS;
@@ -233,12 +229,6 @@ generate_tex(struct brw_codegen *p,
          if (inst->offset)
             /* Set the texel offset bits in DWord 2. */
             dw2 = inst->offset;
-
-         if (devinfo->gen >= 9)
-            /* SKL+ overloads BRW_SAMPLER_SIMD_MODE_SIMD4X2 to also do SIMD8D,
-             * based on bit 22 in the header.
-             */
-            dw2 |= GEN9_SAMPLER_SIMD_MODE_EXTENSION_SIMD4X2;
 
          /* The VS, DS, and FS stages have the g0.2 payload delivered as 0,
           * so header0.2 is 0 when g0 is copied.  The HS and GS stages do
@@ -472,35 +462,29 @@ generate_gs_set_vertex_count(struct brw_codegen *p,
    brw_push_insn_state(p);
    brw_set_default_mask_control(p, BRW_MASK_DISABLE);
 
-   if (p->devinfo->gen >= 8) {
-      /* Move the vertex count into the second MRF for the EOT write. */
-      brw_MOV(p, retype(brw_message_reg(dst.nr + 1), BRW_REGISTER_TYPE_UD),
-              src);
-   } else {
-      /* If we think of the src and dst registers as composed of 8 DWORDs each,
-       * we want to pick up the contents of DWORDs 0 and 4 from src, truncate
-       * them to WORDs, and then pack them into DWORD 2 of dst.
-       *
-       * It's easier to get the EU to do this if we think of the src and dst
-       * registers as composed of 16 WORDS each; then, we want to pick up the
-       * contents of WORDs 0 and 8 from src, and pack them into WORDs 4 and 5
-       * of dst.
-       *
-       * We can do that by the following EU instruction:
-       *
-       *     mov (2) dst.4<1>:uw src<8;1,0>:uw   { Align1, Q1, NoMask }
-       */
-      brw_set_default_access_mode(p, BRW_ALIGN_1);
-      brw_MOV(p,
-              suboffset(stride(retype(dst, BRW_REGISTER_TYPE_UW), 2, 2, 1), 4),
-              stride(retype(src, BRW_REGISTER_TYPE_UW), 8, 1, 0));
-   }
+   /* If we think of the src and dst registers as composed of 8 DWORDs each,
+    * we want to pick up the contents of DWORDs 0 and 4 from src, truncate
+    * them to WORDs, and then pack them into DWORD 2 of dst.
+    *
+    * It's easier to get the EU to do this if we think of the src and dst
+    * registers as composed of 16 WORDS each; then, we want to pick up the
+    * contents of WORDs 0 and 8 from src, and pack them into WORDs 4 and 5
+    * of dst.
+    *
+    * We can do that by the following EU instruction:
+    *
+    *     mov (2) dst.4<1>:uw src<8;1,0>:uw   { Align1, Q1, NoMask }
+    */
+   brw_set_default_access_mode(p, BRW_ALIGN_1);
+   brw_MOV(p,
+           suboffset(stride(retype(dst, BRW_REGISTER_TYPE_UW), 2, 2, 1), 4),
+           stride(retype(src, BRW_REGISTER_TYPE_UW), 8, 1, 0));
+
    brw_pop_insn_state(p);
 }
 
 static void
 generate_gs_svb_write(struct brw_codegen *p,
-                      struct brw_vue_prog_data *prog_data,
                       vec4_instruction *inst,
                       struct brw_reg dst,
                       struct brw_reg src0,
@@ -1281,7 +1265,6 @@ generate_scratch_write(struct brw_codegen *p,
 
 static void
 generate_pull_constant_load(struct brw_codegen *p,
-                            struct brw_vue_prog_data *prog_data,
                             vec4_instruction *inst,
                             struct brw_reg dst,
                             struct brw_reg index,
@@ -1343,7 +1326,6 @@ generate_pull_constant_load(struct brw_codegen *p,
 
 static void
 generate_get_buffer_size(struct brw_codegen *p,
-                         struct brw_vue_prog_data *prog_data,
                          vec4_instruction *inst,
                          struct brw_reg dst,
                          struct brw_reg src,
@@ -1369,7 +1351,6 @@ generate_get_buffer_size(struct brw_codegen *p,
 
 static void
 generate_pull_constant_load_gen7(struct brw_codegen *p,
-                                 struct brw_vue_prog_data *prog_data,
                                  vec4_instruction *inst,
                                  struct brw_reg dst,
                                  struct brw_reg surf_index,
@@ -1419,24 +1400,6 @@ generate_pull_constant_load_gen7(struct brw_codegen *p,
                           0),
          false /* EOT */);
    }
-}
-
-static void
-generate_set_simd4x2_header_gen9(struct brw_codegen *p,
-                                 vec4_instruction *,
-                                 struct brw_reg dst)
-{
-   brw_push_insn_state(p);
-   brw_set_default_mask_control(p, BRW_MASK_DISABLE);
-
-   brw_set_default_exec_size(p, BRW_EXECUTE_8);
-   brw_MOV(p, vec8(dst), retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
-
-   brw_set_default_access_mode(p, BRW_ALIGN_1);
-   brw_MOV(p, get_element_ud(dst, 2),
-           brw_imm_ud(GEN9_SAMPLER_SIMD_MODE_EXTENSION_SIMD4X2));
-
-   brw_pop_insn_state(p);
 }
 
 static void
@@ -1800,7 +1763,7 @@ generate_code(struct brw_codegen *p,
          break;
 
       case SHADER_OPCODE_GET_BUFFER_SIZE:
-         generate_get_buffer_size(p, prog_data, inst, dst, src[0], src[1]);
+         generate_get_buffer_size(p, inst, dst, src[0], src[1]);
          send_count++;
          break;
 
@@ -1820,17 +1783,13 @@ generate_code(struct brw_codegen *p,
          break;
 
       case VS_OPCODE_PULL_CONSTANT_LOAD:
-         generate_pull_constant_load(p, prog_data, inst, dst, src[0], src[1]);
+         generate_pull_constant_load(p, inst, dst, src[0], src[1]);
          send_count++;
          break;
 
       case VS_OPCODE_PULL_CONSTANT_LOAD_GEN7:
-         generate_pull_constant_load_gen7(p, prog_data, inst, dst, src[0], src[1]);
+         generate_pull_constant_load_gen7(p, inst, dst, src[0], src[1]);
          send_count++;
-         break;
-
-      case VS_OPCODE_SET_SIMD4X2_HEADER_GEN9:
-         generate_set_simd4x2_header_gen9(p, inst, dst);
          break;
 
       case GS_OPCODE_URB_WRITE:
@@ -1844,7 +1803,7 @@ generate_code(struct brw_codegen *p,
          break;
 
       case GS_OPCODE_SVB_WRITE:
-         generate_gs_svb_write(p, prog_data, inst, dst, src[0], src[1]);
+         generate_gs_svb_write(p, inst, dst, src[0], src[1]);
          send_count++;
          break;
 
@@ -2238,7 +2197,8 @@ generate_code(struct brw_codegen *p,
 
       /* overriding the shader makes disasm_info invalid */
       if (!brw_try_override_assembly(p, 0, sha1buf)) {
-         dump_assembly(p->store, disasm_info, perf.block_latency);
+         dump_assembly(p->store, 0, p->next_insn_offset,
+                       disasm_info, perf.block_latency);
       } else {
          fprintf(stderr, "Successfully overrode shader with sha1 %s\n\n", sha1buf);
       }
@@ -2279,6 +2239,13 @@ brw_vec4_generate_assembly(const struct brw_compiler *compiler,
    brw_set_default_access_mode(p, BRW_ALIGN_16);
 
    generate_code(p, compiler, log_data, nir, prog_data, cfg, perf, stats);
+
+   assert(prog_data->base.const_data_size == 0);
+   if (nir->constant_data_size > 0) {
+      prog_data->base.const_data_size = nir->constant_data_size;
+      prog_data->base.const_data_offset =
+         brw_append_data(p, nir->constant_data, nir->constant_data_size, 32);
+   }
 
    return brw_get_program(p, &prog_data->base.program_size);
 }

@@ -72,6 +72,15 @@ bool EmitSSBOInstruction::do_emit(nir_instr* instr)
    case nir_intrinsic_store_ssbo:
       return emit_store_ssbo(intr);
    case nir_intrinsic_ssbo_atomic_add:
+   case nir_intrinsic_ssbo_atomic_comp_swap:
+   case nir_intrinsic_ssbo_atomic_or:
+   case nir_intrinsic_ssbo_atomic_xor:
+   case nir_intrinsic_ssbo_atomic_imax:
+   case nir_intrinsic_ssbo_atomic_imin:
+   case nir_intrinsic_ssbo_atomic_umax:
+   case nir_intrinsic_ssbo_atomic_umin:
+   case nir_intrinsic_ssbo_atomic_and:
+   case nir_intrinsic_ssbo_atomic_exchange:
       return emit_ssbo_atomic_op(intr);
    case nir_intrinsic_image_store:
       return emit_image_store(intr);
@@ -89,6 +98,13 @@ bool EmitSSBOInstruction::do_emit(nir_instr* instr)
       return emit_image_load(intr);
    case nir_intrinsic_image_size:
       return emit_image_size(intr);
+   case nir_intrinsic_get_ssbo_size:
+      return emit_buffer_size(intr);
+   case nir_intrinsic_memory_barrier:
+   case nir_intrinsic_memory_barrier_image:
+   case nir_intrinsic_memory_barrier_buffer:
+   case nir_intrinsic_group_memory_barrier:
+      return make_stores_ack_and_waitack();
    default:
       return false;
    }
@@ -103,7 +119,7 @@ bool EmitSSBOInstruction::emit_atomic(const nir_intrinsic_instr* instr)
 
    GPRVector dest = make_dest(instr);
 
-   int base = nir_intrinsic_base(instr);
+   int base = remap_atomic_base(nir_intrinsic_base(instr));
 
    PValue uav_id = from_nir(instr->src[0], 0);
 
@@ -111,7 +127,7 @@ bool EmitSSBOInstruction::emit_atomic(const nir_intrinsic_instr* instr)
 
    GDSInstr *ir = nullptr;
    if (instr->intrinsic == nir_intrinsic_atomic_counter_comp_swap)  {
-      PValue value2 = from_nir_with_fetch_constant(instr->src[1], 1);
+      PValue value2 = from_nir_with_fetch_constant(instr->src[2], 0);
       ir = new GDSInstr(op, dest, value, value2, uav_id, base);
    } else {
       ir = new GDSInstr(op, dest, value, uav_id, base);
@@ -132,7 +148,7 @@ bool EmitSSBOInstruction::emit_unary_atomic(const nir_intrinsic_instr* instr)
 
    PValue uav_id = from_nir(instr->src[0], 0);
 
-   auto ir = new GDSInstr(op, dest, uav_id, nir_intrinsic_base(instr));
+   auto ir = new GDSInstr(op, dest, uav_id, remap_atomic_base(nir_intrinsic_base(instr)));
 
    emit_instruction(ir);
    return true;
@@ -197,8 +213,10 @@ EmitSSBOInstruction::get_rat_opcode(const nir_intrinsic_op opcode, pipe_format f
    case nir_intrinsic_ssbo_atomic_umax:
    case nir_intrinsic_image_atomic_umax:
       return RatInstruction::MAX_UINT_RTN;
+   case nir_intrinsic_ssbo_atomic_xor:
    case nir_intrinsic_image_atomic_xor:
       return RatInstruction::XOR_RTN;
+   case nir_intrinsic_ssbo_atomic_comp_swap:
    case nir_intrinsic_image_atomic_comp_swap:
       if (util_format_is_float(format))
          return RatInstruction::CMPXCHG_FLT_RTN;
@@ -221,7 +239,7 @@ bool EmitSSBOInstruction::emit_atomic_add(const nir_intrinsic_instr* instr)
    PValue uav_id = from_nir(instr->src[0], 0);
 
    auto ir = new GDSInstr(DS_OP_ADD_RET, dest, value, uav_id,
-                          nir_intrinsic_base(instr));
+                          remap_atomic_base(nir_intrinsic_base(instr)));
 
    emit_instruction(ir);
    return true;
@@ -230,6 +248,7 @@ bool EmitSSBOInstruction::emit_atomic_add(const nir_intrinsic_instr* instr)
 bool EmitSSBOInstruction::load_atomic_inc_limits()
 {
    m_atomic_update = get_temp_register();
+   m_atomic_update->set_keep_alive();
    emit_instruction(new AluInstruction(op1_mov, m_atomic_update, literal(1),
    {alu_write, alu_last_instr}));
    return true;
@@ -240,7 +259,7 @@ bool EmitSSBOInstruction::emit_atomic_inc(const nir_intrinsic_instr* instr)
    PValue uav_id = from_nir(instr->src[0], 0);
    GPRVector dest = make_dest(instr);
    auto ir = new GDSInstr(DS_OP_ADD_RET, dest, m_atomic_update, uav_id,
-                          nir_intrinsic_base(instr));
+                          remap_atomic_base(nir_intrinsic_base(instr)));
    emit_instruction(ir);
    return true;
 }
@@ -252,8 +271,10 @@ bool EmitSSBOInstruction::emit_atomic_pre_dec(const nir_intrinsic_instr *instr)
    PValue uav_id = from_nir(instr->src[0], 0);
 
    auto ir = new GDSInstr(DS_OP_SUB_RET, dest, m_atomic_update, uav_id,
-                          nir_intrinsic_base(instr));
+                          remap_atomic_base(nir_intrinsic_base(instr)));
    emit_instruction(ir);
+
+   emit_instruction(new AluInstruction(op2_sub_int,  dest.x(), dest.x(), literal(1), last_write));
 
    return true;
 }
@@ -263,7 +284,7 @@ bool EmitSSBOInstruction::emit_load_ssbo(const nir_intrinsic_instr* instr)
    GPRVector dest = make_dest(instr);
 
    /** src0 not used, should be some offset */
-   auto addr = from_nir_with_fetch_constant(instr->src[1], 0);
+   auto addr = from_nir(instr->src[1], 0);
    PValue addr_temp = create_register_from_nir_src(instr->src[1], 1);
 
    /** Should be lowered in nir */
@@ -286,7 +307,8 @@ bool EmitSSBOInstruction::emit_load_ssbo(const nir_intrinsic_instr* instr)
 
    /* TODO fix resource index */
    auto ir = new FetchInstruction(dest, addr_temp,
-                                  R600_IMAGE_REAL_RESOURCE_OFFSET, from_nir(instr->src[0], 0),
+                                  R600_IMAGE_REAL_RESOURCE_OFFSET + m_ssbo_image_offset
+                                  , from_nir(instr->src[0], 0),
                                   formats[nir_dest_num_components(instr->dest) - 1], vtx_nf_int);
    ir->set_dest_swizzle(dest_swt[nir_dest_num_components(instr->dest) - 1]);
    ir->set_flag(vtx_use_tc);
@@ -306,6 +328,8 @@ bool EmitSSBOInstruction::emit_store_ssbo(const nir_intrinsic_instr* instr)
 
    int temp1 = allocate_temp_register();
    GPRVector addr_vec(temp1, {0,1,2,7});
+
+   auto temp2 = get_temp_vec4();
 
    auto rat_id = from_nir(instr->src[1], 0);
 
@@ -334,16 +358,24 @@ bool EmitSSBOInstruction::emit_store_ssbo(const nir_intrinsic_instr* instr)
    auto values = vec_from_nir_with_fetch_constant(instr->src[0],
          (1 << nir_src_num_components(instr->src[0])) - 1, {0,1,2,3}, true);
 
-   emit_instruction(new RatInstruction(cf_mem_rat, RatInstruction::STORE_TYPED,
-                                       values, addr_vec, m_ssbo_image_offset, rat_id, 1,
-                                       1, 0, false));
+   auto cf_op = cf_mem_rat;
+   //auto cf_op = nir_intrinsic_access(instr) & ACCESS_COHERENT ? cf_mem_rat_cacheless : cf_mem_rat;
+   auto store = new RatInstruction(cf_op, RatInstruction::STORE_TYPED,
+                                   values, addr_vec, m_ssbo_image_offset, rat_id, 1,
+                                   1, 0, false);
+   emit_instruction(store);
+   m_store_ops.push_back(store);
+
    for (unsigned i = 1; i < nir_src_num_components(instr->src[0]); ++i) {
-      emit_instruction(new AluInstruction(op1_mov, values.reg_i(0), from_nir(instr->src[0], i), write));
+      emit_instruction(new AluInstruction(op1_mov, temp2.reg_i(0), from_nir(instr->src[0], i), write));
       emit_instruction(new AluInstruction(op2_add_int, addr_vec.reg_i(0),
                                           {addr_vec.reg_i(0), Value::one_i}, last_write));
-      emit_instruction(new RatInstruction(cf_mem_rat, RatInstruction::STORE_TYPED,
-                                          values, addr_vec, 0, rat_id, 1,
-                                          1, 0, false));
+      store = new RatInstruction(cf_op, RatInstruction::STORE_TYPED,
+                                 temp2, addr_vec, 0, rat_id, 1,
+                                 1, 0, false);
+      emit_instruction(store);
+      if (!(nir_intrinsic_access(instr) & ACCESS_COHERENT))
+         m_store_ops.push_back(store);
    }
 #endif
    return true;
@@ -371,8 +403,13 @@ EmitSSBOInstruction::emit_image_store(const nir_intrinsic_instr *intrin)
       emit_instruction(new AluInstruction(op1_mov, coord.reg_i(1), coord.reg_i(2), {alu_last_instr, alu_write}));
    }
 
-   auto store = new RatInstruction(cf_mem_rat, RatInstruction::STORE_TYPED, value, coord, imageid,
+   auto op = cf_mem_rat; //nir_intrinsic_access(intrin) & ACCESS_COHERENT ? cf_mem_rat_cacheless : cf_mem_rat;
+   auto store = new RatInstruction(op, RatInstruction::STORE_TYPED, value, coord, imageid,
                                    image_offset, 1, 0xf, 0, false);
+
+   //if (!(nir_intrinsic_access(intrin) & ACCESS_COHERENT))
+      m_store_ops.push_back(store);
+
    emit_instruction(store);
    return true;
 }
@@ -390,10 +427,24 @@ EmitSSBOInstruction::emit_ssbo_atomic_op(const nir_intrinsic_instr *intrin)
 
    auto opcode = EmitSSBOInstruction::get_rat_opcode(intrin->intrinsic, PIPE_FORMAT_R32_UINT);
 
-   auto coord =  from_nir_with_fetch_constant(intrin->src[1], 0);
 
-   emit_instruction(new AluInstruction(op1_mov, m_rat_return_address.reg_i(0), from_nir(intrin->src[2], 0), write));
-   emit_instruction(new AluInstruction(op1_mov, m_rat_return_address.reg_i(2), Value::zero, last_write));
+   auto coord_orig =  from_nir(intrin->src[1], 0, 0);
+   auto coord = get_temp_register(0);
+
+   emit_instruction(new AluInstruction(op2_lshr_int, coord, coord_orig, literal(2), last_write));
+
+   if (intrin->intrinsic == nir_intrinsic_ssbo_atomic_comp_swap) {
+      emit_instruction(new AluInstruction(op1_mov, m_rat_return_address.reg_i(0),
+                                          from_nir(intrin->src[3], 0), {alu_write}));
+      // TODO: cayman wants channel 2 here
+      emit_instruction(new AluInstruction(op1_mov, m_rat_return_address.reg_i(3),
+                                          from_nir(intrin->src[2], 0), {alu_last_instr, alu_write}));
+   } else {
+      emit_instruction(new AluInstruction(op1_mov, m_rat_return_address.reg_i(0),
+                                          from_nir(intrin->src[2], 0), {alu_write}));
+      emit_instruction(new AluInstruction(op1_mov, m_rat_return_address.reg_i(2), Value::zero, last_write));
+   }
+
 
    GPRVector out_vec({coord, coord, coord, coord});
 
@@ -413,7 +464,7 @@ EmitSSBOInstruction::emit_ssbo_atomic_op(const nir_intrinsic_instr *intrin)
                                      0,
                                      false,
                                      0xf,
-                                     R600_IMAGE_IMMED_RESOURCE_OFFSET,
+                                     R600_IMAGE_IMMED_RESOURCE_OFFSET + imageid,
                                      0,
                                      bim_none,
                                      false,
@@ -421,7 +472,7 @@ EmitSSBOInstruction::emit_ssbo_atomic_op(const nir_intrinsic_instr *intrin)
                                      0,
                                      0,
                                      0,
-                                     PValue(),
+                                     image_offset,
                                      {0,7,7,7});
    fetch->set_flag(vtx_srf_mode);
    fetch->set_flag(vtx_use_tc);
@@ -463,8 +514,9 @@ EmitSSBOInstruction::emit_image_load(const nir_intrinsic_instr *intrin)
                                              from_nir(intrin->src[3], 0), {alu_last_instr, alu_write}));
       }
    }
+   auto cf_op = cf_mem_rat;// nir_intrinsic_access(intrin) & ACCESS_COHERENT ? cf_mem_rat_cacheless : cf_mem_rat;
 
-   auto store = new RatInstruction(cf_mem_rat, rat_op, m_rat_return_address, coord, imageid,
+   auto store = new RatInstruction(cf_op, rat_op, m_rat_return_address, coord, imageid,
                                    image_offset, 1, 0xf, 0, true);
    emit_instruction(store);
    return fetch_return_value(intrin);
@@ -501,7 +553,7 @@ bool EmitSSBOInstruction::fetch_return_value(const nir_intrinsic_instr *intrin)
                                      dest,
                                      0,
                                      false,
-                                     0xf,
+                                     0x3,
                                      R600_IMAGE_IMMED_RESOURCE_OFFSET + imageid,
                                      0,
                                      bim_none,
@@ -524,6 +576,8 @@ bool EmitSSBOInstruction::emit_image_size(const nir_intrinsic_instr *intrin)
 {
    GPRVector dest = vec_from_nir(intrin->dest, nir_dest_num_components(intrin->dest));
    GPRVector src{0,{4,4,4,4}};
+
+   assert(nir_src_as_uint(intrin->src[1]) == 0);
 
    auto const_offset = nir_src_as_const_value(intrin->src[0]);
    auto dyn_offset = PValue();
@@ -553,6 +607,45 @@ bool EmitSSBOInstruction::emit_image_size(const nir_intrinsic_instr *intrin)
          EmitInstruction::last_write));
       }
    }
+   return true;
+}
+
+bool EmitSSBOInstruction::emit_buffer_size(const nir_intrinsic_instr *intr)
+{
+   std::array<PValue,4> dst_elms;
+
+
+   for (uint16_t i = 0; i < 4; ++i) {
+      dst_elms[i] = from_nir(intr->dest, (i < intr->dest.ssa.num_components) ? i : 7);
+   }
+
+   GPRVector dst(dst_elms);
+   GPRVector src(0,{4,4,4,4});
+
+   auto const_offset = nir_src_as_const_value(intr->src[0]);
+   auto dyn_offset = PValue();
+   int res_id = R600_IMAGE_REAL_RESOURCE_OFFSET;
+   if (const_offset)
+      res_id += const_offset[0].u32;
+   else
+      assert(0 && "dynamic buffer offset not supported in buffer_size");
+
+   emit_instruction(new FetchInstruction(dst, PValue(new GPRValue(0, 7)),
+                    res_id, bim_none));
+
+   return true;
+}
+
+bool EmitSSBOInstruction::make_stores_ack_and_waitack()
+{
+   for (auto&& store: m_store_ops)
+      store->set_ack();
+
+   if (!m_store_ops.empty())
+      emit_instruction(new WaitAck(0));
+
+   m_store_ops.clear();
+
    return true;
 }
 

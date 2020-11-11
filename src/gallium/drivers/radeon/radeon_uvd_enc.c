@@ -60,10 +60,19 @@ static void radeon_uvd_enc_get_param(struct radeon_uvd_encoder *enc,
    enc->enc_pic.not_referenced = pic->not_referenced;
    enc->enc_pic.is_iframe = (pic->picture_type == PIPE_H265_ENC_PICTURE_TYPE_IDR) ||
                             (pic->picture_type == PIPE_H265_ENC_PICTURE_TYPE_I);
-   enc->enc_pic.crop_left = 0;
-   enc->enc_pic.crop_right = (align(enc->base.width, 16) - enc->base.width) / 2;
-   enc->enc_pic.crop_top = 0;
-   enc->enc_pic.crop_bottom = (align(enc->base.height, 16) - enc->base.height) / 2;
+
+   if (pic->seq.conformance_window_flag) {
+         enc->enc_pic.crop_left = pic->seq.conf_win_left_offset;
+         enc->enc_pic.crop_right = pic->seq.conf_win_right_offset;
+         enc->enc_pic.crop_top = pic->seq.conf_win_top_offset;
+         enc->enc_pic.crop_bottom = pic->seq.conf_win_bottom_offset;
+   } else {
+         enc->enc_pic.crop_left = 0;
+         enc->enc_pic.crop_right = (align(enc->base.width, 16) - enc->base.width) / 2;
+         enc->enc_pic.crop_top = 0;
+         enc->enc_pic.crop_bottom = (align(enc->base.height, 16) - enc->base.height) / 2;
+   }
+
    enc->enc_pic.general_tier_flag = pic->seq.general_tier_flag;
    enc->enc_pic.general_profile_idc = pic->seq.general_profile_idc;
    enc->enc_pic.general_level_idc = pic->seq.general_level_idc;
@@ -238,7 +247,7 @@ static void radeon_uvd_enc_get_feedback(struct pipe_video_codec *encoder, void *
 
    if (NULL != size) {
       radeon_uvd_enc_feedback_t *fb_data = (radeon_uvd_enc_feedback_t *)enc->ws->buffer_map(
-         fb->res->buf, enc->cs, PIPE_TRANSFER_READ_WRITE | RADEON_TRANSFER_TEMPORARY);
+         fb->res->buf, enc->cs, PIPE_MAP_READ_WRITE | RADEON_MAP_TEMPORARY);
 
       if (!fb_data->status)
          *size = fb_data->bitstream_size;

@@ -266,7 +266,8 @@ anv_RegisterDeviceEventEXT(VkDevice _device,
                                    &device->physical->wsi_device,
                                    device_event_info,
                                    allocator,
-                                   &fence->permanent.fence_wsi);
+                                   &fence->permanent.fence_wsi,
+                                   -1);
    if (ret == VK_SUCCESS)
       *_fence = anv_fence_to_handle(fence);
    else
@@ -294,7 +295,7 @@ anv_RegisterDisplayEventEXT(VkDevice _device,
 
    ret = wsi_register_display_event(
       _device, &device->physical->wsi_device,
-      display, display_event_info, allocator, &(fence->permanent.fence_wsi));
+      display, display_event_info, allocator, &fence->permanent.fence_wsi, -1);
 
    if (ret == VK_SUCCESS)
       *_fence = anv_fence_to_handle(fence);

@@ -1370,7 +1370,6 @@ static void
 emit_3dstate_streamout(struct anv_graphics_pipeline *pipeline,
                        const VkPipelineRasterizationStateCreateInfo *rs_info)
 {
-#if GEN_GEN >= 8
    const struct brw_vue_prog_data *prog_data =
       anv_pipeline_get_last_vue_prog_data(pipeline);
    const struct brw_vue_map *vue_map = &prog_data->vue_map;
@@ -1382,12 +1381,10 @@ emit_3dstate_streamout(struct anv_graphics_pipeline *pipeline,
       xfb_info = pipeline->shaders[MESA_SHADER_TESS_EVAL]->xfb_info;
    else
       xfb_info = pipeline->shaders[MESA_SHADER_VERTEX]->xfb_info;
-#endif
 
    anv_batch_emit(&pipeline->base.batch, GENX(3DSTATE_STREAMOUT), so) {
       so.RenderingDisable = rs_info->rasterizerDiscardEnable;
 
-#if GEN_GEN >= 8
       if (xfb_info) {
          so.SOFunctionEnable = true;
          so.SOStatisticsEnable = true;
@@ -1397,10 +1394,28 @@ emit_3dstate_streamout(struct anv_graphics_pipeline *pipeline,
          so.RenderStreamSelect = stream_info ?
                                  stream_info->rasterizationStream : 0;
 
+#if GEN_GEN >= 8
          so.Buffer0SurfacePitch = xfb_info->buffers[0].stride;
          so.Buffer1SurfacePitch = xfb_info->buffers[1].stride;
          so.Buffer2SurfacePitch = xfb_info->buffers[2].stride;
          so.Buffer3SurfacePitch = xfb_info->buffers[3].stride;
+#else
+         pipeline->gen7.xfb_bo_pitch[0] = xfb_info->buffers[0].stride;
+         pipeline->gen7.xfb_bo_pitch[1] = xfb_info->buffers[1].stride;
+         pipeline->gen7.xfb_bo_pitch[2] = xfb_info->buffers[2].stride;
+         pipeline->gen7.xfb_bo_pitch[3] = xfb_info->buffers[3].stride;
+
+         /* On Gen7, the SO buffer enables live in 3DSTATE_STREAMOUT which
+          * is a bit inconvenient because we don't know what buffers will
+          * actually be enabled until draw time.  We do our best here by
+          * setting them based on buffers_written and we disable them
+          * as-needed at draw time by setting EndAddress = BaseAddress.
+          */
+         so.SOBufferEnable0 = xfb_info->buffers_written & (1 << 0);
+         so.SOBufferEnable1 = xfb_info->buffers_written & (1 << 1);
+         so.SOBufferEnable2 = xfb_info->buffers_written & (1 << 2);
+         so.SOBufferEnable3 = xfb_info->buffers_written & (1 << 3);
+#endif
 
          int urb_entry_read_offset = 0;
          int urb_entry_read_length =
@@ -1419,10 +1434,8 @@ emit_3dstate_streamout(struct anv_graphics_pipeline *pipeline,
          so.Stream3VertexReadOffset = urb_entry_read_offset;
          so.Stream3VertexReadLength = urb_entry_read_length - 1;
       }
-#endif /* GEN_GEN >= 8 */
    }
 
-#if GEN_GEN >= 8
    if (xfb_info) {
       struct GENX(SO_DECL) so_decl[MAX_XFB_STREAMS][128];
       int next_offset[MAX_XFB_BUFFERS] = {0, 0, 0, 0};
@@ -1521,7 +1534,6 @@ emit_3dstate_streamout(struct anv_graphics_pipeline *pipeline,
             });
       }
    }
-#endif /* GEN_GEN >= 8 */
 }
 
 static uint32_t

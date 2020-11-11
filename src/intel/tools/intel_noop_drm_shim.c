@@ -142,6 +142,24 @@ i915_ioctl_get_param(int fd, unsigned long request, void *arg)
       else
          *gp->value = I915_GEM_PPGTT_FULL;
       return 0;
+
+   case I915_PARAM_NUM_FENCES_AVAIL:
+      *gp->value = 8; /* gen2/3 value, unused in brw/iris */
+      return 0;
+
+   case I915_PARAM_HAS_BLT:
+      *gp->value = 1; /* gen2/3 value, unused in brw/iris */
+      return 0;
+
+   case I915_PARAM_HAS_BSD:
+   case I915_PARAM_HAS_LLC:
+   case I915_PARAM_HAS_VEBOX:
+      *gp->value = 0; /* gen2/3 value, unused in brw/iris */
+      return 0;
+
+   case I915_PARAM_HAS_GEM:
+   case I915_PARAM_HAS_RELAXED_DELTA:
+   case I915_PARAM_HAS_RELAXED_FENCING:
    case I915_PARAM_HAS_WAIT_TIMEOUT:
    case I915_PARAM_HAS_EXECBUF2:
    case I915_PARAM_HAS_EXEC_SOFTPIN:

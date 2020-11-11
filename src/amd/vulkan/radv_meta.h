@@ -219,24 +219,21 @@ void radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer,
 				     struct radv_image *dest_image,
 				     VkFormat dest_format,
 				     VkImageLayout dest_image_layout,
-				     uint32_t region_count,
-				     const VkImageResolve *regions);
+				     const VkImageResolve2KHR *region);
 
 void radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer,
 				      struct radv_image *src_image,
 				      VkImageLayout src_image_layout,
 				      struct radv_image *dest_image,
 				      VkImageLayout dest_image_layout,
-				      uint32_t region_count,
-				      const VkImageResolve *regions);
+				     const VkImageResolve2KHR *region);
 
 void radv_decompress_resolve_subpass_src(struct radv_cmd_buffer *cmd_buffer);
 
 void radv_decompress_resolve_src(struct radv_cmd_buffer *cmd_buffer,
 				 struct radv_image *src_image,
 				 VkImageLayout src_image_layout,
-				 uint32_t region_count,
-				 const VkImageResolve *regions);
+				 const VkImageResolve2KHR *region);
 
 uint32_t radv_clear_cmask(struct radv_cmd_buffer *cmd_buffer,
 			  struct radv_image *image,
@@ -286,11 +283,11 @@ radv_is_hw_resolve_pipeline(struct radv_cmd_buffer *cmd_buffer)
 	struct radv_meta_state *meta_state = &cmd_buffer->device->meta_state;
 	struct radv_pipeline *pipeline = cmd_buffer->state.pipeline;
 
-	for (uint32_t i = 0; i < NUM_META_FS_KEYS; ++i) {
-		VkFormat format = radv_fs_key_format_exemplars[i];
-		unsigned fs_key = radv_format_meta_fs_key(format);
+	if (!pipeline)
+		return false;
 
-		if (radv_pipeline_to_handle(pipeline) == meta_state->resolve.pipeline[fs_key])
+	for (uint32_t i = 0; i < NUM_META_FS_KEYS; ++i) {
+		if (radv_pipeline_to_handle(pipeline) == meta_state->resolve.pipeline[i])
 			return true;
 	}
 	return false;
@@ -310,6 +307,10 @@ void radv_meta_build_resolve_shader_core(nir_builder *b,
 					 nir_variable *input_img,
 					 nir_variable *color,
 					 nir_ssa_def *img_coord);
+
+nir_ssa_def *radv_meta_load_descriptor(nir_builder *b, unsigned desc_set,
+				       unsigned binding);
+
 #ifdef __cplusplus
 }
 #endif

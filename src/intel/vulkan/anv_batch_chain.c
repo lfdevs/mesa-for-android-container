@@ -188,6 +188,9 @@ anv_reloc_list_add(struct anv_reloc_list *list,
    if (address_u64_out)
       *address_u64_out = target_bo_offset + delta;
 
+   assert(unwrapped_target_bo->gem_handle > 0);
+   assert(unwrapped_target_bo->refcount > 0);
+
    if (unwrapped_target_bo->flags & EXEC_OBJECT_PINNED) {
       assert(!target_bo->is_wrapper);
       uint32_t idx = unwrapped_target_bo->gem_handle;
@@ -1096,6 +1099,8 @@ anv_cmd_buffer_add_secondary(struct anv_cmd_buffer *primary,
 struct anv_execbuf {
    struct drm_i915_gem_execbuffer2           execbuf;
 
+   struct drm_i915_gem_execbuffer_ext_timeline_fences timeline_fences;
+
    struct drm_i915_gem_exec_object2 *        objects;
    uint32_t                                  bo_count;
    struct anv_bo **                          bos;
@@ -1122,6 +1127,24 @@ anv_execbuf_finish(struct anv_execbuf *exec)
 {
    vk_free(exec->alloc, exec->objects);
    vk_free(exec->alloc, exec->bos);
+}
+
+static void
+anv_execbuf_add_ext(struct anv_execbuf *exec,
+                    uint32_t ext_name,
+                    struct i915_user_extension *ext)
+{
+   __u64 *iter = &exec->execbuf.cliprects_ptr;
+
+   exec->execbuf.flags |= I915_EXEC_USE_EXTENSIONS;
+
+   while (*iter != 0) {
+      iter = (__u64 *) &((struct i915_user_extension *)(uintptr_t)*iter)->next_extension;
+   }
+
+   ext->name = ext_name;
+
+   *iter = (uintptr_t) ext;
 }
 
 static VkResult
@@ -1638,7 +1661,7 @@ setup_empty_execbuf(struct anv_execbuf *execbuf, struct anv_device *device)
       .buffer_count = execbuf->bo_count,
       .batch_start_offset = 0,
       .batch_len = 8, /* GEN7_MI_BATCH_BUFFER_END and NOOP */
-      .flags = I915_EXEC_HANDLE_LUT | I915_EXEC_RENDER,
+      .flags = I915_EXEC_HANDLE_LUT | I915_EXEC_RENDER | I915_EXEC_NO_RELOC,
       .rsvd1 = device->context_id,
       .rsvd2 = 0,
    };
@@ -1711,7 +1734,7 @@ anv_queue_execbuf_locked(struct anv_queue *queue,
          .buffer_count = execbuf.bo_count,
          .batch_start_offset = 0,
          .batch_len = submit->simple_bo_size,
-         .flags = I915_EXEC_HANDLE_LUT | I915_EXEC_RENDER,
+         .flags = I915_EXEC_HANDLE_LUT | I915_EXEC_RENDER | I915_EXEC_NO_RELOC,
          .rsvd1 = device->context_id,
          .rsvd2 = 0,
       };
@@ -1727,7 +1750,7 @@ anv_queue_execbuf_locked(struct anv_queue *queue,
       submit->cmd_buffer &&
       submit->cmd_buffer->perf_query_pool;
 
-   if (unlikely(INTEL_DEBUG & DEBUG_BATCH)) {
+   if (INTEL_DEBUG & DEBUG_BATCH) {
       if (submit->cmd_buffer) {
          if (has_perf_query) {
             struct anv_query_pool *query_pool = submit->cmd_buffer->perf_query_pool;
@@ -1759,18 +1782,30 @@ anv_queue_execbuf_locked(struct anv_queue *queue,
 
    if (submit->fence_count > 0) {
       assert(device->physical->has_syncobj);
-      execbuf.execbuf.flags |= I915_EXEC_FENCE_ARRAY;
-      execbuf.execbuf.num_cliprects = submit->fence_count;
-      execbuf.execbuf.cliprects_ptr = (uintptr_t)submit->fences;
+      if (device->has_thread_submit) {
+         execbuf.timeline_fences.fence_count = submit->fence_count;
+         execbuf.timeline_fences.handles_ptr = (uintptr_t)submit->fences;
+         execbuf.timeline_fences.values_ptr = (uintptr_t)submit->fence_values;
+         anv_execbuf_add_ext(&execbuf,
+                             DRM_I915_GEM_EXECBUFFER_EXT_TIMELINE_FENCES,
+                             &execbuf.timeline_fences.base);
+      } else {
+         execbuf.execbuf.flags |= I915_EXEC_FENCE_ARRAY;
+         execbuf.execbuf.num_cliprects = submit->fence_count;
+         execbuf.execbuf.cliprects_ptr = (uintptr_t)submit->fences;
+      }
    }
 
    if (submit->in_fence != -1) {
+      assert(!device->has_thread_submit);
       execbuf.execbuf.flags |= I915_EXEC_FENCE_IN;
       execbuf.execbuf.rsvd2 |= (uint32_t)submit->in_fence;
    }
 
-   if (submit->need_out_fence)
+   if (submit->need_out_fence) {
+      assert(!device->has_thread_submit);
       execbuf.execbuf.flags |= I915_EXEC_FENCE_OUT;
+   }
 
    if (has_perf_query) {
       struct anv_query_pool *query_pool = submit->cmd_buffer->perf_query_pool;
@@ -1781,7 +1816,7 @@ anv_queue_execbuf_locked(struct anv_queue *queue,
       /* Some performance queries just the pipeline statistic HW, no need for
        * OA in that case, so no need to reconfigure.
        */
-      if (likely((INTEL_DEBUG & DEBUG_NO_OACONFIG) == 0) &&
+      if ((INTEL_DEBUG & DEBUG_NO_OACONFIG) == 0 &&
           (query_info->kind == GEN_PERF_QUERY_TYPE_OA ||
            query_info->kind == GEN_PERF_QUERY_TYPE_RAW)) {
          int ret = gen_ioctl(device->perf_fd, I915_PERF_IOCTL_CONFIG,

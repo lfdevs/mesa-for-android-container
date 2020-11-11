@@ -1368,6 +1368,9 @@ builtin_builder::create_intrinsics()
                 _atomic_intrinsic2(NV_shader_atomic_float_supported,
                                    glsl_type::float_type,
                                    ir_intrinsic_generic_atomic_add),
+                _atomic_intrinsic2(buffer_atomics_supported,
+                                   glsl_type::int64_t_type,
+                                   ir_intrinsic_generic_atomic_add),
                 _atomic_counter_intrinsic1(shader_atomic_counter_ops_or_v460_desktop,
                                            ir_intrinsic_atomic_counter_add),
                 NULL);
@@ -1380,6 +1383,12 @@ builtin_builder::create_intrinsics()
                                    ir_intrinsic_generic_atomic_min),
                 _atomic_intrinsic2(INTEL_shader_atomic_float_minmax_supported,
                                    glsl_type::float_type,
+                                   ir_intrinsic_generic_atomic_min),
+                _atomic_intrinsic2(buffer_atomics_supported,
+                                   glsl_type::uint64_t_type,
+                                   ir_intrinsic_generic_atomic_min),
+                _atomic_intrinsic2(buffer_atomics_supported,
+                                   glsl_type::int64_t_type,
                                    ir_intrinsic_generic_atomic_min),
                 _atomic_counter_intrinsic1(shader_atomic_counter_ops_or_v460_desktop,
                                            ir_intrinsic_atomic_counter_min),
@@ -1394,6 +1403,12 @@ builtin_builder::create_intrinsics()
                 _atomic_intrinsic2(INTEL_shader_atomic_float_minmax_supported,
                                    glsl_type::float_type,
                                    ir_intrinsic_generic_atomic_max),
+                _atomic_intrinsic2(buffer_atomics_supported,
+                                   glsl_type::uint64_t_type,
+                                   ir_intrinsic_generic_atomic_max),
+                _atomic_intrinsic2(buffer_atomics_supported,
+                                   glsl_type::int64_t_type,
+                                   ir_intrinsic_generic_atomic_max),
                 _atomic_counter_intrinsic1(shader_atomic_counter_ops_or_v460_desktop,
                                            ir_intrinsic_atomic_counter_max),
                 NULL);
@@ -1403,6 +1418,12 @@ builtin_builder::create_intrinsics()
                                    ir_intrinsic_generic_atomic_and),
                 _atomic_intrinsic2(buffer_atomics_supported,
                                    glsl_type::int_type,
+                                   ir_intrinsic_generic_atomic_and),
+                _atomic_intrinsic2(buffer_atomics_supported,
+                                   glsl_type::uint64_t_type,
+                                   ir_intrinsic_generic_atomic_and),
+                _atomic_intrinsic2(buffer_atomics_supported,
+                                   glsl_type::int64_t_type,
                                    ir_intrinsic_generic_atomic_and),
                 _atomic_counter_intrinsic1(shader_atomic_counter_ops_or_v460_desktop,
                                            ir_intrinsic_atomic_counter_and),
@@ -1414,6 +1435,12 @@ builtin_builder::create_intrinsics()
                 _atomic_intrinsic2(buffer_atomics_supported,
                                    glsl_type::int_type,
                                    ir_intrinsic_generic_atomic_or),
+                _atomic_intrinsic2(buffer_atomics_supported,
+                                   glsl_type::uint64_t_type,
+                                   ir_intrinsic_generic_atomic_or),
+                _atomic_intrinsic2(buffer_atomics_supported,
+                                   glsl_type::int64_t_type,
+                                   ir_intrinsic_generic_atomic_or),
                 _atomic_counter_intrinsic1(shader_atomic_counter_ops_or_v460_desktop,
                                            ir_intrinsic_atomic_counter_or),
                 NULL);
@@ -1424,6 +1451,12 @@ builtin_builder::create_intrinsics()
                 _atomic_intrinsic2(buffer_atomics_supported,
                                    glsl_type::int_type,
                                    ir_intrinsic_generic_atomic_xor),
+                _atomic_intrinsic2(buffer_atomics_supported,
+                                   glsl_type::uint64_t_type,
+                                   ir_intrinsic_generic_atomic_xor),
+                _atomic_intrinsic2(buffer_atomics_supported,
+                                   glsl_type::int64_t_type,
+                                   ir_intrinsic_generic_atomic_xor),
                 _atomic_counter_intrinsic1(shader_atomic_counter_ops_or_v460_desktop,
                                            ir_intrinsic_atomic_counter_xor),
                 NULL);
@@ -1433,6 +1466,9 @@ builtin_builder::create_intrinsics()
                                    ir_intrinsic_generic_atomic_exchange),
                 _atomic_intrinsic2(buffer_atomics_supported,
                                    glsl_type::int_type,
+                                   ir_intrinsic_generic_atomic_exchange),
+                _atomic_intrinsic2(buffer_atomics_supported,
+                                   glsl_type::int64_t_type,
                                    ir_intrinsic_generic_atomic_exchange),
                 _atomic_intrinsic2(NV_shader_atomic_float_supported,
                                    glsl_type::float_type,
@@ -1446,6 +1482,9 @@ builtin_builder::create_intrinsics()
                                    ir_intrinsic_generic_atomic_comp_swap),
                 _atomic_intrinsic3(buffer_atomics_supported,
                                    glsl_type::int_type,
+                                   ir_intrinsic_generic_atomic_comp_swap),
+                _atomic_intrinsic3(buffer_atomics_supported,
+                                   glsl_type::int64_t_type,
                                    ir_intrinsic_generic_atomic_comp_swap),
                 _atomic_intrinsic3(INTEL_shader_atomic_float_minmax_supported,
                                    glsl_type::float_type,
@@ -1580,6 +1619,18 @@ builtin_builder::create_builtins()
                 _##NAME(v130, glsl_type::vec2_type),  \
                 _##NAME(v130, glsl_type::vec3_type),                  \
                 _##NAME(v130, glsl_type::vec4_type),  \
+                _##NAME(fp64, glsl_type::double_type),  \
+                _##NAME(fp64, glsl_type::dvec2_type),    \
+                _##NAME(fp64, glsl_type::dvec3_type),     \
+                _##NAME(fp64, glsl_type::dvec4_type),      \
+                NULL);
+
+#define FD130GS4(NAME)                          \
+   add_function(#NAME,                          \
+                _##NAME(v130_or_gpu_shader4, glsl_type::float_type), \
+                _##NAME(v130_or_gpu_shader4, glsl_type::vec2_type),  \
+                _##NAME(v130_or_gpu_shader4, glsl_type::vec3_type),  \
+                _##NAME(v130_or_gpu_shader4, glsl_type::vec4_type),  \
                 _##NAME(fp64, glsl_type::double_type),  \
                 _##NAME(fp64, glsl_type::dvec2_type),    \
                 _##NAME(fp64, glsl_type::dvec3_type),     \
@@ -1796,9 +1847,9 @@ builtin_builder::create_builtins()
    FI64(abs)
    FI64(sign)
    FD(floor)
-   FD(trunc)
-   FD(round)
-   FD(roundEven)
+   FD130(trunc)
+   FD130GS4(round)
+   FD130(roundEven)
    FD(ceil)
    FD(fract)
 
@@ -1830,7 +1881,7 @@ builtin_builder::create_builtins()
                 _mod(fp64, glsl_type::dvec4_type,  glsl_type::dvec4_type),
                 NULL);
 
-   FD(modf)
+   FD130(modf)
 
    FIUD2_MIXED(min)
    FIUD2_MIXED(max)
@@ -4051,6 +4102,9 @@ builtin_builder::create_builtins()
                 _atomic_op2("__intrinsic_atomic_add",
                             shader_atomic_float_add,
                             glsl_type::float_type),
+                _atomic_op2("__intrinsic_atomic_add",
+                            buffer_atomics_supported,
+                            glsl_type::int64_t_type),
                 NULL);
    add_function("atomicMin",
                 _atomic_op2("__intrinsic_atomic_min",
@@ -4062,6 +4116,12 @@ builtin_builder::create_builtins()
                 _atomic_op2("__intrinsic_atomic_min",
                             shader_atomic_float_minmax,
                             glsl_type::float_type),
+                _atomic_op2("__intrinsic_atomic_min",
+                            buffer_atomics_supported,
+                            glsl_type::uint64_t_type),
+                _atomic_op2("__intrinsic_atomic_min",
+                            buffer_atomics_supported,
+                            glsl_type::int64_t_type),
                 NULL);
    add_function("atomicMax",
                 _atomic_op2("__intrinsic_atomic_max",
@@ -4073,6 +4133,12 @@ builtin_builder::create_builtins()
                 _atomic_op2("__intrinsic_atomic_max",
                             shader_atomic_float_minmax,
                             glsl_type::float_type),
+                _atomic_op2("__intrinsic_atomic_max",
+                            buffer_atomics_supported,
+                            glsl_type::uint64_t_type),
+                _atomic_op2("__intrinsic_atomic_max",
+                            buffer_atomics_supported,
+                            glsl_type::int64_t_type),
                 NULL);
    add_function("atomicAnd",
                 _atomic_op2("__intrinsic_atomic_and",
@@ -4081,6 +4147,12 @@ builtin_builder::create_builtins()
                 _atomic_op2("__intrinsic_atomic_and",
                             buffer_atomics_supported,
                             glsl_type::int_type),
+                _atomic_op2("__intrinsic_atomic_and",
+                            buffer_atomics_supported,
+                            glsl_type::uint64_t_type),
+                _atomic_op2("__intrinsic_atomic_and",
+                            buffer_atomics_supported,
+                            glsl_type::int64_t_type),
                 NULL);
    add_function("atomicOr",
                 _atomic_op2("__intrinsic_atomic_or",
@@ -4089,6 +4161,12 @@ builtin_builder::create_builtins()
                 _atomic_op2("__intrinsic_atomic_or",
                             buffer_atomics_supported,
                             glsl_type::int_type),
+                _atomic_op2("__intrinsic_atomic_or",
+                            buffer_atomics_supported,
+                            glsl_type::uint64_t_type),
+                _atomic_op2("__intrinsic_atomic_or",
+                            buffer_atomics_supported,
+                            glsl_type::int64_t_type),
                 NULL);
    add_function("atomicXor",
                 _atomic_op2("__intrinsic_atomic_xor",
@@ -4097,6 +4175,12 @@ builtin_builder::create_builtins()
                 _atomic_op2("__intrinsic_atomic_xor",
                             buffer_atomics_supported,
                             glsl_type::int_type),
+                _atomic_op2("__intrinsic_atomic_xor",
+                            buffer_atomics_supported,
+                            glsl_type::uint64_t_type),
+                _atomic_op2("__intrinsic_atomic_xor",
+                            buffer_atomics_supported,
+                            glsl_type::int64_t_type),
                 NULL);
    add_function("atomicExchange",
                 _atomic_op2("__intrinsic_atomic_exchange",
@@ -4105,6 +4189,9 @@ builtin_builder::create_builtins()
                 _atomic_op2("__intrinsic_atomic_exchange",
                             buffer_atomics_supported,
                             glsl_type::int_type),
+                _atomic_op2("__intrinsic_atomic_exchange",
+                            buffer_atomics_supported,
+                            glsl_type::int64_t_type),
                 _atomic_op2("__intrinsic_atomic_exchange",
                             shader_atomic_float_exchange,
                             glsl_type::float_type),
@@ -4116,6 +4203,9 @@ builtin_builder::create_builtins()
                 _atomic_op3("__intrinsic_atomic_comp_swap",
                             buffer_atomics_supported,
                             glsl_type::int_type),
+                _atomic_op3("__intrinsic_atomic_comp_swap",
+                            buffer_atomics_supported,
+                            glsl_type::int64_t_type),
                 _atomic_op3("__intrinsic_atomic_comp_swap",
                             shader_atomic_float_minmax,
                             glsl_type::float_type),

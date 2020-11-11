@@ -1255,8 +1255,8 @@ CodeEmitterNVC0::emitSLCT(const CmpInstruction *i)
       code[0] |= 1 << 5;
 }
 
-static void
-selpFlip(const FixupEntry *entry, uint32_t *code, const FixupData& data)
+void
+nvc0_selpFlip(const FixupEntry *entry, uint32_t *code, const FixupData& data)
 {
    int loc = entry->loc;
    if (data.force_persample_interp)
@@ -1273,7 +1273,7 @@ void CodeEmitterNVC0::emitSELP(const Instruction *i)
       code[1] |= 1 << 20;
 
    if (i->subOp == 1) {
-      addInterp(0, 0, selpFlip);
+      addInterp(0, 0, nvc0_selpFlip);
    }
 }
 
@@ -1726,8 +1726,8 @@ CodeEmitterNVC0::emitInterpMode(const Instruction *i)
    }
 }
 
-static void
-interpApply(const FixupEntry *entry, uint32_t *code, const FixupData& data)
+void
+nvc0_interpApply(const FixupEntry *entry, uint32_t *code, const FixupData& data)
 {
    int ipa = entry->ipa;
    int reg = entry->reg;
@@ -1762,10 +1762,10 @@ CodeEmitterNVC0::emitINTERP(const Instruction *i)
 
       if (i->op == OP_PINTERP) {
          srcId(i->src(1), 26);
-         addInterp(i->ipa, SDATA(i->src(1)).id, interpApply);
+         addInterp(i->ipa, SDATA(i->src(1)).id, nvc0_interpApply);
       } else {
          code[0] |= 0x3f << 26;
-         addInterp(i->ipa, 0x3f, interpApply);
+         addInterp(i->ipa, 0x3f, nvc0_interpApply);
       }
 
       srcId(i->src(0).getIndirect(0), 20);

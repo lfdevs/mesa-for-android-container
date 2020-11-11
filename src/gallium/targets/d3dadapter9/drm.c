@@ -47,22 +47,21 @@
 
 #define DBG_CHANNEL DBG_ADAPTER
 
-const char __driConfigOptionsNine[] =
-DRI_CONF_BEGIN
+const driOptionDescription __driConfigOptionsNine[] = {
     DRI_CONF_SECTION_PERFORMANCE
          DRI_CONF_VBLANK_MODE(DRI_CONF_VBLANK_DEF_INTERVAL_1)
     DRI_CONF_SECTION_END
     DRI_CONF_SECTION_NINE
         DRI_CONF_NINE_OVERRIDEVENDOR(-1)
         DRI_CONF_NINE_THROTTLE(-2)
-        DRI_CONF_NINE_THREADSUBMIT("false")
-        DRI_CONF_NINE_ALLOWDISCARDDELAYEDRELEASE("true")
-        DRI_CONF_NINE_TEARFREEDISCARD("false")
+        DRI_CONF_NINE_THREADSUBMIT(false)
+        DRI_CONF_NINE_ALLOWDISCARDDELAYEDRELEASE(true)
+        DRI_CONF_NINE_TEARFREEDISCARD(false)
         DRI_CONF_NINE_CSMT(-1)
-        DRI_CONF_NINE_DYNAMICTEXTUREWORKAROUND("false")
-        DRI_CONF_NINE_SHADERINLINECONSTANTS("false")
+        DRI_CONF_NINE_DYNAMICTEXTUREWORKAROUND(false)
+        DRI_CONF_NINE_SHADERINLINECONSTANTS(false)
     DRI_CONF_SECTION_END
-DRI_CONF_END;
+};
 
 struct fallback_card_config {
     const char *name;
@@ -249,7 +248,8 @@ drm_create_adapter( int fd,
     ctx->base.throttling_value = 2;
     ctx->base.throttling = ctx->base.throttling_value > 0;
 
-    driParseOptionInfo(&defaultInitOptions, __driConfigOptionsNine);
+    driParseOptionInfo(&defaultInitOptions, __driConfigOptionsNine,
+                       ARRAY_SIZE(__driConfigOptionsNine));
     driParseConfigFiles(&userInitOptions, &defaultInitOptions, 0,
                         "nine", NULL, NULL, 0, NULL, 0);
     if (driCheckOption(&userInitOptions, "throttle_value", DRI_INT)) {

@@ -429,6 +429,7 @@ static void radeon_uvd_enc_nalu_sps_hevc(struct radeon_uvd_encoder *enc)
                                     ? 0x1
                                     : 0x0;
    radeon_uvd_enc_code_fixed_bits(enc, conformance_window_flag, 1);
+
    if (conformance_window_flag == 1) {
       radeon_uvd_enc_code_ue(enc, enc->enc_pic.crop_left);
       radeon_uvd_enc_code_ue(enc, enc->enc_pic.crop_right);

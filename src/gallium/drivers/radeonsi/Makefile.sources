@@ -1,8 +1,4 @@
-GENERATED_SOURCES := \
-	si_driinfo.h
-
 C_SOURCES := \
-	$(GENERATED_SOURCES) \
 	cik_sdma.c \
 	driinfo_radeonsi.h \
 	gfx10_query.c \

@@ -381,7 +381,7 @@ bool r600_append_tcs_TF_emission(nir_shader *shader, enum pipe_prim_type prim_ty
                      1, 32, NULL);
    nir_builder_instr_insert(b, &invocation_id->instr);
 
-   nir_push_if(b, nir_ieq(b, &invocation_id->dest.ssa, nir_imm_int(b, 0)));
+   nir_push_if(b, nir_ieq_imm(b, &invocation_id->dest.ssa, 0));
    auto base = emit_load_param_base(b, nir_intrinsic_load_tcs_out_param_base_r600);
    auto rel_patch_id = r600_load_rel_patch_id(b);
 

@@ -201,7 +201,7 @@ static void printtypeinfo (struct rnntypeinfo *ti, struct rnnbitfield *bf,
 			if (width == 32)
 				fprintf(dst, "fui(val)");
 			else if (width == 16)
-				fprintf(dst, "util_float_to_half(val)");
+				fprintf(dst, "_mesa_float_to_half(val)");
 			else
 				assert(!"invalid float size");
 		} else {

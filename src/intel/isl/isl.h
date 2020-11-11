@@ -298,6 +298,7 @@ enum isl_format {
    ISL_FORMAT_BC7_UNORM_SRGB =                                 419,
    ISL_FORMAT_BC6H_UF16 =                                      420,
    ISL_FORMAT_PLANAR_420_8 =                                   421,
+   ISL_FORMAT_PLANAR_420_16 =                                  422,
    ISL_FORMAT_R8G8B8_UNORM_SRGB =                              424,
    ISL_FORMAT_ETC1_RGB8 =                                      425,
    ISL_FORMAT_ETC2_RGB8 =                                      426,
@@ -374,6 +375,10 @@ enum isl_format {
     * explicit number.  We'll just let the C compiler assign it for us.  Any
     * actual hardware formats *must* come before these in the list.
     */
+
+   /* Formats for the aux-map */
+   ISL_FORMAT_PLANAR_420_10,
+   ISL_FORMAT_PLANAR_420_12,
 
    /* Formats for auxiliary surfaces */
    ISL_FORMAT_HIZ,
@@ -912,6 +917,10 @@ typedef uint64_t isl_surf_usage_flags_t;
 #define ISL_SURF_USAGE_HIZ_BIT                 (1u << 13)
 #define ISL_SURF_USAGE_MCS_BIT                 (1u << 14)
 #define ISL_SURF_USAGE_CCS_BIT                 (1u << 15)
+#define ISL_SURF_USAGE_VERTEX_BUFFER_BIT       (1u << 16)
+#define ISL_SURF_USAGE_INDEX_BUFFER_BIT        (1u << 17)
+#define ISL_SURF_USAGE_CONSTANT_BUFFER_BIT     (1u << 18)
+#define ISL_SURF_USAGE_STAGING_BIT             (1u << 19)
 /** @} */
 
 /**
@@ -1067,6 +1076,7 @@ struct isl_device {
    struct {
       uint32_t internal;
       uint32_t external;
+      uint32_t l1_hdc_l3_llc;
    } mocs;
 };
 
@@ -1633,7 +1643,10 @@ isl_format_has_bc_compression(enum isl_format fmt)
 static inline bool
 isl_format_is_planar(enum isl_format fmt)
 {
-   return fmt == ISL_FORMAT_PLANAR_420_8;
+   return fmt == ISL_FORMAT_PLANAR_420_8 ||
+          fmt == ISL_FORMAT_PLANAR_420_10 ||
+          fmt == ISL_FORMAT_PLANAR_420_12 ||
+          fmt == ISL_FORMAT_PLANAR_420_16;
 }
 
 static inline bool
@@ -1873,7 +1886,8 @@ isl_drm_modifier_get_default_aux_state(uint64_t modifier)
       return ISL_AUX_STATE_AUX_INVALID;
 
    assert(mod_info->aux_usage == ISL_AUX_USAGE_CCS_E ||
-          mod_info->aux_usage == ISL_AUX_USAGE_GEN12_CCS_E);
+          mod_info->aux_usage == ISL_AUX_USAGE_GEN12_CCS_E ||
+          mod_info->aux_usage == ISL_AUX_USAGE_MC);
    return mod_info->supports_clear_color ? ISL_AUX_STATE_COMPRESSED_CLEAR :
                                            ISL_AUX_STATE_COMPRESSED_NO_CLEAR;
 }
@@ -1986,6 +2000,8 @@ struct isl_swizzle
 isl_swizzle_compose(struct isl_swizzle first, struct isl_swizzle second);
 struct isl_swizzle
 isl_swizzle_invert(struct isl_swizzle swizzle);
+
+uint32_t isl_mocs(const struct isl_device *dev, isl_surf_usage_flags_t usage);
 
 #define isl_surf_init(dev, surf, ...) \
    isl_surf_init_s((dev), (surf), \

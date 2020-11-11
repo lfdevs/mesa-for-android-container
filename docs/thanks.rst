@@ -15,7 +15,7 @@ somewhat dated, unfortunately.
 -  Precision Insight, Inc., VA Linux Systems, Inc., and most recently,
    Tungsten Graphics, Inc. have supported the ongoing development of
    Mesa.
--  The `Mesa <https://www.mesa3d.org>`__ website and git repository are
+-  The `Mesa <https://www.mesa3d.org>`__ website and Git repository are
    hosted by `freedesktop.org <https://freedesktop.org/>`__.
 -  `alt.software <http://web.archive.org/web/20131110021426/http://www.altsoftware.com/>`__
    contributed the Direct3D driver.

@@ -223,6 +223,7 @@ struct blorp_params
 void blorp_params_init(struct blorp_params *params);
 
 enum blorp_shader_type {
+   BLORP_SHADER_TYPE_COPY,
    BLORP_SHADER_TYPE_BLIT,
    BLORP_SHADER_TYPE_CLEAR,
    BLORP_SHADER_TYPE_MCS_PARTIAL_RESOLVE,
@@ -360,6 +361,8 @@ struct brw_blorp_blit_prog_key
  */
 
 void brw_blorp_init_wm_prog_key(struct brw_wm_prog_key *wm_key);
+
+const char *blorp_shader_type_to_name(enum blorp_shader_type type);
 
 const unsigned *
 blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,

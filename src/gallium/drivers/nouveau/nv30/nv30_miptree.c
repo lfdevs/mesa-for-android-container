@@ -324,7 +324,7 @@ nv30_miptree_transfer_map(struct pipe_context *pipe, struct pipe_resource *pt,
    tx->tmp.y1     = tx->tmp.h;
    tx->tmp.z      = 0;
 
-   if (usage & PIPE_TRANSFER_READ) {
+   if (usage & PIPE_MAP_READ) {
       bool is_3d = mt->base.base.target == PIPE_TEXTURE_3D;
       unsigned offset = tx->img.offset;
       unsigned z = tx->img.z;
@@ -349,9 +349,9 @@ nv30_miptree_transfer_map(struct pipe_context *pipe, struct pipe_resource *pt,
       return tx->tmp.bo->map;
    }
 
-   if (usage & PIPE_TRANSFER_READ)
+   if (usage & PIPE_MAP_READ)
       access |= NOUVEAU_BO_RD;
-   if (usage & PIPE_TRANSFER_WRITE)
+   if (usage & PIPE_MAP_WRITE)
       access |= NOUVEAU_BO_WR;
 
    ret = nouveau_bo_map(tx->tmp.bo, access, nv30->base.client);
@@ -374,7 +374,7 @@ nv30_miptree_transfer_unmap(struct pipe_context *pipe,
    struct nv30_miptree *mt = nv30_miptree(tx->base.resource);
    unsigned i;
 
-   if (ptx->usage & PIPE_TRANSFER_WRITE) {
+   if (ptx->usage & PIPE_MAP_WRITE) {
       bool is_3d = mt->base.base.target == PIPE_TEXTURE_3D;
       for (i = 0; i < tx->base.box.depth; ++i) {
          nv30_transfer_rect(nv30, NEAREST, &tx->tmp, &tx->img);

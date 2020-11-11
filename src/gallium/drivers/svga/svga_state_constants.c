@@ -515,7 +515,7 @@ emit_consts_vgpu9(struct svga_context *svga, enum pipe_shader_type shader)
       /* emit user-provided constants */
       data = (const float (*)[4])
          pipe_buffer_map(&svga->pipe, svga->curr.constbufs[shader][0].buffer,
-                         PIPE_TRANSFER_READ, &transfer);
+                         PIPE_MAP_READ, &transfer);
       if (!data) {
          return PIPE_ERROR_OUT_OF_MEMORY;
       }
@@ -603,7 +603,7 @@ emit_constbuf(struct svga_context *svga,
          src_map = pipe_buffer_map_range(&svga->pipe,
                                          (struct pipe_resource *)buffer,
                                          buffer_offset, buffer_size,
-                                         PIPE_TRANSFER_READ, &src_transfer);
+                                         PIPE_MAP_READ, &src_transfer);
          assert(src_map);
          if (!src_map) {
             return PIPE_ERROR_OUT_OF_MEMORY;

@@ -131,7 +131,6 @@ namespace SwrJit
         Value*        mpfnTranslateGfxAddressForRead;
         Value*        mpfnTranslateGfxAddressForWrite;
         Value*        mpParamSimDC;
-        FunctionType* mpTrackMemAccessFuncTy;
         Value*        mpfnTrackMemAccess;
     };
 } // namespace SwrJit

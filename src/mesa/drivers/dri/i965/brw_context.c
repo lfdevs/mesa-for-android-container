@@ -141,7 +141,7 @@ intel_get_string(struct gl_context * ctx, GLenum name)
 
 static void
 brw_set_background_context(struct gl_context *ctx,
-                           struct util_queue_monitoring *queue_info)
+                           UNUSED struct util_queue_monitoring *queue_info)
 {
    struct brw_context *brw = brw_context(ctx);
    __DRIcontext *driContext = brw->driContext;
@@ -923,6 +923,11 @@ brw_process_driconf_options(struct brw_context *brw)
    ctx->Const.AllowGLSLCrossStageInterpolationMismatch =
       driQueryOptionb(options, "allow_glsl_cross_stage_interpolation_mismatch");
 
+   char *vendor_str = driQueryOptionstr(options, "force_gl_vendor");
+   /* not an empty string */
+   if (*vendor_str)
+      ctx->Const.VendorOverride = vendor_str;
+
    ctx->Const.dri_config_options_sha1 = ralloc_array(brw, unsigned char, 20);
    driComputeOptionsSha1(&brw->screen->optionCache,
                          ctx->Const.dri_config_options_sha1);
@@ -1454,7 +1459,7 @@ intel_update_dri2_buffers(struct brw_context *brw, __DRIdrawable *drawable)
     * thus ignore the invalidate. */
    drawable->lastStamp = drawable->dri2.stamp;
 
-   if (unlikely(INTEL_DEBUG & DEBUG_DRI))
+   if (INTEL_DEBUG & DEBUG_DRI)
       fprintf(stderr, "enter %s, drawable %p\n", __func__, drawable);
 
    intel_query_dri2_buffers(brw, drawable, &buffers, &count);
@@ -1507,7 +1512,7 @@ intel_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable)
     * thus ignore the invalidate. */
    drawable->lastStamp = drawable->dri2.stamp;
 
-   if (unlikely(INTEL_DEBUG & DEBUG_DRI))
+   if (INTEL_DEBUG & DEBUG_DRI)
       fprintf(stderr, "enter %s, drawable %p\n", __func__, drawable);
 
    if (dri_screen->image.loader)
@@ -1686,7 +1691,7 @@ intel_process_dri2_buffer(struct brw_context *brw,
    if (old_name == buffer->name)
       return;
 
-   if (unlikely(INTEL_DEBUG & DEBUG_DRI)) {
+   if (INTEL_DEBUG & DEBUG_DRI) {
       fprintf(stderr,
               "attaching buffer %d, at %d, cpp %d, pitch %d\n",
               buffer->name, buffer->attachment,

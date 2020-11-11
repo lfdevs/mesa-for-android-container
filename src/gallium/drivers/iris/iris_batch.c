@@ -211,7 +211,7 @@ iris_init_batch(struct iris_context *ice,
          batch->other_batches[j++] = &ice->batches[i];
    }
 
-   if (unlikely(INTEL_DEBUG)) {
+   if (INTEL_DEBUG) {
       const unsigned decode_flags =
          GEN_BATCH_DECODE_FULL |
          ((INTEL_DEBUG & DEBUG_COLOR) ? GEN_BATCH_DECODE_IN_COLOR : 0) |
@@ -443,7 +443,7 @@ iris_batch_free(struct iris_batch *batch)
 
    _mesa_hash_table_destroy(batch->cache.render, NULL);
 
-   if (unlikely(INTEL_DEBUG))
+   if (INTEL_DEBUG)
       gen_batch_decode_ctx_finish(&batch->decoder);
 }
 
@@ -684,8 +684,7 @@ _iris_batch_flush(struct iris_batch *batch, const char *file, int line)
 
    iris_finish_batch(batch);
 
-   if (unlikely(INTEL_DEBUG &
-                (DEBUG_BATCH | DEBUG_SUBMIT | DEBUG_PIPE_CONTROL))) {
+   if (INTEL_DEBUG & (DEBUG_BATCH | DEBUG_SUBMIT | DEBUG_PIPE_CONTROL)) {
       const char *basefile = strstr(file, "iris/");
       if (basefile)
          file = basefile + 5;
@@ -719,7 +718,7 @@ _iris_batch_flush(struct iris_batch *batch, const char *file, int line)
 
    util_dynarray_clear(&batch->exec_fences);
 
-   if (unlikely(INTEL_DEBUG & DEBUG_SYNC)) {
+   if (INTEL_DEBUG & DEBUG_SYNC) {
       dbg_printf("waiting for idle\n");
       iris_bo_wait_rendering(batch->bo); /* if execbuf failed; this is a nop */
    }

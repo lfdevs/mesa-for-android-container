@@ -953,16 +953,23 @@ static const uint32_t gen12_3src_subreg_table[32] = {
    0b01000000000010000000, /* .0  .4  .0  .8  */
 };
 
-static const uint32_t *control_index_table;
-static const uint32_t *datatype_table;
-static const uint16_t *subreg_table;
-static const uint16_t *src0_index_table;
-static const uint16_t *src1_index_table;
+struct compaction_state {
+   const struct gen_device_info *devinfo;
+   const uint32_t *control_index_table;
+   const uint32_t *datatype_table;
+   const uint16_t *subreg_table;
+   const uint16_t *src0_index_table;
+   const uint16_t *src1_index_table;
+};
+
+static void compaction_state_init(struct compaction_state *c,
+                                  const struct gen_device_info *devinfo);
 
 static bool
-set_control_index(const struct gen_device_info *devinfo,
+set_control_index(const struct compaction_state *c,
                   brw_compact_inst *dst, const brw_inst *src)
 {
+   const struct gen_device_info *devinfo = c->devinfo;
    uint32_t uncompacted; /* 17b/G45; 19b/IVB+; 21b/TGL+ */
 
    if (devinfo->gen >= 12) {
@@ -994,7 +1001,7 @@ set_control_index(const struct gen_device_info *devinfo,
    }
 
    for (int i = 0; i < 32; i++) {
-      if (control_index_table[i] == uncompacted) {
+      if (c->control_index_table[i] == uncompacted) {
          brw_compact_inst_set_control_index(devinfo, dst, i);
 	 return true;
       }
@@ -1004,9 +1011,10 @@ set_control_index(const struct gen_device_info *devinfo,
 }
 
 static bool
-set_datatype_index(const struct gen_device_info *devinfo, brw_compact_inst *dst,
+set_datatype_index(const struct compaction_state *c, brw_compact_inst *dst,
                    const brw_inst *src, bool is_immediate)
 {
+   const struct gen_device_info *devinfo = c->devinfo;
    uint32_t uncompacted; /* 18b/G45+; 21b/BDW+; 20b/TGL+ */
 
    if (devinfo->gen >= 12) {
@@ -1036,7 +1044,7 @@ set_datatype_index(const struct gen_device_info *devinfo, brw_compact_inst *dst,
    }
 
    for (int i = 0; i < 32; i++) {
-      if (datatype_table[i] == uncompacted) {
+      if (c->datatype_table[i] == uncompacted) {
          brw_compact_inst_set_datatype_index(devinfo, dst, i);
 	 return true;
       }
@@ -1046,9 +1054,10 @@ set_datatype_index(const struct gen_device_info *devinfo, brw_compact_inst *dst,
 }
 
 static bool
-set_subreg_index(const struct gen_device_info *devinfo, brw_compact_inst *dst,
+set_subreg_index(const struct compaction_state *c, brw_compact_inst *dst,
                  const brw_inst *src, bool is_immediate)
 {
+   const struct gen_device_info *devinfo = c->devinfo;
    uint16_t uncompacted; /* 15b */
 
    if (devinfo->gen >= 12) {
@@ -1066,7 +1075,7 @@ set_subreg_index(const struct gen_device_info *devinfo, brw_compact_inst *dst,
    }
 
    for (int i = 0; i < 32; i++) {
-      if (subreg_table[i] == uncompacted) {
+      if (c->subreg_table[i] == uncompacted) {
          brw_compact_inst_set_subreg_index(devinfo, dst, i);
 	 return true;
       }
@@ -1076,9 +1085,10 @@ set_subreg_index(const struct gen_device_info *devinfo, brw_compact_inst *dst,
 }
 
 static bool
-set_src0_index(const struct gen_device_info *devinfo,
-               brw_compact_inst *dst, const brw_inst *src)
+set_src0_index(const struct compaction_state *c, brw_compact_inst *dst,
+               const brw_inst *src)
 {
+   const struct gen_device_info *devinfo = c->devinfo;
    uint16_t uncompacted; /* 12b */
    int table_len;
 
@@ -1095,7 +1105,7 @@ set_src0_index(const struct gen_device_info *devinfo,
    }
 
    for (int i = 0; i < table_len; i++) {
-      if (src0_index_table[i] == uncompacted) {
+      if (c->src0_index_table[i] == uncompacted) {
          brw_compact_inst_set_src0_index(devinfo, dst, i);
 	 return true;
       }
@@ -1105,9 +1115,10 @@ set_src0_index(const struct gen_device_info *devinfo,
 }
 
 static bool
-set_src1_index(const struct gen_device_info *devinfo, brw_compact_inst *dst,
+set_src1_index(const struct compaction_state *c, brw_compact_inst *dst,
                const brw_inst *src, bool is_immediate, unsigned imm)
 {
+   const struct gen_device_info *devinfo = c->devinfo;
    if (is_immediate) {
       if (devinfo->gen >= 12) {
          /* src1 index takes the low 4 bits of the 12-bit compacted value */
@@ -1134,7 +1145,7 @@ set_src1_index(const struct gen_device_info *devinfo, brw_compact_inst *dst,
       }
 
       for (int i = 0; i < table_len; i++) {
-         if (src1_index_table[i] == uncompacted) {
+         if (c->src1_index_table[i] == uncompacted) {
             brw_compact_inst_set_src1_index(devinfo, dst, i);
             return true;
          }
@@ -1631,10 +1642,11 @@ precompact(const struct gen_device_info *devinfo, brw_inst inst)
  * It doesn't modify dst unless src is compactable, which is relied on by
  * brw_compact_instructions().
  */
-bool
-brw_try_compact_instruction(const struct gen_device_info *devinfo,
-                            brw_compact_inst *dst, const brw_inst *src)
+static bool
+try_compact_instruction(const struct compaction_state *c,
+                        brw_compact_inst *dst, const brw_inst *src)
 {
+   const struct gen_device_info *devinfo = c->devinfo;
    brw_compact_inst temp;
 
    assert(brw_inst_cmpt_control(devinfo, src) == 0);
@@ -1683,15 +1695,15 @@ brw_try_compact_instruction(const struct gen_device_info *devinfo,
    compact(hw_opcode);
    compact(debug_control);
 
-   if (!set_control_index(devinfo, &temp, src))
+   if (!set_control_index(c, &temp, src))
       return false;
-   if (!set_datatype_index(devinfo, &temp, src, is_immediate))
+   if (!set_datatype_index(c, &temp, src, is_immediate))
       return false;
-   if (!set_subreg_index(devinfo, &temp, src, is_immediate))
+   if (!set_subreg_index(c, &temp, src, is_immediate))
       return false;
-   if (!set_src0_index(devinfo, &temp, src))
+   if (!set_src0_index(c, &temp, src))
       return false;
-   if (!set_src1_index(devinfo, &temp, src, is_immediate, compacted_imm))
+   if (!set_src1_index(c, &temp, src, is_immediate, compacted_imm))
       return false;
 
    if (devinfo->gen >= 12) {
@@ -1737,12 +1749,22 @@ brw_try_compact_instruction(const struct gen_device_info *devinfo,
    return true;
 }
 
+bool
+brw_try_compact_instruction(const struct gen_device_info *devinfo,
+                            brw_compact_inst *dst, const brw_inst *src)
+{
+   struct compaction_state c;
+   compaction_state_init(&c, devinfo);
+   return try_compact_instruction(&c, dst, src);
+}
+
 static void
-set_uncompacted_control(const struct gen_device_info *devinfo, brw_inst *dst,
+set_uncompacted_control(const struct compaction_state *c, brw_inst *dst,
                         brw_compact_inst *src)
 {
+   const struct gen_device_info *devinfo = c->devinfo;
    uint32_t uncompacted =
-      control_index_table[brw_compact_inst_control_index(devinfo, src)];
+      c->control_index_table[brw_compact_inst_control_index(devinfo, src)];
 
    if (devinfo->gen >= 12) {
       brw_inst_set_bits(dst, 95, 92, (uncompacted >> 17));
@@ -1771,11 +1793,12 @@ set_uncompacted_control(const struct gen_device_info *devinfo, brw_inst *dst,
 }
 
 static void
-set_uncompacted_datatype(const struct gen_device_info *devinfo, brw_inst *dst,
+set_uncompacted_datatype(const struct compaction_state *c, brw_inst *dst,
                          brw_compact_inst *src)
 {
+   const struct gen_device_info *devinfo = c->devinfo;
    uint32_t uncompacted =
-      datatype_table[brw_compact_inst_datatype_index(devinfo, src)];
+      c->datatype_table[brw_compact_inst_datatype_index(devinfo, src)];
 
    if (devinfo->gen >= 12) {
       brw_inst_set_bits(dst, 98, 98, (uncompacted >> 19));
@@ -1799,11 +1822,12 @@ set_uncompacted_datatype(const struct gen_device_info *devinfo, brw_inst *dst,
 }
 
 static void
-set_uncompacted_subreg(const struct gen_device_info *devinfo, brw_inst *dst,
+set_uncompacted_subreg(const struct compaction_state *c, brw_inst *dst,
                        brw_compact_inst *src)
 {
+   const struct gen_device_info *devinfo = c->devinfo;
    uint16_t uncompacted =
-      subreg_table[brw_compact_inst_subreg_index(devinfo, src)];
+      c->subreg_table[brw_compact_inst_subreg_index(devinfo, src)];
 
    if (devinfo->gen >= 12) {
       brw_inst_set_bits(dst, 103, 99, (uncompacted >> 10));
@@ -1817,11 +1841,12 @@ set_uncompacted_subreg(const struct gen_device_info *devinfo, brw_inst *dst,
 }
 
 static void
-set_uncompacted_src0(const struct gen_device_info *devinfo, brw_inst *dst,
+set_uncompacted_src0(const struct compaction_state *c, brw_inst *dst,
                      brw_compact_inst *src)
 {
+   const struct gen_device_info *devinfo = c->devinfo;
    uint32_t compacted = brw_compact_inst_src0_index(devinfo, src);
-   uint16_t uncompacted = src0_index_table[compacted];
+   uint16_t uncompacted = c->src0_index_table[compacted];
 
    if (devinfo->gen >= 12) {
       brw_inst_set_bits(dst, 87, 84, (uncompacted >> 8));
@@ -1835,11 +1860,12 @@ set_uncompacted_src0(const struct gen_device_info *devinfo, brw_inst *dst,
 }
 
 static void
-set_uncompacted_src1(const struct gen_device_info *devinfo, brw_inst *dst,
+set_uncompacted_src1(const struct compaction_state *c, brw_inst *dst,
                      brw_compact_inst *src)
 {
+   const struct gen_device_info *devinfo = c->devinfo;
    uint16_t uncompacted =
-      src1_index_table[brw_compact_inst_src1_index(devinfo, src)];
+      c->src1_index_table[brw_compact_inst_src1_index(devinfo, src)];
 
    if (devinfo->gen >= 12) {
       brw_inst_set_bits(dst, 121, 120, (uncompacted >> 10));
@@ -1853,9 +1879,10 @@ set_uncompacted_src1(const struct gen_device_info *devinfo, brw_inst *dst,
 }
 
 static void
-set_uncompacted_3src_control_index(const struct gen_device_info *devinfo,
+set_uncompacted_3src_control_index(const struct compaction_state *c,
                                    brw_inst *dst, brw_compact_inst *src)
 {
+   const struct gen_device_info *devinfo = c->devinfo;
    assert(devinfo->gen >= 8);
 
    if (devinfo->gen >= 12) {
@@ -1954,9 +1981,10 @@ set_uncompacted_3src_subreg_index(const struct gen_device_info *devinfo,
 }
 
 static void
-brw_uncompact_3src_instruction(const struct gen_device_info *devinfo,
+brw_uncompact_3src_instruction(const struct compaction_state *c,
                                brw_inst *dst, brw_compact_inst *src)
 {
+   const struct gen_device_info *devinfo = c->devinfo;
    assert(devinfo->gen >= 8);
 
 #define uncompact(field) \
@@ -1967,7 +1995,7 @@ brw_uncompact_3src_instruction(const struct gen_device_info *devinfo,
    uncompact(hw_opcode);
 
    if (devinfo->gen >= 12) {
-      set_uncompacted_3src_control_index(devinfo, dst, src);
+      set_uncompacted_3src_control_index(c, dst, src);
       set_uncompacted_3src_source_index(devinfo, dst, src);
       set_uncompacted_3src_subreg_index(devinfo, dst, src);
 
@@ -1978,7 +2006,7 @@ brw_uncompact_3src_instruction(const struct gen_device_info *devinfo,
       uncompact(src1_reg_nr);
       uncompact(src2_reg_nr);
    } else {
-      set_uncompacted_3src_control_index(devinfo, dst, src);
+      set_uncompacted_3src_control_index(c, dst, src);
       set_uncompacted_3src_source_index(devinfo, dst, src);
 
       uncompact(dst_reg_nr);
@@ -2000,16 +2028,17 @@ brw_uncompact_3src_instruction(const struct gen_device_info *devinfo,
 #undef uncompact_a16
 }
 
-void
-brw_uncompact_instruction(const struct gen_device_info *devinfo, brw_inst *dst,
-                          brw_compact_inst *src)
+static void
+uncompact_instruction(const struct compaction_state *c, brw_inst *dst,
+                      brw_compact_inst *src)
 {
+   const struct gen_device_info *devinfo = c->devinfo;
    memset(dst, 0, sizeof(*dst));
 
    if (devinfo->gen >= 8 &&
        is_3src(devinfo, brw_opcode_decode(
                   devinfo, brw_compact_inst_3src_hw_opcode(devinfo, src)))) {
-      brw_uncompact_3src_instruction(devinfo, dst, src);
+      brw_uncompact_3src_instruction(c, dst, src);
       return;
    }
 
@@ -2022,10 +2051,10 @@ brw_uncompact_instruction(const struct gen_device_info *devinfo, brw_inst *dst,
    uncompact(hw_opcode);
    uncompact(debug_control);
 
-   set_uncompacted_control(devinfo, dst, src);
-   set_uncompacted_datatype(devinfo, dst, src);
-   set_uncompacted_subreg(devinfo, dst, src);
-   set_uncompacted_src0(devinfo, dst, src);
+   set_uncompacted_control(c, dst, src);
+   set_uncompacted_datatype(c, dst, src);
+   set_uncompacted_subreg(c, dst, src);
+   set_uncompacted_src0(c, dst, src);
 
    enum brw_reg_type type;
    if (has_immediate(devinfo, dst, &type)) {
@@ -2033,7 +2062,7 @@ brw_uncompact_instruction(const struct gen_device_info *devinfo, brw_inst *dst,
                                          brw_compact_inst_imm(devinfo, src));
       brw_inst_set_imm_ud(devinfo, dst, imm);
    } else {
-      set_uncompacted_src1(devinfo, dst, src);
+      set_uncompacted_src1(c, dst, src);
       uncompact_reg(src1);
    }
 
@@ -2062,6 +2091,15 @@ brw_uncompact_instruction(const struct gen_device_info *devinfo, brw_inst *dst,
 #undef uncompact_reg
 }
 
+void
+brw_uncompact_instruction(const struct gen_device_info *devinfo, brw_inst *dst,
+                          brw_compact_inst *src)
+{
+   struct compaction_state c;
+   compaction_state_init(&c, devinfo);
+   uncompact_instruction(&c, dst, src);
+}
+
 void brw_debug_compact_uncompact(const struct gen_device_info *devinfo,
                                  brw_inst *orig,
                                  brw_inst *uncompacted)
@@ -2070,10 +2108,10 @@ void brw_debug_compact_uncompact(const struct gen_device_info *devinfo,
            devinfo->gen);
 
    fprintf(stderr, "  before: ");
-   brw_disassemble_inst(stderr, devinfo, orig, true);
+   brw_disassemble_inst(stderr, devinfo, orig, true, 0, NULL);
 
    fprintf(stderr, "  after:  ");
-   brw_disassemble_inst(stderr, devinfo, uncompacted, false);
+   brw_disassemble_inst(stderr, devinfo, uncompacted, false, 0, NULL);
 
    uint32_t *before_bits = (uint32_t *)orig;
    uint32_t *after_bits = (uint32_t *)uncompacted;
@@ -2149,8 +2187,9 @@ update_gen4_jump_count(const struct gen_device_info *devinfo, brw_inst *insn,
    brw_inst_set_gen4_jump_count(devinfo, insn, jump_count_compacted >> shift);
 }
 
-void
-brw_init_compaction_tables(const struct gen_device_info *devinfo)
+static void
+compaction_state_init(struct compaction_state *c,
+                      const struct gen_device_info *devinfo)
 {
    assert(g45_control_index_table[ARRAY_SIZE(g45_control_index_table) - 1] != 0);
    assert(g45_datatype_table[ARRAY_SIZE(g45_datatype_table) - 1] != 0);
@@ -2175,51 +2214,51 @@ brw_init_compaction_tables(const struct gen_device_info *devinfo)
    assert(gen12_src0_index_table[ARRAY_SIZE(gen12_src0_index_table) - 1] != 0);
    assert(gen12_src1_index_table[ARRAY_SIZE(gen12_src1_index_table) - 1] != 0);
 
+   c->devinfo = devinfo;
    switch (devinfo->gen) {
    case 12:
-      control_index_table = gen12_control_index_table;;
-      datatype_table = gen12_datatype_table;
-      subreg_table = gen12_subreg_table;
-      src0_index_table = gen12_src0_index_table;
-      src1_index_table = gen12_src1_index_table;
+      c->control_index_table = gen12_control_index_table;;
+      c->datatype_table = gen12_datatype_table;
+      c->subreg_table = gen12_subreg_table;
+      c->src0_index_table = gen12_src0_index_table;
+      c->src1_index_table = gen12_src1_index_table;
       break;
    case 11:
-      control_index_table = gen8_control_index_table;
-      datatype_table = gen11_datatype_table;
-      subreg_table = gen8_subreg_table;
-      src0_index_table = gen8_src_index_table;
-      src1_index_table = gen8_src_index_table;
+      c->control_index_table = gen8_control_index_table;
+      c->datatype_table = gen11_datatype_table;
+      c->subreg_table = gen8_subreg_table;
+      c->src0_index_table = gen8_src_index_table;
+      c->src1_index_table = gen8_src_index_table;
       break;
-   case 10:
    case 9:
    case 8:
-      control_index_table = gen8_control_index_table;
-      datatype_table = gen8_datatype_table;
-      subreg_table = gen8_subreg_table;
-      src0_index_table = gen8_src_index_table;
-      src1_index_table = gen8_src_index_table;
+      c->control_index_table = gen8_control_index_table;
+      c->datatype_table = gen8_datatype_table;
+      c->subreg_table = gen8_subreg_table;
+      c->src0_index_table = gen8_src_index_table;
+      c->src1_index_table = gen8_src_index_table;
       break;
    case 7:
-      control_index_table = gen7_control_index_table;
-      datatype_table = gen7_datatype_table;
-      subreg_table = gen7_subreg_table;
-      src0_index_table = gen7_src_index_table;
-      src1_index_table = gen7_src_index_table;
+      c->control_index_table = gen7_control_index_table;
+      c->datatype_table = gen7_datatype_table;
+      c->subreg_table = gen7_subreg_table;
+      c->src0_index_table = gen7_src_index_table;
+      c->src1_index_table = gen7_src_index_table;
       break;
    case 6:
-      control_index_table = gen6_control_index_table;
-      datatype_table = gen6_datatype_table;
-      subreg_table = gen6_subreg_table;
-      src0_index_table = gen6_src_index_table;
-      src1_index_table = gen6_src_index_table;
+      c->control_index_table = gen6_control_index_table;
+      c->datatype_table = gen6_datatype_table;
+      c->subreg_table = gen6_subreg_table;
+      c->src0_index_table = gen6_src_index_table;
+      c->src1_index_table = gen6_src_index_table;
       break;
    case 5:
    case 4:
-      control_index_table = g45_control_index_table;
-      datatype_table = g45_datatype_table;
-      subreg_table = g45_subreg_table;
-      src0_index_table = g45_src_index_table;
-      src1_index_table = g45_src_index_table;
+      c->control_index_table = g45_control_index_table;
+      c->datatype_table = g45_datatype_table;
+      c->subreg_table = g45_subreg_table;
+      c->src0_index_table = g45_src_index_table;
+      c->src1_index_table = g45_src_index_table;
       break;
    default:
       unreachable("unknown generation");
@@ -2230,7 +2269,7 @@ void
 brw_compact_instructions(struct brw_codegen *p, int start_offset,
                          struct disasm_info *disasm)
 {
-   if (unlikely(INTEL_DEBUG & DEBUG_NO_COMPACTION))
+   if (INTEL_DEBUG & DEBUG_NO_COMPACTION)
       return;
 
    const struct gen_device_info *devinfo = p->devinfo;
@@ -2248,6 +2287,9 @@ brw_compact_instructions(struct brw_codegen *p, int start_offset,
    if (devinfo->gen == 4 && !devinfo->is_g4x)
       return;
 
+   struct compaction_state c;
+   compaction_state_init(&c, devinfo);
+
    int offset = 0;
    int compacted_count = 0;
    for (int src_offset = 0; src_offset < p->next_insn_offset - start_offset;
@@ -2261,12 +2303,12 @@ brw_compact_instructions(struct brw_codegen *p, int start_offset,
       brw_inst inst = precompact(devinfo, *src);
       brw_inst saved = inst;
 
-      if (brw_try_compact_instruction(devinfo, dst, &inst)) {
+      if (try_compact_instruction(&c, dst, &inst)) {
          compacted_count++;
 
          if (INTEL_DEBUG) {
             brw_inst uncompacted;
-            brw_uncompact_instruction(devinfo, &uncompacted, dst);
+            uncompact_instruction(&c, &uncompacted, dst);
             if (memcmp(&saved, &uncompacted, sizeof(uncompacted))) {
                brw_debug_compact_uncompact(devinfo, &saved, &uncompacted);
             }
@@ -2333,15 +2375,14 @@ brw_compact_instructions(struct brw_codegen *p, int start_offset,
          if (devinfo->gen >= 7) {
             if (brw_inst_cmpt_control(devinfo, insn)) {
                brw_inst uncompacted;
-               brw_uncompact_instruction(devinfo, &uncompacted,
-                                         (brw_compact_inst *)insn);
+               uncompact_instruction(&c, &uncompacted,
+                                     (brw_compact_inst *)insn);
 
                update_uip_jip(devinfo, &uncompacted, this_old_ip,
                               compacted_counts);
 
-               bool ret = brw_try_compact_instruction(devinfo,
-                                                      (brw_compact_inst *)insn,
-                                                      &uncompacted);
+               bool ret = try_compact_instruction(&c, (brw_compact_inst *)insn,
+                                                  &uncompacted);
                assert(ret); (void)ret;
             } else {
                update_uip_jip(devinfo, insn, this_old_ip, compacted_counts);
@@ -2403,6 +2444,15 @@ brw_compact_instructions(struct brw_codegen *p, int start_offset,
       p->next_insn_offset += sizeof(brw_compact_inst);
    }
    p->nr_insn = p->next_insn_offset / sizeof(brw_inst);
+
+   for (int i = 0; i < p->num_relocs; i++) {
+      if (p->relocs[i].offset < (uint32_t)start_offset)
+         continue;
+
+      assert(p->relocs[i].offset % 16 == 0);
+      unsigned idx = (p->relocs[i].offset - start_offset) / 16;
+      p->relocs[i].offset -= compacted_counts[idx] * 8;
+   }
 
    /* Update the instruction offsets for each group. */
    if (disasm) {

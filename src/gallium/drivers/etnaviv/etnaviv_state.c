@@ -39,6 +39,7 @@
 #include "etnaviv_surface.h"
 #include "etnaviv_translate.h"
 #include "etnaviv_util.h"
+#include "etnaviv_zsa.h"
 #include "util/u_framebuffer.h"
 #include "util/u_helpers.h"
 #include "util/u_inlines.h"
@@ -250,9 +251,7 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
          depth_format |
          COND(depth_supertiled, VIVS_PE_DEPTH_CONFIG_SUPER_TILED) |
          VIVS_PE_DEPTH_CONFIG_DEPTH_MODE_Z |
-         VIVS_PE_DEPTH_CONFIG_UNK18 | /* something to do with clipping? */
-         COND(screen->specs.halti >= 5, VIVS_PE_DEPTH_CONFIG_DISABLE_ZS) /* Needs to be enabled on GC7000, otherwise depth writes hang w/ TS - apparently it does something else now */
-         ;
+         VIVS_PE_DEPTH_CONFIG_UNK18; /* something to do with clipping? */
       /* VIVS_PE_DEPTH_CONFIG_ONLY_DEPTH */
       /* merged with depth_stencil_alpha */
 
@@ -677,6 +676,71 @@ etna_update_clipping(struct etna_context *ctx)
    return true;
 }
 
+static bool
+etna_update_zsa(struct etna_context *ctx)
+{
+   struct compiled_shader_state *shader_state = &ctx->shader_state;
+   struct pipe_depth_stencil_alpha_state *zsa_state = ctx->zsa;
+   struct etna_zsa_state *zsa = etna_zsa_state(zsa_state);
+   struct etna_screen *screen = ctx->screen;
+   uint32_t new_pe_depth, new_ra_depth;
+   bool late_z_write = false, early_z_write = false,
+        late_z_test = false, early_z_test = false;
+
+   if (zsa->z_write_enabled) {
+      if (VIV_FEATURE(screen, chipMinorFeatures5, RA_WRITE_DEPTH) &&
+          !VIV_FEATURE(screen, chipFeatures, NO_EARLY_Z) &&
+          !zsa->stencil_enabled &&
+          !zsa_state->alpha.enabled &&
+          !shader_state->writes_z &&
+          !shader_state->uses_discard)
+         early_z_write = true;
+      else
+         late_z_write = true;
+   }
+
+   if (zsa->z_test_enabled) {
+      if (!VIV_FEATURE(screen, chipFeatures, NO_EARLY_Z) &&
+          !zsa->stencil_modified &&
+          !shader_state->writes_z)
+         early_z_test = true;
+      else
+         late_z_test = true;
+   }
+
+   new_pe_depth = VIVS_PE_DEPTH_CONFIG_DEPTH_FUNC(zsa->z_test_enabled ?
+                     /* compare funcs have 1 to 1 mapping */
+                     zsa_state->depth.func : PIPE_FUNC_ALWAYS) |
+                  COND(zsa->z_write_enabled, VIVS_PE_DEPTH_CONFIG_WRITE_ENABLE) |
+                  COND(early_z_test, VIVS_PE_DEPTH_CONFIG_EARLY_Z) |
+                  COND(!late_z_write && !late_z_test && !zsa->stencil_enabled,
+                       VIVS_PE_DEPTH_CONFIG_DISABLE_ZS);
+
+   /* blob sets this to 0x40000031 on GC7000, seems to make no difference,
+    * but keep it in mind if depth behaves strangely. */
+   new_ra_depth = 0x0000030 |
+                  COND(early_z_test, VIVS_RA_EARLY_DEPTH_TEST_ENABLE);
+
+   if (VIV_FEATURE(screen, chipMinorFeatures5, RA_WRITE_DEPTH)) {
+      if (!early_z_write)
+         new_ra_depth |= VIVS_RA_EARLY_DEPTH_WRITE_DISABLE;
+      /* The new early hierarchical test seems to only work properly if depth
+       * is also written from the early stage.
+       */
+      if (late_z_test || (early_z_test && late_z_write))
+         new_ra_depth |= VIVS_RA_EARLY_DEPTH_HDEPTH_DISABLE;
+   }
+
+   if (new_pe_depth != zsa->PE_DEPTH_CONFIG ||
+       new_ra_depth != zsa->RA_DEPTH_CONFIG)
+      ctx->dirty |= ETNA_DIRTY_ZSA;
+
+   zsa->PE_DEPTH_CONFIG = new_pe_depth;
+   zsa->RA_DEPTH_CONFIG = new_ra_depth;
+
+   return true;
+}
+
 struct etna_state_updater {
    bool (*update)(struct etna_context *ctx);
    uint32_t dirty;
@@ -701,6 +765,9 @@ static const struct etna_state_updater etna_state_updates[] = {
    {
       etna_update_clipping, ETNA_DIRTY_SCISSOR | ETNA_DIRTY_FRAMEBUFFER |
                             ETNA_DIRTY_RASTERIZER | ETNA_DIRTY_VIEWPORT,
+   },
+   {
+      etna_update_zsa, ETNA_DIRTY_ZSA | ETNA_DIRTY_SHADER,
    }
 };
 

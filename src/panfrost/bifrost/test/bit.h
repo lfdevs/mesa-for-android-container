@@ -27,9 +27,9 @@
 #ifndef __BIFROST_TEST_H
 #define __BIFROST_TEST_H
 
-#include "panfrost/include/panfrost-job.h"
-#include "panfrost/encoder/pan_device.h"
-#include "panfrost/encoder/pan_bo.h"
+#include "panfrost/lib/midgard_pack.h"
+#include "panfrost/lib/pan_device.h"
+#include "panfrost/lib/pan_bo.h"
 #include "bifrost_compile.h"
 #include "bifrost/compiler.h"
 
@@ -45,7 +45,7 @@ enum bit_debug {
 };
 
 bool
-bit_vertex(struct panfrost_device *dev, panfrost_program prog,
+bit_vertex(struct panfrost_device *dev, panfrost_program *prog,
                 uint32_t *iubo, size_t sz_ubo,
                 uint32_t *iattr, size_t sz_attr,
                 uint32_t *expected, size_t sz_expected, enum bit_debug debug);

@@ -144,7 +144,7 @@ static void *texture_transfer_map_resolve(struct pipe_context *ctx,
 
    struct pipe_box dst_box = *box;
    dst_box.x = dst_box.y = dst_box.z = 0;
-   if (usage & PIPE_TRANSFER_READ) {
+   if (usage & PIPE_MAP_READ) {
       /* readback should scale to the block size */
       dst_box.width = align(dst_box.width,
             util_format_get_blockwidth(resource->format));
@@ -158,7 +158,7 @@ static void *texture_transfer_map_resolve(struct pipe_context *ctx,
    if (!resolve_tmp)
       return NULL;
 
-   if (usage & PIPE_TRANSFER_READ) {
+   if (usage & PIPE_MAP_READ) {
       virgl_copy_region_with_blit(ctx, resolve_tmp, 0, &dst_box, resource,
                                   level, box);
       ctx->flush(ctx, NULL, 0);
@@ -178,7 +178,7 @@ static void *texture_transfer_map_resolve(struct pipe_context *ctx,
       trans->base.layer_stride = trans->resolve_transfer->layer_stride;
       return ptr;
    } else {
-      if (usage & PIPE_TRANSFER_READ) {
+      if (usage & PIPE_MAP_READ) {
          struct virgl_winsys *vws = virgl_screen(ctx->screen)->vws;
          void *src = ptr;
          ptr = vws->resource_map(vws, vtex->hw_res);
@@ -205,7 +205,7 @@ static void *texture_transfer_map_resolve(struct pipe_context *ctx,
          }
       }
 
-      if ((usage & PIPE_TRANSFER_WRITE) == 0)
+      if ((usage & PIPE_MAP_WRITE) == 0)
          pipe_resource_reference(&trans->resolve_transfer->resource, NULL);
 
       return ptr + trans->offset;
@@ -223,7 +223,7 @@ static bool needs_resolve(struct pipe_screen *screen,
    if (resource->nr_samples > 1)
       return true;
 
-   if (usage & PIPE_TRANSFER_READ)
+   if (usage & PIPE_MAP_READ)
       return !util_format_is_depth_or_stencil(resource->format) &&
              !virgl_has_readback_format(screen, pipe_to_virgl_format(resource->format));
 
@@ -261,8 +261,8 @@ static void virgl_texture_transfer_unmap(struct pipe_context *ctx,
    struct virgl_transfer *trans = virgl_transfer(transfer);
    bool queue_unmap = false;
 
-   if (transfer->usage & PIPE_TRANSFER_WRITE &&
-       (transfer->usage & PIPE_TRANSFER_FLUSH_EXPLICIT) == 0) {
+   if (transfer->usage & PIPE_MAP_WRITE &&
+       (transfer->usage & PIPE_MAP_FLUSH_EXPLICIT) == 0) {
 
       if (trans->resolve_transfer && (trans->base.resource->format ==
           trans->resolve_transfer->resource->format)) {

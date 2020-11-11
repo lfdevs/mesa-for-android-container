@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2019-2020 Collabora, Ltd.
  * Copyright (C) 2019 Alyssa Rosenzweig <alyssa@rosenzweig.io>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -71,10 +72,6 @@ typedef struct midgard_branch {
         };
 } midgard_branch;
 
-#define PAN_WRITEOUT_C 1
-#define PAN_WRITEOUT_Z 2
-#define PAN_WRITEOUT_S 4
-
 /* Generic in-memory data type repesenting a single logical instruction, rather
  * than a single instruction group. This is the preferred form for code gen.
  * Multiple midgard_insturctions will later be combined during scheduling,
@@ -140,7 +137,6 @@ typedef struct midgard_instruction {
         bool has_constants;
         midgard_constants constants;
         uint16_t inline_constant;
-        bool has_blend_constant;
         bool has_inline_constant;
 
         bool compact_branch;
@@ -221,7 +217,6 @@ typedef struct midgard_bundle {
         int control;
         bool has_embedded_constants;
         midgard_constants constants;
-        bool has_blend_constant;
         bool last_writeout;
 } midgard_bundle;
 
@@ -254,8 +249,8 @@ typedef struct compiler_context {
         /* Index to precolour to r2 for a dual-source blend colour */
         unsigned blend_src1;
 
-        /* Tracking for blend constant patching */
-        int blend_constant_offset;
+        /* Blend constants */
+        float blend_constants[4];
 
         /* Number of bytes used for Thread Local Storage */
         unsigned tls_size;
@@ -308,9 +303,6 @@ typedef struct compiler_context {
 
         /* Count of instructions emitted from NIR overall, across all blocks */
         int instruction_count;
-
-        /* Alpha ref value passed in */
-        float alpha_ref;
 
         unsigned quadword_count;
 
@@ -664,11 +656,9 @@ void emit_binary_bundle(
         struct util_dynarray *emission,
         int next_tag);
 
-bool
-nir_undef_to_zero(nir_shader *shader);
 bool nir_fuse_io_16(nir_shader *shader);
 
-void midgard_nir_lod_errata(nir_shader *shader);
+bool midgard_nir_lod_errata(nir_shader *shader);
 
 unsigned midgard_get_first_tag_from_block(compiler_context *ctx, unsigned block_idx);
 

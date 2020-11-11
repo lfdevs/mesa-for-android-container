@@ -113,25 +113,20 @@ PValue ValuePool::from_nir(const nir_src& v, unsigned component, unsigned swizzl
          return reg;
    }
 
-
-   auto literal_val = m_literal_constants.find(index);
-   if (literal_val != m_literal_constants.end()) {
-      switch (literal_val->second->def.bit_size) {
+   auto literal_val = nir_src_as_const_value(v);
+   if (literal_val) {
+      assert(v.is_ssa);
+      switch (v.ssa->bit_size) {
       case 1:
-         return PValue(new LiteralValue(literal_val->second->value[swizzled].b ? 0xffffffff : 0, component));
+         return PValue(new LiteralValue(literal_val[swizzled].b ? 0xffffffff : 0, component));
       case 32:
-         return literal(literal_val->second->value[swizzled].u32);
+         return literal(literal_val[swizzled].u32);
       default:
-         sfn_log << SfnLog::reg << "Unsupported bit size " << literal_val->second->def.bit_size
+         sfn_log << SfnLog::reg << "Unsupported bit size " << v.ssa->bit_size
                  << " fall back to 32\n";
-         return PValue(new LiteralValue(literal_val->second->value[swizzled].u32, component));
+         return PValue(new LiteralValue(literal_val[swizzled].u32, component));
       }
    }
-
-   unsigned uindex = (index << 2) + swizzled;
-   auto u = m_uniforms.find(uindex);
-   if (u != m_uniforms.end())
-      return u->second;
 
    return PValue();
 }
@@ -151,19 +146,21 @@ PValue ValuePool::from_nir(const nir_alu_src &v, unsigned component)
    return from_nir(v.src, component, v.swizzle[component]);
 }
 
-PValue ValuePool::get_temp_register(int channel)
+PGPRValue ValuePool::get_temp_register(int channel)
 {
    /* Skip to next register to get the channel we want */
-   if (next_temp_reg_comp <= channel)
-      next_temp_reg_comp = channel;
-   else
-      next_temp_reg_comp = 4;
+   if (channel >= 0) {
+      if (next_temp_reg_comp <= channel)
+         next_temp_reg_comp = channel;
+      else
+         next_temp_reg_comp = 4;
+   }
 
    if (next_temp_reg_comp > 3) {
       current_temp_reg_index = allocate_temp_register();
       next_temp_reg_comp = 0;
    }
-   return PValue(new GPRValue(current_temp_reg_index, next_temp_reg_comp++));
+   return std::make_shared<GPRValue>(current_temp_reg_index, next_temp_reg_comp++);
 }
 
 GPRVector ValuePool::get_temp_vec4()
@@ -477,38 +474,6 @@ bool ValuePool::create_undef(nir_ssa_undef_instr* instr)
 {
    m_ssa_undef.insert(instr->def.index);
    return true;
-}
-
-bool ValuePool::set_literal_constant(nir_load_const_instr* instr)
-{
-   sfn_log << SfnLog::reg << "Add literal " <<  instr->def.index << "\n";
-   m_literal_constants[instr->def.index] = instr;
-   return true;
-}
-
-const nir_load_const_instr* ValuePool::get_literal_constant(int index)
-{
-   sfn_log << SfnLog::reg << "Try to locate literal " << index  << "...";
-   auto literal = m_literal_constants.find(index);
-   if (literal == m_literal_constants.end()) {
-      sfn_log << SfnLog::reg << " not found\n";
-      return nullptr;
-   }
-   sfn_log << SfnLog::reg << " found\n";
-   return literal->second;
-}
-
-void ValuePool::add_uniform(unsigned index, const PValue& value)
-{
-   sfn_log << SfnLog::reg << "Reserve " << *value << " as " << index << "\n";
-   m_uniforms[index] = value;
-}
-
-PValue ValuePool::uniform(unsigned index)
-{
-   sfn_log << SfnLog::reg << "Search index " << index << "\n";
-   auto i = m_uniforms.find(index);
-   return i == m_uniforms.end() ? PValue() : i->second;
 }
 
 int ValuePool::allocate_with_mask(unsigned index, unsigned mask, bool pre_alloc)

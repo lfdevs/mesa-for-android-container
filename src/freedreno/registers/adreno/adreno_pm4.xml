@@ -14,7 +14,7 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value name="VIZQUERY_START" value="7" varset="chip" variants="A2XX"/>
 	<value name="HLSQ_FLUSH" value="7" varset="chip" variants="A3XX-A4XX"/>
 	<value name="VIZQUERY_END" value="8" varset="chip" variants="A2XX"/>
-	<value name="SC_WAIT_WC" value="9"/>
+	<value name="SC_WAIT_WC" value="9" varset="chip" variants="A2XX"/>
 	<value name="WRITE_PRIMITIVE_COUNTS" value="9" varset="chip" variants="A6XX"/>
 	<value name="START_PRIMITIVE_CTRS" value="11" varset="chip" variants="A6XX"/>
 	<value name="STOP_PRIMITIVE_CTRS" value="12" varset="chip" variants="A6XX"/>
@@ -383,6 +383,7 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value name="CP_SKIP_IB2_ENABLE_GLOBAL" value="0x1d" varset="chip" variants="A5XX-"/>
 	<value name="CP_SKIP_IB2_ENABLE_LOCAL" value="0x23" varset="chip" variants="A5XX-"/>
 	<value name="CP_SET_SUBDRAW_SIZE" value="0x35" varset="chip" variants="A5XX-"/>
+	<value name="CP_WHERE_AM_I" value="0x62" varset="chip" variants="A5XX-"/>
 	<value name="CP_SET_VISIBILITY_OVERRIDE" value="0x64" varset="chip" variants="A5XX-"/>
 	<!-- Enable/Disable/Defer A5x global preemption model -->
 	<value name="CP_PREEMPT_ENABLE_GLOBAL" value="0x69" varset="chip" variants="A5XX"/>
@@ -1725,7 +1726,7 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 		<doc>
 			Do a mysterious CP_EVENT_WRITE 0x3f when the low bit of
 			the data to write is 0. Used by the Vulkan blob with
-			PC_UNKNOWN_9B07, but this isn't predicated on particular
+			PC_MULTIVIEW_CNTL, but this isn't predicated on particular
 			register(s) like the others.
 		</doc>
 		<value name="UNK_EVENT_WRITE" value="0x4"/>

@@ -116,7 +116,7 @@ set_class(unsigned *classes, unsigned node, unsigned class)
 /* Special register classes impose special constraints on who can read their
  * values, so check that */
 
-static bool
+static bool ASSERTED
 check_read_class(unsigned *classes, unsigned tag, unsigned node)
 {
         /* Non-nodes are implicitly ok */
@@ -137,7 +137,7 @@ check_read_class(unsigned *classes, unsigned tag, unsigned node)
         }
 }
 
-static bool
+static bool ASSERTED
 check_write_class(unsigned *classes, unsigned tag, unsigned node)
 {
         /* Non-nodes are implicitly ok */
@@ -203,6 +203,7 @@ mir_lower_special_reads(compiler_context *ctx)
                         mark_node_class(ldst, ins->src[0]);
                         mark_node_class(ldst, ins->src[1]);
                         mark_node_class(ldst, ins->src[2]);
+                        mark_node_class(ldst, ins->src[3]);
                         break;
 
                 case TAG_TEXTURE_4:
@@ -529,12 +530,14 @@ allocate_registers(compiler_context *ctx, bool *spilled)
                         set_class(l->class, ins->src[0], REG_CLASS_LDST);
                         set_class(l->class, ins->src[1], REG_CLASS_LDST);
                         set_class(l->class, ins->src[2], REG_CLASS_LDST);
+                        set_class(l->class, ins->src[3], REG_CLASS_LDST);
 
                         if (OP_IS_VEC4_ONLY(ins->op)) {
                                 lcra_restrict_range(l, ins->dest, 16);
                                 lcra_restrict_range(l, ins->src[0], 16);
                                 lcra_restrict_range(l, ins->src[1], 16);
                                 lcra_restrict_range(l, ins->src[2], 16);
+                                lcra_restrict_range(l, ins->src[3], 16);
                         }
                 } else if (ins->type == TAG_TEXTURE_4) {
                         set_class(l->class, ins->dest, REG_CLASS_TEXW);
@@ -551,6 +554,7 @@ allocate_registers(compiler_context *ctx, bool *spilled)
                 assert(check_read_class(l->class, ins->type, ins->src[0]));
                 assert(check_read_class(l->class, ins->type, ins->src[1]));
                 assert(check_read_class(l->class, ins->type, ins->src[2]));
+                assert(check_read_class(l->class, ins->type, ins->src[3]));
         }
 
         /* Mark writeout to r0, depth to r1.x, stencil to r1.y,
@@ -719,25 +723,17 @@ install_registers_instr(
 
                 /* We also follow up by actual arguments */
 
-                unsigned src2 = ins->src[1];
-                unsigned src3 = ins->src[2];
-
-                if (src2 != ~0) {
-                        struct phys_reg src = index_to_reg(ctx, l, src2, 2);
-                        unsigned component = src.offset >> src.shift;
-                        assert(component << src.shift == src.offset);
-                        ins->src[1] = SSA_FIXED_REGISTER(src.reg);
-                        ins->swizzle[1][0] = component;
+                for (int i = 1; i <= 3; i++) {
+                        unsigned src_index = ins->src[i];
+                        if (src_index != ~0) {
+                                struct phys_reg src = index_to_reg(ctx, l, src_index, src_shift[i]);
+                                unsigned component = src.offset >> src.shift;
+                                assert(component << src.shift == src.offset);
+                                ins->src[i] = SSA_FIXED_REGISTER(src.reg);
+                                ins->swizzle[i][0] += component;
+                        }
                 }
 
-                if (src3 != ~0) {
-                        struct phys_reg src = index_to_reg(ctx, l, src3, 2);
-                        unsigned component = src.offset >> src.shift;
-                        assert(component << src.shift == src.offset);
-                        ins->src[2] = SSA_FIXED_REGISTER(src.reg);
-                        ins->swizzle[2][0] = component;
-                }
- 
                 break;
         }
 
@@ -975,6 +971,7 @@ mir_ra(compiler_context *ctx)
 
                         if (spill_node == -1) {
                                 fprintf(stderr, "ERROR: Failed to choose spill node\n");
+                                lcra_free(l);
                                 return;
                         }
 

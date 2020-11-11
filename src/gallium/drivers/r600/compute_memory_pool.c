@@ -479,7 +479,7 @@ static void compute_memory_move_item(struct compute_memory_pool *pool,
 
 			u_box_1d(new_start_in_dw * 4, (offset + item->size_in_dw) * 4, &box);
 
-			map = pipe->transfer_map(pipe, src, 0, PIPE_TRANSFER_READ_WRITE,
+			map = pipe->transfer_map(pipe, src, 0, PIPE_MAP_READ_WRITE,
 				&box, &trans);
 
 			assert(map);
@@ -614,7 +614,7 @@ static void compute_memory_transfer(
 		offset_in_chunk, size);
 
 	if (device_to_host) {
-		map = pipe->transfer_map(pipe, gart, 0, PIPE_TRANSFER_READ,
+		map = pipe->transfer_map(pipe, gart, 0, PIPE_MAP_READ,
 			&(struct pipe_box) { .width = aligned_size * 4,
 			.height = 1, .depth = 1 }, &xfer);
 		assert(xfer);
@@ -622,7 +622,7 @@ static void compute_memory_transfer(
 		memcpy(data, map + internal_offset, size);
 		pipe->transfer_unmap(pipe, xfer);
 	} else {
-		map = pipe->transfer_map(pipe, gart, 0, PIPE_TRANSFER_WRITE,
+		map = pipe->transfer_map(pipe, gart, 0, PIPE_MAP_WRITE,
 			&(struct pipe_box) { .width = aligned_size * 4,
 			.height = 1, .depth = 1 }, &xfer);
 		assert(xfer);

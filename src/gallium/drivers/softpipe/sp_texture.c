@@ -348,7 +348,7 @@ softpipe_surface_destroy(struct pipe_context *pipe,
  * \param pipe  rendering context
  * \param resource  the resource to transfer in/out of
  * \param level  which mipmap level
- * \param usage  bitmask of PIPE_TRANSFER_x flags
+ * \param usage  bitmask of PIPE_MAP_x flags
  * \param box  the 1D/2D/3D region of interest
  */
 static void *
@@ -394,9 +394,9 @@ softpipe_transfer_map(struct pipe_context *pipe,
     * Transfers, like other pipe operations, must happen in order, so flush the
     * context if necessary.
     */
-   if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
-      boolean read_only = !(usage & PIPE_TRANSFER_WRITE);
-      boolean do_not_block = !!(usage & PIPE_TRANSFER_DONTBLOCK);
+   if (!(usage & PIPE_MAP_UNSYNCHRONIZED)) {
+      boolean read_only = !(usage & PIPE_MAP_WRITE);
+      boolean do_not_block = !!(usage & PIPE_MAP_DONTBLOCK);
       if (!softpipe_flush_resource(pipe, resource,
                                    level, box->depth > 1 ? -1 : box->z,
                                    0, /* flush_flags */
@@ -468,7 +468,7 @@ softpipe_transfer_unmap(struct pipe_context *pipe,
       winsys->displaytarget_unmap(winsys, spr->dt);
    }
 
-   if (transfer->usage & PIPE_TRANSFER_WRITE) {
+   if (transfer->usage & PIPE_MAP_WRITE) {
       /* Mark the texture as dirty to expire the tile caches. */
       spr->timestamp++;
    }

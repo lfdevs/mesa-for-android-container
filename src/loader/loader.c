@@ -178,13 +178,12 @@ loader_open_render_node(const char *name)
 }
 
 #ifdef USE_DRICONF
-static const char __driConfigOptionsLoader[] =
-DRI_CONF_BEGIN
+static const driOptionDescription __driConfigOptionsLoader[] = {
     DRI_CONF_SECTION_INITIALIZATION
         DRI_CONF_DEVICE_ID_PATH_TAG()
         DRI_CONF_DRI_DRIVER()
     DRI_CONF_SECTION_END
-DRI_CONF_END;
+};
 
 static char *loader_get_dri_config_driver(int fd)
 {
@@ -193,7 +192,8 @@ static char *loader_get_dri_config_driver(int fd)
    char *dri_driver = NULL;
    char *kernel_driver = loader_get_kernel_driver_name(fd);
 
-   driParseOptionInfo(&defaultInitOptions, __driConfigOptionsLoader);
+   driParseOptionInfo(&defaultInitOptions, __driConfigOptionsLoader,
+                      ARRAY_SIZE(__driConfigOptionsLoader));
    driParseConfigFiles(&userInitOptions, &defaultInitOptions, 0,
                        "loader", kernel_driver, NULL, 0, NULL, 0);
    if (driCheckOption(&userInitOptions, "dri_driver", DRI_STRING)) {
@@ -215,7 +215,8 @@ static char *loader_get_dri_config_device_id(void)
    driOptionCache userInitOptions;
    char *prime = NULL;
 
-   driParseOptionInfo(&defaultInitOptions, __driConfigOptionsLoader);
+   driParseOptionInfo(&defaultInitOptions, __driConfigOptionsLoader,
+                      ARRAY_SIZE(__driConfigOptionsLoader));
    driParseConfigFiles(&userInitOptions, &defaultInitOptions, 0,
                        "loader", NULL, NULL, 0, NULL, 0);
    if (driCheckOption(&userInitOptions, "device_id", DRI_STRING))
@@ -546,6 +547,7 @@ loader_open_driver(const char *driver_name,
       search_paths = DEFAULT_DRIVER_DIR;
 
    void *driver = NULL;
+   char *dl_error = NULL;
    end = search_paths + strlen(search_paths);
    for (char *p = search_paths; p < end; p = next + 1) {
       int len;
@@ -561,9 +563,11 @@ loader_open_driver(const char *driver_name,
       if (driver == NULL) {
          snprintf(path, sizeof(path), "%.*s/%s_dri.so", len, p, driver_name);
          driver = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
-         if (driver == NULL)
+         if (driver == NULL) {
+            dl_error = dlerror();
             log_(_LOADER_DEBUG, "MESA-LOADER: failed to open %s: %s\n",
-                 path, dlerror());
+                 path, dl_error);
+         }
       }
       /* not need continue to loop all paths once the driver is found */
       if (driver != NULL)
@@ -571,8 +575,8 @@ loader_open_driver(const char *driver_name,
    }
 
    if (driver == NULL) {
-      log_(_LOADER_WARNING, "MESA-LOADER: failed to open %s (search paths %s)\n",
-           driver_name, search_paths);
+      log_(_LOADER_WARNING, "MESA-LOADER: failed to open %s: %s (search paths %s)\n",
+           driver_name, dl_error, search_paths);
       *out_driver_handle = NULL;
       return NULL;
    }

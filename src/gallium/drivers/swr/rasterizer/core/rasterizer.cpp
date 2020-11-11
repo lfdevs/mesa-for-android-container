@@ -382,7 +382,7 @@ void RasterizeTriPoint(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
 
         // overwrite texcoord for point sprites
         uint32_t texCoordMask   = backendState.pointSpriteTexCoordMask;
-        DWORD    texCoordAttrib = 0;
+        unsigned long texCoordAttrib = 0;
 
         while (_BitScanForward(&texCoordAttrib, texCoordMask))
         {
@@ -424,7 +424,7 @@ void RasterizeTriPoint(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
     if (isPointSpriteTexCoordEnabled)
     {
         uint32_t texCoordMask   = backendState.pointSpriteTexCoordMask;
-        DWORD    texCoordAttrib = 0;
+        unsigned long texCoordAttrib = 0;
 
         while (_BitScanForward(&texCoordAttrib, texCoordMask))
         {

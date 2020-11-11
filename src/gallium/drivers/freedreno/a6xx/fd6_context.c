@@ -47,6 +47,7 @@ fd6_context_destroy(struct pipe_context *pctx)
 	struct fd6_context *fd6_ctx = fd6_context(fd_context(pctx));
 
 	u_upload_destroy(fd6_ctx->border_color_uploader);
+	pipe_resource_reference(&fd6_ctx->border_color_buf, NULL);
 
 	fd_context_destroy(pctx);
 
@@ -134,62 +135,6 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 	if (!fd6_ctx)
 		return NULL;
 
-
-	switch (screen->gpu_id) {
-	case 618:
-/*
-GRAS_BIN_CONTROL:
-RB_BIN_CONTROL:
-  - a618 doesn't appear to set .USE_VIZ; also bin size diffs
-
-RB_CCU_CNTL:
-  - 0x3c400004 -> 0x3e400004
-  - 0x10000000 -> 0x08000000
-
-RB_UNKNOWN_8E04:               <-- see stencil-0000.rd.gz
-  - 0x01000000 -> 0x00100000
-
-SP_UNKNOWN_A0F8:
-PC_UNKNOWN_9805:
-  - 0x1 -> 0
- */
-		fd6_ctx->magic.RB_UNKNOWN_8E04_blit = 0x00100000;
-		fd6_ctx->magic.RB_CCU_CNTL_gmem = A6XX_RB_CCU_CNTL_OFFSET(0x7c000) |
-										  A6XX_RB_CCU_CNTL_GMEM |
-										  A6XX_RB_CCU_CNTL_UNK2;
-		fd6_ctx->magic.RB_CCU_CNTL_bypass = A6XX_RB_CCU_CNTL_OFFSET(0x10000);
-		fd6_ctx->magic.PC_UNKNOWN_9805 = 0x0;
-		fd6_ctx->magic.SP_UNKNOWN_A0F8 = 0x0;
-		break;
-	case 630:
-		fd6_ctx->magic.RB_UNKNOWN_8E04_blit = 0x01000000;
-		fd6_ctx->magic.RB_CCU_CNTL_gmem = A6XX_RB_CCU_CNTL_OFFSET(0xf8000) |
-										  A6XX_RB_CCU_CNTL_GMEM |
-										  A6XX_RB_CCU_CNTL_UNK2;
-		fd6_ctx->magic.RB_CCU_CNTL_bypass = A6XX_RB_CCU_CNTL_OFFSET(0x20000);
-		fd6_ctx->magic.PC_UNKNOWN_9805 = 0x1;
-		fd6_ctx->magic.SP_UNKNOWN_A0F8 = 0x1;
-		break;
-	case 640:
-		fd6_ctx->magic.RB_UNKNOWN_8E04_blit = 0x00100000;
-		fd6_ctx->magic.RB_CCU_CNTL_gmem = A6XX_RB_CCU_CNTL_OFFSET(0xf8000) |
-										  A6XX_RB_CCU_CNTL_GMEM;
-		fd6_ctx->magic.RB_CCU_CNTL_bypass = A6XX_RB_CCU_CNTL_OFFSET(0x20000);
-		fd6_ctx->magic.PC_UNKNOWN_9805 = 0x1;
-		fd6_ctx->magic.SP_UNKNOWN_A0F8 = 0x1;
-		break;
-	case 650:
-		fd6_ctx->magic.RB_UNKNOWN_8E04_blit = 0x04100000;
-		fd6_ctx->magic.RB_CCU_CNTL_gmem = A6XX_RB_CCU_CNTL_OFFSET(0x114000) |
-										  A6XX_RB_CCU_CNTL_GMEM;
-		fd6_ctx->magic.RB_CCU_CNTL_bypass = A6XX_RB_CCU_CNTL_OFFSET(0x30000);
-		fd6_ctx->magic.PC_UNKNOWN_9805 = 0x2;
-		fd6_ctx->magic.SP_UNKNOWN_A0F8 = 0x2;
-		break;
-	default:
-		unreachable("missing magic config");
-	}
-
 	pctx = &fd6_ctx->base.base;
 	pctx->screen = pscreen;
 
@@ -225,7 +170,7 @@ PC_UNKNOWN_9805:
 	 * here. */
 	pctx->delete_rasterizer_state = fd6_rasterizer_state_delete;
 	pctx->delete_blend_state = fd6_blend_state_delete;
-	pctx->delete_depth_stencil_alpha_state = fd6_depth_stencil_alpha_state_delete;
+	pctx->delete_depth_stencil_alpha_state = fd6_zsa_state_delete;
 
 	/* initial sizes for VSC buffers (or rather the per-pipe sizes
 	 * which is used to derive entire buffer size:

@@ -140,8 +140,6 @@ fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info)
 	struct fd_ringbuffer *ring = ctx->batch->draw;
 	unsigned nglobal = 0;
 
-	fd6_emit_restore(ctx->batch, ring);
-
 	v = ir3_shader_variant(so->shader, key, false, &ctx->debug);
 	if (!v)
 		return;

@@ -369,8 +369,8 @@ fd5_emit_tile_init(struct fd_batch *batch)
 
 	fd5_emit_restore(batch, ring);
 
-	if (batch->lrz_clear)
-		fd5_emit_ib(ring, batch->lrz_clear);
+	if (batch->prologue)
+		fd5_emit_ib(ring, batch->prologue);
 
 	fd5_emit_lrz_flush(ring);
 
@@ -693,12 +693,14 @@ fd5_emit_tile_fini(struct fd_batch *batch)
 static void
 fd5_emit_sysmem_prep(struct fd_batch *batch)
 {
-	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 	struct fd_ringbuffer *ring = batch->gmem;
 
 	fd5_emit_restore(batch, ring);
 
 	fd5_emit_lrz_flush(ring);
+
+	if (batch->prologue)
+		fd5_emit_ib(ring, batch->prologue);
 
 	OUT_PKT7(ring, CP_SKIP_IB2_ENABLE_GLOBAL, 1);
 	OUT_RING(ring, 0x0);
@@ -716,6 +718,17 @@ fd5_emit_sysmem_prep(struct fd_batch *batch)
 	fd_wfi(batch, ring);
 	OUT_PKT4(ring, REG_A5XX_RB_CCU_CNTL, 1);
 	OUT_RING(ring, 0x10000000);   /* RB_CCU_CNTL */
+
+	OUT_PKT4(ring, REG_A5XX_RB_CNTL, 1);
+	OUT_RING(ring, A5XX_RB_CNTL_WIDTH(0) |
+			A5XX_RB_CNTL_HEIGHT(0) |
+			A5XX_RB_CNTL_BYPASS);
+
+	/* remaining setup below here does not apply to blit/compute: */
+	if (batch->nondraw)
+		return;
+
+	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 
 	OUT_PKT4(ring, REG_A5XX_GRAS_SC_WINDOW_SCISSOR_TL, 2);
 	OUT_RING(ring, A5XX_GRAS_SC_WINDOW_SCISSOR_TL_X(0) |
@@ -735,11 +748,6 @@ fd5_emit_sysmem_prep(struct fd_batch *batch)
 
 	OUT_PKT7(ring, CP_SET_VISIBILITY_OVERRIDE, 1);
 	OUT_RING(ring, 0x1);
-
-	OUT_PKT4(ring, REG_A5XX_RB_CNTL, 1);
-	OUT_RING(ring, A5XX_RB_CNTL_WIDTH(0) |
-			A5XX_RB_CNTL_HEIGHT(0) |
-			A5XX_RB_CNTL_BYPASS);
 
 	patch_draws(batch, IGNORE_VISIBILITY);
 

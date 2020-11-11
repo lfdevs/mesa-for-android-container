@@ -297,7 +297,7 @@ int main(int argc, char *argv[])
       { "no-offsets",    no_argument,       (int *) &option_print_offsets, false },
       { "gen",           required_argument, NULL,                          'g' },
       { "headers",       no_argument,       (int *) &option_full_decode,   false },
-      { "color",         required_argument, NULL,                          'c' },
+      { "color",         optional_argument, NULL,                          'c' },
       { "xml",           required_argument, NULL,                          'x' },
       { "max-vbo-lines", required_argument, NULL,                          'v' },
       { NULL,            0,                 NULL,                          0 }

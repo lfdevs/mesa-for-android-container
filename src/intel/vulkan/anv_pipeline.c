@@ -242,11 +242,12 @@ anv_shader_compile_to_nir(struct anv_device *device,
                    stage, entrypoint_name, &spirv_options, nir_options);
    assert(nir->info.stage == stage);
    nir_validate_shader(nir, "after spirv_to_nir");
+   nir_validate_ssa_dominance(nir, "after spirv_to_nir");
    ralloc_steal(mem_ctx, nir);
 
    free(spec_entries);
 
-   if (unlikely(INTEL_DEBUG & intel_debug_flag_for_shader_stage(stage))) {
+   if (INTEL_DEBUG & intel_debug_flag_for_shader_stage(stage)) {
       fprintf(stderr, "NIR (from SPIR-V) for %s shader:\n",
               gl_shader_stage_name(stage));
       nir_print_shader(nir, stderr);
@@ -744,7 +745,11 @@ anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       NIR_PASS_V(nir, nir_lower_wpos_center,
                  anv_pipeline_to_graphics(pipeline)->sample_shading_enable);
-      NIR_PASS_V(nir, nir_lower_input_attachments, true);
+      NIR_PASS_V(nir, nir_lower_input_attachments,
+                 &(nir_input_attachment_options) {
+                     .use_fragcoord_sysval = true,
+                     .use_layer_id_sysval = true,
+                 });
    }
 
    NIR_PASS_V(nir, anv_nir_lower_ycbcr_textures, layout);
@@ -760,6 +765,8 @@ anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
 
    NIR_PASS_V(nir, nir_lower_explicit_io, nir_var_mem_global,
               nir_address_format_64bit_global);
+   NIR_PASS_V(nir, nir_lower_explicit_io, nir_var_mem_push_const,
+              nir_address_format_32bit_offset);
 
    /* Apply the actual pipeline layout to UBOs, SSBOs, and textures */
    anv_nir_apply_pipeline_layout(pdevice,
@@ -1182,9 +1189,8 @@ anv_pipeline_add_executable(struct anv_pipeline *pipeline,
       /* Creating this is far cheaper than it looks.  It's perfectly fine to
        * do it for every binary.
        */
-      struct gen_disasm *d = gen_disasm_create(&pipeline->device->info);
-      gen_disasm_disassemble(d, stage->code, code_offset, stream);
-      gen_disasm_destroy(d);
+      gen_disassemble(&pipeline->device->info,
+                      stage->code, code_offset, stream);
 
       fclose(stream);
 
@@ -1577,8 +1583,6 @@ anv_pipeline_compile_graphics(struct anv_graphics_pipeline *pipeline,
                                   sizeof(stages[s].cache_key),
                                   stages[s].code,
                                   stages[s].prog_data.base.program_size,
-                                  stages[s].nir->constant_data,
-                                  stages[s].nir->constant_data_size,
                                   &stages[s].prog_data.base,
                                   brw_prog_data_size(s),
                                   stages[s].stats, stages[s].num_stats,
@@ -1767,8 +1771,6 @@ anv_pipeline_compile_cs(struct anv_compute_pipeline *pipeline,
                                      MESA_SHADER_COMPUTE,
                                      &stage.cache_key, sizeof(stage.cache_key),
                                      stage.code, code_size,
-                                     stage.nir->constant_data,
-                                     stage.nir->constant_data_size,
                                      &stage.prog_data.base,
                                      sizeof(stage.prog_data.cs),
                                      stage.stats, stage.num_stats,
@@ -2406,7 +2408,7 @@ VkResult anv_GetPipelineExecutableStatisticsKHR(
                    "Number of bytes of workgroup shared memory used by this "
                    "compute shader including any padding.");
          stat->format = VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_UINT64_KHR;
-         stat->value.u64 = brw_cs_prog_data_const(prog_data)->slm_size;
+         stat->value.u64 = prog_data->total_shared;
       }
    }
 

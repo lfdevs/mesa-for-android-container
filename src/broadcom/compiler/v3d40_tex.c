@@ -175,9 +175,10 @@ v3d40_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
         /* Limit the number of channels returned to both how many the NIR
          * instruction writes and how many the instruction could produce.
          */
-        assert(instr->dest.is_ssa);
         p0_unpacked.return_words_of_texture_data =
-                nir_ssa_def_components_read(&instr->dest.ssa);
+                instr->dest.is_ssa ?
+                nir_ssa_def_components_read(&instr->dest.ssa) :
+                (1 << instr->dest.reg.reg->num_components) - 1;
 
         assert(p0_unpacked.return_words_of_texture_data != 0);
 
@@ -220,8 +221,11 @@ v3d40_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
                 (instr->op == nir_texop_lod ||
                  memcmp(&p2_unpacked, &p2_unpacked_default, sizeof(p2_unpacked)) != 0);
 
-        if (output_type_32_bit ||
-            nir_tex_instr_need_sampler(instr)) {
+        /* To handle the cases were we can't just use p1_unpacked_default */
+        bool non_default_p1_config = nir_tex_instr_need_sampler(instr) ||
+                output_type_32_bit;
+
+        if (non_default_p1_config) {
                 struct V3D41_TMU_CONFIG_PARAMETER_1 p1_unpacked = {
                         .output_type_32_bit = output_type_32_bit,
 
@@ -243,14 +247,21 @@ v3d40_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
                                                   (uint8_t *)&p1_packed,
                                                   &p1_unpacked);
 
-                /* Load unit number into the high bits of the sampler
-                 * address field, which will be be used by the driver
-                 * to decide which sampler to put in the actual
-                 * address field.
-                 */
-                p1_packed |= unit << 24;
+                if (nir_tex_instr_need_sampler(instr)) {
+                        /* Load unit number into the high bits of the sampler
+                         * address field, which will be be used by the driver
+                         * to decide which sampler to put in the actual
+                         * address field.
+                         */
+                        p1_packed |= unit << 24;
 
-                vir_WRTMUC(c, QUNIFORM_TMU_CONFIG_P1, p1_packed);
+                        vir_WRTMUC(c, QUNIFORM_TMU_CONFIG_P1, p1_packed);
+                } else {
+                        /* In this case, we don't need to merge in any
+                         * sampler state from the API and can just use
+                         * our packed bits */
+                        vir_WRTMUC(c, QUNIFORM_CONSTANT, p1_packed);
+                }
         } else if (needs_p2_config) {
                 /* Configuration parameters need to be set up in
                  * order, and if P2 is needed, you need to set up P1

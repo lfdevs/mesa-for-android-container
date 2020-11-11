@@ -100,6 +100,13 @@ store_clipdist_output(nir_builder *b, nir_variable *out, nir_ssa_def **val)
    store->num_components = 4;
    nir_intrinsic_set_base(store, out->data.driver_location);
    nir_intrinsic_set_write_mask(store, 0xf);
+
+   nir_io_semantics semantics = {
+      .location = out->data.location,
+      .num_slots = 1,
+   };
+   nir_intrinsic_set_io_semantics(store, semantics);
+
    store->src[0].ssa = nir_vec4(b, val[0], val[1], val[2], val[3]);
    store->src[0].is_ssa = true;
    store->src[1] = nir_src_for_ssa(nir_imm_int(b, 0));
@@ -115,6 +122,13 @@ load_clipdist_input(nir_builder *b, nir_variable *in, int location_offset,
    load = nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_input);
    load->num_components = 4;
    nir_intrinsic_set_base(load, in->data.driver_location + location_offset);
+
+   nir_io_semantics semantics = {
+      .location = in->data.location,
+      .num_slots = 1,
+   };
+   nir_intrinsic_set_io_semantics(load, semantics);
+
    load->src[0] = nir_src_for_ssa(nir_imm_int(b, 0));
    nir_ssa_dest_init(&load->instr, &load->dest, 4, 32, NULL);
    nir_builder_instr_insert(b, &load->instr);

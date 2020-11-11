@@ -241,7 +241,7 @@ iris_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
    /* We can't safely re-emit 3DSTATE_SO_BUFFERS because it may zero the
     * write offsets, changing the behavior.
     */
-   if (unlikely(INTEL_DEBUG & DEBUG_REEMIT)) {
+   if (INTEL_DEBUG & DEBUG_REEMIT) {
       ice->state.dirty |= IRIS_ALL_DIRTY_FOR_RENDER & ~IRIS_DIRTY_SO_BUFFERS;
       ice->state.stage_dirty |= IRIS_ALL_STAGE_DIRTY_FOR_RENDER;
    }
@@ -332,7 +332,8 @@ iris_update_grid_size_resource(struct iris_context *ice,
                          .size_B = sizeof(grid->grid),
                          .format = ISL_FORMAT_RAW,
                          .stride_B = 1,
-                         .mocs = iris_mocs(grid_bo, isl_dev));
+                         .mocs = iris_mocs(grid_bo, isl_dev,
+                                           ISL_SURF_USAGE_CONSTANT_BUFFER_BIT));
 
    ice->state.stage_dirty |= IRIS_STAGE_DIRTY_BINDINGS_CS;
 }
@@ -346,7 +347,7 @@ iris_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info *grid)
    if (ice->state.predicate == IRIS_PREDICATE_STATE_DONT_RENDER)
       return;
 
-   if (unlikely(INTEL_DEBUG & DEBUG_REEMIT)) {
+   if (INTEL_DEBUG & DEBUG_REEMIT) {
       ice->state.dirty |= IRIS_ALL_DIRTY_FOR_COMPUTE;
       ice->state.stage_dirty |= IRIS_ALL_STAGE_DIRTY_FOR_COMPUTE;
    }

@@ -38,7 +38,7 @@ bitcount4(const uint32_t val)
 }
 
 static int
-nv50_vertprog_assign_slots(struct nv50_ir_prog_info *info)
+nv50_vertprog_assign_slots(struct nv50_ir_prog_info_out *info)
 {
    struct nv50_program *prog = (struct nv50_program *)info->driverPriv;
    unsigned i, n, c;
@@ -140,7 +140,7 @@ nv50_vertprog_assign_slots(struct nv50_ir_prog_info *info)
 }
 
 static int
-nv50_fragprog_assign_slots(struct nv50_ir_prog_info *info)
+nv50_fragprog_assign_slots(struct nv50_ir_prog_info_out *info)
 {
    struct nv50_program *prog = (struct nv50_program *)info->driverPriv;
    unsigned i, n, m, c;
@@ -249,7 +249,7 @@ nv50_fragprog_assign_slots(struct nv50_ir_prog_info *info)
 }
 
 static int
-nv50_program_assign_varying_slots(struct nv50_ir_prog_info *info)
+nv50_program_assign_varying_slots(struct nv50_ir_prog_info_out *info)
 {
    switch (info->type) {
    case PIPE_SHADER_VERTEX:
@@ -266,7 +266,7 @@ nv50_program_assign_varying_slots(struct nv50_ir_prog_info *info)
 }
 
 static struct nv50_stream_output_state *
-nv50_program_create_strmout_state(const struct nv50_ir_prog_info *info,
+nv50_program_create_strmout_state(const struct nv50_ir_prog_info_out *info,
                                   const struct pipe_stream_output_info *pso)
 {
    struct nv50_stream_output_state *so;
@@ -326,6 +326,7 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
                        struct pipe_debug_callback *debug)
 {
    struct nv50_ir_prog_info *info;
+   struct nv50_ir_prog_info_out info_out = {};
    int i, ret;
    const uint8_t map_undef = (prog->type == PIPE_SHADER_VERTEX) ? 0x40 : 0x80;
 
@@ -376,7 +377,7 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
    if (prog->type == PIPE_SHADER_COMPUTE)
       info->prop.cp.inputOffset = 0x10;
 
-   info->driverPriv = prog;
+   info_out.driverPriv = prog;
 
 #ifndef NDEBUG
    info->optLevel = debug_get_num_option("NV50_PROG_OPTIMIZE", 3);
@@ -386,39 +387,39 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
    info->optLevel = 3;
 #endif
 
-   ret = nv50_ir_generate_code(info);
+   ret = nv50_ir_generate_code(info, &info_out);
    if (ret) {
       NOUVEAU_ERR("shader translation failed: %i\n", ret);
       goto out;
    }
 
-   prog->code = info->bin.code;
-   prog->code_size = info->bin.codeSize;
-   prog->fixups = info->bin.relocData;
-   prog->interps = info->bin.fixupData;
-   prog->max_gpr = MAX2(4, (info->bin.maxGPR >> 1) + 1);
-   prog->tls_space = info->bin.tlsSpace;
-   prog->cp.smem_size = info->bin.smemSize;
+   prog->code = info_out.bin.code;
+   prog->code_size = info_out.bin.codeSize;
+   prog->fixups = info_out.bin.relocData;
+   prog->interps = info_out.bin.fixupData;
+   prog->max_gpr = MAX2(4, (info_out.bin.maxGPR >> 1) + 1);
+   prog->tls_space = info_out.bin.tlsSpace;
+   prog->cp.smem_size = info_out.bin.smemSize;
    prog->mul_zero_wins = info->io.mul_zero_wins;
-   prog->vp.need_vertex_id = info->io.vertexId < PIPE_MAX_SHADER_INPUTS;
+   prog->vp.need_vertex_id = info_out.io.vertexId < PIPE_MAX_SHADER_INPUTS;
 
-   prog->vp.clip_enable = (1 << info->io.clipDistances) - 1;
+   prog->vp.clip_enable = (1 << info_out.io.clipDistances) - 1;
    prog->vp.cull_enable =
-      ((1 << info->io.cullDistances) - 1) << info->io.clipDistances;
+      ((1 << info_out.io.cullDistances) - 1) << info_out.io.clipDistances;
    prog->vp.clip_mode = 0;
-   for (i = 0; i < info->io.cullDistances; ++i)
-      prog->vp.clip_mode |= 1 << ((info->io.clipDistances + i) * 4);
+   for (i = 0; i < info_out.io.cullDistances; ++i)
+      prog->vp.clip_mode |= 1 << ((info_out.io.clipDistances + i) * 4);
 
    if (prog->type == PIPE_SHADER_FRAGMENT) {
-      if (info->prop.fp.writesDepth) {
+      if (info_out.prop.fp.writesDepth) {
          prog->fp.flags[0] |= NV50_3D_FP_CONTROL_EXPORTS_Z;
          prog->fp.flags[1] = 0x11;
       }
-      if (info->prop.fp.usesDiscard)
+      if (info_out.prop.fp.usesDiscard)
          prog->fp.flags[0] |= NV50_3D_FP_CONTROL_USES_KIL;
    } else
    if (prog->type == PIPE_SHADER_GEOMETRY) {
-      switch (info->prop.gp.outputPrim) {
+      switch (info_out.prop.gp.outputPrim) {
       case PIPE_PRIM_LINE_STRIP:
          prog->gp.prim_type = NV50_3D_GP_OUTPUT_PRIMITIVE_TYPE_LINE_STRIP;
          break;
@@ -427,29 +428,22 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
          break;
       case PIPE_PRIM_POINTS:
       default:
-         assert(info->prop.gp.outputPrim == PIPE_PRIM_POINTS);
+         assert(info_out.prop.gp.outputPrim == PIPE_PRIM_POINTS);
          prog->gp.prim_type = NV50_3D_GP_OUTPUT_PRIMITIVE_TYPE_POINTS;
          break;
       }
-      prog->gp.vert_count = CLAMP(info->prop.gp.maxVertices, 1, 1024);
-   }
-
-   if (prog->type == PIPE_SHADER_COMPUTE) {
-      prog->cp.syms = info->bin.syms;
-      prog->cp.num_syms = info->bin.numSyms;
-   } else {
-      FREE(info->bin.syms);
+      prog->gp.vert_count = CLAMP(info_out.prop.gp.maxVertices, 1, 1024);
    }
 
    if (prog->pipe.stream_output.num_outputs)
-      prog->so = nv50_program_create_strmout_state(info,
+      prog->so = nv50_program_create_strmout_state(&info_out,
                                                    &prog->pipe.stream_output);
 
    pipe_debug_message(debug, SHADER_INFO,
                       "type: %d, local: %d, shared: %d, gpr: %d, inst: %d, bytes: %d",
-                      prog->type, info->bin.tlsSpace, info->bin.smemSize,
-                      prog->max_gpr, info->bin.instructions,
-                      info->bin.codeSize);
+                      prog->type, info_out.bin.tlsSpace, info_out.bin.smemSize,
+                      prog->max_gpr, info_out.bin.instructions,
+                      info_out.bin.codeSize);
 
 out:
    if (info->bin.sourceRep == PIPE_SHADER_IR_NIR)
@@ -542,9 +536,6 @@ nv50_program_destroy(struct nv50_context *nv50, struct nv50_program *p)
    FREE(p->fixups);
    FREE(p->interps);
    FREE(p->so);
-
-   if (type == PIPE_SHADER_COMPUTE)
-      FREE(p->cp.syms);
 
    memset(p, 0, sizeof(*p));
 

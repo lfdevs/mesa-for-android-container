@@ -254,7 +254,8 @@ use_hw_binning(struct fd_batch *batch)
 {
 	const struct fd_gmem_stateobj *gmem = batch->gmem_state;
 
-	// TODO figure out hw limits for binning
+	if ((gmem->maxpw * gmem->maxph) > 32)
+		return false;
 
 	return fd_binning_enabled && ((gmem->nbins_x * gmem->nbins_y) >= 2) &&
 			(batch->num_draws > 0);
@@ -557,7 +558,7 @@ emit_binning_pass(struct fd_batch *batch)
 {
 	struct fd_ringbuffer *ring = batch->gmem;
 	const struct fd_gmem_stateobj *gmem = batch->gmem_state;
-	struct fd6_context *fd6_ctx = fd6_context(batch->ctx);
+	struct fd_screen *screen = batch->ctx->screen;
 
 	debug_assert(!batch->tessellation);
 
@@ -581,10 +582,10 @@ emit_binning_pass(struct fd_batch *batch)
 	update_vsc_pipe(batch);
 
 	OUT_PKT4(ring, REG_A6XX_PC_UNKNOWN_9805, 1);
-	OUT_RING(ring, fd6_ctx->magic.PC_UNKNOWN_9805);
+	OUT_RING(ring, screen->info.a6xx.magic.PC_UNKNOWN_9805);
 
 	OUT_PKT4(ring, REG_A6XX_SP_UNKNOWN_A0F8, 1);
-	OUT_RING(ring, fd6_ctx->magic.SP_UNKNOWN_A0F8);
+	OUT_RING(ring, screen->info.a6xx.magic.SP_UNKNOWN_A0F8);
 
 	OUT_PKT7(ring, CP_EVENT_WRITE, 1);
 	OUT_RING(ring, UNK_2C);
@@ -632,8 +633,10 @@ emit_binning_pass(struct fd_batch *batch)
 
 	OUT_WFI5(ring);
 
-	OUT_PKT4(ring, REG_A6XX_RB_CCU_CNTL, 1);
-	OUT_RING(ring, fd6_ctx->magic.RB_CCU_CNTL_gmem);
+	OUT_REG(ring,
+			A6XX_RB_CCU_CNTL(.offset = screen->info.a6xx.ccu_offset_gmem,
+							 .gmem = true,
+							 .unk2 = screen->info.a6xx.ccu_cntl_gmem_unk2));
 }
 
 static void
@@ -667,19 +670,19 @@ static void prepare_tile_fini_ib(struct fd_batch *batch);
 static void
 fd6_emit_tile_init(struct fd_batch *batch)
 {
-	struct fd_context *ctx = batch->ctx;
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 	const struct fd_gmem_stateobj *gmem = batch->gmem_state;
+	struct fd_screen *screen = batch->ctx->screen;
 
 	fd6_emit_restore(batch, ring);
 
 	fd6_emit_lrz_flush(ring);
 
-	if (batch->lrz_clear) {
-		fd_log(batch, "START LRZ CLEAR");
-		fd6_emit_ib(ring, batch->lrz_clear);
-		fd_log(batch, "END LRZ CLEAR");
+	if (batch->prologue) {
+		fd_log(batch, "START PROLOGUE");
+		fd6_emit_ib(ring, batch->prologue);
+		fd_log(batch, "END PROLOGUE");
 	}
 
 	fd6_cache_inv(batch, ring);
@@ -695,8 +698,10 @@ fd6_emit_tile_init(struct fd_batch *batch)
 	OUT_RING(ring, 0x1);
 
 	fd_wfi(batch, ring);
-	OUT_PKT4(ring, REG_A6XX_RB_CCU_CNTL, 1);
-	OUT_RING(ring, fd6_context(ctx)->magic.RB_CCU_CNTL_gmem);
+	OUT_REG(ring,
+			A6XX_RB_CCU_CNTL(.offset = screen->info.a6xx.ccu_offset_gmem,
+							 .gmem = true,
+							 .unk2 = screen->info.a6xx.ccu_cntl_gmem_unk2));
 
 	emit_zs(ring, pfb->zsbuf, batch->gmem_state);
 	emit_mrt(ring, pfb, batch->gmem_state);
@@ -731,10 +736,10 @@ fd6_emit_tile_init(struct fd_batch *batch)
 		OUT_RING(ring, 0x0);
 
 		OUT_PKT4(ring, REG_A6XX_PC_UNKNOWN_9805, 1);
-		OUT_RING(ring, fd6_context(ctx)->magic.PC_UNKNOWN_9805);
+		OUT_RING(ring, screen->info.a6xx.magic.PC_UNKNOWN_9805);
 
 		OUT_PKT4(ring, REG_A6XX_SP_UNKNOWN_A0F8, 1);
-		OUT_RING(ring, fd6_context(ctx)->magic.SP_UNKNOWN_A0F8);
+		OUT_RING(ring, screen->info.a6xx.magic.SP_UNKNOWN_A0F8);
 
 		OUT_PKT7(ring, CP_SKIP_IB2_ENABLE_GLOBAL, 1);
 		OUT_RING(ring, 0x1);
@@ -1109,6 +1114,9 @@ emit_restore_blits(struct fd_batch *batch, struct fd_ringbuffer *ring)
 static void
 prepare_tile_setup_ib(struct fd_batch *batch)
 {
+	if (!(batch->restore || batch->fast_cleared))
+		return;
+
 	batch->tile_setup = fd_submit_new_ringbuffer(batch->submit, 0x1000,
 			FD_RINGBUFFER_STREAMING);
 
@@ -1130,6 +1138,9 @@ fd6_emit_tile_mem2gmem(struct fd_batch *batch, const struct fd_tile *tile)
 static void
 fd6_emit_tile_renderprep(struct fd_batch *batch, const struct fd_tile *tile)
 {
+	if (!batch->tile_setup)
+		return;
+
 	fd_log(batch, "TILE: START CLEAR/RESTORE");
 	if (batch->fast_cleared || !use_hw_binning(batch)) {
 		fd6_emit_ib(batch->gmem, batch->tile_setup);
@@ -1359,10 +1370,23 @@ setup_tess_buffers(struct fd_batch *batch, struct fd_ringbuffer *ring)
 static void
 fd6_emit_sysmem_prep(struct fd_batch *batch)
 {
-	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 	struct fd_ringbuffer *ring = batch->gmem;
+	struct fd_screen *screen = batch->ctx->screen;
 
 	fd6_emit_restore(batch, ring);
+	fd6_emit_lrz_flush(ring);
+
+	if (batch->prologue) {
+		fd_log(batch, "START PROLOGUE");
+		fd6_emit_ib(ring, batch->prologue);
+		fd_log(batch, "END PROLOGUE");
+	}
+
+	/* remaining setup below here does not apply to blit/compute: */
+	if (batch->nondraw)
+		return;
+
+	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 
 	if (pfb->width > 0 && pfb->height > 0)
 		set_scissor(ring, 0, 0, pfb->width - 1, pfb->height - 1);
@@ -1374,11 +1398,6 @@ fd6_emit_sysmem_prep(struct fd_batch *batch)
 	set_bin_size(ring, 0, 0, 0xc00000); /* 0xc00000 = BYPASS? */
 
 	emit_sysmem_clears(batch, ring);
-
-	fd6_emit_lrz_flush(ring);
-
-	if (batch->lrz_clear)
-		fd6_emit_ib(ring, batch->lrz_clear);
 
 	emit_marker6(ring, 7);
 	OUT_PKT7(ring, CP_SET_MARKER, 1);
@@ -1399,8 +1418,7 @@ fd6_emit_sysmem_prep(struct fd_batch *batch)
 	fd6_cache_inv(batch, ring);
 
 	fd_wfi(batch, ring);
-	OUT_PKT4(ring, REG_A6XX_RB_CCU_CNTL, 1);
-	OUT_RING(ring, fd6_context(batch->ctx)->magic.RB_CCU_CNTL_bypass);
+	OUT_REG(ring, A6XX_RB_CCU_CNTL(.offset = screen->info.a6xx.ccu_offset_bypass));
 
 	/* enable stream-out, with sysmem there is only one pass: */
 	OUT_REG(ring, A6XX_VPC_SO_DISABLE(false));

@@ -72,6 +72,7 @@ if with_tools.contains('all')
     'xvmc',
   ]
 endif
+with_clc = false
 
 with_intel_tools = with_tools.contains('intel') or with_tools.contains('intel-ui')
 with_imgui = with_intel_tools or with_vulkan_overlay_layer
@@ -162,6 +163,8 @@ if dri_drivers.contains('auto')
       dri_drivers = ['i915', 'i965', 'r100', 'r200', 'nouveau']
     elif ['arm', 'aarch64'].contains(host_machine.cpu_family())
       dri_drivers = []
+    elif ['mips', 'mips64'].contains(host_machine.cpu_family())
+      dri_drivers = ['r100', 'r200', 'nouveau']
     else
       error('Unknown architecture @0@. Please pass -Ddri-drivers to set driver options. Patches gladly accepted to fix this.'.format(
             host_machine.cpu_family()))
@@ -197,6 +200,10 @@ if gallium_drivers.contains('auto')
       gallium_drivers = [
         'kmsro', 'v3d', 'vc4', 'freedreno', 'etnaviv', 'nouveau',
         'tegra', 'virgl', 'lima', 'panfrost', 'swrast'
+      ]
+    elif ['mips', 'mips64'].contains(host_machine.cpu_family())
+      gallium_drivers = [
+        'r300', 'r600', 'radeonsi', 'nouveau', 'virgl', 'swrast'
       ]
     else
       error('Unknown architecture @0@. Please pass -Dgallium-drivers to set driver options. Patches gladly accepted to fix this.'.format(
@@ -243,9 +250,11 @@ _vulkan_drivers = get_option('vulkan-drivers')
 if _vulkan_drivers.contains('auto')
   if system_has_kms_drm
     if host_machine.cpu_family().startswith('x86')
-      _vulkan_drivers = ['amd', 'intel']
+      _vulkan_drivers = ['amd', 'intel', 'swrast']
     elif ['arm', 'aarch64'].contains(host_machine.cpu_family())
-      _vulkan_drivers = []
+      _vulkan_drivers = ['swrast']
+    elif ['mips', 'mips64'].contains(host_machine.cpu_family())
+      _vulkan_drivers = ['amd', 'swrast']
     else
       error('Unknown architecture @0@. Please pass -Dvulkan-drivers to set driver options. Patches gladly accepted to fix this.'.format(
             host_machine.cpu_family()))
@@ -262,8 +271,17 @@ endif
 with_intel_vk = _vulkan_drivers.contains('intel')
 with_amd_vk = _vulkan_drivers.contains('amd')
 with_freedreno_vk = _vulkan_drivers.contains('freedreno')
+with_swrast_vk = _vulkan_drivers.contains('swrast')
+with_freedreno_kgsl = get_option('freedreno-kgsl')
+with_broadcom_vk = _vulkan_drivers.contains('broadcom')
 with_any_vk = _vulkan_drivers.length() != 0
 
+with_any_broadcom = with_gallium_vc4 or with_gallium_v3d or with_broadcom_vk
+with_any_intel = with_dri_i965 or with_intel_vk or with_gallium_iris
+
+if with_swrast_vk and not with_gallium_softpipe
+  error('swrast vulkan requires gallium swrast')
+endif
 if with_dri_swrast and (with_gallium_softpipe or with_gallium_swr)
   error('Only one swrast provider can be built')
 endif
@@ -332,7 +350,9 @@ endif
 
 with_glx = get_option('glx')
 if with_glx == 'auto'
-  if with_dri
+  if with_platform_android
+    with_glx = 'disabled'
+  elif with_dri
     with_glx = 'dri'
   elif with_platform_haiku
     with_glx = 'disabled'
@@ -789,26 +809,17 @@ if _opencl != 'disabled'
     error('OpenCL Clover implementation requires at least one gallium driver.')
   endif
 
-  dep_clc = dependency('libclc')
+  with_clc = true
   with_gallium_opencl = true
   with_opencl_icd = _opencl == 'icd'
-
-  with_opencl_spirv = get_option('opencl-spirv')
-  if with_opencl_spirv
-    dep_spirv_tools = dependency('SPIRV-Tools', required : true, version : '>= 2018.0')
-    # LLVMSPIRVLib is available at https://github.com/KhronosGroup/SPIRV-LLVM-Translator
-    dep_llvmspirvlib = dependency('LLVMSPIRVLib', required : true, version : '>= 0.2.1')
-  else
-    dep_spirv_tools = null_dep
-    dep_llvmspirvlib = null_dep
-  endif
 else
-  dep_clc = null_dep
-  dep_spirv_tools = null_dep
-  dep_llvmspirvlib = null_dep
   with_gallium_opencl = false
   with_opencl_icd = false
-  with_opencl_spirv = false
+endif
+
+dep_clc = null_dep
+if with_clc
+  dep_clc = dependency('libclc')
 endif
 
 gl_pkgconfig_c_flags = []
@@ -903,11 +914,14 @@ elif _shader_cache == 'false'
 endif
 if _shader_cache != 'disabled'
   if host_machine.system() == 'windows'
-    if _shader_cache == 'enabled'
+    if ['enabled', 'default-disabled'].contains(_shader_cache)
       error('Shader Cache does not currently work on Windows')
     endif
   else
     pre_args += '-DENABLE_SHADER_CACHE'
+    if _shader_cache == 'default-disabled'
+      pre_args += '-DSHADER_CACHE_DISABLE_BY_DEFAULT'
+    endif
     with_shader_cache = true
   endif
 endif
@@ -943,7 +957,7 @@ elif host_machine.system() == 'sunos'
   pre_args += '-D__EXTENSIONS__'
 elif host_machine.system() == 'windows'
   pre_args += [
-    '-D_WINDOWS', '-D_WIN32_WINNT=0x0601', '-DWINVER=0x0601',
+    '-D_WINDOWS', '-D_WIN32_WINNT=0x0A00', '-DWINVER=0x0A00',
     '-DPIPE_SUBSYSTEM_WINDOWS_USER',
     '-D_USE_MATH_DEFINES',  # XXX: scons doesn't use this for mingw
   ]
@@ -984,6 +998,10 @@ if cc.get_id() == 'msvc'
                '/wd4146',  # unary minus operator applied to unsigned type, result still unsigned
                '/wd4200',  # nonstandard extension used: zero-sized array in struct/union
                '/wd4624',  # destructor was implicitly defined as deleted [from LLVM]
+               '/wd4309',  # 'initializing': truncation of constant value
+               '/wd4838',  # conversion from 'int' to 'const char' requires a narrowing conversion
+               '/we4020',  # Error when passing the wrong number of parameters
+               '/we4024',  # Error when passing different type of parameter
               ]
     if cc.has_argument(a)
       c_args += a
@@ -1352,7 +1370,8 @@ if dep_thread.found() and host_machine.system() != 'windows'
   endif
 endif
 if host_machine.system() != 'windows'
-  dep_expat = dependency('expat', fallback : ['expat', 'expat_dep'])
+  dep_expat = dependency('expat', fallback : ['expat', 'expat_dep'],
+                         required: not with_platform_android or with_any_broadcom or with_any_intel)
 else
   dep_expat = null_dep
 endif
@@ -1446,7 +1465,7 @@ if with_gallium_opencl
   ]
 endif
 
-if with_amd_vk or with_gallium_radeonsi
+if with_amd_vk or with_gallium_radeonsi or with_gallium_opencl
   _llvm_version = '>= 8.0.0'
 elif with_gallium_swr
   _llvm_version = '>= 6.0.0'
@@ -1540,6 +1559,31 @@ elif with_gallium_opencl
   error('The OpenCL "Clover" state tracker requires LLVM, but LLVM is disabled.')
 endif
 
+with_opencl_spirv = _opencl != 'disabled' and get_option('opencl-spirv')
+if with_opencl_spirv
+  chosen_llvm_version_array = dep_llvm.version().split('.')
+  chosen_llvm_version_major = chosen_llvm_version_array[0].to_int()
+  chosen_llvm_version_minor = chosen_llvm_version_array[1].to_int()
+
+  # Require an SPIRV-LLVM-Translator version compatible with the chosen LLVM
+  # one.
+  _llvmspirvlib_version = [
+    # This first version check is still needed as maybe LLVM 8.0 was picked but
+    # we do not want to accept SPIRV-LLVM-Translator 8.0.0.1 as that version does
+    # not have the required API and those are only available starting from
+    # 8.0.1.3.
+    '>= 8.0.1.3',
+    '>= @0@.@1@'.format(chosen_llvm_version_major, chosen_llvm_version_minor),
+    '< @0@.@1@'.format(chosen_llvm_version_major, chosen_llvm_version_minor + 1) ]
+
+  dep_spirv_tools = dependency('SPIRV-Tools', required : true, version : '>= 2018.0')
+  # LLVMSPIRVLib is available at https://github.com/KhronosGroup/SPIRV-LLVM-Translator
+  dep_llvmspirvlib = dependency('LLVMSPIRVLib', required : true, version : _llvmspirvlib_version)
+else
+  dep_spirv_tools = null_dep
+  dep_llvmspirvlib = null_dep
+endif
+
 if (with_amd_vk or with_gallium_radeonsi or with_gallium_opencl or
     (with_gallium_r600 and with_llvm))
   dep_elf = dependency('libelf', required : false)
@@ -1623,7 +1667,7 @@ elif _libunwind == 'false'
   _libunwind = 'disabled'
   warning('libunwind option "false" deprecated, please use "disabled" instead.')
 endif
-if _libunwind != 'disabled'
+if _libunwind != 'disabled' and not with_platform_android
   dep_unwind = dependency('libunwind', required : _libunwind == 'enabled')
   if dep_unwind.found()
     pre_args += '-DHAVE_LIBUNWIND'
@@ -1644,7 +1688,7 @@ if with_osmesa != 'none'
   osmesa_bits = get_option('osmesa-bits')
   if osmesa_bits != '8'
     if with_dri or with_glx != 'disabled'
-      error('OSMesa bits must be 8 if building glx or dir based drivers')
+      error('OSMesa bits must be 8 if building glx or dri based drivers')
     endif
     osmesa_lib_name = osmesa_lib_name + osmesa_bits
     pre_args += [
@@ -1695,6 +1739,7 @@ dep_xcb_sync = null_dep
 dep_xcb_xfixes = null_dep
 dep_xshmfence = null_dep
 dep_xcb_xrandr = null_dep
+dep_xcb_shm = null_dep
 dep_xlib_xrandr = null_dep
 if with_platform_x11
   if with_glx == 'xlib' or with_glx == 'gallium-xlib'
@@ -1707,6 +1752,7 @@ if with_platform_x11
     dep_xdamage = dependency('xdamage', version : '>= 1.1')
     dep_xfixes = dependency('xfixes', version : '>= 2.0')
     dep_xcb_glx = dependency('xcb-glx', version : '>= 1.8.1')
+    dep_xcb_shm = dependency('xcb-shm')
   endif
   if (with_any_vk or with_glx == 'dri' or with_egl or
        (with_gallium_vdpau or with_gallium_xvmc or with_gallium_va or
@@ -1739,10 +1785,13 @@ if with_platform_x11
   if with_glx == 'dri'
     if with_dri_platform == 'drm'
       dep_dri2proto = dependency('dri2proto', version : '>= 2.8')
-      dep_xxf86vm = dependency('xxf86vm')
+      if with_glx_direct
+        dep_xxf86vm = dependency('xxf86vm')
+      endif
     endif
   endif
-  if (with_egl or (
+  if (with_egl or 
+      with_dri3 or (
       with_gallium_vdpau or with_gallium_xvmc or with_gallium_xa or
       with_gallium_omx != 'disabled'))
     dep_xcb_xfixes = dependency('xcb-xfixes')
@@ -1779,7 +1828,6 @@ endif
 # drop shared code unused by that specific driver (particularly
 # relevant for Vulkan drivers).
 if cc.has_link_argument('-Wl,--gc-sections')
-  add_project_arguments('-Wl,--gc-sections', language : ['c', 'cpp'])
   foreach a: ['-ffunction-sections', '-fdata-sections']
     if cc.has_argument(a)
       add_project_arguments(a, language : ['c', 'cpp'])
@@ -1807,7 +1855,9 @@ elif with_glx == 'dri'
     'xcb-glx >= 1.8.1']
   if with_dri_platform == 'drm'
     gl_priv_reqs += 'xcb-dri2 >= 1.8'
-    gl_priv_reqs += 'xxf86vm'
+    if with_glx_direct
+      gl_priv_reqs += 'xxf86vm'
+    endif
   endif
 endif
 if dep_libdrm.found()

@@ -126,7 +126,6 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.APPLE_object_purgeable = true;
    ctx->Extensions.ATI_texture_env_combine3 = true;
    ctx->Extensions.MESA_framebuffer_flip_y = true;
-   ctx->Extensions.MESA_pack_invert = true;
    ctx->Extensions.NV_conditional_render = true;
    ctx->Extensions.NV_fog_distance = true;
    ctx->Extensions.NV_primitive_restart = true;
@@ -220,10 +219,12 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.EXT_disjoint_timer_query =
          ctx->Extensions.ARB_timer_query;
 
-      /* Only enable this in core profile because other parts of Mesa behave
-       * slightly differently when the extension is enabled.
+      /* Only enable this in core profile because geometry shaders are
+       * required, and Mesa only supports geometry shaders in OpenGL 3.2 and
+       * later.  In this driver, that currently means Core profile.
        */
-      if (ctx->API == API_OPENGL_CORE) {
+      if (ctx->API == API_OPENGL_CORE ||
+          ctx->Const.AllowHigherCompatVersion) {
          ctx->Extensions.ARB_shader_viewport_layer_array = true;
          ctx->Extensions.ARB_viewport_array = true;
          ctx->Extensions.AMD_vertex_shader_viewport_index = true;

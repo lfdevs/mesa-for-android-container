@@ -433,7 +433,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (35 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): (cnt=0, max=0)  (estimated)
-				- shaderdb: 5 instructions, 4 nops, 1 non-nops, (5 instlen), 0 half, 0 full
+				- shaderdb: 5 instructions, 4 nops, 1 non-nops, (5 instlen), 0 last-baryf, 0 half, 0 full
+				- shaderdb: 5 cat0, 0 cat1, 0 cat2, 0 cat3, 0 cat4, 0 cat5, 0 cat6, 0 cat7
 				- shaderdb: 0 (ss), 0 (sy)
 109ce1f0:			0000: c0213000 00600000 00000000 00000000 03000000 00000000 00000000 00000000
 *
@@ -458,7 +459,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (35 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): 0-3 (cnt=4, max=3)  (estimated)
-				- shaderdb: 9 instructions, 8 nops, 1 non-nops, (9 instlen), 0 half, 1 full
+				- shaderdb: 9 instructions, 4 nops, 5 non-nops, (9 instlen), 0 last-baryf, 0 half, 1 full
+				- shaderdb: 5 cat0, 4 cat1, 0 cat2, 0 cat3, 0 cat4, 0 cat5, 0 cat6, 0 cat7
 				- shaderdb: 0 (ss), 0 (sy)
 109ce27c:			0000: c0213000 00700000 00000000 00000000 20244000 00000001 20244001 00000002
 109ce29c:			0020: 20244002 00000003 20244003 00000000 03000000 00000000 00000000 00000000
@@ -1045,7 +1047,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (131 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): 6-13 (cnt=8, max=13)  (estimated)
-				- shaderdb: 74 instructions, 38 nops, 36 non-nops, (61 instlen), 0 half, 4 full
+				- shaderdb: 74 instructions, 27 nops, 47 non-nops, (61 instlen), 0 last-baryf, 0 half, 4 full
+				- shaderdb: 28 cat0, 8 cat1, 15 cat2, 22 cat3, 1 cat4, 0 cat5, 0 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109ce66c:			0000: c0813000 01200000 00000000 10000002 40700000 10030002 40700001 00001004
 109ce68c:			0020: 63818000 00011007 63818001 00001008 63820000 0001100b 63820001 0000100c
@@ -1086,7 +1089,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (35 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): (cnt=0, max=0)  (estimated)
-				- shaderdb: 11 instructions, 5 nops, 6 non-nops, (11 instlen), 0 half, 1 full
+				- shaderdb: 11 instructions, 5 nops, 6 non-nops, (11 instlen), 5 last-baryf, 0 half, 1 full
+				- shaderdb: 6 cat0, 0 cat1, 1 cat2, 0 cat3, 0 cat4, 0 cat5, 4 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109ce878:			0000: c0213000 00700000 00000000 00000000 00000000 01c00000 c7c60000 01c00002
 109ce898:			0020: c7c60001 01c00004 c7c60002 01c00006 c7c60003 00002000 473090fc 00000000
@@ -1675,7 +1679,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (131 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): 10-17 (cnt=8, max=17)  (estimated)
-				- shaderdb: 67 instructions, 31 nops, 36 non-nops, (56 instlen), 0 half, 5 full
+				- shaderdb: 67 instructions, 23 nops, 44 non-nops, (56 instlen), 0 last-baryf, 0 half, 5 full
+				- shaderdb: 24 cat0, 5 cat1, 15 cat2, 22 cat3, 1 cat4, 0 cat5, 0 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109cee34:			0000: c0813000 01200000 00000000 10000002 40700000 10030002 40700001 00001004
 109cee54:			0020: 63818000 00011007 63818001 00001008 63820000 0001100b 63820001 0000100c
@@ -1715,7 +1720,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (35 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): (cnt=0, max=0)  (estimated)
-				- shaderdb: 11 instructions, 5 nops, 6 non-nops, (11 instlen), 0 half, 1 full
+				- shaderdb: 11 instructions, 5 nops, 6 non-nops, (11 instlen), 5 last-baryf, 0 half, 1 full
+				- shaderdb: 6 cat0, 0 cat1, 1 cat2, 0 cat3, 0 cat4, 0 cat5, 4 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109cf040:			0000: c0213000 00700000 00000000 00000000 00000000 01c00000 c7c60000 01c00002
 109cf060:			0020: c7c60001 01c00004 c7c60002 01c00006 c7c60003 00002000 473090fc 00000000
@@ -2106,7 +2112,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (131 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): 10-17 (cnt=8, max=17)  (estimated)
-				- shaderdb: 67 instructions, 31 nops, 36 non-nops, (56 instlen), 0 half, 5 full
+				- shaderdb: 67 instructions, 23 nops, 44 non-nops, (56 instlen), 0 last-baryf, 0 half, 5 full
+				- shaderdb: 24 cat0, 5 cat1, 15 cat2, 22 cat3, 1 cat4, 0 cat5, 0 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109cf40c:			0000: c0813000 01200000 00000000 10000002 40700000 10030002 40700001 00001004
 109cf42c:			0020: 63818000 00011007 63818001 00001008 63820000 0001100b 63820001 0000100c
@@ -2144,7 +2151,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (35 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): 2-5 (cnt=4, max=5)  (estimated)
-				- shaderdb: 9 instructions, 4 nops, 5 non-nops, (9 instlen), 0 half, 2 full
+				- shaderdb: 9 instructions, 4 nops, 5 non-nops, (9 instlen), 3 last-baryf, 0 half, 2 full
+				- shaderdb: 5 cat0, 0 cat1, 4 cat2, 0 cat3, 0 cat4, 0 cat5, 0 cat6, 0 cat7
 				- shaderdb: 0 (ss), 0 (sy)
 109cf618:			0000: c0213000 00700000 00000000 00002000 47300002 00002001 47300003 00002002
 109cf638:			0020: 47300004 00002003 47308005 00000000 03000000 00000000 00000000 00000000
@@ -2498,7 +2506,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (131 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): 6-13 (cnt=8, max=13)  (estimated)
-				- shaderdb: 74 instructions, 38 nops, 36 non-nops, (61 instlen), 0 half, 4 full
+				- shaderdb: 74 instructions, 27 nops, 47 non-nops, (61 instlen), 0 last-baryf, 0 half, 4 full
+				- shaderdb: 28 cat0, 8 cat1, 15 cat2, 22 cat3, 1 cat4, 0 cat5, 0 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109cf96c:			0000: c0813000 01200000 00000000 10000002 40700000 10030002 40700001 00001004
 109cf98c:			0020: 63818000 00011007 63818001 00001008 63820000 0001100b 63820001 0000100c
@@ -2539,7 +2548,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (35 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): (cnt=0, max=0)  (estimated)
-				- shaderdb: 11 instructions, 5 nops, 6 non-nops, (11 instlen), 0 half, 1 full
+				- shaderdb: 11 instructions, 5 nops, 6 non-nops, (11 instlen), 5 last-baryf, 0 half, 1 full
+				- shaderdb: 6 cat0, 0 cat1, 1 cat2, 0 cat3, 0 cat4, 0 cat5, 4 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109cfb78:			0000: c0213000 00700000 00000000 00000000 00000000 01c00000 c7c60000 01c00002
 109cfb98:			0020: c7c60001 01c00004 c7c60002 01c00006 c7c60003 00002000 473090fc 00000000
@@ -3051,7 +3061,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (131 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): 10-17 (cnt=8, max=17)  (estimated)
-				- shaderdb: 67 instructions, 31 nops, 36 non-nops, (56 instlen), 0 half, 5 full
+				- shaderdb: 67 instructions, 23 nops, 44 non-nops, (56 instlen), 0 last-baryf, 0 half, 5 full
+				- shaderdb: 24 cat0, 5 cat1, 15 cat2, 22 cat3, 1 cat4, 0 cat5, 0 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109d00b4:			0000: c0813000 01200000 00000000 10000002 40700000 10030002 40700001 00001004
 109d00d4:			0020: 63818000 00011007 63818001 00001008 63820000 0001100b 63820001 0000100c
@@ -3091,7 +3102,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (35 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): (cnt=0, max=0)  (estimated)
-				- shaderdb: 11 instructions, 5 nops, 6 non-nops, (11 instlen), 0 half, 1 full
+				- shaderdb: 11 instructions, 5 nops, 6 non-nops, (11 instlen), 5 last-baryf, 0 half, 1 full
+				- shaderdb: 6 cat0, 0 cat1, 1 cat2, 0 cat3, 0 cat4, 0 cat5, 4 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109d02c0:			0000: c0213000 00700000 00000000 00000000 00000000 01c00000 c7c60000 01c00002
 109d02e0:			0020: c7c60001 01c00004 c7c60002 01c00006 c7c60003 00002000 473090fc 00000000
@@ -3482,7 +3494,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (131 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): 10-17 (cnt=8, max=17)  (estimated)
-				- shaderdb: 67 instructions, 31 nops, 36 non-nops, (56 instlen), 0 half, 5 full
+				- shaderdb: 67 instructions, 23 nops, 44 non-nops, (56 instlen), 0 last-baryf, 0 half, 5 full
+				- shaderdb: 24 cat0, 5 cat1, 15 cat2, 22 cat3, 1 cat4, 0 cat5, 0 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109d068c:			0000: c0813000 01200000 00000000 10000002 40700000 10030002 40700001 00001004
 109d06ac:			0020: 63818000 00011007 63818001 00001008 63820000 0001100b 63820001 0000100c
@@ -3520,7 +3533,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (35 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): 2-5 (cnt=4, max=5)  (estimated)
-				- shaderdb: 9 instructions, 4 nops, 5 non-nops, (9 instlen), 0 half, 2 full
+				- shaderdb: 9 instructions, 4 nops, 5 non-nops, (9 instlen), 3 last-baryf, 0 half, 2 full
+				- shaderdb: 5 cat0, 0 cat1, 4 cat2, 0 cat3, 0 cat4, 0 cat5, 0 cat6, 0 cat7
 				- shaderdb: 0 (ss), 0 (sy)
 109d0898:			0000: c0213000 00700000 00000000 00002000 47300002 00002001 47300003 00002002
 109d08b8:			0020: 47300004 00002003 47308005 00000000 03000000 00000000 00000000 00000000
@@ -3874,7 +3888,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (131 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): 6-13 (cnt=8, max=13)  (estimated)
-				- shaderdb: 74 instructions, 38 nops, 36 non-nops, (61 instlen), 0 half, 4 full
+				- shaderdb: 74 instructions, 27 nops, 47 non-nops, (61 instlen), 0 last-baryf, 0 half, 4 full
+				- shaderdb: 28 cat0, 8 cat1, 15 cat2, 22 cat3, 1 cat4, 0 cat5, 0 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109d0bec:			0000: c0813000 01200000 00000000 10000002 40700000 10030002 40700001 00001004
 109d0c0c:			0020: 63818000 00011007 63818001 00001008 63820000 0001100b 63820001 0000100c
@@ -3915,7 +3930,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (35 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): (cnt=0, max=0)  (estimated)
-				- shaderdb: 11 instructions, 5 nops, 6 non-nops, (11 instlen), 0 half, 1 full
+				- shaderdb: 11 instructions, 5 nops, 6 non-nops, (11 instlen), 5 last-baryf, 0 half, 1 full
+				- shaderdb: 6 cat0, 0 cat1, 1 cat2, 0 cat3, 0 cat4, 0 cat5, 4 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109d0df8:			0000: c0213000 00700000 00000000 00000000 00000000 01c00000 c7c60000 01c00002
 109d0e18:			0020: c7c60001 01c00004 c7c60002 01c00006 c7c60003 00002000 473090fc 00000000
@@ -4427,7 +4443,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (131 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): 10-17 (cnt=8, max=17)  (estimated)
-				- shaderdb: 67 instructions, 31 nops, 36 non-nops, (56 instlen), 0 half, 5 full
+				- shaderdb: 67 instructions, 23 nops, 44 non-nops, (56 instlen), 0 last-baryf, 0 half, 5 full
+				- shaderdb: 24 cat0, 5 cat1, 15 cat2, 22 cat3, 1 cat4, 0 cat5, 0 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109d1334:			0000: c0813000 01200000 00000000 10000002 40700000 10030002 40700001 00001004
 109d1354:			0020: 63818000 00011007 63818001 00001008 63820000 0001100b 63820001 0000100c
@@ -4467,7 +4484,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (35 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): (cnt=0, max=0)  (estimated)
-				- shaderdb: 11 instructions, 5 nops, 6 non-nops, (11 instlen), 0 half, 1 full
+				- shaderdb: 11 instructions, 5 nops, 6 non-nops, (11 instlen), 5 last-baryf, 0 half, 1 full
+				- shaderdb: 6 cat0, 0 cat1, 1 cat2, 0 cat3, 0 cat4, 0 cat5, 4 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109d1540:			0000: c0213000 00700000 00000000 00000000 00000000 01c00000 c7c60000 01c00002
 109d1560:			0020: c7c60001 01c00004 c7c60002 01c00006 c7c60003 00002000 473090fc 00000000
@@ -4858,7 +4876,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (131 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): 10-17 (cnt=8, max=17)  (estimated)
-				- shaderdb: 67 instructions, 31 nops, 36 non-nops, (56 instlen), 0 half, 5 full
+				- shaderdb: 67 instructions, 23 nops, 44 non-nops, (56 instlen), 0 last-baryf, 0 half, 5 full
+				- shaderdb: 24 cat0, 5 cat1, 15 cat2, 22 cat3, 1 cat4, 0 cat5, 0 cat6, 0 cat7
 				- shaderdb: 1 (ss), 0 (sy)
 109d190c:			0000: c0813000 01200000 00000000 10000002 40700000 10030002 40700001 00001004
 109d192c:			0020: 63818000 00011007 63818001 00001008 63820000 0001100b 63820001 0000100c
@@ -4896,7 +4915,8 @@ t3			opcode: CP_LOAD_STATE4 (30) (35 dwords)
 
 				- output (half): (cnt=0, max=0)  (estimated)
 				- output (full): 2-5 (cnt=4, max=5)  (estimated)
-				- shaderdb: 9 instructions, 4 nops, 5 non-nops, (9 instlen), 0 half, 2 full
+				- shaderdb: 9 instructions, 4 nops, 5 non-nops, (9 instlen), 3 last-baryf, 0 half, 2 full
+				- shaderdb: 5 cat0, 0 cat1, 4 cat2, 0 cat3, 0 cat4, 0 cat5, 0 cat6, 0 cat7
 				- shaderdb: 0 (ss), 0 (sy)
 109d1b18:			0000: c0213000 00700000 00000000 00002000 47300002 00002001 47300003 00002002
 109d1b38:			0020: 47300004 00002003 47308005 00000000 03000000 00000000 00000000 00000000
@@ -5200,7 +5220,8 @@ t3		opcode: CP_LOAD_STATE4 (30) (35 dwords)
 
 			- output (half): (cnt=0, max=0)  (estimated)
 			- output (full): (cnt=0, max=0)  (estimated)
-			- shaderdb: 5 instructions, 4 nops, 1 non-nops, (5 instlen), 0 half, 0 full
+			- shaderdb: 5 instructions, 4 nops, 1 non-nops, (5 instlen), 0 last-baryf, 0 half, 0 full
+			- shaderdb: 5 cat0, 0 cat1, 0 cat2, 0 cat3, 0 cat4, 0 cat5, 0 cat6, 0 cat7
 			- shaderdb: 0 (ss), 0 (sy)
 108ce4b0:		0000: c0213000 00600000 00000000 00000000 03000000 00000000 00000000 00000000
 *
@@ -5225,7 +5246,8 @@ t3		opcode: CP_LOAD_STATE4 (30) (35 dwords)
 
 			- output (half): (cnt=0, max=0)  (estimated)
 			- output (full): 0-3 (cnt=4, max=3)  (estimated)
-			- shaderdb: 9 instructions, 8 nops, 1 non-nops, (9 instlen), 0 half, 1 full
+			- shaderdb: 9 instructions, 4 nops, 5 non-nops, (9 instlen), 0 last-baryf, 0 half, 1 full
+			- shaderdb: 5 cat0, 4 cat1, 0 cat2, 0 cat3, 0 cat4, 0 cat5, 0 cat6, 0 cat7
 			- shaderdb: 0 (ss), 0 (sy)
 108ce53c:		0000: c0213000 00700000 00000000 00000000 20244000 00000001 20244001 00000002
 108ce55c:		0020: 20244002 00000003 20244003 00000000 03000000 00000000 00000000 00000000

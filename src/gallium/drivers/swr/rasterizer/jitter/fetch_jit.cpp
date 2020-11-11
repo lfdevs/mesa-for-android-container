@@ -178,7 +178,7 @@ Function* FetchJit::Create(const FETCH_COMPILE_STATE& fetchState)
         if (fetchState.bDisableIndexOOBCheck)
         {
             vIndices = LOAD(
-                BITCAST(indices, PointerType::get(VectorType::get(mInt8Ty, mpJitMgr->mVWidth), 0)),
+                BITCAST(indices, PointerType::get(getVectorType(mInt8Ty, mpJitMgr->mVWidth), 0)),
                 {(uint32_t)0});
             vIndices = Z_EXT(vIndices, mSimdInt32Ty);
         }
@@ -191,7 +191,7 @@ Function* FetchJit::Create(const FETCH_COMPILE_STATE& fetchState)
         if (fetchState.bDisableIndexOOBCheck)
         {
             vIndices = LOAD(
-                BITCAST(indices, PointerType::get(VectorType::get(mInt16Ty, mpJitMgr->mVWidth), 0)),
+                BITCAST(indices, PointerType::get(getVectorType(mInt16Ty, mpJitMgr->mVWidth), 0)),
                 {(uint32_t)0});
             vIndices = Z_EXT(vIndices, mSimdInt32Ty);
         }
@@ -297,7 +297,9 @@ Function* FetchJit::Create(const FETCH_COMPILE_STATE& fetchState)
     optPasses.add(createCFGSimplificationPass());
     optPasses.add(createEarlyCSEPass());
     optPasses.add(createInstructionCombiningPass());
+#if LLVM_VERSION_MAJOR <= 11
     optPasses.add(createConstantPropagationPass());
+#endif
     optPasses.add(createSCCPPass());
     optPasses.add(createAggressiveDCEPass());
 
@@ -1310,14 +1312,14 @@ void FetchJit::Shuffle8bpcGatherd16(Shuffle8bpcArgs& args)
     const uint32_t(&swizzle)[4]                     = std::get<9>(args);
 
     // cast types
-    Type* vGatherTy = VectorType::get(mInt32Ty, 8);
-    Type* v32x8Ty   = VectorType::get(mInt8Ty, 32);
+    Type* vGatherTy = getVectorType(mInt32Ty, 8);
+    Type* v32x8Ty   = getVectorType(mInt8Ty, 32);
 
     // have to do extra work for sign extending
     if ((extendType == Instruction::CastOps::SExt) || (extendType == Instruction::CastOps::SIToFP))
     {
-        Type* v16x8Ty = VectorType::get(mInt8Ty, 16); // 8x16bit ints in a 128bit lane
-        Type* v128Ty  = VectorType::get(IntegerType::getIntNTy(JM()->mContext, 128), 2);
+        Type* v16x8Ty = getVectorType(mInt8Ty, 16); // 8x16bit ints in a 128bit lane
+        Type* v128Ty  = getVectorType(IntegerType::getIntNTy(JM()->mContext, 128), 2);
 
         // shuffle mask, including any swizzling
         const char x          = (char)swizzle[0];
@@ -1573,7 +1575,7 @@ void FetchJit::Shuffle8bpcGatherd(Shuffle8bpcArgs& args)
     const uint32_t(&swizzle)[4]                     = std::get<9>(args);
 
     // cast types
-    Type* v32x8Ty = VectorType::get(mInt8Ty, mVWidth * 4); // vwidth is units of 32 bits
+    Type* v32x8Ty = getVectorType(mInt8Ty, mVWidth * 4); // vwidth is units of 32 bits
 
     for (uint32_t i = 0; i < 4; i++)
     {
@@ -1687,8 +1689,8 @@ void FetchJit::Shuffle16bpcGather16(Shuffle16bpcArgs& args)
     Value*(&vVertexElements)[4]                     = std::get<8>(args);
 
     // cast types
-    Type* vGatherTy = VectorType::get(mInt32Ty, 8);
-    Type* v32x8Ty   = VectorType::get(mInt8Ty, 32);
+    Type* vGatherTy = getVectorType(mInt32Ty, 8);
+    Type* v32x8Ty   = getVectorType(mInt8Ty, 32);
 
     // have to do extra work for sign extending
     if ((extendType == Instruction::CastOps::SExt) ||
@@ -1697,8 +1699,8 @@ void FetchJit::Shuffle16bpcGather16(Shuffle16bpcArgs& args)
         // is this PP float?
         bool bFP = (extendType == Instruction::CastOps::FPExt) ? true : false;
 
-        Type* v8x16Ty   = VectorType::get(mInt16Ty, 8); // 8x16bit in a 128bit lane
-        Type* v128bitTy = VectorType::get(IntegerType::getIntNTy(JM()->mContext, 128), 2);
+        Type* v8x16Ty   = getVectorType(mInt16Ty, 8); // 8x16bit in a 128bit lane
+        Type* v128bitTy = getVectorType(IntegerType::getIntNTy(JM()->mContext, 128), 2);
 
         // shuffle mask
         Value* vConstMask = C<uint8_t>({0, 1, 4, 5, 8, 9, 12, 13, 2, 3, 6, 7, 10, 11, 14, 15,
@@ -1956,8 +1958,8 @@ void FetchJit::Shuffle16bpcGather(Shuffle16bpcArgs& args)
     Value*(&vVertexElements)[4]                     = std::get<8>(args);
 
     // cast types
-    Type* vGatherTy = VectorType::get(IntegerType::getInt32Ty(JM()->mContext), mVWidth);
-    Type* v32x8Ty   = VectorType::get(mInt8Ty, mVWidth * 4); // vwidth is units of 32 bits
+    Type* vGatherTy = getVectorType(IntegerType::getInt32Ty(JM()->mContext), mVWidth);
+    Type* v32x8Ty   = getVectorType(mInt8Ty, mVWidth * 4); // vwidth is units of 32 bits
 
     // have to do extra work for sign extending
     if ((extendType == Instruction::CastOps::SExt) ||
@@ -1966,8 +1968,8 @@ void FetchJit::Shuffle16bpcGather(Shuffle16bpcArgs& args)
         // is this PP float?
         bool bFP = (extendType == Instruction::CastOps::FPExt) ? true : false;
 
-        Type* v8x16Ty   = VectorType::get(mInt16Ty, 8); // 8x16bit in a 128bit lane
-        Type* v128bitTy = VectorType::get(IntegerType::getIntNTy(JM()->mContext, 128),
+        Type* v8x16Ty   = getVectorType(mInt16Ty, 8); // 8x16bit in a 128bit lane
+        Type* v128bitTy = getVectorType(IntegerType::getIntNTy(JM()->mContext, 128),
                                           mVWidth / 4); // vwidth is units of 32 bits
 
         // shuffle mask
@@ -2223,7 +2225,7 @@ Value* FetchJit::GenerateCompCtrlVector(const ComponentControl ctrl)
     {
         if (mVWidth == 16)
         {
-            Type*  pSimd8FPTy = VectorType::get(mFP32Ty, 8);
+            Type*  pSimd8FPTy = getVectorType(mFP32Ty, 8);
             Value* pIdLo =
                 BITCAST(LOAD(GEP(mpFetchInfo, {0, SWR_FETCH_CONTEXT_VertexID})), pSimd8FPTy);
             Value* pIdHi =

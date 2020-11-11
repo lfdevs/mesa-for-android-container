@@ -25,6 +25,7 @@
 
 #include "pipe/p_shader_tokens.h"
 
+#include "util/blob.h"
 #include "tgsi/tgsi_util.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_scan.h"
@@ -79,6 +80,9 @@ struct nv50_ir_prog_symbol
 #define NVISA_GM200_CHIPSET    0x120
 #define NVISA_GV100_CHIPSET    0x140
 
+struct nv50_ir_prog_info_out;
+
+/* used for the input data and assignSlot interface */
 struct nv50_ir_prog_info
 {
    uint16_t target; /* chipset (0x50, 0x84, 0xc0, ...) */
@@ -90,18 +94,59 @@ struct nv50_ir_prog_info
    bool omitLineNum; /* only used for printing the prog when dbgFlags is set */
 
    struct {
+      uint32_t smemSize;  /* required shared memory per block */
+      uint8_t sourceRep;  /* PIPE_SHADER_IR_* */
+      const void *source;
+   } bin;
+
+   union {
+      struct {
+         uint32_t inputOffset; /* base address for user args */
+         uint32_t gridInfoBase;  /* base address for NTID,NCTAID */
+         uint16_t numThreads[3]; /* max number of threads */
+      } cp;
+   } prop;
+
+   struct {
+      int8_t genUserClip;        /* request user clip planes for ClipVertex */
+      uint8_t auxCBSlot;         /* driver constant buffer slot */
+      uint16_t ucpBase;          /* base address for UCPs */
+      uint16_t drawInfoBase;     /* base address for draw parameters */
+      uint16_t alphaRefBase;     /* base address for alpha test values */
+      int8_t viewportId;         /* output index of ViewportIndex */
+      bool mul_zero_wins;        /* program wants for x*0 = 0 */
+      bool nv50styleSurfaces;    /* generate gX[] access for raw buffers */
+      uint16_t texBindBase;      /* base address for tex handles (nve4) */
+      uint16_t fbtexBindBase;    /* base address for fbtex handle (nve4) */
+      uint16_t suInfoBase;       /* base address for surface info (nve4) */
+      uint16_t bindlessBase;     /* base address for bindless image info (nve4) */
+      uint16_t bufInfoBase;      /* base address for buffer info */
+      uint16_t sampleInfoBase;   /* base address for sample positions */
+      uint8_t msInfoCBSlot;      /* cX[] used for multisample info */
+      uint16_t msInfoBase;       /* base address for multisample info */
+      uint16_t uboInfoBase;      /* base address for compute UBOs (gk104+) */
+   } io;
+
+   /* driver callback to assign input/output locations */
+   int (*assignSlots)(struct nv50_ir_prog_info_out *);
+};
+
+/* the produced binary with metadata */
+struct nv50_ir_prog_info_out
+{
+   uint16_t target; /* chipset (0x50, 0x84, 0xc0, ...) */
+
+   uint8_t type; /* PIPE_SHADER */
+
+   struct {
       int16_t maxGPR;     /* may be -1 if none used */
       uint32_t tlsSpace;  /* required local memory per thread */
       uint32_t smemSize;  /* required shared memory per block */
       uint32_t *code;
       uint32_t codeSize;
       uint32_t instructions;
-      uint8_t sourceRep;  /* PIPE_SHADER_IR_* */
-      const void *source;
       void *relocData;
       void *fixupData;
-      struct nv50_ir_prog_symbol *syms;
-      uint16_t numSyms;
    } bin;
 
    struct nv50_ir_varying sv[PIPE_MAX_SHADER_INPUTS];
@@ -130,57 +175,33 @@ struct nv50_ir_prog_info
       } gp;
       struct {
          unsigned numColourResults;
-         bool writesDepth;
-         bool earlyFragTests;
-         bool postDepthCoverage;
-         bool separateFragData;
-         bool usesDiscard;
-         bool usesSampleMaskIn;
-         bool readsFramebuffer;
-         bool readsSampleLocations;
+         bool writesDepth           : 1;
+         bool earlyFragTests        : 1;
+         bool postDepthCoverage     : 1;
+         bool usesDiscard           : 1;
+         bool usesSampleMaskIn      : 1;
+         bool readsFramebuffer      : 1;
+         bool readsSampleLocations  : 1;
+         bool separateFragData      : 1;
       } fp;
-      struct {
-         uint32_t inputOffset; /* base address for user args */
-         uint32_t gridInfoBase;  /* base address for NTID,NCTAID */
-         uint16_t numThreads[3]; /* max number of threads */
-      } cp;
    } prop;
-
-   uint8_t numBarriers;
 
    struct {
       uint8_t clipDistances;     /* number of clip distance outputs */
       uint8_t cullDistances;     /* number of cull distance outputs */
       int8_t genUserClip;        /* request user clip planes for ClipVertex */
-      uint8_t auxCBSlot;         /* driver constant buffer slot */
-      uint16_t ucpBase;          /* base address for UCPs */
-      uint16_t drawInfoBase;     /* base address for draw parameters */
-      uint16_t alphaRefBase;     /* base address for alpha test values */
       uint8_t instanceId;        /* system value index of InstanceID */
       uint8_t vertexId;          /* system value index of VertexID */
       uint8_t edgeFlagIn;
       uint8_t edgeFlagOut;
-      int8_t viewportId;         /* output index of ViewportIndex */
       uint8_t fragDepth;         /* output index of FragDepth */
       uint8_t sampleMask;        /* output index of SampleMask */
       uint8_t globalAccess;      /* 1 for read, 2 for wr, 3 for rw */
       bool fp64;                 /* program uses fp64 math */
-      bool mul_zero_wins;        /* program wants for x*0 = 0 */
       bool layer_viewport_relative;
-      bool nv50styleSurfaces;    /* generate gX[] access for raw buffers */
-      uint16_t texBindBase;      /* base address for tex handles (nve4) */
-      uint16_t fbtexBindBase;    /* base address for fbtex handle (nve4) */
-      uint16_t suInfoBase;       /* base address for surface info (nve4) */
-      uint16_t bindlessBase;     /* base address for bindless image info (nve4) */
-      uint16_t bufInfoBase;      /* base address for buffer info */
-      uint16_t sampleInfoBase;   /* base address for sample positions */
-      uint8_t msInfoCBSlot;      /* cX[] used for multisample info */
-      uint16_t msInfoBase;       /* base address for multisample info */
-      uint16_t uboInfoBase;      /* base address for compute UBOs (gk104+) */
    } io;
 
-   /* driver callback to assign input/output locations */
-   int (*assignSlots)(struct nv50_ir_prog_info *);
+   uint8_t numBarriers;
 
    void *driverPriv;
 };
@@ -192,7 +213,8 @@ extern "C" {
 const struct nir_shader_compiler_options *
 nv50_ir_nir_shader_compiler_options(int chipset);
 
-extern int nv50_ir_generate_code(struct nv50_ir_prog_info *);
+extern int nv50_ir_generate_code(struct nv50_ir_prog_info *,
+                                 struct nv50_ir_prog_info_out *);
 
 extern void nv50_ir_relocate_code(void *relocData, uint32_t *code,
                                   uint32_t codePos,
@@ -207,6 +229,61 @@ nv50_ir_apply_fixups(void *fixupData, uint32_t *code,
 /* obtain code that will be shared among programs */
 extern void nv50_ir_get_target_library(uint32_t chipset,
                                        const uint32_t **code, uint32_t *size);
+
+
+#ifdef __cplusplus
+namespace nv50_ir
+{
+   class FixupEntry;
+   class FixupData;
+
+   void
+   gk110_interpApply(const nv50_ir::FixupEntry *entry, uint32_t *code,
+                     const nv50_ir::FixupData& data);
+   void
+   gm107_interpApply(const nv50_ir::FixupEntry *entry, uint32_t *code,
+                     const nv50_ir::FixupData& data);
+   void
+   nv50_interpApply(const nv50_ir::FixupEntry *entry, uint32_t *code,
+                    const nv50_ir::FixupData& data);
+   void
+   nvc0_interpApply(const nv50_ir::FixupEntry *entry, uint32_t *code,
+                    const nv50_ir::FixupData& data);
+   void
+   gv100_interpApply(const nv50_ir::FixupEntry *entry, uint32_t *code,
+                     const nv50_ir::FixupData& data);
+   void
+   gk110_selpFlip(const nv50_ir::FixupEntry *entry, uint32_t *code,
+                  const nv50_ir::FixupData& data);
+   void
+   gm107_selpFlip(const nv50_ir::FixupEntry *entry, uint32_t *code,
+                  const nv50_ir::FixupData& data);
+   void
+   nvc0_selpFlip(const nv50_ir::FixupEntry *entry, uint32_t *code,
+                 const nv50_ir::FixupData& data);
+   void
+   gv100_selpFlip(const nv50_ir::FixupEntry *entry, uint32_t *code,
+                  const nv50_ir::FixupData& data);
+}
+#endif
+
+extern void
+nv50_ir_prog_info_out_print(struct nv50_ir_prog_info_out *);
+
+/* Serialize a nv50_ir_prog_info structure and save it into blob */
+extern bool
+nv50_ir_prog_info_serialize(struct blob *, struct nv50_ir_prog_info *);
+
+/* Serialize a nv50_ir_prog_info_out structure and save it into blob */
+extern bool MUST_CHECK
+nv50_ir_prog_info_out_serialize(struct blob *, struct nv50_ir_prog_info_out *);
+
+/* Deserialize from data and save into a nv50_ir_prog_info_out structure
+ * using a pointer. Size is a total size of the serialized data.
+ * Offset points to where info_out in data is located. */
+extern bool MUST_CHECK
+nv50_ir_prog_info_out_deserialize(void *data, size_t size, size_t offset,
+                                  struct nv50_ir_prog_info_out *);
 
 #ifdef __cplusplus
 }

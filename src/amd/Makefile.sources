@@ -78,12 +78,14 @@ ACO_FILES = \
 	compiler/aco_dead_code_analysis.cpp \
 	compiler/aco_dominance.cpp \
 	compiler/aco_instruction_selection.cpp \
+	compiler/aco_instruction_selection.h \
 	compiler/aco_instruction_selection_setup.cpp \
 	compiler/aco_interface.cpp \
 	compiler/aco_interface.h \
 	compiler/aco_ir.cpp \
 	compiler/aco_ir.h \
 	compiler/aco_assembler.cpp \
+	compiler/aco_form_hard_clauses.cpp \
 	compiler/aco_insert_exec_mask.cpp \
 	compiler/aco_insert_NOPs.cpp \
 	compiler/aco_insert_waitcnt.cpp \

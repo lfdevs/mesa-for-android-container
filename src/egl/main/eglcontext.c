@@ -671,12 +671,8 @@ _eglQueryContextRenderBuffer(_EGLContext *ctx)
 
 
 EGLBoolean
-_eglQueryContext(const _EGLDriver *drv, _EGLDisplay *disp, _EGLContext *c,
-                 EGLint attribute, EGLint *value)
+_eglQueryContext(_EGLContext *c, EGLint attribute, EGLint *value)
 {
-   (void) drv;
-   (void) disp;
-
    if (!value)
       return _eglError(EGL_BAD_PARAMETER, "eglQueryContext");
 

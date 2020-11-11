@@ -24,9 +24,11 @@
 
 namespace nv50_ir {
 
-ConverterCommon::ConverterCommon(Program *prog, nv50_ir_prog_info *info)
+ConverterCommon::ConverterCommon(Program *prog, nv50_ir_prog_info *info,
+                                 nv50_ir_prog_info_out *info_out)
    :  BuildUtil(prog),
-      info(info) {}
+      info(info),
+      info_out(info_out) {}
 
 ConverterCommon::Subroutine *
 ConverterCommon::getSubroutine(unsigned ip)
@@ -82,7 +84,7 @@ ConverterCommon::handleUserClipPlanes()
    int n, i, c;
 
    for (c = 0; c < 4; ++c) {
-      for (i = 0; i < info->io.genUserClip; ++i) {
+      for (i = 0; i < info_out->io.genUserClip; ++i) {
          Symbol *sym = mkSymbol(FILE_MEMORY_CONST, info->io.auxCBSlot,
                                 TYPE_F32, info->io.ucpBase + i * 16 + c * 4);
          Value *ucp = mkLoadv(TYPE_F32, sym, NULL);
@@ -93,13 +95,13 @@ ConverterCommon::handleUserClipPlanes()
       }
    }
 
-   const int first = info->numOutputs - (info->io.genUserClip + 3) / 4;
+   const int first = info_out->numOutputs - (info_out->io.genUserClip + 3) / 4;
 
-   for (i = 0; i < info->io.genUserClip; ++i) {
+   for (i = 0; i < info_out->io.genUserClip; ++i) {
       n = i / 4 + first;
       c = i % 4;
       Symbol *sym =
-         mkSymbol(FILE_SHADER_OUTPUT, 0, TYPE_F32, info->out[n].slot[c] * 4);
+         mkSymbol(FILE_SHADER_OUTPUT, 0, TYPE_F32, info_out->out[n].slot[c] * 4);
       mkStore(OP_EXPORT, TYPE_F32, sym, NULL, res[i]);
    }
 }

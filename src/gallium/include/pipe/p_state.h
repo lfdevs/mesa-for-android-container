@@ -111,6 +111,7 @@ struct pipe_rasterizer_state
    unsigned point_tri_clip:1; /** large points clipped as tris or points */
    unsigned point_size_per_vertex:1; /**< size computed in vertex shader */
    unsigned multisample:1;         /* XXX maybe more ms state in future */
+   unsigned no_ms_sample_mask_out;
    unsigned force_persample_interp:1;
    unsigned line_smooth:1;
    unsigned line_stipple_enable:1;
@@ -213,10 +214,10 @@ struct pipe_viewport_state
 {
    float scale[3];
    float translate[3];
-   enum pipe_viewport_swizzle swizzle_x:3;
-   enum pipe_viewport_swizzle swizzle_y:3;
-   enum pipe_viewport_swizzle swizzle_z:3;
-   enum pipe_viewport_swizzle swizzle_w:3;
+   enum pipe_viewport_swizzle swizzle_x:8;
+   enum pipe_viewport_swizzle swizzle_y:8;
+   enum pipe_viewport_swizzle swizzle_z:8;
+   enum pipe_viewport_swizzle swizzle_w:8;
 };
 
 
@@ -574,6 +575,10 @@ struct pipe_resource
    struct pipe_screen *screen; /**< screen that this texture belongs to */
 };
 
+/**
+ * Opaque object used for separate resource/memory allocations.
+ */
+struct pipe_memory_allocation;
 
 /**
  * Transfer object.  For data transfer to/from a resource.
@@ -582,7 +587,7 @@ struct pipe_transfer
 {
    struct pipe_resource *resource; /**< resource to transfer to/from  */
    unsigned level;                 /**< texture mipmap level */
-   enum pipe_transfer_usage usage;
+   enum pipe_map_flags usage;
    struct pipe_box box;            /**< region of the resource to access */
    unsigned stride;                /**< row stride in bytes */
    unsigned layer_stride;          /**< image/layer stride in bytes */
@@ -716,18 +721,16 @@ struct pipe_draw_indirect_info
    struct pipe_resource *indirect_draw_count;
 };
 
+struct pipe_draw_start_count {
+   unsigned start;
+   unsigned count;
+};
 
 /**
  * Information to describe a draw_vbo call.
  */
 struct pipe_draw_info
 {
-   ubyte index_size;  /**< if 0, the draw is not indexed. */
-   enum pipe_prim_type mode:8;  /**< the mode of the primitive */
-   unsigned primitive_restart:1;
-   unsigned has_user_indices:1; /**< if true, use index.user_buffer */
-   ubyte vertices_per_patch; /**< the number of vertices per patch */
-
    /**
     * Direct draws: start is the index of the first vertex
     * Non-indexed indirect draws: not used
@@ -735,6 +738,13 @@ struct pipe_draw_info
     */
    unsigned start;
    unsigned count;  /**< number of vertices */
+
+   enum pipe_prim_type mode:8;  /**< the mode of the primitive */
+   ubyte vertices_per_patch; /**< the number of vertices per patch */
+   ubyte index_size;  /**< if 0, the draw is not indexed. */
+   bool primitive_restart:1;
+   bool has_user_indices:1; /**< if true, use index.user_buffer */
+   char _pad:6;             /**< padding for memcmp */
 
    unsigned start_instance; /**< first instance id */
    unsigned instance_count; /**< number of instances */

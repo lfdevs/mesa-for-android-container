@@ -146,6 +146,17 @@ spirv_builder_emit_entry_point(struct spirv_builder *b,
 }
 
 void
+spirv_builder_emit_exec_mode_literal(struct spirv_builder *b, SpvId entry_point,
+                                     SpvExecutionMode exec_mode, uint32_t param)
+{
+   spirv_buffer_prepare(&b->exec_modes, b->mem_ctx, 4);
+   spirv_buffer_emit_word(&b->exec_modes, SpvOpExecutionMode | (4 << 16));
+   spirv_buffer_emit_word(&b->exec_modes, entry_point);
+   spirv_buffer_emit_word(&b->exec_modes, exec_mode);
+   spirv_buffer_emit_word(&b->exec_modes, param);
+}
+
+void
 spirv_builder_emit_exec_mode(struct spirv_builder *b, SpvId entry_point,
                              SpvExecutionMode exec_mode)
 {
@@ -210,6 +221,20 @@ spirv_builder_emit_builtin(struct spirv_builder *b, SpvId target,
 {
    uint32_t args[] = { builtin };
    emit_decoration(b, target, SpvDecorationBuiltIn, args, ARRAY_SIZE(args));
+}
+
+void
+spirv_builder_emit_vertex(struct spirv_builder *b)
+{
+   spirv_buffer_prepare(&b->instructions, b->mem_ctx, 1);
+   spirv_buffer_emit_word(&b->instructions, SpvOpEmitVertex | (1 << 16));
+}
+
+void
+spirv_builder_end_primitive(struct spirv_builder *b)
+{
+   spirv_buffer_prepare(&b->instructions, b->mem_ctx, 1);
+   spirv_buffer_emit_word(&b->instructions, SpvOpEndPrimitive | (1 << 16));
 }
 
 void
@@ -416,6 +441,22 @@ spirv_builder_emit_triop(struct spirv_builder *b, SpvOp op, SpvId result_type,
    spirv_buffer_emit_word(&b->instructions, operand0);
    spirv_buffer_emit_word(&b->instructions, operand1);
    spirv_buffer_emit_word(&b->instructions, operand2);
+   return result;
+}
+
+SpvId
+spirv_builder_emit_quadop(struct spirv_builder *b, SpvOp op, SpvId result_type,
+                         SpvId operand0, SpvId operand1, SpvId operand2, SpvId operand3)
+{
+   SpvId result = spirv_builder_new_id(b);
+   spirv_buffer_prepare(&b->instructions, b->mem_ctx, 7);
+   spirv_buffer_emit_word(&b->instructions, op | (7 << 16));
+   spirv_buffer_emit_word(&b->instructions, result_type);
+   spirv_buffer_emit_word(&b->instructions, result);
+   spirv_buffer_emit_word(&b->instructions, operand0);
+   spirv_buffer_emit_word(&b->instructions, operand1);
+   spirv_buffer_emit_word(&b->instructions, operand2);
+   spirv_buffer_emit_word(&b->instructions, operand3);
    return result;
 }
 
@@ -734,6 +775,26 @@ spirv_builder_emit_image_query_size(struct spirv_builder *b,
 }
 
 SpvId
+spirv_builder_emit_image_query_lod(struct spirv_builder *b,
+                                    SpvId result_type,
+                                    SpvId image,
+                                    SpvId coords)
+{
+   int opcode = SpvOpImageQueryLod;
+   int words = 5;
+
+   SpvId result = spirv_builder_new_id(b);
+   spirv_buffer_prepare(&b->instructions, b->mem_ctx, words);
+   spirv_buffer_emit_word(&b->instructions, opcode | (words << 16));
+   spirv_buffer_emit_word(&b->instructions, result_type);
+   spirv_buffer_emit_word(&b->instructions, result);
+   spirv_buffer_emit_word(&b->instructions, image);
+   spirv_buffer_emit_word(&b->instructions, coords);
+
+   return result;
+}
+
+SpvId
 spirv_builder_emit_ext_inst(struct spirv_builder *b, SpvId result_type,
                             SpvId set, uint32_t instruction,
                             const SpvId *args, size_t num_args)
@@ -916,6 +977,15 @@ spirv_builder_type_vector(struct spirv_builder *b, SpvId component_type,
 }
 
 SpvId
+spirv_builder_type_matrix(struct spirv_builder *b, SpvId component_type,
+                          unsigned component_count)
+{
+   assert(component_count > 1);
+   uint32_t args[] = { component_type, component_count };
+   return get_type_def(b, SpvOpTypeMatrix, args, ARRAY_SIZE(args));
+}
+
+SpvId
 spirv_builder_type_array(struct spirv_builder *b, SpvId component_type,
                          SpvId length)
 {
@@ -1095,6 +1165,25 @@ spirv_builder_emit_var(struct spirv_builder *b, SpvId type,
    spirv_buffer_emit_word(buf, ret);
    spirv_buffer_emit_word(buf, storage_class);
    return ret;
+}
+
+void
+spirv_builder_emit_memory_barrier(struct spirv_builder *b, SpvScope scope, SpvMemorySemanticsMask semantics)
+{
+   spirv_buffer_prepare(&b->instructions, b->mem_ctx, 3);
+   spirv_buffer_emit_word(&b->instructions, SpvOpMemoryBarrier | (3 << 16));
+   spirv_buffer_emit_word(&b->instructions, spirv_builder_const_uint(b, 32, scope));
+   spirv_buffer_emit_word(&b->instructions, spirv_builder_const_uint(b, 32, semantics));
+}
+
+void
+spirv_builder_emit_control_barrier(struct spirv_builder *b, SpvScope scope, SpvScope mem_scope, SpvMemorySemanticsMask semantics)
+{
+   spirv_buffer_prepare(&b->instructions, b->mem_ctx, 4);
+   spirv_buffer_emit_word(&b->instructions, SpvOpControlBarrier | (4 << 16));
+   spirv_buffer_emit_word(&b->instructions, spirv_builder_const_uint(b, 32, scope));
+   spirv_buffer_emit_word(&b->instructions, spirv_builder_const_uint(b, 32, mem_scope));
+   spirv_buffer_emit_word(&b->instructions, spirv_builder_const_uint(b, 32, semantics));
 }
 
 SpvId

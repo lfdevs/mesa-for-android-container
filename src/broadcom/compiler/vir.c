@@ -210,6 +210,17 @@ vir_set_unpack(struct qinst *inst, int src,
 }
 
 void
+vir_set_pack(struct qinst *inst, enum v3d_qpu_output_pack pack)
+{
+        if (vir_is_add(inst)) {
+                inst->qpu.alu.add.output_pack = pack;
+        } else {
+                assert(vir_is_mul(inst));
+                inst->qpu.alu.mul.output_pack = pack;
+        }
+}
+
+void
 vir_set_cond(struct qinst *inst, enum v3d_qpu_cond cond)
 {
         if (vir_is_add(inst)) {
@@ -586,6 +597,7 @@ v3d_lower_nir(struct v3d_compile *c)
 
         NIR_PASS_V(c->s, nir_lower_tex, &tex_options);
         NIR_PASS_V(c->s, nir_lower_system_values);
+        NIR_PASS_V(c->s, nir_lower_compute_system_values, NULL);
 
         NIR_PASS_V(c->s, nir_lower_vars_to_scratch,
                    nir_var_function_temp,
@@ -624,11 +636,19 @@ v3d_vs_set_prog_data(struct v3d_compile *c,
         }
 
         prog_data->uses_vid = (c->s->info.system_values_read &
-                               (1ull << SYSTEM_VALUE_VERTEX_ID));
+                               (1ull << SYSTEM_VALUE_VERTEX_ID |
+                                1ull << SYSTEM_VALUE_VERTEX_ID_ZERO_BASE));
+
+        prog_data->uses_biid = (c->s->info.system_values_read &
+                                (1ull << SYSTEM_VALUE_BASE_INSTANCE));
+
         prog_data->uses_iid = (c->s->info.system_values_read &
-                               (1ull << SYSTEM_VALUE_INSTANCE_ID));
+                               (1ull << SYSTEM_VALUE_INSTANCE_ID |
+                                1ull << SYSTEM_VALUE_INSTANCE_INDEX));
 
         if (prog_data->uses_vid)
+                prog_data->vpm_input_size++;
+        if (prog_data->uses_biid)
                 prog_data->vpm_input_size++;
         if (prog_data->uses_iid)
                 prog_data->vpm_input_size++;
@@ -740,6 +760,7 @@ v3d_fs_set_prog_data(struct v3d_compile *c,
                 c->uses_implicit_point_line_varyings;
         prog_data->lock_scoreboard_on_first_thrsw =
                 c->lock_scoreboard_on_first_thrsw;
+        prog_data->force_per_sample_msaa = c->force_per_sample_msaa;
 }
 
 static void
@@ -821,8 +842,11 @@ v3d_nir_lower_vs_early(struct v3d_compile *c)
         NIR_PASS_V(c->s, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
                    type_size_vec4,
                    (nir_lower_io_options)0);
-        /* clean up nir_lower_io's deref_var remains */
+        /* clean up nir_lower_io's deref_var remains and do a constant folding pass
+         * on the code it generated.
+         */
         NIR_PASS_V(c->s, nir_opt_dce);
+        NIR_PASS_V(c->s, nir_opt_constant_folding);
 }
 
 static void
@@ -947,12 +971,6 @@ v3d_nir_lower_fs_late(struct v3d_compile *c)
 
         if (c->fs_key->clamp_color)
                 NIR_PASS_V(c->s, nir_lower_clamp_color_outputs);
-
-        if (c->fs_key->alpha_test) {
-                NIR_PASS_V(c->s, nir_lower_alpha_test,
-                           c->fs_key->alpha_test_func,
-                           false, NULL);
-        }
 
         /* In OpenGL the fragment shader can't read gl_ClipDistance[], but
          * Vulkan allows it, in which case the SPIR-V compiler will declare
@@ -1102,6 +1120,17 @@ v3d_attempt_compile(struct v3d_compile *c)
         NIR_PASS_V(c->s, v3d_nir_lower_image_load_store);
         NIR_PASS_V(c->s, nir_lower_idiv, nir_lower_idiv_fast);
 
+        if (c->key->robust_buffer_access) {
+           /* v3d_nir_lower_robust_buffer_access assumes constant buffer
+            * indices on ubo/ssbo intrinsics so run a copy propagation pass
+            * before we run the lowering to warrant this. We also want to run
+            * the lowering before v3d_optimize to clean-up redundant
+            * get_buffer_size calls produced in the pass.
+            */
+           NIR_PASS_V(c->s, nir_copy_prop);
+           NIR_PASS_V(c->s, v3d_nir_lower_robust_buffer_access, c);
+        }
+
         v3d_optimize_nir(c->s);
 
         /* Do late algebraic optimization to turn add(a, neg(b)) back into
@@ -1144,6 +1173,45 @@ v3d_attempt_compile(struct v3d_compile *c)
         NIR_PASS_V(c->s, nir_schedule, &schedule_options);
 
         v3d_nir_to_vir(c);
+}
+
+uint32_t
+v3d_prog_data_size(gl_shader_stage stage)
+{
+        static const int prog_data_size[] = {
+                [MESA_SHADER_VERTEX] = sizeof(struct v3d_vs_prog_data),
+                [MESA_SHADER_GEOMETRY] = sizeof(struct v3d_gs_prog_data),
+                [MESA_SHADER_FRAGMENT] = sizeof(struct v3d_fs_prog_data),
+                [MESA_SHADER_COMPUTE] = sizeof(struct v3d_compute_prog_data),
+        };
+
+        assert(stage >= 0 &&
+               stage < ARRAY_SIZE(prog_data_size) &&
+               prog_data_size[stage]);
+
+        return prog_data_size[stage];
+}
+
+int v3d_shaderdb_dump(struct v3d_compile *c,
+		      char **shaderdb_str)
+{
+        if (c == NULL)
+                return -1;
+
+        return asprintf(shaderdb_str,
+                        "%s shader: %d inst, %d threads, %d loops, "
+                        "%d uniforms, %d max-temps, %d:%d spills:fills, "
+                        "%d sfu-stalls, %d inst-and-stalls",
+                        vir_get_stage_name(c),
+                        c->qpu_inst_count,
+                        c->threads,
+                        c->loops,
+                        c->num_uniforms,
+                        vir_get_max_temps(c),
+                        c->spills,
+                        c->fills,
+                        c->qpu_inst_stalled_count,
+                        c->qpu_inst_count + c->qpu_inst_stalled_count);
 }
 
 uint64_t *v3d_compile(const struct v3d_compiler *compiler,
@@ -1189,38 +1257,14 @@ uint64_t *v3d_compile(const struct v3d_compiler *compiler,
 
         struct v3d_prog_data *prog_data;
 
-        static const int prog_data_size[] = {
-                [MESA_SHADER_VERTEX] = sizeof(struct v3d_vs_prog_data),
-                [MESA_SHADER_GEOMETRY] = sizeof(struct v3d_gs_prog_data),
-                [MESA_SHADER_FRAGMENT] = sizeof(struct v3d_fs_prog_data),
-                [MESA_SHADER_COMPUTE] = sizeof(struct v3d_compute_prog_data),
-        };
-
-        assert(c->s->info.stage >= 0 &&
-               c->s->info.stage < ARRAY_SIZE(prog_data_size) &&
-               prog_data_size[c->s->info.stage]);
-
-        prog_data = rzalloc_size(NULL, prog_data_size[c->s->info.stage]);
+        prog_data = rzalloc_size(NULL, v3d_prog_data_size(c->s->info.stage));
 
         v3d_set_prog_data(c, prog_data);
 
         *out_prog_data = prog_data;
 
         char *shaderdb;
-        int ret = asprintf(&shaderdb,
-                           "%s shader: %d inst, %d threads, %d loops, "
-                           "%d uniforms, %d max-temps, %d:%d spills:fills, "
-                           "%d sfu-stalls, %d inst-and-stalls",
-                           vir_get_stage_name(c),
-                           c->qpu_inst_count,
-                           c->threads,
-                           c->loops,
-                           c->num_uniforms,
-                           vir_get_max_temps(c),
-                           c->spills,
-                           c->fills,
-                           c->qpu_inst_stalled_count,
-                           c->qpu_inst_count + c->qpu_inst_stalled_count);
+        int ret = v3d_shaderdb_dump(c, &shaderdb);
         if (ret >= 0) {
                 if (V3D_DEBUG & V3D_DEBUG_SHADERDB)
                         fprintf(stderr, "SHADER-DB: %s\n", shaderdb);

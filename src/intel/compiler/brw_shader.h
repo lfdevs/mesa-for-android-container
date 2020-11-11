@@ -69,8 +69,7 @@ public:
    exec_list instructions;
 
    cfg_t *cfg;
-   BRW_ANALYSIS(idom_analysis, brw::idom_tree,
-                const backend_shader *) idom_analysis;
+   brw_analysis<brw::idom_tree, backend_shader> idom_analysis;
 
    gl_shader_stage stage;
    bool debug_enabled;

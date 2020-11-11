@@ -22,7 +22,7 @@
  */
 
 #include "util/format/u_format.h"
-#include "util/u_half.h"
+#include "util/half_float.h"
 #include "v3d_context.h"
 #include "broadcom/common/v3d_macros.h"
 #include "broadcom/cle/v3dx_pack.h"
@@ -101,11 +101,11 @@ swizzled_border_color(const struct v3d_device_info *devinfo,
 
         switch (swiz) {
         case PIPE_SWIZZLE_0:
-                return util_float_to_half(0.0);
+                return _mesa_float_to_half(0.0);
         case PIPE_SWIZZLE_1:
-                return util_float_to_half(1.0);
+                return _mesa_float_to_half(1.0);
         default:
-                return util_float_to_half(sampler->border_color.f[swiz]);
+                return _mesa_float_to_half(sampler->border_color.f[swiz]);
         }
 }
 

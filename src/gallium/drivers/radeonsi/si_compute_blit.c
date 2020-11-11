@@ -626,18 +626,18 @@ void si_retile_dcc(struct si_context *sctx, struct si_texture *tex)
    unsigned num_elements = tex->surface.u.gfx9.dcc_retile_num_elements;
    struct pipe_image_view img[3];
 
-   assert(tex->surface.dcc_retile_map_offset && tex->surface.dcc_retile_map_offset <= UINT_MAX);
+   assert(tex->dcc_retile_buffer);
    assert(tex->surface.dcc_offset && tex->surface.dcc_offset <= UINT_MAX);
    assert(tex->surface.display_dcc_offset && tex->surface.display_dcc_offset <= UINT_MAX);
 
    for (unsigned i = 0; i < 3; i++) {
-      img[i].resource = &tex->buffer.b.b;
+      img[i].resource = i == 0 ? &tex->dcc_retile_buffer->b.b : &tex->buffer.b.b;
       img[i].access = i == 2 ? PIPE_IMAGE_ACCESS_WRITE : PIPE_IMAGE_ACCESS_READ;
       img[i].shader_access = SI_IMAGE_ACCESS_AS_BUFFER;
    }
 
    img[0].format = use_uint16 ? PIPE_FORMAT_R16G16B16A16_UINT : PIPE_FORMAT_R32G32B32A32_UINT;
-   img[0].u.buf.offset = tex->surface.dcc_retile_map_offset;
+   img[0].u.buf.offset = 0;
    img[0].u.buf.size = num_elements * (use_uint16 ? 2 : 4);
 
    img[1].format = PIPE_FORMAT_R8_UINT;

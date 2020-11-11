@@ -25,6 +25,7 @@
 #include <sys/sysinfo.h>
 
 #include "common/v3d_device_info.h"
+#include "common/v3d_limits.h"
 #include "util/os_misc.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
@@ -258,6 +259,9 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_UMA:
                 return 1;
 
+        case PIPE_CAP_ALPHA_TEST:
+                return 0;
+
         /* Geometry shaders */
         case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
                 /* Minimum required by GLES 3.2 */
@@ -279,11 +283,11 @@ v3d_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
         switch (param) {
         case PIPE_CAPF_MAX_LINE_WIDTH:
         case PIPE_CAPF_MAX_LINE_WIDTH_AA:
-                return 32;
+                return V3D_MAX_LINE_WIDTH;
 
         case PIPE_CAPF_MAX_POINT_WIDTH:
         case PIPE_CAPF_MAX_POINT_WIDTH_AA:
-                return 512.0f;
+                return V3D_MAX_POINT_SIZE;
 
         case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
                 return 0.0f;
@@ -387,7 +391,7 @@ v3d_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
                 return 0;
         case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
         case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
-                return V3D_MAX_TEXTURE_SAMPLERS;
+                return V3D_OPENGL_MAX_TEXTURE_SAMPLERS;
 
         case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
                 if (screen->has_cache_flush) {
@@ -556,6 +560,7 @@ v3d_screen_is_format_supported(struct pipe_screen *pscreen,
                 case PIPE_FORMAT_R16G16B16_SSCALED:
                 case PIPE_FORMAT_R16G16_SSCALED:
                 case PIPE_FORMAT_R16_SSCALED:
+                case PIPE_FORMAT_B8G8R8A8_UNORM:
                 case PIPE_FORMAT_R8G8B8A8_UNORM:
                 case PIPE_FORMAT_R8G8B8_UNORM:
                 case PIPE_FORMAT_R8G8_UNORM:

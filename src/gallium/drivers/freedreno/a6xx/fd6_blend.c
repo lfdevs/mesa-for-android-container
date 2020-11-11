@@ -166,7 +166,20 @@ fd6_blend_state_create(struct pipe_context *pctx,
 		const struct pipe_rt_blend_state *rt = &cso->rt[i];
 
 		so->reads_dest |= rt->blend_enable;
-		if (rt->blend_enable) {
+
+		/* From the PoV of LRZ, having masked color channels is
+		 * the same as having blend enabled, in that the draw will
+		 * care about the fragments from an earlier draw.
+		 *
+		 * NOTE we actually don't care about masked color channels
+		 * that don't actually exist in the render target, but we
+		 * don't know the render target format here to determine
+		 * that.  It is probably not worth worrying about, but if
+		 * we find a game/benchmark that goes out of it's way to
+		 * mask off non-existent channels, we should fixup the
+		 * pipe_blend_state to give us more info.
+		 */
+		if (rt->blend_enable || (rt->colormask != 0xf)) {
 			so->reads_dest = true;
 		}
 	}

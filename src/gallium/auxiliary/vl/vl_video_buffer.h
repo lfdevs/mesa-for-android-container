@@ -54,14 +54,14 @@ vl_video_buffer_adjust_size(unsigned *width, unsigned *height, unsigned plane,
                             bool interlaced)
 {
    if (interlaced) {
-      *height /= 2;
+      *height = align(*height, 2) / 2;
    }
    if (plane > 0) {
       if (chroma_format == PIPE_VIDEO_CHROMA_FORMAT_420) {
-         *width /= 2;
-         *height /= 2;
+         *width = align(*width, 2) / 2;
+         *height = align(*height, 2) / 2;
       } else if (chroma_format == PIPE_VIDEO_CHROMA_FORMAT_422) {
-         *width /= 2;
+         *width = align(*width, 2) / 2;
       }
    }
 }

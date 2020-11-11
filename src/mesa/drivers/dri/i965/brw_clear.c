@@ -63,7 +63,7 @@ debug_mask(const char *name, GLbitfield mask)
 {
    GLuint i;
 
-   if (unlikely(INTEL_DEBUG & DEBUG_BLIT)) {
+   if (INTEL_DEBUG & DEBUG_BLIT) {
       DBG("%s clear:", name);
       for (i = 0; i < BUFFER_COUNT; i++) {
 	 if (mask & (1 << i))

@@ -10,6 +10,9 @@ PLATFORM_SYMBOLS = [
     '__bss_end__',
     '__bss_start__',
     '__bss_start',
+    '__cxa_guard_abort',
+    '__cxa_guard_acquire',
+    '__cxa_guard_release',
     '__end__',
     '_bss_end__',
     '_edata',
@@ -17,7 +20,6 @@ PLATFORM_SYMBOLS = [
     '_fini',
     '_init',
 ]
-
 
 def get_symbols_nm(nm, lib):
     '''

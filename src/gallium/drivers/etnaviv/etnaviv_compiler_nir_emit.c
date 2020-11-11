@@ -101,7 +101,7 @@ static const struct etna_op_info etna_ops[] = {
 
    /* compare with int result */
     OPC(feq32, CMP, 0_1_X, EQ),
-    OPC(fne32, CMP, 0_1_X, NE),
+    OPC(fneu32, CMP, 0_1_X, NE),
     OPC(fge32, CMP, 0_1_X, GE),
     OPC(flt32, CMP, 0_1_X, LT),
    IOPC(ieq32, CMP, 0_1_X, EQ),

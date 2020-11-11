@@ -66,17 +66,22 @@ enum bi_class {
         BI_LOAD_ATTR,
         BI_LOAD_VAR,
         BI_LOAD_VAR_ADDRESS,
+        BI_LOAD_TILE,
         BI_MINMAX,
         BI_MOV,
         BI_REDUCE_FMA,
         BI_SELECT,
         BI_STORE,
         BI_STORE_VAR,
-        BI_SPECIAL, /* _FAST on supported GPUs */
+        BI_SPECIAL_ADD, /* _FAST on supported GPUs */
+        BI_SPECIAL_FMA, /* _FAST on supported GPUs */
         BI_TABLE,
-        BI_TEX,
+        BI_TEXS,
+        BI_TEXC,
+        BI_TEXC_DUAL,
         BI_ROUND,
         BI_IMUL,
+        BI_ZS_EMIT,
         BI_NUM_CLASSES
 };
 
@@ -116,7 +121,7 @@ extern unsigned bi_class_props[BI_NUM_CLASSES];
 #define BI_VECTOR (1 << 8)
 
 /* Use a data register for src0/dest respectively, bypassing the usual
- * register accessor. Mutually exclusive. */
+ * register accessor. */
 #define BI_DATA_REG_SRC (1 << 9)
 #define BI_DATA_REG_DEST (1 << 10)
 
@@ -139,20 +144,44 @@ struct bi_load_vary {
  *
  * We define our own enum of conditions since the conditions in the hardware
  * packed in crazy ways that would make manipulation unweildly (meaning changes
- * based on port swapping, etc), so we defer dealing with that until emit time.
+ * based on slot swapping, etc), so we defer dealing with that until emit time.
  * Likewise, we expose NIR types instead of the crazy branch types, although
  * the restrictions do eventually apply of course. */
 
 struct bi_block;
 
+/* Sync with gen-pack.py */
 enum bi_cond {
-        BI_COND_ALWAYS,
+        BI_COND_ALWAYS = 0,
         BI_COND_LT,
         BI_COND_LE,
         BI_COND_GE,
         BI_COND_GT,
         BI_COND_EQ,
         BI_COND_NE,
+};
+
+/* Segments, as synced with ISA. Used as an immediate in LOAD/STORE
+ * instructions for address calculation, and directly in SEG_ADD/SEG_SUB
+ * instructions. */
+
+enum bi_segment {
+        /* No segment (use global addressing, offset from GPU VA 0x0) */
+        BI_SEGMENT_NONE = 1,
+
+        /* Within workgroup local memory (shared memory). Relative to
+         * wls_base_pointer in the draw's thread storage descriptor */
+        BI_SEGMENT_WLS = 2,
+
+        /* Within one of the bound uniform buffers. Low 32-bits are the index
+         * within the uniform buffer; high 32-bits are the index of the uniform
+         * buffer itself. Relative to the uniform_array_pointer indexed within
+         * the draw's uniform remap table indexed by the high 32-bits. */
+        BI_SEGMENT_UBO = 4,
+
+        /* Within thread local storage (for spilling). Relative to
+         * tls_base_pointer in the draw's thread storage descriptor */
+        BI_SEGMENT_TLS = 7
 };
 
 /* Opcodes within a class */
@@ -164,7 +193,8 @@ enum bi_minmax_op {
 enum bi_bitwise_op {
         BI_BITWISE_AND,
         BI_BITWISE_OR,
-        BI_BITWISE_XOR
+        BI_BITWISE_XOR,
+        BI_BITWISE_ARSHIFT,
 };
 
 enum bi_imath_op {
@@ -205,16 +235,17 @@ enum bi_special_op {
          * the second, it takes x itself. */
         BI_SPECIAL_EXP2_LOW,
         BI_SPECIAL_IABS,
-};
 
-enum bi_tex_op {
-        BI_TEX_NORMAL,
-        BI_TEX_COMPACT,
-        BI_TEX_DUAL
+        /* cubemap coordinates extraction helpers */
+        BI_SPECIAL_CUBEFACE1,
+        BI_SPECIAL_CUBEFACE2,
+        BI_SPECIAL_CUBE_SSEL,
+        BI_SPECIAL_CUBE_TSEL,
 };
 
 struct bi_bitwise {
-        bool src_invert[2];
+        bool dest_invert;
+        bool src1_invert;
         bool rshift; /* false for lshift */
 };
 
@@ -222,6 +253,10 @@ struct bi_texture {
         /* Constant indices. Indirect would need to be in src[..] like normal,
          * we can reserve some sentinels there for that for future. */
         unsigned texture_index, sampler_index;
+
+        /* Should the LOD be computed based on neighboring pixels? Only valid
+         * in fragment shaders. */
+        bool compute_lod;
 };
 
 typedef struct {
@@ -263,6 +298,9 @@ typedef struct {
         /* Source types if required by the class */
         nir_alu_type src_types[BIR_SRC_COUNT];
 
+        /* register_format if applicable */
+        nir_alu_type format;
+
         /* If the source type is 8-bit or 16-bit such that SIMD is possible,
          * and the class has BI_SWIZZLABLE, this is a swizzle in the usual
          * sense. On non-SIMD instructions, it can be used for component
@@ -272,8 +310,22 @@ typedef struct {
         /* For VECTOR ops, how many channels are written? */
         unsigned vector_channels;
 
+        /* For texture ops, the skip bit. Set if helper invocations can skip
+         * the operation. That is, set if the result of this texture operation
+         * is never used for cross-lane operation (including texture
+         * coordinates and derivatives) as determined by data flow analysis
+         * (like Midgard) */
+        bool skip;
+
         /* The comparison op. BI_COND_ALWAYS may not be valid. */
         enum bi_cond cond;
+
+        /* For memory ops, base address */
+        enum bi_segment segment;
+
+        /* Can we spill the value written here? Used to prevent
+         * useless double fills */
+        bool no_spill;
 
         /* A class-specific op from which the actual opcode can be derived
          * (along with the above information) */
@@ -285,7 +337,6 @@ typedef struct {
                 enum bi_reduce_op reduce;
                 enum bi_table_op table;
                 enum bi_frexp_op frexp;
-                enum bi_tex_op texture;
                 enum bi_imath_op imath;
                 enum bi_imul_op imul;
 
@@ -307,24 +358,20 @@ typedef struct {
         };
 } bi_instruction;
 
-/* Represents the assignment of ports for a given bi_bundle */
+/* Represents the assignment of slots for a given bi_bundle */
 
 typedef struct {
-        /* Register to assign to each port */
-        unsigned port[4];
+        /* Register to assign to each slot */
+        unsigned slot[4];
 
-        /* Read ports can be disabled */
+        /* Read slots can be disabled */
         bool enabled[2];
 
-        /* Should we write FMA? what about ADD? If only a single port is
-         * enabled it is in port 2, else ADD/FMA is 2/3 respectively */
-        bool write_fma, write_add;
+        /* Configuration for slots 2/3 */
+        struct bifrost_reg_ctrl_23 slot23;
 
-        /* Should we read with port 3? */
-        bool read_port3;
-
-        /* Packed uniform/constant */
-        uint8_t uniform_constant;
+        /* Fast-Access-Uniform RAM index */
+        uint8_t fau_idx;
 
         /* Whether writes are actually for the last instruction */
         bool first_instruction;
@@ -332,10 +379,11 @@ typedef struct {
 
 /* A bi_bundle contains two paired instruction pointers. If a slot is unfilled,
  * leave it NULL; the emitter will fill in a nop. Instructions reference
- * registers via ports which are assigned per bundle.
+ * registers via slots which are assigned per bundle.
  */
 
 typedef struct {
+        uint8_t fau_idx;
         bi_registers regs;
         bi_instruction *fma;
         bi_instruction *add;
@@ -364,18 +412,18 @@ typedef struct {
         unsigned scoreboard_id;
         uint8_t dependencies;
 
-        /* Back-to-back corresponds directly to the back-to-back bit. Branch
-         * conditional corresponds to the branch conditional bit except that in
-         * the emitted code it's always set if back-to-bit is, whereas we use
-         * the actual value (without back-to-back so to speak) internally */
-        bool back_to_back;
-        bool branch_conditional;
+        /* See ISA header for description */
+        enum bifrost_flow flow_control;
+
+        /* Can we prefetch the next clause? Usually it makes sense, except for
+         * clauses ending in unconditional branches */
+        bool next_clause_prefetch;
 
         /* Assigned data register */
-        unsigned data_register;
+        unsigned staging_register;
 
         /* Corresponds to the usual bit but shifted by a clause */
-        bool data_register_write_barrier;
+        bool staging_barrier;
 
         /* Constants read by this clause. ISA limit. Must satisfy:
          *
@@ -394,7 +442,7 @@ typedef struct {
         bool branch_constant;
 
         /* What type of high latency instruction is here, basically */
-        unsigned clause_type;
+        unsigned message_type;
 } bi_clause;
 
 typedef struct bi_block {
@@ -411,6 +459,19 @@ typedef struct {
        struct list_head blocks; /* list of bi_block */
        struct panfrost_sysvals sysvals;
        uint32_t quirks;
+       unsigned tls_size;
+
+       /* Is internally a blend shader? Depends on stage == FRAGMENT */
+       bool is_blend;
+
+       /* Blend constants */
+       float blend_constants[4];
+
+       /* Blend return offsets */
+       uint32_t blend_ret_offsets[8];
+
+       /* Blend tile buffer conversion desc */
+       uint64_t blend_desc;
 
        /* During NIR->BIR */
        nir_function_impl *impl;
@@ -430,6 +491,8 @@ typedef struct {
        /* Stats for shader-db */
        unsigned instruction_count;
        unsigned loop_count;
+       unsigned spills;
+       unsigned fills;
 } bi_context;
 
 static inline bi_instruction *
@@ -471,11 +534,13 @@ bi_remove_instruction(bi_instruction *ins)
 #define BIR_INDEX_CONSTANT (1 << 29)
 #define BIR_INDEX_ZERO     (1 << 28)
 #define BIR_INDEX_PASS     (1 << 27)
+#define BIR_INDEX_BLEND    (1 << 26)
 
 /* Keep me synced please so we can check src & BIR_SPECIAL */
 
-#define BIR_SPECIAL        ((BIR_INDEX_REGISTER | BIR_INDEX_UNIFORM) | \
-        (BIR_INDEX_CONSTANT | BIR_INDEX_ZERO | BIR_INDEX_PASS))
+#define BIR_SPECIAL        (BIR_INDEX_REGISTER | BIR_INDEX_UNIFORM | \
+                            BIR_INDEX_CONSTANT | BIR_INDEX_ZERO | \
+                            BIR_INDEX_PASS | BIR_INDEX_BLEND)
 
 static inline unsigned
 bi_max_temp(bi_context *ctx)
@@ -527,6 +592,9 @@ bi_make_temp_reg(bi_context *ctx)
 
 #define bi_foreach_clause_in_block(block, v) \
         list_for_each_entry(bi_clause, v, &(block)->clauses, link)
+
+#define bi_foreach_clause_in_block_safe(block, v) \
+        list_for_each_entry_safe(bi_clause, v, &(block)->clauses, link)
 
 #define bi_foreach_clause_in_block_from(block, v, from) \
         list_for_each_entry_from(bi_clause, v, from, &(block)->clauses, link)
@@ -591,6 +659,7 @@ uint16_t bi_bytemask_of_read_components(bi_instruction *ins, unsigned node);
 uint64_t bi_get_immediate(bi_instruction *ins, unsigned index);
 bool bi_writes_component(bi_instruction *ins, unsigned comp);
 unsigned bi_writemask(bi_instruction *ins);
+void bi_rewrite_uses(bi_context *ctx, unsigned old, unsigned oldc, unsigned new, unsigned newc);
 
 /* BIR passes */
 
@@ -598,6 +667,12 @@ void bi_lower_combine(bi_context *ctx, bi_block *block);
 bool bi_opt_dead_code_eliminate(bi_context *ctx, bi_block *block);
 void bi_schedule(bi_context *ctx);
 void bi_register_allocate(bi_context *ctx);
+
+bi_clause *bi_make_singleton(void *memctx, bi_instruction *ins,
+                bi_block *block,
+                unsigned scoreboard_id,
+                unsigned dependencies,
+                bool osrb);
 
 /* Liveness */
 

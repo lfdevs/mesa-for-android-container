@@ -24,7 +24,7 @@
 #define VIRGL_WINSYS_H
 
 #include "pipe/p_defines.h"
-#include "virgl_hw.h"
+#include "virtio-gpu/virgl_hw.h"
 
 struct pipe_box;
 struct pipe_fence_handle;
@@ -47,6 +47,7 @@ struct virgl_winsys {
    unsigned pci_id;
    int supports_fences; /* In/Out fences are supported */
    int supports_encoded_transfers; /* Encoded transfers are supported */
+   int supports_coherent;          /* Coherent memory is supported */
 
    void (*destroy)(struct virgl_winsys *vws);
 
@@ -68,7 +69,7 @@ struct virgl_winsys {
                                uint32_t width, uint32_t height,
                                uint32_t depth, uint32_t array_size,
                                uint32_t last_level, uint32_t nr_samples,
-                               uint32_t size);
+                               uint32_t flags, uint32_t size);
 
    void (*resource_reference)(struct virgl_winsys *qws,
                               struct virgl_hw_res **dres,
@@ -84,7 +85,8 @@ struct virgl_winsys {
                                                        uint32_t *plane,
                                                        uint32_t *stride,
                                                        uint32_t *plane_offset,
-                                                       uint64_t *modifier);
+                                                       uint64_t *modifier,
+                                                       uint32_t *blob_mem);
    boolean (*resource_get_handle)(struct virgl_winsys *vws,
                                   struct virgl_hw_res *res,
                                   uint32_t stride,

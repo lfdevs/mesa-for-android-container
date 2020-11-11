@@ -100,12 +100,7 @@ emit_quads_workaround(nir_builder *b, nir_block *block)
        nir_ior(b, nir_bany(b, nir_flt(b, nir_imm_float(b, 1.0f), outer)),
                   nir_bany(b, nir_flt(b, nir_imm_float(b, 1.0f), inner)));
 
-   nir_if *if_stmt = nir_if_create(b->shader);
-   if_stmt->condition = nir_src_for_ssa(any_greater_than_1);
-   nir_builder_cf_insert(b, &if_stmt->cf_node);
-
-   /* Fill out the new then-block */
-   b->cursor = nir_after_cf_list(&if_stmt->then_list);
+   nir_push_if(b, any_greater_than_1);
 
    inner = nir_bcsel(b, nir_fge(b, nir_imm_float(b, 1.0f), inner),
                         nir_imm_float(b, 2.0f), inner);
@@ -118,6 +113,8 @@ emit_quads_workaround(nir_builder *b, nir_block *block)
    store->src[0] = nir_src_for_ssa(inner);
    store->src[1] = nir_src_for_ssa(nir_imm_int(b, 0));
    nir_builder_instr_insert(b, &store->instr);
+
+   nir_pop_if(b, NULL);
 }
 
 void

@@ -44,6 +44,7 @@
 #include "util/u_draw.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
+#include "util/u_prim_restart.h"
 #include "util/u_upload_mgr.h"
 
 #include "indices/u_indices.h"
@@ -52,20 +53,28 @@
 struct primconvert_context
 {
    struct pipe_context *pipe;
-   uint32_t primtypes_mask;
+   struct primconvert_config cfg;
    unsigned api_pv;
 };
 
 
 struct primconvert_context *
-util_primconvert_create(struct pipe_context *pipe, uint32_t primtypes_mask)
+util_primconvert_create_config(struct pipe_context *pipe,
+                               struct primconvert_config *cfg)
 {
    struct primconvert_context *pc = CALLOC_STRUCT(primconvert_context);
    if (!pc)
       return NULL;
    pc->pipe = pipe;
-   pc->primtypes_mask = primtypes_mask;
+   pc->cfg = *cfg;
    return pc;
+}
+
+struct primconvert_context *
+util_primconvert_create(struct pipe_context *pipe, uint32_t primtypes_mask)
+{
+   struct primconvert_config cfg = { .primtypes_mask = primtypes_mask };
+   return util_primconvert_create_config(pipe, &cfg);
 }
 
 void
@@ -110,7 +119,7 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
       enum pipe_prim_type mode = 0;
       unsigned index_size;
 
-      u_index_translator(pc->primtypes_mask,
+      u_index_translator(pc->cfg.primtypes_mask,
                          info->mode, info->index_size, info->count,
                          pc->api_pv, pc->api_pv,
                          info->primitive_restart ? PR_ENABLE : PR_DISABLE,
@@ -121,7 +130,7 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
       src = info->has_user_indices ? info->index.user : NULL;
       if (!src) {
          src = pipe_buffer_map(pc->pipe, info->index.resource,
-                               PIPE_TRANSFER_READ, &src_transfer);
+                               PIPE_MAP_READ, &src_transfer);
       }
       src = (const uint8_t *)src;
    }
@@ -129,7 +138,7 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
       enum pipe_prim_type mode = 0;
       unsigned index_size;
 
-      u_index_generator(pc->primtypes_mask,
+      u_index_generator(pc->cfg.primtypes_mask,
                         info->mode, info->start, info->count,
                         pc->api_pv, pc->api_pv,
                         &mode, &index_size, &new_info.count,
@@ -144,6 +153,14 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
 
    if (info->index_size) {
       trans_func(src, info->start, info->count, new_info.count, info->restart_index, dst);
+
+      if (pc->cfg.fixed_prim_restart && info->primitive_restart) {
+         new_info.restart_index = (1ull << (new_info.index_size * 8)) - 1;
+         if (info->restart_index != new_info.restart_index)
+            util_translate_prim_restart_data(new_info.index_size, dst, dst,
+                                             new_info.count,
+                                             info->restart_index);
+      }
    }
    else {
       gen_func(info->start, new_info.count, dst);

@@ -155,114 +155,97 @@ handle_op_atomic(const struct pipe_shader_buffer *bview,
                  float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE],
                  float rgba2[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])
 {
-   uint c;
-   unsigned sdata[4];
+   uint c = 0; /* SSBO atomics are always on the .x channel. */
+   unsigned sdata;
 
-   for (c = 0; c < 4; c++) {
-      memcpy(&sdata[c], data_ptr + (c * 4), 4);
-   }
+   memcpy(&sdata, data_ptr + (c * 4), 4);
 
    if (just_read) {
-      for (c = 0; c < 4; c++) {
-         ((uint32_t *)rgba[c])[qi] = sdata[c];
-      }
+      ((uint32_t *)rgba[c])[qi] = sdata;
       return;
    }
 
    switch (opcode) {
-   case TGSI_OPCODE_ATOMUADD:
-      for (c = 0; c < 4; c++) {
-         unsigned temp = sdata[c];
-         sdata[c] += ((uint32_t *)rgba[c])[qi];
-         ((uint32_t *)rgba[c])[qi] = temp;
-      }
+   case TGSI_OPCODE_ATOMUADD: {
+      unsigned temp = sdata;
+      sdata += ((uint32_t *)rgba[c])[qi];
+      ((uint32_t *)rgba[c])[qi] = temp;
       break;
-   case TGSI_OPCODE_ATOMXCHG:
-      for (c = 0; c < 4; c++) {
-         unsigned temp = sdata[c];
-         sdata[c] = ((uint32_t *)rgba[c])[qi];
-         ((uint32_t *)rgba[c])[qi] = temp;
-      }
+   }
+   case TGSI_OPCODE_ATOMXCHG: {
+      unsigned temp = sdata;
+      sdata = ((uint32_t *)rgba[c])[qi];
+      ((uint32_t *)rgba[c])[qi] = temp;
       break;
-   case TGSI_OPCODE_ATOMCAS:
-      for (c = 0; c < 4; c++) {
-         unsigned dst_x = sdata[c];
-         unsigned cmp_x = ((uint32_t *)rgba[c])[qi];
-         unsigned src_x = ((uint32_t *)rgba2[c])[qi];
-         unsigned temp = sdata[c];
-         sdata[c] = (dst_x == cmp_x) ? src_x : dst_x;
-         ((uint32_t *)rgba[c])[qi] = temp;
-      }
+   }
+   case TGSI_OPCODE_ATOMCAS: {
+      unsigned dst_x = sdata;
+      unsigned cmp_x = ((uint32_t *)rgba[c])[qi];
+      unsigned src_x = ((uint32_t *)rgba2[c])[qi];
+      unsigned temp = sdata;
+      sdata = (dst_x == cmp_x) ? src_x : dst_x;
+      ((uint32_t *)rgba[c])[qi] = temp;
       break;
-   case TGSI_OPCODE_ATOMAND:
-      for (c = 0; c < 4; c++) {
-         unsigned temp = sdata[c];
-         sdata[c] &= ((uint32_t *)rgba[c])[qi];
-         ((uint32_t *)rgba[c])[qi] = temp;
-      }
+   }
+   case TGSI_OPCODE_ATOMAND: {
+      unsigned temp = sdata;
+      sdata &= ((uint32_t *)rgba[c])[qi];
+      ((uint32_t *)rgba[c])[qi] = temp;
       break;
-   case TGSI_OPCODE_ATOMOR:
-      for (c = 0; c < 4; c++) {
-         unsigned temp = sdata[c];
-         sdata[c] |= ((uint32_t *)rgba[c])[qi];
-         ((uint32_t *)rgba[c])[qi] = temp;
-      }
+   }
+   case TGSI_OPCODE_ATOMOR: {
+      unsigned temp = sdata;
+      sdata |= ((uint32_t *)rgba[c])[qi];
+      ((uint32_t *)rgba[c])[qi] = temp;
       break;
-   case TGSI_OPCODE_ATOMXOR:
-      for (c = 0; c < 4; c++) {
-         unsigned temp = sdata[c];
-         sdata[c] ^= ((uint32_t *)rgba[c])[qi];
-         ((uint32_t *)rgba[c])[qi] = temp;
-      }
+   }
+   case TGSI_OPCODE_ATOMXOR: {
+      unsigned temp = sdata;
+      sdata ^= ((uint32_t *)rgba[c])[qi];
+      ((uint32_t *)rgba[c])[qi] = temp;
       break;
-   case TGSI_OPCODE_ATOMUMIN:
-      for (c = 0; c < 4; c++) {
-         unsigned dst_x = sdata[c];
-         unsigned src_x = ((uint32_t *)rgba[c])[qi];
-         sdata[c] = MIN2(dst_x, src_x);
-         ((uint32_t *)rgba[c])[qi] = dst_x;
-      }
+   }
+   case TGSI_OPCODE_ATOMUMIN: {
+      unsigned dst_x = sdata;
+      unsigned src_x = ((uint32_t *)rgba[c])[qi];
+      sdata = MIN2(dst_x, src_x);
+      ((uint32_t *)rgba[c])[qi] = dst_x;
       break;
-   case TGSI_OPCODE_ATOMUMAX:
-      for (c = 0; c < 4; c++) {
-         unsigned dst_x = sdata[c];
-         unsigned src_x = ((uint32_t *)rgba[c])[qi];
-         sdata[c] = MAX2(dst_x, src_x);
-         ((uint32_t *)rgba[c])[qi] = dst_x;
-      }
+   }
+   case TGSI_OPCODE_ATOMUMAX: {
+      unsigned dst_x = sdata;
+      unsigned src_x = ((uint32_t *)rgba[c])[qi];
+      sdata = MAX2(dst_x, src_x);
+      ((uint32_t *)rgba[c])[qi] = dst_x;
       break;
-   case TGSI_OPCODE_ATOMIMIN:
-      for (c = 0; c < 4; c++) {
-         int dst_x = sdata[c];
-         int src_x = ((uint32_t *)rgba[c])[qi];
-         sdata[c] = MIN2(dst_x, src_x);
-         ((uint32_t *)rgba[c])[qi] = dst_x;
-      }
+   }
+   case TGSI_OPCODE_ATOMIMIN: {
+      int dst_x = sdata;
+      int src_x = ((uint32_t *)rgba[c])[qi];
+      sdata = MIN2(dst_x, src_x);
+      ((uint32_t *)rgba[c])[qi] = dst_x;
       break;
-   case TGSI_OPCODE_ATOMIMAX:
-      for (c = 0; c < 4; c++) {
-         int dst_x = sdata[c];
-         int src_x = ((uint32_t *)rgba[c])[qi];
-         sdata[c] = MAX2(dst_x, src_x);
-         ((uint32_t *)rgba[c])[qi] = dst_x;
-      }
+   }
+   case TGSI_OPCODE_ATOMIMAX: {
+      int dst_x = sdata;
+      int src_x = ((uint32_t *)rgba[c])[qi];
+      sdata = MAX2(dst_x, src_x);
+      ((uint32_t *)rgba[c])[qi] = dst_x;
       break;
-   case TGSI_OPCODE_ATOMFADD:
-      for (c = 0; c < 4; c++) {
-         float temp = uif(sdata[c]);
-         sdata[c] = fui(temp + rgba[c][qi]);
-         rgba[c][qi] = temp;
-      }
+   }
+   case TGSI_OPCODE_ATOMFADD: {
+      float temp = uif(sdata);
+      sdata = fui(temp + rgba[c][qi]);
+      rgba[c][qi] = temp;
       break;
+   }
    default:
       assert(!"Unexpected TGSI opcode in sp_tgsi_op");
       break;
    }
 
-   for (c = 0; c < 4; c++) {
-      if (writemask & (1 << c)) {
-         memcpy(data_ptr + (c * 4), &sdata[c], 4);
-      }
+   if (writemask & TGSI_WRITEMASK_X) {
+      memcpy(data_ptr + (c * 4), &sdata, 4);
    }
 }
 

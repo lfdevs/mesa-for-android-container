@@ -427,8 +427,8 @@ namespace SwrJit
                                       bool                   bPackedOutput)
     {
         // cast types
-        Type* vGatherTy = VectorType::get(IntegerType::getInt32Ty(JM()->mContext), mVWidth);
-        Type* v32x8Ty   = VectorType::get(mInt8Ty, mVWidth * 4); // vwidth is units of 32 bits
+        Type* vGatherTy = getVectorType(IntegerType::getInt32Ty(JM()->mContext), mVWidth);
+        Type* v32x8Ty   = getVectorType(mInt8Ty, mVWidth * 4); // vwidth is units of 32 bits
 
         // input could either be float or int vector; do shuffle work in int
         vGatherInput[0] = BITCAST(vGatherInput[0], mSimdInt32Ty);
@@ -436,7 +436,7 @@ namespace SwrJit
 
         if (bPackedOutput)
         {
-            Type* v128bitTy = VectorType::get(IntegerType::getIntNTy(JM()->mContext, 128),
+            Type* v128bitTy = getVectorType(IntegerType::getIntNTy(JM()->mContext, 128),
                                               mVWidth / 4); // vwidth is units of 32 bits
 
             // shuffle mask
@@ -532,12 +532,12 @@ namespace SwrJit
                                      bool                   bPackedOutput)
     {
         // cast types
-        Type* vGatherTy = VectorType::get(IntegerType::getInt32Ty(JM()->mContext), mVWidth);
-        Type* v32x8Ty   = VectorType::get(mInt8Ty, mVWidth * 4); // vwidth is units of 32 bits
+        Type* vGatherTy = getVectorType(IntegerType::getInt32Ty(JM()->mContext), mVWidth);
+        Type* v32x8Ty   = getVectorType(mInt8Ty, mVWidth * 4); // vwidth is units of 32 bits
 
         if (bPackedOutput)
         {
-            Type* v128Ty = VectorType::get(IntegerType::getIntNTy(JM()->mContext, 128),
+            Type* v128Ty = getVectorType(IntegerType::getIntNTy(JM()->mContext, 128),
                                            mVWidth / 4); // vwidth is units of 32 bits
                                                          // shuffle mask
             Value* vConstMask = C<char>({0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15,

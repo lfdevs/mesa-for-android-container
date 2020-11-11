@@ -44,7 +44,7 @@ iris_is_color_fast_clear_compatible(struct iris_context *ice,
    const struct gen_device_info *devinfo = &batch->screen->devinfo;
 
    if (isl_format_has_int_channel(format)) {
-      perf_debug(&ice->dbg, "Integer fast clear not enabled for %s",
+      perf_debug(&ice->dbg, "Integer fast clear not enabled for %s\n",
                  isl_format_get_name(format));
       return false;
    }
@@ -107,32 +107,42 @@ can_fast_clear_color(struct iris_context *ice,
       return false;
    }
 
-   /* XXX: if (irb->mt->supports_fast_clear)
-    * see intel_miptree_create_for_dri_image()
-    */
-
    if (!iris_is_color_fast_clear_compatible(ice, res->surf.format, color))
       return false;
+
+   /* The RENDER_SURFACE_STATE page for TGL says:
+    *
+    *   For an 8 bpp surface with NUM_MULTISAMPLES = 1, Surface Width not
+    *   multiple of 64 pixels and more than 1 mip level in the view, Fast Clear
+    *   is not supported when AUX_CCS_E is set in this field.
+    *
+    * The granularity of a fast-clear is one CCS element. For an 8 bpp primary
+    * surface, this maps to 32px x 4rows. Due to the surface layout parameters,
+    * if LOD0's width isn't a multiple of 64px, LOD1 and LOD2+ will share CCS
+    * elements. Assuming LOD2 exists, don't fast-clear any level above LOD0
+    * to avoid stomping on other LODs.
+    */
+   if (level > 0 && util_format_get_blocksizebits(p_res->format) == 8 &&
+       res->aux.usage == ISL_AUX_USAGE_GEN12_CCS_E && p_res->width0 % 64) {
+      return false;
+   }
 
    return true;
 }
 
 static union isl_color_value
-convert_fast_clear_color(struct iris_context *ice,
-                         struct iris_resource *res,
-                         const union isl_color_value color)
+convert_clear_color(enum pipe_format format,
+                    const union pipe_color_union *color)
 {
-   union isl_color_value override_color = color;
-   struct pipe_resource *p_res = (void *) res;
+   /* pipe_color_union and isl_color_value are interchangeable */
+   union isl_color_value override_color = *(union isl_color_value *)color;
 
-   const enum pipe_format format = p_res->format;
    const struct util_format_description *desc =
       util_format_description(format);
    unsigned colormask = util_format_colormask(desc);
 
    if (util_format_is_intensity(format) ||
-       util_format_is_luminance(format) ||
-       util_format_is_luminance_alpha(format)) {
+       util_format_is_luminance(format)) {
       override_color.u32[1] = override_color.u32[0];
       override_color.u32[2] = override_color.u32[0];
       if (util_format_is_intensity(format))
@@ -163,7 +173,7 @@ convert_fast_clear_color(struct iris_context *ice,
       for (int i = 0; i < 4; i++) {
          unsigned bits = util_format_get_component_bits(
             format, UTIL_FORMAT_COLORSPACE_RGB, i);
-         if (bits < 32) {
+         if (bits > 0 && bits < 32) {
             int32_t max = (1 << (bits - 1)) - 1;
             int32_t min = -(1 << (bits - 1));
             override_color.i32[i] = CLAMP(override_color.i32[i], min, max);
@@ -197,8 +207,6 @@ fast_clear_color(struct iris_context *ice,
 {
    struct iris_batch *batch = &ice->batches[IRIS_BATCH_RENDER];
    struct pipe_resource *p_res = (void *) res;
-
-   color = convert_fast_clear_color(ice, res, color);
 
    bool color_changed = !!memcmp(&res->aux.clear_color, &color,
                                  sizeof(color));
@@ -678,9 +686,6 @@ iris_clear(struct pipe_context *ctx,
    }
 
    if (buffers & PIPE_CLEAR_COLOR) {
-      /* pipe_color_union and isl_color_value are interchangeable */
-      union isl_color_value *color = (void *) p_color;
-
       for (unsigned i = 0; i < cso_fb->nr_cbufs; i++) {
          if (buffers & (PIPE_CLEAR_COLOR0 << i)) {
             struct pipe_surface *psurf = cso_fb->cbufs[i];
@@ -690,7 +695,7 @@ iris_clear(struct pipe_context *ctx,
 
             clear_color(ice, psurf->texture, psurf->u.tex.level, &box,
                         true, isurf->view.format, isurf->view.swizzle,
-                        *color);
+                        convert_clear_color(psurf->format, p_color));
          }
       }
    }
@@ -717,16 +722,16 @@ iris_clear_texture(struct pipe_context *ctx,
       iris_resource_finish_aux_import(ctx->screen, res);
 
    if (util_format_is_depth_or_stencil(p_res->format)) {
-      const struct util_format_description *fmt_desc =
-         util_format_description(p_res->format);
+      const struct util_format_unpack_description *unpack =
+         util_format_unpack_description(p_res->format);
 
       float depth = 0.0;
       uint8_t stencil = 0;
 
-      if (fmt_desc->unpack_z_float)
+      if (unpack->unpack_z_float)
          util_format_unpack_z_float(p_res->format, &depth, data, 1);
 
-      if (fmt_desc->unpack_s_8uint)
+      if (unpack->unpack_s_8uint)
          util_format_unpack_s_8uint(p_res->format, &stencil, data, 1);
 
       clear_depth_stencil(ice, p_res, level, box, true, true, true,
@@ -788,12 +793,10 @@ iris_clear_render_target(struct pipe_context *ctx,
       .depth = psurf->u.tex.last_layer - psurf->u.tex.first_layer + 1
    };
 
-   /* pipe_color_union and isl_color_value are interchangeable */
-   union isl_color_value *color = (void *) p_color;
-
    clear_color(ice, psurf->texture, psurf->u.tex.level, &box,
                render_condition_enabled,
-               isurf->view.format, isurf->view.swizzle, *color);
+               isurf->view.format, isurf->view.swizzle,
+               convert_clear_color(psurf->format, p_color));
 }
 
 /**

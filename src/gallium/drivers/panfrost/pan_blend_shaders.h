@@ -27,15 +27,17 @@
 
 #include "pipe/p_state.h"
 #include "pipe/p_defines.h"
-#include <panfrost-job.h>
+#include <midgard_pack.h>
 #include "pan_context.h"
 #include "pan_blend.h"
 
-struct panfrost_blend_shader
-panfrost_compile_blend_shader(
-        struct panfrost_context *ctx,
-        struct pipe_blend_state *cso,
-        enum pipe_format format,
-        unsigned rt);
+struct panfrost_blend_shader *
+panfrost_create_blend_shader(struct panfrost_context *ctx,
+                             struct panfrost_blend_state *state,
+                             const struct panfrost_blend_shader_key *key);
+
+void
+panfrost_compile_blend_shader(struct panfrost_blend_shader *shader,
+                              const float *constants);
 
 #endif

@@ -149,7 +149,7 @@ static int store_shader(struct pipe_context *ctx,
 		}
 		ptr = r600_buffer_map_sync_with_rings(
 			&rctx->b, shader->bo,
-			PIPE_TRANSFER_WRITE | RADEON_TRANSFER_TEMPORARY);
+			PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
 		if (R600_BIG_ENDIAN) {
 			for (i = 0; i < shader->shader.bc.ndw; ++i) {
 				ptr[i] = util_cpu_to_le32(shader->shader.bc.bytecode[i]);
@@ -201,9 +201,9 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 				NIR_PASS_V(sel->nir, nir_lower_regs_to_ssa);
 				NIR_PASS_V(sel->nir, nir_lower_alu_to_scalar, NULL, NULL);
 				NIR_PASS_V(sel->nir, nir_lower_int64);
-				NIR_PASS_V(sel->nir, nir_opt_vectorize);
+				NIR_PASS_V(sel->nir, nir_opt_vectorize, NULL, NULL);
 			}
-			NIR_PASS_V(sel->nir, nir_lower_flrp, ~0, false, false);
+			NIR_PASS_V(sel->nir, nir_lower_flrp, ~0, false);
 		}
 		nir_tgsi_scan_shader(sel->nir, &sel->info, true);
 

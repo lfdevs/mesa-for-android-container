@@ -890,6 +890,8 @@ struct _mesa_glsl_parse_state {
    bool NV_image_formats_warn;
    bool NV_shader_atomic_float_enable;
    bool NV_shader_atomic_float_warn;
+   bool NV_shader_atomic_int64_enable;
+   bool NV_shader_atomic_int64_warn;
    bool NV_viewport_array2_enable;
    bool NV_viewport_array2_warn;
    /*@}*/
@@ -941,7 +943,6 @@ struct _mesa_glsl_parse_state {
    bool allow_extension_directive_midshader;
    bool allow_glsl_120_subset_in_110;
    bool allow_builtin_variable_redeclaration;
-   bool allow_layout_qualifier_on_function_parameter;
 
    /**
     * Known subroutine type declarations.

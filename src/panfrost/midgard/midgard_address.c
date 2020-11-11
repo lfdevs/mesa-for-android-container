@@ -198,10 +198,16 @@ mir_set_offset(compiler_context *ctx, midgard_instruction *ins, nir_src *offset,
                 ins->swizzle[2][i] = 0;
         }
 
+        bool force_zext = (nir_src_bit_size(*offset) < 64);
+
         if (!offset->is_ssa) {
                 ins->load_store.arg_1 |= is_shared ? 0x6E : 0x7E;
                 ins->src[2] = nir_src_index(ctx, offset);
                 ins->src_types[2] = nir_type_uint | nir_src_bit_size(*offset);
+
+                if (force_zext)
+                        ins->load_store.arg_1 |= 0x80;
+
                 return;
         }
 
@@ -221,7 +227,7 @@ mir_set_offset(compiler_context *ctx, midgard_instruction *ins, nir_src *offset,
         } else
                 ins->load_store.arg_2 = 0x1E;
 
-        if (match.zext)
+        if (match.zext || force_zext)
                 ins->load_store.arg_1 |= 0x80;
 
         assert(match.shift <= 7);

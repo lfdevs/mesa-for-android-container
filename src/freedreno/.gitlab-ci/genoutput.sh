@@ -10,11 +10,12 @@ set -e
 # input/output directories:
 base=src/freedreno
 traces=$base/.gitlab-ci/traces
+reference=$base/.gitlab-ci/reference
 output=$base/.gitlab-ci/out
 
 # use the --update arg to update reference output:
 if [ "$1" = "--update" ]; then
-	output=src/freedreno/.gitlab-ci/reference
+	output=$reference
 fi
 
 mkdir -p $output
@@ -22,6 +23,8 @@ mkdir -p $output
 # binary locations:
 cffdump=./install/bin/cffdump
 crashdec=./install/bin/crashdec
+asm=./install/bin/afuc-asm
+disasm=./install/bin/afuc-disasm
 
 # helper to filter out paths that can change depending on
 # who is building:
@@ -50,3 +53,5 @@ $cffdump --script $base/decode/scripts/parse-submits.lua $traces/shadow.rd.gz | 
 
 $crashdec -sf $traces/crash.devcore | filter $output/crash.log
 
+$asm -g 6 $traces/afuc_test.asm $output/afuc_test.fw
+$disasm -g 6 $reference/afuc_test.fw | filter $output/afuc_test.asm

@@ -629,8 +629,8 @@ vl_mpeg12_begin_frame(struct pipe_video_codec *decoder,
 
    buf->texels =
       dec->context->transfer_map(dec->context, tex, 0,
-                                 PIPE_TRANSFER_WRITE |
-                                 PIPE_TRANSFER_DISCARD_RANGE,
+                                 PIPE_MAP_WRITE |
+                                 PIPE_MAP_DISCARD_RANGE,
                                  &rect, &buf->tex_transfer);
 
    buf->block_num = 0;

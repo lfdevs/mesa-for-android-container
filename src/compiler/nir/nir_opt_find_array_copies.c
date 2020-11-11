@@ -53,7 +53,9 @@ struct match_node {
 
 struct match_state {
    /* Map from nir_variable * -> match_node */
-   struct hash_table *table;
+   struct hash_table *var_nodes;
+   /* Map from cast nir_deref_instr * -> match_node */
+   struct hash_table *cast_nodes;
 
    unsigned cur_instr;
 
@@ -89,12 +91,25 @@ node_for_deref(nir_deref_instr *instr, struct match_node *parent,
    unsigned idx;
    switch (instr->deref_type) {
    case nir_deref_type_var: {
-      struct hash_entry *entry = _mesa_hash_table_search(state->table, instr->var);
+      struct hash_entry *entry =
+         _mesa_hash_table_search(state->var_nodes, instr->var);
       if (entry) {
          return entry->data;
       } else {
          struct match_node *node = create_match_node(instr->type, state);
-         _mesa_hash_table_insert(state->table, instr->var, node);
+         _mesa_hash_table_insert(state->var_nodes, instr->var, node);
+         return node;
+      }
+   }
+
+   case nir_deref_type_cast: {
+      struct hash_entry *entry =
+         _mesa_hash_table_search(state->cast_nodes, instr);
+      if (entry) {
+         return entry->data;
+      } else {
+         struct match_node *node = create_match_node(instr->type, state);
+         _mesa_hash_table_insert(state->cast_nodes, instr, node);
          return node;
       }
    }
@@ -176,6 +191,19 @@ node_for_path_with_wildcard(nir_deref_path *path, unsigned wildcard_idx,
 typedef void (*match_cb)(struct match_node *, struct match_state *);
 
 static void
+_foreach_child(match_cb cb, struct match_node *node, struct match_state *state)
+{
+   if (node->num_children == 0) {
+      cb(node, state);
+   } else {
+      for (unsigned i = 0; i < node->num_children; i++) {
+         if (node->children[i])
+            _foreach_child(cb, node->children[i], state);
+      }
+   }
+}
+
+static void
 _foreach_aliasing(nir_deref_instr **deref, match_cb cb,
                   struct match_node *node, struct match_state *state)
 {
@@ -218,6 +246,10 @@ _foreach_aliasing(nir_deref_instr **deref, match_cb cb,
       return;
    }
 
+   case nir_deref_type_cast:
+      _foreach_child(cb, node, state);
+      return;
+
    default:
       unreachable("bad deref type");
    }
@@ -230,11 +262,32 @@ foreach_aliasing_node(nir_deref_path *path,
                       match_cb cb,
                       struct match_state *state)
 {
-   assert(path->path[0]->deref_type == nir_deref_type_var);
-   struct hash_entry *entry = _mesa_hash_table_search(state->table,
-                                                      path->path[0]->var);
-   if (entry)
-      _foreach_aliasing(&path->path[1], cb, entry->data, state);
+   if (path->path[0]->deref_type == nir_deref_type_var) {
+      struct hash_entry *entry = _mesa_hash_table_search(state->var_nodes,
+                                                         path->path[0]->var);
+      if (entry)
+         _foreach_aliasing(&path->path[1], cb, entry->data, state);
+
+      hash_table_foreach(state->cast_nodes, entry)
+         _foreach_child(cb, entry->data, state);
+   } else {
+      /* Casts automatically alias anything that isn't a cast */
+      assert(path->path[0]->deref_type == nir_deref_type_cast);
+      hash_table_foreach(state->var_nodes, entry)
+         _foreach_child(cb, entry->data, state);
+
+      /* Casts alias other casts if the casts are different or if they're the
+       * same and the path from the cast may alias as per the usual rules.
+       */
+      hash_table_foreach(state->cast_nodes, entry) {
+         const nir_deref_instr *cast = entry->key;
+         assert(cast->deref_type == nir_deref_type_cast);
+         if (cast == path->path[0])
+            _foreach_aliasing(&path->path[1], cb, entry->data, state);
+         else
+            _foreach_child(cb, entry->data, state);
+      }
+   }
 }
 
 static nir_deref_instr *
@@ -472,7 +525,8 @@ opt_find_array_copies_block(nir_builder *b, nir_block *block,
 
    unsigned next_index = 0;
 
-   _mesa_hash_table_clear(state->table, NULL);
+   _mesa_hash_table_clear(state->var_nodes, NULL);
+   _mesa_hash_table_clear(state->cast_nodes, NULL);
 
    nir_foreach_instr(instr, block) {
       if (instr->type != nir_instr_type_intrinsic)
@@ -501,8 +555,18 @@ opt_find_array_copies_block(nir_builder *b, nir_block *block,
        * continue on because it won't affect local stores or read-only
        * variables.
        */
-      if (dst_deref->mode != nir_var_function_temp)
+      if (!nir_deref_mode_may_be(dst_deref, nir_var_function_temp))
          continue;
+
+      if (!nir_deref_mode_must_be(dst_deref, nir_var_function_temp)) {
+         /* This only happens if we have something that might be a local store
+          * but we don't know.  In this case, clear everything.
+          */
+         nir_deref_path dst_path;
+         nir_deref_path_init(&dst_path, dst_deref, state->dead_ctx);
+         foreach_aliasing_node(&dst_path, clobber, state);
+         continue;
+      }
 
       /* If there are any known out-of-bounds writes, then we can just skip
        * this write as it's undefined and won't contribute to building up an
@@ -535,10 +599,9 @@ opt_find_array_copies_block(nir_builder *b, nir_block *block,
       /* The source must be either local or something that's guaranteed to be
        * read-only.
        */
-      const nir_variable_mode read_only_modes =
-         nir_var_shader_in | nir_var_uniform | nir_var_system_value;
       if (src_deref &&
-          !(src_deref->mode & (nir_var_function_temp | read_only_modes))) {
+          !nir_deref_mode_must_be(src_deref, nir_var_function_temp |
+                                             nir_var_read_only_modes)) {
          src_deref = NULL;
       }
 
@@ -576,7 +639,8 @@ opt_find_array_copies_impl(nir_function_impl *impl)
 
    struct match_state s;
    s.dead_ctx = ralloc_context(NULL);
-   s.table = _mesa_pointer_hash_table_create(s.dead_ctx);
+   s.var_nodes = _mesa_pointer_hash_table_create(s.dead_ctx);
+   s.cast_nodes = _mesa_pointer_hash_table_create(s.dead_ctx);
    nir_builder_init(&s.builder, impl);
 
    nir_foreach_block(block, impl) {

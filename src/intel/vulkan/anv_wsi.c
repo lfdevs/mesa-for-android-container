@@ -85,7 +85,8 @@ anv_init_wsi(struct anv_physical_device *physical_device)
                             anv_wsi_proc_addr,
                             &physical_device->instance->alloc,
                             physical_device->master_fd,
-                            &physical_device->instance->dri_options);
+                            &physical_device->instance->dri_options,
+                            false);
    if (result != VK_SUCCESS)
       return result;
 
@@ -288,11 +289,72 @@ VkResult anv_QueuePresentKHR(
     const VkPresentInfoKHR*                  pPresentInfo)
 {
    ANV_FROM_HANDLE(anv_queue, queue, _queue);
+   struct anv_device *device = queue->device;
 
-   return wsi_common_queue_present(&queue->device->physical->wsi_device,
-                                   anv_device_to_handle(queue->device),
-                                   _queue, 0,
-                                   pPresentInfo);
+   if (device->debug_frame_desc) {
+      device->debug_frame_desc->frame_id++;
+      if (!device->info.has_llc) {
+         gen_clflush_range(device->debug_frame_desc,
+                           sizeof(*device->debug_frame_desc));
+      }
+   }
+
+   if (device->has_thread_submit &&
+       pPresentInfo->waitSemaphoreCount > 0) {
+      /* Make sure all of the dependency semaphores have materialized when
+       * using a threaded submission.
+       */
+      uint32_t *syncobjs = vk_alloc(&device->vk.alloc,
+                                    sizeof(*syncobjs) * pPresentInfo->waitSemaphoreCount, 8,
+                                    VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+
+      if (!syncobjs)
+         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+
+      uint32_t wait_count = 0;
+      for (uint32_t i = 0; i < pPresentInfo->waitSemaphoreCount; i++) {
+         ANV_FROM_HANDLE(anv_semaphore, semaphore, pPresentInfo->pWaitSemaphores[i]);
+         struct anv_semaphore_impl *impl =
+            semaphore->temporary.type != ANV_SEMAPHORE_TYPE_NONE ?
+            &semaphore->temporary : &semaphore->permanent;
+
+         if (impl->type == ANV_SEMAPHORE_TYPE_DUMMY)
+            continue;
+         assert(impl->type == ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ);
+         syncobjs[wait_count++] = impl->syncobj;
+      }
+
+      int ret = 0;
+      if (wait_count > 0) {
+         ret =
+            anv_gem_syncobj_wait(device, syncobjs, wait_count,
+                                 anv_get_absolute_timeout(INT64_MAX),
+                                 true /* wait_all */);
+      }
+
+      vk_free(&device->vk.alloc, syncobjs);
+
+      if (ret)
+         return vk_error(VK_ERROR_DEVICE_LOST);
+   }
+
+   VkResult result = wsi_common_queue_present(&device->physical->wsi_device,
+                                              anv_device_to_handle(queue->device),
+                                              _queue, 0,
+                                              pPresentInfo);
+
+   for (uint32_t i = 0; i < pPresentInfo->waitSemaphoreCount; i++) {
+      ANV_FROM_HANDLE(anv_semaphore, semaphore, pPresentInfo->pWaitSemaphores[i]);
+      /* From the Vulkan 1.0.53 spec:
+       *
+       *    "If the import is temporary, the implementation must restore the
+       *    semaphore to its prior permanent state after submitting the next
+       *    semaphore wait operation."
+       */
+      anv_semaphore_reset_temporary(queue->device, semaphore);
+   }
+
+   return result;
 }
 
 VkResult anv_GetDeviceGroupPresentCapabilitiesKHR(

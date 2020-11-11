@@ -163,8 +163,7 @@ namespace brw {
                          unsigned dims, unsigned size,
                          brw_predicate pred)
       {
-         const bool has_simd4x2 = (bld.shader->devinfo->gen >= 8 ||
-                                   bld.shader->devinfo->is_haswell);
+         const bool has_simd4x2 = bld.shader->devinfo->is_haswell;
          emit_send(bld, VEC4_OPCODE_UNTYPED_SURFACE_WRITE, src_reg(),
                    emit_insert(bld, addr, dims, has_simd4x2),
                    has_simd4x2 ? 1 : dims,
@@ -185,8 +184,7 @@ namespace brw {
                           unsigned dims, unsigned rsize, unsigned op,
                           brw_predicate pred)
       {
-         const bool has_simd4x2 = (bld.shader->devinfo->gen >= 8 ||
-                                   bld.shader->devinfo->is_haswell);
+         const bool has_simd4x2 = bld.shader->devinfo->is_haswell;
 
          /* Zip the components of both sources, they are represented as the X
           * and Y components of the same vector.

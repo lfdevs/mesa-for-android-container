@@ -37,7 +37,6 @@
 #include "util/bitset.h"
 #include "util/set.h"
 
-#include <panfrost-misc.h>
 #include "pan_device.h"
 #include "pan_pool.h"
 

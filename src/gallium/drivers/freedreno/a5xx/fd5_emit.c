@@ -276,8 +276,8 @@ setup_border_colors(struct fd_texture_stateobj *tex, struct bcolor_entry *entrie
 				float f_s = CLAMP(f, -1, 1);
 
 				e->fp32[c] = fui(f);
-				e->fp16[c] = util_float_to_half(f);
-				e->srgb[c] = util_float_to_half(f_u);
+				e->fp16[c] = _mesa_float_to_half(f);
+				e->srgb[c] = _mesa_float_to_half(f_u);
 				e->ui16[c] = f_u * 0xffff;
 				e->si16[c] = f_s * 0x7fff;
 				e->ui8[c]  = f_u * 0xff;

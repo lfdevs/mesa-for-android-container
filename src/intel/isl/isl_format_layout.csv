@@ -258,6 +258,9 @@ BC7_UNORM                   , 128,  4,  4,  1,  un8,  un8,  un8,  un8,     ,    
 BC7_UNORM_SRGB              , 128,  4,  4,  1,  un8,  un8,  un8,  un8,     ,     ,    ,      ,   srgb,  bptc
 BC6H_UF16                   , 128,  4,  4,  1, uf16, uf16, uf16,     ,     ,     ,    ,      , linear,  bptc
 PLANAR_420_8                ,   0,  0,  0,  0,     ,     ,     ,     ,     ,     ,    ,      ,    yuv,
+PLANAR_420_10               ,   0,  0,  0,  0,     ,     ,     ,     ,     ,     ,    ,      ,    yuv,
+PLANAR_420_12               ,   0,  0,  0,  0,     ,     ,     ,     ,     ,     ,    ,      ,    yuv,
+PLANAR_420_16               ,   0,  0,  0,  0,     ,     ,     ,     ,     ,     ,    ,      ,    yuv,
 R8G8B8_UNORM_SRGB           ,  24,  1,  1,  1,  un8,  un8,  un8,     ,     ,     ,    ,   rgb,   srgb,
 ETC1_RGB8                   ,  64,  4,  4,  1,  un8,  un8,  un8,     ,     ,     ,    ,      , linear,  etc1
 ETC2_RGB8                   ,  64,  4,  4,  1,  un8,  un8,  un8,     ,     ,     ,    ,      , linear,  etc2

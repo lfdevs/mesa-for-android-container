@@ -422,7 +422,7 @@ drisw_update_tex_buffer(struct dri_drawable *drawable,
 
    map = pipe_transfer_map(pipe, res,
                            0, 0, // level, layer,
-                           PIPE_TRANSFER_WRITE,
+                           PIPE_MAP_WRITE,
                            x, y, w, h, &transfer);
 
    /* Copy the Drawable content to the mapped texture buffer */

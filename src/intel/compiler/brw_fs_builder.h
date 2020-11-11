@@ -304,11 +304,11 @@ namespace brw {
          case SHADER_OPCODE_INT_REMAINDER:
             return emit(instruction(opcode, dispatch_width(), dst,
                                     fix_math_operand(src0),
-                                    fix_math_operand(fix_byte_src(src1))));
+                                    fix_math_operand(src1)));
 
          default:
             return emit(instruction(opcode, dispatch_width(), dst,
-                                    src0, fix_byte_src(src1)));
+                                    src0, src1));
 
          }
       }
@@ -327,12 +327,12 @@ namespace brw {
          case BRW_OPCODE_LRP:
             return emit(instruction(opcode, dispatch_width(), dst,
                                     fix_3src_operand(src0),
-                                    fix_3src_operand(fix_byte_src(src1)),
-                                    fix_3src_operand(fix_byte_src(src2))));
+                                    fix_3src_operand(src1),
+                                    fix_3src_operand(src2)));
 
          default:
             return emit(instruction(opcode, dispatch_width(), dst,
-                                    src0, fix_byte_src(src1), fix_byte_src(src2)));
+                                    src0, src1, src2));
          }
       }
 
@@ -394,8 +394,8 @@ namespace brw {
          /* In some cases we can't have bytes as operand for src1, so use the
           * same type for both operand.
           */
-         return set_condmod(mod, SEL(dst, fix_unsigned_negate(fix_byte_src(src0)),
-                                     fix_unsigned_negate(fix_byte_src(src1))));
+         return set_condmod(mod, SEL(dst, fix_unsigned_negate(src0),
+                                     fix_unsigned_negate(src1)));
       }
 
       /**
@@ -659,8 +659,8 @@ namespace brw {
                             emit(BRW_OPCODE_CSEL,
                                  retype(dst, BRW_REGISTER_TYPE_F),
                                  retype(src0, BRW_REGISTER_TYPE_F),
-                                 retype(fix_byte_src(src1), BRW_REGISTER_TYPE_F),
-                                 fix_byte_src(src2)));
+                                 retype(src1, BRW_REGISTER_TYPE_F),
+                                 src2));
       }
 
       /**
@@ -720,21 +720,6 @@ namespace brw {
       }
 
       backend_shader *shader;
-
-      /**
-       * Byte sized operands are not supported for src1 on Gen11+.
-       */
-      src_reg
-      fix_byte_src(const src_reg &src) const
-      {
-         if (shader->devinfo->gen < 11 || type_sz(src.type) != 1)
-            return src;
-
-         dst_reg temp = vgrf(src.type == BRW_REGISTER_TYPE_UB ?
-                             BRW_REGISTER_TYPE_UD : BRW_REGISTER_TYPE_D);
-         MOV(temp, src);
-         return src_reg(temp);
-      }
 
    private:
       /**

@@ -396,7 +396,17 @@ static void radeon_enc_nalu_sps_hevc(struct radeon_encoder *enc)
    radeon_enc_code_ue(enc, enc->enc_pic.chroma_format_idc);
    radeon_enc_code_ue(enc, enc->enc_pic.session_init.aligned_picture_width);
    radeon_enc_code_ue(enc, enc->enc_pic.session_init.aligned_picture_height);
-   radeon_enc_code_fixed_bits(enc, 0x0, 1);
+
+	if ((enc->enc_pic.crop_left != 0) || (enc->enc_pic.crop_right  != 0) ||
+	    (enc->enc_pic.crop_top  != 0) || (enc->enc_pic.crop_bottom != 0)) {
+		radeon_enc_code_fixed_bits(enc, 0x1, 1);
+		radeon_enc_code_ue(enc, enc->enc_pic.crop_left);
+		radeon_enc_code_ue(enc, enc->enc_pic.crop_right);
+		radeon_enc_code_ue(enc, enc->enc_pic.crop_top);
+		radeon_enc_code_ue(enc, enc->enc_pic.crop_bottom);
+	} else
+		radeon_enc_code_fixed_bits(enc, 0x0, 1);
+
    radeon_enc_code_ue(enc, enc->enc_pic.bit_depth_luma_minus8);
    radeon_enc_code_ue(enc, enc->enc_pic.bit_depth_chroma_minus8);
    radeon_enc_code_ue(enc, enc->enc_pic.log2_max_poc - 4);

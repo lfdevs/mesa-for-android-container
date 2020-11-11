@@ -250,7 +250,9 @@ iris_blorp_surf_for_resource(struct isl_device *isl_dev,
          .buffer = res->bo,
          .offset = res->offset,
          .reloc_flags = is_render_target ? EXEC_OBJECT_WRITE : 0,
-         .mocs = iris_mocs(res->bo, isl_dev),
+         .mocs = iris_mocs(res->bo, isl_dev,
+                           is_render_target ? ISL_SURF_USAGE_RENDER_TARGET_BIT
+                                            : ISL_SURF_USAGE_TEXTURE_BIT),
       },
       .aux_usage = aux_usage,
    };
@@ -261,7 +263,7 @@ iris_blorp_surf_for_resource(struct isl_device *isl_dev,
          .buffer = res->aux.bo,
          .offset = res->aux.offset,
          .reloc_flags = is_render_target ? EXEC_OBJECT_WRITE : 0,
-         .mocs = iris_mocs(res->bo, isl_dev),
+         .mocs = iris_mocs(res->bo, isl_dev, 0),
       };
       surf->clear_color =
          iris_resource_get_clear_color(res, NULL, NULL);
@@ -269,7 +271,7 @@ iris_blorp_surf_for_resource(struct isl_device *isl_dev,
          .buffer = res->aux.clear_color_bo,
          .offset = res->aux.clear_color_offset,
          .reloc_flags = 0,
-         .mocs = iris_mocs(res->aux.clear_color_bo, isl_dev),
+         .mocs = iris_mocs(res->aux.clear_color_bo, isl_dev, 0),
       };
    }
 }
@@ -361,6 +363,27 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
          blorp_flags |= BLORP_BATCH_PREDICATE_ENABLE;
    }
 
+   float src_x0 = info->src.box.x;
+   float src_x1 = info->src.box.x + info->src.box.width;
+   float src_y0 = info->src.box.y;
+   float src_y1 = info->src.box.y + info->src.box.height;
+   float dst_x0 = info->dst.box.x;
+   float dst_x1 = info->dst.box.x + info->dst.box.width;
+   float dst_y0 = info->dst.box.y;
+   float dst_y1 = info->dst.box.y + info->dst.box.height;
+   bool mirror_x = apply_mirror(&src_x0, &src_x1);
+   bool mirror_y = apply_mirror(&src_y0, &src_y1);
+   enum blorp_filter filter;
+
+   if (info->scissor_enable) {
+      bool noop = apply_blit_scissor(&info->scissor,
+                                     &src_x0, &src_y0, &src_x1, &src_y1,
+                                     &dst_x0, &dst_y0, &dst_x1, &dst_y1,
+                                     mirror_x, mirror_y);
+      if (noop)
+         return;
+   }
+
    if (iris_resource_unfinished_aux_import(src_res))
       iris_resource_finish_aux_import(ctx->screen, src_res);
    if (iris_resource_unfinished_aux_import(dst_res))
@@ -402,27 +425,6 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
                                 info->dst.box.z, info->dst.box.depth,
                                 dst_aux_usage, dst_clear_supported);
    iris_emit_buffer_barrier_for(batch, dst_res->bo, IRIS_DOMAIN_RENDER_WRITE);
-
-   float src_x0 = info->src.box.x;
-   float src_x1 = info->src.box.x + info->src.box.width;
-   float src_y0 = info->src.box.y;
-   float src_y1 = info->src.box.y + info->src.box.height;
-   float dst_x0 = info->dst.box.x;
-   float dst_x1 = info->dst.box.x + info->dst.box.width;
-   float dst_y0 = info->dst.box.y;
-   float dst_y1 = info->dst.box.y + info->dst.box.height;
-   bool mirror_x = apply_mirror(&src_x0, &src_x1);
-   bool mirror_y = apply_mirror(&src_y0, &src_y1);
-   enum blorp_filter filter;
-
-   if (info->scissor_enable) {
-      bool noop = apply_blit_scissor(&info->scissor,
-                                     &src_x0, &src_y0, &src_x1, &src_y1,
-                                     &dst_x0, &dst_y0, &dst_x1, &dst_y1,
-                                     mirror_x, mirror_y);
-      if (noop)
-         return;
-   }
 
    if (abs(info->dst.box.width) == abs(info->src.box.width) &&
        abs(info->dst.box.height) == abs(info->src.box.height)) {
@@ -485,15 +487,28 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
    else
       main_mask = PIPE_MASK_RGBA;
 
+   float src_z_step = (float)info->src.box.depth / (float)info->dst.box.depth;
+
+   /* There is no interpolation to the pixel center during rendering, so
+    * add the 0.5 offset ourselves here.
+    */
+   float depth_center_offset = 0;
+   if (src_res->surf.dim == ISL_SURF_DIM_3D)
+      depth_center_offset = 0.5 / info->dst.box.depth * info->src.box.depth;
+
    if (info->mask & main_mask) {
       for (int slice = 0; slice < info->dst.box.depth; slice++) {
+         unsigned dst_z = info->dst.box.z + slice;
+         float src_z = info->src.box.z + slice * src_z_step +
+                       depth_center_offset;
+
          iris_batch_maybe_flush(batch, 1500);
          iris_batch_sync_region_start(batch);
 
          blorp_blit(&blorp_batch,
-                    &src_surf, info->src.level, info->src.box.z + slice,
+                    &src_surf, info->src.level, src_z,
                     src_fmt.fmt, src_fmt.swizzle,
-                    &dst_surf, info->dst.level, info->dst.box.z + slice,
+                    &dst_surf, info->dst.level, dst_z,
                     dst_fmt.fmt, dst_fmt.swizzle,
                     src_x0, src_y0, src_x1, src_y1,
                     dst_x0, dst_y0, dst_x1, dst_y1,

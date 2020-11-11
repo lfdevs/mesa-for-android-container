@@ -569,9 +569,6 @@ blorp_nir_combine_samples(nir_builder *b, struct brw_blorp_blit_vars *v,
                           nir_alu_type dst_type,
                           enum blorp_filter filter)
 {
-   /* If non-null, this is the outer-most if statement */
-   nir_if *outer_if = NULL;
-
    nir_variable *color =
       nir_local_variable_create(b->impl, glsl_vec4_type(), "color");
 
@@ -607,6 +604,10 @@ blorp_nir_combine_samples(nir_builder *b, struct brw_blorp_blit_vars *v,
    default:
       unreachable("Invalid filter");
    }
+
+   /* If true, we inserted an if statement that we need to pop at at the end.
+    */
+   bool inserted_if = false;
 
    /* We add together samples using a binary tree structure, e.g. for 4x MSAA:
     *
@@ -670,24 +671,19 @@ blorp_nir_combine_samples(nir_builder *b, struct brw_blorp_blit_vars *v,
           * clear color and we can skip the remaining fetches just like we do
           * when MCS == 0.
           */
-         nir_ssa_def *mcs_zero =
-            nir_ieq(b, nir_channel(b, mcs, 0), nir_imm_int(b, 0));
+         nir_ssa_def *mcs_zero = nir_ieq_imm(b, nir_channel(b, mcs, 0), 0);
          if (tex_samples == 16) {
             mcs_zero = nir_iand(b, mcs_zero,
-               nir_ieq(b, nir_channel(b, mcs, 1), nir_imm_int(b, 0)));
+               nir_ieq_imm(b, nir_channel(b, mcs, 1), 0));
          }
          nir_ssa_def *mcs_clear =
             blorp_nir_mcs_is_clear_color(b, mcs, tex_samples);
 
-         nir_if *if_stmt = nir_if_create(b->shader);
-         if_stmt->condition = nir_src_for_ssa(nir_ior(b, mcs_zero, mcs_clear));
-         nir_cf_node_insert(b->cursor, &if_stmt->cf_node);
-
-         b->cursor = nir_after_cf_list(&if_stmt->then_list);
+         nir_push_if(b, nir_ior(b, mcs_zero, mcs_clear));
          nir_store_var(b, color, texture_data[0], 0xf);
 
-         b->cursor = nir_after_cf_list(&if_stmt->else_list);
-         outer_if = if_stmt;
+         nir_push_else(b, NULL);
+         inserted_if = true;
       }
 
       for (int j = 0; j < count_trailing_one_bits(i); j++) {
@@ -713,8 +709,8 @@ blorp_nir_combine_samples(nir_builder *b, struct brw_blorp_blit_vars *v,
 
    nir_store_var(b, color, texture_data[0], 0xf);
 
-   if (outer_if)
-      b->cursor = nir_after_cf_node(&outer_if->cf_node);
+   if (inserted_if)
+      nir_pop_if(b, NULL);
 
    return nir_load_var(b, color);
 }
@@ -1445,9 +1441,9 @@ brw_blorp_build_nir_shader(struct blorp_context *blorp, void *mem_ctx,
       assert(dst_pos->num_components == 2);
 
       nir_ssa_def *color_component =
-         nir_bcsel(&b, nir_ieq(&b, comp, nir_imm_int(&b, 0)),
+         nir_bcsel(&b, nir_ieq_imm(&b, comp, 0),
                        nir_channel(&b, color, 0),
-                       nir_bcsel(&b, nir_ieq(&b, comp, nir_imm_int(&b, 1)),
+                       nir_bcsel(&b, nir_ieq_imm(&b, comp, 1),
                                      nir_channel(&b, color, 1),
                                      nir_channel(&b, color, 2)));
 
@@ -1497,7 +1493,7 @@ brw_blorp_get_blit_kernel(struct blorp_batch *batch,
    struct brw_wm_prog_data prog_data;
 
    nir_shader *nir = brw_blorp_build_nir_shader(blorp, mem_ctx, prog_key);
-   nir->info.name = ralloc_strdup(nir, "BLORP-blit");
+   nir->info.name = ralloc_strdup(nir, blorp_shader_type_to_name(prog_key->shader_type));
 
    struct brw_wm_prog_key wm_key;
    brw_blorp_init_wm_prog_key(&wm_key);
@@ -2652,7 +2648,7 @@ blorp_copy(struct blorp_batch *batch,
                                dst_layer, ISL_FORMAT_UNSUPPORTED, true);
 
    struct brw_blorp_blit_prog_key wm_prog_key = {
-      .shader_type = BLORP_SHADER_TYPE_BLIT,
+      .shader_type = BLORP_SHADER_TYPE_COPY,
       .filter = BLORP_FILTER_NONE,
       .need_src_offset = src_surf->tile_x_sa || src_surf->tile_y_sa,
       .need_dst_offset = dst_surf->tile_x_sa || dst_surf->tile_y_sa,

@@ -27,6 +27,7 @@
 
 #include "util/u_rect.h"
 #include "util/u_surface.h"
+#include "util/u_memset.h"
 #include "lp_context.h"
 #include "lp_flush.h"
 #include "lp_limits.h"
@@ -53,14 +54,14 @@ lp_resource_copy_ms(struct pipe_context *pipe,
    for (unsigned i = 0; i < src->nr_samples; i++) {
       struct pipe_transfer *src_trans, *dst_trans;
       const uint8_t *src_map = llvmpipe_transfer_map_ms(pipe,
-                                                        src, 0, PIPE_TRANSFER_READ, i,
+                                                        src, 0, PIPE_MAP_READ, i,
                                                         src_box,
                                                         &src_trans);
       if (!src_map)
          return;
 
       uint8_t *dst_map = llvmpipe_transfer_map_ms(pipe,
-                                                  dst, 0, PIPE_TRANSFER_WRITE, i,
+                                                  dst, 0, PIPE_MAP_WRITE, i,
                                                   &dst_box,
                                                   &dst_trans);
       if (!dst_map) {
@@ -285,7 +286,7 @@ lp_clear_color_texture_msaa(struct pipe_context *pipe,
    struct pipe_transfer *dst_trans;
    ubyte *dst_map;
 
-   dst_map = llvmpipe_transfer_map_ms(pipe, texture, 0, PIPE_TRANSFER_WRITE,
+   dst_map = llvmpipe_transfer_map_ms(pipe, texture, 0, PIPE_MAP_WRITE,
                                       sample, box, &dst_trans);
    if (!dst_map)
       return;
@@ -313,6 +314,10 @@ llvmpipe_clear_render_target(struct pipe_context *pipe,
    if (dst->texture->nr_samples > 1) {
       struct pipe_box box;
       u_box_2d(dstx, dsty, width, height, &box);
+      if (dst->texture->target != PIPE_BUFFER) {
+         box.z = dst->u.tex.first_layer;
+         box.depth = dst->u.tex.last_layer - dst->u.tex.first_layer + 1;
+      }
       for (unsigned s = 0; s < util_res_sample_count(dst->texture); s++) {
          lp_clear_color_texture_msaa(pipe, dst->texture, dst->format,
                                      color, s, &box);
@@ -343,8 +348,8 @@ lp_clear_depth_stencil_texture_msaa(struct pipe_context *pipe,
    dst_map = llvmpipe_transfer_map_ms(pipe,
                                       texture,
                                       0,
-                                      (need_rmw ? PIPE_TRANSFER_READ_WRITE :
-                                       PIPE_TRANSFER_WRITE),
+                                      (need_rmw ? PIPE_MAP_READ_WRITE :
+                                       PIPE_MAP_WRITE),
                                       sample, box, &dst_trans);
    assert(dst_map);
    if (!dst_map)
@@ -378,6 +383,10 @@ llvmpipe_clear_depth_stencil(struct pipe_context *pipe,
       uint64_t zstencil = util_pack64_z_stencil(dst->format, depth, stencil);
       struct pipe_box box;
       u_box_2d(dstx, dsty, width, height, &box);
+      if (dst->texture->target != PIPE_BUFFER) {
+         box.z = dst->u.tex.first_layer;
+         box.depth = dst->u.tex.last_layer - dst->u.tex.first_layer + 1;
+      }
       for (unsigned s = 0; s < util_res_sample_count(dst->texture); s++)
          lp_clear_depth_stencil_texture_msaa(pipe, dst->texture,
                                              dst->format, clear_flags,
@@ -434,6 +443,41 @@ llvmpipe_clear_texture(struct pipe_context *pipe,
    }
 }
 
+static void
+llvmpipe_clear_buffer(struct pipe_context *pipe,
+                      struct pipe_resource *res,
+                      unsigned offset,
+                      unsigned size,
+                      const void *clear_value,
+                      int clear_value_size)
+{
+   struct pipe_transfer *dst_t;
+   struct pipe_box box;
+   char *dst;
+   u_box_1d(offset, size, &box);
+
+   dst = pipe->transfer_map(pipe,
+                            res,
+                            0,
+                            PIPE_MAP_WRITE,
+                            &box,
+                            &dst_t);
+
+   switch (clear_value_size) {
+   case 1:
+      memset(dst, *(uint8_t *)clear_value, size);
+      break;
+   case 4:
+      util_memset32(dst, *(uint32_t *)clear_value, size / 4);
+      break;
+   default:
+      for (unsigned i = 0; i < size; i += clear_value_size)
+         memcpy(&dst[i], clear_value, clear_value_size);
+      break;
+   }
+   pipe->transfer_unmap(pipe, dst_t);
+}
+
 void
 llvmpipe_init_surface_functions(struct llvmpipe_context *lp)
 {
@@ -443,6 +487,7 @@ llvmpipe_init_surface_functions(struct llvmpipe_context *lp)
    lp->pipe.surface_destroy = llvmpipe_surface_destroy;
    /* These are not actually functions dealing with surfaces */
    lp->pipe.clear_texture = llvmpipe_clear_texture;
+   lp->pipe.clear_buffer = llvmpipe_clear_buffer;
    lp->pipe.resource_copy_region = lp_resource_copy;
    lp->pipe.blit = lp_blit;
    lp->pipe.flush_resource = lp_flush_resource;

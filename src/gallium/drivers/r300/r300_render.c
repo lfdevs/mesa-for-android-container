@@ -374,7 +374,7 @@ static void r300_draw_arrays_immediate(struct r300_context *r300,
         if (!map[vbi]) {
             map[vbi] = (uint32_t*)r300->rws->buffer_map(
                 r300_resource(vbuf->buffer.resource)->buf,
-                r300->cs, PIPE_TRANSFER_READ | PIPE_TRANSFER_UNSYNCHRONIZED);
+                r300->cs, PIPE_MAP_READ | PIPE_MAP_UNSYNCHRONIZED);
             map[vbi] += (vbuf->buffer_offset / 4) + stride[i] * info->start;
         }
         mapelem[i] = map[vbi] + (velem->src_offset / 4);
@@ -609,8 +609,8 @@ static void r300_draw_elements(struct r300_context *r300,
         /* If we got here, then orgIndexBuffer == indexBuffer. */
         uint16_t *ptr = r300->rws->buffer_map(r300_resource(orgIndexBuffer)->buf,
                                               r300->cs,
-                                              PIPE_TRANSFER_READ |
-                                              PIPE_TRANSFER_UNSYNCHRONIZED);
+                                              PIPE_MAP_READ |
+                                              PIPE_MAP_UNSYNCHRONIZED);
 
         if (info->mode == PIPE_PRIM_TRIANGLES) {
            memcpy(indices3, ptr + start, 6);
@@ -922,7 +922,7 @@ static boolean r300_render_allocate_vertices(struct vbuf_render* render,
         }
         r300->draw_vbo_offset = 0;
         r300render->vbo_ptr = rws->buffer_map(r300->vbo, r300->cs,
-                                              PIPE_TRANSFER_WRITE);
+                                              PIPE_MAP_WRITE);
     }
 
     r300render->vertex_size = vertex_size;

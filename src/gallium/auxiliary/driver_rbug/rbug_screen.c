@@ -268,6 +268,7 @@ rbug_screen_resource_get_param(struct pipe_screen *_screen,
                                struct pipe_resource *_resource,
                                unsigned plane,
                                unsigned layer,
+                               unsigned level,
                                enum pipe_resource_param param,
                                unsigned handle_usage,
                                uint64_t *value)
@@ -279,7 +280,7 @@ rbug_screen_resource_get_param(struct pipe_screen *_screen,
    struct pipe_resource *resource = rb_resource->resource;
 
    return screen->resource_get_param(screen, rb_pipe ? rb_pipe->pipe : NULL,
-                                     resource, plane, layer, param,
+                                     resource, plane, layer, level, param,
                                      handle_usage, value);
 }
 

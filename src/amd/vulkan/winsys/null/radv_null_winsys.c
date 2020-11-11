@@ -63,6 +63,9 @@ static const struct {
 	[CHIP_NAVI10] = { 0x7310, 16 },
 	[CHIP_NAVI12] = { 0x7360, 8 },
 	[CHIP_NAVI14] = { 0x7340, 8 },
+	/* TODO: fill with real info. */
+	[CHIP_SIENNA_CICHLID] = { 0xffff, 8 },
+	[CHIP_NAVY_FLOUNDER] = { 0xffff, 8 },
 };
 
 static void radv_null_winsys_query_info(struct radeon_winsys *rws,

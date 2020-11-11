@@ -92,7 +92,7 @@ svga_define_stream_output(struct svga_context *svga,
                                           bufSize);
       if (!declBuf)
          return PIPE_ERROR;
-      map = sws->buffer_map(sws, declBuf, PIPE_TRANSFER_WRITE);
+      map = sws->buffer_map(sws, declBuf, PIPE_MAP_WRITE);
       if (!map) {
          sws->buffer_destroy(sws, declBuf);
          return PIPE_ERROR;

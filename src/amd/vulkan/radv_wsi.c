@@ -57,7 +57,8 @@ radv_init_wsi(struct radv_physical_device *physical_device)
 					   radv_wsi_proc_addr,
 					   &physical_device->instance->alloc,
 					   physical_device->master_fd,
-					   &physical_device->instance->dri_options);
+					   &physical_device->instance->dri_options,
+					   false);
 	if (result != VK_SUCCESS)
 		return result;
 

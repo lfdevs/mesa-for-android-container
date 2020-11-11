@@ -22,6 +22,7 @@ vk_api_xml = files('registry/vk.xml')
 vulkan_icd_symbols = files('vulkan-icd-symbols.txt')
 
 inc_vulkan_wsi = include_directories('wsi')
+inc_vulkan_util = include_directories('util')
 
 vulkan_wsi_args = []
 vulkan_wsi_deps = []
@@ -32,7 +33,6 @@ if with_platform_x11
   vulkan_wsi_deps += [
     dep_xcb,
     dep_x11_xcb,
-    dep_xcb_dri2,
     dep_xcb_dri3,
     dep_xcb_present,
     dep_xcb_sync,

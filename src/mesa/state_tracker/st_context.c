@@ -89,7 +89,7 @@
 #include "util/u_memory.h"
 #include "cso_cache/cso_context.h"
 #include "compiler/glsl/glsl_parser_extras.h"
-
+#include "nir/nir_to_tgsi.h"
 
 DEBUG_GET_ONCE_BOOL_OPTION(mesa_mvp_dp4, "MESA_MVP_DP4", FALSE)
 
@@ -98,7 +98,7 @@ DEBUG_GET_ONCE_BOOL_OPTION(mesa_mvp_dp4, "MESA_MVP_DP4", FALSE)
  * Called via ctx->Driver.Enable()
  */
 static void
-st_Enable(struct gl_context *ctx, GLenum cap, GLboolean state)
+st_Enable(struct gl_context *ctx, GLenum cap, UNUSED GLboolean state)
 {
    struct st_context *st = st_context(ctx);
 
@@ -553,7 +553,7 @@ st_init_driver_flags(struct st_context *st)
    }
 
    if (st->lower_ucp)
-      f->NewClipPlaneEnable = ST_NEW_VS_STATE;
+      f->NewClipPlaneEnable = ST_NEW_VS_STATE | ST_NEW_GS_STATE;
    else
       f->NewClipPlaneEnable = ST_NEW_RASTERIZER;
 
@@ -722,10 +722,7 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    assert(!ctx->Extensions.OES_geometry_shader || !st->lower_point_size);
    assert(!ctx->Extensions.ARB_tessellation_shader || !st->lower_point_size);
 
-   /* FIXME: add support for geometry and tessellation shaders for
-    * lower_ucp
-    */
-   assert(!ctx->Extensions.OES_geometry_shader || !st->lower_ucp);
+   /* FIXME: add support for tessellation shaders for lower_ucp */
    assert(!ctx->Extensions.ARB_tessellation_shader || !st->lower_ucp);
 
    if (st_have_perfmon(st)) {
@@ -812,10 +809,29 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    st->shader_has_one_variant[MESA_SHADER_GEOMETRY] =
          st->has_shareable_shaders &&
          !st->clamp_frag_depth_in_shader &&
-         !st->clamp_vert_color_in_shader;
+         !st->clamp_vert_color_in_shader &&
+         !st->lower_ucp;
    st->shader_has_one_variant[MESA_SHADER_COMPUTE] = st->has_shareable_shaders;
 
    st->bitmap.cache.empty = true;
+
+   if (ctx->Const.ForceGLNamesReuse && ctx->Shared->RefCount == 1) {
+      _mesa_HashEnableNameReuse(ctx->Shared->TexObjects);
+      _mesa_HashEnableNameReuse(ctx->Shared->ShaderObjects);
+      _mesa_HashEnableNameReuse(ctx->Shared->BufferObjects);
+      _mesa_HashEnableNameReuse(ctx->Shared->SamplerObjects);
+      _mesa_HashEnableNameReuse(ctx->Shared->FrameBuffers);
+      _mesa_HashEnableNameReuse(ctx->Shared->RenderBuffers);
+      _mesa_HashEnableNameReuse(ctx->Shared->MemoryObjects);
+      _mesa_HashEnableNameReuse(ctx->Shared->SemaphoreObjects);
+   }
+   /* SPECviewperf13/sw-04 crashes since a56849ddda6 if Mesa is build with
+    * -O3 on gcc 7.5, which doesn't happen with ForceGLNamesReuse, which is
+    * the default setting for SPECviewperf because it simulates glGen behavior
+    * of closed source drivers.
+    */
+   if (ctx->Const.ForceGLNamesReuse)
+      _mesa_HashEnableNameReuse(ctx->Query.QueryObjects);
 
    _mesa_override_extensions(ctx);
    _mesa_compute_version(ctx);
@@ -889,6 +905,16 @@ st_get_driver_uuid(struct gl_context *ctx, char *uuid)
    assert(GL_UUID_SIZE_EXT >= PIPE_UUID_SIZE);
    memset(uuid, 0, GL_UUID_SIZE_EXT);
    screen->get_driver_uuid(screen, uuid);
+}
+
+
+static void
+st_pin_driver_to_l3_cache(struct gl_context *ctx, unsigned L3_cache)
+{
+   struct pipe_context *pipe = st_context(ctx)->pipe;
+
+   pipe->set_context_param(pipe, PIPE_CONTEXT_PARAM_PIN_THREADS_TO_L3_CACHE,
+                           L3_cache);
 }
 
 
@@ -983,6 +1009,9 @@ st_create_context(gl_api api, struct pipe_context *pipe,
    memset(&funcs, 0, sizeof(funcs));
    st_init_driver_functions(pipe->screen, &funcs);
 
+   if (pipe->set_context_param)
+      funcs.PinDriverToL3Cache = st_pin_driver_to_l3_cache;
+
    ctx = calloc(1, sizeof(struct gl_context));
    if (!ctx)
       return NULL;
@@ -1020,7 +1049,7 @@ st_create_context(gl_api api, struct pipe_context *pipe,
  * texture's sampler views which belong to the context.
  */
 static void
-destroy_tex_sampler_cb(GLuint id, void *data, void *userData)
+destroy_tex_sampler_cb(void *data, void *userData)
 {
    struct gl_texture_object *texObj = (struct gl_texture_object *) data;
    struct st_context *st = (struct st_context *) userData;
@@ -1029,7 +1058,7 @@ destroy_tex_sampler_cb(GLuint id, void *data, void *userData)
 }
 
 static void
-destroy_framebuffer_attachment_sampler_cb(GLuint id, void *data, void *userData)
+destroy_framebuffer_attachment_sampler_cb(void *data, void *userData)
 {
    struct gl_framebuffer* glfb = (struct gl_framebuffer*) data;
    struct st_context *st = (struct st_context *) userData;
@@ -1129,5 +1158,20 @@ st_destroy_context(struct st_context *st)
    } else {
       /* Restore the current context and draw/read buffers (may be NULL) */
       _mesa_make_current(save_ctx, save_drawbuffer, save_readbuffer);
+   }
+}
+
+const struct nir_shader_compiler_options *
+st_get_nir_compiler_options(struct st_context *st, gl_shader_stage stage)
+{
+   const struct nir_shader_compiler_options *options =
+      st->ctx->Const.ShaderCompilerOptions[stage].NirOptions;
+
+   if (options) {
+      return options;
+   } else {
+      return nir_to_tgsi_get_compiler_options(st->pipe->screen,
+                                              PIPE_SHADER_IR_NIR,
+                                              pipe_shader_type_from_mesa(stage));
    }
 }

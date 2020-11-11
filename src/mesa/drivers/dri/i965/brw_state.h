@@ -119,9 +119,6 @@ void gen8_emit_raw_pipe_control(struct brw_context *brw, uint32_t flags,
 void gen9_emit_raw_pipe_control(struct brw_context *brw, uint32_t flags,
                                 struct brw_bo *bo, uint32_t offset,
                                 uint64_t imm);
-void gen10_emit_raw_pipe_control(struct brw_context *brw, uint32_t flags,
-                                 struct brw_bo *bo, uint32_t offset,
-                                 uint64_t imm);
 void gen11_emit_raw_pipe_control(struct brw_context *brw, uint32_t flags,
                                  struct brw_bo *bo, uint32_t offset,
                                  uint64_t imm);
@@ -360,7 +357,6 @@ void gen7_init_atoms(struct brw_context *brw);
 void gen75_init_atoms(struct brw_context *brw);
 void gen8_init_atoms(struct brw_context *brw);
 void gen9_init_atoms(struct brw_context *brw);
-void gen10_init_atoms(struct brw_context *brw);
 void gen11_init_atoms(struct brw_context *brw);
 
 /* Memory Object Control State:

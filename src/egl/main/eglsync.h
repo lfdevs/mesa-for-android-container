@@ -58,7 +58,7 @@ _eglInitSync(_EGLSync *sync, _EGLDisplay *disp, EGLenum type,
 
 
 extern EGLBoolean
-_eglGetSyncAttrib(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSync *sync,
+_eglGetSyncAttrib(_EGLDisplay *disp, _EGLSync *sync,
                   EGLint attribute, EGLAttrib *value);
 
 

@@ -241,6 +241,7 @@ enum quniform_contents {
         QUNIFORM_TEXTURE_DEPTH,
         QUNIFORM_TEXTURE_ARRAY_SIZE,
         QUNIFORM_TEXTURE_LEVELS,
+        QUNIFORM_TEXTURE_SAMPLES,
 
         QUNIFORM_UBO_ADDR,
 
@@ -250,8 +251,9 @@ enum quniform_contents {
         /* Returns the base offset of the SSBO given by the data value. */
         QUNIFORM_SSBO_OFFSET,
 
-        /* Returns the size of the SSBO given by the data value. */
-        QUNIFORM_GET_BUFFER_SIZE,
+        /* Returns the size of the SSBO or UBO given by the data value. */
+        QUNIFORM_GET_SSBO_SIZE,
+        QUNIFORM_GET_UBO_SIZE,
 
         /* Sizes (in pixels) of a shader image given by the data value. */
         QUNIFORM_IMAGE_WIDTH,
@@ -333,6 +335,11 @@ static inline uint8_t v3d_slot_get_component(struct v3d_varying_slot slot)
         return slot.slot_and_component & 3;
 }
 
+enum v3d_execution_environment {
+   V3D_ENVIRONMENT_OPENGL = 0,
+   V3D_ENVIRONMENT_VULKAN,
+};
+
 struct v3d_key {
         void *shader_state;
         struct {
@@ -343,13 +350,16 @@ struct v3d_key {
                 bool clamp_t:1;
                 bool clamp_r:1;
         } tex[V3D_MAX_TEXTURE_SAMPLERS];
+        uint8_t num_tex_used;
         uint8_t ucp_enables;
         bool is_last_geometry_stage;
+        bool robust_buffer_access;
+
+        enum v3d_execution_environment environment;
 };
 
 struct v3d_fs_key {
         struct v3d_key base;
-        bool depth_enabled;
         bool is_points;
         bool is_lines;
         bool line_smoothing;
@@ -403,6 +413,12 @@ struct v3d_vs_key {
 
         struct v3d_varying_slot used_outputs[V3D_MAX_ANY_STAGE_INPUTS];
         uint8_t num_used_outputs;
+
+        /* A bit-mask indicating if we need to swap the R/B channels for
+         * vertex attributes. Since the hardware doesn't provide any
+         * means to swizzle vertex attributes we need to do it in the shader.
+         */
+        uint32_t va_swap_rb_mask;
 
         bool is_coord;
         bool per_vertex_point_size;
@@ -508,6 +524,17 @@ struct v3d_compiler {
         unsigned int reg_class_phys_or_acc[3];
 };
 
+/**
+ * This holds partially interpolated inputs as provided by hardware
+ * (The Vp = A*(x - x0) + B*(y - y0) term), as well as the C coefficient
+ * required to compute the final interpolated value.
+ */
+struct v3d_interp_input {
+   struct qreg vp;
+   struct qreg C;
+   unsigned mode; /* interpolation mode */
+};
+
 struct v3d_compile {
         const struct v3d_device_info *devinfo;
         nir_shader *s;
@@ -535,6 +562,10 @@ struct v3d_compile {
          * Not all fragment shader QFILE_VARY reads are present in this array.
          */
         struct qreg *inputs;
+        /**
+         * Partially interpolated inputs to the shader.
+         */
+        struct v3d_interp_input *interp;
         struct qreg *outputs;
         bool msaa_per_sample_output;
         struct qreg color_reads[V3D_MAX_DRAW_BUFFERS * V3D_MAX_SAMPLES * 4];
@@ -557,6 +588,11 @@ struct v3d_compile {
         bool writes_z;
         bool uses_implicit_point_line_varyings;
 
+        /* If the fragment shader does anything that requires to force
+         * per-sample MSAA, such as reading gl_SampleID.
+         */
+        bool force_per_sample_msaa;
+
         /* Whether we are using the fallback scheduler. This will be set after
          * register allocation has failed once.
          */
@@ -577,8 +613,14 @@ struct v3d_compile {
         struct qreg iid;
 
         /**
-         * Vertex ID, which comes in before the vertex attribute payload
+         * Base Instance ID, which comes in before the vertex attribute payload
          * (after Instance ID) if the shader record requests it.
+         */
+        struct qreg biid;
+
+        /**
+         * Vertex ID, which comes in before the vertex attribute payload
+         * (after Base Instance) if the shader record requests it.
          */
         struct qreg vid;
 
@@ -677,6 +719,9 @@ struct v3d_compile {
         bool emitted_tlb_load;
         bool lock_scoreboard_on_first_thrsw;
 
+        /* Total number of spilled registers in the program */
+        uint32_t spill_count;
+
         enum v3d_compilation_result compilation_result;
 
         bool tmu_dirty_rcl;
@@ -706,7 +751,7 @@ struct v3d_prog_data {
 struct v3d_vs_prog_data {
         struct v3d_prog_data base;
 
-        bool uses_iid, uses_vid;
+        bool uses_iid, uses_biid, uses_vid;
 
         /* Number of components read from each vertex attribute. */
         uint8_t vattr_sizes[V3D_MAX_VS_INPUTS / 4];
@@ -778,6 +823,7 @@ struct v3d_fs_prog_data {
         bool uses_center_w;
         bool uses_implicit_point_line_varyings;
         bool lock_scoreboard_on_first_thrsw;
+        bool force_per_sample_msaa;
 };
 
 struct v3d_compute_prog_data {
@@ -808,6 +854,7 @@ uint64_t *v3d_compile(const struct v3d_compiler *compiler,
                       int program_id, int variant_id,
                       uint32_t *final_assembly_size);
 
+uint32_t v3d_prog_data_size(gl_shader_stage stage);
 void v3d_nir_to_vir(struct v3d_compile *c);
 
 void vir_compile_destroy(struct v3d_compile *c);
@@ -841,6 +888,7 @@ void vir_set_pf(struct qinst *inst, enum v3d_qpu_pf pf);
 void vir_set_uf(struct qinst *inst, enum v3d_qpu_uf uf);
 void vir_set_unpack(struct qinst *inst, int src,
                     enum v3d_qpu_input_unpack unpack);
+void vir_set_pack(struct qinst *inst, enum v3d_qpu_output_pack pack);
 
 struct qreg vir_get_temp(struct v3d_compile *c);
 void vir_emit_last_thrsw(struct v3d_compile *c);
@@ -881,6 +929,7 @@ void v3d_nir_lower_blend(nir_shader *s, struct v3d_compile *c);
 void v3d_nir_lower_io(nir_shader *s, struct v3d_compile *c);
 void v3d_nir_lower_line_smooth(nir_shader *shader);
 void v3d_nir_lower_logic_ops(nir_shader *s, struct v3d_compile *c);
+void v3d_nir_lower_robust_buffer_access(nir_shader *shader, struct v3d_compile *c);
 void v3d_nir_lower_scratch(nir_shader *s);
 void v3d_nir_lower_txf_ms(nir_shader *s, struct v3d_compile *c);
 void v3d_nir_lower_image_load_store(nir_shader *s);
@@ -898,6 +947,8 @@ uint32_t v3d_qpu_schedule_instructions(struct v3d_compile *c);
 void qpu_validate(struct v3d_compile *c);
 struct qpu_reg *v3d_register_allocate(struct v3d_compile *c, bool *spilled);
 bool vir_init_reg_sets(struct v3d_compiler *compiler);
+
+int v3d_shaderdb_dump(struct v3d_compile *c, char **shaderdb_str);
 
 bool v3d_gl_format_is_return_32(GLenum format);
 
@@ -1083,6 +1134,7 @@ VIR_A_ALU0(YCD)
 VIR_A_ALU0(MSF)
 VIR_A_ALU0(REVF)
 VIR_A_ALU0(BARRIERID)
+VIR_A_ALU0(SAMPID)
 VIR_A_NODST_1(VPMSETUP)
 VIR_A_NODST_0(VPMWT)
 VIR_A_ALU2(FCMP)

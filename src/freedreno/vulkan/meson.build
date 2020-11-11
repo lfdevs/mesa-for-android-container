@@ -47,10 +47,10 @@ libtu_files = files(
   'tu_device.c',
   'tu_descriptor_set.c',
   'tu_descriptor_set.h',
-  'tu_drm.c',
-  'tu_fence.c',
   'tu_formats.c',
   'tu_image.c',
+  'tu_legacy.c',
+  'tu_nir_lower_multiview.c',
   'tu_pass.c',
   'tu_pipeline.c',
   'tu_pipeline_cache.c',
@@ -59,12 +59,14 @@ libtu_files = files(
   'tu_shader.c',
   'tu_util.c',
   'tu_util.h',
-  'tu_wsi.c',
   'vk_format.h',
 )
 
 tu_deps = []
 tu_flags = []
+tu_link_with = []
+
+tu_wsi = false
 
 if with_platform_x11
   tu_deps += dep_xcb_dri3
@@ -73,17 +75,25 @@ if with_platform_x11
     '-DVK_USE_PLATFORM_XLIB_KHR',
   ]
   libtu_files += files('tu_wsi_x11.c')
+  tu_wsi = true
 endif
 
 if with_platform_wayland
   tu_deps += dep_wayland_client
   tu_flags += '-DVK_USE_PLATFORM_WAYLAND_KHR'
   libtu_files += files('tu_wsi_wayland.c')
+  tu_wsi = true
 endif
 
 if system_has_kms_drm and not with_platform_android
   tu_flags += '-DVK_USE_PLATFORM_DISPLAY_KHR'
   libtu_files += files('tu_wsi_display.c')
+  tu_wsi = true
+endif
+
+if tu_wsi
+  libtu_files += 'tu_wsi.c'
+  tu_link_with += libvulkan_wsi
 endif
 
 if with_platform_android
@@ -95,6 +105,13 @@ endif
 if with_xlib_lease
   tu_deps += [dep_xcb_xrandr, dep_xlib_xrandr]
   tu_flags += '-DVK_USE_PLATFORM_XLIB_XRANDR_EXT'
+endif
+
+if with_freedreno_kgsl
+  libtu_files += files('tu_kgsl.c')
+else
+  libtu_files += files('tu_drm.c')
+  tu_deps += dep_libdrm
 endif
 
 libvulkan_freedreno = shared_library(
@@ -112,7 +129,7 @@ libvulkan_freedreno = shared_library(
     inc_freedreno,
   ],
   link_with : [
-    libvulkan_wsi,
+    tu_link_with,
     libfreedreno_ir3,
     libfreedreno_layout,
   ],
@@ -120,7 +137,6 @@ libvulkan_freedreno = shared_library(
     idep_libfreedreno_common,
     dep_dl,
     dep_elf,
-    dep_libdrm,
     dep_m,
     dep_thread,
     dep_valgrind,

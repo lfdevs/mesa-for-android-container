@@ -39,6 +39,7 @@ static const struct {
    const char *name;
    int pci_id;
 } name_map[] = {
+   { "lpt", 0x27a2 },
    { "brw", 0x2a02 },
    { "g4x", 0x2a42 },
    { "ilk", 0x0042 },
@@ -56,13 +57,13 @@ static const struct {
    { "cfl", 0x3E9B },
    { "whl", 0x3EA1 },
    { "cml", 0x9b41 },
-   { "cnl", 0x5a52 },
    { "icl", 0x8a52 },
    { "ehl", 0x4500 },
    { "jsl", 0x4E71 },
    { "tgl", 0x9a49 },
    { "rkl", 0x4c8a },
    { "dg1", 0x4905 },
+   { "adl", 0x4680 },
 };
 
 /**
@@ -80,6 +81,11 @@ gen_device_name_to_pci_device_id(const char *name)
 
    return -1;
 }
+
+static const struct gen_device_info gen_device_info_gen3 = {
+   .gen = 3,
+   .simulator_id = -1,
+};
 
 static const struct gen_device_info gen_device_info_i965 = {
    .gen = 4,
@@ -784,67 +790,7 @@ static const struct gen_device_info gen_device_info_cfl_gt3 = {
    .simulator_id = 24,
 };
 
-#define GEN10_HW_INFO                               \
-   .gen = 10,                                       \
-   .num_thread_per_eu = 7,                          \
-   .max_vs_threads = 728,                           \
-   .max_gs_threads = 432,                           \
-   .max_tcs_threads = 432,                          \
-   .max_tes_threads = 624,                          \
-   .max_cs_threads = 56,                            \
-   .timestamp_frequency = 19200000,                 \
-   .urb = {                                         \
-      .min_entries = {                              \
-         [MESA_SHADER_VERTEX]    = 64,              \
-         [MESA_SHADER_TESS_EVAL] = 34,              \
-      },                                            \
-      .max_entries = {                              \
-      [MESA_SHADER_VERTEX]       = 3936,            \
-      [MESA_SHADER_TESS_CTRL]    = 896,             \
-      [MESA_SHADER_TESS_EVAL]    = 2064,            \
-      [MESA_SHADER_GEOMETRY]     = 832,             \
-      },                                            \
-   }
-
 #define subslices(args...) { args, }
-
-#define GEN10_FEATURES(_gt, _slices, _subslices, _l3) \
-   GEN8_FEATURES,                                   \
-   GEN10_HW_INFO,                                   \
-   .has_sample_with_hiz = true,                     \
-   .gt = _gt,                                       \
-   .num_slices = _slices,                           \
-   .num_subslices = _subslices,                     \
-   .num_eu_per_subslice = 8,                        \
-   .l3_banks = _l3
-
-static const struct gen_device_info gen_device_info_cnl_gt0_5 = {
-   /* GT0.5 */
-   GEN10_FEATURES(1, 1, subslices(2), 2),
-   .is_cannonlake = true,
-   .simulator_id = 15,
-};
-
-static const struct gen_device_info gen_device_info_cnl_gt1 = {
-   /* GT1 */
-   GEN10_FEATURES(1, 1, subslices(3), 3),
-   .is_cannonlake = true,
-   .simulator_id = 15,
-};
-
-static const struct gen_device_info gen_device_info_cnl_gt1_5 = {
-   /* GT 1.5 */
-   GEN10_FEATURES(1, 2, subslices(2, 2), 6),
-   .is_cannonlake = true,
-   .simulator_id = 15,
-};
-
-static const struct gen_device_info gen_device_info_cnl_gt2 = {
-   /* GT2 */
-   GEN10_FEATURES(2, 2, subslices(3, 2), 6),
-   .is_cannonlake = true,
-   .simulator_id = 15,
-};
 
 #define GEN11_HW_INFO                               \
    .gen = 11,                                       \
@@ -1011,6 +957,14 @@ static const struct gen_device_info gen_device_info_rkl_gt05 = {
 };
 
 static const struct gen_device_info gen_device_info_rkl_gt1 = {
+   GEN12_GT_FEATURES(1),
+};
+
+static const struct gen_device_info gen_device_info_adl_gt05 = {
+   GEN12_GT05_FEATURES,
+};
+
+static const struct gen_device_info gen_device_info_adl_gt1 = {
    GEN12_GT_FEATURES(1),
 };
 
@@ -1255,6 +1209,12 @@ gen_get_device_info_from_pci_id(int pci_id,
       case id: *devinfo = gen_device_info_##family; break;
 #include "pci_ids/i965_pci_ids.h"
 #include "pci_ids/iris_pci_ids.h"
+
+#undef CHIPSET
+#define CHIPSET(id, fam_str, name) \
+      case id: *devinfo = gen_device_info_gen3; break;
+#include "pci_ids/i915_pci_ids.h"
+
    default:
       fprintf(stderr, "Driver does not support the 0x%x PCI ID.\n", pci_id);
       return false;
@@ -1278,7 +1238,6 @@ gen_get_device_info_from_pci_id(int pci_id,
 
    switch(devinfo->gen) {
    case 9:
-   case 10:
       devinfo->max_wm_threads = 64 /* threads-per-PSD */
                               * devinfo->num_slices
                               * 4; /* effective subslices per slice */
@@ -1448,6 +1407,11 @@ gen_get_device_info_from_fd(int fd, struct gen_device_info *devinfo)
       if (!gen_get_device_info_from_pci_id(devid, devinfo))
          return false;
       devinfo->no_hw = false;
+   }
+
+   if (devinfo->gen == 10) {
+      fprintf(stderr, "Gen10 support is redacted.\n");
+      return false;
    }
 
    /* remaining initializion queries the kernel for device info */

@@ -41,6 +41,7 @@ extern "C" {
 struct pipe_screen;
 struct ureg_program;
 struct pipe_stream_output_info;
+struct shader_info;
 
 /* Almost a tgsi_src_register, but we need to pull in the Absolute
  * flag from the _ext token.  Indirect flag always implies ADDR[0].
@@ -814,6 +815,32 @@ static inline void ureg_##op( struct ureg_program *ureg,                \
    ureg_fixup_insn_size( ureg, insn.insn_token );                       \
 }
 
+#define OP14( op )                                                      \
+static inline void ureg_##op( struct ureg_program *ureg,                \
+                              struct ureg_dst dst,                      \
+                              struct ureg_src src0,                     \
+                              struct ureg_src src1,                     \
+                              struct ureg_src src2,                     \
+                              struct ureg_src src3 )                    \
+{                                                                       \
+   enum tgsi_opcode opcode = TGSI_OPCODE_##op;                          \
+   struct ureg_emit_insn_result insn;                                   \
+   if (ureg_dst_is_empty(dst))                                          \
+      return;                                                           \
+   insn = ureg_emit_insn(ureg,                                          \
+                         opcode,                                        \
+                         dst.Saturate,                                  \
+                         0,                                             \
+                         1,                                             \
+                         4);                                            \
+   ureg_emit_dst( ureg, dst );                                          \
+   ureg_emit_src( ureg, src0 );                                         \
+   ureg_emit_src( ureg, src1 );                                         \
+   ureg_emit_src( ureg, src2 );                                         \
+   ureg_emit_src( ureg, src3 );                                         \
+   ureg_fixup_insn_size( ureg, insn.insn_token );                       \
+}
+
 #define OP14_TEX( op )                                                  \
 static inline void ureg_##op( struct ureg_program *ureg,                \
                               struct ureg_dst dst,                      \
@@ -1190,6 +1217,9 @@ ureg_dst_is_undef( struct ureg_dst dst )
    return dst.File == TGSI_FILE_NULL;
 }
 
+void
+ureg_setup_shader_info(struct ureg_program *ureg,
+                       const struct shader_info *info);
 
 #ifdef __cplusplus
 }

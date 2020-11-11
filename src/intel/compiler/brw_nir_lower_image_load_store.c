@@ -653,6 +653,8 @@ lower_image_size_instr(nir_builder *b,
    if (isl_has_matching_typed_storage_image_format(devinfo, image_fmt))
       return false;
 
+   assert(nir_src_as_uint(intrin->src[1]) == 0);
+
    b->cursor = nir_instr_remove(&intrin->instr);
 
    nir_ssa_def *size = load_image_param(b, deref, SIZE);

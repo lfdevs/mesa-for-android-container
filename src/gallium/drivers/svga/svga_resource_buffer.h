@@ -278,7 +278,7 @@ svga_buffer_has_hw_storage(struct svga_buffer *sbuf)
 
 /**
  * Map the hardware storage of a buffer.
- * \param flags  bitmask of PIPE_TRANSFER_* flags
+ * \param flags  bitmask of PIPE_MAP_* flags
  */
 static inline void *
 svga_buffer_hw_storage_map(struct svga_context *svga,
@@ -295,7 +295,7 @@ svga_buffer_hw_storage_map(struct svga_context *svga,
       void *map;
 
       if (swc->force_coherent) {
-         flags |= PIPE_TRANSFER_PERSISTENT | PIPE_TRANSFER_COHERENT;
+         flags |= PIPE_MAP_PERSISTENT | PIPE_MAP_COHERENT;
       }
       map = swc->surface_map(swc, sbuf->handle, flags, retry, &rebind);
       if (map && rebind) {

@@ -3050,7 +3050,7 @@ struct gl_shader_program
       GLint VerticesIn;
 
       bool UsesEndPrimitive;
-      bool UsesStreams;
+      unsigned ActiveStreamMask;
    } Geom;
 
    /**
@@ -3871,9 +3871,12 @@ struct gl_constants
    GLboolean AllowHigherCompatVersion;
 
    /**
-    * Allow layout qualifiers on function parameters.
+    * Allow extra tokens at end of preprocessor directives. The CTS now tests
+    * to make sure these are not allowed. However, previously drivers would
+    * allow them to exist and just issue a warning so some old applications
+    * depend on this.
     */
-   GLboolean AllowLayoutQualifiersOnFunctionParameters;
+   GLboolean AllowExtraPPTokens;
 
    /**
     * Force computing the absolute value for sqrt() and inversesqrt() to follow
@@ -3889,6 +3892,11 @@ struct gl_constants
     *        function out variables are now initialized.
     */
    GLchar GLSLZeroInit;
+
+   /**
+    * Force GL names reuse. Needed by SPECviewperf13.
+    */
+   GLboolean ForceGLNamesReuse;
 
    /**
     * Treat integer textures using GL_LINEAR filters as GL_NEAREST.
@@ -4247,6 +4255,7 @@ struct gl_extensions
    GLboolean ARB_conservative_depth;
    GLboolean ARB_copy_image;
    GLboolean ARB_cull_distance;
+   GLboolean EXT_color_buffer_half_float;
    GLboolean ARB_depth_buffer_float;
    GLboolean ARB_depth_clamp;
    GLboolean ARB_depth_texture;
@@ -4436,7 +4445,6 @@ struct gl_extensions
    GLboolean KHR_texture_compression_astc_sliced_3d;
    GLboolean MESA_framebuffer_flip_y;
    GLboolean MESA_tile_raster_order;
-   GLboolean MESA_pack_invert;
    GLboolean EXT_shader_framebuffer_fetch;
    GLboolean EXT_shader_framebuffer_fetch_non_coherent;
    GLboolean MESA_shader_integer_functions;
@@ -4444,12 +4452,14 @@ struct gl_extensions
    GLboolean NV_alpha_to_coverage_dither_control;
    GLboolean NV_compute_shader_derivatives;
    GLboolean NV_conditional_render;
+   GLboolean NV_copy_depth_to_color;
    GLboolean NV_copy_image;
    GLboolean NV_fill_rectangle;
    GLboolean NV_fog_distance;
    GLboolean NV_point_sprite;
    GLboolean NV_primitive_restart;
    GLboolean NV_shader_atomic_float;
+   GLboolean NV_shader_atomic_int64;
    GLboolean NV_texture_barrier;
    GLboolean NV_texture_env_combine4;
    GLboolean NV_texture_rectangle;

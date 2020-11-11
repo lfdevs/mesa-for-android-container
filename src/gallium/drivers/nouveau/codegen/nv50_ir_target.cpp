@@ -351,29 +351,8 @@ CodeEmitter::prepareEmission(BasicBlock *bb)
    func->binSize += bb->binSize;
 }
 
-void
-Program::emitSymbolTable(struct nv50_ir_prog_info *info)
-{
-   unsigned int n = 0, nMax = allFuncs.getSize();
-
-   info->bin.syms =
-      (struct nv50_ir_prog_symbol *)MALLOC(nMax * sizeof(*info->bin.syms));
-
-   for (ArrayList::Iterator fi = allFuncs.iterator();
-        !fi.end();
-        fi.next(), ++n) {
-      Function *f = (Function *)fi.get();
-      assert(n < nMax);
-
-      info->bin.syms[n].label = f->getLabel();
-      info->bin.syms[n].offset = f->binPos;
-   }
-
-   info->bin.numSyms = n;
-}
-
 bool
-Program::emitBinary(struct nv50_ir_prog_info *info)
+Program::emitBinary(struct nv50_ir_prog_info_out *info)
 {
    CodeEmitter *emit = target->getCodeEmitter(progType);
 
@@ -410,8 +389,6 @@ Program::emitBinary(struct nv50_ir_prog_info *info)
    info->io.fp64 |= fp64;
    info->bin.relocData = emit->getRelocInfo();
    info->bin.fixupData = emit->getFixupInfo();
-
-   emitSymbolTable(info);
 
    // the nvc0 driver will print the binary iself together with the header
    if ((dbgFlags & NV50_IR_DEBUG_BASIC) && getTarget()->getChipset() < 0xc0)

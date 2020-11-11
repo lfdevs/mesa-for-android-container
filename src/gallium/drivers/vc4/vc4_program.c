@@ -115,7 +115,7 @@ indirect_uniform_load(struct vc4_compile *c, nir_intrinsic_instr *intr)
 static struct qreg
 vc4_ubo_load(struct vc4_compile *c, nir_intrinsic_instr *intr)
 {
-        int buffer_index = nir_src_as_uint(intr->src[0]);
+        ASSERTED int buffer_index = nir_src_as_uint(intr->src[0]);
         assert(buffer_index == 1);
         assert(c->stage == QSTAGE_FRAG);
 
@@ -958,7 +958,7 @@ ntq_emit_comparison(struct vc4_compile *c, struct qreg *dest,
         case nir_op_seq:
                 cond = QPU_COND_ZS;
                 break;
-        case nir_op_fne32:
+        case nir_op_fneu32:
         case nir_op_ine32:
         case nir_op_sne:
                 cond = QPU_COND_ZC;
@@ -1213,7 +1213,7 @@ ntq_emit_alu(struct vc4_compile *c, nir_alu_instr *instr)
         case nir_op_sge:
         case nir_op_slt:
         case nir_op_feq32:
-        case nir_op_fne32:
+        case nir_op_fneu32:
         case nir_op_fge32:
         case nir_op_flt32:
         case nir_op_ieq32:
@@ -1546,8 +1546,7 @@ vc4_optimize_nir(struct nir_shader *s)
 
                         NIR_PASS(lower_flrp_progress, s, nir_lower_flrp,
                                  lower_flrp,
-                                 false /* always_precise */,
-                                 s->options->lower_ffma);
+                                 false /* always_precise */);
                         if (lower_flrp_progress) {
                                 NIR_PASS(progress, s, nir_opt_constant_folding);
                                 progress = true;
@@ -1802,11 +1801,6 @@ ntq_emit_intrinsic(struct vc4_compile *c, nir_intrinsic_instr *instr)
                 ntq_store_dest(c, &instr->dest, 0,
                                qir_uniform(c, QUNIFORM_BLEND_CONST_COLOR_AAAA,
                                            0));
-                break;
-
-        case nir_intrinsic_load_alpha_ref_float:
-                ntq_store_dest(c, &instr->dest, 0,
-                               qir_uniform(c, QUNIFORM_ALPHA_REF, 0));
                 break;
 
         case nir_intrinsic_load_sample_mask_in:
@@ -2180,7 +2174,9 @@ static const nir_shader_compiler_options nir_options = {
         .lower_extract_byte = true,
         .lower_extract_word = true,
         .lower_fdiv = true,
-        .lower_ffma = true,
+        .lower_ffma16 = true,
+        .lower_ffma32 = true,
+        .lower_ffma64 = true,
         .lower_flrp32 = true,
         .lower_fmod = true,
         .lower_fpow = true,
@@ -2192,6 +2188,7 @@ static const nir_shader_compiler_options nir_options = {
         .lower_to_scalar = true,
         .lower_umax = true,
         .lower_umin = true,
+        .lower_isign = true,
         .max_unroll_iterations = 32,
 };
 
@@ -2254,13 +2251,6 @@ vc4_shader_ntq(struct vc4_context *vc4, enum qstage stage,
         c->s = nir_shader_clone(c, key->shader_state->base.ir.nir);
 
         if (stage == QSTAGE_FRAG) {
-                if (c->fs_key->alpha_test_func != COMPARE_FUNC_ALWAYS) {
-                        NIR_PASS_V(c->s, nir_lower_alpha_test,
-                                   c->fs_key->alpha_test_func,
-                                   c->fs_key->sample_alpha_to_one &&
-                                   c->fs_key->msaa,
-                                   NULL);
-                }
                 NIR_PASS_V(c->s, vc4_nir_lower_blend, c);
         }
 

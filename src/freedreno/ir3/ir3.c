@@ -954,10 +954,17 @@ void * ir3_assemble(struct ir3_shader_variant *v)
 			if ((instr->opc == OPC_BARY_F) && (instr->regs[0]->flags & IR3_REG_EI))
 				info->last_baryf = info->instrs_count;
 
-			info->instrs_count += 1 + instr->repeat + instr->nop;
-			info->nops_count += instr->nop;
-			if (instr->opc == OPC_NOP)
-				info->nops_count += 1 + instr->repeat;
+			unsigned instrs_count = 1 + instr->repeat + instr->nop;
+			unsigned nops_count = instr->nop;
+
+			if (instr->opc == OPC_NOP) {
+				nops_count = 1 + instr->repeat;
+				info->instrs_per_cat[0] += nops_count;
+			} else {
+				info->instrs_per_cat[opc_cat(instr->opc)] += instrs_count;
+				info->instrs_per_cat[0] += nops_count;
+			}
+
 			if (instr->opc == OPC_MOV) {
 				if (instr->cat1.src_type == instr->cat1.dst_type) {
 					info->mov_count += 1 + instr->repeat;
@@ -965,6 +972,10 @@ void * ir3_assemble(struct ir3_shader_variant *v)
 					info->cov_count += 1 + instr->repeat;
 				}
 			}
+
+			info->instrs_count += instrs_count;
+			info->nops_count += nops_count;
+
 			dwords += 2;
 
 			if (instr->flags & IR3_INSTR_SS) {

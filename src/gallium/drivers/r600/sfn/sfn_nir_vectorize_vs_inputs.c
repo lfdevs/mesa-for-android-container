@@ -87,7 +87,7 @@ r600_instr_can_rewrite(nir_instr *instr)
       return false;
 
    nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
-   if (deref->mode != nir_var_shader_in)
+   if (!nir_deref_mode_is(deref, nir_var_shader_in))
       return false;
 
    return r600_variable_can_rewrite(nir_deref_instr_get_variable(deref));

@@ -317,6 +317,13 @@ fd_bc_alloc_batch(struct fd_batch_cache *cache, struct fd_context *ctx, bool non
 	struct fd_batch *batch;
 	uint32_t idx;
 
+	/* For normal draw batches, pctx->set_framebuffer_state() handles
+	 * this, but for nondraw batches, this is a nice central location
+	 * to handle them all.
+	 */
+	if (nondraw)
+		fd_context_switch_from(ctx);
+
 	fd_screen_lock(ctx->screen);
 
 	while ((idx = ffs(~cache->batch_mask)) == 0) {
@@ -381,6 +388,9 @@ fd_bc_alloc_batch(struct fd_batch_cache *cache, struct fd_context *ctx, bool non
 
 	debug_assert(cache->batches[idx] == NULL);
 	cache->batches[idx] = batch;
+
+	if (nondraw)
+		fd_context_switch_to(ctx, batch);
 
 out:
 	fd_screen_unlock(ctx->screen);

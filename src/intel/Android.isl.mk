@@ -162,25 +162,6 @@ include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 # ---------------------------------------
-# Build libmesa_isl_gen10
-# ---------------------------------------
-
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := libmesa_isl_gen10
-
-LOCAL_SRC_FILES := $(ISL_GEN10_FILES)
-
-LOCAL_CFLAGS := -DGEN_VERSIONx10=100
-
-LOCAL_C_INCLUDES := $(LIBISL_GENX_COMMON_INCLUDES)
-
-LOCAL_WHOLE_STATIC_LIBRARIES := libmesa_genxml
-
-include $(MESA_COMMON_MK)
-include $(BUILD_STATIC_LIBRARY)
-
-# ---------------------------------------
 # Build libmesa_isl_gen11
 # ---------------------------------------
 
@@ -286,7 +267,6 @@ LOCAL_WHOLE_STATIC_LIBRARIES := \
 	libmesa_isl_gen75 \
 	libmesa_isl_gen8 \
 	libmesa_isl_gen9 \
-	libmesa_isl_gen10 \
 	libmesa_isl_gen11 \
 	libmesa_isl_gen12 \
 	libmesa_genxml \

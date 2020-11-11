@@ -35,6 +35,7 @@ struct virgl_resource_cache_entry {
    uint32_t size;
    uint32_t bind;
    uint32_t format;
+   uint32_t flags;
 };
 
 /* Pointer to a function that returns whether the resource represented by
@@ -81,7 +82,7 @@ virgl_resource_cache_add(struct virgl_resource_cache *cache,
 struct virgl_resource_cache_entry *
 virgl_resource_cache_remove_compatible(struct virgl_resource_cache *cache,
                                        uint32_t size, uint32_t bind,
-                                       uint32_t format);
+                                       uint32_t format, uint32_t flags);
 
 /** Empties the resource cache. */
 void
@@ -90,11 +91,12 @@ virgl_resource_cache_flush(struct virgl_resource_cache *cache);
 static inline void
 virgl_resource_cache_entry_init(struct virgl_resource_cache_entry *entry,
                                 uint32_t size, uint32_t bind,
-                                uint32_t format)
+                                uint32_t format, uint32_t flags)
 {
    entry->size = size;
    entry->bind = bind;
    entry->format = format;
+   entry->flags = flags;
 }
 
 #endif

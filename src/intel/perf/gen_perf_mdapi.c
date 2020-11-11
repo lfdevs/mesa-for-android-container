@@ -92,7 +92,6 @@ gen_perf_query_result_write_mdapi(void *data, uint32_t data_size,
       return sizeof(*mdapi_data);
    }
    case 9:
-   case 10:
    case 11:
    case 12:{
       struct gen9_mdapi_metrics *mdapi_data = (struct gen9_mdapi_metrics *) data;
@@ -294,7 +293,6 @@ gen_perf_register_mdapi_oa_query(struct gen_perf_config *perf,
       break;
    }
    case 9:
-   case 10:
    case 11:
    case 12: {
       query = gen_perf_append_query_info(perf, 2 + 36 + 16 + 16 + 16 + 2);

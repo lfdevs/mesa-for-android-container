@@ -302,7 +302,7 @@ void BackendSampleRate(DRAW_CONTEXT*        pDC,
 
             if (useAlternateOffset)
             {
-                DWORD    rt;
+                unsigned long rt;
                 uint32_t rtMask = state.colorHottileEnable;
                 while (_BitScanForward(&rt, rtMask))
                 {

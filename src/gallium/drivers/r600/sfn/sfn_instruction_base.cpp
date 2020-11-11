@@ -60,7 +60,13 @@ void ValueRemapper::remap(PValue& v)
       size_t range_end = range_start + val.array_size();
       while (range_start < range_end)
          m_map[range_start++].used = true;
+   } else if (v->type() == Value::kconst) {
+      auto& val = static_cast<UniformValue&>(*v);
+      auto addr = val.addr();
+      if (addr && addr->type() == Value::gpr)
+            val.reset_addr(remap_one_registers(addr));
    }
+
 }
 
 void ValueRemapper::remap(GPRVector& v)

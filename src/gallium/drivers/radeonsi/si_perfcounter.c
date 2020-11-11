@@ -836,11 +836,11 @@ static void si_pc_emit_start(struct si_context *sctx, struct si_resource *buffer
                    COPY_DATA_IMM, NULL, 1);
 
    radeon_set_uconfig_reg(cs, R_036020_CP_PERFMON_CNTL,
-                          S_036020_PERFMON_STATE(V_036020_DISABLE_AND_RESET));
+                          S_036020_PERFMON_STATE(V_036020_CP_PERFMON_STATE_DISABLE_AND_RESET));
    radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
    radeon_emit(cs, EVENT_TYPE(V_028A90_PERFCOUNTER_START) | EVENT_INDEX(0));
    radeon_set_uconfig_reg(cs, R_036020_CP_PERFMON_CNTL,
-                          S_036020_PERFMON_STATE(V_036020_START_COUNTING));
+                          S_036020_PERFMON_STATE(V_036020_CP_PERFMON_STATE_START_COUNTING));
 }
 
 /* Note: The buffer was already added in si_pc_emit_start, so we don't have to
@@ -859,7 +859,7 @@ static void si_pc_emit_stop(struct si_context *sctx, struct si_resource *buffer,
    radeon_emit(cs, EVENT_TYPE(V_028A90_PERFCOUNTER_STOP) | EVENT_INDEX(0));
    radeon_set_uconfig_reg(
       cs, R_036020_CP_PERFMON_CNTL,
-      S_036020_PERFMON_STATE(V_036020_STOP_COUNTING) | S_036020_PERFMON_SAMPLE_ENABLE(1));
+      S_036020_PERFMON_STATE(V_036020_CP_PERFMON_STATE_STOP_COUNTING) | S_036020_PERFMON_SAMPLE_ENABLE(1));
 }
 
 static void si_pc_emit_read(struct si_context *sctx, struct si_pc_block *block, unsigned count,
@@ -941,7 +941,7 @@ static void si_pc_query_resume(struct si_context *sctx, struct si_query *squery)
 
    if (!si_query_buffer_alloc(sctx, &query->buffer, NULL, query->result_size))
       return;
-   si_need_gfx_cs_space(sctx);
+   si_need_gfx_cs_space(sctx, 0);
 
    if (query->shaders)
       si_pc_emit_shaders(sctx, query->shaders);
@@ -1053,7 +1053,7 @@ static bool si_pc_query_get_result(struct si_context *sctx, struct si_query *squ
    memset(result, 0, sizeof(result->batch[0]) * query->num_counters);
 
    for (struct si_query_buffer *qbuf = &query->buffer; qbuf; qbuf = qbuf->previous) {
-      unsigned usage = PIPE_TRANSFER_READ | (wait ? 0 : PIPE_TRANSFER_DONTBLOCK);
+      unsigned usage = PIPE_MAP_READ | (wait ? 0 : PIPE_MAP_DONTBLOCK);
       unsigned results_base = 0;
       void *map;
 

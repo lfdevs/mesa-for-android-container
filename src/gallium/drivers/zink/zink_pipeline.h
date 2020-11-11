@@ -41,16 +41,26 @@ struct zink_gfx_pipeline_state {
 
    struct zink_vertex_elements_hw_state *element_state;
    VkVertexInputBindingDescription bindings[PIPE_MAX_ATTRIBS]; // combination of element_state and stride
+   VkVertexInputBindingDivisorDescriptionEXT divisors[PIPE_MAX_ATTRIBS];
+   uint8_t divisors_present;
 
    uint32_t num_attachments;
    struct zink_blend_state *blend_state;
 
    struct zink_rasterizer_hw_state *rast_state;
 
-   struct zink_depth_stencil_alpha_state *depth_stencil_alpha_state;
+   struct zink_depth_stencil_alpha_hw_state *depth_stencil_alpha_state;
 
    VkSampleMask sample_mask;
    uint8_t rast_samples;
+
+   unsigned num_viewports;
+
+   bool primitive_restart;
+
+   /* Pre-hashed value for table lookup, invalid when zero.
+    * Members after this point are not included in pipeline state hash key */
+   uint32_t hash;
 };
 
 VkPipeline

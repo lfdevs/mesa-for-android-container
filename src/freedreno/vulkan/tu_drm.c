@@ -35,6 +35,11 @@
 
 #include "tu_private.h"
 
+struct tu_syncobj {
+   struct vk_object_base base;
+   uint32_t permanent, temporary;
+};
+
 static int
 tu_drm_get_param(const struct tu_physical_device *dev,
                  uint32_t param,
@@ -98,7 +103,7 @@ tu_drm_submitqueue_new(const struct tu_device *dev,
       .prio = priority,
    };
 
-   int ret = drmCommandWriteRead(dev->physical_device->local_fd,
+   int ret = drmCommandWriteRead(dev->fd,
                                  DRM_MSM_SUBMITQUEUE_NEW, &req, sizeof(req));
    if (ret)
       return ret;
@@ -110,7 +115,7 @@ tu_drm_submitqueue_new(const struct tu_device *dev,
 void
 tu_drm_submitqueue_close(const struct tu_device *dev, uint32_t queue_id)
 {
-   drmCommandWrite(dev->physical_device->local_fd, DRM_MSM_SUBMITQUEUE_CLOSE,
+   drmCommandWrite(dev->fd, DRM_MSM_SUBMITQUEUE_CLOSE,
                    &queue_id, sizeof(uint32_t));
 }
 
@@ -121,7 +126,7 @@ tu_gem_close(const struct tu_device *dev, uint32_t gem_handle)
       .handle = gem_handle,
    };
 
-   drmIoctl(dev->physical_device->local_fd, DRM_IOCTL_GEM_CLOSE, &req);
+   drmIoctl(dev->fd, DRM_IOCTL_GEM_CLOSE, &req);
 }
 
 /** Helper for DRM_MSM_GEM_INFO, returns 0 on error. */
@@ -133,7 +138,7 @@ tu_gem_info(const struct tu_device *dev, uint32_t gem_handle, uint32_t info)
       .info = info,
    };
 
-   int ret = drmCommandWriteRead(dev->physical_device->local_fd,
+   int ret = drmCommandWriteRead(dev->fd,
                                  DRM_MSM_GEM_INFO, &req, sizeof(req));
    if (ret < 0)
       return 0;
@@ -145,7 +150,8 @@ static VkResult
 tu_bo_init(struct tu_device *dev,
            struct tu_bo *bo,
            uint32_t gem_handle,
-           uint64_t size)
+           uint64_t size,
+           bool dump)
 {
    uint64_t iova = tu_gem_info(dev, gem_handle, MSM_INFO_GET_IOVA);
    if (!iova) {
@@ -159,11 +165,53 @@ tu_bo_init(struct tu_device *dev,
       .iova = iova,
    };
 
+   mtx_lock(&dev->bo_mutex);
+   uint32_t idx = dev->bo_count++;
+
+   /* grow the bo list if needed */
+   if (idx >= dev->bo_list_size) {
+      uint32_t new_len = idx + 64;
+      struct drm_msm_gem_submit_bo *new_ptr =
+         vk_realloc(&dev->vk.alloc, dev->bo_list, new_len * sizeof(*dev->bo_list),
+                    8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+      if (!new_ptr) {
+         tu_gem_close(dev, gem_handle);
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+      }
+
+      dev->bo_list = new_ptr;
+      dev->bo_list_size = new_len;
+   }
+
+   /* grow the "bo idx" list (maps gem handles to index in the bo list) */
+   if (bo->gem_handle >= dev->bo_idx_size) {
+      uint32_t new_len = bo->gem_handle + 256;
+      uint32_t *new_ptr =
+         vk_realloc(&dev->vk.alloc, dev->bo_idx, new_len * sizeof(*dev->bo_idx),
+                    8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+      if (!new_ptr) {
+         tu_gem_close(dev, gem_handle);
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+      }
+
+      dev->bo_idx = new_ptr;
+      dev->bo_idx_size = new_len;
+   }
+
+   dev->bo_idx[bo->gem_handle] = idx;
+   dev->bo_list[idx] = (struct drm_msm_gem_submit_bo) {
+      .flags = MSM_SUBMIT_BO_READ | MSM_SUBMIT_BO_WRITE |
+               COND(dump, MSM_SUBMIT_BO_DUMP),
+      .handle = gem_handle,
+      .presumed = iova,
+   };
+   mtx_unlock(&dev->bo_mutex);
+
    return VK_SUCCESS;
 }
 
 VkResult
-tu_bo_init_new(struct tu_device *dev, struct tu_bo *bo, uint64_t size)
+tu_bo_init_new(struct tu_device *dev, struct tu_bo *bo, uint64_t size, bool dump)
 {
    /* TODO: Choose better flags. As of 2018-11-12, freedreno/drm/msm_bo.c
     * always sets `flags = MSM_BO_WC`, and we copy that behavior here.
@@ -173,12 +221,12 @@ tu_bo_init_new(struct tu_device *dev, struct tu_bo *bo, uint64_t size)
       .flags = MSM_BO_WC
    };
 
-   int ret = drmCommandWriteRead(dev->physical_device->local_fd,
+   int ret = drmCommandWriteRead(dev->fd,
                                  DRM_MSM_GEM_NEW, &req, sizeof(req));
    if (ret)
       return vk_error(dev->instance, VK_ERROR_OUT_OF_DEVICE_MEMORY);
 
-   return tu_bo_init(dev, bo, req.handle, size);
+   return tu_bo_init(dev, bo, req.handle, size, dump);
 }
 
 VkResult
@@ -194,19 +242,19 @@ tu_bo_init_dmabuf(struct tu_device *dev,
       return vk_error(dev->instance, VK_ERROR_INVALID_EXTERNAL_HANDLE);
 
    uint32_t gem_handle;
-   int ret = drmPrimeFDToHandle(dev->physical_device->local_fd, prime_fd,
+   int ret = drmPrimeFDToHandle(dev->fd, prime_fd,
                                 &gem_handle);
    if (ret)
       return vk_error(dev->instance, VK_ERROR_INVALID_EXTERNAL_HANDLE);
 
-   return tu_bo_init(dev, bo, gem_handle, size);
+   return tu_bo_init(dev, bo, gem_handle, size, false);
 }
 
 int
 tu_bo_export_dmabuf(struct tu_device *dev, struct tu_bo *bo)
 {
    int prime_fd;
-   int ret = drmPrimeHandleToFD(dev->physical_device->local_fd, bo->gem_handle,
+   int ret = drmPrimeHandleToFD(dev->fd, bo->gem_handle,
                                 DRM_CLOEXEC, &prime_fd);
 
    return ret == 0 ? prime_fd : -1;
@@ -224,7 +272,7 @@ tu_bo_map(struct tu_device *dev, struct tu_bo *bo)
 
    /* TODO: Should we use the wrapper os_mmap() like Freedreno does? */
    void *map = mmap(0, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
-                    dev->physical_device->local_fd, offset);
+                    dev->fd, offset);
    if (map == MAP_FAILED)
       return vk_error(dev->instance, VK_ERROR_MEMORY_MAP_FAILED);
 
@@ -239,6 +287,13 @@ tu_bo_finish(struct tu_device *dev, struct tu_bo *bo)
 
    if (bo->map)
       munmap(bo->map, bo->size);
+
+   mtx_lock(&dev->bo_mutex);
+   uint32_t idx = dev->bo_idx[bo->gem_handle];
+   dev->bo_count--;
+   dev->bo_list[idx] = dev->bo_list[dev->bo_count];
+   dev->bo_idx[dev->bo_list[idx].handle] = idx;
+   mtx_unlock(&dev->bo_mutex);
 
    tu_gem_close(dev, bo->gem_handle);
 }
@@ -256,36 +311,38 @@ tu_drm_device_init(struct tu_physical_device *device,
 
    fd = open(path, O_RDWR | O_CLOEXEC);
    if (fd < 0) {
-      return vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
-                       "failed to open device %s", path);
+      return vk_startup_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+                               "failed to open device %s", path);
    }
 
-   /* Version 1.3 added MSM_INFO_IOVA. */
+   /* Version 1.6 added SYNCOBJ support. */
    const int min_version_major = 1;
-   const int min_version_minor = 3;
+   const int min_version_minor = 6;
 
    version = drmGetVersion(fd);
    if (!version) {
       close(fd);
-      return vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
-                       "failed to query kernel driver version for device %s",
-                       path);
+      return vk_startup_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+                               "failed to query kernel driver version for device %s",
+                               path);
    }
 
    if (strcmp(version->name, "msm")) {
       drmFreeVersion(version);
       close(fd);
-      return vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
-                       "device %s does not use the msm kernel driver", path);
+      return vk_startup_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+                               "device %s does not use the msm kernel driver",
+                               path);
    }
 
    if (version->version_major != min_version_major ||
        version->version_minor < min_version_minor) {
-      result = vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
-                         "kernel driver for device %s has version %d.%d, "
-                         "but Vulkan requires version >= %d.%d",
-                         path, version->version_major, version->version_minor,
-                         min_version_major, min_version_minor);
+      result = vk_startup_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+                                 "kernel driver for device %s has version %d.%d, "
+                                 "but Vulkan requires version >= %d.%d",
+                                 path,
+                                 version->version_major, version->version_minor,
+                                 min_version_major, min_version_minor);
       drmFreeVersion(version);
       close(fd);
       return result;
@@ -297,12 +354,10 @@ tu_drm_device_init(struct tu_physical_device *device,
    drmFreeVersion(version);
 
    if (instance->debug_flags & TU_DEBUG_STARTUP)
-      tu_logi("Found compatible device '%s'.", path);
+      mesa_logi("Found compatible device '%s'.", path);
 
    vk_object_base_init(NULL, &device->base, VK_OBJECT_TYPE_PHYSICAL_DEVICE);
    device->instance = instance;
-   assert(strlen(path) < ARRAY_SIZE(device->path));
-   strncpy(device->path, path, ARRAY_SIZE(device->path));
 
    if (instance->enabled_extensions.KHR_display) {
       master_fd =
@@ -317,7 +372,7 @@ tu_drm_device_init(struct tu_physical_device *device,
 
    if (tu_drm_get_gpu_id(device, &device->gpu_id)) {
       if (instance->debug_flags & TU_DEBUG_STARTUP)
-         tu_logi("Could not query the GPU ID");
+         mesa_logi("Could not query the GPU ID");
       result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
                          "could not get GPU ID");
       goto fail;
@@ -325,7 +380,7 @@ tu_drm_device_init(struct tu_physical_device *device,
 
    if (tu_drm_get_gmem_size(device, &device->gmem_size)) {
       if (instance->debug_flags & TU_DEBUG_STARTUP)
-         tu_logi("Could not query the GMEM size");
+         mesa_logi("Could not query the GMEM size");
       result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
                          "could not get GMEM size");
       goto fail;
@@ -333,7 +388,7 @@ tu_drm_device_init(struct tu_physical_device *device,
 
    if (tu_drm_get_gmem_base(device, &device->gmem_base)) {
       if (instance->debug_flags & TU_DEBUG_STARTUP)
-         tu_logi("Could not query the GMEM size");
+         mesa_logi("Could not query the GMEM size");
       result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
                          "could not get GMEM size");
       goto fail;
@@ -362,13 +417,14 @@ tu_enumerate_devices(struct tu_instance *instance)
 
    if (instance->debug_flags & TU_DEBUG_STARTUP) {
       if (max_devices < 0)
-         tu_logi("drmGetDevices2 returned error: %s\n", strerror(max_devices));
+         mesa_logi("drmGetDevices2 returned error: %s\n", strerror(max_devices));
       else
-         tu_logi("Found %d drm nodes", max_devices);
+         mesa_logi("Found %d drm nodes", max_devices);
    }
 
    if (max_devices < 1)
-      return vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);
+      return vk_startup_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+                               "No DRM devices found");
 
    for (unsigned i = 0; i < (unsigned) max_devices; i++) {
       if (devices[i]->available_nodes & 1 << DRM_NODE_RENDER &&
@@ -388,241 +444,166 @@ tu_enumerate_devices(struct tu_instance *instance)
    return result;
 }
 
-// Queue semaphore functions
-
-static void
-tu_semaphore_part_destroy(struct tu_device *device,
-                          struct tu_semaphore_part *part)
-{
-   switch(part->kind) {
-   case TU_SEMAPHORE_NONE:
-      break;
-   case TU_SEMAPHORE_SYNCOBJ:
-      drmSyncobjDestroy(device->physical_device->local_fd, part->syncobj);
-      break;
-   }
-   part->kind = TU_SEMAPHORE_NONE;
-}
-
-static void
-tu_semaphore_remove_temp(struct tu_device *device,
-                         struct tu_semaphore *sem)
-{
-   if (sem->temporary.kind != TU_SEMAPHORE_NONE) {
-      tu_semaphore_part_destroy(device, &sem->temporary);
-   }
-}
-
 static VkResult
-tu_get_semaphore_syncobjs(const VkSemaphore *sems,
-                          uint32_t sem_count,
-                          bool wait,
-                          struct drm_msm_gem_submit_syncobj **out,
-                          uint32_t *out_count)
+sync_create(VkDevice _device,
+            bool signaled,
+            bool fence,
+            const VkAllocationCallbacks *pAllocator,
+            void **p_sync)
 {
-   uint32_t syncobj_count = 0;
-   struct drm_msm_gem_submit_syncobj *syncobjs;
+   TU_FROM_HANDLE(tu_device, device, _device);
 
-   for (uint32_t i = 0; i  < sem_count; ++i) {
-      TU_FROM_HANDLE(tu_semaphore, sem, sems[i]);
+   struct tu_syncobj *sync =
+         vk_object_alloc(&device->vk, pAllocator, sizeof(*sync),
+                         fence ? VK_OBJECT_TYPE_FENCE : VK_OBJECT_TYPE_SEMAPHORE);
+   if (!sync)
+      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-      struct tu_semaphore_part *part =
-         sem->temporary.kind != TU_SEMAPHORE_NONE ?
-            &sem->temporary : &sem->permanent;
+   struct drm_syncobj_create create = {};
+   if (signaled)
+      create.flags |= DRM_SYNCOBJ_CREATE_SIGNALED;
 
-      if (part->kind == TU_SEMAPHORE_SYNCOBJ)
-         ++syncobj_count;
-   }
-
-   *out = NULL;
-   *out_count = syncobj_count;
-   if (!syncobj_count)
-      return VK_SUCCESS;
-
-   *out = syncobjs = calloc(syncobj_count, sizeof (*syncobjs));
-   if (!syncobjs)
+   int ret = ioctl(device->fd, DRM_IOCTL_SYNCOBJ_CREATE, &create);
+   if (ret) {
+      vk_free2(&device->vk.alloc, pAllocator, sync);
       return VK_ERROR_OUT_OF_HOST_MEMORY;
-
-   for (uint32_t i = 0, j = 0; i  < sem_count; ++i) {
-      TU_FROM_HANDLE(tu_semaphore, sem, sems[i]);
-
-      struct tu_semaphore_part *part =
-         sem->temporary.kind != TU_SEMAPHORE_NONE ?
-            &sem->temporary : &sem->permanent;
-
-      if (part->kind == TU_SEMAPHORE_SYNCOBJ) {
-         syncobjs[j].handle = part->syncobj;
-         syncobjs[j].flags = wait ? MSM_SUBMIT_SYNCOBJ_RESET : 0;
-         ++j;
-      }
    }
+
+   sync->permanent = create.handle;
+   sync->temporary = 0;
+   *p_sync = sync;
 
    return VK_SUCCESS;
 }
 
 static void
-tu_semaphores_remove_temp(struct tu_device *device,
-                          const VkSemaphore *sems,
-                          uint32_t sem_count)
+sync_set_temporary(struct tu_device *device, struct tu_syncobj *sync, uint32_t syncobj)
 {
-   for (uint32_t i = 0; i  < sem_count; ++i) {
-      TU_FROM_HANDLE(tu_semaphore, sem, sems[i]);
-      tu_semaphore_remove_temp(device, sem);
+   if (sync->temporary) {
+      ioctl(device->fd, DRM_IOCTL_SYNCOBJ_DESTROY,
+            &(struct drm_syncobj_destroy) { .handle = sync->temporary });
    }
+   sync->temporary = syncobj;
+}
+
+static void
+sync_destroy(VkDevice _device, struct tu_syncobj *sync, const VkAllocationCallbacks *pAllocator)
+{
+   TU_FROM_HANDLE(tu_device, device, _device);
+
+   if (!sync)
+      return;
+
+   sync_set_temporary(device, sync, 0);
+   ioctl(device->fd, DRM_IOCTL_SYNCOBJ_DESTROY,
+         &(struct drm_syncobj_destroy) { .handle = sync->permanent });
+
+   vk_object_free(&device->vk, pAllocator, sync);
+}
+
+static VkResult
+sync_import(VkDevice _device, struct tu_syncobj *sync, bool temporary, bool sync_fd, int fd)
+{
+   TU_FROM_HANDLE(tu_device, device, _device);
+   int ret;
+
+   if (!sync_fd) {
+      uint32_t *dst = temporary ? &sync->temporary : &sync->permanent;
+
+      struct drm_syncobj_handle handle = { .fd = fd };
+      ret = ioctl(device->fd, DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE, &handle);
+      if (ret)
+         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+
+      if (*dst) {
+         ioctl(device->fd, DRM_IOCTL_SYNCOBJ_DESTROY,
+               &(struct drm_syncobj_destroy) { .handle = *dst });
+      }
+      *dst = handle.handle;
+      close(fd);
+   } else {
+      assert(temporary);
+
+      struct drm_syncobj_create create = {};
+
+      if (fd == -1)
+         create.flags |= DRM_SYNCOBJ_CREATE_SIGNALED;
+
+      ret = ioctl(device->fd, DRM_IOCTL_SYNCOBJ_CREATE, &create);
+      if (ret)
+         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+
+      if (fd != -1) {
+         ret = ioctl(device->fd, DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE, &(struct drm_syncobj_handle) {
+            .fd = fd,
+            .handle = create.handle,
+            .flags = DRM_SYNCOBJ_FD_TO_HANDLE_FLAGS_IMPORT_SYNC_FILE,
+         });
+         if (ret) {
+            ioctl(device->fd, DRM_IOCTL_SYNCOBJ_DESTROY,
+                  &(struct drm_syncobj_destroy) { .handle = create.handle });
+            return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+         }
+         close(fd);
+      }
+
+      sync_set_temporary(device, sync, create.handle);
+   }
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+sync_export(VkDevice _device, struct tu_syncobj *sync, bool sync_fd, int *p_fd)
+{
+   TU_FROM_HANDLE(tu_device, device, _device);
+
+   struct drm_syncobj_handle handle = {
+      .handle = sync->temporary ?: sync->permanent,
+      .flags = COND(sync_fd, DRM_SYNCOBJ_HANDLE_TO_FD_FLAGS_EXPORT_SYNC_FILE),
+      .fd = -1,
+   };
+   int ret = ioctl(device->fd, DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD, &handle);
+   if (ret)
+      return vk_error(device->instance, VK_ERROR_INVALID_EXTERNAL_HANDLE);
+
+   /* restore permanent payload on export */
+   sync_set_temporary(device, sync, 0);
+
+   *p_fd = handle.fd;
+   return VK_SUCCESS;
 }
 
 VkResult
-tu_CreateSemaphore(VkDevice _device,
+tu_CreateSemaphore(VkDevice device,
                    const VkSemaphoreCreateInfo *pCreateInfo,
                    const VkAllocationCallbacks *pAllocator,
                    VkSemaphore *pSemaphore)
 {
-   TU_FROM_HANDLE(tu_device, device, _device);
-
-   struct tu_semaphore *sem =
-         vk_object_alloc(&device->vk, pAllocator, sizeof(*sem),
-                         VK_OBJECT_TYPE_SEMAPHORE);
-   if (!sem)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   const VkExportSemaphoreCreateInfo *export =
-      vk_find_struct_const(pCreateInfo->pNext, EXPORT_SEMAPHORE_CREATE_INFO);
-   VkExternalSemaphoreHandleTypeFlags handleTypes =
-      export ? export->handleTypes : 0;
-
-   sem->permanent.kind = TU_SEMAPHORE_NONE;
-   sem->temporary.kind = TU_SEMAPHORE_NONE;
-
-   if (handleTypes) {
-      if (drmSyncobjCreate(device->physical_device->local_fd, 0, &sem->permanent.syncobj) < 0) {
-          vk_free2(&device->vk.alloc, pAllocator, sem);
-          return VK_ERROR_OUT_OF_HOST_MEMORY;
-      }
-      sem->permanent.kind = TU_SEMAPHORE_SYNCOBJ;
-   }
-   *pSemaphore = tu_semaphore_to_handle(sem);
-   return VK_SUCCESS;
+   return sync_create(device, false, false, pAllocator, (void**) pSemaphore);
 }
 
 void
-tu_DestroySemaphore(VkDevice _device,
-                    VkSemaphore _semaphore,
-                    const VkAllocationCallbacks *pAllocator)
+tu_DestroySemaphore(VkDevice device, VkSemaphore sem, const VkAllocationCallbacks *pAllocator)
 {
-   TU_FROM_HANDLE(tu_device, device, _device);
-   TU_FROM_HANDLE(tu_semaphore, sem, _semaphore);
-   if (!_semaphore)
-      return;
-
-   tu_semaphore_part_destroy(device, &sem->permanent);
-   tu_semaphore_part_destroy(device, &sem->temporary);
-
-   vk_object_free(&device->vk, pAllocator, sem);
+   TU_FROM_HANDLE(tu_syncobj, sync, sem);
+   sync_destroy(device, sync, pAllocator);
 }
 
 VkResult
-tu_ImportSemaphoreFdKHR(VkDevice _device,
-                        const VkImportSemaphoreFdInfoKHR *pImportSemaphoreFdInfo)
+tu_ImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR *info)
 {
-   TU_FROM_HANDLE(tu_device, device, _device);
-   TU_FROM_HANDLE(tu_semaphore, sem, pImportSemaphoreFdInfo->semaphore);
-   int ret;
-   struct tu_semaphore_part *dst = NULL;
-
-   if (pImportSemaphoreFdInfo->flags & VK_SEMAPHORE_IMPORT_TEMPORARY_BIT) {
-      dst = &sem->temporary;
-   } else {
-      dst = &sem->permanent;
-   }
-
-   uint32_t syncobj = dst->kind == TU_SEMAPHORE_SYNCOBJ ? dst->syncobj : 0;
-
-   switch(pImportSemaphoreFdInfo->handleType) {
-      case VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT: {
-         uint32_t old_syncobj = syncobj;
-         ret = drmSyncobjFDToHandle(device->physical_device->local_fd, pImportSemaphoreFdInfo->fd, &syncobj);
-         if (ret == 0) {
-            close(pImportSemaphoreFdInfo->fd);
-            if (old_syncobj)
-               drmSyncobjDestroy(device->physical_device->local_fd, old_syncobj);
-         }
-         break;
-      }
-      case VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT: {
-         if (!syncobj) {
-            ret = drmSyncobjCreate(device->physical_device->local_fd, 0, &syncobj);
-            if (ret)
-               break;
-         }
-         if (pImportSemaphoreFdInfo->fd == -1) {
-            ret = drmSyncobjSignal(device->physical_device->local_fd, &syncobj, 1);
-         } else {
-            ret = drmSyncobjImportSyncFile(device->physical_device->local_fd, syncobj, pImportSemaphoreFdInfo->fd);
-         }
-         if (!ret)
-            close(pImportSemaphoreFdInfo->fd);
-         break;
-      }
-      default:
-         unreachable("Unhandled semaphore handle type");
-   }
-
-   if (ret) {
-      return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-   }
-   dst->syncobj = syncobj;
-   dst->kind = TU_SEMAPHORE_SYNCOBJ;
-
-   return VK_SUCCESS;
+   TU_FROM_HANDLE(tu_syncobj, sync, info->semaphore);
+   return sync_import(device, sync, info->flags & VK_SEMAPHORE_IMPORT_TEMPORARY_BIT,
+         info->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT, info->fd);
 }
 
 VkResult
-tu_GetSemaphoreFdKHR(VkDevice _device,
-                     const VkSemaphoreGetFdInfoKHR *pGetFdInfo,
-                     int *pFd)
+tu_GetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR *info, int *pFd)
 {
-   TU_FROM_HANDLE(tu_device, device, _device);
-   TU_FROM_HANDLE(tu_semaphore, sem, pGetFdInfo->semaphore);
-   int ret;
-   uint32_t syncobj_handle;
-
-   if (sem->temporary.kind != TU_SEMAPHORE_NONE) {
-      assert(sem->temporary.kind == TU_SEMAPHORE_SYNCOBJ);
-      syncobj_handle = sem->temporary.syncobj;
-   } else {
-      assert(sem->permanent.kind == TU_SEMAPHORE_SYNCOBJ);
-      syncobj_handle = sem->permanent.syncobj;
-   }
-
-   switch(pGetFdInfo->handleType) {
-   case VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT:
-      ret = drmSyncobjHandleToFD(device->physical_device->local_fd, syncobj_handle, pFd);
-      break;
-   case VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT:
-      ret = drmSyncobjExportSyncFile(device->physical_device->local_fd, syncobj_handle, pFd);
-      if (!ret) {
-         if (sem->temporary.kind != TU_SEMAPHORE_NONE) {
-            tu_semaphore_part_destroy(device, &sem->temporary);
-         } else {
-            drmSyncobjReset(device->physical_device->local_fd, &syncobj_handle, 1);
-         }
-      }
-      break;
-   default:
-      unreachable("Unhandled semaphore handle type");
-   }
-
-   if (ret)
-      return vk_error(device->instance, VK_ERROR_INVALID_EXTERNAL_HANDLE);
-   return VK_SUCCESS;
-}
-
-static bool tu_has_syncobj(struct tu_physical_device *pdev)
-{
-   uint64_t value;
-   if (drmGetCap(pdev->local_fd, DRM_CAP_SYNCOBJ, &value))
-      return false;
-   return value && pdev->msm_major_version == 1 && pdev->msm_minor_version >= 6;
+   TU_FROM_HANDLE(tu_syncobj, sync, info->semaphore);
+   return sync_export(device, sync,
+         info->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT, pFd);
 }
 
 void
@@ -631,11 +612,8 @@ tu_GetPhysicalDeviceExternalSemaphoreProperties(
    const VkPhysicalDeviceExternalSemaphoreInfo *pExternalSemaphoreInfo,
    VkExternalSemaphoreProperties *pExternalSemaphoreProperties)
 {
-   TU_FROM_HANDLE(tu_physical_device, pdev, physicalDevice);
-
-   if (tu_has_syncobj(pdev) &&
-       (pExternalSemaphoreInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT ||
-        pExternalSemaphoreInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT)) {
+   if (pExternalSemaphoreInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT ||
+       pExternalSemaphoreInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT) {
       pExternalSemaphoreProperties->exportFromImportedHandleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT | VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
       pExternalSemaphoreProperties->compatibleHandleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT | VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
       pExternalSemaphoreProperties->externalSemaphoreFeatures = VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT |
@@ -654,31 +632,40 @@ tu_QueueSubmit(VkQueue _queue,
                VkFence _fence)
 {
    TU_FROM_HANDLE(tu_queue, queue, _queue);
-   VkResult result;
+   TU_FROM_HANDLE(tu_syncobj, fence, _fence);
 
    for (uint32_t i = 0; i < submitCount; ++i) {
       const VkSubmitInfo *submit = pSubmits + i;
       const bool last_submit = (i == submitCount - 1);
-      struct drm_msm_gem_submit_syncobj *in_syncobjs = NULL, *out_syncobjs = NULL;
-      uint32_t nr_in_syncobjs, nr_out_syncobjs;
-      struct tu_bo_list bo_list;
-      tu_bo_list_init(&bo_list);
+      uint32_t out_syncobjs_size = submit->signalSemaphoreCount;
+      if (last_submit && fence)
+         out_syncobjs_size += 1;
+      /* note: assuming there won't be any very large semaphore counts */
+      struct drm_msm_gem_submit_syncobj in_syncobjs[submit->waitSemaphoreCount];
+      struct drm_msm_gem_submit_syncobj out_syncobjs[out_syncobjs_size];
+      uint32_t nr_in_syncobjs = 0, nr_out_syncobjs = 0;
 
-      result = tu_get_semaphore_syncobjs(pSubmits[i].pWaitSemaphores,
-                                         pSubmits[i].waitSemaphoreCount,
-                                         false, &in_syncobjs, &nr_in_syncobjs);
-      if (result != VK_SUCCESS) {
-         return tu_device_set_lost(queue->device,
-                                   "failed to allocate space for semaphore submission\n");
+      for (uint32_t i = 0; i < submit->waitSemaphoreCount; i++) {
+         TU_FROM_HANDLE(tu_syncobj, sem, submit->pWaitSemaphores[i]);
+         in_syncobjs[nr_in_syncobjs++] = (struct drm_msm_gem_submit_syncobj) {
+            .handle = sem->temporary ?: sem->permanent,
+            .flags = MSM_SUBMIT_SYNCOBJ_RESET,
+         };
       }
 
-      result = tu_get_semaphore_syncobjs(pSubmits[i].pSignalSemaphores,
-                                         pSubmits[i].signalSemaphoreCount,
-                                         false, &out_syncobjs, &nr_out_syncobjs);
-      if (result != VK_SUCCESS) {
-         free(in_syncobjs);
-         return tu_device_set_lost(queue->device,
-                                   "failed to allocate space for semaphore submission\n");
+      for (uint32_t i = 0; i < submit->signalSemaphoreCount; i++) {
+         TU_FROM_HANDLE(tu_syncobj, sem, submit->pSignalSemaphores[i]);
+         out_syncobjs[nr_out_syncobjs++] = (struct drm_msm_gem_submit_syncobj) {
+            .handle = sem->temporary ?: sem->permanent,
+            .flags = 0,
+         };
+      }
+
+      if (last_submit && fence) {
+         out_syncobjs[nr_out_syncobjs++] = (struct drm_msm_gem_submit_syncobj) {
+            .handle = fence->temporary ?: fence->permanent,
+            .flags = 0,
+         };
       }
 
       uint32_t entry_count = 0;
@@ -686,6 +673,8 @@ tu_QueueSubmit(VkQueue _queue,
          TU_FROM_HANDLE(tu_cmd_buffer, cmdbuf, submit->pCommandBuffers[j]);
          entry_count += cmdbuf->cs.entry_count;
       }
+
+      mtx_lock(&queue->device->bo_mutex);
 
       struct drm_msm_gem_submit_cmd cmds[entry_count];
       uint32_t entry_idx = 0;
@@ -695,16 +684,13 @@ tu_QueueSubmit(VkQueue _queue,
          for (unsigned i = 0; i < cs->entry_count; ++i, ++entry_idx) {
             cmds[entry_idx].type = MSM_SUBMIT_CMD_BUF;
             cmds[entry_idx].submit_idx =
-               tu_bo_list_add(&bo_list, cs->entries[i].bo,
-                              MSM_SUBMIT_BO_READ | MSM_SUBMIT_BO_DUMP);
+               queue->device->bo_idx[cs->entries[i].bo->gem_handle];
             cmds[entry_idx].submit_offset = cs->entries[i].offset;
             cmds[entry_idx].size = cs->entries[i].size;
             cmds[entry_idx].pad = 0;
             cmds[entry_idx].nr_relocs = 0;
             cmds[entry_idx].relocs = 0;
          }
-
-         tu_bo_list_merge(&bo_list, &cmdbuf->bo_list);
       }
 
       uint32_t flags = MSM_PIPE_3D0;
@@ -714,7 +700,6 @@ tu_QueueSubmit(VkQueue _queue,
       if (nr_out_syncobjs) {
          flags |= MSM_SUBMIT_SYNCOBJ_OUT;
       }
-
       if (last_submit) {
          flags |= MSM_SUBMIT_FENCE_FD_OUT;
       }
@@ -722,8 +707,8 @@ tu_QueueSubmit(VkQueue _queue,
       struct drm_msm_gem_submit req = {
          .flags = flags,
          .queueid = queue->msm_queue_id,
-         .bos = (uint64_t)(uintptr_t) bo_list.bo_infos,
-         .nr_bos = bo_list.count,
+         .bos = (uint64_t)(uintptr_t) queue->device->bo_list,
+         .nr_bos = queue->device->bo_count,
          .cmds = (uint64_t)(uintptr_t)cmds,
          .nr_cmds = entry_count,
          .in_syncobjs = (uint64_t)(uintptr_t)in_syncobjs,
@@ -733,34 +718,259 @@ tu_QueueSubmit(VkQueue _queue,
          .syncobj_stride = sizeof(struct drm_msm_gem_submit_syncobj),
       };
 
-      int ret = drmCommandWriteRead(queue->device->physical_device->local_fd,
+      int ret = drmCommandWriteRead(queue->device->fd,
                                     DRM_MSM_GEM_SUBMIT,
                                     &req, sizeof(req));
+      mtx_unlock(&queue->device->bo_mutex);
       if (ret) {
-         free(in_syncobjs);
-         free(out_syncobjs);
          return tu_device_set_lost(queue->device, "submit failed: %s\n",
                                    strerror(errno));
       }
 
-      tu_bo_list_destroy(&bo_list);
-      free(in_syncobjs);
-      free(out_syncobjs);
+      /* restore permanent payload on wait */
+      for (uint32_t i = 0; i < submit->waitSemaphoreCount; i++) {
+         TU_FROM_HANDLE(tu_syncobj, sem, submit->pWaitSemaphores[i]);
+         sync_set_temporary(queue->device, sem, 0);
+      }
 
-      tu_semaphores_remove_temp(queue->device, pSubmits[i].pWaitSemaphores,
-                                pSubmits[i].waitSemaphoreCount);
       if (last_submit) {
-         /* no need to merge fences as queue execution is serialized */
-         tu_fence_update_fd(&queue->submit_fence, req.fence_fd);
-      } else if (last_submit) {
-         close(req.fence_fd);
+         if (queue->fence >= 0)
+            close(queue->fence);
+         queue->fence = req.fence_fd;
       }
    }
 
-   if (_fence != VK_NULL_HANDLE) {
-      TU_FROM_HANDLE(tu_fence, fence, _fence);
-      tu_fence_copy(fence, &queue->submit_fence);
+   if (!submitCount && fence) {
+      /* signal fence imemediately since we don't have a submit to do it */
+      ioctl(queue->device->fd, DRM_IOCTL_SYNCOBJ_SIGNAL, &(struct drm_syncobj_array) {
+         .handles = (uintptr_t) (uint32_t[]) { fence->temporary ?: fence->permanent },
+         .count_handles = 1,
+      });
    }
 
    return VK_SUCCESS;
 }
+
+VkResult
+tu_CreateFence(VkDevice device,
+               const VkFenceCreateInfo *info,
+               const VkAllocationCallbacks *pAllocator,
+               VkFence *pFence)
+{
+   return sync_create(device, info->flags & VK_FENCE_CREATE_SIGNALED_BIT, true,
+                      pAllocator, (void**) pFence);
+}
+
+void
+tu_DestroyFence(VkDevice device, VkFence fence, const VkAllocationCallbacks *pAllocator)
+{
+   TU_FROM_HANDLE(tu_syncobj, sync, fence);
+   sync_destroy(device, sync, pAllocator);
+}
+
+VkResult
+tu_ImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR *info)
+{
+   TU_FROM_HANDLE(tu_syncobj, sync, info->fence);
+   return sync_import(device, sync, info->flags & VK_FENCE_IMPORT_TEMPORARY_BIT,
+         info->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT, info->fd);
+}
+
+VkResult
+tu_GetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR *info, int *pFd)
+{
+   TU_FROM_HANDLE(tu_syncobj, sync, info->fence);
+   return sync_export(device, sync,
+         info->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT, pFd);
+}
+
+static VkResult
+drm_syncobj_wait(struct tu_device *device,
+                 const uint32_t *handles, uint32_t count_handles,
+                 int64_t timeout_nsec, bool wait_all)
+{
+   int ret = ioctl(device->fd, DRM_IOCTL_SYNCOBJ_WAIT, &(struct drm_syncobj_wait) {
+      .handles = (uint64_t) (uintptr_t) handles,
+      .count_handles = count_handles,
+      .timeout_nsec = timeout_nsec,
+      .flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT |
+               COND(wait_all, DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL)
+   });
+   if (ret) {
+      if (errno == ETIME)
+         return VK_TIMEOUT;
+
+      assert(0);
+      return VK_ERROR_DEVICE_LOST; /* TODO */
+   }
+   return VK_SUCCESS;
+}
+
+static uint64_t
+gettime_ns(void)
+{
+   struct timespec current;
+   clock_gettime(CLOCK_MONOTONIC, &current);
+   return (uint64_t)current.tv_sec * 1000000000 + current.tv_nsec;
+}
+
+/* and the kernel converts it right back to relative timeout - very smart UAPI */
+static uint64_t
+absolute_timeout(uint64_t timeout)
+{
+   if (timeout == 0)
+      return 0;
+   uint64_t current_time = gettime_ns();
+   uint64_t max_timeout = (uint64_t) INT64_MAX - current_time;
+
+   timeout = MIN2(max_timeout, timeout);
+
+   return (current_time + timeout);
+}
+
+VkResult
+tu_WaitForFences(VkDevice _device,
+                 uint32_t fenceCount,
+                 const VkFence *pFences,
+                 VkBool32 waitAll,
+                 uint64_t timeout)
+{
+   TU_FROM_HANDLE(tu_device, device, _device);
+
+   if (tu_device_is_lost(device))
+      return VK_ERROR_DEVICE_LOST;
+
+   uint32_t handles[fenceCount];
+   for (unsigned i = 0; i < fenceCount; ++i) {
+      TU_FROM_HANDLE(tu_syncobj, fence, pFences[i]);
+      handles[i] = fence->temporary ?: fence->permanent;
+   }
+
+   return drm_syncobj_wait(device, handles, fenceCount, absolute_timeout(timeout), waitAll);
+}
+
+VkResult
+tu_ResetFences(VkDevice _device, uint32_t fenceCount, const VkFence *pFences)
+{
+   TU_FROM_HANDLE(tu_device, device, _device);
+   int ret;
+
+   uint32_t handles[fenceCount];
+   for (unsigned i = 0; i < fenceCount; ++i) {
+      TU_FROM_HANDLE(tu_syncobj, fence, pFences[i]);
+      sync_set_temporary(device, fence, 0);
+      handles[i] = fence->permanent;
+   }
+
+   ret = ioctl(device->fd, DRM_IOCTL_SYNCOBJ_RESET, &(struct drm_syncobj_array) {
+      .handles = (uint64_t) (uintptr_t) handles,
+      .count_handles = fenceCount,
+   });
+   if (ret) {
+      tu_device_set_lost(device, "DRM_IOCTL_SYNCOBJ_RESET failure: %s",
+                         strerror(errno));
+   }
+
+   return VK_SUCCESS;
+}
+
+VkResult
+tu_GetFenceStatus(VkDevice _device, VkFence _fence)
+{
+   TU_FROM_HANDLE(tu_device, device, _device);
+   TU_FROM_HANDLE(tu_syncobj, fence, _fence);
+   VkResult result;
+
+   result = drm_syncobj_wait(device, (uint32_t[]){fence->temporary ?: fence->permanent}, 1, 0, false);
+   if (result == VK_TIMEOUT)
+      result = VK_NOT_READY;
+   return result;
+}
+
+int
+tu_signal_fences(struct tu_device *device, struct tu_syncobj *fence1, struct tu_syncobj *fence2)
+{
+   uint32_t handles[2], count = 0;
+   if (fence1)
+      handles[count++] = fence1->temporary ?: fence1->permanent;
+
+   if (fence2)
+      handles[count++] = fence2->temporary ?: fence2->permanent;
+
+   if (!count)
+      return 0;
+
+   return ioctl(device->fd, DRM_IOCTL_SYNCOBJ_SIGNAL, &(struct drm_syncobj_array) {
+      .handles = (uintptr_t) handles,
+      .count_handles = count
+   });
+}
+
+int
+tu_syncobj_to_fd(struct tu_device *device, struct tu_syncobj *sync)
+{
+   struct drm_syncobj_handle handle = { .handle = sync->permanent };
+   int ret;
+
+   ret = ioctl(device->fd, DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD, &handle);
+   if (ret)
+      return 0;
+
+   return ret ? -1 : handle.fd;
+}
+
+#ifdef ANDROID
+#include <libsync.h>
+
+VkResult
+tu_QueueSignalReleaseImageANDROID(VkQueue _queue,
+                                  uint32_t waitSemaphoreCount,
+                                  const VkSemaphore *pWaitSemaphores,
+                                  VkImage image,
+                                  int *pNativeFenceFd)
+{
+   TU_FROM_HANDLE(tu_queue, queue, _queue);
+   VkResult result = VK_SUCCESS;
+
+   if (waitSemaphoreCount == 0) {
+      if (pNativeFenceFd)
+         *pNativeFenceFd = -1;
+      return VK_SUCCESS;
+   }
+
+   int fd = -1;
+
+   for (uint32_t i = 0; i < waitSemaphoreCount; ++i) {
+      int tmp_fd;
+      result = tu_GetSemaphoreFdKHR(
+         tu_device_to_handle(queue->device),
+         &(VkSemaphoreGetFdInfoKHR) {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR,
+            .handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT,
+            .semaphore = pWaitSemaphores[i],
+         },
+         &tmp_fd);
+      if (result != VK_SUCCESS) {
+         if (fd >= 0)
+            close(fd);
+         return result;
+      }
+
+      if (fd < 0)
+         fd = tmp_fd;
+      else if (tmp_fd >= 0) {
+         sync_accumulate("tu", &fd, tmp_fd);
+         close(tmp_fd);
+      }
+   }
+
+   if (pNativeFenceFd) {
+      *pNativeFenceFd = fd;
+   } else if (fd >= 0) {
+      close(fd);
+      /* We still need to do the exports, to reset the semaphores, but
+       * otherwise we don't wait on them. */
+   }
+   return VK_SUCCESS;
+}
+#endif

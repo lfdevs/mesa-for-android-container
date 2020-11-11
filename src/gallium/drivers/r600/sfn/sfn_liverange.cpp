@@ -358,6 +358,7 @@ register_live_range temp_access::get_required_live_range()
          break;
    }
    result.is_array_elm = is_array_element;
+
    return result;
 }
 
@@ -387,7 +388,8 @@ temp_comp_access::temp_comp_access():
 void temp_comp_access::record_read(int line, prog_scope *scope)
 {
    last_read_scope = scope;
-   last_read = line;
+   if (last_read < line)
+      last_read = line;
 
    if (first_read > line) {
       first_read = line;
@@ -775,12 +777,18 @@ void LiverangeEvaluator::run(const Shader& shader,
 
    for (auto& v: shader.m_temp) {
       if (v.second->type() == Value::gpr) {
+         sfn_log << SfnLog::merge << "Record " << *v.second << "\n";
          const auto& g = static_cast<const GPRValue&>(*v.second);
          if (g.is_input()) {
             sfn_log << SfnLog::merge << "Record INPUT write for "
                     << g << " in " << temp_acc.size() << " temps\n";
             temp_acc[g.sel()].record_write(line, cur_scope, 1 << g.chan(), false);
             temp_acc[g.sel()].record_read(line, cur_scope, 1 << g.chan(), false);
+         }
+         if (g.keep_alive()) {
+            sfn_log << SfnLog::merge << "Record KEEP ALIVE for "
+                    << g << " in " << temp_acc.size() << " temps\n";
+            temp_acc[g.sel()].record_read(0x7fffff, cur_scope, 1 << g.chan(), false);
          }
       }
    }
@@ -807,11 +815,15 @@ void LiverangeEvaluator::record_read(const Value& src, bool is_array_elm)
    if (src.type() == Value::gpr) {
       const GPRValue& v = static_cast<const GPRValue&>(src);
       if (v.chan() < 4)
-         temp_acc[v.sel()].record_read(line, cur_scope, 1 << v.chan(), is_array_elm);
+         temp_acc[v.sel()].record_read(v.keep_alive() ? 0x7fffff: line, cur_scope, 1 << v.chan(), is_array_elm);
       return;
    } else if (src.type() == Value::gpr_array_value) {
       const GPRArrayValue& v = static_cast<const GPRArrayValue&>(src);
       v.record_read(*this);
+   } else if (src.type() == Value::kconst) {
+      const UniformValue& v = static_cast<const UniformValue&>(src);
+      if (v.addr())
+         record_read(*v.addr(),is_array_elm);
    }
 }
 
@@ -829,6 +841,10 @@ void LiverangeEvaluator::record_write(const Value& src, bool is_array_elm)
    } else if (src.type() == Value::gpr_array_value) {
       const GPRArrayValue& v = static_cast<const GPRArrayValue&>(src);
       v.record_write(*this);
+   } else if (src.type() == Value::kconst) {
+      const UniformValue& v = static_cast<const UniformValue&>(src);
+      if (v.addr())
+         record_write(*v.addr(),is_array_elm);
    }
 }
 

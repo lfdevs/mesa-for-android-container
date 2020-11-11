@@ -55,6 +55,7 @@ virgl_staging_alloc_buffer(struct virgl_staging_mgr *staging, unsigned min_size)
                                           1,     /* array_size */
                                           0,     /* last_level */
                                           0,     /* nr_samples */
+                                          0,     /* flags */
                                           size); /* size */
    if (staging->hw_res == NULL)
       return false;

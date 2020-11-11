@@ -219,12 +219,12 @@ do {                       \
  * inline a static function that we later use in an alias. - ajax
  */
 #ifndef PUBLIC
-#  if defined(__GNUC__)
-#    define PUBLIC __attribute__((visibility("default")))
-#    define USED __attribute__((used))
-#  elif defined(_MSC_VER)
+#  if defined(_WIN32)
 #    define PUBLIC __declspec(dllexport)
 #    define USED
+#  elif defined(__GNUC__)
+#    define PUBLIC __attribute__((visibility("default")))
+#    define USED __attribute__((used))
 #  else
 #    define PUBLIC
 #    define USED
@@ -264,6 +264,8 @@ do {                       \
 
 #if defined(__GNUC__)
 #define ATTRIBUTE_NOINLINE __attribute__((noinline))
+#elif defined(_MSC_VER)
+#define ATTRIBUTE_NOINLINE __declspec(noinline)
 #else
 #define ATTRIBUTE_NOINLINE
 #endif
@@ -348,5 +350,15 @@ enum pipe_debug_type
    PIPE_DEBUG_TYPE_FALLBACK,
    PIPE_DEBUG_TYPE_CONFORMANCE,
 };
+
+#if !defined(alignof) && !defined(__cplusplus)
+#if __STDC_VERSION__ >= 201112L
+#define alignof(t) _Alignof(t)
+#elif defined(_MSC_VER)
+#define alignof(t) __alignof(t)
+#else
+#define alignof(t) __alignof__(t)
+#endif
+#endif
 
 #endif /* UTIL_MACROS_H */

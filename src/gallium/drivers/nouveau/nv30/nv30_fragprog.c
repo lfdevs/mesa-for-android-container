@@ -50,7 +50,7 @@ nv30_fragprog_upload(struct nv30_context *nv30)
       int i;
 
       map = pipe_buffer_map(pipe, fp->buffer,
-                            PIPE_TRANSFER_WRITE | PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE,
+                            PIPE_MAP_WRITE | PIPE_MAP_DISCARD_WHOLE_RESOURCE,
                             &transfer);
       for (i = 0; i < fp->insn_len; i++)
          *map++ = (fp->insn[i] >> 16) | (fp->insn[i] << 16);

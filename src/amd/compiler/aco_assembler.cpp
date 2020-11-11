@@ -5,6 +5,7 @@
 #include "aco_builder.h"
 #include "common/sid.h"
 #include "ac_shader_util.h"
+#include "util/memstream.h"
 #include "util/u_math.h"
 
 namespace aco {
@@ -81,8 +82,19 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
 
    uint32_t opcode = ctx.opcode[(int)instr->opcode];
    if (opcode == (uint32_t)-1) {
-      fprintf(stderr, "Unsupported opcode: ");
-      aco_print_instr(instr, stderr);
+      char *out;
+      size_t outsize;
+      struct u_memstream mem;
+      u_memstream_open(&mem, &out, &outsize);
+      FILE *const memf = u_memstream_get(&mem);
+
+      fprintf(memf, "Unsupported opcode: ");
+      aco_print_instr(instr, memf);
+      u_memstream_close(&mem);
+
+      aco_err(ctx.program, out);
+      free(out);
+
       abort();
    }
 
@@ -720,7 +732,7 @@ void fix_exports(asm_context& ctx, std::vector<uint32_t>& out, Program* program)
       {
          if ((*it)->format == Format::EXP) {
             Export_instruction* exp = static_cast<Export_instruction*>((*it).get());
-            if (program->stage & (hw_vs | hw_ngg_gs)) {
+            if (program->stage.hw == HWStage::VS || program->stage.hw == HWStage::NGG) {
                if (exp->dest >= V_008DFC_SQ_EXP_POS && exp->dest <= (V_008DFC_SQ_EXP_POS + 3)) {
                   exp->done = true;
                   exported = true;
@@ -740,7 +752,8 @@ void fix_exports(asm_context& ctx, std::vector<uint32_t>& out, Program* program)
 
    if (!exported) {
       /* Abort in order to avoid a GPU hang. */
-      fprintf(stderr, "Missing export in %s shader:\n", (program->stage & hw_vs) ? "vertex" : "fragment");
+      bool is_vertex_or_ngg = (program->stage.hw == HWStage::VS || program->stage.hw == HWStage::NGG);
+      aco_err(program, "Missing export in %s shader:", is_vertex_or_ngg ? "vertex or NGG" : "fragment");
       aco_print_program(program, stderr);
       abort();
    }
@@ -905,7 +918,9 @@ unsigned emit_program(Program* program,
 {
    asm_context ctx(program);
 
-   if (program->stage & (hw_vs | hw_fs | hw_ngg_gs))
+   if (program->stage.hw == HWStage::VS ||
+       program->stage.hw == HWStage::FS ||
+       program->stage.hw == HWStage::NGG)
       fix_exports(ctx, code, program);
 
    for (Block& block : program->blocks) {

@@ -227,7 +227,7 @@ util_probe_rect_rgba_multi(struct pipe_context *ctx, struct pipe_resource *tex,
    unsigned x,y,e,c;
    bool pass = true;
 
-   map = pipe_transfer_map(ctx, tex, 0, 0, PIPE_TRANSFER_READ,
+   map = pipe_transfer_map(ctx, tex, 0, 0, PIPE_MAP_READ,
                            offx, offy, w, h, &transfer);
    pipe_get_tile_rgba(transfer, map, 0, 0, w, h, tex->format, pixels);
    pipe_transfer_unmap(ctx, transfer);
@@ -907,7 +907,7 @@ test_nv12(struct pipe_screen *screen)
          struct pipe_resource *res = i == 2 ? tex->next : tex;
          unsigned plane = i == 2 ? 0 : i;
 
-         if (!screen->resource_get_param(screen, NULL, res, plane, 0,
+         if (!screen->resource_get_param(screen, NULL, res, plane, 0, 0,
                                          PIPE_RESOURCE_PARAM_HANDLE_TYPE_KMS,
                                          0, &handle[i].handle)) {
             printf("resource_get_param failed\n");
@@ -915,7 +915,7 @@ test_nv12(struct pipe_screen *screen)
             goto cleanup;
          }
 
-         if (!screen->resource_get_param(screen, NULL, res, plane, 0,
+         if (!screen->resource_get_param(screen, NULL, res, plane, 0, 0,
                                          PIPE_RESOURCE_PARAM_HANDLE_TYPE_FD,
                                          0, &handle[i].dmabuf)) {
             printf("resource_get_param failed\n");
@@ -923,7 +923,7 @@ test_nv12(struct pipe_screen *screen)
             goto cleanup;
          }
 
-         if (!screen->resource_get_param(screen, NULL, res, plane, 0,
+         if (!screen->resource_get_param(screen, NULL, res, plane, 0, 0,
                                          PIPE_RESOURCE_PARAM_OFFSET,
                                          0, &handle[i].offset)) {
             printf("resource_get_param failed\n");
@@ -931,7 +931,7 @@ test_nv12(struct pipe_screen *screen)
             goto cleanup;
          }
 
-         if (!screen->resource_get_param(screen, NULL, res, plane, 0,
+         if (!screen->resource_get_param(screen, NULL, res, plane, 0, 0,
                                          PIPE_RESOURCE_PARAM_STRIDE,
                                          0, &handle[i].stride)) {
             printf("resource_get_param failed\n");
@@ -939,7 +939,7 @@ test_nv12(struct pipe_screen *screen)
             goto cleanup;
          }
 
-         if (!screen->resource_get_param(screen, NULL, res, plane, 0,
+         if (!screen->resource_get_param(screen, NULL, res, plane, 0, 0,
                                          PIPE_RESOURCE_PARAM_NPLANES,
                                          0, &handle[i].planes)) {
             printf("resource_get_param failed\n");

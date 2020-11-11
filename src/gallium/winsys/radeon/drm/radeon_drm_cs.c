@@ -638,7 +638,8 @@ static int radeon_drm_cs_flush(struct radeon_cmdbuf *rcs,
    cs->cst = tmp;
 
    /* If the CS is not empty or overflowed, emit it in a separate thread. */
-   if (cs->base.current.cdw && cs->base.current.cdw <= cs->base.current.max_dw && !debug_get_option_noop()) {
+   if (cs->base.current.cdw && cs->base.current.cdw <= cs->base.current.max_dw &&
+       !debug_get_option_noop() && !(flags & RADEON_FLUSH_NOOP)) {
       unsigned i, num_relocs;
 
       num_relocs = cs->cst->num_relocs;

@@ -26,6 +26,7 @@
 
 #include <sys/stat.h>
 
+#include "util/os_file.h"
 #include "util/u_hash_table.h"
 #include "util/u_memory.h"
 #include "util/u_pointer.h"
@@ -35,6 +36,64 @@
 #include "etnaviv_drm_public.h"
 
 #include <stdio.h>
+
+static uint32_t hash_file_description(const void *key)
+{
+   int fd = pointer_to_intptr(key);
+   struct stat stat;
+
+   // File descriptions can't be hashed, but it should be safe to assume
+   // that the same file description will always refer to he same file
+   if(fstat(fd, &stat) == -1)
+      return ~0; // Make sure fstat failing won't result in a random hash
+
+   return stat.st_dev ^ stat.st_ino ^ stat.st_rdev;
+}
+
+
+static bool equal_file_description(const void *key1, const void *key2)
+{
+   int ret;
+   int fd1 = pointer_to_intptr(key1);
+   int fd2 = pointer_to_intptr(key2);
+   struct stat stat1, stat2;
+
+   // If the file descriptors are the same, the file description will be too
+   // This will also catch sentinels, such as -1
+   if (fd1 == fd2)
+      return true;
+
+   ret = os_same_file_description(fd1, fd2);
+   if (ret >= 0)
+      return (ret == 0);
+
+   {
+      static bool has_warned;
+      if (!has_warned)
+         fprintf(stderr, "os_same_file_description couldn't determine if "
+                 "two DRM fds reference the same file description. (%s)\n"
+                 "Let's just assume that file descriptors for the same file probably"
+                 "share the file description instead. This may cause problems when"
+                 "that isn't the case.\n", strerror(errno));
+      has_warned = true;
+   }
+
+   // Let's at least check that it's the same file, different files can't
+   // have the same file descriptions
+   fstat(fd1, &stat1);
+   fstat(fd2, &stat2);
+
+   return stat1.st_dev == stat2.st_dev &&
+          stat1.st_ino == stat2.st_ino &&
+          stat1.st_rdev == stat2.st_rdev;
+}
+
+
+static struct hash_table *
+hash_table_create_file_description_keys(void)
+{
+   return _mesa_hash_table_create(NULL, hash_file_description, equal_file_description);
+}
 
 static struct pipe_screen *
 screen_create(struct renderonly *ro)
@@ -99,7 +158,7 @@ etna_drm_screen_create_renderonly(struct renderonly *ro)
 
    mtx_lock(&etna_screen_mutex);
    if (!etna_tab) {
-      etna_tab = util_hash_table_create_fd_keys();
+      etna_tab = hash_table_create_file_description_keys();
       if (!etna_tab)
          goto unlock;
    }

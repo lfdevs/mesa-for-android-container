@@ -37,7 +37,7 @@ afuc_lexer = custom_target(
 )
 
 asm = executable(
-  'asm',
+  'afuc-asm',
   [
     'asm.c',
     afuc_lexer,
@@ -51,11 +51,11 @@ asm = executable(
   ],
   dependencies: [],
   build_by_default : with_tools.contains('freedreno'),
-  install: false,
+  install: install_fd_decode_tools,
 )
 
 disasm = executable(
-  'disasm',
+  'afuc-disasm',
   'disasm.c',
   include_directories: [
     inc_freedreno_rnn,
@@ -65,5 +65,5 @@ disasm = executable(
   ],
   dependencies: [],
   build_by_default : with_tools.contains('freedreno'),
-  install: false
+  install: install_fd_decode_tools,
 )

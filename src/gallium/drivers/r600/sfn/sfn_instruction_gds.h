@@ -168,6 +168,10 @@ public:
 
    int data_swz(int chan) const {return m_data.chan_i(chan);}
 
+   ECFOpCode cf_opcode() const { return m_cf_opcode;}
+
+   void set_ack() {m_need_ack = true; }
+
 private:
 
    bool is_equal_to(const Instruction& lhs) const override;

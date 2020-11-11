@@ -263,8 +263,8 @@ kms_sw_displaytarget_map(struct sw_winsys *ws,
    if (ret)
       return NULL;
 
-   prot = (flags == PIPE_TRANSFER_READ) ? PROT_READ : (PROT_READ | PROT_WRITE);
-   void **ptr = (flags == PIPE_TRANSFER_READ) ? &kms_sw_dt->ro_mapped : &kms_sw_dt->mapped;
+   prot = (flags == PIPE_MAP_READ) ? PROT_READ : (PROT_READ | PROT_WRITE);
+   void **ptr = (flags == PIPE_MAP_READ) ? &kms_sw_dt->ro_mapped : &kms_sw_dt->mapped;
    if (*ptr == MAP_FAILED) {
       void *tmp = mmap(0, kms_sw_dt->size, prot, MAP_SHARED,
                        kms_sw->fd, map_req.offset);

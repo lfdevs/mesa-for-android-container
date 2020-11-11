@@ -100,6 +100,8 @@ lima_job_create(struct lima_context *ctx)
    s->damage_rect.minx = s->damage_rect.miny = 0xffff;
    s->damage_rect.maxx = s->damage_rect.maxy = 0;
 
+   s->clear.depth = 0x00ffffff;
+
    for (int i = 0; i < 2; i++) {
       util_dynarray_init(s->gem_bos + i, s);
       util_dynarray_init(s->bos + i, s);
@@ -344,6 +346,10 @@ lima_pack_reload_plbu_cmd(struct lima_job *job, struct pipe_surface *psurf)
    struct lima_context *ctx = job->ctx;
    struct lima_surface *surf = lima_surface(psurf);
 
+   struct pipe_surface *cbuf = job->key.cbuf;
+   int level = cbuf->u.tex.level;
+   unsigned first_layer = cbuf->u.tex.first_layer;
+
    uint32_t va;
    void *cpu = lima_job_create_stream_bo(
       job, LIMA_PIPE_PP, lima_reload_buffer_size, &va);
@@ -386,7 +392,7 @@ lima_pack_reload_plbu_cmd(struct lima_job *job, struct pipe_surface *psurf)
 
    lima_tex_desc *td = cpu + lima_reload_tex_desc_offset;
    memset(td, 0, lima_min_tex_desc_size);
-   lima_texture_desc_set_res(ctx, td, psurf->texture, 0, 0);
+   lima_texture_desc_set_res(ctx, td, psurf->texture, level, level, first_layer);
    td->format = lima_format_get_texel_reload(psurf->format);
    td->unnorm_coords = 1;
    td->texture_type = LIMA_TEXTURE_TYPE_2D;

@@ -170,6 +170,10 @@ static void emit_instructions(int outfd)
 			if (ai->has_immed) {
 				/* MSB overlaps with STORE */
 				assert(ai->tok != T_OP_MSB);
+				if (ai->xmov) {
+					fprintf(stderr, "ALU instruction cannot have immediate and xmov\n");
+					exit(1);
+				}
 				opc = tok2alu(ai->tok);
 				instr.alui.dst = ai->dst;
 				instr.alui.src = ai->src1;
@@ -179,6 +183,7 @@ static void emit_instructions(int outfd)
 				instr.alu.dst  = ai->dst;
 				instr.alu.src1 = ai->src1;
 				instr.alu.src2 = ai->src2;
+				instr.alu.xmov = ai->xmov;
 				instr.alu.alu = tok2alu(ai->tok);
 			}
 			break;
@@ -186,6 +191,10 @@ static void emit_instructions(int outfd)
 			/* move can either be encoded as movi (ie. move w/ immed) or
 			 * an alu instruction
 			 */
+			if ((ai->has_immed || ai->label) && ai->xmov) {
+				fprintf(stderr, "ALU instruction cannot have immediate and xmov\n");
+				exit(1);
+			}
 			if (ai->has_immed) {
 				opc = OPC_MOVI;
 				instr.movi.dst = ai->dst;
@@ -206,6 +215,7 @@ static void emit_instructions(int outfd)
 				instr.alu.dst  = ai->dst;
 				instr.alu.src1 = 0x00;      /* $00 reads-back 0 */
 				instr.alu.src2 = ai->src1;
+				instr.alu.xmov = ai->xmov;
 				instr.alu.alu = OPC_OR;
 			}
 			break;
@@ -254,6 +264,10 @@ static void emit_instructions(int outfd)
 		case T_OP_RET:
 			opc = OPC_RET;
 			break;
+		case T_OP_IRET:
+			opc = OPC_RET;
+			instr.ret.interrupt = 1;
+			break;
 		case T_OP_CALL:
 			opc = OPC_CALL;
 			instr.call.uoff = resolve_label(ai->label);
@@ -261,6 +275,17 @@ static void emit_instructions(int outfd)
 		case T_OP_PREEMPTLEAVE:
 			opc = OPC_PREEMPTLEAVE6;
 			instr.call.uoff = resolve_label(ai->label);
+			break;
+		case T_OP_SETSECURE:
+			opc = OPC_SETSECURE;
+			if (resolve_label(ai->label) != i + 3) {
+				fprintf(stderr, "jump label %s is incorrect for setsecure\n", ai->label);
+				exit(1);
+			}
+			if (ai->src1 != 0x2) {
+				fprintf(stderr, "source for setsecure must be $02\n");
+				exit(1);
+			}
 			break;
 		case T_OP_JUMP:
 			/* encode jump as: brne $00, b0, #label */

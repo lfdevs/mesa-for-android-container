@@ -309,7 +309,7 @@ do_blit_bitmap( struct gl_context *ctx,
    }
 out:
 
-   if (unlikely(INTEL_DEBUG & DEBUG_SYNC))
+   if (INTEL_DEBUG & DEBUG_SYNC)
       intel_batchbuffer_flush(brw);
 
    if (unpack->BufferObj) {

@@ -1,3 +1,6 @@
-cont(8)         JIP: 2          UIP: 8                          { align1 1Q };
-cont(16)        JIP: 2          UIP: 8                          { align1 1H };
-cont(8)         JIP: 2          UIP: 8                          { align16 1Q };
+cont(8)         JIP: LABEL0          UIP: LABEL2                { align1 1Q };
+LABEL0:
+cont(16)        JIP: LABEL1          UIP: LABEL2                { align1 1H };
+LABEL1:
+cont(8)         JIP: LABEL2          UIP: LABEL2                { align16 1Q };
+LABEL2:

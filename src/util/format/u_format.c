@@ -332,6 +332,8 @@ util_format_read_4(enum pipe_format format,
                    unsigned x, unsigned y, unsigned w, unsigned h)
 {
    const struct util_format_description *format_desc;
+   const struct util_format_unpack_description *unpack =
+      util_format_unpack_description(format);
    const uint8_t *src_row;
 
    format_desc = util_format_description(format);
@@ -341,7 +343,7 @@ util_format_read_4(enum pipe_format format,
 
    src_row = (const uint8_t *)src + y*src_stride + x*(format_desc->block.bits/8);
 
-   format_desc->unpack_rgba(dst, dst_stride, src_row, src_stride, w, h);
+   unpack->unpack_rgba(dst, dst_stride, src_row, src_stride, w, h);
 }
 
 
@@ -352,6 +354,8 @@ util_format_write_4(enum pipe_format format,
                      unsigned x, unsigned y, unsigned w, unsigned h)
 {
    const struct util_format_description *format_desc;
+   const struct util_format_pack_description *pack =
+      util_format_pack_description(format);
    uint8_t *dst_row;
 
    format_desc = util_format_description(format);
@@ -362,11 +366,11 @@ util_format_write_4(enum pipe_format format,
    dst_row = (uint8_t *)dst + y*dst_stride + x*(format_desc->block.bits/8);
 
    if (util_format_is_pure_uint(format))
-      format_desc->pack_rgba_uint(dst_row, dst_stride, src, src_stride, w, h);
+      pack->pack_rgba_uint(dst_row, dst_stride, src, src_stride, w, h);
    else if (util_format_is_pure_sint(format))
-      format_desc->pack_rgba_sint(dst_row, dst_stride, src, src_stride, w, h);
+      pack->pack_rgba_sint(dst_row, dst_stride, src, src_stride, w, h);
    else
-      format_desc->pack_rgba_float(dst_row, dst_stride, src, src_stride, w, h);
+      pack->pack_rgba_float(dst_row, dst_stride, src, src_stride, w, h);
 }
 
 
@@ -374,6 +378,8 @@ void
 util_format_read_4ub(enum pipe_format format, uint8_t *dst, unsigned dst_stride, const void *src, unsigned src_stride, unsigned x, unsigned y, unsigned w, unsigned h)
 {
    const struct util_format_description *format_desc;
+   const struct util_format_unpack_description *unpack =
+      util_format_unpack_description(format);
    const uint8_t *src_row;
    uint8_t *dst_row;
 
@@ -385,7 +391,7 @@ util_format_read_4ub(enum pipe_format format, uint8_t *dst, unsigned dst_stride,
    src_row = (const uint8_t *)src + y*src_stride + x*(format_desc->block.bits/8);
    dst_row = dst;
 
-   format_desc->unpack_rgba_8unorm(dst_row, dst_stride, src_row, src_stride, w, h);
+   unpack->unpack_rgba_8unorm(dst_row, dst_stride, src_row, src_stride, w, h);
 }
 
 
@@ -393,6 +399,8 @@ void
 util_format_write_4ub(enum pipe_format format, const uint8_t *src, unsigned src_stride, void *dst, unsigned dst_stride, unsigned x, unsigned y, unsigned w, unsigned h)
 {
    const struct util_format_description *format_desc;
+   const struct util_format_pack_description *pack =
+      util_format_pack_description(format);
    uint8_t *dst_row;
    const uint8_t *src_row;
 
@@ -404,7 +412,7 @@ util_format_write_4ub(enum pipe_format format, const uint8_t *src, unsigned src_
    dst_row = (uint8_t *)dst + y*dst_stride + x*(format_desc->block.bits/8);
    src_row = src;
 
-   format_desc->pack_rgba_8unorm(dst_row, dst_stride, src_row, src_stride, w, h);
+   pack->pack_rgba_8unorm(dst_row, dst_stride, src_row, src_stride, w, h);
 }
 
 /**
@@ -568,6 +576,10 @@ util_format_translate(enum pipe_format dst_format,
 {
    const struct util_format_description *dst_format_desc;
    const struct util_format_description *src_format_desc;
+   const struct util_format_pack_description *pack =
+      util_format_pack_description(dst_format);
+   const struct util_format_unpack_description *unpack =
+      util_format_unpack_description(src_format);
    uint8_t *dst_row;
    const uint8_t *src_row;
    unsigned x_step, y_step;
@@ -622,13 +634,11 @@ util_format_translate(enum pipe_format dst_format,
       assert(x_step == 1);
       assert(y_step == 1);
 
-      if (src_format_desc->unpack_z_float &&
-          dst_format_desc->pack_z_float) {
+      if (unpack->unpack_z_float && pack->pack_z_float) {
          tmp_z = malloc(width * sizeof *tmp_z);
       }
 
-      if (src_format_desc->unpack_s_8uint &&
-          dst_format_desc->pack_s_8uint) {
+      if (unpack->unpack_s_8uint && pack->pack_s_8uint) {
          tmp_s = malloc(width * sizeof *tmp_s);
       }
 
@@ -659,8 +669,8 @@ util_format_translate(enum pipe_format dst_format,
       unsigned tmp_stride;
       uint8_t *tmp_row;
 
-      if (!src_format_desc->unpack_rgba_8unorm ||
-          !dst_format_desc->pack_rgba_8unorm) {
+      if (!unpack->unpack_rgba_8unorm ||
+          !pack->pack_rgba_8unorm) {
          return FALSE;
       }
 
@@ -670,8 +680,8 @@ util_format_translate(enum pipe_format dst_format,
          return FALSE;
 
       while (height >= y_step) {
-         src_format_desc->unpack_rgba_8unorm(tmp_row, tmp_stride, src_row, src_stride, width, y_step);
-         dst_format_desc->pack_rgba_8unorm(dst_row, dst_stride, tmp_row, tmp_stride, width, y_step);
+         unpack->unpack_rgba_8unorm(tmp_row, tmp_stride, src_row, src_stride, width, y_step);
+         pack->pack_rgba_8unorm(dst_row, dst_stride, tmp_row, tmp_stride, width, y_step);
 
          dst_row += dst_step;
          src_row += src_step;
@@ -679,8 +689,8 @@ util_format_translate(enum pipe_format dst_format,
       }
 
       if (height) {
-         src_format_desc->unpack_rgba_8unorm(tmp_row, tmp_stride, src_row, src_stride, width, height);
-         dst_format_desc->pack_rgba_8unorm(dst_row, dst_stride, tmp_row, tmp_stride, width, height);
+         unpack->unpack_rgba_8unorm(tmp_row, tmp_stride, src_row, src_stride, width, height);
+         pack->pack_rgba_8unorm(dst_row, dst_stride, tmp_row, tmp_stride, width, height);
       }
 
       free(tmp_row);
@@ -701,8 +711,8 @@ util_format_translate(enum pipe_format dst_format,
          return FALSE;
 
       while (height >= y_step) {
-         src_format_desc->unpack_rgba(tmp_row, tmp_stride, src_row, src_stride, width, y_step);
-         dst_format_desc->pack_rgba_sint(dst_row, dst_stride, tmp_row, tmp_stride, width, y_step);
+         unpack->unpack_rgba(tmp_row, tmp_stride, src_row, src_stride, width, y_step);
+         pack->pack_rgba_sint(dst_row, dst_stride, tmp_row, tmp_stride, width, y_step);
 
          dst_row += dst_step;
          src_row += src_step;
@@ -710,8 +720,8 @@ util_format_translate(enum pipe_format dst_format,
       }
 
       if (height) {
-         src_format_desc->unpack_rgba(tmp_row, tmp_stride, src_row, src_stride, width, height);
-         dst_format_desc->pack_rgba_sint(dst_row, dst_stride, tmp_row, tmp_stride, width, height);
+         unpack->unpack_rgba(tmp_row, tmp_stride, src_row, src_stride, width, height);
+         pack->pack_rgba_sint(dst_row, dst_stride, tmp_row, tmp_stride, width, height);
       }
 
       free(tmp_row);
@@ -721,8 +731,8 @@ util_format_translate(enum pipe_format dst_format,
       unsigned tmp_stride;
       unsigned int *tmp_row;
 
-      if (!src_format_desc->unpack_rgba ||
-          !dst_format_desc->pack_rgba_uint) {
+      if (!unpack->unpack_rgba ||
+          !pack->pack_rgba_uint) {
          return FALSE;
       }
 
@@ -732,8 +742,8 @@ util_format_translate(enum pipe_format dst_format,
          return FALSE;
 
       while (height >= y_step) {
-         src_format_desc->unpack_rgba(tmp_row, tmp_stride, src_row, src_stride, width, y_step);
-         dst_format_desc->pack_rgba_uint(dst_row, dst_stride, tmp_row, tmp_stride, width, y_step);
+         unpack->unpack_rgba(tmp_row, tmp_stride, src_row, src_stride, width, y_step);
+         pack->pack_rgba_uint(dst_row, dst_stride, tmp_row, tmp_stride, width, y_step);
 
          dst_row += dst_step;
          src_row += src_step;
@@ -741,8 +751,8 @@ util_format_translate(enum pipe_format dst_format,
       }
 
       if (height) {
-         src_format_desc->unpack_rgba(tmp_row, tmp_stride, src_row, src_stride, width, height);
-         dst_format_desc->pack_rgba_uint(dst_row, dst_stride, tmp_row, tmp_stride, width, height);
+         unpack->unpack_rgba(tmp_row, tmp_stride, src_row, src_stride, width, height);
+         pack->pack_rgba_uint(dst_row, dst_stride, tmp_row, tmp_stride, width, height);
       }
 
       free(tmp_row);
@@ -751,8 +761,8 @@ util_format_translate(enum pipe_format dst_format,
       unsigned tmp_stride;
       float *tmp_row;
 
-      if (!src_format_desc->unpack_rgba ||
-          !dst_format_desc->pack_rgba_float) {
+      if (!unpack->unpack_rgba ||
+          !pack->pack_rgba_float) {
          return FALSE;
       }
 
@@ -762,8 +772,8 @@ util_format_translate(enum pipe_format dst_format,
          return FALSE;
 
       while (height >= y_step) {
-         src_format_desc->unpack_rgba(tmp_row, tmp_stride, src_row, src_stride, width, y_step);
-         dst_format_desc->pack_rgba_float(dst_row, dst_stride, tmp_row, tmp_stride, width, y_step);
+         unpack->unpack_rgba(tmp_row, tmp_stride, src_row, src_stride, width, y_step);
+         pack->pack_rgba_float(dst_row, dst_stride, tmp_row, tmp_stride, width, y_step);
 
          dst_row += dst_step;
          src_row += src_step;
@@ -771,8 +781,8 @@ util_format_translate(enum pipe_format dst_format,
       }
 
       if (height) {
-         src_format_desc->unpack_rgba(tmp_row, tmp_stride, src_row, src_stride, width, height);
-         dst_format_desc->pack_rgba_float(dst_row, dst_stride, tmp_row, tmp_stride, width, height);
+         unpack->unpack_rgba(tmp_row, tmp_stride, src_row, src_stride, width, height);
+         pack->pack_rgba_float(dst_row, dst_stride, tmp_row, tmp_stride, width, height);
       }
 
       free(tmp_row);

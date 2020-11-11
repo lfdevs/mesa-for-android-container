@@ -33,6 +33,7 @@ static bool bin_debug = false;
  * in a single bin) are commented out, but retained for posterity.
  */
 static const struct gmem_key keys[] = {
+	{ .minx=0, .miny=0, .width=1536, .height=2048, .gmem_page_align=1, .nr_cbufs=1, .cbuf_cpp = {1,0,0,0,0,0,0,0,}, .zsbuf_cpp = {0,0,}},
 	/* manhattan: */
 	{ .minx=0, .miny=0, .width=1920, .height=1080, .gmem_page_align=1, .nr_cbufs=1, .cbuf_cpp = {4,0,0,0,0,0,0,0,}, .zsbuf_cpp = {0,0,}},
 	{ .minx=0, .miny=0, .width=1920, .height=1080, .gmem_page_align=1, .nr_cbufs=1, .cbuf_cpp = {4,0,0,0,0,0,0,0,}, .zsbuf_cpp = {4,0,}},
@@ -80,11 +81,6 @@ static const struct gmem_key keys[] = {
 struct gpu_info {
 	const char *name;
 	uint32_t gpu_id;
-	uint32_t gmem_alignw;
-	uint32_t gmem_alignh;
-	uint32_t tile_alignw;
-	uint32_t tile_alignh;
-	uint32_t num_vsc_pipes;
 	uint8_t  gmem_page_align;
 	uint32_t gmemsize_bytes;
 };
@@ -96,12 +92,12 @@ struct gpu_info {
 
 /* keep sorted by gpu name: */
 static const struct gpu_info gpu_infos[] = {
-	{ "a306", 307, 32, 32, 32, 32,  8, 4, SZ_128K },
-	{ "a405", 405, 32, 32, 32, 32,  8, 4, SZ_256K },
-	{ "a530", 530, 64, 32, 64, 32, 16, 4, SZ_1M   },
-	{ "a618", 618, 16,  4, 32, 32, 32, 1, SZ_512K },
-	{ "a630", 630, 16,  4, 32, 32, 32, 1, SZ_1M   },
-	{ "a650", 630, 16,  4, 96, 32, 32, 1, SZ_1M + SZ_128K },
+	{ "a306", 307, 4, SZ_128K },
+	{ "a405", 405, 4, SZ_256K },
+	{ "a530", 530, 4, SZ_1M   },
+	{ "a618", 618, 1, SZ_512K },
+	{ "a630", 630, 1, SZ_1M   },
+	{ "a650", 630, 1, SZ_1M + SZ_128K },
 };
 
 
@@ -168,13 +164,10 @@ main(int argc, char **argv)
 	 */
 	struct fd_screen screen = {
 		.gpu_id         = gpu_info->gpu_id,
-		.gmem_alignw    = gpu_info->gmem_alignw,
-		.gmem_alignh    = gpu_info->gmem_alignh,
-		.tile_alignw    = gpu_info->tile_alignw,
-		.tile_alignh    = gpu_info->tile_alignh,
-		.num_vsc_pipes  = gpu_info->num_vsc_pipes,
 		.gmemsize_bytes = gpu_info->gmemsize_bytes,
 	};
+
+	freedreno_dev_info_init(&screen.info, gpu_info->gpu_id);
 
 	/* And finally run thru all the GMEM keys: */
 	for (int i = 0; i < ARRAY_SIZE(keys); i++) {
@@ -185,6 +178,8 @@ main(int argc, char **argv)
 
 		assert((gmem->bin_w * gmem->nbins_x) >= key.width);
 		assert((gmem->bin_h * gmem->nbins_y) >= key.height);
+		assert(gmem->bin_w < screen.info.tile_max_w);
+		assert(gmem->bin_h < screen.info.tile_max_h);
 
 		ralloc_free(gmem);
 	}

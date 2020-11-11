@@ -640,20 +640,62 @@ brw_inst_set_state(const struct gen_device_info *devinfo,
       brw_inst_set_acc_wr_control(devinfo, insn, state->acc_wr_control);
 }
 
+static brw_inst *
+brw_append_insns(struct brw_codegen *p, unsigned nr_insn, unsigned align)
+{
+   assert(util_is_power_of_two_or_zero(sizeof(brw_inst)));
+   assert(util_is_power_of_two_or_zero(align));
+   const unsigned align_insn = MAX2(align / sizeof(brw_inst), 1);
+   const unsigned start_insn = ALIGN(p->nr_insn, align_insn);
+   const unsigned new_nr_insn = start_insn + nr_insn;
+
+   if (p->store_size < new_nr_insn) {
+      p->store_size = util_next_power_of_two(new_nr_insn * sizeof(brw_inst));
+      p->store = reralloc(p->mem_ctx, p->store, brw_inst, p->store_size);
+   }
+
+   /* Memset any padding due to alignment to 0.  We don't want to be hashing
+    * or caching a bunch of random bits we got from a memory allocation.
+    */
+   if (p->nr_insn < start_insn) {
+      memset(&p->store[p->nr_insn], 0,
+             (start_insn - p->nr_insn) * sizeof(brw_inst));
+   }
+
+   assert(p->next_insn_offset == p->nr_insn * sizeof(brw_inst));
+   p->nr_insn = new_nr_insn;
+   p->next_insn_offset = new_nr_insn * sizeof(brw_inst);
+
+   return &p->store[start_insn];
+}
+
+void
+brw_realign(struct brw_codegen *p, unsigned align)
+{
+   brw_append_insns(p, 0, align);
+}
+
+int
+brw_append_data(struct brw_codegen *p, void *data,
+                unsigned size, unsigned align)
+{
+   unsigned nr_insn = DIV_ROUND_UP(size, sizeof(brw_inst));
+   void *dst = brw_append_insns(p, nr_insn, align);
+   memcpy(dst, data, size);
+
+   /* If it's not a whole number of instructions, memset the end */
+   if (size < nr_insn * sizeof(brw_inst))
+      memset(dst + size, 0, nr_insn * sizeof(brw_inst) - size);
+
+   return dst - (void *)p->store;
+}
+
 #define next_insn brw_next_insn
 brw_inst *
 brw_next_insn(struct brw_codegen *p, unsigned opcode)
 {
    const struct gen_device_info *devinfo = p->devinfo;
-   brw_inst *insn;
-
-   if (p->nr_insn + 1 > p->store_size) {
-      p->store_size <<= 1;
-      p->store = reralloc(p->mem_ctx, p->store, brw_inst, p->store_size);
-   }
-
-   p->next_insn_offset += 16;
-   insn = &p->store[p->nr_insn++];
+   brw_inst *insn = brw_append_insns(p, 1, sizeof(brw_inst));
 
    memset(insn, 0, sizeof(*insn));
    brw_inst_set_opcode(devinfo, insn, opcode);
@@ -3025,8 +3067,7 @@ brw_svb_write(struct brw_codegen *p,
 }
 
 static unsigned
-brw_surface_payload_size(struct brw_codegen *p,
-                         unsigned num_channels,
+brw_surface_payload_size(unsigned num_channels,
                          unsigned exec_size /**< 0 for SIMD4x2 */)
 {
    if (exec_size == 0)
@@ -3057,7 +3098,7 @@ brw_untyped_atomic(struct brw_codegen *p,
    const unsigned exec_size = align1 ? 1 << brw_get_default_exec_size(p) :
                               has_simd4x2 ? 0 : 8;
    const unsigned response_length =
-      brw_surface_payload_size(p, response_expected, exec_size);
+      brw_surface_payload_size(response_expected, exec_size);
    const unsigned desc =
       brw_message_desc(devinfo, msg_length, response_length, header_present) |
       brw_dp_untyped_atomic_desc(devinfo, exec_size, atomic_op,
@@ -3089,7 +3130,7 @@ brw_untyped_surface_read(struct brw_codegen *p,
    const bool align1 = brw_get_default_access_mode(p) == BRW_ALIGN_1;
    const unsigned exec_size = align1 ? 1 << brw_get_default_exec_size(p) : 0;
    const unsigned response_length =
-      brw_surface_payload_size(p, num_channels, exec_size);
+      brw_surface_payload_size(num_channels, exec_size);
    const unsigned desc =
       brw_message_desc(devinfo, msg_length, response_length, false) |
       brw_dp_untyped_surface_rw_desc(devinfo, exec_size, num_channels, false);
@@ -3598,4 +3639,47 @@ brw_float_controls_mode(struct brw_codegen *p,
 
    if (p->devinfo->gen >= 12)
       brw_SYNC(p, TGL_SYNC_NOP);
+}
+
+void
+brw_update_reloc_imm(const struct gen_device_info *devinfo,
+                     brw_inst *inst,
+                     uint32_t value)
+{
+   /* Sanity check that the instruction is a MOV of an immediate */
+   assert(brw_inst_opcode(devinfo, inst) == BRW_OPCODE_MOV);
+   assert(brw_inst_src0_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE);
+
+   /* If it was compacted, we can't safely rewrite */
+   assert(brw_inst_cmpt_control(devinfo, inst) == 0);
+
+   brw_inst_set_imm_ud(devinfo, inst, value);
+}
+
+/* A default value for constants that will be patched at run-time.
+ * We pick an arbitrary value that prevents instruction compaction.
+ */
+#define DEFAULT_PATCH_IMM 0x4a7cc037
+
+void
+brw_MOV_reloc_imm(struct brw_codegen *p,
+                  struct brw_reg dst,
+                  enum brw_reg_type src_type,
+                  uint32_t id)
+{
+   assert(type_sz(src_type) == 4);
+   assert(type_sz(dst.type) == 4);
+
+   if (p->num_relocs + 1 > p->reloc_array_size) {
+      p->reloc_array_size = MAX2(16, p->reloc_array_size * 2);
+      p->relocs = reralloc(p->mem_ctx, p->relocs,
+                           struct brw_shader_reloc, p->reloc_array_size);
+   }
+
+   p->relocs[p->num_relocs++] = (struct brw_shader_reloc) {
+      .id = id,
+      .offset = p->next_insn_offset,
+   };
+
+   brw_MOV(p, dst, retype(brw_imm_ud(DEFAULT_PATCH_IMM), src_type));
 }

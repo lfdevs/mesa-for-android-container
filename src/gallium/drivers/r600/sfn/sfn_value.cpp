@@ -210,7 +210,7 @@ UniformValue::UniformValue(uint32_t sel, uint32_t chan, uint32_t kcache_bank):
 UniformValue::UniformValue(uint32_t sel, uint32_t chan, PValue addr):
    Value(Value::kconst, chan),
    m_index(sel),
-   m_kcache_bank(0),
+   m_kcache_bank(1),
    m_addr(addr)
 {
 
@@ -238,8 +238,10 @@ void UniformValue::do_print(std::ostream& os) const
 {
    if (m_index < 512)
       os << "KC" << m_kcache_bank << "[" << m_index;
+   else if (m_addr)
+      os << "KC[" << *m_addr << "][" << m_index;
    else
-      os << "KCX[" << m_index;
+      os << "KCx[" << m_index;
    os << "]." << component_names[chan()];
 }
 

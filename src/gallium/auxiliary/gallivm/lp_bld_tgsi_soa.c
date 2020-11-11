@@ -1255,6 +1255,7 @@ emit_fetch_tcs_input(
                                               vertex_index,
                                               reg->Register.Indirect,
                                               attrib_index,
+                                              FALSE,
                                               swizzle_index,
                                               bld_base->info->output_semantic_name[reg->Register.Index]);
    } else {
@@ -1263,6 +1264,7 @@ emit_fetch_tcs_input(
                                              vertex_index,
                                              reg->Register.Indirect,
                                              attrib_index,
+                                             FALSE,
                                              swizzle_index);
    }
 
@@ -1277,6 +1279,7 @@ emit_fetch_tcs_input(
                                                   vertex_index,
                                                   reg->Register.Indirect,
                                                   attrib_index,
+                                                  FALSE,
                                                   swizzle_index,
                                                   bld_base->info->output_semantic_name[reg->Register.Index]);
       } else {
@@ -1285,6 +1288,7 @@ emit_fetch_tcs_input(
                                                  vertex_index,
                                                  reg->Register.Indirect,
                                                  attrib_index,
+                                                 FALSE,
                                                  swizzle_index);
       }
       assert(res2);
@@ -1358,6 +1362,7 @@ emit_fetch_tes_input(
                                        vertex_index,
                                        reg->Register.Indirect,
                                        attrib_index,
+                                       FALSE,
                                        swizzle_index);
    }
 
@@ -1377,6 +1382,7 @@ emit_fetch_tes_input(
                                              vertex_index,
                                              reg->Register.Indirect,
                                              attrib_index,
+                                             FALSE,
                                              swizzle_index);
       }
       assert(res2);
@@ -1763,6 +1769,7 @@ emit_store_tcs_output(struct lp_build_tgsi_context *bld_base,
                                           vertex_index,
                                           reg->Register.Indirect,
                                           attrib_index,
+                                          false,
                                           channel_index,
                                           value,
                                           mask_vec(bld_base));

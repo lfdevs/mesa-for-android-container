@@ -38,6 +38,7 @@
 #include "util/u_upload_mgr.h"
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_builder.h"
+#include "intel/common/gen_disasm.h"
 #include "intel/compiler/brw_compiler.h"
 #include "intel/compiler/brw_eu.h"
 #include "intel/compiler/brw_nir.h"
@@ -199,6 +200,7 @@ iris_upload_shader(struct iris_context *ice,
                    uint32_t *streamout,
                    enum brw_param_builtin *system_values,
                    unsigned num_system_values,
+                   unsigned kernel_input_size,
                    unsigned num_cbufs,
                    const struct iris_binding_table *bt)
 {
@@ -226,6 +228,24 @@ iris_upload_shader(struct iris_context *ice,
                      &shader->assembly.offset, &shader->assembly.res,
                      &shader->map);
       memcpy(shader->map, assembly, prog_data->program_size);
+
+      struct iris_resource *res = (void *) shader->assembly.res;
+      uint64_t shader_data_addr = res->bo->gtt_offset +
+                                  shader->assembly.offset +
+                                  prog_data->const_data_offset;
+
+      struct brw_shader_reloc_value reloc_values[] = {
+         {
+            .id = IRIS_SHADER_RELOC_CONST_DATA_ADDR_LOW,
+            .value = shader_data_addr,
+         },
+         {
+            .id = IRIS_SHADER_RELOC_CONST_DATA_ADDR_HIGH,
+            .value = shader_data_addr >> 32,
+         },
+      };
+      brw_write_shader_relocs(&screen->devinfo, shader->map, prog_data,
+                              reloc_values, ARRAY_SIZE(reloc_values));
    }
 
    list_inithead(&shader->link);
@@ -234,10 +254,12 @@ iris_upload_shader(struct iris_context *ice,
    shader->streamout = streamout;
    shader->system_values = system_values;
    shader->num_system_values = num_system_values;
+   shader->kernel_input_size = kernel_input_size;
    shader->num_cbufs = num_cbufs;
    shader->bt = *bt;
 
    ralloc_steal(shader, shader->prog_data);
+   ralloc_steal(shader->prog_data, (void *)prog_data->relocs);
    ralloc_steal(shader->prog_data, prog_data->param);
    ralloc_steal(shader->prog_data, prog_data->pull_param);
    ralloc_steal(shader, shader->streamout);
@@ -296,7 +318,7 @@ iris_blorp_upload_shader(struct blorp_batch *blorp_batch, uint32_t stage,
 
    struct iris_compiled_shader *shader =
       iris_upload_shader(ice, IRIS_CACHE_BLORP, key_size, key, kernel,
-                         prog_data, NULL, NULL, 0, 0, &bt);
+                         prog_data, NULL, NULL, 0, 0, 0, &bt);
 
    struct iris_bo *bo = iris_resource_bo(shader->assembly.res);
    *kernel_out =
@@ -363,7 +385,6 @@ iris_print_program_cache(struct iris_context *ice)
       const struct keybox *keybox = entry->key;
       struct iris_compiled_shader *shader = entry->data;
       fprintf(stderr, "%s:\n", cache_name(keybox->cache_id));
-      brw_disassemble(devinfo, shader->map, 0,
-                      shader->prog_data->program_size, stderr);
+      gen_disassemble(devinfo, shader->map, 0, stderr);
    }
 }

@@ -125,23 +125,6 @@ static const struct gen_l3_config bxt_2x6_l3_configs[] = {
 DECLARE_L3_LIST(bxt_2x6);
 
 /**
- * CNL validated L3 configurations.  \sa ivb_l3_configs.
- */
-static const struct gen_l3_config cnl_l3_configs[] = {
-   /* SLM URB ALL DC  RO  IS   C   T */
-   {{  0, 64, 64,  0,  0,  0,  0,  0 }},
-   {{  0, 64,  0, 16, 48,  0,  0,  0 }},
-   {{  0, 48,  0, 16, 64,  0,  0,  0 }},
-   {{  0, 32,  0,  0, 96,  0,  0,  0 }},
-   {{  0, 32, 96,  0,  0,  0,  0,  0 }},
-   {{  0, 32,  0, 16, 80,  0,  0,  0 }},
-   {{ 32, 16, 80,  0,  0,  0,  0,  0 }},
-   {{ 32, 16,  0, 64, 16,  0,  0,  0 }},
-   {{ 32,  0, 96,  0,  0,  0,  0,  0 }},
-};
-DECLARE_L3_LIST(cnl);
-
-/**
  * ICL validated L3 configurations.  \sa icl_l3_configs.
  * Zeroth entry in below table has been commented out intentionally
  * due to known issues with this configuration. Many other entries
@@ -191,9 +174,6 @@ get_l3_list(const struct gen_device_info *devinfo)
       if (devinfo->l3_banks == 1)
          return &bxt_2x6_l3_list;
       return &chv_l3_list;
-
-   case 10:
-      return &cnl_l3_list;
 
    case 11:
       return &icl_l3_list;

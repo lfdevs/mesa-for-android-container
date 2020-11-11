@@ -40,14 +40,30 @@ CSO objects handled by the context object:
 Resource Binding State
 ^^^^^^^^^^^^^^^^^^^^^^
 
-This state describes how resources in various flavours (textures,
+This state describes how resources in various flavors (textures,
 buffers, surfaces) are bound to the driver.
 
 
 * ``set_constant_buffer`` sets a constant buffer to be used for a given shader
-  type. index is used to indicate which buffer to set (some apis may allow
+  type. index is used to indicate which buffer to set (some APIs may allow
   multiple ones to be set, and binding a specific one later, though drivers
   are mostly restricted to the first one right now).
+
+* ``set_inlinable_constants`` sets inlinable constants for constant buffer 0.
+
+These are constants that the driver would like to inline in the IR
+of the current shader and recompile it. Drivers can determine which
+constants they prefer to inline in finalize_nir and store that
+information in shader_info::*inlinable_uniform*. When the state tracker
+or frontend uploads constants to a constant buffer, it can pass
+inlinable constants separately via this call.
+
+Any ``set_constant_buffer`` call invalidates inlinable constants, so
+``set_inlinable_constants`` must be called after it. Binding a shader also
+invalidates this state.
+
+There is no ``PIPE_CAP`` for this. Drivers shouldn't set the shader_info
+fields if they don't implement ``set_inlinable_constants``.
 
 * ``set_framebuffer_state``
 
@@ -66,7 +82,7 @@ objects. They all follow simple, one-method binding calls, e.g.
 * ``set_blend_color``
 * ``set_sample_mask``  sets the per-context multisample sample mask.  Note
   that this takes effect even if multisampling is not explicitly enabled if
-  the frambuffer surface(s) are multisampled.  Also, this mask is AND-ed
+  the framebuffer surface(s) are multisampled.  Also, this mask is AND-ed
   with the optional fragment shader sample mask output (when emitted).
 * ``set_sample_locations`` sets the sample locations used for rasterization.
   ```get_sample_position``` still returns the default locations. When NULL,
@@ -145,7 +161,7 @@ to the array index which is used for sampling.
 
   Sampler views outside of ``[start_slot, start_slot + num_views)`` are
   unmodified.  If ``views`` is NULL, the behavior is the same as if
-  ``views[n]`` was NULL for the entire range, ie. releasing the reference
+  ``views[n]`` was NULL for the entire range, i.e. releasing the reference
   for all the sampler views in the specified range.
 
 * ``create_sampler_view`` creates a new sampler view. ``texture`` is associated
@@ -214,7 +230,7 @@ Two stream output targets can use the same resource at the same time, but
 with a disjoint memory range.
 
 Additionally, the stream output target internally maintains the offset
-into the buffer which is incremented everytime something is written to it.
+into the buffer which is incremented every time something is written to it.
 The internal offset is equal to how much data has already been written.
 It can be stored in device memory and the CPU actually doesn't have to query
 it.
@@ -605,11 +621,11 @@ is forever considered to be signaled.
 Once a re-usable ``pipe_fence_handle`` becomes signaled, it can be reset
 back into an unsignaled state. The ``pipe_fence_handle`` will be reset to
 the unsignaled state by performing a wait operation on said object, i.e.
-``fence_server_sync``. As a corollary to this behaviour, a re-usable
+``fence_server_sync``. As a corollary to this behavior, a re-usable
 ``pipe_fence_handle`` can only have one waiter.
 
-This behaviour is useful in producer <-> consumer chains. It helps avoid
-unecessarily sharing a new ``pipe_fence_handle`` each time a new frame is
+This behavior is useful in producer <-> consumer chains. It helps avoid
+unnecessarily sharing a new ``pipe_fence_handle`` each time a new frame is
 ready. Instead, the fences are exchanged once ahead of time, and access is synchronized
 through GPU signaling instead of direct producer <-> consumer communication.
 
@@ -754,49 +770,49 @@ the last (partial) page requires a box that ends at the end of the buffer
 
 .. _pipe_transfer:
 
-PIPE_TRANSFER
+PIPE_MAP
 ^^^^^^^^^^^^^
 
 These flags control the behavior of a transfer object.
 
-``PIPE_TRANSFER_READ``
+``PIPE_MAP_READ``
   Resource contents read back (or accessed directly) at transfer create time.
 
-``PIPE_TRANSFER_WRITE``
+``PIPE_MAP_WRITE``
   Resource contents will be written back at transfer_unmap time (or modified
   as a result of being accessed directly).
 
-``PIPE_TRANSFER_MAP_DIRECTLY``
+``PIPE_MAP_DIRECTLY``
   a transfer should directly map the resource. May return NULL if not supported.
 
-``PIPE_TRANSFER_DISCARD_RANGE``
+``PIPE_MAP_DISCARD_RANGE``
   The memory within the mapped region is discarded.  Cannot be used with
-  ``PIPE_TRANSFER_READ``.
+  ``PIPE_MAP_READ``.
 
-``PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE``
+``PIPE_MAP_DISCARD_WHOLE_RESOURCE``
   Discards all memory backing the resource.  It should not be used with
-  ``PIPE_TRANSFER_READ``.
+  ``PIPE_MAP_READ``.
 
-``PIPE_TRANSFER_DONTBLOCK``
+``PIPE_MAP_DONTBLOCK``
   Fail if the resource cannot be mapped immediately.
 
-``PIPE_TRANSFER_UNSYNCHRONIZED``
+``PIPE_MAP_UNSYNCHRONIZED``
   Do not synchronize pending operations on the resource when mapping. The
   interaction of any writes to the map and any operations pending on the
-  resource are undefined. Cannot be used with ``PIPE_TRANSFER_READ``.
+  resource are undefined. Cannot be used with ``PIPE_MAP_READ``.
 
-``PIPE_TRANSFER_FLUSH_EXPLICIT``
+``PIPE_MAP_FLUSH_EXPLICIT``
   Written ranges will be notified later with :ref:`transfer_flush_region`.
-  Cannot be used with ``PIPE_TRANSFER_READ``.
+  Cannot be used with ``PIPE_MAP_READ``.
 
-``PIPE_TRANSFER_PERSISTENT``
+``PIPE_MAP_PERSISTENT``
   Allows the resource to be used for rendering while mapped.
   PIPE_RESOURCE_FLAG_MAP_PERSISTENT must be set when creating
   the resource.
   If COHERENT is not set, memory_barrier(PIPE_BARRIER_MAPPED_BUFFER)
   must be called to ensure the device can see what the CPU has written.
 
-``PIPE_TRANSFER_COHERENT``
+``PIPE_MAP_COHERENT``
   If PERSISTENT is set, this ensures any writes done by the device are
   immediately visible to the CPU and vice versa.
   PIPE_RESOURCE_FLAG_MAP_COHERENT must be set when creating
@@ -909,4 +925,4 @@ uploaded data, unless:
   mapping, memory_barrier(PIPE_BARRIER_MAPPED_BUFFER) should be called on the
   context that has mapped the resource. No flush is required.
 
-* Mapping the resource with PIPE_TRANSFER_MAP_DIRECTLY.
+* Mapping the resource with PIPE_MAP_DIRECTLY.

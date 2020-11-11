@@ -46,3 +46,16 @@ if with_tests
        suite : ['intel'],
       )
 endif
+
+if with_intel_tools
+  intel_device_info = executable(
+    'intel_device_info',
+    files('intel_device_info.c'),
+    dependencies : [dep_libdrm, dep_dl, dep_thread, dep_m],
+    include_directories : [inc_include, inc_src, inc_intel],
+    link_with : libintel_dev,
+    c_args : [no_override_init_args],
+    gnu_symbol_visibility : 'hidden',
+    install : false
+  )
+endif

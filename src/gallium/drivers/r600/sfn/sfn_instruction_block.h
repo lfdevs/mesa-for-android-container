@@ -61,6 +61,8 @@ public:
            return m_block_number;
         }
 
+        PInstruction last_instruction();
+
 private:
         void do_evalue_liveness(LiverangeEvaluator& eval) const override;
         bool is_equal_to(const Instruction& lhs) const override;

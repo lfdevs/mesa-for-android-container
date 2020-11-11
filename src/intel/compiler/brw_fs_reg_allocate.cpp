@@ -28,6 +28,7 @@
 #include "brw_eu.h"
 #include "brw_fs.h"
 #include "brw_cfg.h"
+#include "util/set.h"
 #include "util/register_allocate.h"
 
 using namespace brw;
@@ -416,6 +417,13 @@ public:
    {
       mem_ctx = ralloc_context(NULL);
 
+      /* Stash the number of instructions so we can sanity check that our
+       * counts still match liveness.
+       */
+      live_instr_count = fs->cfg->last_block()->end_ip + 1;
+
+      spill_insts = _mesa_pointer_set_create(mem_ctx);
+
       /* Most of this allocation was written for a reg_width of 1
        * (dispatch_width == 8).  In extending to SIMD16, the code was
        * left in place and it was converted to have the hardware
@@ -428,6 +436,15 @@ public:
 
       /* Get payload IP information */
       payload_last_use_ip = ralloc_array(mem_ctx, int, payload_node_count);
+
+      node_count = 0;
+      first_payload_node = 0;
+      first_mrf_hack_node = 0;
+      scratch_header_node = 0;
+      grf127_send_hack_node = 0;
+      first_vgrf_node = 0;
+      last_vgrf_node = 0;
+      first_spill_node = 0;
 
       spill_vgrf_ip = NULL;
       spill_vgrf_ip_alloc = 0;
@@ -449,8 +466,14 @@ private:
    void build_interference_graph(bool allow_spilling);
    void discard_interference_graph();
 
+   void emit_unspill(const fs_builder &bld, fs_reg dst,
+                     uint32_t spill_offset, unsigned count);
+   void emit_spill(const fs_builder &bld, fs_reg src,
+                   uint32_t spill_offset, unsigned count);
+
    void set_spill_costs();
    int choose_spill_reg();
+   fs_reg alloc_scratch_header();
    fs_reg alloc_spill_reg(unsigned size, int ip);
    void spill_reg(unsigned spill_reg);
 
@@ -459,6 +482,9 @@ private:
    const gen_device_info *devinfo;
    const brw_compiler *compiler;
    const fs_live_variables &live;
+   int live_instr_count;
+
+   set *spill_insts;
 
    /* Which compiler->fs_reg_sets[] to use */
    int rsi;
@@ -472,13 +498,17 @@ private:
    int node_count;
    int first_payload_node;
    int first_mrf_hack_node;
+   int scratch_header_node;
    int grf127_send_hack_node;
    int first_vgrf_node;
+   int last_vgrf_node;
    int first_spill_node;
 
    int *spill_vgrf_ip;
    int spill_vgrf_ip_alloc;
    int spill_node_count;
+
+   fs_reg scratch_header;
 };
 
 /**
@@ -554,6 +584,8 @@ namespace {
    unsigned
    spill_base_mrf(const backend_shader *s)
    {
+      /* We don't use the MRF hack on Gen9+ */
+      assert(s->devinfo->gen < 9);
       return BRW_MAX_MRF(s->devinfo->gen) - spill_max_size(s) - 1;
    }
 }
@@ -585,12 +617,16 @@ fs_reg_alloc::setup_live_interference(unsigned node,
          ra_add_node_interference(g, node, first_mrf_hack_node + i);
    }
 
+   /* Everything interferes with the scratch header */
+   if (scratch_header_node >= 0)
+      ra_add_node_interference(g, node, scratch_header_node);
+
    /* Add interference with every vgrf whose live range intersects this
     * node's.  We only need to look at nodes below this one as the reflexivity
     * of interference will take care of the rest.
     */
    for (unsigned n2 = first_vgrf_node;
-        n2 < (unsigned)first_spill_node && n2 < node; n2++) {
+        n2 <= (unsigned)last_vgrf_node && n2 < node; n2++) {
       unsigned vgrf = n2 - first_vgrf_node;
       if (!(node_end_ip <= live.vgrf_start[vgrf] ||
             live.vgrf_end[vgrf] <= node_start_ip))
@@ -723,7 +759,7 @@ fs_reg_alloc::build_interference_graph(bool allow_spilling)
    node_count = 0;
    first_payload_node = node_count;
    node_count += payload_node_count;
-   if (devinfo->gen >= 7 && allow_spilling) {
+   if (devinfo->gen >= 7 && devinfo->gen < 9 && allow_spilling) {
       first_mrf_hack_node = node_count;
       node_count += BRW_MAX_GRF - GEN7_MRF_HACK_START;
    } else {
@@ -737,6 +773,12 @@ fs_reg_alloc::build_interference_graph(bool allow_spilling)
    }
    first_vgrf_node = node_count;
    node_count += fs->alloc.count;
+   last_vgrf_node = node_count - 1;
+   if (devinfo->gen >= 9 && allow_spilling) {
+      scratch_header_node = node_count++;
+   } else {
+      scratch_header_node = -1;
+   }
    first_spill_node = node_count;
 
    fs->calculate_payload_ranges(payload_node_count,
@@ -828,9 +870,9 @@ fs_reg_alloc::discard_interference_graph()
    have_spill_costs = false;
 }
 
-static void
-emit_unspill(const fs_builder &bld, fs_reg dst,
-             uint32_t spill_offset, unsigned count)
+void
+fs_reg_alloc::emit_unspill(const fs_builder &bld, fs_reg dst,
+                           uint32_t spill_offset, unsigned count)
 {
    const gen_device_info *devinfo = bld.shader->devinfo;
    const unsigned reg_size = dst.component_size(bld.dispatch_width()) /
@@ -838,46 +880,98 @@ emit_unspill(const fs_builder &bld, fs_reg dst,
    assert(count % reg_size == 0);
 
    for (unsigned i = 0; i < count / reg_size; i++) {
-      /* The Gen7 descriptor-based offset is 12 bits of HWORD units.  Because
-       * the Gen7-style scratch block read is hardwired to BTI 255, on Gen9+
-       * it would cause the DC to do an IA-coherent read, what largely
-       * outweighs the slight advantage from not having to provide the address
-       * as part of the message header, so we're better off using plain old
-       * oword block reads.
-       */
-      bool gen7_read = (devinfo->gen >= 7 && devinfo->gen < 9 &&
-                        spill_offset < (1 << 12) * REG_SIZE);
-      fs_inst *unspill_inst = bld.emit(gen7_read ?
-                                       SHADER_OPCODE_GEN7_SCRATCH_READ :
-                                       SHADER_OPCODE_GEN4_SCRATCH_READ,
-                                       dst);
-      unspill_inst->offset = spill_offset;
+      fs_inst *unspill_inst;
+      if (devinfo->gen >= 9) {
+         fs_reg header = this->scratch_header;
+         fs_builder ubld = bld.exec_all().group(1, 0);
+         assert(spill_offset % 16 == 0);
+         unspill_inst = ubld.MOV(component(header, 2),
+                                 brw_imm_ud(spill_offset / 16));
+         _mesa_set_add(spill_insts, unspill_inst);
 
-      if (!gen7_read) {
+         fs_reg srcs[] = { brw_imm_ud(0), brw_imm_ud(0), header };
+         unspill_inst = bld.emit(SHADER_OPCODE_SEND, dst,
+                                 srcs, ARRAY_SIZE(srcs));
+         unspill_inst->mlen = 1;
+         unspill_inst->header_size = 1;
+         unspill_inst->size_written = reg_size * REG_SIZE;
+         unspill_inst->send_has_side_effects = false;
+         unspill_inst->send_is_volatile = true;
+         unspill_inst->sfid = GEN7_SFID_DATAPORT_DATA_CACHE;
+         unspill_inst->desc =
+            brw_dp_read_desc(devinfo, GEN8_BTI_STATELESS_NON_COHERENT,
+                             BRW_DATAPORT_OWORD_BLOCK_DWORDS(reg_size * 8),
+                             BRW_DATAPORT_READ_MESSAGE_OWORD_BLOCK_READ,
+                             BRW_DATAPORT_READ_TARGET_RENDER_CACHE);
+      } else if (devinfo->gen >= 7 && spill_offset < (1 << 12) * REG_SIZE) {
+         /* The Gen7 descriptor-based offset is 12 bits of HWORD units.
+          * Because the Gen7-style scratch block read is hardwired to BTI 255,
+          * on Gen9+ it would cause the DC to do an IA-coherent read, what
+          * largely outweighs the slight advantage from not having to provide
+          * the address as part of the message header, so we're better off
+          * using plain old oword block reads.
+          */
+         unspill_inst = bld.emit(SHADER_OPCODE_GEN7_SCRATCH_READ, dst);
+         unspill_inst->offset = spill_offset;
+      } else {
+         unspill_inst = bld.emit(SHADER_OPCODE_GEN4_SCRATCH_READ, dst);
+         unspill_inst->offset = spill_offset;
          unspill_inst->base_mrf = spill_base_mrf(bld.shader);
          unspill_inst->mlen = 1; /* header contains offset */
       }
+      _mesa_set_add(spill_insts, unspill_inst);
 
       dst.offset += reg_size * REG_SIZE;
       spill_offset += reg_size * REG_SIZE;
    }
 }
 
-static void
-emit_spill(const fs_builder &bld, fs_reg src,
-           uint32_t spill_offset, unsigned count)
+void
+fs_reg_alloc::emit_spill(const fs_builder &bld, fs_reg src,
+                         uint32_t spill_offset, unsigned count)
 {
+   const gen_device_info *devinfo = bld.shader->devinfo;
    const unsigned reg_size = src.component_size(bld.dispatch_width()) /
                              REG_SIZE;
    assert(count % reg_size == 0);
 
    for (unsigned i = 0; i < count / reg_size; i++) {
-      fs_inst *spill_inst =
-         bld.emit(SHADER_OPCODE_GEN4_SCRATCH_WRITE, bld.null_reg_f(), src);
+      fs_inst *spill_inst;
+      if (devinfo->gen >= 9) {
+         fs_reg header = this->scratch_header;
+         fs_builder ubld = bld.exec_all().group(1, 0);
+         assert(spill_offset % 16 == 0);
+         spill_inst = ubld.MOV(component(header, 2),
+                               brw_imm_ud(spill_offset / 16));
+         _mesa_set_add(spill_insts, spill_inst);
+
+         fs_reg srcs[] = { brw_imm_ud(0), brw_imm_ud(0), header, src };
+         spill_inst = bld.emit(SHADER_OPCODE_SEND, bld.null_reg_f(),
+                               srcs, ARRAY_SIZE(srcs));
+         spill_inst->mlen = 1;
+         spill_inst->ex_mlen = reg_size;
+         spill_inst->size_written = 0;
+         spill_inst->header_size = 1;
+         spill_inst->send_has_side_effects = true;
+         spill_inst->send_is_volatile = false;
+         spill_inst->sfid = GEN7_SFID_DATAPORT_DATA_CACHE;
+         spill_inst->desc =
+            brw_dp_write_desc(devinfo, GEN8_BTI_STATELESS_NON_COHERENT,
+                              BRW_DATAPORT_OWORD_BLOCK_DWORDS(reg_size * 8),
+                              GEN6_DATAPORT_WRITE_MESSAGE_OWORD_BLOCK_WRITE,
+                              0 /* not a render target */,
+                              false /* send_commit_msg */);
+      } else {
+         spill_inst = bld.emit(SHADER_OPCODE_GEN4_SCRATCH_WRITE,
+                               bld.null_reg_f(), src);
+         spill_inst->offset = spill_offset;
+         spill_inst->mlen = 1 + reg_size; /* header, value */
+         spill_inst->base_mrf = spill_base_mrf(bld.shader);
+      }
+      _mesa_set_add(spill_insts, spill_inst);
+
       src.offset += reg_size * REG_SIZE;
-      spill_inst->offset = spill_offset + i * reg_size * REG_SIZE;
-      spill_inst->mlen = 1 + reg_size; /* header, value */
-      spill_inst->base_mrf = spill_base_mrf(bld.shader);
+      spill_offset += reg_size * REG_SIZE;
    }
 }
 
@@ -906,6 +1000,16 @@ fs_reg_alloc::set_spill_costs()
       if (inst->dst.file == VGRF)
          spill_costs[inst->dst.nr] += regs_written(inst) * block_scale;
 
+      /* Don't spill anything we generated while spilling */
+      if (_mesa_set_search(spill_insts, inst)) {
+         for (unsigned int i = 0; i < inst->sources; i++) {
+	    if (inst->src[i].file == VGRF)
+               no_spill[inst->src[i].nr] = true;
+         }
+	 if (inst->dst.file == VGRF)
+            no_spill[inst->dst.nr] = true;
+      }
+
       switch (inst->opcode) {
 
       case BRW_OPCODE_DO:
@@ -924,17 +1028,6 @@ fs_reg_alloc::set_spill_costs()
       case BRW_OPCODE_ENDIF:
          block_scale /= 0.5;
          break;
-
-      case SHADER_OPCODE_GEN4_SCRATCH_WRITE:
-	 if (inst->src[0].file == VGRF)
-            no_spill[inst->src[0].nr] = true;
-	 break;
-
-      case SHADER_OPCODE_GEN4_SCRATCH_READ:
-      case SHADER_OPCODE_GEN7_SCRATCH_READ:
-	 if (inst->dst.file == VGRF)
-            no_spill[inst->dst.nr] = true;
-	 break;
 
       default:
 	 break;
@@ -984,6 +1077,19 @@ fs_reg_alloc::choose_spill_reg()
 }
 
 fs_reg
+fs_reg_alloc::alloc_scratch_header()
+{
+   int vgrf = fs->alloc.allocate(1);
+   assert(first_vgrf_node + vgrf == scratch_header_node);
+   ra_set_node_class(g, scratch_header_node,
+                        compiler->fs_reg_sets[rsi].classes[0]);
+
+   setup_live_interference(scratch_header_node, 0, INT_MAX);
+
+   return fs_reg(VGRF, vgrf, BRW_REGISTER_TYPE_UD);
+}
+
+fs_reg
 fs_reg_alloc::alloc_spill_reg(unsigned size, int ip)
 {
    int vgrf = fs->alloc.allocate(size);
@@ -1030,13 +1136,22 @@ fs_reg_alloc::spill_reg(unsigned spill_reg)
     * SIMD16 mode, because we'd stomp the FB writes.
     */
    if (!fs->spilled_any_registers) {
-      bool mrf_used[BRW_MAX_MRF(devinfo->gen)];
-      get_used_mrfs(fs, mrf_used);
+      if (devinfo->gen >= 9) {
+         this->scratch_header = alloc_scratch_header();
+         fs_builder ubld = fs->bld.exec_all().group(8, 0).at(
+            fs->cfg->first_block(), fs->cfg->first_block()->start());
+         fs_inst *header_inst = ubld.emit(SHADER_OPCODE_SCRATCH_HEADER,
+                                          this->scratch_header);
+         _mesa_set_add(spill_insts, header_inst);
+      } else {
+         bool mrf_used[BRW_MAX_MRF(devinfo->gen)];
+         get_used_mrfs(fs, mrf_used);
 
-      for (int i = spill_base_mrf(fs); i < BRW_MAX_MRF(devinfo->gen); i++) {
-         if (mrf_used[i]) {
-            fs->fail("Register spilling not supported with m%d used", i);
-          return;
+         for (int i = spill_base_mrf(fs); i < BRW_MAX_MRF(devinfo->gen); i++) {
+            if (mrf_used[i]) {
+               fs->fail("Register spilling not supported with m%d used", i);
+             return;
+            }
          }
       }
 
@@ -1087,8 +1202,8 @@ fs_reg_alloc::spill_reg(unsigned spill_reg)
              * 32 bit channels.  It shouldn't hurt in any case because the
              * unspill destination is a block-local temporary.
              */
-            emit_unspill(ibld.exec_all().group(width, 0),
-                         unspill_dst, subset_spill_offset, count);
+            emit_unspill(ibld.exec_all().group(width, 0), unspill_dst,
+                         subset_spill_offset, count);
 	 }
       }
 
@@ -1154,13 +1269,15 @@ fs_reg_alloc::spill_reg(unsigned spill_reg)
 
       /* We don't advance the ip for scratch read/write instructions
        * because we consider them to have the same ip as instruction we're
-       * spilling around for the purposes of interference.
+       * spilling around for the purposes of interference.  Also, we're
+       * inserting spill instructions without re-running liveness analysis
+       * and we don't want to mess up our IPs.
        */
-      if (inst->opcode != SHADER_OPCODE_GEN4_SCRATCH_WRITE &&
-          inst->opcode != SHADER_OPCODE_GEN4_SCRATCH_READ &&
-          inst->opcode != SHADER_OPCODE_GEN7_SCRATCH_READ)
+      if (!_mesa_set_search(spill_insts, inst))
          ip++;
    }
+
+   assert(ip == live_instr_count);
 }
 
 bool

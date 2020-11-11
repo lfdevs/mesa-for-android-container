@@ -65,21 +65,16 @@ build_dither_mask(nir_builder *b, nir_ssa_def *color)
       nir_f2i32(b, nir_fmul_imm(b, nir_fsat(b, alpha), 16.0));
 
    nir_ssa_def *part_a =
-      nir_iand(b,
-               nir_imm_int(b, 0xf),
-               nir_ushr(b,
-                        nir_imm_int(b, 0xfea80),
-                        nir_iand(b, m, nir_imm_int(b, ~3))));
+      nir_iand_imm(b, nir_ushr(b, nir_imm_int(b, 0xfea80),
+                                  nir_iand_imm(b, m, ~3)),
+                      0xf);
 
-   nir_ssa_def *part_b = nir_iand(b, m, nir_imm_int(b, 2));
+   nir_ssa_def *part_b = nir_iand_imm(b, m, 2);
+   nir_ssa_def *part_c = nir_iand_imm(b, m, 1);
 
-   nir_ssa_def *part_c = nir_iand(b, m, nir_imm_int(b, 1));
-
-   return nir_ior(b,
-                  nir_imul_imm(b, part_a, 0x1111),
-                  nir_ior(b,
-                          nir_imul_imm(b, part_b, 0x0808),
-                          nir_imul_imm(b, part_c, 0x0100)));
+   return nir_ior(b, nir_imul_imm(b, part_a, 0x1111),
+                     nir_ior(b, nir_imul_imm(b, part_b, 0x0808),
+                                nir_imul_imm(b, part_c, 0x0100)));
 }
 
 bool

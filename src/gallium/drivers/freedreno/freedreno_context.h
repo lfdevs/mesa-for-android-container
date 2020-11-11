@@ -30,6 +30,7 @@
 #include "pipe/p_context.h"
 #include "indices/u_primconvert.h"
 #include "util/u_blitter.h"
+#include "util/libsync.h"
 #include "util/list.h"
 #include "util/slab.h"
 #include "util/u_string.h"
@@ -183,7 +184,7 @@ struct fd_context {
 	struct fd_pipe *pipe;
 
 	struct blitter_context *blitter;
-	void *clear_rs_state;
+	void *clear_rs_state[2];
 	struct primconvert_context *primconvert;
 
 	/* slab for pipe_transfer allocations: */
@@ -258,6 +259,21 @@ struct fd_context {
 	 * than having to flush no-op batch.
 	 */
 	struct pipe_fence_handle *last_fence;
+
+	/* Fence fd we are told to wait on via ->fence_server_sync() (or -1
+	 * if none).  The in-fence is transferred over to the batch on the
+	 * next draw/blit/grid.
+	 *
+	 * The reason for this extra complexity is that apps will typically
+	 * do eglWaitSyncKHR()/etc at the beginning of the frame, before the
+	 * first draw.  But mesa/st doesn't flush down framebuffer state
+	 * change until we hit a draw, so at ->fence_server_sync() time, we
+	 * don't yet have the correct batch.  If we created a batch at that
+	 * point, it would be the wrong one, and we'd have to flush it pre-
+	 * maturely, causing us to stall early in the frame where we could
+	 * be building up cmdstream.
+	 */
+	int in_fence_fd;
 
 	/* track last known reset status globally and per-context to
 	 * determine if more resets occurred since then.  If global reset
@@ -365,6 +381,7 @@ struct fd_context {
 
 	/* blitter: */
 	bool (*blit)(struct fd_context *ctx, const struct pipe_blit_info *info);
+	void (*clear_ubwc)(struct fd_batch *batch, struct fd_resource *rsc);
 
 	/* handling for barriers: */
 	void (*framebuffer_barrier)(struct fd_context *ctx);
@@ -477,6 +494,35 @@ fd_supported_prim(struct fd_context *ctx, unsigned prim)
 	return (1 << prim) & ctx->primtype_mask;
 }
 
+/**
+ * If we have a pending fence_server_sync() (GPU side sync), flush now.
+ * The alternative to try to track this with batch dependencies gets
+ * hairy quickly.
+ *
+ * Call this before switching to a different batch, to handle this case.
+ */
+static inline void
+fd_context_switch_from(struct fd_context *ctx)
+{
+	if (ctx->batch && (ctx->batch->in_fence_fd != -1))
+		fd_batch_flush(ctx->batch);
+}
+
+/**
+ * If there is a pending fence-fd that we need to sync on, this will
+ * transfer the reference to the next batch we are going to render
+ * to.
+ */
+static inline void
+fd_context_switch_to(struct fd_context *ctx, struct fd_batch *batch)
+{
+	if (ctx->in_fence_fd != -1) {
+		sync_accumulate("freedreno", &batch->in_fence_fd, ctx->in_fence_fd);
+		close(ctx->in_fence_fd);
+		ctx->in_fence_fd = -1;
+	}
+}
+
 static inline struct fd_batch *
 fd_context_batch(struct fd_context *ctx)
 {
@@ -487,6 +533,7 @@ fd_context_batch(struct fd_context *ctx)
 		ctx->batch = batch;
 		fd_context_all_dirty(ctx);
 	}
+	fd_context_switch_to(ctx, ctx->batch);
 	return ctx->batch;
 }
 

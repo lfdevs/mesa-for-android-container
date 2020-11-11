@@ -606,6 +606,7 @@ radv_cmd_buffer_after_draw(struct radv_cmd_buffer *cmd_buffer,
 	}
 
 	if (cmd_buffer->device->instance->debug_flags & RADV_DEBUG_SYNC_SHADERS) {
+		enum rgp_flush_bits sqtt_flush_bits = 0;
 		assert(flags & (RADV_CMD_FLAG_PS_PARTIAL_FLUSH |
 				RADV_CMD_FLAG_CS_PARTIAL_FLUSH));
 
@@ -617,7 +618,7 @@ radv_cmd_buffer_after_draw(struct radv_cmd_buffer *cmd_buffer,
 				       &cmd_buffer->gfx9_fence_idx,
 				       cmd_buffer->gfx9_fence_va,
 				       radv_cmd_buffer_uses_mec(cmd_buffer),
-				       flags, cmd_buffer->gfx9_eop_bug_va);
+				       flags, &sqtt_flush_bits, cmd_buffer->gfx9_eop_bug_va);
 	}
 
 	if (unlikely(cmd_buffer->device->trace_bo))
@@ -626,13 +627,16 @@ radv_cmd_buffer_after_draw(struct radv_cmd_buffer *cmd_buffer,
 
 static void
 radv_save_pipeline(struct radv_cmd_buffer *cmd_buffer,
-		   struct radv_pipeline *pipeline, enum ring_type ring)
+		   struct radv_pipeline *pipeline)
 {
 	struct radv_device *device = cmd_buffer->device;
+	enum ring_type ring;
 	uint32_t data[2];
 	uint64_t va;
 
 	va = radv_buffer_get_va(device->trace_bo);
+
+	ring = radv_queue_family_to_ring(cmd_buffer->queue_family_index);
 
 	switch (ring) {
 	case RING_GFX:
@@ -673,7 +677,7 @@ radv_save_descriptors(struct radv_cmd_buffer *cmd_buffer,
 	struct radv_descriptor_state *descriptors_state =
 		radv_get_descriptors_state(cmd_buffer, bind_point);
 	struct radv_device *device = cmd_buffer->device;
-	uint32_t data[MAX_SETS * 2] = {};
+	uint32_t data[MAX_SETS * 2] = {0};
 	uint64_t va;
 	unsigned i;
 	va = radv_buffer_get_va(device->trace_bo) + 24;
@@ -851,7 +855,7 @@ radv_emit_sample_locations(struct radv_cmd_buffer *cmd_buffer)
 		&cmd_buffer->state.dynamic.sample_location;
 	uint32_t num_samples = (uint32_t)sample_location->per_pixel;
 	struct radeon_cmdbuf *cs = cmd_buffer->cs;
-	uint32_t sample_locs_pixel[4][2] = {};
+	uint32_t sample_locs_pixel[4][2] = {0};
 	VkOffset2D sample_locs[4][8]; /* 8 is the max. sample count supported */
 	uint32_t max_sample_dist = 0;
 	uint64_t centroid_priority;
@@ -1193,6 +1197,10 @@ radv_emit_rbplus_state(struct radv_cmd_buffer *cmd_buffer)
 				sx_blend_opt_epsilon |= V_028758_10BIT_FORMAT << (i * 4);
 			}
 			break;
+		case V_028C70_COLOR_5_9_9_9:
+			if (spi_format == V_028714_SPI_SHADER_FP16_ABGR)
+				sx_ps_downconvert |= V_028754_SX_RT_EXPORT_9_9_9_E5 << (i * 4);
+			break;
 		}
 	}
 
@@ -1313,7 +1321,7 @@ radv_emit_graphics_pipeline(struct radv_cmd_buffer *cmd_buffer)
 				   pipeline->gs_copy_shader->bo);
 
 	if (unlikely(cmd_buffer->device->trace_bo))
-		radv_save_pipeline(cmd_buffer, pipeline, RING_GFX);
+		radv_save_pipeline(cmd_buffer, pipeline);
 
 	cmd_buffer->state.emitted_pipeline = pipeline;
 
@@ -1630,7 +1638,7 @@ radv_emit_fb_color_state(struct radv_cmd_buffer *cmd_buffer,
 		radeon_set_context_reg_seq(cmd_buffer->cs, R_028C94_CB_COLOR0_DCC_BASE + index * 0x3c, 2);
 		radeon_emit(cmd_buffer->cs, cb->cb_dcc_base);
 		radeon_emit(cmd_buffer->cs, S_028C98_BASE_256B(cb->cb_dcc_base >> 32));
-		
+
 		radeon_set_context_reg(cmd_buffer->cs, R_0287A0_CB_MRT0_EPITCH + index * 4,
 				       cb->cb_mrt_epitch);
 	} else {
@@ -2488,7 +2496,7 @@ radv_flush_indirect_descriptor_sets(struct radv_cmd_buffer *cmd_buffer,
 	uint32_t size = MAX_SETS * 4;
 	uint32_t offset;
 	void *ptr;
-	
+
 	if (!radv_cmd_buffer_upload_alloc(cmd_buffer, size,
 					  256, &offset, &ptr))
 		return;
@@ -4123,7 +4131,7 @@ radv_emit_compute_pipeline(struct radv_cmd_buffer *cmd_buffer)
 			   pipeline->shaders[MESA_SHADER_COMPUTE]->bo);
 
 	if (unlikely(cmd_buffer->device->trace_bo))
-		radv_save_pipeline(cmd_buffer, pipeline, RING_COMPUTE);
+		radv_save_pipeline(cmd_buffer, pipeline);
 }
 
 static void radv_mark_descriptor_sets_dirty(struct radv_cmd_buffer *cmd_buffer,
@@ -5047,6 +5055,8 @@ radv_emit_draw_packets(struct radv_cmd_buffer *cmd_buffer,
 	struct radeon_winsys *ws = cmd_buffer->device->ws;
 	struct radeon_cmdbuf *cs = cmd_buffer->cs;
 
+	radv_describe_draw(cmd_buffer);
+
 	if (info->indirect) {
 		uint64_t va = radv_buffer_get_va(info->indirect->bo);
 		uint64_t count_va = 0;
@@ -5277,8 +5287,6 @@ radv_draw(struct radv_cmd_buffer *cmd_buffer,
 			return;
 	}
 
-	radv_describe_draw(cmd_buffer);
-
 	/* Use optimal packet order based on whether we need to sync the
 	 * pipeline.
 	 */
@@ -5360,7 +5368,7 @@ void radv_CmdDraw(
 	uint32_t                                    firstInstance)
 {
 	RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
-	struct radv_draw_info info = {};
+	struct radv_draw_info info = {0};
 
 	info.count = vertexCount;
 	info.instance_count = instanceCount;
@@ -5379,7 +5387,7 @@ void radv_CmdDrawIndexed(
 	uint32_t                                    firstInstance)
 {
 	RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
-	struct radv_draw_info info = {};
+	struct radv_draw_info info = {0};
 
 	info.indexed = true;
 	info.count = indexCount;
@@ -5400,7 +5408,7 @@ void radv_CmdDrawIndirect(
 {
 	RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
 	RADV_FROM_HANDLE(radv_buffer, buffer, _buffer);
-	struct radv_draw_info info = {};
+	struct radv_draw_info info = {0};
 
 	info.count = drawCount;
 	info.indirect = buffer;
@@ -5419,7 +5427,7 @@ void radv_CmdDrawIndexedIndirect(
 {
 	RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
 	RADV_FROM_HANDLE(radv_buffer, buffer, _buffer);
-	struct radv_draw_info info = {};
+	struct radv_draw_info info = {0};
 
 	info.indexed = true;
 	info.count = drawCount;
@@ -5442,7 +5450,7 @@ void radv_CmdDrawIndirectCount(
 	RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
 	RADV_FROM_HANDLE(radv_buffer, buffer, _buffer);
 	RADV_FROM_HANDLE(radv_buffer, count_buffer, _countBuffer);
-	struct radv_draw_info info = {};
+	struct radv_draw_info info = {0};
 
 	info.count = maxDrawCount;
 	info.indirect = buffer;
@@ -5466,7 +5474,7 @@ void radv_CmdDrawIndexedIndirectCount(
 	RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
 	RADV_FROM_HANDLE(radv_buffer, buffer, _buffer);
 	RADV_FROM_HANDLE(radv_buffer, count_buffer, _countBuffer);
-	struct radv_draw_info info = {};
+	struct radv_draw_info info = {0};
 
 	info.indexed = true;
 	info.count = maxDrawCount;
@@ -5513,6 +5521,9 @@ radv_emit_dispatch_packets(struct radv_cmd_buffer *cmd_buffer,
 	bool predicating = cmd_buffer->state.predicating;
 	struct radeon_cmdbuf *cs = cmd_buffer->cs;
 	struct radv_userdata_info *loc;
+
+	radv_describe_dispatch(cmd_buffer, info->blocks[0], info->blocks[1],
+	                       info->blocks[2]);
 
 	loc = radv_lookup_user_sgpr(pipeline, MESA_SHADER_COMPUTE,
 				    AC_UD_CS_GRID_SIZE);
@@ -5654,8 +5665,6 @@ radv_dispatch(struct radv_cmd_buffer *cmd_buffer,
 	bool pipeline_is_dirty = pipeline &&
 				 pipeline != cmd_buffer->state.emitted_compute_pipeline;
 
-	radv_describe_dispatch(cmd_buffer, 8, 8, 8);
-
 	if (cmd_buffer->state.flush_bits & (RADV_CMD_FLAG_FLUSH_AND_INV_CB |
 					    RADV_CMD_FLAG_FLUSH_AND_INV_DB |
 					    RADV_CMD_FLAG_PS_PARTIAL_FLUSH |
@@ -5714,7 +5723,7 @@ void radv_CmdDispatchBase(
 	uint32_t                                    z)
 {
 	RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
-	struct radv_dispatch_info info = {};
+	struct radv_dispatch_info info = {0};
 
 	info.blocks[0] = x;
 	info.blocks[1] = y;
@@ -5742,7 +5751,7 @@ void radv_CmdDispatchIndirect(
 {
 	RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
 	RADV_FROM_HANDLE(radv_buffer, buffer, _buffer);
-	struct radv_dispatch_info info = {};
+	struct radv_dispatch_info info = {0};
 
 	info.indirect = buffer;
 	info.indirect_offset = offset;
@@ -5756,7 +5765,7 @@ void radv_unaligned_dispatch(
 	uint32_t                                    y,
 	uint32_t                                    z)
 {
-	struct radv_dispatch_info info = {};
+	struct radv_dispatch_info info = {0};
 
 	info.blocks[0] = x;
 	info.blocks[1] = y;
@@ -5814,8 +5823,8 @@ static void radv_initialize_htile(struct radv_cmd_buffer *cmd_buffer,
 	VkImageAspectFlags aspects = VK_IMAGE_ASPECT_DEPTH_BIT;
 	struct radv_cmd_state *state = &cmd_buffer->state;
 	uint32_t htile_value = vk_format_is_stencil(image->vk_format) ? 0xfffff30f : 0xfffc000f;
-	VkClearDepthStencilValue value = {};
-	struct radv_barrier_data barrier = {};
+	VkClearDepthStencilValue value = {0};
+	struct radv_barrier_data barrier = {0};
 
 	state->flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_DB |
 			     RADV_CMD_FLAG_FLUSH_AND_INV_DB_META;
@@ -5880,7 +5889,7 @@ static void radv_initialise_cmask(struct radv_cmd_buffer *cmd_buffer,
 				  uint32_t value)
 {
 	struct radv_cmd_state *state = &cmd_buffer->state;
-	struct radv_barrier_data barrier = {};
+	struct radv_barrier_data barrier = {0};
 
 	state->flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB |
 			    RADV_CMD_FLAG_FLUSH_AND_INV_CB_META;
@@ -5906,7 +5915,7 @@ void radv_initialize_fmask(struct radv_cmd_buffer *cmd_buffer,
 	};
 	uint32_t log2_samples = util_logbase2(image->info.samples);
 	uint32_t value = fmask_clear_values[log2_samples];
-	struct radv_barrier_data barrier = {};
+	struct radv_barrier_data barrier = {0};
 
 	state->flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB |
 			     RADV_CMD_FLAG_FLUSH_AND_INV_CB_META;
@@ -5924,7 +5933,7 @@ void radv_initialize_dcc(struct radv_cmd_buffer *cmd_buffer,
 			 const VkImageSubresourceRange *range, uint32_t value)
 {
 	struct radv_cmd_state *state = &cmd_buffer->state;
-	struct radv_barrier_data barrier = {};
+	struct radv_barrier_data barrier = {0};
 	unsigned size = 0;
 
 	state->flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB |
@@ -6005,24 +6014,21 @@ static void radv_init_color_image_metadata(struct radv_cmd_buffer *cmd_buffer,
 
 	if (radv_dcc_enabled(image, range->baseMipLevel)) {
 		uint32_t value = 0xffffffffu; /* Fully expanded mode. */
-		bool need_decompress_pass = false;
 
 		if (radv_layout_dcc_compressed(cmd_buffer->device, image, dst_layout,
 					       dst_render_loop,
 					       dst_queue_mask)) {
-			value = 0x20202020u;
-			need_decompress_pass = true;
+			value = 0u;
 		}
 
 		radv_initialize_dcc(cmd_buffer, image, range, value);
 
-		radv_update_fce_metadata(cmd_buffer, image, range,
-					 need_decompress_pass);
+		radv_update_fce_metadata(cmd_buffer, image, range, false);
 	}
 
 	if (radv_image_has_cmask(image) ||
 	    radv_dcc_enabled(image, range->baseMipLevel)) {
-		uint32_t color_values[2] = {};
+		uint32_t color_values[2] = {0};
 		radv_set_color_clear_metadata(cmd_buffer, image, range,
 					      color_values);
 	}
@@ -6068,7 +6074,9 @@ static void radv_handle_color_image_transition(struct radv_cmd_buffer *cmd_buffe
 			fce_eliminate = true;
 		}
 
-		if (radv_image_has_fmask(image)) {
+		if (radv_image_has_fmask(image) &&
+		    (image->usage & (VK_IMAGE_USAGE_STORAGE_BIT |
+				     VK_IMAGE_USAGE_TRANSFER_DST_BIT))) {
 			if (src_layout != VK_IMAGE_LAYOUT_GENERAL &&
 			    dst_layout == VK_IMAGE_LAYOUT_GENERAL) {
 				/* A FMASK decompress is required before doing
@@ -6082,7 +6090,7 @@ static void radv_handle_color_image_transition(struct radv_cmd_buffer *cmd_buffe
 			radv_fast_clear_flush_image_inplace(cmd_buffer, image, range);
 
 		if (fmask_expand) {
-			struct radv_barrier_data barrier = {};
+			struct radv_barrier_data barrier = {0};
 			barrier.layout_transitions.fmask_color_expand = 1;
 			radv_describe_layout_transition(cmd_buffer, &barrier);
 
@@ -6228,7 +6236,7 @@ radv_barrier(struct radv_cmd_buffer *cmd_buffer,
 		const struct VkSampleLocationsInfoEXT *sample_locs_info =
 			vk_find_struct_const(pImageMemoryBarriers[i].pNext,
 					     SAMPLE_LOCATIONS_INFO_EXT);
-		struct radv_sample_locations_state sample_locations = {};
+		struct radv_sample_locations_state sample_locations = {0};
 
 		if (sample_locs_info) {
 			assert(image->flags & VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT);
@@ -6302,7 +6310,7 @@ static void write_event(struct radv_cmd_buffer *cmd_buffer,
 
 	radv_cs_add_buffer(cmd_buffer->device->ws, cs, event->bo);
 
-	ASSERTED unsigned cdw_max = radeon_check_space(cmd_buffer->device->ws, cs, 21);
+	ASSERTED unsigned cdw_max = radeon_check_space(cmd_buffer->device->ws, cs, 28);
 
 	/* Flags that only require a top-of-pipe event. */
 	VkPipelineStageFlags top_of_pipe_flags =
@@ -6883,7 +6891,7 @@ void radv_CmdDrawIndirectByteCountEXT(
 {
 	RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
 	RADV_FROM_HANDLE(radv_buffer, counterBuffer, _counterBuffer);
-	struct radv_draw_info info = {};
+	struct radv_draw_info info = {0};
 
 	info.instance_count = instanceCount;
 	info.first_instance = firstInstance;

@@ -94,20 +94,9 @@ files_libradeonsi = files(
   '../radeon/radeon_winsys.h',
 )
 
-si_driinfo_h = custom_target(
-  'si_driinfo.h',
-  input : files(
-    '../../../util/merge_driinfo.py',
-    '../../auxiliary/pipe-loader/driinfo_gallium.h', 'driinfo_radeonsi.h'
-  ),
-  output : 'si_driinfo.h',
-  command : [prog_python, '@INPUT@'],
-  capture : true,
-)
-
 libradeonsi = static_library(
   'radeonsi',
-  [files_libradeonsi, si_driinfo_h, sid_tables_h],
+  [files_libradeonsi, sid_tables_h],
   include_directories : [
     inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_amd_common, inc_amd_common_llvm,
     inc_gallium_drivers,
@@ -119,7 +108,6 @@ libradeonsi = static_library(
 
 driver_radeonsi = declare_dependency(
   compile_args : '-DGALLIUM_RADEONSI',
-  sources : si_driinfo_h,
   link_with : [
     libradeonsi, libradeonwinsys, libamdgpuwinsys, libamd_common, libamd_common_llvm, libgalliumvl
   ],

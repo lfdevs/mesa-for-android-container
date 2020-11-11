@@ -46,7 +46,7 @@ anv_loge(const char *format, ...)
 void
 anv_loge_v(const char *format, va_list va)
 {
-   intel_loge_v(format, va);
+   mesa_loge_v(format, va);
 }
 
 void anv_printflike(6, 7)
@@ -73,7 +73,7 @@ __anv_perf_warn(struct anv_device *device, const void *object,
                    "anv",
                    report);
 
-   intel_logw("%s:%d: PERF: %s", file, line, buffer);
+   mesa_logw("%s:%d: PERF: %s", file, line, buffer);
 }
 
 VkResult
@@ -106,7 +106,7 @@ __vk_errorv(struct anv_instance *instance, const void *object,
                       report);
    }
 
-   intel_loge("%s", report);
+   mesa_loge("%s", report);
 
    return error;
 }

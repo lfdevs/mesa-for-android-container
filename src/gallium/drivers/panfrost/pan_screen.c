@@ -48,7 +48,7 @@
 #include "pan_resource.h"
 #include "pan_public.h"
 #include "pan_util.h"
-#include "pandecode/decode.h"
+#include "decode.h"
 
 #include "pan_context.h"
 #include "midgard/midgard_compile.h"
@@ -59,12 +59,13 @@ static const struct debug_named_value debug_options[] = {
         {"msgs",      PAN_DBG_MSGS,	"Print debug messages"},
         {"trace",     PAN_DBG_TRACE,    "Trace the command stream"},
         {"deqp",      PAN_DBG_DEQP,     "Hacks for dEQP"},
-        {"afbc",      PAN_DBG_AFBC,     "Enable non-conformant AFBC impl"},
+        {"afbc",      PAN_DBG_AFBC,     "Enable AFBC buffer sharing"},
         {"sync",      PAN_DBG_SYNC,     "Wait for each job's completion and check for any GPU fault"},
         {"precompile", PAN_DBG_PRECOMPILE, "Precompile shaders for shader-db"},
+        {"fp16",     PAN_DBG_FP16,     "Enable 16-bit support"},
         {"nofp16",     PAN_DBG_NOFP16,     "Disable 16-bit support"},
-        {"bifrost",   PAN_DBG_BIFROST, "Enable experimental Mali G31 and G52 support"},
         {"gl3",       PAN_DBG_GL3,      "Enable experimental GL 3.x implementation, up to 3.3"},
+        {"noafbc",    PAN_DBG_NO_AFBC,  "Disable AFBC support"},
         DEBUG_NAMED_VALUE_END
 };
 
@@ -102,7 +103,7 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
 
         /* Bifrost is WIP. No MRT support yet. */
         bool is_bifrost = (dev->quirks & IS_BIFROST);
-        has_mrt &= !is_bifrost;
+        has_mrt &= !is_bifrost || is_deqp;
 
         switch (param) {
         case PIPE_CAP_NPOT_TEXTURES:
@@ -112,9 +113,9 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
         case PIPE_CAP_POINT_SPRITE:
         case PIPE_CAP_DEPTH_CLIP_DISABLE:
+        case PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE:
         case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
         case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
-        case PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE:
                 return 1;
 
         case PIPE_CAP_MAX_RENDER_TARGETS:
@@ -129,15 +130,16 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
                 /* WIP */
                 return is_gl3 ? 1 : 0;
 
+        case PIPE_CAP_OCCLUSION_QUERY:
+        case PIPE_CAP_PRIMITIVE_RESTART:
+        case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
+                return true;
 
         /* ES3 features unsupported on Bifrost */
-        case PIPE_CAP_OCCLUSION_QUERY:
         case PIPE_CAP_TGSI_INSTANCEID:
         case PIPE_CAP_TEXTURE_MULTISAMPLE:
         case PIPE_CAP_SURFACE_SAMPLE_COUNT:
-        case PIPE_CAP_PRIMITIVE_RESTART:
-        case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
-                return !is_bifrost;
+                return !is_bifrost || is_deqp;
 
         case PIPE_CAP_SAMPLER_VIEW_TARGET:
         case PIPE_CAP_TEXTURE_SWIZZLE:
@@ -157,28 +159,27 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
                 return 1;
 
         case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
-                return is_bifrost ? 0 : 4;
+                return (is_bifrost && !is_deqp) ? 0 : 4;
         case PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS:
         case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
-                return is_bifrost ? 0 : 64;
+                return (is_bifrost && !is_deqp) ? 0 : 64;
+        case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
         case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
-                return is_bifrost ? 0 : 1;
+                return (is_bifrost && !is_deqp) ? 0 : 1;
 
         case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
-                return is_bifrost ? 0 : 256;
+                return (is_bifrost && !is_deqp) ? 0 : 256;
 
         case PIPE_CAP_GLSL_FEATURE_LEVEL:
         case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
-                return is_gl3 ? 330 : (is_bifrost ? 120 : 140);
+                return is_gl3 ? 330 : (is_bifrost && !is_deqp) ? 120 : 140;
         case PIPE_CAP_ESSL_FEATURE_LEVEL:
-                return is_bifrost ? 120 : 300;
+                return (is_bifrost && !is_deqp) ? 120 : 300;
 
         case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
                 return 16;
 
         /* For faking GLES 3.1 for dEQP-GLES31 */
-        case PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTERS:
-        case PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTER_BUFFERS:
         case PIPE_CAP_IMAGE_LOAD_FORMATTED:
         case PIPE_CAP_CUBE_MAP_ARRAY:
         case PIPE_CAP_COMPUTE:
@@ -198,7 +199,7 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
                 return 4096;
         case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
-                return is_bifrost ? 0 : 13;
+                return (is_bifrost && !is_deqp) ? 0 : 13;
         case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
                 return 13;
 
@@ -220,7 +221,7 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
 
         case PIPE_CAP_SEAMLESS_CUBE_MAP:
         case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
-                return !is_bifrost;
+                return !is_bifrost || is_deqp;
 
         case PIPE_CAP_MAX_VERTEX_ELEMENT_SRC_OFFSET:
                 return 0xffff;
@@ -231,7 +232,8 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_ENDIANNESS:
                 return PIPE_ENDIAN_NATIVE;
 
-                return 1;
+        case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
+                return is_deqp ? 4 : 0;
 
         case PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET:
                 return -8;
@@ -249,7 +251,7 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         }
 
         case PIPE_CAP_SHADER_STENCIL_EXPORT:
-                return !is_bifrost;
+                return !is_bifrost || is_deqp;
 
         case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
                 return 4;
@@ -282,6 +284,7 @@ panfrost_get_shader_param(struct pipe_screen *screen,
 {
         struct panfrost_device *dev = pan_device(screen);
         bool is_deqp = dev->debug & PAN_DBG_DEQP;
+        bool is_fp16 = dev->debug & PAN_DBG_FP16;
         bool is_nofp16 = dev->debug & PAN_DBG_NOFP16;
         bool is_bifrost = dev->quirks & IS_BIFROST;
 
@@ -320,7 +323,7 @@ panfrost_get_shader_param(struct pipe_screen *screen,
                 return 0;
 
         case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
-                return is_bifrost ? 0 : 1;
+                return (is_bifrost && !is_deqp) ? 0 : 1;
         case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
                 return 0;
 
@@ -328,7 +331,7 @@ panfrost_get_shader_param(struct pipe_screen *screen,
                 return 0;
 
         case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
-                return is_bifrost ? 0 : 1;
+                return (is_bifrost && !is_deqp) ? 0 : 1;
 
         case PIPE_SHADER_CAP_SUBROUTINES:
                 return 0;
@@ -341,7 +344,7 @@ panfrost_get_shader_param(struct pipe_screen *screen,
 
         case PIPE_SHADER_CAP_FP16:
         case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
-                return !is_nofp16;
+                return (!is_nofp16 && (!is_bifrost || is_deqp)) || is_fp16;
 
         case PIPE_SHADER_CAP_FP16_DERIVATIVES:
         case PIPE_SHADER_CAP_INT16:
@@ -432,6 +435,7 @@ panfrost_is_format_supported( struct pipe_screen *screen,
                               unsigned bind)
 {
         struct panfrost_device *dev = pan_device(screen);
+        bool is_bifrost = (dev->quirks & IS_BIFROST);
         const struct util_format_description *format_desc;
 
         assert(target == PIPE_BUFFER ||
@@ -459,6 +463,14 @@ panfrost_is_format_supported( struct pipe_screen *screen,
         if (MAX2(sample_count, 1) != MAX2(storage_sample_count, 1))
                 return false;
 
+        /* Don't advertise multisampling on Bifrost yet */
+        if (is_bifrost && sample_count > 1)
+                return false;
+
+        /* Z16 causes dEQP failures on t720 */
+        if (format == PIPE_FORMAT_Z16_UNORM && dev->quirks & MIDGARD_SFBD)
+                return false;
+
         /* Don't confuse poorly written apps (workaround dEQP bug) that expect
          * more alpha than they ask for */
 
@@ -474,19 +486,62 @@ panfrost_is_format_supported( struct pipe_screen *screen,
                 ( PIPE_BIND_DEPTH_STENCIL | PIPE_BIND_RENDER_TARGET
                 | PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_SAMPLER_VIEW);
 
-        struct panfrost_format fmt = panfrost_pipe_format_table[format];
+        struct panfrost_format fmt = dev->formats[format];
+        enum mali_format indexed = MALI_EXTRACT_INDEX(fmt.hw);
 
         /* Also check that compressed texture formats are supported on this
          * particular chip. They may not be depending on system integration
          * differences. RGTC can be emulated so is always supported. */
 
         bool is_rgtc = format_desc->layout == UTIL_FORMAT_LAYOUT_RGTC;
-        bool supported = panfrost_supports_compressed_format(dev, fmt.hw);
+        bool supported = panfrost_supports_compressed_format(dev, indexed);
 
         if (!is_rgtc && !supported)
                 return false;
 
-        return fmt.hw && ((relevant_bind & ~fmt.bind) == 0);
+        return indexed && ((relevant_bind & ~fmt.bind) == 0);
+}
+
+/* We always support linear and tiled operations, both external and internal.
+ * We support AFBC for a subset of formats, and colourspace transform for a
+ * subset of those. */
+
+static void
+panfrost_query_dmabuf_modifiers(struct pipe_screen *screen,
+                enum pipe_format format, int max, uint64_t *modifiers, unsigned
+                int *external_only, int *out_count)
+{
+        /* Query AFBC status */
+        bool afbc = panfrost_format_supports_afbc(format);
+        bool ytr = panfrost_afbc_can_ytr(format);
+
+        /* Don't advertise AFBC before T760 */
+        struct panfrost_device *dev = pan_device(screen);
+        afbc &= !(dev->quirks & MIDGARD_NO_AFBC);
+
+        /* XXX: AFBC scanout is broken on mainline RK3399 with older kernels */
+        afbc &= (dev->debug & PAN_DBG_AFBC);
+
+        unsigned count = 0;
+
+        for (unsigned i = 0; i < PAN_MODIFIER_COUNT; ++i) {
+                if (drm_is_afbc(pan_best_modifiers[i]) && !afbc)
+                        continue;
+
+                if ((pan_best_modifiers[i] & AFBC_FORMAT_MOD_YTR) && !ytr)
+                        continue;
+
+                count++;
+
+                if (max > (int) count) {
+                        modifiers[count] = pan_best_modifiers[i];
+
+                        if (external_only)
+                                external_only[count] = false;
+                }
+        }
+
+        *out_count = count;
 }
 
 static int
@@ -653,6 +708,9 @@ panfrost_create_screen(int fd, struct renderonly *ro)
 
         dev->debug = debug_get_flags_option("PAN_MESA_DEBUG", debug_options, 0);
 
+        if (dev->debug & PAN_DBG_NO_AFBC)
+                dev->quirks |= MIDGARD_NO_AFBC;
+
         if (ro) {
                 dev->ro = renderonly_dup(ro);
                 if (!dev->ro) {
@@ -671,13 +729,10 @@ panfrost_create_screen(int fd, struct renderonly *ro)
         case 0x750: /* T760 */
         case 0x820: /* T820 */
         case 0x860: /* T860 */
-                break;
+        case 0x6221: /* G72 */
         case 0x7093: /* G31 */
         case 0x7212: /* G52 */
-                if (dev->debug & PAN_DBG_BIFROST)
-                        break;
-
-                /* fallthrough */
+                break;
         default:
                 /* Fail to load against untested models */
                 debug_printf("panfrost: Unsupported model %X", dev->gpu_id);
@@ -699,6 +754,7 @@ panfrost_create_screen(int fd, struct renderonly *ro)
         screen->base.get_paramf = panfrost_get_paramf;
         screen->base.get_timestamp = panfrost_get_timestamp;
         screen->base.is_format_supported = panfrost_is_format_supported;
+        screen->base.query_dmabuf_modifiers = panfrost_query_dmabuf_modifiers;
         screen->base.context_create = panfrost_create_context;
         screen->base.get_compiler_options = panfrost_screen_get_compiler_options;
         screen->base.fence_reference = panfrost_fence_reference;
@@ -706,9 +762,7 @@ panfrost_create_screen(int fd, struct renderonly *ro)
         screen->base.set_damage_region = panfrost_resource_set_damage_region;
 
         panfrost_resource_screen_init(&screen->base);
-
-        if (!(dev->quirks & IS_BIFROST))
-                panfrost_init_blit_shaders(dev);
+        panfrost_init_blit_shaders(dev);
 
         return &screen->base;
 }

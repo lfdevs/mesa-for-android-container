@@ -394,7 +394,7 @@ static int gpir_get_slots_required(gpir_node *node)
    return 1;
 }
 
-static void verify_ready_list(sched_ctx *ctx)
+static void ASSERTED verify_ready_list(sched_ctx *ctx)
 {
    list_for_each_entry(gpir_node, node, &ctx->ready_list, list) {
       if (!gpir_is_input_node(node)) {
@@ -1123,7 +1123,7 @@ static bool try_spill_nodes(sched_ctx *ctx, gpir_node *orig_node)
    return ctx->total_spill_needed <= 0 && ctx->max_node_spill_needed <= 0;
 }
 
-static int gpir_get_curr_ready_list_slots(sched_ctx *ctx)
+static int ASSERTED gpir_get_curr_ready_list_slots(sched_ctx *ctx)
 {
    int total = 0;
    list_for_each_entry(gpir_node, node, &ctx->ready_list, list) {
@@ -1248,13 +1248,13 @@ static void sched_find_max_nodes(sched_ctx *ctx)
 /* Verify the invariants described in gpir.h, as well as making sure the
  * counts are correct.
  */
-static void verify_max_nodes(sched_ctx *ctx)
+static void ASSERTED verify_max_nodes(sched_ctx *ctx)
 {
    int alu_num_slot_needed_by_max = 0;
    int alu_num_unscheduled_next_max = 0;
    int alu_num_slot_needed_by_store = 0;
    int alu_num_slot_needed_by_non_cplx_store = 0;
-   int alu_max_allowed_next_max = 5;
+   ASSERTED int alu_max_allowed_next_max = 5;
 
    list_for_each_entry(gpir_node, node, &ctx->ready_list, list) {
       if (!gpir_is_input_node(node))

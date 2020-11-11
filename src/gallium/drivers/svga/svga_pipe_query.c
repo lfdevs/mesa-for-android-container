@@ -101,7 +101,7 @@ define_query_vgpu9(struct svga_context *svga,
       return PIPE_ERROR_OUT_OF_MEMORY;
 
    sq->queryResult = (SVGA3dQueryResult *)
-                     sws->buffer_map(sws, sq->hwbuf, PIPE_TRANSFER_WRITE);
+                     sws->buffer_map(sws, sq->hwbuf, PIPE_MAP_WRITE);
    if (!sq->queryResult) {
       sws->buffer_destroy(sws, sq->hwbuf);
       return PIPE_ERROR_OUT_OF_MEMORY;

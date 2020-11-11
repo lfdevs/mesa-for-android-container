@@ -59,19 +59,18 @@ protected:
    PValue from_nir(const nir_alu_dest& v, unsigned component);
    PValue from_nir(const nir_dest& v, unsigned component);
 
-   const nir_load_const_instr* get_literal_register(const nir_src& src) const;
-
    int lookup_register_index(const nir_src& src) const;
    int lookup_register_index(const nir_dest& dst);
    PValue create_register_from_nir_src(const nir_src& src, unsigned comp);
 
    int allocate_temp_register();
 
-   PValue get_temp_register(int channel = -1);
+   PGPRValue get_temp_register(int channel = -1);
    GPRVector get_temp_vec4();
 
    // forwards from ShaderFromNirProcessor
    void emit_instruction(Instruction *ir);
+   void emit_instruction(AluInstruction *ir);
    bool emit_instruction(EAluOp opcode, PValue dest,
                          std::vector<PValue> src0,
                          const std::set<AluModifiers>& m_flags);
@@ -80,8 +79,6 @@ protected:
    GPRVector vec_from_nir_with_fetch_constant(const nir_src& src, unsigned mask,
                                               const GPRVector::Swizzle& swizzle, bool match = false);
 
-   void add_uniform(unsigned index, const PValue &value);
-   void load_uniform(const nir_alu_src& src);
    const nir_variable *get_deref_location(const nir_src& v) const;
 
    enum chip_class get_chip_class(void) const;
@@ -93,6 +90,7 @@ protected:
    bool inject_register(unsigned sel, unsigned swizzle,
                         const PValue& reg, bool map);
 
+   int remap_atomic_base(int base);
 private:
 
    ShaderFromNirProcessor& m_proc;

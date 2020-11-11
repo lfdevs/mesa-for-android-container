@@ -199,14 +199,12 @@ bool
 pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd);
 
 /**
- * Get the driinfo XML used for the DRM driver of the given name, if any.
+ * Get the dri options used for the DRM driver of the given name, if any.
  *
- * The returned string is heap-allocated.
+ * The returned array is heap-allocated.
  */
-char *
-pipe_loader_drm_get_driinfo_xml(const char *driver_name);
-
-extern const char gallium_driinfo_xml[];
+const struct driOptionDescription *
+pipe_loader_drm_get_driconf_by_name(const char *driver_name, unsigned *count);
 
 #ifdef __cplusplus
 }

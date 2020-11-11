@@ -134,6 +134,9 @@ struct glthread_state
    /** Whether GLThread is inside a display list generation. */
    bool inside_dlist;
 
+   /** For L3 cache pinning. */
+   unsigned pin_thread_counter;
+
    /** The ring of batches in memory. */
    struct glthread_batch batches[MARSHAL_MAX_BATCHES];
 
@@ -244,5 +247,7 @@ void _mesa_glthread_PushClientAttrib(struct gl_context *ctx, GLbitfield mask,
                                      bool set_default);
 void _mesa_glthread_PopClientAttrib(struct gl_context *ctx);
 void _mesa_glthread_ClientAttribDefault(struct gl_context *ctx, GLbitfield mask);
+void _mesa_glthread_InterleavedArrays(struct gl_context *ctx, GLenum format,
+                                      GLsizei stride, const GLvoid *pointer);
 
 #endif /* _GLTHREAD_H*/

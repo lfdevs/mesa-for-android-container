@@ -210,7 +210,7 @@ The integer capabilities:
   hardware implements the SM5 features, component selection,
   shadow comparison, and run-time offsets.
 * ``PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT``: Whether
-  PIPE_TRANSFER_PERSISTENT and PIPE_TRANSFER_COHERENT are supported
+  PIPE_MAP_PERSISTENT and PIPE_MAP_COHERENT are supported
   for buffers.
 * ``PIPE_CAP_TEXTURE_QUERY_LOD``: Whether the ``LODQ`` instruction is
   supported.
@@ -589,7 +589,10 @@ The integer capabilities:
 * ``PIPE_CAP_MAP_UNSYNCHRONIZED_THREAD_SAFE``: Whether mapping a buffer as unsynchronized from any thread is safe.
 * ``PIPE_CAP_GLSL_ZERO_INIT``: Choose a default zero initialization some glsl variables. If `1`, then all glsl shader variables and gl_FragColor are initialized to zero. If `2`, then shader out variables are not initialized but function out variables are.
 * ``PIPE_CAP_BLEND_EQUATION_ADVANCED``: Driver supports blend equation advanced without necessarily supporting FBFETCH.
+* ``PIPE_CAP_NIR_ATOMICS_AS_DEREF``: Whether NIR atomics instructions should reference atomics as NIR derefs instead of by indices.
 * ``PIPE_CAP_NO_CLIP_ON_COPY_TEX``: Driver doesn't want x/y/width/height clipped based on src size when doing a copy texture operation (eg: may want out-of-bounds reads that produce 0 instead of leaving the texture content undefined)
+* ``PIPE_CAP_MAX_TEXTURE_MB``: Maximum texture size in MB (default is 1024)
+* ``PIPE_CAP_DEVICE_PROTECTED_CONTENT``: Whether the device support protected / encrypted content.
 
 .. _pipe_capf:
 

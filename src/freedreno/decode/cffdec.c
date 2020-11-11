@@ -399,7 +399,7 @@ dump_shader(const char *ext, void *buf, int bufsz)
 {
 	if (options->dump_shaders) {
 		static int n = 0;
-		char filename[8];
+		char filename[16];
 		int fd;
 		sprintf(filename, "%04d.%s", n++, ext);
 		fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
@@ -426,7 +426,7 @@ disasm_gpuaddr(const char *name, uint64_t gpuaddr, int level)
 		const char *ext;
 
 		dump_hex(buf, min(64, sizedwords), level+1);
-		disasm_a3xx(buf, sizedwords, level+2, stdout, options->gpu_id);
+		try_disasm_a3xx(buf, sizedwords, level+2, stdout, options->gpu_id);
 
 		/* this is a bit ugly way, but oh well.. */
 		if (strstr(name, "SP_VS_OBJ")) {
@@ -1440,8 +1440,8 @@ cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	case STATE_SRC_BINDLESS: {
 		const unsigned base_reg =
 			stage == MESA_SHADER_COMPUTE ?
-				regbase("HLSQ_CS_BINDLESS_BASE[0]") :
-				regbase("HLSQ_BINDLESS_BASE[0]");
+				regbase("HLSQ_CS_BINDLESS_BASE[0].ADDR") :
+				regbase("HLSQ_BINDLESS_BASE[0].ADDR");
 
 		if (is_64b()) {
 			const unsigned reg = base_reg + (dwords[1] >> 28) * 2;
@@ -1493,7 +1493,7 @@ cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 		}
 
 		if (contents)
-			disasm_a3xx(contents, num_unit * 2, level+2, stdout, options->gpu_id);
+			try_disasm_a3xx(contents, num_unit * 2, level+2, stdout, options->gpu_id);
 
 		/* dump raw shader: */
 		if (ext)

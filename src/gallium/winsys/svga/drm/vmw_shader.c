@@ -97,7 +97,7 @@ vmw_svga_shader_create(struct svga_winsys_screen *sws,
       return NULL;
    }
 
-   map = sws->buffer_map(sws, shader->buf, PIPE_TRANSFER_WRITE);
+   map = sws->buffer_map(sws, shader->buf, PIPE_MAP_WRITE);
    if (!map) {
       FREE(shader);
       return NULL;

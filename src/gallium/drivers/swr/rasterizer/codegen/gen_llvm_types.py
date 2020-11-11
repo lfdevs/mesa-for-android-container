@@ -57,31 +57,31 @@ def gen_llvm_type(type, name, idx, is_pointer, is_pointer_pointer, is_array, is_
         elif type == 'HANDLE':
             llvm_type = 'PointerType::get(Type::getInt32Ty(ctx), 0)'
         elif type == 'simdscalar':
-            llvm_type = 'VectorType::get(Type::getFloatTy(ctx), pJitMgr->mVWidth)'
+            llvm_type = 'getVectorType(Type::getFloatTy(ctx), pJitMgr->mVWidth)'
         elif type == 'simdscalari':
-            llvm_type = 'VectorType::get(Type::getInt32Ty(ctx), pJitMgr->mVWidth)'
+            llvm_type = 'getVectorType(Type::getInt32Ty(ctx), pJitMgr->mVWidth)'
         elif type == 'simd16scalar':
-            llvm_type = 'VectorType::get(Type::getFloatTy(ctx), 16)'
+            llvm_type = 'getVectorType(Type::getFloatTy(ctx), 16)'
         elif type == 'simd16scalari':
-            llvm_type = 'VectorType::get(Type::getInt32Ty(ctx), 16)'
+            llvm_type = 'getVectorType(Type::getInt32Ty(ctx), 16)'
         elif type == '__m128i':
-            llvm_type = 'VectorType::get(Type::getInt32Ty(ctx), 4)'
+            llvm_type = 'getVectorType(Type::getInt32Ty(ctx), 4)'
         elif type == 'SIMD256::Float':
-            llvm_type = 'VectorType::get(Type::getFloatTy(ctx), 8)'
+            llvm_type = 'getVectorType(Type::getFloatTy(ctx), 8)'
         elif type == 'SIMD256::Integer':
-            llvm_type = 'VectorType::get(Type::getInt32Ty(ctx), 8)'
+            llvm_type = 'getVectorType(Type::getInt32Ty(ctx), 8)'
         elif type == 'SIMD512::Float':
-            llvm_type = 'VectorType::get(Type::getFloatTy(ctx), 16)'
+            llvm_type = 'getVectorType(Type::getFloatTy(ctx), 16)'
         elif type == 'SIMD512::Integer':
-            llvm_type = 'VectorType::get(Type::getInt32Ty(ctx), 16)'
+            llvm_type = 'getVectorType(Type::getInt32Ty(ctx), 16)'
         elif type == 'simdvector':
-            llvm_type = 'ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 8), 4)'
+            llvm_type = 'ArrayType::get(getVectorType(Type::getFloatTy(ctx), 8), 4)'
         elif type == 'simd16vector':
-            llvm_type = 'ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 16), 4)'
+            llvm_type = 'ArrayType::get(getVectorType(Type::getFloatTy(ctx), 16), 4)'
         elif type == 'SIMD256::Vec4':
-            llvm_type = 'ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 8), 4)'
+            llvm_type = 'ArrayType::get(getVectorType(Type::getFloatTy(ctx), 8), 4)'
         elif type == 'SIMD512::Vec4':
-            llvm_type = 'ArrayType::get(VectorType::get(Type::getFloatTy(ctx), 16), 4)'
+            llvm_type = 'ArrayType::get(getVectorType(Type::getFloatTy(ctx), 16), 4)'
         else:
             llvm_type = 'Gen_%s(pJitMgr)' % type
 

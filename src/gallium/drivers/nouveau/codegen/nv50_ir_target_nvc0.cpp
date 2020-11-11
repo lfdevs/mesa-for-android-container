@@ -387,6 +387,12 @@ TargetNVC0::insnCanLoad(const Instruction *i, int s,
       }
    }
 
+   // only loads can do sub 4 byte addressing
+   if (sf == FILE_MEMORY_CONST &&
+       (ld->getSrc(0)->reg.data.offset & 0x3)
+       && i->op != OP_LOAD)
+      return false;
+
    // not all instructions support full 32 bit immediates
    if (sf == FILE_IMMEDIATE) {
       Storage &reg = ld->getSrc(0)->asImm()->reg;

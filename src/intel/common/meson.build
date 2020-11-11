@@ -37,13 +37,14 @@ files_libintel_common = files(
   'gen_l3_config.h',
   'gen_urb_config.c',
   'gen_sample_positions.h',
-  'intel_log.c',
+  'gen_uuid.c',
+  'gen_uuid.h',
 )
 
 libintel_common = static_library(
   ['intel_common', genX_xml_h],
   files_libintel_common,
-  include_directories : [inc_include, inc_src, inc_mesa, inc_gallium, inc_intel],
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
   link_with : [libisl],

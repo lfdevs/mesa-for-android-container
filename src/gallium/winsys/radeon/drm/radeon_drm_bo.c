@@ -498,16 +498,16 @@ void *radeon_bo_do_map(struct radeon_bo *bo)
 
 static void *radeon_bo_map(struct pb_buffer *buf,
                            struct radeon_cmdbuf *rcs,
-                           enum pipe_transfer_usage usage)
+                           enum pipe_map_flags usage)
 {
    struct radeon_bo *bo = (struct radeon_bo*)buf;
    struct radeon_drm_cs *cs = (struct radeon_drm_cs*)rcs;
 
    /* If it's not unsynchronized bo_map, flush CS if needed and then wait. */
-   if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
+   if (!(usage & PIPE_MAP_UNSYNCHRONIZED)) {
       /* DONTBLOCK doesn't make sense with UNSYNCHRONIZED. */
-      if (usage & PIPE_TRANSFER_DONTBLOCK) {
-         if (!(usage & PIPE_TRANSFER_WRITE)) {
+      if (usage & PIPE_MAP_DONTBLOCK) {
+         if (!(usage & PIPE_MAP_WRITE)) {
             /* Mapping for read.
              *
              * Since we are mapping for read, we don't need to wait
@@ -540,7 +540,7 @@ static void *radeon_bo_map(struct pb_buffer *buf,
       } else {
          uint64_t time = os_time_get_nano();
 
-         if (!(usage & PIPE_TRANSFER_WRITE)) {
+         if (!(usage & PIPE_MAP_WRITE)) {
             /* Mapping for read.
              *
              * Since we are mapping for read, we don't need to wait

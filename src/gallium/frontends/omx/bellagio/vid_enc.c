@@ -311,7 +311,7 @@ static OMX_ERRORTYPE enc_AllocateBackTexture(omx_base_PortType *port,
    box.width = (*resource)->width0;
    box.height = (*resource)->height0;
    box.depth = (*resource)->depth0;
-   ptr = priv->s_pipe->transfer_map(priv->s_pipe, *resource, 0, PIPE_TRANSFER_WRITE, &box, transfer);
+   ptr = priv->s_pipe->transfer_map(priv->s_pipe, *resource, 0, PIPE_MAP_WRITE, &box, transfer);
    if (map)
       *map = ptr;
 
@@ -887,6 +887,7 @@ static OMX_ERRORTYPE vid_enc_EncodeFrame(omx_base_PortType *port, OMX_BUFFERHEAD
       picture_type = PIPE_H264_ENC_PICTURE_TYPE_IDR;
       priv->force_pic_type.IntraRefreshVOP = OMX_FALSE;
       priv->frame_num = 0;
+      priv->pic_order_cnt = 0;
    } else if (priv->codec->profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE ||
               !(priv->pic_order_cnt % OMX_VID_ENC_P_PERIOD_DEFAULT) ||
               (buf->nFlags & OMX_BUFFERFLAG_EOS)) {

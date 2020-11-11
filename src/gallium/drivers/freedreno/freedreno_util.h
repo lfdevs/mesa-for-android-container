@@ -34,7 +34,7 @@
 #include "pipe/p_state.h"
 #include "util/u_debug.h"
 #include "util/u_math.h"
-#include "util/u_half.h"
+#include "util/half_float.h"
 #include "util/u_dynarray.h"
 #include "util/u_pack_color.h"
 

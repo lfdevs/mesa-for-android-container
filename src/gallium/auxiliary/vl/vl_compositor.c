@@ -475,7 +475,7 @@ vl_compositor_set_csc_matrix(struct vl_compositor_state *s,
    assert(s);
 
    float *ptr = pipe_buffer_map(s->pipe, s->shader_params,
-                               PIPE_TRANSFER_WRITE | PIPE_TRANSFER_DISCARD_RANGE,
+                               PIPE_MAP_WRITE | PIPE_MAP_DISCARD_RANGE,
                                &buf_transfer);
 
    if (!ptr)

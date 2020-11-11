@@ -63,8 +63,6 @@ driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable);
 extern void
 driReleaseDrawables(struct glx_context *gc);
 
-extern const __DRIsystemTimeExtension systemTimeExtension;
-
 extern void dri_message(int level, const char *f, ...) PRINTFLIKE(2, 3);
 
 #define InfoMessageF(...) dri_message(_LOADER_INFO, __VA_ARGS__)

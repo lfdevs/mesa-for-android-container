@@ -23,7 +23,10 @@
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
 
+#include <xcb/xproto.h>
+#include <xcb/shm.h>
 #include <X11/Xlib.h>
+#include <X11/Xlib-xcb.h>
 #include "glxclient.h"
 #include <dlfcn.h>
 #include "dri_common.h"
@@ -765,11 +768,18 @@ driswDestroyScreen(struct glx_screen *base)
 
 #define SWRAST_DRIVER_NAME "swrast"
 
+static char *
+drisw_get_driver_name(struct glx_screen *glx_screen)
+{
+    return strdup(SWRAST_DRIVER_NAME);
+}
+
 static const struct glx_screen_vtable drisw_screen_vtable = {
    .create_context         = drisw_create_context,
    .create_context_attribs = drisw_create_context_attribs,
    .query_renderer_integer = drisw_query_renderer_integer,
    .query_renderer_string  = drisw_query_renderer_string,
+   .get_driver_name        = drisw_get_driver_name,
 };
 
 static void
@@ -823,27 +833,26 @@ driswBindExtensions(struct drisw_screen *psc, const __DRIextension **extensions)
 static int
 check_xshm(Display *dpy)
 {
-   int (*old_handler)(Display *, XErrorEvent *);
-
+   xcb_connection_t *c = XGetXCBConnection(dpy);
+   xcb_void_cookie_t cookie;
+   xcb_generic_error_t *error;
+   int ret = True;
    int ignore;
-   XShmSegmentInfo info = { 0, };
 
    if (!XQueryExtension(dpy, "MIT-SHM", &xshm_opcode, &ignore, &ignore))
       return False;
 
-   old_handler = XSetErrorHandler(handle_xerror);
-   XShmDetach(dpy, &info);
-   XSync(dpy, False);
-   (void) XSetErrorHandler(old_handler);
+   cookie = xcb_shm_detach_checked(c, 0);
+   if ((error = xcb_request_check(c, cookie))) {
+      /* BadRequest means we're a remote client. If we were local we'd
+       * expect BadValue since 'info' has an invalid segment name.
+       */
+      if (error->error_code == BadRequest)
+         ret = False;
+      free(error);
+   }
 
-   /* BadRequest means we're a remote client. If we were local we'd
-    * expect BadValue since 'info' has an invalid segment name.
-    */
-   if (xshm_error == BadRequest)
-      return False;
-
-   xshm_error = 0;
-   return True;
+   return ret;
 }
 
 static struct glx_screen *

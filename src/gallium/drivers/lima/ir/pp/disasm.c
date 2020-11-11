@@ -24,7 +24,7 @@
  *
  */
 
-#include "util/u_half.h"
+#include "util/half_float.h"
 
 #include "ppir.h"
 #include "codegen.h"
@@ -174,7 +174,7 @@ print_const(unsigned const_num, uint16_t *val)
 {
    printf("const%u", const_num);
    for (unsigned i = 0; i < 4; i++)
-      printf(" %f", util_half_to_float(val[i]));
+      printf(" %f", _mesa_half_to_float(val[i]));
 }
 
 static void

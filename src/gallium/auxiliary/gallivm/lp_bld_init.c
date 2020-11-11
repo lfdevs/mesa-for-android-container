@@ -171,6 +171,8 @@ create_pass_manager(struct gallivm_state *gallivm)
       LLVMAddPromoteMemoryToRegisterPass(gallivm->passmgr);
 #if LLVM_VERSION_MAJOR <= 11
       LLVMAddConstantPropagationPass(gallivm->passmgr);
+#else
+      LLVMAddInstructionSimplifyPass(gallivm->passmgr);
 #endif
       LLVMAddInstructionCombiningPass(gallivm->passmgr);
       LLVMAddGVNPass(gallivm->passmgr);

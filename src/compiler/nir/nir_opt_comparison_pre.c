@@ -319,7 +319,7 @@ comparison_pre_block(nir_block *block, struct block_queue *bq, nir_builder *bld)
 
       case nir_op_flt:
       case nir_op_fge:
-      case nir_op_fne:
+      case nir_op_fneu:
       case nir_op_feq:
          /* If the instruction is a comparison that is used by an if-statement
           * and neither operand is immediate value 0, add it to the set.

@@ -190,7 +190,7 @@ _blorp_combine_address(struct blorp_batch *batch, void *location,
 static void
 emit_urb_config(struct blorp_batch *batch,
                 const struct blorp_params *params,
-                enum gen_urb_deref_block_size *deref_block_size)
+                UNUSED enum gen_urb_deref_block_size *deref_block_size)
 {
    /* Once vertex fetcher has written full VUE entries with complete
     * header the space requirement is as follows per vertex (in bytes):
@@ -347,8 +347,7 @@ blorp_emit_input_varying_data(struct blorp_batch *batch,
 }
 
 static void
-blorp_fill_vertex_buffer_state(struct blorp_batch *batch,
-                               struct GENX(VERTEX_BUFFER_STATE) *vb,
+blorp_fill_vertex_buffer_state(struct GENX(VERTEX_BUFFER_STATE) *vb,
                                unsigned idx,
                                struct blorp_address addr, uint32_t size,
                                uint32_t stride)
@@ -388,11 +387,11 @@ blorp_emit_vertex_buffers(struct blorp_batch *batch,
    struct blorp_address addrs[2] = {};
    uint32_t sizes[2];
    blorp_emit_vertex_data(batch, params, &addrs[0], &sizes[0]);
-   blorp_fill_vertex_buffer_state(batch, vb, 0, addrs[0], sizes[0],
+   blorp_fill_vertex_buffer_state(vb, 0, addrs[0], sizes[0],
                                   3 * sizeof(float));
 
    blorp_emit_input_varying_data(batch, params, &addrs[1], &sizes[1]);
-   blorp_fill_vertex_buffer_state(batch, vb, 1, addrs[1], sizes[1], 0);
+   blorp_fill_vertex_buffer_state(vb, 1, addrs[1], sizes[1], 0);
 
    blorp_vf_invalidate_for_vb_48b_transitions(batch, addrs, sizes, num_vbs);
 
@@ -688,7 +687,7 @@ blorp_emit_vs_config(struct blorp_batch *batch,
 static void
 blorp_emit_sf_config(struct blorp_batch *batch,
                      const struct blorp_params *params,
-                     enum gen_urb_deref_block_size urb_deref_block_size)
+                     UNUSED enum gen_urb_deref_block_size urb_deref_block_size)
 {
    const struct brw_wm_prog_data *prog_data = params->wm_prog_data;
 
@@ -1400,7 +1399,7 @@ blorp_emit_memcpy(struct blorp_batch *batch,
 static void
 blorp_emit_surface_state(struct blorp_batch *batch,
                          const struct brw_blorp_surface_info *surface,
-                         enum isl_aux_op aux_op,
+                         UNUSED enum isl_aux_op aux_op,
                          void *state, uint32_t state_offset,
                          const bool color_write_disables[4],
                          bool is_render_target)
@@ -1864,7 +1863,7 @@ blorp_emit_gen8_hiz_op(struct blorp_batch *batch,
 #endif
 
 static void
-blorp_update_clear_color(struct blorp_batch *batch,
+blorp_update_clear_color(UNUSED struct blorp_batch *batch,
                          const struct brw_blorp_surface_info *info,
                          enum isl_aux_op op)
 {

@@ -42,7 +42,8 @@ public:
 
    virtual void getBuiltinCode(const uint32_t **code, uint32_t *size) const;
 
-   virtual void parseDriverInfo(const struct nv50_ir_prog_info *);
+   virtual void parseDriverInfo(const struct nv50_ir_prog_info *,
+                                const struct nv50_ir_prog_info_out *);
 
    virtual bool insnCanLoad(const Instruction *insn, int s,
                             const Instruction *ld) const;

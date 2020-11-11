@@ -193,6 +193,19 @@ test_disk_cache_create(void)
 
    unsetenv("MESA_GLSL_CACHE_DISABLE");
 
+#ifdef SHADER_CACHE_DISABLE_BY_DEFAULT
+   /* With SHADER_CACHE_DISABLE_BY_DEFAULT, ensure that with
+    * MESA_GLSL_CACHE_DISABLE set to nothing, disk_cache_create returns NULL.
+    */
+   unsetenv("MESA_GLSL_CACHE_DISABLE");
+   cache = disk_cache_create("test", "make_check", 0);
+   expect_null(cache, "disk_cache_create with MESA_GLSL_CACHE_DISABLE unset "
+               " and SHADER_CACHE_DISABLE_BY_DEFAULT build option");
+
+   /* For remaining tests, ensure that the cache is enabled. */
+   setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
+#endif /* SHADER_CACHE_DISABLE_BY_DEFAULT */
+
    /* For the first real disk_cache_create() clear these environment
     * variables to test creation of cache in home directory.
     */
@@ -203,6 +216,13 @@ test_disk_cache_create(void)
    expect_non_null(cache, "disk_cache_create with no environment variables");
 
    disk_cache_destroy(cache);
+
+#ifdef ANDROID
+   /* Android doesn't try writing to disk (just calls the cache callbacks), so
+    * the directory tests below don't apply.
+    */
+   exit(error ? 1 : 0);
+#endif
 
    /* Test with XDG_CACHE_HOME set */
    setenv("XDG_CACHE_HOME", CACHE_TEST_TMP "/xdg-cache-home", 1);
@@ -265,6 +285,10 @@ test_put_and_get(void)
    uint8_t *one_KB, *one_MB;
    uint8_t one_KB_key[20], one_MB_key[20];
    int count;
+
+#ifdef SHADER_CACHE_DISABLE_BY_DEFAULT
+   setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
+#endif /* SHADER_CACHE_DISABLE_BY_DEFAULT */
 
    cache = disk_cache_create("test", "make_check", 0);
 
@@ -436,6 +460,10 @@ test_put_key_and_get_key(void)
    uint8_t key_a_collide[20] =
                         { 0,  1, 42, 43, 44, 45, 46, 47, 48, 49,
                          50, 55, 52, 53, 54, 55, 56, 57, 58, 59};
+
+#ifdef SHADER_CACHE_DISABLE_BY_DEFAULT
+   setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
+#endif /* SHADER_CACHE_DISABLE_BY_DEFAULT */
 
    cache = disk_cache_create("test", "make_check", 0);
 

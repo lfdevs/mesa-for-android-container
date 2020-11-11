@@ -28,16 +28,18 @@
 #include "util/u_dynarray.h"
 #include "panfrost/util/pan_ir.h"
 
-void bifrost_compile_shader_nir(nir_shader *nir, panfrost_program *program, unsigned product_id);
+panfrost_program *
+bifrost_compile_shader_nir(void *mem_ctx, nir_shader *nir,
+                           const struct panfrost_compile_inputs *inputs);
 
 static const nir_shader_compiler_options bifrost_nir_options = {
         .lower_scmp = true,
+        .lower_flrp16 = true,
         .lower_flrp32 = true,
         .lower_flrp64 = true,
         .lower_ffract = true,
         .lower_fmod = true,
         .lower_fdiv = true,
-        .lower_idiv = true,
         .lower_isign = true,
         .lower_fpow = true,
         .lower_find_lsb = true,
@@ -68,8 +70,12 @@ static const nir_shader_compiler_options bifrost_nir_options = {
 
         .lower_bitfield_extract_to_shifts = true,
         .vectorize_io = true,
-        .fuse_ffma = true,
-        .use_interpolated_input_intrinsics = true
+        .fuse_ffma16 = true,
+        .fuse_ffma32 = true,
+        .fuse_ffma64 = true,
+        .use_interpolated_input_intrinsics = true,
+
+        .lower_uniforms_to_ubo = true,
 };
 
 #endif

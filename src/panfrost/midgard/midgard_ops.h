@@ -1,4 +1,5 @@
 /* Copyright (c) 2018-2019 Alyssa Rosenzweig (alyssa@rosenzweig.io)
+ * Copyright (C) 2019-2020 Collabora, Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,6 +31,7 @@ extern struct mir_op_props alu_opcode_props[256];
 extern struct mir_ldst_op_props load_store_opcode_props[256];
 extern struct mir_tag_props midgard_tag_props[16];
 
+#define OP_IS_ATOMIC(op) (load_store_opcode_props[op].props & LDST_ATOMIC)
 #define OP_IS_STORE(op) (load_store_opcode_props[op].props & LDST_STORE)
 #define OP_HAS_ADDRESS(op) (load_store_opcode_props[op].props & LDST_ADDRESS)
 

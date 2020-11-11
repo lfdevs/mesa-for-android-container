@@ -180,7 +180,8 @@ static void emit_image_tex(struct fd_ringbuffer *ring, struct fd6_image *img)
 		A6XX_TEX_CONST_2_TYPE(img->type) |
 		A6XX_TEX_CONST_2_PITCH(img->pitch));
 	OUT_RING(ring, A6XX_TEX_CONST_3_ARRAY_PITCH(img->array_pitch) |
-		COND(ubwc_enabled, A6XX_TEX_CONST_3_FLAG | A6XX_TEX_CONST_3_TILE_ALL));
+		COND(ubwc_enabled, A6XX_TEX_CONST_3_FLAG) |
+		COND(rsc->layout.tile_all, A6XX_TEX_CONST_3_TILE_ALL));
 	if (img->bo) {
 		OUT_RELOC(ring, img->bo, img->offset,
 				(uint64_t)A6XX_TEX_CONST_5_DEPTH(img->depth) << 32, 0);

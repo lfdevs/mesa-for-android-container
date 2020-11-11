@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2018-2019 Alyssa Rosenzweig <alyssa@rosenzweig.io>
+ * Copyright (C) 2019-2020 Collabora, Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -212,6 +213,9 @@ mir_is_scalar(midgard_instruction *ains)
         if (ains->src[1] != ~0)
                 could_scalar &= (sz1 == 16) || (sz1 == 32);
 
+        if (midgard_is_integer_out_op(ains->op) && ains->outmod != midgard_outmod_int_wrap)
+                return false;
+
         return could_scalar;
 }
 
@@ -325,7 +329,6 @@ struct midgard_predicate {
 
         midgard_constants *constants;
         unsigned constant_mask;
-        bool blend_constant;
 
         /* Exclude this destination (if not ~0) */
         unsigned exclude;
@@ -434,17 +437,6 @@ mir_adjust_constants(midgard_instruction *ins,
                 struct midgard_predicate *pred,
                 bool destructive)
 {
-        /* Blend constants dominate */
-        if (ins->has_blend_constant) {
-                if (pred->constant_mask)
-                        return false;
-                else if (destructive) {
-                        pred->blend_constant = true;
-                        pred->constant_mask = 0xffff;
-                        return true;
-                }
-        }
-
         /* No constant, nothing to adjust */
         if (!ins->has_constants)
                 return true;
@@ -1293,7 +1285,6 @@ mir_schedule_alu(
         mir_update_worklist(worklist, len, instructions, vmul);
         mir_update_worklist(worklist, len, instructions, sadd);
 
-        bundle.has_blend_constant = predicate.blend_constant;
         bundle.has_embedded_constants = predicate.constant_mask != 0;
 
         unsigned padding = 0;
@@ -1372,7 +1363,6 @@ schedule_block(compiler_context *ctx, midgard_block *block)
         util_dynarray_init(&bundles, NULL);
 
         block->quadword_count = 0;
-        unsigned blend_offset = 0;
 
         for (;;) {
                 unsigned tag = mir_choose_bundle(instructions, liveness, worklist, len);
@@ -1388,10 +1378,6 @@ schedule_block(compiler_context *ctx, midgard_block *block)
                         break;
 
                 util_dynarray_append(&bundles, midgard_bundle, bundle);
-
-                if (bundle.has_blend_constant)
-                        blend_offset = block->quadword_count;
-
                 block->quadword_count += midgard_tag_props[bundle.tag].size;
         }
 
@@ -1402,15 +1388,6 @@ schedule_block(compiler_context *ctx, midgard_block *block)
                 util_dynarray_append(&block->bundles, midgard_bundle, *bundle);
         }
         util_dynarray_fini(&bundles);
-
-        /* Blend constant was backwards as well. blend_offset if set is
-         * strictly positive, as an offset of zero would imply constants before
-         * any instructions which is invalid in Midgard. TODO: blend constants
-         * are broken if you spill since then quadword_count becomes invalid
-         * XXX */
-
-        if (blend_offset)
-                ctx->blend_constant_offset = ((ctx->quadword_count + block->quadword_count) - blend_offset - 1) * 0x10;
 
         block->scheduled = true;
         ctx->quadword_count += block->quadword_count;

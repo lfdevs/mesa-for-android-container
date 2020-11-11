@@ -445,6 +445,7 @@ v3d_setup_shared_key(struct v3d_context *v3d, struct v3d_key *key,
 {
         const struct v3d_device_info *devinfo = &v3d->screen->devinfo;
 
+        key->num_tex_used = texstate->num_textures;
         for (int i = 0; i < texstate->num_textures; i++) {
                 struct pipe_sampler_view *sampler = texstate->textures[i];
                 struct v3d_sampler_view *v3d_sampler = v3d_sampler_view(sampler);
@@ -504,6 +505,7 @@ v3d_setup_shared_precompile_key(struct v3d_uncompiled_shader *uncompiled,
 {
         nir_shader *s = uncompiled->base.ir.nir;
 
+        key->num_tex_used = s->info.num_textures;
         for (int i = 0; i < s->info.num_textures; i++) {
                 key->tex[i].return_size = 16;
                 key->tex[i].return_channels = 2;
@@ -557,8 +559,6 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
                 key->sample_alpha_to_one = v3d->blend->base.alpha_to_one;
         }
 
-        key->depth_enabled = (v3d->zsa->base.depth.enabled ||
-                              v3d->zsa->base.stencil[0].enabled);
         if (v3d->zsa->base.alpha.enabled) {
                 key->alpha_test = true;
                 key->alpha_test_func = v3d->zsa->base.alpha.func;
@@ -761,6 +761,29 @@ v3d_update_compiled_vs(struct v3d_context *v3d, uint8_t prim_mode)
         key->per_vertex_point_size =
                 (prim_mode == PIPE_PRIM_POINTS &&
                  v3d->rasterizer->base.point_size_per_vertex);
+
+        nir_shader *s = v3d->prog.bind_vs->base.ir.nir;
+        uint64_t inputs_read = s->info.inputs_read;
+        assert(util_bitcount(inputs_read) <= v3d->vtx->num_elements);
+
+        while (inputs_read) {
+                int location = u_bit_scan64(&inputs_read);
+                nir_variable *var =
+                        nir_find_variable_with_location(s, nir_var_shader_in, location);
+                assert (var != NULL);
+                int driver_location = var->data.driver_location;
+                switch (v3d->vtx->pipe[driver_location].src_format) {
+                case PIPE_FORMAT_B8G8R8A8_UNORM:
+                case PIPE_FORMAT_B10G10R10A2_UNORM:
+                case PIPE_FORMAT_B10G10R10A2_SNORM:
+                case PIPE_FORMAT_B10G10R10A2_USCALED:
+                case PIPE_FORMAT_B10G10R10A2_SSCALED:
+                        key->va_swap_rb_mask |= 1 << location;
+                        break;
+                default:
+                        break;
+                }
+        }
 
         struct v3d_compiled_shader *vs =
                 v3d_get_compiled_shader(v3d, &key->base, sizeof(*key));

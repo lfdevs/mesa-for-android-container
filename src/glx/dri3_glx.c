@@ -741,6 +741,8 @@ dri3_bind_extensions(struct dri3_screen *psc, struct glx_display * priv,
 
    extensions = psc->core->getExtensions(psc->driScreen);
 
+   __glXEnableDirectExtension(&psc->base, "GLX_EXT_swap_control");
+   __glXEnableDirectExtension(&psc->base, "GLX_EXT_swap_control_tear");
    __glXEnableDirectExtension(&psc->base, "GLX_SGI_swap_control");
    __glXEnableDirectExtension(&psc->base, "GLX_MESA_swap_control");
    __glXEnableDirectExtension(&psc->base, "GLX_SGI_make_current_read");
@@ -804,11 +806,20 @@ dri3_bind_extensions(struct dri3_screen *psc, struct glx_display * priv,
    }
 }
 
+static char *
+dri3_get_driver_name(struct glx_screen *glx_screen)
+{
+    struct dri3_screen *psc = (struct dri3_screen *)glx_screen;
+
+    return loader_get_driver_for_fd(psc->fd);
+}
+
 static const struct glx_screen_vtable dri3_screen_vtable = {
    .create_context         = dri3_create_context,
    .create_context_attribs = dri3_create_context_attribs,
    .query_renderer_integer = dri3_query_renderer_integer,
    .query_renderer_string  = dri3_query_renderer_string,
+   .get_driver_name        = dri3_get_driver_name,
 };
 
 /** dri3_create_screen
@@ -986,6 +997,17 @@ dri3_create_screen(int screen, struct glx_display * priv)
                                  "glx_disable_ext_buffer_age",
                                  &disable) || !disable)
       __glXEnableDirectExtension(&psc->base, "GLX_EXT_buffer_age");
+
+   if (psc->config->base.version > 1 &&
+          psc->config->configQuerys(psc->driScreen, "glx_extension_override",
+                                    &tmp) == 0)
+      __glXParseExtensionOverride(&psc->base, tmp);
+
+   if (psc->config->base.version > 1 &&
+          psc->config->configQuerys(psc->driScreen,
+                                    "indirect_gl_extension_override",
+                                    &tmp) == 0)
+      __IndirectGlParseExtensionOverride(&psc->base, tmp);
 
    free(driverName);
 

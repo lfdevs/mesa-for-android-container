@@ -190,17 +190,7 @@ fd5_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 	struct fd_ringbuffer *ring;
 	uint32_t clear = util_pack_z(PIPE_FORMAT_Z16_UNORM, depth);
 
-	// TODO mid-frame clears (ie. app doing crazy stuff)??  Maybe worth
-	// splitting both clear and lrz clear out into their own rb's.  And
-	// just throw away any draws prior to clear.  (Anything not fullscreen
-	// clear, just fallback to generic path that treats it as a normal
-	// draw
-
-	if (!batch->lrz_clear) {
-		batch->lrz_clear = fd_submit_new_ringbuffer(batch->submit, 0x1000, 0);
-	}
-
-	ring = batch->lrz_clear;
+	ring = fd_batch_get_prologue(batch);
 
 	OUT_WFI5(ring);
 

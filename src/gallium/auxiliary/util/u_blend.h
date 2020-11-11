@@ -114,4 +114,32 @@ util_blend_factor_is_inverted(enum pipe_blendfactor factor)
    }
 }
 
+/* To determine if the destination needs to be read while blending */
+
+static inline bool
+util_blend_factor_uses_dest(enum pipe_blendfactor factor, bool alpha)
+{
+   switch (factor) {
+      case PIPE_BLENDFACTOR_DST_ALPHA:
+      case PIPE_BLENDFACTOR_DST_COLOR:
+      case PIPE_BLENDFACTOR_INV_DST_ALPHA:
+      case PIPE_BLENDFACTOR_INV_DST_COLOR:
+         return true;
+      case PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE:
+         return !alpha;
+      default:
+         return false;
+   }
+}
+
+static inline bool
+util_blend_uses_dest(struct pipe_rt_blend_state rt)
+{
+   return rt.blend_enable &&
+      (util_blend_factor_uses_dest(rt.rgb_src_factor, false) ||
+       util_blend_factor_uses_dest(rt.alpha_src_factor, true) ||
+       rt.rgb_dst_factor != PIPE_BLENDFACTOR_ZERO ||
+       rt.alpha_dst_factor != PIPE_BLENDFACTOR_ZERO);
+}
+
 #endif /* U_BLEND_H */

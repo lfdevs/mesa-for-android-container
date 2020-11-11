@@ -46,7 +46,6 @@ static const struct gen_info {
    { "glk", },
    { "cfl", },
    { "whl", },
-   { "cnl", },
    { "icl", },
    { "tgl", },
 };
@@ -110,7 +109,7 @@ validate(struct brw_codegen *p)
                                         p->next_insn_offset, disasm);
 
    if (print) {
-      dump_assembly(p->store, disasm, NULL);
+      dump_assembly(p->store, 0, p->next_insn_offset, disasm, NULL);
    }
    ralloc_free(disasm);
 
@@ -485,8 +484,8 @@ TEST_P(validation_test, invalid_type_encoding_3src_a1)
       /* There are no ternary instructions that can operate on B-type sources
        * on Gen11-12. Src1/Src2 cannot be B-typed either.
        */
-      { BRW_REGISTER_TYPE_B,  E(INT),   devinfo.gen == 10 },
-      { BRW_REGISTER_TYPE_UB, E(INT),   devinfo.gen == 10 },
+      { BRW_REGISTER_TYPE_B,  E(INT),   false },
+      { BRW_REGISTER_TYPE_UB, E(INT),   false },
    };
 
    /* Initially assume all hardware encodings are invalid */

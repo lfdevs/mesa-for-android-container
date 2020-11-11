@@ -489,7 +489,6 @@ fd5_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	OUT_PKT4(ring, REG_A5XX_VPC_CNTL_0, 1);
 	OUT_RING(ring, A5XX_VPC_CNTL_0_STRIDE_IN_VPC(l.max_loc) |
 			COND(s[FS].v->total_in > 0, A5XX_VPC_CNTL_0_VARYING) |
-			COND(s[FS].v->fragcoord_compmask != 0, A5XX_VPC_CNTL_0_VARYING) |
 			0x10000);    // XXX
 
 	fd5_context(ctx)->max_loc = l.max_loc;
@@ -524,7 +523,6 @@ fd5_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 	OUT_PKT4(ring, REG_A5XX_SP_FS_CTRL_REG0, 1);
 	OUT_RING(ring, COND(s[FS].v->total_in > 0, A5XX_SP_FS_CTRL_REG0_VARYING) |
-			COND(s[FS].v->fragcoord_compmask != 0, A5XX_SP_FS_CTRL_REG0_VARYING) |
 			0x40006 | /* XXX set pretty much everywhere */
 			A5XX_SP_FS_CTRL_REG0_THREADSIZE(fssz) |
 			A5XX_SP_FS_CTRL_REG0_HALFREGFOOTPRINT(s[FS].i->max_half_reg + 1) |
@@ -613,7 +611,7 @@ fd5_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 			uint32_t inloc = s[FS].v->inputs[j].inloc;
 
-			if ((s[FS].v->inputs[j].interpolate == INTERP_MODE_FLAT) ||
+			if (s[FS].v->inputs[j].flat ||
 					(s[FS].v->inputs[j].rasterflat && emit->rasterflat)) {
 				uint32_t loc = inloc;
 

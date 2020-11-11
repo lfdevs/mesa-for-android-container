@@ -76,7 +76,7 @@ bi_emit_fexp2_new(bi_context *ctx, nir_alu_instr *instr)
         /* FEXP2_FAST T, T, X */
 
         bi_instruction fexp = {
-                .type = BI_SPECIAL,
+                .type = BI_SPECIAL_ADD,
                 .op = { .special = BI_SPECIAL_EXP2_LOW },
                 .dest = pan_dest_index(&instr->dest.dest),
                 .dest_type = nir_type_float32,

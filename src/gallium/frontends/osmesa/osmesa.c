@@ -349,7 +349,7 @@ osmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
 
    u_box_2d(0, 0, res->width0, res->height0, &box);
 
-   map = pipe->transfer_map(pipe, res, 0, PIPE_TRANSFER_READ, &box,
+   map = pipe->transfer_map(pipe, res, 0, PIPE_MAP_READ, &box,
                             &transfer);
 
    /*
@@ -930,7 +930,7 @@ OSMesaGetDepthBuffer(OSMesaContext c, GLint *width, GLint *height,
 
    u_box_2d(0, 0, res->width0, res->height0, &box);
 
-   *buffer = pipe->transfer_map(pipe, res, 0, PIPE_TRANSFER_READ, &box,
+   *buffer = pipe->transfer_map(pipe, res, 0, PIPE_MAP_READ, &box,
                                 &transfer);
    if (!*buffer) {
       return GL_FALSE;

@@ -168,6 +168,8 @@ struct loader_dri3_drawable {
    unsigned int back_format;
    xcb_present_complete_mode_t last_present_mode;
 
+   bool is_protected_content;
+
    /* Currently protects the following fields:
     * event_cnd, has_event_waiter,
     * recv_sbc, ust, msc, recv_msc_serial,

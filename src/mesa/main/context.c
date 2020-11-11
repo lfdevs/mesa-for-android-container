@@ -80,7 +80,6 @@
 
 #include "accum.h"
 #include "api_exec.h"
-#include "api_loopback.h"
 #include "arrayobj.h"
 #include "attrib.h"
 #include "bbox.h"
@@ -1084,7 +1083,7 @@ _mesa_alloc_dispatch_table(void)
  *      OPERATION."
  *
  * The table entries for specifying vertex attributes are set up by
- * install_vtxfmt() and _mesa_loopback_init_api_table(), and End() and dlists
+ * install_vtxfmt(), and End() and dlists
  * are set by install_vtxfmt() as well.
  */
 static struct _glapi_table *
@@ -1129,8 +1128,6 @@ create_beginend_table(const struct gl_context *ctx)
    COPY_DISPATCH(MapBufferRange);
    COPY_DISPATCH(ObjectPurgeableAPPLE);
    COPY_DISPATCH(ObjectUnpurgeableAPPLE);
-
-   _mesa_loopback_init_api_table(ctx, table);
 
    return table;
 }

@@ -1,4 +1,5 @@
 /* Copyright (c) 2018-2019 Alyssa Rosenzweig (alyssa@rosenzweig.io)
+ * Copyright (C) 2019-2020 Collabora, Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -188,25 +189,27 @@ struct mir_ldst_op_props load_store_opcode_props[256] = {
         [midgard_op_ldst_perspective_division_z] = {"ldst_perspective_division_z", M32},
         [midgard_op_ldst_perspective_division_w] = {"ldst_perspective_division_w", M32},
 
-        [midgard_op_atomic_add]  = {"atomic_add",  M32 | LDST_SIDE_FX},
-        [midgard_op_atomic_and]  = {"atomic_and",  M32 | LDST_SIDE_FX},
-        [midgard_op_atomic_or]   = {"atomic_or",   M32 | LDST_SIDE_FX},
-        [midgard_op_atomic_xor]  = {"atomic_xor",  M32 | LDST_SIDE_FX},
-        [midgard_op_atomic_imin] = {"atomic_imin", M32 | LDST_SIDE_FX},
-        [midgard_op_atomic_umin] = {"atomic_umin", M32 | LDST_SIDE_FX},
-        [midgard_op_atomic_imax] = {"atomic_imax", M32 | LDST_SIDE_FX},
-        [midgard_op_atomic_umax] = {"atomic_umax", M32 | LDST_SIDE_FX},
-        [midgard_op_atomic_xchg] = {"atomic_xchg", M32 | LDST_SIDE_FX},
+        [midgard_op_atomic_add]     = {"atomic_add",     M32 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_and]     = {"atomic_and",     M32 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_or]      = {"atomic_or",      M32 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_xor]     = {"atomic_xor",     M32 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_imin]    = {"atomic_imin",    M32 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_umin]    = {"atomic_umin",    M32 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_imax]    = {"atomic_imax",    M32 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_umax]    = {"atomic_umax",    M32 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_xchg]    = {"atomic_xchg",    M32 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_cmpxchg] = {"atomic_cmpxchg", M32 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
 
-        [midgard_op_atomic_add64]  = {"atomic_add64",  M64 | LDST_SIDE_FX},
-        [midgard_op_atomic_and64]  = {"atomic_and64",  M64 | LDST_SIDE_FX},
-        [midgard_op_atomic_or64]   = {"atomic_or64",   M64 | LDST_SIDE_FX},
-        [midgard_op_atomic_xor64]  = {"atomic_xor64",  M64 | LDST_SIDE_FX},
-        [midgard_op_atomic_imin64] = {"atomic_imin64", M64 | LDST_SIDE_FX},
-        [midgard_op_atomic_umin64] = {"atomic_umin64", M64 | LDST_SIDE_FX},
-        [midgard_op_atomic_imax64] = {"atomic_imax64", M64 | LDST_SIDE_FX},
-        [midgard_op_atomic_umax64] = {"atomic_umax64", M64 | LDST_SIDE_FX},
-        [midgard_op_atomic_xchg64] = {"atomic_xchg64", M64 | LDST_SIDE_FX},
+        [midgard_op_atomic_add64]     = {"atomic_add64",     M64 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_and64]     = {"atomic_and64",     M64 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_or64]      = {"atomic_or64",      M64 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_xor64]     = {"atomic_xor64",     M64 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_imin64]    = {"atomic_imin64",    M64 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_umin64]    = {"atomic_umin64",    M64 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_imax64]    = {"atomic_imax64",    M64 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_umax64]    = {"atomic_umax64",    M64 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_xchg64]    = {"atomic_xchg64",    M64 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
+        [midgard_op_atomic_cmpxchg64] = {"atomic_cmpxchg64", M64 | LDST_SIDE_FX | LDST_ADDRESS | LDST_ATOMIC},
 
         [midgard_op_ld_uchar]  = {"ld_uchar", M32 | LDST_ADDRESS},
         [midgard_op_ld_char]   = {"ld_char",   M32 | LDST_ADDRESS},

@@ -53,6 +53,19 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
 
       nir_ssa_def *sysval;
       switch (intrinsic->intrinsic) {
+      case nir_intrinsic_load_local_group_size:
+      case nir_intrinsic_load_work_group_id:
+      case nir_intrinsic_load_num_work_groups:
+         /* Convert this to 32-bit if it's not */
+         if (intrinsic->dest.ssa.bit_size == 64) {
+            intrinsic->dest.ssa.bit_size = 32;
+            sysval = nir_u2u64(b, &intrinsic->dest.ssa);
+            nir_ssa_def_rewrite_uses_after(&intrinsic->dest.ssa,
+                                           nir_src_for_ssa(sysval),
+                                           sysval->parent_instr);
+         }
+         continue;
+
       case nir_intrinsic_load_local_invocation_index:
       case nir_intrinsic_load_local_invocation_id: {
          /* First time we are using those, so let's calculate them. */
@@ -171,6 +184,9 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
          continue;
       }
 
+      if (intrinsic->dest.ssa.bit_size == 64)
+         sysval = nir_u2u64(b, sysval);
+
       nir_ssa_def_rewrite_uses(&intrinsic->dest.ssa, nir_src_for_ssa(sysval));
       nir_instr_remove(&intrinsic->instr);
 
@@ -196,7 +212,8 @@ lower_cs_intrinsics_convert_impl(struct lower_intrinsics_state *state)
 bool
 brw_nir_lower_cs_intrinsics(nir_shader *nir)
 {
-   assert(nir->info.stage == MESA_SHADER_COMPUTE);
+   assert(nir->info.stage == MESA_SHADER_COMPUTE ||
+          nir->info.stage == MESA_SHADER_KERNEL);
 
    struct lower_intrinsics_state state = {
       .nir = nir,

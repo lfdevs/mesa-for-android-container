@@ -24,7 +24,7 @@
 #include "util/u_memory.h"
 #include "virgl_context.h"
 #include "virgl_encode.h"
-#include "virgl_protocol.h"
+#include "virtio-gpu/virgl_protocol.h"
 #include "virgl_resource.h"
 
 static struct pipe_stream_output_target *virgl_create_so_target(

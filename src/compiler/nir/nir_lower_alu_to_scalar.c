@@ -68,7 +68,7 @@ lower_reduction(nir_alu_instr *alu, nir_op chan_op, nir_op merge_op,
    unsigned num_components = nir_op_infos[alu->op].input_sizes[0];
 
    nir_ssa_def *last = NULL;
-   for (unsigned i = 0; i < num_components; i++) {
+   for (int i = num_components - 1; i >= 0; i--) {
       nir_alu_instr *chan = nir_alu_instr_create(builder->shader, chan_op);
       nir_alu_ssa_dest_init(chan, 1, alu->dest.dest.ssa.bit_size);
       nir_alu_src_copy(&chan->src[0], &alu->src[0], chan);
@@ -82,7 +82,7 @@ lower_reduction(nir_alu_instr *alu, nir_op chan_op, nir_op merge_op,
 
       nir_builder_instr_insert(builder, &chan->instr);
 
-      if (i == 0) {
+      if (i == num_components - 1) {
          last = &chan->dest.dest.ssa;
       } else {
          last = nir_build_alu(builder, merge_op,
@@ -209,6 +209,34 @@ lower_alu_instr_scalar(nir_builder *b, nir_instr *instr, void *_data)
                          nir_fadd(b, sum[2], sum[3]));
    }
 
+   case nir_op_pack_64_2x32: {
+      if (!b->shader->options->lower_pack_64_2x32)
+         return NULL;
+
+      nir_ssa_def *src_vec2 = nir_ssa_for_alu_src(b, alu, 0);
+      return nir_pack_64_2x32_split(b, nir_channel(b, src_vec2, 0),
+                                    nir_channel(b, src_vec2, 1));
+   }
+   case nir_op_pack_64_4x16: {
+      if (!b->shader->options->lower_pack_64_4x16)
+         return NULL;
+
+      nir_ssa_def *src_vec4 = nir_ssa_for_alu_src(b, alu, 0);
+      nir_ssa_def *xy = nir_pack_32_2x16_split(b, nir_channel(b, src_vec4, 0),
+                                                  nir_channel(b, src_vec4, 1));
+      nir_ssa_def *zw = nir_pack_32_2x16_split(b, nir_channel(b, src_vec4, 2),
+                                                  nir_channel(b, src_vec4, 3));
+
+      return nir_pack_64_2x32_split(b, xy, zw);
+   }
+   case nir_op_pack_32_2x16: {
+      if (!b->shader->options->lower_pack_32_2x16)
+         return NULL;
+
+      nir_ssa_def *src_vec2 = nir_ssa_for_alu_src(b, alu, 0);
+      return nir_pack_32_2x16_split(b, nir_channel(b, src_vec2, 0),
+                                    nir_channel(b, src_vec2, 1));
+   }
    case nir_op_unpack_64_2x32:
    case nir_op_unpack_64_4x16:
    case nir_op_unpack_32_2x16:
@@ -217,19 +245,19 @@ lower_alu_instr_scalar(nir_builder *b, nir_instr *instr, void *_data)
       LOWER_REDUCTION(nir_op_fdot, nir_op_fmul, nir_op_fadd);
       LOWER_REDUCTION(nir_op_ball_fequal, nir_op_feq, nir_op_iand);
       LOWER_REDUCTION(nir_op_ball_iequal, nir_op_ieq, nir_op_iand);
-      LOWER_REDUCTION(nir_op_bany_fnequal, nir_op_fne, nir_op_ior);
+      LOWER_REDUCTION(nir_op_bany_fnequal, nir_op_fneu, nir_op_ior);
       LOWER_REDUCTION(nir_op_bany_inequal, nir_op_ine, nir_op_ior);
       LOWER_REDUCTION(nir_op_b8all_fequal, nir_op_feq8, nir_op_iand);
       LOWER_REDUCTION(nir_op_b8all_iequal, nir_op_ieq8, nir_op_iand);
-      LOWER_REDUCTION(nir_op_b8any_fnequal, nir_op_fne8, nir_op_ior);
+      LOWER_REDUCTION(nir_op_b8any_fnequal, nir_op_fneu8, nir_op_ior);
       LOWER_REDUCTION(nir_op_b8any_inequal, nir_op_ine8, nir_op_ior);
       LOWER_REDUCTION(nir_op_b16all_fequal, nir_op_feq16, nir_op_iand);
       LOWER_REDUCTION(nir_op_b16all_iequal, nir_op_ieq16, nir_op_iand);
-      LOWER_REDUCTION(nir_op_b16any_fnequal, nir_op_fne16, nir_op_ior);
+      LOWER_REDUCTION(nir_op_b16any_fnequal, nir_op_fneu16, nir_op_ior);
       LOWER_REDUCTION(nir_op_b16any_inequal, nir_op_ine16, nir_op_ior);
       LOWER_REDUCTION(nir_op_b32all_fequal, nir_op_feq32, nir_op_iand);
       LOWER_REDUCTION(nir_op_b32all_iequal, nir_op_ieq32, nir_op_iand);
-      LOWER_REDUCTION(nir_op_b32any_fnequal, nir_op_fne32, nir_op_ior);
+      LOWER_REDUCTION(nir_op_b32any_fnequal, nir_op_fneu32, nir_op_ior);
       LOWER_REDUCTION(nir_op_b32any_inequal, nir_op_ine32, nir_op_ior);
       LOWER_REDUCTION(nir_op_fall_equal, nir_op_seq, nir_op_fmin);
       LOWER_REDUCTION(nir_op_fany_nequal, nir_op_sne, nir_op_fmax);

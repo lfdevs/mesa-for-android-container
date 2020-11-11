@@ -50,11 +50,11 @@ namespace clover {
       void copy(command_queue &q, const vector &origin, const vector &region,
                 resource &src_resource, const vector &src_origin);
 
-      void clear(command_queue &q, const size_t origin, const size_t size,
-                 const void *pattern, const size_t pattern_size);
+      void clear(command_queue &q, const vector &origin, const vector &region,
+                 const std::string &data);
 
-      void *add_map(command_queue &q, cl_map_flags flags, bool blocking,
-                    const vector &origin, const vector &region);
+      mapping *add_map(command_queue &q, cl_map_flags flags, bool blocking,
+                       const vector &origin, const vector &region);
       void del_map(void *p);
       unsigned map_count() const;
 
@@ -75,6 +75,8 @@ namespace clover {
       pipe_surface *bind_surface(command_queue &q, bool rw);
       void unbind_surface(command_queue &q, pipe_surface *st);
 
+      pipe_image_view create_image_view(command_queue &q);
+
       pipe_resource *pipe;
       vector offset;
 
@@ -89,7 +91,7 @@ namespace clover {
    class root_resource : public resource {
    public:
       root_resource(clover::device &dev, memory_obj &obj,
-                    command_queue &q, const std::string &data);
+                    command_queue &q, const void *data_ptr);
       root_resource(clover::device &dev, memory_obj &obj, root_resource &r);
       virtual ~root_resource();
    };
@@ -124,6 +126,8 @@ namespace clover {
       operator T *() const {
          return (T *)p;
       }
+
+      resource::vector pitch() const;
 
    private:
       pipe_context *pctx;

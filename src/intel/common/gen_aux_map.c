@@ -67,7 +67,7 @@
  *
  * Where:
  *  - Format: See `get_format_encoding`
- *  - Y/Cr: 0=not-Y/Cr, 1=Y/Cr
+ *  - Y/Cr: 0=Y(Luma), 1=Cr(Chroma)
  *  - (bit) Depth: See `get_bpp_encoding`
  *  - TM (Tile-mode): 0=Ys, 1=Y, 2=rsvd, 3=rsvd
  *  - aux-data-addr: VMA/GPU address for the aux-data
@@ -282,46 +282,63 @@ get_u64_entry_ptr(struct gen_aux_map_context *ctx, uint64_t addr)
 }
 
 static uint8_t
-get_bpp_encoding(uint16_t bpp)
+get_bpp_encoding(enum isl_format format)
 {
-   switch (bpp) {
-   case 16:  return 0;
-   case 10:  return 1;
-   case 12:  return 2;
-   case 8:   return 4;
-   case 32:  return 5;
-   case 64:  return 6;
-   case 128: return 7;
-   default:
-      unreachable("Unsupported bpp!");
-      return 0;
+   if (isl_format_is_yuv(format)) {
+      switch (format) {
+      case ISL_FORMAT_YCRCB_NORMAL:
+      case ISL_FORMAT_YCRCB_SWAPY:
+      case ISL_FORMAT_PLANAR_420_8: return 3;
+      case ISL_FORMAT_PLANAR_420_12: return 2;
+      case ISL_FORMAT_PLANAR_420_10: return 1;
+      case ISL_FORMAT_PLANAR_420_16: return 0;
+      default:
+         unreachable("Unsupported format!");
+         return 0;
+      }
+   } else {
+      switch (isl_format_get_layout(format)->bpb) {
+      case 16:  return 0;
+      case 8:   return 4;
+      case 32:  return 5;
+      case 64:  return 6;
+      case 128: return 7;
+      default:
+         unreachable("Unsupported bpp!");
+         return 0;
+      }
    }
 }
 
 #define GEN_AUX_MAP_ENTRY_Y_TILED_BIT  (0x1ull << 52)
 
 uint64_t
-gen_aux_map_format_bits_for_isl_surf(const struct isl_surf *isl_surf)
+gen_aux_map_format_bits(enum isl_tiling tiling, enum isl_format format,
+                        uint8_t plane)
 {
-   const struct isl_format_layout *fmtl =
-      isl_format_get_layout(isl_surf->format);
-
-   uint16_t bpp = fmtl->bpb;
-   assert(fmtl->bw == 1 && fmtl->bh == 1 && fmtl->bd == 1);
    if (aux_map_debug)
-      fprintf(stderr, "AUX-MAP entry %s, bpp=%d\n",
-              isl_format_get_name(isl_surf->format), bpp);
+      fprintf(stderr, "AUX-MAP entry %s, bpp_enc=%d\n",
+              isl_format_get_name(format),
+              isl_format_get_aux_map_encoding(format));
 
-   assert(isl_tiling_is_any_y(isl_surf->tiling));
+   assert(isl_tiling_is_any_y(tiling));
 
    uint64_t format_bits =
-      ((uint64_t)isl_format_get_aux_map_encoding(isl_surf->format) << 58) |
-      ((uint64_t)get_bpp_encoding(bpp) << 54) |
+      ((uint64_t)isl_format_get_aux_map_encoding(format) << 58) |
+      ((uint64_t)(plane > 0) << 57) |
+      ((uint64_t)get_bpp_encoding(format) << 54) |
       GEN_AUX_MAP_ENTRY_Y_TILED_BIT;
 
    assert((format_bits & GEN_AUX_MAP_FORMAT_BITS_MASK) == format_bits);
 
    return format_bits;
+}
+
+uint64_t
+gen_aux_map_format_bits_for_isl_surf(const struct isl_surf *isl_surf)
+{
+   assert(!isl_format_is_planar(isl_surf->format));
+   return gen_aux_map_format_bits(isl_surf->tiling, isl_surf->format, 0);
 }
 
 static void
@@ -447,15 +464,6 @@ gen_aux_map_add_mapping(struct gen_aux_map_context *ctx, uint64_t address,
    pthread_mutex_unlock(&ctx->mutex);
    if (state_changed)
       p_atomic_inc(&ctx->state_num);
-}
-
-void
-gen_aux_map_add_image(struct gen_aux_map_context *ctx,
-                      const struct isl_surf *isl_surf, uint64_t address,
-                      uint64_t aux_address)
-{
-   gen_aux_map_add_mapping(ctx, address, aux_address, isl_surf->size_B,
-                           gen_aux_map_format_bits_for_isl_surf(isl_surf));
 }
 
 /**

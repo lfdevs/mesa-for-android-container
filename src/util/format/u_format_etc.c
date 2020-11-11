@@ -67,8 +67,9 @@ util_format_etc1_rgb8_pack_rgba_float(UNUSED uint8_t *dst_row, UNUSED unsigned d
 }
 
 void
-util_format_etc1_rgb8_fetch_rgba_float(float *dst, const uint8_t *src, unsigned i, unsigned j)
+util_format_etc1_rgb8_fetch_rgba(void *in_dst, const uint8_t *src, unsigned i, unsigned j)
 {
+   float *dst = in_dst;
    struct etc1_block block;
    uint8_t tmp[3];
 

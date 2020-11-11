@@ -1240,37 +1240,43 @@ void Program::releaseValue(Value *value)
 extern "C" {
 
 static void
-nv50_ir_init_prog_info(struct nv50_ir_prog_info *info)
+nv50_ir_init_prog_info(struct nv50_ir_prog_info *info,
+                       struct nv50_ir_prog_info_out *info_out)
 {
+   info_out->target = info->target;
+   info_out->type = info->type;
    if (info->type == PIPE_SHADER_TESS_CTRL || info->type == PIPE_SHADER_TESS_EVAL) {
-      info->prop.tp.domain = PIPE_PRIM_MAX;
-      info->prop.tp.outputPrim = PIPE_PRIM_MAX;
+      info_out->prop.tp.domain = PIPE_PRIM_MAX;
+      info_out->prop.tp.outputPrim = PIPE_PRIM_MAX;
    }
    if (info->type == PIPE_SHADER_GEOMETRY) {
-      info->prop.gp.instanceCount = 1;
-      info->prop.gp.maxVertices = 1;
+      info_out->prop.gp.instanceCount = 1;
+      info_out->prop.gp.maxVertices = 1;
    }
    if (info->type == PIPE_SHADER_COMPUTE) {
       info->prop.cp.numThreads[0] =
       info->prop.cp.numThreads[1] =
       info->prop.cp.numThreads[2] = 1;
    }
-   info->io.instanceId = 0xff;
-   info->io.vertexId = 0xff;
-   info->io.edgeFlagIn = 0xff;
-   info->io.edgeFlagOut = 0xff;
-   info->io.fragDepth = 0xff;
-   info->io.sampleMask = 0xff;
+   info_out->bin.smemSize = info->bin.smemSize;
+   info_out->io.genUserClip = info->io.genUserClip;
+   info_out->io.instanceId = 0xff;
+   info_out->io.vertexId = 0xff;
+   info_out->io.edgeFlagIn = 0xff;
+   info_out->io.edgeFlagOut = 0xff;
+   info_out->io.fragDepth = 0xff;
+   info_out->io.sampleMask = 0xff;
 }
 
 int
-nv50_ir_generate_code(struct nv50_ir_prog_info *info)
+nv50_ir_generate_code(struct nv50_ir_prog_info *info,
+                      struct nv50_ir_prog_info_out *info_out)
 {
    int ret = 0;
 
    nv50_ir::Program::Type type;
 
-   nv50_ir_init_prog_info(info);
+   nv50_ir_init_prog_info(info, info_out);
 
 #define PROG_TYPE_CASE(a, b)                                      \
    case PIPE_SHADER_##a: type = nv50_ir::Program::TYPE_##b; break
@@ -1298,15 +1304,16 @@ nv50_ir_generate_code(struct nv50_ir_prog_info *info)
       return -1;
    }
    prog->driver = info;
+   prog->driver_out = info_out;
    prog->dbgFlags = info->dbgFlags;
    prog->optLevel = info->optLevel;
 
    switch (info->bin.sourceRep) {
    case PIPE_SHADER_IR_NIR:
-      ret = prog->makeFromNIR(info) ? 0 : -2;
+      ret = prog->makeFromNIR(info, info_out) ? 0 : -2;
       break;
    case PIPE_SHADER_IR_TGSI:
-      ret = prog->makeFromTGSI(info) ? 0 : -2;
+      ret = prog->makeFromTGSI(info, info_out) ? 0 : -2;
       break;
    default:
       ret = -1;
@@ -1317,7 +1324,7 @@ nv50_ir_generate_code(struct nv50_ir_prog_info *info)
    if (prog->dbgFlags & NV50_IR_DEBUG_VERBOSE)
       prog->print();
 
-   targ->parseDriverInfo(info);
+   targ->parseDriverInfo(info, info_out);
    prog->getTarget()->runLegalizePass(prog, nv50_ir::CG_STAGE_PRE_SSA);
 
    prog->convertToSSA();
@@ -1339,7 +1346,7 @@ nv50_ir_generate_code(struct nv50_ir_prog_info *info)
 
    prog->optimizePostRA(info->optLevel);
 
-   if (!prog->emitBinary(info)) {
+   if (!prog->emitBinary(info_out)) {
       ret = -5;
       goto out;
    }
@@ -1347,10 +1354,10 @@ nv50_ir_generate_code(struct nv50_ir_prog_info *info)
 out:
    INFO_DBG(prog->dbgFlags, VERBOSE, "nv50_ir_generate_code: ret = %i\n", ret);
 
-   info->bin.maxGPR = prog->maxGPR;
-   info->bin.code = prog->code;
-   info->bin.codeSize = prog->binSize;
-   info->bin.tlsSpace = prog->tlsSize;
+   info_out->bin.maxGPR = prog->maxGPR;
+   info_out->bin.code = prog->code;
+   info_out->bin.codeSize = prog->binSize;
+   info_out->bin.tlsSpace = prog->tlsSize;
 
    delete prog;
    nv50_ir::Target::destroy(targ);

@@ -56,20 +56,7 @@ static void mem_trace_memory_write_header_out(struct aub_file *aub, uint64_t add
                                               uint32_t len, uint32_t addr_space,
                                               const char *desc);
 
-static void __attribute__ ((format(__printf__, 2, 3)))
-fail_if(int cond, const char *format, ...)
-{
-   va_list args;
-
-   if (!cond)
-      return;
-
-   va_start(args, format);
-   vfprintf(stderr, format, args);
-   va_end(args);
-
-   raise(SIGTRAP);
-}
+#define fail_if(cond, ...) _fail_if(cond, NULL, __VA_ARGS__)
 
 static inline uint32_t
 align_u32(uint32_t v, uint32_t a)

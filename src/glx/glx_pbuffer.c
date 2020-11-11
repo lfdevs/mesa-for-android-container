@@ -35,6 +35,7 @@
 #include <X11/extensions/Xext.h>
 #include <assert.h>
 #include <string.h>
+#include <limits.h>
 #include "glxextensions.h"
 
 #ifdef GLX_USE_APPLEGL
@@ -343,6 +344,20 @@ __glXGetDrawableAttribute(Display * dpy, GLXDrawable drawable,
 
       return 0;
    }
+
+   if (pdraw) {
+      if (attribute == GLX_SWAP_INTERVAL_EXT) {
+         *value = pdraw->psc->driScreen->getSwapInterval(pdraw);
+         return 0;
+      } else if (attribute == GLX_MAX_SWAP_INTERVAL_EXT) {
+         *value = INT_MAX;
+         return 0;
+      } else if (attribute == GLX_LATE_SWAPS_TEAR_EXT) {
+         *value = __glXExtensionBitIsEnabled(pdraw->psc,
+                                             EXT_swap_control_tear_bit);
+         return 0;
+      }
+   }
 #endif
 
    LockDisplay(dpy);
@@ -543,6 +558,7 @@ CreatePbuffer(Display * dpy, struct glx_config *config,
    unsigned int i;
    Pixmap pixmap;
    GLboolean glx_1_3 = GL_FALSE;
+   int depth = config->rgbBits;
 
    if (priv == NULL)
       return None;
@@ -607,8 +623,11 @@ CreatePbuffer(Display * dpy, struct glx_config *config,
    UnlockDisplay(dpy);
    SyncHandle();
 
+   if (depth == 30)
+      depth = 32;
+
    pixmap = XCreatePixmap(dpy, RootWindow(dpy, config->screen),
-			  width, height, config->rgbBits);
+			  width, height, depth);
 
    if (!CreateDRIDrawable(dpy, config, pixmap, id, attrib_list, i)) {
       CARD32 o = glx_1_3 ? X_GLXDestroyPbuffer : X_GLXvop_DestroyGLXPbufferSGIX;

@@ -31,8 +31,8 @@ void
 aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
                            struct aub_viewer_cfg *cfg,
                            struct aub_viewer_decode_cfg *decode_cfg,
+                           const struct gen_device_info *devinfo,
                            struct gen_spec *spec,
-                           struct gen_disasm *disasm,
                            struct gen_batch_decode_bo (*get_bo)(void *, bool, uint64_t),
                            unsigned (*get_state_size)(void *, uint32_t),
                            void *user_data)
@@ -42,12 +42,12 @@ aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
    ctx->get_bo = get_bo;
    ctx->get_state_size = get_state_size;
    ctx->user_data = user_data;
+   ctx->devinfo = devinfo;
    ctx->engine = I915_ENGINE_CLASS_RENDER;
 
    ctx->cfg = cfg;
    ctx->decode_cfg = decode_cfg;
    ctx->spec = spec;
-   ctx->disasm = disasm;
 }
 
 static void

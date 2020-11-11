@@ -1506,7 +1506,7 @@ XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
 
       map = pipe_transfer_map(pipe, res,
                               0, 0,    /* level, layer */
-                              PIPE_TRANSFER_WRITE,
+                              PIPE_MAP_WRITE,
                               x, y,
                               w, h, &tex_xfer);
       if (!map)

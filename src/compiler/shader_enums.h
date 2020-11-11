@@ -51,14 +51,35 @@ typedef enum
    MESA_SHADER_GEOMETRY = 3,
    MESA_SHADER_FRAGMENT = 4,
    MESA_SHADER_COMPUTE = 5,
+
+   /* Vulkan-only stages. */
+   MESA_SHADER_TASK         = 6,
+   MESA_SHADER_MESH         = 7,
+   MESA_SHADER_RAYGEN       = 8,
+   MESA_SHADER_ANY_HIT      = 9,
+   MESA_SHADER_CLOSEST_HIT  = 10,
+   MESA_SHADER_MISS         = 11,
+   MESA_SHADER_INTERSECTION = 12,
+   MESA_SHADER_CALLABLE     = 13,
+
    /* must be last so it doesn't affect the GL pipeline */
-   MESA_SHADER_KERNEL = 6,
+   MESA_SHADER_KERNEL = 14,
 } gl_shader_stage;
 
 static inline bool
 gl_shader_stage_is_compute(gl_shader_stage stage)
 {
    return stage == MESA_SHADER_COMPUTE || stage == MESA_SHADER_KERNEL;
+}
+
+static inline bool
+gl_shader_stage_is_callable(gl_shader_stage stage)
+{
+   return stage == MESA_SHADER_ANY_HIT ||
+          stage == MESA_SHADER_CLOSEST_HIT ||
+          stage == MESA_SHADER_MISS ||
+          stage == MESA_SHADER_INTERSECTION ||
+          stage == MESA_SHADER_CALLABLE;
 }
 
 /**
@@ -87,6 +108,11 @@ const char *_mesa_shader_stage_to_abbrev(unsigned stage);
  * GL related stages (not including CL)
  */
 #define MESA_SHADER_STAGES (MESA_SHADER_COMPUTE + 1)
+
+/**
+ * Vulkan stages (not including CL)
+ */
+#define MESA_VULKAN_SHADER_STAGES (MESA_SHADER_CALLABLE + 1)
 
 /**
  * All stages
@@ -615,6 +641,7 @@ typedef enum
    SYSTEM_VALUE_LOCAL_INVOCATION_ID,
    SYSTEM_VALUE_LOCAL_INVOCATION_INDEX,
    SYSTEM_VALUE_GLOBAL_INVOCATION_ID,
+   SYSTEM_VALUE_BASE_GLOBAL_INVOCATION_ID,
    SYSTEM_VALUE_GLOBAL_INVOCATION_INDEX,
    SYSTEM_VALUE_WORK_GROUP_ID,
    SYSTEM_VALUE_NUM_WORK_GROUPS,
@@ -653,6 +680,26 @@ typedef enum
    SYSTEM_VALUE_BARYCENTRIC_PULL_MODEL,
 
    /**
+    * \name Ray tracing shader system values
+    */
+   /*@{*/
+   SYSTEM_VALUE_RAY_LAUNCH_ID,
+   SYSTEM_VALUE_RAY_LAUNCH_SIZE,
+   SYSTEM_VALUE_RAY_WORLD_ORIGIN,
+   SYSTEM_VALUE_RAY_WORLD_DIRECTION,
+   SYSTEM_VALUE_RAY_OBJECT_ORIGIN,
+   SYSTEM_VALUE_RAY_OBJECT_DIRECTION,
+   SYSTEM_VALUE_RAY_T_MIN,
+   SYSTEM_VALUE_RAY_T_MAX,
+   SYSTEM_VALUE_RAY_OBJECT_TO_WORLD,
+   SYSTEM_VALUE_RAY_WORLD_TO_OBJECT,
+   SYSTEM_VALUE_RAY_HIT_KIND,
+   SYSTEM_VALUE_RAY_FLAGS,
+   SYSTEM_VALUE_RAY_GEOMETRY_INDEX,
+   SYSTEM_VALUE_RAY_INSTANCE_CUSTOM_INDEX,
+   /*@}*/
+
+   /**
     * IR3 specific geometry shader and tesselation control shader system
     * values that packs invocation id, thread id and vertex id.  Having this
     * as a nir level system value lets us do the unpacking in nir.
@@ -679,6 +726,7 @@ enum glsl_interp_mode
    INTERP_MODE_FLAT,
    INTERP_MODE_NOPERSPECTIVE,
    INTERP_MODE_EXPLICIT,
+   INTERP_MODE_COLOR, /**< glShadeModel determines the interp mode */
    INTERP_MODE_COUNT /**< Number of interpolation qualifiers */
 };
 
@@ -897,6 +945,23 @@ enum float_controls
    FLOAT_CONTROLS_ROUNDING_MODE_RTZ_FP16            = 0x1000,
    FLOAT_CONTROLS_ROUNDING_MODE_RTZ_FP32            = 0x2000,
    FLOAT_CONTROLS_ROUNDING_MODE_RTZ_FP64            = 0x4000,
+};
+
+/**
+* Enums to describe sampler properties used by OpenCL's inline constant samplers.
+* These values match the meanings described in the SPIR-V spec.
+*/
+enum cl_sampler_addressing_mode {
+   SAMPLER_ADDRESSING_MODE_NONE = 0,
+   SAMPLER_ADDRESSING_MODE_CLAMP_TO_EDGE = 1,
+   SAMPLER_ADDRESSING_MODE_CLAMP = 2,
+   SAMPLER_ADDRESSING_MODE_REPEAT = 3,
+   SAMPLER_ADDRESSING_MODE_REPEAT_MIRRORED = 4,
+};
+
+enum cl_sampler_filter_mode {
+   SAMPLER_FILTER_MODE_NEAREST = 0,
+   SAMPLER_FILTER_MODE_LINEAR = 1,
 };
 
 #ifdef __cplusplus

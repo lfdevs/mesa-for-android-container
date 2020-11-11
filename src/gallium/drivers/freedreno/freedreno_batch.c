@@ -35,40 +35,44 @@
 #include "freedreno_resource.h"
 #include "freedreno_query_hw.h"
 
-static void
-batch_init(struct fd_batch *batch)
+static struct fd_ringbuffer *
+alloc_ring(struct fd_batch *batch, unsigned sz, enum fd_ringbuffer_flags flags)
 {
 	struct fd_context *ctx = batch->ctx;
-	enum fd_ringbuffer_flags flags = 0;
-	unsigned size = 0;
 
 	/* if kernel is too old to support unlimited # of cmd buffers, we
 	 * have no option but to allocate large worst-case sizes so that
 	 * we don't need to grow the ringbuffer.  Performance is likely to
 	 * suffer, but there is no good alternative.
 	 *
-	 * XXX I think we can just require new enough kernel for this?
+	 * Otherwise if supported, allocate a growable ring with initial
+	 * size of zero.
 	 */
-	if ((fd_device_version(ctx->screen->dev) < FD_VERSION_UNLIMITED_CMDS) ||
-			(fd_mesa_debug & FD_DBG_NOGROW)){
-		size = 0x100000;
-	} else {
-		flags = FD_RINGBUFFER_GROWABLE;
+	if ((fd_device_version(ctx->screen->dev) >= FD_VERSION_UNLIMITED_CMDS) &&
+			!(fd_mesa_debug & FD_DBG_NOGROW)){
+		flags |= FD_RINGBUFFER_GROWABLE;
+		sz = 0;
 	}
+
+	return fd_submit_new_ringbuffer(batch->submit, sz, flags);
+}
+
+static void
+batch_init(struct fd_batch *batch)
+{
+	struct fd_context *ctx = batch->ctx;
 
 	batch->submit = fd_submit_new(ctx->pipe);
 	if (batch->nondraw) {
-		batch->draw = fd_submit_new_ringbuffer(batch->submit, size,
-				FD_RINGBUFFER_PRIMARY | flags);
+		batch->gmem = alloc_ring(batch, 0x1000, FD_RINGBUFFER_PRIMARY);
+		batch->draw = alloc_ring(batch, 0x100000, 0);
 	} else {
-		batch->gmem = fd_submit_new_ringbuffer(batch->submit, size,
-				FD_RINGBUFFER_PRIMARY | flags);
-		batch->draw = fd_submit_new_ringbuffer(batch->submit, size,
-				flags);
+		batch->gmem = alloc_ring(batch, 0x100000, FD_RINGBUFFER_PRIMARY);
+		batch->draw = alloc_ring(batch, 0x100000, 0);
 
+		/* a6xx+ re-uses draw rb for both draw and binning pass: */
 		if (ctx->screen->gpu_id < 600) {
-			batch->binning = fd_submit_new_ringbuffer(batch->submit,
-					size, flags);
+			batch->binning = alloc_ring(batch, 0x100000, 0);
 		}
 	}
 
@@ -152,18 +156,16 @@ batch_fini(struct fd_batch *batch)
 	fd_fence_ref(&batch->fence, NULL);
 
 	fd_ringbuffer_del(batch->draw);
-	if (!batch->nondraw) {
-		if (batch->binning)
-			fd_ringbuffer_del(batch->binning);
-		fd_ringbuffer_del(batch->gmem);
-	} else {
-		debug_assert(!batch->binning);
-		debug_assert(!batch->gmem);
+	fd_ringbuffer_del(batch->gmem);
+
+	if (batch->binning) {
+		fd_ringbuffer_del(batch->binning);
+		batch->binning = NULL;
 	}
 
-	if (batch->lrz_clear) {
-		fd_ringbuffer_del(batch->lrz_clear);
-		batch->lrz_clear = NULL;
+	if (batch->prologue) {
+		fd_ringbuffer_del(batch->prologue);
+		batch->prologue = NULL;
 	}
 
 	if (batch->epilogue) {
@@ -333,6 +335,15 @@ batch_flush(struct fd_batch *batch)
 	fd_screen_unlock(batch->ctx->screen);
 }
 
+/* Get per-batch prologue */
+struct fd_ringbuffer *
+fd_batch_get_prologue(struct fd_batch *batch)
+{
+	if (!batch->prologue)
+		batch->prologue = alloc_ring(batch, 0x1000, 0);
+	return batch->prologue;
+}
+
 /* NOTE: could drop the last ref to batch
  *
  * @sync: synchronize with flush_queue, ensures batch is *actually* flushed
@@ -425,6 +436,8 @@ void
 fd_batch_resource_write(struct fd_batch *batch, struct fd_resource *rsc)
 {
 	fd_screen_assert_locked(batch->ctx->screen);
+
+	fd_batch_write_prep(batch, rsc);
 
 	if (rsc->stencil)
 		fd_batch_resource_write(batch, rsc->stencil);

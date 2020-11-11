@@ -338,7 +338,12 @@ ir3_setup_used_key(struct ir3_shader *shader)
 
 	key->safe_constlen = true;
 
-	key->ucp_enables = 0xff;
+	/* When clip/cull distances are natively supported, we only use
+	 * ucp_enables to determine whether to lower legacy clip planes to
+	 * gl_ClipDistance.
+	 */
+	if (info->stage != MESA_SHADER_FRAGMENT || !shader->compiler->has_clip_cull)
+		key->ucp_enables = 0xff;
 
 	if (info->stage == MESA_SHADER_FRAGMENT) {
 		key->fsaturate_s = ~0;
@@ -354,6 +359,10 @@ ir3_setup_used_key(struct ir3_shader *shader)
 
 		if (info->inputs_read & VARYING_BIT_LAYER) {
 			key->layer_zero = true;
+		}
+
+		if (info->inputs_read & VARYING_BIT_VIEWPORT) {
+			key->view_zero = true;
 		}
 
 		if ((info->outputs_written & ~(FRAG_RESULT_DEPTH |
@@ -614,6 +623,17 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
 			so->info.max_half_reg + 1,
 			so->info.max_reg + 1,
 			so->constlen);
+
+	fprintf(out, "; %s prog %d/%d: %u cat0, %u cat1, %u cat2, %u cat3, %u cat4, %u cat5, %u cat6, %u cat7, \n",
+			type, so->shader->id, so->id,
+			so->info.instrs_per_cat[0],
+			so->info.instrs_per_cat[1],
+			so->info.instrs_per_cat[2],
+			so->info.instrs_per_cat[3],
+			so->info.instrs_per_cat[4],
+			so->info.instrs_per_cat[5],
+			so->info.instrs_per_cat[6],
+			so->info.instrs_per_cat[7]);
 
 	fprintf(out, "; %s prog %d/%d: %u sstall, %u (ss), %u (sy), %d max_sun, %d loops\n",
 			type, so->shader->id, so->id,

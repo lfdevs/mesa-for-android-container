@@ -42,6 +42,7 @@ gen_batch_decode_ctx_init(struct gen_batch_decode_ctx *ctx,
 {
    memset(ctx, 0, sizeof(*ctx));
 
+   ctx->devinfo = *devinfo;
    ctx->get_bo = get_bo;
    ctx->get_state_size = get_state_size;
    ctx->user_data = user_data;
@@ -54,14 +55,12 @@ gen_batch_decode_ctx_init(struct gen_batch_decode_ctx *ctx,
       ctx->spec = gen_spec_load(devinfo);
    else
       ctx->spec = gen_spec_load_from_path(devinfo, xml_path);
-   ctx->disasm = gen_disasm_create(devinfo);
 }
 
 void
 gen_batch_decode_ctx_finish(struct gen_batch_decode_ctx *ctx)
 {
    gen_spec_destroy(ctx->spec);
-   gen_disasm_destroy(ctx->disasm);
 }
 
 #define CSI "\e["
@@ -138,7 +137,7 @@ ctx_disassemble_program(struct gen_batch_decode_ctx *ctx,
       return;
 
    fprintf(ctx->fp, "\nReferenced %s:\n", type);
-   gen_disasm_disassemble(ctx->disasm, bo.map, 0, ctx->fp);
+   gen_disassemble(&ctx->devinfo, bo.map, 0, ctx->fp);
 }
 
 /* Heuristic to determine whether a uint32_t is probably actually a float
@@ -508,7 +507,7 @@ decode_single_ksp(struct gen_batch_decode_ctx *ctx, const uint32_t *p)
    struct gen_group *inst = gen_ctx_find_instruction(ctx, p);
 
    uint64_t ksp = 0;
-   bool is_simd8 = false; /* vertex shaders on Gen8+ only */
+   bool is_simd8 = ctx->devinfo.gen >= 11; /* vertex shaders on Gen8+ only */
    bool is_enabled = true;
 
    struct gen_field_iterator iter;

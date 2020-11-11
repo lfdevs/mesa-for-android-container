@@ -129,8 +129,8 @@ offset_units
     Specifies the polygon offset bias
 offset_units_unscaled
     Specifies the unit of the polygon offset bias. If false, use the
-    GL/D3D1X behaviour. If true, offset_units is a floating point offset
-    which isn't scaled (D3D9). Note that GL/D3D1X behaviour has different
+    GL/D3D1X behavior. If true, offset_units is a floating point offset
+    which isn't scaled (D3D9). Note that GL/D3D1X behavior has different
     formula whether the depth buffer is unorm or float, which is not
     the case for D3D9.
 offset_scale
@@ -235,7 +235,7 @@ point_smooth
     points into circles or ovals.
 point_size_per_vertex
     Whether the vertex shader is expected to have a point size output.
-    Undefined behaviour is permitted if there is disagreement between
+    Undefined behavior is permitted if there is disagreement between
     this flag and the actual bound shader.
 point_size
     The size of points, if not specified per-vertex.

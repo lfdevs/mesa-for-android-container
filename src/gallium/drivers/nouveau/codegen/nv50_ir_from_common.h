@@ -28,7 +28,7 @@ namespace nv50_ir {
 class ConverterCommon : public BuildUtil
 {
 public:
-   ConverterCommon(Program *, nv50_ir_prog_info *);
+   ConverterCommon(Program *, nv50_ir_prog_info *, nv50_ir_prog_info_out *);
 protected:
    struct Subroutine
    {
@@ -50,6 +50,7 @@ protected:
    } sub;
 
    struct nv50_ir_prog_info *info;
+   struct nv50_ir_prog_info_out *info_out;
    Value *fragCoord[4];
    Value *clipVtx[4];
    Value *outBase; // base address of vertex out patch (for TCP)

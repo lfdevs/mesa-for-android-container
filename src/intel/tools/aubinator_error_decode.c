@@ -759,7 +759,7 @@ main(int argc, char *argv[])
       { "no-pager",   no_argument,       (int *) &pager,                false },
       { "no-offsets", no_argument,       (int *) &option_print_offsets, false },
       { "headers",    no_argument,       (int *) &option_full_decode,   false },
-      { "color",      required_argument, NULL,                          'c' },
+      { "color",      optional_argument, NULL,                          'c' },
       { "xml",        required_argument, NULL,                          'x' },
       { "all-bb",     no_argument,       (int *) &option_print_all_bb,  true },
       { NULL,         0,                 NULL,                          0 }

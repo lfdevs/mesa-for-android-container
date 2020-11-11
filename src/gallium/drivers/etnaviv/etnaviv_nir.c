@@ -158,7 +158,7 @@ etna_lower_io(nir_shader *shader, struct etna_shader_variant *v)
                load->num_components = 2;
                load->src[0] = nir_src_for_ssa(nir_imm_float(&b, 0.0f));
                nir_ssa_dest_init(&load->instr, &load->dest, 2, 32, NULL);
-               nir_intrinsic_set_type(load, nir_type_float);
+               nir_intrinsic_set_dest_type(load, nir_type_float);
 
                nir_builder_instr_insert(&b, &load->instr);
 

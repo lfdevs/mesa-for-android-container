@@ -291,7 +291,7 @@ virgl_vtest_winsys_resource_create(struct virgl_winsys *vws,
    }
 
 out:
-   virgl_resource_cache_entry_init(&res->cache_entry, size, bind, format);
+   virgl_resource_cache_entry_init(&res->cache_entry, size, bind, format, 0);
    res->res_handle = handle++;
    pipe_reference_init(&res->reference, 1);
    p_atomic_set(&res->num_cs_references, 0);
@@ -347,6 +347,7 @@ virgl_vtest_winsys_resource_cache_create(struct virgl_winsys *vws,
                                          uint32_t array_size,
                                          uint32_t last_level,
                                          uint32_t nr_samples,
+                                         uint32_t flags,
                                          uint32_t size)
 {
    struct virgl_vtest_winsys *vtws = virgl_vtest_winsys(vws);
@@ -359,7 +360,7 @@ virgl_vtest_winsys_resource_cache_create(struct virgl_winsys *vws,
    mtx_lock(&vtws->mutex);
 
    entry = virgl_resource_cache_remove_compatible(&vtws->cache, size,
-                                                  bind, format);
+                                                  bind, format, 0);
    if (entry) {
       res = cache_entry_container_res(entry);
       mtx_unlock(&vtws->mutex);

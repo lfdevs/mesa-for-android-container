@@ -105,7 +105,7 @@ void copy_propagation_test::SetUp()
 static void
 copy_propagation(vec4_visitor *v)
 {
-   bool print = false;
+   const bool print = getenv("TEST_DEBUG");
 
    if (print) {
       fprintf(stderr, "instructions before:\n");

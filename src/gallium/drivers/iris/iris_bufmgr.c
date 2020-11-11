@@ -1381,7 +1381,7 @@ bo_set_tiling_internal(struct iris_bo *bo, uint32_t tiling_mode,
 
 struct iris_bo *
 iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd,
-                      int tiling)
+                      uint64_t modifier)
 {
    uint32_t handle;
    struct iris_bo *bo;
@@ -1441,9 +1441,10 @@ iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd,
    bo->gem_handle = handle;
    _mesa_hash_table_insert(bufmgr->handle_table, &bo->gem_handle, bo);
 
-   if (tiling != -1) {
-      /* Modifiers path */
-      bo->tiling_mode = tiling;
+   const struct isl_drm_modifier_info *mod_info =
+      isl_drm_modifier_get_info(modifier);
+   if (mod_info) {
+      bo->tiling_mode = isl_tiling_to_i915_tiling(mod_info->tiling);
    } else if (bufmgr->has_tiling_uapi) {
       struct drm_i915_gem_get_tiling get_tiling = { .handle = bo->gem_handle };
       if (gen_ioctl(bufmgr->fd, DRM_IOCTL_I915_GEM_GET_TILING, &get_tiling))
@@ -1940,7 +1941,8 @@ iris_bufmgr_get_for_fd(struct gen_device_info *devinfo, int fd, bool bo_reuse)
    }
 
    bufmgr = iris_bufmgr_create(devinfo, fd, bo_reuse);
-   list_addtail(&bufmgr->link, &global_bufmgr_list);
+   if (bufmgr)
+      list_addtail(&bufmgr->link, &global_bufmgr_list);
 
  unlock:
    mtx_unlock(&global_bufmgr_list_mutex);

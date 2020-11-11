@@ -1921,7 +1921,14 @@ to upconvert to 32b float internally?
 		<bitfield name="POLY_OFFSET" pos="11" type="boolean"/>
 		<bitfield name="UNK12" pos="12"/>
 		<bitfield name="MSAA_ENABLE" pos="13" type="boolean"/>
-		<bitfield name="UNK15" low="15" high="22"/>
+		<bitfield name="UNK15" low="15" high="16"/>
+		<!--
+		This is set by the blob when multiview is enabled, but doesn't seem
+		to do anything.
+		-->
+		<bitfield name="UNK17" pos="17" type="boolean"/>
+		<bitfield name="MULTIVIEW_ENABLE" pos="18" type="boolean"/>
+		<bitfield name="UNK19" low="19" high="22"/>
 	</reg32>
 	<reg32 offset="0x8091" name="GRAS_SU_POINT_MINMAX">
 		<bitfield name="MIN" low="0" high="15" type="ufixed" radix="4"/>
@@ -2663,7 +2670,11 @@ to upconvert to 32b float internally?
 	<reg32 offset="0x9105" name="VPC_GS_LAYER_CNTL" type="a6xx_vpc_xs_layer_cntl"/>
 	<reg32 offset="0x9106" name="VPC_DS_LAYER_CNTL" type="a6xx_vpc_xs_layer_cntl"/>
 
-	<reg32 offset="0x9107" name="VPC_UNKNOWN_9107" pos="2"/>
+	<reg32 offset="0x9107" name="VPC_UNKNOWN_9107">
+		<!-- this mirrors PC_RASTER_CNTL::DISCARD, although it seems it's unused -->
+		<bitfield name="RASTER_DISCARD" pos="0" type="boolean"/>
+		<bitfield name="UNK2" pos="2" type="boolean"/>
+	</reg32>
 	<reg32 offset="0x9108" name="VPC_POLYGON_MODE">
 		<bitfield name="MODE" low="0" high="1" type="a6xx_polygon_mode"/>
 	</reg32>
@@ -2685,9 +2696,32 @@ to upconvert to 32b float internally?
 	</array>
 
 	<reg32 offset="0x9216" name="VPC_SO_CNTL">
-		<bitfield name="UNK0" low="0" high="7"/>
-		<!-- always 0x10000 when SO enabled.. -->
-		<bitfield name="ENABLE" pos="16" type="boolean"/>
+		<!--
+			Choose which DWORD to write to. There is an array of
+			(4 * 64) DWORD's, dumped in the devcoredump at
+			HLSQ_INST_RAM dword 0x400. Each DWORD corresponds to a
+			(VPC location, stream) pair like so:
+
+			location 0, stream 0
+			location 2, stream 0
+			...
+			location 126, stream 0
+			location 0, stream 1
+			location 2, stream 1
+			...
+			location 126, stream 1
+			location 0, stream 2
+			...
+
+			When EmitStreamVertex(N) happens, the HW goes to DWORD
+			64 * N and then "executes" the next 64 DWORD's.
+
+			This field is auto-incremented when VPC_SO_PROG is
+			written to.
+		-->
+		<bitfield name="ADDR" low="0" high="7" type="hex"/>
+		<!-- clear all A_EN and B_EN bits for all DWORD's -->
+		<bitfield name="RESET" pos="16" type="boolean"/>
 	</reg32>
 	<!-- special register, write multiple times to load SO program (not readable) -->
 	<reg32 offset="0x9217" name="VPC_SO_PROG">
@@ -2731,7 +2765,13 @@ to upconvert to 32b float internally?
 		<bitfield name="STRIDE_IN_VPC" low="0" high="7" type="uint"/>
 		<bitfield name="POSITIONLOC" low="8" high="15" type="uint"/>
 		<bitfield name="PSIZELOC" low="16" high="23" type="uint"/>
-		<bitfield name="UNK24" low="24" high="27"/>
+		<bitfield name="EXTRAPOS" low="24" high="27" type="uint">
+			<doc>
+				The number of extra copies of POSITION, i.e.
+				number of views minus one when multi-position
+				output is enabled, otherwise 0.
+			</doc>
+		</bitfield>
 	</bitset>
 	<reg32 offset="0x9301" name="VPC_VS_PACK" type="a6xx_vpc_xs_pack"/>
 	<reg32 offset="0x9302" name="VPC_GS_PACK" type="a6xx_vpc_xs_pack"/>
@@ -2742,17 +2782,29 @@ to upconvert to 32b float internally?
 		<!-- for fixed-function (i.e. no GS) gl_PrimitiveID in FS -->
 		<bitfield name="PRIMIDLOC" low="8" high="15" type="uint"/>
 		<bitfield name="VARYING" pos="16" type="boolean"/>
-		<bitfield name="UNKLOC" low="24" high="31" type="uint"/>
+		<bitfield name="VIEWIDLOC" low="24" high="31" type="uint">
+			<doc>
+				This VPC location will be overwritten with
+				ViewID when multiview is enabled. It's used when
+				fragment shaders read ViewID. It's only
+				strictly required for multi-position output,
+				where the same VS invocation is used for all the
+				views at once, but it can be used when multi-pos
+				output is disabled too, to avoid having to pass
+				ViewID through the VS.
+			</doc>
+		</bitfield>
 	</reg32>
 
-	<reg32 offset="0x9305" name="VPC_SO_BUF_CNTL">
-		<!-- TODO: the first 12 bits are valid, likely 3-bit enum instead of bools -->
-		<bitfield name="BUF0" pos="0" type="boolean"/>
-		<bitfield name="BUF1" pos="3" type="boolean"/>
-		<bitfield name="BUF2" pos="6" type="boolean"/>
-		<bitfield name="BUF3" pos="9" type="boolean"/>
-		<bitfield name="ENABLE" pos="15" type="boolean"/>
-		<bitfield name="UNK16" low="16" high="19"/>
+	<reg32 offset="0x9305" name="VPC_SO_STREAM_CNTL">
+		<!--
+		It's offset by 1, and 0 means "disabled"
+		-->
+		<bitfield name="BUF0_STREAM" low="0" high="2" type="uint"/>
+		<bitfield name="BUF1_STREAM" low="3" high="5" type="uint"/>
+		<bitfield name="BUF2_STREAM" low="6" high="8" type="uint"/>
+		<bitfield name="BUF3_STREAM" low="9" high="11" type="uint"/>
+		<bitfield name="STREAM_ENABLE" low="15" high="18" type="hex"/>
 	</reg32>
 	<reg32 offset="0x9306" name="VPC_SO_DISABLE">
 		<bitfield name="DISABLE" pos="0" type="boolean"/>
@@ -2828,7 +2880,13 @@ to upconvert to 32b float internally?
 	<reg32 offset="0x9981" name="PC_POLYGON_MODE">
 		<bitfield name="MODE" low="0" high="1" type="a6xx_polygon_mode"/>
 	</reg32>
-	<reg32 offset="0x9980" name="PC_UNKNOWN_9980" low="0" high="2"/>
+
+	<reg32 offset="0x9980" name="PC_RASTER_CNTL">
+		<!-- which stream to send to GRAS -->
+		<bitfield name="STREAM" low="0" high="1" type="uint"/>
+		<!-- discard primitives before rasterization -->
+		<bitfield name="DISCARD" pos="2" type="boolean"/>
+	</reg32>
 
 	<!-- 0x9982-0x9aff invalid -->
 
@@ -2877,10 +2935,24 @@ to upconvert to 32b float internally?
 		</doc>
 		<bitfield name="STRIDE_IN_VPC" low="0" high="10" type="uint"/>
 	</reg32>
-	<!-- something gs related: -->
-	<reg32 offset="0x9b07" name="PC_UNKNOWN_9B07" low="0" high="6"/>
 
-	<reg32 offset="0x9b08" name="PC_UNKNOWN_9B08" low="0" high="15"/>
+	<bitset name="a6xx_multiview_cntl" inline="yes">
+		<bitfield name="ENABLE" pos="0" type="boolean"/>
+		<bitfield name="DISABLEMULTIPOS" pos="1" type="boolean">
+			<doc>
+				Multi-position output lets the last geometry
+				stage shader write multiple copies of
+				gl_Position. If disabled then the VS is run once
+				for each view, and ViewID is passed as a
+				register to the VS.
+			</doc>
+		</bitfield>
+		<bitfield name="VIEWS" low="2" high="6" type="uint"/>
+	</bitset>
+
+	<reg32 offset="0x9b07" name="PC_MULTIVIEW_CNTL" type="a6xx_multiview_cntl"/>
+	<!-- mask of enabled views, doesn't exist on A630 -->
+	<reg32 offset="0x9b08" name="PC_MULTIVIEW_MASK" type="hex" low="0" high="15"/>
 	<!-- 0x9b09-0x9bff invalid -->
 	<reg32 offset="0x9c00" name="PC_2D_EVENT_CMD">
 		<!-- special register (but note first 8 bits can be written/read) -->
@@ -2924,6 +2996,8 @@ to upconvert to 32b float internally?
 		<bitfield name="REGID4VTX" low="0" high="7" type="a3xx_regid"/>
 		<bitfield name="REGID4INST" low="8" high="15" type="a3xx_regid"/>
 		<bitfield name="REGID4PRIMID" low="16" high="23" type="a3xx_regid"/>
+		<!-- only used for VS in non-multi-position-output case -->
+		<bitfield name="REGID4VIEWID" low="24" high="31" type="a3xx_regid"/>
 	</reg32>
 	<reg32 offset="0xa002" name="VFD_CONTROL_2">
 		<bitfield name="REGID_HSPATCHID" low="0" high="7" type="a3xx_regid"/>
@@ -2952,8 +3026,7 @@ to upconvert to 32b float internally?
 		<bitfield name="BINNING_PASS" pos="0" type="boolean"/>
 	</reg32>
 
-	<!-- always 0x0 ? -->
-	<reg32 offset="0xa008" name="VFD_UNKNOWN_A008"/>
+	<reg32 offset="0xa008" name="VFD_MULTIVIEW_CNTL" type="a6xx_multiview_cntl"/>
 	<reg32 offset="0xa009" name="VFD_ADD_OFFSET">
 		<!-- add VFD_INDEX_OFFSET to REGID4VTX -->
 		<bitfield name="VERTEX" pos="0" type="boolean"/>
@@ -3689,7 +3762,7 @@ to upconvert to 32b float internally?
 	<reg32 offset="2" name="2">
 		<bitfield name="REDUCTION_MODE" low="0" high="1" type="a6xx_reduction_mode"/>
 		<bitfield name="CHROMA_LINEAR" pos="5" type="boolean"/>
-		<bitfield name="BCOLOR_OFFSET" low="7" high="31" shr="7"/>
+		<bitfield name="BCOLOR" low="7" high="31"/>
 	</reg32>
 	<reg32 offset="3" name="3"/>
 </domain>

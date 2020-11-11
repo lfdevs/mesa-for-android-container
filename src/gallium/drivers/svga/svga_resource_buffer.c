@@ -122,14 +122,14 @@ svga_buffer_transfer_map(struct pipe_context *pipe,
    transfer->stride = 0;
    transfer->layer_stride = 0;
 
-   if (usage & PIPE_TRANSFER_WRITE) {
+   if (usage & PIPE_MAP_WRITE) {
       /* If we write to the buffer for any reason, free any saved translated
        * vertices.
        */
       pipe_resource_reference(&sbuf->translated_indices.buffer, NULL);
    }
 
-   if ((usage & PIPE_TRANSFER_READ) && sbuf->dirty &&
+   if ((usage & PIPE_MAP_READ) && sbuf->dirty &&
        !sbuf->key.coherent && !svga->swc->force_coherent) {
 
       /* Host-side buffers can only be dirtied with vgpu10 features
@@ -157,8 +157,8 @@ svga_buffer_transfer_map(struct pipe_context *pipe,
       sbuf->dirty = FALSE;
    }
 
-   if (usage & PIPE_TRANSFER_WRITE) {
-      if ((usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE) &&
+   if (usage & PIPE_MAP_WRITE) {
+      if ((usage & PIPE_MAP_DISCARD_WHOLE_RESOURCE) &&
           !(resource->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT)) {
          /*
           * Flush any pending primitives, finish writing any pending DMA
@@ -175,7 +175,7 @@ svga_buffer_transfer_map(struct pipe_context *pipe,
              * Instead of flushing the context command buffer, simply discard
              * the current hwbuf, and start a new one.
              * With GB objects, the map operation takes care of this
-             * if passed the PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE flag,
+             * if passed the PIPE_MAP_DISCARD_WHOLE_RESOURCE flag,
              * and the old backing store is busy.
              */
 
@@ -187,7 +187,7 @@ svga_buffer_transfer_map(struct pipe_context *pipe,
          sbuf->dma.flags.discard = TRUE;
       }
 
-      if (usage & PIPE_TRANSFER_UNSYNCHRONIZED) {
+      if (usage & PIPE_MAP_UNSYNCHRONIZED) {
          if (!sbuf->map.num_ranges) {
             /*
              * No pending ranges to upload so far, so we can tell the host to
@@ -223,7 +223,7 @@ svga_buffer_transfer_map(struct pipe_context *pipe,
                 * without having to do a DMA download from the host.
                 */
 
-               if (usage & PIPE_TRANSFER_DONTBLOCK) {
+               if (usage & PIPE_MAP_DONTBLOCK) {
                   /*
                    * Flushing the command buffer here will most likely cause
                    * the map of the hwbuf below to block, so preemptively
@@ -316,8 +316,8 @@ svga_buffer_transfer_flush_region(struct pipe_context *pipe,
    unsigned offset = transfer->box.x + box->x;
    unsigned length = box->width;
 
-   assert(transfer->usage & PIPE_TRANSFER_WRITE);
-   assert(transfer->usage & PIPE_TRANSFER_FLUSH_EXPLICIT);
+   assert(transfer->usage & PIPE_MAP_WRITE);
+   assert(transfer->usage & PIPE_MAP_FLUSH_EXPLICIT);
 
    if (!(svga->swc->force_coherent || sbuf->key.coherent) || sbuf->swbuf) {
       mtx_lock(&ss->swc_mutex);
@@ -352,8 +352,8 @@ svga_buffer_transfer_unmap(struct pipe_context *pipe,
       svga_buffer_hw_storage_unmap(svga, sbuf);
    }
 
-   if (transfer->usage & PIPE_TRANSFER_WRITE) {
-      if (!(transfer->usage & PIPE_TRANSFER_FLUSH_EXPLICIT)) {
+   if (transfer->usage & PIPE_MAP_WRITE) {
+      if (!(transfer->usage & PIPE_MAP_FLUSH_EXPLICIT)) {
          /*
           * Mapped range not flushed explicitly, so flush the whole buffer,
           * and tell the host to discard the contents when processing the DMA

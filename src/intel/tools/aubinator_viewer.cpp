@@ -63,7 +63,6 @@ struct aub_file {
    /* Device state */
    struct gen_device_info devinfo;
    struct gen_spec *spec;
-   struct gen_disasm *disasm;
 };
 
 static void
@@ -131,7 +130,6 @@ handle_info(void *user_data, int pci_id, const char *app_name)
       exit(EXIT_FAILURE);
    }
    file->spec = gen_spec_load(&file->devinfo);
-   file->disasm = gen_disasm_create(&file->devinfo);
 }
 
 static void
@@ -394,9 +392,9 @@ new_shader_window(struct aub_mem *mem, uint64_t address, const char *desc)
    if (shader_bo.map) {
       FILE *f = open_memstream(&window->shader, &window->shader_size);
       if (f) {
-         gen_disasm_disassemble(context.file->disasm,
-                                (const uint8_t *) shader_bo.map +
-                                (address - shader_bo.addr), 0, f);
+         gen_disassemble(&context.file->devinfo,
+                         (const uint8_t *) shader_bo.map +
+                         (address - shader_bo.addr), 0, f);
          fclose(f);
       }
    }
@@ -818,8 +816,8 @@ new_batch_window(int exec_idx)
    aub_viewer_decode_ctx_init(&window->decode_ctx,
                               &context.cfg,
                               &window->decode_cfg,
+                              &context.file->devinfo,
                               context.file->spec,
-                              context.file->disasm,
                               batch_get_bo,
                               NULL,
                               window);

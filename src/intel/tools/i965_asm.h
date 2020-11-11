@@ -35,6 +35,7 @@
 #include "compiler/brw_inst.h"
 #include "compiler/brw_eu.h"
 #include "dev/gen_device_info.h"
+#include "util/list.h"
 
 /* glibc < 2.27 defines OVERFLOW in /usr/include/math.h. */
 #undef OVERFLOW
@@ -47,6 +48,9 @@ char *lex_text(void);
 extern struct brw_codegen *p;
 extern int errors;
 extern char *input_filename;
+
+extern struct list_head instr_labels;
+extern struct list_head target_labels;
 
 struct condition {
    unsigned cond_modifier:4;
@@ -75,6 +79,26 @@ struct options {
    unsigned qtr_ctrl:2;
    unsigned nib_ctrl:1;
    unsigned is_compr:1;
+};
+
+enum instr_label_type {
+   INSTR_LABEL_JIP,
+   INSTR_LABEL_UIP,
+};
+
+struct instr_label {
+   struct list_head link;
+
+   char *name;
+   int offset;
+   enum instr_label_type type;
+};
+
+struct target_label {
+   struct list_head link;
+
+   char *name;
+   int offset;
 };
 
 #endif /* __I965_ASM_H__ */

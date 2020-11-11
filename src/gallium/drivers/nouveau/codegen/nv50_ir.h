@@ -1312,19 +1312,19 @@ public:
    inline void del(Function *fn, int& id) { allFuncs.remove(id); }
    inline void add(Value *rval, int& id) { allRValues.insert(rval, id); }
 
-   bool makeFromNIR(struct nv50_ir_prog_info *);
-   bool makeFromTGSI(struct nv50_ir_prog_info *);
+   bool makeFromNIR(struct nv50_ir_prog_info *,
+                    struct nv50_ir_prog_info_out *);
+   bool makeFromTGSI(struct nv50_ir_prog_info *,
+                     struct nv50_ir_prog_info_out *);
    bool convertToSSA();
    bool optimizeSSA(int level);
    bool optimizePostRA(int level);
    bool registerAllocation();
-   bool emitBinary(struct nv50_ir_prog_info *);
+   bool emitBinary(struct nv50_ir_prog_info_out *);
 
    const Target *getTarget() const { return target; }
 
 private:
-   void emitSymbolTable(struct nv50_ir_prog_info *);
-
    Type progType;
    Target *target;
 
@@ -1357,6 +1357,7 @@ public:
    void *targetPriv; // e.g. to carry information between passes
 
    const struct nv50_ir_prog_info *driver; // for driver configuration
+   const struct nv50_ir_prog_info_out *driver_out; // for driver configuration
 
    void releaseInstruction(Instruction *);
    void releaseValue(Value *);

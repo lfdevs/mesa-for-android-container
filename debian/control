@@ -30,6 +30,7 @@ Build-Depends:
  libxcb-dri3-dev,
  libxcb-present-dev,
  libxcb-randr0-dev,
+ libxcb-shm0-dev,
  libxcb-sync-dev,
  libxrandr-dev,
  libxshmfence-dev (>= 1.1),

@@ -61,7 +61,6 @@ struct gen_device_info
    bool is_kabylake;
    bool is_geminilake;
    bool is_coffeelake;
-   bool is_cannonlake;
    bool is_elkhartlake;
    bool is_dg1;
 
@@ -282,6 +281,16 @@ gen_device_info_subslice_available(const struct gen_device_info *devinfo,
 {
    return (devinfo->subslice_masks[slice * devinfo->subslice_slice_stride +
                                    subslice / 8] & (1U << (subslice % 8))) != 0;
+}
+
+static inline bool
+gen_device_info_eu_available(const struct gen_device_info *devinfo,
+                             int slice, int subslice, int eu)
+{
+   unsigned subslice_offset = slice * devinfo->eu_slice_stride +
+      subslice * devinfo->eu_subslice_stride;
+
+   return (devinfo->eu_masks[subslice_offset + eu / 8] & (1U << eu % 8)) != 0;
 }
 
 int gen_device_name_to_pci_device_id(const char *name);

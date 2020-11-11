@@ -95,6 +95,11 @@ struct panfrost_batch {
         /* Pool owned by this batch (released when the batch is released) used for temporary descriptors */
         struct pan_pool pool;
 
+        /* Pool also owned by this batch that is not CPU mapped (created as
+         * INVISIBLE) used for private GPU-internal structures, particularly
+         * varyings */
+        struct pan_pool invisible_pool;
+
         /* Job scoreboarding state */
         struct pan_scoreboard scoreboard;
 
@@ -114,7 +119,7 @@ struct panfrost_batch {
         struct panfrost_bo *tiler_dummy;
 
         /* Framebuffer descriptor. */
-        struct panfrost_transfer framebuffer;
+        struct panfrost_ptr framebuffer;
 
         /* Bifrost tiler meta descriptor. */
         mali_ptr tiler_meta;
@@ -147,8 +152,6 @@ void
 panfrost_batch_add_bo(struct panfrost_batch *batch, struct panfrost_bo *bo,
                       uint32_t flags);
 
-void panfrost_batch_add_fbo_bos(struct panfrost_batch *batch);
-
 struct panfrost_bo *
 panfrost_batch_create_bo(struct panfrost_batch *batch, size_t size,
                          uint32_t create_flags, uint32_t access_flags);
@@ -171,16 +174,13 @@ void
 panfrost_batch_adjust_stack_size(struct panfrost_batch *batch);
 
 struct panfrost_bo *
-panfrost_batch_get_scratchpad(struct panfrost_batch *batch, unsigned shift, unsigned thread_tls_alloc, unsigned core_count);
+panfrost_batch_get_scratchpad(struct panfrost_batch *batch, unsigned size, unsigned thread_tls_alloc, unsigned core_count);
 
 struct panfrost_bo *
 panfrost_batch_get_shared_memory(struct panfrost_batch *batch, unsigned size, unsigned workgroup_count);
 
 mali_ptr
 panfrost_batch_get_polygon_list(struct panfrost_batch *batch, unsigned size);
-
-struct panfrost_bo *
-panfrost_batch_get_tiler_heap(struct panfrost_batch *batch);
 
 struct panfrost_bo *
 panfrost_batch_get_tiler_dummy(struct panfrost_batch *batch);
@@ -205,7 +205,7 @@ bool
 panfrost_batch_is_scanout(struct panfrost_batch *batch);
 
 mali_ptr
-panfrost_batch_get_tiler_meta(struct panfrost_batch *batch, unsigned vertex_count);
+panfrost_batch_get_bifrost_tiler(struct panfrost_batch *batch, unsigned vertex_count);
 
 mali_ptr
 panfrost_batch_reserve_framebuffer(struct panfrost_batch *batch);

@@ -167,7 +167,7 @@ fd_setup_border_colors(struct fd_texture_stateobj *tex, void *ptr,
 				} else {
 					bcolor32[desc->swizzle[j]] = fui(sampler->border_color.f[j]);
 					bcolor[desc->swizzle[j]] =
-						util_float_to_half(sampler->border_color.f[j]);
+						_mesa_float_to_half(sampler->border_color.f[j]);
 				}
 			}
 		}

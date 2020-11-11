@@ -98,12 +98,12 @@ bool rvid_resize_buffer(struct pipe_screen *screen, struct radeon_cmdbuf *cs,
 		goto error;
 
 	src = ws->buffer_map(old_buf.res->buf, cs,
-			     PIPE_TRANSFER_READ | RADEON_TRANSFER_TEMPORARY);
+			     PIPE_MAP_READ | RADEON_MAP_TEMPORARY);
 	if (!src)
 		goto error;
 
 	dst = ws->buffer_map(new_buf->res->buf, cs,
-			     PIPE_TRANSFER_WRITE | RADEON_TRANSFER_TEMPORARY);
+			     PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
 	if (!dst)
 		goto error;
 

@@ -28,90 +28,79 @@
 #include "pipe/p_defines.h"
 #include "pipe/p_state.h"
 
-#include "panfrost-job.h"
+#include "midgard_pack.h"
 
 #include "pan_job.h"
 
-void panfrost_sampler_desc_init(const struct pipe_sampler_state *cso,
-                                struct mali_sampler_descriptor *hw);
+void panfrost_sampler_desc_init(const struct pipe_sampler_state *cso, struct mali_midgard_sampler_packed *hw);
+void panfrost_sampler_desc_init_bifrost(const struct pipe_sampler_state *cso, struct mali_bifrost_sampler_packed *hw);
 
-void panfrost_sampler_desc_init_bifrost(const struct pipe_sampler_state *cso,
-                                        struct bifrost_sampler_descriptor *hw);
+mali_ptr
+panfrost_emit_compute_shader_meta(struct panfrost_batch *batch, enum pipe_shader_type stage);
 
-void
-panfrost_vt_init(struct panfrost_context *ctx,
-                 enum pipe_shader_type stage,
-                 struct mali_vertex_tiler_prefix *prefix,
-                 struct mali_vertex_tiler_postfix *postfix);
+mali_ptr
+panfrost_emit_frag_shader_meta(struct panfrost_batch *batch);
 
-void
-panfrost_vt_set_draw_info(struct panfrost_context *ctx,
-                          const struct pipe_draw_info *info,
-                          enum mali_draw_mode draw_mode,
-                          struct mali_vertex_tiler_postfix *vertex_postfix,
-                          struct mali_vertex_tiler_prefix *tiler_prefix,
-                          struct mali_vertex_tiler_postfix *tiler_postfix,
-                          unsigned *vertex_count,
-                          unsigned *padded_count);
+mali_ptr
+panfrost_emit_viewport(struct panfrost_batch *batch);
 
-void
-panfrost_emit_shader_meta(struct panfrost_batch *batch,
-                          enum pipe_shader_type st,
-                          struct mali_vertex_tiler_postfix *postfix);
-
-void
-panfrost_emit_viewport(struct panfrost_batch *batch,
-                       struct mali_vertex_tiler_postfix *tiler_postfix);
-
-void
+mali_ptr
 panfrost_emit_const_buf(struct panfrost_batch *batch,
                         enum pipe_shader_type stage,
-                        struct mali_vertex_tiler_postfix *postfix);
+                        mali_ptr *push_constants);
 
-void
+mali_ptr
 panfrost_emit_shared_memory(struct panfrost_batch *batch,
-                            const struct pipe_grid_info *info,
-                            struct midgard_payload_vertex_tiler *vtp);
+                            const struct pipe_grid_info *info);
 
-void
+mali_ptr
 panfrost_emit_texture_descriptors(struct panfrost_batch *batch,
-                                  enum pipe_shader_type stage,
-                                  struct mali_vertex_tiler_postfix *postfix);
+                                  enum pipe_shader_type stage);
 
-void
+mali_ptr
 panfrost_emit_sampler_descriptors(struct panfrost_batch *batch,
-                                  enum pipe_shader_type stage,
-                                  struct mali_vertex_tiler_postfix *postfix);
+                                  enum pipe_shader_type stage);
 
-void
-panfrost_emit_vertex_attr_meta(struct panfrost_batch *batch,
-                               struct mali_vertex_tiler_postfix *vertex_postfix);
-
-void
+mali_ptr
 panfrost_emit_vertex_data(struct panfrost_batch *batch,
-                          struct mali_vertex_tiler_postfix *vertex_postfix);
+                          mali_ptr *buffers);
+
+mali_ptr
+panfrost_get_index_buffer_bounded(struct panfrost_context *ctx,
+                                  const struct pipe_draw_info *info,
+                                  unsigned *min_index, unsigned *max_index);
 
 void
 panfrost_emit_varying_descriptor(struct panfrost_batch *batch,
                                  unsigned vertex_count,
-                                 struct mali_vertex_tiler_postfix *vertex_postfix,
-                                 struct mali_vertex_tiler_postfix *tiler_postfix,
-                                 union midgard_primitive_size *primitive_size);
+                                 mali_ptr *vs_attribs,
+                                 mali_ptr *fs_attribs,
+                                 mali_ptr *buffers,
+                                 mali_ptr *position,
+                                 mali_ptr *psiz);
 
 void
 panfrost_emit_vertex_tiler_jobs(struct panfrost_batch *batch,
-                                struct mali_vertex_tiler_prefix *vertex_prefix,
-                                struct mali_vertex_tiler_postfix *vertex_postfix,
-                                struct mali_vertex_tiler_prefix *tiler_prefix,
-                                struct mali_vertex_tiler_postfix *tiler_postfix,
-                                union midgard_primitive_size *primitive_size);
-
-void
-panfrost_vt_update_primitive_size(struct panfrost_context *ctx,
-                                  struct mali_vertex_tiler_prefix *prefix,
-                                  union midgard_primitive_size *primitive_size);
+                                const struct panfrost_ptr *vertex_job,
+                                const struct panfrost_ptr *tiler_job);
 
 mali_ptr
 panfrost_emit_sample_locations(struct panfrost_batch *batch);
+
+static inline unsigned
+panfrost_translate_compare_func(enum pipe_compare_func in)
+{
+        switch (in) {
+        case PIPE_FUNC_NEVER: return MALI_FUNC_NEVER;
+        case PIPE_FUNC_LESS: return MALI_FUNC_LESS;
+        case PIPE_FUNC_EQUAL: return MALI_FUNC_EQUAL;
+        case PIPE_FUNC_LEQUAL: return MALI_FUNC_LEQUAL;
+        case PIPE_FUNC_GREATER: return MALI_FUNC_GREATER;
+        case PIPE_FUNC_NOTEQUAL: return MALI_FUNC_NOT_EQUAL;
+        case PIPE_FUNC_GEQUAL: return MALI_FUNC_GEQUAL;
+        case PIPE_FUNC_ALWAYS: return MALI_FUNC_ALWAYS;
+        default: unreachable("Invalid func");
+        }
+}
 
 #endif /* __PAN_CMDSTREAM_H__ */

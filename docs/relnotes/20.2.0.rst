@@ -33,8 +33,6 @@ New features
 
 - GL_ARB_post_depth_coverage on llvmpipe
 
-- GL 4.3 on llvmpipe
-
 - GLES 3.2 on llvmpipe
 
 - GL_EXT_shader_group_vote on GLES3.
@@ -84,8 +82,6 @@ New features
 - GL 4.5 on llvmpipe
 
 - EGL_KHR_swap_buffers_with_damage on X11 (DRI3)
-
-- None
 
 
 Bug fixes
@@ -145,7 +141,7 @@ Bug fixes
 - ci: Capture artifacts in baremetal mode
 - turnip/ir3: fine derivatives
 - panfrost: regression: Major stuttering and low compositor FPS with glmark2
-- khr_debug-push-pop-group_gl: ../src/util/simple_mtx.h:86: simple_mtx_lock: Assertion `c != _SIMPLE_MTX_INVALID_VALUE' failed.
+- khr_debug-push-pop-group_gl: ../src/util/simple_mtx.h:86: simple_mtx_lock: Assertion \`c != _SIMPLE_MTX_INVALID_VALUE' failed.
 - freedreno/a6xx: skai/skqp fails
 - SPIR-V parsing fails in src/compiler/spirv/spirv_to_nir.c
 - SPIR-V parsing fails in src/compiler/spirv/vtn_cfg.c
@@ -197,7 +193,7 @@ Bug fixes
 - [regression] performance drop on Dota 2, CS:GO, and gfxbench GL benchmarks on ICL/Iris
 - [amd] C++ ODR violatation for union GB_ADDR_CONFIG
 - Zink reports incorrect amount of video memory
-- [RADV/LLVM]: void llvm::ICmpInst::AssertOK(): Assertion `getOperand(0)->getType() == getOperand(1)->getType() && "Both operands to ICmp instruction are not of the same type!"' failed.
+- [RADV/LLVM]: void llvm::ICmpInst::AssertOK(): Assertion \`getOperand(0)->getType() == getOperand(1)->getType() && "Both operands to ICmp instruction are not of the same type!"' failed.
 - glsl-1.50-gs-max-output hangs on Navi10 + NGG
 - anv: Runs out of binding tables with PPSSPP during long runs
 - Segfault in Panfrost with waypipe
@@ -598,7 +594,7 @@ Alyssa Rosenzweig (475):
 - pan/mdg: Add roundmode enum
 - pan/mdg: Add opcode roundmode property
 - pan/mdg: Lower roundmodes
-- pan/mdg: Implement *_rtz conversions with roundmode
+- pan/mdg: Implement \*_rtz conversions with roundmode
 - pan/mdg: Fold roundmode into applicable instructions
 - pan/mdg: Handle f2u8
 - pan/mdg: Allow f2u8 and friends thru
@@ -653,7 +649,7 @@ Alyssa Rosenzweig (475):
 - pan/mdg: Allow scheduling "x + x" to multipliers
 - pan/mdg: Canonicalize (x * 2.0) to (x + x)
 - pan/mdg: Reassociate adds for multiply-by-two
-- nir: Propagate *2*16 conversions into vectors
+- nir: Propagate \*2*16 conversions into vectors
 - panfrost: Specify stack_shift on SFBD
 - pan/mdg: Defer nir_fuse_io_16 until after opts
 - pan/mdg: Don't assign destination in writeout block to r1
@@ -2592,7 +2588,7 @@ Jason Ekstrand (167):
 - nir/lower_io: Use b2b for shader and function temporaries
 - nir/lower_io: Add support for global scratch addressing
 - spirv: Simplify our handling of NonUniform
-- spirv: Drop the void *ptr from vtn_value
+- spirv: Drop the void \*ptr from vtn_value
 - spirv: Fix indentation in vtn_handle_ptr
 - spirv: Clean up OpSignBitSet
 - spirv: Use nir_bany/ball for OpAny/All
@@ -2654,7 +2650,7 @@ Jason Ekstrand (167):
 - nir: Use a single list for all shader variables
 - nir/split_per_member_structs: Inline split_variables_in_list
 - nir/gl_nir_linker: Call add_vars_with_modes once for GL_PROGRAM_INPUT
-- nir: Add a find_variable_with_[driver_]location helper
+- nir: Add a find_variable_with\_[driver\_]location helper
 - vulkan: Update Vulkan XML and headers to 1.2.149
 - anv: Implement VK_EXT_4444_formats
 - nir/deref: Don't try to compare derefs containing casts
@@ -2983,7 +2979,7 @@ Kristian Høgsberg (73):
 - freedreno/a6xx: Emit VFD setup as array writes
 - freedreno/a6xx: Avoid stalling for occlusion queries
 - freedreno: Use the right amount of &'s
-- freedreno: Use explicit *_NONE enum for undefined formats
+- freedreno: Use explicit \*_NONE enum for undefined formats
 - turnip: Use hw enum when emitting A6XX_RB_STENCIL_CONTROL
 - turnip: Use tu6_reduction_mode() to avoid warning
 - turnip: Use {} initializer to silence warning
@@ -3574,7 +3570,7 @@ Mike Blumenkrantz (73):
 - zink: add some asserts for building access chains in ntv
 - zink: omit Lod image operand in ntv when not using an image texture dim
 - nir: allow lower_psiz_mov to run in tessellation stages
-- nir_ allow nir_lower_clip_halfz to run in tess eval shader
+- nir\_ allow nir_lower_clip_halfz to run in tess eval shader
 - u_prim_restart: handle indirect draws
 - zink: add extension loading framework for spirv builder
 - zink: implement VK_EXT_robustness2
@@ -3817,7 +3813,7 @@ Rhys Perry (174):
 - aco: preserve more fields when combining additions into SMEM
 - aco: don't reorder barriers in the scheduler
 - aco: fix 64-bit shared_atomic_exchange
-- docs: add missing "shader_" in VK_KHR_shader_subgroup_extended_types
+- docs: add missing "shader\_" in VK_KHR_shader_subgroup_extended_types
 - radv: set keep_statistic_info with RADV_DEBUG=shaderstats
 - ac/gpu_info, radv: set max_wave64_per_simd to 20 on GFX10
 - aco: use v_xor3_b32
@@ -4518,7 +4514,7 @@ Serge Martin (3):
 
 Shawn Guo (1):
 
-- freedreno/a4xx: fix *_NONE enum conversion
+- freedreno/a4xx: fix \*_NONE enum conversion
 
 Simon Ser (3):
 
@@ -4739,7 +4735,7 @@ Yevhenii Kolesnikov (5):
 - glsl: subroutine signatures must match exactly
 - nvir: don't use designated initialisers in C++ code
 - intel/compiler: don't propagate cmp to add if add is saturated
-- mesa: change error code of *TextureSubImage* for incorreect target
+- mesa: change error code of \*TextureSubImage\* for incorreect target
 - nine: fix incorrect calculation of layer count for 3D textures
 
 jzielins (2):

@@ -249,7 +249,7 @@ sp_find_cached_tile_tex(struct softpipe_tex_tile_cache *tc,
             pipe_transfer_map(tc->pipe, tc->texture,
                               addr.bits.level,
                               layer,
-                              PIPE_TRANSFER_READ | PIPE_TRANSFER_UNSYNCHRONIZED,
+                              PIPE_MAP_READ | PIPE_MAP_UNSYNCHRONIZED,
                               0, 0, width, height, &tc->tex_trans);
 
          tc->tex_level = addr.bits.level;

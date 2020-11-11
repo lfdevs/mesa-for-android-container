@@ -29,6 +29,8 @@
 #include "etnaviv_compiler.h"
 #include "etnaviv_context.h"
 #include "etnaviv_debug.h"
+#include "etnaviv_disasm.h"
+#include "etnaviv_disk_cache.h"
 #include "etnaviv_screen.h"
 #include "etnaviv_util.h"
 
@@ -55,6 +57,56 @@ static bool etna_icache_upload_shader(struct etna_context *ctx, struct etna_shad
    return true;
 }
 
+extern const char *tgsi_swizzle_names[];
+void
+etna_dump_shader(const struct etna_shader_variant *shader)
+{
+   if (shader->stage == MESA_SHADER_VERTEX)
+      printf("VERT\n");
+   else
+      printf("FRAG\n");
+
+   etna_disasm(shader->code, shader->code_size, PRINT_RAW);
+
+   printf("num loops: %i\n", shader->num_loops);
+   printf("num temps: %i\n", shader->num_temps);
+   printf("immediates:\n");
+   for (int idx = 0; idx < shader->uniforms.imm_count; ++idx) {
+      printf(" [%i].%s = %f (0x%08x) (%d)\n",
+             idx / 4,
+             tgsi_swizzle_names[idx % 4],
+             *((float *)&shader->uniforms.imm_data[idx]),
+             shader->uniforms.imm_data[idx],
+             shader->uniforms.imm_contents[idx]);
+   }
+   printf("inputs:\n");
+   for (int idx = 0; idx < shader->infile.num_reg; ++idx) {
+      printf(" [%i] name=%s comps=%i\n", shader->infile.reg[idx].reg,
+               (shader->stage == MESA_SHADER_VERTEX) ?
+               gl_vert_attrib_name(shader->infile.reg[idx].slot) :
+               gl_varying_slot_name(shader->infile.reg[idx].slot),
+               shader->infile.reg[idx].num_components);
+   }
+   printf("outputs:\n");
+   for (int idx = 0; idx < shader->outfile.num_reg; ++idx) {
+      printf(" [%i] name=%s comps=%i\n", shader->outfile.reg[idx].reg,
+               (shader->stage == MESA_SHADER_VERTEX) ?
+               gl_varying_slot_name(shader->outfile.reg[idx].slot) :
+               gl_frag_result_name(shader->outfile.reg[idx].slot),
+               shader->outfile.reg[idx].num_components);
+   }
+   printf("special:\n");
+   if (shader->stage == MESA_SHADER_VERTEX) {
+      printf("  vs_pos_out_reg=%i\n", shader->vs_pos_out_reg);
+      printf("  vs_pointsize_out_reg=%i\n", shader->vs_pointsize_out_reg);
+      printf("  vs_load_balancing=0x%08x\n", shader->vs_load_balancing);
+   } else {
+      printf("  ps_color_out_reg=%i\n", shader->ps_color_out_reg);
+      printf("  ps_depth_out_reg=%i\n", shader->ps_depth_out_reg);
+   }
+   printf("  input_count_unk8=0x%08x\n", shader->input_count_unk8);
+}
+
 /* Link vs and fs together: fill in shader_state from vs and fs
  * as this function is called every time a new fs or vs is bound, the goal is to
  * do little processing as possible here, and to precompute as much as possible in
@@ -75,13 +127,8 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
 
 #ifdef DEBUG
    if (DBG_ENABLED(ETNA_DBG_DUMP_SHADERS)) {
-      if (DBG_ENABLED(ETNA_DBG_NIR)) {
-         etna_dump_shader_nir(vs);
-         etna_dump_shader_nir(fs);
-      } else {
-         etna_dump_shader(vs);
-         etna_dump_shader(fs);
-      }
+      etna_dump_shader(vs);
+      etna_dump_shader(fs);
    }
 #endif
 
@@ -204,8 +251,8 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
       VIVS_GL_HALTI5_SH_SPECIALS_PS_PCOORD_IN((link.pcoord_varying_comp_ofs != -1) ?
                                               link.pcoord_varying_comp_ofs : 0x7f);
 
-   /* mask out early Z bit when frag depth is written */
-   cs->PE_DEPTH_CONFIG = ~COND(fs->ps_depth_out_reg >= 0, VIVS_PE_DEPTH_CONFIG_EARLY_Z);
+   cs->writes_z = fs->ps_depth_out_reg >= 0;
+   cs->uses_discard = fs->uses_discard;
 
    /* reference instruction memory */
    cs->vs_inst_mem_size = vs->code_size;
@@ -247,6 +294,17 @@ etna_shader_link(struct etna_context *ctx)
 
    /* re-link vs and fs if needed */
    return etna_link_shaders(ctx, &ctx->shader_state, ctx->shader.vs, ctx->shader.fs);
+}
+
+void
+etna_destroy_shader(struct etna_shader_variant *shader)
+{
+   assert(shader);
+
+   FREE(shader->code);
+   FREE(shader->uniforms.imm_data);
+   FREE(shader->uniforms.imm_contents);
+   FREE(shader);
 }
 
 static bool
@@ -353,6 +411,10 @@ create_variant(struct etna_shader *shader, struct etna_shader_key key)
 
    v->shader = shader;
    v->key = key;
+   v->id = ++shader->variant_count;
+
+   if (etna_disk_cache_retrieve(shader->compiler, v))
+      return v;
 
    ret = etna_compile_shader(v);
    if (!ret) {
@@ -360,7 +422,7 @@ create_variant(struct etna_shader *shader, struct etna_shader_key key)
       goto fail;
    }
 
-   v->id = ++shader->variant_count;
+   etna_disk_cache_store(shader->compiler, v);
 
    return v;
 
@@ -412,7 +474,7 @@ etna_create_shader_state(struct pipe_context *pctx,
    else
       shader->tokens = tgsi_dup_tokens(pss->tokens);
 
-
+   etna_disk_cache_init_shader_key(compiler, shader);
 
    if (etna_mesa_debug & ETNA_DBG_SHADERDB) {
       /* if shader-db run, create a standard variant immediately
@@ -439,10 +501,7 @@ etna_delete_shader_state(struct pipe_context *pctx, void *ss)
       if (t->bo)
          etna_bo_del(t->bo);
 
-      if (DBG_ENABLED(ETNA_DBG_NIR))
-         etna_destroy_shader_nir(t);
-      else
-         etna_destroy_shader(t);
+      etna_destroy_shader(t);
    }
 
    tgsi_free_tokens(shader->tokens);

@@ -67,13 +67,13 @@ endif
 if with_platform_wayland
   subdir('egl/wayland/wayland-drm')
 endif
-if with_any_vk
+if with_any_vk or with_gallium_zink
   subdir('vulkan')
 endif
 if with_gallium_radeonsi or with_amd_vk
   subdir('amd')
 endif
-if with_gallium_vc4 or with_gallium_v3d
+if with_any_broadcom
   subdir('broadcom')
 endif
 if with_gallium_etnaviv
@@ -85,7 +85,10 @@ endif
 if with_gallium_panfrost or with_gallium_lima
   subdir('panfrost')
 endif
-if with_dri_i965 or with_intel_vk or with_gallium_iris
+if with_gallium_virgl
+  subdir('virtio')
+endif
+if with_any_intel
   subdir('intel')
 endif
 subdir('mesa')

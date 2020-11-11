@@ -51,11 +51,13 @@ bool ComputeShaderFromNir::do_allocate_reserved_registers()
    for (int i = 0; i < 3; ++i) {
       auto tmp = new GPRValue(thread_id_sel, i);
       tmp->set_as_input();
+      tmp->set_keep_alive();
       m_local_invocation_id[i] = PValue(tmp);
       inject_register(tmp->sel(), i, m_local_invocation_id[i], false);
 
       tmp = new GPRValue(wg_id_sel, i);
       tmp->set_as_input();
+      tmp->set_keep_alive();
       m_workgroup_id[i] = PValue(tmp);
       inject_register(tmp->sel(), i, m_workgroup_id[i], false);
    }

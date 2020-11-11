@@ -23,7 +23,6 @@
 #include "radv_private.h"
 #include "radv_shader.h"
 #include "nir/nir.h"
-#include "nir/nir_deref.h"
 #include "nir/nir_xfb_info.h"
 
 static void mark_sampler_desc(const nir_variable *var,
@@ -32,79 +31,18 @@ static void mark_sampler_desc(const nir_variable *var,
 	info->desc_set_used_mask |= (1u << var->data.descriptor_set);
 }
 
-static void mark_ls_output(struct radv_shader_info *info,
-			   uint32_t param, int num_slots)
-{
-	uint64_t mask = (1ull << num_slots) - 1ull;
-	info->vs.ls_outputs_written |= (mask << param);
-}
-
-static void mark_tess_output(struct radv_shader_info *info,
-			     bool is_patch, uint32_t param, int num_slots)
-{
-	uint64_t mask = (1ull << num_slots) - 1ull;
-	if (is_patch)
-		info->tcs.patch_outputs_written |= (mask << param);
-	else
-		info->tcs.outputs_written |= (mask << param);
-}
-
 static void
-get_deref_offset(nir_deref_instr *instr,
-                 unsigned *const_out)
-{
-        nir_variable *var = nir_deref_instr_get_variable(instr);
-        nir_deref_path path;
-        unsigned idx_lvl = 1;
-
-	if (var->data.compact) {
-		assert(instr->deref_type == nir_deref_type_array);
-		*const_out = nir_src_as_uint(instr->arr.index);
-		return;
-	}
-
-	nir_deref_path_init(&path, instr, NULL);
-
-	uint32_t const_offset = 0;
-
-	for (; path.path[idx_lvl]; ++idx_lvl) {
-		const struct glsl_type *parent_type = path.path[idx_lvl - 1]->type;
-		if (path.path[idx_lvl]->deref_type == nir_deref_type_struct) {
-			unsigned index = path.path[idx_lvl]->strct.index;
-
-			for (unsigned i = 0; i < index; i++) {
-				const struct glsl_type *ft = glsl_get_struct_field(parent_type, i);
-				const_offset += glsl_count_attribute_slots(ft, false);
-			}
-		} else if(path.path[idx_lvl]->deref_type == nir_deref_type_array) {
-			unsigned size = glsl_count_attribute_slots(path.path[idx_lvl]->type, false);
-			if (nir_src_is_const(path.path[idx_lvl]->arr.index))
-				const_offset += nir_src_as_uint(path.path[idx_lvl]->arr.index) * size;
-		} else
-			unreachable("Uhandled deref type in get_deref_instr_offset");
-	}
-
-	*const_out = const_offset;
-
-	nir_deref_path_finish(&path);
-}
-
-static void
-gather_intrinsic_load_deref_info(const nir_shader *nir,
+gather_intrinsic_load_input_info(const nir_shader *nir,
 			       const nir_intrinsic_instr *instr,
 			       struct radv_shader_info *info)
 {
 	switch (nir->info.stage) {
 	case MESA_SHADER_VERTEX: {
-		nir_variable *var = nir_deref_instr_get_variable(nir_instr_as_deref(instr->src[0].ssa->parent_instr));
+		unsigned idx = nir_intrinsic_io_semantics(instr).location;
+		unsigned component = nir_intrinsic_component(instr);
+		unsigned mask = nir_ssa_def_components_read(&instr->dest.ssa);
 
-		if (var && var->data.mode == nir_var_shader_in) {
-			unsigned idx = var->data.location;
-			uint8_t mask = nir_ssa_def_components_read(&instr->dest.ssa);
-
-			info->vs.input_usage_mask[idx] |=
-				mask << var->data.location_frac;
-		}
+		info->vs.input_usage_mask[idx] |= mask << component;
 		break;
 	}
 	default:
@@ -122,83 +60,44 @@ widen_writemask(uint32_t wrmask)
 }
 
 static void
-set_output_usage_mask(const nir_shader *nir, const nir_intrinsic_instr *instr,
-		      uint8_t *output_usage_mask)
-{
-	nir_deref_instr *deref_instr =
-		nir_instr_as_deref(instr->src[0].ssa->parent_instr);
-	nir_variable *var = nir_deref_instr_get_variable(deref_instr);
-	unsigned attrib_count = glsl_count_attribute_slots(deref_instr->type, false);
-	unsigned idx = var->data.location;
-	unsigned comp = var->data.location_frac;
-	unsigned const_offset = 0;
-
-	get_deref_offset(deref_instr, &const_offset);
-
-	if (var->data.compact) {
-		assert(!glsl_type_is_64bit(deref_instr->type));
-		const_offset += comp;
-		output_usage_mask[idx + const_offset / 4] |= 1 << (const_offset % 4);
-		return;
-	}
-
-	uint32_t wrmask = nir_intrinsic_write_mask(instr);
-	if (glsl_type_is_64bit(deref_instr->type))
-		wrmask = widen_writemask(wrmask);
-
-	for (unsigned i = 0; i < attrib_count; i++)
-		output_usage_mask[idx + i + const_offset] |=
-			((wrmask >> (i * 4)) & 0xf) << comp;
-}
-
-static void
 set_writes_memory(const nir_shader *nir, struct radv_shader_info *info)
 {
 	if (nir->info.stage == MESA_SHADER_FRAGMENT)
 		info->ps.writes_memory = true;
-	else if (nir->info.stage == MESA_SHADER_GEOMETRY)
-		info->gs.writes_memory = true;
 }
 
 static void
-gather_intrinsic_store_deref_info(const nir_shader *nir,
-				const nir_intrinsic_instr *instr,
-				struct radv_shader_info *info)
+gather_intrinsic_store_output_info(const nir_shader *nir,
+				   const nir_intrinsic_instr *instr,
+				   struct radv_shader_info *info)
 {
-	nir_variable *var = nir_deref_instr_get_variable(nir_instr_as_deref(instr->src[0].ssa->parent_instr));
+	unsigned idx = nir_intrinsic_base(instr);
+	unsigned num_slots = nir_intrinsic_io_semantics(instr).num_slots;
+	unsigned component = nir_intrinsic_component(instr);
+	unsigned write_mask = nir_intrinsic_write_mask(instr);
+	uint8_t *output_usage_mask = NULL;
 
-	if (var && var->data.mode == nir_var_shader_out) {
-		unsigned idx = var->data.location;
+	if (instr->src[0].ssa->bit_size == 64)
+		write_mask = widen_writemask(write_mask);
 
-		switch (nir->info.stage) {
-		case MESA_SHADER_VERTEX:
-			set_output_usage_mask(nir, instr,
-					      info->vs.output_usage_mask);
-			break;
-		case MESA_SHADER_GEOMETRY:
-			set_output_usage_mask(nir, instr,
-					      info->gs.output_usage_mask);
-			break;
-		case MESA_SHADER_TESS_EVAL:
-			set_output_usage_mask(nir, instr,
-					      info->tes.output_usage_mask);
-			break;
-		case MESA_SHADER_TESS_CTRL: {
-			unsigned param = shader_io_get_unique_index(idx);
-			const struct glsl_type *type = var->type;
+	switch (nir->info.stage) {
+	case MESA_SHADER_VERTEX:
+		output_usage_mask = info->vs.output_usage_mask;
+		break;
+	case MESA_SHADER_TESS_EVAL:
+		output_usage_mask = info->tes.output_usage_mask;
+		break;
+	case MESA_SHADER_GEOMETRY:
+		output_usage_mask = info->gs.output_usage_mask;
+		break;
+	default:
+		break;
+	}
 
-			if (!var->data.patch)
-				type = glsl_get_array_element(var->type);
-
-			unsigned slots =
-				var->data.compact ? DIV_ROUND_UP(var->data.location_frac + glsl_get_length(type), 4)
-						  : glsl_count_attribute_slots(type, false);
-
-			mark_tess_output(info, var->data.patch, param, slots);
-			break;
-		}
-		default:
-			break;
+	if (output_usage_mask) {
+		for (unsigned i = 0; i < num_slots; i++) {
+			output_usage_mask[idx + i] |=
+				((write_mask >> (i * 4)) & 0xf) << component;
 		}
 	}
 }
@@ -332,28 +231,25 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr,
 	case nir_intrinsic_ssbo_atomic_xor:
 	case nir_intrinsic_ssbo_atomic_exchange:
 	case nir_intrinsic_ssbo_atomic_comp_swap:
+	case nir_intrinsic_store_global:
+	case nir_intrinsic_global_atomic_add:
+	case nir_intrinsic_global_atomic_imin:
+	case nir_intrinsic_global_atomic_umin:
+	case nir_intrinsic_global_atomic_imax:
+	case nir_intrinsic_global_atomic_umax:
+	case nir_intrinsic_global_atomic_and:
+	case nir_intrinsic_global_atomic_or:
+	case nir_intrinsic_global_atomic_xor:
+	case nir_intrinsic_global_atomic_exchange:
+	case nir_intrinsic_global_atomic_comp_swap:
 		set_writes_memory(nir, info);
 		break;
-	case nir_intrinsic_load_deref:
-		gather_intrinsic_load_deref_info(nir, instr, info);
+	case nir_intrinsic_load_input:
+		gather_intrinsic_load_input_info(nir, instr, info);
 		break;
-	case nir_intrinsic_store_deref:
-		gather_intrinsic_store_deref_info(nir, instr, info);
-		/* fallthrough */
-	case nir_intrinsic_deref_atomic_add:
-	case nir_intrinsic_deref_atomic_imin:
-	case nir_intrinsic_deref_atomic_umin:
-	case nir_intrinsic_deref_atomic_imax:
-	case nir_intrinsic_deref_atomic_umax:
-	case nir_intrinsic_deref_atomic_and:
-	case nir_intrinsic_deref_atomic_or:
-	case nir_intrinsic_deref_atomic_xor:
-	case nir_intrinsic_deref_atomic_exchange:
-	case nir_intrinsic_deref_atomic_comp_swap: {
-		if (nir_src_as_deref(instr->src[0])->mode & (nir_var_mem_global | nir_var_mem_ssbo))
-			set_writes_memory(nir, info);
+	case nir_intrinsic_store_output:
+		gather_intrinsic_store_output_info(nir, instr, info);
 		break;
-	}
 	default:
 		break;
 	}
@@ -507,18 +403,6 @@ gather_info_input_decl(const nir_shader *nir, const nir_variable *var,
 }
 
 static void
-gather_info_output_decl_ls(const nir_shader *nir, const nir_variable *var,
-			   struct radv_shader_info *info)
-{
-	int idx = var->data.location;
-	unsigned param = shader_io_get_unique_index(idx);
-	int num_slots = glsl_count_attribute_slots(var->type, false);
-	if (var->data.compact)
-		num_slots = DIV_ROUND_UP(var->data.location_frac + glsl_get_length(var->type), 4);
-	mark_ls_output(info, param, num_slots);
-}
-
-static void
 gather_info_output_decl_ps(const nir_shader *nir, const nir_variable *var,
 			   struct radv_shader_info *info)
 {
@@ -581,9 +465,8 @@ gather_info_output_decl(const nir_shader *nir, const nir_variable *var,
 		    !key->vs_common_out.as_es)
 			vs_info = &info->vs.outinfo;
 
-		if (key->vs_common_out.as_ls)
-			gather_info_output_decl_ls(nir, var, info);
-		else if (key->vs_common_out.as_ngg)
+		/* TODO: Adjust as_ls/as_nng. */
+		if (!key->vs_common_out.as_ls && key->vs_common_out.as_ngg)
 			gather_info_output_decl_gs(nir, var, info);
 		break;
 	case MESA_SHADER_GEOMETRY:
@@ -667,8 +550,7 @@ void
 radv_nir_shader_info_pass(const struct nir_shader *nir,
 			  const struct radv_pipeline_layout *layout,
 			  const struct radv_shader_variant_key *key,
-			  struct radv_shader_info *info,
-			  bool use_llvm)
+			  struct radv_shader_info *info)
 {
 	struct nir_function *func =
 		(struct nir_function *)exec_list_get_head_const(&nir->functions);
@@ -821,26 +703,10 @@ radv_nir_shader_info_pass(const struct nir_shader *nir,
 	    key->vs_common_out.as_es) {
 		struct radv_es_output_info *es_info =
 			nir->info.stage == MESA_SHADER_VERTEX ? &info->vs.es_info : &info->tes.es_info;
-
-		if (use_llvm) {
-			/* The outputs may contain gaps, use the highest output index + 1 */
-			uint32_t max_output_written = 0;
-			uint64_t output_mask = nir->info.outputs_written;
-
-			while (output_mask) {
-				const int i = u_bit_scan64(&output_mask);
-				unsigned param_index = shader_io_get_unique_index(i);
-
-				max_output_written = MAX2(param_index, max_output_written);
-			}
-			es_info->esgs_itemsize = (max_output_written + 1) * 16;
-		} else {
-			/* The outputs don't contain gaps, se we can use the number of outputs */
-			uint32_t num_outputs_written = nir->info.stage == MESA_SHADER_VERTEX
-				? info->vs.num_linked_outputs
-				: info->tes.num_linked_outputs;
-			es_info->esgs_itemsize = num_outputs_written * 16;
-		}
+		uint32_t num_outputs_written = nir->info.stage == MESA_SHADER_VERTEX
+			? info->vs.num_linked_outputs
+			: info->tes.num_linked_outputs;
+		es_info->esgs_itemsize = num_outputs_written * 16;
 	}
 
 	info->float_controls_mode = nir->info.float_controls_execution_mode;

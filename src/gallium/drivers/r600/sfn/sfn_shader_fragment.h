@@ -54,7 +54,7 @@ private:
    bool do_process_outputs(nir_variable *output) override;
    bool do_emit_load_deref(const nir_variable *in_var, nir_intrinsic_instr* instr) override;
    bool do_emit_store_deref(const nir_variable *out_var, nir_intrinsic_instr* instr) override;
-   bool emit_export_pixel(const nir_variable *, nir_intrinsic_instr* instr, bool all_chanels);
+   bool emit_export_pixel(const nir_variable *, nir_intrinsic_instr* instr, int outputs);
    bool load_interpolated(GPRVector &dest, ShaderInput &io, const Interpolator& ip,
                           int num_components, int start_comp);
    bool load_interpolated_one_comp(GPRVector &dest, ShaderInput& io, const Interpolator& ip, EAluOp op);
@@ -85,9 +85,10 @@ private:
    std::array<Interpolator, 6> m_interpolator;
    unsigned m_reserved_registers;
    unsigned m_frag_pos_index;
-   PValue m_front_face_reg;
-   PValue m_sample_mask_reg;
-   PValue m_sample_id_reg;
+   PGPRValue m_front_face_reg;
+   PGPRValue m_sample_mask_reg;
+   PGPRValue m_sample_id_reg;
+   PGPRValue m_helper_invocation;
    GPRVector m_frag_pos;
    bool m_need_back_color;
    bool m_front_face_loaded;
@@ -96,7 +97,9 @@ private:
 
    std::map<unsigned, PValue> m_input_cache;
    bool m_enable_centroid_interpolators;
+   bool m_enable_sample_interpolators;
    unsigned m_apply_sample_mask;
+   bool m_dual_source_blend;
 };
 	
 }

@@ -49,6 +49,7 @@ struct pipe_debug_callback;
 struct pipe_depth_stencil_alpha_state;
 struct pipe_device_reset_callback;
 struct pipe_draw_info;
+struct pipe_draw_start_count;
 struct pipe_grid_info;
 struct pipe_fence_handle;
 struct pipe_framebuffer_state;
@@ -108,6 +109,41 @@ struct pipe_context {
    /*@{*/
    void (*draw_vbo)( struct pipe_context *pipe,
                      const struct pipe_draw_info *info );
+
+   /**
+    * Direct multi draw specifying "start" and "count" for each draw.
+    *
+    * For indirect multi draws, use draw_vbo, which supports them through
+    * "info->indirect".
+    *
+    * Differences against draw_vbo:
+    * - "start" and "count" are taken from "draws", not "info"
+    * - "info->has_user_indices" is always false
+    * - "info->indirect" and "info->count_from_stream_output" are always NULL
+    *
+    * Differences against glMultiDraw:
+    * - "info->draw_id" is 0 and should be 0 for every draw
+    *   (we could make this configurable)
+    * - "info->index_bias" is always constant due to hardware performance
+    *   concerns (this is very important) and the lack of apps using
+    *   glMultiDrawElementsBaseVertex.
+    *
+    * The main use case is to optimize applications that submit many
+    * back-to-back draws or when mesa/main or st/mesa eliminates redundant
+    * state changes, resulting in back-to-back draws in the driver. It requires
+    * DrawID = 0 for every draw. u_threaded_context is the module that converts
+    * back-to-back draws into a multi draw. It's done trivially by looking
+    * ahead within a gallium command buffer and collapsing draws.
+    *
+    * \param pipe          context
+    * \param info          draw info
+    * \param draws         array of (start, count) pairs
+    * \param num_draws     number of draws
+    */
+   void (*multi_draw)(struct pipe_context *pipe,
+                      const struct pipe_draw_info *info,
+                      const struct pipe_draw_start_count *draws,
+                      unsigned num_draws);
    /*@}*/
 
    /**
@@ -319,6 +355,26 @@ struct pipe_context {
    void (*set_constant_buffer)( struct pipe_context *,
                                 enum pipe_shader_type shader, uint index,
                                 const struct pipe_constant_buffer *buf );
+
+   /**
+    * Set inlinable constants for constant buffer 0.
+    *
+    * These are constants that the driver would like to inline in the IR
+    * of the current shader and recompile it. Drivers can determine which
+    * constants they prefer to inline in finalize_nir and store that
+    * information in shader_info::*inlinable_uniform*. When the state tracker
+    * or frontend uploads constants to a constant buffer, it can pass
+    * inlinable constants separately via this call.
+    *
+    * Any set_constant_buffer call invalidates this state, so this function
+    * must be called after it. Binding a shader also invalidates this state.
+    *
+    * There is no PIPE_CAP for this. Drivers shouldn't set the shader_info
+    * fields if they don't want this or if they don't implement this.
+    */
+   void (*set_inlinable_constants)( struct pipe_context *,
+                                    enum pipe_shader_type shader,
+                                    uint num_values, uint32_t *values );
 
    void (*set_framebuffer_state)( struct pipe_context *,
                                   const struct pipe_framebuffer_state * );
@@ -674,7 +730,7 @@ struct pipe_context {
    void *(*transfer_map)(struct pipe_context *,
                          struct pipe_resource *resource,
                          unsigned level,
-                         unsigned usage,  /* a combination of PIPE_TRANSFER_x */
+                         unsigned usage,  /* a combination of PIPE_MAP_x */
                          const struct pipe_box *,
                          struct pipe_transfer **out_transfer);
 
@@ -694,7 +750,7 @@ struct pipe_context {
     */
    void (*buffer_subdata)(struct pipe_context *,
                           struct pipe_resource *,
-                          unsigned usage, /* a combination of PIPE_TRANSFER_x */
+                          unsigned usage, /* a combination of PIPE_MAP_x */
                           unsigned offset,
                           unsigned size,
                           const void *data);
@@ -702,7 +758,7 @@ struct pipe_context {
    void (*texture_subdata)(struct pipe_context *,
                            struct pipe_resource *,
                            unsigned level,
-                           unsigned usage, /* a combination of PIPE_TRANSFER_x */
+                           unsigned usage, /* a combination of PIPE_MAP_x */
                            const struct pipe_box *,
                            const void *data,
                            unsigned stride,

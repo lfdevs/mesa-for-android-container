@@ -469,7 +469,7 @@ static SIMDINLINE Float SIMDCALL
     uint32_t* pOffsets = (uint32_t*)&idx;
     Float     vResult  = old;
     float*    pResult  = (float*)&vResult;
-    DWORD     index;
+    unsigned long index;
     uint32_t  umask = movemask_ps(mask);
     while (_BitScanForward(&index, umask))
     {

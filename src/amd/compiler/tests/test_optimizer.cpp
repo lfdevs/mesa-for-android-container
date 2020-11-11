@@ -80,3 +80,45 @@ BEGIN_TEST(optimize.neg)
       finish_opt_test();
    }
 END_TEST
+
+Temp create_subbrev_co(Operand op0, Operand op1, Operand op2)
+{
+   return bld.vop2_e64(aco_opcode::v_subbrev_co_u32, bld.def(v1), bld.hint_vcc(bld.def(bld.lm)), op0, op1, op2);
+}
+
+BEGIN_TEST(optimize.cndmask)
+   for (unsigned i = GFX9; i <= GFX10; i++) {
+      //>> v1: %a, s1: %b, s2: %c, s2: %_:exec = p_startpgm
+      if (!setup_cs("v1 s1 s2", (chip_class)i))
+         continue;
+
+      Temp subbrev;
+
+      //! v1: %res0 = v_cndmask_b32 0, %a, %c
+      //! p_unit_test 0, %res0
+      subbrev = create_subbrev_co(Operand(0u), Operand(0u),  Operand(inputs[2]));
+      writeout(0, bld.vop2(aco_opcode::v_and_b32, bld.def(v1), inputs[0], subbrev));
+
+      //! v1: %res1 = v_cndmask_b32 0, 42, %c
+      //! p_unit_test 1, %res1
+      subbrev = create_subbrev_co(Operand(0u), Operand(0u), Operand(inputs[2]));
+      writeout(1, bld.vop2(aco_opcode::v_and_b32, bld.def(v1), Operand(42u), subbrev));
+
+      //~gfx9! v1: %subbrev, s2: %_ = v_subbrev_co_u32 0, 0, %c
+      //~gfx9! v1: %res2 = v_and_b32 %b, %subbrev
+      //~gfx10! v1: %res2 = v_cndmask_b32 0, %b, %c
+      //! p_unit_test 2, %res2
+      subbrev = create_subbrev_co(Operand(0u), Operand(0u), Operand(inputs[2]));
+      writeout(2, bld.vop2(aco_opcode::v_and_b32, bld.def(v1), inputs[1], subbrev));
+
+      //! v1: %subbrev1, s2: %_ = v_subbrev_co_u32 0, 0, %c
+      //! v1: %xor = v_xor_b32 %a, %subbrev1
+      //! v1: %res3 = v_cndmask_b32 0, %xor, %c
+      //! p_unit_test 3, %res3
+      subbrev = create_subbrev_co(Operand(0u), Operand(0u), Operand(inputs[2]));
+      Temp xor_a = bld.vop2(aco_opcode::v_xor_b32, bld.def(v1), inputs[0], subbrev);
+      writeout(3, bld.vop2(aco_opcode::v_and_b32, bld.def(v1), xor_a, subbrev));
+
+      finish_opt_test();
+   }
+END_TEST

@@ -115,14 +115,14 @@ translate_indices(struct svga_hwtnl *hwtnl,
       if (!dst)
          goto fail;
 
-      dst_map = pipe_buffer_map(pipe, dst, PIPE_TRANSFER_WRITE, &dst_transfer);
+      dst_map = pipe_buffer_map(pipe, dst, PIPE_MAP_WRITE, &dst_transfer);
       if (!dst_map)
          goto fail;
 
       *out_offset = 0;
       src_map = pipe_buffer_map(pipe, info->index.resource,
-                                PIPE_TRANSFER_READ |
-                                PIPE_TRANSFER_UNSYNCHRONIZED,
+                                PIPE_MAP_READ |
+                                PIPE_MAP_UNSYNCHRONIZED,
                                 &src_transfer);
       if (!src_map)
          goto fail;
@@ -254,7 +254,7 @@ svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
                                     &gen_prim, &gen_size, &gen_nr, &gen_func);
    }
 
-   if (gen_type == U_TRANSLATE_MEMCPY) {
+   if ((gen_type == U_TRANSLATE_MEMCPY) && (info->index_size == gen_size)) {
       /* No need for translation, just pass through to hardware:
        */
       unsigned start_offset = info->start * info->index_size;

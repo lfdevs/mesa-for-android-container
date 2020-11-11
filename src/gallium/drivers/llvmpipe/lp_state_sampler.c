@@ -82,7 +82,11 @@ llvmpipe_bind_sampler_states(struct pipe_context *pipe,
 
    /* set the new samplers */
    for (i = 0; i < num; i++) {
-      llvmpipe->samplers[shader][start + i] = samplers[i];
+      void *sampler = NULL;
+
+      if (samplers && samplers[i])
+	 sampler = samplers[i];
+      llvmpipe->samplers[shader][start + i] = sampler;
    }
 
    /* find highest non-null samplers[] entry */
@@ -129,20 +133,24 @@ llvmpipe_set_sampler_views(struct pipe_context *pipe,
 
    /* set the new sampler views */
    for (i = 0; i < num; i++) {
+      struct pipe_sampler_view *view = NULL;
+
+      if (views && views[i])
+	 view = views[i];
       /*
        * Warn if someone tries to set a view created in a different context
        * (which is why we need the hack above in the first place).
        * An assert would be better but st/mesa relies on it...
        */
-      if (views[i] && views[i]->context != pipe) {
+      if (view && view->context != pipe) {
          debug_printf("Illegal setting of sampler_view %d created in another "
                       "context\n", i);
       }
 
-      if (views[i])
-         llvmpipe_flush_resource(pipe, views[i]->texture, 0, true, false, false, "sampler_view");
+      if (view)
+         llvmpipe_flush_resource(pipe, view->texture, 0, true, false, false, "sampler_view");
       pipe_sampler_view_reference(&llvmpipe->sampler_views[shader][start + i],
-                                  views[i]);
+                                  view);
    }
 
    /* find highest non-null sampler_views[] entry */
@@ -333,7 +341,7 @@ prepare_shader_sampling(
             struct llvmpipe_screen *screen = llvmpipe_screen(tex->screen);
             struct sw_winsys *winsys = screen->winsys;
             addr = winsys->displaytarget_map(winsys, lp_tex->dt,
-                                                PIPE_TRANSFER_READ);
+                                                PIPE_MAP_READ);
             row_stride[0] = lp_tex->row_stride[0];
             img_stride[0] = lp_tex->img_stride[0];
             mip_offsets[0] = 0;
@@ -474,7 +482,7 @@ prepare_shader_images(
             struct llvmpipe_screen *screen = llvmpipe_screen(img->screen);
             struct sw_winsys *winsys = screen->winsys;
             addr = winsys->displaytarget_map(winsys, lp_img->dt,
-                                                PIPE_TRANSFER_READ);
+                                                PIPE_MAP_READ);
             row_stride = lp_img->row_stride[0];
             img_stride = lp_img->img_stride[0];
             sample_stride = 0;

@@ -48,8 +48,8 @@ anv_get_perf(const struct gen_device_info *devinfo, int fd)
 
    if (!perf->n_queries) {
       if (perf->platform_supported)
-         intel_logw("Performance support disabled, "
-                    "consider sysctl dev.i915.perf_stream_paranoid=0\n");
+         mesa_logw("Performance support disabled, "
+                   "consider sysctl dev.i915.perf_stream_paranoid=0\n");
       goto err;
    }
 
@@ -187,7 +187,7 @@ VkResult anv_AcquirePerformanceConfigurationINTEL(
    if (!config)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   if (likely(!(INTEL_DEBUG & DEBUG_NO_OACONFIG))) {
+   if (!(INTEL_DEBUG & DEBUG_NO_OACONFIG)) {
       config->register_config =
          gen_perf_load_configuration(device->physical->perf, device->fd,
                                      GEN_PERF_QUERY_GUID_MDAPI);
@@ -223,7 +223,7 @@ VkResult anv_ReleasePerformanceConfigurationINTEL(
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_performance_configuration_intel, config, _configuration);
 
-   if (likely(!(INTEL_DEBUG & DEBUG_NO_OACONFIG)))
+   if (!(INTEL_DEBUG & DEBUG_NO_OACONFIG))
       gen_ioctl(device->fd, DRM_IOCTL_I915_PERF_REMOVE_CONFIG, &config->config_id);
 
    ralloc_free(config->register_config);
@@ -241,7 +241,7 @@ VkResult anv_QueueSetPerformanceConfigurationINTEL(
    ANV_FROM_HANDLE(anv_performance_configuration_intel, config, _configuration);
    struct anv_device *device = queue->device;
 
-   if (likely(!(INTEL_DEBUG & DEBUG_NO_OACONFIG))) {
+   if (!(INTEL_DEBUG & DEBUG_NO_OACONFIG)) {
       if (device->perf_fd < 0) {
          device->perf_fd = anv_device_perf_open(device, config->config_id);
          if (device->perf_fd < 0)
@@ -370,7 +370,7 @@ VkResult anv_AcquireProfilingLockKHR(
 
    assert(device->perf_fd == -1);
 
-   if (likely(!(INTEL_DEBUG & DEBUG_NO_OACONFIG))) {
+   if (!(INTEL_DEBUG & DEBUG_NO_OACONFIG)) {
       fd = anv_device_perf_open(device, first_metric_set->oa_metrics_set_id);
       if (fd < 0)
          return VK_TIMEOUT;
@@ -385,7 +385,7 @@ void anv_ReleaseProfilingLockKHR(
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
 
-   if (likely(!(INTEL_DEBUG & DEBUG_NO_OACONFIG))) {
+   if (!(INTEL_DEBUG & DEBUG_NO_OACONFIG)) {
       assert(device->perf_fd >= 0);
       close(device->perf_fd);
    }

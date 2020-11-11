@@ -354,29 +354,29 @@ vmw_svga_winsys_buffer_destroy(struct svga_winsys_screen *sws,
 void *
 vmw_svga_winsys_buffer_map(struct svga_winsys_screen *sws,
                            struct svga_winsys_buffer *buf,
-                           enum pipe_transfer_usage flags)
+                           enum pipe_map_flags flags)
 {
    void *map;
 
    (void)sws;
-   if (flags & PIPE_TRANSFER_UNSYNCHRONIZED)
-      flags &= ~PIPE_TRANSFER_DONTBLOCK;
+   if (flags & PIPE_MAP_UNSYNCHRONIZED)
+      flags &= ~PIPE_MAP_DONTBLOCK;
 
-   /* NOTE: we're passing PIPE_TRANSFER_x flags instead of
+   /* NOTE: we're passing PIPE_MAP_x flags instead of
     * PB_USAGE_x flags here.  We should probably fix that.
     */
    STATIC_ASSERT((unsigned) PB_USAGE_CPU_READ ==
-                 (unsigned) PIPE_TRANSFER_READ);
+                 (unsigned) PIPE_MAP_READ);
    STATIC_ASSERT((unsigned) PB_USAGE_CPU_WRITE ==
-                 (unsigned) PIPE_TRANSFER_WRITE);
+                 (unsigned) PIPE_MAP_WRITE);
    STATIC_ASSERT((unsigned) PB_USAGE_GPU_READ ==
-                 (unsigned) PIPE_TRANSFER_MAP_DIRECTLY);
+                 (unsigned) PIPE_MAP_DIRECTLY);
    STATIC_ASSERT((unsigned) PB_USAGE_DONTBLOCK ==
-                 (unsigned) PIPE_TRANSFER_DONTBLOCK);
+                 (unsigned) PIPE_MAP_DONTBLOCK);
    STATIC_ASSERT((unsigned) PB_USAGE_UNSYNCHRONIZED ==
-                 (unsigned) PIPE_TRANSFER_UNSYNCHRONIZED);
+                 (unsigned) PIPE_MAP_UNSYNCHRONIZED);
    STATIC_ASSERT((unsigned) PB_USAGE_PERSISTENT ==
-                 (unsigned) PIPE_TRANSFER_PERSISTENT);
+                 (unsigned) PIPE_MAP_PERSISTENT);
 
    map = pb_map(vmw_pb_buffer(buf), flags & PB_USAGE_ALL, NULL);
 

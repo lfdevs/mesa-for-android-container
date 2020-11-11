@@ -332,6 +332,8 @@ static struct fd6_format formats[PIPE_FORMAT_COUNT] = {
 	_T_(ASTC_10x10_SRGB, ASTC_10x10,             WZYX),
 	_T_(ASTC_12x10_SRGB, ASTC_12x10,             WZYX),
 	_T_(ASTC_12x12_SRGB, ASTC_12x12,             WZYX),
+
+	_T_(R8_G8B8_420_UNORM, R8_G8B8_2PLANE_420_UNORM, WZYX),
 };
 
 /* convert pipe format to vertex buffer format: */

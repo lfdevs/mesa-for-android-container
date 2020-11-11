@@ -37,7 +37,7 @@
 
 #include "util/u_debug.h"
 #include "util/u_math.h"
-#include "util/u_half.h"
+#include "util/half_float.h"
 
 #include "lp_bld_type.h"
 #include "lp_bld_const.h"
@@ -257,7 +257,7 @@ lp_build_one(struct gallivm_state *gallivm, struct lp_type type)
    elem_type = lp_build_elem_type(gallivm, type);
 
    if(type.floating && type.width == 16)
-      elems[0] = LLVMConstInt(elem_type, util_float_to_half(1.0f), 0);
+      elems[0] = LLVMConstInt(elem_type, _mesa_float_to_half(1.0f), 0);
    else if(type.floating)
       elems[0] = LLVMConstReal(elem_type, 1.0);
    else if(type.fixed)
@@ -304,7 +304,7 @@ lp_build_const_elem(struct gallivm_state *gallivm,
    LLVMValueRef elem;
 
    if(type.floating && type.width == 16) {
-      elem = LLVMConstInt(elem_type, util_float_to_half((float)val), 0);
+      elem = LLVMConstInt(elem_type, _mesa_float_to_half((float)val), 0);
    } else if(type.floating) {
       elem = LLVMConstReal(elem_type, val);
    }

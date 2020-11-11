@@ -21,7 +21,7 @@ exposes > 1 MRT, and we should revisit this issue if anyone ever does.
 Logical Operations
 ------------------
 
-Logical operations, also known as logicops, lops, or rops, are supported.
+Logical operations, also known as logicops, LOPs, or ROPs, are supported.
 Only two-operand logicops are available. When logicops are enabled, all other
 blend state is ignored, including per-render-target state, so logicops are
 performed on all render targets.
@@ -101,7 +101,7 @@ alpha_to_one
    is enabled or the destination buffer is multisampled.
 max_rt
    The index of the max render target (irrespecitive of whether independent
-   blend is enabled), ie. the number of MRTs minus one.  This is provided
+   blend is enabled), i.e. the number of MRTs minus one.  This is provided
    so that the driver can avoid the overhead of programming unused MRTs.
 
 

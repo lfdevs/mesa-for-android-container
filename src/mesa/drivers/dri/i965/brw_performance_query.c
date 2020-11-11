@@ -111,7 +111,7 @@ brw_is_perf_query_ready(struct gl_context *ctx,
                         struct gl_perf_query_object *o);
 
 static void
-dump_perf_query_callback(GLuint id, void *query_void, void *brw_void)
+dump_perf_query_callback(void *query_void, void *brw_void)
 {
    struct brw_context *ctx = brw_void;
    struct gen_perf_context *perf_ctx = ctx->perf_ctx;
@@ -120,7 +120,7 @@ dump_perf_query_callback(GLuint id, void *query_void, void *brw_void)
    struct gen_perf_query_object *obj = brw_query->query;
 
    DBG("%4d: %-6s %-8s ",
-       id,
+       o->Id,
        o->Used ? "Dirty," : "New,",
        o->Active ? "Active," : (o->Ready ? "Ready," : "Pending,"));
    gen_perf_dump_query(perf_ctx, obj, &ctx->batch);

@@ -245,7 +245,6 @@ struct compiled_shader_state {
    uint32_t PS_TEMP_REGISTER_CONTROL;
    uint32_t PS_TEMP_REGISTER_CONTROL_MSAA; /* Adds a temporary if needed to make space for extra input */
    uint32_t PS_START_PC;
-   uint32_t PE_DEPTH_CONFIG;
    uint32_t GL_VARYING_TOTAL_COMPONENTS;
    uint32_t GL_VARYING_NUM_COMPONENTS[2];
    uint32_t GL_VARYING_COMPONENT_USE[2];
@@ -257,6 +256,8 @@ struct compiled_shader_state {
    uint32_t *PS_INST_MEM;
    struct etna_reloc PS_INST_ADDR;
    struct etna_reloc VS_INST_ADDR;
+   unsigned writes_z:1;
+   unsigned uses_discard:1;
 };
 
 /* Helpers to assist creating and setting bitarrays (eg, for varyings).

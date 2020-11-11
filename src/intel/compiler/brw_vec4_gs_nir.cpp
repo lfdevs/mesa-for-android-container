@@ -78,7 +78,7 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       gs_end_primitive();
       break;
 
-   case nir_intrinsic_set_vertex_count:
+   case nir_intrinsic_set_vertex_and_primitive_count:
       this->vertex_count =
          retype(get_nir_src(instr->src[0], 1), BRW_REGISTER_TYPE_UD);
       break;

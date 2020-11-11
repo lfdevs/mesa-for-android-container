@@ -85,6 +85,10 @@ uint64_t
 gen_aux_map_get_base(struct gen_aux_map_context *ctx);
 
 uint64_t
+gen_aux_map_format_bits(enum isl_tiling tiling, enum isl_format format,
+                        uint8_t plane);
+
+uint64_t
 gen_aux_map_format_bits_for_isl_surf(const struct isl_surf *isl_surf);
 
 uint64_t *
@@ -96,11 +100,6 @@ void
 gen_aux_map_add_mapping(struct gen_aux_map_context *ctx, uint64_t address,
                         uint64_t aux_address, uint64_t main_size_B,
                         uint64_t format_bits);
-
-void
-gen_aux_map_add_image(struct gen_aux_map_context *ctx,
-                      const struct isl_surf *isl_surf, uint64_t address,
-                      uint64_t aux_address);
 
 void
 gen_aux_map_unmap_range(struct gen_aux_map_context *ctx, uint64_t address,

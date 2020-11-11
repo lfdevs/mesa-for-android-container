@@ -8,15 +8,15 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- state.xml     (  26877 bytes, from 2020-02-14 10:19:56)
-- common.xml    (  35468 bytes, from 2020-01-04 20:02:31)
-- common_3d.xml (  15058 bytes, from 2020-04-17 16:31:50)
-- state_hi.xml  (  34851 bytes, from 2020-04-17 16:25:34)
-- copyright.xml (   1597 bytes, from 2018-02-10 13:09:26)
-- state_2d.xml  (  51552 bytes, from 2018-02-10 13:09:26)
-- state_3d.xml  (  83771 bytes, from 2020-04-17 17:15:55)
-- state_blt.xml (  14252 bytes, from 2020-01-10 14:36:29)
-- state_vg.xml  (   5975 bytes, from 2018-02-10 13:09:26)
+- state.xml     (  26877 bytes, from 2020-10-28 12:56:03)
+- common.xml    (  35468 bytes, from 2020-10-28 12:56:03)
+- common_3d.xml (  15058 bytes, from 2020-10-28 12:56:03)
+- state_hi.xml  (  34803 bytes, from 2020-10-28 12:56:03)
+- copyright.xml (   1597 bytes, from 2020-10-28 12:56:03)
+- state_2d.xml  (  51552 bytes, from 2020-10-28 12:56:03)
+- state_3d.xml  (  84002 bytes, from 2020-11-01 11:28:08)
+- state_blt.xml (  14252 bytes, from 2020-10-28 12:56:03)
+- state_vg.xml  (   5975 bytes, from 2020-10-28 12:56:03)
 
 Copyright (C) 2012-2020 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>
@@ -561,6 +561,9 @@ DEALINGS IN THE SOFTWARE.
 #define VIVS_RA_MULTISAMPLE_UNK00E04				0x00000e04
 
 #define VIVS_RA_EARLY_DEPTH					0x00000e08
+#define VIVS_RA_EARLY_DEPTH_TEST_ENABLE				0x00000001
+#define VIVS_RA_EARLY_DEPTH_HDEPTH_DISABLE			0x01000000
+#define VIVS_RA_EARLY_DEPTH_WRITE_DISABLE			0x10000000
 
 #define VIVS_RA_UNK00E0C					0x00000e0c
 
@@ -1786,6 +1789,7 @@ DEALINGS IN THE SOFTWARE.
 #define VIVS_NTE_DESCRIPTOR_TX_CTRL_TS_INDEX__MASK		0x0000001c
 #define VIVS_NTE_DESCRIPTOR_TX_CTRL_TS_INDEX__SHIFT		2
 #define VIVS_NTE_DESCRIPTOR_TX_CTRL_TS_INDEX(x)			(((x) << VIVS_NTE_DESCRIPTOR_TX_CTRL_TS_INDEX__SHIFT) & VIVS_NTE_DESCRIPTOR_TX_CTRL_TS_INDEX__MASK)
+#define VIVS_NTE_DESCRIPTOR_TX_CTRL_COMPRESSION			0x00000040
 
 #define VIVS_NTE_DESCRIPTOR_SAMP_CTRL0_MIRROR(i0)	       (0x00016000 + 0x4*(i0))
 

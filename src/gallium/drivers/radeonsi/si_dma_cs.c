@@ -74,7 +74,8 @@ void si_sdma_clear_buffer(struct si_context *sctx, struct pipe_resource *dst, ui
    assert(size % 4 == 0);
 
    if (!cs || dst->flags & PIPE_RESOURCE_FLAG_SPARSE ||
-       sctx->screen->debug_flags & DBG(NO_SDMA_CLEARS) || sctx->ws->ws_is_secure(sctx->ws)) {
+       sctx->screen->debug_flags & DBG(NO_SDMA_CLEARS) ||
+       unlikely(radeon_uses_secure_bos(sctx->ws))) {
       sctx->b.clear_buffer(&sctx->b, dst, offset, size, &clear_value, 4);
       return;
    }
@@ -232,8 +233,7 @@ void si_need_dma_space(struct si_context *ctx, unsigned num_dw, struct si_resour
       si_flush_gfx_cs(ctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
 
    bool use_secure_cmd = false;
-   /* if TMZ is supported and enabled */
-   if (ctx->ws->ws_is_secure(ctx->ws)) {
+   if (unlikely(radeon_uses_secure_bos(ctx->ws))) {
       if (src && src->flags & RADEON_FLAG_ENCRYPTED) {
          assert(!dst || (dst->flags & RADEON_FLAG_ENCRYPTED));
          use_secure_cmd = true;
@@ -260,10 +260,10 @@ void si_need_dma_space(struct si_context *ctx, unsigned num_dw, struct si_resour
         !ws->cs_check_space(ctx->sdma_cs, num_dw, false) ||
         ctx->sdma_cs->used_vram + ctx->sdma_cs->used_gart > 64 * 1024 * 1024 ||
         !radeon_cs_memory_below_limit(ctx->screen, ctx->sdma_cs, vram, gtt))) {
-      si_flush_dma_cs(ctx, PIPE_FLUSH_ASYNC, NULL);
+      si_flush_dma_cs(ctx, PIPE_FLUSH_ASYNC | RADEON_FLUSH_TOGGLE_SECURE_SUBMISSION, NULL);
+      assert(ctx->ws->cs_is_secure(ctx->sdma_cs) == use_secure_cmd);
       assert((num_dw + ctx->sdma_cs->current.cdw) <= ctx->sdma_cs->current.max_dw);
    }
-   ctx->ws->cs_set_secure(ctx->sdma_cs, use_secure_cmd);
 
    /* Wait for idle if either buffer has been used in the IB before to
     * prevent read-after-write hazards.
@@ -290,7 +290,8 @@ void si_flush_dma_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
    struct radeon_saved_cs saved;
    bool check_vm = (ctx->screen->debug_flags & DBG(CHECK_VM)) != 0;
 
-   if (!radeon_emitted(cs, 0)) {
+   if (!radeon_emitted(cs, 0) &&
+       !(flags & RADEON_FLUSH_TOGGLE_SECURE_SUBMISSION)) {
       if (fence)
          ctx->ws->fence_reference(fence, ctx->last_sdma_fence);
       return;
@@ -298,6 +299,9 @@ void si_flush_dma_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
 
    if (check_vm)
       si_save_cs(ctx->ws, cs, &saved, true);
+
+   if (ctx->is_noop)
+      flags |= RADEON_FLUSH_NOOP;
 
    ctx->ws->cs_flush(cs, flags, &ctx->last_sdma_fence);
    if (fence)

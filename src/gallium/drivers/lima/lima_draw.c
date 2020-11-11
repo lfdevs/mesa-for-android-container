@@ -25,7 +25,7 @@
 
 #include "util/format/u_format.h"
 #include "util/u_debug.h"
-#include "util/u_half.h"
+#include "util/half_float.h"
 #include "util/u_helpers.h"
 #include "util/u_inlines.h"
 #include "util/u_pack_color.h"
@@ -175,8 +175,7 @@ lima_clear(struct pipe_context *pctx, unsigned buffers, const struct pipe_scisso
       clear->depth = util_pack_z(PIPE_FORMAT_Z24X8_UNORM, depth);
       if (zsbuf)
          zsbuf->reload &= ~PIPE_CLEAR_DEPTH;
-   } else
-      clear->depth = 0x00ffffff;
+   }
 
    if (buffers & PIPE_CLEAR_STENCIL) {
       clear->stencil = stencil;
@@ -193,7 +192,8 @@ lima_clear(struct pipe_context *pctx, unsigned buffers, const struct pipe_scisso
 
 enum lima_attrib_type {
    LIMA_ATTRIB_FLOAT = 0x000,
-   /* todo: find out what lives here. */
+   LIMA_ATTRIB_I32   = 0x001,
+   LIMA_ATTRIB_U32   = 0x002,
    LIMA_ATTRIB_I16   = 0x004,
    LIMA_ATTRIB_U16   = 0x005,
    LIMA_ATTRIB_I8    = 0x006,
@@ -202,8 +202,8 @@ enum lima_attrib_type {
    LIMA_ATTRIB_U8N   = 0x009,
    LIMA_ATTRIB_I16N  = 0x00A,
    LIMA_ATTRIB_U16N  = 0x00B,
-   /* todo: where is the 32 int */
-   /* todo: find out what lives here. */
+   LIMA_ATTRIB_I32N  = 0x00D,
+   LIMA_ATTRIB_U32N  = 0x00E,
    LIMA_ATTRIB_FIXED = 0x101
 };
 
@@ -232,6 +232,12 @@ lima_pipe_format_to_attrib_type(enum pipe_format format)
          else
             return LIMA_ATTRIB_I16;
       }
+      else if (c->size == 32) {
+         if (c->normalized)
+            return LIMA_ATTRIB_I32N;
+         else
+            return LIMA_ATTRIB_I32;
+      }
       break;
    case UTIL_FORMAT_TYPE_UNSIGNED:
       if (c->size == 8) {
@@ -246,6 +252,12 @@ lima_pipe_format_to_attrib_type(enum pipe_format format)
          else
             return LIMA_ATTRIB_U16;
       }
+      else if (c->size == 32) {
+         if (c->normalized)
+            return LIMA_ATTRIB_U32N;
+         else
+            return LIMA_ATTRIB_U32;
+      }
       break;
    }
 
@@ -255,6 +267,9 @@ lima_pipe_format_to_attrib_type(enum pipe_format format)
 static void
 lima_pack_vs_cmd(struct lima_context *ctx, const struct pipe_draw_info *info)
 {
+   struct lima_context_constant_buffer *ccb =
+      ctx->const_buffer + PIPE_SHADER_VERTEX;
+   struct lima_vs_shader_state *vs = ctx->vs;
    struct lima_job *job = lima_job_get(ctx);
 
    VS_CMD_BEGIN(&job->vs_cmd_array, 24);
@@ -263,11 +278,12 @@ lima_pack_vs_cmd(struct lima_context *ctx, const struct pipe_draw_info *info)
       VS_CMD_ARRAYS_SEMAPHORE_BEGIN_1();
       VS_CMD_ARRAYS_SEMAPHORE_BEGIN_2();
    }
+   int uniform_size = MIN2(vs->uniform_size, ccb->size);
 
-   int uniform_size = ctx->vs->uniform_pending_offset + ctx->vs->constant_size + 32;
+   int size = uniform_size + vs->constant_size + 32;
    VS_CMD_UNIFORMS_ADDRESS(
       lima_ctx_buff_va(ctx, lima_ctx_buff_gp_uniform),
-      align(uniform_size, 16));
+      align(size, 16));
 
    VS_CMD_SHADER_ADDRESS(ctx->vs->bo->va, ctx->vs->shader_size);
    VS_CMD_SHADER_INFO(ctx->vs->prefetch, ctx->vs->shader_size);
@@ -824,23 +840,24 @@ lima_update_gp_uniform(struct lima_context *ctx)
    struct lima_context_constant_buffer *ccb =
       ctx->const_buffer + PIPE_SHADER_VERTEX;
    struct lima_vs_shader_state *vs = ctx->vs;
+   int uniform_size = MIN2(vs->uniform_size, ccb->size);
 
-   int size = vs->uniform_pending_offset + vs->constant_size + 32;
+   int size = uniform_size + vs->constant_size + 32;
    void *vs_const_buff =
       lima_ctx_buff_alloc(ctx, lima_ctx_buff_gp_uniform, size);
 
    if (ccb->buffer)
-      memcpy(vs_const_buff, ccb->buffer, ccb->size);
+      memcpy(vs_const_buff, ccb->buffer, uniform_size);
 
-   memcpy(vs_const_buff + vs->uniform_pending_offset,
+   memcpy(vs_const_buff + uniform_size,
           ctx->viewport.transform.scale,
           sizeof(ctx->viewport.transform.scale));
-   memcpy(vs_const_buff + vs->uniform_pending_offset + 16,
+   memcpy(vs_const_buff + uniform_size + 16,
           ctx->viewport.transform.translate,
           sizeof(ctx->viewport.transform.translate));
 
    if (vs->constant)
-      memcpy(vs_const_buff + vs->uniform_pending_offset + 32,
+      memcpy(vs_const_buff + uniform_size + 32,
              vs->constant, vs->constant_size);
 
    struct lima_job *job = lima_job_get(ctx);
@@ -881,7 +898,7 @@ lima_update_pp_uniform(struct lima_context *ctx)
       lima_ctx_buff_alloc(ctx, lima_ctx_buff_pp_uniform_array, 4);
 
    for (int i = 0; i < const_buff_size; i++)
-       fp16_const_buff[i] = util_float_to_half(const_buff[i]);
+       fp16_const_buff[i] = _mesa_float_to_half(const_buff[i]);
 
    *array = lima_ctx_buff_va(ctx, lima_ctx_buff_pp_uniform);
 

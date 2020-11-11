@@ -33,15 +33,11 @@ struct si_compute {
    struct si_shader shader;
 
    unsigned ir_type;
-   unsigned local_size;
    unsigned private_size;
    unsigned input_size;
 
    int max_global_buffers;
    struct pipe_resource **global_buffers;
-
-   bool reads_variable_block_size;
-   unsigned num_cs_user_data_dwords;
 };
 
 void si_destroy_compute(struct si_compute *program);

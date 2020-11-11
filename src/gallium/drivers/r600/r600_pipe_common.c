@@ -1179,13 +1179,16 @@ struct pipe_resource *r600_resource_create_common(struct pipe_screen *screen,
 }
 
 const struct nir_shader_compiler_options r600_nir_fs_options = {
-	.fuse_ffma = true,
+	.fuse_ffma16 = true,
+	.fuse_ffma32 = true,
+	.fuse_ffma64 = true,
 	.lower_scmp = true,
 	.lower_flrp32 = true,
 	.lower_flrp64 = true,
 	.lower_fpow = true,
 	.lower_fdiv = true,
-	.lower_idiv = true,
+        .lower_isign = true,
+        .lower_fsign = true,
 	.lower_fmod = true,
 	.lower_doubles_options = nir_lower_fp64_full_software,
 	.lower_int64_options = 0,
@@ -1200,13 +1203,14 @@ const struct nir_shader_compiler_options r600_nir_fs_options = {
 };
 
 const struct nir_shader_compiler_options r600_nir_options = {
-	.fuse_ffma = true,
+	.fuse_ffma16 = true,
+	.fuse_ffma32 = true,
+	.fuse_ffma64 = true,
 	.lower_scmp = true,
 	.lower_flrp32 = true,
 	.lower_flrp64 = true,
 	.lower_fpow = true,
 	.lower_fdiv = true,
-	.lower_idiv = true,
 	.lower_fmod = true,
 	.lower_doubles_options = nir_lower_fp64_full_software,
 	.lower_int64_options = 0,
@@ -1286,10 +1290,6 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 	rscreen->family = rscreen->info.family;
 	rscreen->chip_class = rscreen->info.chip_class;
 	rscreen->debug_flags |= debug_get_flags_option("R600_DEBUG", common_debug_options, 0);
-	int has_draw_use_llvm = debug_get_bool_option("DRAW_USE_LLVM", FALSE);
-	if (!has_draw_use_llvm)
-	   setenv("DRAW_USE_LLVM", "no", 0);
-
 
 	r600_disk_cache_create(rscreen);
 

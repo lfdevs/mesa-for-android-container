@@ -152,7 +152,7 @@ fill_grid_size(struct pipe_context *context,
    params = pipe_buffer_map_range(context, info->indirect,
                                   info->indirect_offset,
                                   3 * sizeof(uint32_t),
-                                  PIPE_TRANSFER_READ,
+                                  PIPE_MAP_READ,
                                   &transfer);
 
    if (!transfer)

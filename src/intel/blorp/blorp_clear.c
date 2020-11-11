@@ -64,7 +64,8 @@ blorp_params_get_clear_kernel(struct blorp_batch *batch,
    void *mem_ctx = ralloc_context(NULL);
 
    nir_builder b;
-   blorp_nir_init_shader(&b, mem_ctx, MESA_SHADER_FRAGMENT, "BLORP-clear");
+   blorp_nir_init_shader(&b, mem_ctx, MESA_SHADER_FRAGMENT,
+                         blorp_shader_type_to_name(blorp_key.shader_type));
 
    nir_variable *v_color =
       BLORP_CREATE_NIR_INPUT(b.shader, clear_color, glsl_vec4_type());
@@ -75,9 +76,9 @@ blorp_params_get_clear_kernel(struct blorp_batch *batch,
       nir_ssa_def *comp = nir_umod(&b, nir_channel(&b, pos, 0),
                                        nir_imm_int(&b, 3));
       nir_ssa_def *color_component =
-         nir_bcsel(&b, nir_ieq(&b, comp, nir_imm_int(&b, 0)),
+         nir_bcsel(&b, nir_ieq_imm(&b, comp, 0),
                        nir_channel(&b, color, 0),
-                       nir_bcsel(&b, nir_ieq(&b, comp, nir_imm_int(&b, 1)),
+                       nir_bcsel(&b, nir_ieq_imm(&b, comp, 1),
                                      nir_channel(&b, color, 1),
                                      nir_channel(&b, color, 2)));
 
@@ -143,7 +144,8 @@ blorp_params_get_layer_offset_vs(struct blorp_batch *batch,
    void *mem_ctx = ralloc_context(NULL);
 
    nir_builder b;
-   blorp_nir_init_shader(&b, mem_ctx, MESA_SHADER_VERTEX, "BLORP-layer-offset-vs");
+   blorp_nir_init_shader(&b, mem_ctx, MESA_SHADER_VERTEX,
+                         blorp_shader_type_to_name(blorp_key.shader_type));
 
    const struct glsl_type *uvec4_type = glsl_vector_type(GLSL_TYPE_UINT, 4);
 
@@ -827,7 +829,7 @@ blorp_can_hiz_clear_depth(const struct gen_device_info *devinfo,
                                    surf->dim == ISL_SURF_DIM_3D ? layer: 0,
                                    &slice_x0, &slice_y0);
       const bool max_x1_y1 =
-         x1 == minify(surf->logical_level0_px.width, level) && 
+         x1 == minify(surf->logical_level0_px.width, level) &&
          y1 == minify(surf->logical_level0_px.height, level);
       const uint32_t haligned_x1 = ALIGN(x1, surf->image_alignment_el.w);
       const uint32_t valigned_y1 = ALIGN(y1, surf->image_alignment_el.h);
@@ -844,6 +846,29 @@ blorp_can_hiz_clear_depth(const struct gen_device_info *devinfo,
    }
 
    return isl_aux_usage_has_hiz(aux_usage);
+}
+
+static bool
+blorp_can_clear_full_surface(const struct blorp_surf *depth,
+                             const struct blorp_surf *stencil,
+                             uint32_t level,
+                             uint32_t x0, uint32_t y0,
+                             uint32_t x1, uint32_t y1,
+                             bool clear_depth,
+                             bool clear_stencil)
+{
+   uint32_t width = 0, height = 0;
+   if (clear_stencil) {
+      width = minify(stencil->surf->logical_level0_px.width, level);
+      height = minify(stencil->surf->logical_level0_px.height, level);
+   }
+
+   if (clear_depth && !(width || height)) {
+      width = minify(depth->surf->logical_level0_px.width, level);
+      height = minify(depth->surf->logical_level0_px.height, level);
+   }
+
+   return x0 == 0 && y0 == 0 && width == x1 && height == y1;
 }
 
 void
@@ -864,6 +889,14 @@ blorp_hiz_clear_depth_stencil(struct blorp_batch *batch,
    assert(ISL_DEV_GEN(batch->blorp->isl_dev) >= 8);
 
    params.hiz_op = ISL_AUX_OP_FAST_CLEAR;
+   /* From BSpec: 3DSTATE_WM_HZ_OP_BODY >> Full Surface Depth and Stencil Clear
+    *
+    *    "Software must set this only when the APP requires the entire Depth
+    *    surface to be cleared."
+    */
+   params.full_surface_hiz_op =
+      blorp_can_clear_full_surface(depth, stencil, level, x0, y0, x1, y1,
+                                   clear_depth, clear_stencil);
    params.num_layers = 1;
 
    params.x0 = x0;
@@ -1111,7 +1144,7 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_batch *batch,
 
    nir_builder b;
    blorp_nir_init_shader(&b, mem_ctx, MESA_SHADER_FRAGMENT,
-                         "BLORP-mcs-partial-resolve");
+                         blorp_shader_type_to_name(blorp_key.shader_type));
 
    nir_variable *v_color =
       BLORP_CREATE_NIR_INPUT(b.shader, clear_color, glsl_vec4_type());

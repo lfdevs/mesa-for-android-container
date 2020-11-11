@@ -99,7 +99,7 @@ brw_codegen_wm_prog(struct brw_context *brw,
    } else {
       brw_nir_setup_arb_uniforms(mem_ctx, nir, &fp->program, &prog_data.base);
 
-      if (unlikely(INTEL_DEBUG & DEBUG_WM))
+      if (INTEL_DEBUG & DEBUG_WM)
          brw_dump_arb_asm("fragment", &fp->program);
    }
 
@@ -153,7 +153,7 @@ brw_codegen_wm_prog(struct brw_context *brw,
 
    brw_alloc_stage_scratch(brw, &brw->wm.base, prog_data.base.total_scratch);
 
-   if (unlikely((INTEL_DEBUG & DEBUG_WM) && fp->program.is_arb_asm))
+   if (((INTEL_DEBUG & DEBUG_WM) && fp->program.is_arb_asm))
       fprintf(stderr, "\n");
 
    /* The param and pull_param arrays will be freed by the shader cache. */

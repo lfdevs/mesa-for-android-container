@@ -179,7 +179,7 @@ INLINE void ProcessAttributes(
             uint32_t mask = backendState.swizzleMap[i].componentOverrideMask;
             if (mask)
             {
-                DWORD comp;
+                unsigned long comp;
                 while (_BitScanForward(&comp, mask))
                 {
                     mask &= ~(1 << comp);
@@ -245,7 +245,7 @@ void ProcessUserClipDist(const SWR_BACKEND_STATE& state,
                          float*                   pRecipW,
                          float*                   pUserClipBuffer)
 {
-    DWORD    clipDist;
+    unsigned long clipDist;
     uint32_t clipDistMask = state.clipDistanceMask;
     while (_BitScanForward(&clipDist, clipDistMask))
     {
@@ -1122,7 +1122,7 @@ endBinTriangles:
     TransposeVertices(vHorizW, vRecipW0, vRecipW1, vRecipW2);
 
     // scan remaining valid triangles and bin each separately
-    while (_BitScanForward((DWORD*)&triIndex, triMask))
+    while (_BitScanForward((unsigned long*)&triIndex, triMask))
     {
         uint32_t linkageCount     = state.backendState.numAttributes;
         uint32_t numScalarAttribs = linkageCount * 4;
@@ -1363,7 +1363,7 @@ void BinPostSetupPointsImpl(DRAW_CONTEXT*          pDC,
         const SWR_BACKEND_STATE& backendState = pDC->pState->state.backendState;
 
         // scan remaining valid triangles and bin each separately
-        while (_BitScanForward((DWORD*)&primIndex, primMask))
+        while (_BitScanForward((unsigned long*)&primIndex, primMask))
         {
             uint32_t linkageCount     = backendState.numAttributes;
             uint32_t numScalarAttribs = linkageCount * 4;
@@ -1519,7 +1519,7 @@ void BinPostSetupPointsImpl(DRAW_CONTEXT*          pDC,
         // scan remaining valid prims and bin each separately
         const SWR_BACKEND_STATE& backendState = state.backendState;
         uint32_t                 primIndex;
-        while (_BitScanForward((DWORD*)&primIndex, primMask))
+        while (_BitScanForward((unsigned long*)&primIndex, primMask))
         {
             uint32_t linkageCount     = backendState.numAttributes;
             uint32_t numScalarAttribs = linkageCount * 4;
@@ -1818,8 +1818,8 @@ void BinPostSetupLinesImpl(DRAW_CONTEXT*          pDC,
     TransposeVertices(vHorizW, vRecipW0, vRecipW1, SIMD_T::setzero_ps());
 
     // scan remaining valid prims and bin each separately
-    uint32_t primIndex;
-    while (_BitScanForward((DWORD*)&primIndex, primMask))
+    unsigned long primIndex;
+    while (_BitScanForward(&primIndex, primMask))
     {
         uint32_t linkageCount     = state.backendState.numAttributes;
         uint32_t numScalarAttribs = linkageCount * 4;

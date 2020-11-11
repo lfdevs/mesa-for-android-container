@@ -44,7 +44,20 @@ static void translate_memcpy_uint( const void *in,
 {
    memcpy(out, &((int *)in)[start], out_nr*sizeof(int));
 }
-                              
+
+static void translate_byte_to_ushort( const void *in,
+                                      unsigned start,
+                                      UNUSED unsigned in_nr,
+                                      unsigned out_nr,
+                                      UNUSED unsigned restart_index,
+                                      void *out )
+{
+   uint8_t *src = (uint8_t *)in + start;
+   uint16_t *dst = out;
+   while (out_nr--) {
+      *dst++ = *src++;
+   }
+}
 
 /**
  * Translate indexes when a driver can't support certain types
@@ -97,15 +110,15 @@ u_index_translator(unsigned hw_mask,
    *out_index_size = (in_index_size == 4) ? 4 : 2;
    out_idx = out_size_idx(*out_index_size);
 
-   if ((hw_mask & (1<<prim)) && 
-       in_index_size == *out_index_size &&
-       in_pv == out_pv) 
+   if ((hw_mask & (1<<prim)) &&
+       in_pv == out_pv)
    {
-      /* Index translation not really needed */
       if (in_index_size == 4)
          *out_translate = translate_memcpy_uint;
-      else
+      else if (in_index_size == 2)
          *out_translate = translate_memcpy_ushort;
+      else
+         *out_translate = translate_byte_to_ushort;
 
       *out_prim = prim;
       *out_nr = nr;

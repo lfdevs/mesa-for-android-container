@@ -29,7 +29,7 @@
 #include "etnaviv_context.h"
 #include "etnaviv_screen.h"
 #include "etnaviv_translate.h"
-#include "util/u_half.h"
+#include "util/half_float.h"
 #include "util/u_memory.h"
 
 #include "hw/common.xml.h"
@@ -47,11 +47,10 @@ etna_zsa_state_create(struct pipe_context *pctx,
 
    cs->base = *so;
 
+   cs->z_test_enabled = so->depth.enabled && so->depth.func != PIPE_FUNC_ALWAYS;
+   cs->z_write_enabled = so->depth.enabled && so->depth.writemask;
+
    /* XXX does stencil[0] / stencil[1] order depend on rs->front_ccw? */
-   bool early_z = !VIV_FEATURE(ctx->screen, chipFeatures, NO_EARLY_Z);
-   bool disable_zs =
-      (!so->depth.enabled || so->depth.func == PIPE_FUNC_ALWAYS) &&
-      !so->depth.writemask;
 
 /* Set operations to KEEP if write mask is 0.
  * When we don't do this, the depth buffer is written for the entire primitive
@@ -73,44 +72,30 @@ etna_zsa_state_create(struct pipe_context *pctx,
    if (so->stencil[0].enabled) {
       if (so->stencil[0].func != PIPE_FUNC_ALWAYS ||
           (so->stencil[1].enabled && so->stencil[1].func != PIPE_FUNC_ALWAYS))
-         disable_zs = false;
+         cs->stencil_enabled = 1;
 
       if (so->stencil[0].fail_op != PIPE_STENCIL_OP_KEEP ||
           so->stencil[0].zfail_op != PIPE_STENCIL_OP_KEEP ||
           so->stencil[0].zpass_op != PIPE_STENCIL_OP_KEEP) {
-         disable_zs = early_z = false;
+         cs->stencil_modified = 1;
       } else if (so->stencil[1].enabled) {
          if (so->stencil[1].fail_op != PIPE_STENCIL_OP_KEEP ||
              so->stencil[1].zfail_op != PIPE_STENCIL_OP_KEEP ||
              so->stencil[1].zpass_op != PIPE_STENCIL_OP_KEEP) {
-            disable_zs = early_z = false;
+            cs->stencil_modified = 1;
          }
       }
    }
-
-   /* Disable early z reject when no depth test is enabled.
-    * This avoids having to sample depth even though we know it's going to
-    * succeed. */
-   if (so->depth.enabled == false || so->depth.func == PIPE_FUNC_ALWAYS)
-      early_z = false;
 
    /* calculate extra_reference value */
    uint32_t extra_reference = 0;
 
    if (VIV_FEATURE(screen, chipMinorFeatures1, HALF_FLOAT))
-      extra_reference = util_float_to_half(SATURATE(so->alpha.ref_value));
+      extra_reference = _mesa_float_to_half(SATURATE(so->alpha.ref_value));
 
    cs->PE_STENCIL_CONFIG_EXT =
       VIVS_PE_STENCIL_CONFIG_EXT_EXTRA_ALPHA_REF(extra_reference);
 
-   /* compare funcs have 1 to 1 mapping */
-   cs->PE_DEPTH_CONFIG =
-      VIVS_PE_DEPTH_CONFIG_DEPTH_FUNC(so->depth.enabled ? so->depth.func
-                                                        : PIPE_FUNC_ALWAYS) |
-      COND(so->depth.writemask, VIVS_PE_DEPTH_CONFIG_WRITE_ENABLE) |
-      COND(early_z, VIVS_PE_DEPTH_CONFIG_EARLY_Z) |
-      /* this bit changed meaning with HALTI5: */
-      COND(disable_zs && screen->specs.halti < 5, VIVS_PE_DEPTH_CONFIG_DISABLE_ZS);
    cs->PE_ALPHA_OP =
       COND(so->alpha.enabled, VIVS_PE_ALPHA_OP_ALPHA_TEST) |
       VIVS_PE_ALPHA_OP_ALPHA_FUNC(so->alpha.func) |

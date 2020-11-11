@@ -31,7 +31,10 @@
 #include "sp_fs.h"
 #include "sp_texture.h"
 
+#include "nir.h"
+#include "nir/nir_to_tgsi.h"
 #include "pipe/p_defines.h"
+#include "util/ralloc.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_pstipple.h"
@@ -139,10 +142,23 @@ softpipe_create_shader_state(struct pipe_context *pipe,
                              const struct pipe_shader_state *templ,
                              bool debug)
 {
-   assert(templ->type == PIPE_SHADER_IR_TGSI);
+   if (templ->type == PIPE_SHADER_IR_NIR) {
+      shader->tokens = nir_to_tgsi(templ->ir.nir, pipe->screen);
+
+      /* Note: Printing the final NIR after nir-to-tgsi transformed and
+       * optimized it
+       */
+      if (debug)
+         nir_print_shader(templ->ir.nir, stderr);
+
+      ralloc_free(templ->ir.nir);
+   } else {
+      assert(templ->type == PIPE_SHADER_IR_TGSI);
+      /* we need to keep a local copy of the tokens */
+      shader->tokens = tgsi_dup_tokens(templ->tokens);
+   }
+
    shader->type = PIPE_SHADER_IR_TGSI;
-   /* we need to keep a local copy of the tokens */
-   shader->tokens = tgsi_dup_tokens(templ->tokens);
 
    shader->stream_output = templ->stream_output;
 
@@ -308,8 +324,9 @@ softpipe_create_gs_state(struct pipe_context *pipe,
    softpipe_create_shader_state(pipe, &state->shader, templ,
                                 sp_debug & SP_DBG_GS);
 
-   if (templ->tokens) {
-      state->draw_data = draw_create_geometry_shader(softpipe->draw, templ);
+   if (state->shader.tokens) {
+      state->draw_data = draw_create_geometry_shader(softpipe->draw,
+                                                     &state->shader);
       if (state->draw_data == NULL)
          goto fail;
 
@@ -405,22 +422,29 @@ static void *
 softpipe_create_compute_state(struct pipe_context *pipe,
                               const struct pipe_compute_state *templ)
 {
-   const struct tgsi_token *tokens;
-   struct sp_compute_shader *state;
-   if (templ->ir_type != PIPE_SHADER_IR_TGSI)
-      return NULL;
-
-   tokens = templ->prog;
-   /* debug */
-   if (sp_debug & SP_DBG_CS)
-      tgsi_dump(tokens, 0);
-
-   softpipe_shader_db(pipe, tokens);
-
-   state = CALLOC_STRUCT(sp_compute_shader);
+   struct sp_compute_shader *state = CALLOC_STRUCT(sp_compute_shader);
 
    state->shader = *templ;
-   state->tokens = tgsi_dup_tokens(tokens);
+
+   if (templ->ir_type == PIPE_SHADER_IR_NIR) {
+      nir_shader *s = (void *)templ->prog;
+
+      if (sp_debug & SP_DBG_CS)
+         nir_print_shader(s, stderr);
+
+      state->tokens = (void *)nir_to_tgsi(s, pipe->screen);
+      ralloc_free(s);
+   } else {
+      assert(templ->ir_type == PIPE_SHADER_IR_TGSI);
+      /* we need to keep a local copy of the tokens */
+      state->tokens = tgsi_dup_tokens(templ->prog);
+   }
+
+   if (sp_debug & SP_DBG_CS)
+      tgsi_dump(state->tokens, 0);
+
+   softpipe_shader_db(pipe, state->tokens);
+
    tgsi_scan_shader(state->tokens, &state->info);
 
    state->max_sampler = state->info.file_max[TGSI_FILE_SAMPLER];

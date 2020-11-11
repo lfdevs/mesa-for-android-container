@@ -202,8 +202,8 @@ sp_tile_cache_set_surface(struct softpipe_tile_cache *tc,
          for (i = 0; i < tc->num_maps; i++) {
             tc->transfer_map[i] = pipe_transfer_map(pipe, ps->texture,
                                                     ps->u.tex.level, ps->u.tex.first_layer + i,
-                                                    PIPE_TRANSFER_READ_WRITE |
-                                                    PIPE_TRANSFER_UNSYNCHRONIZED,
+                                                    PIPE_MAP_READ_WRITE |
+                                                    PIPE_MAP_UNSYNCHRONIZED,
                                                     0, 0, ps->width, ps->height,
                                                     &tc->transfer[i]);
          }

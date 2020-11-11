@@ -186,6 +186,8 @@ public:
    UniformValue(uint32_t sel, uint32_t chan, PValue addr);
    uint32_t sel() const override;
    uint32_t kcache_bank() const;
+   PValue addr() const {return m_addr;}
+   void reset_addr(PValue v) {m_addr = v;}
 private:
    void do_print(std::ostream& os) const override;
    bool is_equal_to(const Value& other) const override;

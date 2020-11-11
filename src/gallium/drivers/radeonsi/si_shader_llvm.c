@@ -70,11 +70,11 @@ static void si_diagnostic_handler(LLVMDiagnosticInfoRef di, void *context)
 bool si_compile_llvm(struct si_screen *sscreen, struct si_shader_binary *binary,
                      struct ac_shader_config *conf, struct ac_llvm_compiler *compiler,
                      struct ac_llvm_context *ac, struct pipe_debug_callback *debug,
-                     enum pipe_shader_type shader_type, const char *name, bool less_optimized)
+                     gl_shader_stage stage, const char *name, bool less_optimized)
 {
    unsigned count = p_atomic_inc_return(&sscreen->num_compilations);
 
-   if (si_can_dump_shader(sscreen, shader_type)) {
+   if (si_can_dump_shader(sscreen, stage)) {
       fprintf(stderr, "radeonsi: Compiling shader %d\n", count);
 
       if (!(sscreen->debug_flags & (DBG(NO_IR) | DBG(PREOPT_IR)))) {
@@ -114,7 +114,7 @@ bool si_compile_llvm(struct si_screen *sscreen, struct si_shader_binary *binary,
    struct ac_rtld_binary rtld;
    if (!ac_rtld_open(&rtld, (struct ac_rtld_open_info){
                                .info = &sscreen->info,
-                               .shader_type = tgsi_processor_to_shader_stage(shader_type),
+                               .shader_type = stage,
                                .wave_size = ac->wave_size,
                                .num_parts = 1,
                                .elf_ptrs = &binary->elf_buffer,
@@ -142,38 +142,37 @@ void si_llvm_create_func(struct si_shader_context *ctx, const char *name, LLVMTy
 {
    LLVMTypeRef ret_type;
    enum ac_llvm_calling_convention call_conv;
-   enum pipe_shader_type real_shader_type;
 
    if (num_return_elems)
       ret_type = LLVMStructTypeInContext(ctx->ac.context, return_types, num_return_elems, true);
    else
       ret_type = ctx->ac.voidt;
 
-   real_shader_type = ctx->type;
+   gl_shader_stage real_stage = ctx->stage;
 
    /* LS is merged into HS (TCS), and ES is merged into GS. */
    if (ctx->screen->info.chip_class >= GFX9) {
       if (ctx->shader->key.as_ls)
-         real_shader_type = PIPE_SHADER_TESS_CTRL;
+         real_stage = MESA_SHADER_TESS_CTRL;
       else if (ctx->shader->key.as_es || ctx->shader->key.as_ngg)
-         real_shader_type = PIPE_SHADER_GEOMETRY;
+         real_stage = MESA_SHADER_GEOMETRY;
    }
 
-   switch (real_shader_type) {
-   case PIPE_SHADER_VERTEX:
-   case PIPE_SHADER_TESS_EVAL:
+   switch (real_stage) {
+   case MESA_SHADER_VERTEX:
+   case MESA_SHADER_TESS_EVAL:
       call_conv = AC_LLVM_AMDGPU_VS;
       break;
-   case PIPE_SHADER_TESS_CTRL:
+   case MESA_SHADER_TESS_CTRL:
       call_conv = AC_LLVM_AMDGPU_HS;
       break;
-   case PIPE_SHADER_GEOMETRY:
+   case MESA_SHADER_GEOMETRY:
       call_conv = AC_LLVM_AMDGPU_GS;
       break;
-   case PIPE_SHADER_FRAGMENT:
+   case MESA_SHADER_FRAGMENT:
       call_conv = AC_LLVM_AMDGPU_PS;
       break;
-   case PIPE_SHADER_COMPUTE:
+   case MESA_SHADER_COMPUTE:
       call_conv = AC_LLVM_AMDGPU_CS;
       break;
    default:
@@ -190,15 +189,13 @@ void si_llvm_create_func(struct si_shader_context *ctx, const char *name, LLVMTy
                                            ctx->screen->info.address32_hi);
    }
 
-   LLVMAddTargetDependentFunctionAttr(ctx->main_fn, "no-signed-zeros-fp-math", "true");
-
    ac_llvm_set_workgroup_size(ctx->main_fn, max_workgroup_size);
 }
 
 void si_llvm_optimize_module(struct si_shader_context *ctx)
 {
    /* Dump LLVM IR before any optimization passes */
-   if (ctx->screen->debug_flags & DBG(PREOPT_IR) && si_can_dump_shader(ctx->screen, ctx->type))
+   if (ctx->screen->debug_flags & DBG(PREOPT_IR) && si_can_dump_shader(ctx->screen, ctx->stage))
       LLVMDumpModule(ctx->ac.module);
 
    /* Run the pass */
@@ -265,24 +262,13 @@ LLVMValueRef si_prolog_get_rw_buffers(struct si_shader_context *ctx)
    return list;
 }
 
-LLVMValueRef si_build_gather_64bit(struct si_shader_context *ctx, LLVMTypeRef type,
-                                   LLVMValueRef val1, LLVMValueRef val2)
-{
-   LLVMValueRef values[2] = {
-      ac_to_integer(&ctx->ac, val1),
-      ac_to_integer(&ctx->ac, val2),
-   };
-   LLVMValueRef result = ac_build_gather_values(&ctx->ac, values, 2);
-   return LLVMBuildBitCast(ctx->ac.builder, result, type, "");
-}
-
 void si_llvm_emit_barrier(struct si_shader_context *ctx)
 {
    /* GFX6 only (thanks to a hw bug workaround):
     * The real barrier instruction isn’t needed, because an entire patch
     * always fits into a single wave.
     */
-   if (ctx->screen->info.chip_class == GFX6 && ctx->type == PIPE_SHADER_TESS_CTRL) {
+   if (ctx->screen->info.chip_class == GFX6 && ctx->stage == MESA_SHADER_TESS_CTRL) {
       ac_build_waitcnt(&ctx->ac, AC_WAIT_LGKM | AC_WAIT_VLOAD | AC_WAIT_VSTORE);
       return;
    }
@@ -351,14 +337,14 @@ LLVMValueRef si_get_primitive_id(struct si_shader_context *ctx, unsigned swizzle
    if (swizzle > 0)
       return ctx->ac.i32_0;
 
-   switch (ctx->type) {
-   case PIPE_SHADER_VERTEX:
+   switch (ctx->stage) {
+   case MESA_SHADER_VERTEX:
       return ac_get_arg(&ctx->ac, ctx->vs_prim_id);
-   case PIPE_SHADER_TESS_CTRL:
+   case MESA_SHADER_TESS_CTRL:
       return ac_get_arg(&ctx->ac, ctx->args.tcs_patch_id);
-   case PIPE_SHADER_TESS_EVAL:
+   case MESA_SHADER_TESS_EVAL:
       return ac_get_arg(&ctx->ac, ctx->args.tes_patch_id);
-   case PIPE_SHADER_GEOMETRY:
+   case MESA_SHADER_GEOMETRY:
       return ac_get_arg(&ctx->ac, ctx->args.gs_prim_id);
    default:
       assert(0);
@@ -370,31 +356,14 @@ LLVMValueRef si_llvm_get_block_size(struct ac_shader_abi *abi)
 {
    struct si_shader_context *ctx = si_shader_context_from_abi(abi);
 
-   LLVMValueRef values[3];
-   LLVMValueRef result;
-   unsigned i;
-   unsigned *properties = ctx->shader->selector->info.properties;
-
-   if (properties[TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH] != 0) {
-      unsigned sizes[3] = {properties[TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH],
-                           properties[TGSI_PROPERTY_CS_FIXED_BLOCK_HEIGHT],
-                           properties[TGSI_PROPERTY_CS_FIXED_BLOCK_DEPTH]};
-
-      for (i = 0; i < 3; ++i)
-         values[i] = LLVMConstInt(ctx->ac.i32, sizes[i], 0);
-
-      result = ac_build_gather_values(&ctx->ac, values, 3);
-   } else {
-      result = ac_get_arg(&ctx->ac, ctx->block_size);
-   }
-
-   return result;
+   assert(ctx->shader->selector->info.base.cs.local_size_variable);
+   return ac_get_arg(&ctx->ac, ctx->block_size);
 }
 
 void si_llvm_declare_compute_memory(struct si_shader_context *ctx)
 {
    struct si_shader_selector *sel = ctx->shader->selector;
-   unsigned lds_size = sel->info.properties[TGSI_PROPERTY_CS_LOCAL_SIZE];
+   unsigned lds_size = sel->info.base.cs.shared_size;
 
    LLVMTypeRef i8p = LLVMPointerType(ctx->ac.i8, AC_ADDR_SPACE_LDS);
    LLVMValueRef var;
@@ -443,7 +412,7 @@ bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *nir)
          ctx->shader->key.mono.u.ps.interpolate_at_sample_force_center;
 
       ctx->abi.kill_ps_if_inf_interp =
-         (ctx->screen->debug_flags & DBG(KILL_PS_INF_INTERP)) &&
+         ctx->screen->options.no_infinite_interp &&
          (ctx->shader->selector->info.uses_persp_center ||
           ctx->shader->selector->info.uses_persp_centroid ||
           ctx->shader->selector->info.uses_persp_sample);
@@ -454,6 +423,9 @@ bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *nir)
          ctx->abi.user_data = ac_build_expand_to_vec4(&ctx->ac, ctx->abi.user_data,
                                                       nir->info.cs.user_data_components_amd);
       }
+
+      if (ctx->shader->selector->info.base.cs.shared_size)
+         si_llvm_declare_compute_memory(ctx);
    }
 
    ctx->abi.inputs = &ctx->inputs[0];
@@ -462,10 +434,17 @@ bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *nir)
    ctx->abi.convert_undef_to_zero = true;
    ctx->abi.clamp_div_by_zero = ctx->screen->options.clamp_div_by_zero;
 
-   if (ctx->shader->selector->info.properties[TGSI_PROPERTY_CS_LOCAL_SIZE]) {
-      assert(gl_shader_stage_is_compute(nir->info.stage));
-      si_llvm_declare_compute_memory(ctx);
+   const struct si_shader_info *info = &ctx->shader->selector->info;
+   for (unsigned i = 0; i < info->num_outputs; i++) {
+      LLVMTypeRef type = ctx->ac.f32;
+
+      if (nir_alu_type_get_type_size(ctx->shader->selector->info.output_type[i]) == 16)
+         type = ctx->ac.f16;
+
+      for (unsigned j = 0; j < 4; j++)
+         ctx->abi.outputs[i * 4 + j] = ac_build_alloca_undef(&ctx->ac, type, "");
    }
+
    ac_nir_translate(&ctx->ac, &ctx->abi, &ctx->args, nir);
 
    return true;

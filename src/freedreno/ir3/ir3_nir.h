@@ -46,12 +46,13 @@ bool ir3_nir_lower_tex_prefetch(nir_shader *shader);
 
 void ir3_nir_lower_to_explicit_output(nir_shader *shader,
 		struct ir3_shader_variant *v, unsigned topology);
-void ir3_nir_lower_to_explicit_input(nir_shader *shader, struct ir3_compiler *compiler);
+void ir3_nir_lower_to_explicit_input(nir_shader *shader, struct ir3_shader_variant *v);
 void ir3_nir_lower_tess_ctrl(nir_shader *shader, struct ir3_shader_variant *v, unsigned topology);
-void ir3_nir_lower_tess_eval(nir_shader *shader, unsigned topology);
+void ir3_nir_lower_tess_eval(nir_shader *shader, struct ir3_shader_variant *v, unsigned topology);
 void ir3_nir_lower_gs(nir_shader *shader);
 
 const nir_shader_compiler_options * ir3_get_compiler_options(struct ir3_compiler *compiler);
+void ir3_optimize_loop(nir_shader *s);
 void ir3_finalize_nir(struct ir3_compiler *compiler, nir_shader *s);
 void ir3_nir_post_finalize(struct ir3_compiler *compiler, nir_shader *s);
 void ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s);
@@ -63,10 +64,6 @@ bool ir3_nir_lower_ubo_loads(nir_shader *nir, struct ir3_shader_variant *v);
 
 nir_ssa_def *
 ir3_nir_try_propagate_bit_shift(nir_builder *b, nir_ssa_def *offset, int32_t shift);
-
-uint32_t ir3_link_geometry_stages(const struct ir3_shader_variant *producer,
-		const struct ir3_shader_variant *consumer,
-		uint32_t *locs);
 
 static inline nir_intrinsic_instr *
 ir3_bindless_resource(nir_src src)

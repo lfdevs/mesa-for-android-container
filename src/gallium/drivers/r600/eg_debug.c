@@ -334,8 +334,8 @@ static void eg_dump_last_ib(struct r600_context *rctx, FILE *f)
 		 */
 		uint32_t *map = rctx->b.ws->buffer_map(rctx->last_trace_buf->buf,
 						       NULL,
-						       PIPE_TRANSFER_UNSYNCHRONIZED |
-						       PIPE_TRANSFER_READ);
+						       PIPE_MAP_UNSYNCHRONIZED |
+						       PIPE_MAP_READ);
 		if (map)
 			last_trace_id = *map;
 	}

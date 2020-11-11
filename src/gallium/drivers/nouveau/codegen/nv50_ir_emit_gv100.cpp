@@ -350,8 +350,8 @@ CodeEmitterGV100::emitS2R()
    emitGPR (16, insn->def(0));
 }
 
-static void
-selpFlip(const FixupEntry *entry, uint32_t *code, const FixupData& data)
+void
+gv100_selpFlip(const FixupEntry *entry, uint32_t *code, const FixupData& data)
 {
    int loc = entry->loc;
    if (data.force_persample_interp)
@@ -367,7 +367,7 @@ CodeEmitterGV100::emitSEL()
    emitNOT  (90, insn->src(2));
    emitPRED (87, insn->src(2));
    if (insn->subOp == 1)
-      addInterp(0, 0, selpFlip);
+      addInterp(0, 0, gv100_selpFlip);
 }
 
 void
@@ -910,8 +910,8 @@ CodeEmitterGV100::emitATOMS()
    emitGPR  (16, insn->def(0));
 }
 
-static void
-interpApply(const FixupEntry *entry, uint32_t *code, const FixupData& data)
+void
+gv100_interpApply(const FixupEntry *entry, uint32_t *code, const FixupData& data)
 {
    int ipa = entry->ipa;
    int loc = entry->loc;
@@ -927,7 +927,7 @@ interpApply(const FixupEntry *entry, uint32_t *code, const FixupData& data)
    case NV50_IR_INTERP_DEFAULT : sample = 0; break;
    case NV50_IR_INTERP_CENTROID: sample = 1; break;
    case NV50_IR_INTERP_OFFSET  : sample = 2; break;
-   default: assert(!"invalid sample mode");
+   default: unreachable("invalid sample mode");
    }
 
    int interp;
@@ -936,7 +936,7 @@ interpApply(const FixupEntry *entry, uint32_t *code, const FixupData& data)
    case NV50_IR_INTERP_PERSPECTIVE: interp = 0; break;
    case NV50_IR_INTERP_FLAT       : interp = 1; break;
    case NV50_IR_INTERP_SC         : interp = 2; break;
-   default: assert(!"invalid ipa mode");
+   default: unreachable("invalid ipa mode");
    }
 
    code[loc + 2] &= ~(0xf << 12);
@@ -971,10 +971,10 @@ CodeEmitterGV100::emitIPA()
 
    if (insn->getSampleMode() != NV50_IR_INTERP_OFFSET) {
       emitGPR  (32);
-      addInterp(insn->ipa, 0xff, interpApply);
+      addInterp(insn->ipa, 0xff, gv100_interpApply);
    } else {
       emitGPR  (32, insn->src(1));
-      addInterp(insn->ipa, insn->getSrc(1)->reg.data.id, interpApply);
+      addInterp(insn->ipa, insn->getSrc(1)->reg.data.id, gv100_interpApply);
    }
 
    assert(!insn->src(0).isIndirect(0));

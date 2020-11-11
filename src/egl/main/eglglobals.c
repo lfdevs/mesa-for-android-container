@@ -37,7 +37,6 @@
 #include "eglglobals.h"
 #include "egldevice.h"
 #include "egldisplay.h"
-#include "egldriver.h"
 
 #include "util/macros.h"
 

@@ -59,7 +59,7 @@ static void flush(struct rvce_encoder *enc)
 #if 0
 static void dump_feedback(struct rvce_encoder *enc, struct rvid_buffer *fb)
 {
-   uint32_t *ptr = enc->ws->buffer_map(fb->res->buf, enc->cs, PIPE_TRANSFER_READ_WRITE);
+   uint32_t *ptr = enc->ws->buffer_map(fb->res->buf, enc->cs, PIPE_MAP_READ_WRITE);
    unsigned i = 0;
    fprintf(stderr, "\n");
    fprintf(stderr, "encStatus:\t\t\t%08x\n", ptr[i++]);
@@ -346,7 +346,7 @@ static void rvce_get_feedback(struct pipe_video_codec *encoder, void *feedback, 
 
    if (size) {
       uint32_t *ptr = enc->ws->buffer_map(fb->res->buf, enc->cs,
-                                          PIPE_TRANSFER_READ_WRITE | RADEON_TRANSFER_TEMPORARY);
+                                          PIPE_MAP_READ_WRITE | RADEON_MAP_TEMPORARY);
 
       if (ptr[1]) {
          *size = ptr[4] - ptr[9];

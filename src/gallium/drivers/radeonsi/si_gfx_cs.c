@@ -30,7 +30,7 @@
 #include "util/u_upload_mgr.h"
 
 /* initialize */
-void si_need_gfx_cs_space(struct si_context *ctx)
+void si_need_gfx_cs_space(struct si_context *ctx, unsigned num_draws)
 {
    struct radeon_cmdbuf *cs = ctx->gfx_cs;
 
@@ -54,7 +54,7 @@ void si_need_gfx_cs_space(struct si_context *ctx)
    ctx->gtt = 0;
    ctx->vram = 0;
 
-   unsigned need_dwords = si_get_minimum_num_gfx_cs_dwords(ctx);
+   unsigned need_dwords = si_get_minimum_num_gfx_cs_dwords(ctx, num_draws);
    if (!ctx->ws->cs_check_space(cs, need_dwords, false))
       si_flush_gfx_cs(ctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
 }
@@ -97,12 +97,19 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
    } else if (ctx->chip_class == GFX6) {
       /* The kernel flushes L2 before shaders are finished. */
       wait_flags |= wait_ps_cs;
-   } else if (!(flags & RADEON_FLUSH_START_NEXT_GFX_IB_NOW)) {
+   } else if (!(flags & RADEON_FLUSH_START_NEXT_GFX_IB_NOW) ||
+              ((flags & RADEON_FLUSH_TOGGLE_SECURE_SUBMISSION) &&
+                !ws->cs_is_secure(cs))) {
+      /* TODO: this workaround fixes subtitles rendering with mpv -vo=vaapi and
+       * tmz but shouldn't be necessary.
+       */
       wait_flags |= wait_ps_cs;
    }
 
    /* Drop this flush if it's a no-op. */
-   if (!radeon_emitted(cs, ctx->initial_gfx_cs_size) && (!wait_flags || !ctx->gfx_last_ib_is_busy))
+   if (!radeon_emitted(cs, ctx->initial_gfx_cs_size) &&
+       (!wait_flags || !ctx->gfx_last_ib_is_busy) &&
+       !(flags & RADEON_FLUSH_TOGGLE_SECURE_SUBMISSION))
       return;
 
    if (ctx->b.get_device_reset_status(&ctx->b) != PIPE_NO_RESET)
@@ -220,6 +227,9 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
       }
    }
 
+   if (ctx->is_noop)
+      flags |= RADEON_FLUSH_NOOP;
+
    /* Flush the CS. */
    ws->cs_flush(cs, flags, &ctx->last_gfx_fence);
    if (fence)
@@ -306,8 +316,8 @@ void si_allocate_gds(struct si_context *sctx)
    /* 4 streamout GDS counters.
     * We need 256B (64 dw) of GDS, otherwise streamout hangs.
     */
-   sctx->gds = ws->buffer_create(ws, 256, 4, RADEON_DOMAIN_GDS, 0);
-   sctx->gds_oa = ws->buffer_create(ws, 4, 1, RADEON_DOMAIN_OA, 0);
+   sctx->gds = ws->buffer_create(ws, 256, 4, RADEON_DOMAIN_GDS, RADEON_FLAG_DRIVER_INTERNAL);
+   sctx->gds_oa = ws->buffer_create(ws, 4, 1, RADEON_DOMAIN_OA, RADEON_FLAG_DRIVER_INTERNAL);
 
    assert(sctx->gds && sctx->gds_oa);
    si_add_gds_to_buffer_list(sctx);
@@ -385,6 +395,17 @@ void si_set_tracked_regs_to_clear_state(struct si_context *ctx)
 
 void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
 {
+   bool is_secure = false;
+
+   if (unlikely(radeon_uses_secure_bos(ctx->ws))) {
+      /* Disable features that don't work with TMZ:
+       *   - primitive discard
+       */
+      ctx->prim_discard_vertex_count_threshold = UINT_MAX;
+
+      is_secure = ctx->ws->cs_is_secure(ctx->gfx_cs);
+   }
+
    if (ctx->is_debug)
       si_begin_gfx_cs_debug(ctx);
 
@@ -424,7 +445,8 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
    }
 
    if (ctx->tess_rings) {
-      radeon_add_to_buffer_list(ctx, ctx->gfx_cs, si_resource(ctx->tess_rings),
+      radeon_add_to_buffer_list(ctx, ctx->gfx_cs,
+                                unlikely(is_secure) ? si_resource(ctx->tess_rings_tmz) : si_resource(ctx->tess_rings),
                                 RADEON_USAGE_READWRITE, RADEON_PRIO_SHADER_RINGS);
    }
 
@@ -436,6 +458,9 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
    /* The CS initialization should be emitted before everything else. */
    if (ctx->cs_preamble_state)
       si_pm4_emit(ctx, ctx->cs_preamble_state);
+   if (ctx->cs_preamble_tess_rings)
+      si_pm4_emit(ctx, unlikely(is_secure) ? ctx->cs_preamble_tess_rings_tmz :
+         ctx->cs_preamble_tess_rings);
    if (ctx->cs_preamble_gs_rings)
       si_pm4_emit(ctx, ctx->cs_preamble_gs_rings);
 

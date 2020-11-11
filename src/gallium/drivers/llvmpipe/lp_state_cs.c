@@ -438,6 +438,7 @@ llvmpipe_create_compute_state(struct pipe_context *pipe,
    shader->no = cs_no++;
 
    shader->base.type = templ->ir_type;
+   shader->req_local_mem = templ->req_local_mem;
    if (templ->ir_type == PIPE_SHADER_IR_NIR_SERIALIZED) {
       struct blob_reader reader;
       const struct pipe_binary_program_header *hdr = templ->prog;
@@ -447,6 +448,7 @@ llvmpipe_create_compute_state(struct pipe_context *pipe,
       shader->base.type = PIPE_SHADER_IR_NIR;
 
       pipe->screen->finalize_nir(pipe->screen, shader->base.ir.nir, false);
+      shader->req_local_mem += ((struct nir_shader *)shader->base.ir.nir)->info.cs.shared_size;
    } else if (templ->ir_type == PIPE_SHADER_IR_NIR)
       shader->base.ir.nir = (struct nir_shader *)templ->prog;
 
@@ -460,7 +462,6 @@ llvmpipe_create_compute_state(struct pipe_context *pipe,
       nir_tgsi_scan_shader(shader->base.ir.nir, &shader->info.base, false);
    }
 
-   shader->req_local_mem = templ->req_local_mem;
    make_empty_list(&shader->variants);
 
    nr_samplers = shader->info.base.file_max[TGSI_FILE_SAMPLER] + 1;
@@ -993,7 +994,7 @@ lp_csctx_set_sampler_views(struct lp_cs_context *csctx,
             struct llvmpipe_screen *screen = llvmpipe_screen(res->screen);
             struct sw_winsys *winsys = screen->winsys;
             jit_tex->base = winsys->displaytarget_map(winsys, lp_tex->dt,
-                                                         PIPE_TRANSFER_READ);
+                                                         PIPE_MAP_READ);
             jit_tex->row_stride[0] = lp_tex->row_stride[0];
             jit_tex->img_stride[0] = lp_tex->img_stride[0];
             jit_tex->mip_offsets[0] = 0;
@@ -1300,7 +1301,7 @@ fill_grid_size(struct pipe_context *pipe,
    params = pipe_buffer_map_range(pipe, info->indirect,
                                   info->indirect_offset,
                                   3 * sizeof(uint32_t),
-                                  PIPE_TRANSFER_READ,
+                                  PIPE_MAP_READ,
                                   &transfer);
 
    if (!transfer)

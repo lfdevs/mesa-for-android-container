@@ -747,7 +747,7 @@ draw_install_aaline_stage(struct draw_context *draw, struct pipe_context *pipe)
     */
    aaline = draw_aaline_stage(draw);
    if (!aaline)
-      goto fail;
+      return FALSE;
 
    /* save original driver functions */
    aaline->driver_create_fs_state = pipe->create_fs_state;
@@ -764,10 +764,4 @@ draw_install_aaline_stage(struct draw_context *draw, struct pipe_context *pipe)
    draw->pipeline.aaline = &aaline->stage;
 
    return TRUE;
-
-fail:
-   if (aaline)
-      aaline->stage.destroy(&aaline->stage);
-
-   return FALSE;
 }

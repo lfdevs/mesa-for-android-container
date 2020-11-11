@@ -302,8 +302,8 @@ svga_clear_texture(struct pipe_context *pipe,
          stencil = 0;
       }
       else {
-         desc->unpack_z_float(&depth, 0, data, 0, 1, 1);
-         desc->unpack_s_8uint(&stencil, 0, data, 0, 1, 1);
+         util_format_unpack_z_float(surface->format, &depth, data, 1);
+         util_format_unpack_s_8uint(surface->format, &stencil, data, 1);
       }
 
       if (util_format_has_depth(desc)) {

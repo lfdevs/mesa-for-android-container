@@ -352,7 +352,7 @@ v3d_write_uniforms(struct v3d_context *v3d, struct v3d_job *job,
                         break;
                 }
 
-                case QUNIFORM_GET_BUFFER_SIZE:
+                case QUNIFORM_GET_SSBO_SIZE:
                         cl_aligned_u32(&uniforms,
                                        v3d->ssbo[stage].sb[data].buffer_size);
                         break;
@@ -457,7 +457,7 @@ v3d_set_shader_uniform_dirty_flags(struct v3d_compiled_shader *shader)
                         break;
 
                 case QUNIFORM_SSBO_OFFSET:
-                case QUNIFORM_GET_BUFFER_SIZE:
+                case QUNIFORM_GET_SSBO_SIZE:
                         dirty |= VC5_DIRTY_SSBO;
                         break;
 

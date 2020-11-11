@@ -24,12 +24,13 @@
 #include "draw/draw_context.h"
 
 #include "util/u_framebuffer.h"
-#include "util/u_half.h"
+#include "util/half_float.h"
 #include "util/u_helpers.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/u_pack_color.h"
 #include "util/u_transfer.h"
+#include "util/u_blend.h"
 
 #include "tgsi/tgsi_parse.h"
 
@@ -284,15 +285,8 @@ static unsigned blend_read_enable(unsigned eqRGB, unsigned eqA,
         eqRGB == PIPE_BLEND_MAX || eqA == PIPE_BLEND_MAX ||
         dstRGB != PIPE_BLENDFACTOR_ZERO ||
         dstA != PIPE_BLENDFACTOR_ZERO ||
-        srcRGB == PIPE_BLENDFACTOR_DST_COLOR ||
-        srcRGB == PIPE_BLENDFACTOR_DST_ALPHA ||
-        srcRGB == PIPE_BLENDFACTOR_INV_DST_COLOR ||
-        srcRGB == PIPE_BLENDFACTOR_INV_DST_ALPHA ||
-        srcA == PIPE_BLENDFACTOR_DST_COLOR ||
-        srcA == PIPE_BLENDFACTOR_DST_ALPHA ||
-        srcA == PIPE_BLENDFACTOR_INV_DST_COLOR ||
-        srcA == PIPE_BLENDFACTOR_INV_DST_ALPHA ||
-        srcRGB == PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE) {
+        util_blend_factor_uses_dest(srcRGB, false) ||
+        util_blend_factor_uses_dest(srcA, true)) {
         /* Enable reading from the colorbuffer. */
         blend_control |= R300_READ_ENABLE;
 
@@ -626,10 +620,10 @@ static void r300_set_blend_color(struct pipe_context* pipe,
         switch (cb ? cb->format : 0) {
         case PIPE_FORMAT_R16G16B16A16_FLOAT:
         case PIPE_FORMAT_R16G16B16X16_FLOAT:
-            OUT_CB(util_float_to_half(c.color[2]) |
-                   (util_float_to_half(c.color[3]) << 16));
-            OUT_CB(util_float_to_half(c.color[0]) |
-                   (util_float_to_half(c.color[1]) << 16));
+            OUT_CB(_mesa_float_to_half(c.color[2]) |
+                   (_mesa_float_to_half(c.color[3]) << 16));
+            OUT_CB(_mesa_float_to_half(c.color[0]) |
+                   (_mesa_float_to_half(c.color[1]) << 16));
             break;
 
         default:
@@ -759,7 +753,7 @@ static void* r300_create_dsa_state(struct pipe_context* pipe,
             R300_FG_ALPHA_FUNC_ENABLE;
 
         dsa->alpha_function |= float_to_ubyte(state->alpha.ref_value);
-        alpha_value_fp16 = util_float_to_half(state->alpha.ref_value);
+        alpha_value_fp16 = _mesa_float_to_half(state->alpha.ref_value);
     }
 
     BEGIN_CB(&dsa->cb_begin, 8);

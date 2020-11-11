@@ -58,7 +58,7 @@
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_util.h"
 #include "tgsi_exec.h"
-#include "util/u_half.h"
+#include "util/half_float.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
 #include "util/rounding.h"
@@ -376,6 +376,16 @@ micro_dfrac(union tgsi_double_channel *dst,
    dst->d[1] = src->d[1] - floor(src->d[1]);
    dst->d[2] = src->d[2] - floor(src->d[2]);
    dst->d[3] = src->d[3] - floor(src->d[3]);
+}
+
+static void
+micro_dflr(union tgsi_double_channel *dst,
+           const union tgsi_double_channel *src)
+{
+   dst->d[0] = floor(src->d[0]);
+   dst->d[1] = floor(src->d[1]);
+   dst->d[2] = floor(src->d[2]);
+   dst->d[3] = floor(src->d[3]);
 }
 
 static void
@@ -3315,8 +3325,8 @@ exec_pk2h(struct tgsi_exec_machine *mach,
    fetch_source(mach, &arg[0], &inst->Src[0], TGSI_CHAN_X, TGSI_EXEC_DATA_FLOAT);
    fetch_source(mach, &arg[1], &inst->Src[0], TGSI_CHAN_Y, TGSI_EXEC_DATA_FLOAT);
    for (chan = 0; chan < TGSI_QUAD_SIZE; chan++) {
-      dst.u[chan] = util_float_to_half(arg[0].f[chan]) |
-         (util_float_to_half(arg[1].f[chan]) << 16);
+      dst.u[chan] = _mesa_float_to_half(arg[0].f[chan]) |
+         (_mesa_float_to_half(arg[1].f[chan]) << 16);
    }
    for (chan = 0; chan < TGSI_NUM_CHANNELS; chan++) {
       if (inst->Dst[0].Register.WriteMask & (1 << chan)) {
@@ -3334,8 +3344,8 @@ exec_up2h(struct tgsi_exec_machine *mach,
 
    fetch_source(mach, &arg, &inst->Src[0], TGSI_CHAN_X, TGSI_EXEC_DATA_UINT);
    for (chan = 0; chan < TGSI_QUAD_SIZE; chan++) {
-      dst[0].f[chan] = util_half_to_float(arg.u[chan] & 0xffff);
-      dst[1].f[chan] = util_half_to_float(arg.u[chan] >> 16);
+      dst[0].f[chan] = _mesa_half_to_float(arg.u[chan] & 0xffff);
+      dst[1].f[chan] = _mesa_half_to_float(arg.u[chan] >> 16);
    }
    for (chan = 0; chan < TGSI_NUM_CHANNELS; chan++) {
       if (inst->Dst[0].Register.WriteMask & (1 << chan)) {
@@ -6102,6 +6112,10 @@ exec_instruction(
 
    case TGSI_OPCODE_DFRAC:
       exec_double_unary(mach, inst, micro_dfrac);
+      break;
+
+   case TGSI_OPCODE_DFLR:
+      exec_double_unary(mach, inst, micro_dflr);
       break;
 
    case TGSI_OPCODE_DLDEXP:

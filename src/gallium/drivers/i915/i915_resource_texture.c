@@ -744,8 +744,8 @@ i915_texture_transfer_map(struct pipe_context *pipe,
     * because we need that for u_blitter */
    if (i915->blitter &&
        util_blitter_is_copy_supported(i915->blitter, resource, resource) &&
-       (usage & PIPE_TRANSFER_WRITE) &&
-       !(usage & (PIPE_TRANSFER_READ | PIPE_TRANSFER_DONTBLOCK | PIPE_TRANSFER_UNSYNCHRONIZED)))
+       (usage & PIPE_MAP_WRITE) &&
+       !(usage & (PIPE_MAP_READ | PIPE_MAP_DONTBLOCK | PIPE_MAP_UNSYNCHRONIZED)))
       use_staging_texture = TRUE;
 
    use_staging_texture = FALSE;
@@ -773,7 +773,7 @@ i915_texture_transfer_map(struct pipe_context *pipe,
    offset = i915_texture_offset(tex, transfer->b.level, box->z);
 
    map = iws->buffer_map(iws, tex->buffer,
-                         (transfer->b.usage & PIPE_TRANSFER_WRITE) ? TRUE : FALSE);
+                         (transfer->b.usage & PIPE_MAP_WRITE) ? TRUE : FALSE);
    if (!map) {
       pipe_resource_reference(&transfer->staging_texture, NULL);
       FREE(transfer);
@@ -802,7 +802,7 @@ i915_texture_transfer_unmap(struct pipe_context *pipe,
    iws->buffer_unmap(iws, tex->buffer);
 
    if ((itransfer->staging_texture) &&
-       (transfer->usage & PIPE_TRANSFER_WRITE)) {
+       (transfer->usage & PIPE_MAP_WRITE)) {
       struct pipe_box sbox;
 
       u_box_origin_2d(itransfer->b.box.width, itransfer->b.box.height, &sbox);

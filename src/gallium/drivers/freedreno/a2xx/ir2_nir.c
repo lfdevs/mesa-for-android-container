@@ -35,7 +35,9 @@ static const nir_shader_compiler_options options = {
 	.lower_fmod = true,
 	.lower_fdiv = true,
 	.lower_fceil = true,
-	.fuse_ffma = true,
+	.fuse_ffma16 = true,
+	.fuse_ffma32 = true,
+	.fuse_ffma64 = true,
 	/* .fdot_replicates = true, it is replicated, but it makes things worse */
 	.lower_all_io_to_temps = true,
 	.vertex_id_zero_based = true, /* its not implemented anyway */
@@ -113,7 +115,7 @@ ir2_optimize_nir(nir_shader *s, bool lower)
 
 	OPT_V(s, nir_lower_regs_to_ssa);
 	OPT_V(s, nir_lower_vars_to_ssa);
-	OPT_V(s, nir_lower_indirect_derefs, nir_var_shader_in | nir_var_shader_out);
+	OPT_V(s, nir_lower_indirect_derefs, nir_var_shader_in | nir_var_shader_out, UINT32_MAX);
 
 	if (lower) {
 		OPT_V(s, ir3_nir_apply_trig_workarounds);

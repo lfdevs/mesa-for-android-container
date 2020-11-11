@@ -28,6 +28,9 @@
 #include "pipe/p_state.h"
 #include "util/bitscan.h"
 #include "util/u_debug.h"
+#include "spirv/invocation.hpp"
+#include "nir/invocation.hpp"
+#include <fstream>
 
 using namespace clover;
 
@@ -45,14 +48,18 @@ namespace {
 }
 
 device::device(clover::platform &platform, pipe_loader_device *ldev) :
-   platform(platform), ldev(ldev) {
+   platform(platform), clc_cache(NULL), ldev(ldev) {
    pipe = pipe_loader_create_screen(ldev);
    if (pipe && pipe->get_param(pipe, PIPE_CAP_COMPUTE)) {
       if (supports_ir(PIPE_SHADER_IR_NATIVE))
          return;
 #ifdef HAVE_CLOVER_SPIRV
-      if (supports_ir(PIPE_SHADER_IR_NIR_SERIALIZED))
+      if (supports_ir(PIPE_SHADER_IR_NIR_SERIALIZED)) {
+         nir::check_for_libclc(*this);
+         clc_cache = nir::create_clc_disk_cache();
+         clc_nir = lazy<std::shared_ptr<nir_shader>>([&] () { std::string log; return std::shared_ptr<nir_shader>(nir::load_libclc_nir(*this, log), ralloc_free); });
          return;
+      }
 #endif
    }
    if (pipe)
@@ -61,6 +68,8 @@ device::device(clover::platform &platform, pipe_loader_device *ldev) :
 }
 
 device::~device() {
+   if (clc_cache)
+      disk_cache_destroy(clc_cache);
    if (pipe)
       pipe->destroy(pipe);
    if (ldev)
@@ -100,7 +109,7 @@ device::vendor_id() const {
 
 size_t
 device::max_images_read() const {
-   return PIPE_MAX_SHADER_IMAGES;
+   return PIPE_MAX_SHADER_SAMPLER_VIEWS;
 }
 
 size_t

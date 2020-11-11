@@ -132,6 +132,12 @@ static void tgsi_fetch_gs_input(struct draw_geometry_shader *shader,
    unsigned input_vertex_stride = shader->input_vertex_stride;
    const float (*input_ptr)[4];
 
+   int primid_sv = machine->SysSemanticToIndex[TGSI_SEMANTIC_PRIMID];
+   if (primid_sv != -1) {
+      for (unsigned j = 0; j < TGSI_QUAD_SIZE; j++)
+         machine->SystemValue[primid_sv].xyzw[0].i[j] = shader->in_prim_idx;
+   }
+
    input_ptr = shader->input;
 
    for (i = 0; i < num_vertices; ++i) {

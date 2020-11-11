@@ -120,7 +120,7 @@ nv30_transfer_rect_fragprog(struct nv30_context *nv30)
       if (nv30->blit_fp) {
          struct pipe_transfer *transfer;
          u32 *map = pipe_buffer_map(pipe, nv30->blit_fp,
-                                    PIPE_TRANSFER_WRITE, &transfer);
+                                    PIPE_MAP_WRITE, &transfer);
          if (map) {
             map[0] = 0x17009e00; /* texr r0, i[tex0], texture[0]; end; */
             map[1] = 0x1c9dc801;

@@ -25,7 +25,6 @@
 #define __PAN_IR_H
 
 #include <stdint.h>
-#include "panfrost-job.h"
 #include "compiler/nir/nir.h"
 #include "util/u_dynarray.h"
 #include "util/hash_table.h"
@@ -82,12 +81,18 @@ panfrost_nir_assign_sysvals(struct panfrost_sysvals *ctx, void *memctx, nir_shad
 int
 panfrost_sysval_for_instr(nir_instr *instr, nir_dest *dest);
 
+bool
+nir_undef_to_zero(nir_shader *shader);
+
 typedef struct {
         int work_register_count;
         int uniform_cutoff;
 
         /* For Bifrost - output type for each RT */
-        nir_alu_type blend_types[BIFROST_MAX_RENDER_TARGET_COUNT];
+        nir_alu_type blend_types[8];
+
+        /* For Bifrost - return address for blend instructions */
+        uint32_t blend_ret_offsets[8];
 
         /* Prepended before uniforms, mapping to SYSVAL_ names for the
          * sysval */
@@ -99,21 +104,24 @@ typedef struct {
 
         struct util_dynarray compiled;
 
-        /* For a blend shader using a constant color -- patch point. If
-         * negative, there's no constant. */
-
-        int blend_patch_offset;
-
         /* The number of bytes to allocate per-thread for Thread Local Storage
          * (register spilling), or zero if no spilling is used */
         unsigned tls_size;
 
-        /* IN: For a fragment shader with a lowered alpha test, the ref value */
-        float alpha_ref;
-
-        /* IN: Render target formats for output load/store lowering */
-        enum pipe_format rt_formats[8];
 } panfrost_program;
+
+struct panfrost_compile_inputs {
+        unsigned gpu_id;
+        bool is_blend;
+        struct {
+                unsigned rt;
+                float constants[4];
+                uint64_t bifrost_blend_desc;
+        } blend;
+        bool shaderdb;
+
+        enum pipe_format rt_formats[8];
+};
 
 typedef struct pan_block {
         /* Link to next block. Must be first for mir_get_block */
@@ -128,6 +136,7 @@ typedef struct pan_block {
         /* Control flow graph */
         struct pan_block *successors[2];
         struct set *predecessors;
+        bool unconditional_jumps;
 
         /* In liveness analysis, these are live masks (per-component) for
          * indices for the block. Scalar compilers have the luxury of using
@@ -223,5 +232,14 @@ void pan_print_alu_type(nir_alu_type t, FILE *fp);
 /* Until it can be upstreamed.. */
 bool pan_has_source_mod(nir_alu_src *src, nir_op op);
 bool pan_has_dest_mod(nir_dest **dest, nir_op op);
+
+/* NIR passes to do some backend-specific lowering */
+
+#define PAN_WRITEOUT_C 1
+#define PAN_WRITEOUT_Z 2
+#define PAN_WRITEOUT_S 4
+
+bool pan_nir_reorder_writeout(nir_shader *nir);
+bool pan_nir_lower_zs_store(nir_shader *nir);
 
 #endif

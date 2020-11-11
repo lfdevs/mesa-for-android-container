@@ -87,7 +87,8 @@ void si_cp_release_mem(struct si_context *ctx, struct radeon_cmdbuf *cs, unsigne
       if (ctx->chip_class == GFX9 && !compute_ib && query_type != PIPE_QUERY_OCCLUSION_COUNTER &&
           query_type != PIPE_QUERY_OCCLUSION_PREDICATE &&
           query_type != PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE) {
-         struct si_resource *scratch = ctx->eop_bug_scratch;
+         struct si_resource *scratch = unlikely(ctx->ws->cs_is_secure(ctx->gfx_cs)) ?
+            ctx->eop_bug_scratch_tmz : ctx->eop_bug_scratch;
 
          assert(16 * ctx->screen->info.num_render_backends <= scratch->b.b.width0);
          radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
@@ -222,7 +223,7 @@ struct pipe_fence_handle *si_create_fence(struct pipe_context *ctx,
 static bool si_fine_fence_signaled(struct radeon_winsys *rws, const struct si_fine_fence *fine)
 {
    char *map =
-      rws->buffer_map(fine->buf->buf, NULL, PIPE_TRANSFER_READ | PIPE_TRANSFER_UNSYNCHRONIZED);
+      rws->buffer_map(fine->buf->buf, NULL, PIPE_MAP_READ | PIPE_MAP_UNSYNCHRONIZED);
    if (!map)
       return false;
 

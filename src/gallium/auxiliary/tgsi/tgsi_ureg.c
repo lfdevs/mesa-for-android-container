@@ -31,6 +31,7 @@
 #include "pipe/p_state.h"
 #include "tgsi/tgsi_ureg.h"
 #include "tgsi/tgsi_build.h"
+#include "tgsi/tgsi_from_mesa.h"
 #include "tgsi/tgsi_info.h"
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_sanity.h"
@@ -39,6 +40,8 @@
 #include "util/u_memory.h"
 #include "util/u_math.h"
 #include "util/u_bitmask.h"
+#include "GL/gl.h"
+#include "compiler/shader_info.h"
 
 union tgsi_any_token {
    struct tgsi_header header;
@@ -2250,6 +2253,150 @@ ureg_get_nr_outputs( const struct ureg_program *ureg )
    if (!ureg)
       return 0;
    return ureg->nr_outputs;
+}
+
+static void
+ureg_setup_clipdist_info(struct ureg_program *ureg,
+                         const struct shader_info *info)
+{
+   if (info->clip_distance_array_size)
+      ureg_property(ureg, TGSI_PROPERTY_NUM_CLIPDIST_ENABLED,
+                    info->clip_distance_array_size);
+   if (info->cull_distance_array_size)
+      ureg_property(ureg, TGSI_PROPERTY_NUM_CULLDIST_ENABLED,
+                    info->cull_distance_array_size);
+}
+
+static void
+ureg_setup_tess_ctrl_shader(struct ureg_program *ureg,
+                            const struct shader_info *info)
+{
+   ureg_property(ureg, TGSI_PROPERTY_TCS_VERTICES_OUT,
+                 info->tess.tcs_vertices_out);
+}
+
+static void
+ureg_setup_tess_eval_shader(struct ureg_program *ureg,
+                            const struct shader_info *info)
+{
+   if (info->tess.primitive_mode == GL_ISOLINES)
+      ureg_property(ureg, TGSI_PROPERTY_TES_PRIM_MODE, GL_LINES);
+   else
+      ureg_property(ureg, TGSI_PROPERTY_TES_PRIM_MODE,
+                    info->tess.primitive_mode);
+
+   STATIC_ASSERT((TESS_SPACING_EQUAL + 1) % 3 == PIPE_TESS_SPACING_EQUAL);
+   STATIC_ASSERT((TESS_SPACING_FRACTIONAL_ODD + 1) % 3 ==
+                 PIPE_TESS_SPACING_FRACTIONAL_ODD);
+   STATIC_ASSERT((TESS_SPACING_FRACTIONAL_EVEN + 1) % 3 ==
+                 PIPE_TESS_SPACING_FRACTIONAL_EVEN);
+
+   ureg_property(ureg, TGSI_PROPERTY_TES_SPACING,
+                 (info->tess.spacing + 1) % 3);
+
+   ureg_property(ureg, TGSI_PROPERTY_TES_VERTEX_ORDER_CW,
+                 !info->tess.ccw);
+   ureg_property(ureg, TGSI_PROPERTY_TES_POINT_MODE,
+                 info->tess.point_mode);
+}
+
+static void
+ureg_setup_geometry_shader(struct ureg_program *ureg,
+                           const struct shader_info *info)
+{
+   ureg_property(ureg, TGSI_PROPERTY_GS_INPUT_PRIM,
+                 info->gs.input_primitive);
+   ureg_property(ureg, TGSI_PROPERTY_GS_OUTPUT_PRIM,
+                 info->gs.output_primitive);
+   ureg_property(ureg, TGSI_PROPERTY_GS_MAX_OUTPUT_VERTICES,
+                 info->gs.vertices_out);
+   ureg_property(ureg, TGSI_PROPERTY_GS_INVOCATIONS,
+                 info->gs.invocations);
+}
+
+static void
+ureg_setup_fragment_shader(struct ureg_program *ureg,
+                           const struct shader_info *info)
+{
+   if (info->fs.early_fragment_tests || info->fs.post_depth_coverage) {
+      ureg_property(ureg, TGSI_PROPERTY_FS_EARLY_DEPTH_STENCIL, 1);
+
+      if (info->fs.post_depth_coverage)
+         ureg_property(ureg, TGSI_PROPERTY_FS_POST_DEPTH_COVERAGE, 1);
+   }
+
+   if (info->fs.depth_layout != FRAG_DEPTH_LAYOUT_NONE) {
+      switch (info->fs.depth_layout) {
+      case FRAG_DEPTH_LAYOUT_ANY:
+         ureg_property(ureg, TGSI_PROPERTY_FS_DEPTH_LAYOUT,
+                       TGSI_FS_DEPTH_LAYOUT_ANY);
+         break;
+      case FRAG_DEPTH_LAYOUT_GREATER:
+         ureg_property(ureg, TGSI_PROPERTY_FS_DEPTH_LAYOUT,
+                       TGSI_FS_DEPTH_LAYOUT_GREATER);
+         break;
+      case FRAG_DEPTH_LAYOUT_LESS:
+         ureg_property(ureg, TGSI_PROPERTY_FS_DEPTH_LAYOUT,
+                       TGSI_FS_DEPTH_LAYOUT_LESS);
+         break;
+      case FRAG_DEPTH_LAYOUT_UNCHANGED:
+         ureg_property(ureg, TGSI_PROPERTY_FS_DEPTH_LAYOUT,
+                       TGSI_FS_DEPTH_LAYOUT_UNCHANGED);
+         break;
+      default:
+         assert(0);
+      }
+   }
+}
+
+static void
+ureg_setup_compute_shader(struct ureg_program *ureg,
+                          const struct shader_info *info)
+{
+   ureg_property(ureg, TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH,
+                 info->cs.local_size[0]);
+   ureg_property(ureg, TGSI_PROPERTY_CS_FIXED_BLOCK_HEIGHT,
+                 info->cs.local_size[1]);
+   ureg_property(ureg, TGSI_PROPERTY_CS_FIXED_BLOCK_DEPTH,
+                 info->cs.local_size[2]);
+
+   if (info->cs.shared_size)
+      ureg_DECL_memory(ureg, TGSI_MEMORY_TYPE_SHARED);
+}
+
+void
+ureg_setup_shader_info(struct ureg_program *ureg,
+                       const struct shader_info *info)
+{
+   if (info->layer_viewport_relative)
+      ureg_property(ureg, TGSI_PROPERTY_LAYER_VIEWPORT_RELATIVE, 1);
+
+   switch (info->stage) {
+   case MESA_SHADER_VERTEX:
+      ureg_setup_clipdist_info(ureg, info);
+      ureg_set_next_shader_processor(ureg, pipe_shader_type_from_mesa(info->next_stage));
+      break;
+   case MESA_SHADER_TESS_CTRL:
+      ureg_setup_tess_ctrl_shader(ureg, info);
+      break;
+   case MESA_SHADER_TESS_EVAL:
+      ureg_setup_tess_eval_shader(ureg, info);
+      ureg_setup_clipdist_info(ureg, info);
+      ureg_set_next_shader_processor(ureg, pipe_shader_type_from_mesa(info->next_stage));
+      break;
+   case MESA_SHADER_GEOMETRY:
+      ureg_setup_geometry_shader(ureg, info);
+      ureg_setup_clipdist_info(ureg, info);
+      break;
+   case MESA_SHADER_FRAGMENT:
+      ureg_setup_fragment_shader(ureg, info);
+      break;
+   case MESA_SHADER_COMPUTE:
+      ureg_setup_compute_shader(ureg, info);
+      break;
+   default:
+      break;
+   }
 }
 
 

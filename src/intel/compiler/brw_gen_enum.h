@@ -53,7 +53,6 @@ gen_from_devinfo(const struct gen_device_info *devinfo)
    case 7: return devinfo->is_haswell ? GEN75 : GEN7;
    case 8: return GEN8;
    case 9: return GEN9;
-   case 10: return GEN10;
    case 11: return GEN11;
    case 12: return GEN12;
    default:

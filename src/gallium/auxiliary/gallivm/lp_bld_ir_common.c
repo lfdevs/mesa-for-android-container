@@ -216,6 +216,8 @@ void lp_exec_mask_store(struct lp_exec_mask *mask,
       LLVMValueRef res, dst;
 
       dst = LLVMBuildLoad(builder, dst_ptr, "");
+      if (bld_store->type.width < 32)
+         exec_mask = LLVMBuildTrunc(builder, exec_mask, bld_store->vec_type, "");
       res = lp_build_select(bld_store, exec_mask, val, dst);
       LLVMBuildStore(builder, res, dst_ptr);
    } else

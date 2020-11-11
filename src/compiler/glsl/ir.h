@@ -2536,9 +2536,6 @@ extern void _mesa_print_ir(FILE *f, struct exec_list *instructions,
                            struct _mesa_glsl_parse_state *state);
 
 extern void
-ir_print_type(FILE *f, const struct glsl_type *t);
-
-extern void
 fprint_ir(FILE *f, const void *instruction);
 
 extern const struct gl_builtin_uniform_desc *

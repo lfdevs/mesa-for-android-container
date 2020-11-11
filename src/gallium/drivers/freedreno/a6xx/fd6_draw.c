@@ -208,7 +208,7 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 
 	/* bail if compile failed: */
 	if (!fd6_ctx->prog)
-		return NULL;
+		return false;
 
 	fixup_draw_state(ctx, &emit);
 
@@ -343,14 +343,9 @@ static void
 fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 {
 	struct fd_ringbuffer *ring;
-	struct fd6_context *fd6_ctx = fd6_context(batch->ctx);
+	struct fd_screen *screen = batch->ctx->screen;
 
-	if (batch->lrz_clear) {
-		fd_ringbuffer_del(batch->lrz_clear);
-	}
-
-	batch->lrz_clear = fd_submit_new_ringbuffer(batch->submit, 0x1000, 0);
-	ring = batch->lrz_clear;
+	ring = fd_batch_get_prologue(batch);
 
 	emit_marker6(ring, 7);
 	OUT_PKT7(ring, CP_SET_MARKER, 1);
@@ -359,8 +354,7 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 
 	OUT_WFI5(ring);
 
-	OUT_PKT4(ring, REG_A6XX_RB_CCU_CNTL, 1);
-	OUT_RING(ring, fd6_ctx->magic.RB_CCU_CNTL_bypass);
+	OUT_REG(ring, A6XX_RB_CCU_CNTL(.offset = screen->info.a6xx.ccu_offset_bypass));
 
 	OUT_REG(ring, A6XX_HLSQ_INVALIDATE_CMD(
 			.vs_state = true,
@@ -448,7 +442,7 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 	OUT_WFI5(ring);
 
 	OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
-	OUT_RING(ring, fd6_ctx->magic.RB_UNKNOWN_8E04_blit);
+	OUT_RING(ring, screen->info.a6xx.magic.RB_UNKNOWN_8E04_blit);
 
 	OUT_PKT7(ring, CP_BLIT, 1);
 	OUT_RING(ring, CP_BLIT_0_OP(BLIT_OP_SCALE));
@@ -484,6 +478,10 @@ fd6_clear(struct fd_context *ctx, unsigned buffers,
 	struct pipe_framebuffer_state *pfb = &ctx->batch->framebuffer;
 	const bool has_depth = pfb->zsbuf;
 	unsigned color_buffers = buffers >> 2;
+
+	/* we need to do multisample clear on 3d pipe, so fallback to u_blitter: */
+	if (pfb->samples > 1)
+		return false;
 
 	/* If we're clearing after draws, fallback to 3D pipe clears.  We could
 	 * use blitter clears in the draw batch but then we'd have to patch up the

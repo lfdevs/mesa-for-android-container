@@ -998,7 +998,7 @@ static void r600_init_color_surface(struct r600_context *rctx,
 			}
 
 			/* Set the contents to 0xCC. */
-			ptr = pipe_buffer_map(&rctx->b.b, &rctx->dummy_cmask->b.b, PIPE_TRANSFER_WRITE, &transfer);
+			ptr = pipe_buffer_map(&rctx->b.b, &rctx->dummy_cmask->b.b, PIPE_MAP_WRITE, &transfer);
 			memset(ptr, 0xCC, cmask.size);
 			pipe_buffer_unmap(&rctx->b.b, transfer);
 		}

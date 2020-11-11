@@ -8007,7 +8007,7 @@ ast_interface_block::hir(exec_list *instructions,
       return NULL;
    }
 
-   unsigned qual_xfb_offset;
+   unsigned qual_xfb_offset = 0;
    if (layout.flags.q.explicit_xfb_offset) {
       if (!process_qualifier_constant(state, &loc, "xfb_offset",
                                       layout.offset, &qual_xfb_offset)) {
@@ -8015,7 +8015,7 @@ ast_interface_block::hir(exec_list *instructions,
       }
    }
 
-   unsigned qual_xfb_stride;
+   unsigned qual_xfb_stride = 0;
    if (layout.flags.q.explicit_xfb_stride) {
       if (!process_qualifier_constant(state, &loc, "xfb_stride",
                                       layout.xfb_stride, &qual_xfb_stride)) {

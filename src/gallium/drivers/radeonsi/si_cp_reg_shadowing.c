@@ -150,7 +150,7 @@ void si_init_cp_reg_shadowing(struct si_context *sctx)
        sctx->screen->debug_flags & DBG(SHADOW_REGS)) {
       sctx->shadowed_regs =
             si_aligned_buffer_create(sctx->b.screen,
-                                     SI_RESOURCE_FLAG_UNMAPPABLE,
+                                     SI_RESOURCE_FLAG_UNMAPPABLE | SI_RESOURCE_FLAG_DRIVER_INTERNAL,
                                      PIPE_USAGE_DEFAULT,
                                      SI_SHADOWED_REG_BUFFER_SIZE,
                                      4096);

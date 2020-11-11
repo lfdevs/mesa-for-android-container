@@ -46,6 +46,7 @@ bit_test_single(struct panfrost_device *dev,
 
         bi_instruction ldubo = {
                 .type = BI_LOAD_UNIFORM,
+                .segment = BI_SEGMENT_UBO,
                 .src = {
                         BIR_INDEX_CONSTANT,
                         BIR_INDEX_ZERO
@@ -64,6 +65,7 @@ bit_test_single(struct panfrost_device *dev,
                 .vector_channels = 3,
                 .dest = BIR_INDEX_REGISTER | 32,
                 .dest_type = nir_type_uint32,
+                .format = nir_type_uint32,
                 .src = {
                         BIR_INDEX_CONSTANT,
                         BIR_INDEX_REGISTER | 61,
@@ -119,12 +121,12 @@ bit_test_single(struct panfrost_device *dev,
 
                 if (i) {
                         clauses[i]->dependencies = 1 << (~i & 1);
-                        clauses[i]->data_register_write_barrier = true;
+                        clauses[i]->staging_barrier = true;
                 }
         }
 
         clauses[0]->bundles[0].add = &ldubo;
-        clauses[0]->clause_type = BIFROST_CLAUSE_UBO;
+        clauses[0]->message_type = BIFROST_MESSAGE_ATTRIBUTE;
 
         if (fma)
                 clauses[1]->bundles[0].fma = ins;
@@ -138,13 +140,14 @@ bit_test_single(struct panfrost_device *dev,
         clauses[2]->bundles[0].add = &ldva;
         clauses[3]->bundles[0].add = &st;
 
-        clauses[2]->clause_type = BIFROST_CLAUSE_UBO;
-        clauses[3]->clause_type = BIFROST_CLAUSE_SSBO_STORE;
+        clauses[2]->message_type = BIFROST_MESSAGE_ATTRIBUTE;
+        clauses[3]->message_type = BIFROST_MESSAGE_STORE;
 
-        panfrost_program prog;
+        panfrost_program prog = { 0 };
+        util_dynarray_init(&prog.compiled, NULL);
         bi_pack(ctx, &prog.compiled);
 
-        bool succ = bit_vertex(dev, prog, input, 16, NULL, 0,
+        bool succ = bit_vertex(dev, &prog, input, 16, NULL, 0,
                         s.r, 16, debug);
 
         if (debug >= BIT_DEBUG_ALL || (!succ && debug >= BIT_DEBUG_FAIL)) {
@@ -292,7 +295,7 @@ static void
 bit_special_helper(struct panfrost_device *dev,
                 unsigned size, uint32_t *input, enum bit_debug debug)
 {
-        bi_instruction ins = bit_ins(BI_SPECIAL, 2, nir_type_float, size);
+        bi_instruction ins = bit_ins(BI_SPECIAL_ADD, 2, nir_type_float, size);
         uint32_t exp_input[4];
 
         for (enum bi_special_op op = BI_SPECIAL_FRCP; op <= BI_SPECIAL_EXP2_LOW; ++op) {
@@ -540,13 +543,19 @@ bit_bitwise_helper(struct panfrost_device *dev, uint32_t *input, unsigned size, 
 
         /* TODO: shifts */
         ins.src[2] = BIR_INDEX_ZERO;
+        ins.src_types[2] = nir_type_uint8;
 
         for (unsigned op = BI_BITWISE_AND; op <= BI_BITWISE_XOR; ++op) {
                 ins.op.bitwise = op;
 
                 for (unsigned mods = 0; mods < 4; ++mods) {
-                        ins.bitwise.src_invert[0] = mods & 1;
-                        ins.bitwise.src_invert[1] = mods & 2;
+                        ins.bitwise.dest_invert = mods & 1;
+                        ins.bitwise.src1_invert = mods & 2;
+
+                        /* Skip out-of-spec combinations */
+                        if (ins.bitwise.src1_invert && op == BI_BITWISE_XOR)
+                                continue;
+
                         bit_test_single(dev, &ins, input, true, debug);
                 }
         }
@@ -557,6 +566,7 @@ bit_imath_helper(struct panfrost_device *dev, uint32_t *input, unsigned size, en
 {
         bi_instruction ins = bit_ins(BI_IMATH, 2, nir_type_uint, size);
         bit_swizzle_identity(&ins, 2, size);
+        ins.src[2] = BIR_INDEX_ZERO; /* carry/borrow for FMA */
 
         for (unsigned op = BI_IMATH_ADD; op <= BI_IMATH_SUB; ++op) {
                 ins.op.imath = op;

@@ -130,6 +130,7 @@ enum vtn_branch_type {
    vtn_branch_type_loop_continue,
    vtn_branch_type_loop_back_edge,
    vtn_branch_type_discard,
+   vtn_branch_type_terminate,
    vtn_branch_type_return,
 };
 
@@ -243,6 +244,9 @@ struct vtn_block {
 
    /** Every block ends in a nop intrinsic so that we can find it again */
    nir_intrinsic_instr *end_nop;
+
+   /** attached nir_block */
+   struct nir_block *block;
 };
 
 struct vtn_function {
@@ -321,7 +325,9 @@ enum vtn_base_type {
    vtn_base_type_image,
    vtn_base_type_sampler,
    vtn_base_type_sampled_image,
+   vtn_base_type_accel_struct,
    vtn_base_type_function,
+   vtn_base_type_event,
 };
 
 struct vtn_type {
@@ -482,9 +488,18 @@ enum vtn_variable_mode {
    vtn_variable_mode_push_constant,
    vtn_variable_mode_workgroup,
    vtn_variable_mode_cross_workgroup,
+   vtn_variable_mode_generic,
+   vtn_variable_mode_constant,
    vtn_variable_mode_input,
    vtn_variable_mode_output,
    vtn_variable_mode_image,
+   vtn_variable_mode_accel_struct,
+   vtn_variable_mode_call_data,
+   vtn_variable_mode_call_data_in,
+   vtn_variable_mode_ray_payload,
+   vtn_variable_mode_ray_payload_in,
+   vtn_variable_mode_hit_attrib,
+   vtn_variable_mode_shader_record,
 };
 
 struct vtn_pointer {
@@ -520,16 +535,6 @@ struct vtn_pointer {
    enum gl_access_qualifier access;
 };
 
-bool vtn_mode_uses_ssa_offset(struct vtn_builder *b,
-                              enum vtn_variable_mode mode);
-
-static inline bool vtn_pointer_uses_ssa_offset(struct vtn_builder *b,
-                                               struct vtn_pointer *ptr)
-{
-   return vtn_mode_uses_ssa_offset(b, ptr->mode);
-}
-
-
 struct vtn_variable {
    enum vtn_variable_mode mode;
 
@@ -549,8 +554,6 @@ struct vtn_variable {
     * don’t have their own explicit location.
     */
    int base_location;
-
-   int shared_location;
 
    /**
     * In some early released versions of GLSLang, it implemented all function
@@ -593,7 +596,7 @@ struct vtn_value {
    struct vtn_decoration *decoration;
    struct vtn_type *type;
    union {
-      char *str;
+      const char *str;
       nir_constant *constant;
       struct vtn_pointer *pointer;
       struct vtn_image_pointer *image;
@@ -643,7 +646,7 @@ struct vtn_builder {
     * automatically by vtn_foreach_instruction.
     */
    size_t spirv_offset;
-   char *file;
+   const char *file;
    int line, col;
 
    /*
@@ -841,6 +844,9 @@ nir_ssa_def *
 vtn_pointer_to_offset(struct vtn_builder *b, struct vtn_pointer *ptr,
                       nir_ssa_def **index_out);
 
+nir_deref_instr *
+vtn_get_call_payload_for_location(struct vtn_builder *b, uint32_t location_id);
+
 struct vtn_ssa_value *
 vtn_local_load(struct vtn_builder *b, nir_deref_instr *src,
                enum gl_access_qualifier access);
@@ -850,10 +856,11 @@ void vtn_local_store(struct vtn_builder *b, struct vtn_ssa_value *src,
                      enum gl_access_qualifier access);
 
 struct vtn_ssa_value *
-vtn_variable_load(struct vtn_builder *b, struct vtn_pointer *src);
+vtn_variable_load(struct vtn_builder *b, struct vtn_pointer *src,
+                  enum gl_access_qualifier access);
 
 void vtn_variable_store(struct vtn_builder *b, struct vtn_ssa_value *src,
-                        struct vtn_pointer *dest);
+                        struct vtn_pointer *dest, enum gl_access_qualifier access);
 
 void vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
                           const uint32_t *w, unsigned count);
@@ -894,6 +901,8 @@ bool vtn_handle_glsl450_instruction(struct vtn_builder *b, SpvOp ext_opcode,
 
 bool vtn_handle_opencl_instruction(struct vtn_builder *b, SpvOp ext_opcode,
                                    const uint32_t *words, unsigned count);
+bool vtn_handle_opencl_core_instruction(struct vtn_builder *b, SpvOp opcode,
+                                        const uint32_t *w, unsigned count);
 
 struct vtn_builder* vtn_create_builder(const uint32_t *words, size_t word_count,
                                        gl_shader_stage stage, const char *entry_point_name,
@@ -912,6 +921,9 @@ enum vtn_variable_mode vtn_storage_class_to_mode(struct vtn_builder *b,
 
 nir_address_format vtn_mode_to_address_format(struct vtn_builder *b,
                                               enum vtn_variable_mode);
+
+nir_rounding_mode vtn_rounding_mode_to_nir(struct vtn_builder *b,
+                                           SpvFPRoundingMode mode);
 
 static inline uint32_t
 vtn_align_u32(uint32_t v, uint32_t a)
@@ -940,7 +952,7 @@ bool vtn_handle_amd_shader_explicit_vertex_parameter_instruction(struct vtn_buil
                                                                  const uint32_t *words,
                                                                  unsigned count);
 
-SpvMemorySemanticsMask vtn_storage_class_to_memory_semantics(SpvStorageClass sc);
+SpvMemorySemanticsMask vtn_mode_to_memory_semantics(enum vtn_variable_mode mode);
 
 void vtn_emit_memory_barrier(struct vtn_builder *b, SpvScope scope,
                              SpvMemorySemanticsMask semantics);

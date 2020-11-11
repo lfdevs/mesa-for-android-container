@@ -103,7 +103,7 @@ void dead_code_eliminate_test::SetUp()
 static void
 dead_code_eliminate(vec4_visitor *v)
 {
-   bool print = false;
+   const bool print = getenv("TEST_DEBUG");
 
    if (print) {
       fprintf(stderr, "instructions before:\n");

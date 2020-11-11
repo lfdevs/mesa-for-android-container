@@ -269,7 +269,7 @@ void
 etna_rs_gen_clear_surface(struct etna_context *ctx, struct etna_surface *surf,
                           uint64_t clear_value)
 {
-   struct etna_screen *screen = ctx->screen;
+   ASSERTED struct etna_screen *screen = ctx->screen;
    struct etna_resource *dst = etna_resource(surf->base.texture);
    uint32_t format;
 

@@ -67,10 +67,6 @@ struct pb_slab_buffer
    
    /** Offset relative to the start of the slab buffer. */
    pb_size start;
-   
-   /** Use when validating, to signal that all mappings are finished */
-   /* TODO: Actually validation does not reach this stage yet */
-   cnd_t event;
 };
 
 
@@ -245,8 +241,6 @@ pb_slab_buffer_unmap(struct pb_buffer *_buf)
    struct pb_slab_buffer *buf = pb_slab_buffer(_buf);
 
    --buf->mapCount;
-   if (buf->mapCount == 0) 
-       cnd_broadcast(&buf->event);
 }
 
 
@@ -351,7 +345,6 @@ pb_slab_create(struct pb_slab_manager *mgr)
       buf->slab = slab;
       buf->start = i* mgr->bufSize;
       buf->mapCount = 0;
-      cnd_init(&buf->event);
       list_addtail(&buf->head, &slab->freeBuffers);
       slab->numFree++;
       buf++;

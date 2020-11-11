@@ -30,8 +30,10 @@
 #include "drm/freedreno_drmif.h"
 #include "drm/freedreno_ringbuffer.h"
 #include "perfcntrs/freedreno_perfcntr.h"
+#include "common/freedreno_dev_info.h"
 
 #include "pipe/p_screen.h"
+#include "util/debug.h"
 #include "util/u_memory.h"
 #include "util/slab.h"
 #include "util/simple_mtx.h"
@@ -70,12 +72,12 @@ struct fd_screen {
 	uint32_t max_freq;
 	uint32_t ram_size;
 	uint32_t max_rts;        /* max # of render targets */
-	uint32_t gmem_alignw, gmem_alignh; /* gmem load/store granularity */
-	uint32_t tile_alignw, tile_alignh; /* alignment for tile sizes */
-	uint32_t num_vsc_pipes;
 	uint32_t priority_mask;
 	bool has_timestamp;
 	bool has_robustness;
+	bool has_syncobj;
+
+	struct freedreno_dev_info info;
 
 	unsigned num_perfcntr_groups;
 	const struct fd_perfcntr_group *perfcntr_groups;

@@ -65,6 +65,9 @@ struct ir3_info {
 	uint16_t sstall;
 
 	uint16_t last_baryf;     /* instruction # of last varying fetch */
+
+	/* Number of instructions of a given category: */
+	uint16_t instrs_per_cat[8];
 };
 
 struct ir3_register {

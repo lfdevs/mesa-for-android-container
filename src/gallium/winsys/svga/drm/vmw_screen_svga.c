@@ -432,7 +432,7 @@ vmw_svga_winsys_shader_create(struct svga_winsys_screen *sws,
    if (!shader->buf)
       goto out_no_buf;
 
-   code = vmw_svga_winsys_buffer_map(sws, shader->buf, PIPE_TRANSFER_WRITE);
+   code = vmw_svga_winsys_buffer_map(sws, shader->buf, PIPE_MAP_WRITE);
    if (!code)
       goto out_no_buf;
 

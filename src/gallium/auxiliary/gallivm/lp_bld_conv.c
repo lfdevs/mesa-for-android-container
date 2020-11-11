@@ -63,7 +63,7 @@
 
 #include "util/u_debug.h"
 #include "util/u_math.h"
-#include "util/u_half.h"
+#include "util/half_float.h"
 #include "util/u_cpu_detect.h"
 
 #include "lp_bld_type.h"
@@ -204,8 +204,8 @@ lp_build_float_to_half(struct gallivm_state *gallivm,
      unsigned i;
 
      LLVMTypeRef func_type = LLVMFunctionType(i16t, &f32t, 1, 0);
-     LLVMValueRef func = lp_build_const_int_pointer(gallivm, func_to_pointer((func_pointer)util_float_to_half));
-     func = LLVMBuildBitCast(builder, func, LLVMPointerType(func_type, 0), "util_float_to_half");
+     LLVMValueRef func = lp_build_const_int_pointer(gallivm, func_to_pointer((func_pointer)_mesa_float_to_half));
+     func = LLVMBuildBitCast(builder, func, LLVMPointerType(func_type, 0), "_mesa_float_to_half");
 
      for (i = 0; i < length; ++i) {
         LLVMValueRef index = LLVMConstInt(i32t, i, 0);

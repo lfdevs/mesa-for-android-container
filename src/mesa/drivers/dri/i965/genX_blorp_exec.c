@@ -95,8 +95,8 @@ blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
 }
 
 static uint64_t
-blorp_get_surface_address(struct blorp_batch *blorp_batch,
-                          struct blorp_address address)
+blorp_get_surface_address(UNUSED struct blorp_batch *blorp_batch,
+                          UNUSED struct blorp_address address)
 {
    /* We'll let blorp_surface_reloc write the address. */
    return 0ull;
@@ -205,10 +205,10 @@ blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
  * See vf_invalidate_for_vb_48b_transitions in genX_state_upload.c.
  */
 static void
-blorp_vf_invalidate_for_vb_48b_transitions(struct blorp_batch *batch,
-                                           const struct blorp_address *addrs,
+blorp_vf_invalidate_for_vb_48b_transitions(UNUSED struct blorp_batch *batch,
+                                           UNUSED const struct blorp_address *addrs,
                                            UNUSED uint32_t *sizes,
-                                           unsigned num_vbs)
+                                           UNUSED unsigned num_vbs)
 {
 #if GEN_GEN >= 8 && GEN_GEN < 11
    struct brw_context *brw = batch->driver_batch;

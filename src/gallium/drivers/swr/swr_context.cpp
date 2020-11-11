@@ -111,10 +111,10 @@ swr_transfer_map(struct pipe_context *pipe,
     * and nothing needs to be done at unmap. */
    swr_store_dirty_resource(pipe, resource, SWR_TILE_INVALID);
 
-   if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
+   if (!(usage & PIPE_MAP_UNSYNCHRONIZED)) {
       /* If resource is in use, finish fence before mapping.
        * Unless requested not to block, then if not done return NULL map */
-      if (usage & PIPE_TRANSFER_DONTBLOCK) {
+      if (usage & PIPE_MAP_DONTBLOCK) {
          if (swr_is_fence_pending(screen->flush_fence))
             return NULL;
       } else {
@@ -134,7 +134,7 @@ swr_transfer_map(struct pipe_context *pipe,
    if (!pt)
       return NULL;
    pipe_resource_reference(&pt->resource, resource);
-   pt->usage = (pipe_transfer_usage)usage;
+   pt->usage = (pipe_map_flags)usage;
    pt->level = level;
    pt->box = *box;
    pt->stride = spr->swr.pitch;
@@ -143,7 +143,7 @@ swr_transfer_map(struct pipe_context *pipe,
    /* if we're mapping the depth/stencil, copy in stencil for the section
     * being read in
     */
-   if (usage & PIPE_TRANSFER_READ && spr->has_depth && spr->has_stencil) {
+   if (usage & PIPE_MAP_READ && spr->has_depth && spr->has_stencil) {
       size_t zbase, sbase;
       for (int z = box->z; z < box->z + box->depth; z++) {
          zbase = (z * spr->swr.qpitch + box->y) * spr->swr.pitch +
@@ -181,7 +181,7 @@ swr_transfer_flush_region(struct pipe_context *pipe,
                           const struct pipe_box *flush_box)
 {
    assert(transfer->resource);
-   assert(transfer->usage & PIPE_TRANSFER_WRITE);
+   assert(transfer->usage & PIPE_MAP_WRITE);
 
    struct swr_resource *spr = swr_resource(transfer->resource);
    if (!spr->has_depth || !spr->has_stencil)
@@ -222,8 +222,8 @@ swr_transfer_unmap(struct pipe_context *pipe, struct pipe_transfer *transfer)
    /* if we're mapping the depth/stencil, copy in stencil for the section
     * being written out
     */
-   if (transfer->usage & PIPE_TRANSFER_WRITE &&
-       !(transfer->usage & PIPE_TRANSFER_FLUSH_EXPLICIT) &&
+   if (transfer->usage & PIPE_MAP_WRITE &&
+       !(transfer->usage & PIPE_MAP_FLUSH_EXPLICIT) &&
        spr->has_depth && spr->has_stencil) {
       struct pipe_box box;
       u_box_3d(0, 0, 0, transfer->box.width, transfer->box.height,

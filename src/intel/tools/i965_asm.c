@@ -38,6 +38,9 @@ static enum opt_output_type output_type = OPT_OUTPUT_BIN;
 char *input_filename = NULL;
 int errors;
 
+struct list_head instr_labels;
+struct list_head target_labels;
+
 static void
 print_help(const char *progname, FILE *file)
 {
@@ -114,9 +117,91 @@ i965_disasm_init(uint16_t pci_id)
       return NULL;
    }
 
-   brw_init_compaction_tables(devinfo);
-
    return devinfo;
+}
+
+static bool
+i965_postprocess_labels()
+{
+   if (p->devinfo->gen < 6) {
+      return true;
+   }
+
+   void *store = p->store;
+
+   struct target_label *tlabel;
+   struct instr_label *ilabel, *s;
+
+   const unsigned to_bytes_scale = brw_jump_scale(p->devinfo);
+
+   LIST_FOR_EACH_ENTRY(tlabel, &target_labels, link) {
+      LIST_FOR_EACH_ENTRY_SAFE(ilabel, s, &instr_labels, link) {
+         if (!strcmp(tlabel->name, ilabel->name)) {
+            brw_inst *inst = store + ilabel->offset;
+
+            int relative_offset = (tlabel->offset - ilabel->offset) / sizeof(brw_inst);
+            relative_offset *= to_bytes_scale;
+
+            unsigned opcode = brw_inst_opcode(p->devinfo, inst);
+
+            if (ilabel->type == INSTR_LABEL_JIP) {
+               switch (opcode) {
+               case BRW_OPCODE_IF:
+               case BRW_OPCODE_ELSE:
+               case BRW_OPCODE_ENDIF:
+               case BRW_OPCODE_WHILE:
+                  if (p->devinfo->gen >= 7) {
+                     brw_inst_set_jip(p->devinfo, inst, relative_offset);
+                  } else if (p->devinfo->gen == 6) {
+                     brw_inst_set_gen6_jump_count(p->devinfo, inst, relative_offset);
+                  }
+                  break;
+               case BRW_OPCODE_BREAK:
+               case BRW_OPCODE_HALT:
+               case BRW_OPCODE_CONTINUE:
+                  brw_inst_set_jip(p->devinfo, inst, relative_offset);
+                  break;
+               default:
+                  fprintf(stderr, "Unknown opcode %d with JIP label\n", opcode);
+                  return false;
+               }
+            } else {
+               switch (opcode) {
+               case BRW_OPCODE_IF:
+               case BRW_OPCODE_ELSE:
+                  if (p->devinfo->gen > 7) {
+                     brw_inst_set_uip(p->devinfo, inst, relative_offset);
+                  } else if (p->devinfo->gen == 7) {
+                     brw_inst_set_uip(p->devinfo, inst, relative_offset);
+                  } else if (p->devinfo->gen == 6) {
+                     // Nothing
+                  }
+                  break;
+               case BRW_OPCODE_WHILE:
+               case BRW_OPCODE_ENDIF:
+                  fprintf(stderr, "WHILE/ENDIF cannot have UIP offset\n");
+                  return false;
+               case BRW_OPCODE_BREAK:
+               case BRW_OPCODE_CONTINUE:
+               case BRW_OPCODE_HALT:
+                  brw_inst_set_uip(p->devinfo, inst, relative_offset);
+                  break;
+               default:
+                  fprintf(stderr, "Unknown opcode %d with UIP label\n", opcode);
+                  return false;
+               }
+            }
+
+            list_del(&ilabel->link);
+         }
+      }
+   }
+
+   LIST_FOR_EACH_ENTRY(ilabel, &instr_labels, link) {
+      fprintf(stderr, "Unknown label '%s'\n", ilabel->name);
+   }
+
+   return list_is_empty(&instr_labels);
 }
 
 int main(int argc, char **argv)
@@ -132,6 +217,8 @@ int main(int argc, char **argv)
    struct disasm_info *disasm_info;
    struct gen_device_info *devinfo = NULL;
    int result = EXIT_FAILURE;
+   list_inithead(&instr_labels);
+   list_inithead(&target_labels);
 
    const struct option i965_asm_opts[] = {
       { "help",          no_argument,       (int *) &help,      true },
@@ -228,6 +315,9 @@ int main(int argc, char **argv)
 
    err = yyparse();
    if (err || errors)
+      goto end;
+
+   if (!i965_postprocess_labels())
       goto end;
 
    store = p->store;

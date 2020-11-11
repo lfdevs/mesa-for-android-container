@@ -321,8 +321,6 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
       ctx->Const.AllowGLSL120SubsetIn110;
    this->allow_builtin_variable_redeclaration =
       ctx->Const.AllowGLSLBuiltinVariableRedeclaration;
-   this->allow_layout_qualifier_on_function_parameter =
-      ctx->Const.AllowLayoutQualifiersOnFunctionParameters;
 
    this->cs_input_local_size_variable_specified = false;
 
@@ -761,6 +759,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(NV_fragment_shader_interlock),
    EXT(NV_image_formats),
    EXT(NV_shader_atomic_float),
+   EXT(NV_shader_atomic_int64),
    EXT(NV_viewport_array2),
 };
 
@@ -1187,6 +1186,7 @@ ast_node::print(void) const
 
 ast_node::ast_node(void)
 {
+   this->location.path = NULL;
    this->location.source = 0;
    this->location.first_line = 0;
    this->location.first_column = 0;

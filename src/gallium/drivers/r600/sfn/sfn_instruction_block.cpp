@@ -42,6 +42,11 @@ bool InstructionBlock::is_equal_to(const Instruction& lhs) const
                      [](PInstruction ri, PInstruction li) {return *ri == *li;});
 }
 
+PInstruction InstructionBlock::last_instruction()
+{
+   return m_block.size() ? *m_block.rbegin() : nullptr;
+}
+
 void InstructionBlock::do_print(std::ostream& os) const
 {
    std::string space(" ", 2 * m_nesting_depth);

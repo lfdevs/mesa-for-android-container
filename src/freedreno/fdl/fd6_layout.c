@@ -122,6 +122,9 @@ fdl6_layout(struct fdl_layout *layout,
 	if (depth0 > 1 || ubwc_blockwidth == 0)
 		layout->ubwc = false;
 
+	if (layout->ubwc || util_format_is_depth_or_stencil(format))
+		layout->tile_all = true;
+
 	/* in layer_first layout, the level (slice) contains just one
 	 * layer (since in fact the layer contains the slices)
 	 */

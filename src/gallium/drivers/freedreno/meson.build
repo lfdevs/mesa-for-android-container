@@ -240,7 +240,7 @@ libfreedreno = static_library(
   c_args : [freedreno_c_args],
   cpp_args : [freedreno_cpp_args],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [dep_libdrm, idep_nir_headers],
+  dependencies : [dep_libdrm, idep_nir_headers, idep_libfreedreno_common],
 )
 
 driver_freedreno = declare_dependency(
@@ -274,7 +274,7 @@ ir3_compiler = executable(
     libglsl_standalone,
   ],
   build_by_default : with_tools.contains('freedreno'),
-  install : with_tools.contains('freedreno'),
+  install : false,
 )
 
 gmemtool = executable(

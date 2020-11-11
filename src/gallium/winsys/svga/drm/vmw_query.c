@@ -82,7 +82,7 @@ vmw_svga_winsys_query_init(struct svga_winsys_screen *sws,
 
    state = (SVGA3dQueryState *) vmw_svga_winsys_buffer_map(sws,
                                        query->buf,
-                                       PIPE_TRANSFER_WRITE);
+                                       PIPE_MAP_WRITE);
    if (!state) {
       debug_printf("Failed to map query result memory for initialization\n");
       return -1;
@@ -110,7 +110,7 @@ vmw_svga_winsys_query_get_result(struct svga_winsys_screen *sws,
 
    state = (SVGA3dQueryState *) vmw_svga_winsys_buffer_map(sws,
                                        query->buf,
-                                       PIPE_TRANSFER_READ);
+                                       PIPE_MAP_READ);
    if (!state) {
       debug_printf("Failed to lock query result memory\n");
 

@@ -55,8 +55,9 @@
 #define ETNA_DBG_NO_SINGLEBUF    0x1000000 /* disable single buffer feature */
 #define ETNA_DBG_NIR             0x2000000 /* use new NIR compiler */
 #define ETNA_DBG_DEQP            0x4000000 /* Hacks to run dEQP GLES3 tests */
+#define ETNA_DBG_NOCACHE         0x8000000 /* Disable shader cache */
 
-extern int etna_mesa_debug; /* set in etna_screen.c from ETNA_DEBUG */
+extern int etna_mesa_debug; /* set in etnaviv_screen.c from ETNA_MESA_DEBUG */
 
 #define DBG_ENABLED(flag) unlikely(etna_mesa_debug & (flag))
 

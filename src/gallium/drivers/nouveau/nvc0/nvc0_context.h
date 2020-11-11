@@ -322,12 +322,11 @@ extern struct draw_stage *nvc0_draw_render_stage(struct nvc0_context *);
 
 /* nvc0_program.c */
 bool nvc0_program_translate(struct nvc0_program *, uint16_t chipset,
+                            struct disk_cache *,
                             struct pipe_debug_callback *);
 bool nvc0_program_upload(struct nvc0_context *, struct nvc0_program *);
 void nvc0_program_destroy(struct nvc0_context *, struct nvc0_program *);
 void nvc0_program_library_upload(struct nvc0_context *);
-uint32_t nvc0_program_symbol_offset(const struct nvc0_program *,
-                                    uint32_t label);
 void nvc0_program_init_tcp_empty(struct nvc0_context *);
 
 /* nvc0_shader_state.c */

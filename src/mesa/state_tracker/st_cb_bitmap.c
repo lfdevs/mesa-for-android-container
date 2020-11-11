@@ -144,7 +144,7 @@ make_bitmap_texture(struct gl_context *ctx, GLsizei width, GLsizei height,
    }
 
    dest = pipe_transfer_map(st->pipe, pt, 0, 0,
-                            PIPE_TRANSFER_WRITE,
+                            PIPE_MAP_WRITE,
                             0, 0, width, height, &transfer);
 
    /* Put image into texture transfer */
@@ -179,6 +179,7 @@ setup_render_state(struct gl_context *ctx,
    key.bitmap = GL_TRUE;
    key.clamp_color = st->clamp_frag_color_in_shader &&
                      ctx->Color._ClampFragmentColor;
+   key.lower_alpha_func = COMPARE_FUNC_ALWAYS;
 
    fpv = st_get_fp_variant(st, st->fp, &key);
 
@@ -393,7 +394,7 @@ create_cache_trans(struct st_context *st)
     * Subsequent glBitmap calls will write into the texture image.
     */
    cache->buffer = pipe_transfer_map(pipe, cache->texture, 0, 0,
-                                     PIPE_TRANSFER_WRITE, 0, 0,
+                                     PIPE_MAP_WRITE, 0, 0,
                                      BITMAP_CACHE_WIDTH,
                                      BITMAP_CACHE_HEIGHT, &cache->trans);
 

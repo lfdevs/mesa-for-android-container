@@ -146,7 +146,7 @@ void finish_validator_test()
    finish_program(program.get());
    aco_print_program(program.get(), output);
    fprintf(output, "Validation results:\n");
-   if (aco::validate(program.get(), output))
+   if (aco::validate_ir(program.get()))
       fprintf(output, "Validation passed\n");
    else
       fprintf(output, "Validation failed\n");
@@ -155,12 +155,12 @@ void finish_validator_test()
 void finish_opt_test()
 {
    finish_program(program.get());
-   if (!aco::validate(program.get(), output)) {
+   if (!aco::validate_ir(program.get())) {
       fail_test("Validation before optimization failed");
       return;
    }
    aco::optimize(program.get());
-   if (!aco::validate(program.get(), output)) {
+   if (!aco::validate_ir(program.get())) {
       fail_test("Validation after optimization failed");
       return;
    }
@@ -187,10 +187,7 @@ void finish_assembler_test()
    } else if (program->chip_class == GFX10 && LLVM_VERSION_MAJOR < 9) {
       skip_test("LLVM 9 needed for GFX10 disassembly");
    } else if (program->chip_class >= GFX8) {
-      std::ostringstream ss;
-      print_asm(program.get(), binary, exec_size / 4u, ss);
-
-      fputs(ss.str().c_str(), output);
+      print_asm(program.get(), binary, exec_size / 4u, output);
    } else {
       //TODO: maybe we should use CLRX and skip this test if it's not available?
       for (uint32_t dword : binary)

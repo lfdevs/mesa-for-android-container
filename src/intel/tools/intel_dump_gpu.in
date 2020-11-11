@@ -16,6 +16,12 @@ contents and execution of the GEM application.
 
   -p, --platform=NAME Override PCI ID using a platform name
 
+  -c, --only-capture  Only write objects flagged with EXEC_OBJECT_CAPTURE into
+                      the output aub file. This helps reducing output file
+                      size greatly but won't produce a file replayable
+
+  -f, --frame=ID      Only dump objects for frame ID
+
   -v                  Enable verbose output
 
   -vv                 Enable extra verbosity - dumps gtt mappings
@@ -31,6 +37,8 @@ ld_preload="@install_libexecdir@/libintel_dump_gpu.so${LD_PRELOAD:+:$LD_PRELOAD}
 args=""
 file=""
 gdb=""
+capture_only=""
+frame=""
 
 function add_arg() {
     arg=$1
@@ -77,8 +85,23 @@ while true; do
             shift
             ;;
         --platform=*)
-            platform=${1##-p}
+            platform=${1##--platform=}
             add_arg "platform=${platform}"
+            shift
+            ;;
+        -f)
+            frame=$2
+            add_arg "frame=${frame}"
+            shift 2
+            ;;
+        -f*)
+            frame=${1##-f}
+            add_arg "frame=${frame}"
+            shift
+            ;;
+        --frame=*)
+            frame=${1##--frame=}
+            add_arg "frame=${frame}"
             shift
             ;;
         --gdb)
@@ -87,6 +110,14 @@ while true; do
             ;;
         -g)
             gdb=1
+            shift
+            ;;
+        -c)
+            add_arg "capture_only=1"
+            shift
+            ;;
+        --only-capture)
+            add_arg "capture_only=1"
             shift
             ;;
         --help)

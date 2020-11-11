@@ -33,9 +33,11 @@ static void virgl_buffer_transfer_unmap(struct pipe_context *ctx,
 {
    struct virgl_context *vctx = virgl_context(ctx);
    struct virgl_transfer *trans = virgl_transfer(transfer);
+   bool persistent_coherent = trans->base.usage & (PIPE_MAP_PERSISTENT |
+                                                   PIPE_MAP_COHERENT);
 
-   if (trans->base.usage & PIPE_TRANSFER_WRITE) {
-      if (transfer->usage & PIPE_TRANSFER_FLUSH_EXPLICIT) {
+   if ((trans->base.usage & PIPE_MAP_WRITE) && !persistent_coherent) {
+      if (transfer->usage & PIPE_MAP_FLUSH_EXPLICIT) {
          if (trans->range.end <= trans->range.start) {
             virgl_resource_destroy_transfer(vctx, trans);
             return;

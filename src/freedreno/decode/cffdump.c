@@ -58,6 +58,7 @@ static bool is_blob = false;
 static int show_comp = false;
 static int interactive;
 static int vertices;
+static const char *exename;
 
 static int handle_file(const char *filename, int start, int end, int draw);
 
@@ -81,6 +82,7 @@ static void print_usage(const char *name)
 			"\t-E, --end=N      - stop decoding after frame N\n"
 			"\t-F, --frame=N    - decode only frame N\n"
 			"\t-D, --draw=N     - decode only draw N\n"
+			"\t-e, --exe=NAME   - only decode cmdstream from named process\n"
 			"\t--textures       - dump texture contents (if possible)\n"
 			"\t-L, --script=LUA - run specified lua script to analyze state\n"
 			"\t-q, --query=REG  - query mode, dump only specified query registers on\n"
@@ -132,6 +134,7 @@ static const struct option opts[] = {
 	{ "end",       required_argument, 0, 'E' },
 	{ "frame",     required_argument, 0, 'F' },
 	{ "draw",      required_argument, 0, 'D' },
+	{ "exe",       required_argument, 0, 'e' },
 	{ "script",    required_argument, 0, 'L' },
 	{ "query",     required_argument, 0, 'q' },
 	{ "help",      no_argument,       0, 'h' },
@@ -148,7 +151,7 @@ int main(int argc, char **argv)
 
 	options.color = interactive;
 
-	while ((c = getopt_long(argc, argv, "vsaS:E:F:D:L:q:h", opts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "vsaS:E:F:D:e:L:q:h", opts, NULL)) != -1) {
 		switch (c) {
 		case 0:
 			/* option that set a flag, nothing to do */
@@ -173,6 +176,9 @@ int main(int argc, char **argv)
 			break;
 		case 'D':
 			draw = atoi(optarg);
+			break;
+		case 'e':
+			exename = optarg;
 			break;
 		case 'L':
 			options.script = optarg;
@@ -306,7 +312,9 @@ static int handle_file(const char *filename, int start, int end, int draw)
 			is_blob = true;
 			printl(2, "cmd: %s\n", (char *)buf);
 			skip = false;
-			if (!show_comp) {
+			if (exename) {
+				skip |= (strstr(buf, exename) != buf);
+			} else if (!show_comp) {
 				skip |= (strstr(buf, "fdperf") == buf);
 				skip |= (strstr(buf, "chrome") == buf);
 				skip |= (strstr(buf, "surfaceflinger") == buf);

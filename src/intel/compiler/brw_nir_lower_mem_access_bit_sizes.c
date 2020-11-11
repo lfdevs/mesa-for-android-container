@@ -89,7 +89,7 @@ lower_mem_load_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
    const unsigned bytes_read = num_components * (bit_size / 8);
    const unsigned align = nir_intrinsic_align(intrin);
 
-   if (bit_size == 32 && align >= 32 &&
+   if (bit_size == 32 && align >= 32 && intrin->num_components <= 4 &&
        (!needs_scalar || intrin->num_components == 1))
       return false;
 
@@ -112,8 +112,10 @@ lower_mem_load_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
       result = nir_extract_bits(b, &load, 1, load_offset * 8,
                                 num_components, bit_size);
    } else {
-      /* Otherwise, we have to break it into smaller loads */
-      nir_ssa_def *loads[8];
+      /* Otherwise, we have to break it into smaller loads.  We could end up
+       * with as many as 32 loads if we're loading a u64vec16 from scratch.
+       */
+      nir_ssa_def *loads[32];
       unsigned num_loads = 0;
       int load_offset = 0;
       while (load_offset < bytes_read) {
@@ -170,7 +172,7 @@ lower_mem_store_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
    assert(writemask < (1 << num_components));
 
    if ((value->bit_size <= 32 && num_components == 1) ||
-       (value->bit_size == 32 && align >= 32 &&
+       (value->bit_size == 32 && num_components <= 4 && align >= 32 &&
         writemask == (1 << num_components) - 1 &&
         !needs_scalar))
       return false;
@@ -254,6 +256,7 @@ lower_mem_access_bit_sizes_impl(nir_function_impl *impl,
          nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
          switch (intrin->intrinsic) {
          case nir_intrinsic_load_global:
+         case nir_intrinsic_load_global_constant:
          case nir_intrinsic_load_ssbo:
          case nir_intrinsic_load_shared:
          case nir_intrinsic_load_scratch:

@@ -58,6 +58,12 @@ _eglParseKHRImageAttribs(_EGLImageAttribs *attrs, _EGLDisplay *disp,
 
       attrs->GLTextureZOffset = val;
       break;
+   case EGL_PROTECTED_CONTENT_EXT:
+      if (!disp->Extensions.EXT_protected_content)
+         return EGL_BAD_PARAMETER;
+
+      attrs->ProtectedContent = val;
+      break;
    default:
       return EGL_BAD_PARAMETER;
    }

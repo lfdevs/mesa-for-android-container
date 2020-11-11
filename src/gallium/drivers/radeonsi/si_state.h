@@ -95,6 +95,7 @@ struct si_state_rasterizer {
    unsigned provoking_vertex_first : 1;
    unsigned polygon_mode_enabled : 1;
    unsigned polygon_mode_is_lines : 1;
+   unsigned polygon_mode_is_points : 1;
 };
 
 struct si_dsa_stencil_ref_part {
@@ -495,7 +496,6 @@ void si_set_ring_buffer(struct si_context *sctx, uint slot, struct pipe_resource
                         unsigned stride, unsigned num_records, bool add_tid, bool swizzle,
                         unsigned element_size, unsigned index_stride, uint64_t offset);
 void si_init_all_descriptors(struct si_context *sctx);
-bool si_upload_vertex_buffer_descriptors(struct si_context *sctx);
 bool si_upload_graphics_shader_descriptors(struct si_context *sctx);
 bool si_upload_compute_shader_descriptors(struct si_context *sctx);
 void si_release_all_descriptors(struct si_context *sctx);
@@ -567,7 +567,7 @@ void si_init_screen_live_shader_cache(struct si_screen *sscreen);
 void si_init_shader_functions(struct si_context *sctx);
 bool si_init_shader_cache(struct si_screen *sscreen);
 void si_destroy_shader_cache(struct si_screen *sscreen);
-void si_schedule_initial_compile(struct si_context *sctx, unsigned processor,
+void si_schedule_initial_compile(struct si_context *sctx, gl_shader_stage stage,
                                  struct util_queue_fence *ready_fence,
                                  struct si_compiler_ctx_state *compiler_ctx_state, void *job,
                                  util_queue_execute_func execute);

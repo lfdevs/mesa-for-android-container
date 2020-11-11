@@ -40,7 +40,7 @@ extern YYSTYPE yylval;
 "\n"                              yylineno++;
 [ \t]                             ; /* ignore whitespace */
 ";"[^\n]*"\n"                     yylineno++; /* ignore comments */
-[1-9][0-9]*                       yylval.num = strtoul(yytext, NULL, 0);    return T_INT;
+0|[1-9][0-9]*                     yylval.num = strtoul(yytext, NULL, 0);    return T_INT;
 "0x"[0-9a-fA-F]*                  yylval.num = strtoul(yytext, NULL, 0);    return T_HEX;
 
 "$"[0-9a-fA-F][0-9a-fA-F]         yylval.num = parse_reg(yytext); return T_REGISTER;
@@ -78,12 +78,15 @@ extern YYSTYPE yylval;
 "brne"                            return TOKEN(T_OP_BRNE);
 "breq"                            return TOKEN(T_OP_BREQ);
 "ret"                             return TOKEN(T_OP_RET);
+"iret"                            return TOKEN(T_OP_IRET);
 "call"                            return TOKEN(T_OP_CALL);
 "jump"                            return TOKEN(T_OP_JUMP);
 "waitin"                          return TOKEN(T_OP_WAITIN);
 "preemptleave"			  return TOKEN(T_OP_PREEMPTLEAVE);
+"setsecure"			  return TOKEN(T_OP_SETSECURE);
 "<<"                              return TOKEN(T_LSHIFT);
 "(rep)"                           return TOKEN(T_REP);
+"(xmov"[1-3]")"	                  yylval.num = yytext[5] - '\0'; return T_XMOV;
 
 ","                               return ',';
 "["                               return '[';

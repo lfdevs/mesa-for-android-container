@@ -79,8 +79,7 @@ anv_gen_files = files(
 )
 foreach g : [['70', ['gen7_cmd_buffer.c']], ['75', ['gen7_cmd_buffer.c']],
              ['80', ['gen8_cmd_buffer.c']], ['90', ['gen8_cmd_buffer.c']],
-             ['100', ['gen8_cmd_buffer.c']], ['110', ['gen8_cmd_buffer.c']],
-             ['120', ['gen8_cmd_buffer.c']]]
+             ['110', ['gen8_cmd_buffer.c']], ['120', ['gen8_cmd_buffer.c']]]
   _gen = g[0]
   libanv_gen_libs += static_library(
     'anv_gen@0@'.format(_gen),
@@ -209,12 +208,22 @@ libvulkan_intel = shared_library(
 )
 
 if with_symbols_check
+  if get_option('buildtype') == 'debug'  # Same rule as `-DDEBUG` in /meson.build
+    _extra_args = [
+      '--ignore-symbol', 'anv_dump_start',
+      '--ignore-symbol', 'anv_dump_finish',
+    ]
+  else
+    _extra_args = []
+  endif
+
   test(
     'anv symbols check',
     symbols_check,
     args : [
       '--lib', libvulkan_intel,
       '--symbols-file', vulkan_icd_symbols,
+      _extra_args,
       symbols_check_args,
     ],
     suite : ['intel'],

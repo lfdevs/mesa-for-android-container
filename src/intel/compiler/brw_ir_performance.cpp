@@ -327,6 +327,7 @@ namespace {
       case BRW_OPCODE_LINE:
       case BRW_OPCODE_NOP:
       case SHADER_OPCODE_CLUSTER_BROADCAST:
+      case SHADER_OPCODE_SCRATCH_HEADER:
       case FS_OPCODE_DDX_COARSE:
       case FS_OPCODE_DDX_FINE:
       case FS_OPCODE_DDY_COARSE:
@@ -376,6 +377,7 @@ namespace {
       case BRW_OPCODE_CMP:
       case BRW_OPCODE_ADD:
       case BRW_OPCODE_MUL:
+      case SHADER_OPCODE_MOV_RELOC_IMM:
          if (devinfo->gen >= 11) {
             return calculate_desc(info, unit_fpu, 0, 2, 0, 0, 2,
                                   0, 10, 6, 14, 0, 0);
@@ -822,15 +824,6 @@ namespace {
                                   4 /* XXX */, 0,
                                   0, 12 /* XXX */, 8 /* XXX */, 18 /* XXX */,
                                   0, 0);
-
-      case VS_OPCODE_SET_SIMD4X2_HEADER_GEN9:
-         if (devinfo->gen >= 8)
-            return calculate_desc(info, unit_fpu, 12 /* XXX */, 0, 0,
-                                  4 /* XXX */, 0,
-                                  0, 8 /* XXX */, 4 /* XXX */, 12 /* XXX */,
-                                  0, 0);
-         else
-            abort();
 
       case VS_OPCODE_UNPACK_FLAGS_SIMD4X2:
       case TCS_OPCODE_GET_INSTANCE_ID:
@@ -1512,16 +1505,23 @@ namespace {
                             const backend_instruction *),
                          unsigned dispatch_width)
    {
-      /* XXX - Plumbing the trip counts from NIR loop analysis would allow us
-       *       to do a better job regarding the loop weights.  And some branch
-       *       divergence analysis would allow us to do a better job with
-       *       branching weights.
+      /* XXX - Note that the previous version of this code used worst-case
+       *       scenario estimation of branching divergence for SIMD32 shaders,
+       *       but this heuristic was removed to improve performance in common
+       *       scenarios. Wider shader variants are less optimal when divergence
+       *       is high, e.g. when application renders complex scene on a small
+       *       surface. It is assumed that such renders are short, so their
+       *       time doesn't matter and when it comes to the overall performance,
+       *       they are dominated by more optimal larger renders.
+       *
+       *       It's possible that we could do better with divergence analysis
+       *       by isolating branches which are 100% uniform.
+       *
+       *       Plumbing the trip counts from NIR loop analysis would allow us
+       *       to do a better job regarding the loop weights.
        *
        *       In the meantime use values that roughly match the control flow
-       *       weights used elsewhere in the compiler back-end -- Main
-       *       difference is the worst-case scenario branch_weight used for
-       *       SIMD32 which accounts for the possibility of a dynamically
-       *       uniform branch becoming divergent in SIMD32.
+       *       weights used elsewhere in the compiler back-end.
        *
        *       Note that we provide slightly more pessimistic weights on
        *       Gen12+ for SIMD32, since the effective warp size on that
@@ -1530,7 +1530,6 @@ namespace {
        *       previous generations, giving narrower SIMD modes a performance
        *       advantage in several test-cases with non-uniform discard jumps.
        */
-      const float branch_weight = (dispatch_width > 16 ? 1.0 : 0.5);
       const float discard_weight = (dispatch_width > 16 || s->devinfo->gen < 12 ?
                                     1.0 : 0.5);
       const float loop_weight = 10;
@@ -1546,16 +1545,12 @@ namespace {
 
             issue_instruction(st, s->devinfo, inst);
 
-            if (inst->opcode == BRW_OPCODE_ENDIF)
-               st.weight /= branch_weight;
-            else if (inst->opcode == FS_OPCODE_PLACEHOLDER_HALT && discard_count)
+            if (inst->opcode == FS_OPCODE_PLACEHOLDER_HALT && discard_count)
                st.weight /= discard_weight;
 
             elapsed += (st.unit_ready[unit_fe] - clock0) * st.weight;
 
-            if (inst->opcode == BRW_OPCODE_IF)
-               st.weight *= branch_weight;
-            else if (inst->opcode == BRW_OPCODE_DO)
+            if (inst->opcode == BRW_OPCODE_DO)
                st.weight *= loop_weight;
             else if (inst->opcode == BRW_OPCODE_WHILE)
                st.weight /= loop_weight;

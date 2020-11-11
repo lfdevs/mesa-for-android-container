@@ -42,6 +42,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "dri2.h"
 #include "dri_sarea.h"
 #include <dlfcn.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/mman.h>
 #include "xf86drm.h"
@@ -90,193 +91,92 @@ struct dri_drawable
    __DRIdrawable *driDrawable;
 };
 
-/*
- * Given a display pointer and screen number, determine the name of
- * the DRI driver for the screen (i.e., "i965", "radeon", "nouveau", etc).
- * Return True for success, False for failure.
- */
-static Bool
-driGetDriverName(Display * dpy, int scrNum, char **driverName)
+static char *
+dri_get_driver_name(struct glx_screen *psc)
 {
+   Display *dpy = psc->dpy;
+   int scrNum = psc->scr;
    int directCapable;
    Bool b;
    int event, error;
    int driverMajor, driverMinor, driverPatch;
-
-   *driverName = NULL;
+   char *driverName = NULL;
 
    if (XF86DRIQueryExtension(dpy, &event, &error)) {    /* DRI1 */
       if (!XF86DRIQueryDirectRenderingCapable(dpy, scrNum, &directCapable)) {
          ErrorMessageF("XF86DRIQueryDirectRenderingCapable failed\n");
-         return False;
+         return NULL;
       }
       if (!directCapable) {
          ErrorMessageF("XF86DRIQueryDirectRenderingCapable returned false\n");
-         return False;
+         return NULL;
       }
 
       b = XF86DRIGetClientDriverName(dpy, scrNum, &driverMajor, &driverMinor,
-                                     &driverPatch, driverName);
+                                     &driverPatch, &driverName);
       if (!b) {
          ErrorMessageF("Cannot determine driver name for screen %d\n",
                        scrNum);
-         return False;
+         return NULL;
       }
 
       InfoMessageF("XF86DRIGetClientDriverName: %d.%d.%d %s (screen %d)\n",
-                   driverMajor, driverMinor, driverPatch, *driverName,
+                   driverMajor, driverMinor, driverPatch, driverName,
                    scrNum);
 
-      return True;
-   }
-   else if (DRI2QueryExtension(dpy, &event, &error)) {  /* DRI2 */
-      char *dev;
-      Bool ret = DRI2Connect(dpy, RootWindow(dpy, scrNum), driverName, &dev);
-
-      if (ret)
-         free(dev);
-
-      return ret;
-   }
-
-   return False;
-}
-
-/*
- * Exported function for querying the DRI driver for a given screen.
- *
- * The returned char pointer points to a static array that will be
- * overwritten by subsequent calls.
- */
-_GLX_PUBLIC const char *
-glXGetScreenDriver(Display * dpy, int scrNum)
-{
-   static char ret[32];
-   char *driverName;
-   if (driGetDriverName(dpy, scrNum, &driverName)) {
-      int len;
-      if (!driverName)
-         return NULL;
-      len = strlen(driverName);
-      if (len >= 31)
-         return NULL;
-      memcpy(ret, driverName, len + 1);
-      free(driverName);
-      return ret;
+      return driverName;
    }
    return NULL;
 }
 
-/* glXGetDriverConfig must return a pointer with a static lifetime. To avoid
- * keeping drivers loaded and other leaks, we keep a cache of results here that
- * is cleared by an atexit handler.
+/**
+ * Get the unadjusted system time (UST).  Currently, the UST is measured in
+ * microseconds since Epoc.  The actual resolution of the UST may vary from
+ * system to system, and the units may vary from release to release.
+ * Drivers should not call this function directly.  They should instead use
+ * \c glXGetProcAddress to obtain a pointer to the function.
+ *
+ * \param ust Location to store the 64-bit UST
+ * \returns Zero on success or a negative errno value on failure.
+ *
+ * \sa glXGetProcAddress, PFNGLXGETUSTPROC
+ *
+ * \since Internal API version 20030317.
  */
-struct driver_config_entry {
-   struct driver_config_entry *next;
-   char *driverName;
-   char *config;
+static int
+__glXGetUST(int64_t * ust)
+{
+   struct timeval tv;
+
+   if (ust == NULL) {
+      return -EFAULT;
+   }
+
+   if (gettimeofday(&tv, NULL) == 0) {
+      ust[0] = (tv.tv_sec * 1000000) + tv.tv_usec;
+      return 0;
+   }
+   else {
+      return -errno;
+   }
+}
+
+static GLboolean
+__driGetMSCRate(__DRIdrawable *draw,
+		int32_t * numerator, int32_t * denominator,
+		void *loaderPrivate)
+{
+   __GLXDRIdrawable *glxDraw = loaderPrivate;
+
+   return __glxGetMscRate(glxDraw->psc, numerator, denominator);
+}
+
+static const __DRIsystemTimeExtension systemTimeExtension = {
+   .base = {__DRI_SYSTEM_TIME, 1 },
+
+   .getUST              = __glXGetUST,
+   .getMSCRate          = __driGetMSCRate
 };
-
-static pthread_mutex_t driver_config_mutex = PTHREAD_MUTEX_INITIALIZER;
-static struct driver_config_entry *driver_config_cache = NULL;
-
-/* Called as an atexit function. Otherwise, this would have to be called with
- * driver_config_mutex locked.
- */
-static void
-clear_driver_config_cache()
-{
-   while (driver_config_cache) {
-      struct driver_config_entry *e = driver_config_cache;
-      driver_config_cache = e->next;
-
-      free(e->driverName);
-      free(e->config);
-      free(e);
-   }
-}
-
-static char *
-get_driver_config(const char *driverName)
-{
-   void *handle;
-   char *config = NULL;
-   const __DRIextension **extensions = driOpenDriver(driverName, &handle);
-   if (extensions) {
-      for (int i = 0; extensions[i]; i++) {
-         if (strcmp(extensions[i]->name, __DRI_CONFIG_OPTIONS) != 0)
-            continue;
-
-         __DRIconfigOptionsExtension *ext =
-            (__DRIconfigOptionsExtension *)extensions[i];
-
-         if (ext->base.version >= 2)
-            config = ext->getXml(driverName);
-         else
-            config = strdup(ext->xml);
-
-         break;
-      }
-   }
-
-   if (!config) {
-      /* Fall back to the old method */
-      config = dlsym(handle, "__driConfigOptions");
-      if (config)
-         config = strdup(config);
-   }
-
-   dlclose(handle);
-
-   return config;
-}
-
-/*
- * Exported function for obtaining a driver's option list (UTF-8 encoded XML).
- *
- * The returned char pointer points directly into the driver. Therefore
- * it should be treated as a constant.
- *
- * If the driver was not found or does not support configuration NULL is
- * returned.
- */
-_GLX_PUBLIC const char *
-glXGetDriverConfig(const char *driverName)
-{
-   struct driver_config_entry *e;
-
-   pthread_mutex_lock(&driver_config_mutex);
-
-   for (e = driver_config_cache; e; e = e->next) {
-      if (strcmp(e->driverName, driverName) == 0)
-         goto out;
-   }
-
-   e = malloc(sizeof(*e));
-   if (!e)
-      goto out;
-
-   e->config = get_driver_config(driverName);
-   e->driverName = strdup(driverName);
-   if (!e->config || !e->driverName) {
-      free(e->config);
-      free(e->driverName);
-      free(e);
-      e = NULL;
-      goto out;
-   }
-
-   e->next = driver_config_cache;
-   driver_config_cache = e;
-
-   if (!e->next)
-      atexit(clear_driver_config_cache);
-
-out:
-   pthread_mutex_unlock(&driver_config_mutex);
-
-   return e ? e->config : NULL;
-}
 
 static GLboolean
 has_damage_post(Display * dpy)
@@ -885,6 +785,7 @@ static const struct glx_screen_vtable dri_screen_vtable = {
    .create_context_attribs = NULL,
    .query_renderer_integer = NULL,
    .query_renderer_string  = NULL,
+   .get_driver_name        = dri_get_driver_name,
 };
 
 static struct glx_screen *
@@ -906,7 +807,7 @@ driCreateScreen(int screen, struct glx_display *priv)
       return NULL;
    }
 
-   if (!driGetDriverName(priv->dpy, screen, &driverName)) {
+   if (!(driverName = dri_get_driver_name(&psc->base))) {
       goto cleanup;
    }
 

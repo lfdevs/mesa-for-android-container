@@ -516,30 +516,8 @@ void si_emit_dpbb_state(struct si_context *sctx)
       disable_start_of_prim = (cb_target_enabled_4bit & blend->blend_enable_4bit) != 0;
    }
 
-   /* Tunable parameters. Also test with DFSM enabled/disabled. */
-   unsigned context_states_per_bin;    /* allowed range: [1, 6] */
-   unsigned persistent_states_per_bin; /* allowed range: [1, 32] */
-   unsigned fpovs_per_batch;           /* allowed range: [0, 255], 0 = unlimited */
-
-   /* Tuned for Raven. Vega might need different values. */
-   if (sscreen->info.has_dedicated_vram) {
-      if (sscreen->info.num_render_backends > 4) {
-         context_states_per_bin = 1;
-         persistent_states_per_bin = 1;
-      } else {
-         context_states_per_bin = 3;
-         persistent_states_per_bin = 8;
-      }
-   } else {
-      /* This is a workaround for:
-       *    https://bugs.freedesktop.org/show_bug.cgi?id=110214
-       * (an alternative is to insert manual BATCH_BREAK event when
-       * a context_roll is detected). */
-      context_states_per_bin = sctx->screen->info.has_gfx9_scissor_bug ? 1 : 6;
-      /* Using 32 here can cause GPU hangs on RAVEN1 */
-      persistent_states_per_bin = 16;
-   }
-   fpovs_per_batch = 63;
+   /* Tunable parameters. */
+   unsigned fpovs_per_batch = 63; /* allowed range: [0, 255], 0 = unlimited */
 
    /* Emit registers. */
    struct uvec2 bin_size_extend = {};
@@ -554,8 +532,8 @@ void si_emit_dpbb_state(struct si_context *sctx)
       S_028C44_BINNING_MODE(V_028C44_BINNING_ALLOWED) | S_028C44_BIN_SIZE_X(bin_size.x == 16) |
          S_028C44_BIN_SIZE_Y(bin_size.y == 16) | S_028C44_BIN_SIZE_X_EXTEND(bin_size_extend.x) |
          S_028C44_BIN_SIZE_Y_EXTEND(bin_size_extend.y) |
-         S_028C44_CONTEXT_STATES_PER_BIN(context_states_per_bin - 1) |
-         S_028C44_PERSISTENT_STATES_PER_BIN(persistent_states_per_bin - 1) |
+         S_028C44_CONTEXT_STATES_PER_BIN(sscreen->pbb_context_states_per_bin - 1) |
+         S_028C44_PERSISTENT_STATES_PER_BIN(sscreen->pbb_persistent_states_per_bin - 1) |
          S_028C44_DISABLE_START_OF_PRIM(disable_start_of_prim) |
          S_028C44_FPOVS_PER_BATCH(fpovs_per_batch) | S_028C44_OPTIMAL_BIN_SELECTION(1) |
          S_028C44_FLUSH_ON_BINNING_TRANSITION((sctx->family == CHIP_VEGA12 ||

@@ -76,7 +76,7 @@ struct haiku_egl_surface
  * Called via eglCreateWindowSurface(), drv->CreateWindowSurface().
  */
 static _EGLSurface *
-haiku_create_window_surface(const _EGLDriver *drv, _EGLDisplay *disp,
+haiku_create_window_surface(_EGLDisplay *disp,
 	_EGLConfig *conf, void *native_window, const EGLint *attrib_list)
 {
 	CALLED();
@@ -113,7 +113,7 @@ haiku_create_window_surface(const _EGLDriver *drv, _EGLDisplay *disp,
 
 
 static _EGLSurface *
-haiku_create_pixmap_surface(const _EGLDriver *drv, _EGLDisplay *disp,
+haiku_create_pixmap_surface(_EGLDisplay *disp,
 	_EGLConfig *conf, void *native_pixmap, const EGLint *attrib_list)
 {
 	return NULL;
@@ -121,7 +121,7 @@ haiku_create_pixmap_surface(const _EGLDriver *drv, _EGLDisplay *disp,
 
 
 static _EGLSurface *
-haiku_create_pbuffer_surface(const _EGLDriver *drv, _EGLDisplay *disp,
+haiku_create_pbuffer_surface(_EGLDisplay *disp,
 	_EGLConfig *conf, const EGLint *attrib_list)
 {
 	return NULL;
@@ -129,7 +129,7 @@ haiku_create_pbuffer_surface(const _EGLDriver *drv, _EGLDisplay *disp,
 
 
 static EGLBoolean
-haiku_destroy_surface(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf)
+haiku_destroy_surface(_EGLDisplay *disp, _EGLSurface *surf)
 {
 	if (_eglPutSurface(surf)) {
 		// XXX: detach haiku_egl_surface::gl from the native window and destroy it
@@ -205,7 +205,7 @@ cleanup:
 
 extern "C"
 EGLBoolean
-init_haiku(const _EGLDriver *drv, _EGLDisplay *disp)
+init_haiku(_EGLDisplay *disp)
 {
 	_EGLDevice *dev;
 	CALLED();
@@ -229,7 +229,7 @@ init_haiku(const _EGLDriver *drv, _EGLDisplay *disp)
 
 extern "C"
 EGLBoolean
-haiku_terminate(const _EGLDriver* drv,_EGLDisplay *disp)
+haiku_terminate(_EGLDisplay *disp)
 {
 	return EGL_TRUE;
 }
@@ -237,7 +237,7 @@ haiku_terminate(const _EGLDriver* drv,_EGLDisplay *disp)
 
 extern "C"
 _EGLContext*
-haiku_create_context(const _EGLDriver *drv, _EGLDisplay *disp, _EGLConfig *conf,
+haiku_create_context(_EGLDisplay *disp, _EGLConfig *conf,
 	_EGLContext *share_list, const EGLint *attrib_list)
 {
 	CALLED();
@@ -263,7 +263,7 @@ cleanup:
 
 extern "C"
 EGLBoolean
-haiku_destroy_context(const _EGLDriver* drv, _EGLDisplay *disp, _EGLContext* ctx)
+haiku_destroy_context(_EGLDisplay *disp, _EGLContext* ctx)
 {
 	struct haiku_egl_context* context = haiku_egl_context(ctx);
 
@@ -278,7 +278,7 @@ haiku_destroy_context(const _EGLDriver* drv, _EGLDisplay *disp, _EGLContext* ctx
 
 extern "C"
 EGLBoolean
-haiku_make_current(const _EGLDriver* drv, _EGLDisplay *disp, _EGLSurface *dsurf,
+haiku_make_current(_EGLDisplay *disp, _EGLSurface *dsurf,
 	_EGLSurface *rsurf, _EGLContext *ctx)
 {
 	CALLED();
@@ -299,7 +299,7 @@ haiku_make_current(const _EGLDriver* drv, _EGLDisplay *disp, _EGLSurface *dsurf,
 
 extern "C"
 EGLBoolean
-haiku_swap_buffers(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf)
+haiku_swap_buffers(_EGLDisplay *disp, _EGLSurface *surf)
 {
 	struct haiku_egl_surface* surface = haiku_egl_surface(surf);
 

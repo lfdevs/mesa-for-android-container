@@ -38,10 +38,10 @@ enum opt_input_type {
 static enum opt_input_type input_type = OPT_INPUT_BINARY;
 
 /* Return size of file in bytes pointed by fp */
-static size_t
+static long
 i965_disasm_get_file_size(FILE *fp)
 {
-   size_t size;
+   long size;
 
    fseek(fp, 0L, SEEK_END);
    size = ftell(fp);
@@ -93,7 +93,11 @@ i965_disasm_read_binary(FILE *fp, size_t *end)
    size_t size;
    void *assembly;
 
-   *end = i965_disasm_get_file_size(fp);
+   long sz = i965_disasm_get_file_size(fp);
+   if (sz < 0)
+      return NULL;
+
+   *end = (size_t)sz;
    if (!*end)
       return NULL;
 
@@ -103,6 +107,7 @@ i965_disasm_read_binary(FILE *fp, size_t *end)
 
    size = fread(assembly, *end, 1, fp);
    if (!size) {
+      free(assembly);
       return NULL;
    }
    return assembly;
@@ -122,9 +127,6 @@ i965_disasm_init(uint16_t pci_id)
               pci_id);
       exit(EXIT_FAILURE);
    }
-
-   /* initialize compaction table in order to handle compacted instructions */
-   brw_init_compaction_tables(devinfo);
 
    return devinfo;
 }
@@ -241,7 +243,7 @@ int main(int argc, char *argv[])
    }
 
    /* Disassemble i965 instructions from buffer assembly */
-   brw_disassemble(devinfo, assembly, start, end, stdout);
+   brw_disassemble_with_labels(devinfo, assembly, start, end, stdout);
 
    result = EXIT_SUCCESS;
 

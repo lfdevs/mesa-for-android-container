@@ -91,6 +91,10 @@ struct llvmpipe_resource
    unsigned id;  /**< temporary, for debugging */
 
    unsigned sample_stride;
+
+   uint64_t size_required;
+   uint64_t backing_offset;
+   bool backable;
 #ifdef DEBUG
    /** for linked list */
    struct llvmpipe_resource *prev, *next;

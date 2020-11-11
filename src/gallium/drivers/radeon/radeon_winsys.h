@@ -28,9 +28,15 @@
 
 /* The public winsys interface header for the radeon driver. */
 
+/* Skip command submission. Same as RADEON_NOOP=1. */
+#define RADEON_FLUSH_NOOP                     (1u << 29)
+
+/* Toggle the secure submission boolean after the flush */
+#define RADEON_FLUSH_TOGGLE_SECURE_SUBMISSION (1u << 30)
+
 /* Whether the next IB can start immediately and not wait for draws and
  * dispatches from the current IB to finish. */
-#define RADEON_FLUSH_START_NEXT_GFX_IB_NOW (1u << 31)
+#define RADEON_FLUSH_START_NEXT_GFX_IB_NOW    (1u << 31)
 
 #define RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW                                                   \
    (PIPE_FLUSH_ASYNC | RADEON_FLUSH_START_NEXT_GFX_IB_NOW)
@@ -69,6 +75,7 @@ enum radeon_bo_flag
   RADEON_FLAG_32BIT = (1 << 6),
   RADEON_FLAG_ENCRYPTED = (1 << 7),
   RADEON_FLAG_UNCACHED = (1 << 8), /* only gfx9 and newer */
+  RADEON_FLAG_DRIVER_INTERNAL = (1 << 9),
 };
 
 enum radeon_dependency_flag
@@ -94,14 +101,14 @@ enum radeon_bo_usage
   RADEON_USAGE_SYNCHRONIZED = 8
 };
 
-enum radeon_transfer_flags
+enum radeon_map_flags
 {
    /* Indicates that the caller will unmap the buffer.
     *
     * Not unmapping buffers is an important performance optimization for
     * OpenGL (avoids kernel overhead for frequently mapped buffers).
     */
-   RADEON_TRANSFER_TEMPORARY = (PIPE_TRANSFER_DRV_PRV << 0),
+   RADEON_MAP_TEMPORARY = (PIPE_MAP_DRV_PRV << 0),
 };
 
 #define RADEON_SPARSE_PAGE_SIZE (64 * 1024)
@@ -248,6 +255,10 @@ struct radeon_winsys {
     * The screen object this winsys was created for
     */
    struct pipe_screen *screen;
+   /**
+    * Has the application created at least one TMZ buffer.
+    */
+   const bool uses_secure_bos;
 
    /**
     * Decrement the winsys reference count.
@@ -306,15 +317,15 @@ struct radeon_winsys {
     * space.
     *
     * Callers are expected to unmap buffers again if and only if the
-    * RADEON_TRANSFER_TEMPORARY flag is set in \p usage.
+    * RADEON_MAP_TEMPORARY flag is set in \p usage.
     *
     * \param buf       A winsys buffer object to map.
     * \param cs        A command stream to flush if the buffer is referenced by it.
-    * \param usage     A bitmask of the PIPE_TRANSFER_* and RADEON_TRANSFER_* flags.
+    * \param usage     A bitmask of the PIPE_MAP_* and RADEON_MAP_* flags.
     * \return          The pointer at the beginning of the buffer.
     */
    void *(*buffer_map)(struct pb_buffer *buf, struct radeon_cmdbuf *cs,
-                       enum pipe_transfer_usage usage);
+                       enum pipe_map_flags usage);
 
    /**
     * Unmap a buffer object from the client's address space.
@@ -689,9 +700,7 @@ struct radeon_winsys {
    /**
     * Secure context
     */
-   bool (*ws_is_secure)(struct radeon_winsys *ws);
    bool (*cs_is_secure)(struct radeon_cmdbuf *cs);
-   void (*cs_set_secure)(struct radeon_cmdbuf *cs, bool secure);
 };
 
 static inline bool radeon_emitted(struct radeon_cmdbuf *cs, unsigned num_dw)
@@ -709,6 +718,11 @@ static inline void radeon_emit_array(struct radeon_cmdbuf *cs, const uint32_t *v
 {
    memcpy(cs->current.buf + cs->current.cdw, values, count * 4);
    cs->current.cdw += count;
+}
+
+static inline bool radeon_uses_secure_bos(struct radeon_winsys* ws)
+{
+  return ws->uses_secure_bos;
 }
 
 enum radeon_heap
@@ -834,7 +848,8 @@ static inline int radeon_get_heap_index(enum radeon_bo_domain domain, enum radeo
 
    /* Unsupported flags: NO_SUBALLOC, SPARSE. */
    if (flags & ~(RADEON_FLAG_GTT_WC | RADEON_FLAG_NO_CPU_ACCESS | RADEON_FLAG_UNCACHED |
-                 RADEON_FLAG_NO_INTERPROCESS_SHARING | RADEON_FLAG_READ_ONLY | RADEON_FLAG_32BIT))
+                 RADEON_FLAG_NO_INTERPROCESS_SHARING | RADEON_FLAG_READ_ONLY | RADEON_FLAG_32BIT |
+                 RADEON_FLAG_DRIVER_INTERNAL))
       return -1;
 
    switch (domain) {

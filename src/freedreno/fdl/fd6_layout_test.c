@@ -586,6 +586,22 @@ static const struct testcase testcases[] = {
 			},
 		},
 	},
+
+	{
+		.format = PIPE_FORMAT_R8G8B8A8_UNORM,
+		.layout = {
+			.tile_mode = TILE6_3,
+			.ubwc = true,
+			.nr_samples = 4,
+			.width0 = 412, .height0 = 732,
+			.slices = {
+				{ .offset = 0, .pitch = 7168 },
+			},
+			.ubwc_slices = {
+				{ .offset = 0, .pitch = 128 },
+			},
+		},
+	},
 };
 
 int

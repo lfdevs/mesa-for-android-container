@@ -50,60 +50,50 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define DRI_CONF_COLOR_REDUCTION_ROUND 0
 #define DRI_CONF_COLOR_REDUCTION_DITHER 1
 #define DRI_CONF_COLOR_REDUCTION(def) \
-DRI_CONF_OPT_BEGIN_V(color_reduction,enum,def,"0:1") \
-        DRI_CONF_DESC_BEGIN("Initial color reduction method") \
-                DRI_CONF_ENUM(0,"Round colors") \
-                DRI_CONF_ENUM(1,"Dither colors") \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
+   DRI_CONF_OPT_E(color_reduction, def, 0, 1, \
+                  "Initial color reduction method", \
+                  DRI_CONF_ENUM(0, "Round colors") \
+                  DRI_CONF_ENUM(1, "Dither colors"))
 
 #define DRI_CONF_DITHER_XERRORDIFF 0
 #define DRI_CONF_DITHER_XERRORDIFFRESET 1
 #define DRI_CONF_DITHER_ORDERED 2
 #define DRI_CONF_DITHER_MODE(def) \
-DRI_CONF_OPT_BEGIN_V(dither_mode,enum,def,"0:2") \
-       DRI_CONF_DESC_BEGIN("Color dithering method") \
-                DRI_CONF_ENUM(0,"Horizontal error diffusion") \
-                DRI_CONF_ENUM(1,"Horizontal error diffusion, reset error at line start") \
-                DRI_CONF_ENUM(2,"Ordered 2D color dithering") \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
+   DRI_CONF_OPT_E(dither_mode, def, 0, 2, \
+                  "Color dithering method", \
+                  DRI_CONF_ENUM(0, "Horizontal error diffusion") \
+                  DRI_CONF_ENUM(1, "Horizontal error diffusion, reset error at line start") \
+                  DRI_CONF_ENUM(2, "Ordered 2D color dithering"))
 
 #define DRI_CONF_ROUND_TRUNC 0
 #define DRI_CONF_ROUND_ROUND 1
 #define DRI_CONF_ROUND_MODE(def) \
-DRI_CONF_OPT_BEGIN_V(round_mode,enum,def,"0:1") \
-       DRI_CONF_DESC_BEGIN("Color rounding method") \
-                DRI_CONF_ENUM(0,"Round color components downward") \
-                DRI_CONF_ENUM(1,"Round to nearest color") \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
+   DRI_CONF_OPT_E(round_mode, def, 0, 1, \
+                  "Color rounding method", \
+                  DRI_CONF_ENUM(0, "Round color components downward") \
+                  DRI_CONF_ENUM(1, "Round to nearest color"))
 
 #define DRI_CONF_FTHROTTLE_BUSY 0
 #define DRI_CONF_FTHROTTLE_USLEEPS 1
 #define DRI_CONF_FTHROTTLE_IRQS 2
 #define DRI_CONF_FTHROTTLE_MODE(def) \
-DRI_CONF_OPT_BEGIN_V(fthrottle_mode,enum,def,"0:2") \
-        DRI_CONF_DESC_BEGIN("Method to limit rendering latency") \
-                DRI_CONF_ENUM(0,"Busy waiting for the graphics hardware") \
-                DRI_CONF_ENUM(1,"Sleep for brief intervals while waiting for the graphics hardware") \
-                DRI_CONF_ENUM(2,"Let the graphics hardware emit a software interrupt and sleep") \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
+   DRI_CONF_OPT_E(fthrottle_mode, def, 0, 2, \
+                  "Method to limit rendering latency",                  \
+                  DRI_CONF_ENUM(0, "Busy waiting for the graphics hardware") \
+                  DRI_CONF_ENUM(1, "Sleep for brief intervals while waiting for the graphics hardware") \
+                  DRI_CONF_ENUM(2, "Let the graphics hardware emit a software interrupt and sleep"))
 
 #define DRI_CONF_TEXTURE_DEPTH_FB       0
 #define DRI_CONF_TEXTURE_DEPTH_32       1
 #define DRI_CONF_TEXTURE_DEPTH_16       2
 #define DRI_CONF_TEXTURE_DEPTH_FORCE_16 3
 #define DRI_CONF_TEXTURE_DEPTH(def) \
-DRI_CONF_OPT_BEGIN_V(texture_depth,enum,def,"0:3") \
-	DRI_CONF_DESC_BEGIN("Texture color depth") \
-                DRI_CONF_ENUM(0,"Prefer frame buffer color depth") \
-                DRI_CONF_ENUM(1,"Prefer 32 bits per texel") \
-                DRI_CONF_ENUM(2,"Prefer 16 bits per texel") \
-                DRI_CONF_ENUM(3,"Force 16 bits per texel") \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
+   DRI_CONF_OPT_E(texture_depth, def, 0, 3, \
+                  "Texture color depth", \
+                  DRI_CONF_ENUM(0, "Prefer frame buffer color depth") \
+                  DRI_CONF_ENUM(1, "Prefer 32 bits per texel") \
+                  DRI_CONF_ENUM(2, "Prefer 16 bits per texel") \
+                  DRI_CONF_ENUM(3, "Force 16 bits per texel"))
 
 #define DRI_CONF_TCL_SW 0
 #define DRI_CONF_TCL_PIPELINED 1

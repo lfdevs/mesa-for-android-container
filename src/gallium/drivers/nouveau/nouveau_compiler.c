@@ -75,7 +75,7 @@ nv30_codegen(int chipset, int type, struct tgsi_token tokens[],
 }
 
 static int
-dummy_assign_slots(struct nv50_ir_prog_info *info)
+dummy_assign_slots(struct nv50_ir_prog_info_out *info)
 {
    unsigned i, n, c;
 
@@ -105,6 +105,7 @@ static int
 nouveau_codegen(int chipset, int type, struct tgsi_token tokens[],
                 unsigned *size, unsigned **code) {
    struct nv50_ir_prog_info info = {0};
+   struct nv50_ir_prog_info_out info_out = {0};
    int ret;
 
    info.type = type;
@@ -124,14 +125,14 @@ nouveau_codegen(int chipset, int type, struct tgsi_token tokens[],
    info.dbgFlags = debug_get_num_option("NV50_PROG_DEBUG", 0);
    info.omitLineNum = debug_get_num_option("NV50_PROG_DEBUG_OMIT_LINENUM", 0);
 
-   ret = nv50_ir_generate_code(&info);
+   ret = nv50_ir_generate_code(&info, &info_out);
    if (ret) {
       _debug_printf("Error compiling program: %d\n", ret);
       return ret;
    }
 
-   *size = info.bin.codeSize;
-   *code = info.bin.code;
+   *size = info_out.bin.codeSize;
+   *code = info_out.bin.code;
    return 0;
 }
 

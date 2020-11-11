@@ -184,6 +184,39 @@ gather_vars_written(struct copy_prop_var_state *state,
             written->modes = nir_var_shader_out;
             break;
 
+         case nir_intrinsic_trace_ray:
+         case nir_intrinsic_execute_callable: {
+            nir_deref_instr *payload =
+               nir_src_as_deref(*nir_get_shader_call_payload_src(intrin));
+
+            nir_component_mask_t mask =
+               BITFIELD_MASK(glsl_get_vector_elements(payload->type));
+
+            struct hash_entry *ht_entry =
+               _mesa_hash_table_search(written->derefs, payload);
+            if (ht_entry) {
+               ht_entry->data = (void *)(mask | (uintptr_t)ht_entry->data);
+            } else {
+               _mesa_hash_table_insert(written->derefs, payload,
+                                       (void *)(uintptr_t)mask);
+            }
+            break;
+         }
+
+         case nir_intrinsic_report_ray_intersection:
+            written->modes |= nir_var_mem_ssbo |
+                              nir_var_mem_global |
+                              nir_var_shader_call_data |
+                              nir_var_ray_hit_attrib;
+            break;
+
+         case nir_intrinsic_ignore_ray_intersection:
+         case nir_intrinsic_terminate_ray:
+            written->modes |= nir_var_mem_ssbo |
+                              nir_var_mem_global |
+                              nir_var_shader_call_data;
+            break;
+
          case nir_intrinsic_deref_atomic_add:
          case nir_intrinsic_deref_atomic_imin:
          case nir_intrinsic_deref_atomic_umin:
@@ -195,7 +228,8 @@ gather_vars_written(struct copy_prop_var_state *state,
          case nir_intrinsic_deref_atomic_exchange:
          case nir_intrinsic_deref_atomic_comp_swap:
          case nir_intrinsic_store_deref:
-         case nir_intrinsic_copy_deref: {
+         case nir_intrinsic_copy_deref:
+         case nir_intrinsic_memcpy_deref: {
             /* Destination in all of store_deref, copy_deref and the atomics is src[0]. */
             nir_deref_instr *dst = nir_src_as_deref(intrin->src[0]);
 
@@ -290,10 +324,10 @@ static void
 copy_entry_remove(struct util_dynarray *copies,
                   struct copy_entry *entry)
 {
-   /* This also works when removing the last element since pop don't shrink
-    * the memory used by the array, so the swap is useless but not invalid.
-    */
-   *entry = util_dynarray_pop(copies, struct copy_entry);
+   const struct copy_entry *src =
+      util_dynarray_pop_ptr(copies, struct copy_entry);
+   if (src != entry)
+      *entry = *src;
 }
 
 static bool
@@ -400,8 +434,8 @@ apply_barrier_for_modes(struct util_dynarray *copies,
                         nir_variable_mode modes)
 {
    util_dynarray_foreach_reverse(copies, struct copy_entry, iter) {
-      if ((iter->dst->mode & modes) ||
-          (!iter->src.is_ssa && (iter->src.deref->mode & modes)))
+      if (nir_deref_mode_may_be(iter->dst, modes) ||
+          (!iter->src.is_ssa && nir_deref_mode_may_be(iter->src.deref, modes)))
          copy_entry_remove(copies, iter);
    }
 }
@@ -703,7 +737,7 @@ invalidate_copies_for_cf_node(struct copy_prop_var_state *state,
    struct vars_written *written = ht_entry->data;
    if (written->modes) {
       util_dynarray_foreach_reverse(copies, struct copy_entry, entry) {
-         if (entry->dst->mode & written->modes)
+         if (nir_deref_mode_may_be(entry->dst, written->modes))
             copy_entry_remove(copies, entry);
       }
    }
@@ -843,6 +877,20 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
          if (debug) dump_instr(instr);
 
          apply_barrier_for_modes(copies, nir_var_shader_out);
+         break;
+
+      case nir_intrinsic_report_ray_intersection:
+         apply_barrier_for_modes(copies, nir_var_mem_ssbo |
+                                         nir_var_mem_global |
+                                         nir_var_shader_call_data |
+                                         nir_var_ray_hit_attrib);
+         break;
+
+      case nir_intrinsic_ignore_ray_intersection:
+      case nir_intrinsic_terminate_ray:
+         apply_barrier_for_modes(copies, nir_var_mem_ssbo |
+                                         nir_var_mem_global |
+                                         nir_var_shader_call_data);
          break;
 
       case nir_intrinsic_load_deref: {
@@ -1056,6 +1104,19 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
          break;
       }
 
+      case nir_intrinsic_trace_ray:
+      case nir_intrinsic_execute_callable: {
+         if (debug) dump_instr(instr);
+
+         nir_deref_instr *payload =
+            nir_src_as_deref(*nir_get_shader_call_payload_src(intrin));
+         nir_component_mask_t full_mask =
+            BITFIELD_MASK(glsl_get_vector_elements(payload->type));
+         kill_aliases(copies, payload, full_mask);
+         break;
+      }
+
+      case nir_intrinsic_memcpy_deref:
       case nir_intrinsic_deref_atomic_add:
       case nir_intrinsic_deref_atomic_imin:
       case nir_intrinsic_deref_atomic_umin:
@@ -1073,6 +1134,24 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
          unsigned full_mask = (1 << num_components) - 1;
          kill_aliases(copies, dst, full_mask);
          break;
+
+      case nir_intrinsic_store_deref_block_intel: {
+         if (debug) dump_instr(instr);
+
+         /* Invalidate the whole variable (or cast) and anything that alias
+          * with it.
+          */
+         nir_deref_instr *dst = nir_src_as_deref(intrin->src[0]);
+         while (nir_deref_instr_parent(dst))
+            dst = nir_deref_instr_parent(dst);
+         assert(dst->deref_type == nir_deref_type_var ||
+                dst->deref_type == nir_deref_type_cast);
+
+         unsigned num_components = glsl_get_vector_elements(dst->type);
+         unsigned full_mask = (1 << num_components) - 1;
+         kill_aliases(copies, dst, full_mask);
+         break;
+      }
 
       default:
          continue; /* To skip the debug below. */

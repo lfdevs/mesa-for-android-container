@@ -53,7 +53,7 @@ util_format_bptc_rgba_unorm_pack_rgba_float(uint8_t *dst_row, unsigned dst_strid
                                             const float *src_row, unsigned src_stride,
                                             unsigned width, unsigned height);
 void
-util_format_bptc_rgba_unorm_fetch_rgba_float(float *dst, const uint8_t *src,
+util_format_bptc_rgba_unorm_fetch_rgba(void *dst, const uint8_t *src,
                                              unsigned width, unsigned height);
 
 void
@@ -73,7 +73,7 @@ util_format_bptc_srgba_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride,
                                        const float *src_row, unsigned src_stride,
                                        unsigned width, unsigned height);
 void
-util_format_bptc_srgba_fetch_rgba_float(float *dst, const uint8_t *src,
+util_format_bptc_srgba_fetch_rgba(void *dst, const uint8_t *src,
                                         unsigned width, unsigned height);
 
 void
@@ -93,7 +93,7 @@ util_format_bptc_rgb_float_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride
                                            const float *src_row, unsigned src_stride,
                                            unsigned width, unsigned height);
 void
-util_format_bptc_rgb_float_fetch_rgba_float(float *dst, const uint8_t *src,
+util_format_bptc_rgb_float_fetch_rgba(void *dst, const uint8_t *src,
                                             unsigned width, unsigned height);
 
 void
@@ -113,7 +113,7 @@ util_format_bptc_rgb_ufloat_pack_rgba_float(uint8_t *dst_row, unsigned dst_strid
                                             const float *src_row, unsigned src_stride,
                                             unsigned width, unsigned height);
 void
-util_format_bptc_rgb_ufloat_fetch_rgba_float(float *dst, const uint8_t *src,
+util_format_bptc_rgb_ufloat_fetch_rgba(void *dst, const uint8_t *src,
                                              unsigned width, unsigned height);
 #ifdef __cplusplus
 }

@@ -266,15 +266,26 @@ static void print_reg_stats(struct disasm_ctx *ctx)
 	 * assigned to shader:
 	 */
 	fullreg = (fullreg + 3) / 4;
-	halfreg = (halfreg + 3) / 4;
+	halfreg = ctx->regs.used.mergedregs ? 0 : (halfreg + 3) / 4;
 
 	// Note this count of instructions includes rptN, which matches
 	// up to how mesa prints this:
 	fprintf(ctx->out, "%s- shaderdb: %d instructions, %d nops, %d non-nops, "
-			"(%d instlen), %d half, %d full\n",
+			"(%d instlen), %u last-baryf, %d half, %d full\n",
 			levels[ctx->level], ctx->stats->instructions, ctx->stats->nops,
 			ctx->stats->instructions - ctx->stats->nops, ctx->stats->instlen,
-			halfreg, fullreg);
+			ctx->stats->last_baryf, halfreg, fullreg);
+	fprintf(ctx->out, "%s- shaderdb: %u cat0, %u cat1, %u cat2, %u cat3, "
+			"%u cat4, %u cat5, %u cat6, %u cat7\n",
+			levels[ctx->level],
+			ctx->stats->instrs_per_cat[0],
+			ctx->stats->instrs_per_cat[1],
+			ctx->stats->instrs_per_cat[2],
+			ctx->stats->instrs_per_cat[3],
+			ctx->stats->instrs_per_cat[4],
+			ctx->stats->instrs_per_cat[5],
+			ctx->stats->instrs_per_cat[6],
+			ctx->stats->instrs_per_cat[7]);
 	fprintf(ctx->out, "%s- shaderdb: %d (ss), %d (sy)\n", levels[ctx->level],
 			ctx->stats->ss, ctx->stats->sy);
 }
@@ -1507,7 +1518,7 @@ static void print_single_instr(struct disasm_ctx *ctx, instr_t *instr)
 static bool print_instr(struct disasm_ctx *ctx, uint32_t *dwords, int n)
 {
 	instr_t *instr = (instr_t *)dwords;
-	uint32_t opc = instr_opc(instr, ctx->gpu_id);
+	opc_t opc = _OPC(instr->opc_cat, instr_opc(instr, ctx->gpu_id));
 	unsigned nop = 0;
 	unsigned cycles = ctx->stats->instructions;
 
@@ -1516,14 +1527,17 @@ static bool print_instr(struct disasm_ctx *ctx, uint32_t *dwords, int n)
 				instr->opc_cat, n, cycles++, dwords[1], dwords[0]);
 	}
 
-	/* NOTE: order flags are printed is a bit fugly.. but for now I
-	 * try to match the order in llvm-a3xx disassembler for easy
-	 * diff'ing..
-	 */
+	if (opc == OPC_BARY_F)
+		ctx->stats->last_baryf = ctx->stats->instructions;
 
 	ctx->repeat = instr_repeat(instr);
 	ctx->stats->instructions += 1 + ctx->repeat;
 	ctx->stats->instlen++;
+
+	/* NOTE: order flags are printed is a bit fugly.. but for now I
+	 * try to match the order in llvm-a3xx disassembler for easy
+	 * diff'ing..
+	 */
 
 	if (instr->sync) {
 		fprintf(ctx->out, "(sy)");
@@ -1545,15 +1559,29 @@ static bool print_instr(struct disasm_ctx *ctx, uint32_t *dwords, int n)
 		nop = (instr->cat2.src2_r * 2) + instr->cat2.src1_r;
 	else if ((instr->opc_cat == 3) && (instr->cat3.src1_r || instr->cat3.src2_r))
 		nop = (instr->cat3.src2_r * 2) + instr->cat3.src1_r;
-	ctx->stats->instructions += nop;
-	ctx->stats->nops += nop;
-	if (opc == OPC_NOP)
-		ctx->stats->nops += 1 + ctx->repeat;
 	if (nop)
 		fprintf(ctx->out, "(nop%d) ", nop);
 
 	if (instr->ul && ((2 <= instr->opc_cat) && (instr->opc_cat <= 4)))
 		fprintf(ctx->out, "(ul)");
+
+	ctx->stats->instructions += nop;
+	ctx->stats->nops += nop;
+	if (opc == OPC_NOP) {
+		ctx->stats->nops += 1 + ctx->repeat;
+		ctx->stats->instrs_per_cat[0] += 1 + ctx->repeat;
+	} else {
+		ctx->stats->instrs_per_cat[instr->opc_cat] += 1 + ctx->repeat;
+		ctx->stats->instrs_per_cat[0] += nop;
+	}
+
+	if (opc == OPC_MOV) {
+		if (instr->cat1.src_type == instr->cat1.dst_type) {
+			ctx->stats->mov_count += 1 + ctx->repeat;
+		} else {
+			ctx->stats->cov_count += 1 + ctx->repeat;
+		}
+	}
 
 	print_single_instr(ctx, instr);
 	fprintf(ctx->out, "\n");
@@ -1583,12 +1611,6 @@ static bool print_instr(struct disasm_ctx *ctx, uint32_t *dwords, int n)
 
 	return (instr->opc_cat == 0) &&
 		((opc == OPC_END) || (opc == OPC_CHSH));
-}
-
-int disasm_a3xx(uint32_t *dwords, int sizedwords, int level, FILE *out, unsigned gpu_id)
-{
-	struct shader_stats stats;
-	return disasm_a3xx_stat(dwords, sizedwords, level, out, gpu_id, &stats);
 }
 
 int disasm_a3xx_stat(uint32_t *dwords, int sizedwords, int level, FILE *out,
@@ -1634,4 +1656,43 @@ int disasm_a3xx_stat(uint32_t *dwords, int sizedwords, int level, FILE *out,
 void disasm_a3xx_set_debug(enum debug_t d)
 {
 	debug = d;
+}
+
+#include <setjmp.h>
+
+static bool jmp_env_valid;
+static jmp_buf jmp_env;
+
+void
+ir3_assert_handler(const char *expr, const char *file, int line,
+		const char *func)
+{
+	fprintf(stdout, "\n%s:%u: %s: Assertion `%s' failed.\n", file, line, func, expr);
+	if (jmp_env_valid)
+		longjmp(jmp_env, 1);
+	abort();
+}
+
+#define TRY(x) do { \
+		assert(!jmp_env_valid); \
+		if (setjmp(jmp_env) == 0) { \
+			jmp_env_valid = true; \
+			x; \
+		} \
+		jmp_env_valid = false; \
+	} while (0)
+
+
+int disasm_a3xx(uint32_t *dwords, int sizedwords, int level, FILE *out, unsigned gpu_id)
+{
+	struct shader_stats stats;
+	return disasm_a3xx_stat(dwords, sizedwords, level, out, gpu_id, &stats);
+}
+
+int try_disasm_a3xx(uint32_t *dwords, int sizedwords, int level, FILE *out, unsigned gpu_id)
+{
+	struct shader_stats stats;
+	int ret = -1;
+	TRY(ret = disasm_a3xx_stat(dwords, sizedwords, level, out, gpu_id, &stats));
+	return ret;
 }

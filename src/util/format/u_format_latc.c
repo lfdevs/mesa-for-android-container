@@ -88,8 +88,9 @@ util_format_latc1_unorm_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, c
 }
 
 void
-util_format_latc1_unorm_fetch_rgba_float(float *dst, const uint8_t *src, unsigned i, unsigned j)
+util_format_latc1_unorm_fetch_rgba(void *in_dst, const uint8_t *src, unsigned i, unsigned j)
 {
+   float *dst = in_dst;
    uint8_t tmp_r;
 
    util_format_unsigned_fetch_texel_rgtc(0, src, i, j, &tmp_r, 1);
@@ -155,8 +156,9 @@ util_format_latc1_snorm_unpack_rgba_float(void *dst_row, unsigned dst_stride, co
 }
 
 void
-util_format_latc1_snorm_fetch_rgba_float(float *dst, const uint8_t *src, unsigned i, unsigned j)
+util_format_latc1_snorm_fetch_rgba(void *in_dst, const uint8_t *src, unsigned i, unsigned j)
 {
+   float *dst = in_dst;
    int8_t tmp_r;
 
    util_format_signed_fetch_texel_rgtc(0, (int8_t *)src, i, j, &tmp_r, 1);
@@ -222,8 +224,9 @@ util_format_latc2_unorm_unpack_rgba_float(void *dst_row, unsigned dst_stride, co
 }
 
 void
-util_format_latc2_unorm_fetch_rgba_float(float *dst, const uint8_t *src, unsigned i, unsigned j)
+util_format_latc2_unorm_fetch_rgba(void *in_dst, const uint8_t *src, unsigned i, unsigned j)
 {
+   float *dst = in_dst;
    uint8_t tmp_r, tmp_g;
 
    util_format_unsigned_fetch_texel_rgtc(0, src, i, j, &tmp_r, 2);
@@ -292,8 +295,9 @@ util_format_latc2_snorm_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, c
 }
 
 void
-util_format_latc2_snorm_fetch_rgba_float(float *dst, const uint8_t *src, unsigned i, unsigned j)
+util_format_latc2_snorm_fetch_rgba(void *in_dst, const uint8_t *src, unsigned i, unsigned j)
 {
+   float *dst = in_dst;
    int8_t tmp_r, tmp_g;
 
    util_format_signed_fetch_texel_rgtc(0, (int8_t *)src, i, j, &tmp_r, 2);

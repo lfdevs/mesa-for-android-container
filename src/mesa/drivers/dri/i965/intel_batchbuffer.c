@@ -130,7 +130,7 @@ intel_batchbuffer_init(struct brw_context *brw)
    struct intel_batchbuffer *batch = &brw->batch;
    const struct gen_device_info *devinfo = &screen->devinfo;
 
-   if (unlikely(INTEL_DEBUG & DEBUG_BATCH)) {
+   if (INTEL_DEBUG & DEBUG_BATCH) {
       /* The shadow doesn't get relocs written so state decode fails. */
       batch->use_shadow_copy = false;
    } else
@@ -644,7 +644,7 @@ brw_finish_batch(struct brw_context *brw)
 
    /* Do not restore push constant packets during context restore. */
    if (devinfo->gen >= 7)
-      gen10_emit_isp_disable(brw);
+      gen7_emit_isp_disable(brw);
 
    /* Emit MI_BATCH_BUFFER_END to finish our batch.  Note that execbuf2
     * requires our batch size to be QWord aligned, so we pad it out if
@@ -830,7 +830,7 @@ submit_batch(struct brw_context *brw, int in_fence_fd, int *out_fence_fd)
       throttle(brw);
    }
 
-   if (unlikely(INTEL_DEBUG & DEBUG_BATCH)) {
+   if (INTEL_DEBUG & DEBUG_BATCH) {
       gen_print_batch(&batch->decoder, batch->batch.map,
                       4 * USED_BATCH(*batch),
                       batch->batch.bo->gtt_offset, false);
@@ -879,7 +879,7 @@ _intel_batchbuffer_flush_fence(struct brw_context *brw,
       brw_bo_reference(brw->throttle_batch[0]);
    }
 
-   if (unlikely(INTEL_DEBUG & (DEBUG_BATCH | DEBUG_SUBMIT))) {
+   if (INTEL_DEBUG & (DEBUG_BATCH | DEBUG_SUBMIT)) {
       int bytes_for_commands = 4 * USED_BATCH(brw->batch);
       int bytes_for_state = brw->batch.state_used;
       fprintf(stderr, "%19s:%-3d: Batchbuffer flush with %5db (%0.1f%%) (pkt),"
@@ -897,7 +897,7 @@ _intel_batchbuffer_flush_fence(struct brw_context *brw,
 
    ret = submit_batch(brw, in_fence_fd, out_fence_fd);
 
-   if (unlikely(INTEL_DEBUG & DEBUG_SYNC)) {
+   if (INTEL_DEBUG & DEBUG_SYNC) {
       fprintf(stderr, "waiting for idle\n");
       brw_bo_wait_rendering(brw->batch.batch.bo);
    }
@@ -1067,7 +1067,7 @@ brw_state_batch(struct brw_context *brw,
       assert(offset + size < batch->state.bo->size);
    }
 
-   if (unlikely(INTEL_DEBUG & DEBUG_BATCH)) {
+   if (INTEL_DEBUG & DEBUG_BATCH) {
       _mesa_hash_table_u64_insert(batch->state_batch_sizes,
                                   offset, (void *) (uintptr_t) size);
    }

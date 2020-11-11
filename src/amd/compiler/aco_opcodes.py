@@ -206,7 +206,10 @@ class Opcode(object):
       op_dtype_sizes['i16'] = 32
       op_dtype_sizes['u16'] = 32
 
-      self.operand_size = op_dtype_sizes.get(op_dtype, 0)
+      # If we can't tell the definition size and the operand size, default to
+      # 32. Some opcodes can have a larger definition size, but
+      # get_subdword_definition_info() handles that.
+      self.operand_size = op_dtype_sizes.get(op_dtype, 32)
       self.definition_size = def_dtype_sizes.get(def_dtype, self.operand_size)
 
       # exceptions
@@ -221,15 +224,12 @@ class Opcode(object):
          self.operand_size = 0
       elif name in ['v_mad_u64_u32', 'v_mad_i64_i32']:
          self.operand_size = 0
-      elif '_pk_' in name or name in ['v_lerp_u8', 'v_sad_u8', 'v_sad_u16',
+      elif '_pk' in name or name in ['v_lerp_u8', 'v_sad_u8', 'v_sad_u16',
                                       'v_cvt_f32_ubyte0', 'v_cvt_f32_ubyte1',
                                       'v_cvt_f32_ubyte2', 'v_cvt_f32_ubyte3']:
          self.operand_size = 32
          self.definition_size = 32
       elif '_pknorm_' in name:
-         self.definition_size = 32
-      elif format == Format.PSEUDO_REDUCTION:
-         # 64-bit reductions can have a larger definition size, but get_subdword_definition_info() handles that
          self.definition_size = 32
 
 
@@ -682,6 +682,7 @@ VOP2 = {
    (  -1,   -1,   -1,   -1, 0x2b, "v_fmac_f32", True),
    (  -1,   -1,   -1,   -1, 0x2c, "v_fmamk_f32", True),
    (  -1,   -1,   -1,   -1, 0x2d, "v_fmaak_f32", True),
+   (0x2f, 0x2f,   -1,   -1, 0x2f, "v_cvt_pkrtz_f16_f32", True),
    (  -1,   -1, 0x1f, 0x1f, 0x32, "v_add_f16", True),
    (  -1,   -1, 0x20, 0x20, 0x33, "v_sub_f16", True),
    (  -1,   -1, 0x21, 0x21, 0x34, "v_subrev_f16", True),
@@ -1051,7 +1052,7 @@ VOP3 = {
    (0x11e, 0x11e, 0x293, 0x293, 0x363, "v_bfm_b32", False, False),
    (0x12d, 0x12d, 0x294, 0x294, 0x368, "v_cvt_pknorm_i16_f32", True, False),
    (0x12e, 0x12e, 0x295, 0x295, 0x369, "v_cvt_pknorm_u16_f32", True, False),
-   (0x12f, 0x12f, 0x296, 0x296, 0x12f, "v_cvt_pkrtz_f16_f32", True, False), # GFX6_7_10 is VOP2 with opcode 0x02f
+   (0x12f, 0x12f, 0x296, 0x296, 0x12f, "v_cvt_pkrtz_f16_f32_e64", True, False), # GFX6_7_10 is VOP2 with opcode 0x02f
    (0x130, 0x130, 0x297, 0x297, 0x36a, "v_cvt_pk_u16_u32", False, False),
    (0x131, 0x131, 0x298, 0x298, 0x36b, "v_cvt_pk_i16_i32", False, False),
    (   -1,    -1,    -1, 0x299, 0x312, "v_cvt_pknorm_i16_f16", True, False),

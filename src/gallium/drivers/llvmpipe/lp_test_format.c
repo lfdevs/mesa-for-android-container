@@ -390,7 +390,7 @@ test_all(unsigned verbose, FILE *fp)
           * precompiled fetch func for any format before we write LLVM code to
           * fetch from it.
           */
-         if (!format_desc->fetch_rgba_float)
+         if (!util_format_fetch_rgba_func(format))
             continue;
 
          /* only test twice with formats which can use cache */

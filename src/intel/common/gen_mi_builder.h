@@ -100,6 +100,27 @@ struct gen_mi_value {
 #endif
 };
 
+struct gen_mi_reg_num {
+   uint32_t num;
+#if GEN_GEN >= 11
+   bool cs;
+#endif
+};
+
+static inline struct gen_mi_reg_num
+gen_mi_adjust_reg_num(uint32_t reg)
+{
+#if GEN_GEN >= 11
+   bool cs = reg >= 0x2000 && reg < 0x4000;
+   return (struct gen_mi_reg_num) {
+      .num = reg - (cs ? 0x2000 : 0),
+      .cs = cs,
+   };
+#else
+   return (struct gen_mi_reg_num) { .num = reg, };
+#endif
+}
+
 #if GEN_GEN >= 9
 #define GEN_MI_BUILDER_MAX_MATH_DWORDS 256
 #else
@@ -400,7 +421,11 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
       case GEN_MI_VALUE_TYPE_REG32:
       case GEN_MI_VALUE_TYPE_REG64:
          gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
-            srm.RegisterAddress = src.reg;
+            struct gen_mi_reg_num reg = gen_mi_adjust_reg_num(src.reg);
+            srm.RegisterAddress = reg.num;
+#if GEN_GEN >= 11
+            srm.AddCSMMIOStartOffset = reg.cs;
+#endif
             srm.MemoryAddress = dst.addr;
          }
          break;
@@ -414,7 +439,11 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
       switch (src.type) {
       case GEN_MI_VALUE_TYPE_IMM:
          gen_mi_builder_emit(b, GENX(MI_LOAD_REGISTER_IMM), lri) {
-            lri.RegisterOffset = dst.reg;
+            struct gen_mi_reg_num reg = gen_mi_adjust_reg_num(dst.reg);
+            lri.RegisterOffset = reg.num;
+#if GEN_GEN >= 11
+            lri.AddCSMMIOStartOffset = reg.cs;
+#endif
             lri.DataDWord = src.imm;
          }
          break;
@@ -422,7 +451,11 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
       case GEN_MI_VALUE_TYPE_MEM32:
       case GEN_MI_VALUE_TYPE_MEM64:
          gen_mi_builder_emit(b, GENX(MI_LOAD_REGISTER_MEM), lrm) {
-            lrm.RegisterAddress = dst.reg;
+            struct gen_mi_reg_num reg = gen_mi_adjust_reg_num(dst.reg);
+            lrm.RegisterAddress = reg.num;
+#if GEN_GEN >= 11
+            lrm.AddCSMMIOStartOffset = reg.cs;
+#endif
             lrm.MemoryAddress = src.addr;
          }
          break;
@@ -432,8 +465,16 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
 #if GEN_GEN >= 8 || GEN_IS_HASWELL
          if (src.reg != dst.reg) {
             gen_mi_builder_emit(b, GENX(MI_LOAD_REGISTER_REG), lrr) {
-               lrr.SourceRegisterAddress = src.reg;
-               lrr.DestinationRegisterAddress = dst.reg;
+               struct gen_mi_reg_num reg = gen_mi_adjust_reg_num(src.reg);
+               lrr.SourceRegisterAddress = reg.num;
+#if GEN_GEN >= 11
+               lrr.AddCSMMIOStartOffsetSource = reg.cs;
+#endif
+               reg = gen_mi_adjust_reg_num(dst.reg);
+               lrr.DestinationRegisterAddress = reg.num;
+#if GEN_GEN >= 11
+               lrr.AddCSMMIOStartOffsetDestination = reg.cs;
+#endif
             }
          }
 #else
@@ -551,18 +592,30 @@ gen_mi_store_if(struct gen_mi_builder *b,
 
    if (dst.type == GEN_MI_VALUE_TYPE_MEM64) {
       gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
-         srm.RegisterAddress = src.reg;
+         struct gen_mi_reg_num reg = gen_mi_adjust_reg_num(src.reg);
+         srm.RegisterAddress = reg.num;
+#if GEN_GEN >= 11
+         srm.AddCSMMIOStartOffset = reg.cs;
+#endif
          srm.MemoryAddress = dst.addr;
          srm.PredicateEnable = true;
       }
       gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
-         srm.RegisterAddress = src.reg + 4;
+         struct gen_mi_reg_num reg = gen_mi_adjust_reg_num(src.reg + 4);
+         srm.RegisterAddress = reg.num;
+#if GEN_GEN >= 11
+         srm.AddCSMMIOStartOffset = reg.cs;
+#endif
          srm.MemoryAddress = __gen_address_offset(dst.addr, 4);
          srm.PredicateEnable = true;
       }
    } else {
       gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
-         srm.RegisterAddress = src.reg;
+         struct gen_mi_reg_num reg = gen_mi_adjust_reg_num(src.reg);
+         srm.RegisterAddress = reg.num;
+#if GEN_GEN >= 11
+         srm.AddCSMMIOStartOffset = reg.cs;
+#endif
          srm.MemoryAddress = dst.addr;
          srm.PredicateEnable = true;
       }

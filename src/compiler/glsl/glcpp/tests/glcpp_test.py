@@ -76,6 +76,10 @@ def test_output(glcpp, filename, expfile, nl_format='\n'):
         actual, _ = proc.communicate(f.read())
         actual = actual.decode('utf-8')
 
+        if proc.returncode == 255:
+            print("Test returned general error, possibly missing linker")
+            sys.exit(77)
+
     with open(expfile, 'r') as f:
         expected = f.read()
 

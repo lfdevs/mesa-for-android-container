@@ -223,7 +223,8 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 		return;
 	}
 
-	if (!info->count_from_stream_output && !info->indirect &&
+	if (info->mode != PIPE_PRIM_MAX &&
+	    !info->count_from_stream_output && !info->indirect &&
 	    !info->primitive_restart &&
 	    !u_trim_pipe_prim(info->mode, (unsigned*)&info->count))
 		return;
@@ -287,7 +288,8 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	 * so keep the count accurate for non-patch geometry.
 	 */
 	unsigned prims;
-	if (info->mode != PIPE_PRIM_PATCHES)
+	if ((info->mode != PIPE_PRIM_PATCHES) &&
+			(info->mode != PIPE_PRIM_MAX))
 		prims = u_reduced_prims_for_vertices(info->mode, info->count);
 	else
 		prims = 0;

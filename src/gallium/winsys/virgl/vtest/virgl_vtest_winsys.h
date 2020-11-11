@@ -31,7 +31,7 @@
 #include "os/os_thread.h"
 
 #include "virgl/virgl_winsys.h"
-#include "vtest_protocol.h"
+#include "vtest/vtest_protocol.h"
 #include "virgl_resource_cache.h"
 
 struct pipe_fence_handle;

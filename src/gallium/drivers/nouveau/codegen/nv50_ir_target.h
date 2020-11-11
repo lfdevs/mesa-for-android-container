@@ -173,8 +173,9 @@ public:
    // The address chosen is supplied to the relocation routine.
    virtual void getBuiltinCode(const uint32_t **code, uint32_t *size) const = 0;
 
-   virtual void parseDriverInfo(const struct nv50_ir_prog_info *info) {
-      if (info->type == PIPE_SHADER_COMPUTE) {
+   virtual void parseDriverInfo(const struct nv50_ir_prog_info *info,
+                                const struct nv50_ir_prog_info_out *info_out) {
+      if (info_out->type == PIPE_SHADER_COMPUTE) {
          threads = info->prop.cp.numThreads[0] *
             info->prop.cp.numThreads[1] *
             info->prop.cp.numThreads[2];

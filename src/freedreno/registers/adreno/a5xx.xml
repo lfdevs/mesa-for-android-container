@@ -1538,7 +1538,9 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<reg32 offset="0x0e55" name="VFD_PERFCTR_VFD_SEL_5" type="a5xx_vfd_perfcounter_select"/>
 	<reg32 offset="0x0e56" name="VFD_PERFCTR_VFD_SEL_6" type="a5xx_vfd_perfcounter_select"/>
 	<reg32 offset="0x0e57" name="VFD_PERFCTR_VFD_SEL_7" type="a5xx_vfd_perfcounter_select"/>
-	<reg32 offset="0x0e60" name="VPC_DBG_ECO_CNTL"/> <!-- always 00000400? -->
+	<reg32 offset="0x0e60" name="VPC_DBG_ECO_CNTL">
+		<bitfield name="ALLFLATOPTDIS" pos="10" type="boolean"/>
+	</reg32>
 	<reg32 offset="0x0e61" name="VPC_ADDR_MODE_CNTL" type="a5xx_address_mode"/>
 	<reg32 offset="0x0e62" name="VPC_MODE_CNTL">
 		<bitfield name="BINNING_PASS" pos="0" type="boolean"/>
@@ -1549,6 +1551,7 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<reg32 offset="0x0e67" name="VPC_PERFCTR_VPC_SEL_3" type="a5xx_vpc_perfcounter_select"/>
 
 	<reg32 offset="0x0e80" name="UCHE_ADDR_MODE_CNTL" type="a5xx_address_mode"/>
+	<reg32 offset="0x0e81" name="UCHE_MODE_CNTL"/>
 	<reg32 offset="0x0e82" name="UCHE_SVM_CNTL"/>
 	<reg32 offset="0x0e87" name="UCHE_WRITE_THRU_BASE_LO"/>
 	<reg32 offset="0x0e88" name="UCHE_WRITE_THRU_BASE_HI"/>

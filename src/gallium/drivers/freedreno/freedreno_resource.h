@@ -46,7 +46,7 @@ enum fd_lrz_direction {
 
 struct fd_resource {
 	struct pipe_resource base;
-	struct fd_bo *bo;
+	struct fd_bo *bo;  /* use fd_resource_set_bo() to write */
 	enum pipe_format internal_format;
 	struct fdl_layout layout;
 
@@ -87,6 +87,12 @@ struct fd_resource {
 	 */
 	enum fd_dirty_3d_state dirty;
 
+	/* Uninitialized resources with UBWC format need their UBWC flag data
+	 * cleared before writes, as the UBWC state is read and used during
+	 * writes, so undefined UBWC flag data results in undefined results.
+	 */
+	bool needs_ubwc_clear : 1;
+
 	/*
 	 * LRZ
 	 *
@@ -101,6 +107,11 @@ struct fd_resource {
 	struct fd_bo *lrz;
 };
 
+struct fd_memory_object {
+	struct pipe_memory_object b;
+	struct fd_bo *bo;
+};
+
 static inline struct fd_resource *
 fd_resource(struct pipe_resource *ptex)
 {
@@ -111,6 +122,12 @@ static inline const struct fd_resource *
 fd_resource_const(const struct pipe_resource *ptex)
 {
 	return (const struct fd_resource *)ptex;
+}
+
+static inline struct fd_memory_object *
+fd_memory_object (struct pipe_memory_object *pmemobj)
+{
+	return (struct fd_memory_object *)pmemobj;
 }
 
 static inline bool
@@ -261,6 +278,7 @@ void fd_resource_context_init(struct pipe_context *pctx);
 uint32_t fd_setup_slices(struct fd_resource *rsc);
 void fd_resource_resize(struct pipe_resource *prsc, uint32_t sz);
 void fd_resource_uncompress(struct fd_context *ctx, struct fd_resource *rsc);
+void fd_resource_dump(struct fd_resource *rsc, const char *name);
 
 bool fd_render_condition_check(struct pipe_context *pctx);
 
@@ -268,6 +286,15 @@ static inline bool
 fd_batch_references_resource(struct fd_batch *batch, struct fd_resource *rsc)
 {
 	return rsc->batch_mask & (1 << batch->idx);
+}
+
+static inline void
+fd_batch_write_prep(struct fd_batch *batch, struct fd_resource *rsc)
+{
+	if (unlikely(rsc->needs_ubwc_clear)) {
+		batch->ctx->clear_ubwc(batch, rsc);
+		rsc->needs_ubwc_clear = false;
+	}
 }
 
 static inline void

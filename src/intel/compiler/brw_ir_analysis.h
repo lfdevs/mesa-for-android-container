@@ -130,63 +130,63 @@ namespace brw {
  *    whether the analysis result \p x is consistent with the input IR.  This
  *    is currently only used for validation in debug builds.
  */
-#define BRW_ANALYSIS(L, T, C)                                           \
-   class L {                                                            \
-   public:                                                              \
-      /**                                                               \
-       * Construct a program analysis.  \p c is an arbitrary object     \
-       * passed as argument to the constructor of the analysis result   \
-       * object of type \p T.                                           \
-       */                                                               \
-      L(C const &c) : c(c), p(NULL) {}                                  \
-                                                                        \
-      /**                                                               \
-       * Destroy a program analysis.                                    \
-       */                                                               \
-      ~L()                                                              \
-      {                                                                 \
-         delete p;                                                      \
-      }                                                                 \
-                                                                        \
-      /**                                                               \
-       * Obtain the result of a program analysis.  This gives a         \
-       * guaranteed up-to-date result, the analysis pass will be        \
-       * rerun implicitly if it has become stale.                       \
-       */                                                               \
-      T &                                                               \
-      require()                                                         \
-      {                                                                 \
-         if (p)                                                         \
-            assert(p->validate(c));                                     \
-         else                                                           \
-            p = new T(c);                                               \
-                                                                        \
-         return *p;                                                     \
-      }                                                                 \
-                                                                        \
-      const T &                                                         \
-      require() const                                                   \
-      {                                                                 \
-         return const_cast<L *>(this)->require();                       \
-      }                                                                 \
-                                                                        \
-      /**                                                               \
-       * Report that dependencies of the analysis pass may have changed \
-       * since the last calculation and the cached analysis result may  \
-       * have to be discarded.                                          \
-       */                                                               \
-      void                                                              \
-      invalidate(brw::analysis_dependency_class c)                      \
-      {                                                                 \
-         if (p && c & p->dependency_class()) {                          \
-            delete p;                                                   \
-            p = NULL;                                                   \
-         }                                                              \
-      }                                                                 \
-                                                                        \
-   private:                                                             \
-      C c;                                                              \
-      T *p;                                                             \
+template<class T, class C>
+class brw_analysis {
+public:
+   /**
+    * Construct a program analysis.  \p c is an arbitrary object
+    * passed as argument to the constructor of the analysis result
+    * object of type \p T.
+    */
+   brw_analysis(const C *c) : c(c), p(NULL) {}
+
+   /**
+    * Destroy a program analysis.
+    */
+   ~brw_analysis()
+   {
+      delete p;
    }
+
+   /**
+    * Obtain the result of a program analysis.  This gives a
+    * guaranteed up-to-date result, the analysis pass will be
+    * rerun implicitly if it has become stale.
+    */
+   T &
+   require()
+   {
+      if (p)
+         assert(p->validate(c));
+      else
+         p = new T(c);
+
+      return *p;
+   }
+
+   const T &
+   require() const
+   {
+      return const_cast<brw_analysis<T, C> *>(this)->require();
+   }
+
+   /**
+    * Report that dependencies of the analysis pass may have changed
+    * since the last calculation and the cached analysis result may
+    * have to be discarded.
+    */
+   void
+   invalidate(brw::analysis_dependency_class c)
+   {
+      if (p && (c & p->dependency_class())) {
+         delete p;
+         p = NULL;
+      }
+   }
+
+private:
+   const C *c;
+   T *p;
+};
 
 #endif

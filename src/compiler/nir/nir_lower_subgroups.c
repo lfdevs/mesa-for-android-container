@@ -550,6 +550,9 @@ lower_subgroups_instr(nir_builder *b, nir_instr *instr, void *_options)
    }
 
    case nir_intrinsic_elect: {
+      if (!options->lower_elect)
+         return NULL;
+
       nir_intrinsic_instr *first =
          nir_intrinsic_instr_create(b->shader,
                                     nir_intrinsic_first_invocation);

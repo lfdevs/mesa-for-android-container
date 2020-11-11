@@ -109,7 +109,7 @@ static void si_dump_shader(struct si_screen *sscreen, struct si_shader *shader, 
 
       const char *mapped = sscreen->ws->buffer_map(
          shader->bo->buf, NULL,
-         PIPE_TRANSFER_UNSYNCHRONIZED | PIPE_TRANSFER_READ | RADEON_TRANSFER_TEMPORARY);
+         PIPE_MAP_UNSYNCHRONIZED | PIPE_MAP_READ | RADEON_MAP_TEMPORARY);
 
       for (unsigned i = 0; i < size; i += 4) {
          fprintf(f, " %4x: %08x\n", i, *(uint32_t *)(mapped + i));
@@ -403,7 +403,7 @@ static void si_log_chunk_type_cs_print(void *data, FILE *f)
     * If the GPU is hung, there is no point in waiting for it.
     */
    uint32_t *map = ctx->ws->buffer_map(scs->trace_buf->buf, NULL,
-                                       PIPE_TRANSFER_UNSYNCHRONIZED | PIPE_TRANSFER_READ);
+                                       PIPE_MAP_UNSYNCHRONIZED | PIPE_MAP_READ);
    if (map) {
       last_trace_id = map[0];
       last_compute_trace_id = map[1];
@@ -777,9 +777,10 @@ static unsigned si_identity(unsigned slot)
    return slot;
 }
 
-static void si_dump_descriptors(struct si_context *sctx, enum pipe_shader_type processor,
+static void si_dump_descriptors(struct si_context *sctx, gl_shader_stage stage,
                                 const struct si_shader_info *info, struct u_log_context *log)
 {
+   enum pipe_shader_type processor = pipe_shader_type_from_mesa(stage);
    struct si_descriptors *descs =
       &sctx->descriptors[SI_DESCS_FIRST_SHADER + processor * SI_NUM_SHADER_DESCS];
    static const char *shader_name[] = {"VS", "PS", "GS", "TCS", "TES", "CS"};
@@ -788,10 +789,10 @@ static void si_dump_descriptors(struct si_context *sctx, enum pipe_shader_type p
    unsigned enabled_images;
 
    if (info) {
-      enabled_constbuf = info->const_buffers_declared;
-      enabled_shaderbuf = info->shader_buffers_declared;
-      enabled_samplers = info->samplers_declared;
-      enabled_images = info->images_declared;
+      enabled_constbuf = u_bit_consecutive(0, info->base.num_ubos);
+      enabled_shaderbuf = u_bit_consecutive(0, info->base.num_ssbos);
+      enabled_samplers = info->base.textures_used;
+      enabled_images = u_bit_consecutive(0, info->base.num_images);
    } else {
       enabled_constbuf =
          sctx->const_and_shader_buffers[processor].enabled_mask >> SI_NUM_SHADER_BUFFERS;
@@ -807,7 +808,7 @@ static void si_dump_descriptors(struct si_context *sctx, enum pipe_shader_type p
       enabled_images = sctx->images[processor].enabled_mask;
    }
 
-   if (processor == PIPE_SHADER_VERTEX && sctx->vb_descriptors_buffer &&
+   if (stage == MESA_SHADER_VERTEX && sctx->vb_descriptors_buffer &&
        sctx->vb_descriptors_gpu_list && sctx->vertex_elements) {
       assert(info); /* only CS may not have an info struct */
       struct si_descriptors desc = {};
@@ -842,7 +843,7 @@ static void si_dump_gfx_descriptors(struct si_context *sctx,
    if (!state->cso || !state->current)
       return;
 
-   si_dump_descriptors(sctx, state->cso->type, &state->cso->info, log);
+   si_dump_descriptors(sctx, state->cso->info.stage, &state->cso->info, log);
 }
 
 static void si_dump_compute_descriptors(struct si_context *sctx, struct u_log_context *log)
@@ -850,7 +851,7 @@ static void si_dump_compute_descriptors(struct si_context *sctx, struct u_log_co
    if (!sctx->cs_shader_state.program)
       return;
 
-   si_dump_descriptors(sctx, PIPE_SHADER_COMPUTE, NULL, log);
+   si_dump_descriptors(sctx, MESA_SHADER_COMPUTE, NULL, log);
 }
 
 struct si_shader_inst {
@@ -873,11 +874,11 @@ struct si_shader_inst {
 static void si_add_split_disasm(struct si_screen *screen, struct ac_rtld_binary *rtld_binary,
                                 struct si_shader_binary *binary, uint64_t *addr, unsigned *num,
                                 struct si_shader_inst *instructions,
-                                enum pipe_shader_type shader_type, unsigned wave_size)
+                                gl_shader_stage stage, unsigned wave_size)
 {
    if (!ac_rtld_open(rtld_binary, (struct ac_rtld_open_info){
                                      .info = &screen->info,
-                                     .shader_type = tgsi_processor_to_shader_stage(shader_type),
+                                     .shader_type = stage,
                                      .wave_size = wave_size,
                                      .num_parts = 1,
                                      .elf_ptrs = &binary->elf_buffer,
@@ -925,7 +926,7 @@ static void si_print_annotated_shader(struct si_shader *shader, struct ac_wave_i
       return;
 
    struct si_screen *screen = shader->selector->screen;
-   enum pipe_shader_type shader_type = shader->selector->type;
+   gl_shader_stage stage = shader->selector->info.stage;
    uint64_t start_addr = shader->bo->gpu_address;
    uint64_t end_addr = start_addr + shader->bo->b.b.width0;
    unsigned i;
@@ -954,21 +955,21 @@ static void si_print_annotated_shader(struct si_shader *shader, struct ac_wave_i
 
    if (shader->prolog) {
       si_add_split_disasm(screen, &rtld_binaries[0], &shader->prolog->binary, &inst_addr, &num_inst,
-                          instructions, shader_type, wave_size);
+                          instructions, stage, wave_size);
    }
    if (shader->previous_stage) {
       si_add_split_disasm(screen, &rtld_binaries[1], &shader->previous_stage->binary, &inst_addr,
-                          &num_inst, instructions, shader_type, wave_size);
+                          &num_inst, instructions, stage, wave_size);
    }
    if (shader->prolog2) {
       si_add_split_disasm(screen, &rtld_binaries[2], &shader->prolog2->binary, &inst_addr,
-                          &num_inst, instructions, shader_type, wave_size);
+                          &num_inst, instructions, stage, wave_size);
    }
    si_add_split_disasm(screen, &rtld_binaries[3], &shader->binary, &inst_addr, &num_inst,
-                       instructions, shader_type, wave_size);
+                       instructions, stage, wave_size);
    if (shader->epilog) {
       si_add_split_disasm(screen, &rtld_binaries[4], &shader->epilog->binary, &inst_addr, &num_inst,
-                          instructions, shader_type, wave_size);
+                          instructions, stage, wave_size);
    }
 
    fprintf(f, COLOR_YELLOW "%s - annotated disassembly:" COLOR_RESET "\n",

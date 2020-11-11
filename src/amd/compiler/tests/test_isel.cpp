@@ -67,9 +67,9 @@ BEGIN_TEST(isel.compute.simple)
             uint res;
          };
          void main() {
-            //~gfx7>> v1: %data = v_mov_b32 42
+            //~gfx7>> v1: %data = p_parallelcopy 42
             //~gfx7>> buffer_store_dword %_, v1: undef, 0, %data disable_wqm storage:buffer semantics: scope:invocation
-            //~gfx8>> s1: %data = s_mov_b32 42
+            //~gfx8>> s1: %data = p_parallelcopy 42
             //~gfx8>> s_buffer_store_dword %_, 0, %data storage:buffer semantics: scope:invocation
             res = 42;
          }

@@ -551,25 +551,12 @@ iris_hiz_exec(struct iris_context *ice,
     *    the depth buffer clear operation."
     *
     * Same applies for Gen8 and Gen9.
-    *
-    * In addition, from the Ivybridge PRM, volume 2, 1.10.4.1
-    * PIPE_CONTROL, Depth Cache Flush Enable:
-    *
-    *   "This bit must not be set when Depth Stall Enable bit is set in
-    *    this packet."
-    *
-    * This is confirmed to hold for real, Haswell gets immediate gpu hangs.
-    *
-    * Therefore issue two pipe control flushes, one for cache flush and
-    * another for depth stall.
     */
    iris_emit_pipe_control_flush(batch,
-                                "hiz op: pre-flushes (1/2)",
+                                "hiz op: pre-flush",
                                 PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+                                PIPE_CONTROL_DEPTH_STALL |
                                 PIPE_CONTROL_CS_STALL);
-
-   iris_emit_pipe_control_flush(batch, "hiz op: pre-flushes (2/2)",
-                                PIPE_CONTROL_DEPTH_STALL);
 
    assert(isl_aux_usage_has_hiz(res->aux.usage) && res->aux.bo);
 
@@ -673,9 +660,9 @@ miptree_layer_range_length(const struct iris_resource *res, uint32_t level,
 }
 
 bool
-iris_has_color_unresolved(const struct iris_resource *res,
-                          unsigned start_level, unsigned num_levels,
-                          unsigned start_layer, unsigned num_layers)
+iris_has_invalid_primary(const struct iris_resource *res,
+                         unsigned start_level, unsigned num_levels,
+                         unsigned start_layer, unsigned num_layers)
 {
    if (!res->aux.bo)
       return false;
@@ -685,13 +672,15 @@ iris_has_color_unresolved(const struct iris_resource *res,
 
    for (uint32_t l = 0; l < num_levels; l++) {
       const uint32_t level = start_level + l;
+      if (!level_has_aux(res, level))
+         continue;
+
       const uint32_t level_layers =
          miptree_layer_range_length(res, level, start_layer, num_layers);
       for (unsigned a = 0; a < level_layers; a++) {
          enum isl_aux_state aux_state =
             iris_resource_get_aux_state(res, level, start_layer + a);
-         assert(aux_state != ISL_AUX_STATE_AUX_INVALID);
-         if (aux_state != ISL_AUX_STATE_PASS_THROUGH)
+         if (!isl_aux_state_has_valid_primary(aux_state))
             return true;
       }
    }
@@ -808,6 +797,15 @@ iris_resource_set_aux_state(struct iris_context *ice,
          ice->state.stage_dirty |= IRIS_ALL_STAGE_DIRTY_BINDINGS;
       }
    }
+
+   if (res->mod_info && !res->mod_info->supports_clear_color) {
+      assert(res->mod_info->aux_usage != ISL_AUX_USAGE_NONE);
+      if (aux_state == ISL_AUX_STATE_CLEAR ||
+          aux_state == ISL_AUX_STATE_COMPRESSED_CLEAR ||
+          aux_state == ISL_AUX_STATE_PARTIAL_CLEAR) {
+         iris_mark_dirty_dmabuf(ice, &res->base);
+      }
+   }
 }
 
 enum isl_aux_usage
@@ -836,6 +834,7 @@ iris_resource_texture_aux_usage(struct iris_context *ice,
    case ISL_AUX_USAGE_MCS:
    case ISL_AUX_USAGE_MCS_CCS:
    case ISL_AUX_USAGE_STC_CCS:
+   case ISL_AUX_USAGE_MC:
       return res->aux.usage;
 
    case ISL_AUX_USAGE_CCS_E:
@@ -844,8 +843,8 @@ iris_resource_texture_aux_usage(struct iris_context *ice,
        * ISL_AUX_USAGE_NONE.  This way, texturing won't even look at the
        * aux surface and we can save some bandwidth.
        */
-      if (!iris_has_color_unresolved(res, 0, INTEL_REMAINING_LEVELS,
-                                     0, INTEL_REMAINING_LAYERS))
+      if (!iris_has_invalid_primary(res, 0, INTEL_REMAINING_LEVELS,
+                                    0, INTEL_REMAINING_LAYERS))
          return ISL_AUX_USAGE_NONE;
 
       /* On Gen9 color buffers may be compressed by the hardware (lossless

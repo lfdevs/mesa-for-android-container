@@ -949,8 +949,8 @@ CodeEmitterGM107::emitI2I()
    emitGPR  (0x00, insn->def(0));
 }
 
-static void
-selpFlip(const FixupEntry *entry, uint32_t *code, const FixupData& data)
+void
+gm107_selpFlip(const FixupEntry *entry, uint32_t *code, const FixupData& data)
 {
    int loc = entry->loc;
    if (data.force_persample_interp)
@@ -986,7 +986,7 @@ CodeEmitterGM107::emitSEL()
    emitGPR (0x00, insn->def(0));
 
    if (insn->subOp == 1) {
-      addInterp(0, 0, selpFlip);
+      addInterp(0, 0, gm107_selpFlip);
    }
 }
 
@@ -2556,8 +2556,8 @@ CodeEmitterGM107::emitAL2P()
    emitGPR  (0x00, insn->def(0));
 }
 
-static void
-interpApply(const FixupEntry *entry, uint32_t *code, const FixupData& data)
+void
+gm107_interpApply(const FixupEntry *entry, uint32_t *code, const FixupData& data)
 {
    int ipa = entry->ipa;
    int reg = entry->reg;
@@ -2617,12 +2617,12 @@ CodeEmitterGM107::emitIPA()
       emitGPR(0x14, insn->src(1));
       if (insn->getSampleMode() == NV50_IR_INTERP_OFFSET)
          emitGPR(0x27, insn->src(2));
-      addInterp(insn->ipa, insn->getSrc(1)->reg.data.id, interpApply);
+      addInterp(insn->ipa, insn->getSrc(1)->reg.data.id, gm107_interpApply);
    } else {
       if (insn->getSampleMode() == NV50_IR_INTERP_OFFSET)
          emitGPR(0x27, insn->src(1));
       emitGPR(0x14);
-      addInterp(insn->ipa, 0xff, interpApply);
+      addInterp(insn->ipa, 0xff, gm107_interpApply);
    }
 
    if (insn->getSampleMode() != NV50_IR_INTERP_OFFSET)

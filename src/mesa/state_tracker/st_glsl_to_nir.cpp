@@ -102,12 +102,13 @@ st_shader_gather_info(nir_shader *nir, struct gl_program *prog)
 void
 st_nir_assign_vs_in_locations(struct nir_shader *nir)
 {
-   if (nir->info.stage != MESA_SHADER_VERTEX)
+   if (nir->info.stage != MESA_SHADER_VERTEX || nir->info.io_lowered)
       return;
+
+   nir->num_inputs = util_bitcount64(nir->info.inputs_read);
 
    bool removed_inputs = false;
 
-   nir->num_inputs = util_bitcount64(nir->info.inputs_read);
    nir_foreach_shader_in_variable_safe(var, nir) {
       /* NIR already assigns dual-slot inputs to two locations so all we have
        * to do is compact everything down.
@@ -263,9 +264,8 @@ st_nir_opts(nir_shader *nir)
        * might be able to make progress after it.
        */
       NIR_PASS(progress, nir, nir_remove_dead_variables,
-               (nir_variable_mode)(nir_var_function_temp |
-                                   nir_var_shader_temp |
-                                   nir_var_mem_shared),
+               nir_var_function_temp | nir_var_shader_temp |
+               nir_var_mem_shared,
                NULL);
 
       NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
@@ -305,8 +305,7 @@ st_nir_opts(nir_shader *nir)
 
             NIR_PASS(lower_flrp_progress, nir, nir_lower_flrp,
                      lower_flrp,
-                     false /* always_precise */,
-                     nir->options->lower_ffma);
+                     false /* always_precise */);
             if (lower_flrp_progress) {
                NIR_PASS(progress, nir,
                         nir_opt_constant_folding);
@@ -371,7 +370,7 @@ st_nir_preprocess(struct st_context *st, struct gl_program *prog,
    }
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
-   if (!st->ctx->SoftFP64 && nir->info.uses_64bit &&
+   if (!st->ctx->SoftFP64 && ((nir->info.bit_sizes_int | nir->info.bit_sizes_float) & 64) &&
        (options->lower_doubles_options & nir_lower_fp64_full_software) != 0) {
       st->ctx->SoftFP64 = glsl_float64_funcs_to_nir(st->ctx, options);
    }
@@ -382,8 +381,7 @@ st_nir_preprocess(struct st_context *st, struct gl_program *prog,
     * calls below do a little extra work but should otherwise have no impact.
     */
    if (!_mesa_is_gles(st->ctx) || !nir->info.separate_shader) {
-      nir_variable_mode mask =
-         (nir_variable_mode) (nir_var_shader_in | nir_var_shader_out);
+      nir_variable_mode mask = nir_var_shader_in | nir_var_shader_out;
       nir_remove_dead_variables(nir, mask, NULL);
    }
 
@@ -432,6 +430,7 @@ st_glsl_to_nir_post_opts(struct st_context *st, struct gl_program *prog,
                          struct gl_shader_program *shader_program)
 {
    nir_shader *nir = prog->nir;
+   struct pipe_screen *screen = st->pipe->screen;
 
    /* Make a pass over the IR to add state references for any built-in
     * uniforms that are used.  This has to be done now (during linking).
@@ -486,7 +485,9 @@ st_glsl_to_nir_post_opts(struct st_context *st, struct gl_program *prog,
        !st->ctx->Const.PackedDriverUniformStorage)
       NIR_PASS_V(nir, st_nir_lower_builtin);
 
-   NIR_PASS_V(nir, gl_nir_lower_atomics, shader_program, true);
+   if (!screen->get_param(screen, PIPE_CAP_NIR_ATOMICS_AS_DEREF))
+      NIR_PASS_V(nir, gl_nir_lower_atomics, shader_program, true);
+
    NIR_PASS_V(nir, nir_opt_intrinsics);
 
    /* Lower 64-bit ops. */
@@ -504,11 +505,11 @@ st_glsl_to_nir_post_opts(struct st_context *st, struct gl_program *prog,
          st_nir_opts(nir);
    }
 
-   nir_variable_mode mask = (nir_variable_mode)
-      (nir_var_shader_in | nir_var_shader_out | nir_var_function_temp );
+   nir_variable_mode mask =
+      nir_var_shader_in | nir_var_shader_out | nir_var_function_temp;
    nir_remove_dead_variables(nir, mask, NULL);
 
-   if (!st->has_hw_atomics)
+   if (!st->has_hw_atomics && !screen->get_param(screen, PIPE_CAP_NIR_ATOMICS_AS_DEREF))
       NIR_PASS_V(nir, nir_lower_atomics_to_ssbo);
 
    st_finalize_nir_before_variants(nir);
@@ -751,6 +752,8 @@ st_link_nir(struct gl_context *ctx,
       struct gl_linked_shader *shader = linked_shader[i];
       nir_shader *nir = shader->Program->nir;
 
+      NIR_PASS_V(nir, nir_opt_access);
+
       /* This needs to run after the initial pass of nir_lower_vars_to_ssa, so
        * that the buffer indices are constants in nir where they where
        * constants in GLSL. */
@@ -768,6 +771,8 @@ st_link_nir(struct gl_context *ctx,
                  st->pipe->screen);
 
       NIR_PASS_V(nir, nir_lower_system_values);
+      NIR_PASS_V(nir, nir_lower_compute_system_values, NULL);
+
       NIR_PASS_V(nir, nir_lower_clip_cull_distance_arrays);
 
       st_shader_gather_info(nir, shader->Program);
@@ -804,6 +809,8 @@ st_link_nir(struct gl_context *ctx,
       struct gl_linked_shader *shader = linked_shader[i];
       struct shader_info *info = &shader->Program->nir->info;
 
+      st_glsl_to_nir_post_opts(st, shader->Program, shader_program);
+
       if (prev_info &&
           ctx->Const.ShaderCompilerOptions[shader->Stage].NirOptions->unify_interfaces) {
          prev_info->outputs_written |= info->inputs_read &
@@ -821,7 +828,17 @@ st_link_nir(struct gl_context *ctx,
       struct gl_linked_shader *shader = linked_shader[i];
       struct gl_program *prog = shader->Program;
       struct st_program *stp = st_program(prog);
-      st_glsl_to_nir_post_opts(st, prog, shader_program);
+
+      /* Make sure that prog->info is in sync with nir->info, but st/mesa
+       * expects some of the values to be from before lowering.
+       */
+      shader_info old_info = prog->info;
+      prog->info = prog->nir->info;
+      prog->info.num_ssbos = old_info.num_ssbos;
+      prog->info.num_ubos = old_info.num_ubos;
+      prog->info.num_abos = old_info.num_abos;
+      if (prog->info.stage == MESA_SHADER_VERTEX)
+         prog->info.inputs_read = old_info.inputs_read;
 
       /* Initialize st_vertex_program members. */
       if (shader->Stage == MESA_SHADER_VERTEX)
@@ -913,16 +930,20 @@ st_unpacked_uniforms_type_size(const struct glsl_type *type, bool bindless)
 void
 st_nir_lower_uniforms(struct st_context *st, nir_shader *nir)
 {
+   unsigned multiplier = 16;
    if (st->ctx->Const.PackedDriverUniformStorage) {
       NIR_PASS_V(nir, nir_lower_io, nir_var_uniform,
                  st_packed_uniforms_type_size,
                  (nir_lower_io_options)0);
-      NIR_PASS_V(nir, nir_lower_uniforms_to_ubo, 4);
+      multiplier = 4;
    } else {
       NIR_PASS_V(nir, nir_lower_io, nir_var_uniform,
                  st_unpacked_uniforms_type_size,
                  (nir_lower_io_options)0);
    }
+
+   if (nir->options->lower_uniforms_to_ubo)
+      NIR_PASS_V(nir, nir_lower_uniforms_to_ubo, multiplier);
 }
 
 /* Last third of preparing nir from glsl, which happens after shader

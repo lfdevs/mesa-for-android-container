@@ -478,6 +478,8 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
                         LLVMValueRef j,
                         LLVMValueRef cache)
 {
+   const struct util_format_unpack_description *unpack =
+      util_format_unpack_description(format_desc->format);
    LLVMBuilderRef builder = gallivm->builder;
    unsigned num_pixels = type.length / 4;
    struct lp_build_context bld;
@@ -789,7 +791,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
     * Fallback to util_format_description::fetch_rgba_8unorm().
     */
 
-   if (format_desc->fetch_rgba_8unorm &&
+   if (unpack->fetch_rgba_8unorm &&
        !type.floating && type.width == 8 && !type.sign && type.norm) {
       /*
        * Fallback to calling util_format_description::fetch_rgba_8unorm.
@@ -839,7 +841,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
             gallivm->cache->dont_cache = true;
          /* make const pointer for the C fetch_rgba_8unorm function */
          function = lp_build_const_int_pointer(gallivm,
-            func_to_pointer((func_pointer) format_desc->fetch_rgba_8unorm));
+            func_to_pointer((func_pointer) unpack->fetch_rgba_8unorm));
 
          /* cast the callee pointer to the function's type */
          function = LLVMBuildBitCast(builder, function,
@@ -892,10 +894,12 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
    }
 
    /*
-    * Fallback to util_format_description::fetch_rgba_float().
+    * Fallback to fetch_rgba().
     */
 
-   if (format_desc->fetch_rgba_float) {
+   util_format_fetch_rgba_func_ptr fetch_rgba =
+      util_format_fetch_rgba_func(format_desc->format);
+   if (fetch_rgba) {
       /*
        * Fallback to calling util_format_description::fetch_rgba_float.
        *
@@ -922,7 +926,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
       }
 
       /*
-       * Declare and bind format_desc->fetch_rgba_float().
+       * Declare and bind unpack->fetch_rgba_float().
        */
 
       {
@@ -942,7 +946,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
          if (gallivm->cache)
             gallivm->cache->dont_cache = true;
          function = lp_build_const_func_pointer(gallivm,
-                                                func_to_pointer((func_pointer) format_desc->fetch_rgba_float),
+                                                func_to_pointer((func_pointer) fetch_rgba),
                                                 ret_type,
                                                 arg_types, ARRAY_SIZE(arg_types),
                                                 format_desc->short_name);

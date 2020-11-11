@@ -37,14 +37,14 @@
 #include "virgl_resource.h"
 #include "virgl_public.h"
 #include "virgl_context.h"
-#include "virgl_protocol.h"
+#include "virtio-gpu/virgl_protocol.h"
 
 int virgl_debug = 0;
 static const struct debug_named_value debug_options[] = {
    { "verbose",   VIRGL_DEBUG_VERBOSE,             NULL },
    { "tgsi",      VIRGL_DEBUG_TGSI,                NULL },
-   { "emubgra",   VIRGL_DEBUG_EMULATE_BGRA,        "Enable tweak to emulate BGRA as RGBA on GLES hosts"},
-   { "bgraswz",   VIRGL_DEBUG_BGRA_DEST_SWIZZLE,   "Enable tweak to swizzle emulated BGRA on GLES hosts" },
+   { "noemubgra", VIRGL_DEBUG_NO_EMULATE_BGRA,     "Disable tweak to emulate BGRA as RGBA on GLES hosts"},
+   { "nobgraswz", VIRGL_DEBUG_NO_BGRA_DEST_SWIZZLE,"Disable tweak to swizzle emulated BGRA on GLES hosts" },
    { "sync",      VIRGL_DEBUG_SYNC,                "Sync after every flush" },
    { "xfer",      VIRGL_DEBUG_XFER,                "Do not optimize for transfers" },
    DEBUG_NAMED_VALUE_END
@@ -291,6 +291,10 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return !!(vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_MULTI_DRAW_INDIRECT);
    case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
       return !!(vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_INDIRECT_PARAMS);
+   case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
+      return (vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_ARB_BUFFER_STORAGE) &&
+             (vscreen->caps.caps.v2.host_feature_check_version >= 4) &&
+              vscreen->vws->supports_coherent;
    case PIPE_CAP_PCI_GROUP:
    case PIPE_CAP_PCI_BUS:
    case PIPE_CAP_PCI_DEVICE:
@@ -841,9 +845,8 @@ virgl_create_screen(struct virgl_winsys *vws, const struct pipe_screen_config *c
       screen->tweak_gles_tf3_value =
             driQueryOptioni(config->options, VIRGL_GLES_SAMPLES_PASSED_VALUE);
    }
-
-   screen->tweak_gles_emulate_bgra |= !!(virgl_debug & VIRGL_DEBUG_EMULATE_BGRA);
-   screen->tweak_gles_apply_bgra_dest_swizzle |= !!(virgl_debug & VIRGL_DEBUG_BGRA_DEST_SWIZZLE);
+   screen->tweak_gles_emulate_bgra &= !(virgl_debug & VIRGL_DEBUG_NO_EMULATE_BGRA);
+   screen->tweak_gles_apply_bgra_dest_swizzle &= !(virgl_debug & VIRGL_DEBUG_NO_BGRA_DEST_SWIZZLE);
 
    screen->vws = vws;
    screen->base.get_name = virgl_get_name;
@@ -869,6 +872,8 @@ virgl_create_screen(struct virgl_winsys *vws, const struct pipe_screen_config *c
                  &screen->caps.caps.v2.supported_readback_formats);
    fixup_formats(&screen->caps.caps, &screen->caps.caps.v2.scanout);
 
+   union virgl_caps *caps = &screen->caps.caps;
+   screen->tweak_gles_emulate_bgra &= !virgl_format_check_bitmask(PIPE_FORMAT_B8G8R8A8_SRGB, caps->v1.render.bitmask, false);
    screen->refcnt = 1;
 
    slab_create_parent(&screen->transfer_pool, sizeof(struct virgl_transfer), 16);

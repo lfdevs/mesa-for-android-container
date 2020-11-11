@@ -110,7 +110,6 @@ struct gen9_mdapi_metrics {
 };
 
 /* Add new definition */
-#define gen10_mdapi_metrics gen9_mdapi_metrics
 #define gen11_mdapi_metrics gen9_mdapi_metrics
 
 struct mdapi_pipeline_metrics {
@@ -153,7 +152,6 @@ static inline void gen_perf_query_mdapi_write_perfcntr(void *data, uint32_t data
       break;
    }
    case 9:
-   case 10:
    case 11: {
       if (data_size < sizeof(struct gen9_mdapi_metrics))
          return;
@@ -182,7 +180,6 @@ static inline void gen_perf_query_mdapi_write_marker(void *data, uint32_t data_s
       break;
    }
    case 9:
-   case 10:
    case 11: {
       if (data_size < sizeof(struct gen9_mdapi_metrics))
          return;

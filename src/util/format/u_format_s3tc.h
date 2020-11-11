@@ -146,7 +146,7 @@ void
 util_format_dxt1_rgb_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, const float *src_row, unsigned src_stride, unsigned width, unsigned height);
 
 void
-util_format_dxt1_rgb_fetch_rgba_float(float *dst, const uint8_t *src, unsigned i, unsigned j);
+util_format_dxt1_rgb_fetch_rgba(void *dst, const uint8_t *src, unsigned i, unsigned j);
 
 void
 util_format_dxt1_rgba_unpack_rgba_float(void *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height);
@@ -155,7 +155,7 @@ void
 util_format_dxt1_rgba_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, const float *src_row, unsigned src_stride, unsigned width, unsigned height);
 
 void
-util_format_dxt1_rgba_fetch_rgba_float(float *dst, const uint8_t *src, unsigned i, unsigned j);
+util_format_dxt1_rgba_fetch_rgba(void *dst, const uint8_t *src, unsigned i, unsigned j);
 
 void
 util_format_dxt3_rgba_unpack_rgba_float(void *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height);
@@ -164,7 +164,7 @@ void
 util_format_dxt3_rgba_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, const float *src_row, unsigned src_stride, unsigned width, unsigned height);
 
 void
-util_format_dxt3_rgba_fetch_rgba_float(float *dst, const uint8_t *src, unsigned i, unsigned j);
+util_format_dxt3_rgba_fetch_rgba(void *dst, const uint8_t *src, unsigned i, unsigned j);
 
 void
 util_format_dxt5_rgba_unpack_rgba_float(void *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height);
@@ -173,7 +173,7 @@ void
 util_format_dxt5_rgba_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, const float *src_row, unsigned src_stride, unsigned width, unsigned height);
 
 void
-util_format_dxt5_rgba_fetch_rgba_float(float *dst, const uint8_t *src, unsigned i, unsigned j);
+util_format_dxt5_rgba_fetch_rgba(void *dst, const uint8_t *src, unsigned i, unsigned j);
 
 void
 util_format_dxt1_srgb_unpack_rgba_float(void *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height);
@@ -182,7 +182,7 @@ void
 util_format_dxt1_srgb_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, const float *src_row, unsigned src_stride, unsigned width, unsigned height);
 
 void
-util_format_dxt1_srgb_fetch_rgba_float(float *dst, const uint8_t *src, unsigned i, unsigned j);
+util_format_dxt1_srgb_fetch_rgba(void *dst, const uint8_t *src, unsigned i, unsigned j);
 
 void
 util_format_dxt1_srgba_unpack_rgba_float(void *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height);
@@ -191,7 +191,7 @@ void
 util_format_dxt1_srgba_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, const float *src_row, unsigned src_stride, unsigned width, unsigned height);
 
 void
-util_format_dxt1_srgba_fetch_rgba_float(float *dst, const uint8_t *src, unsigned i, unsigned j);
+util_format_dxt1_srgba_fetch_rgba(void *dst, const uint8_t *src, unsigned i, unsigned j);
 
 void
 util_format_dxt3_srgba_unpack_rgba_float(void *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height);
@@ -200,7 +200,7 @@ void
 util_format_dxt3_srgba_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, const float *src_row, unsigned src_stride, unsigned width, unsigned height);
 
 void
-util_format_dxt3_srgba_fetch_rgba_float(float *dst, const uint8_t *src, unsigned i, unsigned j);
+util_format_dxt3_srgba_fetch_rgba(void *dst, const uint8_t *src, unsigned i, unsigned j);
 
 void
 util_format_dxt5_srgba_unpack_rgba_float(void *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height);
@@ -209,7 +209,7 @@ void
 util_format_dxt5_srgba_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, const float *src_row, unsigned src_stride, unsigned width, unsigned height);
 
 void
-util_format_dxt5_srgba_fetch_rgba_float(float *dst, const uint8_t *src, unsigned i, unsigned j);
+util_format_dxt5_srgba_fetch_rgba(void *dst, const uint8_t *src, unsigned i, unsigned j);
 
 #ifdef __cplusplus
 }

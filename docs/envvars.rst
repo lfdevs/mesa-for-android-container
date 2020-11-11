@@ -39,7 +39,7 @@ Core Mesa environment variables
    if set, disables Intel SSE optimizations
 ``MESA_NO_ERROR``
    if set to 1, error checking is disabled as per ``KHR_no_error``. This
-   will result in undefined behaviour for invalid use of the api, but
+   will result in undefined behavior for invalid use of the API, but
    can reduce CPU use for apps that are known to be error free.
 ``MESA_DEBUG``
    if set, error messages are printed to stderr. For example, if the
@@ -48,7 +48,7 @@ Core Mesa environment variables
    will be printed to stderr. For release builds, ``MESA_DEBUG``
    defaults to off (no debug output). ``MESA_DEBUG`` accepts the
    following comma-separated list of named flags, which adds extra
-   behaviour to just set ``MESA_DEBUG=1``:
+   behavior to just set ``MESA_DEBUG=1``:
 
    ``silent``
       turn off debug messages. Only useful for debug builds.
@@ -57,7 +57,7 @@ Core Mesa environment variables
    ``incomplete_tex``
       extra debug messages when a texture is incomplete
    ``incomplete_fbo``
-      extra debug messages when a fbo is incomplete
+      extra debug messages when a FBO is incomplete
    ``context``
       create a debug context (see ``GLX_CONTEXT_DEBUG_BIT_ARB``) and
       print error and performance messages to stderr (or
@@ -141,7 +141,9 @@ Core Mesa environment variables
    features of the given language version if it's higher than what's
    normally reported. (for developers only)
 ``MESA_GLSL_CACHE_DISABLE``
-   if set to ``true``, disables the GLSL shader cache
+   if set to ``true``, disables the GLSL shader cache. If set to
+   ``false``, enables the GLSL shader cache when it is disabled by
+   default.
 ``MESA_GLSL_CACHE_MAX_SIZE``
    if set, determines the maximum size of the on-disk cache of compiled
    GLSL programs. Should be set to a number optionally followed by
@@ -180,12 +182,14 @@ Core Mesa environment variables
       instance version as advertised by ``vkEnumerateInstanceVersion``
    -  This can be very useful for debugging but some features may not be
       implemented correctly. (For developers only)
+``MESA_LOADER_DRIVER_OVERRIDE``
+   chooses a different driver binary such as ``etnaviv`` or ``zink``.
 
 NIR passes environment variables
 --------------------------------
 
 The following are only applicable for drivers that uses NIR, as they
-modify the behaviour for the common NIR_PASS and NIR_PASS_V macros, that
+modify the behavior for the common NIR_PASS and NIR_PASS_V macros, that
 wrap calls to NIR lowering/optimizations.
 
 ``NIR_PRINT``
@@ -216,7 +220,7 @@ the :doc:`Xlib software driver page <xlibdriver>` for details.
 ``MESA_XSYNC``
    enable synchronous X behavior (for debugging only)
 ``MESA_GLX_FORCE_CI``
-   if set, force GLX to treat 8bpp visuals as CI visuals
+   if set, force GLX to treat 8 BPP visuals as CI visuals
 ``MESA_GLX_FORCE_ALPHA``
    if set, forces RGB windows to have an alpha channel.
 ``MESA_GLX_DEPTH_BITS``
@@ -331,6 +335,20 @@ i945/i965 driver environment variables (non-Gallium)
 ``INTEL_PRECISE_TRIG``
    if set to 1, true or yes, then the driver prefers accuracy over
    performance in trig functions.
+``INTEL_SHADER_ASM_READ_PATH``
+   if set, determines the directory to be used for overriding shader
+   assembly. The binaries with custom assembly should be placed in
+   this folder and have a name formatted as ``sha1_of_assembly.bin``.
+   The sha1 of a shader assembly is printed when assembly is dumped via
+   corresponding ``INTEL_DEBUG`` flag (e.g. ``vs`` for vertex shader).
+   A binary could be generated from a dumped assembly by ``i965_asm``.
+   For ``INTEL_SHADER_ASM_READ_PATH`` to work it is necessary to enable
+   dumping of corresponding shader stages via ``INTEL_DEBUG``.
+   It is advised to use ``nocompact`` flag of ``INTEL_DEBUG`` when
+   dumping and overriding shader assemblies.
+   The success of assembly override would be signified by "Successfully
+   overrode shader with sha1 <sha1>" in stderr replacing the original
+   assembly.
 
 Radeon driver environment variables (radeon, r200, and r300g)
 -------------------------------------------------------------
@@ -348,25 +366,25 @@ Gallium environment variables
 -----------------------------
 
 ``GALLIUM_HUD``
-   draws various information on the screen, like framerate, cpu load,
+   draws various information on the screen, like framerate, CPU load,
    driver statistics, performance counters, etc. Set
    ``GALLIUM_HUD=help`` and run e.g. ``glxgears`` for more info.
 ``GALLIUM_HUD_PERIOD``
-   sets the hud update rate in seconds (float). Use zero to update every
+   sets the HUD update rate in seconds (float). Use zero to update every
    frame. The default period is 1/2 second.
 ``GALLIUM_HUD_VISIBLE``
    control default visibility, defaults to true.
 ``GALLIUM_HUD_TOGGLE_SIGNAL``
    toggle visibility via user specified signal. Especially useful to
-   toggle hud at specific points of application and disable for
+   toggle HUD at specific points of application and disable for
    unencumbered viewing the rest of the time. For example, set
    ``GALLIUM_HUD_VISIBLE`` to ``false`` and
    ``GALLIUM_HUD_TOGGLE_SIGNAL`` to ``10`` (``SIGUSR1``). Use
-   ``kill -10 <pid>`` to toggle the hud as desired.
+   ``kill -10 <pid>`` to toggle the HUD as desired.
 ``GALLIUM_HUD_SCALE``
-   Scale hud by an integer factor, for high DPI displays. Default is 1.
+   Scale HUD by an integer factor, for high DPI displays. Default is 1.
 ``GALLIUM_HUD_DUMP_DIR``
-   specifies a directory for writing the displayed hud values into
+   specifies a directory for writing the displayed HUD values into
    files.
 ``GALLIUM_DRIVER``
    useful in combination with ``LIBGL_ALWAYS_SOFTWARE=true`` for
@@ -375,6 +393,9 @@ Gallium environment variables
 ``GALLIUM_LOG_FILE``
    specifies a file for logging all errors, warnings, etc. rather than
    stderr.
+``GALLIUM_PIPE_SEARCH_DIR``
+   specifies an alternate search directory for pipe-loader which overrides
+   the compile-time path based on the install location.
 ``GALLIUM_PRINT_OPTIONS``
    if non-zero, print all the Gallium environment variables which are
    used, and their current values.
@@ -430,6 +451,9 @@ Softpipe driver environment variables
    ``use_llvm``
       the softpipe driver will try to use LLVM JIT for vertex
       shading processing.
+   ``use_tgsi``
+      if set, the softpipe driver will ask to directly consume TGSI, instead
+      of NIR.
 
 LLVMpipe driver environment variables
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -527,6 +551,12 @@ RADV driver environment variables
       validate the LLVM IR before LLVM compiles the shader
    ``errors``
       display more info about errors
+   ``forcecompress``
+      Enables DCC,FMASK,CMASK,HTILE in situations where the driver supports it
+      but normally does not deem it beneficial.
+   ``hang``
+      enable GPU hangs detection and dump a report to $HOME/radv_dumps_<pid>
+      if a GPU hang is detected
    ``info``
       show GPU-related information
    ``metashaders``
@@ -573,7 +603,7 @@ RADV driver environment variables
       initialize all memory allocated in VRAM as zero
 
 ``RADV_FORCE_FAMILY``
-   create a null device to compile shaders without a AMD GPU (eg.
+   create a null device to compile shaders without a AMD GPU (e.g.
    gfx900)
 ``RADV_PERFTEST``
    a comma-separated list of named flags, which do various things:
@@ -597,8 +627,6 @@ RADV driver environment variables
 
 ``RADV_TEX_ANISO``
    force anisotropy filter (up to 16)
-``RADV_TRACE_FILE``
-   generate cmdbuffer tracefiles when a GPU hang is detected
 ``ACO_DEBUG``
    a comma-separated list of named flags, which do various things:
 
@@ -609,6 +637,14 @@ RADV driver environment variables
       validate register assignment of ACO IR and catches many RA bugs
    ``perfwarn``
       abort on some suboptimal code generation
+   ``force-waitcnt``
+      force emitting waitcnt states if there is something to wait for
+   ``novn``
+      disable value numbering
+   ``noopt``
+      disable various optimizations
+   ``noscheduling``
+      disable instructions scheduling
 
 radeonsi driver environment variables
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

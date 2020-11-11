@@ -20,11 +20,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-GENERATED_SOURCES := \
-	iris_driinfo.h
-
 IRIS_C_SOURCES = \
-	$(GENERATED_SOURCES) \
 	driinfo_iris.h \
 	iris_batch.c \
 	iris_batch.h \

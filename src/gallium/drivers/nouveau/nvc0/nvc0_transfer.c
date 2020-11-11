@@ -360,11 +360,11 @@ static inline bool
 nvc0_mt_sync(struct nvc0_context *nvc0, struct nv50_miptree *mt, unsigned usage)
 {
    if (!mt->base.mm) {
-      uint32_t access = (usage & PIPE_TRANSFER_WRITE) ?
+      uint32_t access = (usage & PIPE_MAP_WRITE) ?
          NOUVEAU_BO_WR : NOUVEAU_BO_RD;
       return !nouveau_bo_wait(mt->base.bo, access, nvc0->base.client);
    }
-   if (usage & PIPE_TRANSFER_WRITE)
+   if (usage & PIPE_MAP_WRITE)
       return !mt->base.fence || nouveau_fence_wait(mt->base.fence, &nvc0->base.debug);
    return !mt->base.fence_wr || nouveau_fence_wait(mt->base.fence_wr, &nvc0->base.debug);
 }
@@ -390,12 +390,12 @@ nvc0_miptree_transfer_map(struct pipe_context *pctx,
       if (!ret)
          ret = nouveau_bo_map(mt->base.bo, 0, NULL);
       if (ret &&
-          (usage & PIPE_TRANSFER_MAP_DIRECTLY))
+          (usage & PIPE_MAP_DIRECTLY))
          return NULL;
       if (!ret)
-         usage |= PIPE_TRANSFER_MAP_DIRECTLY;
+         usage |= PIPE_MAP_DIRECTLY;
    } else
-   if (usage & PIPE_TRANSFER_MAP_DIRECTLY)
+   if (usage & PIPE_MAP_DIRECTLY)
       return NULL;
 
    tx = CALLOC_STRUCT(nvc0_transfer);
@@ -417,7 +417,7 @@ nvc0_miptree_transfer_map(struct pipe_context *pctx,
    }
    tx->nlayers = box->depth;
 
-   if (usage & PIPE_TRANSFER_MAP_DIRECTLY) {
+   if (usage & PIPE_MAP_DIRECTLY) {
       tx->base.stride = mt->level[level].pitch;
       tx->base.layer_stride = mt->layer_stride;
       uint32_t offset = box->y * tx->base.stride +
@@ -452,7 +452,7 @@ nvc0_miptree_transfer_map(struct pipe_context *pctx,
    tx->rect[1].pitch = tx->base.stride;
    tx->rect[1].domain = NOUVEAU_BO_GART;
 
-   if (usage & PIPE_TRANSFER_READ) {
+   if (usage & PIPE_MAP_READ) {
       unsigned base = tx->rect[0].base;
       unsigned z = tx->rect[0].z;
       unsigned i;
@@ -475,9 +475,9 @@ nvc0_miptree_transfer_map(struct pipe_context *pctx,
       return tx->rect[1].bo->map;
    }
 
-   if (usage & PIPE_TRANSFER_READ)
+   if (usage & PIPE_MAP_READ)
       flags = NOUVEAU_BO_RD;
-   if (usage & PIPE_TRANSFER_WRITE)
+   if (usage & PIPE_MAP_WRITE)
       flags |= NOUVEAU_BO_WR;
 
    ret = nouveau_bo_map(tx->rect[1].bo, flags, nvc0->screen->base.client);
@@ -501,14 +501,14 @@ nvc0_miptree_transfer_unmap(struct pipe_context *pctx,
    struct nv50_miptree *mt = nv50_miptree(tx->base.resource);
    unsigned i;
 
-   if (tx->base.usage & PIPE_TRANSFER_MAP_DIRECTLY) {
+   if (tx->base.usage & PIPE_MAP_DIRECTLY) {
       pipe_resource_reference(&transfer->resource, NULL);
 
       FREE(tx);
       return;
    }
 
-   if (tx->base.usage & PIPE_TRANSFER_WRITE) {
+   if (tx->base.usage & PIPE_MAP_WRITE) {
       for (i = 0; i < tx->nlayers; ++i) {
          nvc0->m2mf_copy_rect(nvc0, &tx->rect[0], &tx->rect[1],
                               tx->nblocksx, tx->nblocksy);
@@ -526,7 +526,7 @@ nvc0_miptree_transfer_unmap(struct pipe_context *pctx,
    } else {
       nouveau_bo_ref(NULL, &tx->rect[1].bo);
    }
-   if (tx->base.usage & PIPE_TRANSFER_READ)
+   if (tx->base.usage & PIPE_MAP_READ)
       NOUVEAU_DRV_STAT(&nvc0->screen->base, tex_transfers_rd, 1);
 
    pipe_resource_reference(&transfer->resource, NULL);

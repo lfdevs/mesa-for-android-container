@@ -91,7 +91,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
          .AddressModifyEnable = true,
          .BufferStartingAddress = src,
          .BufferPitch = bs,
-         .MOCS = anv_mocs_for_bo(cmd_buffer->device, src.bo),
+         .MOCS = anv_mocs(cmd_buffer->device, src.bo, 0),
 #if (GEN_GEN >= 8)
          .BufferSize = size,
 #else
@@ -163,7 +163,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       sob._3DCommandOpcode = 0;
       sob._3DCommandSubOpcode = SO_BUFFER_INDEX_0_CMD;
 #endif
-      sob.MOCS = anv_mocs_for_bo(cmd_buffer->device, dst.bo),
+      sob.MOCS = anv_mocs(cmd_buffer->device, dst.bo, 0),
       sob.SurfaceBaseAddress = dst;
 
 #if GEN_GEN >= 8

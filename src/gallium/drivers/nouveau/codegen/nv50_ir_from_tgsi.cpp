@@ -986,7 +986,7 @@ bool Instruction::checkDstSrcAliasing() const
 class Source
 {
 public:
-   Source(struct nv50_ir_prog_info *, nv50_ir::Program *);
+   Source(struct nv50_ir_prog_info *, struct nv50_ir_prog_info_out *, nv50_ir::Program *);
    ~Source();
 
 public:
@@ -998,6 +998,7 @@ public:
    struct tgsi_full_instruction *insns;
    const struct tgsi_token *tokens;
    struct nv50_ir_prog_info *info;
+   struct nv50_ir_prog_info_out *info_out;
 
    nv50_ir::DynArray tempArrays;
    nv50_ir::DynArray immdArrays;
@@ -1053,8 +1054,9 @@ private:
    inline bool isEdgeFlagPassthrough(const Instruction&) const;
 };
 
-Source::Source(struct nv50_ir_prog_info *info, nv50_ir::Program *prog)
-: info(info), prog(prog)
+Source::Source(struct nv50_ir_prog_info *info, struct nv50_ir_prog_info_out *info_out,
+               nv50_ir::Program *prog)
+:  insns(NULL), info(info), info_out(info_out), clipVertexOutput(-1), prog(prog)
 {
    tokens = (const struct tgsi_token *)info->bin.source;
 
@@ -1086,24 +1088,22 @@ bool Source::scanSource()
    if (!insns)
       return false;
 
-   clipVertexOutput = -1;
-
    textureViews.resize(scan.file_max[TGSI_FILE_SAMPLER_VIEW] + 1);
    //resources.resize(scan.file_max[TGSI_FILE_RESOURCE] + 1);
    tempArrayId.resize(scan.file_max[TGSI_FILE_TEMPORARY] + 1);
    memoryFiles.resize(scan.file_max[TGSI_FILE_MEMORY] + 1);
    bufferAtomics.resize(scan.file_max[TGSI_FILE_BUFFER] + 1);
 
-   info->numInputs = scan.file_max[TGSI_FILE_INPUT] + 1;
-   info->numOutputs = scan.file_max[TGSI_FILE_OUTPUT] + 1;
-   info->numSysVals = scan.file_max[TGSI_FILE_SYSTEM_VALUE] + 1;
+   info_out->numInputs = scan.file_max[TGSI_FILE_INPUT] + 1;
+   info_out->numOutputs = scan.file_max[TGSI_FILE_OUTPUT] + 1;
+   info_out->numSysVals = scan.file_max[TGSI_FILE_SYSTEM_VALUE] + 1;
 
    if (info->type == PIPE_SHADER_FRAGMENT) {
-      info->prop.fp.writesDepth = scan.writes_z;
-      info->prop.fp.usesDiscard = scan.uses_kill || info->io.alphaRefBase;
+      info_out->prop.fp.writesDepth = scan.writes_z;
+      info_out->prop.fp.usesDiscard = scan.uses_kill || info->io.alphaRefBase;
    } else
    if (info->type == PIPE_SHADER_GEOMETRY) {
-      info->prop.gp.instanceCount = 1; // default value
+      info_out->prop.gp.instanceCount = 1; // default value
    }
 
    info->io.viewportId = -1;
@@ -1141,40 +1141,40 @@ bool Source::scanSource()
          indirectTempOffsets.insert(std::make_pair(*it, tempBase - info.first));
          tempBase += info.second;
       }
-      info->bin.tlsSpace += tempBase * 16;
+      info_out->bin.tlsSpace += tempBase * 16;
    }
 
-   if (info->io.genUserClip > 0) {
-      info->io.clipDistances = info->io.genUserClip;
+   if (info_out->io.genUserClip > 0) {
+      info_out->io.clipDistances = info_out->io.genUserClip;
 
-      const unsigned int nOut = (info->io.genUserClip + 3) / 4;
+      const unsigned int nOut = (info_out->io.genUserClip + 3) / 4;
 
       for (unsigned int n = 0; n < nOut; ++n) {
-         unsigned int i = info->numOutputs++;
-         info->out[i].id = i;
-         info->out[i].sn = TGSI_SEMANTIC_CLIPDIST;
-         info->out[i].si = n;
-         info->out[i].mask = ((1 << info->io.clipDistances) - 1) >> (n * 4);
+         unsigned int i = info_out->numOutputs++;
+         info_out->out[i].id = i;
+         info_out->out[i].sn = TGSI_SEMANTIC_CLIPDIST;
+         info_out->out[i].si = n;
+         info_out->out[i].mask = ((1 << info_out->io.clipDistances) - 1) >> (n * 4);
       }
    }
 
-   return info->assignSlots(info) == 0;
+   return info->assignSlots(info_out) == 0;
 }
 
 void Source::scanProperty(const struct tgsi_full_property *prop)
 {
    switch (prop->Property.PropertyName) {
    case TGSI_PROPERTY_GS_OUTPUT_PRIM:
-      info->prop.gp.outputPrim = prop->u[0].Data;
+      info_out->prop.gp.outputPrim = prop->u[0].Data;
       break;
    case TGSI_PROPERTY_GS_MAX_OUTPUT_VERTICES:
-      info->prop.gp.maxVertices = prop->u[0].Data;
+      info_out->prop.gp.maxVertices = prop->u[0].Data;
       break;
    case TGSI_PROPERTY_GS_INVOCATIONS:
-      info->prop.gp.instanceCount = prop->u[0].Data;
+      info_out->prop.gp.instanceCount = prop->u[0].Data;
       break;
    case TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS:
-      info->prop.fp.separateFragData = true;
+      info_out->prop.fp.separateFragData = true;
       break;
    case TGSI_PROPERTY_FS_COORD_ORIGIN:
    case TGSI_PROPERTY_FS_COORD_PIXEL_CENTER:
@@ -1183,25 +1183,25 @@ void Source::scanProperty(const struct tgsi_full_property *prop)
       // we don't care
       break;
    case TGSI_PROPERTY_VS_PROHIBIT_UCPS:
-      info->io.genUserClip = -1;
+      info_out->io.genUserClip = -1;
       break;
    case TGSI_PROPERTY_TCS_VERTICES_OUT:
-      info->prop.tp.outputPatchSize = prop->u[0].Data;
+      info_out->prop.tp.outputPatchSize = prop->u[0].Data;
       break;
    case TGSI_PROPERTY_TES_PRIM_MODE:
-      info->prop.tp.domain = prop->u[0].Data;
+      info_out->prop.tp.domain = prop->u[0].Data;
       break;
    case TGSI_PROPERTY_TES_SPACING:
-      info->prop.tp.partitioning = prop->u[0].Data;
+      info_out->prop.tp.partitioning = prop->u[0].Data;
       break;
    case TGSI_PROPERTY_TES_VERTEX_ORDER_CW:
-      info->prop.tp.winding = prop->u[0].Data;
+      info_out->prop.tp.winding = prop->u[0].Data;
       break;
    case TGSI_PROPERTY_TES_POINT_MODE:
       if (prop->u[0].Data)
-         info->prop.tp.outputPrim = PIPE_PRIM_POINTS;
+         info_out->prop.tp.outputPrim = PIPE_PRIM_POINTS;
       else
-         info->prop.tp.outputPrim = PIPE_PRIM_TRIANGLES; /* anything but points */
+         info_out->prop.tp.outputPrim = PIPE_PRIM_TRIANGLES; /* anything but points */
       break;
    case TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH:
       info->prop.cp.numThreads[0] = prop->u[0].Data;
@@ -1213,25 +1213,25 @@ void Source::scanProperty(const struct tgsi_full_property *prop)
       info->prop.cp.numThreads[2] = prop->u[0].Data;
       break;
    case TGSI_PROPERTY_NUM_CLIPDIST_ENABLED:
-      info->io.clipDistances = prop->u[0].Data;
+      info_out->io.clipDistances = prop->u[0].Data;
       break;
    case TGSI_PROPERTY_NUM_CULLDIST_ENABLED:
-      info->io.cullDistances = prop->u[0].Data;
+      info_out->io.cullDistances = prop->u[0].Data;
       break;
    case TGSI_PROPERTY_NEXT_SHADER:
       /* Do not need to know the next shader stage. */
       break;
    case TGSI_PROPERTY_FS_EARLY_DEPTH_STENCIL:
-      info->prop.fp.earlyFragTests = prop->u[0].Data;
+      info_out->prop.fp.earlyFragTests = prop->u[0].Data;
       break;
    case TGSI_PROPERTY_FS_POST_DEPTH_COVERAGE:
-      info->prop.fp.postDepthCoverage = prop->u[0].Data;
+      info_out->prop.fp.postDepthCoverage = prop->u[0].Data;
       break;
    case TGSI_PROPERTY_MUL_ZERO_WINS:
       info->io.mul_zero_wins = prop->u[0].Data;
       break;
    case TGSI_PROPERTY_LAYER_VIEWPORT_RELATIVE:
-      info->io.layer_viewport_relative = prop->u[0].Data;
+      info_out->io.layer_viewport_relative = prop->u[0].Data;
       break;
    default:
       INFO("unhandled TGSI property %d\n", prop->Property.PropertyName);
@@ -1294,37 +1294,37 @@ bool Source::scanDeclaration(const struct tgsi_full_declaration *decl)
       if (info->type == PIPE_SHADER_VERTEX) {
          // all vertex attributes are equal
          for (i = first; i <= last; ++i) {
-            info->in[i].sn = TGSI_SEMANTIC_GENERIC;
-            info->in[i].si = i;
+            info_out->in[i].sn = TGSI_SEMANTIC_GENERIC;
+            info_out->in[i].si = i;
          }
       } else {
          for (i = first; i <= last; ++i, ++si) {
-            info->in[i].id = i;
-            info->in[i].sn = sn;
-            info->in[i].si = si;
+            info_out->in[i].id = i;
+            info_out->in[i].sn = sn;
+            info_out->in[i].si = si;
             if (info->type == PIPE_SHADER_FRAGMENT) {
                // translate interpolation mode
                switch (decl->Interp.Interpolate) {
                case TGSI_INTERPOLATE_CONSTANT:
-                  info->in[i].flat = 1;
+                  info_out->in[i].flat = 1;
                   break;
                case TGSI_INTERPOLATE_COLOR:
-                  info->in[i].sc = 1;
+                  info_out->in[i].sc = 1;
                   break;
                case TGSI_INTERPOLATE_LINEAR:
-                  info->in[i].linear = 1;
+                  info_out->in[i].linear = 1;
                   break;
                default:
                   break;
                }
                if (decl->Interp.Location)
-                  info->in[i].centroid = 1;
+                  info_out->in[i].centroid = 1;
             }
 
             if (sn == TGSI_SEMANTIC_PATCH)
-               info->in[i].patch = 1;
+               info_out->in[i].patch = 1;
             if (sn == TGSI_SEMANTIC_PATCH)
-               info->numPatchConstants = MAX2(info->numPatchConstants, si + 1);
+               info_out->numPatchConstants = MAX2(info_out->numPatchConstants, si + 1);
          }
       }
       break;
@@ -1333,77 +1333,77 @@ bool Source::scanDeclaration(const struct tgsi_full_declaration *decl)
          switch (sn) {
          case TGSI_SEMANTIC_POSITION:
             if (info->type == PIPE_SHADER_FRAGMENT)
-               info->io.fragDepth = i;
+               info_out->io.fragDepth = i;
             else
             if (clipVertexOutput < 0)
                clipVertexOutput = i;
             break;
          case TGSI_SEMANTIC_COLOR:
             if (info->type == PIPE_SHADER_FRAGMENT)
-               info->prop.fp.numColourResults++;
+               info_out->prop.fp.numColourResults++;
             break;
          case TGSI_SEMANTIC_EDGEFLAG:
-            info->io.edgeFlagOut = i;
+            info_out->io.edgeFlagOut = i;
             break;
          case TGSI_SEMANTIC_CLIPVERTEX:
             clipVertexOutput = i;
             break;
          case TGSI_SEMANTIC_CLIPDIST:
-            info->io.genUserClip = -1;
+            info_out->io.genUserClip = -1;
             break;
          case TGSI_SEMANTIC_SAMPLEMASK:
-            info->io.sampleMask = i;
+            info_out->io.sampleMask = i;
             break;
          case TGSI_SEMANTIC_VIEWPORT_INDEX:
             info->io.viewportId = i;
             break;
          case TGSI_SEMANTIC_PATCH:
-            info->numPatchConstants = MAX2(info->numPatchConstants, si + 1);
+            info_out->numPatchConstants = MAX2(info_out->numPatchConstants, si + 1);
             /* fallthrough */
          case TGSI_SEMANTIC_TESSOUTER:
          case TGSI_SEMANTIC_TESSINNER:
-            info->out[i].patch = 1;
+            info_out->out[i].patch = 1;
             break;
          default:
             break;
          }
-         info->out[i].id = i;
-         info->out[i].sn = sn;
-         info->out[i].si = si;
+         info_out->out[i].id = i;
+         info_out->out[i].sn = sn;
+         info_out->out[i].si = si;
       }
       break;
    case TGSI_FILE_SYSTEM_VALUE:
       switch (sn) {
       case TGSI_SEMANTIC_INSTANCEID:
-         info->io.instanceId = first;
+         info_out->io.instanceId = first;
          break;
       case TGSI_SEMANTIC_VERTEXID:
-         info->io.vertexId = first;
+         info_out->io.vertexId = first;
          break;
       case TGSI_SEMANTIC_BASEVERTEX:
       case TGSI_SEMANTIC_BASEINSTANCE:
       case TGSI_SEMANTIC_DRAWID:
-         info->prop.vp.usesDrawParameters = true;
+         info_out->prop.vp.usesDrawParameters = true;
          break;
       case TGSI_SEMANTIC_SAMPLEID:
       case TGSI_SEMANTIC_SAMPLEPOS:
          prog->persampleInvocation = true;
          break;
       case TGSI_SEMANTIC_SAMPLEMASK:
-         info->prop.fp.usesSampleMaskIn = true;
+         info_out->prop.fp.usesSampleMaskIn = true;
          break;
       default:
          break;
       }
       for (i = first; i <= last; ++i, ++si) {
-         info->sv[i].sn = sn;
-         info->sv[i].si = si;
-         info->sv[i].input = inferSysValDirection(sn);
+         info_out->sv[i].sn = sn;
+         info_out->sv[i].si = si;
+         info_out->sv[i].input = inferSysValDirection(sn);
 
          switch (sn) {
          case TGSI_SEMANTIC_TESSOUTER:
          case TGSI_SEMANTIC_TESSINNER:
-            info->sv[i].patch = 1;
+            info_out->sv[i].patch = 1;
             break;
          }
       }
@@ -1453,7 +1453,7 @@ bool Source::scanDeclaration(const struct tgsi_full_declaration *decl)
 inline bool Source::isEdgeFlagPassthrough(const Instruction& insn) const
 {
    return insn.getOpcode() == TGSI_OPCODE_MOV &&
-      insn.getDst(0).getIndex(0) == info->io.edgeFlagOut &&
+      insn.getDst(0).getIndex(0) == info_out->io.edgeFlagOut &&
       insn.getSrc(0).getFile() == TGSI_FILE_INPUT;
 }
 
@@ -1469,22 +1469,22 @@ void Source::scanInstructionSrc(const Instruction& insn,
       if (src.isIndirect(0)) {
          // We don't know which one is accessed, just mark everything for
          // reading. This is an extremely unlikely occurrence.
-         for (unsigned i = 0; i < info->numOutputs; ++i)
-            info->out[i].oread = 1;
+         for (unsigned i = 0; i < info_out->numOutputs; ++i)
+            info_out->out[i].oread = 1;
       } else {
-         info->out[src.getIndex(0)].oread = 1;
+         info_out->out[src.getIndex(0)].oread = 1;
       }
    }
    if (src.getFile() == TGSI_FILE_SYSTEM_VALUE) {
-      if (info->sv[src.getIndex(0)].sn == TGSI_SEMANTIC_SAMPLEPOS)
-         info->prop.fp.readsSampleLocations = true;
+      if (info_out->sv[src.getIndex(0)].sn == TGSI_SEMANTIC_SAMPLEPOS)
+         info_out->prop.fp.readsSampleLocations = true;
    }
    if (src.getFile() != TGSI_FILE_INPUT)
       return;
 
    if (src.isIndirect(0)) {
-      for (unsigned i = 0; i < info->numInputs; ++i)
-         info->in[i].mask = 0xf;
+      for (unsigned i = 0; i < info_out->numInputs; ++i)
+         info_out->in[i].mask = 0xf;
    } else {
       const int i = src.getIndex(0);
       for (unsigned c = 0; c < 4; ++c) {
@@ -1492,16 +1492,16 @@ void Source::scanInstructionSrc(const Instruction& insn,
             continue;
          int k = src.getSwizzle(c);
          if (k <= TGSI_SWIZZLE_W)
-            info->in[i].mask |= 1 << k;
+            info_out->in[i].mask |= 1 << k;
       }
-      switch (info->in[i].sn) {
+      switch (info_out->in[i].sn) {
       case TGSI_SEMANTIC_PSIZE:
       case TGSI_SEMANTIC_PRIMID:
       case TGSI_SEMANTIC_FOG:
-         info->in[i].mask &= 0x1;
+         info_out->in[i].mask &= 0x1;
          break;
       case TGSI_SEMANTIC_PCOORD:
-         info->in[i].mask &= 0x3;
+         info_out->in[i].mask &= 0x3;
          break;
       default:
          break;
@@ -1514,48 +1514,47 @@ bool Source::scanInstruction(const struct tgsi_full_instruction *inst)
    Instruction insn(inst);
 
    if (insn.getOpcode() == TGSI_OPCODE_BARRIER)
-      info->numBarriers = 1;
+      info_out->numBarriers = 1;
 
    if (insn.getOpcode() == TGSI_OPCODE_FBFETCH)
-      info->prop.fp.readsFramebuffer = true;
+      info_out->prop.fp.readsFramebuffer = true;
 
    if (insn.getOpcode() == TGSI_OPCODE_INTERP_SAMPLE)
-      info->prop.fp.readsSampleLocations = true;
+      info_out->prop.fp.readsSampleLocations = true;
 
    if (insn.getOpcode() == TGSI_OPCODE_DEMOTE)
-      info->prop.fp.usesDiscard = true;
+      info_out->prop.fp.usesDiscard = true;
 
    if (insn.dstCount()) {
       Instruction::DstRegister dst = insn.getDst(0);
 
       if (insn.getOpcode() == TGSI_OPCODE_STORE &&
           dst.getFile() != TGSI_FILE_MEMORY) {
-         info->io.globalAccess |= 0x2;
+         info_out->io.globalAccess |= 0x2;
 
          if (dst.getFile() == TGSI_FILE_INPUT) {
             // TODO: Handle indirect somehow?
             const int i = dst.getIndex(0);
-            info->in[i].mask |= 1;
+            info_out->in[i].mask |= 1;
          }
       }
 
       if (dst.getFile() == TGSI_FILE_OUTPUT) {
          if (dst.isIndirect(0))
-            for (unsigned i = 0; i < info->numOutputs; ++i)
-               info->out[i].mask = 0xf;
+            for (unsigned i = 0; i < info_out->numOutputs; ++i)
+               info_out->out[i].mask = 0xf;
          else
-            info->out[dst.getIndex(0)].mask |= dst.getMask();
+            info_out->out[dst.getIndex(0)].mask |= dst.getMask();
 
-         if (info->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_PSIZE ||
-             info->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_PRIMID ||
-             info->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_LAYER ||
-             info->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_VIEWPORT_INDEX ||
-             info->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_VIEWPORT_MASK ||
-             info->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_FOG)
-            info->out[dst.getIndex(0)].mask &= 1;
+         if (info_out->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_PSIZE ||
+             info_out->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_PRIMID ||
+             info_out->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_LAYER ||
+             info_out->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_VIEWPORT_INDEX ||
+             info_out->out[dst.getIndex(0)].sn == TGSI_SEMANTIC_FOG)
+            info_out->out[dst.getIndex(0)].mask &= 1;
 
          if (isEdgeFlagPassthrough(insn))
-            info->io.edgeFlagIn = insn.getSrc(0).getIndex(0);
+            info_out->io.edgeFlagIn = insn.getSrc(0).getIndex(0);
       } else
       if (dst.getFile() == TGSI_FILE_TEMPORARY) {
          if (dst.isIndirect(0))
@@ -1565,7 +1564,7 @@ bool Source::scanInstruction(const struct tgsi_full_instruction *inst)
           dst.getFile() == TGSI_FILE_IMAGE ||
           (dst.getFile() == TGSI_FILE_MEMORY &&
            memoryFiles[dst.getIndex(0)].mem_type == TGSI_MEMORY_TYPE_GLOBAL)) {
-         info->io.globalAccess |= 0x2;
+         info_out->io.globalAccess |= 0x2;
       }
    }
 
@@ -1588,7 +1587,7 @@ bool Source::scanInstruction(const struct tgsi_full_instruction *inst)
       case TGSI_OPCODE_ATOMDEC_WRAP:
       case TGSI_OPCODE_ATOMINC_WRAP:
       case TGSI_OPCODE_LOAD:
-         info->io.globalAccess |= (insn.getOpcode() == TGSI_OPCODE_LOAD) ?
+         info_out->io.globalAccess |= (insn.getOpcode() == TGSI_OPCODE_LOAD) ?
             0x1 : 0x2;
          break;
       }
@@ -1633,7 +1632,7 @@ using namespace nv50_ir;
 class Converter : public ConverterCommon
 {
 public:
-   Converter(Program *, const tgsi::Source *);
+   Converter(Program *, const tgsi::Source *, nv50_ir_prog_info_out *);
    ~Converter();
 
    bool run();
@@ -1792,13 +1791,13 @@ Converter::makeSym(uint tgsiFile, int fileIdx, int idx, int c, uint32_t address)
 
    if (idx >= 0) {
       if (sym->reg.file == FILE_SHADER_INPUT)
-         sym->setOffset(info->in[idx].slot[c] * 4);
+         sym->setOffset(info_out->in[idx].slot[c] * 4);
       else
       if (sym->reg.file == FILE_SHADER_OUTPUT)
-         sym->setOffset(info->out[idx].slot[c] * 4);
+         sym->setOffset(info_out->out[idx].slot[c] * 4);
       else
       if (sym->reg.file == FILE_SYSTEM_VALUE)
-         sym->setSV(tgsi::translateSysVal(info->sv[idx].sn), c);
+         sym->setSV(tgsi::translateSysVal(info_out->sv[idx].sn), c);
       else
          sym->setOffset(address);
    } else {
@@ -1813,7 +1812,7 @@ Converter::interpolate(tgsi::Instruction::SrcRegister src, int c, Value *ptr)
    operation op;
 
    // XXX: no way to know interpolation mode if we don't know what's accessed
-   const uint8_t mode = translateInterpMode(&info->in[ptr ? 0 :
+   const uint8_t mode = translateInterpMode(&info_out->in[ptr ? 0 :
                                                       src.getIndex(0)], op);
 
    Instruction *insn = new_Instruction(func, op, TYPE_F32);
@@ -2025,12 +2024,12 @@ Converter::fetchSrc(tgsi::Instruction::SrcRegister src, int c, Value *ptr)
    case TGSI_FILE_INPUT:
       if (prog->getType() == Program::TYPE_FRAGMENT) {
          // don't load masked inputs, won't be assigned a slot
-         if (!ptr && !(info->in[idx].mask & (1 << swz)))
+         if (!ptr && !(info_out->in[idx].mask & (1 << swz)))
             return loadImm(NULL, swz == TGSI_SWIZZLE_W ? 1.0f : 0.0f);
          return interpolate(src, c, shiftAddress(ptr));
       } else
       if (prog->getType() == Program::TYPE_GEOMETRY) {
-         if (!ptr && info->in[idx].sn == TGSI_SEMANTIC_PRIMID)
+         if (!ptr && info_out->in[idx].sn == TGSI_SEMANTIC_PRIMID)
             return mkOp1v(OP_RDSV, TYPE_U32, getSSA(), mkSysVal(SV_PRIMITIVE_ID, 0));
          // XXX: This is going to be a problem with scalar arrays, i.e. when
          // we cannot assume that the address is given in units of vec4.
@@ -2041,24 +2040,24 @@ Converter::fetchSrc(tgsi::Instruction::SrcRegister src, int c, Value *ptr)
             return mkLoadv(TYPE_U32, srcToSym(src, c), ptr);
       }
       ld = mkLoad(TYPE_U32, getSSA(), srcToSym(src, c), shiftAddress(ptr));
-      ld->perPatch = info->in[idx].patch;
+      ld->perPatch = info_out->in[idx].patch;
       return ld->getDef(0);
    case TGSI_FILE_OUTPUT:
       assert(prog->getType() == Program::TYPE_TESSELLATION_CONTROL);
       ld = mkLoad(TYPE_U32, getSSA(), srcToSym(src, c), shiftAddress(ptr));
-      ld->perPatch = info->out[idx].patch;
+      ld->perPatch = info_out->out[idx].patch;
       return ld->getDef(0);
    case TGSI_FILE_SYSTEM_VALUE:
       assert(!ptr);
-      if (info->sv[idx].sn == TGSI_SEMANTIC_THREAD_ID &&
+      if (info_out->sv[idx].sn == TGSI_SEMANTIC_THREAD_ID &&
           info->prop.cp.numThreads[swz] == 1)
          return loadImm(NULL, 0u);
-      if (isSubGroupMask(info->sv[idx].sn) && swz > 0)
+      if (isSubGroupMask(info_out->sv[idx].sn) && swz > 0)
          return loadImm(NULL, 0u);
-      if (info->sv[idx].sn == TGSI_SEMANTIC_SUBGROUP_SIZE)
+      if (info_out->sv[idx].sn == TGSI_SEMANTIC_SUBGROUP_SIZE)
          return loadImm(NULL, 32u);
       ld = mkOp1(OP_RDSV, TYPE_U32, getSSA(), srcToSym(src, c));
-      ld->perPatch = info->sv[idx].patch;
+      ld->perPatch = info_out->sv[idx].patch;
       return ld->getDef(0);
    case TGSI_FILE_TEMPORARY: {
       int arrayid = src.getArrayId();
@@ -2113,7 +2112,7 @@ Converter::storeDst(int d, int c, Value *val)
    if (dst.isIndirect(0))
       ptr = shiftAddress(fetchSrc(dst.getIndirect(0), 0, NULL));
 
-   if (info->io.genUserClip > 0 &&
+   if (info_out->io.genUserClip > 0 &&
        dst.getFile() == TGSI_FILE_OUTPUT &&
        !dst.isIndirect(0) && dst.getIndex(0) == code->clipVertexOutput) {
       mkMov(clipVtx[c], val);
@@ -2137,16 +2136,16 @@ Converter::storeDst(const tgsi::Instruction::DstRegister dst, int c,
    } else
    if (f == TGSI_FILE_OUTPUT && prog->getType() != Program::TYPE_FRAGMENT) {
 
-      if (ptr || (info->out[idx].mask & (1 << c))) {
+      if (ptr || (info_out->out[idx].mask & (1 << c))) {
          /* Save the viewport index into a scratch register so that it can be
             exported at EMIT time */
-         if (info->out[idx].sn == TGSI_SEMANTIC_VIEWPORT_INDEX &&
+         if (info_out->out[idx].sn == TGSI_SEMANTIC_VIEWPORT_INDEX &&
              prog->getType() == Program::TYPE_GEOMETRY &&
              viewport != NULL)
             mkOp1(OP_MOV, TYPE_U32, viewport, val);
          else
             mkStore(OP_EXPORT, TYPE_U32, dstToSym(dst, c), ptr, val)->perPatch =
-               info->out[idx].patch;
+               info_out->out[idx].patch;
       }
    } else
    if (f == TGSI_FILE_TEMPORARY ||
@@ -3033,7 +3032,7 @@ Converter::handleINTERP(Value *dst[4])
       // We can assume that the fixed index will point to an input of the same
       // interpolation type in case of an indirect.
       // TODO: Make use of ArrayID.
-      linear = info->in[src.getIndex(0)].linear;
+      linear = info_out->in[src.getIndex(0)].linear;
       if (linear) {
          op = OP_LINTERP;
          mode = NV50_IR_INTERP_LINEAR;
@@ -3526,11 +3525,11 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
       /* export the saved viewport index */
       if (viewport != NULL) {
          Symbol *vpSym = mkSymbol(FILE_SHADER_OUTPUT, 0, TYPE_U32,
-                                  info->out[info->io.viewportId].slot[0] * 4);
+                                  info_out->out[info->io.viewportId].slot[0] * 4);
          mkStore(OP_EXPORT, TYPE_U32, vpSym, NULL, viewport);
       }
       /* handle user clip planes for each emitted vertex */
-      if (info->io.genUserClip > 0)
+      if (info_out->io.genUserClip > 0)
          handleUserClipPlanes();
       /* fallthrough */
    case TGSI_OPCODE_ENDPRIM:
@@ -3539,7 +3538,7 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
       unsigned int stream = tgsi.getSrc(0).getValueU32(0, code->immd.data);
       if (stream && op == OP_RESTART)
          break;
-      if (info->prop.gp.maxVertices == 0)
+      if (info_out->prop.gp.maxVertices == 0)
          break;
       src0 = mkImm(stream);
       mkOp1(op, TYPE_U32, NULL, src0)->fixed = 1;
@@ -3708,7 +3707,7 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
          exportOutputs();
       if ((prog->getType() == Program::TYPE_VERTEX ||
            prog->getType() == Program::TYPE_TESSELLATION_EVAL
-          ) && info->io.genUserClip > 0)
+          ) && info_out->io.genUserClip > 0)
          handleUserClipPlanes();
       mkOp(OP_EXIT, TYPE_NONE, NULL)->terminator = 1;
    }
@@ -4154,9 +4153,9 @@ void
 Converter::exportOutputs()
 {
    if (info->io.alphaRefBase) {
-      for (unsigned int i = 0; i < info->numOutputs; ++i) {
-         if (info->out[i].sn != TGSI_SEMANTIC_COLOR ||
-             info->out[i].si != 0)
+      for (unsigned int i = 0; i < info_out->numOutputs; ++i) {
+         if (info_out->out[i].sn != TGSI_SEMANTIC_COLOR ||
+             info_out->out[i].si != 0)
             continue;
          const unsigned int c = 3;
          if (!oData.exists(sub.cur->values, i, c))
@@ -4175,15 +4174,15 @@ Converter::exportOutputs()
       }
    }
 
-   for (unsigned int i = 0; i < info->numOutputs; ++i) {
+   for (unsigned int i = 0; i < info_out->numOutputs; ++i) {
       for (unsigned int c = 0; c < 4; ++c) {
          if (!oData.exists(sub.cur->values, i, c))
             continue;
          Symbol *sym = mkSymbol(FILE_SHADER_OUTPUT, 0, TYPE_F32,
-                                info->out[i].slot[c] * 4);
+                                info_out->out[i].slot[c] * 4);
          Value *val = oData.load(sub.cur->values, i, c, NULL);
          if (val) {
-            if (info->out[i].sn == TGSI_SEMANTIC_POSITION)
+            if (info_out->out[i].sn == TGSI_SEMANTIC_POSITION)
                mkOp1(OP_SAT, TYPE_F32, val, val);
             mkStore(OP_EXPORT, TYPE_F32, sym, NULL, val);
          }
@@ -4191,7 +4190,8 @@ Converter::exportOutputs()
    }
 }
 
-Converter::Converter(Program *ir, const tgsi::Source *code) : ConverterCommon(ir, code->info),
+Converter::Converter(Program *ir, const tgsi::Source *code, nv50_ir_prog_info_out *info_out)
+:    ConverterCommon(ir, code->info, info_out),
      code(code),
      tgsi(NULL),
      tData(this), lData(this), aData(this), oData(this)
@@ -4292,7 +4292,7 @@ Converter::run()
    setPosition(entry, true);
    sub.cur = getSubroutine(prog->main);
 
-   if (info->io.genUserClip > 0) {
+   if (info_out->io.genUserClip > 0) {
       for (int c = 0; c < 4; ++c)
          clipVtx[c] = getScratch();
    }
@@ -4335,14 +4335,15 @@ Converter::run()
 namespace nv50_ir {
 
 bool
-Program::makeFromTGSI(struct nv50_ir_prog_info *info)
+Program::makeFromTGSI(struct nv50_ir_prog_info *info,
+                      struct nv50_ir_prog_info_out *info_out)
 {
-   tgsi::Source src(info, this);
+   tgsi::Source src(info, info_out, this);
    if (!src.scanSource())
       return false;
-   tlsSize = info->bin.tlsSpace;
+   tlsSize = info_out->bin.tlsSpace;
 
-   Converter builder(this, &src);
+   Converter builder(this, &src, info_out);
    return builder.run();
 }
 

@@ -55,6 +55,9 @@ tgsi_get_gl_frag_result_semantic(gl_frag_result frag_result,
 enum tgsi_semantic
 tgsi_get_sysval_semantic(unsigned sysval);
 
+enum tgsi_interpolate_mode
+tgsi_get_interp_mode(enum glsl_interp_mode mode, bool color);
+
 static inline enum pipe_shader_type
 pipe_shader_type_from_mesa(gl_shader_stage stage)
 {

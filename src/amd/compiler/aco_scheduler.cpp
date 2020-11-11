@@ -27,7 +27,6 @@
 #include <unordered_set>
 #include <algorithm>
 
-#include "vulkan/radv_shader.h" // for radv_nir_compiler_options
 #include "amdgfxregs.h"
 
 #define SMEM_WINDOW_SIZE (350 - ctx.num_waves * 35)
@@ -863,7 +862,8 @@ void schedule_block(sched_ctx& ctx, Program *program, Block* block, live& live_v
       }
    }
 
-   if ((program->stage & (hw_vs | hw_ngg_gs)) && (block->kind & block_kind_export_end)) {
+   if ((program->stage.hw == HWStage::VS || program->stage.hw == HWStage::NGG) &&
+       (block->kind & block_kind_export_end)) {
       /* Try to move position exports as far up as possible, to reduce register
        * usage and because ISA reference guides say so. */
       for (unsigned idx = 0; idx < block->instructions.size(); idx++) {
@@ -936,9 +936,7 @@ void schedule_program(Program *program, live& live_vars)
       demands[j] = program->blocks[j].register_demand;
    }
 
-   struct radv_nir_compiler_options options;
-   options.chip_class = program->chip_class;
-   live live_vars2 = aco::live_var_analysis(program, &options);
+   live live_vars2 = aco::live_var_analysis(program);
 
    for (unsigned j = 0; j < program->blocks.size(); j++) {
       Block &b = program->blocks[j];

@@ -220,6 +220,9 @@ fd_context_destroy(struct pipe_context *pctx)
 
 	fd_fence_ref(&ctx->last_fence, NULL);
 
+	if (ctx->in_fence_fd != -1)
+		close(ctx->in_fence_fd);
+
 	util_copy_framebuffer_state(&ctx->framebuffer, NULL);
 	fd_batch_reference(&ctx->batch, NULL);  /* unref current batch */
 	fd_bc_invalidate_context(ctx);
@@ -232,8 +235,9 @@ fd_context_destroy(struct pipe_context *pctx)
 	if (pctx->stream_uploader)
 		u_upload_destroy(pctx->stream_uploader);
 
-	if (ctx->clear_rs_state)
-		pctx->delete_rasterizer_state(pctx, ctx->clear_rs_state);
+	for (i = 0; i < ARRAY_SIZE(ctx->clear_rs_state); i++)
+		if (ctx->clear_rs_state[i])
+			pctx->delete_rasterizer_state(pctx, ctx->clear_rs_state[i]);
 
 	if (ctx->primconvert)
 		util_primconvert_destroy(ctx->primconvert);
@@ -400,6 +404,8 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 	ctx->screen = screen;
 	ctx->pipe = fd_pipe_new2(screen->dev, FD_PIPE_3D, prio);
 
+	ctx->in_fence_fd = -1;
+
 	if (fd_device_version(screen->dev) >= FD_VERSION_ROBUSTNESS) {
 		ctx->context_reset_count = fd_get_reset_count(ctx, true);
 		ctx->global_reset_count = fd_get_reset_count(ctx, false);
@@ -407,7 +413,7 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 
 	ctx->primtypes = primtypes;
 	ctx->primtype_mask = 0;
-	for (i = 0; i < PIPE_PRIM_MAX; i++)
+	for (i = 0; i <= PIPE_PRIM_MAX; i++)
 		if (primtypes[i])
 			ctx->primtype_mask |= (1 << i);
 
@@ -428,6 +434,7 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 	pctx->get_device_reset_status = fd_get_device_reset_status;
 	pctx->create_fence_fd = fd_create_fence_fd;
 	pctx->fence_server_sync = fd_fence_server_sync;
+	pctx->fence_server_signal = fd_fence_server_signal;
 	pctx->texture_barrier = fd_texture_barrier;
 	pctx->memory_barrier = fd_memory_barrier;
 

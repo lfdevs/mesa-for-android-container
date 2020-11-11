@@ -1013,7 +1013,7 @@ swr_flush_frontbuffer(struct pipe_screen *p_screen,
       SWR_SURFACE_STATE *resolve = &swr_resource(resolve_target)->swr;
 
       void *map = winsys->displaytarget_map(winsys, spr->display_target,
-                                            PIPE_TRANSFER_WRITE);
+                                            PIPE_MAP_WRITE);
       memcpy(map, (void*)(resolve->xpBaseAddress), resolve->pitch * resolve->height);
       winsys->displaytarget_unmap(winsys, spr->display_target);
    }

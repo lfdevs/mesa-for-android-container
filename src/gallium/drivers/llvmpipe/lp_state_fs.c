@@ -881,6 +881,7 @@ generate_fs_loop(struct gallivm_state *gallivm,
       if (key->min_samples == 1) {
          /* for multisample Z needs to be re interpolated at pixel center */
          lp_build_interp_soa_update_pos_dyn(interp, gallivm, loop_state.counter, NULL);
+         z = interp->pos[2];
          lp_build_mask_update(&mask, tmp_s_mask_or);
       }
    } else {
@@ -1029,6 +1030,11 @@ generate_fs_loop(struct gallivm_state *gallivm,
       assert(smaski >= 0);
       output_smask = LLVMBuildLoad(builder, outputs[smaski][0], "smask");
       output_smask = LLVMBuildBitCast(builder, output_smask, smask_bld.vec_type, "");
+      if (!key->multisample && key->no_ms_sample_mask_out) {
+         output_smask = lp_build_and(&smask_bld, output_smask, smask_bld.one);
+         output_smask = lp_build_cmp(&smask_bld, PIPE_FUNC_NOTEQUAL, output_smask, smask_bld.zero);
+         lp_build_mask_update(&mask, output_smask);
+      }
 
       if (key->min_samples > 1) {
          /* only the bit corresponding to this sample is to be used. */
@@ -1119,6 +1125,11 @@ generate_fs_loop(struct gallivm_state *gallivm,
                                           0);
       if (pos0 != -1 && outputs[pos0][2]) {
          z = LLVMBuildLoad(builder, outputs[pos0][2], "output.z");
+      } else {
+         if (key->multisample) {
+            lp_build_interp_soa_update_pos_dyn(interp, gallivm, loop_state.counter, key->multisample ? sample_loop_state.counter : NULL);
+            z = interp->pos[2];
+         }
       }
       /*
        * Clamp according to ARB_depth_clamp semantics.
@@ -3481,7 +3492,9 @@ generate_variant(struct llvmpipe_context *lp,
    snprintf(module_name, sizeof(module_name), "fs%u_variant%u",
             shader->no, shader->variants_created);
 
-   variant->shader = shader;
+   pipe_reference_init(&variant->reference, 1);
+   lp_fs_reference(lp, &variant->shader, shader);
+
    memcpy(&variant->key, key, shader->variant_key_size);
 
    if (shader->base.ir.nir) {
@@ -3588,6 +3601,7 @@ llvmpipe_create_fs_state(struct pipe_context *pipe,
    if (!shader)
       return NULL;
 
+   pipe_reference_init(&shader->reference, 1);
    shader->no = fs_no++;
    make_empty_list(&shader->variants);
 
@@ -3687,8 +3701,10 @@ llvmpipe_bind_fs_state(struct pipe_context *pipe, void *fs)
    draw_bind_fragment_shader(llvmpipe->draw,
                              (lp_fs ? lp_fs->draw_data : NULL));
 
-   llvmpipe->fs = lp_fs;
+   lp_fs_reference(llvmpipe, &llvmpipe->fs, lp_fs);
 
+   /* invalidate the setup link, NEW_FS will make it update */
+   lp_setup_set_fs_variant(llvmpipe->setup, NULL);
    llvmpipe->dirty |= LP_NEW_FS;
 }
 
@@ -3697,9 +3713,10 @@ llvmpipe_bind_fs_state(struct pipe_context *pipe, void *fs)
  * Remove shader variant from two lists: the shader's variant list
  * and the context's variant list.
  */
-static void
-llvmpipe_remove_shader_variant(struct llvmpipe_context *lp,
-                               struct lp_fragment_shader_variant *variant)
+
+static
+void llvmpipe_remove_shader_variant(struct llvmpipe_context *lp,
+                                    struct lp_fragment_shader_variant *variant)
 {
    if ((LP_DEBUG & DEBUG_FS) || (gallivm_debug & GALLIVM_DEBUG_IR)) {
       debug_printf("llvmpipe: del fs #%u var %u v created %u v cached %u "
@@ -3710,8 +3727,6 @@ llvmpipe_remove_shader_variant(struct llvmpipe_context *lp,
                    lp->nr_fs_variants, variant->nr_instrs, lp->nr_fs_instrs);
    }
 
-   gallivm_destroy(variant->gallivm);
-
    /* remove from shader's list */
    remove_from_list(&variant->list_item_local);
    variant->shader->variants_cached--;
@@ -3720,35 +3735,23 @@ llvmpipe_remove_shader_variant(struct llvmpipe_context *lp,
    remove_from_list(&variant->list_item_global);
    lp->nr_fs_variants--;
    lp->nr_fs_instrs -= variant->nr_instrs;
+}
+
+void
+llvmpipe_destroy_shader_variant(struct llvmpipe_context *lp,
+                               struct lp_fragment_shader_variant *variant)
+{
+   gallivm_destroy(variant->gallivm);
+
+   lp_fs_reference(lp, &variant->shader, NULL);
 
    FREE(variant);
 }
 
-
-static void
-llvmpipe_delete_fs_state(struct pipe_context *pipe, void *fs)
+void
+llvmpipe_destroy_fs(struct llvmpipe_context *llvmpipe,
+                    struct lp_fragment_shader *shader)
 {
-   struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
-   struct lp_fragment_shader *shader = fs;
-   struct lp_fs_variant_list_item *li;
-
-   assert(fs != llvmpipe->fs);
-
-   /*
-    * XXX: we need to flush the context until we have some sort of reference
-    * counting in fragment shaders as they may still be binned
-    * Flushing alone might not sufficient we need to wait on it too.
-    */
-   llvmpipe_finish(pipe, __FUNCTION__);
-
-   /* Delete all the variants */
-   li = first_elem(&shader->variants);
-   while(!at_end(&shader->variants, li)) {
-      struct lp_fs_variant_list_item *next = next_elem(li);
-      llvmpipe_remove_shader_variant(llvmpipe, li->base);
-      li = next;
-   }
-
    /* Delete draw module's data */
    draw_delete_fragment_shader(llvmpipe->draw, shader->draw_data);
 
@@ -3759,7 +3762,26 @@ llvmpipe_delete_fs_state(struct pipe_context *pipe, void *fs)
    FREE(shader);
 }
 
+static void
+llvmpipe_delete_fs_state(struct pipe_context *pipe, void *fs)
+{
+   struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
+   struct lp_fragment_shader *shader = fs;
+   struct lp_fs_variant_list_item *li;
 
+   /* Delete all the variants */
+   li = first_elem(&shader->variants);
+   while(!at_end(&shader->variants, li)) {
+      struct lp_fs_variant_list_item *next = next_elem(li);
+      struct lp_fragment_shader_variant *variant;
+      variant = li->base;
+      llvmpipe_remove_shader_variant(llvmpipe, li->base);
+      lp_fs_variant_reference(llvmpipe, &variant, NULL);
+      li = next;
+   }
+
+   lp_fs_reference(llvmpipe, &shader, NULL);
+}
 
 static void
 llvmpipe_set_constant_buffer(struct pipe_context *pipe,
@@ -3972,13 +3994,12 @@ make_variant_key(struct llvmpipe_context *lp,
 
    key->flatshade = lp->rasterizer->flatshade;
    key->multisample = lp->rasterizer->multisample;
+   key->no_ms_sample_mask_out = lp->rasterizer->no_ms_sample_mask_out;
    if (lp->active_occlusion_queries && !lp->queries_disabled) {
       key->occlusion_count = TRUE;
    }
 
-   if (lp->framebuffer.nr_cbufs) {
-      memcpy(&key->blend, lp->blend, sizeof key->blend);
-   }
+   memcpy(&key->blend, lp->blend, sizeof key->blend);
 
    key->coverage_samples = 1;
    key->min_samples = 1;
@@ -4181,8 +4202,6 @@ llvmpipe_update_fs(struct llvmpipe_context *lp)
 
       if (variants_to_cull ||
           lp->nr_fs_instrs >= LP_MAX_SHADER_INSTRUCTIONS) {
-         struct pipe_context *pipe = &lp->pipe;
-
          if (gallivm_debug & GALLIVM_DEBUG_PERF) {
             debug_printf("Evicting FS: %u fs variants,\t%u total variants,"
                          "\t%u instrs,\t%u instrs/variant\n",
@@ -4190,13 +4209,6 @@ llvmpipe_update_fs(struct llvmpipe_context *lp)
                          lp->nr_fs_variants, lp->nr_fs_instrs,
                          lp->nr_fs_instrs / lp->nr_fs_variants);
          }
-
-         /*
-          * XXX: we need to flush the context until we have some sort of
-          * reference counting in fragment shaders as they may still be binned
-          * Flushing alone might not be sufficient we need to wait on it too.
-          */
-         llvmpipe_finish(pipe, __FUNCTION__);
 
          /*
           * We need to re-check lp->nr_fs_variants because an arbitrarliy large
@@ -4213,6 +4225,7 @@ llvmpipe_update_fs(struct llvmpipe_context *lp)
             assert(item);
             assert(item->base);
             llvmpipe_remove_shader_variant(lp, item->base);
+            lp_fs_variant_reference(lp, &item->base, NULL);
          }
       }
 

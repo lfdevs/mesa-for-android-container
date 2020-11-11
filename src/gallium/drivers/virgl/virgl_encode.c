@@ -33,7 +33,7 @@
 
 #include "virgl_context.h"
 #include "virgl_encode.h"
-#include "virgl_protocol.h"
+#include "virtio-gpu/virgl_protocol.h"
 #include "virgl_resource.h"
 #include "virgl_screen.h"
 
@@ -1429,10 +1429,18 @@ void virgl_encode_transfer(struct virgl_screen *vs, struct virgl_cmd_buf *buf,
                            struct virgl_transfer *trans, uint32_t direction)
 {
    uint32_t command;
+   struct virgl_resource *vres = virgl_resource(trans->base.resource);
+   enum virgl_transfer3d_encode_stride stride_type =
+        virgl_transfer3d_host_inferred_stride;
+
+   if (trans->base.box.depth == 1 && trans->base.level == 0 &&
+       trans->base.resource->target == PIPE_TEXTURE_2D &&
+       vres->blob_mem == VIRGL_BLOB_MEM_HOST3D_GUEST)
+      stride_type = virgl_transfer3d_explicit_stride;
+
    command = VIRGL_CMD0(VIRGL_CCMD_TRANSFER3D, 0, VIRGL_TRANSFER3D_SIZE);
    virgl_encoder_write_dword(buf, command);
-   virgl_encoder_transfer3d_common(vs, buf, trans,
-                                   virgl_transfer3d_host_inferred_stride);
+   virgl_encoder_transfer3d_common(vs, buf, trans, stride_type);
    virgl_encoder_write_dword(buf, trans->offset);
    virgl_encoder_write_dword(buf, direction);
 }

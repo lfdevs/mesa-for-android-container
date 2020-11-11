@@ -64,7 +64,8 @@ libpanfrost = static_library(
   dependencies: [
     dep_thread,
     dep_libdrm,
-    idep_nir
+    idep_nir,
+    idep_midgard_pack
   ],
   include_directories : panfrost_includes,
   c_args : [c_msvc_compat_args, compile_args_panfrost],
@@ -73,5 +74,5 @@ libpanfrost = static_library(
 
 driver_panfrost = declare_dependency(
   compile_args : compile_args_panfrost,
-  link_with : [libpanfrost, libpanfrostwinsys, libpanfrost_shared, libpanfrost_midgard, libpanfrost_bifrost, libpanfrost_decode, libpanfrost_encoder],
+  link_with : [libpanfrost, libpanfrostwinsys, libpanfrost_shared, libpanfrost_midgard, libpanfrost_bifrost, libpanfrost_decode, libpanfrost_lib],
 )

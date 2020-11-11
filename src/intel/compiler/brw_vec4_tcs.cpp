@@ -143,7 +143,7 @@ vec4_tcs_visitor::emit_thread_end()
       emit(BRW_OPCODE_ENDIF);
    }
 
-   if (unlikely(INTEL_DEBUG & DEBUG_SHADER_TIME))
+   if (INTEL_DEBUG & DEBUG_SHADER_TIME)
       emit_shader_time_end();
 
    inst = emit(TCS_OPCODE_THREAD_END);
@@ -352,6 +352,8 @@ get_patch_count_threshold(int input_control_points)
    return 1;
 }
 
+} /* namespace brw */
+
 extern "C" const unsigned *
 brw_compile_tcs(const struct brw_compiler *compiler,
                 void *log_data,
@@ -390,7 +392,7 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    bool has_primitive_id =
       nir->info.system_values_read & (1 << SYSTEM_VALUE_PRIMITIVE_ID);
 
-   prog_data->patch_count_threshold = get_patch_count_threshold(key->input_vertices);
+   prog_data->patch_count_threshold = brw::get_patch_count_threshold(key->input_vertices);
 
    if (compiler->use_tcs_8_patch &&
        nir->info.tess.tcs_vertices_out <= (devinfo->gen >= 12 ? 32 : 16) &&
@@ -438,20 +440,13 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    /* URB entry sizes are stored as a multiple of 64 bytes. */
    vue_prog_data->urb_entry_size = ALIGN(output_size_bytes, 64) / 64;
 
-   /* On Cannonlake software shall not program an allocation size that
-    * specifies a size that is a multiple of 3 64B (512-bit) cachelines.
-    */
-   if (devinfo->gen == 10 &&
-       vue_prog_data->urb_entry_size % 3 == 0)
-      vue_prog_data->urb_entry_size++;
-
    /* HS does not use the usual payload pushing from URB to GRFs,
     * because we don't have enough registers for a full-size payload, and
     * the hardware is broken on Haswell anyway.
     */
    vue_prog_data->urb_read_length = 0;
 
-   if (unlikely(INTEL_DEBUG & DEBUG_TCS)) {
+   if (INTEL_DEBUG & DEBUG_TCS) {
       fprintf(stderr, "TCS Input ");
       brw_print_vue_map(stderr, &input_vue_map);
       fprintf(stderr, "TCS Output ");
@@ -472,7 +467,7 @@ brw_compile_tcs(const struct brw_compiler *compiler,
 
       fs_generator g(compiler, log_data, mem_ctx,
                      &prog_data->base.base, false, MESA_SHADER_TESS_CTRL);
-      if (unlikely(INTEL_DEBUG & DEBUG_TCS)) {
+      if (INTEL_DEBUG & DEBUG_TCS) {
          g.enable_debug(ralloc_asprintf(mem_ctx,
                                         "%s tessellation control shader %s",
                                         nir->info.label ? nir->info.label
@@ -483,9 +478,11 @@ brw_compile_tcs(const struct brw_compiler *compiler,
       g.generate_code(v.cfg, 8, v.shader_stats,
                       v.performance_analysis.require(), stats);
 
+      g.add_const_data(nir->constant_data, nir->constant_data_size);
+
       assembly = g.get_assembly();
    } else {
-      vec4_tcs_visitor v(compiler, log_data, key, prog_data,
+      brw::vec4_tcs_visitor v(compiler, log_data, key, prog_data,
                          nir, mem_ctx, shader_time_index, &input_vue_map);
       if (!v.run()) {
          if (error_str)
@@ -493,7 +490,7 @@ brw_compile_tcs(const struct brw_compiler *compiler,
          return NULL;
       }
 
-      if (unlikely(INTEL_DEBUG & DEBUG_TCS))
+      if (INTEL_DEBUG & DEBUG_TCS)
          v.dump_instructions();
 
 
@@ -505,6 +502,3 @@ brw_compile_tcs(const struct brw_compiler *compiler,
 
    return assembly;
 }
-
-
-} /* namespace brw */

@@ -51,9 +51,11 @@
 #include "iris_pipe.h"
 #include "iris_resource.h"
 #include "iris_screen.h"
+#include "compiler/glsl_types.h"
 #include "intel/compiler/brw_compiler.h"
 #include "intel/common/gen_gem.h"
 #include "intel/common/gen_l3_config.h"
+#include "intel/common/gen_uuid.h"
 #include "iris_monitor.h"
 
 static void
@@ -74,6 +76,46 @@ static const char *
 iris_get_device_vendor(struct pipe_screen *pscreen)
 {
    return "Intel";
+}
+
+static void
+iris_get_device_uuid(struct pipe_screen *pscreen, char *uuid)
+{
+   struct iris_screen *screen = (struct iris_screen *)pscreen;
+   const struct isl_device *isldev = &screen->isl_dev;
+
+   gen_uuid_compute_device_id((uint8_t *)uuid, isldev, PIPE_UUID_SIZE);
+}
+
+static void
+iris_get_driver_uuid(struct pipe_screen *pscreen, char *uuid)
+{
+   struct iris_screen *screen = (struct iris_screen *)pscreen;
+   const struct gen_device_info *devinfo = &screen->devinfo;
+
+   gen_uuid_compute_driver_id((uint8_t *)uuid, devinfo, PIPE_UUID_SIZE);
+}
+
+static bool
+iris_enable_clover()
+{
+   static int enable = -1;
+   if (enable < 0)
+      enable = env_var_as_boolean("IRIS_ENABLE_CLOVER", false);
+   return enable;
+}
+
+static void
+iris_warn_clover()
+{
+   static bool warned = false;
+   if (warned)
+      return;
+
+   warned = true;
+   fprintf(stderr, "WARNING: OpenCL support via iris+clover is incomplete.\n"
+                   "For a complete and conformant OpenCL implementation, use\n"
+                   "https://github.com/intel/compute-runtime instead\n");
 }
 
 static const char *
@@ -194,6 +236,7 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_DEMOTE_TO_HELPER_INVOCATION:
    case PIPE_CAP_NATIVE_FENCE_FD:
    case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
+   case PIPE_CAP_FENCE_SIGNAL:
       return true;
    case PIPE_CAP_FBFETCH:
       return BRW_MAX_DRAW_BUFFERS;
@@ -421,8 +464,12 @@ iris_get_shader_param(struct pipe_screen *pscreen,
       return 0;
    case PIPE_SHADER_CAP_PREFERRED_IR:
       return PIPE_SHADER_IR_NIR;
-   case PIPE_SHADER_CAP_SUPPORTED_IRS:
-      return 1 << PIPE_SHADER_IR_NIR;
+   case PIPE_SHADER_CAP_SUPPORTED_IRS: {
+      int irs = 1 << PIPE_SHADER_IR_NIR;
+      if (iris_enable_clover())
+         irs |= 1 << PIPE_SHADER_IR_NIR_SERIALIZED;
+      return irs;
+   }
    case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_LDEXP_SUPPORTED:
       return 1;
@@ -460,7 +507,11 @@ iris_get_compute_param(struct pipe_screen *pscreen,
 
    switch (param) {
    case PIPE_COMPUTE_CAP_ADDRESS_BITS:
-      RET((uint32_t []){ 32 });
+      /* This gets queried on clover device init and is never queried by the
+       * OpenGL state tracker.
+       */
+      iris_warn_clover();
+      RET((uint32_t []){ 64 });
 
    case PIPE_COMPUTE_CAP_IR_TARGET:
       if (ret)
@@ -488,19 +539,32 @@ iris_get_compute_param(struct pipe_screen *pscreen,
       RET((uint64_t []) { 64 * 1024 });
 
    case PIPE_COMPUTE_CAP_IMAGES_SUPPORTED:
-      RET((uint32_t []) { 1 });
+      RET((uint32_t []) { 0 });
 
    case PIPE_COMPUTE_CAP_SUBGROUP_SIZE:
       RET((uint32_t []) { BRW_SUBGROUP_SIZE });
 
    case PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE:
-   case PIPE_COMPUTE_CAP_MAX_CLOCK_FREQUENCY:
-   case PIPE_COMPUTE_CAP_MAX_COMPUTE_UNITS:
    case PIPE_COMPUTE_CAP_MAX_GLOBAL_SIZE:
+      RET((uint64_t []) { 1 << 30 }); /* TODO */
+
+   case PIPE_COMPUTE_CAP_MAX_CLOCK_FREQUENCY:
+      RET((uint32_t []) { 400 }); /* TODO */
+
+   case PIPE_COMPUTE_CAP_MAX_COMPUTE_UNITS: {
+      unsigned total_num_subslices = 0;
+      for (unsigned i = 0; i < devinfo->num_slices; i++)
+         total_num_subslices += devinfo->num_subslices[i];
+      RET((uint32_t []) { total_num_subslices });
+   }
+
    case PIPE_COMPUTE_CAP_MAX_PRIVATE_SIZE:
+      /* MaxComputeSharedMemorySize */
+      RET((uint64_t []) { 64 * 1024 });
+
    case PIPE_COMPUTE_CAP_MAX_INPUT_SIZE:
-      // XXX: I think these are for Clover...
-      return 0;
+      /* We could probably allow more; this is the OpenCL minimum */
+      RET((uint64_t []) { 1024 });
 
    default:
       unreachable("unknown compute param");
@@ -525,6 +589,7 @@ iris_get_timestamp(struct pipe_screen *pscreen)
 void
 iris_screen_destroy(struct iris_screen *screen)
 {
+   glsl_type_singleton_decref();
    iris_bo_unreference(screen->workaround_bo);
    u_transfer_helper_destroy(screen->base.transfer_helper);
    iris_bufmgr_unref(screen->bufmgr);
@@ -620,7 +685,7 @@ iris_shader_perf_log(void *data, const char *fmt, ...)
    va_list args;
    va_start(args, fmt);
 
-   if (unlikely(INTEL_DEBUG & DEBUG_PERF)) {
+   if (INTEL_DEBUG & DEBUG_PERF) {
       va_list args_copy;
       va_copy(args_copy, args);
       vfprintf(stderr, fmt, args_copy);
@@ -741,6 +806,7 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    screen->compiler->supports_pull_constants = false;
    screen->compiler->supports_shader_constants = true;
    screen->compiler->compact_params = false;
+   screen->compiler->indirect_ubos_use_sampler = screen->devinfo.gen < 12;
 
    screen->l3_config_3d = iris_get_default_l3_config(&screen->devinfo, false);
    screen->l3_config_cs = iris_get_default_l3_config(&screen->devinfo, true);
@@ -770,6 +836,8 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    pscreen->get_compute_param = iris_get_compute_param;
    pscreen->get_paramf = iris_get_paramf;
    pscreen->get_compiler_options = iris_get_compiler_options;
+   pscreen->get_device_uuid = iris_get_device_uuid;
+   pscreen->get_driver_uuid = iris_get_driver_uuid;
    pscreen->get_disk_shader_cache = iris_get_disk_shader_cache;
    pscreen->is_format_supported = iris_is_format_supported;
    pscreen->context_create = iris_create_context;
@@ -778,6 +846,8 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    pscreen->query_memory_info = iris_query_memory_info;
    pscreen->get_driver_query_group_info = iris_get_monitor_group_info;
    pscreen->get_driver_query_info = iris_get_monitor_info;
+
+   glsl_type_singleton_init_or_ref();
 
    return pscreen;
 }

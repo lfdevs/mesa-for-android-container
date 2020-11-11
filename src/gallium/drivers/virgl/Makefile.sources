@@ -4,8 +4,6 @@ C_SOURCES := \
 	virgl_context.h \
 	virgl_encode.c \
 	virgl_encode.h \
-	virgl_hw.h \
-	virgl_protocol.h \
 	virgl_public.h \
 	virgl_query.c \
 	virgl_resource.c \

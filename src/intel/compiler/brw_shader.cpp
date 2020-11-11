@@ -301,8 +301,20 @@ brw_instruction_name(const struct gen_device_info *devinfo, enum opcode op)
       return "untyped_surface_write";
    case SHADER_OPCODE_UNTYPED_SURFACE_WRITE_LOGICAL:
       return "untyped_surface_write_logical";
+   case SHADER_OPCODE_OWORD_BLOCK_READ_LOGICAL:
+      return "oword_block_read_logical";
+   case SHADER_OPCODE_UNALIGNED_OWORD_BLOCK_READ_LOGICAL:
+      return "unaligned_oword_block_read_logical";
+   case SHADER_OPCODE_OWORD_BLOCK_WRITE_LOGICAL:
+      return "oword_block_write_logical";
    case SHADER_OPCODE_A64_UNTYPED_READ_LOGICAL:
       return "a64_untyped_read_logical";
+   case SHADER_OPCODE_A64_OWORD_BLOCK_READ_LOGICAL:
+      return "a64_oword_block_read_logical";
+   case SHADER_OPCODE_A64_UNALIGNED_OWORD_BLOCK_READ_LOGICAL:
+      return "a64_unaligned_oword_block_read_logical";
+   case SHADER_OPCODE_A64_OWORD_BLOCK_WRITE_LOGICAL:
+      return "a64_oword_block_write_logical";
    case SHADER_OPCODE_A64_UNTYPED_WRITE_LOGICAL:
       return "a64_untyped_write_logical";
    case SHADER_OPCODE_A64_BYTE_SCATTERED_READ_LOGICAL:
@@ -349,6 +361,8 @@ brw_instruction_name(const struct gen_device_info *devinfo, enum opcode op)
       return "gen4_scratch_write";
    case SHADER_OPCODE_GEN7_SCRATCH_READ:
       return "gen7_scratch_read";
+   case SHADER_OPCODE_SCRATCH_HEADER:
+      return "scratch_header";
    case SHADER_OPCODE_URB_WRITE_SIMD8:
       return "gen8_urb_write_simd8";
    case SHADER_OPCODE_URB_WRITE_SIMD8_PER_SLOT:
@@ -456,9 +470,6 @@ brw_instruction_name(const struct gen_device_info *devinfo, enum opcode op)
    case VS_OPCODE_PULL_CONSTANT_LOAD_GEN7:
       return "pull_constant_load_gen7";
 
-   case VS_OPCODE_SET_SIMD4X2_HEADER_GEN9:
-      return "set_simd4x2_header_gen9";
-
    case VS_OPCODE_UNPACK_FLAGS_SIMD4X2:
       return "unpack_flags_simd4x2";
 
@@ -502,6 +513,8 @@ brw_instruction_name(const struct gen_device_info *devinfo, enum opcode op)
       return "usub_sat";
    case SHADER_OPCODE_MOV_INDIRECT:
       return "mov_indirect";
+   case SHADER_OPCODE_MOV_RELOC_IMM:
+      return "mov_reloc_imm";
 
    case VEC4_OPCODE_URB_READ:
       return "urb_read";
@@ -1087,6 +1100,8 @@ backend_instruction::has_side_effects() const
    case SHADER_OPCODE_RND_MODE:
    case SHADER_OPCODE_FLOAT_CONTROL_MODE:
    case FS_OPCODE_SCHEDULING_FENCE:
+   case SHADER_OPCODE_OWORD_BLOCK_WRITE_LOGICAL:
+   case SHADER_OPCODE_A64_OWORD_BLOCK_WRITE_LOGICAL:
       return true;
    default:
       return eot;
@@ -1220,14 +1235,14 @@ backend_shader::dump_instructions(const char *name) const
    if (cfg) {
       int ip = 0;
       foreach_block_and_inst(block, backend_instruction, inst, cfg) {
-         if (!unlikely(INTEL_DEBUG & DEBUG_OPTIMIZER))
+         if (!(INTEL_DEBUG & DEBUG_OPTIMIZER))
             fprintf(file, "%4d: ", ip++);
          dump_instruction(inst, file);
       }
    } else {
       int ip = 0;
       foreach_in_list(backend_instruction, inst, &instructions) {
-         if (!unlikely(INTEL_DEBUG & DEBUG_OPTIMIZER))
+         if (!(INTEL_DEBUG & DEBUG_OPTIMIZER))
             fprintf(file, "%4d: ", ip++);
          dump_instruction(inst, file);
       }
@@ -1298,13 +1313,6 @@ brw_compile_tes(const struct brw_compiler *compiler,
    /* URB entry sizes are stored as a multiple of 64 bytes. */
    prog_data->base.urb_entry_size = ALIGN(output_size_bytes, 64) / 64;
 
-   /* On Cannonlake software shall not program an allocation size that
-    * specifies a size that is a multiple of 3 64B (512-bit) cachelines.
-    */
-   if (devinfo->gen == 10 &&
-       prog_data->base.urb_entry_size % 3 == 0)
-      prog_data->base.urb_entry_size++;
-
    prog_data->base.urb_read_length = 0;
 
    STATIC_ASSERT(BRW_TESS_PARTITIONING_INTEGER == TESS_SPACING_EQUAL - 1);
@@ -1341,7 +1349,7 @@ brw_compile_tes(const struct brw_compiler *compiler,
                              : BRW_TESS_OUTPUT_TOPOLOGY_TRI_CCW;
    }
 
-   if (unlikely(INTEL_DEBUG & DEBUG_TES)) {
+   if (INTEL_DEBUG & DEBUG_TES) {
       fprintf(stderr, "TES Input ");
       brw_print_vue_map(stderr, input_vue_map);
       fprintf(stderr, "TES Output ");
@@ -1363,7 +1371,7 @@ brw_compile_tes(const struct brw_compiler *compiler,
 
       fs_generator g(compiler, log_data, mem_ctx,
                      &prog_data->base.base, false, MESA_SHADER_TESS_EVAL);
-      if (unlikely(INTEL_DEBUG & DEBUG_TES)) {
+      if (INTEL_DEBUG & DEBUG_TES) {
          g.enable_debug(ralloc_asprintf(mem_ctx,
                                         "%s tessellation evaluation shader %s",
                                         nir->info.label ? nir->info.label
@@ -1373,6 +1381,8 @@ brw_compile_tes(const struct brw_compiler *compiler,
 
       g.generate_code(v.cfg, 8, v.shader_stats,
                       v.performance_analysis.require(), stats);
+
+      g.add_const_data(nir->constant_data, nir->constant_data_size);
 
       assembly = g.get_assembly();
    } else {
@@ -1384,7 +1394,7 @@ brw_compile_tes(const struct brw_compiler *compiler,
 	 return NULL;
       }
 
-      if (unlikely(INTEL_DEBUG & DEBUG_TES))
+      if (INTEL_DEBUG & DEBUG_TES)
 	 v.dump_instructions();
 
       assembly = brw_vec4_generate_assembly(compiler, log_data, mem_ctx, nir,

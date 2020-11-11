@@ -51,28 +51,38 @@ function start_cmdstream(name)
 end
 
 function draw(primtype, nindx)
-  if primtype ~= "BLIT_OP_SCALE" then
-    return
-  end
-
-  -- Just in case, filter out anything that isn't starting
-  -- at 0,0
-  if r.GRAS_2D_DST_TL.X ~= 0 or r.GRAS_2D_DST_TL.Y ~= 0 then
-    return
-  end
-
   local blit = {}
 
-  blit.width   = r.GRAS_2D_DST_BR.X + 1
-  blit.height  = r.GRAS_2D_DST_BR.Y + 1
-  blit.pitch   = r.RB_2D_DST_SIZE.PITCH
-  blit.addr    = r.RB_2D_DST_LO | (r.RB_2D_DST_HI << 32)
+  local type = "???";
+  if primtype == "BLIT_OP_SCALE" then
+    -- Just in case, filter out anything that isn't starting
+    -- at 0,0
+    if r.GRAS_2D_DST_TL.X ~= 0 or r.GRAS_2D_DST_TL.Y ~= 0 then
+      return
+    end
+
+    blit.width   = r.GRAS_2D_DST_BR.X + 1
+    blit.height  = r.GRAS_2D_DST_BR.Y + 1
+    blit.pitch   = r.RB_2D_DST_PITCH
+    blit.addr    = r.RB_2D_DST_LO | (r.RB_2D_DST_HI << 32)
+    blit.ubwc_addr = r.RB_2D_DST_FLAGS_LO | (r.RB_2D_DST_FLAGS_HI << 32)
+    blit.ubwc_pitch = r.RB_2D_DST_FLAGS_PITCH
+    type="blit";
+  else
+    blit.width   = r.GRAS_SC_WINDOW_SCISSOR_BR.X + 1
+    blit.height  = r.GRAS_SC_WINDOW_SCISSOR_BR.Y + 1
+    blit.pitch = r.RB_MRT[0].PITCH
+    blit.addr = r.RB_MRT[0].BASE_LO | (r.RB_MRT[0].BASE_HI << 32);
+    blit.ubwc_addr = r.RB_MRT_FLAG_BUFFER[0].ADDR_LO | (r.RB_MRT_FLAG_BUFFER[0].ADDR_HI << 32)
+    blit.ubwc_pitch = r.RB_MRT_FLAG_BUFFER[0].PITCH.PITCH
+    type="draw"
+  end
   blit.base    = bos.base(blit.addr)
-  blit.ubwc_addr = r.RB_2D_DST_FLAGS_LO | (r.RB_2D_DST_FLAGS_HI << 32)
   blit.ubwc_base = bos.base(blit.uwbc_addr)
-  blit.ubwc_pitch = r.RB_2D_DST_FLAGS_PITCH.PITCH
   blit.endaddr = 0  -- filled in later
-  printf("Found blit: 0x%x (0x%x) %dx%d UBWC 0x%x (0x%x)\n", blit.addr, blit.base, blit.width, blit.height, blit.ubwc_addr, blit.ubwc_base)
+
+  printf("Found %s: 0x%x/%d (0x%x) %dx%d UBWC 0x%x/%d (0x%x)\n",
+         type, blit.addr, blit.pitch, blit.base, blit.width, blit.height, blit.ubwc_addr, blit.ubwc_pitch, blit.ubwc_base)
 
   allblits[nallblits] = blit
   nallblits = nallblits + 1
@@ -93,8 +103,8 @@ function A6XX_TEX_CONST(pkt, size)
   end
   found_tex = 1
 
-  printf("Found texture state:\n  %ux%ux%u (%s, %s, MIN_LAYERSZ=0x%x, TILE_ALL=%s, UBWC=%s FLAG_LOG2=%ux%u)\n",
-         width0, height0, depth0, pkt[0].FMT, pkt[0].TILE_MODE, pkt[3].MIN_LAYERSZ, tostring(pkt[3].TILE_ALL), tostring(pkt[3].FLAG), pkt[10].FLAG_BUFFER_LOGW, pkt[10].FLAG_BUFFER_LOGH)
+  printf("Found texture state:\n  %ux%ux%u (%s, %s, MIN_LAYERSZ=0x%x, TILE_ALL=%s, UBWC=%s FLAG_LOG2=%ux%u %s)\n",
+         width0, height0, depth0, pkt[0].FMT, pkt[0].TILE_MODE, pkt[3].MIN_LAYERSZ, tostring(pkt[3].TILE_ALL), tostring(pkt[3].FLAG), pkt[10].FLAG_BUFFER_LOGW, pkt[10].FLAG_BUFFER_LOGH, tostring(pkt[0].SAMPLES))
 
   -- Note that in some case the texture has some extra page or so
   -- at the beginning:
@@ -131,6 +141,16 @@ function A6XX_TEX_CONST(pkt, size)
   printf("		.layout = {\n")
   printf("			.tile_mode = %s,\n", pkt[0].TILE_MODE)
   printf("			.ubwc = %s,\n", tostring(pkt[3].FLAG))
+
+  if (tostring(pkt[0].SAMPLES) == "MSAA_ONE") then
+    -- Ignore it, 1 is the default
+  elseif (tostring(pkt[0].SAMPLES) == "MSAA_TWO") then
+    printf("			.nr_samples = 2,\n")
+  elseif (tostring(pkt[0].SAMPLES) == "MSAA_FOUR") then
+    printf("			.nr_samples = 4,\n")
+  else
+    printf("			.nr_samples = XXX,\n")
+  end
 
   if (tostring(pkt[2].TYPE) == "A6XX_TEX_3D") then
     printf("			.width0 = %d, .height0 = %d, .depth = %d,\n", width0, height0, depth0)

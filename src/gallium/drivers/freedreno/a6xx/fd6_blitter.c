@@ -158,16 +158,32 @@ ok_format(enum pipe_format pfmt)
 		if (cond) {														\
 			if (DEBUG_BLIT_FALLBACK) {									\
 				fprintf(stderr, "falling back: %s for blit:\n", #cond);	\
-				util_dump_blit_info(stderr, info);						\
-				fprintf(stderr, "\nsrc: ");								\
-				util_dump_resource(stderr, info->src.resource);			\
-				fprintf(stderr, "\ndst: ");								\
-				util_dump_resource(stderr, info->dst.resource);			\
-				fprintf(stderr, "\n");									\
+				dump_blit_info(info);									\
 			}															\
 			return false;												\
 		}																\
 	} while (0)
+
+static bool
+is_ubwc(struct pipe_resource *prsc, unsigned level)
+{
+	return fd_resource_ubwc_enabled(fd_resource(prsc), level);
+}
+
+static void
+dump_blit_info(const struct pipe_blit_info *info)
+{
+	util_dump_blit_info(stderr, info);
+	fprintf(stderr, "\ndst resource: ");
+	util_dump_resource(stderr, info->dst.resource);
+	if (is_ubwc(info->dst.resource, info->dst.level))
+		fprintf(stderr, " (ubwc)");
+	fprintf(stderr, "\nsrc resource: ");
+	util_dump_resource(stderr, info->src.resource);
+	if (is_ubwc(info->src.resource, info->src.level))
+		fprintf(stderr, " (ubwc)");
+	fprintf(stderr, "\n");
+}
 
 static bool
 can_do_blit(const struct pipe_blit_info *info)
@@ -219,6 +235,7 @@ static void
 emit_setup(struct fd_batch *batch)
 {
 	struct fd_ringbuffer *ring = batch->draw;
+	struct fd_screen *screen = batch->ctx->screen;
 
 	fd6_event_write(batch, ring, PC_CCU_FLUSH_COLOR_TS, true);
 	fd6_event_write(batch, ring, PC_CCU_FLUSH_DEPTH_TS, true);
@@ -228,7 +245,7 @@ emit_setup(struct fd_batch *batch)
 	/* normal BLIT_OP_SCALE operation needs bypass RB_CCU_CNTL */
 	OUT_WFI5(ring);
 	OUT_PKT4(ring, REG_A6XX_RB_CCU_CNTL, 1);
-	OUT_RING(ring, fd6_context(batch->ctx)->magic.RB_CCU_CNTL_bypass);
+	OUT_RING(ring, A6XX_RB_CCU_CNTL_OFFSET(screen->info.a6xx.ccu_offset_bypass));
 }
 
 static void
@@ -300,12 +317,7 @@ emit_blit_buffer(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 	if (DEBUG_BLIT) {
 		fprintf(stderr, "buffer blit: ");
-		util_dump_blit_info(stderr, info);
-		fprintf(stderr, "\ndst resource: ");
-		util_dump_resource(stderr, info->dst.resource);
-		fprintf(stderr, "\nsrc resource: ");
-		util_dump_resource(stderr, info->src.resource);
-		fprintf(stderr, "\n");
+		dump_blit_info(info);
 	}
 
 	src = fd_resource(info->src.resource);
@@ -409,7 +421,7 @@ emit_blit_buffer(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		OUT_WFI5(ring);
 
 		OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
-		OUT_RING(ring, fd6_context(ctx)->magic.RB_UNKNOWN_8E04_blit);
+		OUT_RING(ring, ctx->screen->info.a6xx.magic.RB_UNKNOWN_8E04_blit);
 
 		OUT_PKT7(ring, CP_BLIT, 1);
 		OUT_RING(ring, CP_BLIT_0_OP(BLIT_OP_SCALE));
@@ -419,6 +431,108 @@ emit_blit_buffer(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
 		OUT_RING(ring, 0);             /* RB_UNKNOWN_8E04 */
 	}
+}
+
+static void
+fd6_clear_ubwc(struct fd_batch *batch, struct fd_resource *rsc)
+{
+	struct fd_ringbuffer *ring = fd_batch_get_prologue(batch);
+	union pipe_color_union color = {};
+
+	emit_blit_setup(ring, PIPE_FORMAT_R8_UNORM, false, &color);
+
+	OUT_PKT4(ring, REG_A6XX_SP_PS_2D_SRC_INFO, 13);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+
+	OUT_PKT4(ring, REG_A6XX_RB_2D_SRC_SOLID_C0, 4);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, 0x00000000);
+
+	OUT_PKT4(ring, REG_A6XX_GRAS_2D_SRC_TL_X, 4);
+	OUT_RING(ring, A6XX_GRAS_2D_SRC_TL_X(0));
+	OUT_RING(ring, A6XX_GRAS_2D_SRC_BR_X(0));
+	OUT_RING(ring, A6XX_GRAS_2D_SRC_TL_Y(0));
+	OUT_RING(ring, A6XX_GRAS_2D_SRC_BR_Y(0));
+
+	unsigned size = rsc->layout.slices[0].offset;
+	unsigned offset = 0;
+
+	/* We could be more clever here and realize that we could use a
+	 * larger width if the size is aligned to something more than a
+	 * single page.. or even use a format larger than r8 in those
+	 * cases. But for normal sized textures and even up to 16k x 16k
+	 * at <= 4byte/pixel, we'll only go thru the loop once
+	 */
+	const unsigned w = 0x1000;
+
+	/* ubwc size should always be page aligned: */
+	assert((size % w) == 0);
+
+	while (size > 0) {
+		const unsigned h = MIN2(0x4000, size / w);
+		/* width is already aligned to a suitable pitch: */
+		const unsigned p = w;
+
+		/*
+		 * Emit destination:
+		 */
+		OUT_PKT4(ring, REG_A6XX_RB_2D_DST_INFO, 9);
+		OUT_RING(ring, A6XX_RB_2D_DST_INFO_COLOR_FORMAT(FMT6_8_UNORM) |
+				A6XX_RB_2D_DST_INFO_TILE_MODE(TILE6_LINEAR) |
+				A6XX_RB_2D_DST_INFO_COLOR_SWAP(WZYX));
+		OUT_RELOC(ring, rsc->bo, offset, 0, 0);    /* RB_2D_DST_LO/HI */
+		OUT_RING(ring, A6XX_RB_2D_DST_PITCH(p));
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+
+		/*
+		 * Blit command:
+		 */
+
+		OUT_PKT4(ring, REG_A6XX_GRAS_2D_DST_TL, 2);
+		OUT_RING(ring, A6XX_GRAS_2D_DST_TL_X(0) | A6XX_GRAS_2D_DST_TL_Y(0));
+		OUT_RING(ring, A6XX_GRAS_2D_DST_BR_X(w - 1) | A6XX_GRAS_2D_DST_BR_Y(h - 1));
+
+		OUT_PKT7(ring, CP_EVENT_WRITE, 1);
+		OUT_RING(ring, 0x3f);
+		OUT_WFI5(ring);
+
+		OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
+		OUT_RING(ring, batch->ctx->screen->info.a6xx.magic.RB_UNKNOWN_8E04_blit);
+
+		OUT_PKT7(ring, CP_BLIT, 1);
+		OUT_RING(ring, CP_BLIT_0_OP(BLIT_OP_SCALE));
+
+		OUT_WFI5(ring);
+
+		OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
+		OUT_RING(ring, 0);             /* RB_UNKNOWN_8E04 */
+
+		offset += w * h;
+		size -= w * h;
+	}
+
+	fd6_event_write(batch, ring, PC_CCU_FLUSH_COLOR_TS, true);
+	fd6_event_write(batch, ring, PC_CCU_FLUSH_DEPTH_TS, true);
+	fd6_event_write(batch, ring, CACHE_FLUSH_TS, true);
+	fd6_cache_inv(batch, ring);
 }
 
 static void
@@ -522,12 +636,7 @@ emit_blit_texture(struct fd_context *ctx,
 
 	if (DEBUG_BLIT) {
 		fprintf(stderr, "texture blit: ");
-		util_dump_blit_info(stderr, info);
-		fprintf(stderr, "\ndst resource: ");
-		util_dump_resource(stderr, info->dst.resource);
-		fprintf(stderr, "\nsrc resource: ");
-		util_dump_resource(stderr, info->src.resource);
-		fprintf(stderr, "\n");
+		dump_blit_info(info);
 	}
 
 	dst = fd_resource(info->dst.resource);
@@ -577,7 +686,7 @@ emit_blit_texture(struct fd_context *ctx,
 		OUT_WFI5(ring);
 
 		OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
-		OUT_RING(ring, fd6_context(ctx)->magic.RB_UNKNOWN_8E04_blit);
+		OUT_RING(ring, ctx->screen->info.a6xx.magic.RB_UNKNOWN_8E04_blit);
 
 		OUT_PKT7(ring, CP_BLIT, 1);
 		OUT_RING(ring, CP_BLIT_0_OP(BLIT_OP_SCALE));
@@ -668,7 +777,7 @@ fd6_clear_surface(struct fd_context *ctx,
 		OUT_WFI5(ring);
 
 		OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
-		OUT_RING(ring, fd6_context(ctx)->magic.RB_UNKNOWN_8E04_blit);
+		OUT_RING(ring, ctx->screen->info.a6xx.magic.RB_UNKNOWN_8E04_blit);
 
 		OUT_PKT7(ring, CP_BLIT, 1);
 		OUT_RING(ring, CP_BLIT_0_OP(BLIT_OP_SCALE));
@@ -691,9 +800,6 @@ handle_rgba_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 		return false;
 
 	batch = fd_bc_alloc_batch(&ctx->screen->batch_cache, ctx, true);
-
-	fd6_emit_restore(batch, batch->draw);
-	fd6_emit_lrz_flush(batch->draw);
 
 	fd_screen_lock(ctx->screen);
 
@@ -771,12 +877,7 @@ handle_zs_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 
 	if (DEBUG_BLIT) {
 		fprintf(stderr, "---- handle_zs_blit: ");
-		util_dump_blit_info(stderr, info);
-		fprintf(stderr, "\ndst resource: ");
-		util_dump_resource(stderr, info->dst.resource);
-		fprintf(stderr, "\nsrc resource: ");
-		util_dump_resource(stderr, info->src.resource);
-		fprintf(stderr, "\n");
+		dump_blit_info(info);
 	}
 
 	switch (info->dst.format) {
@@ -843,12 +944,7 @@ handle_compressed_blit(struct fd_context *ctx, const struct pipe_blit_info *info
 
 	if (DEBUG_BLIT) {
 		fprintf(stderr, "---- handle_compressed_blit: ");
-		util_dump_blit_info(stderr, info);
-		fprintf(stderr, "\ndst resource: ");
-		util_dump_resource(stderr, info->dst.resource);
-		fprintf(stderr, "\nsrc resource: ");
-		util_dump_resource(stderr, info->src.resource);
-		fprintf(stderr, "\n");
+		dump_blit_info(info);
 	}
 
 	if (info->src.format != info->dst.format)
@@ -903,6 +999,8 @@ fd6_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 void
 fd6_blitter_init(struct pipe_context *pctx)
 {
+	fd_context(pctx)->clear_ubwc = fd6_clear_ubwc;
+
 	if (fd_mesa_debug & FD_DBG_NOBLIT)
 		return;
 

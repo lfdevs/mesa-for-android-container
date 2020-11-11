@@ -85,7 +85,7 @@ anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
        * the shader.
        */
       const uint32_t push_reg_mask_start =
-         offsetof(struct anv_push_constants, push_reg_mask);
+         offsetof(struct anv_push_constants, push_reg_mask[nir->info.stage]);
       const uint32_t push_reg_mask_end = push_reg_mask_start + sizeof(uint64_t);
       push_start = MIN2(push_start, push_reg_mask_start);
       push_end = MAX2(push_end, push_reg_mask_end);
@@ -172,7 +172,7 @@ anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
 
       if (robust_buffer_access) {
          const uint32_t push_reg_mask_offset =
-            offsetof(struct anv_push_constants, push_reg_mask);
+            offsetof(struct anv_push_constants, push_reg_mask[nir->info.stage]);
          assert(push_reg_mask_offset >= push_start);
          prog_data->push_reg_mask_param =
             (push_reg_mask_offset - push_start) / 4;

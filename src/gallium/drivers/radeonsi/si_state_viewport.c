@@ -273,13 +273,15 @@ static void si_emit_guardband(struct si_context *ctx)
     * This is done by applying the inverse viewport transformation
     * on the viewport limits to get those limits in clip space.
     *
-    * The viewport range is [-max_viewport_size/2, max_viewport_size/2].
+    * The viewport range is [-max_viewport_size/2 - 1, max_viewport_size/2].
+    * (-1 to the min coord because max_viewport_size is odd and ViewportBounds
+    * Min/Max are -32768, 32767).
     */
    assert(vp_as_scissor.quant_mode < ARRAY_SIZE(max_viewport_size));
    max_range = max_viewport_size[vp_as_scissor.quant_mode] / 2;
-   left = (-max_range - vp.translate[0]) / vp.scale[0];
+   left = (-max_range - 1 - vp.translate[0]) / vp.scale[0];
    right = (max_range - vp.translate[0]) / vp.scale[0];
-   top = (-max_range - vp.translate[1]) / vp.scale[1];
+   top = (-max_range - 1 - vp.translate[1]) / vp.scale[1];
    bottom = (max_range - vp.translate[1]) / vp.scale[1];
 
    assert(left <= -1 && top <= -1 && right >= 1 && bottom >= 1);
@@ -375,7 +377,9 @@ static void si_set_viewport_states(struct pipe_context *pctx, unsigned start_slo
       unsigned h = scissor->maxy - scissor->miny;
       unsigned max_extent = MAX2(w, h);
 
-      int max_corner = MAX2(scissor->maxx, scissor->maxy);
+      int max_corner = MAX2(
+         MAX2(abs(scissor->maxx), abs(scissor->maxy)),
+         MAX2(abs(scissor->minx), abs(scissor->miny)));
 
       unsigned center_x = (scissor->maxx + scissor->minx) / 2;
       unsigned center_y = (scissor->maxy + scissor->miny) / 2;
@@ -415,9 +419,9 @@ static void si_set_viewport_states(struct pipe_context *pctx, unsigned start_slo
        * 4k x 4k of the render target.
        */
 
-      if (max_extent <= 1024 && max_corner < 4096) /* 4K scanline area for guardband */
+      if (max_extent <= 1024 && max_corner < (1 << 12)) /* 4K scanline area for guardband */
          scissor->quant_mode = SI_QUANT_MODE_12_12_FIXED_POINT_1_4096TH;
-      else if (max_extent <= 4096) /* 16K scanline area for guardband */
+      else if (max_extent <= 4096 && max_corner < (1 << 14)) /* 16K scanline area for guardband */
          scissor->quant_mode = SI_QUANT_MODE_14_10_FIXED_POINT_1_1024TH;
       else /* 64K scanline area for guardband */
          scissor->quant_mode = SI_QUANT_MODE_16_8_FIXED_POINT_1_256TH;
@@ -557,7 +561,7 @@ void si_update_vs_viewport_state(struct si_context *ctx)
       return;
 
    /* When the VS disables clipping and viewport transformation. */
-   vs_window_space = info->properties[TGSI_PROPERTY_VS_WINDOW_SPACE_POSITION];
+   vs_window_space = info->stage == MESA_SHADER_VERTEX && info->base.vs.window_space_position;
 
    if (ctx->vs_disables_clipping_viewport != vs_window_space) {
       ctx->vs_disables_clipping_viewport = vs_window_space;

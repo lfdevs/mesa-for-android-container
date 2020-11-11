@@ -131,7 +131,7 @@ files_i965 = files(
 )
 
 i965_gen_libs = []
-foreach v : ['40', '45', '50', '60', '70', '75', '80', '90', '100', '110']
+foreach v : ['40', '45', '50', '60', '70', '75', '80', '90', '110']
   i965_gen_libs += static_library(
     'i965_gen@0@'.format(v),
     ['genX_blorp_exec.c', 'genX_boilerplate.h', 'genX_pipe_control.c',

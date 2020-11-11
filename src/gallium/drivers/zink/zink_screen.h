@@ -24,16 +24,24 @@
 #ifndef ZINK_SCREEN_H
 #define ZINK_SCREEN_H
 
+#include "zink_device_info.h"
+
 #include "pipe/p_screen.h"
 #include "util/slab.h"
 
 #include <vulkan/vulkan.h>
+
+#if defined(__APPLE__)
+// Source of MVK_VERSION
+#include "MoltenVK/vk_mvk_moltenvk.h"
+#endif
 
 extern uint32_t zink_debug;
 
 #define ZINK_DEBUG_NIR 0x1
 #define ZINK_DEBUG_SPIRV 0x2
 #define ZINK_DEBUG_TGSI 0x4
+#define ZINK_DEBUG_VALIDATION 0x8
 
 struct zink_screen {
    struct pipe_screen base;
@@ -45,30 +53,26 @@ struct zink_screen {
    VkInstance instance;
    VkPhysicalDevice pdev;
 
-   VkPhysicalDeviceProperties props;
-   VkPhysicalDeviceFeatures feats;
-   VkPhysicalDeviceMemoryProperties mem_props;
-   VkPhysicalDeviceTransformFeedbackPropertiesEXT tf_props;
-   VkPhysicalDeviceRobustness2PropertiesEXT rb2_props;
-   VkPhysicalDeviceRobustness2FeaturesEXT rb2_feats;
-   VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT vdiv_feats;
-   uint32_t max_vertex_attrib_divisor;
-
-   bool have_KHR_maintenance1;
-   bool have_KHR_external_memory_fd;
-   bool have_EXT_conditional_rendering;
-   bool have_EXT_transform_feedback;
-   bool have_EXT_index_type_uint8;
-   bool have_EXT_robustness2_features;
-   bool have_EXT_vertex_attribute_divisor;
-   bool have_EXT_calibrated_timestamps;
+   struct zink_device_info info;
 
    bool have_X8_D24_UNORM_PACK32;
    bool have_D24_UNORM_S8_UINT;
+   bool have_triangle_fans;
 
    uint32_t gfx_queue;
    uint32_t timestamp_valid_bits;
    VkDevice dev;
+   VkDebugUtilsMessengerEXT debugUtilsCallbackHandle;
+
+   uint32_t loader_version;
+   bool have_physical_device_prop2_ext;
+   bool have_debug_utils_ext;
+#if defined(MVK_VERSION)
+   bool have_moltenvk;
+#endif
+
+   PFN_vkGetPhysicalDeviceFeatures2 vk_GetPhysicalDeviceFeatures2;
+   PFN_vkGetPhysicalDeviceProperties2 vk_GetPhysicalDeviceProperties2;
 
    PFN_vkGetMemoryFdKHR vk_GetMemoryFdKHR;
    PFN_vkCmdBeginConditionalRenderingEXT vk_CmdBeginConditionalRenderingEXT;
@@ -83,6 +87,22 @@ struct zink_screen {
 
    PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT vk_GetPhysicalDeviceCalibrateableTimeDomainsEXT;
    PFN_vkGetCalibratedTimestampsEXT vk_GetCalibratedTimestampsEXT;
+
+   PFN_vkCmdSetViewportWithCountEXT vk_CmdSetViewportWithCountEXT;
+   PFN_vkCmdSetScissorWithCountEXT vk_CmdSetScissorWithCountEXT;
+
+   PFN_vkCreateDebugUtilsMessengerEXT vk_CreateDebugUtilsMessengerEXT;
+   PFN_vkDestroyDebugUtilsMessengerEXT vk_DestroyDebugUtilsMessengerEXT;
+
+#if defined(MVK_VERSION)
+   PFN_vkGetMoltenVKConfigurationMVK vk_GetMoltenVKConfigurationMVK;
+   PFN_vkSetMoltenVKConfigurationMVK vk_SetMoltenVKConfigurationMVK;
+
+   PFN_vkGetPhysicalDeviceMetalFeaturesMVK vk_GetPhysicalDeviceMetalFeaturesMVK;
+   PFN_vkGetVersionStringsMVK vk_GetVersionStringsMVK;
+   PFN_vkUseIOSurfaceMVK vk_UseIOSurfaceMVK;
+   PFN_vkGetIOSurfaceMVK vk_GetIOSurfaceMVK;
+#endif
 };
 
 static inline struct zink_screen *

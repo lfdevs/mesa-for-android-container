@@ -229,12 +229,12 @@ svga_buffer_create_host_surface(struct svga_screen *ss,
       /* Add the new surface to the buffer surface list */
       ret = svga_buffer_add_host_surface(sbuf, sbuf->handle, &sbuf->key,
                                          bind_flags);
-   }
 
-   if (ss->sws->have_gb_objects) {
-      /* Initialize the surface with zero */
-      ss->sws->surface_init(ss->sws, sbuf->handle, svga_surface_size(&sbuf->key),
-                            sbuf->key.flags);
+      if (ss->sws->have_gb_objects) {
+         /* Initialize the surface with zero */
+         ss->sws->surface_init(ss->sws, sbuf->handle, svga_surface_size(&sbuf->key),
+                               sbuf->key.flags);
+      }
    }
 
    return ret;
@@ -789,7 +789,7 @@ svga_buffer_add_range(struct svga_buffer *sbuf, unsigned start, unsigned end)
           * Note that it is not this function's task to prevent overlapping
           * ranges, as the GMR was already given so it is too late to do
           * anything.  If the ranges overlap here it must surely be because
-          * PIPE_TRANSFER_UNSYNCHRONIZED was set.
+          * PIPE_MAP_UNSYNCHRONIZED was set.
           */
          sbuf->map.ranges[i].start = MIN2(sbuf->map.ranges[i].start, start);
          sbuf->map.ranges[i].end   = MAX2(sbuf->map.ranges[i].end,   end);
@@ -869,7 +869,7 @@ svga_buffer_update_hw(struct svga_context *svga, struct svga_buffer *sbuf,
          return ret;
 
       mtx_lock(&ss->swc_mutex);
-      map = svga_buffer_hw_storage_map(svga, sbuf, PIPE_TRANSFER_WRITE, &retry);
+      map = svga_buffer_hw_storage_map(svga, sbuf, PIPE_MAP_WRITE, &retry);
       assert(map);
       assert(!retry);
       if (!map) {
@@ -955,8 +955,8 @@ svga_buffer_upload_piecewise(struct svga_screen *ss,
                   offset, offset + size);
 
          map = sws->buffer_map(sws, hwbuf,
-                               PIPE_TRANSFER_WRITE |
-                               PIPE_TRANSFER_DISCARD_RANGE);
+                               PIPE_MAP_WRITE |
+                               PIPE_MAP_DISCARD_RANGE);
          assert(map);
          if (map) {
             memcpy(map, (const char *) sbuf->swbuf + offset, size);

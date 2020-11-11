@@ -465,7 +465,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 
 			uint32_t inloc = s[FS].v->inputs[j].inloc;
 
-			if ((s[FS].v->inputs[j].interpolate == INTERP_MODE_FLAT) ||
+			if (s[FS].v->inputs[j].flat ||
 					(s[FS].v->inputs[j].rasterflat && emit->rasterflat)) {
 				uint32_t loc = inloc;
 

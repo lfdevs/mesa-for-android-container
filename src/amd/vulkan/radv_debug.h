@@ -56,6 +56,8 @@ enum {
 	RADV_DEBUG_NO_MEMORY_CACHE   = 1 << 25,
 	RADV_DEBUG_DISCARD_TO_DEMOTE = 1 << 26,
 	RADV_DEBUG_LLVM              = 1 << 27,
+	RADV_DEBUG_FORCE_COMPRESS    = 1 << 28,
+	RADV_DEBUG_HANG              = 1 << 29,
 };
 
 enum {
@@ -80,5 +82,9 @@ radv_print_spirv(const char *data, uint32_t size, FILE *fp);
 
 void
 radv_dump_enabled_options(struct radv_device *device, FILE *f);
+
+bool radv_trap_handler_init(struct radv_device *device);
+void radv_trap_handler_finish(struct radv_device *device);
+void radv_check_trap_handler(struct radv_queue *queue);
 
 #endif

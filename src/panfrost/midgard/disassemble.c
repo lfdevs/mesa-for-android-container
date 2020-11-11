@@ -4,6 +4,7 @@
  *
  * Copyright (c) 2013 Connor Abbott (connor@abbott.cx)
  * Copyright (c) 2018 Alyssa Rosenzweig (alyssa@rosenzweig.io)
+ * Copyright (C) 2019-2020 Collabora, Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -1282,10 +1283,10 @@ print_texture_format(FILE *fp, int format)
         fprintf(fp, ".");
 
         switch (format) {
-                DEFINE_CASE(MALI_TEX_1D, "1d");
-                DEFINE_CASE(MALI_TEX_2D, "2d");
-                DEFINE_CASE(MALI_TEX_3D, "3d");
-                DEFINE_CASE(MALI_TEX_CUBE, "cube");
+                DEFINE_CASE(1, "1d");
+                DEFINE_CASE(2, "2d");
+                DEFINE_CASE(3, "3d");
+                DEFINE_CASE(0, "cube");
 
         default:
                 unreachable("Bad format");
@@ -1293,15 +1294,11 @@ print_texture_format(FILE *fp, int format)
 }
 
 static bool
-midgard_op_has_helpers(unsigned op, bool gather)
+midgard_op_has_helpers(unsigned op)
 {
-        if (gather)
-                return true;
-
         switch (op) {
         case TEXTURE_OP_NORMAL:
-        case TEXTURE_OP_DFDX:
-        case TEXTURE_OP_DFDY:
+        case TEXTURE_OP_DERIVATIVE:
                 return true;
         default:
                 return false;
@@ -1309,30 +1306,14 @@ midgard_op_has_helpers(unsigned op, bool gather)
 }
 
 static void
-print_texture_op(FILE *fp, unsigned op, bool gather)
+print_texture_op(FILE *fp, unsigned op)
 {
-        /* Act like a bare name, like ESSL functions */
-
-        if (gather) {
-                fprintf(fp, "textureGather");
-
-                unsigned component = op >> 4;
-                unsigned bottom = op & 0xF;
-
-                if (bottom != 0x2)
-                        fprintf(fp, "_unk%u", bottom);
-
-                fprintf(fp, ".%c", components[component]);
-                return;
-        }
-
         switch (op) {
                 DEFINE_CASE(TEXTURE_OP_NORMAL, "texture");
                 DEFINE_CASE(TEXTURE_OP_LOD, "textureLod");
                 DEFINE_CASE(TEXTURE_OP_TEXEL_FETCH, "texelFetch");
                 DEFINE_CASE(TEXTURE_OP_BARRIER, "barrier");
-                DEFINE_CASE(TEXTURE_OP_DFDX, "dFdx");
-                DEFINE_CASE(TEXTURE_OP_DFDY, "dFdy");
+                DEFINE_CASE(TEXTURE_OP_DERIVATIVE, "derivative");
 
         default:
                 fprintf(fp, "tex_%X", op);
@@ -1391,34 +1372,47 @@ print_texture_barrier(FILE *fp, uint32_t *word)
         if (barrier->zero5)
                 fprintf(fp, "/* zero4 = 0x%" PRIx64 " */ ", barrier->zero5);
 
-
-        /* Control barriers are always implied, so include for obviousness */
-        fprintf(fp, " control");
-
-        if (barrier->buffer)
-                fprintf(fp, " | buffer");
-
-        if (barrier->shared)
-                fprintf(fp, " | shared");
-
-        if (barrier->stack)
-                fprintf(fp, " | stack");
+        if (barrier->out_of_order)
+                fprintf(fp, ".ooo%u", barrier->out_of_order);
 
         fprintf(fp, "\n");
 }
 
 #undef DEFINE_CASE
 
+static const char *
+texture_mode(enum mali_texture_mode mode)
+{
+        switch (mode) {
+        case TEXTURE_NORMAL: return "";
+        case TEXTURE_SHADOW: return ".shadow";
+        case TEXTURE_GATHER_SHADOW: return ".gather.shadow";
+        case TEXTURE_GATHER_X: return ".gatherX";
+        case TEXTURE_GATHER_Y: return ".gatherY";
+        case TEXTURE_GATHER_Z: return ".gatherZ";
+        case TEXTURE_GATHER_W: return ".gatherW";
+        default: return "unk";
+        }
+}
+
+static const char *
+derivative_mode(enum mali_derivative_mode mode)
+{
+        switch (mode) {
+        case TEXTURE_DFDX: return ".x";
+        case TEXTURE_DFDY: return ".y";
+        default: return "unk";
+        }
+}
+
 static void
 print_texture_word(FILE *fp, uint32_t *word, unsigned tabs, unsigned in_reg_base, unsigned out_reg_base)
 {
         midgard_texture_word *texture = (midgard_texture_word *) word;
-
-        midg_stats.helper_invocations |=
-                midgard_op_has_helpers(texture->op, texture->is_gather);
+        midg_stats.helper_invocations |= midgard_op_has_helpers(texture->op);
 
         /* Broad category of texture operation in question */
-        print_texture_op(fp, texture->op, texture->is_gather);
+        print_texture_op(fp, texture->op);
 
         /* Barriers use a dramatically different code path */
         if (texture->op == TEXTURE_OP_BARRIER) {
@@ -1429,13 +1423,15 @@ print_texture_word(FILE *fp, uint32_t *word, unsigned tabs, unsigned in_reg_base
         else if (texture->type == TAG_TEXTURE_4_VTX)
                 fprintf (fp, ".vtx");
 
+        if (texture->op == TEXTURE_OP_DERIVATIVE)
+                fprintf(fp, "%s", derivative_mode(texture->mode));
+        else
+                fprintf(fp, "%s", texture_mode(texture->mode));
+
         /* Specific format in question */
         print_texture_format(fp, texture->format);
 
         /* Instruction "modifiers" parallel the ALU instructions. */
-
-        if (texture->shadow)
-                fprintf(fp, ".shadow");
 
         if (texture->cont)
                 fprintf(fp, ".cont");

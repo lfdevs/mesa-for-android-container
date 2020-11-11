@@ -55,19 +55,8 @@ files_libiris = files(
   'iris_disk_cache.c',
 )
 
-iris_driinfo_h = custom_target(
-  'iris_driinfo.h',
-  input : files(
-    '../../../util/merge_driinfo.py',
-    '../../auxiliary/pipe-loader/driinfo_gallium.h', 'driinfo_iris.h'
-  ),
-  output : 'iris_driinfo.h',
-  command : [prog_python, '@INPUT@'],
-  capture : true,
-)
-
 iris_gen_libs = []
-foreach v : ['80', '90', '100', '110', '120']
+foreach v : ['80', '90', '110', '120']
   iris_gen_libs += static_library(
     'iris_gen@0@'.format(v),
     ['iris_blorp.c', 'iris_query.c', 'iris_state.c', gen_xml_pack],
@@ -83,7 +72,7 @@ endforeach
 
 libiris = static_library(
   'iris',
-  [files_libiris, gen_xml_pack, iris_driinfo_h],
+  [files_libiris, gen_xml_pack],
   include_directories : [
     inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_intel,
     inc_gallium_drivers,
@@ -102,6 +91,5 @@ libiris = static_library(
 
 driver_iris = declare_dependency(
   compile_args : '-DGALLIUM_IRIS',
-  sources : iris_driinfo_h,
   link_with : [libiris, libiriswinsys],
 )

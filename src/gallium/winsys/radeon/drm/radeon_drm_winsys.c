@@ -798,23 +798,15 @@ static void radeon_pin_threads_to_L3_cache(struct radeon_winsys *ws,
    struct radeon_drm_winsys *rws = (struct radeon_drm_winsys*)ws;
 
    if (util_queue_is_initialized(&rws->cs_queue)) {
-      util_pin_thread_to_L3(rws->cs_queue.threads[0], cache,
-            util_cpu_caps.cores_per_L3);
+      util_set_thread_affinity(rws->cs_queue.threads[0],
+                               util_cpu_caps.L3_affinity_mask[cache],
+                               NULL, UTIL_MAX_CPUS);
    }
-}
-
-static bool radeon_ws_is_secure(struct radeon_winsys* ws)
-{
-    return false;
 }
 
 static bool radeon_cs_is_secure(struct radeon_cmdbuf* cs)
 {
     return false;
-}
-
-static void radeon_cs_set_secure(struct radeon_cmdbuf* cs, bool enable)
-{
 }
 
 PUBLIC struct radeon_winsys *
@@ -888,9 +880,7 @@ radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
    ws->base.cs_request_feature = radeon_cs_request_feature;
    ws->base.query_value = radeon_query_value;
    ws->base.read_registers = radeon_read_registers;
-    ws->base.ws_is_secure = radeon_ws_is_secure;
-    ws->base.cs_is_secure = radeon_cs_is_secure;
-    ws->base.cs_set_secure = radeon_cs_set_secure;
+   ws->base.cs_is_secure = radeon_cs_is_secure;
 
    radeon_drm_bo_init_functions(ws);
    radeon_drm_cs_init_functions(ws);

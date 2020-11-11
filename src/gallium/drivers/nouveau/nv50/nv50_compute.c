@@ -225,21 +225,6 @@ nv50_compute_upload_input(struct nv50_context *nv50, const uint32_t *input)
    }
 }
 
-static uint32_t
-nv50_compute_find_symbol(struct nv50_context *nv50, uint32_t label)
-{
-   struct nv50_program *prog = nv50->compprog;
-   const struct nv50_ir_prog_symbol *syms =
-      (const struct nv50_ir_prog_symbol *)prog->cp.syms;
-   unsigned i;
-
-   for (i = 0; i < prog->cp.num_syms; ++i) {
-      if (syms[i].label == label)
-         return prog->code_base + syms[i].offset;
-   }
-   return prog->code_base; /* no symbols or symbol not found */
-}
-
 void
 nv50_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
 {
@@ -258,7 +243,7 @@ nv50_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
    nv50_compute_upload_input(nv50, info->input);
 
    BEGIN_NV04(push, NV50_CP(CP_START_ID), 1);
-   PUSH_DATA (push, nv50_compute_find_symbol(nv50, info->pc));
+   PUSH_DATA (push, cp->code_base);
 
    BEGIN_NV04(push, NV50_CP(SHARED_SIZE), 1);
    PUSH_DATA (push, align(cp->cp.smem_size + cp->parm_size + 0x10, 0x40));

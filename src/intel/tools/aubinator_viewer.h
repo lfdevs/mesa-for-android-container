@@ -68,8 +68,8 @@ struct aub_viewer_decode_ctx {
 
    void *user_data;
 
+   const struct gen_device_info *devinfo;
    struct gen_spec *spec;
-   struct gen_disasm *disasm;
    enum drm_i915_gem_engine_class engine;
 
    struct aub_viewer_cfg *cfg;
@@ -89,8 +89,8 @@ struct aub_viewer_decode_ctx {
 void aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
                                 struct aub_viewer_cfg *cfg,
                                 struct aub_viewer_decode_cfg *decode_cfg,
+                                const struct gen_device_info *devinfo,
                                 struct gen_spec *spec,
-                                struct gen_disasm *disasm,
                                 struct gen_batch_decode_bo (*get_bo)(void *, bool, uint64_t),
                                 unsigned (*get_state_size)(void *, uint32_t),
                                 void *user_data);

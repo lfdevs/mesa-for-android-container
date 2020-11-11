@@ -46,7 +46,8 @@ test(
     [aco_tests_files, gen_spirv_files],
     cpp_args : ['-DACO_TEST_SOURCE_DIR="@0@"'.format(meson.current_source_dir()),
                 '-DACO_TEST_BUILD_ROOT="@0@"'.format(meson.build_root()),
-                '-DACO_TEST_PYTHON_BIN="@0@"'.format(prog_python.path())],
+                '-DACO_TEST_PYTHON_BIN="@0@"'.format(prog_python.path())] +
+               cpp_args_aco,
     include_directories : [
       inc_include, inc_src, inc_gallium, inc_compiler, inc_mesa, inc_mapi, inc_amd, inc_amd_common, inc_amd_common_llvm,
     ],

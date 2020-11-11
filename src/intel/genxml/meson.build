@@ -27,7 +27,6 @@ gen_xml_files = [
   'gen75.xml',
   'gen8.xml',
   'gen9.xml',
-  'gen10.xml',
   'gen11.xml',
   'gen12.xml',
 ]

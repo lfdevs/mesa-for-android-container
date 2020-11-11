@@ -49,7 +49,6 @@ if sys.version_info < (3, 0):
 else:
     integer_types = (int, )
 
-
 def inv_swizzles(swizzles):
     '''Return an array[4] of inverse swizzle terms'''
     '''Only pick the first matching value to avoid l8 getting blue and i8 getting alpha'''
@@ -361,7 +360,7 @@ def conversion_expr(src_channel,
 
     # Promote half to float
     if src_type == FLOAT and src_size == 16:
-        value = 'util_half_to_float(%s)' % value
+        value = '_mesa_half_to_float(%s)' % value
         src_size = 32
 
     # Special case for float <-> ubytes for more accurate results
@@ -437,7 +436,7 @@ def conversion_expr(src_channel,
             src_size = 32
 
         if dst_channel.size == 16:
-            value = 'util_float_to_half_rtz(%s)' % value
+            value = '_mesa_float_to_float16_rtz(%s)' % value
         elif dst_channel.size == 64 and src_size < 64:
             value = '(double)%s' % value
 
@@ -629,8 +628,11 @@ def generate_format_unpack(format, dst_channel, dst_native_type, dst_suffix):
     else:
         dst_proto_type = 'void'
 
-    print('static inline void')
-    print('util_format_%s_unpack_%s(%s *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)' % (name, dst_suffix, dst_proto_type))
+    proto = 'util_format_%s_unpack_%s(%s *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)' % (name, dst_suffix, dst_proto_type)
+    print('void %s;' % proto, file=sys.stdout2)
+
+    print('void')
+    print(proto)
     print('{')
 
     if is_format_supported(format):
@@ -658,9 +660,11 @@ def generate_format_pack(format, src_channel, src_native_type, src_suffix):
 
     name = format.short_name()
 
-    print('static inline void')
+    print('void')
     print('util_format_%s_pack_%s(uint8_t *dst_row, unsigned dst_stride, const %s *src_row, unsigned src_stride, unsigned width, unsigned height)' % (name, src_suffix, src_native_type))
     print('{')
+
+    print('void util_format_%s_pack_%s(uint8_t *dst_row, unsigned dst_stride, const %s *src_row, unsigned src_stride, unsigned width, unsigned height);' % (name, src_suffix, src_native_type), file=sys.stdout2)
     
     if is_format_supported(format):
         print('   unsigned x, y;')
@@ -682,14 +686,19 @@ def generate_format_pack(format, src_channel, src_native_type, src_suffix):
     print()
     
 
-def generate_format_fetch(format, dst_channel, dst_native_type, dst_suffix):
+def generate_format_fetch(format, dst_channel, dst_native_type):
     '''Generate the function to unpack pixels from a particular format'''
 
     name = format.short_name()
 
-    print('static inline void')
-    print('util_format_%s_fetch_%s(%s *dst, const uint8_t *src, UNUSED unsigned i, UNUSED unsigned j)' % (name, dst_suffix, dst_native_type))
+    proto = 'util_format_%s_fetch_rgba(void *in_dst, const uint8_t *src, UNUSED unsigned i, UNUSED unsigned j)' % (name)
+    print('void %s;' % proto, file=sys.stdout2)
+
+    print('void')
+    print(proto)
+
     print('{')
+    print('   %s *dst = in_dst;' % dst_native_type)
 
     if is_format_supported(format):
         generate_unpack_kernel(format, dst_channel, dst_native_type)
@@ -706,12 +715,13 @@ def generate(formats):
     print()
     print('#include "pipe/p_compiler.h"')
     print('#include "util/u_math.h"')
-    print('#include "util/u_half.h"')
+    print('#include "util/half_float.h"')
     print('#include "u_format.h"')
     print('#include "u_format_other.h"')
     print('#include "util/format_srgb.h"')
     print('#include "u_format_yuv.h"')
     print('#include "u_format_zs.h"')
+    print('#include "u_format_pack.h"')
     print()
 
     for format in formats:
@@ -727,7 +737,7 @@ def generate(formats):
 
                 generate_format_unpack(format, channel, native_type, suffix)
                 generate_format_pack(format, channel, native_type, suffix)
-                generate_format_fetch(format, channel, native_type, suffix)
+                generate_format_fetch(format, channel, native_type)
 
                 channel = Channel(SIGNED, False, True, 32)
                 native_type = 'int'
@@ -740,7 +750,7 @@ def generate(formats):
 
                 generate_format_unpack(format, channel, native_type, suffix)
                 generate_format_pack(format, channel, native_type, suffix)   
-                generate_format_fetch(format, channel, native_type, suffix)
+                generate_format_fetch(format, channel, native_type)
 
                 native_type = 'unsigned'
                 suffix = 'unsigned'
@@ -753,7 +763,7 @@ def generate(formats):
 
                 generate_format_unpack(format, channel, native_type, suffix)
                 generate_format_pack(format, channel, native_type, suffix)
-                generate_format_fetch(format, channel, native_type, suffix)
+                generate_format_fetch(format, channel, native_type)
 
                 channel = Channel(UNSIGNED, True, False, 8)
                 native_type = 'uint8_t'
@@ -761,4 +771,3 @@ def generate(formats):
 
                 generate_format_unpack(format, channel, native_type, suffix)
                 generate_format_pack(format, channel, native_type, suffix)
-

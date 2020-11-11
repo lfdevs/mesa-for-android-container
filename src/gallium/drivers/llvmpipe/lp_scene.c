@@ -34,6 +34,8 @@
 #include "lp_scene.h"
 #include "lp_fence.h"
 #include "lp_debug.h"
+#include "lp_context.h"
+#include "lp_state_fs.h"
 
 
 #define RESOURCE_REF_SZ 32
@@ -43,6 +45,14 @@ struct resource_ref {
    struct pipe_resource *resource[RESOURCE_REF_SZ];
    int count;
    struct resource_ref *next;
+};
+
+#define SHADER_REF_SZ 32
+/** List of shader variant references */
+struct shader_ref {
+   struct lp_fragment_shader_variant *variant[SHADER_REF_SZ];
+   int count;
+   struct shader_ref *next;
 };
 
 
@@ -281,6 +291,22 @@ lp_scene_end_rasterization(struct lp_scene *scene )
                       j, scene->resource_reference_size);
    }
 
+   /* Decrement shader variant ref counts
+    */
+   {
+      struct shader_ref *ref;
+      int i, j = 0;
+
+      for (ref = scene->frag_shaders; ref; ref = ref->next) {
+         for (i = 0; i < ref->count; i++) {
+            if (LP_DEBUG & DEBUG_SETUP)
+               debug_printf("shader %d: %p\n", j, (void *) ref->variant[i]);
+            j++;
+            lp_fs_variant_reference(llvmpipe_context(scene->pipe), &ref->variant[i], NULL);
+         }
+      }
+   }
+
    /* Free all scene data blocks:
     */
    {
@@ -299,6 +325,7 @@ lp_scene_end_rasterization(struct lp_scene *scene )
    lp_fence_reference(&scene->fence, NULL);
 
    scene->resources = NULL;
+   scene->frag_shaders = NULL;
    scene->scene_size = 0;
    scene->resource_reference_size = 0;
 
@@ -433,6 +460,53 @@ lp_scene_add_resource_reference(struct lp_scene *scene,
    return TRUE;
 }
 
+
+/**
+ * Add a reference to a fragment shader variant
+ */
+boolean
+lp_scene_add_frag_shader_reference(struct lp_scene *scene,
+                                   struct lp_fragment_shader_variant *variant)
+{
+   struct shader_ref *ref, **last = &scene->frag_shaders;
+   int i;
+
+   /* Look at existing resource blocks:
+    */
+   for (ref = scene->frag_shaders; ref; ref = ref->next) {
+      last = &ref->next;
+
+      /* Search for this resource:
+       */
+      for (i = 0; i < ref->count; i++)
+         if (ref->variant[i] == variant)
+            return TRUE;
+
+      if (ref->count < SHADER_REF_SZ) {
+         /* If the block is half-empty, then append the reference here.
+          */
+         break;
+      }
+   }
+
+   /* Create a new block if no half-empty block was found.
+    */
+   if (!ref) {
+      assert(*last == NULL);
+      *last = lp_scene_alloc(scene, sizeof *ref);
+      if (*last == NULL)
+          return FALSE;
+
+      ref = *last;
+      memset(ref, 0, sizeof *ref);
+   }
+
+   /* Append the reference to the reference block.
+    */
+   lp_fs_variant_reference(llvmpipe_context(scene->pipe), &ref->variant[ref->count++], variant);
+
+   return TRUE;
+}
 
 /**
  * Does this scene have a reference to the given resource?

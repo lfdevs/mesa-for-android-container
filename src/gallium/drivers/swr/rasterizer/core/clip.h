@@ -409,7 +409,7 @@ public:
         pa.Assemble(vertexClipCullOffset, vClipCullDistLo);
         pa.Assemble(vertexClipCullOffset + 1, vClipCullDistHi);
 
-        DWORD index;
+        unsigned long index;
         while (_BitScanForward(&index, cullMask))
         {
             cullMask &= ~(1 << index);
@@ -881,7 +881,7 @@ private:
         const uint32_t* pOffsets = reinterpret_cast<const uint32_t*>(&vOffsets);
         const float*    pSrc     = reinterpret_cast<const float*>(&vSrc);
         uint32_t        mask     = SIMD_T::movemask_ps(vMask);
-        DWORD           lane;
+        unsigned long  lane;
         while (_BitScanForward(&lane, mask))
         {
             mask &= ~(1 << lane);

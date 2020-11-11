@@ -308,11 +308,7 @@ ir3_emit_link_map(struct fd_screen *screen,
 {
 	const struct ir3_const_state *const_state = ir3_const_state(v);
 	uint32_t base = const_state->offsets.primitive_map;
-	uint32_t patch_locs[MAX_VARYING] = { }, num_loc;
-
-	num_loc = ir3_link_geometry_stages(producer, v, patch_locs);
-
-	int size = DIV_ROUND_UP(num_loc, 4);
+	int size = DIV_ROUND_UP(v->input_size, 4);
 
 	/* truncate size to avoid writing constants that shader
 	 * does not use:
@@ -324,7 +320,7 @@ ir3_emit_link_map(struct fd_screen *screen,
 	size *= 4;
 
 	if (size > 0)
-		emit_const_user(ring, v, base, size, patch_locs);
+		emit_const_user(ring, v, base, size, producer->output_loc);
 }
 
 /* emit stream-out buffers: */

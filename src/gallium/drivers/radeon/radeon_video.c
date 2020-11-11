@@ -67,6 +67,18 @@ bool si_vid_create_buffer(struct pipe_screen *screen, struct rvid_buffer *buffer
    return buffer->res != NULL;
 }
 
+/* create a tmz buffer in the winsys */
+bool si_vid_create_tmz_buffer(struct pipe_screen *screen, struct rvid_buffer *buffer, unsigned size,
+                              unsigned usage)
+{
+   memset(buffer, 0, sizeof(*buffer));
+   buffer->usage = usage;
+   buffer->res = si_resource(pipe_buffer_create(screen, PIPE_BIND_SHARED | PIPE_BIND_PROTECTED,
+                                                usage, size));
+   return buffer->res != NULL;
+}
+
+
 /* destroy a buffer */
 void si_vid_destroy_buffer(struct rvid_buffer *buffer)
 {
@@ -86,11 +98,11 @@ bool si_vid_resize_buffer(struct pipe_screen *screen, struct radeon_cmdbuf *cs,
    if (!si_vid_create_buffer(screen, new_buf, new_size, new_buf->usage))
       goto error;
 
-   src = ws->buffer_map(old_buf.res->buf, cs, PIPE_TRANSFER_READ | RADEON_TRANSFER_TEMPORARY);
+   src = ws->buffer_map(old_buf.res->buf, cs, PIPE_MAP_READ | RADEON_MAP_TEMPORARY);
    if (!src)
       goto error;
 
-   dst = ws->buffer_map(new_buf->res->buf, cs, PIPE_TRANSFER_WRITE | RADEON_TRANSFER_TEMPORARY);
+   dst = ws->buffer_map(new_buf->res->buf, cs, PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
    if (!dst)
       goto error;
 

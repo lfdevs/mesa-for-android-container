@@ -258,7 +258,7 @@ nv50_miptree_transfer_map(struct pipe_context *pctx,
    int ret;
    unsigned flags = 0;
 
-   if (usage & PIPE_TRANSFER_MAP_DIRECTLY)
+   if (usage & PIPE_MAP_DIRECTLY)
       return NULL;
 
    tx = CALLOC_STRUCT(nv50_transfer);
@@ -300,7 +300,7 @@ nv50_miptree_transfer_map(struct pipe_context *pctx,
    tx->rect[1].pitch = tx->base.stride;
    tx->rect[1].domain = NOUVEAU_BO_GART;
 
-   if (usage & PIPE_TRANSFER_READ) {
+   if (usage & PIPE_MAP_READ) {
       unsigned base = tx->rect[0].base;
       unsigned z = tx->rect[0].z;
       unsigned i;
@@ -323,9 +323,9 @@ nv50_miptree_transfer_map(struct pipe_context *pctx,
       return tx->rect[1].bo->map;
    }
 
-   if (usage & PIPE_TRANSFER_READ)
+   if (usage & PIPE_MAP_READ)
       flags = NOUVEAU_BO_RD;
-   if (usage & PIPE_TRANSFER_WRITE)
+   if (usage & PIPE_MAP_WRITE)
       flags |= NOUVEAU_BO_WR;
 
    ret = nouveau_bo_map(tx->rect[1].bo, flags, screen->base.client);
@@ -348,7 +348,7 @@ nv50_miptree_transfer_unmap(struct pipe_context *pctx,
    struct nv50_miptree *mt = nv50_miptree(tx->base.resource);
    unsigned i;
 
-   if (tx->base.usage & PIPE_TRANSFER_WRITE) {
+   if (tx->base.usage & PIPE_MAP_WRITE) {
       for (i = 0; i < tx->base.box.depth; ++i) {
          nv50_m2mf_transfer_rect(nv50, &tx->rect[0], &tx->rect[1],
                                  tx->nblocksx, tx->nblocksy);

@@ -127,7 +127,7 @@ struct ir3_ubo_analysis_state {
  * be required, rather than allocating worst-case const space, we scan the
  * shader and allocate consts as-needed:
  *
- *   + SSBO sizes: only needed if shader has a get_buffer_size intrinsic
+ *   + SSBO sizes: only needed if shader has a get_ssbo_size intrinsic
  *     for a given SSBO
  *
  *   + Image dimensions: needed to calculate pixel offset, but only for
@@ -171,9 +171,9 @@ struct ir3_const_state {
 	} offsets;
 
 	struct {
-		uint32_t mask;  /* bitmask of SSBOs that have get_buffer_size */
+		uint32_t mask;  /* bitmask of SSBOs that have get_ssbo_size */
 		uint32_t count; /* number of consts allocated */
-		/* one const allocated per SSBO which has get_buffer_size,
+		/* one const allocated per SSBO which has get_ssbo_size,
 		 * ssbo_sizes.off[ssbo_id] is offset from start of ssbo_sizes
 		 * consts:
 		 */
@@ -218,6 +218,10 @@ struct ir3_stream_output_info {
 	unsigned num_outputs;
 	/** stride for an entire vertex for each buffer in dwords */
 	uint16_t stride[IR3_MAX_SO_BUFFERS];
+
+	/* These correspond to the VPC_SO_STREAM_CNTL fields */
+	uint8_t streams_written;
+	uint8_t buffer_to_stream[IR3_MAX_SO_BUFFERS];
 
 	/**
 	 * Array of stream outputs, in the order they are to be written in.
@@ -318,6 +322,9 @@ struct ir3_shader_key {
 
 			/* Whether gl_Layer must be forced to 0 because it isn't written. */
 			unsigned layer_zero : 1;
+
+			/* Whether gl_ViewportIndex must be forced to 0 because it isn't written. */
+			unsigned view_zero : 1;
 		};
 		uint32_t global;
 	};
@@ -559,6 +566,7 @@ struct ir3_shader_variant {
 	struct {
 		uint8_t slot;
 		uint8_t regid;
+		uint8_t view;
 		bool    half : 1;
 	} outputs[32 + 2];  /* +POSITION +PSIZE */
 	bool writes_pos, writes_smask, writes_psize, writes_stencilref;
@@ -566,7 +574,13 @@ struct ir3_shader_variant {
 	/* Size in dwords of all outputs for VS, size of entire patch for HS. */
 	uint32_t output_size;
 
-	/* Map from driver_location to byte offset in per-primitive storage */
+	/* Expected size of incoming output_loc for HS, DS, and GS */
+	uint32_t input_size;
+
+	/* Map from location to offset in per-primitive storage. In dwords for
+	 * HS, where varyings are read in the next stage via ldg with a dword
+	 * offset, and in bytes for all other stages.
+	 */
 	unsigned output_loc[32];
 
 	/* attributes (VS) / varyings (FS):
@@ -588,9 +602,8 @@ struct ir3_shader_variant {
 		/* fragment shader specific: */
 		bool    bary       : 1;   /* fetched varying (vs one loaded into reg) */
 		bool    rasterflat : 1;   /* special handling for emit->rasterflat */
-		bool    use_ldlv   : 1;   /* internal to ir3_compiler_nir */
 		bool    half       : 1;
-		enum glsl_interp_mode interpolate;
+		bool    flat       : 1;
 	} inputs[32 + 2];  /* +POSITION +FACE */
 
 	/* sum of input components (scalar).  For frag shaders, it only counts
@@ -643,6 +656,8 @@ struct ir3_shader_variant {
 
 	/* Are we using split or merged register file? */
 	bool mergedregs;
+
+	uint8_t clip_mask, cull_mask;
 
 	/* for astc srgb workaround, the number/base of additional
 	 * alpha tex states we need, and index of original tex states
@@ -851,6 +866,12 @@ struct ir3_shader_linkage {
 
 	/* location for fixed-function gl_PrimitiveID passthrough */
 	uint8_t primid_loc;
+
+	/* location for fixed-function gl_ViewIndex passthrough */
+	uint8_t viewid_loc;
+
+	/* location for combined clip/cull distance arrays */
+	uint8_t clip0_loc, clip1_loc;
 };
 
 static inline void
@@ -891,6 +912,9 @@ ir3_link_shaders(struct ir3_shader_linkage *l,
 	int j = -1, k;
 
 	l->primid_loc = 0xff;
+	l->viewid_loc = 0xff;
+	l->clip0_loc = 0xff;
+	l->clip1_loc = 0xff;
 
 	while (l->cnt < ARRAY_SIZE(l->var)) {
 		j = ir3_next_varying(fs, j);
@@ -906,6 +930,17 @@ ir3_link_shaders(struct ir3_shader_linkage *l,
 		if (k < 0 && fs->inputs[j].slot == VARYING_SLOT_PRIMITIVE_ID) {
 			l->primid_loc = fs->inputs[j].inloc;
 		}
+
+		if (fs->inputs[j].slot == VARYING_SLOT_VIEW_INDEX) {
+			assert(k < 0);
+			l->viewid_loc = fs->inputs[j].inloc;
+		}
+
+		if (fs->inputs[j].slot == VARYING_SLOT_CLIP_DIST0)
+			l->clip0_loc = fs->inputs[j].inloc;
+
+		if (fs->inputs[j].slot == VARYING_SLOT_CLIP_DIST1)
+			l->clip1_loc = fs->inputs[j].inloc;
 
 		ir3_link_add(l, k >= 0 ? vs->outputs[k].regid : default_regid,
 			fs->inputs[j].compmask, fs->inputs[j].inloc);

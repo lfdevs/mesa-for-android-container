@@ -78,7 +78,7 @@ class Field(object):
 			val = "fui(%s)" % var_name
 		elif self.type == "float" and self.high - self.low == 15:
 			type = "float"
-			val = "util_float_to_half(%s)" % var_name
+			val = "_mesa_float_to_half(%s)" % var_name
 		elif self.type in [ "address", "waddress" ]:
 			type = "uint64_t"
 			val = var_name

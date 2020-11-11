@@ -158,12 +158,6 @@ i965_gen9_FILES = \
 	genX_pipe_control.c \
 	genX_state_upload.c
 
-i965_gen10_FILES = \
-	genX_blorp_exec.c \
-	genX_boilerplate.h \
-	genX_pipe_control.c \
-	genX_state_upload.c
-
 i965_gen11_FILES = \
 	genX_blorp_exec.c \
 	genX_boilerplate.h \

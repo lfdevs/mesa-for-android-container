@@ -55,6 +55,11 @@ static inline bool fd_blend_enabled(struct fd_context *ctx, unsigned n)
 	return ctx->blend && ctx->blend->rt[n].blend_enable;
 }
 
+static inline bool fd_depth_clamp_enabled(struct fd_context *ctx)
+{
+	return !(ctx->rasterizer->depth_clip_near && ctx->rasterizer->depth_clip_far);
+}
+
 void fd_set_shader_images(struct pipe_context *pctx,
 		enum pipe_shader_type shader,
 		unsigned start, unsigned count,

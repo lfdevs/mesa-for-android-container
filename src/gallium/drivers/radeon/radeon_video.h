@@ -49,6 +49,10 @@ unsigned si_vid_alloc_stream_handle(void);
 bool si_vid_create_buffer(struct pipe_screen *screen, struct rvid_buffer *buffer, unsigned size,
                           unsigned usage);
 
+/* create a tmz buffer in the winsys */
+bool si_vid_create_tmz_buffer(struct pipe_screen *screen, struct rvid_buffer *buffer, unsigned size,
+                              unsigned usage);
+
 /* destroy a buffer */
 void si_vid_destroy_buffer(struct rvid_buffer *buffer);
 

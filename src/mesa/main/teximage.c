@@ -2678,7 +2678,7 @@ struct cb_info
  * Check render to texture callback.  Called from _mesa_HashWalk().
  */
 static void
-check_rtt_cb(UNUSED GLuint key, void *data, void *userData)
+check_rtt_cb(void *data, void *userData)
 {
    struct gl_framebuffer *fb = (struct gl_framebuffer *) data;
    const struct cb_info *info = (struct cb_info *) userData;
@@ -2915,7 +2915,9 @@ lookup_texture_ext_dsa(struct gl_context *ctx, GLenum target, GLuint texture,
       texObj = ctx->Shared->DefaultTex[targetIndex];
       assert(texObj);
    } else {
+      bool isGenName;
       texObj = _mesa_lookup_texture(ctx, texture);
+      isGenName = texObj != NULL;
       if (!texObj && ctx->API == API_OPENGL_CORE) {
          _mesa_error(ctx, GL_INVALID_OPERATION, "%s(non-gen name)", caller);
          return NULL;
@@ -2929,7 +2931,7 @@ lookup_texture_ext_dsa(struct gl_context *ctx, GLenum target, GLuint texture,
          }
 
          /* insert into hash table */
-         _mesa_HashInsert(ctx->Shared->TexObjects, texObj->Name, texObj);
+         _mesa_HashInsert(ctx->Shared->TexObjects, texObj->Name, texObj, isGenName);
       }
 
       if (texObj->Target != boundTarget) {

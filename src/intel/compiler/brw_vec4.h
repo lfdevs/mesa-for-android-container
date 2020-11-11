@@ -107,10 +107,8 @@ public:
 
    int first_non_payload_grf;
    unsigned int max_grf;
-   BRW_ANALYSIS(live_analysis, brw::vec4_live_variables,
-                backend_shader *) live_analysis;
-   BRW_ANALYSIS(performance_analysis, brw::performance,
-                vec4_visitor *) performance_analysis;
+   brw_analysis<brw::vec4_live_variables, backend_shader> live_analysis;
+   brw_analysis<brw::performance, vec4_visitor> performance_analysis;
 
    bool need_all_constants_in_pull_buffer;
 
@@ -241,7 +239,6 @@ public:
    void fix_float_operands(src_reg op[3], nir_alu_instr *instr);
 
    src_reg fix_3src_operand(const src_reg &src);
-   src_reg resolve_source_modifiers(const src_reg &src);
 
    vec4_instruction *emit_math(enum opcode opcode, const dst_reg &dst, const src_reg &src0,
                                const src_reg &src1 = src_reg());

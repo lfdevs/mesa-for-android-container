@@ -47,7 +47,7 @@ fake_resource_create(struct virgl_winsys *vws,
                      uint32_t width, uint32_t height,
                      uint32_t depth, uint32_t array_size,
                      uint32_t last_level, uint32_t nr_samples,
-                     uint32_t size)
+                     uint32_t flags, uint32_t size)
 {
    struct virgl_hw_res *hw_res = CALLOC_STRUCT(virgl_hw_res);
 
@@ -320,7 +320,7 @@ failing_resource_create(struct virgl_winsys *vws,
                         uint32_t width, uint32_t height,
                         uint32_t depth, uint32_t array_size,
                         uint32_t last_level, uint32_t nr_samples,
-                        uint32_t size)
+                        uint32_t flags, uint32_t size)
 {
    return NULL;
 }

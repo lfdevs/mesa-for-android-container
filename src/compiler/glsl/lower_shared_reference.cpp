@@ -54,7 +54,9 @@ class lower_shared_reference_visitor :
 public:
 
    lower_shared_reference_visitor(struct gl_linked_shader *shader)
-      : list_ctx(ralloc_context(NULL)), shader(shader), shared_size(0u)
+      : buffer_access_type(shared_load_access),
+      list_ctx(ralloc_context(NULL)), shader(shader), shared_size(0u),
+      progress(false)
    {
       list_inithead(&var_offsets);
    }
@@ -354,7 +356,7 @@ lower_shared_reference_visitor::lower_shared_atomic_intrinsic(ir_call *ir)
 
    ir_rvalue *deref = (ir_rvalue *) inst;
    assert(deref->type->is_scalar() &&
-          (deref->type->is_integer_32() || deref->type->is_float()));
+          (deref->type->is_integer_32_64() || deref->type->is_float()));
 
    ir_variable *var = deref->variable_referenced();
    assert(var);

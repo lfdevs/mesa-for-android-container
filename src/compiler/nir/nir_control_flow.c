@@ -140,7 +140,7 @@ link_block_to_non_block(nir_block *block, nir_cf_node *node)
 
       unlink_block_successors(block);
       link_blocks(block, first_then_block, first_else_block);
-   } else {
+   } else if (node->type == nir_cf_node_loop) {
       /*
        * For similar reasons as the corresponding case in
        * link_non_block_to_block(), don't worry about if the loop header has
@@ -226,8 +226,8 @@ rewrite_phi_preds(nir_block *block, nir_block *old_pred, nir_block *new_pred)
    }
 }
 
-static void
-insert_phi_undef(nir_block *block, nir_block *pred)
+void
+nir_insert_phi_undef(nir_block *block, nir_block *pred)
 {
    nir_function_impl *impl = nir_cf_node_get_function(&block->cf_node);
    nir_foreach_instr(instr, block) {
@@ -298,7 +298,7 @@ block_add_normal_succs(nir_block *block)
          nir_block *head_block = nir_loop_first_block(loop);
 
          link_blocks(block, head_block, NULL);
-         insert_phi_undef(head_block, block);
+         nir_insert_phi_undef(head_block, block);
       } else {
          nir_function_impl *impl = nir_cf_node_as_function(parent);
          link_blocks(block, impl->end_block, NULL);
@@ -312,13 +312,13 @@ block_add_normal_succs(nir_block *block)
          nir_block *first_else_block = nir_if_first_else_block(next_if);
 
          link_blocks(block, first_then_block, first_else_block);
-      } else {
+      } else if (next->type == nir_cf_node_loop) {
          nir_loop *next_loop = nir_cf_node_as_loop(next);
 
          nir_block *first_block = nir_loop_first_block(next_loop);
 
          link_blocks(block, first_block, NULL);
-         insert_phi_undef(first_block, block);
+         nir_insert_phi_undef(first_block, block);
       }
    }
 }
@@ -491,6 +491,14 @@ nir_handle_add_jump(nir_block *block)
       break;
    }
 
+   case nir_jump_goto:
+      link_blocks(block, jump_instr->target, NULL);
+      break;
+
+   case nir_jump_goto_if:
+      link_blocks(block, jump_instr->else_target, jump_instr->target);
+      break;
+
    default:
       unreachable("Invalid jump type");
    }
@@ -624,8 +632,10 @@ cleanup_cf_node(nir_cf_node *node, nir_function_impl *impl)
       /* We need to walk the instructions and clean up defs/uses */
       nir_foreach_instr_safe(instr, block) {
          if (instr->type == nir_instr_type_jump) {
-            nir_jump_type jump_type = nir_instr_as_jump(instr)->type;
-            unlink_jump(block, jump_type, false);
+            nir_jump_instr *jump = nir_instr_as_jump(instr);
+            unlink_jump(block, jump->type, false);
+            if (jump->type == nir_jump_goto_if)
+               nir_instr_rewrite_src(instr, &jump->condition, NIR_SRC_INIT);
          } else {
             nir_foreach_ssa_def(instr, replace_ssa_def_uses, impl);
             nir_instr_remove(instr);

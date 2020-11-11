@@ -246,8 +246,8 @@ bool ShaderFromNir::emit_instruction(nir_instr *instr)
       return impl->emit_deref_instruction(nir_instr_as_deref(instr));
    case nir_instr_type_intrinsic:
       return impl->emit_intrinsic_instruction(nir_instr_as_intrinsic(instr));
-   case nir_instr_type_load_const:
-      return impl->set_literal_constant(nir_instr_as_load_const(instr));
+   case nir_instr_type_load_const: /* const values are loaded when needed */
+      return true;
    case nir_instr_type_tex:
       return impl->emit_tex_instruction(instr);
    case nir_instr_type_jump:
@@ -390,102 +390,198 @@ bool r600_lower_scratch_addresses(nir_shader *shader)
    return progress;
 }
 
-static nir_ssa_def *
-r600_lower_ubo_to_align16_impl(nir_builder *b, nir_instr *instr, void *_options)
+static void
+insert_uniform_sorted(struct exec_list *var_list, nir_variable *new_var)
 {
-   b->cursor = nir_before_instr(instr);
+   nir_foreach_variable_in_list(var, var_list) {
+      if (var->data.binding > new_var->data.binding ||
+          (var->data.binding == new_var->data.binding &&
+           var->data.offset > new_var->data.offset)) {
+         exec_node_insert_node_before(&var->node, &new_var->node);
+         return;
+      }
+   }
+   exec_list_push_tail(var_list, &new_var->node);
+}
 
-   nir_intrinsic_instr *op = nir_instr_as_intrinsic(instr);
-   assert(op->intrinsic == nir_intrinsic_load_ubo);
+void sort_uniforms(nir_shader *shader)
+{
+   struct exec_list new_list;
+   exec_list_make_empty(&new_list);
 
-   bool const_address = (nir_src_is_const(op->src[1]) && nir_src_is_const(op->src[0]));
+   nir_foreach_uniform_variable_safe(var, shader) {
+      exec_node_remove(&var->node);
+      insert_uniform_sorted(&new_list, var);
+   }
+   exec_list_append(&shader->variables, &new_list);
+}
 
-   nir_ssa_def *offset = op->src[1].ssa;
+static void
+insert_fsoutput_sorted(struct exec_list *var_list, nir_variable *new_var)
+{
 
-   /* This is ugly: With const addressing we can actually set a proper fetch target mask,
-    * but for this we need the component encoded, we don't shift and do de decoding in the
-    * backend. Otherwise we shift by four and resolve the component here
-    * (TODO: encode the start component in the intrinsic when the offset base is non-constant
-    * but a multiple of 16 */
+   nir_foreach_variable_in_list(var, var_list) {
+      if (var->data.location > new_var->data.location ||
+          (var->data.location == new_var->data.location &&
+           var->data.index > new_var->data.index)) {
+         exec_node_insert_node_before(&var->node, &new_var->node);
+         return;
+      }
+   }
 
-   nir_ssa_def *new_offset = offset;
-   if (!const_address)
-      new_offset = nir_ishr(b, offset,  nir_imm_int(b, 4));
+   exec_list_push_tail(var_list, &new_var->node);
+}
 
-   nir_intrinsic_instr *load = nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_ubo_r600);
-   load->num_components = const_address ? op->num_components : 4;
-   load->src[0] = op->src[0];
-   load->src[1] = nir_src_for_ssa(new_offset);
-   nir_intrinsic_set_align(load, nir_intrinsic_align_mul(op), nir_intrinsic_align_offset(op));
+void sort_fsoutput(nir_shader *shader)
+{
+   struct exec_list new_list;
+   exec_list_make_empty(&new_list);
 
-   nir_ssa_dest_init(&load->instr, &load->dest, load->num_components, 32, NULL);
-   nir_builder_instr_insert(b, &load->instr);
+   nir_foreach_shader_out_variable_safe(var, shader) {
+      exec_node_remove(&var->node);
+      insert_fsoutput_sorted(&new_list, var);
+   }
 
-   /* when four components are loaded or both the offset and the location
-    * are constant, then the backend can deal with it better */
-   if (op->num_components == 4 || const_address)
-      return &load->dest.ssa;
+   unsigned driver_location = 0;
+   nir_foreach_variable_in_list(var, &new_list)
+      var->data.driver_location = driver_location++;
 
-   /* What comes below is a performance disaster when the offset is not constant
-    * because then we have to assume that any component can be the first one and we
-    * have to pick the result manually. */
-   nir_ssa_def *first_comp = nir_iand(b, nir_ishr(b, offset,  nir_imm_int(b, 2)),
-                                      nir_imm_int(b,3));
+   exec_list_append(&shader->variables, &new_list);
+}
 
-   const unsigned swz_000[4] = {0, 0, 0};
-   nir_ssa_def *component_select = nir_ieq(b, r600_imm_ivec3(b, 0, 1, 2),
-                                           nir_swizzle(b, first_comp, swz_000, 3));
+}
 
-   if (op->num_components == 1) {
-      nir_ssa_def *check0 = nir_bcsel(b, nir_channel(b, component_select, 0),
-                                      nir_channel(b, &load->dest.ssa, 0),
-                                      nir_channel(b, &load->dest.ssa, 3));
-      nir_ssa_def *check1 = nir_bcsel(b, nir_channel(b, component_select, 1),
-                                      nir_channel(b, &load->dest.ssa, 1),
-                                      check0);
-      return nir_bcsel(b, nir_channel(b, component_select, 2),
-                       nir_channel(b, &load->dest.ssa, 2),
-                       check1);
-   } else if (op->num_components == 2) {
-      const unsigned szw_01[2] = {0, 1};
-      const unsigned szw_12[2] = {1, 2};
-      const unsigned szw_23[2] = {2, 3};
-
-      nir_ssa_def *check0 = nir_bcsel(b, nir_channel(b, component_select, 0),
-                                      nir_swizzle(b, &load->dest.ssa, szw_01, 2),
-                                      nir_swizzle(b, &load->dest.ssa, szw_23, 2));
-      return nir_bcsel(b, nir_channel(b, component_select, 1),
-                                      nir_swizzle(b, &load->dest.ssa, szw_12, 2),
-                                      check0);
-   } else {
-      const unsigned szw_012[3] = {0, 1, 2};
-      const unsigned szw_123[3] = {1, 2, 3};
-      return nir_bcsel(b, nir_channel(b, component_select, 0),
-                       nir_swizzle(b, &load->dest.ssa, szw_012, 3),
-                       nir_swizzle(b, &load->dest.ssa, szw_123, 3));
+static nir_intrinsic_op
+r600_map_atomic(nir_intrinsic_op op)
+{
+   switch (op) {
+   case nir_intrinsic_atomic_counter_read_deref:
+      return nir_intrinsic_atomic_counter_read;
+   case nir_intrinsic_atomic_counter_inc_deref:
+      return nir_intrinsic_atomic_counter_inc;
+   case nir_intrinsic_atomic_counter_pre_dec_deref:
+      return nir_intrinsic_atomic_counter_pre_dec;
+   case nir_intrinsic_atomic_counter_post_dec_deref:
+      return nir_intrinsic_atomic_counter_post_dec;
+   case nir_intrinsic_atomic_counter_add_deref:
+      return nir_intrinsic_atomic_counter_add;
+   case nir_intrinsic_atomic_counter_min_deref:
+      return nir_intrinsic_atomic_counter_min;
+   case nir_intrinsic_atomic_counter_max_deref:
+      return nir_intrinsic_atomic_counter_max;
+   case nir_intrinsic_atomic_counter_and_deref:
+      return nir_intrinsic_atomic_counter_and;
+   case nir_intrinsic_atomic_counter_or_deref:
+      return nir_intrinsic_atomic_counter_or;
+   case nir_intrinsic_atomic_counter_xor_deref:
+      return nir_intrinsic_atomic_counter_xor;
+   case nir_intrinsic_atomic_counter_exchange_deref:
+      return nir_intrinsic_atomic_counter_exchange;
+   case nir_intrinsic_atomic_counter_comp_swap_deref:
+      return nir_intrinsic_atomic_counter_comp_swap;
+   default:
+      return nir_num_intrinsics;
    }
 }
 
-bool r600_lower_ubo_to_align16_filter(const nir_instr *instr, const void *_options)
+static bool
+r600_lower_deref_instr(nir_builder *b, nir_intrinsic_instr *instr,
+                       nir_shader *shader)
 {
-   if (instr->type != nir_instr_type_intrinsic)
+   nir_intrinsic_op op = r600_map_atomic(instr->intrinsic);
+   if (nir_num_intrinsics == op)
       return false;
 
-   nir_intrinsic_instr *op = nir_instr_as_intrinsic(instr);
-   return op->intrinsic == nir_intrinsic_load_ubo;
+   nir_deref_instr *deref = nir_src_as_deref(instr->src[0]);
+   nir_variable *var = nir_deref_instr_get_variable(deref);
+
+   if (var->data.mode != nir_var_uniform &&
+       var->data.mode != nir_var_mem_ssbo &&
+       var->data.mode != nir_var_mem_shared)
+      return false; /* atomics passed as function arguments can't be lowered */
+
+   const unsigned idx = var->data.binding;
+
+   b->cursor = nir_before_instr(&instr->instr);
+
+   nir_ssa_def *offset = nir_imm_int(b, var->data.index);
+   for (nir_deref_instr *d = deref; d->deref_type != nir_deref_type_var;
+        d = nir_deref_instr_parent(d)) {
+      assert(d->deref_type == nir_deref_type_array);
+      assert(d->arr.index.is_ssa);
+
+      unsigned array_stride = 1;
+      if (glsl_type_is_array(d->type))
+         array_stride *= glsl_get_aoa_size(d->type);
+
+      offset = nir_iadd(b, offset, nir_imul(b, d->arr.index.ssa,
+                                            nir_imm_int(b, array_stride)));
+   }
+
+   /* Since the first source is a deref and the first source in the lowered
+    * instruction is the offset, we can just swap it out and change the
+    * opcode.
+    */
+   instr->intrinsic = op;
+   nir_instr_rewrite_src(&instr->instr, &instr->src[0],
+                         nir_src_for_ssa(offset));
+   nir_intrinsic_set_base(instr, idx);
+
+   nir_deref_instr_remove_if_unused(deref);
+
+   return true;
 }
 
-
-bool r600_lower_ubo_to_align16(nir_shader *shader)
+static bool
+r600_nir_lower_atomics(nir_shader *shader)
 {
-   return nir_shader_lower_instructions(shader,
-                                        r600_lower_ubo_to_align16_filter,
-                                        r600_lower_ubo_to_align16_impl,
-                                        nullptr);
-}
+   bool progress = false;
 
-}
+   /* First re-do the offsets, in Hardware we start at zero for each new
+    * binding, and we use an offset of one per counter */
+   int current_binding = -1;
+   int current_offset = 0;
+   nir_foreach_variable_with_modes(var, shader, nir_var_uniform) {
+      if (!var->type->contains_atomic())
+         continue;
 
+      if (current_binding == (int)var->data.binding) {
+         var->data.index = current_offset;
+         current_offset += var->type->atomic_size() / ATOMIC_COUNTER_SIZE;
+      } else {
+         current_binding = var->data.binding;
+         var->data.index = 0;
+         current_offset = var->type->atomic_size() / ATOMIC_COUNTER_SIZE;
+      }
+   }
+
+   nir_foreach_function(function, shader) {
+      if (!function->impl)
+         continue;
+
+      bool impl_progress = false;
+
+      nir_builder build;
+      nir_builder_init(&build, function->impl);
+
+      nir_foreach_block(block, function->impl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            impl_progress |= r600_lower_deref_instr(&build,
+                                                    nir_instr_as_intrinsic(instr), shader);
+         }
+      }
+
+      if (impl_progress) {
+         nir_metadata_preserve(function->impl, nir_metadata_block_index | nir_metadata_dominance);
+         progress = true;
+      }
+   }
+
+   return progress;
+}
 using r600::r600_nir_lower_int_tg4;
 using r600::r600_nir_lower_pack_unpack_2x16;
 using r600::r600_lower_scratch_addresses;
@@ -603,7 +699,7 @@ r600_lower_shared_io(nir_shader *nir)
 }
 
 static bool
-optimize_once(nir_shader *shader)
+optimize_once(nir_shader *shader, bool vectorize)
 {
    bool progress = false;
    NIR_PASS(progress, shader, nir_copy_prop);
@@ -611,7 +707,8 @@ optimize_once(nir_shader *shader)
    NIR_PASS(progress, shader, nir_opt_algebraic);
    NIR_PASS(progress, shader, nir_opt_constant_folding);
    NIR_PASS(progress, shader, nir_opt_copy_prop_vars);
-   NIR_PASS(progress, shader, nir_opt_vectorize);
+   if (vectorize)
+      NIR_PASS(progress, shader, nir_opt_vectorize, NULL, NULL);
 
    NIR_PASS(progress, shader, nir_opt_remove_phis);
 
@@ -661,11 +758,14 @@ int r600_shader_from_nir(struct r600_context *rctx,
       fprintf(stderr, "END PRE-OPT-NIR--------------------------------------\n\n");
    }
 
+   r600::sort_uniforms(sel->nir);
+
    NIR_PASS_V(sel->nir, nir_lower_vars_to_ssa);
    NIR_PASS_V(sel->nir, nir_lower_regs_to_ssa);
    NIR_PASS_V(sel->nir, nir_lower_phis_to_scalar);
 
    NIR_PASS_V(sel->nir, r600_lower_shared_io);
+   NIR_PASS_V(sel->nir, r600_nir_lower_atomics);
 
    static const struct nir_lower_tex_options lower_tex_options = {
       .lower_txp = ~0u,
@@ -713,18 +813,13 @@ int r600_shader_from_nir(struct r600_context *rctx,
 
 
    const nir_function *func = reinterpret_cast<const nir_function *>(exec_list_get_head_const(&sel->nir->functions));
-   bool optimize = func->impl->registers.length() == 0 && !has_saturate(func);
+   assert(func->impl->registers.length() == 0 && !has_saturate(func));
 
-   if (optimize) {
-      optimize_once(sel->nir);
-      NIR_PASS_V(sel->nir, r600_lower_ubo_to_align16);
-   }
-   /* It seems the output of this optimization is cached somewhere, and
-    * when there are registers, then we can no longer copy propagate, so
-    * skip the optimization then. (There is probably a better way, but yeah)
-    */
-   if (optimize)
-      while(optimize_once(sel->nir));
+   NIR_PASS_V(sel->nir, nir_lower_ubo_vec4);
+
+   /* Lower to scalar to let some optimization work out better */
+   NIR_PASS_V(sel->nir, nir_lower_alu_to_scalar, NULL, NULL);
+   while(optimize_once(sel->nir, false));
 
    NIR_PASS_V(sel->nir, nir_remove_dead_variables, nir_var_shader_in, NULL);
    NIR_PASS_V(sel->nir, nir_remove_dead_variables,  nir_var_shader_out, NULL);
@@ -735,21 +830,32 @@ int r600_shader_from_nir(struct r600_context *rctx,
               40,
               r600_get_natural_size_align_bytes);
 
-   while (optimize && optimize_once(sel->nir));
+   NIR_PASS_V(sel->nir, nir_lower_bool_to_int32);
 
-   NIR_PASS_V(sel->nir, nir_lower_locals_to_regs);
+   while (optimize_once(sel->nir, true));
+
+   auto sh = nir_shader_clone(sel->nir, sel->nir);
+   NIR_PASS_V(sh, nir_opt_algebraic_late);
+
+   if (sel->nir->info.stage == MESA_SHADER_FRAGMENT)
+      r600::sort_fsoutput(sh);
+
+   NIR_PASS_V(sh, nir_lower_locals_to_regs);
+
    //NIR_PASS_V(sel->nir, nir_opt_algebraic);
    //NIR_PASS_V(sel->nir, nir_copy_prop);
-   NIR_PASS_V(sel->nir, nir_lower_to_source_mods, nir_lower_float_source_mods);
-   NIR_PASS_V(sel->nir, nir_convert_from_ssa, true);
-   NIR_PASS_V(sel->nir, nir_opt_dce);
+   NIR_PASS_V(sh, nir_lower_to_source_mods,
+	      (nir_lower_to_source_mods_flags)(nir_lower_float_source_mods |
+					       nir_lower_64bit_source_mods));
+   NIR_PASS_V(sh, nir_convert_from_ssa, true);
+   NIR_PASS_V(sh, nir_opt_dce);
 
    if ((rctx->screen->b.debug_flags & DBG_NIR) &&
        (rctx->screen->b.debug_flags & DBG_ALL_SHADERS)) {
       fprintf(stderr, "-- NIR --------------------------------------------------------\n");
-      struct nir_function *func = (struct nir_function *)exec_list_get_head(&sel->nir->functions);
+      struct nir_function *func = (struct nir_function *)exec_list_get_head(&sh->functions);
       nir_index_ssa_defs(func->impl);
-      nir_print_shader(sel->nir, stderr);
+      nir_print_shader(sh, stderr);
       fprintf(stderr, "-- END --------------------------------------------------------\n");
    }
 
@@ -771,7 +877,7 @@ int r600_shader_from_nir(struct r600_context *rctx,
       gs_shader = &rctx->gs_shader->current->shader;
    r600_screen *rscreen = rctx->screen;
 
-   bool r = convert.lower(sel->nir, pipeshader, sel, *key, gs_shader, rscreen->b.chip_class);
+   bool r = convert.lower(sh, pipeshader, sel, *key, gs_shader, rscreen->b.chip_class);
    if (!r || rctx->screen->b.debug_flags & DBG_ALL_SHADERS) {
       static int shnr = 0;
 
@@ -782,7 +888,7 @@ int r600_shader_from_nir(struct r600_context *rctx,
 
          if (f) {
             fprintf(f, "const char *shader_blob_%s = {\nR\"(", sel->nir->info.name);
-            nir_print_shader(sel->nir, f);
+            nir_print_shader(sh, f);
             fprintf(f, ")\";\n");
             fclose(f);
          }
@@ -816,6 +922,8 @@ int r600_shader_from_nir(struct r600_context *rctx,
    } else {
       r600::sfn_log << r600::SfnLog::shader_info << "This is not a Geometry shader\n";
    }
+   if (pipeshader->shader.bc.ngpr < 6)
+      pipeshader->shader.bc.ngpr = 6;
 
    return 0;
 }

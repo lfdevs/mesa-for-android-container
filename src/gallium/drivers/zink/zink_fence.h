@@ -25,6 +25,7 @@
 #define ZINK_FENCE_H
 
 #include "util/u_inlines.h"
+#include "util/u_dynarray.h"
 
 #include <vulkan/vulkan.h>
 
@@ -33,8 +34,10 @@ struct zink_screen;
 
 struct zink_fence {
    struct pipe_reference reference;
+   unsigned batch_id : 2;
    VkFence fence;
    struct set *active_queries; /* zink_query objects which were active at some point in this batch */
+   struct util_dynarray resources;
 };
 
 static inline struct zink_fence *

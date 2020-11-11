@@ -178,7 +178,6 @@ static void add_sysval(unsigned reg, unsigned compmask, gl_system_value sysval)
 	variant->inputs[n].sysval = true;
 	variant->inputs[n].slot = sysval;
 	variant->inputs[n].compmask = compmask;
-	variant->inputs[n].interpolate = INTERP_MODE_FLAT;
 	variant->total_in++;
 }
 

@@ -25,8 +25,10 @@
 #include "zink_fence.h"
 
 #include "zink_query.h"
+#include "zink_resource.h"
 #include "zink_screen.h"
 
+#include "util/set.h"
 #include "util/u_memory.h"
 
 static void
@@ -34,6 +36,7 @@ destroy_fence(struct zink_screen *screen, struct zink_fence *fence)
 {
    if (fence->fence)
       vkDestroyFence(screen->dev, fence->fence, NULL);
+   util_dynarray_fini(&fence->resources);
    FREE(fence);
 }
 
@@ -57,6 +60,17 @@ zink_create_fence(struct pipe_screen *pscreen, struct zink_batch *batch)
    }
    ret->active_queries = batch->active_queries;
    batch->active_queries = NULL;
+
+   ret->batch_id = batch->batch_id;
+   util_dynarray_init(&ret->resources, NULL);
+   set_foreach(batch->resources, entry) {
+      /* the fence needs its own reference to ensure it can safely access lifetime-dependent
+       * resource members
+       */
+      struct pipe_resource *r = NULL, *pres = (struct pipe_resource *)entry->key;
+      pipe_resource_reference(&r, pres);
+      util_dynarray_append(&ret->resources, struct pipe_resource*, pres);
+   }
 
    pipe_reference_init(&ret->reference, 1);
    return ret;
@@ -86,14 +100,35 @@ fence_reference(struct pipe_screen *pscreen,
                         zink_fence(pfence));
 }
 
+static inline void
+fence_remove_resource_access(struct zink_fence *fence, struct zink_resource *res)
+{
+   p_atomic_set(&res->batch_uses[fence->batch_id], 0);
+}
+
 bool
 zink_fence_finish(struct zink_screen *screen, struct zink_fence *fence,
                   uint64_t timeout_ns)
 {
    bool success = vkWaitForFences(screen->dev, 1, &fence->fence, VK_TRUE,
                                   timeout_ns) == VK_SUCCESS;
-   if (success && fence->active_queries)
-      zink_prune_queries(screen, fence);
+   if (success) {
+      if (fence->active_queries)
+         zink_prune_queries(screen, fence);
+
+      /* unref all used resources */
+      util_dynarray_foreach(&fence->resources, struct pipe_resource*, pres) {
+         struct zink_resource *stencil, *res = zink_resource(*pres);
+         fence_remove_resource_access(fence, res);
+
+         /* we still hold a ref, so this doesn't need to be atomic */
+         zink_get_depth_stencil_resources((struct pipe_resource*)res, NULL, &stencil);
+         if (stencil)
+            fence_remove_resource_access(fence, stencil);
+         pipe_resource_reference(pres, NULL);
+      }
+      util_dynarray_clear(&fence->resources);
+   }
    return success;
 }
 

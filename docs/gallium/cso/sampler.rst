@@ -28,9 +28,9 @@ The wrap modes are:
   border color is sampled when coords go outside the range [0,1].
 * ``PIPE_TEX_WRAP_CLAMP``: The coord is clamped to the range [0,1] before
   scaling to the texture size.  This corresponds to the legacy OpenGL GL_CLAMP
-  texture wrap mode.  Historically, this mode hasn't acted consistantly across
+  texture wrap mode.  Historically, this mode hasn't acted consistently across
   all graphics hardware.  It sometimes acts like CLAMP_TO_EDGE or
-  CLAMP_TO_BORDER.  The behaviour may also vary depending on linear vs.
+  CLAMP_TO_BORDER.  The behavior may also vary depending on linear vs.
   nearest sampling mode.
 * ``PIPE_TEX_WRAP_MIRROR_REPEAT``: If the integer part of the coordinate
   is odd, the coord becomes (1 - coord).  Then, normal texture REPEAT is
@@ -105,8 +105,8 @@ border_color
     PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK, in which case special care has to be
     taken (see description of the cap).
 max_anisotropy
-    Maximum anistropy ratio to use when sampling from textures.  For example,
-    if max_anistropy=4, a region of up to 1 by 4 texels will be sampled.
+    Maximum anisotropy ratio to use when sampling from textures.  For example,
+    if max_anisotropy=4, a region of up to 1 by 4 texels will be sampled.
     Set to zero to disable anisotropic filtering.  Any other setting enables
     anisotropic filtering, however it's not unexpected some drivers only will
     change their filtering with a setting of 2 and higher.

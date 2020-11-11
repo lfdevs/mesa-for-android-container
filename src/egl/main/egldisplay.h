@@ -106,6 +106,7 @@ struct _egl_extensions
    EGLBoolean EXT_image_dma_buf_import;
    EGLBoolean EXT_image_dma_buf_import_modifiers;
    EGLBoolean EXT_pixel_format_float;
+   EGLBoolean EXT_protected_content;
    EGLBoolean EXT_surface_CTA861_3_metadata;
    EGLBoolean EXT_surface_SMPTE2086_metadata;
    EGLBoolean EXT_swap_buffers_with_damage;
@@ -207,7 +208,7 @@ _eglFindDisplay(_EGLPlatformType plat, void *plat_dpy, const EGLAttrib *attr);
 
 
 extern void
-_eglReleaseDisplayResources(const _EGLDriver *drv, _EGLDisplay *disp);
+_eglReleaseDisplayResources(_EGLDisplay *disp);
 
 
 extern void

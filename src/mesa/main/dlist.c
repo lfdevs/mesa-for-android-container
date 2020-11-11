@@ -34,7 +34,6 @@
 
 #include "api_arrayelt.h"
 #include "api_exec.h"
-#include "api_loopback.h"
 #include "draw_validate.h"
 #include "atifragshader.h"
 #include "config.h"
@@ -875,7 +874,7 @@ lookup_bitmap_atlas(struct gl_context *ctx, GLuint listBase)
  * Create new bitmap atlas and insert into hash table.
  */
 static struct gl_bitmap_atlas *
-alloc_bitmap_atlas(struct gl_context *ctx, GLuint listBase)
+alloc_bitmap_atlas(struct gl_context *ctx, GLuint listBase, bool isGenName)
 {
    struct gl_bitmap_atlas *atlas;
 
@@ -884,7 +883,8 @@ alloc_bitmap_atlas(struct gl_context *ctx, GLuint listBase)
 
    atlas = calloc(1, sizeof(*atlas));
    if (atlas) {
-      _mesa_HashInsert(ctx->Shared->BitmapAtlas, listBase, atlas);
+      _mesa_HashInsert(ctx->Shared->BitmapAtlas, listBase, atlas, isGenName);
+      atlas->Id = listBase;
    }
 
    return atlas;
@@ -1407,10 +1407,11 @@ _mesa_delete_list(struct gl_context *ctx, struct gl_display_list *dlist)
  * deleted belongs to a bitmap texture atlas.
  */
 static void
-check_atlas_for_deleted_list(GLuint atlas_id, void *data, void *userData)
+check_atlas_for_deleted_list(void *data, void *userData)
 {
    struct gl_bitmap_atlas *atlas = (struct gl_bitmap_atlas *) data;
    GLuint list_id = *((GLuint *) userData);  /* the list being deleted */
+   const GLuint atlas_id = atlas->Id;
 
    /* See if the list_id falls in the range contained in this texture atlas */
    if (atlas->complete &&
@@ -6116,6 +6117,48 @@ save_Rectf(GLfloat a, GLfloat b, GLfloat c, GLfloat d)
    if (ctx->ExecuteFlag) {
       CALL_Rectf(ctx->Exec, (a, b, c, d));
    }
+}
+
+static void GLAPIENTRY
+save_Rectd(GLdouble x1, GLdouble y1, GLdouble x2, GLdouble y2)
+{
+   save_Rectf((GLfloat) x1, (GLfloat) y1, (GLfloat) x2, (GLfloat) y2);
+}
+
+static void GLAPIENTRY
+save_Rectdv(const GLdouble *v1, const GLdouble *v2)
+{
+   save_Rectf((GLfloat) v1[0], (GLfloat) v1[1], (GLfloat) v2[0], (GLfloat) v2[1]);
+}
+
+static void GLAPIENTRY
+save_Rectfv(const GLfloat *v1, const GLfloat *v2)
+{
+   save_Rectf(v1[0], v1[1], v2[0], v2[1]);
+}
+
+static void GLAPIENTRY
+save_Recti(GLint x1, GLint y1, GLint x2, GLint y2)
+{
+   save_Rectf((GLfloat) x1, (GLfloat) y1, (GLfloat) x2, (GLfloat) y2);
+}
+
+static void GLAPIENTRY
+save_Rectiv(const GLint *v1, const GLint *v2)
+{
+   save_Rectf((GLfloat) v1[0], (GLfloat) v1[1], (GLfloat) v2[0], (GLfloat) v2[1]);
+}
+
+static void GLAPIENTRY
+save_Rects(GLshort x1, GLshort y1, GLshort x2, GLshort y2)
+{
+   save_Rectf((GLfloat) x1, (GLfloat) y1, (GLfloat) x2, (GLfloat) y2);
+}
+
+static void GLAPIENTRY
+save_Rectsv(const GLshort *v1, const GLshort *v2)
+{
+   save_Rectf((GLfloat) v1[0], (GLfloat) v1[1], (GLfloat) v2[0], (GLfloat) v2[1]);
 }
 
 static void GLAPIENTRY
@@ -13651,7 +13694,7 @@ _mesa_GenLists(GLsizei range)
       GLint i;
       for (i = 0; i < range; i++) {
          _mesa_HashInsertLocked(ctx->Shared->DisplayList, base + i,
-                                make_list(base + i, 1));
+                                make_list(base + i, 1), true);
       }
    }
 
@@ -13664,7 +13707,7 @@ _mesa_GenLists(GLsizei range)
        */
       struct gl_bitmap_atlas *atlas = lookup_bitmap_atlas(ctx, base);
       if (!atlas) {
-         atlas = alloc_bitmap_atlas(ctx, base);
+         atlas = alloc_bitmap_atlas(ctx, base, true);
       }
       if (atlas) {
          /* Atlas _should_ be new/empty now, but clobbering is OK */
@@ -13770,7 +13813,7 @@ _mesa_EndList(void)
    /* Install the new list */
    _mesa_HashInsert(ctx->Shared->DisplayList,
                     ctx->ListState.CurrentList->Name,
-                    ctx->ListState.CurrentList);
+                    ctx->ListState.CurrentList, true);
 
 
    if (MESA_VERBOSE & VERBOSE_DISPLAY_LIST)
@@ -13857,7 +13900,7 @@ render_bitmap_atlas(struct gl_context *ctx, GLsizei n, GLenum type,
       /* Even if glGenLists wasn't called, we can still try to create
        * the atlas now.
        */
-      atlas = alloc_bitmap_atlas(ctx, ctx->List.ListBase);
+      atlas = alloc_bitmap_atlas(ctx, ctx->List.ListBase, false);
    }
 
    if (atlas && !atlas->complete && !atlas->incomplete) {
@@ -13988,8 +14031,6 @@ _mesa_initialize_save_table(const struct gl_context *ctx)
     */
    memcpy(table, ctx->Exec, numEntries * sizeof(_glapi_proc));
 
-   _mesa_loopback_init_api_table(ctx, table);
-
    /* VBO functions */
    vbo_initialize_save_dispatch(ctx, table);
 
@@ -14104,6 +14145,13 @@ _mesa_initialize_save_table(const struct gl_context *ctx)
    SET_RasterPos4sv(table, save_RasterPos4sv);
    SET_ReadBuffer(table, save_ReadBuffer);
    SET_Rectf(table, save_Rectf);
+   SET_Rectd(table, save_Rectd);
+   SET_Rectdv(table, save_Rectdv);
+   SET_Rectfv(table, save_Rectfv);
+   SET_Recti(table, save_Recti);
+   SET_Rectiv(table, save_Rectiv);
+   SET_Rects(table, save_Rects);
+   SET_Rectsv(table, save_Rectsv);
    SET_Rotated(table, save_Rotated);
    SET_Rotatef(table, save_Rotatef);
    SET_Scaled(table, save_Scaled);

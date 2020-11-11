@@ -29,6 +29,8 @@ LOCAL_SRC_FILES := $(C_SOURCES)
 
 LOCAL_MODULE := libmesa_winsys_virgl
 
+LOCAL_C_INCLUDES := $(MESA_TOP)/src/virtio
+
 LOCAL_STATIC_LIBRARIES := libmesa_winsys_virgl_common
 
 include $(GALLIUM_COMMON_MK)

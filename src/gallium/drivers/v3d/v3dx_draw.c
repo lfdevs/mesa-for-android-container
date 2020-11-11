@@ -1497,7 +1497,7 @@ v3d_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
                 uint32_t *map = pipe_buffer_map_range(pctx, info->indirect,
                                                       info->indirect_offset,
                                                       3 * sizeof(uint32_t),
-                                                      PIPE_TRANSFER_READ,
+                                                      PIPE_MAP_READ,
                                                       &transfer);
                 memcpy(v3d->compute_num_workgroups, map, 3 * sizeof(uint32_t));
                 pipe_buffer_unmap(pctx, transfer);

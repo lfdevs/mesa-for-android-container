@@ -41,8 +41,8 @@
 #include "util/hash_table.h"
 #include "util/u_math.h"
 
-#define INTEL_LOG_TAG "INTEL-SANITIZE-GPU"
-#include "common/intel_log.h"
+#define MESA_LOG_TAG "INTEL-SANITIZE-GPU"
+#include "util/log.h"
 #include "common/gen_clflush.h"
 
 static int (*libc_open)(const char *pathname, int flags, mode_t mode);
@@ -68,13 +68,13 @@ struct refcnt_hash_table {
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 #define MUTEX_LOCK() do {                        \
    if (unlikely(pthread_mutex_lock(&mutex))) {   \
-      intel_loge("mutex_lock failed");           \
+      mesa_loge("mutex_lock failed");           \
       abort();                                   \
    }                                             \
 } while (0)
 #define MUTEX_UNLOCK() do {                      \
    if (unlikely(pthread_mutex_unlock(&mutex))) { \
-      intel_loge("mutex_unlock failed");         \
+      mesa_loge("mutex_unlock failed");         \
       abort();                                   \
    }                                             \
 } while (0)
@@ -180,7 +180,7 @@ padding_is_good(int fd, uint32_t handle)
 
    ret = libc_ioctl(fd, DRM_IOCTL_I915_GEM_MMAP, &mmap_arg);
    if (ret != 0) {
-      intel_logd("Unable to map buffer %d for pad checking.", handle);
+      mesa_logd("Unable to map buffer %d for pad checking.", handle);
       return false;
    }
 
@@ -226,7 +226,7 @@ create_with_padding(int fd, struct drm_i915_gem_create *create)
 
    ret = libc_ioctl(fd, DRM_IOCTL_I915_GEM_MMAP, &mmap_arg);
    if (ret != 0) {
-      intel_logd("Unable to map buffer %d for pad creation.\n", create->handle);
+      mesa_logd("Unable to map buffer %d for pad creation.\n", create->handle);
       return 0;
    }
 
@@ -269,7 +269,7 @@ exec_and_check_padding(int fd, unsigned long request,
 
       if (!padding_is_good(fd, handle)) {
          detected_out_of_bounds_write = true;
-         intel_loge("Detected buffer out-of-bounds write in bo %d", handle);
+         mesa_loge("Detected buffer out-of-bounds write in bo %d", handle);
       }
    }
 
@@ -391,7 +391,7 @@ ioctl(int fd, unsigned long request, ...)
    va_end(args);
 
    if (_IOC_TYPE(request) == DRM_IOCTL_BASE && !is_drm_fd(fd) && is_i915(fd)) {
-      intel_loge("missed drm fd %d", fd);
+      mesa_loge("missed drm fd %d", fd);
       add_drm_fd(fd);
    }
 

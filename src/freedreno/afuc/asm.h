@@ -44,6 +44,7 @@ struct asm_instruction {
 	int immed;
 	int shift;
 	int bit;
+	int xmov;
 	uint32_t literal;
 	const char *label;
 

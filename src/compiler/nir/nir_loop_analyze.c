@@ -634,7 +634,7 @@ get_iteration(nir_op cond_op, nir_const_value initial, nir_const_value step,
    case nir_op_fge:
    case nir_op_flt:
    case nir_op_feq:
-   case nir_op_fne:
+   case nir_op_fneu:
       span = eval_const_binop(nir_op_fsub, bit_size, limit, initial,
                               execution_mode);
       iter = eval_const_binop(nir_op_fdiv, bit_size, span,
@@ -845,10 +845,10 @@ inverse_comparison(nir_op alu_op)
    case nir_op_ult:
       return nir_op_uge;
    case nir_op_feq:
-      return nir_op_fne;
+      return nir_op_fneu;
    case nir_op_ieq:
       return nir_op_ine;
-   case nir_op_fne:
+   case nir_op_fneu:
       return nir_op_feq;
    case nir_op_ine:
       return nir_op_ieq;
@@ -1111,10 +1111,14 @@ force_unroll_array_access(loop_info_state *state, nir_deref_instr *deref)
 {
    unsigned array_size = find_array_access_via_induction(state, deref, NULL);
    if (array_size) {
-      if (array_size == state->loop->info->max_trip_count)
+      if ((array_size == state->loop->info->max_trip_count) &&
+          nir_deref_mode_must_be(deref, nir_var_shader_in |
+                                        nir_var_shader_out |
+                                        nir_var_shader_temp |
+                                        nir_var_function_temp))
          return true;
 
-      if (deref->mode & state->indirect_mask)
+      if (nir_deref_mode_must_be(deref, state->indirect_mask))
          return true;
    }
 

@@ -71,7 +71,7 @@ struct context {
 
 static void init_ctx(struct context *ctx)
 {
-        int ret;
+        ASSERTED int ret;
 
         ret = pipe_loader_probe(&ctx->dev, 1);
         assert(ret);
@@ -153,7 +153,7 @@ static void init_prog(struct context *ctx, unsigned local_sz,
                 .req_input_mem = input_sz
         };
         char *psrc = preprocess_prog(ctx, src, defs);
-        int ret;
+        ASSERTED int ret;
 
         ret = tgsi_text_translate(psrc, prog, ARRAY_SIZE(prog));
         assert(ret);
@@ -204,7 +204,7 @@ static void init_tex(struct context *ctx, int slot,
         *tex = ctx->screen->resource_create(ctx->screen, &ttex);
         assert(*tex);
 
-        map = pipe->transfer_map(pipe, *tex, 0, PIPE_TRANSFER_WRITE,
+        map = pipe->transfer_map(pipe, *tex, 0, PIPE_MAP_WRITE,
                                   &(struct pipe_box) { .width = w,
                                                   .height = h,
                                                   .depth = 1 }, &xfer);
@@ -246,7 +246,7 @@ static void check_tex(struct context *ctx, int slot,
         if (!check)
                 check = default_check;
 
-        map = pipe->transfer_map(pipe, tex, 0, PIPE_TRANSFER_READ,
+        map = pipe->transfer_map(pipe, tex, 0, PIPE_MAP_READ,
                                   &(struct pipe_box) { .width = tex->width0,
                                         .height = tex->height0,
                                         .depth = 1 }, &xfer);

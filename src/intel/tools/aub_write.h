@@ -25,8 +25,10 @@
 #ifndef INTEL_AUB_WRITE
 #define INTEL_AUB_WRITE
 
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "drm-uapi/i915_drm.h"
 
@@ -36,6 +38,25 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+static inline void PRINTFLIKE(2, 3) NORETURN
+_fail(const char *prefix, const char *format, ...)
+{
+   va_list args;
+
+   va_start(args, format);
+   if (prefix)
+      fprintf(stderr, "%s: ", prefix);
+   vfprintf(stderr, format, args);
+   va_end(args);
+
+   abort();
+}
+
+#define _fail_if(cond, prefix, ...) do { \
+   if (cond) \
+      _fail(prefix, __VA_ARGS__); \
+} while (0)
 
 #define MAX_CONTEXT_COUNT 64
 

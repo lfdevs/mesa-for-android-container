@@ -28,6 +28,7 @@
 
 #include <stdint.h>
 #include "compiler/shader_enums.h"
+#include "util/macros.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,7 +40,9 @@ extern "C" {
  * list of debugging flags, as well as some macros for handling them.
  */
 
-extern uint64_t INTEL_DEBUG;
+extern uint64_t intel_debug;
+
+#define INTEL_DEBUG __builtin_expect(intel_debug, 0)
 
 #define DEBUG_TEXTURE             (1ull <<  0)
 #define DEBUG_STATE               (1ull <<  1)
@@ -115,7 +118,7 @@ extern uint64_t INTEL_DEBUG;
 #endif /* HAVE_ANDROID_PLATFORM */
 
 #define DBG(...) do {						\
-	if (unlikely(INTEL_DEBUG & FILE_DEBUG_FLAG))		\
+	if (INTEL_DEBUG & FILE_DEBUG_FLAG)		\
 		dbg_printf(__VA_ARGS__);			\
 } while(0)
 
@@ -134,6 +137,9 @@ enum gen_debug_block_type {
    /* Driver identifier (struct gen_debug_block_driver) */
    GEN_DEBUG_BLOCK_TYPE_DRIVER,
 
+   /* Frame identifier (struct gen_debug_block_frame) */
+   GEN_DEBUG_BLOCK_TYPE_FRAME,
+
    /* Internal, never to be written out */
    GEN_DEBUG_BLOCK_TYPE_MAX,
 };
@@ -146,6 +152,11 @@ struct gen_debug_block_base {
 struct gen_debug_block_driver {
    struct gen_debug_block_base base;
    uint8_t description[];
+};
+
+struct gen_debug_block_frame {
+   struct gen_debug_block_base base;
+   uint64_t frame_id;
 };
 
 extern void *intel_debug_identifier(void);

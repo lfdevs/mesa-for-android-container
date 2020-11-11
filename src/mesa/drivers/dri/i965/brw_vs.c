@@ -171,7 +171,7 @@ brw_codegen_vs_prog(struct brw_context *brw,
       start_time = get_time();
    }
 
-   if (unlikely(INTEL_DEBUG & DEBUG_VS)) {
+   if (INTEL_DEBUG & DEBUG_VS) {
       if (vp->program.is_arb_asm)
          brw_dump_arb_asm("vertex", &vp->program);
    }

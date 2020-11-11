@@ -602,8 +602,8 @@ set_tex_parameteri(struct gl_context *ctx,
       goto invalid_pname;
 
    case GL_TEXTURE_TILING_EXT:
-      if (ctx->Extensions.EXT_memory_object) {
-         texObj->TextureTiling = params[0];
+      if (ctx->Extensions.EXT_memory_object && !texObj->Immutable) {
+            texObj->TextureTiling = params[0];
 
          return GL_TRUE;
       }

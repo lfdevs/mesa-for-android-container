@@ -89,6 +89,7 @@ static const uint32_t isl_to_gen_multisample_layout[] = {
 #if GEN_GEN >= 12
 static const uint32_t isl_to_gen_aux_mode[] = {
    [ISL_AUX_USAGE_NONE] = AUX_NONE,
+   [ISL_AUX_USAGE_MC] = AUX_NONE,
    [ISL_AUX_USAGE_MCS] = AUX_CCS_E,
    [ISL_AUX_USAGE_GEN12_CCS_E] = AUX_CCS_E,
    [ISL_AUX_USAGE_CCS_E] = AUX_CCS_E,
@@ -591,6 +592,7 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
          assert(info->aux_usage == ISL_AUX_USAGE_MCS ||
                 info->aux_usage == ISL_AUX_USAGE_CCS_E ||
                 info->aux_usage == ISL_AUX_USAGE_GEN12_CCS_E ||
+                info->aux_usage == ISL_AUX_USAGE_MC ||
                 info->aux_usage == ISL_AUX_USAGE_HIZ_CCS_WT ||
                 info->aux_usage == ISL_AUX_USAGE_MCS_CCS ||
                 info->aux_usage == ISL_AUX_USAGE_STC_CCS);
@@ -663,6 +665,9 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
          }
       }
 
+#if GEN_GEN >= 12
+      s.MemoryCompressionEnable = info->aux_usage == ISL_AUX_USAGE_MC;
+#endif
 #if GEN_GEN >= 8
       s.AuxiliarySurfaceMode = isl_to_gen_aux_mode[info->aux_usage];
 #else
@@ -735,7 +740,7 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
    }
 #endif
 
-   if (info->aux_usage != ISL_AUX_USAGE_NONE) {
+   if (isl_aux_usage_has_fast_clears(info->aux_usage)) {
       if (info->use_clear_address) {
 #if GEN_GEN >= 10
          s.ClearValueAddressEnable = true;

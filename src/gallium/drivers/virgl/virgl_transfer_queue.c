@@ -24,7 +24,7 @@
 #include "util/u_box.h"
 #include "util/u_inlines.h"
 
-#include "virgl_protocol.h"
+#include "virtio-gpu/virgl_protocol.h"
 #include "virgl_context.h"
 #include "virgl_screen.h"
 #include "virgl_encode.h"

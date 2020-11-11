@@ -106,14 +106,19 @@ iris_disk_cache_store(struct disk_cache *cache,
     * 2. Assembly code
     * 3. Number of entries in the system value array
     * 4. System value array
-    * 5. Legacy param array (only used for compute workgroup ID)
-    * 6. Binding table
+    * 5. Size (in bytes) of kernel inputs
+    * 6. Shader relocations
+    * 7. Legacy param array (only used for compute workgroup ID)
+    * 8. Binding table
     */
    blob_write_bytes(&blob, shader->prog_data, brw_prog_data_size(stage));
    blob_write_bytes(&blob, shader->map, shader->prog_data->program_size);
-   blob_write_bytes(&blob, &shader->num_system_values, sizeof(unsigned));
+   blob_write_uint32(&blob, shader->num_system_values);
    blob_write_bytes(&blob, shader->system_values,
                     shader->num_system_values * sizeof(enum brw_param_builtin));
+   blob_write_uint32(&blob, shader->kernel_input_size);
+   blob_write_bytes(&blob, prog_data->relocs,
+                    prog_data->num_relocs * sizeof(struct brw_shader_reloc));
    blob_write_bytes(&blob, prog_data->param,
                     prog_data->nr_params * sizeof(uint32_t));
    blob_write_bytes(&blob, &shader->bt, sizeof(shader->bt));
@@ -122,6 +127,15 @@ iris_disk_cache_store(struct disk_cache *cache,
    blob_finish(&blob);
 #endif
 }
+
+static const enum iris_program_cache_id cache_id_for_stage[] = {
+   [MESA_SHADER_VERTEX]    = IRIS_CACHE_VS,
+   [MESA_SHADER_TESS_CTRL] = IRIS_CACHE_TCS,
+   [MESA_SHADER_TESS_EVAL] = IRIS_CACHE_TES,
+   [MESA_SHADER_GEOMETRY]  = IRIS_CACHE_GS,
+   [MESA_SHADER_FRAGMENT]  = IRIS_CACHE_FS,
+   [MESA_SHADER_COMPUTE]   = IRIS_CACHE_CS,
+};
 
 /**
  * Search for a compiled shader in the disk cache.  If found, upload it
@@ -164,6 +178,7 @@ iris_disk_cache_retrieve(struct iris_context *ice,
    struct brw_stage_prog_data *prog_data = ralloc_size(NULL, prog_data_size);
    const void *assembly;
    uint32_t num_system_values;
+   uint32_t kernel_input_size;
    uint32_t *system_values = NULL;
    uint32_t *so_decls = NULL;
 
@@ -177,6 +192,17 @@ iris_disk_cache_retrieve(struct iris_context *ice,
          ralloc_array(NULL, enum brw_param_builtin, num_system_values);
       blob_copy_bytes(&blob, system_values,
                       num_system_values * sizeof(enum brw_param_builtin));
+   }
+
+   kernel_input_size = blob_read_uint32(&blob);
+
+   prog_data->relocs = NULL;
+   if (prog_data->num_relocs) {
+      struct brw_shader_reloc *relocs =
+         ralloc_array(NULL, struct brw_shader_reloc, prog_data->num_relocs);
+      blob_copy_bytes(&blob, relocs,
+                      prog_data->num_relocs * sizeof(struct brw_shader_reloc));
+      prog_data->relocs = relocs;
    }
 
    prog_data->param = NULL;
@@ -209,16 +235,19 @@ iris_disk_cache_retrieve(struct iris_context *ice,
    if (num_cbufs || ish->nir->num_uniforms)
       num_cbufs++;
 
-   if (num_system_values)
+   if (num_system_values || kernel_input_size)
       num_cbufs++;
+
+   assert(stage < ARRAY_SIZE(cache_id_for_stage));
+   enum iris_program_cache_id cache_id = cache_id_for_stage[stage];
 
    /* Upload our newly read shader to the in-memory program cache and
     * return it to the caller.
     */
    struct iris_compiled_shader *shader =
-      iris_upload_shader(ice, stage, key_size, prog_key, assembly,
+      iris_upload_shader(ice, cache_id, key_size, prog_key, assembly,
                          prog_data, so_decls, system_values,
-                         num_system_values, num_cbufs, &bt);
+                         num_system_values, kernel_input_size, num_cbufs, &bt);
 
    free(buffer);
 

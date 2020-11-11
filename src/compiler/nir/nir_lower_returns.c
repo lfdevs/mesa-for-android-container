@@ -55,17 +55,16 @@ predicate_following(nir_cf_node *node, struct lower_returns_state *state)
 
    assert(state->return_flag);
 
-   nir_if *if_stmt = nir_if_create(b->shader);
-   if_stmt->condition = nir_src_for_ssa(nir_load_var(b, state->return_flag));
-   nir_cf_node_insert(b->cursor, &if_stmt->cf_node);
+   nir_if *if_stmt = nir_push_if(b, nir_load_var(b, state->return_flag));
 
    if (state->loop) {
       /* If we're inside of a loop, then all we need to do is insert a
        * conditional break.
        */
-      nir_jump_instr *brk =
-         nir_jump_instr_create(state->builder.shader, nir_jump_break);
-      nir_instr_insert(nir_before_cf_list(&if_stmt->then_list), &brk->instr);
+      nir_jump(b, nir_jump_break);
+
+      nir_block *block = nir_cursor_current_block(b->cursor);
+      nir_insert_phi_undef(block->successors[0], block);
    } else {
       /* Otherwise, we need to actually move everything into the else case
        * of the if statement.
@@ -76,6 +75,8 @@ predicate_following(nir_cf_node *node, struct lower_returns_state *state)
       assert(!exec_list_is_empty(&list.list));
       nir_cf_reinsert(&list, nir_before_cf_list(&if_stmt->else_list));
    }
+
+   nir_pop_if(b, NULL);
 }
 
 static bool
@@ -207,6 +208,8 @@ lower_returns_in_block(nir_block *block, struct lower_returns_state *state)
    if (state->loop) {
       /* We're in a loop;  we need to break out of it. */
       nir_jump(b, nir_jump_break);
+
+      nir_insert_phi_undef(block->successors[0], block);
    } else {
       /* Not in a loop;  we'll deal with predicating later*/
       assert(nir_cf_node_next(&block->cf_node) == NULL);

@@ -28,6 +28,7 @@
 
 #include "pan_context.h"
 #include "pan_cmdstream.h"
+#include "panfrost-quirks.h"
 #include "pan_bo.h"
 #include "util/u_memory.h"
 #include "nir_serialize.h"
@@ -95,6 +96,7 @@ panfrost_launch_grid(struct pipe_context *pipe,
                 const struct pipe_grid_info *info)
 {
         struct panfrost_context *ctx = pan_context(pipe);
+        struct panfrost_device *dev = pan_device(pipe->screen);
 
         /* TODO: Do we want a special compute-only batch? */
         struct panfrost_batch *batch = panfrost_get_batch_for_fbo(ctx);
@@ -102,7 +104,10 @@ panfrost_launch_grid(struct pipe_context *pipe,
         ctx->compute_grid = info;
 
         /* TODO: Stub */
-        struct midgard_payload_vertex_tiler payload;
+        struct panfrost_ptr t =
+                panfrost_pool_alloc_aligned(&batch->pool,
+                                            MALI_COMPUTE_JOB_LENGTH,
+                                            64);
 
         /* We implement OpenCL inputs as uniforms (or a UBO -- same thing), so
          * reuse the graphics path for this by lowering to Gallium */
@@ -117,24 +122,40 @@ panfrost_launch_grid(struct pipe_context *pipe,
         if (info->input)
                 pipe->set_constant_buffer(pipe, PIPE_SHADER_COMPUTE, 0, &ubuf);
 
-        panfrost_vt_init(ctx, PIPE_SHADER_COMPUTE, &payload.prefix, &payload.postfix);
-
-        panfrost_emit_shader_meta(batch, PIPE_SHADER_COMPUTE, &payload.postfix);
-        panfrost_emit_const_buf(batch, PIPE_SHADER_COMPUTE, &payload.postfix);
-        panfrost_emit_shared_memory(batch, info, &payload);
-
         /* Invoke according to the grid info */
 
-        panfrost_pack_work_groups_compute(&payload.prefix,
+        void *invocation =
+                pan_section_ptr(t.cpu, COMPUTE_JOB, INVOCATION);
+        panfrost_pack_work_groups_compute(invocation,
                                           info->grid[0], info->grid[1],
                                           info->grid[2],
                                           info->block[0], info->block[1],
                                           info->block[2],
                                           false);
 
-        panfrost_new_job(&batch->pool, &batch->scoreboard,
-                        JOB_TYPE_COMPUTE, true, 0, &payload,
-                         sizeof(payload), false);
+        pan_section_pack(t.cpu, COMPUTE_JOB, PARAMETERS, cfg) {
+                cfg.job_task_split =
+                        util_logbase2_ceil(info->block[0] + 1) +
+                        util_logbase2_ceil(info->block[1] + 1) +
+                        util_logbase2_ceil(info->block[2] + 1);
+        }
+
+        pan_section_pack(t.cpu, COMPUTE_JOB, DRAW, cfg) {
+                cfg.draw_descriptor_is_64b = true;
+                if (!(dev->quirks & IS_BIFROST))
+                        cfg.texture_descriptor_is_64b = true;
+                cfg.state = panfrost_emit_compute_shader_meta(batch, PIPE_SHADER_COMPUTE);
+                cfg.thread_storage = panfrost_emit_shared_memory(batch, info);
+                cfg.uniform_buffers = panfrost_emit_const_buf(batch,
+                                PIPE_SHADER_COMPUTE, &cfg.push_uniforms);
+                cfg.textures = panfrost_emit_texture_descriptors(batch,
+                                PIPE_SHADER_COMPUTE);
+                cfg.samplers = panfrost_emit_sampler_descriptors(batch,
+                                PIPE_SHADER_COMPUTE);
+        }
+
+        panfrost_add_job(&batch->pool, &batch->scoreboard,
+                         MALI_JOB_TYPE_COMPUTE, true, 0, &t, true);
         panfrost_flush_all_batches(ctx, 0);
 }
 

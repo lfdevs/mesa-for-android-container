@@ -195,7 +195,7 @@ each directory.
 
          -  **d3dadapter9** - d3dadapter9.so for Wine
          -  **dri** - libgallium_dri.so loaded by libGL.so
-         -  **graw** - raw gallium interface without a frontend
+         -  **graw** - raw Gallium interface without a frontend
          -  XXX more
 
    -  **glx** - The GLX library code for building libGL.so using DRI

@@ -625,7 +625,7 @@ snapshot_statistics_registers(struct gen_perf_context *ctx,
 
       perf->vtbl.store_register_mem(ctx->ctx, obj->pipeline_stats.bo,
                                     counter->pipeline_stat.reg, 8,
-                                    offset_in_bytes + i * sizeof(uint64_t));
+                                    offset_in_bytes + counter->offset);
    }
 }
 
@@ -938,20 +938,24 @@ read_oa_samples_until(struct gen_perf_context *perf_ctx,
       if (len <= 0) {
          exec_list_push_tail(&perf_ctx->free_sample_buffers, &buf->link);
 
-         if (len < 0) {
-            if (errno == EAGAIN) {
-               return ((last_timestamp - start_timestamp) < INT32_MAX &&
-                       (last_timestamp - start_timestamp) >=
-                       (end_timestamp - start_timestamp)) ?
-                      OA_READ_STATUS_FINISHED :
-                      OA_READ_STATUS_UNFINISHED;
-            } else {
-               DBG("Error reading i915 perf samples: %m\n");
-            }
-         } else
+         if (len == 0) {
             DBG("Spurious EOF reading i915 perf samples\n");
+            return OA_READ_STATUS_ERROR;
+         }
 
-         return OA_READ_STATUS_ERROR;
+         if (errno != EAGAIN) {
+            DBG("Error reading i915 perf samples: %m\n");
+            return OA_READ_STATUS_ERROR;
+         }
+
+         if ((last_timestamp - start_timestamp) >= INT32_MAX)
+            return OA_READ_STATUS_UNFINISHED;
+
+         if ((last_timestamp - start_timestamp) <
+              (end_timestamp - start_timestamp))
+            return OA_READ_STATUS_UNFINISHED;
+
+         return OA_READ_STATUS_FINISHED;
       }
 
       buf->len = len;
@@ -1408,7 +1412,6 @@ read_gt_frequency(struct gen_perf_context *perf_ctx,
       obj->oa.gt_frequency[1] = GET_FIELD(end, GEN7_RPSTAT1_CURR_GT_FREQ) * 50ULL;
       break;
    case 9:
-   case 10:
    case 11:
    case 12:
       obj->oa.gt_frequency[0] = GET_FIELD(start, GEN9_RPSTAT0_CURR_GT_FREQ) * 50ULL / 3ULL;
@@ -1458,7 +1461,9 @@ get_oa_counter_data(struct gen_perf_context *perf_ctx,
             /* So far we aren't using uint32, double or bool32... */
             unreachable("unexpected counter data type");
          }
-         written = counter->offset + counter_size;
+
+         if (counter->offset + counter_size > written)
+            written = counter->offset + counter_size;
       }
    }
 

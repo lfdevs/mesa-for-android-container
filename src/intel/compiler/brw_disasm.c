@@ -32,8 +32,8 @@
 #include "brw_eu.h"
 #include "util/half_float.h"
 
-static bool
-has_jip(const struct gen_device_info *devinfo, enum opcode opcode)
+bool
+brw_has_jip(const struct gen_device_info *devinfo, enum opcode opcode)
 {
    if (devinfo->gen < 6)
       return false;
@@ -47,8 +47,8 @@ has_jip(const struct gen_device_info *devinfo, enum opcode opcode)
           opcode == BRW_OPCODE_HALT;
 }
 
-static bool
-has_uip(const struct gen_device_info *devinfo, enum opcode opcode)
+bool
+brw_has_uip(const struct gen_device_info *devinfo, enum opcode opcode)
 {
    if (devinfo->gen < 6)
       return false;
@@ -443,6 +443,8 @@ static const char *const dp_dc1_msg_type_hsw[32] = {
    [GEN9_DATAPORT_DC_PORT1_A64_SCATTERED_READ] = "DC A64 scattered read",
    [GEN8_DATAPORT_DC_PORT1_A64_UNTYPED_SURFACE_READ] = "DC A64 untyped surface read",
    [GEN8_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_OP] = "DC A64 untyped atomic op",
+   [GEN9_DATAPORT_DC_PORT1_A64_OWORD_BLOCK_READ] = "DC A64 oword block read",
+   [GEN9_DATAPORT_DC_PORT1_A64_OWORD_BLOCK_WRITE] = "DC A64 oword block write",
    [GEN8_DATAPORT_DC_PORT1_A64_UNTYPED_SURFACE_WRITE] = "DC A64 untyped surface write",
    [GEN8_DATAPORT_DC_PORT1_A64_SCATTERED_WRITE] = "DC A64 scattered write",
    [GEN9_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_FLOAT_OP] =
@@ -1654,13 +1656,29 @@ brw_disassemble_imm(const struct gen_device_info *devinfo,
    brw_inst inst;
    inst.data[0] = (((uint64_t) dw1) << 32) | ((uint64_t) dw0);
    inst.data[1] = (((uint64_t) dw3) << 32) | ((uint64_t) dw2);
-   return brw_disassemble_inst(stderr, devinfo, &inst, false);
+   return brw_disassemble_inst(stderr, devinfo, &inst, false, 0, NULL);
 }
 #endif
 
+static void
+write_label(FILE *file, const struct gen_device_info *devinfo,
+            const struct brw_label *root_label,
+            int offset, int jump)
+{
+   if (root_label != NULL) {
+      int to_bytes_scale = sizeof(brw_inst) / brw_jump_scale(devinfo);
+      const struct brw_label *label =
+         brw_find_label(root_label, offset + jump * to_bytes_scale);
+      if (label != NULL) {
+         format(file, " LABEL%d", label->number);
+      }
+   }
+}
+
 int
 brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
-                     const brw_inst *inst, bool is_compacted)
+                     const brw_inst *inst, bool is_compacted,
+                     int offset, const struct brw_label *root_label)
 {
    int err = 0;
    int space = 0;
@@ -1733,19 +1751,26 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
    if (opcode == BRW_OPCODE_SEND && devinfo->gen < 6)
       format(file, " %"PRIu64, brw_inst_base_mrf(devinfo, inst));
 
-   if (has_uip(devinfo, opcode)) {
+   if (brw_has_uip(devinfo, opcode)) {
       /* Instructions that have UIP also have JIP. */
       pad(file, 16);
-      format(file, "JIP: %d", brw_inst_jip(devinfo, inst));
-      pad(file, 32);
-      format(file, "UIP: %d", brw_inst_uip(devinfo, inst));
-   } else if (has_jip(devinfo, opcode)) {
-      pad(file, 16);
+      string(file, "JIP: ");
+      write_label(file, devinfo, root_label, offset, brw_inst_jip(devinfo, inst));
+
+      pad(file, 38);
+      string(file, "UIP: ");
+      write_label(file, devinfo, root_label, offset, brw_inst_uip(devinfo, inst));
+   } else if (brw_has_jip(devinfo, opcode)) {
+      int jip;
       if (devinfo->gen >= 7) {
-         format(file, "JIP: %d", brw_inst_jip(devinfo, inst));
+         jip = brw_inst_jip(devinfo, inst);
       } else {
-         format(file, "JIP: %d", brw_inst_gen6_jump_count(devinfo, inst));
+         jip = brw_inst_gen6_jump_count(devinfo, inst);
       }
+
+      pad(file, 16);
+      string(file, "JIP: ");
+      write_label(file, devinfo, root_label, offset, jip);
    } else if (devinfo->gen < 6 && (opcode == BRW_OPCODE_BREAK ||
                                    opcode == BRW_OPCODE_CONTINUE ||
                                    opcode == BRW_OPCODE_ELSE)) {

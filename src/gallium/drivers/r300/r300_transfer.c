@@ -135,7 +135,7 @@ r300_texture_transfer_map(struct pipe_context *ctx,
          * for this transfer.
          * Also make write transfers pipelined. */
         if (tex->tex.microtile || tex->tex.macrotile[level] ||
-            (referenced_hw && !(usage & PIPE_TRANSFER_READ) &&
+            (referenced_hw && !(usage & PIPE_MAP_READ) &&
              r300_is_blit_supported(texture->format))) {
             struct pipe_resource base;
 
@@ -194,7 +194,7 @@ r300_texture_transfer_map(struct pipe_context *ctx,
             trans->transfer.layer_stride =
                     trans->linear_texture->tex.layer_size_in_bytes[0];
 
-            if (usage & PIPE_TRANSFER_READ) {
+            if (usage & PIPE_MAP_READ) {
                 /* We cannot map a tiled texture directly because the data is
                  * in a different order, therefore we do detiling using a blit. */
                 r300_copy_from_tiled_texture(ctx, trans);
@@ -209,7 +209,7 @@ r300_texture_transfer_map(struct pipe_context *ctx,
             trans->offset = r300_texture_get_offset(tex, level, box->z);
 
             if (referenced_cs &&
-                !(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
+                !(usage & PIPE_MAP_UNSYNCHRONIZED)) {
                 r300_flush(ctx, 0, NULL);
             }
         }
@@ -249,7 +249,7 @@ void r300_texture_transfer_unmap(struct pipe_context *ctx,
     struct r300_transfer *trans = r300_transfer(transfer);
 
     if (trans->linear_texture) {
-        if (transfer->usage & PIPE_TRANSFER_WRITE) {
+        if (transfer->usage & PIPE_MAP_WRITE) {
             r300_copy_into_tiled_texture(ctx, trans);
         }
 

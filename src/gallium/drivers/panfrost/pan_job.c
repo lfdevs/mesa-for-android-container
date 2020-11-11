@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2019-2020 Collabora, Ltd.
  * Copyright (C) 2019 Alyssa Rosenzweig
  * Copyright (C) 2014-2017 Broadcom
  *
@@ -36,7 +37,8 @@
 #include "util/rounding.h"
 #include "pan_util.h"
 #include "pan_blending.h"
-#include "pandecode/decode.h"
+#include "pan_cmdstream.h"
+#include "decode.h"
 #include "panfrost-quirks.h"
 
 /* panfrost_bo_access is here to help us keep track of batch accesses to BOs
@@ -92,11 +94,15 @@ panfrost_batch_fence_reference(struct panfrost_batch_fence *fence)
         pipe_reference(NULL, &fence->reference);
 }
 
+static void
+panfrost_batch_add_fbo_bos(struct panfrost_batch *batch);
+
 static struct panfrost_batch *
 panfrost_create_batch(struct panfrost_context *ctx,
                       const struct pipe_framebuffer_state *key)
 {
         struct panfrost_batch *batch = rzalloc(ctx, struct panfrost_batch);
+        struct panfrost_device *dev = pan_device(ctx->base.screen);
 
         batch->ctx = ctx;
 
@@ -109,7 +115,16 @@ panfrost_create_batch(struct panfrost_context *ctx,
         batch->out_sync = panfrost_create_batch_fence(batch);
         util_copy_framebuffer_state(&batch->key, key);
 
-        batch->pool = panfrost_create_pool(batch, pan_device(ctx->base.screen));
+        /* Preallocate the main pool, since every batch has at least one job
+         * structure so it will be used */
+        panfrost_pool_init(&batch->pool, batch, dev, 0, true);
+
+        /* Don't preallocate the invisible pool, since not every batch will use
+         * the pre-allocation, particularly if the varyings are larger than the
+         * preallocation and a reallocation is needed after anyway. */
+        panfrost_pool_init(&batch->invisible_pool, batch, dev, PAN_BO_INVISIBLE, false);
+
+        panfrost_batch_add_fbo_bos(batch);
 
         return batch;
 }
@@ -121,22 +136,15 @@ panfrost_freeze_batch(struct panfrost_batch *batch)
         struct hash_entry *entry;
 
         /* Remove the entry in the FBO -> batch hash table if the batch
-         * matches. This way, next draws/clears targeting this FBO will trigger
-         * the creation of a new batch.
+         * matches and drop the context reference. This way, next draws/clears
+         * targeting this FBO will trigger the creation of a new batch.
          */
         entry = _mesa_hash_table_search(ctx->batches, &batch->key);
         if (entry && entry->data == batch)
                 _mesa_hash_table_remove(ctx->batches, entry);
 
-        /* If this is the bound batch, the panfrost_context parameters are
-         * relevant so submitting it invalidates those parameters, but if it's
-         * not bound, the context parameters are for some other batch so we
-         * can't invalidate them.
-         */
-        if (ctx->batch == batch) {
-                panfrost_invalidate_frame(ctx);
+        if (ctx->batch == batch)
                 ctx->batch = NULL;
-        }
 }
 
 #ifdef PAN_BATCH_DEBUG
@@ -169,8 +177,8 @@ panfrost_free_batch(struct panfrost_batch *batch)
         hash_table_foreach(batch->bos, entry)
                 panfrost_bo_unreference((struct panfrost_bo *)entry->key);
 
-        hash_table_foreach(batch->pool.bos, entry)
-                panfrost_bo_unreference((struct panfrost_bo *)entry->key);
+        panfrost_pool_cleanup(&batch->pool);
+        panfrost_pool_cleanup(&batch->invisible_pool);
 
         util_dynarray_foreach(&batch->dependencies,
                               struct panfrost_batch_fence *, dep) {
@@ -269,12 +277,6 @@ panfrost_get_batch(struct panfrost_context *ctx,
 struct panfrost_batch *
 panfrost_get_batch_for_fbo(struct panfrost_context *ctx)
 {
-        /* If we're wallpapering, we special case to workaround
-         * u_blitter abuse */
-
-        if (ctx->wallpaper_batch)
-                return ctx->wallpaper_batch;
-
         /* If we already began rendering, use that */
 
         if (ctx->batch) {
@@ -541,13 +543,6 @@ panfrost_batch_add_bo(struct panfrost_batch *batch, struct panfrost_bo *bo,
         if (!(flags & PAN_BO_ACCESS_SHARED))
                 return;
 
-        /* All dependencies should have been flushed before we execute the
-         * wallpaper draw, so it should be harmless to skip the
-         * update_bo_access() call.
-         */
-        if (batch == batch->ctx->wallpaper_batch)
-                return;
-
         assert(flags & PAN_BO_ACCESS_RW);
         panfrost_batch_update_bo_access(batch, bo, flags & PAN_BO_ACCESS_WRITE,
                         old_flags != 0);
@@ -568,7 +563,8 @@ panfrost_batch_add_resource_bos(struct panfrost_batch *batch,
                 panfrost_batch_add_bo(batch, rsrc->separate_stencil->bo, flags);
 }
 
-void panfrost_batch_add_fbo_bos(struct panfrost_batch *batch)
+static void
+panfrost_batch_add_fbo_bos(struct panfrost_batch *batch)
 {
         uint32_t flags = PAN_BO_ACCESS_SHARED | PAN_BO_ACCESS_WRITE |
                          PAN_BO_ACCESS_VERTEX_TILER |
@@ -625,16 +621,16 @@ panfrost_batch_get_polygon_list(struct panfrost_batch *batch, unsigned size)
                                                                PAN_BO_ACCESS_FRAGMENT);
         }
 
-        return batch->polygon_list->gpu;
+        return batch->polygon_list->ptr.gpu;
 }
 
 struct panfrost_bo *
 panfrost_batch_get_scratchpad(struct panfrost_batch *batch,
-                unsigned shift,
+                unsigned size_per_thread,
                 unsigned thread_tls_alloc,
                 unsigned core_count)
 {
-        unsigned size = panfrost_get_total_stack_size(shift,
+        unsigned size = panfrost_get_total_stack_size(size_per_thread,
                         thread_tls_alloc,
                         core_count);
 
@@ -670,25 +666,8 @@ panfrost_batch_get_shared_memory(struct panfrost_batch *batch,
         return batch->shared_memory;
 }
 
-struct panfrost_bo *
-panfrost_batch_get_tiler_heap(struct panfrost_batch *batch)
-{
-        if (batch->tiler_heap)
-                return batch->tiler_heap;
-
-        batch->tiler_heap = panfrost_batch_create_bo(batch, 4096 * 4096,
-                                                     PAN_BO_INVISIBLE |
-                                                     PAN_BO_GROWABLE,
-                                                     PAN_BO_ACCESS_PRIVATE |
-                                                     PAN_BO_ACCESS_RW |
-                                                     PAN_BO_ACCESS_VERTEX_TILER |
-                                                     PAN_BO_ACCESS_FRAGMENT);
-        assert(batch->tiler_heap);
-        return batch->tiler_heap;
-}
-
 mali_ptr
-panfrost_batch_get_tiler_meta(struct panfrost_batch *batch, unsigned vertex_count)
+panfrost_batch_get_bifrost_tiler(struct panfrost_batch *batch, unsigned vertex_count)
 {
         if (!vertex_count)
                 return 0;
@@ -696,27 +675,28 @@ panfrost_batch_get_tiler_meta(struct panfrost_batch *batch, unsigned vertex_coun
         if (batch->tiler_meta)
                 return batch->tiler_meta;
 
-        struct panfrost_bo *tiler_heap;
-        tiler_heap = panfrost_batch_get_tiler_heap(batch);
+        struct panfrost_device *dev = pan_device(batch->ctx->base.screen);
+        struct panfrost_ptr t =
+                panfrost_pool_alloc_aligned(&batch->pool, MALI_BIFROST_TILER_HEAP_LENGTH, 64);
 
-        struct bifrost_tiler_heap_meta tiler_heap_meta = {
-            .heap_size = tiler_heap->size,
-            .tiler_heap_start = tiler_heap->gpu,
-            .tiler_heap_free = tiler_heap->gpu,
-            .tiler_heap_end = tiler_heap->gpu + tiler_heap->size,
-            .unk1 = 0x1,
-            .unk7e007e = 0x7e007e,
-        };
+        pan_pack(t.cpu, BIFROST_TILER_HEAP, heap) {
+                heap.size = dev->tiler_heap->size;
+                heap.base = dev->tiler_heap->ptr.gpu;
+                heap.bottom = dev->tiler_heap->ptr.gpu;
+                heap.top = dev->tiler_heap->ptr.gpu + dev->tiler_heap->size;
+        }
 
-        struct bifrost_tiler_meta tiler_meta = {
-            .hierarchy_mask = 0x28,
-            .flags = 0x0,
-            .width = MALI_POSITIVE(batch->key.width),
-            .height = MALI_POSITIVE(batch->key.height),
-            .tiler_heap_meta = panfrost_pool_upload(&batch->pool, &tiler_heap_meta, sizeof(tiler_heap_meta)),
-        };
+        mali_ptr heap = t.gpu;
 
-        batch->tiler_meta = panfrost_pool_upload(&batch->pool, &tiler_meta, sizeof(tiler_meta));
+        t = panfrost_pool_alloc_aligned(&batch->pool, MALI_BIFROST_TILER_LENGTH, 64);
+        pan_pack(t.cpu, BIFROST_TILER, tiler) {
+                tiler.hierarchy_mask = 0x28;
+                tiler.fb_width = batch->key.width;
+                tiler.fb_height = batch->key.height;
+                tiler.heap = heap;
+        }
+
+        batch->tiler_meta = t.gpu;
         return batch->tiler_meta;
 }
 
@@ -748,24 +728,25 @@ panfrost_batch_reserve_framebuffer(struct panfrost_batch *batch)
 {
         struct panfrost_device *dev = pan_device(batch->ctx->base.screen);
 
-        /* If we haven't, reserve space for the framebuffer */
+        /* If we haven't, reserve space for the thread storage descriptor (or a
+         * full framebuffer descriptor on Midgard) */
 
         if (!batch->framebuffer.gpu) {
-                unsigned size = (dev->quirks & MIDGARD_SFBD) ?
-                        sizeof(struct mali_single_framebuffer) :
-                        sizeof(struct mali_framebuffer);
+                unsigned size = (dev->quirks & IS_BIFROST) ?
+                        MALI_LOCAL_STORAGE_LENGTH :
+                        (dev->quirks & MIDGARD_SFBD) ?
+                        MALI_SINGLE_TARGET_FRAMEBUFFER_LENGTH :
+                        MALI_MULTI_TARGET_FRAMEBUFFER_LENGTH;
 
-                batch->framebuffer = panfrost_pool_alloc(&batch->pool, size);
+                batch->framebuffer = panfrost_pool_alloc_aligned(&batch->pool, size, 64);
 
                 /* Tag the pointer */
-                if (!(dev->quirks & MIDGARD_SFBD))
-                        batch->framebuffer.gpu |= MALI_MFBD;
+                if (!(dev->quirks & (MIDGARD_SFBD | IS_BIFROST)))
+                        batch->framebuffer.gpu |= MALI_FBD_TAG_IS_MFBD;
         }
 
         return batch->framebuffer.gpu;
 }
-
-
 
 static void
 panfrost_load_surface(struct panfrost_batch *batch, struct pipe_surface *surf, unsigned loc)
@@ -797,28 +778,6 @@ panfrost_load_surface(struct panfrost_batch *batch, struct pipe_surface *surf, u
                                                     rsrc->damage.extent.maxy);
         }
 
-        /* XXX: Native blits on Bifrost */
-        if (batch->pool.dev->quirks & IS_BIFROST) {
-                if (loc != FRAG_RESULT_DATA0)
-                        return;
-
-                /* XXX: why align on *twice* the tile length? */
-                batch->minx = batch->minx & ~((MALI_TILE_LENGTH * 2) - 1);
-                batch->miny = batch->miny & ~((MALI_TILE_LENGTH * 2) - 1);
-                batch->maxx = MIN2(ALIGN_POT(batch->maxx, MALI_TILE_LENGTH * 2),
-                                rsrc->base.width0);
-                batch->maxy = MIN2(ALIGN_POT(batch->maxy, MALI_TILE_LENGTH * 2),
-                                rsrc->base.height0);
-
-                struct pipe_box rect;
-                batch->ctx->wallpaper_batch = batch;
-                u_box_2d(batch->minx, batch->miny, batch->maxx - batch->minx,
-                                batch->maxy - batch->miny, &rect);
-                panfrost_blit_wallpaper(batch->ctx, &rect);
-                batch->ctx->wallpaper_batch = NULL;
-                return;
-        }
-
         enum pipe_format format = rsrc->base.format;
 
         if (loc == FRAG_RESULT_DEPTH) {
@@ -838,16 +797,16 @@ panfrost_load_surface(struct panfrost_batch *batch, struct pipe_surface *surf, u
                 format = util_format_stencil_only(format);
         }
 
-        enum mali_texture_type type =
-                panfrost_translate_texture_type(rsrc->base.target);
+        enum mali_texture_dimension dim =
+                panfrost_translate_texture_dimension(rsrc->base.target);
 
         struct pan_image img = {
                 .width0 = rsrc->base.width0,
                 .height0 = rsrc->base.height0,
                 .depth0 = rsrc->base.depth0,
                 .format = format,
-                .type = type,
-                .layout = rsrc->layout,
+                .dim = dim,
+                .modifier = rsrc->modifier,
                 .array_size = rsrc->base.array_size,
                 .first_level = level,
                 .last_level = level,
@@ -863,7 +822,9 @@ panfrost_load_surface(struct panfrost_batch *batch, struct pipe_surface *surf, u
 
         if (loc >= FRAG_RESULT_DATA0 && !panfrost_can_fixed_blend(rsrc->base.format)) {
                 struct panfrost_blend_shader *b =
-                        panfrost_get_blend_shader(batch->ctx, &batch->ctx->blit_blend, rsrc->base.format, loc - FRAG_RESULT_DATA0);
+                        panfrost_get_blend_shader(batch->ctx, batch->ctx->blit_blend,
+                                                  rsrc->base.format, loc - FRAG_RESULT_DATA0,
+                                                  NULL);
 
                 struct panfrost_bo *bo = panfrost_batch_create_bo(batch, b->size,
                    PAN_BO_EXECUTE,
@@ -871,14 +832,14 @@ panfrost_load_surface(struct panfrost_batch *batch, struct pipe_surface *surf, u
                    PAN_BO_ACCESS_READ |
                    PAN_BO_ACCESS_FRAGMENT);
 
-                memcpy(bo->cpu, b->buffer, b->size);
+                memcpy(bo->ptr.cpu, b->buffer, b->size);
                 assert(b->work_count <= 4);
 
-                blend_shader = bo->gpu | b->first_tag;
+                blend_shader = bo->ptr.gpu | b->first_tag;
         }
 
-        struct panfrost_transfer transfer = panfrost_pool_alloc(&batch->pool,
-                        4 * 4 * 6 * rsrc->damage.inverted_len);
+        struct panfrost_ptr transfer = panfrost_pool_alloc_aligned(&batch->pool,
+                        4 * 4 * 6 * rsrc->damage.inverted_len, 64);
 
         for (unsigned i = 0; i < rsrc->damage.inverted_len; ++i) {
                 float *o = (float *) (transfer.cpu + (4 * 4 * 6 * i));
@@ -898,11 +859,23 @@ panfrost_load_surface(struct panfrost_batch *batch, struct pipe_surface *surf, u
                 memcpy(o, rect, sizeof(rect));
         }
 
-        panfrost_load_midg(&batch->pool, &batch->scoreboard,
-                blend_shader,
-                batch->framebuffer.gpu, transfer.gpu,
-                rsrc->damage.inverted_len * 6,
-                &img, loc);
+        unsigned vertex_count = rsrc->damage.inverted_len * 6;
+        if (batch->pool.dev->quirks & IS_BIFROST) {
+                mali_ptr tiler =
+                        panfrost_batch_get_bifrost_tiler(batch, vertex_count);
+                panfrost_load_bifrost(&batch->pool, &batch->scoreboard,
+                                      blend_shader,
+                                      batch->framebuffer.gpu,
+                                      tiler,
+                                      transfer.gpu, vertex_count,
+                                      &img, loc);
+        } else {
+                panfrost_load_midg(&batch->pool, &batch->scoreboard,
+                                   blend_shader,
+                                   batch->framebuffer.gpu,
+                                   transfer.gpu, vertex_count,
+                                   &img, loc);
+        }
 
         panfrost_batch_add_bo(batch, batch->pool.dev->blit_shaders.bo,
                         PAN_BO_ACCESS_SHARED | PAN_BO_ACCESS_READ | PAN_BO_ACCESS_FRAGMENT);
@@ -988,14 +961,23 @@ panfrost_batch_submit_ioctl(struct panfrost_batch *batch,
         submit.jc = first_job_desc;
         submit.requirements = reqs;
 
-        bo_handles = calloc(batch->pool.bos->entries + batch->bos->entries, sizeof(*bo_handles));
+        bo_handles = calloc(panfrost_pool_num_bos(&batch->pool) +
+                            panfrost_pool_num_bos(&batch->invisible_pool) +
+                            batch->bos->entries + 1,
+                            sizeof(*bo_handles));
         assert(bo_handles);
 
         hash_table_foreach(batch->bos, entry)
                 panfrost_batch_record_bo(entry, bo_handles, submit.bo_handle_count++);
 
-        hash_table_foreach(batch->pool.bos, entry)
-                panfrost_batch_record_bo(entry, bo_handles, submit.bo_handle_count++);
+        panfrost_pool_get_bo_handles(&batch->pool, bo_handles + submit.bo_handle_count);
+        submit.bo_handle_count += panfrost_pool_num_bos(&batch->pool);
+        panfrost_pool_get_bo_handles(&batch->invisible_pool, bo_handles + submit.bo_handle_count);
+        submit.bo_handle_count += panfrost_pool_num_bos(&batch->invisible_pool);
+
+        /* Used by all tiler jobs (XXX: skip for compute-only) */
+        if (!(reqs & PANFROST_JD_REQ_FS))
+                bo_handles[submit.bo_handle_count++] = dev->tiler_heap->gem_handle;
 
         submit.bo_handles = (u64) (uintptr_t) bo_handles;
         ret = drmIoctl(dev->fd, DRM_IOCTL_PANFROST_SUBMIT, &submit);
@@ -1104,7 +1086,7 @@ panfrost_batch_submit(struct panfrost_batch *batch, uint32_t out_sync)
         }
 
         mali_ptr polygon_list = panfrost_batch_get_polygon_list(batch,
-                MALI_TILER_MINIMUM_HEADER_SIZE);
+                MALI_MIDGARD_TILER_MINIMUM_HEADER_SIZE);
 
         panfrost_scoreboard_initialize_tiler(&batch->pool, &batch->scoreboard, polygon_list);
 
@@ -1213,15 +1195,15 @@ panfrost_batch_set_requirements(struct panfrost_batch *batch)
 {
         struct panfrost_context *ctx = batch->ctx;
 
-        if (ctx->rasterizer && ctx->rasterizer->base.multisample)
+        if (ctx->rasterizer->base.multisample)
                 batch->requirements |= PAN_REQ_MSAA;
 
-        if (ctx->depth_stencil && ctx->depth_stencil->depth.writemask) {
+        if (ctx->depth_stencil && ctx->depth_stencil->base.depth.writemask) {
                 batch->requirements |= PAN_REQ_DEPTH_WRITE;
                 batch->draws |= PIPE_CLEAR_DEPTH;
         }
 
-        if (ctx->depth_stencil && ctx->depth_stencil->stencil[0].enabled)
+        if (ctx->depth_stencil && ctx->depth_stencil->base.stencil[0].enabled)
                 batch->draws |= PIPE_CLEAR_STENCIL;
 }
 

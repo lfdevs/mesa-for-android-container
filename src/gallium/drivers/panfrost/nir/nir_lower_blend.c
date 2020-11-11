@@ -266,7 +266,19 @@ nir_blend(
       return nir_blend_logicop(b, options, src, dst);
 
    /* Grab the blend constant ahead of time */
-   nir_ssa_def *bconst = nir_load_blend_const_color_rgba(b);
+   nir_ssa_def *bconst;
+   if (options.is_bifrost) {
+      /* Bifrost is a scalar architecture, so let's split loads now to avoid a
+       * lowering pass.
+       */
+      bconst = nir_vec4(b,
+                        nir_load_blend_const_color_r_float(b),
+                        nir_load_blend_const_color_g_float(b),
+                        nir_load_blend_const_color_b_float(b),
+                        nir_load_blend_const_color_a_float(b));
+   } else {
+      bconst = nir_load_blend_const_color_rgba(b);
+   }
 
    if (options.half)
       bconst = nir_f2f16(b, bconst);

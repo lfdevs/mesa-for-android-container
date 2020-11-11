@@ -37,6 +37,7 @@ struct etna_context;
 struct etna_sampler_ts {
    unsigned enable:1;
    unsigned mode:1;
+   unsigned comp:1;
    uint32_t TS_SAMPLER_CONFIG;
    struct etna_reloc TS_SAMPLER_STATUS_BASE;
    uint32_t TS_SAMPLER_CLEAR_VALUE;

@@ -47,7 +47,9 @@ static const nir_shader_compiler_options options = {
 		.lower_usub_borrow = true,
 		.lower_mul_high = true,
 		.lower_mul_2x32_64 = true,
-		.fuse_ffma = true,
+		.fuse_ffma16 = true,
+		.fuse_ffma32 = true,
+		.fuse_ffma64 = true,
 		.vertex_id_zero_based = true,
 		.lower_extract_byte = true,
 		.lower_extract_word = true,
@@ -78,6 +80,7 @@ static const nir_shader_compiler_options options = {
 		 * supported there.
 		 */
 		.lower_int64_options = (nir_lower_int64_options)~0,
+		.lower_uniforms_to_ubo = true,
 };
 
 /* we don't want to lower vertex_id to _zero_based on newer gpus: */
@@ -96,7 +99,9 @@ static const nir_shader_compiler_options options_a6xx = {
 		.lower_usub_borrow = true,
 		.lower_mul_high = true,
 		.lower_mul_2x32_64 = true,
-		.fuse_ffma = true,
+		.fuse_ffma16 = true,
+		.fuse_ffma32 = true,
+		.fuse_ffma64 = true,
 		.vertex_id_zero_based = false,
 		.lower_extract_byte = true,
 		.lower_extract_word = true,
@@ -129,6 +134,7 @@ static const nir_shader_compiler_options options_a6xx = {
 		 * supported there.
 		 */
 		.lower_int64_options = (nir_lower_int64_options)~0,
+		.lower_uniforms_to_ubo = true,
 };
 
 const nir_shader_compiler_options *
@@ -139,6 +145,36 @@ ir3_get_compiler_options(struct ir3_compiler *compiler)
 	return &options;
 }
 
+static bool
+ir3_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
+		unsigned bit_size,
+		unsigned num_components,
+		nir_intrinsic_instr *low,
+		nir_intrinsic_instr *high)
+{
+	assert(bit_size >= 8);
+	if (bit_size != 32)
+		return false;
+	unsigned byte_size = bit_size / 8;
+
+	int size = num_components * byte_size;
+
+	/* Don't care about alignment past vec4. */
+	assert(util_is_power_of_two_nonzero(align_mul));
+	align_mul = MIN2(align_mul, 16);
+	align_offset &= 15;
+
+	/* Our offset alignment should aways be at least 4 bytes */
+	if (align_mul < 4)
+		return false;
+
+	unsigned worst_start_offset = 16 - align_mul + align_offset;
+	if (worst_start_offset + size > 16)
+		return false;
+
+	return true;
+}
+
 #define OPT(nir, pass, ...) ({                             \
    bool this_progress = false;                             \
    NIR_PASS(this_progress, nir, pass, ##__VA_ARGS__);      \
@@ -147,7 +183,7 @@ ir3_get_compiler_options(struct ir3_compiler *compiler)
 
 #define OPT_V(nir, pass, ...) NIR_PASS_V(nir, pass, ##__VA_ARGS__)
 
-static void
+void
 ir3_optimize_loop(nir_shader *s)
 {
 	bool progress;
@@ -182,11 +218,13 @@ ir3_optimize_loop(nir_shader *s)
 		progress |= OPT(s, nir_lower_pack);
 		progress |= OPT(s, nir_opt_constant_folding);
 
+		progress |= OPT(s, nir_opt_load_store_vectorize, nir_var_mem_ubo,
+				ir3_nir_should_vectorize_mem, 0);
+
 		if (lower_flrp != 0) {
 			if (OPT(s, nir_lower_flrp,
 					lower_flrp,
-					false /* always_precise */,
-					s->options->lower_ffma)) {
+					false /* always_precise */)) {
 				OPT(s, nir_opt_constant_folding);
 				progress = true;
 			}
@@ -321,17 +359,18 @@ ir3_nir_post_finalize(struct ir3_compiler *compiler, nir_shader *s)
 }
 
 static bool
-ir3_nir_lower_layer_id(nir_shader *nir)
+ir3_nir_lower_view_layer_id(nir_shader *nir, bool layer_zero, bool view_zero)
 {
-	unsigned layer_id_loc = ~0;
+	unsigned layer_id_loc = ~0, view_id_loc = ~0;
 	nir_foreach_shader_in_variable(var, nir) {
-		if (var->data.location == VARYING_SLOT_LAYER) {
+		if (var->data.location == VARYING_SLOT_LAYER)
 			layer_id_loc = var->data.driver_location;
-			break;
-		}
+		if (var->data.location == VARYING_SLOT_VIEWPORT)
+			view_id_loc = var->data.driver_location;
 	}
 
-	assert(layer_id_loc != ~0);
+	assert(!layer_zero || layer_id_loc != ~0);
+	assert(!view_zero || view_id_loc != ~0);
 
 	bool progress = false;
 	nir_builder b;
@@ -351,7 +390,7 @@ ir3_nir_lower_layer_id(nir_shader *nir)
 					continue;
 
 				unsigned base = nir_intrinsic_base(intrin);
-				if (base != layer_id_loc)
+				if (base != layer_id_loc && base != view_id_loc)
 					continue;
 
 				b.cursor = nir_before_instr(&intrin->instr);
@@ -394,17 +433,17 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
 			break;
 		case MESA_SHADER_TESS_CTRL:
 			NIR_PASS_V(s, ir3_nir_lower_tess_ctrl, so, so->key.tessellation);
-			NIR_PASS_V(s, ir3_nir_lower_to_explicit_input, so->shader->compiler);
+			NIR_PASS_V(s, ir3_nir_lower_to_explicit_input, so);
 			progress = true;
 			break;
 		case MESA_SHADER_TESS_EVAL:
-			NIR_PASS_V(s, ir3_nir_lower_tess_eval, so->key.tessellation);
+			NIR_PASS_V(s, ir3_nir_lower_tess_eval, so, so->key.tessellation);
 			if (so->key.has_gs)
 				NIR_PASS_V(s, ir3_nir_lower_to_explicit_output, so, so->key.tessellation);
 			progress = true;
 			break;
 		case MESA_SHADER_GEOMETRY:
-			NIR_PASS_V(s, ir3_nir_lower_to_explicit_input, so->shader->compiler);
+			NIR_PASS_V(s, ir3_nir_lower_to_explicit_input, so);
 			progress = true;
 			break;
 		default:
@@ -418,12 +457,15 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
 		if (so->key.vclamp_color)
 			progress |= OPT(s, nir_lower_clamp_color_outputs);
 	} else if (s->info.stage == MESA_SHADER_FRAGMENT) {
-		if (so->key.ucp_enables)
+		bool layer_zero = so->key.layer_zero && (s->info.inputs_read & VARYING_BIT_LAYER);
+		bool view_zero = so->key.view_zero && (s->info.inputs_read & VARYING_BIT_VIEWPORT);
+
+		if (so->key.ucp_enables && !so->shader->compiler->has_clip_cull)
 			progress |= OPT(s, nir_lower_clip_fs, so->key.ucp_enables, false);
 		if (so->key.fclamp_color)
 			progress |= OPT(s, nir_lower_clamp_color_outputs);
-		if (so->key.layer_zero && (s->info.inputs_read & VARYING_BIT_LAYER))
-			progress |= OPT(s, ir3_nir_lower_layer_id);
+		if (layer_zero || view_zero)
+			progress |= OPT(s, ir3_nir_lower_view_layer_id, layer_zero, view_zero);
 	}
 	if (so->key.color_two_side) {
 		OPT_V(s, nir_lower_two_sided_color, true);
@@ -461,6 +503,9 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
 	/* UBO offset lowering has to come after we've decided what will
 	 * be left as load_ubo
 	 */
+	if (so->shader->compiler->gpu_id >= 600)
+		progress |= OPT(s, nir_lower_ubo_vec4);
+
 	OPT_V(s, ir3_nir_lower_io_offsets, so->shader->compiler->gpu_id);
 
 	if (progress)
@@ -516,7 +561,7 @@ ir3_nir_scan_driver_consts(nir_shader *shader,
 				unsigned idx;
 
 				switch (intr->intrinsic) {
-				case nir_intrinsic_get_buffer_size:
+				case nir_intrinsic_get_ssbo_size:
 					if (ir3_bindless_resource(intr->src[0]))
 						break;
 					idx = nir_src_as_uint(intr->src[0]);
@@ -649,12 +694,12 @@ ir3_setup_const_state(nir_shader *nir, struct ir3_shader_variant *v,
 		constoff = align(constoff - 1, 4) + 3;
 		const_state->offsets.primitive_param = constoff;
 		const_state->offsets.primitive_map = constoff + 5;
-		constoff += 5 + DIV_ROUND_UP(nir->num_inputs, 4);
+		constoff += 5 + DIV_ROUND_UP(v->input_size, 4);
 		break;
 	case MESA_SHADER_GEOMETRY:
 		const_state->offsets.primitive_param = constoff;
 		const_state->offsets.primitive_map = constoff + 1;
-		constoff += 1 + DIV_ROUND_UP(nir->num_inputs, 4);
+		constoff += 1 + DIV_ROUND_UP(v->input_size, 4);
 		break;
 	default:
 		break;

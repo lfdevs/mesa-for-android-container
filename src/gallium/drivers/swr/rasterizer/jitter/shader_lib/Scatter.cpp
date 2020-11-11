@@ -39,7 +39,7 @@ extern "C" void ScatterPS_256(uint8_t* pBase, SIMD256::Integer vIndices, SIMD256
     SIMD256::store_ps(src, vSrc);
     SIMD256::store_si((SIMD256::Integer*)indices, vIndices);
 
-    DWORD index;
+    unsigned long index;
     while (_BitScanForward(&index, mask))
     {
         mask &= ~(1 << index);

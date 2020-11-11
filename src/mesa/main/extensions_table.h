@@ -27,6 +27,7 @@ EXT(AMD_vertex_shader_viewport_index        , AMD_vertex_shader_viewport_index  
 
 EXT(ANDROID_extension_pack_es31a            , ANDROID_extension_pack_es31a           ,  x ,  x ,  x ,  31, 2014)
 
+EXT(ANGLE_pack_reverse_row_order            , dummy_true                             ,  x ,  x ,  x , ES2, 2011)
 EXT(ANGLE_texture_compression_dxt3          , ANGLE_texture_compression_dxt          , GLL, GLC, ES1, ES2, 2011)
 EXT(ANGLE_texture_compression_dxt5          , ANGLE_texture_compression_dxt          , GLL, GLC, ES1, ES2, 2011)
 
@@ -220,6 +221,7 @@ EXT(EXT_buffer_storage                      , ARB_buffer_storage                
 EXT(EXT_clip_control                        , ARB_clip_control                       ,  x ,  x ,  x , ES2, 2017)
 EXT(EXT_clip_cull_distance                  , ARB_cull_distance                      ,  x ,  x ,  x ,  30, 2016)
 EXT(EXT_color_buffer_float                  , dummy_true                             ,  x ,  x ,  x ,  30, 2013)
+EXT(EXT_color_buffer_half_float             , EXT_color_buffer_half_float            ,  x ,  x ,  x ,  20, 2017)
 EXT(EXT_compiled_vertex_array               , dummy_true                             , GLL,  x ,  x ,  x , 1996)
 EXT(EXT_compressed_ETC1_RGB8_sub_texture    , OES_compressed_ETC1_RGB8_texture       ,  x ,  x , ES1, ES2, 2014)
 EXT(EXT_copy_image                          , OES_copy_image                         ,  x ,  x ,  x ,  30, 2014)
@@ -363,7 +365,7 @@ EXT(KHR_texture_compression_astc_ldr        , KHR_texture_compression_astc_ldr  
 EXT(KHR_texture_compression_astc_sliced_3d  , KHR_texture_compression_astc_sliced_3d , GLL, GLC,  x , ES2, 2015)
 
 EXT(MESA_framebuffer_flip_y                 , MESA_framebuffer_flip_y                ,  43,  43,  x ,  30, 2018)
-EXT(MESA_pack_invert                        , MESA_pack_invert                       , GLL, GLC,  x ,  x , 2002)
+EXT(MESA_pack_invert                        , dummy_true                             , GLL, GLC,  x ,  x , 2002)
 EXT(MESA_shader_integer_functions           , MESA_shader_integer_functions          , GLL, GLC,  x ,  30, 2016)
 EXT(MESA_texture_signed_rgba                , EXT_texture_snorm                      , GLL, GLC,  x ,  x , 2009)
 EXT(MESA_tile_raster_order                  , MESA_tile_raster_order                 , GLL, GLC,  x , ES2, 2017)
@@ -380,6 +382,7 @@ EXT(NV_conservative_raster                  , NV_conservative_raster            
 EXT(NV_conservative_raster_dilate           , NV_conservative_raster_dilate          , GLL, GLC, ES1, ES2, 2015)
 EXT(NV_conservative_raster_pre_snap         , NV_conservative_raster_pre_snap        , GLL, GLC, ES1, ES2, 2017)
 EXT(NV_conservative_raster_pre_snap_triangles, NV_conservative_raster_pre_snap_triangles, GLL, GLC, ES1, ES2, 2015)
+EXT(NV_copy_depth_to_color                  , NV_copy_depth_to_color                 , GLL,  x ,  x ,  x,  2001)
 EXT(NV_copy_image                           , NV_copy_image                          , GLL, GLC,  x ,  x,  2009)
 EXT(NV_depth_clamp                          , ARB_depth_clamp                        , GLL, GLC,  x ,  x , 2001)
 EXT(NV_draw_buffers                         , dummy_true                             ,  x ,  x ,  x , ES2, 2011)
@@ -387,6 +390,7 @@ EXT(NV_fbo_color_attachments                , dummy_true                        
 EXT(NV_fill_rectangle                       , NV_fill_rectangle                      , GLL, GLC,  x ,  x , 2015)
 EXT(NV_fog_distance                         , NV_fog_distance                        , GLL,  x ,  x ,  x , 2001)
 EXT(NV_fragment_shader_interlock            , ARB_fragment_shader_interlock          , GLL, GLC,  x ,  31, 2015)
+EXT(NV_half_float                           , ARB_half_float_vertex                  , GLL, x,  x ,  x, 2001)
 EXT(NV_image_formats                        , ARB_shader_image_load_store            ,  x ,  x ,  x ,  31, 2014)
 EXT(NV_light_max_exponent                   , dummy_true                             , GLL,  x ,  x ,  x , 1999)
 EXT(NV_packed_depth_stencil                 , dummy_true                             , GLL, GLC,  x ,  x , 2000)
@@ -399,6 +403,7 @@ EXT(NV_read_depth_stencil                   , dummy_true                        
 EXT(NV_read_stencil                         , dummy_true                             ,  x ,  x ,  x , ES2, 2011)
 EXT(NV_sample_locations                     , ARB_sample_locations                   , GLL, GLC,  x , ES2, 2015)
 EXT(NV_shader_atomic_float                  , NV_shader_atomic_float                 , GLL, GLC,  x ,  x , 2012)
+EXT(NV_shader_atomic_int64                  , NV_shader_atomic_int64                 , GLL, GLC,  x ,  x , 2014)
 EXT(NV_texgen_reflection                    , dummy_true                             , GLL,  x ,  x ,  x , 1999)
 EXT(NV_texture_barrier                      , NV_texture_barrier                     , GLL, GLC,  x ,  x , 2009)
 EXT(NV_texture_env_combine4                 , NV_texture_env_combine4                , GLL,  x ,  x ,  x , 1999)

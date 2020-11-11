@@ -58,6 +58,9 @@ ok_ubwc_format(struct fd_resource *rsc, enum pipe_format pfmt)
 			pfmt == PIPE_FORMAT_Z24_UNORM_S8_UINT)
 		return false;
 
+	if (pfmt == PIPE_FORMAT_R8_G8B8_420_UNORM)
+		return true;
+
 	switch (fd6_pipe2color(pfmt)) {
 	case FMT6_10_10_10_2_UINT:
 	case FMT6_10_10_10_2_UNORM_DEST:

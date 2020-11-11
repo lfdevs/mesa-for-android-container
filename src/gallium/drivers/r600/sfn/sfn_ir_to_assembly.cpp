@@ -77,7 +77,7 @@ private:
    bool copy_dst(r600_bytecode_alu_dst& dst, const Value& src);
    bool copy_src(r600_bytecode_alu_src& src, const Value& s);
 
-
+   EBufferIndexMode emit_index_reg(const Value& reg, unsigned idx);
 
    ConditionalJumpTracker m_jump_tracker;
    CallStack m_callstack;
@@ -510,7 +510,7 @@ bool AssemblyFromShaderLegacyImpl::emit_if_start(const IfInstruction & if_instr)
 
    if (needs_workaround) {
 		r600_bytecode_add_cfinst(m_bc, CF_OP_PUSH);
-      m_bc->cf_last->cf_addr = m_bc->cf_last->id + 2;
+                m_bc->cf_last->cf_addr = m_bc->cf_last->id + 2;
 		op = cf_alu;
 	}
    emit_alu(pred, op);
@@ -726,37 +726,7 @@ bool AssemblyFromShaderLegacyImpl::emit_vtx(const FetchInstruction& fetch_instr)
          const auto& boffs = static_cast<const LiteralValue&>(*addr);
          buffer_offset = boffs.value();
       } else {
-         index_mode = bim_zero;
-         if ((!m_bc->index_loaded[0] || m_loop_nesting  ||
-              m_bc->index_reg[0] != addr->sel() ||
-              m_bc->index_reg_chan[0] != addr->chan())) {
-            struct r600_bytecode_alu alu;
-            memset(&alu, 0, sizeof(alu));
-            alu.op = opcode_map.at(op1_mova_int);
-            alu.dst.chan = 0;
-            alu.src[0].sel = addr->sel();
-            alu.src[0].chan = addr->chan();
-            alu.last = 1;
-            int r = r600_bytecode_add_alu(m_bc, &alu);
-            if (r)
-               return false;
-
-            m_bc->ar_loaded = 0;
-
-            alu.op = opcode_map.at(op1_set_cf_idx0);
-            alu.dst.chan = 0;
-            alu.src[0].sel = 0;
-            alu.src[0].chan = 0;
-            alu.last = 1;
-
-            r = r600_bytecode_add_alu(m_bc, &alu);
-            if (r)
-               return false;
-
-            m_bc->index_reg[0] = addr->sel();
-            m_bc->index_reg_chan[0] = addr->chan();
-            m_bc->index_loaded[0] = true;
-         }
+         index_mode = emit_index_reg(*addr, 0);
       }
    }
 
@@ -887,54 +857,10 @@ bool AssemblyFromShaderLegacyImpl::emit_gds(const GDSInstr& instr)
    int uav_idx = -1;
    auto addr = instr.uav_id();
    if (addr->type() != Value::literal) {
-      if (!m_bc->index_loaded[1] || m_loop_nesting ||
-          m_bc->index_reg[1] != addr->sel()
-          || m_bc->index_reg_chan[1] != addr->chan()) {
-         struct r600_bytecode_alu alu;
-
-         memset(&alu, 0, sizeof(alu));
-         alu.op = opcode_map.at(op2_lshr_int);
-         alu.dst.sel = addr->sel();
-         alu.dst.chan = addr->chan();
-         alu.src[0].sel = addr->sel();
-         alu.src[0].chan = addr->chan();
-         alu.src[1].sel = ALU_SRC_LITERAL;
-         alu.src[1].value = 2;
-         alu.last = 1;
-         alu.dst.write = 1;
-         int r = r600_bytecode_add_alu(m_bc, &alu);
-         if (r)
-            return false;
-
-         memset(&alu, 0, sizeof(alu));
-         alu.op = opcode_map.at(op1_mova_int);
-         alu.dst.chan = 0;
-         alu.src[0].sel = addr->sel();
-         alu.src[0].chan = addr->chan();
-         alu.last = 1;
-         r = r600_bytecode_add_alu(m_bc, &alu);
-         if (r)
-            return false;
-
-         m_bc->ar_loaded = 0;
-
-         alu.op = opcode_map.at(op1_set_cf_idx1);
-         alu.dst.chan = 0;
-         alu.src[0].sel = 0;
-         alu.src[0].chan = 0;
-         alu.last = 1;
-
-         r = r600_bytecode_add_alu(m_bc, &alu);
-         if (r)
-            return false;
-
-         m_bc->index_reg[1] = addr->sel();
-         m_bc->index_reg_chan[1] = addr->chan();
-         m_bc->index_loaded[1] = true;
-      }
+      emit_index_reg(*addr, 1);
    } else {
       const LiteralValue& addr_reg = static_cast<const LiteralValue&>(*addr);
-      uav_idx = addr_reg.value() >> 2;
+      uav_idx = addr_reg.value();
    }
 
    memset(&gds, 0, sizeof(struct r600_bytecode_gds));
@@ -1085,14 +1011,10 @@ bool AssemblyFromShaderLegacyImpl::emit_ldsatomic(const LDSAtomicInstruction& in
    alu_fetch.op = instr.op();
 
    copy_src(alu_fetch.src[0], instr.address());
-   auto& src0 = instr.src0();
-   alu_fetch.src[1].sel = src0.sel();
-   alu_fetch.src[1].chan = src0.chan();
-   if (instr.src1()) {
-      auto& src1 = *instr.src1();
-      alu_fetch.src[2].sel = src1.sel();
-      alu_fetch.src[2].chan = src1.chan();
-   }
+   copy_src(alu_fetch.src[1], instr.src0());
+
+   if (instr.src1())
+      copy_src(alu_fetch.src[2], *instr.src1());
    alu_fetch.last = 1;
    int r = r600_bytecode_add_alu(m_bc, &alu_fetch);
    if (r)
@@ -1120,39 +1042,7 @@ bool AssemblyFromShaderLegacyImpl::emit_rat(const RatInstruction& instr)
 
    if (addr) {
       if (addr->type() != Value::literal) {
-         rat_index_mode = bim_one;
-         if (!m_bc->index_loaded[1] || m_loop_nesting ||
-             m_bc->index_reg[1] != addr->sel()
-             ||  m_bc->index_reg_chan[1] != addr->chan()) {
-            struct r600_bytecode_alu alu;
-
-            memset(&alu, 0, sizeof(alu));
-            alu.op = opcode_map.at(op1_mova_int);
-            alu.dst.chan = 0;
-            alu.src[0].sel = addr->sel();
-            alu.src[0].chan = addr->chan();
-            alu.last = 1;
-            int r = r600_bytecode_add_alu(m_bc, &alu);
-            if (r)
-               return false;
-
-            m_bc->ar_loaded = 0;
-
-            alu.op = opcode_map.at(op1_set_cf_idx1);
-            alu.dst.chan = 0;
-            alu.src[0].sel = 0;
-            alu.src[0].chan = 0;
-            alu.last = 1;
-
-            r = r600_bytecode_add_alu(m_bc, &alu);
-            if (r)
-               return false;
-
-            m_bc->index_reg[1] = addr->sel();
-            m_bc->index_reg_chan[1] = addr->chan();
-            m_bc->index_loaded[1] = true;
-
-         }
+         rat_index_mode = emit_index_reg(*addr, 1);
       } else {
          const LiteralValue& addr_reg = static_cast<const LiteralValue&>(*addr);
          rat_idx += addr_reg.value();
@@ -1160,7 +1050,7 @@ bool AssemblyFromShaderLegacyImpl::emit_rat(const RatInstruction& instr)
    }
    memset(&gds, 0, sizeof(struct r600_bytecode_gds));
 
-   r600_bytecode_add_cfinst(m_bc, CF_OP_MEM_RAT);
+   r600_bytecode_add_cfinst(m_bc, instr.cf_opcode());
    auto cf = m_bc->cf_last;
    cf->rat.id = rat_idx + m_shader->rat_base;
    cf->rat.inst = instr.rat_op();
@@ -1183,6 +1073,53 @@ bool AssemblyFromShaderLegacyImpl::emit_rat(const RatInstruction& instr)
    cf->mark = instr.need_ack();
    cf->output.elem_size = instr.elm_size();
    return true;
+}
+
+EBufferIndexMode
+AssemblyFromShaderLegacyImpl::emit_index_reg(const Value& addr, unsigned idx)
+{
+   assert(idx < 2);
+
+   EAluOp idxop = idx ? op1_set_cf_idx1 : op1_set_cf_idx0;
+
+   if (!m_bc->index_loaded[idx] || m_loop_nesting ||
+       m_bc->index_reg[idx] != addr.sel()
+       ||  m_bc->index_reg_chan[idx] != addr.chan()) {
+      struct r600_bytecode_alu alu;
+
+      // Make sure MOVA is not last instr in clause
+      if ((m_bc->cf_last->ndw>>1) >= 110)
+              m_bc->force_add_cf = 1;
+
+      memset(&alu, 0, sizeof(alu));
+      alu.op = opcode_map.at(op1_mova_int);
+      alu.dst.chan = 0;
+      alu.src[0].sel = addr.sel();
+      alu.src[0].chan = addr.chan();
+      alu.last = 1;
+      sfn_log << SfnLog::assembly << "   mova_int, ";
+      int r = r600_bytecode_add_alu(m_bc, &alu);
+      if (r)
+         return bim_invalid;
+
+      m_bc->ar_loaded = 0;
+
+      alu.op = opcode_map.at(idxop);
+      alu.dst.chan = 0;
+      alu.src[0].sel = 0;
+      alu.src[0].chan = 0;
+      alu.last = 1;
+      sfn_log << SfnLog::assembly << "op1_set_cf_idx" << idx;
+      r = r600_bytecode_add_alu(m_bc, &alu);
+      if (r)
+         return bim_invalid;
+
+      m_bc->index_reg[idx] = addr.sel();
+      m_bc->index_reg_chan[idx] = addr.chan();
+      m_bc->index_loaded[idx] = true;
+      sfn_log << SfnLog::assembly << "\n";
+   }
+   return idx == 0 ? bim_zero : bim_one;
 }
 
 bool AssemblyFromShaderLegacyImpl::copy_dst(r600_bytecode_alu_dst& dst,
@@ -1267,6 +1204,16 @@ bool AssemblyFromShaderLegacyImpl::copy_src(r600_bytecode_alu_src& src, const Va
    if (s.type() == Value::kconst) {
       const UniformValue& cv = static_cast<const UniformValue&>(s);
       src.kc_bank = cv.kcache_bank();
+      auto addr = cv.addr();
+      if (addr) {
+         src.kc_rel = 1;
+         emit_index_reg(*addr, 0);
+         auto type = m_bc->cf_last->op;
+         if (r600_bytecode_add_cf(m_bc)) {
+                 return false;
+         }
+         m_bc->cf_last->op = type;
+      }
    }
 
    return true;

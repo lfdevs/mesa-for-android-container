@@ -26,25 +26,26 @@
 #include "vk_util.h"
 
 static void
-anv_render_pass_add_subpass_dep(struct anv_render_pass *pass,
+anv_render_pass_add_subpass_dep(struct anv_device *device,
+                                struct anv_render_pass *pass,
                                 const VkSubpassDependency2KHR *dep)
 {
    if (dep->dstSubpass == VK_SUBPASS_EXTERNAL) {
       pass->subpass_flushes[pass->subpass_count] |=
-         anv_pipe_invalidate_bits_for_access_flags(dep->dstAccessMask);
+         anv_pipe_invalidate_bits_for_access_flags(device, dep->dstAccessMask);
    } else {
       assert(dep->dstSubpass < pass->subpass_count);
       pass->subpass_flushes[dep->dstSubpass] |=
-         anv_pipe_invalidate_bits_for_access_flags(dep->dstAccessMask);
+         anv_pipe_invalidate_bits_for_access_flags(device, dep->dstAccessMask);
    }
 
    if (dep->srcSubpass == VK_SUBPASS_EXTERNAL) {
       pass->subpass_flushes[0] |=
-         anv_pipe_flush_bits_for_access_flags(dep->srcAccessMask);
+         anv_pipe_flush_bits_for_access_flags(device, dep->srcAccessMask);
    } else {
       assert(dep->srcSubpass < pass->subpass_count);
       pass->subpass_flushes[dep->srcSubpass + 1] |=
-         anv_pipe_flush_bits_for_access_flags(dep->srcAccessMask);
+         anv_pipe_flush_bits_for_access_flags(device, dep->srcAccessMask);
    }
 }
 
@@ -361,7 +362,7 @@ VkResult anv_CreateRenderPass(
          .dstAccessMask    = pCreateInfo->pDependencies[i].dstAccessMask,
          .dependencyFlags  = pCreateInfo->pDependencies[i].dependencyFlags,
       };
-      anv_render_pass_add_subpass_dep(pass, &dep2);
+      anv_render_pass_add_subpass_dep(device, pass, &dep2);
    }
 
    vk_foreach_struct(ext, pCreateInfo->pNext) {
@@ -568,8 +569,10 @@ VkResult anv_CreateRenderPass2(
       }
    }
 
-   for (uint32_t i = 0; i < pCreateInfo->dependencyCount; i++)
-      anv_render_pass_add_subpass_dep(pass, &pCreateInfo->pDependencies[i]);
+   for (uint32_t i = 0; i < pCreateInfo->dependencyCount; i++) {
+      anv_render_pass_add_subpass_dep(device, pass,
+                                      &pCreateInfo->pDependencies[i]);
+   }
 
    vk_foreach_struct(ext, pCreateInfo->pNext) {
       switch (ext->sType) {

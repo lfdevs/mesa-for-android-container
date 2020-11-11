@@ -148,7 +148,7 @@ static int virgl_vtest_negotiate_version(struct virgl_vtest_winsys *vws)
    uint32_t version_buf[VCMD_PROTOCOL_VERSION_SIZE];
    uint32_t busy_wait_buf[VCMD_BUSY_WAIT_SIZE];
    uint32_t busy_wait_result[1];
-   int ret;
+   ASSERTED int ret;
 
    vtest_hdr[VTEST_CMD_LEN] = VCMD_PING_PROTOCOL_VERSION_SIZE;
    vtest_hdr[VTEST_CMD_ID] = VCMD_PING_PROTOCOL_VERSION;
@@ -521,7 +521,7 @@ int virgl_vtest_busy_wait(struct virgl_vtest_winsys *vws, int handle,
    uint32_t vtest_hdr[VTEST_HDR_SIZE];
    uint32_t cmd[VCMD_BUSY_WAIT_SIZE];
    uint32_t result[1];
-   int ret;
+   ASSERTED int ret;
    vtest_hdr[VTEST_CMD_LEN] = VCMD_BUSY_WAIT_SIZE;
    vtest_hdr[VTEST_CMD_ID] = VCMD_RESOURCE_BUSY_WAIT;
    cmd[VCMD_BUSY_WAIT_HANDLE] = handle;

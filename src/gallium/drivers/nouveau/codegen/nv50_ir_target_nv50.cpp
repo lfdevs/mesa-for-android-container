@@ -584,15 +584,16 @@ recordLocation(uint16_t *locs, uint8_t *masks,
 }
 
 void
-TargetNV50::parseDriverInfo(const struct nv50_ir_prog_info *info)
+TargetNV50::parseDriverInfo(const struct nv50_ir_prog_info *info,
+                            const struct nv50_ir_prog_info_out *info_out)
 {
    unsigned int i;
-   for (i = 0; i < info->numOutputs; ++i)
-      recordLocation(sysvalLocation, NULL, &info->out[i]);
-   for (i = 0; i < info->numInputs; ++i)
-      recordLocation(sysvalLocation, &wposMask, &info->in[i]);
-   for (i = 0; i < info->numSysVals; ++i)
-      recordLocation(sysvalLocation, NULL, &info->sv[i]);
+   for (i = 0; i < info_out->numOutputs; ++i)
+      recordLocation(sysvalLocation, NULL, &info_out->out[i]);
+   for (i = 0; i < info_out->numInputs; ++i)
+      recordLocation(sysvalLocation, &wposMask, &info_out->in[i]);
+   for (i = 0; i < info_out->numSysVals; ++i)
+      recordLocation(sysvalLocation, NULL, &info_out->sv[i]);
 
    if (sysvalLocation[SV_POSITION] >= 0x200) {
       // not assigned by driver, but we need it internally
@@ -600,7 +601,7 @@ TargetNV50::parseDriverInfo(const struct nv50_ir_prog_info *info)
       sysvalLocation[SV_POSITION] = 0;
    }
 
-   Target::parseDriverInfo(info);
+   Target::parseDriverInfo(info, info_out);
 }
 
 } // namespace nv50_ir

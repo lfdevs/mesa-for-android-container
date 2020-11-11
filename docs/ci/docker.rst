@@ -2,13 +2,13 @@ Docker CI
 =========
 
 For llvmpipe and swrast CI, we run tests in a container containing
-VK-GL-CTS, on the shared gitlab runners provided by `freedesktop
+VK-GL-CTS, on the shared GitLab runners provided by `freedesktop
 <http://freedesktop.org>`_
 
 Software architecture
 ---------------------
 
-The docker containers are rebuilt from the debian-install.sh script
+The Docker containers are rebuilt from the debian-install.sh script
 when DEBIAN\_TAG is changed in .gitlab-ci.yml, and
 debian-test-install.sh when DEBIAN\_ARM64\_TAG is changed in
 .gitlab-ci.yml.  The resulting images are around 500MB, and are
@@ -19,7 +19,7 @@ come up with a working MR!).
 gitlab-runner is a client that polls gitlab.freedesktop.org for
 available jobs, with no inbound networking requirements.  Jobs can
 have tags, so we can have DUT-specific jobs that only run on runners
-with that tag marked in the gitlab UI.
+with that tag marked in the GitLab UI.
 
 Since dEQP takes a long time to run, we mark the job as "parallel" at
 some level, which spawns multiple jobs from one definition, and then
@@ -36,7 +36,7 @@ DUT requirements
 ----------------
 
 In addition to the general :ref:`CI-farm-expectations`, using
-docker requires:
+Docker requires:
 
 * DUTs must have a stable kernel and GPU reset (if applicable).
 
@@ -46,25 +46,25 @@ reliably reset the GPU on failure, bugs in one MR may leak into
 spurious failures in another MR.  This would be an unacceptable impact
 on Mesa developers working on other drivers.
 
-* DUTs must be able to run docker
+* DUTs must be able to run Docker
 
-The Mesa gitlab-runner based test architecture is built around docker,
-so that we can cache the debian package installation and CTS build
+The Mesa gitlab-runner based test architecture is built around Docker,
+so that we can cache the Debian package installation and CTS build
 step across multiple test runs.  Since the images are large and change
 approximately weekly, the DUTs also need to be running some script to
-prune stale docker images periodically in order to not run out of disk
+prune stale Docker images periodically in order to not run out of disk
 space as we rev those containers (perhaps `this script
 <https://gitlab.com/gitlab-org/gitlab-runner/issues/2980#note_169233611>`_).
 
-Note that docker doesn't allow containers to be stored on NFS, and
-doesn't allow multiple docker daemons to interact with the same
+Note that Docker doesn't allow containers to be stored on NFS, and
+doesn't allow multiple Docker daemons to interact with the same
 network block device, so you will probably need some sort of physical
 storage on your DUTs.
 
 * DUTs must be public
 
 By including your device in .gitlab-ci.yml, you're effectively letting
-anyone on the internet run code on your device.  docker containers may
+anyone on the internet run code on your device.  Docker containers may
 provide some limited protection, but how much you trust that and what
 you do to mitigate hostile access is up to you.
 

@@ -360,9 +360,12 @@ ir3_split_dest(struct ir3_block *block, struct ir3_instruction **dst,
 {
 	struct ir3_instruction *prev = NULL;
 
-	if ((n == 1) && (src->regs[0]->wrmask == 0x1)) {
+	if ((n == 1) && (src->regs[0]->wrmask == 0x1) &&
+		/* setup_input needs ir3_split_dest to generate a SPLIT instruction */
+		src->opc != OPC_META_INPUT) {
 		dst[0] = src;
 		return;
+
 	}
 
 	if (src->opc == OPC_META_COLLECT) {

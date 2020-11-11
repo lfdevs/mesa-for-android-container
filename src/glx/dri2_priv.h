@@ -54,6 +54,7 @@ struct dri2_screen {
    const __DRIconfig **driver_configs;
 
    void *driver;
+   char *driverName;
    int fd;
 
    int show_fps_interval;

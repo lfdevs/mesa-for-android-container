@@ -530,9 +530,9 @@ nve4_compute_upload_input(struct nvc0_context *nvc0,
       BEGIN_NVC0(push, NVE4_CP(UPLOAD_LINE_LENGTH_IN), 2);
       PUSH_DATA (push, cp->parm_size);
       PUSH_DATA (push, 0x1);
-      BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 1 + (cp->parm_size / 4));
+      BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 1 + DIV_ROUND_UP(cp->parm_size, 4));
       PUSH_DATA (push, NVE4_COMPUTE_UPLOAD_EXEC_LINEAR | (0x20 << 1));
-      PUSH_DATAp(push, info->input, cp->parm_size / 4);
+      PUSH_DATAb(push, info->input, cp->parm_size);
    }
    BEGIN_NVC0(push, NVE4_CP(UPLOAD_DST_ADDRESS_HIGH), 2);
    PUSH_DATAh(push, address + NVC0_CB_AUX_GRID_INFO(0));
@@ -638,8 +638,7 @@ nve4_compute_setup_launch_desc(struct nvc0_context *nvc0, uint32_t *qmd,
    NVA0C0_QMDV00_06_DEF_SET(qmd, API_VISIBLE_CALL_LIMIT, NO_CHECK);
    NVA0C0_QMDV00_06_VAL_SET(qmd, SASS_VERSION, 0x30);
 
-   NVA0C0_QMDV00_06_VAL_SET(qmd, PROGRAM_OFFSET,
-                                 nvc0_program_symbol_offset(cp, info->pc));
+   NVA0C0_QMDV00_06_VAL_SET(qmd, PROGRAM_OFFSET, cp->code_base);
 
    NVA0C0_QMDV00_06_VAL_SET(qmd, CTA_RASTER_WIDTH, info->grid[0]);
    NVA0C0_QMDV00_06_VAL_SET(qmd, CTA_RASTER_HEIGHT, info->grid[1]);
@@ -699,8 +698,7 @@ gp100_compute_setup_launch_desc(struct nvc0_context *nvc0, uint32_t *qmd,
    NVC0C0_QMDV02_01_DEF_SET(qmd, CWD_MEMBAR_TYPE, L1_SYSMEMBAR);
    NVC0C0_QMDV02_01_DEF_SET(qmd, API_VISIBLE_CALL_LIMIT, NO_CHECK);
 
-   NVC0C0_QMDV02_01_VAL_SET(qmd, PROGRAM_OFFSET,
-                                 nvc0_program_symbol_offset(cp, info->pc));
+   NVC0C0_QMDV02_01_VAL_SET(qmd, PROGRAM_OFFSET, cp->code_base);
 
    NVC0C0_QMDV02_01_VAL_SET(qmd, CTA_RASTER_WIDTH, info->grid[0]);
    NVC0C0_QMDV02_01_VAL_SET(qmd, CTA_RASTER_HEIGHT, info->grid[1]);
@@ -754,8 +752,7 @@ gv100_compute_setup_launch_desc(struct nvc0_context *nvc0, u32 *qmd,
 {
    struct nvc0_program *cp = nvc0->compprog;
    struct nvc0_screen *screen = nvc0->screen;
-   uint64_t entry =
-      screen->text->offset + nvc0_program_symbol_offset(cp, info->pc);
+   uint64_t entry = screen->text->offset + cp->code_base;
 
    NVC3C0_QMDV02_02_VAL_SET(qmd, SM_GLOBAL_CACHING_ENABLE, 1);
    NVC3C0_QMDV02_02_DEF_SET(qmd, API_VISIBLE_CALL_LIMIT, NO_CHECK);

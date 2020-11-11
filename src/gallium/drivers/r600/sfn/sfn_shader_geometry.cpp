@@ -291,18 +291,15 @@ bool GeometryShaderFromNir::emit_load_from_array(nir_intrinsic_instr* instr,
 {
    auto dest = vec_from_nir(instr->dest, instr->num_components);
 
-   const nir_load_const_instr* literal_index = nullptr;
-
-   if (array_deref.index->is_ssa)
-      literal_index = get_literal_constant(array_deref.index->ssa->index);
+   auto literal_index = nir_src_as_const_value(*array_deref.index);
 
    if (!literal_index) {
       sfn_log << SfnLog::err << "GS: Indirect input addressing not (yet) supported\n";
       return false;
    }
-   assert(literal_index->value[0].u32 < 6);
-   PValue addr = m_per_vertex_offsets[literal_index->value[0].u32];
+   assert(literal_index->u32 < 6);
 
+   PValue addr = m_per_vertex_offsets[literal_index->u32];
    auto fetch = new FetchInstruction(vc_fetch, no_index_offset, dest, addr,
                                      16 * array_deref.var->data.driver_location,
                                      R600_GS_RING_CONST_BUFFER, PValue(), bim_none, true);

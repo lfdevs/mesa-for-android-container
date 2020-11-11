@@ -105,13 +105,11 @@ static const struct loader_dri3_vtable egl_dri3_vtable = {
 };
 
 static EGLBoolean
-dri3_destroy_surface(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf)
+dri3_destroy_surface(_EGLDisplay *disp, _EGLSurface *surf)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri3_egl_surface *dri3_surf = dri3_egl_surface(surf);
    xcb_drawable_t drawable = dri3_surf->loader_drawable.drawable;
-
-   (void) drv;
 
    loader_dri3_drawable_fini(&dri3_surf->loader_drawable);
 
@@ -125,8 +123,7 @@ dri3_destroy_surface(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf
 }
 
 static EGLBoolean
-dri3_set_swap_interval(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf,
-                       EGLint interval)
+dri3_set_swap_interval(_EGLDisplay *disp, _EGLSurface *surf, EGLint interval)
 {
    struct dri3_egl_surface *dri3_surf = dri3_egl_surface(surf);
 
@@ -137,17 +134,14 @@ dri3_set_swap_interval(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *su
 }
 
 static _EGLSurface *
-dri3_create_surface(const _EGLDriver *drv, _EGLDisplay *disp, EGLint type,
-                    _EGLConfig *conf, void *native_surface,
-                    const EGLint *attrib_list)
+dri3_create_surface(_EGLDisplay *disp, EGLint type, _EGLConfig *conf,
+                    void *native_surface, const EGLint *attrib_list)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_config *dri2_conf = dri2_egl_config(conf);
    struct dri3_egl_surface *dri3_surf;
    const __DRIconfig *dri_config;
    xcb_drawable_t drawable;
-
-   (void) drv;
 
    dri3_surf = calloc(1, sizeof *dri3_surf);
    if (!dri3_surf) {
@@ -189,6 +183,15 @@ dri3_create_surface(const _EGLDriver *drv, _EGLDisplay *disp, EGLint type,
       goto cleanup_pixmap;
    }
 
+   if (dri3_surf->surf.base.ProtectedContent &&
+       dri2_dpy->is_different_gpu) {
+      _eglError(EGL_BAD_ALLOC, "dri3_surface_create");
+      goto cleanup_pixmap;
+   }
+
+   dri3_surf->loader_drawable.is_protected_content =
+      dri3_surf->surf.base.ProtectedContent;
+
    return &dri3_surf->surf.base;
 
  cleanup_pixmap:
@@ -223,35 +226,33 @@ dri3_authenticate(_EGLDisplay *disp, uint32_t id)
  * Called via eglCreateWindowSurface(), drv->CreateWindowSurface().
  */
 static _EGLSurface *
-dri3_create_window_surface(const _EGLDriver *drv, _EGLDisplay *disp,
-                           _EGLConfig *conf, void *native_window,
-                           const EGLint *attrib_list)
+dri3_create_window_surface(_EGLDisplay *disp, _EGLConfig *conf,
+                           void *native_window, const EGLint *attrib_list)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    _EGLSurface *surf;
 
-   surf = dri3_create_surface(drv, disp, EGL_WINDOW_BIT, conf,
+   surf = dri3_create_surface(disp, EGL_WINDOW_BIT, conf,
                               native_window, attrib_list);
    if (surf != NULL)
-      dri3_set_swap_interval(drv, disp, surf, dri2_dpy->default_swap_interval);
+      dri3_set_swap_interval(disp, surf, dri2_dpy->default_swap_interval);
 
    return surf;
 }
 
 static _EGLSurface *
-dri3_create_pixmap_surface(const _EGLDriver *drv, _EGLDisplay *disp,
-                           _EGLConfig *conf, void *native_pixmap,
-                           const EGLint *attrib_list)
+dri3_create_pixmap_surface(_EGLDisplay *disp, _EGLConfig *conf,
+                           void *native_pixmap, const EGLint *attrib_list)
 {
-   return dri3_create_surface(drv, disp, EGL_PIXMAP_BIT, conf,
+   return dri3_create_surface(disp, EGL_PIXMAP_BIT, conf,
                               native_pixmap, attrib_list);
 }
 
 static _EGLSurface *
-dri3_create_pbuffer_surface(const _EGLDriver *drv, _EGLDisplay *disp,
-                                _EGLConfig *conf, const EGLint *attrib_list)
+dri3_create_pbuffer_surface(_EGLDisplay *disp, _EGLConfig *conf,
+                            const EGLint *attrib_list)
 {
-   return dri3_create_surface(drv, disp, EGL_PBUFFER_BIT, conf,
+   return dri3_create_surface(disp, EGL_PBUFFER_BIT, conf,
                               NULL, attrib_list);
 }
 
@@ -375,8 +376,7 @@ dri3_create_image_khr_pixmap_from_buffers(_EGLDisplay *disp, _EGLContext *ctx,
 #endif
 
 static _EGLImage *
-dri3_create_image_khr(const _EGLDriver *drv, _EGLDisplay *disp,
-                      _EGLContext *ctx, EGLenum target,
+dri3_create_image_khr(_EGLDisplay *disp, _EGLContext *ctx, EGLenum target,
                       EGLClientBuffer buffer, const EGLint *attr_list)
 {
 #ifdef HAVE_DRI3_MODIFIERS
@@ -392,7 +392,7 @@ dri3_create_image_khr(const _EGLDriver *drv, _EGLDisplay *disp,
 #endif
       return dri3_create_image_khr_pixmap(disp, ctx, buffer, attr_list);
    default:
-      return dri2_create_image_khr(drv, disp, ctx, target, buffer, attr_list);
+      return dri2_create_image_khr(disp, ctx, target, buffer, attr_list);
    }
 }
 
@@ -422,7 +422,7 @@ const __DRIimageLoaderExtension dri3_image_loader_extension = {
 };
 
 static EGLBoolean
-dri3_swap_buffers_with_damage(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw,
+dri3_swap_buffers_with_damage(_EGLDisplay *disp, _EGLSurface *draw,
                               const EGLint *rects, EGLint n_rects)
 {
    struct dri3_egl_surface *dri3_surf = dri3_egl_surface(draw);
@@ -434,14 +434,13 @@ dri3_swap_buffers_with_damage(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurf
 }
 
 static EGLBoolean
-dri3_swap_buffers(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw)
+dri3_swap_buffers(_EGLDisplay *disp, _EGLSurface *draw)
 {
-   return dri3_swap_buffers_with_damage(drv, disp, draw, NULL, 0);
+   return dri3_swap_buffers_with_damage(disp, draw, NULL, 0);
 }
 
 static EGLBoolean
-dri3_copy_buffers(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf,
-                  void *native_pixmap_target)
+dri3_copy_buffers(_EGLDisplay *disp, _EGLSurface *surf, void *native_pixmap_target)
 {
    struct dri3_egl_surface *dri3_surf = dri3_egl_surface(surf);
    xcb_pixmap_t target;
@@ -456,7 +455,7 @@ dri3_copy_buffers(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf,
 }
 
 static int
-dri3_query_buffer_age(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf)
+dri3_query_buffer_age(_EGLDisplay *disp, _EGLSurface *surf)
 {
    struct dri3_egl_surface *dri3_surf = dri3_egl_surface(surf);
 
@@ -464,9 +463,8 @@ dri3_query_buffer_age(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *sur
 }
 
 static EGLBoolean
-dri3_query_surface(const _EGLDriver *drv, _EGLDisplay *disp,
-                   _EGLSurface *surf, EGLint attribute,
-                   EGLint *value)
+dri3_query_surface(_EGLDisplay *disp, _EGLSurface *surf,
+                   EGLint attribute, EGLint *value)
 {
    struct dri3_egl_surface *dri3_surf = dri3_egl_surface(surf);
 
@@ -479,7 +477,7 @@ dri3_query_surface(const _EGLDriver *drv, _EGLDisplay *disp,
       break;
    }
 
-   return _eglQuerySurface(drv, disp, surf, attribute, value);
+   return _eglQuerySurface(disp, surf, attribute, value);
 }
 
 static __DRIdrawable *

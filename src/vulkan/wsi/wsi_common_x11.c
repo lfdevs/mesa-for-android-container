@@ -270,6 +270,7 @@ static const VkPresentModeKHR present_modes[] = {
    VK_PRESENT_MODE_IMMEDIATE_KHR,
    VK_PRESENT_MODE_MAILBOX_KHR,
    VK_PRESENT_MODE_FIFO_KHR,
+   VK_PRESENT_MODE_FIFO_RELAXED_KHR,
 };
 
 static xcb_screen_t *
@@ -996,8 +997,8 @@ x11_acquire_next_image_from_queue(struct x11_swapchain *chain,
 }
 
 static VkResult
-x11_present_to_x11(struct x11_swapchain *chain, uint32_t image_index,
-                   uint32_t target_msc)
+x11_present_to_x11_dri3(struct x11_swapchain *chain, uint32_t image_index,
+                        uint32_t target_msc)
 {
    struct x11_image *image = &chain->images[image_index];
 
@@ -1008,7 +1009,8 @@ x11_present_to_x11(struct x11_swapchain *chain, uint32_t image_index,
    int64_t divisor = 0;
    int64_t remainder = 0;
 
-   if (chain->base.present_mode == VK_PRESENT_MODE_IMMEDIATE_KHR)
+   if (chain->base.present_mode == VK_PRESENT_MODE_IMMEDIATE_KHR ||
+       chain->base.present_mode == VK_PRESENT_MODE_FIFO_RELAXED_KHR)
       options |= XCB_PRESENT_OPTION_ASYNC;
 
 #ifdef HAVE_DRI3_MODIFIERS
@@ -1060,6 +1062,41 @@ x11_present_to_x11(struct x11_swapchain *chain, uint32_t image_index,
 }
 
 static VkResult
+x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index,
+                      uint32_t target_msc)
+{
+   struct x11_image *image = &chain->images[image_index];
+
+   xcb_void_cookie_t cookie;
+   void *myptr;
+   chain->base.wsi->MapMemory(chain->base.device,
+                              image->base.memory,
+                              0, 0, 0, &myptr);
+
+   cookie = xcb_put_image(chain->conn, XCB_IMAGE_FORMAT_Z_PIXMAP,
+                          chain->window,
+                          chain->gc,
+			  image->base.row_pitches[0] / 4,
+                          chain->extent.height,
+                          0,0,0,24,
+                          image->base.row_pitches[0] * chain->extent.height,
+                          myptr);
+
+   chain->base.wsi->UnmapMemory(chain->base.device, image->base.memory);
+   xcb_discard_reply(chain->conn, cookie.sequence);
+   xcb_flush(chain->conn);
+   return x11_swapchain_result(chain, VK_SUCCESS);
+}
+static VkResult
+x11_present_to_x11(struct x11_swapchain *chain, uint32_t image_index,
+                   uint32_t target_msc)
+{
+   if (chain->base.wsi->sw)
+      return x11_present_to_x11_sw(chain, image_index, target_msc);
+   return x11_present_to_x11_dri3(chain, image_index, target_msc);
+}
+
+static VkResult
 x11_acquire_next_image(struct wsi_swapchain *anv_chain,
                        const VkAcquireNextImageInfoKHR *info,
                        uint32_t *image_index)
@@ -1071,6 +1108,10 @@ x11_acquire_next_image(struct wsi_swapchain *anv_chain,
    if (chain->status < 0)
       return chain->status;
 
+   if (chain->base.wsi->sw) {
+      *image_index = 0;
+      return VK_SUCCESS;
+   }
    if (chain->has_acquire_queue) {
       return x11_acquire_next_image_from_queue(chain, image_index, timeout);
    } else {
@@ -1193,6 +1234,10 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
    if (result < 0)
       return result;
 
+   if (chain->base.wsi->sw) {
+      image->busy = false;
+      return VK_SUCCESS;
+   }
    image->pixmap = xcb_generate_id(chain->conn);
 
 #ifdef HAVE_DRI3_MODIFIERS
@@ -1281,12 +1326,14 @@ x11_image_finish(struct x11_swapchain *chain,
 {
    xcb_void_cookie_t cookie;
 
-   cookie = xcb_sync_destroy_fence(chain->conn, image->sync_fence);
-   xcb_discard_reply(chain->conn, cookie.sequence);
-   xshmfence_unmap_shm(image->shm_fence);
+   if (!chain->base.wsi->sw) {
+      cookie = xcb_sync_destroy_fence(chain->conn, image->sync_fence);
+      xcb_discard_reply(chain->conn, cookie.sequence);
+      xshmfence_unmap_shm(image->shm_fence);
 
-   cookie = xcb_free_pixmap(chain->conn, image->pixmap);
-   xcb_discard_reply(chain->conn, cookie.sequence);
+      cookie = xcb_free_pixmap(chain->conn, image->pixmap);
+      xcb_discard_reply(chain->conn, cookie.sequence);
+   }
 
    wsi_destroy_image(&chain->base, &image->base);
 }
@@ -1508,8 +1555,9 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    else
       chain->last_present_mode = XCB_PRESENT_COMPLETE_MODE_COPY;
 
-   if (!wsi_x11_check_dri3_compatible(wsi_device, conn))
-       chain->base.use_prime_blit = true;
+   if (!wsi_device->sw)
+      if (!wsi_x11_check_dri3_compatible(wsi_device, conn))
+         chain->base.use_prime_blit = true;
 
    chain->event_id = xcb_generate_id(chain->conn);
    xcb_present_select_input(chain->conn, chain->event_id, chain->window,
@@ -1557,8 +1605,9 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
          goto fail_init_images;
    }
 
-   if (chain->base.present_mode == VK_PRESENT_MODE_FIFO_KHR ||
-       chain->base.present_mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+   if ((chain->base.present_mode == VK_PRESENT_MODE_FIFO_KHR ||
+       chain->base.present_mode == VK_PRESENT_MODE_FIFO_RELAXED_KHR ||
+       chain->base.present_mode == VK_PRESENT_MODE_MAILBOX_KHR) && !chain->base.wsi->sw) {
       chain->has_present_queue = true;
 
       /* Initialize our queues.  We make them base.image_count + 1 because we will
@@ -1571,7 +1620,8 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
          goto fail_init_images;
       }
 
-      if (chain->base.present_mode == VK_PRESENT_MODE_FIFO_KHR) {
+      if (chain->base.present_mode == VK_PRESENT_MODE_FIFO_KHR ||
+          chain->base.present_mode == VK_PRESENT_MODE_FIFO_RELAXED_KHR) {
          chain->has_acquire_queue = true;
 
          ret = wsi_queue_init(&chain->acquire_queue, chain->base.image_count + 1);

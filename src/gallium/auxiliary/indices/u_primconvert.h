@@ -31,8 +31,16 @@
 
 struct primconvert_context;
 
+struct primconvert_config {
+   uint32_t primtypes_mask;
+   bool fixed_prim_restart;
+};
+
 struct primconvert_context *util_primconvert_create(struct pipe_context *pipe,
                                                     uint32_t primtypes_mask);
+struct primconvert_context *util_primconvert_create_config(struct pipe_context *pipe,
+                                                           struct primconvert_config *cfg);
+
 void util_primconvert_destroy(struct primconvert_context *pc);
 void util_primconvert_save_rasterizer_state(struct primconvert_context *pc,
                                             const struct pipe_rasterizer_state

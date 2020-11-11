@@ -1,4 +1,5 @@
 /* Copyright (c) 2018-2019 Alyssa Rosenzweig (alyssa@rosenzweig.io)
+ * Copyright (C) 2019-2020 Collabora, Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -63,11 +64,6 @@
                 OP_IS_CSEL_V(op) || \
                 op == midgard_alu_op_icsel || \
                 op == midgard_alu_op_fcsel \
-        )
-
-#define OP_IS_DERIVATIVE(op) ( \
-                op == TEXTURE_OP_DFDX || \
-                op == TEXTURE_OP_DFDY \
         )
 
 #define OP_IS_UNSIGNED_CMP(op) ( \
@@ -243,6 +239,9 @@ struct mir_tag_props {
 /* Computes an address according to indirects/zext/shift/etc */
 #define LDST_ADDRESS (1 << 5)
 
+/* Some fields such swizzle and address have special meanings */
+#define LDST_ATOMIC (1 << 6)
+
 /* This file is common, so don't define the tables themselves. #include
  * midgard_op.h if you need that, or edit midgard_ops.c directly */
 
@@ -310,9 +309,19 @@ mir_is_simple_swizzle(unsigned *swizzle, unsigned mask)
 /* Packs a load/store argument */
 
 static inline uint8_t
-midgard_ldst_reg(unsigned reg, unsigned component)
+midgard_ldst_reg(unsigned reg, unsigned component, unsigned size)
 {
         assert((reg == REGISTER_LDST_BASE) || (reg == REGISTER_LDST_BASE + 1));
+        assert(size == 16 || size == 32 || size == 64);
+
+        /* Shift so everything is in terms of 32-bit units */
+        if (size == 64) {
+                assert(component < 2);
+                component <<= 1;
+        } else if (size == 16) {
+                assert((component & 1) == 0);
+                component >>= 1;
+        }
 
         midgard_ldst_register_select sel = {
                 .component = component,

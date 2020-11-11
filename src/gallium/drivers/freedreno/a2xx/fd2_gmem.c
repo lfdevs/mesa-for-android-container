@@ -572,7 +572,7 @@ fd2_emit_tile_init(struct fd_batch *batch)
 			if (cf->opc == ALLOC)
 				cf++;
 			assert(cf->opc == EXEC);
-			assert(cf[ctx->screen->num_vsc_pipes*2-2].opc == EXEC_END);
+			assert(cf[ctx->screen->info.num_vsc_pipes*2-2].opc == EXEC_END);
 			cf[2*(gmem->num_vsc_pipes-1)].opc = EXEC_END;
 		}
 

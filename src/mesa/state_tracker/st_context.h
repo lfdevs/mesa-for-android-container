@@ -282,7 +282,7 @@ struct st_context
 
    /** for glDraw/CopyPixels */
    struct {
-      void *zs_shaders[4];
+      void *zs_shaders[6];
    } drawpix;
 
    /** Cache of glDrawPixels images */
@@ -418,6 +418,8 @@ st_save_zombie_shader(struct st_context *st,
 void
 st_context_free_zombie_objects(struct st_context *st);
 
+const struct nir_shader_compiler_options *
+st_get_nir_compiler_options(struct st_context *st, gl_shader_stage stage);
 
 
 /**

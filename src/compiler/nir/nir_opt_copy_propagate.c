@@ -230,6 +230,16 @@ copy_prop_instr(nir_instr *instr)
       return progress;
    }
 
+   case nir_instr_type_jump: {
+      nir_jump_instr *jump = nir_instr_as_jump(instr);
+      if (jump->type == nir_jump_goto_if) {
+         while (copy_prop_src(&jump->condition, instr, NULL, 1))
+            progress = true;
+      }
+
+      return progress;
+   }
+
    case nir_instr_type_phi: {
       nir_phi_instr *phi = nir_instr_as_phi(instr);
       assert(phi->dest.is_ssa);

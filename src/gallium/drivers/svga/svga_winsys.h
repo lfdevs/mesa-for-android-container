@@ -400,13 +400,13 @@ struct svga_winsys_context
     * Map a guest-backed surface.
     * \param swc The winsys context
     * \param surface The surface to map
-    * \param flags  bitmaks of PIPE_TRANSFER_x flags
+    * \param flags  bitmaks of PIPE_MAP_x flags
     * \param retry Whether to flush and retry the map
     * \param rebind Whether to issue an immediate rebind and flush.
     *
     * The surface_map() member is allowed to fail due to a
     * shortage of command buffer space, if the
-    * PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE bit is set in flags.
+    * PIPE_MAP_DISCARD_WHOLE_RESOURCE bit is set in flags.
     * In that case, the caller must flush the current command
     * buffer and reissue the map.
     */
@@ -623,7 +623,7 @@ struct svga_winsys_screen
 
    /**
     * Map the entire data store of a buffer object into the client's address.
-    * usage is a bitmask of PIPE_TRANSFER_*
+    * usage is a bitmask of PIPE_MAP_*
     */
    void *
    (*buffer_map)( struct svga_winsys_screen *sws,

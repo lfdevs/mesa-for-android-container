@@ -70,9 +70,11 @@ private:
    PValue m_instance_id;
    PValue m_rel_vertex_id;
    PValue m_primitive_id;
+   std::vector<PGPRValue> m_attribs;
    r600_shader_key m_key;
 
    std::unique_ptr<VertexStageExportBase> m_export_processor;
+   unsigned m_max_attrib;
 };
 
 }

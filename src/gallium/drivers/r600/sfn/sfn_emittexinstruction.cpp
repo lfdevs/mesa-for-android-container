@@ -484,8 +484,12 @@ bool EmitTexInstruction::emit_tex_txf(nir_tex_instr* instr, TexInputs& src)
 
    auto dst = make_dest(*instr);
 
-   if (*src.coord.reg_i(3) != *src.lod)
-      emit_instruction(new AluInstruction(op1_mov, src.coord.reg_i(3), src.lod, {alu_write, alu_last_instr}));
+   if (*src.coord.reg_i(3) != *src.lod) {
+      if (src.coord.sel() != src.lod->sel())
+         emit_instruction(new AluInstruction(op1_mov, src.coord.reg_i(3), src.lod, {alu_write, alu_last_instr}));
+      else
+         src.coord.set_reg_i(3, src.lod);
+   }
 
    auto sampler = get_samplerr_id(instr->sampler_index, src.sampler_deref);
    assert(!sampler.indirect);
@@ -539,14 +543,18 @@ bool EmitTexInstruction::emit_tex_txl(nir_tex_instr* instr, TexInputs& src)
                  << "' (" << __func__ << ")\n";
 
    auto tex_op = TexInstruction::sample_l;
-   emit_instruction(new AluInstruction(op1_mov, src.coord.reg_i(3), src.lod,
-                                       {alu_last_instr, alu_write}));
-
    if (instr->is_shadow)  {
-      emit_instruction(new AluInstruction(op1_mov, src.coord.reg_i(2), src.comperator,
-                       {alu_last_instr, alu_write}));
+      if (src.coord.sel() != src.comperator->sel())
+         emit_instruction(new AluInstruction(op1_mov, src.coord.reg_i(2), src.comperator, {alu_write}));
+      else
+         src.coord.set_reg_i(2, src.comperator);
       tex_op = TexInstruction::sample_c_l;
    }
+
+   if (src.coord.sel() != src.lod->sel())
+      emit_instruction(new AluInstruction(op1_mov, src.coord.reg_i(3), src.lod, {last_write}));
+   else
+      src.coord.set_reg_i(3, src.lod);
 
    auto sampler = get_samplerr_id(instr->sampler_index, src.sampler_deref);
    assert(!sampler.indirect && "Indirect sampler selection not yet supported");
@@ -571,14 +579,18 @@ bool EmitTexInstruction::emit_tex_txb(nir_tex_instr* instr, TexInputs& src)
 
    std::array<uint8_t, 4> in_swizzle = {0,1,2,3};
 
-   emit_instruction(new AluInstruction(op1_mov, src.coord.reg_i(3), src.bias,
-                                       {alu_last_instr, alu_write}));
-
    if (instr->is_shadow) {
-      emit_instruction(new AluInstruction(op1_mov, src.coord.reg_i(2), src.comperator,
-                                          {alu_last_instr, alu_write}));
+      if (src.coord.sel() != src.comperator->sel())
+         emit_instruction(new AluInstruction(op1_mov, src.coord.reg_i(2), src.comperator, {alu_write}));
+      else
+         src.coord.set_reg_i(2, src.comperator);
       tex_op = TexInstruction::sample_c_lb;
    }
+
+   if (src.coord.sel() != src.bias->sel())
+      emit_instruction(new AluInstruction(op1_mov, src.coord.reg_i(3), src.bias, {last_write}));
+   else
+      src.coord.set_reg_i(3, src.bias);
 
    GPRVector tex_src(src.coord, in_swizzle);
 
@@ -670,7 +682,7 @@ bool EmitTexInstruction::emit_tex_tg4(nir_tex_instr* instr, TexInputs& src)
 
    bool literal_offset = false;
    if (src.offset) {
-      literal_offset =  src.offset->is_ssa && get_literal_register(*src.offset);
+      literal_offset =  nir_src_as_const_value(*src.offset) != 0;
       r600::sfn_log << SfnLog::tex << " really have offsets and they are " <<
                        (literal_offset ? "literal" : "varying") <<
                        "\n";
@@ -808,16 +820,20 @@ bool EmitTexInstruction::emit_tex_txf_ms(nir_tex_instr* instr, TexInputs& src)
 
    emit_instruction(tex_sample_id_ir);
 
-   emit_instruction(new AluInstruction(op2_mullo_int, help,
-                                       {src.ms_index, PValue(new LiteralValue(4))},
-                                       {alu_write, alu_last_instr}));
 
-   emit_instruction(new AluInstruction(op2_lshr_int, src.coord.reg_i(3),
-                                       {sample_id_dest.reg_i(0), help},
-                                       {alu_write, alu_last_instr}));
+   if (src.ms_index->type() != Value::literal ||
+       static_cast<const LiteralValue&>(*src.ms_index).value() != 0) {
+      emit_instruction(new AluInstruction(op2_lshl_int, help,
+                                          src.ms_index, literal(2),
+      {alu_write, alu_last_instr}));
+
+      emit_instruction(new AluInstruction(op2_lshr_int, sample_id_dest.reg_i(0),
+                                          {sample_id_dest.reg_i(0), help},
+                                          {alu_write, alu_last_instr}));
+   }
 
    emit_instruction(new AluInstruction(op2_and_int, src.coord.reg_i(3),
-                                       {src.coord.reg_i(3), PValue(new LiteralValue(15))},
+                                       {sample_id_dest.reg_i(0), PValue(new LiteralValue(15))},
                                        {alu_write, alu_last_instr}));
 
    auto dst = make_dest(*instr);
@@ -960,11 +976,11 @@ void EmitTexInstruction::set_offsets(TexInstruction* ir, nir_src *offset)
       return;
 
    assert(offset->is_ssa);
-   auto literal = get_literal_register(*offset);
+   auto literal = nir_src_as_const_value(*offset);
    assert(literal);
 
    for (int i = 0; i < offset->ssa->num_components; ++i) {
-      ir->set_offset(i, literal->value[i].i32);
+      ir->set_offset(i, literal[i].i32);
    }
 }
 

@@ -59,7 +59,7 @@ panfrost_nir_sysval_for_intrinsic(nir_intrinsic_instr *instr)
         case nir_intrinsic_load_num_work_groups:
                 return PAN_SYSVAL_NUM_WORK_GROUPS;
         case nir_intrinsic_load_ssbo_address: 
-        case nir_intrinsic_get_buffer_size: 
+        case nir_intrinsic_get_ssbo_size: 
                 return panfrost_sysval_for_ssbo(instr);
         case nir_intrinsic_load_sampler_lod_parameters_pan:
                 return panfrost_sysval_for_sampler(instr);

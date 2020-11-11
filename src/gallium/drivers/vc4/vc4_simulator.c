@@ -421,7 +421,7 @@ vc4_simulator_submit_cl_ioctl(int fd, struct drm_vc4_submit_cl *args)
         list_for_each_entry_safe(struct drm_vc4_bo, bo, &exec.unref_list,
                                  unref_head) {
                 struct vc4_simulator_bo *sim_bo = (struct vc4_simulator_bo *)bo;
-                struct drm_gem_cma_object *obj = &sim_bo->base.base;
+                ASSERTED struct drm_gem_cma_object *obj = &sim_bo->base.base;
 		list_del(&bo->unref_head);
                 assert(*(uint32_t *)(obj->vaddr + obj->base.size) ==
                        BO_SENTINEL);

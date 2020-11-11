@@ -166,7 +166,7 @@ gen7_emit_vs_workaround_flush(struct brw_context *brw)
  * so that it doesn't hang a previous 3DPRIMITIVE.
  */
 void
-gen10_emit_isp_disable(struct brw_context *brw)
+gen7_emit_isp_disable(struct brw_context *brw)
 {
    brw->vtbl.emit_raw_pipe_control(brw,
                                    PIPE_CONTROL_STALL_AT_SCOREBOARD |
@@ -400,9 +400,6 @@ brw_init_pipe_control(struct brw_context *brw,
    case 11:
       brw->vtbl.emit_raw_pipe_control = gen11_emit_raw_pipe_control;
       break;
-   case 10:
-      brw->vtbl.emit_raw_pipe_control = gen10_emit_raw_pipe_control;
-      break;
    case 9:
       brw->vtbl.emit_raw_pipe_control = gen9_emit_raw_pipe_control;
       break;
@@ -425,6 +422,8 @@ brw_init_pipe_control(struct brw_context *brw,
          devinfo->is_g4x ? gen45_emit_raw_pipe_control
                          : gen4_emit_raw_pipe_control;
       break;
+   default:
+      unreachable("Unhandled Gen.");
    }
 
    if (devinfo->gen < 6)

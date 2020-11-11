@@ -133,10 +133,10 @@ brw_codegen_ff_gs_prog(struct brw_context *brw,
     */
    program = brw_get_program(&c.func, &program_size);
 
-   if (unlikely(INTEL_DEBUG & DEBUG_GS)) {
+   if (INTEL_DEBUG & DEBUG_GS) {
       fprintf(stderr, "gs:\n");
-      brw_disassemble(&brw->screen->devinfo, c.func.store,
-                      0, program_size, stderr);
+      brw_disassemble_with_labels(&brw->screen->devinfo, c.func.store,
+                                  0, program_size, stderr);
       fprintf(stderr, "\n");
     }
 

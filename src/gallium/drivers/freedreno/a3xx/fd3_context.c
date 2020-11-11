@@ -43,6 +43,7 @@ fd3_context_destroy(struct pipe_context *pctx)
 	struct fd3_context *fd3_ctx = fd3_context(fd_context(pctx));
 
 	u_upload_destroy(fd3_ctx->border_color_uploader);
+	pipe_resource_reference(&fd3_ctx->border_color_buf, NULL);
 
 	fd_context_destroy(pctx);
 

@@ -70,7 +70,7 @@ UINT pdep_u32(UINT a, UINT mask)
 
     // copied from http://wm.ite.pl/articles/pdep-soft-emu.html
     // using bsf instead of funky loop
-    DWORD maskIndex;
+    unsigned long maskIndex = 0;
     while (_BitScanForward(&maskIndex, mask))
     {
         // 1. isolate lowest set bit of mask
@@ -100,7 +100,7 @@ UINT pext_u32(UINT a, UINT mask)
     return _pext_u32(a, mask);
 #else
     UINT     result = 0;
-    DWORD    maskIndex;
+    unsigned long maskIndex;
     uint32_t currentBit = 0;
     while (_BitScanForward(&maskIndex, mask))
     {

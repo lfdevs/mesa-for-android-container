@@ -108,7 +108,7 @@ void register_coalesce_test::SetUp()
 static void
 _register_coalesce(vec4_visitor *v, const char *func)
 {
-   bool print = false;
+   const bool print = getenv("TEST_DEBUG");
 
    if (print) {
       printf("%s: instructions before:\n", func);

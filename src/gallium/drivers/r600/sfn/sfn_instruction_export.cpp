@@ -331,7 +331,7 @@ void MemRingOutIntruction::remap_registers_child(std::vector<rename_reg_pair>& m
 
 void MemRingOutIntruction::patch_ring(int stream)
 {
-   const ECFOpCode ring_op[4] = {cf_mem_ring, cf_mem_ring2, cf_mem_ring3, cf_mem_ring3};
+   const ECFOpCode ring_op[4] = {cf_mem_ring, cf_mem_ring1, cf_mem_ring2, cf_mem_ring3};
 
    assert(stream < 4);
    m_ring_op = ring_op[stream];

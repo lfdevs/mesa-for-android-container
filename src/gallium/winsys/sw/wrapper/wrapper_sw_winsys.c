@@ -106,7 +106,7 @@ wsw_dt_get_stride(struct wrapper_sw_displaytarget *wdt, unsigned *stride)
    void *map;
 
    map = pipe_transfer_map(pipe, tex, 0, 0,
-                           PIPE_TRANSFER_READ_WRITE,
+                           PIPE_MAP_READ_WRITE,
                            0, 0, wdt->tex->width0, wdt->tex->height0, &tr);
    if (!map)
       return false;
@@ -222,7 +222,7 @@ wsw_dt_map(struct sw_winsys *ws,
       assert(!wdt->transfer);
 
       ptr = pipe_transfer_map(pipe, tex, 0, 0,
-                              PIPE_TRANSFER_READ_WRITE,
+                              PIPE_MAP_READ_WRITE,
                               0, 0, wdt->tex->width0, wdt->tex->height0, &tr);
       if (!ptr)
         goto err;

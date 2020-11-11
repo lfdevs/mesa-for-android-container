@@ -40,7 +40,6 @@
 #include <assert.h>
 #include <getopt.h>
 #include <inttypes.h>
-#include <setjmp.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -230,34 +229,6 @@ parseline(const char *line, const char *fmt, ...)
 			pushline();                                           \
 			break;                                                \
 		} else
-
-/*
- * Provide our own disasm assert() handler, so that we can recover
- * after attempting to disassemble things that might not be valid
- * instructions:
- */
-
-static bool jmp_env_valid;
-static jmp_buf jmp_env;
-
-void
-ir3_assert_handler(const char *expr, const char *file, int line,
-		const char *func)
-{
-	printf("\n%s:%u: %s: Assertion `%s' failed.\n", file, line, func, expr);
-	if (jmp_env_valid)
-		longjmp(jmp_env, 1);
-	abort();
-}
-
-#define TRY(x) do { \
-		assert(!jmp_env_valid); \
-		if (setjmp(jmp_env) == 0) { \
-			jmp_env_valid = true; \
-			x; \
-		} \
-		jmp_env_valid = false; \
-	} while (0)
 
 /*
  * Decode ringbuffer section:
@@ -930,7 +901,7 @@ decode_shader_blocks(void)
 				 * (or parts of shaders?), so perhaps we should search
 				 * for ends of shaders and decode each?
 				 */
-				TRY(disasm_a3xx(buf, sizedwords, 1, stdout, options.gpu_id));
+				try_disasm_a3xx(buf, sizedwords, 1, stdout, options.gpu_id);
 			}
 
 			if (dump)

@@ -49,7 +49,7 @@ test_compact_instruction(struct brw_codegen *p, brw_inst src)
       if (memcmp(&unchanged, &dst, sizeof(dst))) {
 	 fprintf(stderr, "Failed to compact, but dst changed\n");
 	 fprintf(stderr, "  Instruction: ");
-	 brw_disassemble_inst(stderr, p->devinfo, &src, false);
+	 brw_disassemble_inst(stderr, p->devinfo, &src, false, 0, NULL);
 	 return false;
       }
    }
@@ -287,7 +287,6 @@ struct {
 static bool
 run_tests(const struct gen_device_info *devinfo)
 {
-   brw_init_compaction_tables(devinfo);
    bool fail = false;
 
    for (unsigned i = 0; i < ARRAY_SIZE(tests); i++) {
@@ -329,12 +328,15 @@ run_tests(const struct gen_device_info *devinfo)
 }
 
 int
-main(int argc, char **argv)
+main(UNUSED int argc, UNUSED char **argv)
 {
    struct gen_device_info *devinfo = (struct gen_device_info *)calloc(1, sizeof(*devinfo));
    bool fail = false;
 
    for (devinfo->gen = 5; devinfo->gen <= 12; devinfo->gen++) {
+      if (devinfo->gen == 10)
+         continue;
+
       fail |= run_tests(devinfo);
    }
 

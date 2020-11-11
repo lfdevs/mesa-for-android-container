@@ -38,20 +38,7 @@
 #include "drm-uapi/i915_drm.h"
 #include "intel_aub.h"
 
-static void __attribute__ ((format(__printf__, 2, 3)))
-fail_if(int cond, const char *format, ...)
-{
-   va_list args;
-
-   if (!cond)
-      return;
-
-   va_start(args, format);
-   vfprintf(stderr, format, args);
-   va_end(args);
-
-   raise(SIGTRAP);
-}
+#define fail_if(cond, ...) _fail_if(cond, NULL, __VA_ARGS__)
 
 #define fail(...) fail_if(true, __VA_ARGS__)
 
@@ -240,7 +227,7 @@ int
 main(int argc, char *argv[])
 {
    int i, c;
-   bool help = false, verbose;
+   bool help = false, verbose = false;
    char *out_filename = NULL, *in_filename = NULL;
    const struct option aubinator_opts[] = {
       { "help",       no_argument,       NULL,     'h' },

@@ -94,8 +94,8 @@ nv30_render_map_vertices(struct vbuf_render *render)
    char *map = pipe_buffer_map_range(
          &r->nv30->base.pipe, r->buffer,
          r->offset, r->length,
-         PIPE_TRANSFER_WRITE |
-         PIPE_TRANSFER_DISCARD_RANGE,
+         PIPE_MAP_WRITE |
+         PIPE_MAP_DISCARD_RANGE,
          &r->transfer);
    assert(map);
    return map;
@@ -424,8 +424,8 @@ nv30_render_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       if (!map) {
          if (nv30->vtxbuf[i].buffer.resource)
             map = pipe_buffer_map(pipe, nv30->vtxbuf[i].buffer.resource,
-                                  PIPE_TRANSFER_UNSYNCHRONIZED |
-                                  PIPE_TRANSFER_READ, &transfer[i]);
+                                  PIPE_MAP_UNSYNCHRONIZED |
+                                  PIPE_MAP_READ, &transfer[i]);
       }
       draw_set_mapped_vertex_buffer(draw, i, map, ~0);
    }
@@ -434,8 +434,8 @@ nv30_render_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       const void *map = info->has_user_indices ? info->index.user : NULL;
       if (!map)
          map = pipe_buffer_map(pipe, info->index.resource,
-                               PIPE_TRANSFER_UNSYNCHRONIZED |
-                               PIPE_TRANSFER_READ, &transferi);
+                               PIPE_MAP_UNSYNCHRONIZED |
+                               PIPE_MAP_READ, &transferi);
       draw_set_indexes(draw,
                        (ubyte *) map,
                        info->index_size, ~0);

@@ -303,6 +303,14 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
          }
          surf->MipmapTexture = !!val;
          break;
+      case EGL_PROTECTED_CONTENT_EXT:
+         if (!disp->Extensions.EXT_protected_content) {
+            err = EGL_BAD_ATTRIBUTE;
+            break;
+         }
+         surf->ProtectedContent = val;
+         break;
+
       /* no pixmap surface specific attributes */
       default:
          err = EGL_BAD_ATTRIBUTE;
@@ -383,6 +391,7 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *disp, EGLint type,
    surf->VGAlphaFormat = EGL_VG_ALPHA_FORMAT_NONPRE;
    surf->VGColorspace = EGL_VG_COLORSPACE_sRGB;
    surf->GLColorspace = EGL_GL_COLORSPACE_LINEAR_KHR;
+   surf->ProtectedContent = EGL_FALSE;
 
    surf->MipmapLevel = 0;
    surf->MultisampleResolve = EGL_MULTISAMPLE_RESOLVE_DEFAULT;
@@ -429,7 +438,7 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *disp, EGLint type,
 
 
 EGLBoolean
-_eglQuerySurface(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surface,
+_eglQuerySurface(_EGLDisplay *disp, _EGLSurface *surface,
                  EGLint attribute, EGLint *value)
 {
    switch (attribute) {
@@ -534,7 +543,7 @@ _eglQuerySurface(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surface,
          return _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
 
       _EGLContext *ctx = _eglGetCurrentContext();
-      EGLint result = drv->QueryBufferAge(drv, disp, surface);
+      EGLint result = disp->Driver->QueryBufferAge(disp, surface);
       /* error happened */
       if (result < 0)
          return EGL_FALSE;
@@ -581,6 +590,11 @@ _eglQuerySurface(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surface,
    case EGL_CTA861_3_MAX_FRAME_AVERAGE_LEVEL_EXT:
       *value = surface->HdrMetadata.max_fall;
       break;
+   case EGL_PROTECTED_CONTENT_EXT:
+      if (!disp->Extensions.EXT_protected_content)
+         return _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
+      *value = surface->ProtectedContent;
+      break;
    default:
       return _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
    }
@@ -593,7 +607,7 @@ _eglQuerySurface(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surface,
  * Default fallback routine - drivers might override this.
  */
 EGLBoolean
-_eglSurfaceAttrib(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surface,
+_eglSurfaceAttrib(_EGLDisplay *disp, _EGLSurface *surface,
                   EGLint attribute, EGLint value)
 {
    EGLint confval;
@@ -718,8 +732,7 @@ _eglSurfaceAttrib(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surface
 
 
 EGLBoolean
-_eglBindTexImage(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surface,
-                 EGLint buffer)
+_eglBindTexImage(_EGLDisplay *disp, _EGLSurface *surface, EGLint buffer)
 {
    EGLint texture_type = EGL_PBUFFER_BIT;
 
@@ -748,8 +761,7 @@ _eglBindTexImage(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surface,
 }
 
 EGLBoolean
-_eglReleaseTexImage(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf,
-                    EGLint buffer)
+_eglReleaseTexImage(_EGLDisplay *disp, _EGLSurface *surf, EGLint buffer)
 {
    /* Just do basic error checking and return success/fail.
     * Drivers must implement the real stuff.
@@ -780,14 +792,6 @@ _eglReleaseTexImage(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf,
 
    surf->BoundToTexture = EGL_FALSE;
 
-   return EGL_TRUE;
-}
-
-
-EGLBoolean
-_eglSwapInterval(const _EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf,
-                 EGLint interval)
-{
    return EGL_TRUE;
 }
 

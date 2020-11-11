@@ -224,7 +224,7 @@ glsl_to_nir(struct gl_context *ctx,
     * inline functions.  That way they get properly initialized at the top
     * of the function and not at the top of its caller.
     */
-   nir_lower_variable_initializers(shader, (nir_variable_mode)~0);
+   nir_lower_variable_initializers(shader, nir_var_all);
    nir_lower_returns(shader);
    nir_inline_functions(shader);
    nir_opt_deref(shader);
@@ -955,9 +955,11 @@ nir_visitor::visit(ir_call *ir)
          break;
       case ir_intrinsic_generic_atomic_min:
          assert(ir->return_deref);
-         if (ir->return_deref->type == glsl_type::int_type)
+         if (ir->return_deref->type == glsl_type::int_type ||
+             ir->return_deref->type == glsl_type::int64_t_type)
             op = nir_intrinsic_deref_atomic_imin;
-         else if (ir->return_deref->type == glsl_type::uint_type)
+         else if (ir->return_deref->type == glsl_type::uint_type ||
+                  ir->return_deref->type == glsl_type::uint64_t_type)
             op = nir_intrinsic_deref_atomic_umin;
          else if (ir->return_deref->type == glsl_type::float_type)
             op = nir_intrinsic_deref_atomic_fmin;
@@ -966,9 +968,11 @@ nir_visitor::visit(ir_call *ir)
          break;
       case ir_intrinsic_generic_atomic_max:
          assert(ir->return_deref);
-         if (ir->return_deref->type == glsl_type::int_type)
+         if (ir->return_deref->type == glsl_type::int_type ||
+             ir->return_deref->type == glsl_type::int64_t_type)
             op = nir_intrinsic_deref_atomic_imax;
-         else if (ir->return_deref->type == glsl_type::uint_type)
+         else if (ir->return_deref->type == glsl_type::uint_type ||
+                  ir->return_deref->type == glsl_type::uint64_t_type)
             op = nir_intrinsic_deref_atomic_umax;
          else if (ir->return_deref->type == glsl_type::float_type)
             op = nir_intrinsic_deref_atomic_fmax;
@@ -1135,9 +1139,11 @@ nir_visitor::visit(ir_call *ir)
          break;
       case ir_intrinsic_shared_atomic_min:
          assert(ir->return_deref);
-         if (ir->return_deref->type == glsl_type::int_type)
+         if (ir->return_deref->type == glsl_type::int_type ||
+             ir->return_deref->type == glsl_type::int64_t_type)
             op = nir_intrinsic_shared_atomic_imin;
-         else if (ir->return_deref->type == glsl_type::uint_type)
+         else if (ir->return_deref->type == glsl_type::uint_type ||
+                  ir->return_deref->type == glsl_type::uint64_t_type)
             op = nir_intrinsic_shared_atomic_umin;
          else if (ir->return_deref->type == glsl_type::float_type)
             op = nir_intrinsic_shared_atomic_fmin;
@@ -1146,9 +1152,11 @@ nir_visitor::visit(ir_call *ir)
          break;
       case ir_intrinsic_shared_atomic_max:
          assert(ir->return_deref);
-         if (ir->return_deref->type == glsl_type::int_type)
+         if (ir->return_deref->type == glsl_type::int_type ||
+             ir->return_deref->type == glsl_type::int64_t_type)
             op = nir_intrinsic_shared_atomic_imax;
-         else if (ir->return_deref->type == glsl_type::uint_type)
+         else if (ir->return_deref->type == glsl_type::uint_type ||
+                  ir->return_deref->type == glsl_type::uint64_t_type)
             op = nir_intrinsic_shared_atomic_umax;
          else if (ir->return_deref->type == glsl_type::float_type)
             op = nir_intrinsic_shared_atomic_fmax;
@@ -1246,8 +1254,13 @@ nir_visitor::visit(ir_call *ir)
 
          /* Atomic result */
          assert(ir->return_deref);
-         nir_ssa_dest_init(&instr->instr, &instr->dest,
-                           ir->return_deref->type->vector_elements, 32, NULL);
+         if (ir->return_deref->type->is_integer_64()) {
+            nir_ssa_dest_init(&instr->instr, &instr->dest,
+                              ir->return_deref->type->vector_elements, 64, NULL);
+         } else {
+            nir_ssa_dest_init(&instr->instr, &instr->dest,
+                              ir->return_deref->type->vector_elements, 32, NULL);
+         }
          nir_builder_instr_insert(&b, &instr->instr);
          break;
       }
@@ -1331,13 +1344,23 @@ nir_visitor::visit(ir_call *ir)
 
          if (op == nir_intrinsic_image_deref_size) {
             instr->num_components = instr->dest.ssa.num_components;
-         } else if (op == nir_intrinsic_image_deref_load ||
-                    op == nir_intrinsic_image_deref_store) {
+         } else if (op == nir_intrinsic_image_deref_load) {
             instr->num_components = 4;
+            nir_intrinsic_set_dest_type(instr,
+               nir_get_nir_type_for_glsl_base_type(type->sampled_type));
+         } else if (op == nir_intrinsic_image_deref_store) {
+            instr->num_components = 4;
+            nir_intrinsic_set_src_type(instr,
+               nir_get_nir_type_for_glsl_base_type(type->sampled_type));
          }
 
          if (op == nir_intrinsic_image_deref_size ||
              op == nir_intrinsic_image_deref_samples) {
+            /* image_deref_size takes an LOD parameter which is always 0
+             * coming from GLSL.
+             */
+            if (op == nir_intrinsic_image_deref_size)
+               instr->src[1] = nir_src_for_ssa(nir_imm_int(&b, 0));
             nir_builder_instr_insert(&b, &instr->instr);
             break;
          }
@@ -1807,7 +1830,7 @@ nir_visitor::visit(ir_expression *ir)
       deref->accept(this);
 
       nir_intrinsic_op op;
-      if (this->deref->mode == nir_var_shader_in) {
+      if (nir_deref_mode_is(this->deref, nir_var_shader_in)) {
          switch (ir->operation) {
          case ir_unop_interpolate_at_centroid:
             op = nir_intrinsic_interp_deref_at_centroid;
@@ -1828,7 +1851,7 @@ nir_visitor::visit(ir_expression *ir)
           * sense, we'll just turn it into a load which will probably
           * eventually end up as an SSA definition.
           */
-         assert(this->deref->mode == nir_var_shader_temp);
+         assert(nir_deref_mode_is(this->deref, nir_var_shader_temp));
          op = nir_intrinsic_load_deref;
       }
 
@@ -1983,7 +2006,7 @@ nir_visitor::visit(ir_expression *ir)
    }
 
    case ir_unop_u2ump: {
-      result = nir_build_alu(&b, nir_op_u2ump, srcs[0], NULL, NULL, NULL);
+      result = nir_build_alu(&b, nir_op_i2imp, srcs[0], NULL, NULL, NULL);
       break;
    }
 
@@ -2083,7 +2106,7 @@ nir_visitor::visit(ir_expression *ir)
    case ir_unop_get_buffer_size: {
       nir_intrinsic_instr *load = nir_intrinsic_instr_create(
          this->shader,
-         nir_intrinsic_get_buffer_size);
+         nir_intrinsic_get_ssbo_size);
       load->num_components = ir->type->vector_elements;
       load->src[0] = nir_src_for_ssa(evaluate_rvalue(ir->operands[0]));
       unsigned bit_size = glsl_get_bit_size(ir->type);
@@ -2185,10 +2208,10 @@ nir_visitor::visit(ir_expression *ir)
    case ir_binop_logic_xor:
       result = nir_ixor(&b, srcs[0], srcs[1]);
       break;
-   case ir_binop_lshift: result = nir_ishl(&b, srcs[0], srcs[1]); break;
+   case ir_binop_lshift: result = nir_ishl(&b, srcs[0], nir_u2u32(&b, srcs[1])); break;
    case ir_binop_rshift:
-      result = (type_is_signed(out_type)) ? nir_ishr(&b, srcs[0], srcs[1])
-                                          : nir_ushr(&b, srcs[0], srcs[1]);
+      result = (type_is_signed(out_type)) ? nir_ishr(&b, srcs[0], nir_u2u32(&b, srcs[1]))
+                                          : nir_ushr(&b, srcs[0], nir_u2u32(&b, srcs[1]));
       break;
    case ir_binop_imul_high:
       result = (out_type == GLSL_TYPE_INT) ? nir_imul_high(&b, srcs[0], srcs[1])
@@ -2220,7 +2243,7 @@ nir_visitor::visit(ir_expression *ir)
       break;
    case ir_binop_nequal:
       if (type_is_float(types[0]))
-         result = nir_fne(&b, srcs[0], srcs[1]);
+         result = nir_fneu(&b, srcs[0], srcs[1]);
       else
          result = nir_ine(&b, srcs[0], srcs[1]);
       break;
@@ -2248,7 +2271,7 @@ nir_visitor::visit(ir_expression *ir)
    case ir_binop_any_nequal:
       if (type_is_float(types[0])) {
          switch (ir->operands[0]->type->vector_elements) {
-            case 1: result = nir_fne(&b, srcs[0], srcs[1]); break;
+            case 1: result = nir_fneu(&b, srcs[0], srcs[1]); break;
             case 2: result = nir_bany_fnequal2(&b, srcs[0], srcs[1]); break;
             case 3: result = nir_bany_fnequal3(&b, srcs[0], srcs[1]); break;
             case 4: result = nir_bany_fnequal4(&b, srcs[0], srcs[1]); break;
@@ -2279,7 +2302,7 @@ nir_visitor::visit(ir_expression *ir)
       result = nir_channel(&b, srcs[0], 0);
       for (unsigned i = 1; i < ir->operands[0]->type->vector_elements; i++) {
          nir_ssa_def *swizzled = nir_channel(&b, srcs[0], i);
-         result = nir_bcsel(&b, nir_ieq(&b, srcs[1], nir_imm_int(&b, i)),
+         result = nir_bcsel(&b, nir_ieq_imm(&b, srcs[1], i),
                             swizzled, result);
       }
       break;
@@ -2445,7 +2468,7 @@ nir_visitor::visit(ir_texture *ir)
    nir_deref_instr *sampler_deref = evaluate_deref(ir->sampler);
 
    /* check for bindless handles */
-   if (sampler_deref->mode != nir_var_uniform ||
+   if (!nir_deref_mode_is(sampler_deref, nir_var_uniform) ||
        nir_deref_instr_get_variable(sampler_deref)->data.bindless) {
       nir_ssa_def *load = nir_load_deref(&b, sampler_deref);
       instr->src[0].src = nir_src_for_ssa(load);

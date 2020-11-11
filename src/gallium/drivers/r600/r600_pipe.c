@@ -324,6 +324,7 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX:
 	case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
 	case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
+        case PIPE_CAP_NIR_ATOMICS_AS_DEREF:
 		return 1;
 
 	case PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET:
@@ -558,14 +559,10 @@ static int r600_get_shader_param(struct pipe_screen* pscreen,
 		if (rscreen->b.info.drm_minor >= 37)
 			break;
 		return 0;
-      /* With NIR we currently disable TES, TCS and COMP shaders */
 	case PIPE_SHADER_TESS_CTRL:
 	case PIPE_SHADER_TESS_EVAL:
-		if (rscreen->b.family >= CHIP_CEDAR)
-			break;
-		/* fallthrough */
 	case PIPE_SHADER_COMPUTE:
-		if (!is_nir_enabled(&rscreen->b))
+		if (rscreen->b.family >= CHIP_CEDAR)
 			break;
 		/* fallthrough */
 	default:
@@ -814,7 +811,7 @@ struct pipe_screen *r600_screen_create(struct radeon_winsys *ws,
 	templ.usage = PIPE_USAGE_DEFAULT;
 
 	struct r600_resource *res = r600_resource(rscreen->screen.resource_create(&rscreen->screen, &templ));
-	unsigned char *map = ws->buffer_map(res->buf, NULL, PIPE_TRANSFER_WRITE);
+	unsigned char *map = ws->buffer_map(res->buf, NULL, PIPE_MAP_WRITE);
 
 	memset(map, 0, 256);
 

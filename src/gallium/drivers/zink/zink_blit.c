@@ -28,16 +28,10 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info)
 
    struct zink_batch *batch = zink_batch_no_rp(ctx);
 
-   zink_batch_reference_resoure(batch, src);
-   zink_batch_reference_resoure(batch, dst);
+   zink_batch_reference_resource_rw(batch, src, false);
+   zink_batch_reference_resource_rw(batch, dst, true);
 
-   if (src->layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
-      zink_resource_barrier(batch->cmdbuf, src, src->aspect,
-                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-
-   if (dst->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
-      zink_resource_barrier(batch->cmdbuf, dst, dst->aspect,
-                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+   zink_resource_setup_transfer_layouts(batch, src, dst);
 
    VkImageResolve region = {};
 
@@ -94,38 +88,10 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info)
       return false;
 
    struct zink_batch *batch = zink_batch_no_rp(ctx);
-   zink_batch_reference_resoure(batch, src);
-   zink_batch_reference_resoure(batch, dst);
+   zink_batch_reference_resource_rw(batch, src, false);
+   zink_batch_reference_resource_rw(batch, dst, true);
 
-   if (src == dst) {
-      /* The Vulkan 1.1 specification says the following about valid usage
-       * of vkCmdBlitImage:
-       *
-       * "srcImageLayout must be VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR,
-       *  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL or VK_IMAGE_LAYOUT_GENERAL"
-       *
-       * and:
-       *
-       * "dstImageLayout must be VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR,
-       *  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL or VK_IMAGE_LAYOUT_GENERAL"
-       *
-       * Since we cant have the same image in two states at the same time,
-       * we're effectively left with VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR or
-       * VK_IMAGE_LAYOUT_GENERAL. And since this isn't a present-related
-       * operation, VK_IMAGE_LAYOUT_GENERAL seems most appropriate.
-       */
-      if (src->layout != VK_IMAGE_LAYOUT_GENERAL)
-         zink_resource_barrier(batch->cmdbuf, src, src->aspect,
-                               VK_IMAGE_LAYOUT_GENERAL);
-   } else {
-      if (src->layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
-         zink_resource_barrier(batch->cmdbuf, src, src->aspect,
-                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-
-      if (dst->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
-         zink_resource_barrier(batch->cmdbuf, dst, dst->aspect,
-                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-   }
+   zink_resource_setup_transfer_layouts(batch, src, dst);
 
    VkImageBlit region = {};
    region.srcSubresource.aspectMask = src->aspect;
@@ -202,12 +168,13 @@ zink_blit(struct pipe_context *pctx,
    }
 
    util_blitter_save_blend(ctx->blitter, ctx->gfx_pipeline_state.blend_state);
-   util_blitter_save_depth_stencil_alpha(ctx->blitter, ctx->gfx_pipeline_state.depth_stencil_alpha_state);
+   util_blitter_save_depth_stencil_alpha(ctx->blitter, ctx->dsa_state);
    util_blitter_save_vertex_elements(ctx->blitter, ctx->element_state);
    util_blitter_save_stencil_ref(ctx->blitter, &ctx->stencil_ref);
    util_blitter_save_rasterizer(ctx->blitter, ctx->rast_state);
    util_blitter_save_fragment_shader(ctx->blitter, ctx->gfx_stages[PIPE_SHADER_FRAGMENT]);
    util_blitter_save_vertex_shader(ctx->blitter, ctx->gfx_stages[PIPE_SHADER_VERTEX]);
+   util_blitter_save_geometry_shader(ctx->blitter, ctx->gfx_stages[PIPE_SHADER_GEOMETRY]);
    util_blitter_save_framebuffer(ctx->blitter, &ctx->fb_state);
    util_blitter_save_viewport(ctx->blitter, ctx->viewport_states);
    util_blitter_save_scissor(ctx->blitter, ctx->scissor_states);

@@ -87,7 +87,10 @@ static struct ssa_result_range
 analyze_constant(const struct nir_alu_instr *instr, unsigned src,
                  nir_alu_type use_type)
 {
-   uint8_t swizzle[4] = { 0, 1, 2, 3 };
+   uint8_t swizzle[NIR_MAX_VEC_COMPONENTS] = { 0, 1, 2, 3,
+                                               4, 5, 6, 7,
+                                               8, 9, 10, 11,
+                                               12, 13, 14, 15 };
 
    /* If the source is an explicitly sized source, then we need to reset
     * both the number of components and the swizzle.
@@ -939,7 +942,7 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
    case nir_op_flt:
    case nir_op_fge:
    case nir_op_feq:
-   case nir_op_fne:
+   case nir_op_fneu:
    case nir_op_ilt:
    case nir_op_ige:
    case nir_op_ieq:
@@ -1316,10 +1319,6 @@ nir_unsigned_upper_bound(nir_shader *shader, struct hash_table *range_ht,
       case nir_op_udiv:
       case nir_op_bcsel:
       case nir_op_b32csel:
-      case nir_op_imax3:
-      case nir_op_imin3:
-      case nir_op_umax3:
-      case nir_op_umin3:
       case nir_op_ubfe:
       case nir_op_bfm:
       case nir_op_f2u32:
@@ -1401,16 +1400,6 @@ nir_unsigned_upper_bound(nir_shader *shader, struct hash_table *range_ht,
       case nir_op_bcsel:
       case nir_op_b32csel:
          res = src1 > src2 ? src1 : src2;
-         break;
-      case nir_op_imax3:
-      case nir_op_imin3:
-      case nir_op_umax3:
-         src0 = src0 > src1 ? src0 : src1;
-         res = src0 > src2 ? src0 : src2;
-         break;
-      case nir_op_umin3:
-         src0 = src0 < src1 ? src0 : src1;
-         res = src0 < src2 ? src0 : src2;
          break;
       case nir_op_ubfe:
          res = bitmask(MIN2(src2, scalar.def->bit_size));

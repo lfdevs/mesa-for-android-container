@@ -254,7 +254,7 @@ prepare_shader_sampling(
             struct softpipe_screen *screen = softpipe_screen(tex->screen);
             struct sw_winsys *winsys = screen->winsys;
             addr = winsys->displaytarget_map(winsys, sp_tex->dt,
-                                             PIPE_TRANSFER_READ);
+                                             PIPE_MAP_READ);
             row_stride[0] = sp_tex->stride[0];
             img_stride[0] = sp_tex->img_stride[0];
             mip_offsets[0] = 0;

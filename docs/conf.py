@@ -109,6 +109,15 @@ html_theme_options = {
   'display_version': False,
 }
 
+html_context = {
+  'display_gitlab': True,
+  'gitlab_host': 'gitlab.freedesktop.org',
+  'gitlab_user': 'mesa',
+  'gitlab_repo': 'mesa',
+  'gitlab_version': 'master',
+  'conf_py_path': '/docs/',
+}
+
 html_copy_source = False
 
 # Add any paths that contain custom static files (such as style sheets) here,
@@ -124,6 +133,22 @@ html_extra_path = [
   'README.UVD',
   'README.VCE',
   'README.WIN32',
+]
+
+html_redirects = [
+  ('gallium/drivers/freedreno', 'drivers/freedreno.html'),
+  ('gallium/drivers/freedreno/ir3-notes', 'drivers/freedreno/ir3-notes.html'),
+  ('gallium/drivers/llvmpipe', 'drivers/llvmpipe.html'),
+  ('gallium/drivers/openswr', 'drivers/openswr.html'),
+  ('gallium/drivers/openswr/faq', 'drivers/openswr/faq.html'),
+  ('gallium/drivers/openswr/knobs', 'drivers/openswr/knobs.html'),
+  ('gallium/drivers/openswr/profiling', 'drivers/openswr/profiling.html'),
+  ('gallium/drivers/openswr/usage', 'drivers/openswr/usage.html'),
+  ('gallium/drivers/zink', 'drivers/zink.html'),
+  ('llvmpipe', 'drivers/llvmpipe.html'),
+  ('postprocess', 'gallium/postprocess.html'),
+  ('vmware-guest', 'drivers/vmware-guest.html'),
+  ('webmaster', 'https://www.mesa3d.org/website/'),
 ]
 
 

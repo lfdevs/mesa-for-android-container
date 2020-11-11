@@ -66,11 +66,7 @@ struct lima_vs_shader_state {
    int shader_size;
    int prefetch;
 
-   /* pipe_constant_buffer.size is aligned with some pad bytes,
-    * so record here for the real start place of gpir lowered
-    * uniforms */
-   int uniform_pending_offset;
-
+   int uniform_size;
    void *constant;
    int constant_size;
 

@@ -46,10 +46,31 @@ zink_create_gfx_pipeline(struct zink_screen *screen,
    vertex_input_state.pVertexAttributeDescriptions = state->element_state->attribs;
    vertex_input_state.vertexAttributeDescriptionCount = state->element_state->num_attribs;
 
+   VkPipelineVertexInputDivisorStateCreateInfoEXT vdiv_state = {};
+   if (state->divisors_present) {
+       vertex_input_state.pNext = &vdiv_state;
+       vdiv_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT;
+       vdiv_state.vertexBindingDivisorCount = state->divisors_present;
+       vdiv_state.pVertexBindingDivisors = state->divisors;
+   }
+
    VkPipelineInputAssemblyStateCreateInfo primitive_state = {};
    primitive_state.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
    primitive_state.topology = primitive_topology;
-   primitive_state.primitiveRestartEnable = VK_FALSE;
+   switch (primitive_topology) {
+   case VK_PRIMITIVE_TOPOLOGY_POINT_LIST:
+   case VK_PRIMITIVE_TOPOLOGY_LINE_LIST:
+   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
+   case VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY:
+   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY:
+   case VK_PRIMITIVE_TOPOLOGY_PATCH_LIST:
+      if (state->primitive_restart)
+         debug_printf("restart_index set with unsupported primitive topology %u\n", primitive_topology);
+      primitive_state.primitiveRestartEnable = VK_FALSE;
+      break;
+   default:
+      primitive_state.primitiveRestartEnable = state->primitive_restart ? VK_TRUE : VK_FALSE;
+   }
 
    VkPipelineColorBlendStateCreateInfo blend_state = {};
    blend_state.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -67,9 +88,9 @@ zink_create_gfx_pipeline(struct zink_screen *screen,
 
    VkPipelineViewportStateCreateInfo viewport_state = {};
    viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-   viewport_state.viewportCount = 1;
+   viewport_state.viewportCount = state->num_viewports;
    viewport_state.pViewports = NULL;
-   viewport_state.scissorCount = 1;
+   viewport_state.scissorCount = state->num_viewports;
    viewport_state.pScissors = NULL;
 
    VkPipelineRasterizationStateCreateInfo rast_state = {};
@@ -127,16 +148,16 @@ zink_create_gfx_pipeline(struct zink_screen *screen,
    pci.pDepthStencilState = &depth_stencil_state;
    pci.pDynamicState = &pipelineDynamicStateCreateInfo;
 
-   VkPipelineShaderStageCreateInfo shader_stages[PIPE_SHADER_TYPES - 1];
+   VkPipelineShaderStageCreateInfo shader_stages[ZINK_SHADER_COUNT];
    uint32_t num_stages = 0;
-   for (int i = 0; i < PIPE_SHADER_TYPES - 1; ++i) {
-      if (!prog->stages[i])
+   for (int i = 0; i < ZINK_SHADER_COUNT; ++i) {
+      if (!prog->modules[i])
          continue;
 
       VkPipelineShaderStageCreateInfo stage = {};
       stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
       stage.stage = zink_shader_stage(i);
-      stage.module = prog->stages[i]->shader_module;
+      stage.module = prog->modules[i]->shader;
       stage.pName = "main";
       shader_stages[num_stages++] = stage;
    }

@@ -33,48 +33,7 @@
 #include "util/u_math.h"
 #include "vk_enum_to_str.h"
 
-/* TODO: Add Android support to tu_log funcs */
-
-/** \see tu_loge() */
-static void
-tu_loge_v(const char *format, va_list va)
-{
-   fprintf(stderr, "vk: error: ");
-   vfprintf(stderr, format, va);
-   fprintf(stderr, "\n");
-}
-
-
-/** Log an error message.  */
-void tu_printflike(1, 2) tu_loge(const char *format, ...)
-{
-   va_list va;
-
-   va_start(va, format);
-   tu_loge_v(format, va);
-   va_end(va);
-}
-
-/** \see tu_logi() */
-static void
-tu_logi_v(const char *format, va_list va)
-{
-   fprintf(stderr, "tu: info: ");
-   vfprintf(stderr, format, va);
-   fprintf(stderr, "\n");
-}
-
-/** Log an error message.  */
-void tu_printflike(1, 2) tu_logi(const char *format, ...)
-{
-   va_list va;
-
-   va_start(va, format);
-   tu_logi_v(format, va);
-   va_end(va);
-}
-
-void tu_printflike(3, 4)
+void PRINTFLIKE(3, 4)
    __tu_finishme(const char *file, int line, const char *format, ...)
 {
    va_list ap;
@@ -84,12 +43,13 @@ void tu_printflike(3, 4)
    vsnprintf(buffer, sizeof(buffer), format, ap);
    va_end(ap);
 
-   fprintf(stderr, "%s:%d: FINISHME: %s\n", file, line, buffer);
+   mesa_loge("%s:%d: FINISHME: %s\n", file, line, buffer);
 }
 
 VkResult
 __vk_errorf(struct tu_instance *instance,
             VkResult error,
+            bool always_print,
             const char *file,
             int line,
             const char *format,
@@ -101,7 +61,8 @@ __vk_errorf(struct tu_instance *instance,
    const char *error_str = vk_Result_to_str(error);
 
 #ifndef DEBUG
-   return error;
+   if (!always_print)
+      return error;
 #endif
 
    if (format) {
@@ -109,9 +70,9 @@ __vk_errorf(struct tu_instance *instance,
       vsnprintf(buffer, sizeof(buffer), format, ap);
       va_end(ap);
 
-      fprintf(stderr, "%s:%d: %s (%s)\n", file, line, buffer, error_str);
+      mesa_loge("%s:%d: %s (%s)\n", file, line, buffer, error_str);
    } else {
-      fprintf(stderr, "%s:%d: %s\n", file, line, error_str);
+      mesa_loge("%s:%d: %s\n", file, line, error_str);
    }
 
    return error;
@@ -123,6 +84,7 @@ tu_tiling_config_update_tile_layout(struct tu_framebuffer *fb,
                                     const struct tu_render_pass *pass)
 {
    const uint32_t tile_align_w = pass->tile_align_w;
+   const uint32_t tile_align_h = dev->physical_device->info.tile_align_h;
    const uint32_t max_tile_width = 1024;
 
    /* start from 1 tile */
@@ -132,7 +94,7 @@ tu_tiling_config_update_tile_layout(struct tu_framebuffer *fb,
    };
    fb->tile0 = (VkExtent2D) {
       .width = util_align_npot(fb->width, tile_align_w),
-      .height = align(fb->height, TILE_ALIGN_H),
+      .height = align(fb->height, tile_align_h),
    };
 
    if (unlikely(dev->physical_device->instance->debug_flags & TU_DEBUG_FORCEBIN)) {
@@ -140,7 +102,7 @@ tu_tiling_config_update_tile_layout(struct tu_framebuffer *fb,
       fb->tile_count.width = 2;
       fb->tile_count.height = 2;
       fb->tile0.width = util_align_npot(DIV_ROUND_UP(fb->width, 2), tile_align_w);
-      fb->tile0.height = align(DIV_ROUND_UP(fb->height, 2), TILE_ALIGN_H);
+      fb->tile0.height = align(DIV_ROUND_UP(fb->height, 2), tile_align_h);
    }
 
    /* do not exceed max tile width */
@@ -164,10 +126,10 @@ tu_tiling_config_update_tile_layout(struct tu_framebuffer *fb,
             util_align_npot(DIV_ROUND_UP(fb->width, fb->tile_count.width), tile_align_w);
       } else {
          /* if this assert fails then layout is impossible.. */
-         assert(fb->tile0.height > TILE_ALIGN_H);
+         assert(fb->tile0.height > tile_align_h);
          fb->tile_count.height++;
          fb->tile0.height =
-            align(DIV_ROUND_UP(fb->height, fb->tile_count.height), TILE_ALIGN_H);
+            align(DIV_ROUND_UP(fb->height, fb->tile_count.height), tile_align_h);
       }
    }
 }

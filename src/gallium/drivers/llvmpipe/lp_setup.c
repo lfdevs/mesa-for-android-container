@@ -128,6 +128,7 @@ void lp_setup_reset( struct lp_setup_context *setup )
       setup->constants[i].stored_size = 0;
       setup->constants[i].stored_data = NULL;
    }
+
    setup->fs.stored = NULL;
    setup->dirty = ~0;
 
@@ -624,7 +625,6 @@ lp_setup_set_fs_variant( struct lp_setup_context *setup,
 {
    LP_DBG(DEBUG_SETUP, "%s %p\n", __FUNCTION__,
           variant);
-   /* FIXME: reference count */
 
    setup->fs.current.variant = variant;
    setup->dirty |= LP_SETUP_NEW_FS;
@@ -1006,7 +1006,7 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
             struct llvmpipe_screen *screen = llvmpipe_screen(res->screen);
             struct sw_winsys *winsys = screen->winsys;
             jit_tex->base = winsys->displaytarget_map(winsys, lp_tex->dt,
-                                                         PIPE_TRANSFER_READ);
+                                                         PIPE_MAP_READ);
             jit_tex->row_stride[0] = lp_tex->row_stride[0];
             jit_tex->img_stride[0] = lp_tex->img_stride[0];
             jit_tex->mip_offsets[0] = 0;
@@ -1280,9 +1280,14 @@ try_update_scene_state( struct lp_setup_context *setup )
             return FALSE;
          }
 
-         memcpy(stored,
-                &setup->fs.current,
-                sizeof setup->fs.current);
+         memcpy(&stored->jit_context,
+                &setup->fs.current.jit_context,
+                sizeof setup->fs.current.jit_context);
+         stored->variant = setup->fs.current.variant;
+
+         if (!lp_scene_add_frag_shader_reference(scene,
+                                                 setup->fs.current.variant))
+            return FALSE;
          setup->fs.stored = stored;
          
          /* The scene now references the textures in the rasterization

@@ -51,12 +51,16 @@
 #include "main/errors.h"
 #include "main/macros.h"
 
-const char __dri2ConfigOptions[] =
-   DRI_CONF_BEGIN
+driOptionDescription __dri2ConfigOptions[] = {
+      DRI_CONF_SECTION_DEBUG
+         DRI_CONF_GLX_EXTENSION_OVERRIDE()
+         DRI_CONF_INDIRECT_GL_EXTENSION_OVERRIDE()
+      DRI_CONF_SECTION_END
+
       DRI_CONF_SECTION_PERFORMANCE
          DRI_CONF_VBLANK_MODE(DRI_CONF_VBLANK_DEF_INTERVAL_1)
       DRI_CONF_SECTION_END
-   DRI_CONF_END;
+};
 
 /*****************************************************************/
 /** \name Screen handling functions                              */
@@ -148,7 +152,8 @@ driCreateNewScreen2(int scrn, int fd,
     psp->myNum = scrn;
 
     /* Option parsing before ->InitScreen(), as some options apply there. */
-    driParseOptionInfo(&psp->optionInfo, __dri2ConfigOptions);
+    driParseOptionInfo(&psp->optionInfo,
+                       __dri2ConfigOptions, ARRAY_SIZE(__dri2ConfigOptions));
     driParseConfigFiles(&psp->optionCache, &psp->optionInfo, psp->myNum,
                         "dri2", NULL, NULL, 0, NULL, 0);
 
@@ -767,6 +772,17 @@ dri2ConfigQueryf(__DRIscreen *screen, const char *var, float *val)
     return 0;
 }
 
+static int
+dri2ConfigQuerys(__DRIscreen *screen, const char *var, char **val)
+{
+   if (!driCheckOption(&screen->optionCache, var, DRI_STRING))
+      return -1;
+
+    *val = driQueryOptionstr(&screen->optionCache, var);
+
+    return 0;
+}
+
 static unsigned int
 driGetAPIMask(__DRIscreen *screen)
 {
@@ -832,11 +848,12 @@ const __DRIswrastExtension driSWRastExtension = {
 };
 
 const __DRI2configQueryExtension dri2ConfigQueryExtension = {
-   .base = { __DRI2_CONFIG_QUERY, 1 },
+   .base = { __DRI2_CONFIG_QUERY, 2 },
 
    .configQueryb        = dri2ConfigQueryb,
    .configQueryi        = dri2ConfigQueryi,
    .configQueryf        = dri2ConfigQueryf,
+   .configQuerys        = dri2ConfigQuerys,
 };
 
 const __DRI2flushControlExtension dri2FlushControlExtension = {

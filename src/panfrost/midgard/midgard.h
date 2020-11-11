@@ -4,6 +4,7 @@
  *
  * Copyright (c) 2013 Connor Abbott (connor@abbott.cx)
  * Copyright (c) 2018 Alyssa Rosenzweig (alyssa@rosenzweig.io)
+ * Copyright (C) 2019-2020 Collabora, Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +30,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "panfrost-job.h"
 
 #define MIDGARD_DBG_MSGS		0x0001
 #define MIDGARD_DBG_SHADERS		0x0002
@@ -457,6 +457,9 @@ typedef enum {
         midgard_op_atomic_xchg = 0x60,
         midgard_op_atomic_xchg64 = 0x61,
 
+        midgard_op_atomic_cmpxchg = 0x64,
+        midgard_op_atomic_cmpxchg64 = 0x65,
+
         /* Used for compute shader's __global arguments, __local variables (or
          * for register spilling) */
 
@@ -633,23 +636,13 @@ midgard_tex_register_select;
 /* Texture pipeline results are in r28-r29 */
 #define REG_TEX_BASE 28
 
-/* Texture opcodes... maybe? */
-#define TEXTURE_OP_NORMAL 0x11          /* texture */
-#define TEXTURE_OP_LOD 0x12             /* textureLod */
-#define TEXTURE_OP_TEXEL_FETCH 0x14     /* texelFetch */
-
-/* Implements barrier() */
-#define TEXTURE_OP_BARRIER 0x0B
-
-/* Computes horizontal and vertical derivatives respectively. Use with a float
- * sampler and a "2D" texture.  Leave texture/sampler IDs as zero; they ought
- * to be ignored. Only works for fp32 on 64-bit at a time, so derivatives of a
- * vec4 require 2 texture ops.  For some reason, the blob computes both X and Y
- * derivatives at the same time and just throws out whichever is unused; it's
- * not known if this is a quirk of the hardware or just of the blob. */
-
-#define TEXTURE_OP_DFDX 0x0D
-#define TEXTURE_OP_DFDY 0x1D
+enum mali_texture_op {
+        TEXTURE_OP_NORMAL = 1,  /* texture */
+        TEXTURE_OP_LOD = 2,     /* textureLod */
+        TEXTURE_OP_TEXEL_FETCH = 4,
+        TEXTURE_OP_BARRIER = 11,
+        TEXTURE_OP_DERIVATIVE = 13
+};
 
 enum mali_sampler_type {
         MALI_SAMPLER_UNK        = 0x0,
@@ -658,8 +651,21 @@ enum mali_sampler_type {
         MALI_SAMPLER_SIGNED     = 0x3, /* isampler */
 };
 
-#define MIDGARD_BARRIER_BUFFER (1 << 0)
-#define MIDGARD_BARRIER_SHARED (1 << 1)
+/* Texture modes */
+enum mali_texture_mode {
+        TEXTURE_NORMAL = 1,
+        TEXTURE_SHADOW = 5,
+        TEXTURE_GATHER_SHADOW = 6,
+        TEXTURE_GATHER_X = 8,
+        TEXTURE_GATHER_Y = 9,
+        TEXTURE_GATHER_Z = 10,
+        TEXTURE_GATHER_W = 11,
+};
+
+enum mali_derivative_mode {
+        TEXTURE_DFDX = 0,
+        TEXTURE_DFDY = 1,
+};
 
 typedef struct
 __attribute__((__packed__))
@@ -667,9 +673,8 @@ __attribute__((__packed__))
         unsigned type      : 4;
         unsigned next_type : 4;
 
-        unsigned op  : 6;
-        unsigned shadow    : 1;
-        unsigned is_gather  : 1;
+        enum mali_texture_op op  : 4;
+        unsigned mode : 4;
 
         /* A little obscure, but last is set for the last texture operation in
          * a shader. cont appears to just be last's opposite (?). Yeah, I know,
@@ -679,7 +684,7 @@ __attribute__((__packed__))
         unsigned cont  : 1;
         unsigned last  : 1;
 
-        enum mali_texture_type format : 2;
+        unsigned format : 2;
 
         /* Are sampler_handle/texture_handler respectively set by registers? If
          * true, the lower 8-bits of the respective field is a register word.
@@ -723,10 +728,8 @@ __attribute__((__packed__))
 
         unsigned swizzle  : 8;
 
-        /* For barriers, control barriers are implied regardless, but these
-         * bits also enable memory barriers of various types. For regular
-         * textures, these indicate how many bundles after this texture op may
-         * be executed in parallel with this op. We may execute only ALU and
+         /* These indicate how many bundles after this texture op may be
+          * executed in parallel with this op. We may execute only ALU and
          * ld/st in parallel (not other textures), and obviously there cannot
          * be any dependency (the blob appears to forbid even accessing other
          * channels of a given texture register). */
@@ -802,10 +805,8 @@ __attribute__((__packed__))
         unsigned zero2 : 14;
 
         unsigned zero3 : 24;
-        unsigned buffer : 1;
-        unsigned shared : 1;
-        unsigned stack  : 1;
-        unsigned zero4 : 5;
+        unsigned out_of_order : 4;
+        unsigned zero4 : 4;
 
         uint64_t zero5;
 } midgard_texture_barrier_word;

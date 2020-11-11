@@ -36,6 +36,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "brw_inst.h"
+#include "brw_compiler.h"
 #include "brw_eu_defines.h"
 #include "brw_reg.h"
 #include "brw_disasm_info.h"
@@ -135,6 +136,16 @@ struct brw_codegen {
    int *if_depth_in_loop;
    int loop_stack_depth;
    int loop_stack_array_size;
+
+   struct brw_shader_reloc *relocs;
+   int num_relocs;
+   int reloc_array_size;
+};
+
+struct brw_label {
+   int offset;
+   int number;
+   struct brw_label *next;
 };
 
 void brw_pop_insn_state( struct brw_codegen *p );
@@ -162,15 +173,31 @@ void brw_set_default_swsb(struct brw_codegen *p, struct tgl_swsb value);
 
 void brw_init_codegen(const struct gen_device_info *, struct brw_codegen *p,
 		      void *mem_ctx);
+bool brw_has_jip(const struct gen_device_info *devinfo, enum opcode opcode);
+bool brw_has_uip(const struct gen_device_info *devinfo, enum opcode opcode);
+const struct brw_label *brw_find_label(const struct brw_label *root, int offset);
+void brw_create_label(struct brw_label **labels, int offset, void *mem_ctx);
 int brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
-                         const struct brw_inst *inst, bool is_compacted);
+                         const struct brw_inst *inst, bool is_compacted,
+                         int offset, const struct brw_label *root_label);
+const struct brw_label *brw_label_assembly(const struct gen_device_info *devinfo,
+                                           const void *assembly, int start, int end,
+                                           void *mem_ctx);
+void brw_disassemble_with_labels(const struct gen_device_info *devinfo,
+                                 const void *assembly, int start, int end, FILE *out);
 void brw_disassemble(const struct gen_device_info *devinfo,
-                     const void *assembly, int start, int end, FILE *out);
+                     const void *assembly, int start, int end,
+                     const struct brw_label *root_label, FILE *out);
+const struct brw_shader_reloc *brw_get_shader_relocs(struct brw_codegen *p,
+                                                     unsigned *num_relocs);
 const unsigned *brw_get_program( struct brw_codegen *p, unsigned *sz );
 
 bool brw_try_override_assembly(struct brw_codegen *p, int start_offset,
                                const char *identifier);
 
+void brw_realign(struct brw_codegen *p, unsigned align);
+int brw_append_data(struct brw_codegen *p, void *data,
+                    unsigned size, unsigned align);
 brw_inst *brw_next_insn(struct brw_codegen *p, unsigned opcode);
 void brw_set_dest(struct brw_codegen *p, brw_inst *insn, struct brw_reg dest);
 void brw_set_src0(struct brw_codegen *p, brw_inst *insn, struct brw_reg reg);
@@ -755,6 +782,26 @@ brw_dp_dword_scattered_rw_desc(const struct gen_device_info *devinfo,
 }
 
 static inline uint32_t
+brw_dp_oword_block_rw_desc(const struct gen_device_info *devinfo,
+                           bool align_16B,
+                           unsigned num_dwords,
+                           bool write)
+{
+   /* Writes can only have addresses aligned by OWORDs (16 Bytes). */
+   assert(!write || align_16B);
+
+   const unsigned msg_type =
+      write ?     GEN7_DATAPORT_DC_OWORD_BLOCK_WRITE :
+      align_16B ? GEN7_DATAPORT_DC_OWORD_BLOCK_READ :
+                  GEN7_DATAPORT_DC_UNALIGNED_OWORD_BLOCK_READ;
+
+   const unsigned msg_control =
+      SET_BITS(BRW_DATAPORT_OWORD_BLOCK_DWORDS(num_dwords), 2, 0);
+
+   return brw_dp_surface_desc(devinfo, msg_type, msg_control);
+}
+
+static inline uint32_t
 brw_dp_a64_untyped_surface_rw_desc(const struct gen_device_info *devinfo,
                                    unsigned exec_size, /**< 0 for SIMD4x2 */
                                    unsigned num_channels,
@@ -774,6 +821,27 @@ brw_dp_a64_untyped_surface_rw_desc(const struct gen_device_info *devinfo,
    const unsigned msg_control =
       SET_BITS(brw_mdc_cmask(num_channels), 3, 0) |
       SET_BITS(simd_mode, 5, 4);
+
+   return brw_dp_desc(devinfo, GEN8_BTI_STATELESS_NON_COHERENT,
+                      msg_type, msg_control);
+}
+
+static inline uint32_t
+brw_dp_a64_oword_block_rw_desc(const struct gen_device_info *devinfo,
+                               bool align_16B,
+                               unsigned num_dwords,
+                               bool write)
+{
+   /* Writes can only have addresses aligned by OWORDs (16 Bytes). */
+   assert(!write || align_16B);
+
+   unsigned msg_type =
+      write ? GEN9_DATAPORT_DC_PORT1_A64_OWORD_BLOCK_WRITE :
+              GEN9_DATAPORT_DC_PORT1_A64_OWORD_BLOCK_READ;
+
+   unsigned msg_control =
+      SET_BITS(!align_16B, 4, 3) |
+      SET_BITS(BRW_DATAPORT_OWORD_BLOCK_DWORDS(num_dwords), 2, 0);
 
    return brw_dp_desc(devinfo, GEN8_BTI_STATELESS_NON_COHERENT,
                       msg_type, msg_control);
@@ -1217,6 +1285,17 @@ void
 brw_float_controls_mode(struct brw_codegen *p,
                         unsigned mode, unsigned mask);
 
+void
+brw_update_reloc_imm(const struct gen_device_info *devinfo,
+                     brw_inst *inst,
+                     uint32_t value);
+
+void
+brw_MOV_reloc_imm(struct brw_codegen *p,
+                  struct brw_reg dst,
+                  enum brw_reg_type src_type,
+                  uint32_t id);
+
 /***********************************************************************
  * brw_eu_util.c:
  */
@@ -1262,7 +1341,6 @@ enum brw_conditional_mod brw_negate_cmod(enum brw_conditional_mod cmod);
 enum brw_conditional_mod brw_swap_cmod(enum brw_conditional_mod cmod);
 
 /* brw_eu_compact.c */
-void brw_init_compaction_tables(const struct gen_device_info *devinfo);
 void brw_compact_instructions(struct brw_codegen *p, int start_offset,
                               struct disasm_info *disasm);
 void brw_uncompact_instruction(const struct gen_device_info *devinfo,

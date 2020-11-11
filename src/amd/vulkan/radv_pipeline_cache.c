@@ -21,6 +21,7 @@
  * IN THE SOFTWARE.
  */
 
+#include "util/macros.h"
 #include "util/mesa-sha1.h"
 #include "util/debug.h"
 #include "util/disk_cache.h"
@@ -108,6 +109,7 @@ entry_size(struct cache_entry *entry)
 	for (int i = 0; i < MESA_SHADER_STAGES; ++i)
 		if (entry->binary_sizes[i])
 			ret += entry->binary_sizes[i];
+	ret = align(ret, alignof(struct cache_entry));
 	return ret;
 }
 
@@ -133,7 +135,7 @@ radv_hash_shaders(unsigned char *hash,
 
 			_mesa_sha1_update(&ctx, module->sha1, sizeof(module->sha1));
 			_mesa_sha1_update(&ctx, stages[i]->pName, strlen(stages[i]->pName));
-			if (spec_info) {
+			if (spec_info && spec_info->mapEntryCount) {
 				_mesa_sha1_update(&ctx, spec_info->pMapEntries,
 				                  spec_info->mapEntryCount * sizeof spec_info->pMapEntries[0]);
 				_mesa_sha1_update(&ctx, spec_info->pData, spec_info->dataSize);
@@ -391,6 +393,7 @@ radv_pipeline_cache_insert_shaders(struct radv_device *device,
 	for (int i = 0; i < MESA_SHADER_STAGES; ++i)
 		if (variants[i])
 			size += binaries[i]->total_size;
+	size = align(size, alignof(struct cache_entry));
 
 
 	entry = vk_alloc(&cache->alloc, size, 8,
@@ -508,7 +511,6 @@ VkResult radv_CreatePipelineCache(
 	struct radv_pipeline_cache *cache;
 
 	assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO);
-	assert(pCreateInfo->flags == 0);
 
 	cache = vk_alloc2(&device->vk.alloc, pAllocator,
 			    sizeof(*cache), 8,
@@ -580,7 +582,7 @@ VkResult radv_GetPipelineCacheData(
 	}
 	void *p = pData, *end = pData + *pDataSize;
 	header = p;
-	header->header_size = sizeof(*header);
+	header->header_size = align(sizeof(*header), alignof(struct cache_entry));
 	header->header_version = VK_PIPELINE_CACHE_HEADER_VERSION_ONE;
 	header->vendor_id = ATI_VENDOR_ID;
 	header->device_id = device->physical_device->rad_info.pci_id;

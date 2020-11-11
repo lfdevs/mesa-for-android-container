@@ -70,7 +70,7 @@ lima_texture_desc_set_va(lima_tex_desc *desc,
 void
 lima_texture_desc_set_res(struct lima_context *ctx, lima_tex_desc *desc,
                           struct pipe_resource *prsc,
-                          unsigned first_level, unsigned last_level)
+                          unsigned first_level, unsigned last_level, unsigned first_layer)
 {
    unsigned width, height, layout, i;
    struct lima_resource *lima_res = lima_resource(prsc);
@@ -102,7 +102,7 @@ lima_texture_desc_set_res(struct lima_context *ctx, lima_tex_desc *desc,
    uint32_t base_va = lima_res->bo->va;
 
    /* attach first level */
-   uint32_t first_va = base_va + lima_res->levels[first_level].offset;
+   uint32_t first_va = base_va + lima_res->levels[first_level].offset + first_layer * lima_res->levels[first_level].layer_stride;
    desc->va_s.va_0 = first_va >> 6;
    desc->va_s.layout = layout;
 
@@ -125,6 +125,7 @@ lima_update_tex_desc(struct lima_context *ctx, struct lima_sampler_state *sample
    lima_tex_desc *desc = pdesc;
    unsigned first_level;
    unsigned last_level;
+   unsigned first_layer;
    float max_lod;
 
    memset(desc, 0, desc_size);
@@ -146,6 +147,7 @@ lima_update_tex_desc(struct lima_context *ctx, struct lima_sampler_state *sample
 
    first_level = texture->base.u.tex.first_level;
    last_level = texture->base.u.tex.last_level;
+   first_layer = texture->base.u.tex.first_layer;
    if (last_level - first_level >= LIMA_MAX_MIP_LEVELS)
       last_level = first_level + LIMA_MAX_MIP_LEVELS - 1;
 
@@ -233,7 +235,7 @@ lima_update_tex_desc(struct lima_context *ctx, struct lima_sampler_state *sample
    desc->lod_bias += lod_bias_delta;
 
    lima_texture_desc_set_res(ctx, desc, texture->base.texture,
-                             first_level, last_level);
+                             first_level, last_level, first_layer);
 }
 
 static unsigned

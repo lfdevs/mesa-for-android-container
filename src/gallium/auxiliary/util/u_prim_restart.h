@@ -41,6 +41,10 @@ struct pipe_draw_info;
 union pipe_index_binding;
 struct pipe_resource;
 
+void
+util_translate_prim_restart_data(unsigned index_size,
+                                 void *src_map, void *dst_map,
+                                 unsigned count, unsigned restart_index);
 
 enum pipe_error
 util_translate_prim_restart_ib(struct pipe_context *context,

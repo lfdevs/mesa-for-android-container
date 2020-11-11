@@ -43,7 +43,7 @@ _mesa_init_performance_queries(struct gl_context *ctx)
 }
 
 static void
-free_performance_query(GLuint key, void *data, void *user)
+free_performance_query(void *data, void *user)
 {
    struct gl_perf_query_object *m = data;
    struct gl_context *ctx = user;
@@ -462,7 +462,7 @@ _mesa_CreatePerfQueryINTEL(GLuint queryId, GLuint *queryHandle)
    obj->Active = false;
    obj->Ready = false;
 
-   _mesa_HashInsert(ctx->PerfQuery.Objects, id, obj);
+   _mesa_HashInsert(ctx->PerfQuery.Objects, id, obj, true);
    *queryHandle = id;
 }
 

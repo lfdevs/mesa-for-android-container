@@ -117,6 +117,8 @@ struct data_block_list {
 
 struct resource_ref;
 
+struct shader_ref;
+
 /**
  * All bins and bin data are contained here.
  * Per-bin data goes into the 'tile' bins.
@@ -161,6 +163,9 @@ struct lp_scene {
 
    /** list of resources referenced by the scene commands */
    struct resource_ref *resources;
+
+   /** list of frag shaders referenced by the scene commands */
+   struct shader_ref *frag_shaders;
 
    /** Total memory used by the scene (in bytes).  This sums all the
     * data blocks and counts all bins, state, resource references and
@@ -208,6 +213,10 @@ boolean lp_scene_add_resource_reference(struct lp_scene *scene,
 
 boolean lp_scene_is_resource_referenced(const struct lp_scene *scene,
                                         const struct pipe_resource *resource );
+
+boolean lp_scene_add_frag_shader_reference(struct lp_scene *scene,
+                                           struct lp_fragment_shader_variant *variant);
+
 
 
 /**

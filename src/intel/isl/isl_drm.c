@@ -102,6 +102,13 @@ static const struct isl_drm_modifier_info modifier_info[] = {
       .aux_usage = ISL_AUX_USAGE_GEN12_CCS_E,
       .supports_clear_color = false,
    },
+   {
+      .modifier = I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS,
+      .name = "I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS",
+      .tiling = ISL_TILING_Y0,
+      .aux_usage = ISL_AUX_USAGE_MC,
+      .supports_clear_color = false,
+   },
 };
 
 const struct isl_drm_modifier_info *

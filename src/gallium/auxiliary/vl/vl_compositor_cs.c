@@ -654,7 +654,7 @@ set_viewport(struct vl_compositor_state *s,
    assert(s && drawn);
 
    void *ptr = pipe_buffer_map(s->pipe, s->shader_params,
-                               PIPE_TRANSFER_READ | PIPE_TRANSFER_WRITE,
+                               PIPE_MAP_READ | PIPE_MAP_WRITE,
                                &buf_transfer);
 
    if (!ptr)
@@ -711,10 +711,12 @@ draw_layers(struct vl_compositor       *c,
 
          drawn.area = calc_drawn_area(s, layer);
          drawn.scale_x = layer->viewport.scale[0] /
-                  (float)layer->sampler_views[0]->texture->width0;
+                  (float)layer->sampler_views[0]->texture->width0 * 
+                  (layer->src.br.x - layer->src.tl.x);
          drawn.scale_y = layer->viewport.scale[1] /
                   ((float)layer->sampler_views[0]->texture->height0 * 
-                   (s->interlaced ? 2.0 : 1.0));
+                   (s->interlaced ? 2.0 : 1.0) * 
+                   (layer->src.br.y - layer->src.tl.y));
 
          drawn.translate_x = (int)layer->viewport.translate[0];
          drawn.translate_y = (int)layer->viewport.translate[1];

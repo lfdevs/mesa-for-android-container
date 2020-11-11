@@ -669,7 +669,7 @@ static bool si_query_hw_prepare_buffer(struct si_context *sctx, struct si_query_
 
    /* The caller ensures that the buffer is currently unused by the GPU. */
    uint32_t *results = screen->ws->buffer_map(qbuf->buf->buf, NULL,
-                                              PIPE_TRANSFER_WRITE | PIPE_TRANSFER_UNSYNCHRONIZED);
+                                              PIPE_MAP_WRITE | PIPE_MAP_UNSYNCHRONIZED);
    if (!results)
       return false;
 
@@ -887,7 +887,7 @@ static void si_query_hw_emit_start(struct si_context *sctx, struct si_query_hw *
       sctx->num_pipeline_stat_queries++;
 
    if (query->b.type != SI_QUERY_TIME_ELAPSED_SDMA)
-      si_need_gfx_cs_space(sctx);
+      si_need_gfx_cs_space(sctx, 0);
 
    va = query->buffer.buf->gpu_address + query->buffer.results_end;
    query->ops->emit_start(sctx, query, query->buffer.buf, va);
@@ -965,7 +965,7 @@ static void si_query_hw_emit_stop(struct si_context *sctx, struct si_query_hw *q
 
    /* The queries which need begin already called this in begin_query. */
    if (query->flags & SI_QUERY_HW_FLAG_NO_START) {
-      si_need_gfx_cs_space(sctx);
+      si_need_gfx_cs_space(sctx, 0);
       if (!si_query_buffer_alloc(sctx, &query->buffer, query->ops->prepare_buffer,
                                  query->result_size))
          return;
@@ -1408,7 +1408,7 @@ bool si_query_hw_get_result(struct si_context *sctx, struct si_query *squery, bo
    query->ops->clear_result(query, result);
 
    for (qbuf = &query->buffer; qbuf; qbuf = qbuf->previous) {
-      unsigned usage = PIPE_TRANSFER_READ | (wait ? 0 : PIPE_TRANSFER_DONTBLOCK);
+      unsigned usage = PIPE_MAP_READ | (wait ? 0 : PIPE_MAP_DONTBLOCK);
       unsigned results_base = 0;
       void *map;
 
@@ -1644,7 +1644,7 @@ void si_resume_queries(struct si_context *sctx)
    struct si_query *query;
 
    /* Check CS space here. Resuming must not be interrupted by flushes. */
-   si_need_gfx_cs_space(sctx);
+   si_need_gfx_cs_space(sctx, 0);
 
    LIST_FOR_EACH_ENTRY (query, &sctx->active_queries, active_list)
       query->ops->resume(sctx, query);
