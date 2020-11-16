@@ -1478,6 +1478,20 @@ static const struct wsi_display_surface_format
    },
    {
       .surface_format = {
+         .format = VK_FORMAT_R8G8B8A8_SRGB,
+         .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
+      },
+      .drm_format = DRM_FORMAT_XBGR8888
+   },
+   {
+      .surface_format = {
+         .format = VK_FORMAT_R8G8B8A8_UNORM,
+         .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
+      },
+      .drm_format = DRM_FORMAT_XBGR8888
+   },
+   {
+      .surface_format = {
          .format = VK_FORMAT_A2B10G10R10_UNORM_PACK32,
          .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
       },
