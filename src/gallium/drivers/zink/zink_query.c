@@ -492,6 +492,7 @@ zink_render_condition(struct pipe_context *pctx,
 
    if (query == NULL) {
       screen->vk_CmdEndConditionalRenderingEXT(batch->cmdbuf);
+      ctx->render_condition_active = false;
       return;
    }
 
@@ -528,6 +529,7 @@ zink_render_condition(struct pipe_context *pctx,
    begin_info.buffer = res->buffer;
    begin_info.flags = begin_flags;
    screen->vk_CmdBeginConditionalRenderingEXT(batch->cmdbuf, &begin_info);
+   ctx->render_condition_active = true;
 
    zink_batch_reference_resource_rw(batch, res, true);
 

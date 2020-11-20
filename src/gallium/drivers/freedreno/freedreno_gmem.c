@@ -528,10 +528,14 @@ lookup_gmem_state(struct fd_batch *batch, bool assume_zs, bool no_scis_opt)
 	struct fd_screen *screen = batch->ctx->screen;
 	struct fd_gmem_cache *cache = &screen->gmem_cache;
 	struct fd_gmem_stateobj *gmem = NULL;
+
+	/* Lock before allocating gmem_key, since that a screen-wide
+	 * ralloc pool and ralloc itself is not thread-safe.
+	 */
+	fd_screen_lock(screen);
+
 	struct gmem_key *key = gmem_key_init(batch, assume_zs, no_scis_opt);
 	uint32_t hash = gmem_key_hash(key);
-
-	fd_screen_lock(screen);
 
 	struct hash_entry *entry =
 		_mesa_hash_table_search_pre_hashed(cache->ht, hash, key);

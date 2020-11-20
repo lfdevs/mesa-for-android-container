@@ -913,8 +913,6 @@ tu_syncobj_to_fd(struct tu_device *device, struct tu_syncobj *sync)
    int ret;
 
    ret = ioctl(device->fd, DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD, &handle);
-   if (ret)
-      return 0;
 
    return ret ? -1 : handle.fd;
 }

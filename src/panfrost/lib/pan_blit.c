@@ -569,7 +569,7 @@ bifrost_load_emit_blend_rt(struct pan_pool *pool, void *out,
                         cfg.bifrost.equation.alpha.b = MALI_BLEND_OPERAND_B_SRC;
                         cfg.bifrost.equation.alpha.c = MALI_BLEND_OPERAND_C_ZERO;
                         cfg.bifrost.equation.color_mask = 0xf;
-                        cfg.bifrost.internal.fixed_function.num_comps = format_desc->nr_channels;
+                        cfg.bifrost.internal.fixed_function.num_comps = 4;
                         cfg.bifrost.internal.fixed_function.conversion.memory_format.format =
                                 panfrost_format_to_bifrost_blend(format_desc, true);
                         cfg.bifrost.internal.fixed_function.conversion.register_format =

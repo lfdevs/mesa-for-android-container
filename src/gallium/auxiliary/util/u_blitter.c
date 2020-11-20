@@ -1819,7 +1819,10 @@ static void do_blits(struct blitter_context_priv *ctx,
       int dst_z;
       for (dst_z = 0; dst_z < dstbox->depth; dst_z++) {
          struct pipe_surface *old;
-         float dst2src_scale = srcbox->depth / (float)dstbox->depth;
+         bool flipped = (srcbox->depth < 0);
+         float depth_center_offset = 0.0;
+         int src_depth = abs(srcbox->depth);
+         float src_z_step = src_depth / (float)dstbox->depth;
 
          /* Scale Z properly if the blit is scaled.
           *
@@ -1835,12 +1838,17 @@ static void do_blits(struct blitter_context_priv *ctx,
           *   src Z:  0 1 2 3 4 5 6 7
           *   dst Z:   0   1   2   3
           *
-          * dst_offset defines the offset needed for centering the pixels and
-          * it works with any scaling (not just 2x).
+          * This calculation is taken from the radv driver.
           */
-         float dst_offset = ((srcbox->depth - 1) -
-                             (dstbox->depth - 1) * dst2src_scale) * 0.5;
-         float src_z = (dst_z + dst_offset) * dst2src_scale;
+         if (src_target == PIPE_TEXTURE_3D)
+            depth_center_offset = 0.5 / dstbox->depth * src_depth;
+
+         if (flipped) {
+            src_z_step *= - 1;
+            depth_center_offset *= -1;
+         }
+
+         float src_z = dst_z * src_z_step + depth_center_offset;
 
          /* Set framebuffer state. */
          if (is_zsbuf) {

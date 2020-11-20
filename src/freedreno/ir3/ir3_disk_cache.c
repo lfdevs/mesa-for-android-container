@@ -126,7 +126,7 @@ retrieve_variant(struct blob_reader *blob, struct ir3_shader_variant *v)
 	 * pointers need special handling:
 	 */
 
-	v->bin = malloc(4 * v->info.sizedwords);
+	v->bin = rzalloc_size(v, 4 * v->info.sizedwords);
 	blob_copy_bytes(blob, v->bin, 4 * v->info.sizedwords);
 
 	if (!v->binning_pass) {

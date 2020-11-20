@@ -83,6 +83,10 @@ def test_output(glcpp, filename, expfile, nl_format='\n'):
     with open(expfile, 'r') as f:
         expected = f.read()
 
+    # Bison 3.6 changed '$end' to 'end of file' in its error messages
+    # See: https://gitlab.freedesktop.org/mesa/mesa/-/issues/3181
+    actual = actual.replace('$end', 'end of file')
+
     if actual == expected:
         return (True, [])
     return (False, difflib.unified_diff(actual.splitlines(), expected.splitlines()))

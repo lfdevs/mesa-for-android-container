@@ -312,7 +312,7 @@ void lvp_GetPhysicalDeviceFeatures(
       .depthBounds                              = (pdevice->pscreen->get_param(pdevice->pscreen, PIPE_CAP_DEPTH_BOUNDS_TEST) != 0),
       .wideLines                                = false,
       .largePoints                              = true,
-      .alphaToOne                               = false,
+      .alphaToOne                               = true,
       .multiViewport                            = true,
       .samplerAnisotropy                        = false, /* FINISHME */
       .textureCompressionETC2                   = false,

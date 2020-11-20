@@ -7800,7 +7800,8 @@ fs_visitor::fixup_3src_null_dest()
 static const fs_inst *
 find_halt_control_flow_region_start(const fs_visitor *v)
 {
-   if (brw_wm_prog_data(v->prog_data)->uses_kill) {
+   if (v->stage == MESA_SHADER_FRAGMENT &&
+       brw_wm_prog_data(v->prog_data)->uses_kill) {
       foreach_block_and_inst(block, fs_inst, inst, v->cfg) {
          if (inst->opcode == FS_OPCODE_DISCARD_JUMP ||
              inst->opcode == FS_OPCODE_PLACEHOLDER_HALT)

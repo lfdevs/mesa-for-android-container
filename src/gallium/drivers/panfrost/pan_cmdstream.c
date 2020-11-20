@@ -296,7 +296,10 @@ panfrost_emit_bifrost_blend(struct panfrost_batch *batch,
                                 else
                                         cfg.bifrost.internal.mode = MALI_BIFROST_BLEND_MODE_FIXED_FUNCTION;
 
-                                cfg.bifrost.internal.fixed_function.num_comps = format_desc->nr_channels;
+                                /* If we want the conversion to work properly,
+                                 * num_comps must be set to 4
+                                 */
+                                cfg.bifrost.internal.fixed_function.num_comps = 4;
                                 cfg.bifrost.internal.fixed_function.conversion.memory_format.format =
                                         panfrost_format_to_bifrost_blend(format_desc, true);
                                 if (dev->quirks & HAS_SWIZZLES) {

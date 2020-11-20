@@ -685,7 +685,10 @@ dri2_lookup_egl_image(__DRIscreen *screen, void *image, void *data)
 
    (void) screen;
 
+   mtx_lock(&disp->Mutex);
    img = _eglLookupImage(image, disp);
+   mtx_unlock(&disp->Mutex);
+
    if (img == NULL) {
       _eglError(EGL_BAD_PARAMETER, "dri2_lookup_egl_image");
       return NULL;

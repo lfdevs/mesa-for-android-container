@@ -200,7 +200,7 @@ void draw_new_instance(struct draw_context *draw)
 void draw_destroy( struct draw_context *draw )
 {
    struct pipe_context *pipe;
-   unsigned i, j;
+   unsigned i, j, k;
 
    if (!draw)
       return;
@@ -211,8 +211,10 @@ void draw_destroy( struct draw_context *draw )
     */
    for (i = 0; i < 2; i++) {
       for (j = 0; j < 2; j++) {
-         if (draw->rasterizer_no_cull[i][j]) {
-            pipe->delete_rasterizer_state(pipe, draw->rasterizer_no_cull[i][j]);
+         for (k = 0; k < 2; k++) {
+            if (draw->rasterizer_no_cull[i][j][k]) {
+               pipe->delete_rasterizer_state(pipe, draw->rasterizer_no_cull[i][j][k]);
+            }
          }
       }
    }
@@ -1056,26 +1058,26 @@ draw_current_shader_num_written_culldistances(const struct draw_context *draw)
  */
 void *
 draw_get_rasterizer_no_cull( struct draw_context *draw,
-                             boolean scissor,
-                             boolean flatshade )
+                             const struct pipe_rasterizer_state *base_rast )
 {
-   if (!draw->rasterizer_no_cull[scissor][flatshade]) {
+   if (!draw->rasterizer_no_cull[base_rast->scissor][base_rast->flatshade][base_rast->rasterizer_discard]) {
       /* create now */
       struct pipe_context *pipe = draw->pipe;
       struct pipe_rasterizer_state rast;
 
       memset(&rast, 0, sizeof(rast));
-      rast.scissor = scissor;
-      rast.flatshade = flatshade;
+      rast.scissor = base_rast->scissor;
+      rast.flatshade = base_rast->flatshade;
+      rast.rasterizer_discard = base_rast->rasterizer_discard;
       rast.front_ccw = 1;
       rast.half_pixel_center = draw->rasterizer->half_pixel_center;
       rast.bottom_edge_rule = draw->rasterizer->bottom_edge_rule;
       rast.clip_halfz = draw->rasterizer->clip_halfz;
 
-      draw->rasterizer_no_cull[scissor][flatshade] =
+      draw->rasterizer_no_cull[base_rast->scissor][base_rast->flatshade][base_rast->rasterizer_discard] =
          pipe->create_rasterizer_state(pipe, &rast);
    }
-   return draw->rasterizer_no_cull[scissor][flatshade];
+   return draw->rasterizer_no_cull[base_rast->scissor][base_rast->flatshade][base_rast->rasterizer_discard];
 }
 
 void

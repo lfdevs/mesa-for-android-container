@@ -923,6 +923,31 @@ anv_get_image_format_properties(
       }
    }
 
+   if (info->flags & VK_IMAGE_CREATE_DISJOINT_BIT) {
+      /* From the Vulkan 1.2.149 spec, VkImageCreateInfo:
+       *
+       *    If format is a multi-planar format, and if imageCreateFormatFeatures
+       *    (as defined in Image Creation Limits) does not contain
+       *    VK_FORMAT_FEATURE_DISJOINT_BIT, then flags must not contain
+       *    VK_IMAGE_CREATE_DISJOINT_BIT.
+       */
+      if (format->n_planes > 1 &&
+          !(format_feature_flags & VK_FORMAT_FEATURE_DISJOINT_BIT)) {
+         goto unsupported;
+      }
+
+      /* From the Vulkan 1.2.149 spec, VkImageCreateInfo:
+       *
+       * If format is not a multi-planar format, and flags does not include
+       * VK_IMAGE_CREATE_ALIAS_BIT, flags must not contain
+       * VK_IMAGE_CREATE_DISJOINT_BIT.
+       */
+      if (format->n_planes == 1 &&
+          !(info->flags & VK_IMAGE_CREATE_ALIAS_BIT)) {
+          goto unsupported;
+      }
+   }
+
    if (info->usage & VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT) {
       /* Nothing to check. */
    }

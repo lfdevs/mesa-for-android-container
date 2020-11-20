@@ -529,7 +529,7 @@ aaline_first_line(struct draw_stage *stage, struct prim_header *header)
    draw->suspend_flushing = TRUE;
 
    /* Disable triangle culling, stippling, unfilled mode etc. */
-   r = draw_get_rasterizer_no_cull(draw, rast->scissor, rast->flatshade);
+   r = draw_get_rasterizer_no_cull(draw, rast);
    pipe->bind_rasterizer_state(pipe, r);
 
    draw->suspend_flushing = FALSE;

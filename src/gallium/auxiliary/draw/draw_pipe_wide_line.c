@@ -147,7 +147,7 @@ static void wideline_first_line( struct draw_stage *stage,
    void *r;
 
    /* Disable triangle culling, stippling, unfilled mode etc. */
-   r = draw_get_rasterizer_no_cull(draw, rast->scissor, rast->flatshade);
+   r = draw_get_rasterizer_no_cull(draw, rast);
    draw->suspend_flushing = TRUE;
    pipe->bind_rasterizer_state(pipe, r);
    draw->suspend_flushing = FALSE;

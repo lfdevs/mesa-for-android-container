@@ -89,7 +89,8 @@ static const nir_shader_compiler_options sp_compiler_options = {
 
 static const void *
 softpipe_get_compiler_options(struct pipe_screen *pscreen,
-                              enum pipe_shader_ir ir, unsigned shader)
+                              enum pipe_shader_ir ir,
+                              enum pipe_shader_type shader)
 {
    assert(ir == PIPE_SHADER_IR_NIR);
    return &sp_compiler_options;

@@ -359,16 +359,9 @@ do_triangle_ccw(struct lp_setup_context *setup,
     * Determine how many scissor planes we need, that is drop scissor
     * edges if the bounding box of the tri is fully inside that edge.
     */
-   if (setup->scissor_test) {
-      /* why not just use draw_regions */
-      scissor = &setup->scissors[viewport_index];
-      scissor_planes_needed(s_planes, &bboxpos, scissor);
-      nr_planes += s_planes[0] + s_planes[1] + s_planes[2] + s_planes[3];
-   } else {
-      scissor = &setup->draw_regions[viewport_index];
-      scissor_planes_needed(s_planes, &bboxpos, scissor);
-      nr_planes += s_planes[0] + s_planes[1] + s_planes[2] + s_planes[3];
-   }
+   scissor = &setup->draw_regions[viewport_index];
+   scissor_planes_needed(s_planes, &bboxpos, scissor);
+   nr_planes += s_planes[0] + s_planes[1] + s_planes[2] + s_planes[3];
 
    tri = lp_setup_alloc_triangle(scene,
                                  key->num_inputs,

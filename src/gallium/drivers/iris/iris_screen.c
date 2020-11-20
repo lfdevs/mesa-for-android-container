@@ -58,6 +58,24 @@
 #include "intel/common/gen_uuid.h"
 #include "iris_monitor.h"
 
+#define genX_call(devinfo, func, ...)             \
+   switch (devinfo.gen) {                        \
+   case 12:                                       \
+      gen12_##func(__VA_ARGS__);                  \
+      break;                                      \
+   case 11:                                       \
+      gen11_##func(__VA_ARGS__);                  \
+      break;                                      \
+   case 9:                                        \
+      gen9_##func(__VA_ARGS__);                   \
+      break;                                      \
+   case 8:                                        \
+      gen8_##func(__VA_ARGS__);                   \
+      break;                                      \
+   default:                                       \
+      unreachable("Unknown hardware generation"); \
+   }
+
 static void
 iris_flush_frontbuffer(struct pipe_screen *_screen,
                        struct pipe_resource *resource,
@@ -846,6 +864,8 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    pscreen->query_memory_info = iris_query_memory_info;
    pscreen->get_driver_query_group_info = iris_get_monitor_group_info;
    pscreen->get_driver_query_info = iris_get_monitor_info;
+
+   genX_call(screen->devinfo, init_screen_state, screen);
 
    glsl_type_singleton_init_or_ref();
 

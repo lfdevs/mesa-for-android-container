@@ -563,13 +563,13 @@ make_surface(struct anv_device *device,
       anv_get_format_plane(&device->info, image->vk_format, aspect, image->tiling);
    struct anv_surface *anv_surf = &image->planes[plane].surface;
 
-   const isl_surf_usage_flags_t usage =
-      choose_isl_surf_usage(image->create_flags, image->usage,
-                            isl_extra_usage_flags, aspect);
-
    VkImageUsageFlags plane_vk_usage =
       aspect == VK_IMAGE_ASPECT_STENCIL_BIT ?
       image->stencil_usage : image->usage;
+
+   const isl_surf_usage_flags_t usage =
+      choose_isl_surf_usage(image->create_flags, plane_vk_usage,
+                            isl_extra_usage_flags, aspect);
 
    bool needs_shadow =
       anv_image_plane_needs_shadow_surface(&device->info,

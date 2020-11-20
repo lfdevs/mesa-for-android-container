@@ -284,9 +284,6 @@ panfrost_shader_compile(struct panfrost_context *ctx,
         bool vertex_id = s->info.system_values_read & (1 << SYSTEM_VALUE_VERTEX_ID);
         bool instance_id = s->info.system_values_read & (1 << SYSTEM_VALUE_INSTANCE_ID);
 
-        /* On Bifrost it's a sysval, on Midgard it's a varying */
-        state->reads_frag_coord = s->info.system_values_read & (1 << SYSTEM_VALUE_FRAG_COORD);
-
         state->writes_global = s->info.writes_memory;
 
         switch (stage) {
@@ -342,7 +339,8 @@ panfrost_shader_compile(struct panfrost_context *ctx,
         state->helper_invocations = s->info.fs.needs_helper_invocations;
         state->stack_size = program->tls_size;
 
-        state->reads_frag_coord = s->info.inputs_read & (1 << VARYING_SLOT_POS);
+        state->reads_frag_coord = (s->info.inputs_read & (1 << VARYING_SLOT_POS)) ||
+                                  (s->info.system_values_read & (1 << SYSTEM_VALUE_FRAG_COORD));
         state->reads_point_coord = s->info.inputs_read & (1 << VARYING_SLOT_PNTC);
         state->reads_face = (s->info.inputs_read & (1 << VARYING_SLOT_FACE)) ||
                             (s->info.system_values_read & (1 << SYSTEM_VALUE_FRONT_FACE));

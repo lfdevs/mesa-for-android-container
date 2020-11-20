@@ -67,7 +67,7 @@ unsigned
 panfrost_get_stack_shift(unsigned stack_size)
 {
         if (stack_size)
-                return util_logbase2(DIV_ROUND_UP(stack_size, 16));
+                return util_logbase2_ceil(DIV_ROUND_UP(stack_size, 16));
         else
                 return 0;
 }

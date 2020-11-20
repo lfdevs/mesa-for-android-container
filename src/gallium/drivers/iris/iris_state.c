@@ -7762,6 +7762,41 @@ iris_set_frontend_noop(struct pipe_context *ctx, bool enable)
 }
 
 void
+genX(init_screen_state)(struct iris_screen *screen)
+{
+   screen->vtbl.destroy_state = iris_destroy_state;
+   screen->vtbl.init_render_context = iris_init_render_context;
+   screen->vtbl.init_compute_context = iris_init_compute_context;
+   screen->vtbl.upload_render_state = iris_upload_render_state;
+   screen->vtbl.update_surface_base_address = iris_update_surface_base_address;
+   screen->vtbl.upload_compute_state = iris_upload_compute_state;
+   screen->vtbl.emit_raw_pipe_control = iris_emit_raw_pipe_control;
+   screen->vtbl.emit_mi_report_perf_count = iris_emit_mi_report_perf_count;
+   screen->vtbl.rebind_buffer = iris_rebind_buffer;
+   screen->vtbl.load_register_reg32 = iris_load_register_reg32;
+   screen->vtbl.load_register_reg64 = iris_load_register_reg64;
+   screen->vtbl.load_register_imm32 = iris_load_register_imm32;
+   screen->vtbl.load_register_imm64 = iris_load_register_imm64;
+   screen->vtbl.load_register_mem32 = iris_load_register_mem32;
+   screen->vtbl.load_register_mem64 = iris_load_register_mem64;
+   screen->vtbl.store_register_mem32 = iris_store_register_mem32;
+   screen->vtbl.store_register_mem64 = iris_store_register_mem64;
+   screen->vtbl.store_data_imm32 = iris_store_data_imm32;
+   screen->vtbl.store_data_imm64 = iris_store_data_imm64;
+   screen->vtbl.copy_mem_mem = iris_copy_mem_mem;
+   screen->vtbl.derived_program_state_size = iris_derived_program_state_size;
+   screen->vtbl.store_derived_program_state = iris_store_derived_program_state;
+   screen->vtbl.create_so_decl_list = iris_create_so_decl_list;
+   screen->vtbl.populate_vs_key = iris_populate_vs_key;
+   screen->vtbl.populate_tcs_key = iris_populate_tcs_key;
+   screen->vtbl.populate_tes_key = iris_populate_tes_key;
+   screen->vtbl.populate_gs_key = iris_populate_gs_key;
+   screen->vtbl.populate_fs_key = iris_populate_fs_key;
+   screen->vtbl.populate_cs_key = iris_populate_cs_key;
+   screen->vtbl.lost_genx_state = iris_lost_genx_state;
+}
+
+void
 genX(init_state)(struct iris_context *ice)
 {
    struct pipe_context *ctx = &ice->ctx;
@@ -7808,37 +7843,6 @@ genX(init_state)(struct iris_context *ice)
    ctx->stream_output_target_destroy = iris_stream_output_target_destroy;
    ctx->set_stream_output_targets = iris_set_stream_output_targets;
    ctx->set_frontend_noop = iris_set_frontend_noop;
-
-   screen->vtbl.destroy_state = iris_destroy_state;
-   screen->vtbl.init_render_context = iris_init_render_context;
-   screen->vtbl.init_compute_context = iris_init_compute_context;
-   screen->vtbl.upload_render_state = iris_upload_render_state;
-   screen->vtbl.update_surface_base_address = iris_update_surface_base_address;
-   screen->vtbl.upload_compute_state = iris_upload_compute_state;
-   screen->vtbl.emit_raw_pipe_control = iris_emit_raw_pipe_control;
-   screen->vtbl.emit_mi_report_perf_count = iris_emit_mi_report_perf_count;
-   screen->vtbl.rebind_buffer = iris_rebind_buffer;
-   screen->vtbl.load_register_reg32 = iris_load_register_reg32;
-   screen->vtbl.load_register_reg64 = iris_load_register_reg64;
-   screen->vtbl.load_register_imm32 = iris_load_register_imm32;
-   screen->vtbl.load_register_imm64 = iris_load_register_imm64;
-   screen->vtbl.load_register_mem32 = iris_load_register_mem32;
-   screen->vtbl.load_register_mem64 = iris_load_register_mem64;
-   screen->vtbl.store_register_mem32 = iris_store_register_mem32;
-   screen->vtbl.store_register_mem64 = iris_store_register_mem64;
-   screen->vtbl.store_data_imm32 = iris_store_data_imm32;
-   screen->vtbl.store_data_imm64 = iris_store_data_imm64;
-   screen->vtbl.copy_mem_mem = iris_copy_mem_mem;
-   screen->vtbl.derived_program_state_size = iris_derived_program_state_size;
-   screen->vtbl.store_derived_program_state = iris_store_derived_program_state;
-   screen->vtbl.create_so_decl_list = iris_create_so_decl_list;
-   screen->vtbl.populate_vs_key = iris_populate_vs_key;
-   screen->vtbl.populate_tcs_key = iris_populate_tcs_key;
-   screen->vtbl.populate_tes_key = iris_populate_tes_key;
-   screen->vtbl.populate_gs_key = iris_populate_gs_key;
-   screen->vtbl.populate_fs_key = iris_populate_fs_key;
-   screen->vtbl.populate_cs_key = iris_populate_cs_key;
-   screen->vtbl.lost_genx_state = iris_lost_genx_state;
 
    ice->state.dirty = ~0ull;
    ice->state.stage_dirty = ~0ull;

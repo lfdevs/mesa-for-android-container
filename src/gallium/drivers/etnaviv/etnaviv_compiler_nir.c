@@ -1118,8 +1118,6 @@ etna_compile_shader_nir(struct etna_shader_variant *v)
       NIR_PASS_V(s, nir_lower_bool_to_int32);
    }
 
-   etna_optimize_loop(s);
-
    if (DBG_ENABLED(ETNA_DBG_DUMP_SHADERS))
       nir_print_shader(s, stdout);
 

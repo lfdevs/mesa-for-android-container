@@ -728,6 +728,20 @@ pan_alloc_staging(struct panfrost_context *ctx, struct panfrost_resource *rsc,
         return pan_resource(pstaging);
 }
 
+static enum pipe_format
+pan_blit_format(enum pipe_format fmt)
+{
+        const struct util_format_description *desc;
+        desc = util_format_description(fmt);
+
+        /* This must be an emulated format (using u_transfer_helper) as if it
+         * was real RGTC we wouldn't have used AFBC and needed a blit. */
+        if (desc->layout == UTIL_FORMAT_LAYOUT_RGTC)
+                fmt = PIPE_FORMAT_R8G8B8A8_UNORM;
+
+        return fmt;
+}
+
 static void
 pan_blit_from_staging(struct pipe_context *pctx, struct panfrost_transfer *trans)
 {
@@ -735,14 +749,14 @@ pan_blit_from_staging(struct pipe_context *pctx, struct panfrost_transfer *trans
         struct pipe_blit_info blit = {0};
 
         blit.dst.resource = dst;
-        blit.dst.format   = dst->format;
+        blit.dst.format   = pan_blit_format(dst->format);
         blit.dst.level    = trans->base.level;
         blit.dst.box      = trans->base.box;
         blit.src.resource = trans->staging.rsrc;
-        blit.src.format   = trans->staging.rsrc->format;
+        blit.src.format   = pan_blit_format(trans->staging.rsrc->format);
         blit.src.level    = 0;
         blit.src.box      = trans->staging.box;
-        blit.mask = util_format_get_mask(trans->staging.rsrc->format);
+        blit.mask = util_format_get_mask(blit.src.format);
         blit.filter = PIPE_TEX_FILTER_NEAREST;
 
         panfrost_blit(pctx, &blit);
@@ -755,14 +769,14 @@ pan_blit_to_staging(struct pipe_context *pctx, struct panfrost_transfer *trans)
         struct pipe_blit_info blit = {0};
 
         blit.src.resource = src;
-        blit.src.format   = src->format;
+        blit.src.format   = pan_blit_format(src->format);
         blit.src.level    = trans->base.level;
         blit.src.box      = trans->base.box;
         blit.dst.resource = trans->staging.rsrc;
-        blit.dst.format   = trans->staging.rsrc->format;
+        blit.dst.format   = pan_blit_format(trans->staging.rsrc->format);
         blit.dst.level    = 0;
         blit.dst.box      = trans->staging.box;
-        blit.mask = util_format_get_mask(trans->staging.rsrc->format);
+        blit.mask = util_format_get_mask(blit.dst.format);
         blit.filter = PIPE_TEX_FILTER_NEAREST;
 
         panfrost_blit(pctx, &blit);

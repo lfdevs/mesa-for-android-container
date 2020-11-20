@@ -14,8 +14,11 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info)
        util_format_get_mask(info->src.format) != info->mask ||
        util_format_is_depth_or_stencil(info->dst.format) ||
        info->scissor_enable ||
-       info->alpha_blend ||
-       info->render_condition_enable)
+       info->alpha_blend)
+      return false;
+
+   if (info->render_condition_enable &&
+       ctx->render_condition_active)
       return false;
 
    struct zink_resource *src = zink_resource(info->src.resource);
@@ -67,8 +70,11 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info)
    if (util_format_get_mask(info->dst.format) != info->mask ||
        util_format_get_mask(info->src.format) != info->mask ||
        info->scissor_enable ||
-       info->alpha_blend ||
-       info->render_condition_enable)
+       info->alpha_blend)
+      return false;
+
+   if (info->render_condition_enable &&
+       ctx->render_condition_active)
       return false;
 
    if (util_format_is_depth_or_stencil(info->dst.format) &&
