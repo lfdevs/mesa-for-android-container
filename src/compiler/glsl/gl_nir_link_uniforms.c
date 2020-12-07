@@ -1776,19 +1776,21 @@ gl_nir_link_uniforms(struct gl_context *ctx,
                      break;
                }
                assert(found);
-            } else
+               var->data.location = location;
+            } else {
                /* this is the base block offset */
-               location = buffer_block_index;
+               var->data.location = buffer_block_index;
+               location = 0;
+            }
             assert(buffer_block_index >= 0);
             const struct gl_uniform_block *const block =
                &blocks[buffer_block_index];
-            assert(location != -1);
+            assert(location >= 0 && location < block->NumUniforms);
 
             const struct gl_uniform_buffer_variable *const ubo_var =
                &block->Uniforms[location];
 
             state.offset = ubo_var->Offset;
-            var->data.location = location;
          }
 
          /* Check if the uniform has been processed already for

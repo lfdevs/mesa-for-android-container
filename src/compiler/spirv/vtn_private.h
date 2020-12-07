@@ -693,7 +693,19 @@ struct vtn_builder {
    unsigned func_param_idx;
 
    bool has_loop_continue;
-   bool has_kill;
+
+   /** True if this shader has any early termination instructions like OpKill
+    *
+    * In the SPIR-V, the following instructions are block terminators:
+    *
+    *  - OpKill
+    *  - OpTerminateInvocation
+    *
+    * However, in NIR, they're represented by regular intrinsics with no
+    * control-flow semantics.  This means that the SSA form from the SPIR-V
+    * may not 100% match NIR and we have to fix it up at the end.
+    */
+   bool has_early_terminate;
 
    /* false by default, set to true by the ContractionOff execution mode */
    bool exact;

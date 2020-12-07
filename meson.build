@@ -334,14 +334,6 @@ with_platform_wayland = _platforms.contains('wayland')
 with_platform_haiku = _platforms.contains('haiku')
 with_platform_windows = _platforms.contains('windows')
 
-if _platforms.contains('surfaceless')
-  warning('Platform `surfaceless` is now always selected; setting this option will be an error in Mesa 20.3')
-endif
-
-if _platforms.contains('drm')
-  warning('Platform `drm` is now automatically selected; setting this option will be an error in Mesa 20.3')
-endif
-
 if _platforms.length() != 0
   egl_native_platform = _platforms[0]
 else
@@ -914,12 +906,12 @@ elif _shader_cache == 'false'
 endif
 if _shader_cache != 'disabled'
   if host_machine.system() == 'windows'
-    if ['enabled', 'default-disabled'].contains(_shader_cache)
+    if _shader_cache == 'enabled'
       error('Shader Cache does not currently work on Windows')
     endif
   else
     pre_args += '-DENABLE_SHADER_CACHE'
-    if _shader_cache == 'default-disabled'
+    if not get_option('shader-cache-default')
       pre_args += '-DSHADER_CACHE_DISABLE_BY_DEFAULT'
     endif
     with_shader_cache = true
@@ -1790,7 +1782,7 @@ if with_platform_x11
       endif
     endif
   endif
-  if (with_egl or 
+  if (with_egl or
       with_dri3 or (
       with_gallium_vdpau or with_gallium_xvmc or with_gallium_xa or
       with_gallium_omx != 'disabled'))

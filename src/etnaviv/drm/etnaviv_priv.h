@@ -50,6 +50,8 @@
 #include "etnaviv_drmif.h"
 #include "drm-uapi/etnaviv_drm.h"
 
+extern pthread_mutex_t etna_drm_table_lock;
+
 struct etna_bo_bucket {
 	uint32_t size;
 	struct list_head list;

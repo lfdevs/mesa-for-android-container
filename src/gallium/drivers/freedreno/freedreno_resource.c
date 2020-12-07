@@ -977,6 +977,7 @@ fd_resource_allocate_and_resolve(struct pipe_screen *pscreen,
 	if (size == 0) {
 		/* note, semi-intention == instead of & */
 		debug_assert(prsc->bind == PIPE_BIND_QUERY_BUFFER);
+		*psize = 0;
 		return prsc;
 	}
 

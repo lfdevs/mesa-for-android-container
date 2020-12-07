@@ -17,6 +17,11 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info)
        info->alpha_blend)
       return false;
 
+   if (info->src.box.width != info->dst.box.width ||
+       info->src.box.height != info->dst.box.height ||
+       info->src.box.depth != info->dst.box.depth)
+      return false;
+
    if (info->render_condition_enable &&
        ctx->render_condition_active)
       return false;
@@ -40,19 +45,35 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info)
 
    region.srcSubresource.aspectMask = src->aspect;
    region.srcSubresource.mipLevel = info->src.level;
-   region.srcSubresource.baseArrayLayer = 0; // no clue
-   region.srcSubresource.layerCount = 1; // no clue
    region.srcOffset.x = info->src.box.x;
    region.srcOffset.y = info->src.box.y;
-   region.srcOffset.z = info->src.box.z;
+
+   if (src->base.array_size > 1) {
+      region.srcOffset.z = 0;
+      region.srcSubresource.baseArrayLayer = info->src.box.z;
+      region.srcSubresource.layerCount = info->src.box.depth;
+   } else {
+      assert(info->src.box.depth == 1);
+      region.srcOffset.z = info->src.box.z;
+      region.srcSubresource.baseArrayLayer = 0;
+      region.srcSubresource.layerCount = 1;
+   }
 
    region.dstSubresource.aspectMask = dst->aspect;
    region.dstSubresource.mipLevel = info->dst.level;
-   region.dstSubresource.baseArrayLayer = 0; // no clue
-   region.dstSubresource.layerCount = 1; // no clue
    region.dstOffset.x = info->dst.box.x;
    region.dstOffset.y = info->dst.box.y;
-   region.dstOffset.z = info->dst.box.z;
+
+   if (dst->base.array_size > 1) {
+      region.dstOffset.z = 0;
+      region.dstSubresource.baseArrayLayer = info->dst.box.z;
+      region.dstSubresource.layerCount = info->dst.box.depth;
+   } else {
+      assert(info->dst.box.depth == 1);
+      region.dstOffset.z = info->dst.box.z;
+      region.dstSubresource.baseArrayLayer = 0;
+      region.dstSubresource.layerCount = 1;
+   }
 
    region.extent.width = info->dst.box.width;
    region.extent.height = info->dst.box.height;

@@ -106,6 +106,7 @@ static void radv_null_winsys_query_info(struct radeon_winsys *rws,
 	info->pci_id = gpu_info[info->family].pci_id;
 	info->has_syncobj_wait_for_submit = true;
 	info->max_se = 4;
+        info->num_se = 4;
 	if (info->chip_class >= GFX10_3)
 		info->max_wave64_per_simd = 16;
 	else if (info->chip_class >= GFX10)

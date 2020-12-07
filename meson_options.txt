@@ -23,8 +23,7 @@ option(
   type : 'array',
   value : ['auto'],
   choices : [
-    'auto', 'x11', 'wayland', 'drm', 'surfaceless', 'haiku', 'android',
-    'windows',
+    'auto', 'x11', 'wayland', 'haiku', 'android', 'windows',
   ],
   description : 'window systems to support. If this is set to `auto`, all platforms applicable will be enabled.'
 )
@@ -186,8 +185,14 @@ option(
   'shader-cache',
   type : 'combo',
   value : 'auto',
-  choices : ['auto', 'true', 'false', 'enabled', 'disabled', 'default-disabled'],
-  description : 'Build with on-disk shader cache support. If set to default-disabled, the feature is only activated when environment variable MESA_GLSL_CACHE_DISABLE is set to false'
+  choices : ['auto', 'true', 'false', 'enabled', 'disabled'],
+  description : 'Build with on-disk shader cache support.',
+)
+option(
+  'shader-cache-default',
+  type : 'boolean',
+  value : true,
+  description : 'If set to false, the feature is only activated when environment variable MESA_GLSL_CACHE_DISABLE is set to false',
 )
 option(
   'vulkan-icd-dir',

@@ -371,6 +371,7 @@ void cso_destroy_context( struct cso_context *ctx )
 
       {
          static struct pipe_sampler_view *views[PIPE_MAX_SHADER_SAMPLER_VIEWS] = { NULL };
+         static struct pipe_shader_buffer ssbos[PIPE_MAX_SHADER_BUFFERS] = { 0 };
          static void *zeros[PIPE_MAX_SAMPLERS] = { NULL };
          struct pipe_screen *scr = ctx->pipe->screen;
          enum pipe_shader_type sh;
@@ -379,13 +380,24 @@ void cso_destroy_context( struct cso_context *ctx )
                                                PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS);
             int maxview = scr->get_shader_param(scr, sh,
                                                 PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS);
+            int maxssbo = scr->get_shader_param(scr, sh,
+                                                PIPE_SHADER_CAP_MAX_SHADER_BUFFERS);
+            int maxcb = scr->get_shader_param(scr, sh,
+                                              PIPE_SHADER_CAP_MAX_CONST_BUFFERS);
             assert(maxsam <= PIPE_MAX_SAMPLERS);
             assert(maxview <= PIPE_MAX_SHADER_SAMPLER_VIEWS);
+            assert(maxssbo <= PIPE_MAX_SHADER_BUFFERS);
             if (maxsam > 0) {
                ctx->pipe->bind_sampler_states(ctx->pipe, sh, 0, maxsam, zeros);
             }
             if (maxview > 0) {
                ctx->pipe->set_sampler_views(ctx->pipe, sh, 0, maxview, views);
+            }
+            if (maxssbo > 0) {
+               ctx->pipe->set_shader_buffers(ctx->pipe, sh, 0, maxssbo, ssbos, 0);
+            }
+            for (int i = 0; i < maxcb; i++) {
+               ctx->pipe->set_constant_buffer(ctx->pipe, sh, i, NULL);
             }
          }
       }
@@ -397,17 +409,13 @@ void cso_destroy_context( struct cso_context *ctx )
       ctx->pipe->set_constant_buffer(ctx->pipe, PIPE_SHADER_VERTEX, 0, NULL);
       if (ctx->has_geometry_shader) {
          ctx->pipe->bind_gs_state(ctx->pipe, NULL);
-         ctx->pipe->set_constant_buffer(ctx->pipe, PIPE_SHADER_GEOMETRY, 0, NULL);
       }
       if (ctx->has_tessellation) {
          ctx->pipe->bind_tcs_state(ctx->pipe, NULL);
-         ctx->pipe->set_constant_buffer(ctx->pipe, PIPE_SHADER_TESS_CTRL, 0, NULL);
          ctx->pipe->bind_tes_state(ctx->pipe, NULL);
-         ctx->pipe->set_constant_buffer(ctx->pipe, PIPE_SHADER_TESS_EVAL, 0, NULL);
       }
       if (ctx->has_compute_shader) {
          ctx->pipe->bind_compute_state(ctx->pipe, NULL);
-         ctx->pipe->set_constant_buffer(ctx->pipe, PIPE_SHADER_COMPUTE, 0, NULL);
       }
       ctx->pipe->bind_vertex_elements_state( ctx->pipe, NULL );
 

@@ -89,6 +89,8 @@ void si_get_ir_cache_key(struct si_shader_selector *sel, bool ngg, bool es,
       shader_variant_flags |= 1 << 8;
    if (sel->screen->debug_flags & DBG(GISEL))
       shader_variant_flags |= 1 << 9;
+   if (sel->screen->options.inline_uniforms)
+      shader_variant_flags |= 1 << 11;
 
    struct mesa_sha1 ctx;
    _mesa_sha1_init(&ctx);
@@ -1145,7 +1147,10 @@ static void gfx10_shader_ngg(struct si_screen *sscreen, struct si_shader *shader
       pm4, R_00B228_SPI_SHADER_PGM_RSRC1_GS,
       S_00B228_VGPRS((shader->config.num_vgprs - 1) / (wave_size == 32 ? 8 : 4)) |
          S_00B228_FLOAT_MODE(shader->config.float_mode) | S_00B228_DX10_CLAMP(1) |
-         S_00B228_MEM_ORDERED(1) | S_00B228_WGP_MODE(1) |
+         S_00B228_MEM_ORDERED(1) |
+         /* Disable the WGP mode on gfx10.3 because it can hang. (it happened on VanGogh)
+          * Let's disable it on all chips that disable exactly 1 CU per SA for GS. */
+         S_00B228_WGP_MODE(sscreen->info.chip_class == GFX10) |
          S_00B228_GS_VGPR_COMP_CNT(gs_vgpr_comp_cnt));
    si_pm4_set_reg(pm4, R_00B22C_SPI_SHADER_PGM_RSRC2_GS,
                   S_00B22C_SCRATCH_EN(shader->config.scratch_bytes_per_wave > 0) |
@@ -3024,8 +3029,13 @@ bool si_update_ngg(struct si_context *sctx)
        * VGT_FLUSH is also emitted at the beginning of IBs when legacy GS ring
        * pointers are set.
        */
-      if (sctx->chip_class == GFX10 && !new_ngg)
+      if ((sctx->chip_class == GFX10 || sctx->family == CHIP_SIENNA_CICHLID) && !new_ngg) {
          sctx->flags |= SI_CONTEXT_VGT_FLUSH;
+         if (sctx->chip_class == GFX10) {
+            /* Workaround for https://gitlab.freedesktop.org/mesa/mesa/-/issues/2941 */
+            si_flush_gfx_cs(sctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
+         }
+      }
 
       sctx->ngg = new_ngg;
       sctx->last_gs_out_prim = -1; /* reset this so that it gets updated */

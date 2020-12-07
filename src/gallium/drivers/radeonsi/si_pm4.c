@@ -38,6 +38,7 @@ void si_pm4_cmd_add(struct si_pm4_state *state, uint32_t dw)
 {
    assert(state->ndw < SI_PM4_MAX_DW);
    state->pm4[state->ndw++] = dw;
+   state->last_opcode = -1;
 }
 
 static void si_pm4_cmd_end(struct si_pm4_state *state, bool predicate)
@@ -76,13 +77,15 @@ void si_pm4_set_reg(struct si_pm4_state *state, unsigned reg, uint32_t val)
 
    reg >>= 2;
 
+   assert(state->ndw + 2 <= SI_PM4_MAX_DW);
+
    if (opcode != state->last_opcode || reg != (state->last_reg + 1)) {
       si_pm4_cmd_begin(state, opcode);
-      si_pm4_cmd_add(state, reg);
+      state->pm4[state->ndw++] = reg;
    }
 
    state->last_reg = reg;
-   si_pm4_cmd_add(state, val);
+   state->pm4[state->ndw++] = val;
    si_pm4_cmd_end(state, false);
 }
 

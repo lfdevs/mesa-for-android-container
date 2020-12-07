@@ -184,7 +184,7 @@ VkResult lvp_CreateCommandPool(
    LVP_FROM_HANDLE(lvp_device, device, _device);
    struct lvp_cmd_pool *pool;
 
-   pool = vk_alloc2(&device->alloc, pAllocator, sizeof(*pool), 8,
+   pool = vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*pool), 8,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (pool == NULL)
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -194,7 +194,7 @@ VkResult lvp_CreateCommandPool(
    if (pAllocator)
       pool->alloc = *pAllocator;
    else
-      pool->alloc = device->alloc;
+      pool->alloc = device->vk.alloc;
 
    list_inithead(&pool->cmd_buffers);
    list_inithead(&pool->free_cmd_buffers);
@@ -226,7 +226,7 @@ void lvp_DestroyCommandPool(
    }
 
    vk_object_base_finish(&pool->base);
-   vk_free2(&device->alloc, pAllocator, pool);
+   vk_free2(&device->vk.alloc, pAllocator, pool);
 }
 
 VkResult lvp_ResetCommandPool(

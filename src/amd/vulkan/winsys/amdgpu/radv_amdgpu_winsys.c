@@ -166,6 +166,7 @@ static void radv_amdgpu_winsys_destroy(struct radeon_winsys *rws)
 		amdgpu_cs_destroy_syncobj(ws->dev, ws->syncobj[i]);
 	free(ws->syncobj);
 
+	pthread_mutex_destroy(&ws->syncobj_lock);
 	u_rwlock_destroy(&ws->global_bo_list_lock);
 	ac_addrlib_destroy(ws->addrlib);
 	amdgpu_device_deinitialize(ws->dev);

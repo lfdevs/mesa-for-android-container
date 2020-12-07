@@ -867,68 +867,75 @@ bool ShaderFromNirProcessor::emit_load_ubo_vec4(nir_intrinsic_instr* instr)
    auto bufid = nir_src_as_const_value(instr->src[0]);
    auto buf_offset = nir_src_as_const_value(instr->src[1]);
 
-   if (bufid) {
-      if (buf_offset) {
-         int buf_cmp = nir_intrinsic_component(instr);
-         AluInstruction *ir = nullptr;
-         for (unsigned i = 0; i < nir_dest_num_components(instr->dest); ++i) {
-            int cmp = buf_cmp + i;
-            assert(cmp < 4);
-            auto u = PValue(new UniformValue(512 +  buf_offset->u32, cmp, bufid->u32 + 1));
-            if (instr->dest.is_ssa)
-               load_preloaded_value(instr->dest, i, u);
-            else {
-               ir = new AluInstruction(op1_mov, from_nir(instr->dest, i), u, {alu_write});
-               emit_instruction(ir);
-            }
-         }
-         if (ir)
-            ir->set_flag(alu_last_instr);
-         return true;
-
-      } else {
-         return load_uniform_indirect(instr, from_nir(instr->src[1], 0, 0), 0, bufid->u32 + 1);
-      }
-   } else {
-      if (buf_offset) {
-         int buf_cmp = nir_intrinsic_component(instr);
-         AluInstruction *ir = nullptr;
-         auto kc_id = from_nir(instr->src[0], 0);
-         for (unsigned i = 0; i < nir_dest_num_components(instr->dest); ++i) {
-            int cmp = buf_cmp + i;
-            auto u = PValue(new UniformValue(512 +  buf_offset->u32, cmp, kc_id));
-            if (instr->dest.is_ssa)
-               load_preloaded_value(instr->dest, i, u);
-            else {
-               ir = new AluInstruction(op1_mov, from_nir(instr->dest, i), u, {alu_write});
-               emit_instruction(ir);
-            }
-         }
-         if (ir)
-            ir->set_flag(alu_last_instr);
-         return true;
-      }
+   if (!buf_offset) {
       /* TODO: if buf_offset is constant then this can also be solved by using the CF indes
        * on the ALU block, and this would probably make sense when there are more then one
        * loads with the same buffer ID. */
-      PValue bufid = from_nir(instr->src[0], 0, 0);
+
       PValue addr = from_nir_with_fetch_constant(instr->src[1], 0);
       GPRVector trgt;
       std::array<int, 4> swz = {7,7,7,7};
-      for (unsigned i = 0; i < nir_dest_num_components(instr->dest); ++i) {
-         trgt.set_reg_i(i, from_nir(instr->dest, i));
-         swz[i] = i + nir_intrinsic_component(instr);
+      for (unsigned i = 0; i < 4; ++i) {
+         if (i < nir_dest_num_components(instr->dest)) {
+            trgt.set_reg_i(i, from_nir(instr->dest, i));
+            swz[i] = i + nir_intrinsic_component(instr);
+         } else {
+            trgt.set_reg_i(i, from_nir(instr->dest, 7));
+         }
       }
 
-      auto ir = new FetchInstruction(vc_fetch, no_index_offset, trgt, addr, 0,
-                                     1, bufid, bim_zero);
+      FetchInstruction *ir;
+      if (bufid) {
+         ir = new FetchInstruction(vc_fetch, no_index_offset, trgt, addr, 0,
+                                              1, nullptr, bim_none);
+      } else {
+         PValue bufid = from_nir(instr->src[0], 0, 0);
+         ir = new FetchInstruction(vc_fetch, no_index_offset, trgt, addr, 0,
+                                              1, bufid, bim_zero);
+      }
       ir->set_dest_swizzle(swz);
-
       emit_instruction(ir);
       m_sh_info.indirect_files |= 1 << TGSI_FILE_CONSTANT;
       return true;
    }
 
+
+   if (bufid) {
+      int buf_cmp = nir_intrinsic_component(instr);
+      AluInstruction *ir = nullptr;
+      for (unsigned i = 0; i < nir_dest_num_components(instr->dest); ++i) {
+         int cmp = buf_cmp + i;
+         assert(cmp < 4);
+         auto u = PValue(new UniformValue(512 +  buf_offset->u32, cmp, bufid->u32 + 1));
+         if (instr->dest.is_ssa)
+            load_preloaded_value(instr->dest, i, u);
+         else {
+            ir = new AluInstruction(op1_mov, from_nir(instr->dest, i), u, {alu_write});
+            emit_instruction(ir);
+         }
+      }
+      if (ir)
+         ir->set_flag(alu_last_instr);
+      return true;
+
+   } else {
+      int buf_cmp = nir_intrinsic_component(instr);
+      AluInstruction *ir = nullptr;
+      auto kc_id = from_nir(instr->src[0], 0);
+      for (unsigned i = 0; i < nir_dest_num_components(instr->dest); ++i) {
+         int cmp = buf_cmp + i;
+         auto u = PValue(new UniformValue(512 +  buf_offset->u32, cmp, kc_id));
+         if (instr->dest.is_ssa)
+            load_preloaded_value(instr->dest, i, u);
+         else {
+            ir = new AluInstruction(op1_mov, from_nir(instr->dest, i), u, {alu_write});
+            emit_instruction(ir);
+         }
+      }
+      if (ir)
+         ir->set_flag(alu_last_instr);
+      return true;
+   }
 }
 
 bool ShaderFromNirProcessor::emit_discard_if(nir_intrinsic_instr* instr)

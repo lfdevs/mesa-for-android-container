@@ -484,6 +484,7 @@ fd6_rebind_resource(struct fd_context *ctx, struct fd_resource *rsc)
 			if (rsc->seqno == state->key.view[i].rsc_seqno) {
 				fd6_texture_state_destroy(entry->data);
 				_mesa_hash_table_remove(fd6_ctx->tex_cache, entry);
+				break;
 			}
 		}
 	}

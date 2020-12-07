@@ -119,6 +119,12 @@ BEGIN_TEST(optimize.cndmask)
       Temp xor_a = bld.vop2(aco_opcode::v_xor_b32, bld.def(v1), inputs[0], subbrev);
       writeout(3, bld.vop2(aco_opcode::v_and_b32, bld.def(v1), xor_a, subbrev));
 
+      //! v1: %res4 = v_cndmask_b32 0, %a, %c
+      //! p_unit_test 4, %res4
+      Temp cndmask = bld.vop2_e64(aco_opcode::v_cndmask_b32, bld.def(v1), Operand(0u), Operand(1u), Operand(inputs[2]));
+      Temp sub = bld.vsub32(bld.def(v1), Operand(0u), cndmask);
+      writeout(4, bld.vop2(aco_opcode::v_and_b32, bld.def(v1), Operand(inputs[0]), sub));
+
       finish_opt_test();
    }
 END_TEST

@@ -424,6 +424,10 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
    ctx->flags |= SI_CONTEXT_INV_ICACHE | SI_CONTEXT_INV_SCACHE | SI_CONTEXT_INV_VCACHE |
                  SI_CONTEXT_INV_L2 | SI_CONTEXT_START_PIPELINE_STATS;
 
+   /* We don't know if the last draw call used GS fast launch, so assume it didn't. */
+   if (ctx->ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_ALL)
+      ctx->flags |= SI_CONTEXT_VGT_FLUSH;
+
    radeon_add_to_buffer_list(ctx, ctx->gfx_cs, ctx->border_color_buffer,
                              RADEON_USAGE_READ, RADEON_PRIO_BORDER_COLORS);
    if (ctx->shadowed_regs) {

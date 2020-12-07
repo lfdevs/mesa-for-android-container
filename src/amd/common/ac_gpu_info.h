@@ -166,7 +166,8 @@ struct radeon_info {
    uint32_t num_good_compute_units;
    uint32_t max_good_cu_per_sa;
    uint32_t min_good_cu_per_sa; /* min != max if SAs have different # of CUs */
-   uint32_t max_se;             /* shader engines */
+   uint32_t max_se;             /* number of shader engines incl. disabled ones */
+   uint32_t num_se;             /* number of enabled shader engines */
    uint32_t max_sh_per_se;      /* shader arrays per shader engine */
    uint32_t max_wave64_per_simd;
    uint32_t num_physical_sgprs_per_simd;

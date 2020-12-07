@@ -162,6 +162,8 @@ fd_screen_destroy(struct pipe_screen *pscreen)
 
 	simple_mtx_destroy(&screen->lock);
 
+	u_transfer_helper_destroy(pscreen->transfer_helper);
+
 	if (screen->compiler)
 		ir3_compiler_destroy(screen->compiler);
 

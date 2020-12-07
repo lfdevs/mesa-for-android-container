@@ -1940,6 +1940,7 @@ static void si_multi_draw_vbo(struct pipe_context *ctx,
          }
       }
    } else {
+      min_direct_count = num_draws ? UINT_MAX : 0;
       for (unsigned i = 0; i < num_draws; i++) {
          unsigned count = draws[i].count;
 
@@ -2029,6 +2030,7 @@ static void si_multi_draw_vbo(struct pipe_context *ctx,
    }
 
    /* Update NGG culling settings. */
+   uint8_t old_ngg_culling = sctx->ngg_culling;
    struct si_shader_selector *hw_vs;
    if (sctx->ngg && !dispatch_prim_discard_cs && rast_prim == PIPE_PRIM_TRIANGLES &&
        (hw_vs = si_get_vs(sctx)->cso) &&
@@ -2037,7 +2039,7 @@ static void si_multi_draw_vbo(struct pipe_context *ctx,
          avg_direct_count > hw_vs->ngg_cull_nonindexed_fast_launch_vert_threshold &&
          prim & ((1 << PIPE_PRIM_TRIANGLES) |
                  (1 << PIPE_PRIM_TRIANGLE_STRIP))))) {
-      unsigned ngg_culling = 0;
+      uint8_t ngg_culling = 0;
 
       if (rs->rasterizer_discard) {
          ngg_culling |= SI_NGG_CULL_FRONT_FACE | SI_NGG_CULL_BACK_FACE;
@@ -2066,16 +2068,12 @@ static void si_multi_draw_vbo(struct pipe_context *ctx,
             ngg_culling |= SI_NGG_CULL_GS_FAST_LAUNCH_TRI_STRIP;
       }
 
-      if (ngg_culling != sctx->ngg_culling) {
-         /* Insert a VGT_FLUSH when enabling fast launch changes to prevent hangs.
-          * See issues #2418, #2426, #2434
-          */
-         if (ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_ALL)
-            sctx->flags |= SI_CONTEXT_VGT_FLUSH;
+      if (ngg_culling != old_ngg_culling) {
+         /* If shader compilation is not ready, this setting will be rejected. */
          sctx->ngg_culling = ngg_culling;
          sctx->do_update_shaders = true;
       }
-   } else if (sctx->ngg_culling) {
+   } else if (old_ngg_culling) {
       sctx->ngg_culling = false;
       sctx->do_update_shaders = true;
    }
@@ -2088,8 +2086,23 @@ static void si_multi_draw_vbo(struct pipe_context *ctx,
       sctx->inlinable_uniforms_dirty_mask = 0;
    }
 
-   if (unlikely(sctx->do_update_shaders && !si_update_shaders(sctx)))
-      goto return_cleanup;
+   if (unlikely(sctx->do_update_shaders)) {
+      if (unlikely(!si_update_shaders(sctx)))
+         goto return_cleanup;
+
+      /* Insert a VGT_FLUSH when enabling fast launch changes to prevent hangs.
+       * See issues #2418, #2426, #2434
+       *
+       * This is the setting that is used by the draw.
+       */
+      uint8_t ngg_culling = si_get_vs(sctx)->current->key.opt.ngg_culling;
+      if (!(old_ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_ALL) &&
+          ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_ALL)
+         sctx->flags |= SI_CONTEXT_VGT_FLUSH;
+
+      /* Set this to the correct value determined by si_update_shaders. */
+      sctx->ngg_culling = ngg_culling;
+   }
 
    si_need_gfx_cs_space(sctx, num_draws);
 

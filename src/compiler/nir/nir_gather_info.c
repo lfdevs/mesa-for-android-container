@@ -29,10 +29,10 @@ static bool
 src_is_invocation_id(const nir_src *src)
 {
    assert(src->is_ssa);
-   if (src->parent_instr->type != nir_instr_type_intrinsic)
+   if (src->ssa->parent_instr->type != nir_instr_type_intrinsic)
       return false;
 
-   return nir_instr_as_intrinsic(src->parent_instr)->intrinsic ==
+   return nir_instr_as_intrinsic(src->ssa->parent_instr)->intrinsic ==
              nir_intrinsic_load_invocation_id;
 }
 
@@ -313,7 +313,19 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    if (nir_intrinsic_infos[instr->intrinsic].index_map[NIR_INTRINSIC_IO_SEMANTICS] > 0) {
       nir_io_semantics semantics = nir_intrinsic_io_semantics(instr);
 
+      if (semantics.location >= VARYING_SLOT_PATCH0) {
+         /* Generic per-patch I/O. */
+         assert((shader->info.stage == MESA_SHADER_TESS_EVAL &&
+                 instr->intrinsic == nir_intrinsic_load_input) ||
+                (shader->info.stage == MESA_SHADER_TESS_CTRL &&
+                 (instr->intrinsic == nir_intrinsic_load_output ||
+                  instr->intrinsic == nir_intrinsic_store_output)));
+
+         semantics.location -= VARYING_SLOT_PATCH0;
+      }
+
       slot_mask = BITFIELD64_RANGE(semantics.location, semantics.num_slots);
+      assert(util_bitcount64(slot_mask) == semantics.num_slots);
    }
 
    switch (instr->intrinsic) {

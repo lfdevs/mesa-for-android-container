@@ -278,6 +278,7 @@ void *si_create_dcc_retile_cs(struct pipe_context *ctx)
 
    void *cs = ctx->create_compute_state(ctx, &state);
    ureg_destroy(ureg);
+   ureg_free_tokens(state.prog);
    return cs;
 }
 

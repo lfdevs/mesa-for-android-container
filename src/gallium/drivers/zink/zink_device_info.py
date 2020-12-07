@@ -58,7 +58,7 @@ import sys
 def EXTENSIONS():
     return [
         Extension("VK_KHR_maintenance1",             required=True),
-        Extension("VK_KHR_external_memory",          required=True),
+        Extension("VK_KHR_external_memory"),
         Extension("VK_KHR_external_memory_fd"),
         Extension("VK_KHR_vulkan_memory_model"),
         Extension("VK_EXT_conditional_rendering",    alias="cond_render", have_feature="conditionalRendering"),

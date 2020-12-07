@@ -666,7 +666,7 @@ lower_ucp(struct st_context *st,
                                            PIPE_CAP_NIR_COMPACT_ARRAYS);
       bool use_eye = st->ctx->_Shader->CurrentProgram[MESA_SHADER_VERTEX] != NULL;
 
-      gl_state_index16 clipplane_state[MAX_CLIP_PLANES][STATE_LENGTH];
+      gl_state_index16 clipplane_state[MAX_CLIP_PLANES][STATE_LENGTH] = {{0}};
       for (int i = 0; i < MAX_CLIP_PLANES; ++i) {
          if (use_eye) {
             clipplane_state[i][0] = STATE_CLIPPLANE;

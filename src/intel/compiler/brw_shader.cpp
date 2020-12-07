@@ -937,6 +937,8 @@ backend_instruction::can_do_source_mods() const
    case BRW_OPCODE_CBIT:
    case BRW_OPCODE_FBH:
    case BRW_OPCODE_FBL:
+   case BRW_OPCODE_ROL:
+   case BRW_OPCODE_ROR:
    case BRW_OPCODE_SUBB:
    case SHADER_OPCODE_BROADCAST:
    case SHADER_OPCODE_CLUSTER_BROADCAST:

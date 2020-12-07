@@ -1745,7 +1745,7 @@ void visit_alu_instr(isel_context *ctx, nir_alu_instr *instr)
 
          Temp tmp = dst.regClass() == s1 ? bld.tmp(v1) : dst;
          if (src0_ub <= 0xffffff && src1_ub <= 0xffffff) {
-            emit_vop3a_instruction(ctx, instr, aco_opcode::v_mul_hi_u32_u24, tmp);
+            emit_vop2_instruction(ctx, instr, aco_opcode::v_mul_hi_u32_u24, tmp, true);
          } else {
             emit_vop3a_instruction(ctx, instr, aco_opcode::v_mul_hi_u32, tmp);
          }
@@ -11358,11 +11358,11 @@ std::pair<Temp, Temp> ngg_gs_workgroup_reduce_and_scan(isel_context *ctx, Temp s
 
    /* Determine if the current lane is the first. */
    Temp is_first_lane = bld.copy(bld.def(bld.lm), Operand(1u, ctx->program->wave_size == 64));
+   Temp wave_id_in_tg = wave_id_in_threadgroup(ctx);
    begin_divergent_if_then(ctx, &ic, is_first_lane);
    bld.reset(ctx->block);
 
    /* The first lane of each wave stores the result of its subgroup reduction to LDS (NGG scratch). */
-   Temp wave_id_in_tg = wave_id_in_threadgroup(ctx);
    Temp wave_id_in_tg_lds_addr = bld.vop2_e64(aco_opcode::v_lshlrev_b32, bld.def(v1), Operand(2u), wave_id_in_tg);
    store_lds(ctx, 4u, as_vgpr(ctx, sg_reduction), 0x1u, wave_id_in_tg_lds_addr, ctx->ngg_gs_scratch_addr, 4u);
 

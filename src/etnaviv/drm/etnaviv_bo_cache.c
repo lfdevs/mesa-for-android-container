@@ -28,7 +28,6 @@
 #include "etnaviv_drmif.h"
 
 void _etna_bo_del(struct etna_bo *bo);
-extern pthread_mutex_t etna_drm_table_lock;
 
 static void add_bucket(struct etna_bo_cache *cache, int size)
 {

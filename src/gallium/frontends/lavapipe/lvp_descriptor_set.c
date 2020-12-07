@@ -47,7 +47,7 @@ VkResult lvp_CreateDescriptorSetLayout(
                  (max_binding + 1) * sizeof(set_layout->binding[0]) +
                  immutable_sampler_count * sizeof(struct lvp_sampler *);
 
-   set_layout = vk_zalloc2(&device->alloc, pAllocator, size, 8,
+   set_layout = vk_zalloc2(&device->vk.alloc, pAllocator, size, 8,
                            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!set_layout)
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -167,7 +167,7 @@ void lvp_DestroyDescriptorSetLayout(
    if (!_set_layout)
      return;
    vk_object_base_finish(&set_layout->base);
-   vk_free2(&device->alloc, pAllocator, set_layout);
+   vk_free2(&device->vk.alloc, pAllocator, set_layout);
 }
 
 VkResult lvp_CreatePipelineLayout(
@@ -181,7 +181,7 @@ VkResult lvp_CreatePipelineLayout(
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO);
 
-   layout = vk_alloc2(&device->alloc, pAllocator, sizeof(*layout), 8,
+   layout = vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*layout), 8,
                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (layout == NULL)
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -219,7 +219,7 @@ void lvp_DestroyPipelineLayout(
    if (!_pipelineLayout)
      return;
    vk_object_base_finish(&pipeline_layout->base);
-   vk_free2(&device->alloc, pAllocator, pipeline_layout);
+   vk_free2(&device->vk.alloc, pAllocator, pipeline_layout);
 }
 
 VkResult
@@ -230,7 +230,7 @@ lvp_descriptor_set_create(struct lvp_device *device,
    struct lvp_descriptor_set *set;
    size_t size = sizeof(*set) + layout->size * sizeof(set->descriptors[0]);
 
-   set = vk_alloc(&device->alloc /* XXX: Use the pool */, size, 8,
+   set = vk_alloc(&device->vk.alloc /* XXX: Use the pool */, size, 8,
                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!set)
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -264,7 +264,7 @@ lvp_descriptor_set_destroy(struct lvp_device *device,
                            struct lvp_descriptor_set *set)
 {
    vk_object_base_finish(&set->base);
-   vk_free(&device->alloc, set);
+   vk_free(&device->vk.alloc, set);
 }
 
 VkResult lvp_AllocateDescriptorSets(
@@ -442,7 +442,7 @@ VkResult lvp_CreateDescriptorPool(
    LVP_FROM_HANDLE(lvp_device, device, _device);
    struct lvp_descriptor_pool *pool;
    size_t size = sizeof(struct lvp_descriptor_pool);
-   pool = vk_zalloc2(&device->alloc, pAllocator, size, 8,
+   pool = vk_zalloc2(&device->vk.alloc, pAllocator, size, 8,
                      VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!pool)
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -461,7 +461,7 @@ static void lvp_reset_descriptor_pool(struct lvp_device *device,
    struct lvp_descriptor_set *set, *tmp;
    LIST_FOR_EACH_ENTRY_SAFE(set, tmp, &pool->sets, link) {
       list_del(&set->link);
-      vk_free(&device->alloc, set);
+      vk_free(&device->vk.alloc, set);
    }
 }
 
@@ -478,7 +478,7 @@ void lvp_DestroyDescriptorPool(
 
    lvp_reset_descriptor_pool(device, pool);
    vk_object_base_finish(&pool->base);
-   vk_free2(&device->alloc, pAllocator, pool);
+   vk_free2(&device->vk.alloc, pAllocator, pool);
 }
 
 VkResult lvp_ResetDescriptorPool(

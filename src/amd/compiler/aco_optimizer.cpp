@@ -2278,9 +2278,16 @@ bool combine_add_sub_b2i(opt_ctx& ctx, aco_ptr<Instruction>& instr, aco_opcode n
          }
          ctx.uses[instr->operands[i].tempId()]--;
          new_instr->definitions[0] = instr->definitions[0];
-         new_instr->definitions[1] =
-            instr->definitions.size() == 2 ? instr->definitions[1] :
-            Definition(ctx.program->allocateTmp(ctx.program->lane_mask));
+         if (instr->definitions.size() == 2) {
+            new_instr->definitions[1] = instr->definitions[1];
+         } else {
+            new_instr->definitions[1] =
+               Definition(ctx.program->allocateTmp(ctx.program->lane_mask));
+            /* Make sure the uses vector is large enough and the number of
+             * uses properly initialized to 0.
+             */
+            ctx.uses.push_back(0);
+         }
          new_instr->definitions[1].setHint(vcc);
          new_instr->operands[0] = Operand(0u);
          new_instr->operands[1] = instr->operands[!i];
@@ -3083,7 +3090,9 @@ void select_instruction(opt_ctx &ctx, aco_ptr<Instruction>& instr)
    /* Mark SCC needed, so the uniform boolean transformation won't swap the definitions when it isn't beneficial */
    if (instr->format == Format::PSEUDO_BRANCH &&
        instr->operands.size() &&
-       instr->operands[0].isTemp()) {
+       instr->operands[0].isTemp() &&
+       instr->operands[0].isFixed() &&
+       instr->operands[0].physReg() == scc) {
       ctx.info[instr->operands[0].tempId()].set_scc_needed();
       return;
    } else if ((instr->opcode == aco_opcode::s_cselect_b64 ||

@@ -30,8 +30,6 @@
 #include "etnaviv_priv.h"
 #include "etnaviv_drmif.h"
 
-static pthread_mutex_t etna_drm_table_lock = PTHREAD_MUTEX_INITIALIZER;
-
 struct etna_device *etna_device_new(int fd)
 {
 	struct etna_device *dev = calloc(sizeof(*dev), 1);

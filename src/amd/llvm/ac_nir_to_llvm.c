@@ -4967,7 +4967,7 @@ static void scan_tess_ctrl(nir_cf_node *cf_node, unsigned *upper_block_tf_writem
              * such segment that writes tess factor channels should write the same
              * channels in all codepaths within that segment.
              */
-            if (upper_block_tf_writemask || cond_block_tf_writemask) {
+            if (*upper_block_tf_writemask || *cond_block_tf_writemask) {
                /* Accumulate the result: */
                *tessfactors_are_def_in_all_invocs &=
                   !(*cond_block_tf_writemask & ~(*upper_block_tf_writemask));
