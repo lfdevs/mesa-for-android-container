@@ -1,3 +1,17 @@
+mesa (20.3.0-2) experimental; urgency=medium
+
+  * rules: Fix the name of the broadcom vulkan driver.
+  * control, rules: Drop llvm support from kfreebsd, as llvm isn't built
+    there.
+  * rules: Enable gallium swrast (softpipe) and OSMesa everywhere, as
+    they're not actually tied to llvm being available.
+  * rules: Move common settings for !hurd to the top.
+  * rules: Use a better method to build the arrays of drivers, thanks
+    Witold Baryluk! (Closes: #972736)
+  * rules: Clarify the status of wayland support on non-linux ports.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 10 Dec 2020 14:21:30 +0200
+
 mesa (20.3.0-1) experimental; urgency=medium
 
   * New upstream release.

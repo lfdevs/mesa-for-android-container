@@ -32,21 +32,25 @@ endif
 
 DRI_DRIVERS =
 EGL_PLATFORMS = x11
-GALLIUM_DRIVERS =
+GALLIUM_DRIVERS = swrast
 VULKAN_DRIVERS =
 
 confflags_DRI3 = -Ddri3=disabled
+confflags_OSMESA =  -Dosmesa=gallium
 
 # hurd doesn't do direct rendering
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
-	DRI_DRIVERS = swrast
-
 	confflags_DIRECT_RENDERING = -Dglx-direct=false
 	confflags_GBM = -Dgbm=disabled
-	confflags_OSMESA = -Dosmesa=classic
 else
-	DRI_DRIVERS += r200,r100
-	GALLIUM_DRIVERS += r600,r300
+	DRI_DRIVERS += r100 r200
+	GALLIUM_DRIVERS += r300 r600
+
+	confflags_DIRECT_RENDERING = -Dglx-direct=true
+	confflags_GBM = -Dgbm=enabled
+	confflags_GALLIUM += -Dgallium-extra-hud=true
+	confflags_GALLIUM += -Dgallium-vdpau=enabled
+	confflags_GALLIUM += -Dlmsensors=enabled
 
   # radv needs LLVM and the Vulkan loader, so only build on the subset of
   # arches where we have LLVM enabled and where the Vulkan loader is built.
@@ -56,29 +60,31 @@ else
 
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 	confflags_DRI3 = -Ddri3=true
-	DRI_DRIVERS += ,nouveau
+	DRI_DRIVERS += nouveau
 	# Gallium drivers which require kernel support, not yet ported to non-Linux
-	GALLIUM_DRIVERS += ,nouveau,virgl
+	GALLIUM_DRIVERS += nouveau virgl
 
 	# Freedreno requires arm in addition
 	ifneq (,$(filter arm arm64,$(DEB_HOST_ARCH_CPU)))
-		GALLIUM_DRIVERS += ,freedreno
+		GALLIUM_DRIVERS += freedreno
 	endif
 
 	# etnaviv, kmsro, tegra, vc4 and v3d kernel support are only available on armhf and arm64
 	ifneq (,$(filter $(DEB_HOST_ARCH), armhf arm64))
-		GALLIUM_DRIVERS += ,etnaviv,kmsro,lima,panfrost,tegra,vc4,v3d
-		VULKAN_DRIVERS += ,v3dv
+		GALLIUM_DRIVERS += etnaviv kmsro lima panfrost tegra vc4 v3d
+		VULKAN_DRIVERS += broadcom
 	endif
 
 	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 i386 x32))
-		GALLIUM_DRIVERS += ,svga
+		GALLIUM_DRIVERS += svga
 		# svga needs xa state tracker
 		confflags_GALLIUM += -Dgallium-xa=enabled
-		VULKAN_DRIVERS += ,intel
+		VULKAN_DRIVERS += intel
 	endif
 
-	# Non-Linux ports also lack *_CLOEXEC and epoll, so wayland isn't ready yet:
+	# Non-Linux ports lack epoll, so wayland isn't ready yet:
+	# https://gitlab.freedesktop.org/wayland/wayland/-/issues/72
+	# hurd also lacks *_CLOEXEC
 	EGL_PLATFORMS += ,wayland
 
 	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x))
@@ -88,55 +94,57 @@ else
 
   # Build intel drivers on archs where libdrm-intel is installed
   ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 x32))
-	DRI_DRIVERS += ,i915, i965
-	GALLIUM_DRIVERS += ,iris
+	DRI_DRIVERS += i915 i965
+	GALLIUM_DRIVERS += iris
   endif
 
   # LLVM is required for building r300g, radeonsi and llvmpipe drivers.
   # It's also required for building OpenCL support.
-  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64))
-	GALLIUM_DRIVERS += ,radeonsi,swrast
+  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64))
+	GALLIUM_DRIVERS += radeonsi
 	confflags_GALLIUM += -Dllvm=enabled
 	confflags_GALLIUM += -Dgallium-opencl=icd
-	confflags_OSMESA = -Dosmesa=gallium
 
 	# nine makes sense only on archs that build wine
-	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 kfreebsd-i386 powerpc))
+	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 powerpc))
 		confflags_GALLIUM += -Dgallium-nine=true
 	endif
   else
-	DRI_DRIVERS += ,swrast
 	confflags_GALLIUM += -Dllvm=disabled
-	confflags_OSMESA = -Dosmesa=classic
   endif
 
   # build vulkan layers where Vulkan loader is available
   ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64 x32))
-	GALLIUM_DRIVERS += ,zink
+	GALLIUM_DRIVERS += zink
 	confflags_VULKAN += -Dvulkan-device-select-layer=true
 	confflags_VULKAN += -Dvulkan-overlay-layer=true
   endif
 
-	confflags_DIRECT_RENDERING = -Dglx-direct=true
-	confflags_GBM = -Dgbm=enabled
-	confflags_GALLIUM += -Dgallium-extra-hud=true
-	confflags_GALLIUM += -Dgallium-vdpau=enabled
-	confflags_GALLIUM += -Dlmsensors=enabled
-
   ifeq (,$(filter pkg.mesa.nolibva,$(DEB_BUILD_PROFILES)))
-        confflags_GALLIUM += -Dgallium-va=enabled
+	confflags_GALLIUM += -Dgallium-va=enabled
   endif
 endif
 
+
+empty:=
+space := $(empty) $(empty)
+comma := ,
+DRI_DRIVERS := $(patsubst %,'%',$(DRI_DRIVERS))
+DRI_DRIVERS_LIST := $(subst $(space),$(comma),$(DRI_DRIVERS))
+GALLIUM_DRIVERS := $(patsubst %,'%',$(GALLIUM_DRIVERS))
+GALLIUM_DRIVERS_LIST := $(subst $(space),$(comma),$(GALLIUM_DRIVERS))
+VULKAN_DRIVERS := $(patsubst %,'%',$(VULKAN_DRIVERS))
+VULKAN_DRIVERS_LIST := $(subst $(space),$(comma),$(VULKAN_DRIVERS))
+
 confflags_EGL = -Dplatforms="$(EGL_PLATFORMS)"
 confflags_GLES = -Dgles1=disabled -Dgles2=enabled
-confflags_GALLIUM += -Dgallium-drivers="$(GALLIUM_DRIVERS)"
+confflags_GALLIUM += -Dgallium-drivers="[$(GALLIUM_DRIVERS_LIST)]"
 
 confflags += \
-	-Ddri-drivers="$(DRI_DRIVERS)" \
+	-Ddri-drivers="[$(DRI_DRIVERS_LIST)]" \
 	-Ddri-drivers-path=/usr/lib/$(DEB_HOST_MULTIARCH)/dri \
 	-Ddri-search-path='/usr/lib/$(DEB_HOST_MULTIARCH)/dri:\$$$${ORIGIN}/dri:/usr/lib/dri' \
-	-Dvulkan-drivers="$(VULKAN_DRIVERS)" \
+	-Dvulkan-drivers="[$(VULKAN_DRIVERS_LIST)]" \
 	-Dglvnd=true \
 	-Dshared-glapi=enabled \
 	-Dgallium-xvmc=disabled \
