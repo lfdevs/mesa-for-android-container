@@ -21,7 +21,7 @@ SHA256 checksum
 
 ::
 
-    TBD.
+    2999738e888731531cd62b27519fa37566cc0ea2cd7d4d97f46abaa3e949c630  mesa-20.3.0.tar.xz
 
 
 New features

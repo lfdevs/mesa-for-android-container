@@ -2796,15 +2796,13 @@ typedef struct nir_block {
    uint32_t dom_pre_index, dom_post_index;
 
    /**
-    * nir_instr->index for the first nir_instr in the block.  If the block is
-    * empty, it will be the index of the immediately previous instr, or 0.
-    * Valid when the impl has nir_metadata_instr_index.
+    * Value just before the first nir_instr->index in the block, but after
+    * end_ip that of any predecessor block.
     */
    uint32_t start_ip;
    /**
-    * nir_instr->index for the last nir_instr in the block.  If the block is
-    * empty, it will be the same as start_ip.  Valid when the impl has
-    * nir_metadata_instr_index.
+    * Value just after the last nir_instr->index in the block, but before the
+    * start_ip of any successor block.
     */
    uint32_t end_ip;
 

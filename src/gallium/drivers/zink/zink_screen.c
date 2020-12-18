@@ -449,7 +449,8 @@ zink_get_shader_param(struct pipe_screen *pscreen,
       return 65536;
 
    case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
-      return  MIN2(screen->info.props.limits.maxPerStageDescriptorUniformBuffers, INT_MAX);
+      return  MIN2(screen->info.props.limits.maxPerStageDescriptorUniformBuffers,
+                   PIPE_MAX_CONSTANT_BUFFERS);
 
    case PIPE_SHADER_CAP_MAX_TEMPS:
       return INT_MAX;

@@ -4254,14 +4254,15 @@ void radv_CmdBindPipeline(
 		/* Prefetch all pipeline shaders at first draw time. */
 		cmd_buffer->state.prefetch_L2_mask |= RADV_PREFETCH_SHADERS;
 
-		if (cmd_buffer->device->physical_device->rad_info.chip_class == GFX10 &&
+		if ((cmd_buffer->device->physical_device->rad_info.chip_class == GFX10 ||
+		     cmd_buffer->device->physical_device->rad_info.family == CHIP_SIENNA_CICHLID) &&
 		    cmd_buffer->state.emitted_pipeline &&
 		    radv_pipeline_has_ngg(cmd_buffer->state.emitted_pipeline) &&
 		    !radv_pipeline_has_ngg(cmd_buffer->state.pipeline)) {
 			/* Transitioning from NGG to legacy GS requires
-			 * VGT_FLUSH on Navi10-14.  VGT_FLUSH is also emitted
-			 * at the beginning of IBs when legacy GS ring pointers
-			 * are set.
+			 * VGT_FLUSH on GFX10 and Sienna Cichlid. VGT_FLUSH
+			 * is also emitted at the beginning of IBs when legacy
+			 * GS ring pointers are set.
 			 */
 			cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_VGT_FLUSH;
 		}

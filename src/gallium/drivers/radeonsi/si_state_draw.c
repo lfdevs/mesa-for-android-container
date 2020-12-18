@@ -1624,7 +1624,7 @@ static void si_get_draw_start_count(struct si_context *sctx, const struct pipe_d
       }
 
       *start = min_element;
-      *count = max_element;
+      *count = max_element - min_element;
    }
 }
 

@@ -257,3 +257,26 @@ BEGIN_TEST(optimize.add3)
 
    finish_opt_test();
 END_TEST
+
+BEGIN_TEST(optimize.minmax)
+   for (unsigned i = GFX8; i <= GFX10; i++) {
+      //>> v1: %a, s2: %_:exec = p_startpgm
+      if (!setup_cs("v1", (chip_class)i))
+         continue;
+
+      //! v1: %res0 = v_max3_f32 0, -0, %a
+      //! p_unit_test 0, %res0
+      Temp xor0 = bld.vop2(aco_opcode::v_xor_b32, bld.def(v1), Operand(0x80000000u), Operand(inputs[0]));
+      Temp min = bld.vop2(aco_opcode::v_min_f32, bld.def(v1), Operand(0u), xor0);
+      Temp xor1 = bld.vop2(aco_opcode::v_xor_b32, bld.def(v1), Operand(0x80000000u), min);
+      writeout(0, bld.vop2(aco_opcode::v_max_f32, bld.def(v1), Operand(0u), xor1));
+
+      //! v1: %res1 = v_max3_f32 0, -0, -%a
+      //! p_unit_test 1, %res1
+      min = bld.vop2(aco_opcode::v_min_f32, bld.def(v1), Operand(0u), Operand(inputs[0]));
+      xor1 = bld.vop2(aco_opcode::v_xor_b32, bld.def(v1), Operand(0x80000000u), min);
+      writeout(1, bld.vop2(aco_opcode::v_max_f32, bld.def(v1), Operand(0u), xor1));
+
+      finish_opt_test();
+   }
+END_TEST

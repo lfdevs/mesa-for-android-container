@@ -62,6 +62,6 @@ pan_device(struct pipe_screen *p)
 }
 
 struct panfrost_fence *
-panfrost_fence_create(struct panfrost_context *ctx, uint32_t syncobj);
+panfrost_fence_create(struct panfrost_context *ctx);
 
 #endif /* PAN_SCREEN_H */

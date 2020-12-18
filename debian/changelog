@@ -1,3 +1,9 @@
+mesa (20.3.1-1) experimental; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 18 Dec 2020 10:23:30 +0200
+
 mesa (20.3.0-2) experimental; urgency=medium
 
   * rules: Fix the name of the broadcom vulkan driver.
@@ -32,6 +38,18 @@ mesa (20.3.0~rc1-1) experimental; urgency=medium
   * control: Add libxcb-shm0-dev to build-depends.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Wed, 11 Nov 2020 18:29:42 +0200
+
+mesa (20.2.6-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 17 Dec 2020 06:42:32 +0200
+
+mesa (20.2.5-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 16 Dec 2020 23:32:56 +0200
 
 mesa (20.2.4-1) unstable; urgency=medium
 

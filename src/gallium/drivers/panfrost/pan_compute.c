@@ -156,7 +156,7 @@ panfrost_launch_grid(struct pipe_context *pipe,
 
         panfrost_add_job(&batch->pool, &batch->scoreboard,
                          MALI_JOB_TYPE_COMPUTE, true, 0, &t, true);
-        panfrost_flush_all_batches(ctx, 0);
+        panfrost_flush_all_batches(ctx);
 }
 
 static void

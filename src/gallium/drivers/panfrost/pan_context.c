@@ -160,16 +160,13 @@ panfrost_flush(
 {
         struct panfrost_context *ctx = pan_context(pipe);
         struct panfrost_device *dev = pan_device(pipe->screen);
-        uint32_t syncobj = 0;
 
-        if (fence)
-                drmSyncobjCreate(dev->fd, 0, &syncobj);
 
         /* Submit all pending jobs */
-        panfrost_flush_all_batches(ctx, syncobj);
+        panfrost_flush_all_batches(ctx);
 
         if (fence) {
-                struct panfrost_fence *f = panfrost_fence_create(ctx, syncobj);
+                struct panfrost_fence *f = panfrost_fence_create(ctx);
                 pipe->screen->fence_reference(pipe->screen, fence, NULL);
                 *fence = (struct pipe_fence_handle *)f;
         }
@@ -182,7 +179,7 @@ static void
 panfrost_texture_barrier(struct pipe_context *pipe, unsigned flags)
 {
         struct panfrost_context *ctx = pan_context(pipe);
-        panfrost_flush_all_batches(ctx, 0);
+        panfrost_flush_all_batches(ctx);
 }
 
 #define DEFINE_CASE(c) case PIPE_PRIM_##c: return MALI_DRAW_MODE_##c;
@@ -1428,7 +1425,7 @@ panfrost_get_query_result(struct pipe_context *pipe,
 
         case PIPE_QUERY_PRIMITIVES_GENERATED:
         case PIPE_QUERY_PRIMITIVES_EMITTED:
-                panfrost_flush_all_batches(ctx, 0);
+                panfrost_flush_all_batches(ctx);
                 vresult->u64 = query->end - query->start;
                 break;
 
@@ -1615,6 +1612,14 @@ panfrost_create_context(struct pipe_screen *screen, void *priv, unsigned flags)
         /* By default mask everything on */
         ctx->sample_mask = ~0;
         ctx->active_queries = true;
+
+        int ASSERTED ret;
+
+        /* Create a syncobj in a signaled state. Will be updated to point to the
+         * last queued job out_sync every time we submit a new job.
+         */
+        ret = drmSyncobjCreate(dev->fd, DRM_SYNCOBJ_CREATE_SIGNALED, &ctx->syncobj);
+        assert(!ret && ctx->syncobj);
 
         return gallium;
 }

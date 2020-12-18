@@ -555,8 +555,10 @@ radv_pipeline_compute_spi_color_formats(const struct radv_pipeline *pipeline,
 	/* The output for dual source blending should have the same format as
 	 * the first output.
 	 */
-	if (blend->mrt0_is_dual_src)
+	if (blend->mrt0_is_dual_src) {
+		assert(!(col_format >> 4));
 		col_format |= (col_format & 0xf) << 4;
+	}
 
 	blend->spi_shader_col_format = col_format;
 	blend->col_format_is_int8 = is_int8;
@@ -682,6 +684,12 @@ radv_pipeline_init_blend_state(const struct radv_pipeline *pipeline,
 			blend.sx_mrt_blend_opt[i] = S_028760_COLOR_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED) | S_028760_ALPHA_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED);
 
 			if (!att->colorWriteMask)
+				continue;
+
+			/* Ignore other blend targets if dual-source blending
+			 * is enabled to prevent wrong behaviour.
+			 */
+			if (blend.mrt0_is_dual_src)
 				continue;
 
 			blend.cb_target_mask |= (unsigned)att->colorWriteMask << (4 * i);
@@ -2073,21 +2081,33 @@ gfx10_get_ngg_info(const struct radv_pipeline_key *key,
 						   (max_lds_size - max_gsprims * gsprim_lds_size) /
 						   esvert_lds_size);
 			max_esverts = MIN2(max_esverts, max_gsprims * max_verts_per_prim);
+			/* Hardware restriction: minimum value of max_esverts */
+			max_esverts = MAX2(max_esverts, min_esverts - 1 + max_verts_per_prim);
 
 			max_gsprims = align(max_gsprims, wavesize);
 			max_gsprims = MIN2(max_gsprims, max_gsprims_base);
-			if (gsprim_lds_size)
-				max_gsprims = MIN2(max_gsprims,
-						   (max_lds_size - max_esverts * esvert_lds_size) /
-						   gsprim_lds_size);
+			if (gsprim_lds_size) {
+				/* Don't count unusable vertices to the LDS
+				 * size. Those are vertices above the maximum
+				 * number of vertices that can occur in the
+				 * workgroup, which is e.g. max_gsprims * 3
+				 * for triangles.
+				 */
+				unsigned usable_esverts = MIN2(max_esverts, max_gsprims * max_verts_per_prim);
+				max_gsprims =
+					MIN2(max_gsprims, (max_lds_size - usable_esverts * esvert_lds_size) / gsprim_lds_size);
+			}
 			clamp_gsprims_to_esverts(&max_gsprims, max_esverts,
 						 min_verts_per_prim, uses_adjacency);
 			assert(max_esverts >= max_verts_per_prim && max_gsprims >= 1);
 		} while (orig_max_esverts != max_esverts || orig_max_gsprims != max_gsprims);
-	}
 
-	/* Hardware restriction: minimum value of max_esverts */
-	max_esverts = MAX2(max_esverts, min_esverts - 1 + max_verts_per_prim);
+		/* Verify the restriction. */
+		assert(max_esverts >= min_esverts - 1 + max_verts_per_prim);
+	} else {
+		/* Hardware restriction: minimum value of max_esverts */
+		max_esverts = MAX2(max_esverts, min_esverts - 1 + max_verts_per_prim);
+	}
 
 	unsigned max_out_vertices =
 		max_vert_out_per_gs_instance ? gs_info->gs.vertices_out :
@@ -2114,7 +2134,10 @@ gfx10_get_ngg_info(const struct radv_pipeline_key *key,
 	ngg->prim_amp_factor = prim_amp_factor;
 	ngg->max_vert_out_per_gs_instance = max_vert_out_per_gs_instance;
 	ngg->ngg_emit_size = max_gsprims * gsprim_lds_size;
-	ngg->esgs_ring_size = 4 * max_esverts * esvert_lds_size;
+
+	/* Don't count unusable vertices. */
+	ngg->esgs_ring_size =
+		MIN2(max_esverts, max_gsprims * max_verts_per_prim) * esvert_lds_size * 4;
 
 	if (gs_type == MESA_SHADER_GEOMETRY) {
 		ngg->vgt_esgs_ring_itemsize = es_info->esgs_itemsize / 4;

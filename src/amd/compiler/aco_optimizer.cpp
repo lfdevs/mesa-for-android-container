@@ -2088,8 +2088,8 @@ bool combine_minmax(opt_ctx& ctx, aco_ptr<Instruction>& instr, aco_opcode opposi
    if (combine_three_valu_op(ctx, instr, instr->opcode, minmax3, "012", 1 | 2))
       return true;
 
-   /* min(-max(a, b), c) -> min3(-a, -b, c) *
-    * max(-min(a, b), c) -> max3(-a, -b, c) */
+   /* min(-max(a, b), c) -> min3(c, -a, -b) *
+    * max(-min(a, b), c) -> max3(c, -a, -b) */
    for (unsigned swap = 0; swap < 2; swap++) {
       Operand operands[3];
       bool neg[3], abs[3], clamp, precise;
@@ -2101,8 +2101,8 @@ bool combine_minmax(opt_ctx& ctx, aco_ptr<Instruction>& instr, aco_opcode opposi
                              &clamp, &omod, &inbetween_neg, NULL, NULL, &precise) &&
           inbetween_neg) {
          ctx.uses[instr->operands[swap].tempId()]--;
-         neg[1] = true;
-         neg[2] = true;
+         neg[1] = !neg[1];
+         neg[2] = !neg[2];
          create_vop3_for_op3(ctx, minmax3, instr, operands, neg, abs, opsel, clamp, omod);
          return true;
       }

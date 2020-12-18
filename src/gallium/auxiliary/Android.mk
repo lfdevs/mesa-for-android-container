@@ -36,7 +36,9 @@ LOCAL_SRC_FILES := \
 	$(VL_STUB_SOURCES)
 
 ifeq ($(USE_LIBBACKTRACE),true)
-	LOCAL_SRC_FILES += util/u_debug_stack_android.cpp
+	LOCAL_CFLAGS += -DHAVE_ANDROID_PLATFORM
+	LOCAL_SHARED_LIBRARIES += libbacktrace
+	LOCAL_SRC_FILES += ../../util/u_debug_stack_android.cpp
 endif
 
 LOCAL_C_INCLUDES := \

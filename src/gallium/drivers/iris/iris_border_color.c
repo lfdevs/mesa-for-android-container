@@ -147,7 +147,7 @@ iris_upload_border_color(struct iris_context *ice,
    memcpy(pool->map + offset, color, sizeof(*color));
    pool->insert_point += BC_ALIGNMENT;
 
-   _mesa_hash_table_insert_pre_hashed(pool->ht, hash, color,
+   _mesa_hash_table_insert_pre_hashed(pool->ht, hash, pool->map + offset,
                                       (void *) (uintptr_t) offset);
    return offset;
 }

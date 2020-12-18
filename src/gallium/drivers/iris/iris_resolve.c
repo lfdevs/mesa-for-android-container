@@ -94,7 +94,7 @@ resolve_sampler_views(struct iris_context *ice,
    while (views) {
       const int i = u_bit_scan(&views);
       struct iris_sampler_view *isv = shs->textures[i];
-      struct iris_resource *res = (void *) isv->base.texture;
+      struct iris_resource *res = isv->res;
 
       if (res->base.target != PIPE_BUFFER) {
          if (consider_framebuffer) {

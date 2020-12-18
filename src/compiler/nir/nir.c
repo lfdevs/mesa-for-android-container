@@ -1945,12 +1945,12 @@ nir_index_instrs(nir_function_impl *impl)
    unsigned index = 0;
 
    nir_foreach_block(block, impl) {
-      block->start_ip = index;
+      block->start_ip = index++;
 
       nir_foreach_instr(instr, block)
          instr->index = index++;
 
-      block->end_ip = index;
+      block->end_ip = index++;
    }
 
    return index;

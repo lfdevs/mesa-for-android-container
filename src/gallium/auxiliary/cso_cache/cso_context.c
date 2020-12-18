@@ -376,6 +376,24 @@ void cso_destroy_context( struct cso_context *ctx )
          struct pipe_screen *scr = ctx->pipe->screen;
          enum pipe_shader_type sh;
          for (sh = 0; sh < PIPE_SHADER_TYPES; sh++) {
+            switch (sh) {
+            case PIPE_SHADER_GEOMETRY:
+               if (!ctx->has_geometry_shader)
+                  continue;
+               break;
+            case PIPE_SHADER_TESS_CTRL:
+            case PIPE_SHADER_TESS_EVAL:
+               if (!ctx->has_tessellation)
+                  continue;
+               break;
+            case PIPE_SHADER_COMPUTE:
+               if (!ctx->has_compute_shader)
+                  continue;
+               break;
+            default:
+               break;
+            }
+
             int maxsam = scr->get_shader_param(scr, sh,
                                                PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS);
             int maxview = scr->get_shader_param(scr, sh,
@@ -387,6 +405,7 @@ void cso_destroy_context( struct cso_context *ctx )
             assert(maxsam <= PIPE_MAX_SAMPLERS);
             assert(maxview <= PIPE_MAX_SHADER_SAMPLER_VIEWS);
             assert(maxssbo <= PIPE_MAX_SHADER_BUFFERS);
+            assert(maxcb <= PIPE_MAX_CONSTANT_BUFFERS);
             if (maxsam > 0) {
                ctx->pipe->bind_sampler_states(ctx->pipe, sh, 0, maxsam, zeros);
             }

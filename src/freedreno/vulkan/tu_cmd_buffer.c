@@ -3340,8 +3340,7 @@ tu6_draw_common(struct tu_cmd_buffer *cmd,
       tu_cs_emit_draw_state(cs, TU_DRAW_STATE_DESC_SETS_LOAD, pipeline->load_state);
       tu_cs_emit_draw_state(cs, TU_DRAW_STATE_VB, cmd->state.vertex_buffers);
       tu_cs_emit_draw_state(cs, TU_DRAW_STATE_VS_PARAMS, cmd->state.vs_params);
-      if (cmd->state.dirty & TU_CMD_DIRTY_LRZ)
-         tu_cs_emit_draw_state(cs, TU_DRAW_STATE_LRZ, cmd->state.lrz.state);
+      tu_cs_emit_draw_state(cs, TU_DRAW_STATE_LRZ, cmd->state.lrz.state);
 
       for (uint32_t i = 0; i < ARRAY_SIZE(cmd->state.dynamic_state); i++) {
          tu_cs_emit_draw_state(cs, TU_DRAW_STATE_DYNAMIC + i,

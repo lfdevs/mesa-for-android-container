@@ -2202,14 +2202,10 @@ void register_allocation(Program *program, std::vector<IDSet>& live_out_per_bloc
                    !register_file.test(reg, definition->bytes()))
                   definition->setFixed(reg);
             } else if (instr->opcode == aco_opcode::p_extract_vector) {
-               PhysReg reg;
-               if (instr->operands[0].isKillBeforeDef() &&
-                   instr->operands[0].getTemp().type() == definition->getTemp().type()) {
-                  reg = instr->operands[0].physReg();
-                  reg.reg_b += definition->bytes() * instr->operands[1].constantValue();
-                  assert(!register_file.test(reg, definition->bytes()));
+               PhysReg reg = instr->operands[0].physReg();
+               reg.reg_b += definition->bytes() * instr->operands[1].constantValue();
+               if (get_reg_specified(ctx, register_file, definition->regClass(), parallelcopy, instr, reg))
                   definition->setFixed(reg);
-               }
             } else if (instr->opcode == aco_opcode::p_create_vector) {
                PhysReg reg = get_reg_create_vector(ctx, register_file, definition->getTemp(),
                                                    parallelcopy, instr);

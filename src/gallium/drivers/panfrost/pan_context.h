@@ -109,6 +109,9 @@ struct panfrost_context {
          * size from the kernel is 4kb */
         struct u_upload_mgr *state_uploader;
 
+        /* Sync obj used to keep track of in-flight jobs. */
+        uint32_t syncobj;
+
         /* Bound job batch and map of panfrost_batch_key to job batches */
         struct panfrost_batch *batch;
         struct hash_table *batches;

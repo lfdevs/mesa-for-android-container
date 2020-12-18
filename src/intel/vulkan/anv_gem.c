@@ -437,7 +437,7 @@ anv_gem_handle_to_fd(struct anv_device *device, uint32_t gem_handle)
 {
    struct drm_prime_handle args = {
       .handle = gem_handle,
-      .flags = DRM_CLOEXEC,
+      .flags = DRM_CLOEXEC | DRM_RDWR,
    };
 
    int ret = gen_ioctl(device->fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &args);

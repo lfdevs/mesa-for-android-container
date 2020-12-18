@@ -1002,10 +1002,6 @@ if cc.get_id() == 'msvc'
       cpp_args += a
     endif
   endforeach
-  if cc.has_argument('-Wmicrosoft-enum-value')  # Clang
-    c_args += '-Wno-microsoft-enum-value'
-    cpp_args += '-Wno-microsoft-enum-value'
-  endif
 else
   _trial = [
     '-Werror=implicit-function-declaration',
@@ -1074,6 +1070,11 @@ else
       cpp_msvc_compat_args += a
     endif
   endforeach
+
+  if cc.has_argument('-Wmicrosoft-enum-value')  # Clang
+    c_args += '-Wno-microsoft-enum-value'
+    cpp_args += '-Wno-microsoft-enum-value'
+  endif
 endif
 
 # set linker arguments

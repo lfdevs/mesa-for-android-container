@@ -100,11 +100,11 @@ $(intermediates)/spirv/spirv_info.c: $(LOCAL_PATH)/spirv/spirv_info_c.py $(LOCAL
 	@mkdir -p $(dir $@)
 	$(hide) $(MESA_PYTHON2) $^ $@ || ($(RM) $@; false)
 
-$(intermediates)/spirv/vtn_gather_types.c:: $(LOCAL_PATH)/spirv/vtn_gather_types_c.py $(LOCAL_PATH)/spirv/spirv.core.grammar.json
+$(intermediates)/spirv/vtn_gather_types.c: $(LOCAL_PATH)/spirv/vtn_gather_types_c.py $(LOCAL_PATH)/spirv/spirv.core.grammar.json
 	@mkdir -p $(dir $@)
 	$(hide) $(MESA_PYTHON2) $^ $@ || ($(RM) $@; false)
 
-$(intermediates)/spirv/vtn_generator_ids.h:: $(LOCAL_PATH)/spirv/vtn_generator_ids_h.py $(LOCAL_PATH)/spirv/spir-v.xml
+$(intermediates)/spirv/vtn_generator_ids.h: $(LOCAL_PATH)/spirv/vtn_generator_ids_h.py $(LOCAL_PATH)/spirv/spir-v.xml
 	@mkdir -p $(dir $@)
 	$(hide) $(MESA_PYTHON2) $^ $@ || ($(RM) $@; false)
 

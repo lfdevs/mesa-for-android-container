@@ -1638,7 +1638,7 @@ get_gather_value(const struct sp_sampler_view *sp_sview,
    case PIPE_SWIZZLE_0:
       return 0.0;
    case PIPE_SWIZZLE_1:
-      return 1.0;
+      return sp_sview->oneval;
    default:
       return tx[chan][swizzle];
    }
@@ -2884,12 +2884,12 @@ do_swizzling(const struct pipe_sampler_view *sview,
              float in[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE],
              float out[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])
 {
+   struct sp_sampler_view *sp_sview = (struct sp_sampler_view *)sview;
    int j;
    const unsigned swizzle_r = sview->swizzle_r;
    const unsigned swizzle_g = sview->swizzle_g;
    const unsigned swizzle_b = sview->swizzle_b;
    const unsigned swizzle_a = sview->swizzle_a;
-   float oneval = util_format_is_pure_integer(sview->format) ? uif(1) : 1.0f;
 
    switch (swizzle_r) {
    case PIPE_SWIZZLE_0:
@@ -2898,7 +2898,7 @@ do_swizzling(const struct pipe_sampler_view *sview,
       break;
    case PIPE_SWIZZLE_1:
       for (j = 0; j < 4; j++)
-         out[0][j] = oneval;
+         out[0][j] = sp_sview->oneval;
       break;
    default:
       assert(swizzle_r < 4);
@@ -2913,7 +2913,7 @@ do_swizzling(const struct pipe_sampler_view *sview,
       break;
    case PIPE_SWIZZLE_1:
       for (j = 0; j < 4; j++)
-         out[1][j] = oneval;
+         out[1][j] = sp_sview->oneval;
       break;
    default:
       assert(swizzle_g < 4);
@@ -2928,7 +2928,7 @@ do_swizzling(const struct pipe_sampler_view *sview,
       break;
    case PIPE_SWIZZLE_1:
       for (j = 0; j < 4; j++)
-         out[2][j] = oneval;
+         out[2][j] = sp_sview->oneval;
       break;
    default:
       assert(swizzle_b < 4);
@@ -2943,7 +2943,7 @@ do_swizzling(const struct pipe_sampler_view *sview,
       break;
    case PIPE_SWIZZLE_1:
       for (j = 0; j < 4; j++)
-         out[3][j] = oneval;
+         out[3][j] = sp_sview->oneval;
       break;
    default:
       assert(swizzle_a < 4);
@@ -3638,6 +3638,8 @@ softpipe_create_sampler_view(struct pipe_context *pipe,
 
       sview->xpot = util_logbase2( resource->width0 );
       sview->ypot = util_logbase2( resource->height0 );
+
+      sview->oneval = util_format_is_pure_integer(view->format) ? uif(1) : 1.0f;
    }
 
    return (struct pipe_sampler_view *) sview;

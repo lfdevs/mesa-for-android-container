@@ -785,6 +785,9 @@ r3d_setup(struct tu_cmd_buffer *cmd,
    tu_cs_emit_regs(cs, A6XX_RB_SRGB_CNTL(vk_format_is_srgb(vk_format)));
    tu_cs_emit_regs(cs, A6XX_SP_SRGB_CNTL(vk_format_is_srgb(vk_format)));
 
+   tu_cs_emit_regs(cs, A6XX_GRAS_LRZ_CNTL(0));
+   tu_cs_emit_regs(cs, A6XX_RB_LRZ_CNTL(0));
+
    if (cmd->state.predication_active) {
       tu_cs_emit_pkt7(cs, CP_DRAW_PRED_ENABLE_LOCAL, 1);
       tu_cs_emit(cs, 0);
@@ -1905,10 +1908,8 @@ tu_clear_sysmem_attachments(struct tu_cmd_buffer *cmd,
             .component_enable = COND(clear_rts & (1 << i), 0xf)));
    }
 
-   if (z_clear) {
-      tu_cs_emit_regs(cs, A6XX_GRAS_LRZ_CNTL(0));
-      tu_cs_emit_regs(cs, A6XX_RB_LRZ_CNTL(0));
-   }
+   tu_cs_emit_regs(cs, A6XX_GRAS_LRZ_CNTL(0));
+   tu_cs_emit_regs(cs, A6XX_RB_LRZ_CNTL(0));
 
    tu_cs_emit_regs(cs, A6XX_RB_DEPTH_PLANE_CNTL());
    tu_cs_emit_regs(cs, A6XX_RB_DEPTH_CNTL(
@@ -1982,7 +1983,7 @@ pack_gmem_clear_value(const VkClearValue *val, VkFormat format, uint32_t clear_v
    float tmp[4];
    memcpy(tmp, val->color.float32, 4 * sizeof(float));
    if (vk_format_is_srgb(format)) {
-      for (int i = 0; i < 4; i++)
+      for (int i = 0; i < 3; i++)
          tmp[i] = util_format_linear_to_srgb_float(tmp[i]);
    }
 
@@ -2135,6 +2136,13 @@ tu_CmdClearAttachments(VkCommandBuffer commandBuffer,
     */
    tu_emit_cache_flush_renderpass(cmd, cs);
 
+   for (uint32_t j = 0; j < attachmentCount; j++) {
+      if ((pAttachments[j].aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) == 0)
+         continue;
+      cmd->state.lrz.valid = false;
+      cmd->state.dirty |= TU_CMD_DIRTY_LRZ;
+   }
+
    /* vkCmdClearAttachments is supposed to respect the predicate if active.
     * The easiest way to do this is to always use the 3d path, which always
     * works even with GMEM because it's just a simple draw using the existing
@@ -2158,13 +2166,6 @@ tu_CmdClearAttachments(VkCommandBuffer commandBuffer,
    tu_cond_exec_start(cs, CP_COND_EXEC_0_RENDER_MODE_SYSMEM);
    tu_clear_sysmem_attachments(cmd, attachmentCount, pAttachments, rectCount, pRects);
    tu_cond_exec_end(cs);
-
-   for (uint32_t j = 0; j < attachmentCount; j++) {
-      if ((pAttachments[j].aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) == 0)
-         continue;
-      cmd->state.lrz.valid = false;
-      cmd->state.dirty |= TU_CMD_DIRTY_LRZ;
-   }
 }
 
 static void

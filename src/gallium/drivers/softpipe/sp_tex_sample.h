@@ -122,6 +122,8 @@ struct sp_sampler_view
    compute_lambda_func compute_lambda;
    compute_lambda_from_grad_func compute_lambda_from_grad;
    union pipe_color_union border_color;
+   /* Value to use for PIPE_SWIZZLE_1 (integer vs float) */
+   float oneval;
 };
 
 struct sp_filter_funcs {

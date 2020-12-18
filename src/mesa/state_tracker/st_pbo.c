@@ -202,7 +202,7 @@ st_pbo_draw(struct st_context *st, const struct st_pbo_addresses *addr,
          return false;
    }
 
-   if (addr->depth != 1 && st->pbo.use_gs && !st->pbo.gs) {
+   if (st->pbo.use_gs && !st->pbo.gs) {
       st->pbo.gs = st_pbo_create_gs(st);
       if (!st->pbo.gs)
          return false;

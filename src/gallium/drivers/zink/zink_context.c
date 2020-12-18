@@ -1304,7 +1304,8 @@ zink_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
                                                   _mesa_hash_pointer,
                                                   _mesa_key_pointer_equal);
 
-      if (!ctx->batches[i].resources || !ctx->batches[i].sampler_views)
+      if (!ctx->batches[i].resources || !ctx->batches[i].sampler_views ||
+          !ctx->batches[i].programs)
          goto fail;
 
       util_dynarray_init(&ctx->batches[i].zombie_samplers, NULL);
