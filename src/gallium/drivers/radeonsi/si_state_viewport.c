@@ -28,34 +28,13 @@
 
 #define SI_MAX_SCISSOR 16384
 
-void si_update_ngg_small_prim_precision(struct si_context *ctx)
-{
-   if (!ctx->screen->use_ngg_culling)
-      return;
-
-   /* Set VS_STATE.SMALL_PRIM_PRECISION for NGG culling. */
-   unsigned num_samples = ctx->framebuffer.nr_samples;
-   unsigned quant_mode = ctx->viewports.as_scissor[0].quant_mode;
-   float precision;
-
-   if (quant_mode == SI_QUANT_MODE_12_12_FIXED_POINT_1_4096TH)
-      precision = num_samples / 4096.0;
-   else if (quant_mode == SI_QUANT_MODE_14_10_FIXED_POINT_1_1024TH)
-      precision = num_samples / 1024.0;
-   else
-      precision = num_samples / 256.0;
-
-   ctx->current_vs_state &= C_VS_STATE_SMALL_PRIM_PRECISION;
-   ctx->current_vs_state |= S_VS_STATE_SMALL_PRIM_PRECISION(fui(precision) >> 23);
-}
-
 void si_get_small_prim_cull_info(struct si_context *sctx, struct si_small_prim_cull_info *out)
 {
    /* This is needed by the small primitive culling, because it's done
     * in screen space.
     */
    struct si_small_prim_cull_info info;
-   unsigned num_samples = sctx->framebuffer.nr_samples;
+   unsigned num_samples = si_get_num_coverage_samples(sctx);
    assert(num_samples >= 1);
 
    info.scale[0] = sctx->viewports.states[0].scale[0];
@@ -85,7 +64,62 @@ void si_get_small_prim_cull_info(struct si_context *sctx, struct si_small_prim_c
       info.scale[i] *= num_samples;
       info.translate[i] *= num_samples;
    }
+
+   /* Better subpixel precision increases the efficiency of small
+    * primitive culling. (more precision means a tighter bounding box
+    * around primitives and more accurate elimination)
+    */
+   unsigned quant_mode = sctx->viewports.as_scissor[0].quant_mode;
+
+   if (quant_mode == SI_QUANT_MODE_12_12_FIXED_POINT_1_4096TH)
+      info.small_prim_precision = num_samples / 4096.0;
+   else if (quant_mode == SI_QUANT_MODE_14_10_FIXED_POINT_1_1024TH)
+      info.small_prim_precision = num_samples / 1024.0;
+   else
+      info.small_prim_precision = num_samples / 256.0;
+
    *out = info;
+}
+
+static void si_emit_cull_state(struct si_context *sctx)
+{
+   assert(sctx->screen->use_ngg_culling);
+
+   struct si_small_prim_cull_info info;
+   si_get_small_prim_cull_info(sctx, &info);
+
+   if (!sctx->small_prim_cull_info_buf ||
+       memcmp(&info, &sctx->last_small_prim_cull_info, sizeof(info))) {
+      unsigned offset = 0;
+
+      /* Align to 256, because the address is shifted by 8 bits. */
+      u_upload_data(sctx->b.const_uploader, 0, sizeof(info), 256, &info, &offset,
+                    (struct pipe_resource **)&sctx->small_prim_cull_info_buf);
+
+      sctx->small_prim_cull_info_address = sctx->small_prim_cull_info_buf->gpu_address + offset;
+      sctx->last_small_prim_cull_info = info;
+   }
+
+   /* This will end up in SGPR6 as (value << 8), shifted by the hw. */
+   radeon_add_to_buffer_list(sctx, sctx->gfx_cs, sctx->small_prim_cull_info_buf,
+                             RADEON_USAGE_READ, RADEON_PRIO_CONST_BUFFER);
+   radeon_set_sh_reg(sctx->gfx_cs, R_00B220_SPI_SHADER_PGM_LO_GS,
+                     sctx->small_prim_cull_info_address >> 8);
+
+   /* Set VS_STATE.SMALL_PRIM_PRECISION for NGG culling.
+    *
+    * small_prim_precision is 1 / 2^n. We only need n between 5 (1/32) and 12 (1/4096).
+    * Such a floating point value can be packed into 4 bits as follows:
+    * If we pass the first 4 bits of the exponent to the shader and set the next 3 bits
+    * to 1, we'll get the number exactly because all other bits are always 0. See:
+    *                                                               1
+    * value  =  (0x70 | value.exponent[0:3]) << 23  =  ------------------------------
+    *                                                  2 ^ (15 - value.exponent[0:3])
+    *
+    * So pass only the first 4 bits of the float exponent to the shader.
+    */
+   sctx->current_vs_state &= C_VS_STATE_SMALL_PRIM_PRECISION;
+   sctx->current_vs_state |= S_VS_STATE_SMALL_PRIM_PRECISION(fui(info.small_prim_precision) >> 23);
 }
 
 static void si_set_scissor_states(struct pipe_context *pctx, unsigned start_slot,
@@ -330,8 +364,6 @@ static void si_emit_guardband(struct si_context *ctx)
          S_028BE4_QUANT_MODE(V_028BE4_X_16_8_FIXED_POINT_1_256TH + vp_as_scissor.quant_mode));
    if (initial_cdw != ctx->gfx_cs->current.cdw)
       ctx->context_roll = true;
-
-   si_update_ngg_small_prim_precision(ctx);
 }
 
 static void si_emit_scissors(struct si_context *ctx)
@@ -430,6 +462,10 @@ static void si_set_viewport_states(struct pipe_context *pctx, unsigned start_slo
    if (start_slot == 0) {
       ctx->viewports.y_inverted =
          -state->scale[1] + state->translate[1] > state->scale[1] + state->translate[1];
+
+      /* NGG cull state uses the viewport and quant mode. */
+      if (ctx->screen->use_ngg_culling)
+         si_mark_atom_dirty(ctx, &ctx->atoms.s.ngg_cull_state);
    }
 
    si_mark_atom_dirty(ctx, &ctx->atoms.s.viewports);
@@ -453,33 +489,6 @@ static void si_emit_viewports(struct si_context *ctx)
 {
    struct radeon_cmdbuf *cs = ctx->gfx_cs;
    struct pipe_viewport_state *states = ctx->viewports.states;
-
-   if (ctx->screen->use_ngg_culling) {
-      /* Set the viewport info for small primitive culling. */
-      struct si_small_prim_cull_info info;
-      si_get_small_prim_cull_info(ctx, &info);
-
-      if (memcmp(&info, &ctx->last_small_prim_cull_info, sizeof(info))) {
-         unsigned offset = 0;
-
-         /* Align to 256, because the address is shifted by 8 bits. */
-         u_upload_data(ctx->b.const_uploader, 0, sizeof(info), 256, &info, &offset,
-                       (struct pipe_resource **)&ctx->small_prim_cull_info_buf);
-
-         ctx->small_prim_cull_info_address = ctx->small_prim_cull_info_buf->gpu_address + offset;
-         ctx->last_small_prim_cull_info = info;
-         ctx->small_prim_cull_info_dirty = true;
-      }
-
-      if (ctx->small_prim_cull_info_dirty) {
-         /* This will end up in SGPR6 as (value << 8), shifted by the hw. */
-         radeon_add_to_buffer_list(ctx, ctx->gfx_cs, ctx->small_prim_cull_info_buf,
-                                   RADEON_USAGE_READ, RADEON_PRIO_CONST_BUFFER);
-         radeon_set_sh_reg(ctx->gfx_cs, R_00B220_SPI_SHADER_PGM_LO_GS,
-                           ctx->small_prim_cull_info_address >> 8);
-         ctx->small_prim_cull_info_dirty = false;
-      }
-   }
 
    /* The simple case: Only 1 viewport is active. */
    if (!ctx->vs_writes_viewport_index) {
@@ -655,6 +664,7 @@ void si_init_viewport_functions(struct si_context *ctx)
    ctx->atoms.s.scissors.emit = si_emit_scissors;
    ctx->atoms.s.viewports.emit = si_emit_viewport_states;
    ctx->atoms.s.window_rectangles.emit = si_emit_window_rectangles;
+   ctx->atoms.s.ngg_cull_state.emit = si_emit_cull_state;
 
    ctx->b.set_scissor_states = si_set_scissor_states;
    ctx->b.set_viewport_states = si_set_viewport_states;

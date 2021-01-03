@@ -227,6 +227,11 @@ softpipe_launch_grid(struct pipe_context *context,
       }
    }
 
+   if (softpipe->active_statistics_queries) {
+      softpipe->pipeline_statistics.cs_invocations +=
+          grid_size[0] * grid_size[1] * grid_size[2];
+   }
+
    for (i = 0; i < num_threads_in_group; i++) {
       cs_delete(cs, machines[i]);
       tgsi_exec_machine_destroy(machines[i]);

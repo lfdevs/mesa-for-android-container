@@ -891,6 +891,7 @@ struct si_sdma_upload {
 
 struct si_small_prim_cull_info {
    float scale[2], translate[2];
+   float small_prim_precision;
 };
 
 struct si_context {
@@ -1133,7 +1134,6 @@ struct si_context {
    struct si_small_prim_cull_info last_small_prim_cull_info;
    struct si_resource *small_prim_cull_info_buf;
    uint64_t small_prim_cull_info_address;
-   bool small_prim_cull_info_dirty;
 
    /* Scratch buffer */
    struct si_resource *scratch_buffer;
@@ -1518,7 +1518,6 @@ struct pipe_video_buffer *si_video_buffer_create(struct pipe_context *pipe,
                                                  const struct pipe_video_buffer *tmpl);
 
 /* si_viewport.c */
-void si_update_ngg_small_prim_precision(struct si_context *ctx);
 void si_get_small_prim_cull_info(struct si_context *sctx, struct si_small_prim_cull_info *out);
 void si_update_vs_viewport_state(struct si_context *ctx);
 void si_init_viewport_functions(struct si_context *ctx);
@@ -1931,6 +1930,20 @@ static inline unsigned si_get_shader_wave_size(struct si_shader *shader)
                            shader->key.as_es,
                            shader->key.opt.ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_ALL,
                            shader->key.opt.vs_as_prim_discard_cs);
+}
+
+/* Return the number of samples that the rasterizer uses. */
+static inline unsigned si_get_num_coverage_samples(struct si_context *sctx)
+{
+   if (sctx->framebuffer.nr_samples > 1 &&
+       sctx->queued.named.rasterizer->multisample_enable)
+      return sctx->framebuffer.nr_samples;
+
+   /* Note that smoothing_enabled is set by si_update_shaders. */
+   if (sctx->smoothing_enabled)
+      return SI_NUM_SMOOTH_AA_SAMPLES;
+
+   return 1;
 }
 
 #define PRINT_ERR(fmt, args...)                                                                    \

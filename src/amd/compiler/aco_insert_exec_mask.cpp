@@ -165,6 +165,8 @@ void mark_block_wqm(wqm_ctx &ctx, unsigned block_idx)
       return;
 
    ctx.branch_wqm[block_idx] = true;
+   ctx.worklist.insert(block_idx);
+
    Block& block = ctx.program->blocks[block_idx];
 
    /* TODO: this sets more branch conditions to WQM than it needs to

@@ -1137,7 +1137,7 @@ fail_global_bo_map:
    tu_bo_finish(device, &device->global_bo);
 
 fail_global_bo:
-   ralloc_free(device->compiler);
+   ir3_compiler_destroy(device->compiler);
 
 fail_queues:
    for (unsigned i = 0; i < TU_MAX_QUEUE_FAMILIES; i++) {

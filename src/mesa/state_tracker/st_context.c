@@ -271,9 +271,11 @@ st_invalidate_state(struct gl_context *ctx)
                    (ST_NEW_SAMPLER_VIEWS |
                     ST_NEW_SAMPLERS |
                     ST_NEW_IMAGE_UNITS);
-      if (ctx->FragmentProgram._Current &&
-          ctx->FragmentProgram._Current->ExternalSamplersUsed) {
-         st->dirty |= ST_NEW_FS_STATE;
+      if (ctx->FragmentProgram._Current) {
+         struct st_program *stfp = st_program(ctx->FragmentProgram._Current);
+
+         if (stfp->Base.ExternalSamplersUsed || stfp->ati_fs)
+            st->dirty |= ST_NEW_FS_STATE;
       }
    }
 }

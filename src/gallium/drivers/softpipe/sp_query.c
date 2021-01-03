@@ -201,6 +201,8 @@ softpipe_end_query(struct pipe_context *pipe, struct pipe_query *q)
          softpipe->pipeline_statistics.c_primitives - sq->stats.c_primitives;
       sq->stats.ps_invocations =
          softpipe->pipeline_statistics.ps_invocations - sq->stats.ps_invocations;
+      sq->stats.cs_invocations =
+         softpipe->pipeline_statistics.cs_invocations - sq->stats.cs_invocations;
 
       softpipe->active_statistics_queries--;
       break;

@@ -1237,7 +1237,7 @@ setup_sampler_swizzle(struct pipe_sampler_view *sv, GLenum format, GLenum type)
 {
    if ((format == GL_RGBA || format == GL_BGRA) && type == GL_UNSIGNED_BYTE) {
       const struct util_format_description *desc =
-         util_format_description(sv->texture->format);
+         util_format_description(sv->format);
       unsigned c0, c1, c2, c3;
 
       /* Every gallium driver supports at least one 32-bit packed RGBA format.
@@ -1384,16 +1384,21 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
       st_upload_constants(st, &st->fp->Base);
    }
 
-   /* create sampler view for the image */
-   sv[0] = st_create_texture_sampler_view(st->pipe, pt);
+   {
+      /* create sampler view for the image */
+      struct pipe_sampler_view templ;
+
+      u_sampler_view_default_template(&templ, pt, pt->format);
+      /* Set up the sampler view's swizzle */
+      setup_sampler_swizzle(&templ, format, type);
+
+      sv[0] = st->pipe->create_sampler_view(st->pipe, pt, &templ);
+   }
    if (!sv[0]) {
       _mesa_error(ctx, GL_OUT_OF_MEMORY, "glDrawPixels");
       pipe_resource_reference(&pt, NULL);
       return;
    }
-
-   /* Set up the sampler view's swizzle */
-   setup_sampler_swizzle(sv[0], format, type);
 
    /* Create a second sampler view to read stencil.  The stencil is
     * written using the shader stencil export functionality.

@@ -2335,11 +2335,12 @@ static void
 tu_pipeline_builder_parse_tessellation(struct tu_pipeline_builder *builder,
                                        struct tu_pipeline *pipeline)
 {
+   if (!(pipeline->active_stages & VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT) ||
+       !(pipeline->active_stages & VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
+      return;
+
    const VkPipelineTessellationStateCreateInfo *tess_info =
       builder->create_info->pTessellationState;
-
-   if (!tess_info)
-      return;
 
    assert(!(pipeline->dynamic_state_mask & BIT(TU_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY)));
 

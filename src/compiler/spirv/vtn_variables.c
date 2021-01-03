@@ -2434,36 +2434,55 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
                   "OpArrayLength must reference the last memeber of the "
                   "structure and that must be an array");
 
-      const uint32_t offset = ptr->type->offsets[field];
-      const uint32_t stride = ptr->type->members[field]->stride;
-
-      if (!ptr->block_index) {
+      if (b->options->use_deref_buffer_array_length) {
          struct vtn_access_chain chain = {
-            .length = 0,
+            .length = 1,
+            .link = {
+               { .mode = vtn_access_mode_literal, .id = field },
+            }
          };
-         ptr = vtn_pointer_dereference(b, ptr, &chain);
-         vtn_assert(ptr->block_index);
+         struct vtn_pointer *array = vtn_pointer_dereference(b, ptr, &chain);
+
+         nir_intrinsic_instr *instr =
+            nir_intrinsic_instr_create(b->nb.shader,
+                                       nir_intrinsic_deref_buffer_array_length);
+         instr->src[0] = nir_src_for_ssa(vtn_pointer_to_ssa(b, array));
+         nir_ssa_dest_init(&instr->instr, &instr->dest, 1, 32, NULL);
+         nir_builder_instr_insert(&b->nb, &instr->instr);
+
+         vtn_push_nir_ssa(b, w[2], &instr->dest.ssa);
+      } else {
+         const uint32_t offset = ptr->type->offsets[field];
+         const uint32_t stride = ptr->type->members[field]->stride;
+
+         if (!ptr->block_index) {
+            struct vtn_access_chain chain = {
+               .length = 0,
+            };
+            ptr = vtn_pointer_dereference(b, ptr, &chain);
+            vtn_assert(ptr->block_index);
+         }
+
+         nir_intrinsic_instr *instr =
+            nir_intrinsic_instr_create(b->nb.shader,
+                                       nir_intrinsic_get_ssbo_size);
+         instr->src[0] = nir_src_for_ssa(ptr->block_index);
+         nir_ssa_dest_init(&instr->instr, &instr->dest, 1, 32, NULL);
+         nir_builder_instr_insert(&b->nb, &instr->instr);
+         nir_ssa_def *buf_size = &instr->dest.ssa;
+
+         /* array_length = max(buffer_size - offset, 0) / stride */
+         nir_ssa_def *array_length =
+            nir_idiv(&b->nb,
+                     nir_imax(&b->nb,
+                              nir_isub(&b->nb,
+                                       buf_size,
+                                       nir_imm_int(&b->nb, offset)),
+                              nir_imm_int(&b->nb, 0u)),
+                     nir_imm_int(&b->nb, stride));
+
+         vtn_push_nir_ssa(b, w[2], array_length);
       }
-
-      nir_intrinsic_instr *instr =
-         nir_intrinsic_instr_create(b->nb.shader,
-                                    nir_intrinsic_get_ssbo_size);
-      instr->src[0] = nir_src_for_ssa(ptr->block_index);
-      nir_ssa_dest_init(&instr->instr, &instr->dest, 1, 32, NULL);
-      nir_builder_instr_insert(&b->nb, &instr->instr);
-      nir_ssa_def *buf_size = &instr->dest.ssa;
-
-      /* array_length = max(buffer_size - offset, 0) / stride */
-      nir_ssa_def *array_length =
-         nir_idiv(&b->nb,
-                  nir_imax(&b->nb,
-                           nir_isub(&b->nb,
-                                    buf_size,
-                                    nir_imm_int(&b->nb, offset)),
-                           nir_imm_int(&b->nb, 0u)),
-                  nir_imm_int(&b->nb, stride));
-
-      vtn_push_nir_ssa(b, w[2], array_length);
       break;
    }
 

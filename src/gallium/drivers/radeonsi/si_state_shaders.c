@@ -4061,6 +4061,10 @@ bool si_update_shaders(struct si_context *sctx)
          sctx->smoothing_enabled = sctx->ps_shader.current->key.part.ps.epilog.poly_line_smoothing;
          si_mark_atom_dirty(sctx, &sctx->atoms.s.msaa_config);
 
+         /* NGG cull state uses smoothing_enabled. */
+         if (sctx->screen->use_ngg_culling)
+            si_mark_atom_dirty(sctx, &sctx->atoms.s.ngg_cull_state);
+
          if (sctx->chip_class == GFX6)
             si_mark_atom_dirty(sctx, &sctx->atoms.s.db_render_state);
 

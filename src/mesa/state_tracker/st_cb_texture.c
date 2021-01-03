@@ -1271,7 +1271,7 @@ try_pbo_upload_common(struct gl_context *ctx,
    bool success = false;
    void *fs;
 
-   fs = st_pbo_get_upload_fs(st, src_format, surface->format);
+   fs = st_pbo_get_upload_fs(st, src_format, surface->format, addr->depth != 1);
    if (!fs)
       return false;
 

@@ -1314,19 +1314,6 @@ void si_dispatch_prim_discard_cs_and_draw(struct si_context *sctx,
    desc[10] = fui(cull_info.translate[0]);
    desc[11] = fui(cull_info.translate[1]);
 
-   /* Better subpixel precision increases the efficiency of small
-    * primitive culling. */
-   unsigned num_samples = sctx->framebuffer.nr_samples;
-   unsigned quant_mode = sctx->viewports.as_scissor[0].quant_mode;
-   float small_prim_cull_precision;
-
-   if (quant_mode == SI_QUANT_MODE_12_12_FIXED_POINT_1_4096TH)
-      small_prim_cull_precision = num_samples / 4096.0;
-   else if (quant_mode == SI_QUANT_MODE_14_10_FIXED_POINT_1_1024TH)
-      small_prim_cull_precision = num_samples / 1024.0;
-   else
-      small_prim_cull_precision = num_samples / 256.0;
-
    /* Set user data SGPRs. */
    /* This can't be greater than 14 if we want the fastest launch rate. */
    unsigned user_sgprs = 13;
@@ -1490,7 +1477,7 @@ void si_dispatch_prim_discard_cs_and_draw(struct si_context *sctx,
          radeon_emit(cs, num_prims_udiv.post_shift | (num_prims_per_instance << 5));
          radeon_emit(cs, info->restart_index);
          /* small-prim culling precision (same as rasterizer precision = QUANT_MODE) */
-         radeon_emit(cs, fui(small_prim_cull_precision));
+         radeon_emit(cs, fui(cull_info.small_prim_precision));
       } else {
          assert(VERTEX_COUNTER_GDS_MODE == 2);
          /* Only update the SGPRs that changed. */

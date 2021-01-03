@@ -1637,6 +1637,11 @@ Temp handle_live_in(ra_ctx& ctx, Temp val, Block* block)
             phi->operands[i].setFixed(ctx.assignments[ops[i].id()].reg);
             if (ops[i].regClass() == new_val.regClass())
                ctx.affinities[new_val.id()] = ops[i].id();
+            /* make sure the operand gets it's original name in case
+             * it comes from an incomplete phi */
+            std::unordered_map<unsigned, phi_info>::iterator it = ctx.phi_map.find(ops[i].id());
+            if (it != ctx.phi_map.end())
+               it->second.uses.emplace(phi.get());
          }
          ctx.assignments.emplace_back();
          assert(ctx.assignments.size() == ctx.program->peekAllocationId());

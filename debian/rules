@@ -52,10 +52,10 @@ else
 	confflags_GALLIUM += -Dgallium-vdpau=enabled
 	confflags_GALLIUM += -Dlmsensors=enabled
 
-  # radv needs LLVM and the Vulkan loader, so only build on the subset of
+  # radv/lavapipe needs LLVM and the Vulkan loader, so only build on the subset of
   # arches where we have LLVM enabled and where the Vulkan loader is built.
   ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64))
-	VULKAN_DRIVERS += amd
+	VULKAN_DRIVERS += amd swrast
   endif
 
   ifeq ($(DEB_HOST_ARCH_OS), linux)

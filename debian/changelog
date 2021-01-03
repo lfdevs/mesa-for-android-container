@@ -1,3 +1,11 @@
+mesa (20.3.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * rules: Enable lavapipe (vulkan swrast) where llvm and vulkan is
+    enabled.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Sun, 03 Jan 2021 20:30:50 +0200
+
 mesa (20.3.1-1) experimental; urgency=medium
 
   * New upstream release.

@@ -228,6 +228,7 @@ union si_state_atoms {
       struct si_atom scratch_state;
       struct si_atom window_rectangles;
       struct si_atom shader_query;
+      struct si_atom ngg_cull_state;
    } s;
    struct si_atom array[sizeof(struct si_atoms_s) / sizeof(struct si_atom)];
 };

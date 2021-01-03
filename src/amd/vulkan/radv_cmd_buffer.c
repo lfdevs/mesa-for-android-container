@@ -6214,7 +6214,7 @@ static void radv_handle_image_transition(struct radv_cmd_buffer *cmd_buffer,
 			return;
 	}
 
-	if (src_layout == dst_layout)
+	if (src_layout == dst_layout && src_render_loop == dst_render_loop)
 		return;
 
 	unsigned src_queue_mask =

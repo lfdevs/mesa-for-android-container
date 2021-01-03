@@ -988,6 +988,10 @@ static void si_bind_rs_state(struct pipe_context *ctx, void *state)
       /* Update the small primitive filter workaround if necessary. */
       if (sctx->screen->info.has_msaa_sample_loc_bug && sctx->framebuffer.nr_samples > 1)
          si_mark_atom_dirty(sctx, &sctx->atoms.s.msaa_sample_locs);
+
+      /* NGG cull state uses multisample_enable. */
+      if (sctx->screen->use_ngg_culling)
+         si_mark_atom_dirty(sctx, &sctx->atoms.s.ngg_cull_state);
    }
 
    sctx->current_vs_state &= C_VS_STATE_CLAMP_VERTEX_COLOR;
@@ -2812,9 +2816,12 @@ static void si_set_framebuffer_state(struct pipe_context *ctx,
 
    si_update_ps_colorbuf0_slot(sctx);
    si_update_poly_offset_state(sctx);
-   si_update_ngg_small_prim_precision(sctx);
    si_mark_atom_dirty(sctx, &sctx->atoms.s.cb_render_state);
    si_mark_atom_dirty(sctx, &sctx->atoms.s.framebuffer);
+
+   /* NGG cull state uses the sample count. */
+   if (sctx->screen->use_ngg_culling)
+      si_mark_atom_dirty(sctx, &sctx->atoms.s.ngg_cull_state);
 
    if (sctx->screen->dpbb_allowed)
       si_mark_atom_dirty(sctx, &sctx->atoms.s.dpbb_state);
@@ -3417,8 +3424,9 @@ static void si_emit_msaa_config(struct si_context *sctx)
     *   EQAA  4s 4z 2f - might look the same as 4x MSAA with low-density geometry
     *   EQAA  2s 2z 2f = 2x MSAA
     */
+   coverage_samples = color_samples = z_samples = si_get_num_coverage_samples(sctx);
+
    if (sctx->framebuffer.nr_samples > 1 && rs->multisample_enable) {
-      coverage_samples = sctx->framebuffer.nr_samples;
       color_samples = sctx->framebuffer.nr_color_samples;
 
       if (sctx->framebuffer.state.zsbuf) {
@@ -3427,10 +3435,6 @@ static void si_emit_msaa_config(struct si_context *sctx)
       } else {
          z_samples = coverage_samples;
       }
-   } else if (sctx->smoothing_enabled) {
-      coverage_samples = color_samples = z_samples = SI_NUM_SMOOTH_AA_SAMPLES;
-   } else {
-      coverage_samples = color_samples = z_samples = 1;
    }
 
    /* Required by OpenGL line rasterization.

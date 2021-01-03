@@ -197,6 +197,7 @@ class nir_copy_prop_vars_test : public nir_vars_test {};
 class nir_dead_write_vars_test : public nir_vars_test {};
 class nir_combine_stores_test : public nir_vars_test {};
 class nir_split_vars_test : public nir_vars_test {};
+class nir_remove_dead_variables_test : public nir_vars_test {};
 
 } // namespace
 
@@ -2185,3 +2186,50 @@ TEST_F(nir_split_vars_test, split_wildcard_copy)
    ASSERT_EQ(count_function_temp_vars(), 8);
    ASSERT_EQ(count_intrinsics(nir_intrinsic_copy_deref), 4);
 }
+
+TEST_F(nir_remove_dead_variables_test, pointer_initializer_used)
+{
+   nir_variable *x = create_int(nir_var_shader_temp, "x");
+   nir_variable *y = create_int(nir_var_shader_temp, "y");
+   y->pointer_initializer = x;
+   nir_variable *out = create_int(nir_var_shader_out, "out");
+
+   nir_validate_shader(b->shader, NULL);
+
+   nir_copy_var(b, out, y);
+
+   bool progress = nir_remove_dead_variables(b->shader, nir_var_all, NULL);
+   EXPECT_FALSE(progress);
+
+   nir_validate_shader(b->shader, NULL);
+
+   unsigned count = 0;
+   nir_foreach_variable_in_shader(var, b->shader)
+      count++;
+
+   ASSERT_EQ(count, 3);
+}
+
+TEST_F(nir_remove_dead_variables_test, pointer_initializer_dead)
+{
+   nir_variable *x = create_int(nir_var_shader_temp, "x");
+   nir_variable *y = create_int(nir_var_shader_temp, "y");
+   nir_variable *z = create_int(nir_var_shader_temp, "z");
+   y->pointer_initializer = x;
+   z->pointer_initializer = y;
+
+   nir_validate_shader(b->shader, NULL);
+
+   bool progress = nir_remove_dead_variables(b->shader, nir_var_all, NULL);
+   EXPECT_TRUE(progress);
+
+   nir_validate_shader(b->shader, NULL);
+
+   unsigned count = 0;
+   nir_foreach_variable_in_shader(var, b->shader)
+      count++;
+
+   ASSERT_EQ(count, 0);
+}
+
+
