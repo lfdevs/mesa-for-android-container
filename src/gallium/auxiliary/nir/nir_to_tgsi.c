@@ -258,8 +258,6 @@ ntt_setup_uniforms(struct ntt_compile *c)
                                                         var->data.image.format,
                                                         !var->data.read_only,
                                                         false);
-      } else if (var->data.mode == nir_var_mem_ubo) {
-         ureg_DECL_constant2D(c->ureg, 0, 0, var->data.driver_location + 1);
       } else {
          unsigned size;
          if (packed) {
@@ -272,6 +270,10 @@ ntt_setup_uniforms(struct ntt_compile *c)
          for (unsigned i = 0; i < size; i++)
             ureg_DECL_constant(c->ureg, var->data.driver_location + i);
       }
+   }
+
+   nir_foreach_variable_with_modes(var, c->s, nir_var_mem_ubo) {
+      ureg_DECL_constant2D(c->ureg, 0, 0, var->data.driver_location + 1);
    }
 
    for (int i = 0; i < PIPE_MAX_SAMPLERS; i++) {
@@ -2183,6 +2185,9 @@ ntt_emit_impl(struct ntt_compile *c, nir_function_impl *impl)
 
    ntt_setup_registers(c, &impl->registers);
    ntt_emit_cf_list(c, &impl->body);
+
+   ralloc_free(c->liveness);
+   c->liveness = NULL;
 }
 
 static int

@@ -1,3 +1,14 @@
+mesa (20.3.3-1) unstable; urgency=medium
+
+  * New upstream release.
+  * path_max.diff: Updated.
+  * lavapipe-Defer-lavapipe-warning-to-CreateDevice.patch:
+    Don't print a warning which might confuse users to think they're on
+    swrast vulkan.
+  * rules: Use 'enabled' instead of 'true' for DRI3.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 15 Jan 2021 15:16:30 +0200
+
 mesa (20.3.2-1) unstable; urgency=medium
 
   * New upstream release.

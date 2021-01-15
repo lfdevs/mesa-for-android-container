@@ -26,6 +26,7 @@
 #include "compiler/nir/nir_builder.h"
 #include "compiler/glsl/gl_nir.h"
 #include "nir/nir_to_tgsi.h"
+#include "tgsi/tgsi_parse.h"
 
 struct pipe_shader_state *
 st_nir_finish_builtin_shader(struct st_context *st,
@@ -83,21 +84,32 @@ st_nir_finish_builtin_shader(struct st_context *st,
       ralloc_free(nir);
    }
 
+   struct pipe_shader_state *shader;
    switch (stage) {
    case MESA_SHADER_VERTEX:
-      return pipe->create_vs_state(pipe, &state);
+      shader = pipe->create_vs_state(pipe, &state);
+      break;
    case MESA_SHADER_TESS_CTRL:
-      return pipe->create_tcs_state(pipe, &state);
+      shader = pipe->create_tcs_state(pipe, &state);
+      break;
    case MESA_SHADER_TESS_EVAL:
-      return pipe->create_tes_state(pipe, &state);
+      shader = pipe->create_tes_state(pipe, &state);
+      break;
    case MESA_SHADER_GEOMETRY:
-      return pipe->create_gs_state(pipe, &state);
+      shader = pipe->create_gs_state(pipe, &state);
+      break;
    case MESA_SHADER_FRAGMENT:
-      return pipe->create_fs_state(pipe, &state);
+      shader = pipe->create_fs_state(pipe, &state);
+      break;
    default:
       unreachable("unsupported shader stage");
       return NULL;
    }
+
+   if (state.type == PIPE_SHADER_IR_TGSI)
+      tgsi_free_tokens(state.tokens);
+
+   return shader;
 }
 
 /**

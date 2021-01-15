@@ -553,6 +553,7 @@ static const struct debug_control radv_debug_options[] = {
 	{"llvm", RADV_DEBUG_LLVM},
 	{"forcecompress", RADV_DEBUG_FORCE_COMPRESS},
 	{"hang", RADV_DEBUG_HANG},
+	{"invariantgeom", RADV_DEBUG_INVARIANT_GEOM},
 	{NULL, 0}
 };
 
@@ -607,6 +608,10 @@ radv_handle_per_app_options(struct radv_instance *instance,
 		} else if (!strcmp(name, "DOOMEternal")) {
 			/* Zero VRAM for Doom Eternal to fix rendering issues. */
 			instance->debug_flags |= RADV_DEBUG_ZERO_VRAM;
+		} else if (!strcmp(name, "ShadowOfTheTomb")) {
+			/* Work around flickering foliage for native Shadow of the Tomb Raider
+			 * on GFX10.3 */
+			instance->debug_flags |= RADV_DEBUG_INVARIANT_GEOM;
 		}
 	}
 
@@ -620,6 +625,14 @@ radv_handle_per_app_options(struct radv_instance *instance,
 			/* Fix various artifacts in Detroit: Become Human */
 			instance->debug_flags |= RADV_DEBUG_ZERO_VRAM |
 			                         RADV_DEBUG_DISCARD_TO_DEMOTE;
+
+			/* Fix rendering issues in Detroit: Become Human
+			 * because the game uses render loops (it
+			 * samples/renders from/to the same depth/stencil
+			 * texture inside the same draw) without input
+			 * attachments and that is invalid Vulkan usage.
+			 */
+			instance->disable_tc_compat_htile_in_general = true;
 		}
 	}
 

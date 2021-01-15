@@ -1208,12 +1208,14 @@ void visit_alu_instr(isel_context *ctx, nir_alu_instr *instr)
    }
    case nir_op_mov: {
       Temp src = get_alu_src(ctx, instr->src[0]);
-      if (src.bytes() != dst.bytes())
-         unreachable("wrong src or dst register class for nir_op_mov");
-      if (src.type() == RegType::vgpr && dst.type() == RegType::sgpr)
+      if (src.type() == RegType::vgpr && dst.type() == RegType::sgpr) {
+         /* use size() instead of bytes() for 8/16-bit */
+         assert(src.size() == dst.size() && "wrong src or dst register class for nir_op_mov");
          bld.pseudo(aco_opcode::p_as_uniform, Definition(dst), src);
-      else
+      } else {
+         assert(src.bytes() == dst.bytes() && "wrong src or dst register class for nir_op_mov");
          bld.copy(Definition(dst), src);
+      }
       break;
    }
    case nir_op_inot: {
@@ -4553,11 +4555,17 @@ void visit_load_interpolated_input(isel_context *ctx, nir_intrinsic_instr *instr
 bool check_vertex_fetch_size(isel_context *ctx, const ac_data_format_info *vtx_info,
                              unsigned offset, unsigned stride, unsigned channels)
 {
-   unsigned vertex_byte_size = vtx_info->chan_byte_size * channels;
    if (vtx_info->chan_byte_size != 4 && channels == 3)
       return false;
+
+   /* Always split typed vertex buffer loads on GFX6 and GFX10+ to avoid any
+    * alignment issues that triggers memory violations and eventually a GPU
+    * hang. This can happen if the stride (static or dynamic) is unaligned and
+    * also if the VBO offset is aligned to a scalar (eg. stride is 8 and VBO
+    * offset is 2 for R16G16B16A16_SNORM).
+    */
    return (ctx->options->chip_class >= GFX7 && ctx->options->chip_class <= GFX9) ||
-          (offset % vertex_byte_size == 0 && stride % vertex_byte_size == 0);
+          (channels == 1);
 }
 
 uint8_t get_fetch_data_format(isel_context *ctx, const ac_data_format_info *vtx_info,
@@ -4821,11 +4829,12 @@ void visit_load_input(isel_context *ctx, nir_intrinsic_instr *instr)
          static const unsigned swizzle_normal[4] = {0, 1, 2, 3};
          static const unsigned swizzle_post_shuffle[4] = {2, 1, 0, 3};
          const unsigned *swizzle = post_shuffle ? swizzle_post_shuffle : swizzle_normal;
+         unsigned num_components = instr->dest.ssa.num_components;
 
-         aco_ptr<Instruction> vec{create_instruction<Pseudo_instruction>(aco_opcode::p_create_vector, Format::PSEUDO, dst.size(), 1)};
+         aco_ptr<Instruction> vec{create_instruction<Pseudo_instruction>(aco_opcode::p_create_vector, Format::PSEUDO, num_components, 1)};
          std::array<Temp,NIR_MAX_VEC_COMPONENTS> elems;
          unsigned num_temp = 0;
-         for (unsigned i = 0; i < dst.size(); i++) {
+         for (unsigned i = 0; i < num_components; i++) {
             unsigned idx = i + component;
             if (swizzle[idx] < num_channels && channels[swizzle[idx]].id()) {
                Temp channel = channels[swizzle[idx]];
@@ -4845,9 +4854,9 @@ void visit_load_input(isel_context *ctx, nir_intrinsic_instr *instr)
          }
          vec->definitions[0] = Definition(dst);
          ctx->block->instructions.emplace_back(std::move(vec));
-         emit_split_vector(ctx, dst, dst.size());
+         emit_split_vector(ctx, dst, num_components);
 
-         if (num_temp == dst.size())
+         if (num_temp == num_components)
             ctx->allocated_vec.emplace(dst.id(), elems);
       }
    } else if (ctx->shader->info.stage == MESA_SHADER_FRAGMENT) {
@@ -7587,7 +7596,7 @@ void visit_intrinsic(isel_context *ctx, nir_intrinsic_instr *instr)
             offset = bld.sop2(aco_opcode::s_lshl3_add_u32, bld.def(s1), bld.def(s1, scc), addr, Operand(sample_pos_offset));
          } else {
             offset = bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), bld.def(s1, scc), addr, Operand(3u));
-            offset = bld.sop2(aco_opcode::s_add_u32, bld.def(s1), bld.def(s1, scc), addr, Operand(sample_pos_offset));
+            offset = bld.sop2(aco_opcode::s_add_u32, bld.def(s1), bld.def(s1, scc), offset, Operand(sample_pos_offset));
          }
 
          Operand off = bld.copy(bld.def(s1), Operand(offset));

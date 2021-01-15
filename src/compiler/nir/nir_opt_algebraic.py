@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #
 # Copyright (C) 2014 Intel Corporation
 #
@@ -423,19 +424,6 @@ optimizations.extend([
    (('ieq', ('iadd', a, b), a), ('ieq', b, 0)),
    (('ine', ('iadd', a, b), a), ('ine', b, 0)),
 
-   # fmin(-b2f(a), b) >= 0.0
-   # -b2f(a) >= 0.0 && b >= 0.0
-   # -b2f(a) == 0.0 && b >= 0.0    -b2f can only be 0 or -1, never >0
-   # b2f(a) == 0.0 && b >= 0.0
-   # a == False && b >= 0.0
-   # !a && b >= 0.0
-   #
-   # The fge in the second replacement is not a typo.  I leave the proof that
-   # "fmin(-b2f(a), b) >= 0 <=> fmin(-b2f(a), b) == 0" as an exercise for the
-   # reader.
-   (('fge', ('fmin', ('fneg', ('b2f', 'a@1')), 'b@1'), 0.0), ('iand', ('inot', a), ('fge', b, 0.0))),
-   (('feq', ('fmin', ('fneg', ('b2f', 'a@1')), 'b@1'), 0.0), ('iand', ('inot', a), ('fge', b, 0.0))),
-
    (('feq', ('b2f', 'a@1'), 0.0), ('inot', a)),
    (('~fneu', ('b2f', 'a@1'), 0.0), a),
    (('ieq', ('b2i', 'a@1'), 0),   ('inot', a)),
@@ -639,8 +627,6 @@ optimizations.extend([
 
 # Float sizes
 for s in [16, 32, 64]:
-    fp_one = {16: 0x3c00, 32: 0x3f800000, 64: 0x3ff0000000000000}[s]
-
     optimizations.extend([
        # These derive from the previous patterns with the application of b < 0 <=>
        # 0 < -b.  The transformation should be applied if either comparison is
@@ -656,11 +642,28 @@ for s in [16, 32, 64]:
        (('~iand', ('fge(is_used_once)', 0.0, 'a@{}'.format(s)), ('fge', 'b@{}'.format(s), 0.0)), ('fge', 0.0, ('fmax', a, ('fneg', b)))),
        (('~iand', ('fge', 0.0, 'a@{}'.format(s)), ('fge(is_used_once)', 'b@{}'.format(s), 0.0)), ('fge', 0.0, ('fmax', a, ('fneg', b)))),
 
-       # The (i2f32, ...) part is an open-coded fsign.  When that is combined with
-       # the bcsel, it's basically copysign(1.0, a).  There is no copysign in NIR,
-       # so emit an open-coded version of that.
+       # The (i2f32, ...) part is an open-coded fsign.  When that is combined
+       # with the bcsel, it's basically copysign(1.0, a).  There are some
+       # behavior differences between this pattern and copysign w.r.t. ±0 and
+       # NaN.  copysign(x, y) blindly takes the sign bit from y and applies it
+       # to x, regardless of whether either or both values are NaN.
+       #
+       # If a != a: bcsel(False, 1.0, i2f(b2i(False) - b2i(False))) = 0,
+       #            int(NaN >= 0.0) - int(NaN < 0.0) = 0 - 0 = 0
+       # If a == ±0: bcsel(True, 1.0, ...) = 1.0,
+       #            int(±0.0 >= 0.0) - int(±0.0 < 0.0) = 1 - 0 = 1
+       #
+       # For all other values of 'a', the original and replacement behave as
+       # copysign.
+       #
+       # Marking the replacement comparisons as precise prevents any future
+       # optimizations from replacing either of the comparisons with the
+       # logical-not of the other.
+       #
+       # Note: Use b2i32 in the replacement because some platforms that
+       # support fp16 don't support int16.
        (('bcsel@{}'.format(s), ('feq', a, 0.0), 1.0, ('i2f{}'.format(s), ('iadd', ('b2i{}'.format(s), ('flt', 0.0, 'a@{}'.format(s))), ('ineg', ('b2i{}'.format(s), ('flt', 'a@{}'.format(s), 0.0)))))),
-        ('ior', fp_one, ('iand', a, 1 << (s - 1)))),
+        ('i2f{}'.format(s), ('iadd', ('b2i32', ('!fge', a, 0.0)), ('ineg', ('b2i32', ('!flt', a, 0.0)))))),
 
        (('bcsel', a, ('b2f(is_used_once)', 'b@{}'.format(s)), ('b2f', 'c@{}'.format(s))), ('b2f', ('bcsel', a, b, c))),
 

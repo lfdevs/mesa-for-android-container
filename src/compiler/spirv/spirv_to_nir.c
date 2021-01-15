@@ -2094,9 +2094,16 @@ vtn_handle_constant(struct vtn_builder *b, SpvOp opcode,
             bit_size = glsl_get_bit_size(val->type->type);
          };
 
-         nir_op op = vtn_nir_alu_op_for_spirv_opcode(b, opcode, &swap,
+         bool exact;
+         nir_op op = vtn_nir_alu_op_for_spirv_opcode(b, opcode, &swap, &exact,
                                                      nir_alu_type_get_type_size(src_alu_type),
                                                      nir_alu_type_get_type_size(dst_alu_type));
+
+         /* No SPIR-V opcodes handled through this path should set exact.
+          * Since it is ignored, assert on it.
+          */
+         assert(!exact);
+
          nir_const_value src[3][NIR_MAX_VEC_COMPONENTS];
 
          for (unsigned i = 0; i < count - 4; i++) {

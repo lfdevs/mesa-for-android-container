@@ -440,7 +440,8 @@ get_cpu_topology(void)
 
 #if defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
    /* AMD Zen */
-   if (util_cpu_caps.x86_cpu_type == 0x17) {
+   if (util_cpu_caps.family >= CPU_AMD_ZEN1_ZEN2 &&
+       util_cpu_caps.family < CPU_AMD_LAST) {
       uint32_t regs[4];
 
       /* Query the L3 cache count. */
@@ -592,6 +593,18 @@ util_cpu_detect_once(void)
          /* Add "extended family". */
          if (util_cpu_caps.x86_cpu_type == 0xf)
              util_cpu_caps.x86_cpu_type += ((regs2[0] >> 20) & 0xff);
+
+         switch (util_cpu_caps.x86_cpu_type) {
+         case 0x17:
+            util_cpu_caps.family = CPU_AMD_ZEN1_ZEN2;
+            break;
+         case 0x18:
+            util_cpu_caps.family = CPU_AMD_ZEN_HYGON;
+            break;
+         case 0x19:
+            util_cpu_caps.family = CPU_AMD_ZEN3;
+            break;
+         }
 
          /* general feature flags */
          util_cpu_caps.has_tsc    = (regs2[3] >>  4) & 1; /* 0x0000010 */

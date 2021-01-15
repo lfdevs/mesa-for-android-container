@@ -964,6 +964,9 @@ void draw_delete_geometry_shader(struct draw_context *draw,
    }
 #endif
 
+   if (draw->gs.tgsi.machine && draw->gs.tgsi.machine->Tokens == dgs->state.tokens)
+      draw->gs.tgsi.machine->Tokens = NULL;
+
    for (i = 0; i < TGSI_MAX_VERTEX_STREAMS; i++)
       FREE(dgs->stream[i].primitive_lengths);
 

@@ -559,6 +559,9 @@ RADV driver environment variables
       if a GPU hang is detected
    ``info``
       show GPU-related information
+   ``invariantgeom``
+      Mark geometry-affecting outputs as invariant. This works around a common
+      class of application bugs appearing as flickering.
    ``metashaders``
       dump internal meta shaders
    ``nobinning``

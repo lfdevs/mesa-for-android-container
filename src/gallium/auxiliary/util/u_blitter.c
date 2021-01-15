@@ -2918,7 +2918,7 @@ util_blitter_stencil_fallback(struct blitter_context *blitter,
                               dstbox->x, dstbox->y,
                               dstbox->x + dstbox->width,
                               dstbox->y + dstbox->height,
-                              0, stencil_bits,
+                              0, 1,
                               UTIL_BLITTER_ATTRIB_TEXCOORD_XYZW,
                               &coord);
    }

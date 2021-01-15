@@ -223,6 +223,8 @@ static uint32_t get_hash_flags(const struct radv_device *device)
 		hash_flags |= RADV_HASH_SHADER_DISCARD_TO_DEMOTE;
 	if (device->instance->enable_mrt_output_nan_fixup)
 		hash_flags |= RADV_HASH_SHADER_MRT_NAN_FIXUP;
+	if (device->instance->debug_flags & RADV_DEBUG_INVARIANT_GEOM)
+		hash_flags |= RADV_HASH_SHADER_INVARIANT_GEOM;
 	return hash_flags;
 }
 

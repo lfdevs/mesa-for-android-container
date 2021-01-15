@@ -1182,17 +1182,15 @@ handle_vs_input_decl(struct radv_shader_context *ctx,
 		t_offset = LLVMConstInt(ctx->ac.i32, attrib_binding, false);
 		t_list = ac_build_load_to_sgpr(&ctx->ac, t_list_ptr, t_offset);
 
-		/* Perform per-channel vertex fetch operations if unaligned
-		 * access are detected. Only GFX6 and GFX10 are affected.
+		/* Always split typed vertex buffer loads on GFX6 and GFX10+
+		 * to avoid any alignment issues that triggers memory
+		 * violations and eventually a GPU hang. This can happen if
+		 * the stride (static or dynamic) is unaligned and also if the
+		 * VBO offset is aligned to a scalar (eg. stride is 8 and VBO
+		 * offset is 2 for R16G16B16A16_SNORM).
 		 */
-		bool unaligned_vertex_fetches = false;
-		if ((ctx->ac.chip_class == GFX6 || ctx->ac.chip_class >= GFX10) &&
-		    vtx_info->chan_format != data_format &&
-		    ((attrib_offset % vtx_info->element_size) ||
-		     (attrib_stride % vtx_info->element_size)))
-			unaligned_vertex_fetches = true;
-
-		if (unaligned_vertex_fetches) {
+		if (ctx->ac.chip_class == GFX6 ||
+		    ctx->ac.chip_class >= GFX10) {
 			unsigned chan_format = vtx_info->chan_format;
 			LLVMValueRef values[4];
 

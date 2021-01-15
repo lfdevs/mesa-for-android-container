@@ -641,6 +641,14 @@ st_nir_lower_wpos_ytransform(struct nir_shader *nir,
       nir_validate_shader(nir, "after nir_lower_wpos_ytransform");
       _mesa_add_state_reference(prog->Parameters, wposTransformState);
    }
+
+   static const gl_state_index16 pntcTransformState[STATE_LENGTH] = {
+      STATE_INTERNAL, STATE_FB_PNTC_Y_TRANSFORM
+   };
+
+   if (nir_lower_pntc_ytransform(nir, &pntcTransformState)) {
+      _mesa_add_state_reference(prog->Parameters, pntcTransformState);
+   }
 }
 
 bool

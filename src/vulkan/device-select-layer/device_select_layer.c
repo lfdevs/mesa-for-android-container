@@ -490,6 +490,8 @@ static void  (*get_pdevice_proc_addr(VkInstance instance, const char* name))()
 
 static void  (*get_instance_proc_addr(VkInstance instance, const char* name))()
 {
+   if (strcmp(name, "vkGetInstanceProcAddr") == 0)
+      return (void(*)())get_instance_proc_addr;
    if (strcmp(name, "vkCreateInstance") == 0)
       return (void(*)())device_select_CreateInstance;
    if (strcmp(name, "vkDestroyInstance") == 0)

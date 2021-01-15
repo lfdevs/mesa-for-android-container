@@ -60,6 +60,7 @@ C_TEMPLATE = Template(textwrap.dedent(u"""\
     #include <string.h>
     #include <vulkan/vulkan.h>
     #include <vulkan/vk_android_native_buffer.h>
+    #include <vulkan/vk_layer.h>
     #include "util/macros.h"
     #include "vk_enum_to_str.h"
 
@@ -102,6 +103,8 @@ C_TEMPLATE = Template(textwrap.dedent(u"""\
         case ${struct.stype}: return sizeof(${struct.name});
         % endif
     %endfor
+        case VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO: return sizeof(VkLayerInstanceCreateInfo);
+        case VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO: return sizeof(VkLayerDeviceCreateInfo);
         }
         #pragma GCC diagnostic pop
         unreachable("Undefined struct type.");

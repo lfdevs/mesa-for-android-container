@@ -1881,14 +1881,14 @@ st_CompressedTexSubImage(struct gl_context *ctx, GLuint dims,
          ? 0 : texImage->TexObject->MinLevel + texImage->Level;
       unsigned max_layer = util_max_layer(texture, level);
 
-      z += texImage->Face + texImage->TexObject->MinLayer;
+      GLint layer = z + texImage->Face + texImage->TexObject->MinLayer;
 
       struct pipe_surface templ;
       memset(&templ, 0, sizeof(templ));
       templ.format = copy_format;
       templ.u.tex.level = level;
-      templ.u.tex.first_layer = MIN2(z, max_layer);
-      templ.u.tex.last_layer = MIN2(z + d - 1, max_layer);
+      templ.u.tex.first_layer = MIN2(layer, max_layer);
+      templ.u.tex.last_layer = MIN2(layer + d - 1, max_layer);
 
       surface = pipe->create_surface(pipe, texture, &templ);
       if (!surface)

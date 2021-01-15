@@ -1738,7 +1738,8 @@ radv_image_view_init(struct radv_image_view *iview,
 	}
 }
 
-bool radv_layout_is_htile_compressed(const struct radv_image *image,
+bool radv_layout_is_htile_compressed(const struct radv_device *device,
+				     const struct radv_image *image,
                                      VkImageLayout layout,
 				     bool in_render_loop,
                                      unsigned queue_mask)
@@ -1746,6 +1747,7 @@ bool radv_layout_is_htile_compressed(const struct radv_image *image,
 	if (radv_image_is_tc_compat_htile(image)) {
 		if (layout == VK_IMAGE_LAYOUT_GENERAL &&
 		    !in_render_loop &&
+		    !device->instance->disable_tc_compat_htile_in_general &&
 		    !(image->usage & VK_IMAGE_USAGE_STORAGE_BIT)) {
 			/* It should be safe to enable TC-compat HTILE with
 			 * VK_IMAGE_LAYOUT_GENERAL if we are not in a render

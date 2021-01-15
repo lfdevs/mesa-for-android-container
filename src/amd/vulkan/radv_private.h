@@ -358,6 +358,7 @@ struct radv_instance {
 	 * Workarounds for game bugs.
 	 */
 	bool enable_mrt_output_nan_fixup;
+	bool disable_tc_compat_htile_in_general;
 };
 
 VkResult radv_init_wsi(struct radv_physical_device *physical_device);
@@ -1651,6 +1652,7 @@ struct radv_shader_module;
 #define RADV_HASH_SHADER_LLVM                (1 << 4)
 #define RADV_HASH_SHADER_DISCARD_TO_DEMOTE   (1 << 5)
 #define RADV_HASH_SHADER_MRT_NAN_FIXUP       (1 << 6)
+#define RADV_HASH_SHADER_INVARIANT_GEOM      (1 << 7)
 
 void
 radv_hash_shaders(unsigned char *hash,
@@ -1901,7 +1903,8 @@ struct radv_image {
  * If this is false reads that don't use the htile should be able to return
  * correct results.
  */
-bool radv_layout_is_htile_compressed(const struct radv_image *image,
+bool radv_layout_is_htile_compressed(const struct radv_device *device,
+				     const struct radv_image *image,
                                      VkImageLayout layout,
                                      bool in_render_loop,
                                      unsigned queue_mask);

@@ -193,7 +193,7 @@ radv_amdgpu_winsys_bo_virtual_bind(struct radeon_winsys_bo *_parent,
 		++first;
 
 	last = first;
-	while(last + 1 < parent->range_count && parent->ranges[last].offset <= offset + size)
+	while(last + 1 < parent->range_count && parent->ranges[last + 1].offset <= offset + size)
 		++last;
 
 	/* Whether the first or last range are going to be totally removed or just
@@ -250,6 +250,7 @@ radv_amdgpu_winsys_bo_virtual_bind(struct radeon_winsys_bo *_parent,
 
 		if (!remove_last) {
 			new_last.size -= offset + size - new_last.offset;
+			new_last.bo_offset += (offset + size - new_last.offset);
 			new_last.offset = offset + size;
 			radv_amdgpu_winsys_virtual_map(parent, &new_last);
 		}

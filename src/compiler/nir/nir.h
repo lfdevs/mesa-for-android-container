@@ -3398,7 +3398,10 @@ typedef struct nir_shader_compiler_options {
 
    bool lower_device_index_to_zero;
 
-   /* Set if nir_lower_wpos_ytransform() should also invert gl_PointCoord. */
+   /* Set if nir_lower_pntc_ytransform() should invert gl_PointCoord.
+    * Either when frame buffer is flipped or GL_POINT_SPRITE_COORD_ORIGIN
+    * is GL_LOWER_LEFT.
+    */
    bool lower_wpos_pntc;
 
    /**
@@ -4899,6 +4902,9 @@ typedef struct nir_lower_wpos_ytransform_options {
 bool nir_lower_wpos_ytransform(nir_shader *shader,
                                const nir_lower_wpos_ytransform_options *options);
 bool nir_lower_wpos_center(nir_shader *shader, const bool for_sample_shading);
+
+bool nir_lower_pntc_ytransform(nir_shader *shader,
+                               const gl_state_index16 clipplane_state_tokens[][STATE_LENGTH]);
 
 bool nir_lower_wrmasks(nir_shader *shader, nir_instr_filter_cb cb, const void *data);
 

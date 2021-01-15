@@ -586,6 +586,18 @@ fetch_state(struct gl_context *ctx, const gl_state_index16 state[],
          }
          return;
 
+      case STATE_FB_PNTC_Y_TRANSFORM:
+         {
+            bool flip_y = (ctx->Point.SpriteOrigin == GL_LOWER_LEFT) ^
+               (ctx->DrawBuffer->FlipY);
+
+            value[0] = flip_y ? -1.0F : 1.0F;
+            value[1] = flip_y ? 1.0F : 0.0F;
+            value[2] = 0.0F;
+            value[3] = 0.0F;
+         }
+         return;
+
       case STATE_TCS_PATCH_VERTICES_IN:
          val[0].i = ctx->TessCtrlProgram.patch_vertices;
          return;
@@ -729,6 +741,9 @@ _mesa_program_state_flags(const gl_state_index16 state[STATE_LENGTH])
       case STATE_FB_SIZE:
       case STATE_FB_WPOS_Y_TRANSFORM:
          return _NEW_BUFFERS;
+
+      case STATE_FB_PNTC_Y_TRANSFORM:
+         return _NEW_BUFFERS | _NEW_POINT;
 
       case STATE_ADVANCED_BLENDING_MODE:
          return _NEW_COLOR;
@@ -941,6 +956,9 @@ append_token(char *dst, gl_state_index k)
       break;
    case STATE_FB_WPOS_Y_TRANSFORM:
       append(dst, "FbWposYTransform");
+      break;
+   case STATE_FB_PNTC_Y_TRANSFORM:
+      append(dst, "PntcYTransform");
       break;
    case STATE_ADVANCED_BLENDING_MODE:
       append(dst, "AdvancedBlendingMode");

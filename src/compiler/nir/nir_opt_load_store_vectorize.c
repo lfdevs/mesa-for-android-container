@@ -1196,7 +1196,6 @@ handle_barrier(struct vectorize_ctx *ctx, bool *progress, nir_function_impl *imp
          release = nir_intrinsic_memory_semantics(intrin) & NIR_MEMORY_RELEASE;
          switch (nir_intrinsic_memory_scope(intrin)) {
          case NIR_SCOPE_INVOCATION:
-         case NIR_SCOPE_SUBGROUP:
             /* a barier should never be required for correctness with these scopes */
             modes = 0;
             break;

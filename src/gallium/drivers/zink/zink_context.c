@@ -59,6 +59,7 @@ zink_context_destroy(struct pipe_context *pctx)
    if (vkQueueWaitIdle(ctx->queue) != VK_SUCCESS)
       debug_printf("vkQueueWaitIdle failed\n");
 
+   pipe_resource_reference(&ctx->dummy_buffer, NULL);
    for (unsigned i = 0; i < ARRAY_SIZE(ctx->null_buffers); i++)
       pipe_resource_reference(&ctx->null_buffers[i], NULL);
 

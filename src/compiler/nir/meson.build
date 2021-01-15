@@ -166,6 +166,7 @@ files_libnir = files(
   'nir_lower_passthrough_edgeflags.c',
   'nir_lower_patch_vertices.c',
   'nir_lower_phis_to_scalar.c',
+  'nir_lower_pntc_ytransform.c',
   'nir_lower_point_size.c',
   'nir_lower_point_size_mov.c',
   'nir_lower_regs_to_ssa.c',

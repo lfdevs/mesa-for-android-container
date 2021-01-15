@@ -1,0 +1,52 @@
+From cb24282b01faea949baa9d10a5d007aa683d6fcf Mon Sep 17 00:00:00 2001
+From: Witold Baryluk <witold.baryluk+freedesktop@gmail.com>
+Date: Fri, 8 Jan 2021 10:16:53 +0000
+Subject: [PATCH] lavapipe: Defer lavapipe warning to CreateDevice
+
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/4055
+Fixes: b38879f8c5f57b7f1802e433e33181bdf5e72aef
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/8377>
+(cherry picked from commit 9c54928f7762a59da4638a563e6c852ecbb9c76f)
+---
+ .pick_status.json                           | 2 +-
+ src/gallium/frontends/lavapipe/lvp_device.c | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/.pick_status.json b/.pick_status.json
+index 16eb62e87e2..dae7d8bb116 100644
+--- a/.pick_status.json
++++ b/.pick_status.json
+@@ -94,7 +94,7 @@
+         "description": "lavapipe: Defer lavapipe warning to CreateDevice",
+         "nominated": true,
+         "nomination_type": 1,
+-        "resolution": 0,
++        "resolution": 1,
+         "master_sha": null,
+         "because_sha": "b38879f8c5f57b7f1802e433e33181bdf5e72aef"
+     },
+diff --git a/src/gallium/frontends/lavapipe/lvp_device.c b/src/gallium/frontends/lavapipe/lvp_device.c
+index 45734f95880..514a64f3287 100644
+--- a/src/gallium/frontends/lavapipe/lvp_device.c
++++ b/src/gallium/frontends/lavapipe/lvp_device.c
+@@ -52,8 +52,6 @@ lvp_physical_device_init(struct lvp_physical_device *device,
+    if (!device->pscreen)
+       return vk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+ 
+-   fprintf(stderr, "WARNING: lavapipe is not a conformant vulkan implementation, testing use only.\n");
+-
+    device->max_images = device->pscreen->get_shader_param(device->pscreen, PIPE_SHADER_FRAGMENT, PIPE_SHADER_CAP_MAX_SHADER_IMAGES);
+    lvp_physical_device_get_supported_extensions(device, &device->supported_extensions);
+    result = lvp_init_wsi(device);
+@@ -822,6 +820,8 @@ VkResult lvp_CreateDevice(
+    const VkAllocationCallbacks*                pAllocator,
+    VkDevice*                                   pDevice)
+ {
++   fprintf(stderr, "WARNING: lavapipe is not a conformant vulkan implementation, testing use only.\n");
++
+    LVP_FROM_HANDLE(lvp_physical_device, physical_device, physicalDevice);
+    struct lvp_device *device;
+ 
+-- 
+2.27.0
+

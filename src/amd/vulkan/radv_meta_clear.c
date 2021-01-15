@@ -733,7 +733,7 @@ static bool depth_view_can_fast_clear(struct radv_cmd_buffer *cmd_buffer,
 	    iview->base_mip == 0 &&
 	    iview->base_layer == 0 &&
 	    iview->layer_count == iview->image->info.array_size &&
-	    radv_layout_is_htile_compressed(iview->image, layout, in_render_loop, queue_mask) &&
+	    radv_layout_is_htile_compressed(cmd_buffer->device, iview->image, layout, in_render_loop, queue_mask) &&
 	    radv_image_extent_compare(iview->image, &iview->extent))
 		return true;
 	return false;
@@ -1090,7 +1090,7 @@ radv_can_fast_clear_depth(struct radv_cmd_buffer *cmd_buffer,
 	if (!radv_image_view_can_fast_clear(cmd_buffer->device, iview))
 		return false;
 
-	if (!radv_layout_is_htile_compressed(iview->image, image_layout, in_render_loop,
+	if (!radv_layout_is_htile_compressed(cmd_buffer->device, iview->image, image_layout, in_render_loop,
 	                                     radv_image_queue_family_mask(iview->image,
 	                                                                  cmd_buffer->queue_family_index,
 	                                                                  cmd_buffer->queue_family_index)))
