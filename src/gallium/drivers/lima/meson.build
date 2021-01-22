@@ -99,7 +99,7 @@ liblima = static_library(
     inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_gallium_drivers,
     inc_panfrost
   ],
-  dependencies : [dep_libdrm, idep_nir_headers],
+  dependencies : [dep_libdrm, idep_nir_headers, idep_mesautil],
 )
 
 driver_lima = declare_dependency(

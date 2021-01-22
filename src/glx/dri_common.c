@@ -602,6 +602,20 @@ dri2_check_no_error(uint32_t flags, struct glx_context *share_context,
    return true;
 }
 
+struct glx_context *
+dri_common_create_context(struct glx_screen *base,
+                          struct glx_config *config_base,
+                          struct glx_context *shareList,
+                          int renderType)
+{
+   unsigned int error;
+   uint32_t attribs[2] = { GLX_RENDER_TYPE, renderType };
+
+   return base->vtable->create_context_attribs(base, config_base, shareList,
+                                               1, attribs, &error);
+}
+
+
 /*
  * Given a display pointer and screen number, determine the name of
  * the DRI driver for the screen (i.e., "i965", "radeon", "nouveau", etc).

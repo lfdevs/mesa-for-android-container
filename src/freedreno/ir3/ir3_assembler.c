@@ -21,8 +21,6 @@
  * SOFTWARE.
  */
 
-#include <err.h>
-
 #include "ir3_assembler.h"
 #include "ir3_shader.h"
 #include "ir3_parser.h"
@@ -51,13 +49,17 @@ ir3_parse_asm(struct ir3_compiler *c, struct ir3_kernel_info *info, FILE *in)
 
 	v->ir = ir3_parse(v, info, in);
 	if (!v->ir)
-		errx(-1, "parse failed");
+		goto error;
 
 	ir3_debug_print(v->ir, "AFTER PARSING");
 
 	v->bin = ir3_shader_assemble(v);
 	if (!v->bin)
-		errx(-1, "assembler failed");
+		goto error;
 
 	return shader;
+
+error:
+	ralloc_free(shader);
+	return NULL;
 }

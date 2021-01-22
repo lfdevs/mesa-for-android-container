@@ -63,12 +63,9 @@ extern "C" {
 
 #define MAX_SETS         8
 #define MAX_PUSH_CONSTANTS_SIZE 128
+#define MAX_PUSH_DESCRIPTORS 32
 
 #define lvp_printflike(a, b) __attribute__((__format__(__printf__, a, b)))
-
-#define typed_memcpy(dest, src, count) ({ \
-   memcpy((dest), (src), (count) * sizeof(*(src))); \
-})
 
 int lvp_get_instance_entrypoint_index(const char *name);
 int lvp_get_device_entrypoint_index(const char *name);
@@ -131,6 +128,7 @@ LVP_DEFINE_NONDISP_HANDLE_CASTS(lvp_buffer_view, VkBufferView)
 LVP_DEFINE_NONDISP_HANDLE_CASTS(lvp_descriptor_pool, VkDescriptorPool)
 LVP_DEFINE_NONDISP_HANDLE_CASTS(lvp_descriptor_set, VkDescriptorSet)
 LVP_DEFINE_NONDISP_HANDLE_CASTS(lvp_descriptor_set_layout, VkDescriptorSetLayout)
+LVP_DEFINE_NONDISP_HANDLE_CASTS(lvp_descriptor_update_template, VkDescriptorUpdateTemplate)
 LVP_DEFINE_NONDISP_HANDLE_CASTS(lvp_device_memory, VkDeviceMemory)
 LVP_DEFINE_NONDISP_HANDLE_CASTS(lvp_event, VkEvent)
 LVP_DEFINE_NONDISP_HANDLE_CASTS(lvp_framebuffer, VkFramebuffer)
@@ -453,21 +451,24 @@ struct lvp_descriptor_set_layout {
    struct lvp_descriptor_set_binding_layout binding[0];
 };
 
+union lvp_descriptor_info {
+   struct {
+      struct lvp_sampler *sampler;
+      struct lvp_image_view *iview;
+      VkImageLayout image_layout;
+   };
+   struct {
+      struct lvp_buffer *buffer;
+      VkDeviceSize offset;
+      VkDeviceSize range;
+   };
+   struct lvp_buffer_view *buffer_view;
+};
+
 struct lvp_descriptor {
    VkDescriptorType type;
 
-   union {
-      struct {
-         struct lvp_image_view *image_view;
-         struct lvp_sampler *sampler;
-      };
-      struct {
-         uint64_t offset;
-         uint64_t range;
-         struct lvp_buffer *buffer;
-      } buf;
-      struct lvp_buffer_view *buffer_view;
-   };
+   union lvp_descriptor_info info;
 };
 
 struct lvp_descriptor_set {
@@ -483,6 +484,17 @@ struct lvp_descriptor_pool {
    uint32_t max_sets;
 
    struct list_head sets;
+};
+
+struct lvp_descriptor_update_template {
+   struct vk_object_base base;
+   uint32_t entry_count;
+   uint32_t set;
+   VkDescriptorUpdateTemplateType type;
+   struct lvp_descriptor_set_layout *descriptor_set_layout;
+   VkPipelineBindPoint bind_point;
+   struct lvp_pipeline_layout *pipeline_layout;
+   VkDescriptorUpdateTemplateEntry entry[0];
 };
 
 VkResult
@@ -513,6 +525,7 @@ struct lvp_pipeline {
    struct lvp_device *                          device;
    struct lvp_pipeline_layout *                 layout;
 
+   void *mem_ctx;
    bool is_compute_pipeline;
    bool force_min_sample;
    nir_shader *pipeline_nir[MESA_SHADER_STAGES];
@@ -644,6 +657,13 @@ enum lvp_cmds {
    LVP_CMD_NEXT_SUBPASS,
    LVP_CMD_END_RENDER_PASS,
    LVP_CMD_EXECUTE_COMMANDS,
+   LVP_CMD_DRAW_INDIRECT_COUNT,
+   LVP_CMD_DRAW_INDEXED_INDIRECT_COUNT,
+   LVP_CMD_PUSH_DESCRIPTOR_SET,
+   LVP_CMD_BIND_TRANSFORM_FEEDBACK_BUFFERS,
+   LVP_CMD_BEGIN_TRANSFORM_FEEDBACK,
+   LVP_CMD_END_TRANSFORM_FEEDBACK,
+   LVP_CMD_DRAW_INDIRECT_BYTE_COUNT,
 };
 
 struct lvp_cmd_bind_pipeline {
@@ -736,6 +756,9 @@ struct lvp_cmd_dispatch {
    uint32_t x;
    uint32_t y;
    uint32_t z;
+   uint32_t base_x;
+   uint32_t base_y;
+   uint32_t base_z;
 };
 
 struct lvp_cmd_dispatch_indirect {
@@ -908,6 +931,62 @@ struct lvp_cmd_execute_commands {
    struct lvp_cmd_buffer *cmd_buffers[0];
 };
 
+struct lvp_cmd_draw_indirect_count {
+   VkDeviceSize offset;
+   struct lvp_buffer *buffer;
+   VkDeviceSize count_buffer_offset;
+   struct lvp_buffer *count_buffer;
+   uint32_t max_draw_count;
+   uint32_t stride;
+};
+
+struct lvp_write_descriptor {
+   uint32_t dst_binding;
+   uint32_t dst_array_element;
+   uint32_t descriptor_count;
+   VkDescriptorType descriptor_type;
+};
+
+struct lvp_cmd_push_descriptor_set {
+   VkPipelineBindPoint bind_point;
+   struct lvp_pipeline_layout *layout;
+   uint32_t set;
+   uint32_t descriptor_write_count;
+   struct lvp_write_descriptor *descriptors;
+   union lvp_descriptor_info *infos;
+};
+
+struct lvp_cmd_bind_transform_feedback_buffers {
+   uint32_t first_binding;
+   uint32_t binding_count;
+   struct lvp_buffer **buffers;
+   VkDeviceSize *offsets;
+   VkDeviceSize *sizes;
+};
+
+struct lvp_cmd_begin_transform_feedback {
+   uint32_t first_counter_buffer;
+   uint32_t counter_buffer_count;
+   struct lvp_buffer **counter_buffers;
+   VkDeviceSize *counter_buffer_offsets;
+};
+
+struct lvp_cmd_end_transform_feedback {
+   uint32_t first_counter_buffer;
+   uint32_t counter_buffer_count;
+   struct lvp_buffer **counter_buffers;
+   VkDeviceSize *counter_buffer_offsets;
+};
+
+struct lvp_cmd_draw_indirect_byte_count {
+   uint32_t instance_count;
+   uint32_t first_instance;
+   struct lvp_buffer *counter_buffer;
+   VkDeviceSize counter_buffer_offset;
+   uint32_t counter_offset;
+   uint32_t vertex_stride;
+};
+
 struct lvp_cmd_buffer_entry {
    struct list_head cmd_link;
    uint32_t cmd_type;
@@ -948,6 +1027,12 @@ struct lvp_cmd_buffer_entry {
       struct lvp_cmd_begin_render_pass begin_render_pass;
       struct lvp_cmd_next_subpass next_subpass;
       struct lvp_cmd_execute_commands execute_commands;
+      struct lvp_cmd_draw_indirect_count draw_indirect_count;
+      struct lvp_cmd_push_descriptor_set push_descriptor_set;
+      struct lvp_cmd_bind_transform_feedback_buffers bind_transform_feedback_buffers;
+      struct lvp_cmd_begin_transform_feedback begin_transform_feedback;
+      struct lvp_cmd_end_transform_feedback end_transform_feedback;
+      struct lvp_cmd_draw_indirect_byte_count draw_indirect_byte_count;
    } u;
 };
 

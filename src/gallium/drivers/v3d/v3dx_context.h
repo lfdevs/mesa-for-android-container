@@ -29,6 +29,8 @@
 struct v3d_hw;
 struct v3d_format;
 
+void v3dX(start_binning)(struct v3d_context *v3d,
+                        struct v3d_job *job);
 void v3dX(emit_state)(struct pipe_context *pctx);
 void v3dX(emit_rcl)(struct v3d_job *job);
 void v3dX(draw_init)(struct pipe_context *pctx);
@@ -42,4 +44,5 @@ const struct v3d_format *v3dX(get_format_desc)(enum pipe_format f);
 void v3dX(get_internal_type_bpp_for_output_format)(uint32_t format,
                                                    uint32_t *type,
                                                    uint32_t *bpp);
-bool v3dX(tfu_supports_tex_format)(uint32_t tex_format);
+bool v3dX(tfu_supports_tex_format)(uint32_t tex_format,
+                                   bool for_mipmap);

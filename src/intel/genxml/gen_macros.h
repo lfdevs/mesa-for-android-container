@@ -59,6 +59,7 @@
 #define GEN_GEN ((GEN_VERSIONx10) / 10)
 #define GEN_IS_HASWELL ((GEN_VERSIONx10) == 75)
 #define GEN_IS_G4X ((GEN_VERSIONx10) == 45)
+#define GEN_IS_GEN12HP ((GEN_VERSIONx10) == 125)
 
 /* Prefixing macros */
 #if (GEN_VERSIONx10 == 40)
@@ -91,6 +92,9 @@
 #elif (GEN_VERSIONx10 == 120)
 #  define GENX(X) GEN12_##X
 #  define genX(x) gen12_##x
+#elif (GEN_VERSIONx10 == 125)
+#  define GENX(X) GEN125_##X
+#  define genX(x) gen125_##x
 #else
 #  error "Need to add prefixing macros for this gen"
 #endif

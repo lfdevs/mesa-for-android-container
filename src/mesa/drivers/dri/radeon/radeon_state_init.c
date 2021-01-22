@@ -872,23 +872,23 @@ void radeonInitState( r100ContextPtr rmesa )
        (RADEON_LM_SOURCE_STATE_MULT << RADEON_SPECULAR_SOURCE_SHIFT));
 
    for (i = 0 ; i < 8; i++) {
-      struct gl_light *l = &ctx->Light.Light[i];
+      struct gl_light_uniforms *lu = &ctx->Light.LightSource[i];
       GLenum p = GL_LIGHT0 + i;
       *(float *)&(rmesa->hw.lit[i].cmd[LIT_RANGE_CUTOFF]) = FLT_MAX;
 
-      ctx->Driver.Lightfv( ctx, p, GL_AMBIENT, l->Ambient );
-      ctx->Driver.Lightfv( ctx, p, GL_DIFFUSE, l->Diffuse );
-      ctx->Driver.Lightfv( ctx, p, GL_SPECULAR, l->Specular );
+      ctx->Driver.Lightfv( ctx, p, GL_AMBIENT, lu->Ambient );
+      ctx->Driver.Lightfv( ctx, p, GL_DIFFUSE, lu->Diffuse );
+      ctx->Driver.Lightfv( ctx, p, GL_SPECULAR, lu->Specular );
       ctx->Driver.Lightfv( ctx, p, GL_POSITION, NULL );
       ctx->Driver.Lightfv( ctx, p, GL_SPOT_DIRECTION, NULL );
-      ctx->Driver.Lightfv( ctx, p, GL_SPOT_EXPONENT, &l->SpotExponent );
-      ctx->Driver.Lightfv( ctx, p, GL_SPOT_CUTOFF, &l->SpotCutoff );
+      ctx->Driver.Lightfv( ctx, p, GL_SPOT_EXPONENT, &lu->SpotExponent );
+      ctx->Driver.Lightfv( ctx, p, GL_SPOT_CUTOFF, &lu->SpotCutoff );
       ctx->Driver.Lightfv( ctx, p, GL_CONSTANT_ATTENUATION,
-			   &l->ConstantAttenuation );
+			   &lu->ConstantAttenuation );
       ctx->Driver.Lightfv( ctx, p, GL_LINEAR_ATTENUATION,
-			   &l->LinearAttenuation );
+			   &lu->LinearAttenuation );
       ctx->Driver.Lightfv( ctx, p, GL_QUADRATIC_ATTENUATION,
-		     &l->QuadraticAttenuation );
+		     &lu->QuadraticAttenuation );
       *(float *)&(rmesa->hw.lit[i].cmd[LIT_ATTEN_XXX]) = 0.0;
    }
 

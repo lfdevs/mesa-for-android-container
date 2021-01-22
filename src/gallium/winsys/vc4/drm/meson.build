@@ -32,6 +32,7 @@ endif
 libvc4winsys = static_library(
   'vc4winsys',
   files('vc4_drm_winsys.c'),
+  dependencies : idep_mesautil,
   include_directories : [
     inc_src, inc_include,
     inc_gallium, inc_gallium_aux, inc_gallium_drivers, inc_gallium_winsys,

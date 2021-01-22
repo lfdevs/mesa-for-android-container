@@ -2091,14 +2091,14 @@ emit_tex( struct lp_build_tgsi_soa_context *bld,
    switch (inst->Texture.Texture) {
    case TGSI_TEXTURE_1D_ARRAY:
       layer_coord = 1;
-      /* fallthrough */
+      FALLTHROUGH;
    case TGSI_TEXTURE_1D:
       num_offsets = 1;
       num_derivs = 1;
       break;
    case TGSI_TEXTURE_2D_ARRAY:
       layer_coord = 2;
-      /* fallthrough */
+      FALLTHROUGH;
    case TGSI_TEXTURE_2D:
    case TGSI_TEXTURE_RECT:
       num_offsets = 2;
@@ -2106,7 +2106,7 @@ emit_tex( struct lp_build_tgsi_soa_context *bld,
       break;
    case TGSI_TEXTURE_SHADOW1D_ARRAY:
       layer_coord = 1;
-      /* fallthrough */
+      FALLTHROUGH;
    case TGSI_TEXTURE_SHADOW1D:
       shadow_coord = 2;
       num_offsets = 1;

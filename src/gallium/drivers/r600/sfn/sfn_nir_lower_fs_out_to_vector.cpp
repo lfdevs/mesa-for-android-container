@@ -436,8 +436,7 @@ nir_ssa_def *NirLowerFSOutToVector::create_combined_vector(nir_builder *b, nir_s
    case 3: op = nir_op_vec3; break;
    case 4: op = nir_op_vec4; break;
    default:
-      assert(0 && "combined vector must have 2 to 4 components");
-
+      unreachable("combined vector must have 2 to 4 components");
    }
    nir_alu_instr * instr = nir_alu_instr_create(b->shader, op);
    instr->exact = b->exact;

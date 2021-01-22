@@ -201,7 +201,7 @@ timestamp_pause(struct fd_acc_query *aq, struct fd_batch *batch)
 	/* We captured a timestamp in timestamp_resume(), nothing to do here. */
 }
 
-/* timestamp logging for fd_log(): */
+/* timestamp logging for u_trace: */
 static void
 record_timestamp(struct fd_ringbuffer *ring, struct fd_bo *bo, unsigned offset)
 {
@@ -591,7 +591,7 @@ fd6_create_batch_query(struct pipe_context *pctx,
 		/* verify valid query_type, ie. is it actually a perfcntr? */
 		if ((query_types[i] < FD_QUERY_FIRST_PERFCNTR) ||
 				(idx >= screen->num_perfcntr_queries)) {
-			debug_printf("invalid batch query query_type: %u\n", query_types[i]);
+			mesa_loge("invalid batch query query_type: %u", query_types[i]);
 			goto error;
 		}
 
@@ -616,7 +616,7 @@ fd6_create_batch_query(struct pipe_context *pctx,
 
 		if (counters_per_group[entry->gid] >=
 				screen->perfcntr_groups[entry->gid].num_counters) {
-			debug_printf("too many counters for group %u\n", entry->gid);
+			mesa_loge("too many counters for group %u", entry->gid);
 			goto error;
 		}
 

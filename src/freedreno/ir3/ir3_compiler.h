@@ -28,6 +28,7 @@
 #define IR3_COMPILER_H_
 
 #include "util/disk_cache.h"
+#include "util/log.h"
 
 #include "ir3.h"
 
@@ -108,6 +109,9 @@ struct ir3_compiler {
 
 	/* Whether clip+cull distances are supported */
 	bool has_clip_cull;
+
+	/* Whether private memory is supported */
+	bool has_pvtmem;
 };
 
 void ir3_compiler_destroy(struct ir3_compiler *compiler);

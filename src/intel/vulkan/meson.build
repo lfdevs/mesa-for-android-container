@@ -79,7 +79,8 @@ anv_gen_files = files(
 )
 foreach g : [['70', ['gen7_cmd_buffer.c']], ['75', ['gen7_cmd_buffer.c']],
              ['80', ['gen8_cmd_buffer.c']], ['90', ['gen8_cmd_buffer.c']],
-             ['110', ['gen8_cmd_buffer.c']], ['120', ['gen8_cmd_buffer.c']]]
+             ['110', ['gen8_cmd_buffer.c']], ['120', ['gen8_cmd_buffer.c']],
+             ['125', ['gen8_cmd_buffer.c']]]
   _gen = g[0]
   libanv_gen_libs += static_library(
     'anv_gen@0@'.format(_gen),
@@ -131,6 +132,7 @@ libanv_files = files(
 anv_deps = [
   dep_libdrm,
   dep_valgrind,
+  idep_genxml,
   idep_nir_headers,
   idep_vulkan_util_headers,
 ]
@@ -160,7 +162,7 @@ if system_has_kms_drm and not with_platform_android
 endif
 
 if with_xlib_lease
-  anv_deps += [dep_xcb_xrandr, dep_xlib_xrandr]
+  anv_deps += [dep_xlib_xrandr]
   anv_flags += '-DVK_USE_PLATFORM_XLIB_XRANDR_EXT'
 endif
 

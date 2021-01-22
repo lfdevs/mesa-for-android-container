@@ -291,7 +291,7 @@ struct SWR_CREATECONTEXT_INFO
     // ArchRast event manager.
     HANDLE hArEventManager;
 
-    // handle to external memory for worker datas to create memory contexts
+    // handle to external memory for worker data to create memory contexts
     HANDLE hExternalMemory;
 
     // Input (optional): Threading info that overrides any set KNOB values.
@@ -610,7 +610,7 @@ SWR_FUNC(void,
 /// @note this enum needs to be kept in sync with HOTTILE_STATE!
 enum SWR_TILE_STATE
 {
-    SWR_TILE_INVALID = 0, // tile is in unitialized state and should be loaded with surface contents
+    SWR_TILE_INVALID = 0, // tile is in uninitialized state and should be loaded with surface contents
                           // before rendering
     SWR_TILE_DIRTY    = 2, // tile contains newer data than surface it represents
     SWR_TILE_RESOLVED = 3, // is in sync with surface it represents

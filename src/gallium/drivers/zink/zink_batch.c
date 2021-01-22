@@ -13,17 +13,9 @@
 #include "util/u_debug.h"
 #include "util/set.h"
 
-static void
-reset_batch(struct zink_context *ctx, struct zink_batch *batch)
+void
+zink_batch_release(struct zink_screen *screen, struct zink_batch *batch)
 {
-   struct zink_screen *screen = zink_screen(ctx->base.screen);
-   batch->descs_left = ZINK_BATCH_DESC_SIZE;
-
-   // cmdbuf hasn't been submitted before
-   if (!batch->fence)
-      return;
-
-   zink_fence_finish(screen, batch->fence, PIPE_TIMEOUT_INFINITE);
    zink_fence_reference(screen, &batch->fence, NULL);
 
    zink_render_pass_reference(screen, &batch->rp, NULL);
@@ -52,6 +44,20 @@ reset_batch(struct zink_context *ctx, struct zink_batch *batch)
       vkDestroySampler(screen->dev, *samp, NULL);
    }
    util_dynarray_clear(&batch->zombie_samplers);
+}
+
+static void
+reset_batch(struct zink_context *ctx, struct zink_batch *batch)
+{
+   struct zink_screen *screen = zink_screen(ctx->base.screen);
+   batch->descs_left = ZINK_BATCH_DESC_SIZE;
+
+   // cmdbuf hasn't been submitted before
+   if (!batch->fence)
+      return;
+
+   zink_fence_finish(screen, batch->fence, PIPE_TIMEOUT_INFINITE);
+   zink_batch_release(screen, batch);
 
    if (vkResetDescriptorPool(screen->dev, batch->descpool, 0) != VK_SUCCESS)
       fprintf(stderr, "vkResetDescriptorPool failed\n");

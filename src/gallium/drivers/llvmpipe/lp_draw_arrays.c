@@ -51,8 +51,25 @@
  * the drawing to the 'draw' module.
  */
 static void
-llvmpipe_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
+llvmpipe_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
+                  const struct pipe_draw_indirect_info *indirect,
+                  const struct pipe_draw_start_count *draws,
+                  unsigned num_draws)
 {
+   if (num_draws > 1) {
+      struct pipe_draw_info tmp_info = *info;
+
+      for (unsigned i = 0; i < num_draws; i++) {
+         llvmpipe_draw_vbo(pipe, &tmp_info, indirect, &draws[i], 1);
+         if (tmp_info.increment_draw_id)
+            tmp_info.drawid++;
+      }
+      return;
+   }
+
+   if (!indirect && (!draws[0].count || !info->instance_count))
+      return;
+
    struct llvmpipe_context *lp = llvmpipe_context(pipe);
    struct draw_context *draw = lp->draw;
    const void *mapped_indices = NULL;
@@ -61,8 +78,8 @@ llvmpipe_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    if (!llvmpipe_check_render_cond(lp))
       return;
 
-   if (info->indirect) {
-      util_draw_indirect(pipe, info);
+   if (indirect && indirect->buffer) {
+      util_draw_indirect(pipe, info, indirect);
       return;
    }
 
@@ -139,7 +156,7 @@ llvmpipe_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
                                      !lp->queries_disabled);
 
    /* draw! */
-   draw_vbo(draw, info);
+   draw_vbo(draw, info, indirect, draws, num_draws);
 
    /*
     * unmap vertex/index buffers

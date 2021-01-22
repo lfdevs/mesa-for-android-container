@@ -103,7 +103,7 @@ if with_platform_android
 endif
 
 if with_xlib_lease
-  tu_deps += [dep_xcb_xrandr, dep_xlib_xrandr]
+  tu_deps += [dep_xlib_xrandr]
   tu_flags += '-DVK_USE_PLATFORM_XLIB_XRANDR_EXT'
 endif
 
@@ -132,6 +132,7 @@ libvulkan_freedreno = shared_library(
     tu_link_with,
     libfreedreno_ir3,
     libfreedreno_layout,
+    libfreedreno_perfcntrs,
   ],
   dependencies : [
     idep_libfreedreno_common,

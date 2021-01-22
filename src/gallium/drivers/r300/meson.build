@@ -126,7 +126,7 @@ libr300 = static_library(
     inc_mesa,
   ],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [dep_libdrm_radeon, dep_llvm],
+  dependencies : [dep_libdrm_radeon, dep_llvm, idep_mesautil],
 )
 
 driver_r300 = declare_dependency(

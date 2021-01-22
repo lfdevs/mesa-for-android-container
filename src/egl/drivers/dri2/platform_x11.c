@@ -1212,7 +1212,8 @@ dri2_find_screen_for_display(const _EGLDisplay *disp, int fallback_screen)
    const EGLAttrib *attr;
 
    for (attr = disp->Options.Attribs; attr; attr += 2) {
-      if (attr[0] == EGL_PLATFORM_X11_SCREEN_EXT)
+      if (attr[0] == EGL_PLATFORM_X11_SCREEN_EXT ||
+          attr[0] == EGL_PLATFORM_XCB_SCREEN_EXT)
          return attr[1];
    }
 
@@ -1232,10 +1233,14 @@ dri2_get_xcb_connection(_EGLDisplay *disp,
       dri2_dpy->conn = xcb_connect(NULL, &screen);
       dri2_dpy->own_device = true;
       screen = dri2_find_screen_for_display(disp, screen);
-   } else {
+   } else if (disp->Platform == _EGL_PLATFORM_X11) {
       Display *dpy = disp->PlatformDisplay;
       dri2_dpy->conn = XGetXCBConnection(dpy);
       screen = DefaultScreen(dpy);
+   } else {
+      /*   _EGL_PLATFORM_XCB   */
+      dri2_dpy->conn = disp->PlatformDisplay;
+      screen = dri2_find_screen_for_display(disp, 0);
    }
 
    if (!dri2_dpy->conn || xcb_connection_has_error(dri2_dpy->conn)) {
@@ -1536,7 +1541,11 @@ dri2_initialize_x11(_EGLDisplay *disp)
          return EGL_TRUE;
 #endif
 
-   return dri2_initialize_x11_dri2(disp);
+   if (!env_var_as_boolean("LIBGL_DRI2_DISABLE", false))
+      if (dri2_initialize_x11_dri2(disp))
+         return EGL_TRUE;
+
+   return EGL_FALSE;
 }
 
 void

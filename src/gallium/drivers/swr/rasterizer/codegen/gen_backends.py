@@ -31,7 +31,7 @@ from gen_common import *
 
 def main(args=sys.argv[1:]):
     thisDir = os.path.dirname(os.path.realpath(__file__))
-    parser = ArgumentParser('Generate files and initialization functions for all permutuations of BackendPixelRate.')
+    parser = ArgumentParser('Generate files and initialization functions for all permutations of BackendPixelRate.')
     parser.add_argument('--dim', help='gBackendPixelRateTable array dimensions', nargs='+', type=int, required=True)
     parser.add_argument('--outdir', help='output directory', nargs='?', type=str, default=thisDir)
     parser.add_argument('--split', help='how many lines of initialization per file [0=no split]', nargs='?', type=int, default='512')
@@ -85,7 +85,7 @@ def main(args=sys.argv[1:]):
         #print each list member as an index in the multidimensional array
         for i in new_list:
             tempStr += '[' + str(i) + ']'
-        #map each entry in the permuation as its own string member, store as the template instantiation string
+        #map each entry in the permutation as its own string member, store as the template instantiation string
         tempStr += backend.funcInstanceHeader + ','.join(map(str, output_combinations[x])) + '>>;'
         #append the line of c++ code in the list of output lines
         output_list.append(tempStr)

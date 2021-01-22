@@ -82,53 +82,6 @@ fd5_emit_shader(struct fd_ringbuffer *ring, const struct ir3_shader_variant *so)
 	}
 }
 
-/* Add any missing varyings needed for stream-out.  Otherwise varyings not
- * used by fragment shader will be stripped out.
- */
-static void
-link_stream_out(struct ir3_shader_linkage *l, const struct ir3_shader_variant *v)
-{
-	const struct ir3_stream_output_info *strmout = &v->shader->stream_output;
-
-	/*
-	 * First, any stream-out varyings not already in linkage map (ie. also
-	 * consumed by frag shader) need to be added:
-	 */
-	for (unsigned i = 0; i < strmout->num_outputs; i++) {
-		const struct ir3_stream_output *out = &strmout->output[i];
-		unsigned k = out->register_index;
-		unsigned compmask =
-			(1 << (out->num_components + out->start_component)) - 1;
-		unsigned idx, nextloc = 0;
-
-		/* psize/pos need to be the last entries in linkage map, and will
-		 * get added link_stream_out, so skip over them:
-		 */
-		if ((v->outputs[k].slot == VARYING_SLOT_PSIZ) ||
-				(v->outputs[k].slot == VARYING_SLOT_POS))
-			continue;
-
-		for (idx = 0; idx < l->cnt; idx++) {
-			if (l->var[idx].regid == v->outputs[k].regid)
-				break;
-			nextloc = MAX2(nextloc, l->var[idx].loc + 4);
-		}
-
-		/* add if not already in linkage map: */
-		if (idx == l->cnt)
-			ir3_link_add(l, v->outputs[k].regid, compmask, nextloc);
-
-		/* expand component-mask if needed, ie streaming out all components
-		 * but frag shader doesn't consume all components:
-		 */
-		if (compmask & ~l->var[idx].compmask) {
-			l->var[idx].compmask |= compmask;
-			l->max_loc = MAX2(l->max_loc,
-				l->var[idx].loc + util_last_bit(l->var[idx].compmask));
-		}
-	}
-}
-
 /* TODO maybe some of this we could pre-compute once rather than having
  * so much draw-time logic?
  */
@@ -414,15 +367,14 @@ fd5_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	struct ir3_shader_linkage l = {0};
 	ir3_link_shaders(&l, s[VS].v, s[FS].v, true);
 
-	if ((s[VS].v->shader->stream_output.num_outputs > 0) &&
-			!emit->binning_pass)
-		link_stream_out(&l, s[VS].v);
-
 	OUT_PKT4(ring, REG_A5XX_VPC_VAR_DISABLE(0), 4);
 	OUT_RING(ring, ~l.varmask[0]);  /* VPC_VAR[0].DISABLE */
 	OUT_RING(ring, ~l.varmask[1]);  /* VPC_VAR[1].DISABLE */
 	OUT_RING(ring, ~l.varmask[2]);  /* VPC_VAR[2].DISABLE */
 	OUT_RING(ring, ~l.varmask[3]);  /* VPC_VAR[3].DISABLE */
+
+	if (!emit->binning_pass)
+		ir3_link_stream_out(&l, s[VS].v);
 
 	/* a5xx appends pos/psize to end of the linkage map: */
 	if (pos_regid != regid(63,0))

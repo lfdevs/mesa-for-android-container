@@ -127,6 +127,7 @@ public:
    bool run_tes();
    bool run_gs();
    bool run_cs(bool allow_spilling);
+   bool run_bs(bool allow_spilling);
    void optimize();
    void allocate_registers(bool allow_spilling);
    void setup_fs_payload_gen4();
@@ -157,7 +158,7 @@ public:
    virtual void invalidate_analysis(brw::analysis_dependency_class c);
    void validate();
    bool opt_algebraic();
-   bool opt_redundant_discard_jumps();
+   bool opt_redundant_halt();
    bool opt_cse();
    bool opt_cse_local(const brw::fs_live_variables &live, bblock_t *block, int &ip);
 
@@ -249,6 +250,8 @@ public:
    void nir_emit_fs_intrinsic(const brw::fs_builder &bld,
                               nir_intrinsic_instr *instr);
    void nir_emit_cs_intrinsic(const brw::fs_builder &bld,
+                              nir_intrinsic_instr *instr);
+   void nir_emit_bs_intrinsic(const brw::fs_builder &bld,
                               nir_intrinsic_instr *instr);
    fs_reg get_nir_image_intrinsic_image(const brw::fs_builder &bld,
                                         nir_intrinsic_instr *instr);
@@ -533,7 +536,7 @@ private:
                                struct brw_reg src0,
                                struct brw_reg src1);
 
-   void generate_discard_jump(fs_inst *inst);
+   void generate_halt(fs_inst *inst);
 
    void generate_pack_half_2x16_split(fs_inst *inst,
                                       struct brw_reg dst,
@@ -559,7 +562,7 @@ private:
                               struct brw_reg dst, struct brw_reg src,
                               unsigned swiz);
 
-   bool patch_discard_jumps_to_fb_writes();
+   bool patch_halt_jumps();
 
    const struct brw_compiler *compiler;
    void *log_data; /* Passed to compiler->*_log functions */

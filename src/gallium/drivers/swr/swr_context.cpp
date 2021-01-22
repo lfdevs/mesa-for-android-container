@@ -428,6 +428,13 @@ swr_render_condition(struct pipe_context *pipe,
    ctx->render_cond_cond = condition;
 }
 
+
+static void
+swr_flush_resource(struct pipe_context *ctx, struct pipe_resource *resource)
+{
+   // NOOP
+}
+
 static void
 swr_UpdateStats(HANDLE hPrivateContext, const SWR_STATS *pStats)
 {
@@ -557,6 +564,7 @@ swr_create_context(struct pipe_screen *p_screen, void *priv, unsigned flags)
 
    ctx->pipe.clear_texture = util_clear_texture;
    ctx->pipe.resource_copy_region = swr_resource_copy;
+   ctx->pipe.flush_resource = swr_flush_resource;
    ctx->pipe.render_condition = swr_render_condition;
 
    swr_state_init(&ctx->pipe);

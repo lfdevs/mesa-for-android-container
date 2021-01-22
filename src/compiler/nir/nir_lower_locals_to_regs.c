@@ -169,7 +169,7 @@ get_deref_reg_src(nir_deref_instr *deref, struct locals_to_regs_state *state)
          nir_ssa_def *index = nir_i2i(b, nir_ssa_for_src(b, d->arr.index, 1), 32);
          src.reg.indirect->ssa =
             nir_iadd(b, src.reg.indirect->ssa,
-                        nir_imul(b, index, nir_imm_int(b, inner_array_size)));
+                        nir_imul_imm(b, index, inner_array_size));
       }
 
       inner_array_size *= glsl_get_length(nir_deref_instr_parent(d)->type);

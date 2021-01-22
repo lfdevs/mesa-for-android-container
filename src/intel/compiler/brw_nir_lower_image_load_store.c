@@ -423,15 +423,9 @@ lower_image_load_instr(nir_builder *b,
       nir_push_if(b, do_load);
 
       nir_ssa_def *addr = image_address(b, devinfo, deref, coord);
-      nir_intrinsic_instr *load =
-         nir_intrinsic_instr_create(b->shader,
-                                    nir_intrinsic_image_deref_load_raw_intel);
-      load->src[0] = nir_src_for_ssa(&deref->dest.ssa);
-      load->src[1] = nir_src_for_ssa(addr);
-      load->num_components = image_fmtl->bpb / 32;
-      nir_ssa_dest_init(&load->instr, &load->dest,
-                        load->num_components, 32, NULL);
-      nir_builder_instr_insert(b, &load->instr);
+      nir_ssa_def *load =
+         nir_image_deref_load_raw_intel(b, image_fmtl->bpb / 32, 32,
+                                        &deref->dest.ssa, addr);
 
       nir_push_else(b, NULL);
 
@@ -439,7 +433,7 @@ lower_image_load_instr(nir_builder *b,
 
       nir_pop_if(b, NULL);
 
-      nir_ssa_def *value = nir_if_phi(b, &load->dest.ssa, zero);
+      nir_ssa_def *value = nir_if_phi(b, load, zero);
 
       nir_ssa_def *color = convert_color_for_load(b, devinfo, value,
                                                   image_fmt, raw_fmt,

@@ -400,7 +400,7 @@ struct svga_winsys_context
     * Map a guest-backed surface.
     * \param swc The winsys context
     * \param surface The surface to map
-    * \param flags  bitmaks of PIPE_MAP_x flags
+    * \param flags  bitmask of PIPE_MAP_x flags
     * \param retry Whether to flush and retry the map
     * \param rebind Whether to issue an immediate rebind and flush.
     *
@@ -791,7 +791,7 @@ struct svga_winsys_screen
    /** Have SM5 hardware? */
    boolean have_sm5;
 
-   /** To rebind resources at the beginnning of a new command buffer */
+   /** To rebind resources at the beginning of a new command buffer */
    boolean need_to_rebind_resources;
 
    boolean have_generate_mipmap_cmd;

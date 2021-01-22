@@ -86,9 +86,7 @@ upload_shader_variant(struct ir3_shader_variant *v)
 
 	assert(!v->bo);
 
-	unsigned sz = v->info.sizedwords * 4;
-
-	v->bo = fd_bo_new(compiler->dev, sz,
+	v->bo = fd_bo_new(compiler->dev, v->info.size,
 			DRM_FREEDRENO_GEM_CACHE_WCOMBINE |
 			DRM_FREEDRENO_GEM_TYPE_KMEM,
 			"%s:%s", ir3_shader_stage(v), info->name);
@@ -96,7 +94,7 @@ upload_shader_variant(struct ir3_shader_variant *v)
 	/* Always include shaders in kernel crash dumps. */
 	fd_bo_mark_for_dump(v->bo);
 
-	memcpy(fd_bo_map(v->bo), v->bin, sz);
+	memcpy(fd_bo_map(v->bo), v->bin, v->info.size);
 }
 
 struct ir3_shader_variant *
@@ -178,7 +176,7 @@ ir3_shader_create(struct ir3_compiler *compiler,
 		nir = tgsi_to_nir(cso->tokens, screen, false);
 	}
 
-	struct ir3_stream_output_info stream_output;
+	struct ir3_stream_output_info stream_output = {};
 	copy_stream_out(&stream_output, &cso->stream_output);
 
 	struct ir3_shader *shader = ir3_shader_from_nir(compiler, nir, 0, &stream_output);

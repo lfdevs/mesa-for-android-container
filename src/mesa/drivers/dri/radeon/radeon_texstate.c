@@ -201,7 +201,7 @@ do {							\
 static GLenum
 texture_base_format(const struct gl_texture_object *t)
 {
-	return t->Image[0][t->BaseLevel]->_BaseFormat;
+	return t->Image[0][t->Attrib.BaseLevel]->_BaseFormat;
 }
 
 static GLboolean radeonUpdateTextureEnv( struct gl_context *ctx, int unit )

@@ -388,6 +388,11 @@ _eglGetPlatformDisplayCommon(EGLenum platform, void *native_display,
       disp = _eglGetX11Display((Display*) native_display, attrib_list);
       break;
 #endif
+#ifdef HAVE_XCB_PLATFORM
+   case EGL_PLATFORM_XCB_EXT:
+      disp = _eglGetXcbDisplay((xcb_connection_t*) native_display, attrib_list);
+      break;
+#endif
 #ifdef HAVE_DRM_PLATFORM
    case EGL_PLATFORM_GBM_MESA:
       disp = _eglGetGbmDisplay((struct gbm_device*) native_display,

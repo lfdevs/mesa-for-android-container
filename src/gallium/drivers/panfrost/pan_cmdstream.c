@@ -61,15 +61,16 @@ panfrost_bo_access_for_stage(enum pipe_shader_type stage)
 mali_ptr
 panfrost_get_index_buffer_bounded(struct panfrost_context *ctx,
                                   const struct pipe_draw_info *info,
+                                  const struct pipe_draw_start_count *draw,
                                   unsigned *min_index, unsigned *max_index)
 {
         struct panfrost_resource *rsrc = pan_resource(info->index.resource);
         struct panfrost_batch *batch = panfrost_get_batch_for_fbo(ctx);
-        off_t offset = info->start * info->index_size;
+        off_t offset = draw->start * info->index_size;
         bool needs_indices = true;
         mali_ptr out = 0;
 
-        if (info->max_index != ~0u) {
+        if (info->index_bounds_valid) {
                 *min_index = info->min_index;
                 *max_index = info->max_index;
                 needs_indices = false;
@@ -85,8 +86,8 @@ panfrost_get_index_buffer_bounded(struct panfrost_context *ctx,
 
                 /* Check the cache */
                 needs_indices = !panfrost_minmax_cache_get(rsrc->index_cache,
-                                                           info->start,
-                                                           info->count,
+                                                           draw->start,
+                                                           draw->count,
                                                            min_index,
                                                            max_index);
         } else {
@@ -94,20 +95,20 @@ panfrost_get_index_buffer_bounded(struct panfrost_context *ctx,
                 const uint8_t *ibuf8 = (const uint8_t *) info->index.user;
                 struct panfrost_ptr T =
                         panfrost_pool_alloc_aligned(&batch->pool,
-                                info->count * info->index_size,
+                                draw->count * info->index_size,
                                 info->index_size);
 
-                memcpy(T.cpu, ibuf8 + offset, info->count * info->index_size);
+                memcpy(T.cpu, ibuf8 + offset, draw->count * info->index_size);
                 out = T.gpu;
         }
 
         if (needs_indices) {
                 /* Fallback */
-                u_vbuf_get_minmax_index(&ctx->base, info, min_index, max_index);
+                u_vbuf_get_minmax_index(&ctx->base, info, draw, min_index, max_index);
 
                 if (!info->has_user_indices)
                         panfrost_minmax_cache_add(rsrc->index_cache,
-                                                  info->start, info->count,
+                                                  draw->start, draw->count,
                                                   *min_index, *max_index);
         }
 
@@ -115,15 +116,25 @@ panfrost_get_index_buffer_bounded(struct panfrost_context *ctx,
 }
 
 static unsigned
-translate_tex_wrap(enum pipe_tex_wrap w)
+translate_tex_wrap(enum pipe_tex_wrap w, bool supports_clamp, bool using_nearest)
 {
+        /* Bifrost doesn't support the GL_CLAMP wrap mode, so instead use
+         * CLAMP_TO_EDGE and CLAMP_TO_BORDER. On Midgard, CLAMP is broken for
+         * nearest filtering, so use CLAMP_TO_EDGE in that case. */
+
         switch (w) {
         case PIPE_TEX_WRAP_REPEAT: return MALI_WRAP_MODE_REPEAT;
-        case PIPE_TEX_WRAP_CLAMP: return MALI_WRAP_MODE_CLAMP;
+        case PIPE_TEX_WRAP_CLAMP:
+                return using_nearest ? MALI_WRAP_MODE_CLAMP_TO_EDGE :
+                     (supports_clamp ? MALI_WRAP_MODE_CLAMP :
+                                       MALI_WRAP_MODE_CLAMP_TO_BORDER);
         case PIPE_TEX_WRAP_CLAMP_TO_EDGE: return MALI_WRAP_MODE_CLAMP_TO_EDGE;
         case PIPE_TEX_WRAP_CLAMP_TO_BORDER: return MALI_WRAP_MODE_CLAMP_TO_BORDER;
         case PIPE_TEX_WRAP_MIRROR_REPEAT: return MALI_WRAP_MODE_MIRRORED_REPEAT;
-        case PIPE_TEX_WRAP_MIRROR_CLAMP: return MALI_WRAP_MODE_MIRRORED_CLAMP;
+        case PIPE_TEX_WRAP_MIRROR_CLAMP:
+                return using_nearest ? MALI_WRAP_MODE_MIRRORED_CLAMP_TO_EDGE :
+                     (supports_clamp ? MALI_WRAP_MODE_MIRRORED_CLAMP :
+                                       MALI_WRAP_MODE_MIRRORED_CLAMP_TO_BORDER);
         case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_EDGE: return MALI_WRAP_MODE_MIRRORED_CLAMP_TO_EDGE;
         case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_BORDER: return MALI_WRAP_MODE_MIRRORED_CLAMP_TO_BORDER;
         default: unreachable("Invalid wrap");
@@ -157,6 +168,8 @@ pan_pipe_to_mipmode(enum pipe_tex_mipfilter f)
 void panfrost_sampler_desc_init(const struct pipe_sampler_state *cso,
                                 struct mali_midgard_sampler_packed *hw)
 {
+        bool using_nearest = cso->min_img_filter == PIPE_TEX_MIPFILTER_NEAREST;
+
         pan_pack(hw, MIDGARD_SAMPLER, cfg) {
                 cfg.magnify_nearest = cso->mag_img_filter == PIPE_TEX_FILTER_NEAREST;
                 cfg.minify_nearest = cso->min_img_filter == PIPE_TEX_FILTER_NEAREST;
@@ -177,9 +190,9 @@ void panfrost_sampler_desc_init(const struct pipe_sampler_state *cso,
                         cfg.minimum_lod + 1 :
                         FIXED_16(cso->max_lod, false);
 
-                cfg.wrap_mode_s = translate_tex_wrap(cso->wrap_s);
-                cfg.wrap_mode_t = translate_tex_wrap(cso->wrap_t);
-                cfg.wrap_mode_r = translate_tex_wrap(cso->wrap_r);
+                cfg.wrap_mode_s = translate_tex_wrap(cso->wrap_s, true, using_nearest);
+                cfg.wrap_mode_t = translate_tex_wrap(cso->wrap_t, true, using_nearest);
+                cfg.wrap_mode_r = translate_tex_wrap(cso->wrap_r, true, using_nearest);
 
                 cfg.compare_function = panfrost_sampler_compare_func(cso);
                 cfg.seamless_cube_map = cso->seamless_cube_map;
@@ -194,6 +207,8 @@ void panfrost_sampler_desc_init(const struct pipe_sampler_state *cso,
 void panfrost_sampler_desc_init_bifrost(const struct pipe_sampler_state *cso,
                                         struct mali_bifrost_sampler_packed *hw)
 {
+        bool using_nearest = cso->min_img_filter == PIPE_TEX_MIPFILTER_NEAREST;
+
         pan_pack(hw, BIFROST_SAMPLER, cfg) {
                 cfg.point_sample_magnify = cso->mag_img_filter == PIPE_TEX_FILTER_NEAREST;
                 cfg.point_sample_minify = cso->min_img_filter == PIPE_TEX_FILTER_NEAREST;
@@ -204,9 +219,14 @@ void panfrost_sampler_desc_init_bifrost(const struct pipe_sampler_state *cso,
                 cfg.minimum_lod = FIXED_16(cso->min_lod, false);
                 cfg.maximum_lod = FIXED_16(cso->max_lod, false);
 
-                cfg.wrap_mode_s = translate_tex_wrap(cso->wrap_s);
-                cfg.wrap_mode_t = translate_tex_wrap(cso->wrap_t);
-                cfg.wrap_mode_r = translate_tex_wrap(cso->wrap_r);
+                if (cso->max_anisotropy > 1) {
+                        cfg.maximum_anisotropy = cso->max_anisotropy;
+                        cfg.lod_algorithm = MALI_LOD_ALGORITHM_ANISOTROPIC;
+                }
+
+                cfg.wrap_mode_s = translate_tex_wrap(cso->wrap_s, false, using_nearest);
+                cfg.wrap_mode_t = translate_tex_wrap(cso->wrap_t, false, using_nearest);
+                cfg.wrap_mode_r = translate_tex_wrap(cso->wrap_r, false, using_nearest);
 
                 cfg.compare_function = panfrost_sampler_compare_func(cso);
                 cfg.seamless_cube_map = cso->seamless_cube_map;
@@ -300,14 +320,11 @@ panfrost_emit_bifrost_blend(struct panfrost_batch *batch,
                                  * num_comps must be set to 4
                                  */
                                 cfg.bifrost.internal.fixed_function.num_comps = 4;
-                                cfg.bifrost.internal.fixed_function.conversion.memory_format.format =
-                                        panfrost_format_to_bifrost_blend(format_desc, true);
-                                if (dev->quirks & HAS_SWIZZLES) {
-                                        cfg.bifrost.internal.fixed_function.conversion.memory_format.swizzle =
-                                                panfrost_get_default_swizzle(4);
-                                }
+                                cfg.bifrost.internal.fixed_function.conversion.memory_format =
+                                        panfrost_format_to_bifrost_blend(dev, format_desc, true);
                                 cfg.bifrost.internal.fixed_function.conversion.register_format =
                                         fs->blend_types[i];
+                                cfg.bifrost.internal.fixed_function.rt = i;
                         }
                 }
         }
@@ -423,7 +440,7 @@ panfrost_prepare_midgard_fs_state(struct panfrost_context *ctx,
 
                 /* If either depth or stencil is enabled, discard matters */
                 bool zs_enabled =
-                        (zsa->base.depth.enabled && zsa->base.depth.func != PIPE_FUNC_ALWAYS) ||
+                        (zsa->base.depth_enabled && zsa->base.depth_func != PIPE_FUNC_ALWAYS) ||
                         zsa->base.stencil[0].enabled;
 
                 bool has_blend_shader = false;
@@ -450,7 +467,7 @@ panfrost_prepare_midgard_fs_state(struct panfrost_context *ctx,
                 state->shader = fs->shader;
         }
 
-        if (dev->quirks & MIDGARD_SFBD) {
+        if (dev->quirks & MIDGARD_SFBD && ctx->pipe_framebuffer.nr_cbufs > 0) {
                 state->multisample_misc.sfbd_load_destination = blend[0].load_dest;
                 state->multisample_misc.sfbd_blend_shader = blend[0].is_shader;
                 state->stencil_mask_misc.sfbd_write_enable = !blend[0].no_colour;
@@ -464,6 +481,16 @@ panfrost_prepare_midgard_fs_state(struct panfrost_context *ctx,
                         state->sfbd_blend_equation = blend[0].equation.equation;
                         state->sfbd_blend_constant = blend[0].equation.constant;
                 }
+        } else if (dev->quirks & MIDGARD_SFBD) {
+                /* If there is no colour buffer, leaving fields default is
+                 * fine, except for blending which is nonnullable */
+                state->sfbd_blend_equation.color_mask = 0xf;
+                state->sfbd_blend_equation.rgb.a = MALI_BLEND_OPERAND_A_SRC;
+                state->sfbd_blend_equation.rgb.b = MALI_BLEND_OPERAND_B_SRC;
+                state->sfbd_blend_equation.rgb.c = MALI_BLEND_OPERAND_C_ZERO;
+                state->sfbd_blend_equation.alpha.a = MALI_BLEND_OPERAND_A_SRC;
+                state->sfbd_blend_equation.alpha.b = MALI_BLEND_OPERAND_B_SRC;
+                state->sfbd_blend_equation.alpha.c = MALI_BLEND_OPERAND_C_ZERO;
         } else {
                 /* Bug where MRT-capable hw apparently reads the last blend
                  * shader from here instead of the usual location? */
@@ -502,11 +529,11 @@ panfrost_prepare_fs_state(struct panfrost_context *ctx,
         /* EXT_shader_framebuffer_fetch requires per-sample */
         bool per_sample = ctx->min_samples > 1 || fs->outputs_read;
         state->multisample_misc.evaluate_per_sample = msaa && per_sample;
-        state->multisample_misc.depth_function = zsa->base.depth.enabled ?
-                panfrost_translate_compare_func(zsa->base.depth.func) :
+        state->multisample_misc.depth_function = zsa->base.depth_enabled ?
+                panfrost_translate_compare_func(zsa->base.depth_func) :
                 MALI_FUNC_ALWAYS;
 
-        state->multisample_misc.depth_write_mask = zsa->base.depth.writemask;
+        state->multisample_misc.depth_write_mask = zsa->base.depth_writemask;
         state->multisample_misc.fixed_function_near_discard = rast->depth_clip_near;
         state->multisample_misc.fixed_function_far_discard = rast->depth_clip_far;
         state->multisample_misc.shader_depth_range_fixed = true;
@@ -515,7 +542,7 @@ panfrost_prepare_fs_state(struct panfrost_context *ctx,
         state->stencil_mask_misc.stencil_mask_back = zsa->stencil_mask_back;
         state->stencil_mask_misc.stencil_enable = zsa->base.stencil[0].enabled;
         state->stencil_mask_misc.alpha_to_coverage = alpha_to_coverage;
-        state->stencil_mask_misc.alpha_test_compare_function = MALI_FUNC_ALWAYS;
+        state->stencil_mask_misc.alpha_test_compare_function = zsa->alpha_func;
         state->stencil_mask_misc.depth_range_1 = rast->offset_tri;
         state->stencil_mask_misc.depth_range_2 = rast->offset_tri;
         state->stencil_mask_misc.single_sampled_lines = !rast->multisample;
@@ -527,6 +554,10 @@ panfrost_prepare_fs_state(struct panfrost_context *ctx,
         state->stencil_back = zsa->stencil_back;
         state->stencil_front.reference_value = ctx->stencil_ref.ref_value[0];
         state->stencil_back.reference_value = ctx->stencil_ref.ref_value[back_enab ? 1 : 0];
+
+        /* v6+ fits register preload here, no alpha testing */
+        if (dev->arch <= 5)
+                state->alpha_reference = zsa->base.alpha_ref_value;
 }
 
 
@@ -596,6 +627,12 @@ panfrost_emit_frag_shader_meta(struct panfrost_batch *batch)
                 panfrost_emit_blend(batch, xfer.cpu + MALI_RENDERER_STATE_LENGTH, blend);
         else
                 batch->draws |= PIPE_CLEAR_COLOR0;
+
+        if (ctx->depth_stencil->base.depth_enabled)
+                batch->read |= PIPE_CLEAR_DEPTH;
+
+        if (ctx->depth_stencil->base.stencil[0].enabled)
+                batch->read |= PIPE_CLEAR_STENCIL;
 
         return xfer.gpu;
 }
@@ -729,6 +766,14 @@ static void panfrost_upload_txs_sysval(struct panfrost_batch *batch,
         struct pipe_sampler_view *tex = &ctx->sampler_views[st][texidx]->base;
 
         assert(dim);
+
+        if (tex->target == PIPE_BUFFER) {
+                assert(dim == 1);
+                uniform->i[0] =
+                        tex->u.buf.size / util_format_get_blocksize(tex->format);
+                return;
+        }
+
         uniform->i[0] = u_minify(tex->texture->width0, tex->u.tex.first_level);
 
         if (dim > 1)
@@ -1010,7 +1055,7 @@ panfrost_update_sampler_view(struct panfrost_sampler_view *view,
 {
         struct panfrost_resource *rsrc = pan_resource(view->base.texture);
         if (view->texture_bo != rsrc->bo->ptr.gpu ||
-            view->modifier != rsrc->modifier) {
+            view->modifier != rsrc->layout.modifier) {
                 panfrost_bo_unreference(view->bo);
                 panfrost_create_sampler_view_bo(view, pctx, &rsrc->base);
         }
@@ -1811,8 +1856,8 @@ panfrost_emit_varying_descriptor(struct panfrost_batch *batch,
         pan_emit_special_input(varyings, present, PAN_VARY_FRAGCOORD, MALI_ATTRIBUTE_SPECIAL_FRAG_COORD);
 
         *buffers = T.gpu;
-        *vs_attribs = trans.gpu;
-        *fs_attribs = trans.gpu + vs_size;
+        *vs_attribs = vs->varying_count ? trans.gpu : 0;
+        *fs_attribs = fs->varying_count ? trans.gpu + vs_size : 0;
 }
 
 void

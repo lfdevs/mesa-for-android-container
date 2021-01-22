@@ -543,7 +543,7 @@ brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering,
 
       struct gl_sampler_object *sampler = _mesa_get_samplerobj(ctx, i);
       enum isl_format view_format =
-         translate_tex_format(brw, tex_obj->_Format, sampler->sRGBDecode);
+         translate_tex_format(brw, tex_obj->_Format, sampler->Attrib.sRGBDecode);
 
       unsigned min_level, min_layer, num_levels, num_layers;
       if (tex_obj->base.Immutable) {
@@ -553,8 +553,8 @@ brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering,
          num_layers = tex_obj->base.Target != GL_TEXTURE_3D ?
                       tex_obj->base.NumLayers : INTEL_REMAINING_LAYERS;
       } else {
-         min_level  = tex_obj->base.BaseLevel;
-         num_levels = tex_obj->_MaxLevel - tex_obj->base.BaseLevel + 1;
+         min_level  = tex_obj->base.Attrib.BaseLevel;
+         num_levels = tex_obj->_MaxLevel - tex_obj->base.Attrib.BaseLevel + 1;
          min_layer  = 0;
          num_layers = INTEL_REMAINING_LAYERS;
       }
@@ -586,7 +586,7 @@ brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering,
 
       brw_cache_flush_for_read(brw, tex_obj->mt->bo);
 
-      if (tex_obj->base.StencilSampling ||
+      if (tex_obj->base.Attrib.StencilSampling ||
           tex_obj->mt->format == MESA_FORMAT_S_UINT8) {
          intel_update_r8stencil(brw, tex_obj->mt);
       }
@@ -1134,28 +1134,27 @@ retry:
 void
 brw_draw_prims(struct gl_context *ctx,
                const struct _mesa_prim *prims,
-               GLuint nr_prims,
+               unsigned nr_prims,
                const struct _mesa_index_buffer *ib,
-               GLboolean index_bounds_valid,
-               GLuint min_index,
-               GLuint max_index,
-               GLuint num_instances,
-               GLuint base_instance,
-               struct gl_transform_feedback_object *gl_xfb_obj,
-               unsigned stream)
+               bool index_bounds_valid,
+               bool primitive_restart,
+               unsigned restart_index,
+               unsigned min_index,
+               unsigned max_index,
+               unsigned num_instances,
+               unsigned base_instance)
 {
    unsigned i;
    struct brw_context *brw = brw_context(ctx);
    int predicate_state = brw->predicate.state;
-   struct brw_transform_feedback_object *xfb_obj =
-      (struct brw_transform_feedback_object *) gl_xfb_obj;
 
    if (!brw_check_conditional_render(brw))
       return;
 
    /* Handle primitive restart if needed */
    if (brw_handle_primitive_restart(ctx, prims, nr_prims, ib, num_instances,
-                                    base_instance)) {
+                                    base_instance, primitive_restart,
+                                    restart_index)) {
       /* The draw was handled, so we can exit now */
       return;
    }
@@ -1168,8 +1167,9 @@ brw_draw_prims(struct gl_context *ctx,
                  _mesa_enum_to_string(ctx->RenderMode));
       _swsetup_Wakeup(ctx);
       _tnl_wakeup(ctx);
-      _tnl_draw(ctx, prims, nr_prims, ib, index_bounds_valid, min_index,
-                max_index, num_instances, base_instance, NULL, 0);
+      _tnl_draw(ctx, prims, nr_prims, ib, index_bounds_valid,
+                primitive_restart, restart_index, min_index,
+                max_index, num_instances, base_instance);
       return;
    }
 
@@ -1180,7 +1180,8 @@ brw_draw_prims(struct gl_context *ctx,
    if (!index_bounds_valid && _mesa_draw_user_array_bits(ctx) != 0) {
       perf_debug("Scanning index buffer to compute index buffer bounds.  "
                  "Use glDrawRangeElements() to avoid this.\n");
-      vbo_get_minmax_indices(ctx, prims, ib, &min_index, &max_index, nr_prims);
+      vbo_get_minmax_indices(ctx, prims, ib, &min_index, &max_index, nr_prims,
+                             primitive_restart, restart_index);
       index_bounds_valid = true;
    }
 
@@ -1222,13 +1223,52 @@ brw_draw_prims(struct gl_context *ctx,
       }
 
       brw_draw_single_prim(ctx, &prims[i], i, ib != NULL, num_instances,
-                           base_instance, xfb_obj, stream,
+                           base_instance, NULL, 0,
                            brw->draw.draw_indirect_offset +
                            brw->draw.draw_indirect_stride * i);
    }
 
    brw_finish_drawing(ctx);
    brw->predicate.state = predicate_state;
+}
+
+static void
+brw_draw_transform_feedback(struct gl_context *ctx, GLenum mode,
+                            unsigned num_instances, unsigned stream,
+                            struct gl_transform_feedback_object *gl_xfb_obj)
+{
+   struct brw_context *brw = brw_context(ctx);
+   struct brw_transform_feedback_object *xfb_obj =
+      (struct brw_transform_feedback_object *) gl_xfb_obj;
+
+   if (!brw_check_conditional_render(brw))
+      return;
+
+   /* Do GL_SELECT and GL_FEEDBACK rendering using swrast, even though it
+    * won't support all the extensions we support.
+    */
+   if (ctx->RenderMode != GL_RENDER) {
+      perf_debug("%s render mode not supported in hardware\n",
+                 _mesa_enum_to_string(ctx->RenderMode));
+      /* swrast doesn't support DrawTransformFeedback. Nothing to do. */
+      return;
+   }
+
+   brw_prepare_drawing(ctx, NULL, false, 0, ~0);
+
+   struct _mesa_prim prim;
+   memset(&prim, 0, sizeof(prim));
+   prim.begin = 1;
+   prim.end = 1;
+   prim.mode = mode;
+
+   /* Try drawing with the hardware, but don't do anything else if we can't
+    * manage it.  swrast doesn't support our featureset, so we can't fall back
+    * to it.
+    */
+   brw_draw_single_prim(ctx, &prim, 0, false, num_instances, 0, xfb_obj,
+                        stream, 0);
+   brw_finish_drawing(ctx);
 }
 
 void
@@ -1240,7 +1280,9 @@ brw_draw_indirect_prims(struct gl_context *ctx,
                         unsigned stride,
                         struct gl_buffer_object *indirect_params,
                         GLsizeiptr indirect_params_offset,
-                        const struct _mesa_index_buffer *ib)
+                        const struct _mesa_index_buffer *ib,
+                        bool primitive_restart,
+                        unsigned restart_index)
 {
    struct brw_context *brw = brw_context(ctx);
    struct _mesa_prim *prim;
@@ -1274,7 +1316,8 @@ brw_draw_indirect_prims(struct gl_context *ctx,
 
    brw->draw.draw_indirect_data = indirect_data;
 
-   brw_draw_prims(ctx, prim, draw_count, ib, false, 0, ~0, 0, 0, NULL, 0);
+   brw_draw_prims(ctx, prim, draw_count, ib, false, primitive_restart,
+                  restart_index, 0, ~0, 0, 0);
 
    brw->draw.draw_indirect_data = NULL;
    free(prim);
@@ -1286,6 +1329,7 @@ brw_init_draw_functions(struct dd_function_table *functions)
    /* Register our drawing function:
     */
    functions->Draw = brw_draw_prims;
+   functions->DrawTransformFeedback = brw_draw_transform_feedback;
    functions->DrawIndirect = brw_draw_indirect_prims;
 }
 

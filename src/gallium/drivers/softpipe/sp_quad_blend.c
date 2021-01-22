@@ -170,6 +170,8 @@ logicop_quad(struct quad_stage *qs,
       src[j][1] = float_to_ubyte(quadColor[j][1]); /* P1 */
       src[j][2] = float_to_ubyte(quadColor[j][2]); /* P2 */
       src[j][3] = float_to_ubyte(quadColor[j][3]); /* P3 */
+
+      res[j][0] = 0;
    }
 
    switch (softpipe->blend->logicop_func) {

@@ -81,6 +81,7 @@ isl_format_layouts[] = {
       % endif
     % endfor
     },
+    .uniform_channel_type = ISL_${format.uniform_channel_type},
     .colorspace = ISL_COLORSPACE_${format.colorspace},
     .txc = ISL_TXC_${format.txc},
   },
@@ -179,6 +180,23 @@ class Format(object):
             chan.start = bit
             bit = bit + chan.size
 
+        # Set the uniform channel type, if the format has one.
+        #
+        # Iterate over all channels, not just those in self.order, because
+        # some formats have an empty 'order' field in the CSV (such as
+        # YCRCB_NORMAL).
+        self.uniform_channel_type = 'VOID'
+        for chan in self.channels:
+            if chan.type in (None, 'VOID'):
+                pass
+            elif self.uniform_channel_type == 'VOID':
+                self.uniform_channel_type = chan.type
+            elif self.uniform_channel_type == chan.type:
+                pass
+            else:
+                self.uniform_channel_type = 'VOID'
+                break
+
         # alpha doesn't have a colorspace of it's own.
         self.colorspace = line[13].strip().upper()
         if self.colorspace in ['']:
@@ -186,6 +204,17 @@ class Format(object):
 
         # This sets it to the line value, or if it's an empty string 'NONE'
         self.txc = line[14].strip().upper() or 'NONE'
+
+
+    @property
+    def channels(self):
+        yield self.r
+        yield self.g
+        yield self.b
+        yield self.a
+        yield self.l
+        yield self.i
+        yield self.p
 
 
 def reader(csvfile):

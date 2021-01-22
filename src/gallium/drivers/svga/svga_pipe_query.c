@@ -1279,7 +1279,7 @@ svga_render_condition(struct pipe_context *pipe, struct pipe_query *q,
 
 /*
  * This function is a workaround because we lack the ability to query
- * renderer's time synchornously.
+ * renderer's time synchronously.
  */
 static uint64_t
 svga_get_timestamp(struct pipe_context *pipe)

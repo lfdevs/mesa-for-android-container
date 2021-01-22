@@ -231,7 +231,7 @@ libnouveau = static_library(
     inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_mapi, inc_mesa,
   ],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [dep_libdrm, dep_libdrm_nouveau, idep_nir_headers],
+  dependencies : [dep_libdrm, dep_libdrm_nouveau, idep_mesautil, idep_nir_headers],
 )
 
 nouveau_compiler = executable(

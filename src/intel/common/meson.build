@@ -42,13 +42,13 @@ files_libintel_common = files(
 )
 
 libintel_common = static_library(
-  ['intel_common', genX_xml_h],
-  files_libintel_common,
+  'intel_common',
+  [files_libintel_common, genX_xml_h, sha1_h],
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
   link_with : [libisl],
-  dependencies : [dep_expat, dep_libdrm, dep_thread, idep_genxml],
+  dependencies : [dep_expat, dep_libdrm, dep_thread, idep_genxml, idep_mesautil],
 )
 
 libintel_extra_dependencies = []
@@ -65,7 +65,8 @@ install_intel_gpu_tests = get_option('install-intel-gpu-tests')
 
 if install_intel_gpu_tests
   foreach g : [['70', 'gen7'], ['75', 'hsw'], ['80', 'gen8'],
-               ['90', 'gen9'], ['110', 'gen11'], ['120', 'gen12']]
+               ['90', 'gen9'], ['110', 'gen11'], ['120', 'gen12'],
+               ['125', 'gen125']]
     executable(
       'intel_@0@_mi_builder_test'.format(g[1]),
       files('tests/gen_mi_builder_test.cpp'),

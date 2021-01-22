@@ -36,6 +36,7 @@ get_intrinsic_info(nir_intrinsic_instr *intrin, nir_variable_mode *modes,
 {
    switch (intrin->intrinsic) {
    case nir_intrinsic_image_deref_load:
+   case nir_intrinsic_image_deref_sparse_load:
       *modes = nir_src_as_deref(intrin->src[0])->modes;
       *reads = true;
       break;

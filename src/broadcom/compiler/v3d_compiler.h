@@ -344,13 +344,17 @@ struct v3d_key {
         void *shader_state;
         struct {
                 uint8_t swizzle[4];
-                uint8_t return_size;
-                uint8_t return_channels;
                 bool clamp_s:1;
                 bool clamp_t:1;
                 bool clamp_r:1;
         } tex[V3D_MAX_TEXTURE_SAMPLERS];
+        struct {
+                uint8_t return_size;
+                uint8_t return_channels;
+        } sampler[V3D_MAX_TEXTURE_SAMPLERS];
+
         uint8_t num_tex_used;
+        uint8_t num_samplers_used;
         uint8_t ucp_enables;
         bool is_last_geometry_stage;
         bool robust_buffer_access;

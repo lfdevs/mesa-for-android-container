@@ -74,6 +74,11 @@ struct spirv_to_nir_options {
     */
    bool use_deref_buffer_array_length;
 
+   /* Initial value for shader_info::float_controls_execution_mode,
+    * indicates hardware requirements rather than shader author intent
+    */
+   uint16_t float_controls_execution_mode;
+
    struct spirv_supported_capabilities caps;
 
    /* Address format for various kinds of pointers. */

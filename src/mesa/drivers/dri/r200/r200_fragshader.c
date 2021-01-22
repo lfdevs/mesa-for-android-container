@@ -109,8 +109,9 @@ static void r200SetFragShaderArg( GLuint *afs_cmd, GLuint opnum, GLuint optype,
    SET_INST_2(opnum, optype) |= reg2;
 }
 
-static GLuint dstmask_table[8] =
+static GLuint dstmask_table[9] =
 {
+   /* first slot never used, GL_NONE translated to RGB by mesa and you can't get a 0 dstmask. */
    R200_TXC_OUTPUT_MASK_RGB,
    R200_TXC_OUTPUT_MASK_R,
    R200_TXC_OUTPUT_MASK_G,
@@ -118,7 +119,8 @@ static GLuint dstmask_table[8] =
    R200_TXC_OUTPUT_MASK_B,
    R200_TXC_OUTPUT_MASK_RB,
    R200_TXC_OUTPUT_MASK_GB,
-   R200_TXC_OUTPUT_MASK_RGB
+   R200_TXC_OUTPUT_MASK_RGB,
+   R200_TXC_OUTPUT_MASK_RGB, /* alpha ops */
 };
 
 static void r200UpdateFSArith( struct gl_context *ctx )

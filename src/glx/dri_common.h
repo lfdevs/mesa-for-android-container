@@ -83,6 +83,12 @@ dri2_check_no_error(uint32_t flags, struct glx_context *share_context,
                     int major, unsigned *error);
 
 
+extern struct glx_context *
+dri_common_create_context(struct glx_screen *base,
+                          struct glx_config *config_base,
+                          struct glx_context *shareList,
+                          int renderType);
+
 #endif /* GLX_DIRECT_RENDERING */
 
 #endif /* _DRI_COMMON_H */

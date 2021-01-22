@@ -312,7 +312,7 @@ Then run the
    ./bin/post_version.py X.Y.Z
 
 , where X.Y.Z is the version you just made. This will update
-docs/relnotes.rst and docs/release-calendar.rst. It will then generate
+docs/relnotes.rst and docs/release-calendar.csv. It will then generate
 a Git commit automatically. Check that everything looks correct and
 push:
 

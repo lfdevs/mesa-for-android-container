@@ -52,8 +52,7 @@ panfrost_build_blit_shader(struct panfrost_device *dev,
 {
         bool is_colour = loc >= FRAG_RESULT_DATA0;
 
-        nir_builder _b;
-        nir_builder_init_simple_shader(&_b, NULL, MESA_SHADER_FRAGMENT, &midgard_nir_options);
+        nir_builder _b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, &midgard_nir_options, "pan_blit");
         nir_builder *b = &_b;
         nir_shader *shader = b->shader;
 
@@ -97,10 +96,12 @@ panfrost_build_blit_shader(struct panfrost_device *dev,
         nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, NULL);
         nir_builder_instr_insert(b, &tex->instr);
 
-        if (is_colour)
+        if (is_colour) {
                 nir_store_var(b, c_out, &tex->dest.ssa, 0xFF);
-        else
-                nir_store_var(b, c_out, nir_channel(b, &tex->dest.ssa, 0), 0xFF);
+        } else {
+                unsigned c = loc == FRAG_RESULT_STENCIL ? 1 : 0;
+                nir_store_var(b, c_out, nir_channel(b, &tex->dest.ssa, c), 0xFF);
+        }
 
         struct panfrost_compile_inputs inputs = {
                 .gpu_id = dev->gpu_id,
@@ -156,7 +157,7 @@ panfrost_init_blit_shaders(struct panfrost_device *dev)
         unsigned total_size = (FRAG_RESULT_DATA7 * PAN_BLIT_NUM_TYPES) * (8 * 16) * 2;
 
         if (is_bifrost)
-                total_size *= 2;
+                total_size *= 4;
 
         dev->blit_shaders.bo = panfrost_bo_create(dev, total_size, PAN_BO_EXECUTE);
 
@@ -302,6 +303,11 @@ midgard_load_emit_texture(struct pan_pool *pool, struct MALI_DRAW *draw,
                                              MAX2(image->nr_samples, 1),
                                              128);
 
+        struct panfrost_ptr payload = {
+                texture.cpu + MALI_MIDGARD_TEXTURE_LENGTH,
+                texture.gpu + MALI_MIDGARD_TEXTURE_LENGTH,
+        };
+
         struct panfrost_ptr sampler =
                  panfrost_pool_alloc(pool, MALI_MIDGARD_SAMPLER_LENGTH);
 
@@ -310,22 +316,24 @@ midgard_load_emit_texture(struct pan_pool *pool, struct MALI_DRAW *draw,
          * itself is for a 2D texture with array size 1 even for 3D/array
          * textures, removing the need to separately key the blit shaders for
          * 2D and 3D variants */
-         panfrost_new_texture(texture.cpu,
-                              image->width0, image->height0,
-                              MAX2(image->nr_samples, 1), 1,
-                              image->format, MALI_TEXTURE_DIMENSION_2D,
-                              image->modifier,
-                              image->first_level, image->last_level,
-                              0, 0,
-                              image->nr_samples,
-                              0,
-                              (MALI_CHANNEL_R << 0) | (MALI_CHANNEL_G << 3) |
-                              (MALI_CHANNEL_B << 6) | (MALI_CHANNEL_A << 9),
-                              image->bo->ptr.gpu + image->first_layer *
-                              panfrost_get_layer_stride(image->slices,
-                                                        image->dim == MALI_TEXTURE_DIMENSION_3D,
-                                                        image->cubemap_stride, image->first_level),
-                              image->slices);
+
+        unsigned offset =
+                image->first_layer *
+                panfrost_get_layer_stride(image->layout, image->first_level);
+
+        unsigned char swizzle[4] = {
+                PIPE_SWIZZLE_X, PIPE_SWIZZLE_Y, PIPE_SWIZZLE_Z, PIPE_SWIZZLE_W
+        };
+
+        panfrost_new_texture(pool->dev, image->layout, texture.cpu,
+                             image->width0, image->height0,
+                             MAX2(image->nr_samples, 1), 1,
+                             image->format, MALI_TEXTURE_DIMENSION_2D,
+                             image->first_level, image->last_level,
+                             0, 0,
+                             image->nr_samples,
+                             swizzle,
+                             image->bo->ptr.gpu + offset, &payload);
 
         pan_pack(sampler.cpu, MIDGARD_SAMPLER, cfg)
                 cfg.normalized_coordinates = false;
@@ -487,23 +495,23 @@ bifrost_load_emit_texture(struct pan_pool *pool, struct MALI_DRAW *draw,
                  .gpu = texture.gpu + MALI_BIFROST_TEXTURE_LENGTH,
         };
 
-        panfrost_new_texture_bifrost(pool->dev, (void *)texture.cpu,
-                                     image->width0, image->height0,
-                                     MAX2(image->nr_samples, 1), 1,
-                                     image->format, MALI_TEXTURE_DIMENSION_2D,
-                                     image->modifier,
-                                     image->first_level, image->last_level,
-                                     0, 0,
-                                     image->nr_samples,
-                                     0,
-                                     (MALI_CHANNEL_R << 0) | (MALI_CHANNEL_G << 3) |
-                                     (MALI_CHANNEL_B << 6) | (MALI_CHANNEL_A << 9),
-                                     image->bo->ptr.gpu + image->first_layer *
-                                     panfrost_get_layer_stride(image->slices,
-                                                               image->dim == MALI_TEXTURE_DIMENSION_3D,
-                                                               image->cubemap_stride, image->first_level),
-                                     image->slices,
-                                     &payload);
+        unsigned offset =
+                image->first_layer *
+                panfrost_get_layer_stride(image->layout, image->first_level);
+
+        unsigned char swizzle[4] = {
+                PIPE_SWIZZLE_X, PIPE_SWIZZLE_Y, PIPE_SWIZZLE_Z, PIPE_SWIZZLE_W
+        };
+
+        panfrost_new_texture(pool->dev, image->layout, texture.cpu,
+                             image->width0, image->height0,
+                             MAX2(image->nr_samples, 1), 1,
+                             image->format, MALI_TEXTURE_DIMENSION_2D,
+                             image->first_level, image->last_level,
+                             0, 0,
+                             image->nr_samples,
+                             swizzle,
+                             image->bo->ptr.gpu + offset, &payload);
 
         pan_pack(sampler.cpu, BIFROST_SAMPLER, cfg) {
                 cfg.seamless_cube_map = false;
@@ -570,16 +578,12 @@ bifrost_load_emit_blend_rt(struct pan_pool *pool, void *out,
                         cfg.bifrost.equation.alpha.c = MALI_BLEND_OPERAND_C_ZERO;
                         cfg.bifrost.equation.color_mask = 0xf;
                         cfg.bifrost.internal.fixed_function.num_comps = 4;
-                        cfg.bifrost.internal.fixed_function.conversion.memory_format.format =
-                                panfrost_format_to_bifrost_blend(format_desc, true);
+                        cfg.bifrost.internal.fixed_function.conversion.memory_format =
+                                panfrost_format_to_bifrost_blend(pool->dev, format_desc, true);
                         cfg.bifrost.internal.fixed_function.conversion.register_format =
                                 blit_type_to_reg_fmt(T);
 
                         cfg.bifrost.internal.fixed_function.rt = rt;
-                        if (pool->dev->quirks & HAS_SWIZZLES) {
-                                cfg.bifrost.internal.fixed_function.conversion.memory_format.swizzle =
-                                        panfrost_get_default_swizzle(4);
-                        }
                 }
         }
 }
@@ -610,6 +614,7 @@ bifrost_load_emit_rsd(struct pan_pool *pool, struct MALI_DRAW *draw,
                 }
                 cfg.properties.bifrost.allow_forward_pixel_to_kill = true;
                 cfg.preload.fragment.coverage = true;
+                cfg.preload.fragment.sample_mask_id = image->nr_samples > 1;
         }
 
         for (unsigned i = 0; i < 8; ++i) {

@@ -169,7 +169,7 @@ struct lp_static_texture_state
    unsigned swizzle_a:3;
 
    /* pipe_texture's state */
-   unsigned target:4;        /**< PIPE_TEXTURE_* */
+   enum pipe_texture_target target:4;        /**< PIPE_TEXTURE_* */
    unsigned pot_width:1;     /**< is the width a power of two? */
    unsigned pot_height:1;
    unsigned pot_depth:1;

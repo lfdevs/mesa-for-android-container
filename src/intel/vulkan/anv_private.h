@@ -355,11 +355,6 @@ static inline uintptr_t anv_pack_ptr(void *ptr, int bits, int flags)
         (b) = __builtin_ffs(__dword) - 1, __dword;      \
         __dword &= ~(1 << (b)))
 
-#define typed_memcpy(dest, src, count) ({ \
-   STATIC_ASSERT(sizeof(*src) == sizeof(*dest)); \
-   memcpy((dest), (src), (count) * sizeof(*(src))); \
-})
-
 /* Mapping from anv object to VkDebugReportObjectTypeEXT. New types need
  * to be added here in order to utilize mapping in debug/error/perf macros.
  */
@@ -487,9 +482,15 @@ VkResult __vk_errorf(struct anv_instance *instance, const void *object,
    vk_errorfi(anv_device_instance_or_null(device),\
               obj, error, format, ## __VA_ARGS__)
 #else
-#define vk_error(error) error
-#define vk_errorfi(instance, obj, error, format, ...) error
-#define vk_errorf(device, obj, error, format, ...) error
+
+static inline VkResult __dummy_vk_error(VkResult error, UNUSED const void *ignored)
+{
+   return error;
+}
+
+#define vk_error(error) __dummy_vk_error(error, NULL)
+#define vk_errorfi(instance, obj, error, format, ...) __dummy_vk_error(error, instance)
+#define vk_errorf(device, obj, error, format, ...) __dummy_vk_error(error, device)
 #endif
 
 /**
@@ -3805,7 +3806,7 @@ struct anv_image {
     * |                     |
     * -----------------------
     */
-   struct {
+   struct anv_image_plane {
       /**
        * Offset of the entire plane (whenever the image is disjoint this is
        * set to 0).
@@ -4242,7 +4243,8 @@ VkFormatFeatureFlags
 anv_get_image_format_features(const struct gen_device_info *devinfo,
                               VkFormat vk_format,
                               const struct anv_format *anv_format,
-                              VkImageTiling vk_tiling);
+                              VkImageTiling vk_tiling,
+                              const struct isl_drm_modifier_info *isl_mod_info);
 
 void anv_fill_buffer_surface_state(struct anv_device *device,
                                    struct anv_state state,
@@ -4596,6 +4598,9 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(anv_performance_configuration_intel, base,
 #  include "anv_genX.h"
 #  undef genX
 #  define genX(x) gen12_##x
+#  include "anv_genX.h"
+#  undef genX
+#  define genX(x) gen125_##x
 #  include "anv_genX.h"
 #  undef genX
 #endif

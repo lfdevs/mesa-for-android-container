@@ -1063,7 +1063,7 @@ void SetupPipeline(DRAW_CONTEXT* pDC)
             pState->state.pfnQuantizeDepth = QuantizeDepth<R16_UNORM>;
             break;
         default:
-            SWR_INVALID("Unsupported depth format for depth quantiztion.");
+            SWR_INVALID("Unsupported depth format for depth quantization.");
             pState->state.pfnQuantizeDepth = QuantizeDepth<R32_FLOAT>;
         }
     }

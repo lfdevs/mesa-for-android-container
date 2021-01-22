@@ -262,7 +262,7 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
          }
 
          struct drm_nouveau_svm_init svm_args = {
-            .unmanaged_addr = (uint64_t)screen->svm_cutout,
+            .unmanaged_addr = (uintptr_t)screen->svm_cutout,
             .unmanaged_size = screen->svm_cutout_size,
          };
 

@@ -59,20 +59,29 @@ zink_context_destroy(struct pipe_context *pctx)
    if (vkQueueWaitIdle(ctx->queue) != VK_SUCCESS)
       debug_printf("vkQueueWaitIdle failed\n");
 
+   util_blitter_destroy(ctx->blitter);
+
    pipe_resource_reference(&ctx->dummy_buffer, NULL);
    for (unsigned i = 0; i < ARRAY_SIZE(ctx->null_buffers); i++)
       pipe_resource_reference(&ctx->null_buffers[i], NULL);
 
    for (int i = 0; i < ARRAY_SIZE(ctx->batches); ++i) {
+      zink_batch_release(screen, &ctx->batches[i]);
+      util_dynarray_fini(&ctx->batches[i].zombie_samplers);
       vkDestroyDescriptorPool(screen->dev, ctx->batches[i].descpool, NULL);
       vkFreeCommandBuffers(screen->dev, ctx->cmdpool, 1, &ctx->batches[i].cmdbuf);
+
+      _mesa_set_destroy(ctx->batches[i].resources, NULL);
+      _mesa_set_destroy(ctx->batches[i].sampler_views, NULL);
+      _mesa_set_destroy(ctx->batches[i].programs, NULL);
    }
    vkDestroyCommandPool(screen->dev, ctx->cmdpool, NULL);
 
    util_primconvert_destroy(ctx->primconvert);
    u_upload_destroy(pctx->stream_uploader);
    slab_destroy_child(&ctx->transfer_pool);
-   util_blitter_destroy(ctx->blitter);
+   _mesa_hash_table_destroy(ctx->program_cache, NULL);
+   _mesa_hash_table_destroy(ctx->render_pass_cache, NULL);
    FREE(ctx);
 }
 
@@ -153,13 +162,27 @@ compare_op(enum pipe_compare_func op)
    unreachable("unexpected compare");
 }
 
+static inline bool
+wrap_needs_border_color(unsigned wrap)
+{
+   return wrap == PIPE_TEX_WRAP_CLAMP || wrap == PIPE_TEX_WRAP_CLAMP_TO_BORDER ||
+          wrap == PIPE_TEX_WRAP_MIRROR_CLAMP || wrap == PIPE_TEX_WRAP_MIRROR_CLAMP_TO_BORDER;
+}
+
+struct zink_sampler_state {
+   VkSampler sampler;
+   bool custom_border_color;
+};
+
 static void *
 zink_create_sampler_state(struct pipe_context *pctx,
                           const struct pipe_sampler_state *state)
 {
    struct zink_screen *screen = zink_screen(pctx->screen);
+   bool need_custom = false;
 
    VkSamplerCreateInfo sci = {};
+   VkSamplerCustomBorderColorCreateInfoEXT cbci = {};
    sci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
    sci.magFilter = zink_filter(state->mag_img_filter);
    sci.minFilter = zink_filter(state->min_img_filter);
@@ -179,6 +202,10 @@ zink_create_sampler_state(struct pipe_context *pctx,
    sci.addressModeW = sampler_address_mode(state->wrap_r);
    sci.mipLodBias = state->lod_bias;
 
+   need_custom |= wrap_needs_border_color(state->wrap_s);
+   need_custom |= wrap_needs_border_color(state->wrap_t);
+   need_custom |= wrap_needs_border_color(state->wrap_r);
+
    if (state->compare_mode == PIPE_TEX_COMPARE_NONE)
       sci.compareOp = VK_COMPARE_OP_NEVER;
    else {
@@ -186,7 +213,18 @@ zink_create_sampler_state(struct pipe_context *pctx,
       sci.compareEnable = VK_TRUE;
    }
 
-   sci.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK; // TODO
+   if (screen->info.have_EXT_custom_border_color &&
+       screen->info.border_color_feats.customBorderColorWithoutFormat && need_custom) {
+      cbci.sType = VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT;
+      cbci.format = VK_FORMAT_UNDEFINED;
+      /* these are identical unions */
+      memcpy(&cbci.customBorderColor, &state->border_color, sizeof(union pipe_color_union));
+      sci.pNext = &cbci;
+      sci.borderColor = VK_BORDER_COLOR_INT_CUSTOM_EXT;
+      UNUSED uint32_t check = p_atomic_inc_return(&screen->cur_custom_border_color_samplers);
+      assert(check <= screen->info.border_color_props.maxCustomBorderColorSamplers);
+   } else
+      sci.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK; // TODO with custom shader if we're super interested?
    sci.unnormalizedCoordinates = !state->normalized_coords;
 
    if (state->max_anisotropy > 1) {
@@ -194,11 +232,11 @@ zink_create_sampler_state(struct pipe_context *pctx,
       sci.anisotropyEnable = VK_TRUE;
    }
 
-   VkSampler *sampler = CALLOC(1, sizeof(VkSampler));
+   struct zink_sampler_state *sampler = CALLOC_STRUCT(zink_sampler_state);
    if (!sampler)
       return NULL;
 
-   if (vkCreateSampler(screen->dev, &sci, NULL, sampler) != VK_SUCCESS) {
+   if (vkCreateSampler(screen->dev, &sci, NULL, &sampler->sampler) != VK_SUCCESS) {
       FREE(sampler);
       return NULL;
    }
@@ -226,10 +264,13 @@ static void
 zink_delete_sampler_state(struct pipe_context *pctx,
                           void *sampler_state)
 {
+   struct zink_sampler_state *sampler = sampler_state;
    struct zink_batch *batch = zink_curr_batch(zink_context(pctx));
    util_dynarray_append(&batch->zombie_samplers, VkSampler,
-                        *(VkSampler *)sampler_state);
-   FREE(sampler_state);
+                        sampler->sampler);
+   if (sampler->custom_border_color)
+      p_atomic_dec(&zink_screen(pctx->screen)->cur_custom_border_color_samplers);
+   FREE(sampler);
 }
 
 
@@ -299,14 +340,20 @@ zink_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *pres,
       ivci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
       ivci.image = res->image;
       ivci.viewType = image_view_type(state->target);
-      ivci.format = zink_get_format(screen, state->format);
-      assert(ivci.format);
+
       ivci.components.r = component_mapping(state->swizzle_r);
       ivci.components.g = component_mapping(state->swizzle_g);
       ivci.components.b = component_mapping(state->swizzle_b);
       ivci.components.a = component_mapping(state->swizzle_a);
-
       ivci.subresourceRange.aspectMask = sampler_aspect_from_format(state->format);
+      /* samplers for stencil aspects of packed formats need to always use stencil type */
+      if (ivci.subresourceRange.aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT) {
+         ivci.format = VK_FORMAT_S8_UINT;
+         ivci.components.g = VK_COMPONENT_SWIZZLE_R;
+      } else
+         ivci.format = zink_get_format(screen, state->format);
+      assert(ivci.format);
+
       ivci.subresourceRange.baseMipLevel = state->u.tex.first_level;
       ivci.subresourceRange.baseArrayLayer = state->u.tex.first_layer;
       ivci.subresourceRange.levelCount = state->u.tex.last_level - state->u.tex.first_level + 1;
@@ -444,7 +491,7 @@ zink_set_vertex_buffers(struct pipe_context *pctx,
             res->needs_xfb_barrier = false;
          }
       }
-      ctx->gfx_pipeline_state.hash = 0;
+      ctx->gfx_pipeline_state.dirty = true;
    }
 
    util_set_vertex_buffers_mask(ctx->buffers, &ctx->buffers_enabled_mask,
@@ -472,7 +519,7 @@ zink_set_viewport_states(struct pipe_context *pctx,
       ctx->viewports[start_slot + i] = viewport;
    }
    if (ctx->gfx_pipeline_state.num_viewports != start_slot + num_viewports)
-      ctx->gfx_pipeline_state.hash = 0;
+      ctx->gfx_pipeline_state.dirty = true;
    ctx->gfx_pipeline_state.num_viewports = start_slot + num_viewports;
 }
 
@@ -535,27 +582,49 @@ zink_set_sampler_views(struct pipe_context *pctx,
                        struct pipe_sampler_view **views)
 {
    struct zink_context *ctx = zink_context(pctx);
-   assert(views);
    for (unsigned i = 0; i < num_views; ++i) {
+      struct pipe_sampler_view *pview = views ? views[i] : NULL;
       pipe_sampler_view_reference(
          &ctx->image_views[shader_type][start_slot + i],
-         views[i]);
+         pview);
    }
    ctx->num_image_views[shader_type] = start_slot + num_views;
 }
 
 static void
 zink_set_stencil_ref(struct pipe_context *pctx,
-                     const struct pipe_stencil_ref *ref)
+                     const struct pipe_stencil_ref ref)
 {
    struct zink_context *ctx = zink_context(pctx);
-   ctx->stencil_ref = *ref;
+   ctx->stencil_ref = ref;
 }
 
 static void
 zink_set_clip_state(struct pipe_context *pctx,
                     const struct pipe_clip_state *pcs)
 {
+}
+
+static void
+zink_set_tess_state(struct pipe_context *pctx,
+                    const float default_outer_level[4],
+                    const float default_inner_level[2])
+{
+   struct zink_context *ctx = zink_context(pctx);
+   memcpy(&ctx->default_inner_level, default_inner_level, sizeof(ctx->default_inner_level));
+   memcpy(&ctx->default_outer_level, default_outer_level, sizeof(ctx->default_outer_level));
+}
+
+static uint32_t
+hash_render_pass_state(const void *key)
+{
+   return _mesa_hash_data(key, sizeof(struct zink_render_pass_state));
+}
+
+static bool
+equals_render_pass_state(const void *a, const void *b)
+{
+   return memcmp(a, b, sizeof(struct zink_render_pass_state)) == 0;
 }
 
 static struct zink_render_pass *
@@ -585,12 +654,13 @@ get_render_pass(struct zink_context *ctx)
    }
    state.have_zsbuf = fb->zsbuf != NULL;
 
-   struct hash_entry *entry = _mesa_hash_table_search(ctx->render_pass_cache,
-                                                      &state);
+   uint32_t hash = hash_render_pass_state(&state);
+   struct hash_entry *entry = _mesa_hash_table_search_pre_hashed(ctx->render_pass_cache, hash,
+                                                                 &state);
    if (!entry) {
       struct zink_render_pass *rp;
       rp = zink_create_render_pass(screen, &state);
-      entry = _mesa_hash_table_insert(ctx->render_pass_cache, &state, rp);
+      entry = _mesa_hash_table_insert_pre_hashed(ctx->render_pass_cache, hash, &rp->state, rp);
       if (!entry)
          return NULL;
    }
@@ -738,9 +808,13 @@ zink_set_framebuffer_state(struct pipe_context *pctx,
    zink_framebuffer_reference(screen, &ctx->framebuffer, fb);
    zink_render_pass_reference(screen, &ctx->gfx_pipeline_state.render_pass, fb->rp);
 
-   ctx->gfx_pipeline_state.rast_samples = util_framebuffer_get_num_samples(state);
+   uint8_t rast_samples = util_framebuffer_get_num_samples(state);
+   /* in vulkan, gl_SampleMask needs to be explicitly ignored for sampleCount == 1 */
+   if ((ctx->gfx_pipeline_state.rast_samples > 1) != (rast_samples > 1))
+      ctx->dirty_shader_stages |= 1 << PIPE_SHADER_FRAGMENT;
+   ctx->gfx_pipeline_state.rast_samples = rast_samples;
    ctx->gfx_pipeline_state.num_attachments = state->nr_cbufs;
-   ctx->gfx_pipeline_state.hash = 0;
+   ctx->gfx_pipeline_state.dirty = true;
 
    struct zink_batch *batch = zink_batch_no_rp(ctx);
 
@@ -760,7 +834,7 @@ zink_set_sample_mask(struct pipe_context *pctx, unsigned sample_mask)
 {
    struct zink_context *ctx = zink_context(pctx);
    ctx->gfx_pipeline_state.sample_mask = sample_mask;
-   ctx->gfx_pipeline_state.hash = 0;
+   ctx->gfx_pipeline_state.dirty = true;
 }
 
 static VkAccessFlags
@@ -768,8 +842,10 @@ access_src_flags(VkImageLayout layout)
 {
    switch (layout) {
    case VK_IMAGE_LAYOUT_UNDEFINED:
-   case VK_IMAGE_LAYOUT_GENERAL:
       return 0;
+
+   case VK_IMAGE_LAYOUT_GENERAL:
+      return VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
 
    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
       return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
@@ -798,13 +874,18 @@ access_dst_flags(VkImageLayout layout)
 {
    switch (layout) {
    case VK_IMAGE_LAYOUT_UNDEFINED:
-   case VK_IMAGE_LAYOUT_GENERAL:
       return 0;
+
+   case VK_IMAGE_LAYOUT_GENERAL:
+      return VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
 
    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
       return VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
    case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
       return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+   case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+      return VK_ACCESS_SHADER_READ_BIT;
 
    case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
       return VK_ACCESS_TRANSFER_READ_BIT;
@@ -831,6 +912,12 @@ pipeline_dst_stage(VkImageLayout layout)
    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
       return VK_PIPELINE_STAGE_TRANSFER_BIT;
 
+   case VK_IMAGE_LAYOUT_GENERAL:
+      return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+   case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+      return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+
    default:
       return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
    }
@@ -849,6 +936,12 @@ pipeline_src_stage(VkImageLayout layout)
       return VK_PIPELINE_STAGE_TRANSFER_BIT;
    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
       return VK_PIPELINE_STAGE_TRANSFER_BIT;
+
+   case VK_IMAGE_LAYOUT_GENERAL:
+      return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+   case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+      return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
 
    default:
       return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -976,18 +1069,6 @@ static bool
 equals_gfx_program(const void *a, const void *b)
 {
    return memcmp(a, b, sizeof(struct zink_shader *) * (ZINK_SHADER_COUNT)) == 0;
-}
-
-static uint32_t
-hash_render_pass_state(const void *key)
-{
-   return _mesa_hash_data(key, sizeof(struct zink_render_pass_state));
-}
-
-static bool
-equals_render_pass_state(const void *a, const void *b)
-{
-   return memcmp(a, b, sizeof(struct zink_render_pass_state)) == 0;
 }
 
 static void
@@ -1194,7 +1275,7 @@ zink_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    if (!ctx)
       goto fail;
 
-   ctx->gfx_pipeline_state.hash = 0;
+   ctx->gfx_pipeline_state.dirty = true;
 
    ctx->base.screen = pscreen;
    ctx->base.priv = priv;
@@ -1225,6 +1306,7 @@ zink_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    ctx->base.set_stencil_ref = zink_set_stencil_ref;
    ctx->base.set_clip_state = zink_set_clip_state;
    ctx->base.set_blend_color = zink_set_blend_color;
+   ctx->base.set_tess_state = zink_set_tess_state;
 
    ctx->base.set_sample_mask = zink_set_sample_mask;
 
@@ -1296,14 +1378,9 @@ zink_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
       if (vkAllocateCommandBuffers(screen->dev, &cbai, &ctx->batches[i].cmdbuf) != VK_SUCCESS)
          goto fail;
 
-      ctx->batches[i].resources = _mesa_set_create(NULL, _mesa_hash_pointer,
-                                                   _mesa_key_pointer_equal);
-      ctx->batches[i].sampler_views = _mesa_set_create(NULL,
-                                                       _mesa_hash_pointer,
-                                                       _mesa_key_pointer_equal);
-      ctx->batches[i].programs = _mesa_set_create(NULL,
-                                                  _mesa_hash_pointer,
-                                                  _mesa_key_pointer_equal);
+      ctx->batches[i].resources = _mesa_pointer_set_create(NULL);
+      ctx->batches[i].sampler_views = _mesa_pointer_set_create(NULL);
+      ctx->batches[i].programs = _mesa_pointer_set_create(NULL);
 
       if (!ctx->batches[i].resources || !ctx->batches[i].sampler_views ||
           !ctx->batches[i].programs)

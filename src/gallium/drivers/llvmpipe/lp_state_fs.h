@@ -37,6 +37,7 @@
 #include "gallivm/lp_bld_tgsi.h" /* for lp_tgsi_info */
 #include "lp_bld_interp.h" /* for struct lp_shader_input */
 #include "util/u_inlines.h"
+#include "lp_jit.h"
 
 struct tgsi_token;
 struct lp_fragment_shader;
@@ -64,9 +65,16 @@ struct lp_image_static_state
    struct lp_static_texture_state image_state;
 };
 
+struct lp_depth_state
+{
+   unsigned enabled:1;         /**< depth test enabled? */
+   unsigned writemask:1;       /**< allow depth buffer writes? */
+   unsigned func:3;            /**< depth test func (PIPE_FUNC_x) */
+};
+
 struct lp_fragment_shader_variant_key
 {
-   struct pipe_depth_state depth;
+   struct lp_depth_state depth;
    struct pipe_stencil_state stencil[2];
    struct pipe_blend_state blend;
 

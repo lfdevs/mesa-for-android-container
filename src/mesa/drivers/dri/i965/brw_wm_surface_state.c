@@ -324,7 +324,7 @@ int
 brw_get_texture_swizzle(const struct gl_context *ctx,
                         const struct gl_texture_object *t)
 {
-   const struct gl_texture_image *img = t->Image[0][t->BaseLevel];
+   const struct gl_texture_image *img = t->Image[0][t->Attrib.BaseLevel];
 
    int swizzles[SWIZZLE_NIL + 1] = {
       SWIZZLE_X,
@@ -338,7 +338,7 @@ brw_get_texture_swizzle(const struct gl_context *ctx,
 
    if (img->_BaseFormat == GL_DEPTH_COMPONENT ||
        img->_BaseFormat == GL_DEPTH_STENCIL) {
-      GLenum depth_mode = t->DepthMode;
+      GLenum depth_mode = t->Attrib.DepthMode;
 
       /* In ES 3.0, DEPTH_TEXTURE_MODE is expected to be GL_RED for textures
        * with depth component data specified with a sized internal format.
@@ -434,10 +434,10 @@ brw_get_texture_swizzle(const struct gl_context *ctx,
       break;
    }
 
-   return MAKE_SWIZZLE4(swizzles[GET_SWZ(t->_Swizzle, 0)],
-                        swizzles[GET_SWZ(t->_Swizzle, 1)],
-                        swizzles[GET_SWZ(t->_Swizzle, 2)],
-                        swizzles[GET_SWZ(t->_Swizzle, 3)]);
+   return MAKE_SWIZZLE4(swizzles[GET_SWZ(t->Attrib._Swizzle, 0)],
+                        swizzles[GET_SWZ(t->Attrib._Swizzle, 1)],
+                        swizzles[GET_SWZ(t->Attrib._Swizzle, 2)],
+                        swizzles[GET_SWZ(t->Attrib._Swizzle, 3)]);
 }
 
 /**
@@ -502,8 +502,8 @@ static void brw_update_texture_surface(struct gl_context *ctx,
        * texturing functions that return a float, as our code generation always
        * selects the .x channel (which would always be 0).
        */
-      struct gl_texture_image *firstImage = obj->Image[0][obj->BaseLevel];
-      const bool alpha_depth = obj->DepthMode == GL_ALPHA &&
+      struct gl_texture_image *firstImage = obj->Image[0][obj->Attrib.BaseLevel];
+      const bool alpha_depth = obj->Attrib.DepthMode == GL_ALPHA &&
          (firstImage->_BaseFormat == GL_DEPTH_COMPONENT ||
           firstImage->_BaseFormat == GL_DEPTH_STENCIL);
       const unsigned swizzle = (unlikely(alpha_depth) ? SWIZZLE_XYZW :
@@ -526,7 +526,7 @@ static void brw_update_texture_surface(struct gl_context *ctx,
       }
       enum isl_format format = translate_tex_format(brw, mesa_fmt,
                                                     for_txf ? GL_DECODE_EXT :
-                                                    sampler->sRGBDecode);
+                                                    sampler->Attrib.sRGBDecode);
 
       /* Implement gen6 and gen7 gather work-around */
       bool need_green_to_blue = false;
@@ -566,7 +566,7 @@ static void brw_update_texture_surface(struct gl_context *ctx,
          }
       }
 
-      if (obj->StencilSampling && firstImage->_BaseFormat == GL_DEPTH_STENCIL) {
+      if (obj->Attrib.StencilSampling && firstImage->_BaseFormat == GL_DEPTH_STENCIL) {
          if (devinfo->gen <= 7) {
             assert(mt->shadow_mt && !mt->stencil_mt->shadow_needs_update);
             mt = mt->shadow_mt;
@@ -587,8 +587,8 @@ static void brw_update_texture_surface(struct gl_context *ctx,
 
       struct isl_view view = {
          .format = format,
-         .base_level = obj->MinLevel + obj->BaseLevel,
-         .levels = intel_obj->_MaxLevel - obj->BaseLevel + 1,
+         .base_level = obj->MinLevel + obj->Attrib.BaseLevel,
+         .levels = intel_obj->_MaxLevel - obj->Attrib.BaseLevel + 1,
          .base_array_layer = obj->MinLayer,
          .array_len = view_num_layers,
          .swizzle = {
@@ -1151,7 +1151,7 @@ is_depth_texture(struct intel_texture_object *iobj)
 {
    GLenum base_format = _mesa_get_format_base_format(iobj->_Format);
    return base_format == GL_DEPTH_COMPONENT ||
-          (base_format == GL_DEPTH_STENCIL && !iobj->base.StencilSampling);
+          (base_format == GL_DEPTH_STENCIL && !iobj->base.Attrib.StencilSampling);
 }
 
 static void

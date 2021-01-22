@@ -36,6 +36,13 @@
 
 #include "vk_format_info.h"
 
+static const enum isl_surf_dim
+vk_to_isl_surf_dim[] = {
+   [VK_IMAGE_TYPE_1D] = ISL_SURF_DIM_1D,
+   [VK_IMAGE_TYPE_2D] = ISL_SURF_DIM_2D,
+   [VK_IMAGE_TYPE_3D] = ISL_SURF_DIM_3D,
+};
+
 static isl_surf_usage_flags_t
 choose_isl_surf_usage(VkImageCreateFlags vk_create_flags,
                       VkImageUsageFlags vk_usage,
@@ -101,6 +108,9 @@ choose_isl_tiling_flags(const struct gen_device_info *devinfo,
    const VkImageCreateInfo *base_info = anv_info->vk_info;
    isl_tiling_flags_t flags = 0;
 
+   assert((isl_mod_info != NULL) ==
+          (base_info->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT));
+
    switch (base_info->tiling) {
    default:
       unreachable("bad VkImageTiling");
@@ -111,12 +121,13 @@ choose_isl_tiling_flags(const struct gen_device_info *devinfo,
       flags = ISL_TILING_LINEAR_BIT;
       break;
    case VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT:
-      assert(isl_mod_info);
       flags = 1 << isl_mod_info->tiling;
    }
 
-   if (anv_info->isl_tiling_flags)
+   if (anv_info->isl_tiling_flags) {
+      assert(isl_mod_info == NULL);
       flags &= anv_info->isl_tiling_flags;
+   }
 
    if (legacy_scanout) {
       isl_tiling_flags_t legacy_mask = ISL_TILING_LINEAR_BIT;
@@ -534,50 +545,57 @@ add_aux_surface_if_supported(struct anv_device *device,
    return VK_SUCCESS;
 }
 
+static VkResult
+add_shadow_surface(struct anv_device *device,
+                   struct anv_image *image,
+                   uint32_t plane,
+                   struct anv_format_plane plane_format,
+                   uint32_t stride,
+                   VkImageUsageFlags vk_plane_usage)
+{
+   bool ok;
+
+   ok = isl_surf_init(&device->isl_dev,
+                      &image->planes[plane].shadow_surface.isl,
+                     .dim = vk_to_isl_surf_dim[image->type],
+                     .format = plane_format.isl_format,
+                     .width = image->extent.width,
+                     .height = image->extent.height,
+                     .depth = image->extent.depth,
+                     .levels = image->levels,
+                     .array_len = image->array_size,
+                     .samples = image->samples,
+                     .min_alignment_B = 0,
+                     .row_pitch_B = stride,
+                     .usage = ISL_SURF_USAGE_TEXTURE_BIT |
+                              (vk_plane_usage & ISL_SURF_USAGE_CUBE_BIT),
+                     .tiling_flags = ISL_TILING_ANY_MASK);
+
+   /* isl_surf_init() will fail only if provided invalid input. Invalid input
+    * here is illegal in Vulkan.
+    */
+   assert(ok);
+
+   add_surface(image, &image->planes[plane].shadow_surface, plane);
+   return VK_SUCCESS;
+}
+
 /**
  * Initialize the anv_image::*_surface selected by \a aspect. Then update the
  * image's memory requirements (that is, the image's size and alignment).
  */
 static VkResult
-make_surface(struct anv_device *device,
-             struct anv_image *image,
-             const VkImageFormatListCreateInfoKHR *fmt_list,
-             uint32_t stride,
-             isl_tiling_flags_t tiling_flags,
-             isl_surf_usage_flags_t isl_extra_usage_flags,
-             VkImageAspectFlagBits aspect)
+add_primary_surface(struct anv_device *device,
+                    struct anv_image *image,
+                    uint32_t plane,
+                    struct anv_format_plane plane_format,
+                    uint32_t stride,
+                    isl_tiling_flags_t isl_tiling_flags,
+                    isl_surf_usage_flags_t isl_usage)
 {
-   VkResult result;
    bool ok;
 
-   static const enum isl_surf_dim vk_to_isl_surf_dim[] = {
-      [VK_IMAGE_TYPE_1D] = ISL_SURF_DIM_1D,
-      [VK_IMAGE_TYPE_2D] = ISL_SURF_DIM_2D,
-      [VK_IMAGE_TYPE_3D] = ISL_SURF_DIM_3D,
-   };
-
-   image->extent = anv_sanitize_image_extent(image->type, image->extent);
-
-   const unsigned plane = anv_image_aspect_to_plane(image->aspects, aspect);
-   const  struct anv_format_plane plane_format =
-      anv_get_format_plane(&device->info, image->vk_format, aspect, image->tiling);
    struct anv_surface *anv_surf = &image->planes[plane].surface;
-
-   VkImageUsageFlags plane_vk_usage =
-      aspect == VK_IMAGE_ASPECT_STENCIL_BIT ?
-      image->stencil_usage : image->usage;
-
-   const isl_surf_usage_flags_t usage =
-      choose_isl_surf_usage(image->create_flags, plane_vk_usage,
-                            isl_extra_usage_flags, aspect);
-
-   bool needs_shadow =
-      anv_image_plane_needs_shadow_surface(&device->info,
-                                   plane_format,
-                                   image->tiling,
-                                   plane_vk_usage,
-                                   image->create_flags,
-                                   &tiling_flags);
 
    ok = isl_surf_init(&device->isl_dev, &anv_surf->isl,
       .dim = vk_to_isl_surf_dim[image->type],
@@ -590,8 +608,8 @@ make_surface(struct anv_device *device,
       .samples = image->samples,
       .min_alignment_B = 0,
       .row_pitch_B = stride,
-      .usage = usage,
-      .tiling_flags = tiling_flags);
+      .usage = isl_usage,
+      .tiling_flags = isl_tiling_flags);
 
    if (!ok)
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
@@ -600,67 +618,98 @@ make_surface(struct anv_device *device,
 
    add_surface(image, anv_surf, plane);
 
-   if (needs_shadow) {
-      ok = isl_surf_init(&device->isl_dev, &image->planes[plane].shadow_surface.isl,
-         .dim = vk_to_isl_surf_dim[image->type],
-         .format = plane_format.isl_format,
-         .width = image->extent.width,
-         .height = image->extent.height,
-         .depth = image->extent.depth,
-         .levels = image->levels,
-         .array_len = image->array_size,
-         .samples = image->samples,
-         .min_alignment_B = 0,
-         .row_pitch_B = stride,
-         .usage = ISL_SURF_USAGE_TEXTURE_BIT |
-                  (usage & ISL_SURF_USAGE_CUBE_BIT),
-         .tiling_flags = ISL_TILING_ANY_MASK);
-
-      /* isl_surf_init() will fail only if provided invalid input. Invalid input
-       * is illegal in Vulkan.
-       */
-      assert(ok);
-
-      add_surface(image, &image->planes[plane].shadow_surface, plane);
-   }
-
-   result = add_aux_surface_if_supported(device, image, plane, plane_format,
-                                         fmt_list, isl_extra_usage_flags);
-   if (result != VK_SUCCESS)
-      return result;
-
-   assert((image->planes[plane].offset + image->planes[plane].size) == image->size);
-
-   /* Upper bound of the last surface should be smaller than the plane's
-    * size.
-    */
-   assert((MAX2(image->planes[plane].surface.offset,
-                image->planes[plane].aux_surface.offset) +
-           (image->planes[plane].aux_surface.isl.size_B > 0 ?
-            image->planes[plane].aux_surface.isl.size_B :
-            image->planes[plane].surface.isl.size_B)) <=
-          (image->planes[plane].offset + image->planes[plane].size));
-
-   if (image->planes[plane].aux_usage != ISL_AUX_USAGE_NONE) {
-      /* assert(image->planes[plane].fast_clear_state_offset == */
-      /*        (image->planes[plane].aux_surface.offset + image->planes[plane].aux_surface.isl.size_B)); */
-      assert(image->planes[plane].fast_clear_state_offset <
-             (image->planes[plane].offset + image->planes[plane].size));
-   }
-
    return VK_SUCCESS;
 }
 
-static uint32_t
-score_drm_format_mod(uint64_t modifier)
+/**
+ * 'plane' must be the most recently added plane.
+ */
+static void
+check_surfaces(const struct anv_image *image,
+               const struct anv_image_plane *plane)
 {
-   switch (modifier) {
-   case DRM_FORMAT_MOD_LINEAR: return 1;
-   case I915_FORMAT_MOD_X_TILED: return 2;
-   case I915_FORMAT_MOD_Y_TILED: return 3;
-   case I915_FORMAT_MOD_Y_TILED_CCS: return 4;
-   default: unreachable("bad DRM format modifier");
+#ifdef DEBUG
+   /* FINISHME: Check the shadow surface. */
+
+   /* XXX: This looks buggy. If the aux surface starts before the primary
+    * surface, then it derives a meaningless value by adding the primary's size
+    * to the aux's offset.
+    */
+   uintmax_t plane_end = plane->offset + plane->size;
+   const struct anv_surface *primary_surface = &plane->surface;
+   const struct anv_surface *aux_surface = &plane->aux_surface;
+   uintmax_t last_surface_offset = MAX2(primary_surface->offset, aux_surface->offset);
+   uintmax_t last_surface_size = aux_surface->isl.size_B > 0
+                               ? aux_surface->isl.size_B
+                               : primary_surface->isl.size_B;
+   uintmax_t last_surface_end = last_surface_offset + last_surface_size;
+
+   if (plane->aux_usage != ISL_AUX_USAGE_NONE)
+      assert(plane->fast_clear_state_offset < plane_end);
+
+   assert(last_surface_end <= plane_end);
+   assert(plane_end == image->size);
+#endif
+}
+
+static VkResult
+add_all_surfaces(struct anv_device *device,
+                 struct anv_image *image,
+                 const VkImageFormatListCreateInfo *format_list_info,
+                 uint32_t stride,
+                 isl_tiling_flags_t isl_tiling_flags,
+                 isl_surf_usage_flags_t isl_extra_usage_flags)
+{
+   const struct gen_device_info *devinfo = &device->info;
+   VkResult result;
+
+   uint32_t b;
+   for_each_bit(b, image->aspects) {
+      VkImageAspectFlagBits aspect = 1 << b;
+      uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+      const  struct anv_format_plane plane_format =
+         anv_get_format_plane(devinfo, image->vk_format, aspect, image->tiling);
+
+      VkImageUsageFlags vk_usage = image->usage;
+      if (aspect == VK_IMAGE_ASPECT_STENCIL_BIT)
+         vk_usage = image->stencil_usage;
+
+      isl_surf_usage_flags_t isl_usage =
+         choose_isl_surf_usage(image->create_flags, vk_usage,
+                               isl_extra_usage_flags, aspect);
+
+      /* Must call this before adding any surfaces because it may modify
+       * isl_tiling_flags.
+       */
+      bool needs_shadow =
+         anv_image_plane_needs_shadow_surface(devinfo, plane_format,
+                                              image->tiling, vk_usage,
+                                              image->create_flags,
+                                              &isl_tiling_flags);
+
+      result = add_primary_surface(device, image, plane, plane_format, stride,
+                                   isl_tiling_flags, isl_usage);
+      if (result != VK_SUCCESS)
+         return result;
+      check_surfaces(image, &image->planes[plane]);
+
+      if (needs_shadow) {
+         result = add_shadow_surface(device, image, plane, plane_format, stride,
+                                     vk_usage);
+         if (result != VK_SUCCESS)
+            return result;
+         check_surfaces(image, &image->planes[plane]);
+      }
+
+      result = add_aux_surface_if_supported(device, image, plane, plane_format,
+                                            format_list_info,
+                                            isl_extra_usage_flags);
+      if (result != VK_SUCCESS)
+         return result;
+      check_surfaces(image, &image->planes[plane]);
    }
+
+   return VK_SUCCESS;
 }
 
 static const struct isl_drm_modifier_info *
@@ -671,7 +720,7 @@ choose_drm_format_mod(const struct anv_physical_device *device,
    uint32_t best_score = 0;
 
    for (uint32_t i = 0; i < modifier_count; ++i) {
-      uint32_t score = score_drm_format_mod(modifiers[i]);
+      uint32_t score = isl_drm_modifier_get_score(&device->info, modifiers[i]);
       if (score > best_score) {
          best_mod = modifiers[i];
          best_score = score;
@@ -682,6 +731,25 @@ choose_drm_format_mod(const struct anv_physical_device *device,
       return isl_drm_modifier_get_info(best_mod);
    else
       return NULL;
+}
+
+static VkImageUsageFlags
+anv_image_create_usage(const VkImageCreateInfo *pCreateInfo,
+                       VkImageUsageFlags usage)
+{
+   /* Add TRANSFER_SRC usage for multisample attachment images. This is
+    * because we might internally use the TRANSFER_SRC layout on them for
+    * blorp operations associated with resolving those into other attachments
+    * at the end of a subpass.
+    *
+    * Without this additional usage, we compute an incorrect AUX state in
+    * anv_layout_to_aux_state().
+    */
+   if (pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT &&
+       (usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                 VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)))
+      usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+   return usage;
 }
 
 VkResult
@@ -725,14 +793,15 @@ anv_image_create(VkDevice _device,
 
    vk_object_base_init(&device->vk, &image->base, VK_OBJECT_TYPE_IMAGE);
    image->type = pCreateInfo->imageType;
-   image->extent = pCreateInfo->extent;
+   image->extent = anv_sanitize_image_extent(pCreateInfo->imageType,
+                                             pCreateInfo->extent);
    image->vk_format = pCreateInfo->format;
    image->format = anv_get_format(pCreateInfo->format);
    image->aspects = vk_format_aspects(image->vk_format);
    image->levels = pCreateInfo->mipLevels;
    image->array_size = pCreateInfo->arrayLayers;
    image->samples = pCreateInfo->samples;
-   image->usage = pCreateInfo->usage;
+   image->usage = anv_image_create_usage(pCreateInfo, pCreateInfo->usage);
    image->create_flags = pCreateInfo->flags;
    image->tiling = pCreateInfo->tiling;
    image->disjoint = pCreateInfo->flags & VK_IMAGE_CREATE_DISJOINT_BIT;
@@ -745,8 +814,11 @@ anv_image_create(VkDevice _device,
       const VkImageStencilUsageCreateInfoEXT *stencil_usage_info =
          vk_find_struct_const(pCreateInfo->pNext,
                               IMAGE_STENCIL_USAGE_CREATE_INFO_EXT);
-      if (stencil_usage_info)
-         image->stencil_usage = stencil_usage_info->stencilUsage;
+      if (stencil_usage_info) {
+         image->stencil_usage =
+            anv_image_create_usage(pCreateInfo,
+                                   stencil_usage_info->stencilUsage);
+      }
    }
 
    /* In case of external format, We don't know format yet,
@@ -771,14 +843,10 @@ anv_image_create(VkDevice _device,
       vk_find_struct_const(pCreateInfo->pNext,
                            IMAGE_FORMAT_LIST_CREATE_INFO_KHR);
 
-   uint32_t b;
-   for_each_bit(b, image->aspects) {
-      r = make_surface(device, image, fmt_list, create_info->stride,
-                       isl_tiling_flags, create_info->isl_extra_usage_flags,
-                       (1 << b));
-      if (r != VK_SUCCESS)
-         goto fail;
-   }
+   r = add_all_surfaces(device, image, fmt_list, create_info->stride,
+                        isl_tiling_flags, create_info->isl_extra_usage_flags);
+   if (r != VK_SUCCESS)
+      goto fail;
 
    *pImage = anv_image_to_handle(image);
 
@@ -959,6 +1027,7 @@ resolve_ahw_image(struct anv_device *device,
    assert(mem->ahw);
    AHardwareBuffer_Desc desc;
    AHardwareBuffer_describe(mem->ahw, &desc);
+   VkResult result;
 
    /* Check tiling. */
    int i915_tiling = anv_gem_get_tiling(device, mem->bo->gem_handle);
@@ -1014,12 +1083,9 @@ resolve_ahw_image(struct anv_device *device,
    uint32_t stride = desc.stride *
                      (isl_format_get_layout(isl_fmt)->bpb / 8);
 
-   uint32_t b;
-   for_each_bit(b, image->aspects) {
-      VkResult r = make_surface(device, image, NULL, stride, isl_tiling_flags,
-                                ISL_SURF_USAGE_DISABLE_AUX_BIT, (1 << b));
-      assert(r == VK_SUCCESS);
-   }
+   result = add_all_surfaces(device, image, NULL, stride, isl_tiling_flags,
+                             ISL_SURF_USAGE_DISABLE_AUX_BIT);
+   assert(result == VK_SUCCESS);
 #endif
 }
 

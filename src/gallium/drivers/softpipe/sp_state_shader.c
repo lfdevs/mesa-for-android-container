@@ -143,15 +143,10 @@ softpipe_create_shader_state(struct pipe_context *pipe,
                              bool debug)
 {
    if (templ->type == PIPE_SHADER_IR_NIR) {
-      shader->tokens = nir_to_tgsi(templ->ir.nir, pipe->screen);
-
-      /* Note: Printing the final NIR after nir-to-tgsi transformed and
-       * optimized it
-       */
       if (debug)
          nir_print_shader(templ->ir.nir, stderr);
 
-      ralloc_free(templ->ir.nir);
+      shader->tokens = nir_to_tgsi(templ->ir.nir, pipe->screen);
    } else {
       assert(templ->type == PIPE_SHADER_IR_TGSI);
       /* we need to keep a local copy of the tokens */
@@ -433,7 +428,6 @@ softpipe_create_compute_state(struct pipe_context *pipe,
          nir_print_shader(s, stderr);
 
       state->tokens = (void *)nir_to_tgsi(s, pipe->screen);
-      ralloc_free(s);
    } else {
       assert(templ->ir_type == PIPE_SHADER_IR_TGSI);
       /* we need to keep a local copy of the tokens */

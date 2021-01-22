@@ -46,28 +46,45 @@ tegra_destroy(struct pipe_context *pcontext)
 
 static void
 tegra_draw_vbo(struct pipe_context *pcontext,
-               const struct pipe_draw_info *pinfo)
+               const struct pipe_draw_info *pinfo,
+               const struct pipe_draw_indirect_info *pindirect,
+               const struct pipe_draw_start_count *draws,
+               unsigned num_draws)
 {
+   if (num_draws > 1) {
+      struct pipe_draw_info tmp_info = *pinfo;
+
+      for (unsigned i = 0; i < num_draws; i++) {
+         tegra_draw_vbo(pcontext, &tmp_info, pindirect, &draws[i], 1);
+         if (tmp_info.increment_draw_id)
+            tmp_info.drawid++;
+      }
+      return;
+   }
+
+   if (!pindirect && (!draws[0].count || !pinfo->instance_count))
+      return;
+
    struct tegra_context *context = to_tegra_context(pcontext);
    struct pipe_draw_indirect_info indirect;
    struct pipe_draw_info info;
 
-   if (pinfo && (pinfo->indirect || pinfo->index_size)) {
+   if (pinfo && ((pindirect && pindirect->buffer) || pinfo->index_size)) {
       memcpy(&info, pinfo, sizeof(info));
 
-      if (pinfo->indirect) {
-         memcpy(&indirect, pinfo->indirect, sizeof(indirect));
-         indirect.buffer = tegra_resource_unwrap(info.indirect->buffer);
-         info.indirect = &indirect;
+      if (pindirect && pindirect->buffer) {
+         memcpy(&indirect, pindirect, sizeof(indirect));
+         indirect.buffer = tegra_resource_unwrap(pindirect->buffer);
       }
 
       if (pinfo->index_size && !pinfo->has_user_indices)
          info.index.resource = tegra_resource_unwrap(info.index.resource);
 
       pinfo = &info;
+      pindirect = &indirect;
    }
 
-   context->gpu->draw_vbo(context->gpu, pinfo);
+   context->gpu->draw_vbo(context->gpu, pinfo, pindirect, draws, num_draws);
 }
 
 static void
@@ -428,7 +445,7 @@ tegra_set_blend_color(struct pipe_context *pcontext,
 
 static void
 tegra_set_stencil_ref(struct pipe_context *pcontext,
-                      const struct pipe_stencil_ref *ref)
+                      const struct pipe_stencil_ref ref)
 {
    struct tegra_context *context = to_tegra_context(pcontext);
 

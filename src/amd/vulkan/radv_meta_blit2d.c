@@ -288,7 +288,7 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
 			    aspect_mask == VK_IMAGE_ASPECT_PLANE_0_BIT ||
 			    aspect_mask == VK_IMAGE_ASPECT_PLANE_1_BIT ||
 			    aspect_mask == VK_IMAGE_ASPECT_PLANE_2_BIT) {
-				unsigned fs_key = radv_format_meta_fs_key(dst_temps.iview.vk_format);
+				unsigned fs_key = radv_format_meta_fs_key(device, dst_temps.iview.vk_format);
 				unsigned dst_layout = radv_meta_dst_layout_from_layout(dst->current_layout);
 
 				if (device->meta_state.blit2d[log2_samples].pipelines[src_type][fs_key] == VK_NULL_HANDLE) {
@@ -310,6 +310,8 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
 									},
 									.clearValueCount = 0,
 									.pClearValues = NULL,
+								  }, &(struct radv_extra_render_pass_begin_info) {
+									.disable_dcc = dst->disable_compression
 								  });
 
 				radv_cmd_buffer_set_subpass(cmd_buffer,
@@ -338,7 +340,7 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
 									},
 									.clearValueCount = 0,
 									.pClearValues = NULL,
-								  });
+								  }, NULL);
 
 				radv_cmd_buffer_set_subpass(cmd_buffer,
 							    &cmd_buffer->state.pass->subpasses[0]);
@@ -367,7 +369,7 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
 									},
 									.clearValueCount = 0,
 									.pClearValues = NULL,
-								   });
+								   }, NULL);
 
 				radv_cmd_buffer_set_subpass(cmd_buffer,
 							    &cmd_buffer->state.pass->subpasses[0]);
@@ -428,10 +430,7 @@ build_nir_vertex_shader(void)
 {
 	const struct glsl_type *vec4 = glsl_vec4_type();
 	const struct glsl_type *vec2 = glsl_vector_type(GLSL_TYPE_FLOAT, 2);
-	nir_builder b;
-
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_VERTEX, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, "meta_blit2d_vs");
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_VERTEX, NULL, "meta_blit2d_vs");
 
 	nir_variable *pos_out = nir_variable_create(b.shader, nir_var_shader_out,
 						    vec4, "gl_Position");
@@ -445,17 +444,8 @@ build_nir_vertex_shader(void)
 	nir_ssa_def *outvec = radv_meta_gen_rect_vertices(&b);
 	nir_store_var(&b, pos_out, outvec, 0xf);
 
-	nir_intrinsic_instr *src_box = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	src_box->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
-	nir_intrinsic_set_base(src_box, 0);
-	nir_intrinsic_set_range(src_box, 16);
-	src_box->num_components = 4;
-	nir_ssa_dest_init(&src_box->instr, &src_box->dest, 4, 32, "src_box");
-	nir_builder_instr_insert(&b, &src_box->instr);
-
-	nir_intrinsic_instr *vertex_id = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_vertex_id_zero_base);
-	nir_ssa_dest_init(&vertex_id->instr, &vertex_id->dest, 1, 32, "vertexid");
-	nir_builder_instr_insert(&b, &vertex_id->instr);
+	nir_ssa_def *src_box = nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .range=16);
+	nir_ssa_def *vertex_id = nir_load_vertex_id_zero_base(&b);
 
 	/* vertex 0 - src_x, src_y */
 	/* vertex 1 - src_x, src_y+h */
@@ -463,19 +453,19 @@ build_nir_vertex_shader(void)
 	/* so channel 0 is vertex_id != 2 ? src_x : src_x + w
 	   channel 1 is vertex id != 1 ? src_y : src_y + w */
 
-	nir_ssa_def *c0cmp = nir_ine(&b, &vertex_id->dest.ssa,
+	nir_ssa_def *c0cmp = nir_ine(&b, vertex_id,
 				     nir_imm_int(&b, 2));
-	nir_ssa_def *c1cmp = nir_ine(&b, &vertex_id->dest.ssa,
+	nir_ssa_def *c1cmp = nir_ine(&b, vertex_id,
 				     nir_imm_int(&b, 1));
 
 	nir_ssa_def *comp[2];
 	comp[0] = nir_bcsel(&b, c0cmp,
-			    nir_channel(&b, &src_box->dest.ssa, 0),
-			    nir_channel(&b, &src_box->dest.ssa, 2));
+			    nir_channel(&b, src_box, 0),
+			    nir_channel(&b, src_box, 2));
 
 	comp[1] = nir_bcsel(&b, c1cmp,
-			    nir_channel(&b, &src_box->dest.ssa, 1),
-			    nir_channel(&b, &src_box->dest.ssa, 3));
+			    nir_channel(&b, src_box, 1),
+			    nir_channel(&b, src_box, 3));
 	nir_ssa_def *out_tex_vec = nir_vec(&b, comp, 2);
 	nir_store_var(&b, tex_pos_out, out_tex_vec, 0x3);
 	return b.shader;
@@ -499,26 +489,18 @@ build_nir_texel_fetch(struct nir_builder *b, struct radv_device *device,
 	sampler->data.binding = 0;
 
 	nir_ssa_def *tex_pos_3d = NULL;
-	nir_intrinsic_instr *sample_idx = NULL;
+	nir_ssa_def *sample_idx = NULL;
 	if (is_3d) {
-		nir_intrinsic_instr *layer = nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_push_constant);
-		nir_intrinsic_set_base(layer, 16);
-		nir_intrinsic_set_range(layer, 4);
-		layer->src[0] = nir_src_for_ssa(nir_imm_int(b, 0));
-		layer->num_components = 1;
-		nir_ssa_dest_init(&layer->instr, &layer->dest, 1, 32, "layer");
-		nir_builder_instr_insert(b, &layer->instr);
+		nir_ssa_def *layer = nir_load_push_constant(b, 1, 32, nir_imm_int(b, 0), .base=16, .range=4);
 
 		nir_ssa_def *chans[3];
 		chans[0] = nir_channel(b, tex_pos, 0);
 		chans[1] = nir_channel(b, tex_pos, 1);
-		chans[2] = &layer->dest.ssa;
+		chans[2] = layer;
 		tex_pos_3d = nir_vec(b, chans, 3);
 	}
 	if (is_multisampled) {
-		sample_idx = nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_sample_id);
-		nir_ssa_dest_init(&sample_idx->instr, &sample_idx->dest, 1, 32, "sample_idx");
-		nir_builder_instr_insert(b, &sample_idx->instr);
+		sample_idx = nir_load_sample_id(b);
 	}
 
 	nir_ssa_def *tex_deref = &nir_build_deref_var(b, sampler)->dest.ssa;
@@ -529,7 +511,7 @@ build_nir_texel_fetch(struct nir_builder *b, struct radv_device *device,
 	tex->src[0].src_type = nir_tex_src_coord;
 	tex->src[0].src = nir_src_for_ssa(is_3d ? tex_pos_3d : tex_pos);
 	tex->src[1].src_type = is_multisampled ? nir_tex_src_ms_index : nir_tex_src_lod;
-	tex->src[1].src = nir_src_for_ssa(is_multisampled ? &sample_idx->dest.ssa : nir_imm_int(b, 0));
+	tex->src[1].src = nir_src_for_ssa(is_multisampled ? sample_idx : nir_imm_int(b, 0));
 	tex->src[2].src_type = nir_tex_src_texture_deref;
 	tex->src[2].src = nir_src_for_ssa(tex_deref);
 	if (is_multisampled) {
@@ -558,17 +540,11 @@ build_nir_buffer_fetch(struct nir_builder *b, struct radv_device *device,
 	sampler->data.descriptor_set = 0;
 	sampler->data.binding = 0;
 
-	nir_intrinsic_instr *width = nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(width, 16);
-	nir_intrinsic_set_range(width, 4);
-	width->src[0] = nir_src_for_ssa(nir_imm_int(b, 0));
-	width->num_components = 1;
-	nir_ssa_dest_init(&width->instr, &width->dest, 1, 32, "width");
-	nir_builder_instr_insert(b, &width->instr);
+	nir_ssa_def *width = nir_load_push_constant(b, 1, 32, nir_imm_int(b, 0), .base=16, .range=4);
 
 	nir_ssa_def *pos_x = nir_channel(b, tex_pos, 0);
 	nir_ssa_def *pos_y = nir_channel(b, tex_pos, 1);
-	pos_y = nir_imul(b, pos_y, &width->dest.ssa);
+	pos_y = nir_imul(b, pos_y, width);
 	pos_x = nir_iadd(b, pos_x, pos_y);
 
 	nir_ssa_def *tex_deref = &nir_build_deref_var(b, sampler)->dest.ssa;
@@ -603,10 +579,7 @@ build_nir_copy_fragment_shader(struct radv_device *device,
 {
 	const struct glsl_type *vec4 = glsl_vec4_type();
 	const struct glsl_type *vec2 = glsl_vector_type(GLSL_TYPE_FLOAT, 2);
-	nir_builder b;
-
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, name);
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, NULL, "%s", name);
 
 	nir_variable *tex_pos_in = nir_variable_create(b.shader, nir_var_shader_in,
 						       vec2, "v_tex_pos");
@@ -632,10 +605,7 @@ build_nir_copy_fragment_shader_depth(struct radv_device *device,
 {
 	const struct glsl_type *vec4 = glsl_vec4_type();
 	const struct glsl_type *vec2 = glsl_vector_type(GLSL_TYPE_FLOAT, 2);
-	nir_builder b;
-
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, name);
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, NULL, "%s", name);
 
 	nir_variable *tex_pos_in = nir_variable_create(b.shader, nir_var_shader_in,
 						       vec2, "v_tex_pos");
@@ -661,10 +631,7 @@ build_nir_copy_fragment_shader_stencil(struct radv_device *device,
 {
 	const struct glsl_type *vec4 = glsl_vec4_type();
 	const struct glsl_type *vec2 = glsl_vector_type(GLSL_TYPE_FLOAT, 2);
-	nir_builder b;
-
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, name);
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, NULL, "%s", name);
 
 	nir_variable *tex_pos_in = nir_variable_create(b.shader, nir_var_shader_in,
 						       vec2, "v_tex_pos");
@@ -735,7 +702,7 @@ blit2d_init_color_pipeline(struct radv_device *device,
 			   uint32_t log2_samples)
 {
 	VkResult result;
-	unsigned fs_key = radv_format_meta_fs_key(format);
+	unsigned fs_key = radv_format_meta_fs_key(device, format);
 	const char *name;
 
 	mtx_lock(&device->meta_state.mtx);

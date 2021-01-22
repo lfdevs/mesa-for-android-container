@@ -35,7 +35,7 @@ void evergreen_dma_copy_buffer(struct r600_context *rctx,
 			       uint64_t src_offset,
 			       uint64_t size)
 {
-	struct radeon_cmdbuf *cs = rctx->b.dma.cs;
+	struct radeon_cmdbuf *cs = &rctx->b.dma.cs;
 	unsigned i, ncopy, csize, sub_cmd, shift;
 	struct r600_resource *rdst = (struct r600_resource*)dst;
 	struct r600_resource *rsrc = (struct r600_resource*)src;
@@ -85,7 +85,7 @@ void evergreen_cp_dma_clear_buffer(struct r600_context *rctx,
 				   unsigned size, uint32_t clear_value,
 				   enum r600_coherency coher)
 {
-	struct radeon_cmdbuf *cs = rctx->b.gfx.cs;
+	struct radeon_cmdbuf *cs = &rctx->b.gfx.cs;
 
 	assert(size);
 	assert(rctx->screen->b.has_cp_dma);

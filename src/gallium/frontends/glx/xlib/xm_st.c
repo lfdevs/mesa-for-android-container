@@ -59,11 +59,13 @@ xmesa_st_framebuffer(struct st_framebuffer_iface *stfbi)
  */
 static bool
 xmesa_st_framebuffer_display(struct st_framebuffer_iface *stfbi,
+                             struct st_context_iface *stctx,
                              enum st_attachment_type statt)
 {
    struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
    struct pipe_resource *ptex = xstfb->textures[statt];
    struct pipe_resource *pres;
+   struct pipe_context *pctx = stctx ? stctx->pipe : NULL;
 
    if (!ptex)
       return true;
@@ -75,7 +77,7 @@ xmesa_st_framebuffer_display(struct st_framebuffer_iface *stfbi,
       pres = xstfb->display_resource;
    }
 
-   xstfb->screen->flush_frontbuffer(xstfb->screen, pres, 0, 0, &xstfb->buffer->ws, NULL);
+   xstfb->screen->flush_frontbuffer(xstfb->screen, pctx, pres, 0, 0, &xstfb->buffer->ws, NULL);
    return true;
 }
 
@@ -265,7 +267,7 @@ xmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
    struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
    bool ret;
 
-   ret = xmesa_st_framebuffer_display(stfbi, statt);
+   ret = xmesa_st_framebuffer_display(stfbi, stctx, statt);
 
    if (ret && xmesa_strict_invalidate)
       xmesa_check_buffer_size(xstfb->buffer);
@@ -347,7 +349,7 @@ xmesa_swap_st_framebuffer(struct st_framebuffer_iface *stfbi)
    struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
    bool ret;
 
-   ret = xmesa_st_framebuffer_display(stfbi, ST_ATTACHMENT_BACK_LEFT);
+   ret = xmesa_st_framebuffer_display(stfbi, NULL, ST_ATTACHMENT_BACK_LEFT);
    if (ret) {
       struct pipe_resource **front, **back, *tmp;
 
@@ -378,7 +380,7 @@ xmesa_copy_st_framebuffer(struct st_framebuffer_iface *stfbi,
 {
    xmesa_st_framebuffer_copy_textures(stfbi, src, dst, x, y, w, h);
    if (dst == ST_ATTACHMENT_FRONT_LEFT)
-      xmesa_st_framebuffer_display(stfbi, dst);
+      xmesa_st_framebuffer_display(stfbi, NULL, dst);
 }
 
 

@@ -67,35 +67,35 @@ nv04_emit_tex_obj(struct gl_context *ctx, int emit)
 
 	if (ctx->Texture.Unit[i]._Current) {
 		struct gl_texture_object *t = ctx->Texture.Unit[i]._Current;
-		struct gl_texture_image *ti = t->Image[0][t->BaseLevel];
+		struct gl_texture_image *ti = t->Image[0][t->Attrib.BaseLevel];
 		const struct gl_sampler_object *sa = _mesa_get_samplerobj(ctx, i);
 		int lod_max = 1, lod_bias = 0;
 
 		if (!nouveau_texture_validate(ctx, t))
 			return;
 
-		s = &to_nouveau_texture(t)->surfaces[t->BaseLevel];
+		s = &to_nouveau_texture(t)->surfaces[t->Attrib.BaseLevel];
 
-		if (sa->MinFilter != GL_NEAREST &&
-		    sa->MinFilter != GL_LINEAR) {
-			lod_max = CLAMP(MIN2(sa->MaxLod, t->_MaxLambda),
+		if (sa->Attrib.MinFilter != GL_NEAREST &&
+		    sa->Attrib.MinFilter != GL_LINEAR) {
+			lod_max = CLAMP(MIN2(sa->Attrib.MaxLod, t->_MaxLambda),
 					0, 15) + 1;
 
 			lod_bias = CLAMP(ctx->Texture.Unit[i].LodBias +
-					 sa->LodBias, -16, 15) * 8;
+					 sa->Attrib.LodBias, -16, 15) * 8;
 		}
 
-		format |= nvgl_wrap_mode(sa->WrapT) << 28 |
-			nvgl_wrap_mode(sa->WrapS) << 24 |
+		format |= nvgl_wrap_mode(sa->Attrib.WrapT) << 28 |
+			nvgl_wrap_mode(sa->Attrib.WrapS) << 24 |
 			ti->HeightLog2 << 20 |
 			ti->WidthLog2 << 16 |
 			lod_max << 12 |
 			get_tex_format(ti);
 
-		filter |= log2i(sa->MaxAnisotropy) << 31 |
-			nvgl_filter_mode(sa->MagFilter) << 28 |
-			log2i(sa->MaxAnisotropy) << 27 |
-			nvgl_filter_mode(sa->MinFilter) << 24 |
+		filter |= log2i(sa->Attrib.MaxAnisotropy) << 31 |
+			nvgl_filter_mode(sa->Attrib.MagFilter) << 28 |
+			log2i(sa->Attrib.MaxAnisotropy) << 27 |
+			nvgl_filter_mode(sa->Attrib.MinFilter) << 24 |
 			(lod_bias & 0xff) << 16;
 
 	} else {

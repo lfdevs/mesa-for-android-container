@@ -505,7 +505,7 @@ struct svga_context
    /* Bitmask of depth/stencil state objects IDs */
    struct util_bitmask *ds_object_id_bm;
 
-   /* Bitmaks of input element object IDs */
+   /* Bitmask of input element object IDs */
    struct util_bitmask *input_element_object_id_bm;
 
    /* Bitmask of rasterizer object IDs */

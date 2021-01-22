@@ -188,6 +188,7 @@ get_native_buffer_name(struct ANativeWindowBuffer *buf)
 static __DRIimage *
 droid_create_image_from_prime_fds_yuv(_EGLDisplay *disp,
                                      struct ANativeWindowBuffer *buf,
+                                     void *priv,
                                      int num_fds, int fds[3])
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
@@ -269,12 +270,13 @@ droid_create_image_from_prime_fds_yuv(_EGLDisplay *disp,
       EGL_YUV_CHROMA_SITING_0_EXT,
       EGL_YUV_CHROMA_SITING_0_EXT,
       &error,
-      NULL);
+      priv);
 }
 
 static __DRIimage *
 droid_create_image_from_prime_fds(_EGLDisplay *disp,
-                                  struct ANativeWindowBuffer *buf)
+                                  struct ANativeWindowBuffer *buf,
+                                  void *priv)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    int pitches[4] = { 0 }, offsets[4] = { 0 };
@@ -289,7 +291,8 @@ droid_create_image_from_prime_fds(_EGLDisplay *disp,
    if (is_yuv(buf->format)) {
       __DRIimage *image;
 
-      image = droid_create_image_from_prime_fds_yuv(disp, buf, num_fds, fds);
+      image = droid_create_image_from_prime_fds_yuv(
+            disp, buf, priv, num_fds, fds);
       /*
        * HACK: https://issuetracker.google.com/32077885
        * There is no API available to properly query the IMPLEMENTATION_DEFINED
@@ -328,7 +331,7 @@ droid_create_image_from_prime_fds(_EGLDisplay *disp,
       EGL_YUV_CHROMA_SITING_0_EXT,
       EGL_YUV_CHROMA_SITING_0_EXT,
       &error,
-      NULL);
+      priv);
 }
 
 /* More recent CrOS gralloc has a perform op that fills out the struct below
@@ -354,7 +357,8 @@ struct cros_gralloc0_buffer_info {
 
 static __DRIimage *
 droid_create_image_from_cros_info(_EGLDisplay *disp,
-                                  struct ANativeWindowBuffer *buf)
+                                  struct ANativeWindowBuffer *buf,
+                                  void* priv)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct cros_gralloc0_buffer_info info;
@@ -377,7 +381,7 @@ droid_create_image_from_cros_info(_EGLDisplay *disp,
                                                       EGL_YUV_CHROMA_SITING_0_EXT,
                                                       EGL_YUV_CHROMA_SITING_0_EXT,
                                                       &error,
-                                                      NULL);
+                                                      priv);
    }
 
    return NULL;
@@ -385,15 +389,16 @@ droid_create_image_from_cros_info(_EGLDisplay *disp,
 
 static __DRIimage *
 droid_create_image_from_native_buffer(_EGLDisplay *disp,
-                                      struct ANativeWindowBuffer *buf)
+                                      struct ANativeWindowBuffer *buf,
+                                      void *priv)
 {
    __DRIimage *dri_image;
 
-   dri_image = droid_create_image_from_cros_info(disp, buf);
+   dri_image = droid_create_image_from_cros_info(disp, buf, priv);
    if (dri_image)
       return dri_image;
 
-   return droid_create_image_from_prime_fds(disp, buf);
+   return droid_create_image_from_prime_fds(disp, buf, priv);
 }
 
 static EGLBoolean
@@ -769,7 +774,7 @@ get_front_bo(struct dri2_egl_surface *dri2_surf, unsigned int format)
                                               dri2_surf->base.Height,
                                               format,
                                               0,
-                                              dri2_surf);
+                                              NULL);
       if (!dri2_surf->dri_image_front) {
          _eglLog(_EGL_WARNING, "dri2_image_front allocation failed");
          return -1;
@@ -794,7 +799,7 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
       }
 
       dri2_surf->dri_image_back =
-         droid_create_image_from_native_buffer(disp, dri2_surf->buffer);
+         droid_create_image_from_native_buffer(disp, dri2_surf->buffer, NULL);
       if (!dri2_surf->dri_image_back) {
          _eglLog(_EGL_WARNING, "failed to create DRI image from FD");
          return -1;
@@ -974,7 +979,8 @@ static int get_format(int format)
 
 static __DRIimage *
 droid_create_image_from_name(_EGLDisplay *disp,
-                             struct ANativeWindowBuffer *buf)
+                             struct ANativeWindowBuffer *buf,
+                             void *priv)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    int name;
@@ -997,7 +1003,7 @@ droid_create_image_from_name(_EGLDisplay *disp,
 					   format,
 					   name,
 					   buf->stride,
-					   NULL);
+					   priv);
 }
 #endif /* HAVE_DRM_GRALLOC */
 
@@ -1051,15 +1057,19 @@ dri2_create_image_android_native_buffer(_EGLDisplay *disp,
    }
 
    __DRIimage *dri_image =
-      droid_create_image_from_native_buffer(disp, buf);
+      droid_create_image_from_native_buffer(disp, buf, buf);
 
 #ifdef HAVE_DRM_GRALLOC
    if (dri_image == NULL)
-      dri_image = droid_create_image_from_name(disp, buf);
+      dri_image = droid_create_image_from_name(disp, buf, buf);
 #endif
 
-   if (dri_image)
+   if (dri_image) {
+#if ANDROID_API_LEVEL >= 26
+      AHardwareBuffer_acquire(ANativeWindowBuffer_getHardwareBuffer(buf));
+#endif
       return dri2_create_image_from_dri(disp, dri_image);
+   }
 
    return NULL;
 }
@@ -1172,6 +1182,17 @@ droid_get_capability(void *loaderPrivate, enum dri_loader_cap cap)
    }
 }
 
+static void
+droid_destroy_loader_image_state(void *loaderPrivate)
+{
+#if ANDROID_API_LEVEL >= 26
+   if (loaderPrivate) {
+      AHardwareBuffer_release(
+            ANativeWindowBuffer_getHardwareBuffer(loaderPrivate));
+   }
+#endif
+}
+
 static EGLBoolean
 droid_add_configs_for_visuals(_EGLDisplay *disp)
 {
@@ -1269,12 +1290,13 @@ static const struct dri2_egl_display_vtbl droid_display_vtbl = {
 
 #ifdef HAVE_DRM_GRALLOC
 static const __DRIdri2LoaderExtension droid_dri2_loader_extension = {
-   .base = { __DRI_DRI2_LOADER, 4 },
+   .base = { __DRI_DRI2_LOADER, 5 },
 
-   .getBuffers           = NULL,
-   .flushFrontBuffer     = droid_flush_front_buffer,
-   .getBuffersWithFormat = droid_get_buffers_with_format,
-   .getCapability        = droid_get_capability,
+   .getBuffers               = NULL,
+   .flushFrontBuffer         = droid_flush_front_buffer,
+   .getBuffersWithFormat     = droid_get_buffers_with_format,
+   .getCapability            = droid_get_capability,
+   .destroyLoaderImageState  = droid_destroy_loader_image_state,
 };
 
 static const __DRIextension *droid_dri2_loader_extensions[] = {
@@ -1289,11 +1311,13 @@ static const __DRIextension *droid_dri2_loader_extensions[] = {
 #endif /* HAVE_DRM_GRALLOC */
 
 static const __DRIimageLoaderExtension droid_image_loader_extension = {
-   .base = { __DRI_IMAGE_LOADER, 2 },
+   .base = { __DRI_IMAGE_LOADER, 4 },
 
-   .getBuffers          = droid_image_get_buffers,
-   .flushFrontBuffer    = droid_flush_front_buffer,
-   .getCapability       = droid_get_capability,
+   .getBuffers               = droid_image_get_buffers,
+   .flushFrontBuffer         = droid_flush_front_buffer,
+   .getCapability            = droid_get_capability,
+   .flushSwapBuffers         = NULL,
+   .destroyLoaderImageState  = droid_destroy_loader_image_state,
 };
 
 static void

@@ -324,8 +324,8 @@ fs_visitor::opt_cse_local(const fs_live_variables &live, bblock_t *block, int &i
        * with instructions dependent on the current execution mask like
        * SHADER_OPCODE_FIND_LIVE_CHANNEL.
        */
-      if (inst->opcode == FS_OPCODE_DISCARD_JUMP ||
-          inst->opcode == FS_OPCODE_PLACEHOLDER_HALT)
+      if (inst->opcode == BRW_OPCODE_HALT ||
+          inst->opcode == SHADER_OPCODE_HALT_TARGET)
          aeb.make_empty();
 
       foreach_in_list_safe(aeb_entry, entry, &aeb) {

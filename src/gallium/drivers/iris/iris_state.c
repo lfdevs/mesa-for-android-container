@@ -812,8 +812,7 @@ iris_upload_slice_hashing_state(struct iris_batch *batch)
    if (subslices_delta == 0)
       return;
 
-   struct iris_context *ice = NULL;
-   ice = container_of(batch, ice, batches[IRIS_BATCH_RENDER]);
+   struct iris_context *ice = container_of(batch, struct iris_context, batches[IRIS_BATCH_RENDER]);
    assert(&ice->batches[IRIS_BATCH_RENDER] == batch);
 
    unsigned size = GENX(SLICE_HASH_TABLE_length) * 4;
@@ -1348,7 +1347,9 @@ struct iris_depth_stencil_alpha_state {
 #endif
 
    /** Outbound to BLEND_STATE, 3DSTATE_PS_BLEND, COLOR_CALC_STATE. */
-   struct pipe_alpha_state alpha;
+   unsigned alpha_enabled:1;
+   unsigned alpha_func:3;     /**< PIPE_FUNC_x */
+   float alpha_ref_value;     /**< reference value */
 
    /** Outbound to resolve and cache set tracking. */
    bool depth_writes_enabled;
@@ -1373,15 +1374,17 @@ iris_create_zsa_state(struct pipe_context *ctx,
 
    bool two_sided_stencil = state->stencil[1].enabled;
 
-   cso->alpha = state->alpha;
-   cso->depth_writes_enabled = state->depth.writemask;
-   cso->depth_test_enabled = state->depth.enabled;
+   cso->alpha_enabled = state->alpha_enabled;
+   cso->alpha_func = state->alpha_func;
+   cso->alpha_ref_value = state->alpha_ref_value;
+   cso->depth_writes_enabled = state->depth_writemask;
+   cso->depth_test_enabled = state->depth_enabled;
    cso->stencil_writes_enabled =
       state->stencil[0].writemask != 0 ||
       (two_sided_stencil && state->stencil[1].writemask != 0);
 
    /* gallium frontends need to optimize away EQUAL writes for us. */
-   assert(!(state->depth.func == PIPE_FUNC_EQUAL && state->depth.writemask));
+   assert(!(state->depth_func == PIPE_FUNC_EQUAL && state->depth_writemask));
 
    iris_pack_command(GENX(3DSTATE_WM_DEPTH_STENCIL), cso->wmds, wmds) {
       wmds.StencilFailOp = state->stencil[0].fail_op;
@@ -1394,14 +1397,14 @@ iris_create_zsa_state(struct pipe_context *ctx,
       wmds.BackfaceStencilPassDepthPassOp = state->stencil[1].zpass_op;
       wmds.BackfaceStencilTestFunction =
          translate_compare_func(state->stencil[1].func);
-      wmds.DepthTestFunction = translate_compare_func(state->depth.func);
+      wmds.DepthTestFunction = translate_compare_func(state->depth_func);
       wmds.DoubleSidedStencilEnable = two_sided_stencil;
       wmds.StencilTestEnable = state->stencil[0].enabled;
       wmds.StencilBufferWriteEnable =
          state->stencil[0].writemask != 0 ||
          (two_sided_stencil && state->stencil[1].writemask != 0);
-      wmds.DepthTestEnable = state->depth.enabled;
-      wmds.DepthBufferWriteEnable = state->depth.writemask;
+      wmds.DepthTestEnable = state->depth_enabled;
+      wmds.DepthBufferWriteEnable = state->depth_writemask;
       wmds.StencilTestMask = state->stencil[0].valuemask;
       wmds.StencilWriteMask = state->stencil[0].writemask;
       wmds.BackfaceStencilTestMask = state->stencil[1].valuemask;
@@ -1416,9 +1419,9 @@ iris_create_zsa_state(struct pipe_context *ctx,
    iris_pack_command(GENX(3DSTATE_DEPTH_BOUNDS), cso->depth_bounds, depth_bounds) {
       depth_bounds.DepthBoundsTestValueModifyDisable = false;
       depth_bounds.DepthBoundsTestEnableModifyDisable = false;
-      depth_bounds.DepthBoundsTestEnable = state->depth.bounds_test;
-      depth_bounds.DepthBoundsTestMinValue = state->depth.bounds_min;
-      depth_bounds.DepthBoundsTestMaxValue = state->depth.bounds_max;
+      depth_bounds.DepthBoundsTestEnable = state->depth_bounds_test;
+      depth_bounds.DepthBoundsTestMinValue = state->depth_bounds_min;
+      depth_bounds.DepthBoundsTestMaxValue = state->depth_bounds_max;
    }
 #endif
 
@@ -1438,13 +1441,13 @@ iris_bind_zsa_state(struct pipe_context *ctx, void *state)
    struct iris_depth_stencil_alpha_state *new_cso = state;
 
    if (new_cso) {
-      if (cso_changed(alpha.ref_value))
+      if (cso_changed(alpha_ref_value))
          ice->state.dirty |= IRIS_DIRTY_COLOR_CALC_STATE;
 
-      if (cso_changed(alpha.enabled))
+      if (cso_changed(alpha_enabled))
          ice->state.dirty |= IRIS_DIRTY_PS_BLEND | IRIS_DIRTY_BLEND_STATE;
 
-      if (cso_changed(alpha.func))
+      if (cso_changed(alpha_func))
          ice->state.dirty |= IRIS_DIRTY_BLEND_STATE;
 
       if (cso_changed(depth_writes_enabled))
@@ -1563,7 +1566,7 @@ want_pma_fix(struct iris_context *ice)
     *  3DSTATE_WM_CHROMAKEY::ChromaKeyKillEnable)
     */
    bool killpixels = wm_prog_data->uses_kill || wm_prog_data->uses_omask ||
-                     cso_blend->alpha_to_coverage || cso_zsa->alpha.enabled;
+                     cso_blend->alpha_to_coverage || cso_zsa->alpha_enabled;
 
    /* The Gen8 depth PMA equation becomes:
     *
@@ -1666,6 +1669,8 @@ struct iris_rasterizer_state {
    bool multisample;
    bool force_persample_interp;
    bool conservative_rasterization;
+   bool fill_mode_point;
+   bool fill_mode_line;
    bool fill_mode_point_or_line;
    enum pipe_sprite_coord_mode sprite_coord_mode; /* PIPE_SPRITE_* */
    uint16_t sprite_coord_enable;
@@ -1729,11 +1734,15 @@ iris_create_rasterizer_state(struct pipe_context *ctx,
    cso->conservative_rasterization =
       state->conservative_raster_mode == PIPE_CONSERVATIVE_RASTER_POST_SNAP;
 
-   cso->fill_mode_point_or_line =
-      state->fill_front == PIPE_POLYGON_MODE_LINE ||
+   cso->fill_mode_point =
       state->fill_front == PIPE_POLYGON_MODE_POINT ||
-      state->fill_back == PIPE_POLYGON_MODE_LINE ||
       state->fill_back == PIPE_POLYGON_MODE_POINT;
+   cso->fill_mode_line =
+      state->fill_front == PIPE_POLYGON_MODE_LINE ||
+      state->fill_back == PIPE_POLYGON_MODE_LINE;
+   cso->fill_mode_point_or_line =
+      cso->fill_mode_point ||
+      cso->fill_mode_line;
 
    if (state->clip_plane_enable != 0)
       cso->num_clip_plane_consts = util_logbase2(state->clip_plane_enable) + 1;
@@ -3022,10 +3031,10 @@ iris_set_scissor_states(struct pipe_context *ctx,
  */
 static void
 iris_set_stencil_ref(struct pipe_context *ctx,
-                     const struct pipe_stencil_ref *state)
+                     const struct pipe_stencil_ref state)
 {
    struct iris_context *ice = (struct iris_context *) ctx;
-   memcpy(&ice->state.stencil_ref, state, sizeof(*state));
+   memcpy(&ice->state.stencil_ref, &state, sizeof(state));
    if (GEN_GEN >= 12)
       ice->state.dirty |= IRIS_DIRTY_STENCIL_REF;
    else if (GEN_GEN >= 9)
@@ -4059,6 +4068,28 @@ iris_emit_sbe_swiz(struct iris_batch *batch,
    }
 }
 
+static bool
+iris_is_drawing_points(const struct iris_context *ice)
+{
+   const struct iris_rasterizer_state *cso_rast = ice->state.cso_rast;
+
+   if (cso_rast->fill_mode_point) {
+      return true;
+   }
+
+   if (ice->shaders.prog[MESA_SHADER_GEOMETRY]) {
+      const struct brw_gs_prog_data *gs_prog_data =
+         (void *) ice->shaders.prog[MESA_SHADER_GEOMETRY]->prog_data;
+      return gs_prog_data->output_topology == _3DPRIM_POINTLIST;
+   } else if (ice->shaders.prog[MESA_SHADER_TESS_EVAL]) {
+      const struct brw_tes_prog_data *tes_data =
+         (void *) ice->shaders.prog[MESA_SHADER_TESS_EVAL]->prog_data;
+      return tes_data->output_topology == BRW_TESS_OUTPUT_TOPOLOGY_POINT;
+   } else {
+      return ice->state.prim_mode == PIPE_PRIM_POINTS;
+   }
+}
+
 static unsigned
 iris_calculate_point_sprite_overrides(const struct brw_wm_prog_data *prog_data,
                                       const struct iris_rasterizer_state *cso)
@@ -4093,7 +4124,8 @@ iris_emit_sbe(struct iris_batch *batch, const struct iris_context *ice)
                                       &urb_read_offset, &urb_read_length);
 
    unsigned sprite_coord_overrides =
-      iris_calculate_point_sprite_overrides(wm_prog_data, cso_rast);
+      iris_is_drawing_points(ice) ?
+      iris_calculate_point_sprite_overrides(wm_prog_data, cso_rast) : 0;
 
    iris_emit_cmd(batch, GENX(3DSTATE_SBE), sbe) {
       sbe.AttributeSwizzleEnable = true;
@@ -4197,7 +4229,7 @@ iris_populate_fs_key(const struct iris_context *ice,
 
    key->alpha_to_coverage = blend->alpha_to_coverage;
 
-   key->alpha_test_replicate_alpha = fb->nr_cbufs > 1 && zsa->alpha.enabled;
+   key->alpha_test_replicate_alpha = fb->nr_cbufs > 1 && zsa->alpha_enabled;
 
    key->flat_shade = rast->flatshade &&
       (info->inputs_read & (VARYING_BIT_COL0 | VARYING_BIT_COL1));
@@ -5594,8 +5626,8 @@ iris_upload_dirty_render_state(struct iris_context *ice,
 
       uint32_t blend_state_header;
       iris_pack_state(GENX(BLEND_STATE), &blend_state_header, bs) {
-         bs.AlphaTestEnable = cso_zsa->alpha.enabled;
-         bs.AlphaTestFunction = translate_compare_func(cso_zsa->alpha.func);
+         bs.AlphaTestEnable = cso_zsa->alpha_enabled;
+         bs.AlphaTestFunction = translate_compare_func(cso_zsa->alpha_func);
       }
 
       blend_map[0] = blend_state_header | cso_blend->blend_state[0];
@@ -5620,7 +5652,7 @@ iris_upload_dirty_render_state(struct iris_context *ice,
                       64, &cc_offset);
       iris_pack_state(GENX(COLOR_CALC_STATE), cc_map, cc) {
          cc.AlphaTestFormat = ALPHATEST_FLOAT32;
-         cc.AlphaReferenceValueAsFLOAT32 = cso->alpha.ref_value;
+         cc.AlphaReferenceValueAsFLOAT32 = cso->alpha_ref_value;
          cc.BlendConstantColorRed   = ice->state.blend_color.color[0];
          cc.BlendConstantColorGreen = ice->state.blend_color.color[1];
          cc.BlendConstantColorBlue  = ice->state.blend_color.color[2];
@@ -5998,7 +6030,7 @@ iris_upload_dirty_render_state(struct iris_context *ice,
       uint32_t dynamic_pb[GENX(3DSTATE_PS_BLEND_length)];
       iris_pack_command(GENX(3DSTATE_PS_BLEND), &dynamic_pb, pb) {
          pb.HasWriteableRT = has_writeable_rt(cso_blend, fs_info);
-         pb.AlphaTestEnable = cso_zsa->alpha.enabled;
+         pb.AlphaTestEnable = cso_zsa->alpha_enabled;
 
          /* The dual source blending docs caution against using SRC1 factors
           * when the shader doesn't use a dual source render target write.
@@ -6417,7 +6449,9 @@ iris_upload_dirty_render_state(struct iris_context *ice,
 static void
 iris_upload_render_state(struct iris_context *ice,
                          struct iris_batch *batch,
-                         const struct pipe_draw_info *draw)
+                         const struct pipe_draw_info *draw,
+                         const struct pipe_draw_indirect_info *indirect,
+                         const struct pipe_draw_start_count *sc)
 {
    bool use_predicate = ice->state.predicate == IRIS_PREDICATE_STATE_USE_BIT;
 
@@ -6442,9 +6476,13 @@ iris_upload_render_state(struct iris_context *ice,
       unsigned offset;
 
       if (draw->has_user_indices) {
-         u_upload_data(ice->ctx.stream_uploader, 0,
-                       draw->count * draw->index_size, 4, draw->index.user,
+         unsigned start_offset = draw->index_size * sc->start;
+
+         u_upload_data(ice->ctx.stream_uploader, start_offset,
+                       sc->count * draw->index_size, 4,
+                       (char*)draw->index.user + start_offset,
                        &offset, &ice->state.last_res.index_buffer);
+         offset -= start_offset;
       } else {
          struct iris_resource *res = (void *) draw->index.resource;
          res->bind_history |= PIPE_BIND_INDEX_BUFFER;
@@ -6492,14 +6530,14 @@ iris_upload_render_state(struct iris_context *ice,
 #define _3DPRIM_START_INSTANCE      0x243C
 #define _3DPRIM_BASE_VERTEX         0x2440
 
-   if (draw->indirect) {
-      if (draw->indirect->indirect_draw_count) {
+   if (indirect && !indirect->count_from_stream_output) {
+      if (indirect->indirect_draw_count) {
          use_predicate = true;
 
          struct iris_bo *draw_count_bo =
-            iris_resource_bo(draw->indirect->indirect_draw_count);
+            iris_resource_bo(indirect->indirect_draw_count);
          unsigned draw_count_offset =
-            draw->indirect->indirect_draw_count_offset;
+            indirect->indirect_draw_count_offset;
 
          iris_emit_pipe_control_flush(batch,
                                       "ensure indirect draw buffer is flushed",
@@ -6551,43 +6589,43 @@ iris_upload_render_state(struct iris_context *ice,
             iris_batch_emit(batch, &mi_predicate, sizeof(uint32_t));
          }
       }
-      struct iris_bo *bo = iris_resource_bo(draw->indirect->buffer);
+      struct iris_bo *bo = iris_resource_bo(indirect->buffer);
       assert(bo);
 
       iris_emit_cmd(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
          lrm.RegisterAddress = _3DPRIM_VERTEX_COUNT;
-         lrm.MemoryAddress = ro_bo(bo, draw->indirect->offset + 0);
+         lrm.MemoryAddress = ro_bo(bo, indirect->offset + 0);
       }
       iris_emit_cmd(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
          lrm.RegisterAddress = _3DPRIM_INSTANCE_COUNT;
-         lrm.MemoryAddress = ro_bo(bo, draw->indirect->offset + 4);
+         lrm.MemoryAddress = ro_bo(bo, indirect->offset + 4);
       }
       iris_emit_cmd(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
          lrm.RegisterAddress = _3DPRIM_START_VERTEX;
-         lrm.MemoryAddress = ro_bo(bo, draw->indirect->offset + 8);
+         lrm.MemoryAddress = ro_bo(bo, indirect->offset + 8);
       }
       if (draw->index_size) {
          iris_emit_cmd(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
             lrm.RegisterAddress = _3DPRIM_BASE_VERTEX;
-            lrm.MemoryAddress = ro_bo(bo, draw->indirect->offset + 12);
+            lrm.MemoryAddress = ro_bo(bo, indirect->offset + 12);
          }
          iris_emit_cmd(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
             lrm.RegisterAddress = _3DPRIM_START_INSTANCE;
-            lrm.MemoryAddress = ro_bo(bo, draw->indirect->offset + 16);
+            lrm.MemoryAddress = ro_bo(bo, indirect->offset + 16);
          }
       } else {
          iris_emit_cmd(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
             lrm.RegisterAddress = _3DPRIM_START_INSTANCE;
-            lrm.MemoryAddress = ro_bo(bo, draw->indirect->offset + 12);
+            lrm.MemoryAddress = ro_bo(bo, indirect->offset + 12);
          }
          iris_emit_cmd(batch, GENX(MI_LOAD_REGISTER_IMM), lri) {
             lri.RegisterOffset = _3DPRIM_BASE_VERTEX;
             lri.DataDWord = 0;
          }
       }
-   } else if (draw->count_from_stream_output) {
+   } else if (indirect && indirect->count_from_stream_output) {
       struct iris_stream_output_target *so =
-         (void *) draw->count_from_stream_output;
+         (void *) indirect->count_from_stream_output;
 
       /* XXX: Replace with actual cache tracking */
       iris_emit_pipe_control_flush(batch,
@@ -6615,19 +6653,17 @@ iris_upload_render_state(struct iris_context *ice,
       prim.VertexAccessType = draw->index_size > 0 ? RANDOM : SEQUENTIAL;
       prim.PredicateEnable = use_predicate;
 
-      if (draw->indirect || draw->count_from_stream_output) {
+      if (indirect) {
          prim.IndirectParameterEnable = true;
       } else {
          prim.StartInstanceLocation = draw->start_instance;
          prim.InstanceCount = draw->instance_count;
-         prim.VertexCountPerInstance = draw->count;
+         prim.VertexCountPerInstance = sc->count;
 
-         prim.StartVertexLocation = draw->start;
+         prim.StartVertexLocation = sc->start;
 
          if (draw->index_size) {
             prim.BaseVertexLocation += draw->index_bias;
-         } else {
-            prim.StartVertexLocation += draw->index_bias;
          }
       }
    }

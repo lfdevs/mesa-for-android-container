@@ -60,10 +60,18 @@ bool TEvalShaderFromNir::scan_sysvalue_access(nir_instr *instr)
    case nir_intrinsic_load_tcs_rel_patch_id_r600:
       m_sv_values.set(es_rel_patch_id);
       break;
+   case nir_intrinsic_store_output:
+      m_export_processor->scan_store_output(ir);
+      break;
    default:
       ;
    }
    return true;
+}
+
+void TEvalShaderFromNir::emit_shader_start()
+{
+   m_export_processor->emit_shader_start();
 }
 
 bool TEvalShaderFromNir::do_allocate_reserved_registers()
@@ -120,6 +128,8 @@ bool TEvalShaderFromNir::emit_intrinsic_instruction_override(nir_intrinsic_instr
       return load_preloaded_value(instr->dest, 0, m_primitive_id);
    case nir_intrinsic_load_tcs_rel_patch_id_r600:
       return load_preloaded_value(instr->dest, 0, m_rel_patch_id);
+   case nir_intrinsic_store_output:
+      return m_export_processor->store_output(instr);
    default:
       return false;
    }
@@ -133,7 +143,7 @@ bool TEvalShaderFromNir::do_process_outputs(nir_variable *output)
 
 bool TEvalShaderFromNir::do_emit_store_deref(const nir_variable *out_var, nir_intrinsic_instr* instr)
 {
-   return m_export_processor->store_deref(out_var, instr);
+   return false;
 }
 
 void TEvalShaderFromNir::do_finalize()

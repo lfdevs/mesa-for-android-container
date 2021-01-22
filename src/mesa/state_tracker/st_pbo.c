@@ -296,8 +296,8 @@ st_pbo_create_vs(struct st_context *st)
    const nir_shader_compiler_options *options =
       st_get_nir_compiler_options(st, MESA_SHADER_VERTEX);
 
-   nir_builder b;
-   nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_VERTEX, options);
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_VERTEX, options,
+                                                  "st/pbo VS");
 
    nir_variable *in_pos = nir_variable_create(b.shader, nir_var_shader_in,
                                               vec4, "in_pos");
@@ -333,7 +333,7 @@ st_pbo_create_vs(struct st_context *st)
       }
    }
 
-   return st_nir_finish_builtin_shader(st, b.shader, "st/pbo VS");
+   return st_nir_finish_builtin_shader(st, b.shader);
 }
 
 void *
@@ -406,14 +406,16 @@ create_fs(struct st_context *st, bool download,
           enum st_pbo_conversion conversion,
           bool need_layer)
 {
-   struct pipe_screen *screen = st->pipe->screen;
-   struct nir_builder b;
+   struct pipe_screen *screen = st->screen;
    const nir_shader_compiler_options *options =
       st_get_nir_compiler_options(st, MESA_SHADER_FRAGMENT);
    bool pos_is_sysval =
       screen->get_param(screen, PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL);
 
-   nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, options);
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, options,
+                                                  download ?
+                                                  "st/pbo download FS" :
+                                                  "st/pbo upload FS");
 
    nir_ssa_def *zero = nir_imm_int(&b, 0);
 
@@ -523,16 +525,12 @@ create_fs(struct st_context *st, bool download,
       img_var->data.explicit_binding = true;
       img_var->data.binding = 0;
       nir_deref_instr *img_deref = nir_build_deref_var(&b, img_var);
-      nir_intrinsic_instr *intrin =
-         nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_deref_store);
-      intrin->src[0] = nir_src_for_ssa(&img_deref->dest.ssa);
-      intrin->src[1] =
-         nir_src_for_ssa(nir_vec4(&b, pbo_addr, zero, zero, zero));
-      intrin->src[2] = nir_src_for_ssa(zero);
-      intrin->src[3] = nir_src_for_ssa(result);
-      intrin->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0));
-      intrin->num_components = 4;
-      nir_builder_instr_insert(&b, &intrin->instr);
+
+      nir_image_deref_store(&b, &img_deref->dest.ssa,
+                            nir_vec4(&b, pbo_addr, zero, zero, zero),
+                            zero,
+                            result,
+                            nir_imm_int(&b, 0));
    } else {
       nir_variable *color =
          nir_variable_create(b.shader, nir_var_shader_out, glsl_vec4_type(),
@@ -542,9 +540,7 @@ create_fs(struct st_context *st, bool download,
       nir_store_var(&b, color, result, TGSI_WRITEMASK_XYZW);
    }
 
-   return st_nir_finish_builtin_shader(st, b.shader, download ?
-                                       "st/pbo download FS" :
-                                       "st/pbo upload FS");
+   return st_nir_finish_builtin_shader(st, b.shader);
 }
 
 static enum st_pbo_conversion
@@ -597,8 +593,7 @@ st_pbo_get_download_fs(struct st_context *st, enum pipe_texture_target target,
 void
 st_init_pbo_helpers(struct st_context *st)
 {
-   struct pipe_context *pipe = st->pipe;
-   struct pipe_screen *screen = pipe->screen;
+   struct pipe_screen *screen = st->screen;
 
    st->pbo.upload_enabled =
       screen->get_param(screen, PIPE_CAP_TEXTURE_BUFFER_OBJECTS) &&

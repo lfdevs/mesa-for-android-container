@@ -177,57 +177,6 @@ dri2_unbind_context(struct glx_context *context, struct glx_context *new)
 }
 
 static struct glx_context *
-dri2_create_context(struct glx_screen *base,
-		    struct glx_config *config_base,
-		    struct glx_context *shareList, int renderType)
-{
-   struct dri2_context *pcp, *pcp_shared;
-   struct dri2_screen *psc = (struct dri2_screen *) base;
-   __GLXDRIconfigPrivate *config = (__GLXDRIconfigPrivate *) config_base;
-   __DRIcontext *shared = NULL;
-
-   /* Check the renderType value */
-   if (!validate_renderType_against_config(config_base, renderType))
-       return NULL;
-
-   if (shareList) {
-      /* If the shareList context is not a DRI2 context, we cannot possibly
-       * create a DRI2 context that shares it.
-       */
-      if (shareList->vtable->destroy != dri2_destroy_context) {
-	 return NULL;
-      }
-
-      pcp_shared = (struct dri2_context *) shareList;
-      shared = pcp_shared->driContext;
-   }
-
-   pcp = calloc(1, sizeof *pcp);
-   if (pcp == NULL)
-      return NULL;
-
-   if (!glx_context_init(&pcp->base, &psc->base, &config->base)) {
-      free(pcp);
-      return NULL;
-   }
-
-   pcp->base.renderType = renderType;
-
-   pcp->driContext =
-      (*psc->dri2->createNewContext) (psc->driScreen,
-                                      config->driConfig, shared, pcp);
-
-   if (pcp->driContext == NULL) {
-      free(pcp);
-      return NULL;
-   }
-
-   pcp->base.vtable = &dri2_context_vtable;
-
-   return &pcp->base;
-}
-
-static struct glx_context *
 dri2_create_context_attribs(struct glx_screen *base,
 			    struct glx_config *config_base,
 			    struct glx_context *shareList,
@@ -272,6 +221,13 @@ dri2_create_context_attribs(struct glx_screen *base,
        goto error_exit;
 
    if (shareList) {
+      /* If the shareList context is not a DRI2 context, we cannot possibly
+       * create a DRI2 context that shares it.
+       */
+      if (shareList->vtable->destroy != dri2_destroy_context) {
+	 return NULL;
+      }
+
       pcp_shared = (struct dri2_context *) shareList;
       shared = pcp_shared->driContext;
    }
@@ -1212,7 +1168,7 @@ dri2_get_driver_name(struct glx_screen *glx_screen)
 }
 
 static const struct glx_screen_vtable dri2_screen_vtable = {
-   .create_context         = dri2_create_context,
+   .create_context         = dri_common_create_context,
    .create_context_attribs = dri2_create_context_attribs,
    .query_renderer_integer = dri2_query_renderer_integer,
    .query_renderer_string  = dri2_query_renderer_string,
@@ -1232,7 +1188,6 @@ dri2CreateScreen(int screen, struct glx_display * priv)
    char *driverName = NULL, *loader_driverName, *deviceName, *tmp;
    drm_magic_t magic;
    int i;
-   unsigned char disable;
 
    psc = calloc(1, sizeof *psc);
    if (psc == NULL)
@@ -1351,16 +1306,11 @@ dri2CreateScreen(int screen, struct glx_display * priv)
       psp->waitForSBC = dri2WaitForSBC;
       psp->setSwapInterval = dri2SetSwapInterval;
       psp->getSwapInterval = dri2GetSwapInterval;
-      if (psc->config->configQueryb(psc->driScreen,
-                                    "glx_disable_oml_sync_control",
-                                    &disable) || !disable)
-         __glXEnableDirectExtension(&psc->base, "GLX_OML_sync_control");
+
+      __glXEnableDirectExtension(&psc->base, "GLX_OML_sync_control");
    }
 
-   if (psc->config->configQueryb(psc->driScreen,
-                                 "glx_disable_sgi_video_sync",
-                                 &disable) || !disable)
-      __glXEnableDirectExtension(&psc->base, "GLX_SGI_video_sync");
+   __glXEnableDirectExtension(&psc->base, "GLX_SGI_video_sync");
 
    if (psc->config->base.version > 1 &&
           psc->config->configQuerys(psc->driScreen, "glx_extension_override",

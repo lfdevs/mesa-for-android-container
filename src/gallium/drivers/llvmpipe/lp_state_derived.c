@@ -229,7 +229,7 @@ void llvmpipe_update_derived( struct llvmpipe_context *llvmpipe )
          (llvmpipe->sample_mask) == 0 ||
          (llvmpipe->rasterizer ? llvmpipe->rasterizer->rasterizer_discard : FALSE) ||
          (null_fs &&
-          !llvmpipe->depth_stencil->depth.enabled &&
+          !llvmpipe->depth_stencil->depth_enabled &&
           !llvmpipe->depth_stencil->stencil[0].enabled);
       lp_setup_set_rasterizer_discard(llvmpipe->setup, discard);
    }
@@ -251,7 +251,7 @@ void llvmpipe_update_derived( struct llvmpipe_context *llvmpipe )
 
    if (llvmpipe->dirty & LP_NEW_DEPTH_STENCIL_ALPHA) {
       lp_setup_set_alpha_ref_value(llvmpipe->setup, 
-                                   llvmpipe->depth_stencil->alpha.ref_value);
+                                   llvmpipe->depth_stencil->alpha_ref_value);
       lp_setup_set_stencil_ref_values(llvmpipe->setup,
                                       llvmpipe->stencil_ref.ref_value);
    }

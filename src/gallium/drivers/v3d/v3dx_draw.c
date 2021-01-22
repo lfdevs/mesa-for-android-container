@@ -36,32 +36,25 @@
 #include "broadcom/common/v3d_macros.h"
 #include "broadcom/cle/v3dx_pack.h"
 
-/**
- * Does the initial bining command list setup for drawing to a given FBO.
- */
 static void
-v3d_start_draw(struct v3d_context *v3d)
+v3d_start_binning(struct v3d_context *v3d, struct v3d_job *job)
 {
-        struct v3d_job *job = v3d->job;
-
-        if (job->needs_flush)
-                return;
+        assert(job->needs_flush);
 
         /* Get space to emit our BCL state, using a branch to jump to a new BO
          * if necessary.
          */
+
         v3d_cl_ensure_space_with_branch(&job->bcl, 256 /* XXX */);
 
         job->submit.bcl_start = job->bcl.bo->offset;
         v3d_job_add_bo(job, job->bcl.bo);
 
-        uint32_t fb_layers = util_framebuffer_get_num_layers(&v3d->framebuffer);
-
         /* The PTB will request the tile alloc initial size per tile at start
          * of tile binning.
          */
         uint32_t tile_alloc_size =
-                MAX2(fb_layers, 1) * job->draw_tiles_x * job->draw_tiles_y * 64;
+                MAX2(job->num_layers, 1) * job->draw_tiles_x * job->draw_tiles_y * 64;
 
         /* The PTB allocates in aligned 4k chunks after the initial setup. */
         tile_alloc_size = align(tile_alloc_size, 4096);
@@ -82,28 +75,29 @@ v3d_start_draw(struct v3d_context *v3d)
                                        "tile_alloc");
         uint32_t tsda_per_tile_size = v3d->screen->devinfo.ver >= 40 ? 256 : 64;
         job->tile_state = v3d_bo_alloc(v3d->screen,
-                                       MAX2(fb_layers, 1) *
+                                       MAX2(job->num_layers, 1) *
                                        job->draw_tiles_y *
                                        job->draw_tiles_x *
                                        tsda_per_tile_size,
                                        "TSDA");
+
 #if V3D_VERSION >= 41
         /* This must go before the binning mode configuration. It is
          * required for layered framebuffers to work.
          */
-        if (fb_layers > 0) {
+        if (job->num_layers > 0) {
                 cl_emit(&job->bcl, NUMBER_OF_LAYERS, config) {
-                        config.number_of_layers = fb_layers;
+                        config.number_of_layers = job->num_layers;
                 }
         }
 #endif
 
 #if V3D_VERSION >= 40
         cl_emit(&job->bcl, TILE_BINNING_MODE_CFG, config) {
-                config.width_in_pixels = v3d->framebuffer.width;
-                config.height_in_pixels = v3d->framebuffer.height;
+                config.width_in_pixels = job->draw_width;
+                config.height_in_pixels = job->draw_height;
                 config.number_of_render_targets =
-                        MAX2(v3d->framebuffer.nr_cbufs, 1);
+                        MAX2(job->nr_cbufs, 1);
 
                 config.multisample_mode_4x = job->msaa;
 
@@ -129,7 +123,7 @@ v3d_start_draw(struct v3d_context *v3d)
                 config.height_in_tiles = job->draw_tiles_y;
                 /* Must be >= 1 */
                 config.number_of_render_targets =
-                        MAX2(v3d->framebuffer.nr_cbufs, 1);
+                        MAX2(job->nr_cbufs, 1);
 
                 config.multisample_mode_4x = job->msaa;
 
@@ -147,11 +141,24 @@ v3d_start_draw(struct v3d_context *v3d)
          *  any prefix state data before the binning list proper starts."
          */
         cl_emit(&job->bcl, START_TILE_BINNING, bin);
+}
+/**
+ * Does the initial bining command list setup for drawing to a given FBO.
+ */
+static void
+v3d_start_draw(struct v3d_context *v3d)
+{
+        struct v3d_job *job = v3d->job;
+
+        if (job->needs_flush)
+                return;
 
         job->needs_flush = true;
         job->draw_width = v3d->framebuffer.width;
         job->draw_height = v3d->framebuffer.height;
-        job->num_layers = fb_layers;
+        job->num_layers = util_framebuffer_get_num_layers(&v3d->framebuffer);
+
+        v3d_start_binning(v3d, job);
 }
 
 static void
@@ -503,7 +510,7 @@ compute_vpm_config_gs(struct v3d_device_info *devinfo,
         /* Try to fit program into our VPM memory budget by adjusting
          * configurable parameters iteratively. We do this in two phases:
          * the first phase tries to fit the program into the total available
-         * VPM memory. If we suceed at that, then the second phase attempts
+         * VPM memory. If we succeed at that, then the second phase attempts
          * to fit the program into half of that budget so we can run bin and
          * render programs in parallel.
          */
@@ -977,14 +984,15 @@ v3d_emit_gl_shader_state(struct v3d_context *v3d,
  */
 static void
 v3d_update_primitives_generated_counter(struct v3d_context *v3d,
-                                        const struct pipe_draw_info *info)
+                                        const struct pipe_draw_info *info,
+                                        const struct pipe_draw_start_count *draw)
 {
         assert(!v3d->prog.gs);
 
         if (!v3d->active_queries)
                 return;
 
-        uint32_t prims = u_prims_for_vertices(info->mode, info->count);
+        uint32_t prims = u_prims_for_vertices(info->mode, draw->count);
         v3d->prims_generated += prims;
 }
 
@@ -1084,13 +1092,30 @@ v3d_check_compiled_shaders(struct v3d_context *v3d)
 }
 
 static void
-v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
+v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
+             const struct pipe_draw_indirect_info *indirect,
+             const struct pipe_draw_start_count *draws,
+             unsigned num_draws)
 {
+	if (num_draws > 1) {
+           struct pipe_draw_info tmp_info = *info;
+
+           for (unsigned i = 0; i < num_draws; i++) {
+              v3d_draw_vbo(pctx, &tmp_info, indirect, &draws[i], 1);
+              if (tmp_info.increment_draw_id)
+                 tmp_info.drawid++;
+           }
+           return;
+	}
+
+        if (!indirect && (!draws[0].count || !info->instance_count))
+           return;
+
         struct v3d_context *v3d = v3d_context(pctx);
 
-        if (!info->count_from_stream_output && !info->indirect &&
+        if (!indirect &&
             !info->primitive_restart &&
-            !u_trim_pipe_prim(info->mode, (unsigned*)&info->count))
+            !u_trim_pipe_prim(info->mode, (unsigned*)&draws[0].count))
                 return;
 
         /* Fall back for weird desktop GL primitive restart values. */
@@ -1108,16 +1133,16 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 }
 
                 if (info->restart_index != mask) {
-                        util_draw_vbo_without_prim_restart(pctx, info);
+                        util_draw_vbo_without_prim_restart(pctx, info, indirect, &draws[0]);
                         return;
                 }
         }
 
         if (info->mode >= PIPE_PRIM_QUADS && info->mode <= PIPE_PRIM_POLYGON) {
                 util_primconvert_save_rasterizer_state(v3d->primconvert, &v3d->rasterizer->base);
-                util_primconvert_draw_vbo(v3d->primconvert, info);
+                util_primconvert_draw_vbo(v3d->primconvert, info, &draws[0]);
                 perf_debug("Fallback conversion for %d %s vertices\n",
-                           info->count, u_prim_name(info->mode));
+                           draws[0].count, u_prim_name(info->mode));
                 return;
         }
 
@@ -1127,8 +1152,8 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
         for (int s = 0; s < PIPE_SHADER_COMPUTE; s++)
                 v3d_predraw_check_stage_inputs(pctx, s);
 
-        if (info->indirect) {
-                v3d_flush_jobs_writing_resource(v3d, info->indirect->buffer,
+        if (indirect && indirect->buffer) {
+                v3d_flush_jobs_writing_resource(v3d, indirect->buffer,
                                                 V3D_FLUSH_DEFAULT, false);
         }
 
@@ -1155,7 +1180,7 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
          * on the last submitted render, rather than tracking the last
          * rendering to each texture's BO.
          */
-        if (v3d->tex[PIPE_SHADER_VERTEX].num_textures || info->indirect) {
+        if (v3d->tex[PIPE_SHADER_VERTEX].num_textures || (indirect && indirect->buffer)) {
                 perf_debug("Blocking binner on last render "
                            "due to vertex texturing or indirect drawing.\n");
                 job->submit.in_sync_bcl = v3d->out_sync;
@@ -1242,10 +1267,10 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
         /* The Base Vertex/Base Instance packet sets those values to nonzero
          * for the next draw call only.
          */
-        if (info->index_bias || info->start_instance) {
+        if ((info->index_size && info->index_bias) || info->start_instance) {
                 cl_emit(&job->bcl, BASE_VERTEX_BASE_INSTANCE, base) {
                         base.base_instance = info->start_instance;
-                        base.base_vertex = info->index_bias;
+                        base.base_vertex = info->index_size ? info->index_bias : 0;
                 }
         }
 
@@ -1259,18 +1284,19 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 #endif
 
         if (!v3d->prog.gs)
-                v3d_update_primitives_generated_counter(v3d, info);
+                v3d_update_primitives_generated_counter(v3d, info, &draws[0]);
 
         uint32_t hw_prim_type = v3d_hw_prim_type(info->mode);
         if (info->index_size) {
                 uint32_t index_size = info->index_size;
-                uint32_t offset = info->start * index_size;
+                uint32_t offset = draws[0].start * index_size;
                 struct pipe_resource *prsc;
                 if (info->has_user_indices) {
+                        unsigned start_offset = draws[0].start * info->index_size;
                         prsc = NULL;
-                        u_upload_data(v3d->uploader, 0,
-                                      info->count * info->index_size, 4,
-                                      info->index.user,
+                        u_upload_data(v3d->uploader, start_offset,
+                                      draws[0].count * info->index_size, 4,
+                                      (char*)info->index.user + start_offset,
                                       &offset, &prsc);
                 } else {
                         prsc = info->index.resource;
@@ -1284,7 +1310,7 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 }
 #endif
 
-                if (info->indirect) {
+                if (indirect && indirect->buffer) {
                         cl_emit(&job->bcl, INDIRECT_INDEXED_INSTANCED_PRIM_LIST, prim) {
                                 prim.index_type = ffs(info->index_size) - 1;
 #if V3D_VERSION < 40
@@ -1294,11 +1320,11 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                                 prim.mode = hw_prim_type | prim_tf_enable;
                                 prim.enable_primitive_restarts = info->primitive_restart;
 
-                                prim.number_of_draw_indirect_indexed_records = info->indirect->draw_count;
+                                prim.number_of_draw_indirect_indexed_records = indirect->draw_count;
 
-                                prim.stride_in_multiples_of_4_bytes = info->indirect->stride >> 2;
-                                prim.address = cl_address(v3d_resource(info->indirect->buffer)->bo,
-                                                          info->indirect->offset);
+                                prim.stride_in_multiples_of_4_bytes = indirect->stride >> 2;
+                                prim.address = cl_address(v3d_resource(indirect->buffer)->bo,
+                                                          indirect->offset);
                         }
                 } else if (info->instance_count > 1) {
                         cl_emit(&job->bcl, INDEXED_INSTANCED_PRIM_LIST, prim) {
@@ -1314,12 +1340,12 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                                 prim.enable_primitive_restarts = info->primitive_restart;
 
                                 prim.number_of_instances = info->instance_count;
-                                prim.instance_length = info->count;
+                                prim.instance_length = draws[0].count;
                         }
                 } else {
                         cl_emit(&job->bcl, INDEXED_PRIM_LIST, prim) {
                                 prim.index_type = ffs(info->index_size) - 1;
-                                prim.length = info->count;
+                                prim.length = draws[0].count;
 #if V3D_VERSION >= 40
                                 prim.index_offset = offset;
 #else /* V3D_VERSION < 40 */
@@ -1335,37 +1361,39 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 if (info->has_user_indices)
                         pipe_resource_reference(&prsc, NULL);
         } else {
-                if (info->indirect) {
+                if (indirect && indirect->buffer) {
                         cl_emit(&job->bcl, INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS, prim) {
                                 prim.mode = hw_prim_type | prim_tf_enable;
-                                prim.number_of_draw_indirect_array_records = info->indirect->draw_count;
+                                prim.number_of_draw_indirect_array_records = indirect->draw_count;
 
-                                prim.stride_in_multiples_of_4_bytes = info->indirect->stride >> 2;
-                                prim.address = cl_address(v3d_resource(info->indirect->buffer)->bo,
-                                                          info->indirect->offset);
+                                prim.stride_in_multiples_of_4_bytes = indirect->stride >> 2;
+                                prim.address = cl_address(v3d_resource(indirect->buffer)->bo,
+                                                          indirect->offset);
                         }
                 } else if (info->instance_count > 1) {
                         struct pipe_stream_output_target *so =
-                                info->count_from_stream_output;
+                                indirect && indirect->count_from_stream_output ?
+                                        indirect->count_from_stream_output : NULL;
                         uint32_t vert_count = so ?
                                 v3d_stream_output_target_get_vertex_count(so) :
-                                info->count;
+                                draws[0].count;
                         cl_emit(&job->bcl, VERTEX_ARRAY_INSTANCED_PRIMS, prim) {
                                 prim.mode = hw_prim_type | prim_tf_enable;
-                                prim.index_of_first_vertex = info->start;
+                                prim.index_of_first_vertex = draws[0].start;
                                 prim.number_of_instances = info->instance_count;
                                 prim.instance_length = vert_count;
                         }
                 } else {
                         struct pipe_stream_output_target *so =
-                                info->count_from_stream_output;
+                                indirect && indirect->count_from_stream_output ?
+                                        indirect->count_from_stream_output : NULL;
                         uint32_t vert_count = so ?
                                 v3d_stream_output_target_get_vertex_count(so) :
-                                info->count;
+                                draws[0].count;
                         cl_emit(&job->bcl, VERTEX_ARRAY_PRIMS, prim) {
                                 prim.mode = hw_prim_type | prim_tf_enable;
                                 prim.length = vert_count;
-                                prim.index_of_first_vertex = info->start;
+                                prim.index_of_first_vertex = draws[0].start;
                         }
                 }
         }
@@ -1384,14 +1412,14 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
          * needs some clamping to the buffer size.
          */
         for (int i = 0; i < v3d->streamout.num_targets; i++)
-                v3d->streamout.offsets[i] += info->count;
+                v3d->streamout.offsets[i] += draws[0].count;
 
-        if (v3d->zsa && job->zsbuf && v3d->zsa->base.depth.enabled) {
+        if (v3d->zsa && job->zsbuf && v3d->zsa->base.depth_enabled) {
                 struct v3d_resource *rsc = v3d_resource(job->zsbuf->texture);
                 v3d_job_add_bo(job, rsc->bo);
 
                 job->load |= PIPE_CLEAR_DEPTH & ~job->clear;
-                if (v3d->zsa->base.depth.writemask)
+                if (v3d->zsa->base.depth_writemask)
                         job->store |= PIPE_CLEAR_DEPTH;
                 rsc->initialized_buffers = PIPE_CLEAR_DEPTH;
         }
@@ -1411,7 +1439,7 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 rsc->initialized_buffers |= PIPE_CLEAR_STENCIL;
         }
 
-        for (int i = 0; i < V3D_MAX_DRAW_BUFFERS; i++) {
+        for (int i = 0; i < job->nr_cbufs; i++) {
                 uint32_t bit = PIPE_CLEAR_COLOR0 << i;
                 int blend_rt = v3d->blend->base.independent_blend_enable ? i : 0;
 
@@ -1664,7 +1692,7 @@ v3d_tlb_clear(struct v3d_job *job, unsigned buffers,
                 buffers &= ~PIPE_CLEAR_DEPTHSTENCIL;
         }
 
-        for (int i = 0; i < V3D_MAX_DRAW_BUFFERS; i++) {
+        for (int i = 0; i < job->nr_cbufs; i++) {
                 uint32_t bit = PIPE_CLEAR_COLOR0 << i;
                 if (!(buffers & bit))
                         continue;
@@ -1774,6 +1802,12 @@ v3d_clear_depth_stencil(struct pipe_context *pctx, struct pipe_surface *ps,
                         bool render_condition_enabled)
 {
         fprintf(stderr, "unimpl: clear DS\n");
+}
+
+void
+v3dX(start_binning)(struct v3d_context *v3d, struct v3d_job *job)
+{
+        v3d_start_binning(v3d, job);
 }
 
 void

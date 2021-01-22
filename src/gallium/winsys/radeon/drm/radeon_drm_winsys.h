@@ -89,6 +89,7 @@ struct radeon_drm_winsys {
    struct radeon_vm_heap vm64;
 
    bool check_vm;
+   bool noop_cs;
 
    struct radeon_surface_manager *surf_man;
 

@@ -49,6 +49,7 @@ struct spirv_supported_capabilities {
    bool float64_atomic_add;
    bool fragment_shader_sample_interlock;
    bool fragment_shader_pixel_interlock;
+   bool fragment_shading_rate;
    bool generic_pointers;
    bool geometry_streams;
    bool image_ms_array;
@@ -67,6 +68,7 @@ struct spirv_supported_capabilities {
    bool multiview;
    bool physical_storage_buffer_address;
    bool post_depth_coverage;
+   bool printf;
    bool ray_tracing;
    bool ray_query;
    bool ray_traversal_primitive_culling;
@@ -74,6 +76,7 @@ struct spirv_supported_capabilities {
    bool float_controls;
    bool shader_clock;
    bool shader_viewport_index_layer;
+   bool sparse_residency;
    bool stencil_export;
    bool storage_8bit;
    bool storage_16bit;
@@ -250,7 +253,7 @@ typedef struct shader_info {
          /** 1 .. MAX_GEOMETRY_SHADER_INVOCATIONS */
          uint8_t invocations;
 
-         /** The number of vertices recieves per input primitive (max. 6) */
+         /** The number of vertices received per input primitive (max. 6) */
          uint8_t vertices_in:3;
 
          /** Whether or not this shader uses EndPrimitive */
@@ -272,12 +275,23 @@ typedef struct shader_info {
           * instructions which do implicit derivatives, and the use of quad
           * subgroup operations.
           */
-         bool needs_helper_invocations:1;
+         bool needs_quad_helper_invocations:1;
+
+         /**
+          * True if this fragment shader requires helper invocations for
+          * all subgroup operations, not just quad ops and derivatives.
+          */
+         bool needs_all_helper_invocations:1;
 
          /**
           * Whether any inputs are declared with the "sample" qualifier.
           */
          bool uses_sample_qualifier:1;
+
+         /**
+          * Whether sample shading is used.
+          */
+         bool uses_sample_shading:1;
 
          /**
           * Whether early fragment tests are enabled as defined by
@@ -341,6 +355,7 @@ typedef struct shader_info {
 
       struct {
          uint16_t local_size[3];
+         uint16_t local_size_hint[3];
 
          bool local_size_variable:1;
          uint8_t user_data_components_amd:3;
@@ -363,6 +378,11 @@ typedef struct shader_info {
           *   AddressingModelPhysical64: 64
           */
          unsigned ptr_size;
+
+         /**
+          * Uses subgroup intrinsics which can communicate across a quad.
+          */
+         bool uses_wide_subgroup_intrinsics;
       } cs;
 
       /* Applies to both TCS and TES. */

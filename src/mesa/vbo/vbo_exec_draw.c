@@ -53,14 +53,13 @@ vbo_exec_debug_verts(struct vbo_exec_context *exec)
           exec->vtx.vertex_size);
 
    for (i = 0 ; i < exec->vtx.prim_count ; i++) {
-      struct _mesa_prim *prim = &exec->vtx.prim[i];
       printf("   prim %d: %s %d..%d %s %s\n",
              i,
-             _mesa_lookup_prim_by_nr(prim->mode),
-             prim->start,
-             prim->start + prim->count,
-             prim->begin ? "BEGIN" : "(wrap)",
-             prim->end ? "END" : "(wrap)");
+             _mesa_lookup_prim_by_nr(exec->vtx.mode[i]),
+             exec->vtx.draw[i].start,
+             exec->vtx.draw[i].start + exec->vtx.draw[i].count,
+             exec->vtx.markers[i].begin ? "BEGIN" : "(wrap)",
+             exec->vtx.markers[i].end ? "END" : "(wrap)");
    }
 }
 
@@ -68,13 +67,18 @@ vbo_exec_debug_verts(struct vbo_exec_context *exec)
 static GLuint
 vbo_exec_copy_vertices(struct vbo_exec_context *exec)
 {
-   struct _mesa_prim *last_prim = &exec->vtx.prim[exec->vtx.prim_count - 1];
+   struct gl_context *ctx = gl_context_from_vbo_exec(exec);
    const GLuint sz = exec->vtx.vertex_size;
    fi_type *dst = exec->vtx.copied.buffer;
-   const fi_type *src = exec->vtx.buffer_map + last_prim->start * sz;
+   unsigned last = exec->vtx.prim_count - 1;
+   unsigned start = exec->vtx.draw[last].start;
+   const fi_type *src = exec->vtx.buffer_map + start * sz;
 
-   return vbo_copy_vertices(exec->ctx, exec->ctx->Driver.CurrentExecPrimitive,
-                            last_prim, sz, false, dst, src);
+   return vbo_copy_vertices(ctx, ctx->Driver.CurrentExecPrimitive,
+                            start,
+                            &exec->vtx.draw[last].count,
+                            exec->vtx.markers[last].begin,
+                            sz, false, dst, src);
 }
 
 
@@ -151,7 +155,7 @@ static void
 vbo_exec_vtx_unmap(struct vbo_exec_context *exec)
 {
    if (exec->vtx.bufferobj) {
-      struct gl_context *ctx = exec->ctx;
+      struct gl_context *ctx = gl_context_from_vbo_exec(exec);
 
       if (ctx->Driver.FlushMappedBufferRange &&
           !ctx->Extensions.ARB_buffer_storage) {
@@ -169,7 +173,7 @@ vbo_exec_vtx_unmap(struct vbo_exec_context *exec)
       exec->vtx.buffer_used += (exec->vtx.buffer_ptr -
                                 exec->vtx.buffer_map) * sizeof(float);
 
-      assert(exec->vtx.buffer_used <= exec->ctx->Const.glBeginEndBufferSize);
+      assert(exec->vtx.buffer_used <= ctx->Const.glBeginEndBufferSize);
       assert(exec->vtx.buffer_ptr != NULL);
 
       ctx->Driver.UnmapBuffer(ctx, exec->vtx.bufferobj, MAP_INTERNAL);
@@ -182,7 +186,9 @@ vbo_exec_vtx_unmap(struct vbo_exec_context *exec)
 static bool
 vbo_exec_buffer_has_space(struct vbo_exec_context *exec)
 {
-   return exec->ctx->Const.glBeginEndBufferSize > exec->vtx.buffer_used + 1024;
+   struct gl_context *ctx = gl_context_from_vbo_exec(exec);
+
+   return ctx->Const.glBeginEndBufferSize > exec->vtx.buffer_used + 1024;
 }
 
 
@@ -192,7 +198,7 @@ vbo_exec_buffer_has_space(struct vbo_exec_context *exec)
 void
 vbo_exec_vtx_map(struct vbo_exec_context *exec)
 {
-   struct gl_context *ctx = exec->ctx;
+   struct gl_context *ctx = gl_context_from_vbo_exec(exec);
    const GLenum usage = GL_STREAM_DRAW_ARB;
    GLenum accessRange = GL_MAP_WRITE_BIT |  /* for MapBufferRange */
                         GL_MAP_UNSYNCHRONIZED_BIT;
@@ -293,8 +299,10 @@ vbo_exec_vtx_map(struct vbo_exec_context *exec)
 void
 vbo_exec_vtx_flush(struct vbo_exec_context *exec)
 {
+   struct gl_context *ctx = gl_context_from_vbo_exec(exec);
+
    /* Only unmap if persistent mappings are unsupported. */
-   bool persistent_mapping = exec->ctx->Extensions.ARB_buffer_storage &&
+   bool persistent_mapping = ctx->Extensions.ARB_buffer_storage &&
                              exec->vtx.bufferobj &&
                              exec->vtx.buffer_map;
 
@@ -307,8 +315,6 @@ vbo_exec_vtx_flush(struct vbo_exec_context *exec)
       exec->vtx.copied.nr = vbo_exec_copy_vertices(exec);
 
       if (exec->vtx.copied.nr != exec->vtx.vert_count) {
-         struct gl_context *ctx = exec->ctx;
-
          /* Prepare and set the exec draws internal VAO for drawing. */
          vbo_exec_bind_arrays(ctx);
 
@@ -324,9 +330,14 @@ vbo_exec_vtx_flush(struct vbo_exec_context *exec)
             printf("%s %d %d\n", __func__, exec->vtx.prim_count,
                    exec->vtx.vert_count);
 
-         ctx->Driver.Draw(ctx, exec->vtx.prim, exec->vtx.prim_count,
-                          NULL, GL_TRUE, 0, exec->vtx.vert_count - 1, 1, 0,
-                          NULL, 0);
+         exec->vtx.info.vertices_per_patch =
+            ctx->TessCtrlProgram.patch_vertices;
+
+         ctx->Driver.DrawGalliumComplex(ctx, &exec->vtx.info,
+                                        exec->vtx.draw,
+                                        exec->vtx.mode,
+                                        NULL,
+                                        exec->vtx.prim_count);
 
          /* Get new storage -- unless asked not to. */
          if (!persistent_mapping)

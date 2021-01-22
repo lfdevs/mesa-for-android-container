@@ -30,7 +30,6 @@
 #include "util/debug.h"
 
 #define COMMON_OPTIONS                                                        \
-   .lower_sub = true,                                                         \
    .lower_fdiv = true,                                                        \
    .lower_scmp = true,                                                        \
    .lower_flrp16 = true,                                                      \
@@ -117,6 +116,9 @@ brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
       compiler->scalar_stage[i] = devinfo->gen >= 8 ||
          i == MESA_SHADER_FRAGMENT || i == MESA_SHADER_COMPUTE;
    }
+
+   for (int i = MESA_SHADER_TASK; i < MESA_VULKAN_SHADER_STAGES; i++)
+      compiler->scalar_stage[i] = true;
 
    nir_lower_int64_options int64_options =
       nir_lower_imul64 |
@@ -230,13 +232,19 @@ unsigned
 brw_prog_data_size(gl_shader_stage stage)
 {
    static const size_t stage_sizes[] = {
-      [MESA_SHADER_VERTEX]    = sizeof(struct brw_vs_prog_data),
-      [MESA_SHADER_TESS_CTRL] = sizeof(struct brw_tcs_prog_data),
-      [MESA_SHADER_TESS_EVAL] = sizeof(struct brw_tes_prog_data),
-      [MESA_SHADER_GEOMETRY]  = sizeof(struct brw_gs_prog_data),
-      [MESA_SHADER_FRAGMENT]  = sizeof(struct brw_wm_prog_data),
-      [MESA_SHADER_COMPUTE]   = sizeof(struct brw_cs_prog_data),
-      [MESA_SHADER_KERNEL]    = sizeof(struct brw_cs_prog_data),
+      [MESA_SHADER_VERTEX]       = sizeof(struct brw_vs_prog_data),
+      [MESA_SHADER_TESS_CTRL]    = sizeof(struct brw_tcs_prog_data),
+      [MESA_SHADER_TESS_EVAL]    = sizeof(struct brw_tes_prog_data),
+      [MESA_SHADER_GEOMETRY]     = sizeof(struct brw_gs_prog_data),
+      [MESA_SHADER_FRAGMENT]     = sizeof(struct brw_wm_prog_data),
+      [MESA_SHADER_COMPUTE]      = sizeof(struct brw_cs_prog_data),
+      [MESA_SHADER_RAYGEN]       = sizeof(struct brw_bs_prog_data),
+      [MESA_SHADER_ANY_HIT]      = sizeof(struct brw_bs_prog_data),
+      [MESA_SHADER_CLOSEST_HIT]  = sizeof(struct brw_bs_prog_data),
+      [MESA_SHADER_MISS]         = sizeof(struct brw_bs_prog_data),
+      [MESA_SHADER_INTERSECTION] = sizeof(struct brw_bs_prog_data),
+      [MESA_SHADER_CALLABLE]     = sizeof(struct brw_bs_prog_data),
+      [MESA_SHADER_KERNEL]       = sizeof(struct brw_cs_prog_data),
    };
    assert((int)stage >= 0 && stage < ARRAY_SIZE(stage_sizes));
    return stage_sizes[stage];
@@ -246,13 +254,19 @@ unsigned
 brw_prog_key_size(gl_shader_stage stage)
 {
    static const size_t stage_sizes[] = {
-      [MESA_SHADER_VERTEX]    = sizeof(struct brw_vs_prog_key),
-      [MESA_SHADER_TESS_CTRL] = sizeof(struct brw_tcs_prog_key),
-      [MESA_SHADER_TESS_EVAL] = sizeof(struct brw_tes_prog_key),
-      [MESA_SHADER_GEOMETRY]  = sizeof(struct brw_gs_prog_key),
-      [MESA_SHADER_FRAGMENT]  = sizeof(struct brw_wm_prog_key),
-      [MESA_SHADER_COMPUTE]   = sizeof(struct brw_cs_prog_key),
-      [MESA_SHADER_KERNEL]    = sizeof(struct brw_cs_prog_key),
+      [MESA_SHADER_VERTEX]       = sizeof(struct brw_vs_prog_key),
+      [MESA_SHADER_TESS_CTRL]    = sizeof(struct brw_tcs_prog_key),
+      [MESA_SHADER_TESS_EVAL]    = sizeof(struct brw_tes_prog_key),
+      [MESA_SHADER_GEOMETRY]     = sizeof(struct brw_gs_prog_key),
+      [MESA_SHADER_FRAGMENT]     = sizeof(struct brw_wm_prog_key),
+      [MESA_SHADER_COMPUTE]      = sizeof(struct brw_cs_prog_key),
+      [MESA_SHADER_RAYGEN]       = sizeof(struct brw_bs_prog_key),
+      [MESA_SHADER_ANY_HIT]      = sizeof(struct brw_bs_prog_key),
+      [MESA_SHADER_CLOSEST_HIT]  = sizeof(struct brw_bs_prog_key),
+      [MESA_SHADER_MISS]         = sizeof(struct brw_bs_prog_key),
+      [MESA_SHADER_INTERSECTION] = sizeof(struct brw_bs_prog_key),
+      [MESA_SHADER_CALLABLE]     = sizeof(struct brw_bs_prog_key),
+      [MESA_SHADER_KERNEL]       = sizeof(struct brw_cs_prog_key),
    };
    assert((int)stage >= 0 && stage < ARRAY_SIZE(stage_sizes));
    return stage_sizes[stage];

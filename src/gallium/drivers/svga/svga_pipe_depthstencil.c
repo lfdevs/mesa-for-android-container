@@ -188,19 +188,19 @@ svga_create_depth_stencil_state(struct pipe_context *pipe,
    }
 
 
-   ds->zenable = templ->depth.enabled;
+   ds->zenable = templ->depth_enabled;
    if (ds->zenable) {
-      ds->zfunc = svga_translate_compare_func(templ->depth.func);
-      ds->zwriteenable = templ->depth.writemask;
+      ds->zfunc = svga_translate_compare_func(templ->depth_func);
+      ds->zwriteenable = templ->depth_writemask;
    }
    else {
       ds->zfunc = SVGA3D_CMP_ALWAYS;
    }
 
-   ds->alphatestenable = templ->alpha.enabled;
+   ds->alphatestenable = templ->alpha_enabled;
    if (ds->alphatestenable) {
-      ds->alphafunc = svga_translate_compare_func(templ->alpha.func);
-      ds->alpharef = templ->alpha.ref_value;
+      ds->alphafunc = svga_translate_compare_func(templ->alpha_func);
+      ds->alpharef = templ->alpha_ref_value;
    }
    else {
       ds->alphafunc = SVGA3D_CMP_ALWAYS;
@@ -263,7 +263,7 @@ svga_delete_depth_stencil_state(struct pipe_context *pipe, void *depth_stencil)
 
 static void
 svga_set_stencil_ref(struct pipe_context *pipe,
-                     const struct pipe_stencil_ref *stencil_ref)
+                     const struct pipe_stencil_ref stencil_ref)
 {
    struct svga_context *svga = svga_context(pipe);
 
@@ -272,7 +272,7 @@ svga_set_stencil_ref(struct pipe_context *pipe,
       svga_hwtnl_flush_retry(svga);
    }
 
-   svga->curr.stencil_ref = *stencil_ref;
+   svga->curr.stencil_ref = stencil_ref;
 
    svga->dirty |= SVGA_NEW_STENCIL_REF;
 }

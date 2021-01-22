@@ -128,6 +128,14 @@ struct zink_context {
 
    struct pipe_stencil_ref stencil_ref;
 
+   union {
+      struct {
+         float default_inner_level[2];
+         float default_outer_level[4];
+      };
+      float tess_levels[6];
+   };
+
    struct list_head suspended_queries;
    struct list_head primitives_generated_queries;
    bool queries_disabled, render_condition_active;
@@ -187,6 +195,9 @@ zink_blit(struct pipe_context *pctx,
 
 void
 zink_draw_vbo(struct pipe_context *pctx,
-              const struct pipe_draw_info *dinfo);
+              const struct pipe_draw_info *dinfo,
+              const struct pipe_draw_indirect_info *indirect,
+              const struct pipe_draw_start_count *draws,
+              unsigned num_draws);
 
 #endif

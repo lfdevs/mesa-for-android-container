@@ -1,3 +1,12 @@
+mesa (21.0.0~rc2-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * lavapipe-Defer-lavapipe-warning-to-CreateDevice.patch: Dropped,
+    upstream.
+  * rules: Fix osmesa confflag to use a boolean.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 22 Jan 2021 13:44:42 +0200
+
 mesa (20.3.3-1) unstable; urgency=medium
 
   * New upstream release.

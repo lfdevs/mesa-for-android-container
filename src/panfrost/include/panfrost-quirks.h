@@ -68,6 +68,9 @@
 /* Lack support for AFBC */
 #define MIDGARD_NO_AFBC (1 << 10)
 
+/* Does this GPU support anisotropic filtering? */
+#define HAS_ANISOTROPIC (1 << 11)
+
 /* Quirk collections common to particular uarchs */
 
 #define MIDGARD_QUIRKS (MIDGARD_BROKEN_FP16 | HAS_SWIZZLES \
@@ -75,10 +78,10 @@
                 | MIDGARD_MISSING_LOADS)
 
 /* TODO: AFBC on Bifrost */
-#define BIFROST_QUIRKS (IS_BIFROST | NO_BLEND_PACKS | MIDGARD_NO_AFBC)
+#define BIFROST_QUIRKS (IS_BIFROST | NO_BLEND_PACKS)
 
 static inline unsigned
-panfrost_get_quirks(unsigned gpu_id)
+panfrost_get_quirks(unsigned gpu_id, unsigned gpu_revision)
 {
         switch (gpu_id) {
         case 0x600:
@@ -105,12 +108,16 @@ panfrost_get_quirks(unsigned gpu_id)
                 return MIDGARD_QUIRKS;
 
         case 0x6000: /* G71 */
-        case 0x6221: /* G72 */
                 return BIFROST_QUIRKS | HAS_SWIZZLES;
+
+        case 0x6221: /* G72 */
+                /* Anisotropic filtering is supported from r0p3 onwards */
+                return BIFROST_QUIRKS | HAS_SWIZZLES
+                        | (gpu_revision >= 0x30 ? HAS_ANISOTROPIC : 0);
 
         case 0x7093: /* G31 */
         case 0x7212: /* G52 */
-                return BIFROST_QUIRKS;
+                return BIFROST_QUIRKS | HAS_ANISOTROPIC;
 
         default:
                 unreachable("Unknown Panfrost GPU ID");

@@ -29,6 +29,7 @@ gen_xml_files = [
   'gen9.xml',
   'gen11.xml',
   'gen12.xml',
+  'gen125.xml',
 ]
 
 genX_xml_h = custom_target(
@@ -47,7 +48,7 @@ genX_bits_h = custom_target(
 )
 
 gen_xml_pack = []
-foreach f : gen_xml_files
+foreach f : gen_xml_files + ['gen_rt.xml']
   _name = '@0@_pack.h'.format(f.split('.')[0])
   gen_xml_pack += custom_target(
     _name,

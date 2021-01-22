@@ -101,6 +101,13 @@ struct osmesa_context
 
    struct osmesa_buffer *current_buffer;
 
+   /* Storage for depth/stencil, if the user has requested access.  The backing
+    * driver always has its own storage for the actual depth/stencil, which we
+    * have to transfer in and out.
+    */
+   void *zs;
+   unsigned zs_stride;
+
    enum pipe_format depth_stencil_format, accum_format;
 
    GLenum format;         /*< User-specified context format */
@@ -114,18 +121,6 @@ struct osmesa_context
    struct pp_queue_t *pp;
 };
 
-
-/**
- * Linked list of all osmesa_buffers.
- * We can re-use an osmesa_buffer from one OSMesaMakeCurrent() call to
- * the next unless the color/depth/stencil/accum formats change.
- * We have to do this to be compatible with the original OSMesa implementation
- * because some apps call OSMesaMakeCurrent() several times during rendering
- * a frame.
- */
-static struct osmesa_buffer *BufferList = NULL;
-
-
 /**
  * Called from the ST manager.
  */
@@ -136,31 +131,37 @@ osmesa_st_get_param(struct st_manager *smapi, enum st_manager_param param)
    return 0;
 }
 
-
-/**
- * Create/return singleton st_api object.
- */
-static struct st_api *
-get_st_api(void)
-{
-   static struct st_api *stapi = NULL;
-   if (!stapi) {
-      stapi = st_gl_api_create();
-   }
-   return stapi;
-}
-
 static struct st_manager *stmgr = NULL;
+static struct st_api *stapi = NULL;
+
+static void
+destroy_st_manager(void)
+{
+   if (stmgr) {
+      if (stmgr->screen)
+         stmgr->screen->destroy(stmgr->screen);
+      FREE(stmgr);
+   }
+
+   if (stapi && stapi->destroy) {
+      stapi->destroy(stapi);
+   }
+}
 
 static void
 create_st_manager(void)
 {
+   if (atexit(destroy_st_manager) != 0)
+      return;
+
    stmgr = CALLOC_STRUCT(st_manager);
    if (stmgr) {
       stmgr->screen = osmesa_create_screen();
       stmgr->get_param = osmesa_st_get_param;
       stmgr->get_egl_image = NULL;
    }
+
+   stapi = st_gl_api_create();
 }
 
 /**
@@ -174,6 +175,53 @@ get_st_manager(void)
    call_once(&create_once_flag, create_st_manager);
 
    return stmgr;
+}
+
+/**
+ * Create/return singleton st_api object.
+ */
+static struct st_api *
+get_st_api(void)
+{
+   get_st_manager();
+   return stapi;
+}
+
+/* Reads the color or depth buffer from the backing context to either the user storage
+ * (color buffer) or our temporary (z/s)
+ */
+static void
+osmesa_read_buffer(OSMesaContext osmesa, struct pipe_resource *res, void *dst,
+                   int dst_stride, bool y_up)
+{
+   struct pipe_context *pipe = osmesa->stctx->pipe;
+
+   struct pipe_box box;
+   u_box_2d(0, 0, res->width0, res->height0, &box);
+
+   struct pipe_transfer *transfer = NULL;
+   ubyte *src = pipe->transfer_map(pipe, res, 0, PIPE_MAP_READ, &box,
+                                   &transfer);
+
+   /*
+    * Copy the color buffer from the resource to the user's buffer.
+    */
+
+   if (y_up) {
+      /* need to flip image upside down */
+      dst = (ubyte *)dst + (res->height0 - 1) * dst_stride;
+      dst_stride = -dst_stride;
+   }
+
+   unsigned bpp = util_format_get_blocksize(res->format);
+   for (unsigned y = 0; y < res->height0; y++)
+   {
+      memcpy(dst, src, bpp * res->width0);
+      dst = (ubyte *)dst + dst_stride;
+      src += transfer->stride;
+   }
+
+   pipe->transfer_unmap(pipe, transfer);
 }
 
 
@@ -316,13 +364,8 @@ osmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
 {
    OSMesaContext osmesa = OSMesaGetCurrentContext();
    struct osmesa_buffer *osbuffer = stfbi_to_osbuffer(stfbi);
-   struct pipe_context *pipe = stctx->pipe;
    struct pipe_resource *res = osbuffer->textures[statt];
-   struct pipe_transfer *transfer = NULL;
-   struct pipe_box box;
-   void *map;
-   ubyte *src, *dst;
-   unsigned y, bytes, bpp;
+   unsigned bpp;
    int dst_stride;
 
    if (osmesa->pp) {
@@ -347,36 +390,20 @@ osmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
       pp_run(osmesa->pp, res, res, zsbuf);
    }
 
-   u_box_2d(0, 0, res->width0, res->height0, &box);
-
-   map = pipe->transfer_map(pipe, res, 0, PIPE_MAP_READ, &box,
-                            &transfer);
-
-   /*
-    * Copy the color buffer from the resource to the user's buffer.
-    */
+   /* Snapshot the color buffer to the user's buffer. */
    bpp = util_format_get_blocksize(osbuffer->visual.color_format);
-   src = map;
-   dst = osbuffer->map;
    if (osmesa->user_row_length)
       dst_stride = bpp * osmesa->user_row_length;
    else
       dst_stride = bpp * osbuffer->width;
-   bytes = bpp * res->width0;
 
-   if (osmesa->y_up) {
-      /* need to flip image upside down */
-      dst = dst + (res->height0 - 1) * dst_stride;
-      dst_stride = -dst_stride;
+   osmesa_read_buffer(osmesa, res, osbuffer->map, dst_stride, osmesa->y_up);
+
+   /* If the user has requested the Z/S buffer, then snapshot that one too. */
+   if (osmesa->zs) {
+      osmesa_read_buffer(osmesa, osbuffer->textures[ST_ATTACHMENT_DEPTH_STENCIL],
+                         osmesa->zs, osmesa->zs_stride, true);
    }
-
-   for (y = 0; y < res->height0; y++) {
-      memcpy(dst, src, bytes);
-      dst += dst_stride;
-      src += transfer->stride;
-   }
-
-   pipe->transfer_unmap(pipe, transfer);
 
    return true;
 }
@@ -480,46 +507,15 @@ osmesa_create_buffer(enum pipe_format color_format,
 
       osmesa_init_st_visual(&osbuffer->visual, color_format,
                             ds_format, accum_format);
-
-      /* insert into linked list */
-      osbuffer->next = BufferList;
-      BufferList = osbuffer;
    }
 
    return osbuffer;
 }
 
 
-/**
- * Search linked list for a buffer with matching pixel formats and size.
- */
-static struct osmesa_buffer *
-osmesa_find_buffer(enum pipe_format color_format,
-                   enum pipe_format ds_format,
-                   enum pipe_format accum_format,
-                   GLsizei width, GLsizei height)
-{
-   struct osmesa_buffer *b;
-
-   /* Check if we already have a suitable buffer for the given formats */
-   for (b = BufferList; b; b = b->next) {
-      if (b->visual.color_format == color_format &&
-          b->visual.depth_stencil_format == ds_format &&
-          b->visual.accum_format == accum_format &&
-          b->width == width &&
-          b->height == height) {
-         return b;
-      }
-   }
-   return NULL;
-}
-
-
 static void
 osmesa_destroy_buffer(struct osmesa_buffer *osbuffer)
 {
-   struct st_api *stapi = get_st_api();
-
    /*
     * Notify the state manager that the associated framebuffer interface
     * is no longer valid.
@@ -730,6 +726,7 @@ OSMesaDestroyContext(OSMesaContext osmesa)
    if (osmesa) {
       pp_free(osmesa->pp);
       osmesa->stctx->destroy(osmesa->stctx);
+      free(osmesa->zs);
       FREE(osmesa);
    }
 }
@@ -762,7 +759,6 @@ OSMesaMakeCurrent(OSMesaContext osmesa, void *buffer, GLenum type,
                   GLsizei width, GLsizei height)
 {
    struct st_api *stapi = get_st_api();
-   struct osmesa_buffer *osbuffer;
    enum pipe_format color_format;
 
    if (!osmesa && !buffer) {
@@ -781,27 +777,33 @@ OSMesaMakeCurrent(OSMesaContext osmesa, void *buffer, GLenum type,
    }
 
    /* See if we already have a buffer that uses these pixel formats */
-   osbuffer = osmesa_find_buffer(color_format,
-                                 osmesa->depth_stencil_format,
-                                 osmesa->accum_format, width, height);
-   if (!osbuffer) {
-      /* Existing buffer found, create new buffer */
-      osbuffer = osmesa_create_buffer(color_format,
+   if (osmesa->current_buffer &&
+       (osmesa->current_buffer->visual.color_format != color_format ||
+        osmesa->current_buffer->visual.depth_stencil_format != osmesa->depth_stencil_format ||
+        osmesa->current_buffer->visual.accum_format != osmesa->accum_format)) {
+      osmesa_destroy_buffer(osmesa->current_buffer);
+   }
+
+   if (!osmesa->current_buffer) {
+      osmesa->current_buffer = osmesa_create_buffer(color_format,
                                       osmesa->depth_stencil_format,
                                       osmesa->accum_format);
    }
+
+   struct osmesa_buffer *osbuffer = osmesa->current_buffer;
 
    osbuffer->width = width;
    osbuffer->height = height;
    osbuffer->map = buffer;
 
-   /* XXX unused for now */
-   (void) osmesa_destroy_buffer;
-
-   osmesa->current_buffer = osbuffer;
    osmesa->type = type;
 
    stapi->make_current(stapi, osmesa->stctx, osbuffer->stfb, osbuffer->stfb);
+
+   /* XXX: We should probably load the current color value into the buffer here
+    * to match classic swrast behavior (context's fb starts with the contents of
+    * your pixel buffer).
+    */
 
    if (!osmesa->ever_used) {
       /* one-time init, just postprocessing for now */
@@ -914,25 +916,13 @@ OSMesaGetDepthBuffer(OSMesaContext c, GLint *width, GLint *height,
                      GLint *bytesPerValue, void **buffer)
 {
    struct osmesa_buffer *osbuffer = c->current_buffer;
-   struct pipe_context *pipe = c->stctx->pipe;
    struct pipe_resource *res = osbuffer->textures[ST_ATTACHMENT_DEPTH_STENCIL];
-   struct pipe_transfer *transfer = NULL;
-   struct pipe_box box;
 
-   /*
-    * Note: we can't really implement this function with gallium as
-    * we did for swrast.  We can't just map the resource and leave it
-    * mapped (and there's no OSMesaUnmapDepthBuffer() function) so
-    * we unmap the buffer here and return a 'stale' pointer.  This should
-    * actually be OK in most cases where the caller of this function
-    * immediately uses the pointer.
-    */
-
-   u_box_2d(0, 0, res->width0, res->height0, &box);
-
-   *buffer = pipe->transfer_map(pipe, res, 0, PIPE_MAP_READ, &box,
-                                &transfer);
-   if (!*buffer) {
+   if (!res) {
+      *width = 0;
+      *height = 0;
+      *bytesPerValue = 0;
+      *buffer = NULL;
       return GL_FALSE;
    }
 
@@ -940,7 +930,16 @@ OSMesaGetDepthBuffer(OSMesaContext c, GLint *width, GLint *height,
    *height = res->height0;
    *bytesPerValue = util_format_get_blocksize(res->format);
 
-   pipe->transfer_unmap(pipe, transfer);
+   if (!c->zs) {
+      c->zs_stride = *width * *bytesPerValue;
+      c->zs = calloc(c->zs_stride, *height);
+      if (!c->zs)
+         return GL_FALSE;
+
+      osmesa_read_buffer(c, res, c->zs, c->zs_stride, true);
+   }
+
+   *buffer = c->zs;
 
    return GL_TRUE;
 }

@@ -188,21 +188,17 @@ static void
 lower_load_push_constant(nir_builder *b, nir_intrinsic_instr *instr,
                          struct tu_shader *shader)
 {
-   nir_intrinsic_instr *load =
-      nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_uniform);
-   load->num_components = instr->num_components;
    uint32_t base = nir_intrinsic_base(instr);
    assert(base % 4 == 0);
    assert(base >= shader->push_consts.lo * 16);
    base -= shader->push_consts.lo * 16;
-   nir_intrinsic_set_base(load, base / 4);
-   load->src[0] =
-      nir_src_for_ssa(nir_ushr(b, instr->src[0].ssa, nir_imm_int(b, 2)));
-   nir_ssa_dest_init(&load->instr, &load->dest,
-                     load->num_components, instr->dest.ssa.bit_size,
-                     instr->dest.ssa.name);
-   nir_builder_instr_insert(b, &load->instr);
-   nir_ssa_def_rewrite_uses(&instr->dest.ssa, nir_src_for_ssa(&load->dest.ssa));
+
+   nir_ssa_def *load =
+      nir_load_uniform(b, instr->num_components, instr->dest.ssa.bit_size,
+                       nir_ushr(b, instr->src[0].ssa, nir_imm_int(b, 2)),
+                       .base = base / 4);
+
+   nir_ssa_def_rewrite_uses(&instr->dest.ssa, nir_src_for_ssa(load));
 
    nir_instr_remove(&instr->instr);
 }
@@ -281,15 +277,8 @@ lower_ssbo_ubo_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin)
       /* if (base_idx == i) { ... */
       nir_if *nif = nir_push_if(b, nir_ieq_imm(b, base_idx, i));
 
-      nir_intrinsic_instr *bindless =
-         nir_intrinsic_instr_create(b->shader,
-                                    nir_intrinsic_bindless_resource_ir3);
-      bindless->num_components = 0;
-      nir_ssa_dest_init(&bindless->instr, &bindless->dest,
-                        1, 32, NULL);
-      nir_intrinsic_set_desc_set(bindless, i);
-      bindless->src[0] = nir_src_for_ssa(descriptor_idx);
-      nir_builder_instr_insert(b, &bindless->instr);
+      nir_ssa_def *bindless =
+         nir_bindless_resource_ir3(b, 32, descriptor_idx, .desc_set = i);
 
       nir_intrinsic_instr *copy =
          nir_intrinsic_instr_create(b->shader, intrin->intrinsic);
@@ -298,7 +287,7 @@ lower_ssbo_ubo_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin)
 
       for (unsigned src = 0; src < info->num_srcs; src++) {
          if (src == buffer_src)
-            copy->src[src] = nir_src_for_ssa(&bindless->dest.ssa);
+            copy->src[src] = nir_src_for_ssa(bindless);
          else
             copy->src[src] = nir_src_for_ssa(intrin->src[src].ssa);
       }
@@ -391,17 +380,7 @@ build_bindless(nir_builder *b, nir_deref_instr *deref, bool is_sampler,
                              nir_imul_imm(b, arr_index, descriptor_stride));
    }
 
-   nir_intrinsic_instr *bindless =
-      nir_intrinsic_instr_create(b->shader,
-                                 nir_intrinsic_bindless_resource_ir3);
-   bindless->num_components = 0;
-   nir_ssa_dest_init(&bindless->instr, &bindless->dest,
-                     1, 32, NULL);
-   nir_intrinsic_set_desc_set(bindless, set);
-   bindless->src[0] = nir_src_for_ssa(desc_offset);
-   nir_builder_instr_insert(b, &bindless->instr);
-
-   return &bindless->dest.ssa;
+   return nir_bindless_resource_ir3(b, 32, desc_offset, .desc_set = set);
 }
 
 static void
@@ -670,6 +649,50 @@ tu_lower_io(nir_shader *shader, struct tu_shader *tu_shader,
    return progress;
 }
 
+static bool
+lower_image_size_filter(const nir_instr *instr, UNUSED const void *data)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+   if(intrin->intrinsic != nir_intrinsic_bindless_image_size)
+      return false;
+
+   return (intrin->num_components == 3 && nir_intrinsic_image_dim(intrin) == GLSL_SAMPLER_DIM_CUBE);
+}
+
+/* imageSize() expects the last component of the return value to be the
+ * number of layers in the texture array. In the case of cube map array,
+ * it will return a ivec3, with the third component being the number of
+ * layer-faces. Therefore, we need to divide it by 6 (# faces of the
+ * cube map).
+ */
+static nir_ssa_def *
+lower_image_size_lower(nir_builder *b, nir_instr *instr, UNUSED void *data)
+{
+   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+   b->cursor = nir_after_instr(&intrin->instr);
+   nir_ssa_def *channels[NIR_MAX_VEC_COMPONENTS];
+   for (unsigned i = 0; i < intrin->num_components; i++) {
+      channels[i] = nir_vector_extract(b, &intrin->dest.ssa, nir_imm_int(b, i));
+   }
+
+   channels[2] = nir_idiv(b, channels[2], nir_imm_int(b, 6u));
+   nir_ssa_def *result = nir_vec(b, channels, intrin->num_components);
+
+   return result;
+}
+
+static bool
+tu_lower_image_size(nir_shader *shader)
+{
+   return nir_shader_lower_instructions(shader,
+                                        lower_image_size_filter,
+                                        lower_image_size_lower,
+                                        NULL);
+}
+
 static void
 shared_type_info(const struct glsl_type *type, unsigned *size, unsigned *align)
 {
@@ -792,6 +815,8 @@ tu_shader_create(struct tu_device *dev,
    nir_assign_io_var_locations(nir, nir_var_shader_out, &nir->num_outputs, nir->info.stage);
 
    NIR_PASS_V(nir, tu_lower_io, shader, layout);
+
+   NIR_PASS_V(nir, tu_lower_image_size);
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 

@@ -220,7 +220,7 @@ class ArgumentParser(argparse.ArgumentParser):
         ''' Better help formatter for argument parser '''
 
         def _split_lines(self, text, width):
-            ''' optimized split lines algorighm, indents split lines '''
+            ''' optimized split lines algorithm, indents split lines '''
             lines = text.splitlines()
             out_lines = []
             if len(lines):

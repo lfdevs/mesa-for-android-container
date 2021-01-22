@@ -134,6 +134,9 @@ class Format(Enum):
                  ('uint8_t', 'row_mask', '0xF'),
                  ('uint8_t', 'bank_mask', '0xF'),
                  ('bool', 'bound_ctrl', 'true')]
+      elif self == Format.VOP3P:
+         return [('uint8_t', 'opsel_lo', None),
+                 ('uint8_t', 'opsel_hi', None)]
       elif self in [Format.FLAT, Format.GLOBAL, Format.SCRATCH]:
          return [('uint16_t', 'offset', 0),
                  ('memory_sync_info', 'sync', 'memory_sync_info()'),
@@ -212,25 +215,24 @@ class Opcode(object):
       self.operand_size = op_dtype_sizes.get(op_dtype, 32)
       self.definition_size = def_dtype_sizes.get(def_dtype, self.operand_size)
 
-      # exceptions
-      if self.operand_size == 16 and op_dtype != 'f16':
-         self.operand_size = 16
+      # exceptions for operands:
+      if 'sad_' in name:
+        self.operand_size = 0
+      elif name in ['v_mad_u64_u32', 'v_mad_i64_i32']:
+        self.operand_size = 0
       elif self.operand_size == 24:
         self.operand_size = 32
-      elif name in ['s_sext_i32_i8', 's_sext_i32_i16', 'v_msad_u8', 'v_cvt_pk_u16_u32', 'v_cvt_pk_i16_i32']:
-         self.operand_size = 32
-      elif name in ['v_qsad_pk_u16_u8', 'v_mqsad_pk_u16_u8', 'v_mqsad_u32_u8']:
-         self.definition_size = 0
-         self.operand_size = 0
-      elif name in ['v_mad_u64_u32', 'v_mad_i64_i32']:
-         self.operand_size = 0
-      elif '_pk' in name or name in ['v_lerp_u8', 'v_sad_u8', 'v_sad_u16',
-                                      'v_cvt_f32_ubyte0', 'v_cvt_f32_ubyte1',
-                                      'v_cvt_f32_ubyte2', 'v_cvt_f32_ubyte3']:
-         self.operand_size = 32
-         self.definition_size = 32
-      elif '_pknorm_' in name:
-         self.definition_size = 32
+      elif op_dtype == 'u8' or op_dtype == 'i8':
+        self.operand_size = 32
+      elif name in ['v_cvt_f32_ubyte0', 'v_cvt_f32_ubyte1',
+                    'v_cvt_f32_ubyte2', 'v_cvt_f32_ubyte3']:
+        self.operand_size = 32
+
+      # exceptions for definitions:
+      if 'sad_' in name:
+        self.definition_size = 0
+      elif '_pk' in name:
+        self.definition_size = 32
 
 
 # global dictionary of opcodes
@@ -284,8 +286,6 @@ opcode("p_load_helper")
 opcode("p_demote_to_helper")
 opcode("p_is_helper")
 opcode("p_exit_early_if")
-
-opcode("p_fs_buffer_store_smem", format=Format.SMEM)
 
 # simulates proper bpermute behavior when it's unsupported, eg. GFX10 wave64
 opcode("p_bpermute")
@@ -704,9 +704,9 @@ VOP2 = {
    (  -1,   -1, 0x31, 0x31,   -1, "v_min_u16", False),
    (  -1,   -1, 0x32, 0x32,   -1, "v_min_i16", False),
    (  -1,   -1, 0x33, 0x33, 0x3b, "v_ldexp_f16", False),
-   (  -1,   -1, 0x34, 0x34, 0x25, "v_add_u32", False), # v_add_nc_u32 in RDNA
-   (  -1,   -1, 0x35, 0x35, 0x26, "v_sub_u32", False), # v_sub_nc_u32 in RDNA
-   (  -1,   -1, 0x36, 0x36, 0x27, "v_subrev_u32", False), # v_subrev_nc_u32 in RDNA
+   (  -1,   -1,   -1, 0x34, 0x25, "v_add_u32", False), # use v_add_co_u32 on GFX8, called v_add_nc_u32 in RDNA
+   (  -1,   -1,   -1, 0x35, 0x26, "v_sub_u32", False), # use v_sub_co_u32 on GFX8, called v_sub_nc_u32 in RDNA
+   (  -1,   -1,   -1, 0x36, 0x27, "v_subrev_u32", False), # use v_subrev_co_u32 on GFX8, called v_subrev_nc_u32 in RDNA
    (  -1,   -1,   -1,   -1, 0x36, "v_fmac_f16", False),
    (  -1,   -1,   -1,   -1, 0x37, "v_fmamk_f16", False),
    (  -1,   -1,   -1,   -1, 0x38, "v_fmaak_f16", False),
@@ -906,33 +906,34 @@ for i in range(8):
 
 # VOPP instructions: packed 16bit instructions - 1 or 2 inputs and 1 output
 VOPP = {
-   (0x00, "v_pk_mad_i16"),
-   (0x01, "v_pk_mul_lo_u16"),
-   (0x02, "v_pk_add_i16"),
-   (0x03, "v_pk_sub_i16"),
-   (0x04, "v_pk_lshlrev_b16"),
-   (0x05, "v_pk_lshrrev_b16"),
-   (0x06, "v_pk_ashrrev_i16"),
-   (0x07, "v_pk_max_i16"),
-   (0x08, "v_pk_min_i16"),
-   (0x09, "v_pk_mad_u16"),
-   (0x0a, "v_pk_add_u16"),
-   (0x0b, "v_pk_sub_u16"),
-   (0x0c, "v_pk_max_u16"),
-   (0x0d, "v_pk_min_u16"),
-   (0x0e, "v_pk_fma_f16"),
-   (0x0f, "v_pk_add_f16"),
-   (0x10, "v_pk_mul_f16"),
-   (0x11, "v_pk_min_f16"),
-   (0x12, "v_pk_max_f16"),
-   (0x20, "v_pk_fma_mix_f32"), # v_mad_mix_f32 in VEGA ISA, v_fma_mix_f32 in RDNA ISA
-   (0x21, "v_pk_fma_mixlo_f16"), # v_mad_mixlo_f16 in VEGA ISA, v_fma_mixlo_f16 in RDNA ISA
-   (0x22, "v_pk_fma_mixhi_f16"), # v_mad_mixhi_f16 in VEGA ISA, v_fma_mixhi_f16 in RDNA ISA
+   # opcode, name, input/output modifiers
+   (0x00, "v_pk_mad_i16", False),
+   (0x01, "v_pk_mul_lo_u16", False),
+   (0x02, "v_pk_add_i16", False),
+   (0x03, "v_pk_sub_i16", False),
+   (0x04, "v_pk_lshlrev_b16", False),
+   (0x05, "v_pk_lshrrev_b16", False),
+   (0x06, "v_pk_ashrrev_i16", False),
+   (0x07, "v_pk_max_i16", False),
+   (0x08, "v_pk_min_i16", False),
+   (0x09, "v_pk_mad_u16", False),
+   (0x0a, "v_pk_add_u16", False),
+   (0x0b, "v_pk_sub_u16", False),
+   (0x0c, "v_pk_max_u16", False),
+   (0x0d, "v_pk_min_u16", False),
+   (0x0e, "v_pk_fma_f16", True),
+   (0x0f, "v_pk_add_f16", True),
+   (0x10, "v_pk_mul_f16", True),
+   (0x11, "v_pk_min_f16", True),
+   (0x12, "v_pk_max_f16", True),
+   (0x20, "v_fma_mix_f32", True), # v_mad_mix_f32 in VEGA ISA, v_fma_mix_f32 in RDNA ISA
+   (0x21, "v_fma_mixlo_f16", True), # v_mad_mixlo_f16 in VEGA ISA, v_fma_mixlo_f16 in RDNA ISA
+   (0x22, "v_fma_mixhi_f16", True), # v_mad_mixhi_f16 in VEGA ISA, v_fma_mixhi_f16 in RDNA ISA
 }
 # note that these are only supported on gfx9+ so we'll need to distinguish between gfx8 and gfx9 here
 # (gfx6, gfx7, gfx8, gfx9, gfx10, name) = (-1, -1, -1, code, code, name)
-for (code, name) in VOPP:
-   opcode(name, -1, code, code, Format.VOP3P)
+for (code, name, modifiers) in VOPP:
+   opcode(name, -1, code, code, Format.VOP3P, modifiers, modifiers)
 
 
 # VINTERP instructions: 

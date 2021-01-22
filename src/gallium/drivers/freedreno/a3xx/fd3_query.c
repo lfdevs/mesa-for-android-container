@@ -25,6 +25,7 @@
  */
 
 #include "freedreno_query_hw.h"
+#include "freedreno_batch.h"
 #include "freedreno_context.h"
 #include "freedreno_util.h"
 

@@ -387,7 +387,11 @@ VkResult anv_ResetCommandBuffer(
       gen11_##func(__VA_ARGS__);                   \
       break;                                       \
    case 12:                                        \
-      gen12_##func(__VA_ARGS__);                   \
+      if (gen_device_info_is_12hp(devinfo)) {      \
+         gen125_##func(__VA_ARGS__);               \
+      } else {                                     \
+         gen12_##func(__VA_ARGS__);                \
+      }                                            \
       break;                                       \
    default:                                        \
       assert(!"Unknown hardware generation");      \

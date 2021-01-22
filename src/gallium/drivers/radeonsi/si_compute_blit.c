@@ -60,15 +60,13 @@ unsigned si_get_flush_flags(struct si_context *sctx, enum si_coherency coher,
    }
 }
 
-#define SI_CS_IMAGE_OP           (1 << 0)
-#define SI_CS_WAIT_FOR_IDLE      (1 << 1)
-#define SI_CS_RENDER_COND_ENABLE (1 << 2)
-
-static void si_launch_grid_internal(struct si_context *sctx, struct pipe_grid_info *info,
+void si_launch_grid_internal(struct si_context *sctx, struct pipe_grid_info *info,
                                     void *restore_cs, unsigned flags)
 {
    /* Wait for previous shaders to finish. */
-   sctx->flags |= SI_CONTEXT_CS_PARTIAL_FLUSH | SI_CONTEXT_PS_PARTIAL_FLUSH;
+   sctx->flags |= SI_CONTEXT_PS_PARTIAL_FLUSH;
+   if (!(flags & SI_CS_PARTIAL_FLUSH_DISABLE))
+      sctx->flags |= SI_CONTEXT_CS_PARTIAL_FLUSH;
    /* Invalidate L0-L1 caches. */
    /* sL0 is never invalidated, because src resources don't use it. */
    sctx->flags |= SI_CONTEXT_INV_VCACHE;
@@ -356,7 +354,7 @@ void si_clear_buffer(struct si_context *sctx, struct pipe_resource *dst, uint64_
                                      clear_value_size, coher);
       } else {
          assert(clear_value_size == 4);
-         si_cp_dma_clear_buffer(sctx, sctx->gfx_cs, dst, offset, aligned_size, *clear_value, 0,
+         si_cp_dma_clear_buffer(sctx, &sctx->gfx_cs, dst, offset, aligned_size, *clear_value, 0,
                                 coher, get_cache_policy(sctx, coher, size));
       }
 
@@ -372,6 +370,17 @@ void si_clear_buffer(struct si_context *sctx, struct pipe_resource *dst, uint64_
 
       pipe_buffer_write(&sctx->b, dst, offset, size, clear_value);
    }
+}
+
+void si_screen_clear_buffer(struct si_screen *sscreen, struct pipe_resource *dst, uint64_t offset,
+                            uint64_t size, unsigned value)
+{
+   struct si_context *ctx = (struct si_context *)sscreen->aux_context;
+
+   simple_mtx_lock(&sscreen->aux_context_lock);
+   ctx->b.clear_buffer(&ctx->b, dst, offset, size, &value, 4);
+   sscreen->aux_context->flush(sscreen->aux_context, NULL, 0);
+   simple_mtx_unlock(&sscreen->aux_context_lock);
 }
 
 static void si_pipe_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
@@ -520,7 +529,6 @@ void si_compute_copy_image(struct si_context *sctx, struct pipe_resource *dst, u
 
    /* SNORM8 blitting has precision issues on some chips. Use the SINT
     * equivalent instead, which doesn't force DCC decompression.
-    * Note that some chips avoid this issue by using SDMA.
     */
    if (util_format_is_snorm8(dst->format)) {
       image[0].format = image[1].format = util_format_snorm8_to_sint8(dst->format);

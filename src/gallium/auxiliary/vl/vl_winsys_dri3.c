@@ -45,6 +45,8 @@
 #include "vl/vl_compositor.h"
 #include "vl/vl_winsys.h"
 
+#include "drm-uapi/drm_fourcc.h"
+
 #define BACK_BUFFER_NUM 3
 
 struct vl_dri3_buffer
@@ -492,6 +494,7 @@ dri3_get_front_buffer(struct vl_dri3_screen *scrn)
    whandle.type = WINSYS_HANDLE_TYPE_FD;
    whandle.handle = (unsigned)fds[0];
    whandle.stride = bp_reply->stride;
+   whandle.modifier = DRM_FORMAT_MOD_INVALID;
    memset(&templ, 0, sizeof(templ));
    templ.bind = PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW;
    templ.format = vl_dri2_format_for_depth(&scrn->base, bp_reply->depth);
@@ -552,6 +555,7 @@ dri3_get_screen_for_root(xcb_connection_t *conn, xcb_window_t root)
 
 static void
 vl_dri3_flush_frontbuffer(struct pipe_screen *screen,
+                          struct pipe_context *pipe,
                           struct pipe_resource *resource,
                           unsigned level, unsigned layer,
                           void *context_private, struct pipe_box *sub_box)

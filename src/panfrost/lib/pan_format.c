@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include "midgard_pack.h"
 #include "pan_texture.h"
+#include "panfrost-quirks.h"
 
 /* Convenience */
 
@@ -95,6 +96,8 @@ panfrost_blend_format(enum pipe_format format)
 #define FLAGS__T_Z (_T | _Z)
 
 #define V6_000R PAN_V6_SWIZZLE(0, 0, 0, R)
+#define V6_0R00 PAN_V6_SWIZZLE(0, R, 0, 0)
+#define V6_0A00 PAN_V6_SWIZZLE(0, A, 0, 0)
 #define V6_A001 PAN_V6_SWIZZLE(A, 0, 0, 1)
 #define V6_ABG1 PAN_V6_SWIZZLE(A, B, G, 1)
 #define V6_ABGR PAN_V6_SWIZZLE(A, B, G, R)
@@ -186,6 +189,7 @@ const struct panfrost_format panfrost_pipe_format_v6[PIPE_FORMAT_COUNT] = {
         PAN_V6(ASTC_10x10_SRGB,         ASTC_2D_LDR,     RGBA, S, _T__),
         PAN_V6(ASTC_12x10_SRGB,         ASTC_2D_LDR,     RGBA, S, _T__),
         PAN_V6(ASTC_12x12_SRGB,         ASTC_2D_LDR,     RGBA, S, _T__),
+        PAN_V6(R5G6B5_UNORM,            RGB565,          RGB1, L, VTR_),
         PAN_V6(B5G6R5_UNORM,            RGB565,          BGR1, L, VTR_),
         PAN_V6(B5G5R5X1_UNORM,          RGB5_A1_UNORM,   BGR1, L, VT__),
         PAN_V6(R5G5B5A1_UNORM,          RGB5_A1_UNORM,   RGBA, L, VTR_),
@@ -240,9 +244,9 @@ const struct panfrost_format panfrost_pipe_format_v6[PIPE_FORMAT_COUNT] = {
         PAN_V6(Z24X8_UNORM,             Z24X8_UNORM,     R000, L, _T_Z),
         PAN_V6(Z32_FLOAT,               R32F,            R000, L, _T_Z),
         PAN_V6(Z32_FLOAT_S8X24_UINT,    R32F,            R000, L, _T_Z),
-        PAN_V6(X32_S8X24_UINT,          R32UI,           R001, L, _T__),
-        PAN_V6(X24S8_UINT,              RGBA8UI,         A001, L, _T_Z),
-        PAN_V6(S8_UINT,                 R8UI,            R001, L, _T__),
+        PAN_V6(X32_S8X24_UINT,          R32UI,           0R00, L, _T__),
+        PAN_V6(X24S8_UINT,              RGBA8UI,         0A00, L, _T_Z),
+        PAN_V6(S8_UINT,                 R8UI,            0R00, L, _T__),
         PAN_V6(R32_FIXED,               R32_FIXED,       R001, L, V___),
         PAN_V6(R32G32_FIXED,            RG32_FIXED,      RG01, L, V___),
         PAN_V6(R32G32B32_FIXED,         RGB32_FIXED,     RGB1, L, V___),
@@ -436,6 +440,7 @@ const struct panfrost_format panfrost_pipe_format_v7[PIPE_FORMAT_COUNT] = {
         PAN_V7(ASTC_10x10_SRGB,         ASTC_2D_LDR,     RGBA, S, _T__),
         PAN_V7(ASTC_12x10_SRGB,         ASTC_2D_LDR,     RGBA, S, _T__),
         PAN_V7(ASTC_12x12_SRGB,         ASTC_2D_LDR,     RGBA, S, _T__),
+        PAN_V7(R5G6B5_UNORM,            RGB565,          RGB1, L, VTR_),
         PAN_V7(B5G6R5_UNORM,            RGB565,          BGR1, L, VTR_),
         PAN_V7(B5G5R5X1_UNORM,          RGB5_A1_UNORM,   BGR1, L, VT__),
         PAN_V7(R5G5B5A1_UNORM,          RGB5_A1_UNORM,   RGBA, L, VTR_),
@@ -485,14 +490,14 @@ const struct panfrost_format panfrost_pipe_format_v7[PIPE_FORMAT_COUNT] = {
         PAN_V7(R32G32B32_SSCALED,       RGB32I,          RGB1, L, V___),
         PAN_V7(R32G32B32A32_SSCALED,    RGBA32I,         RGBA, L, V___),
         PAN_V7(R3G3B2_UNORM,            RGB332_UNORM,    RGB1, L, VT__),
-        PAN_V7(Z16_UNORM,               R16_UNORM,       RGBA, L, _T_Z),
+        PAN_V7(Z16_UNORM,               RGB332_UNORM /* XXX: Deduplicate enum */,    RGBA, L, _T_Z),
         PAN_V7(Z24_UNORM_S8_UINT,       Z24X8_UNORM,     RGBA, L, _T_Z),
         PAN_V7(Z24X8_UNORM,             Z24X8_UNORM,     RGBA, L, _T_Z),
         PAN_V7(Z32_FLOAT,               R32F,            RGBA, L, _T_Z),
         PAN_V7(Z32_FLOAT_S8X24_UINT,    R32F,            RGBA, L, _T_Z),
-        PAN_V7(X32_S8X24_UINT,          S8X24,           GRBA, L, _T__),
-        PAN_V7(X24S8_UINT,              TILEBUFFER_NATIVE /* XXX: Deduplicate enum */, GRBA, L, _T_Z),
-        PAN_V7(S8_UINT,                 S8,              GRBA, L, _T__),
+        PAN_V7(X32_S8X24_UINT,          S8X24,           RGBA, L, _T__),
+        PAN_V7(X24S8_UINT,              TILEBUFFER_NATIVE /* XXX: Deduplicate enum */, RGBA, L, _T_Z),
+        PAN_V7(S8_UINT,                 S8,              RGBA, L, _T__),
         PAN_V7(R32_FIXED,               R32_FIXED,       RGB1, L, V___),
         PAN_V7(R32G32_FIXED,            RG32_FIXED,      RGB1, L, V___),
         PAN_V7(R32G32B32_FIXED,         RGB32_FIXED,     RGB1, L, V___),
@@ -672,34 +677,44 @@ panfrost_invert_swizzle(const unsigned char *in, unsigned char *out)
         }
 }
 
-enum mali_format
-panfrost_format_to_bifrost_blend(const struct util_format_description *desc, bool dither)
+unsigned
+panfrost_format_to_bifrost_blend(const struct panfrost_device *dev,
+                                 const struct util_format_description *desc, bool dither)
 {
         struct pan_blendable_format fmt = panfrost_blend_format(desc->format);
 
         /* Formats requiring blend shaders are stored raw in the tilebuffer */
         if (!fmt.internal)
-                return desc->format;
+                return dev->formats[desc->format].hw;
+
+        unsigned extra = 0;
+
+        if (dev->quirks & HAS_SWIZZLES)
+                extra |= panfrost_get_default_swizzle(4);
+
+        if (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB)
+                extra |= 1 << 20;
 
         /* Else, pick the pixel format matching the tilebuffer format */
         switch (fmt.internal) {
-        case MALI_COLOR_BUFFER_INTERNAL_FORMAT_R8G8B8A8:
-                return MALI_RGBA8_TB;
+#define TB_FORMAT(in, out) \
+        case MALI_COLOR_BUFFER_INTERNAL_FORMAT_ ## in: \
+                return (MALI_ ## out << 12) | extra
 
-        case MALI_COLOR_BUFFER_INTERNAL_FORMAT_R10G10B10A2:
-                return MALI_RGB10_A2_TB;
+#define TB_FORMAT_DITHER(in, out) \
+        case MALI_COLOR_BUFFER_INTERNAL_FORMAT_ ## in: \
+                return ((dither ? MALI_ ## out ## _AU : MALI_ ## out ## _PU) << 12) | extra
 
-        case MALI_COLOR_BUFFER_INTERNAL_FORMAT_R8G8B8A2:
-                return dither ? MALI_RGB8_A2_AU : MALI_RGB8_A2_PU;
+        TB_FORMAT(R8G8B8A8, RGBA8_TB);
+        TB_FORMAT(R10G10B10A2, RGB10_A2_TB);
+        TB_FORMAT_DITHER(R8G8B8A2, RGB8_A2);
+        TB_FORMAT_DITHER(R4G4B4A4, RGBA4);
+        TB_FORMAT_DITHER(R5G6B5A0, R5G6B5);
+        TB_FORMAT_DITHER(R5G5B5A1, RGB5_A1);
 
-        case MALI_COLOR_BUFFER_INTERNAL_FORMAT_R4G4B4A4:
-                return dither ? MALI_RGBA4_AU : MALI_RGBA4_PU;
+#undef TB_FORMAT_DITHER
+#undef TB_FORMAT
 
-        case MALI_COLOR_BUFFER_INTERNAL_FORMAT_R5G6B5A0:
-                return dither ? MALI_R5G6B5_AU : MALI_R5G6B5_PU;
-
-        case MALI_COLOR_BUFFER_INTERNAL_FORMAT_R5G5B5A1:
-                return dither ? MALI_RGB5_A1_AU : MALI_RGB5_A1_PU;
         default:
                 unreachable("invalid internal blendable");
         }

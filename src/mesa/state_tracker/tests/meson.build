@@ -22,7 +22,7 @@ libmesa_st_test_common = static_library(
   'mesa_st_test_common',
   ['st_tests_common.cpp', ir_expression_operation_h],
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
-  dependencies : idep_gtest,
+  dependencies : [idep_gtest, idep_mesautil],
 )
 
 test(

@@ -43,7 +43,6 @@ namespace pipe_tessellator_wrap
       PIPE_ALIGN_VAR(32) float     domain_points_u[MAX_POINT_COUNT];
       PIPE_ALIGN_VAR(32) float     domain_points_v[MAX_POINT_COUNT];
       uint32_t               num_domain_points;
-      PIPE_ALIGN_VAR(32) uint32_t  indices[3][MAX_INDEX_COUNT / 3];
 
    public:
       void Init(enum pipe_prim_type tes_prim_mode,

@@ -166,14 +166,14 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
    /* Get first image here, since intelObj->firstLevel will get set in
     * the intel_finalize_mipmap_tree() call above.
     */
-   firstImage = tObj->Image[0][tObj->BaseLevel];
+   firstImage = tObj->Image[0][tObj->Attrib.BaseLevel];
 
    drm_intel_bo_reference(intelObj->mt->region->bo);
    i915->state.tex_buffer[unit] = intelObj->mt->region->bo;
    i915->state.tex_offset[unit] = intelObj->mt->offset;
 
    format = translate_texture_format(firstImage->TexFormat,
-				     tObj->DepthMode);
+				     tObj->Attrib.DepthMode);
 
    state[I915_TEXREG_MS3] =
       (((firstImage->Height - 1) << MS3_HEIGHT_SHIFT) |
@@ -189,7 +189,7 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
     * (lowest resolution) LOD.  Use it to cover both MAX_LEVEL and
     * MAX_LOD.
     */
-   maxlod = MIN2(sampler->MaxLod, tObj->_MaxLevel - tObj->BaseLevel);
+   maxlod = MIN2(sampler->Attrib.MaxLod, tObj->_MaxLevel - tObj->Attrib.BaseLevel);
    state[I915_TEXREG_MS4] =
       ((((intelObj->mt->region->pitch / 4) - 1) << MS4_PITCH_SHIFT) |
        MS4_CUBE_FACE_ENA_MASK |
@@ -200,7 +200,7 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
    {
       GLuint minFilt, mipFilt, magFilt;
 
-      switch (sampler->MinFilter) {
+      switch (sampler->Attrib.MinFilter) {
       case GL_NEAREST:
          minFilt = FILTER_NEAREST;
          mipFilt = MIPFILTER_NONE;
@@ -229,16 +229,16 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
          return false;
       }
 
-      if (sampler->MaxAnisotropy > 1.0) {
+      if (sampler->Attrib.MaxAnisotropy > 1.0) {
          minFilt = FILTER_ANISOTROPIC;
          magFilt = FILTER_ANISOTROPIC;
-         if (sampler->MaxAnisotropy > 2.0)
+         if (sampler->Attrib.MaxAnisotropy > 2.0)
             aniso = SS2_MAX_ANISO_4;
          else
             aniso = SS2_MAX_ANISO_2;
       }
       else {
-         switch (sampler->MagFilter) {
+         switch (sampler->Attrib.MagFilter) {
          case GL_NEAREST:
             magFilt = FILTER_NEAREST;
             break;
@@ -250,7 +250,7 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
          }
       }
 
-      lodbias = (int) ((tUnit->LodBias + sampler->LodBias) * 16.0);
+      lodbias = (int) ((tUnit->LodBias + sampler->Attrib.LodBias) * 16.0);
       if (lodbias < -256)
           lodbias = -256;
       if (lodbias > 255)
@@ -266,14 +266,14 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
 
       /* Shadow:
        */
-      if (sampler->CompareMode == GL_COMPARE_R_TO_TEXTURE_ARB &&
+      if (sampler->Attrib.CompareMode == GL_COMPARE_R_TO_TEXTURE_ARB &&
           tObj->Target != GL_TEXTURE_3D) {
          if (tObj->Target == GL_TEXTURE_1D) 
             return false;
 
          state[I915_TEXREG_SS2] |=
             (SS2_SHADOW_ENABLE |
-             intel_translate_shadow_compare_func(sampler->CompareFunc));
+             intel_translate_shadow_compare_func(sampler->Attrib.CompareFunc));
 
          minFilt = FILTER_4X4_FLAT;
          magFilt = FILTER_4X4_FLAT;
@@ -286,9 +286,9 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
    }
 
    {
-      GLenum ws = sampler->WrapS;
-      GLenum wt = sampler->WrapT;
-      GLenum wr = sampler->WrapR;
+      GLenum ws = sampler->Attrib.WrapS;
+      GLenum wt = sampler->Attrib.WrapT;
+      GLenum wr = sampler->Attrib.WrapR;
       float minlod;
 
       /* We program 1D textures as 2D textures, so the 2D texcoord could
@@ -306,8 +306,8 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
        * clamp_to_border.
        */
       if (tObj->Target == GL_TEXTURE_3D &&
-          (sampler->MinFilter != GL_NEAREST ||
-           sampler->MagFilter != GL_NEAREST) &&
+          (sampler->Attrib.MinFilter != GL_NEAREST ||
+           sampler->Attrib.MagFilter != GL_NEAREST) &&
           (ws == GL_CLAMP ||
            wt == GL_CLAMP ||
            wr == GL_CLAMP ||
@@ -352,24 +352,24 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
           (translate_wrap_mode(wt) << SS3_TCY_ADDR_MODE_SHIFT) |
           (translate_wrap_mode(wr) << SS3_TCZ_ADDR_MODE_SHIFT));
 
-      minlod = MIN2(sampler->MinLod, tObj->_MaxLevel - tObj->BaseLevel);
+      minlod = MIN2(sampler->Attrib.MinLod, tObj->_MaxLevel - tObj->Attrib.BaseLevel);
       state[I915_TEXREG_SS3] |= (unit << SS3_TEXTUREMAP_INDEX_SHIFT);
       state[I915_TEXREG_SS3] |= (U_FIXED(CLAMP(minlod, 0.0, 11.0), 4) <<
 				 SS3_MIN_LOD_SHIFT);
 
    }
 
-   if (sampler->sRGBDecode == GL_DECODE_EXT &&
+   if (sampler->Attrib.sRGBDecode == GL_DECODE_EXT &&
        (_mesa_get_srgb_format_linear(firstImage->TexFormat) !=
         firstImage->TexFormat)) {
       state[I915_TEXREG_SS2] |= SS2_REVERSE_GAMMA_ENABLE;
    }
 
    /* convert border color from float to ubyte */
-   CLAMPED_FLOAT_TO_UBYTE(border[0], sampler->BorderColor.f[0]);
-   CLAMPED_FLOAT_TO_UBYTE(border[1], sampler->BorderColor.f[1]);
-   CLAMPED_FLOAT_TO_UBYTE(border[2], sampler->BorderColor.f[2]);
-   CLAMPED_FLOAT_TO_UBYTE(border[3], sampler->BorderColor.f[3]);
+   CLAMPED_FLOAT_TO_UBYTE(border[0], sampler->Attrib.BorderColor.f[0]);
+   CLAMPED_FLOAT_TO_UBYTE(border[1], sampler->Attrib.BorderColor.f[1]);
+   CLAMPED_FLOAT_TO_UBYTE(border[2], sampler->Attrib.BorderColor.f[2]);
+   CLAMPED_FLOAT_TO_UBYTE(border[3], sampler->Attrib.BorderColor.f[3]);
 
    if (firstImage->_BaseFormat == GL_DEPTH_COMPONENT) {
       /* GL specs that border color for depth textures is taken from the

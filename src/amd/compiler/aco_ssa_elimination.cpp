@@ -39,7 +39,7 @@ struct ssa_elimination_ctx {
    std::vector<bool> empty_blocks;
    Program* program;
 
-   ssa_elimination_ctx(Program* program) : empty_blocks(program->blocks.size(), true), program(program) {}
+   ssa_elimination_ctx(Program* program_) : empty_blocks(program_->blocks.size(), true), program(program_) {}
 };
 
 void collect_phi_info(ssa_elimination_ctx& ctx)
@@ -134,6 +134,7 @@ bool is_empty_block(Block* block, bool ignore_exec_writes)
          case aco_opcode::s_andn2_b32:
             if (ignore_exec_writes && instr->definitions[0].physReg() == exec)
                break;
+            return false;
          default:
             return false;
       }

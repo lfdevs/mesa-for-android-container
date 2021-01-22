@@ -5,7 +5,7 @@ namespace nv50_ir {
 class SchedDataCalculatorGM107 : public Pass
 {
 public:
-   SchedDataCalculatorGM107(const TargetGM107 *targ) : targ(targ) {}
+   SchedDataCalculatorGM107(const TargetGM107 *targ) : score(NULL), targ(targ) {}
 
 private:
    struct RegScores

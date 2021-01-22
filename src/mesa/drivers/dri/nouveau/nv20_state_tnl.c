@@ -200,15 +200,16 @@ nv20_emit_light_source(struct gl_context *ctx, int emit)
 	const int i = emit - NOUVEAU_STATE_LIGHT_SOURCE0;
 	struct nouveau_pushbuf *push = context_push(ctx);
 	struct gl_light *l = &ctx->Light.Light[i];
+        struct gl_light_uniforms *lu = &ctx->Light.LightSource[i];
 
 	if (l->_Flags & LIGHT_POSITIONAL) {
 		BEGIN_NV04(push, NV20_3D(LIGHT_POSITION_X(i)), 3);
 		PUSH_DATAp(push, l->_Position, 3);
 
 		BEGIN_NV04(push, NV20_3D(LIGHT_ATTENUATION_CONSTANT(i)), 3);
-		PUSH_DATAf(push, l->ConstantAttenuation);
-		PUSH_DATAf(push, l->LinearAttenuation);
-		PUSH_DATAf(push, l->QuadraticAttenuation);
+		PUSH_DATAf(push, lu->ConstantAttenuation);
+		PUSH_DATAf(push, lu->LinearAttenuation);
+		PUSH_DATAf(push, lu->QuadraticAttenuation);
 
 	} else {
 		BEGIN_NV04(push, NV20_3D(LIGHT_DIRECTION_X(i)), 3);
@@ -221,7 +222,7 @@ nv20_emit_light_source(struct gl_context *ctx, int emit)
 	if (l->_Flags & LIGHT_SPOT) {
 		float k[7];
 
-		nv10_get_spot_coeff(l, k);
+		nv10_get_spot_coeff(l, lu, k);
 
 		BEGIN_NV04(push, NV20_3D(LIGHT_SPOT_CUTOFF(i, 0)), 7);
 		PUSH_DATAp(push, k, 7);
@@ -267,8 +268,9 @@ nv20_emit_material_ambient(struct gl_context *ctx, int emit)
 	while (mask) {
 		const int i = u_bit_scan(&mask);
 		struct gl_light *l = &ctx->Light.Light[i];
+                struct gl_light_uniforms *lu = &ctx->Light.LightSource[i];
 		float *c_light = (USE_COLOR_MATERIAL(AMBIENT, side) ?
-				  l->Ambient :
+				  lu->Ambient :
 				  l->_MatAmbient[side]);
 
 		BEGIN_NV04(push, SUBC_3D(LIGHT_AMBIENT_R(side, i)), 3);
@@ -291,8 +293,9 @@ nv20_emit_material_diffuse(struct gl_context *ctx, int emit)
 	while (mask) {
 		const int i = u_bit_scan(&mask);
 		struct gl_light *l = &ctx->Light.Light[i];
+                struct gl_light_uniforms *lu = &ctx->Light.LightSource[i];
 		float *c_light = (USE_COLOR_MATERIAL(DIFFUSE, side) ?
-				  l->Diffuse :
+				  lu->Diffuse :
 				  l->_MatDiffuse[side]);
 
 		BEGIN_NV04(push, SUBC_3D(LIGHT_DIFFUSE_R(side, i)), 3);
@@ -311,8 +314,9 @@ nv20_emit_material_specular(struct gl_context *ctx, int emit)
 	while (mask) {
 		const int i = u_bit_scan(&mask);
 		struct gl_light *l = &ctx->Light.Light[i];
+                struct gl_light_uniforms *lu = &ctx->Light.LightSource[i];
 		float *c_light = (USE_COLOR_MATERIAL(SPECULAR, side) ?
-				  l->Specular :
+				  lu->Specular :
 				  l->_MatSpecular[side]);
 
 		BEGIN_NV04(push, SUBC_3D(LIGHT_SPECULAR_R(side, i)), 3);
@@ -378,6 +382,4 @@ nv20_emit_projection(struct gl_context *ctx, int emit)
 
 	BEGIN_NV04(push, NV20_3D(PROJECTION_MATRIX(0)), 16);
 	PUSH_DATAm(push, m.m);
-
-	_math_matrix_dtr(&m);
 }

@@ -490,7 +490,7 @@ struct r600_context {
 	struct r600_common_context	b;
 	struct r600_screen		*screen;
 	struct blitter_context		*blitter;
-	struct u_suballocator		*allocator_fetch_shader;
+	struct u_suballocator		allocator_fetch_shader;
 
 	/* Hardware info. */
 	boolean				has_vertex_cache;

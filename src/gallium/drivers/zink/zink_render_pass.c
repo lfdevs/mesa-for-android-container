@@ -100,7 +100,7 @@ zink_create_render_pass(struct zink_screen *screen,
    rp->render_pass = create_render_pass(screen->dev, state);
    if (!rp->render_pass)
       goto fail;
-
+   memcpy(&rp->state, state, sizeof(struct zink_render_pass_state));
    return rp;
 
 fail:

@@ -547,7 +547,7 @@ tu_get_image_format_properties(
          if (info->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT)
             return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
-         if (!ubwc_possible(info->format, info->type, info->usage, physical_device->limited_z24s8))
+         if (!ubwc_possible(info->format, info->type, info->usage, physical_device->info.a6xx.has_z24uint_s8uint))
             return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
          format_feature_flags = format_props.optimalTilingFeatures;

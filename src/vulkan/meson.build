@@ -36,6 +36,7 @@ if with_platform_x11
     dep_xcb_dri3,
     dep_xcb_present,
     dep_xcb_sync,
+    dep_xcb_xrandr,
     dep_xshmfence,
   ]
   vulkan_wsi_list += ['xcb', 'x11']
@@ -52,7 +53,7 @@ if system_has_kms_drm and not with_platform_android
 endif
 if with_xlib_lease
   vulkan_wsi_args += '-DVK_USE_PLATFORM_XLIB_XRANDR_EXT'
-  vulkan_wsi_deps += [dep_xcb_xrandr, dep_xlib_xrandr]
+  vulkan_wsi_deps += [dep_xlib_xrandr]
   vulkan_wsi_list += ['xlib_xrandr']
 endif
 

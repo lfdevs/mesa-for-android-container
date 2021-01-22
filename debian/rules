@@ -36,7 +36,7 @@ GALLIUM_DRIVERS = swrast
 VULKAN_DRIVERS =
 
 confflags_DRI3 = -Ddri3=disabled
-confflags_OSMESA =  -Dosmesa=gallium
+confflags_OSMESA =  -Dosmesa=true
 
 # hurd doesn't do direct rendering
 ifeq ($(DEB_HOST_ARCH_OS), hurd)

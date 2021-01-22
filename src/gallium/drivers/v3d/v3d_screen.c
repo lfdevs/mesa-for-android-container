@@ -631,6 +631,11 @@ v3d_screen_get_compiler_options(struct pipe_screen *pscreen,
         return &v3d_nir_options;
 }
 
+static const uint64_t v3d_available_modifiers[] = {
+   DRM_FORMAT_MOD_BROADCOM_UIF,
+   DRM_FORMAT_MOD_LINEAR,
+};
+
 static void
 v3d_screen_query_dmabuf_modifiers(struct pipe_screen *pscreen,
                                   enum pipe_format format, int max,
@@ -639,11 +644,7 @@ v3d_screen_query_dmabuf_modifiers(struct pipe_screen *pscreen,
                                   int *count)
 {
         int i;
-        uint64_t available_modifiers[] = {
-                DRM_FORMAT_MOD_BROADCOM_UIF,
-                DRM_FORMAT_MOD_LINEAR,
-        };
-        int num_modifiers = ARRAY_SIZE(available_modifiers);
+        int num_modifiers = ARRAY_SIZE(v3d_available_modifiers);
 
         if (!modifiers) {
                 *count = num_modifiers;
@@ -652,10 +653,30 @@ v3d_screen_query_dmabuf_modifiers(struct pipe_screen *pscreen,
 
         *count = MIN2(max, num_modifiers);
         for (i = 0; i < *count; i++) {
-                modifiers[i] = available_modifiers[i];
+                modifiers[i] = v3d_available_modifiers[i];
                 if (external_only)
                         external_only[i] = false;
        }
+}
+
+static bool
+v3d_screen_is_dmabuf_modifier_supported(struct pipe_screen *pscreen,
+                                        uint64_t modifier,
+                                        enum pipe_format format,
+                                        bool *external_only)
+{
+        int i;
+
+        for (i = 0; i < ARRAY_SIZE(v3d_available_modifiers); i++) {
+                if (v3d_available_modifiers[i] == modifier) {
+                        if (external_only)
+                                *external_only = false;
+
+                        return true;
+                }
+        }
+
+        return false;
 }
 
 struct pipe_screen *
@@ -722,6 +743,8 @@ v3d_screen_create(int fd, const struct pipe_screen_config *config,
         pscreen->get_device_vendor = v3d_screen_get_vendor;
         pscreen->get_compiler_options = v3d_screen_get_compiler_options;
         pscreen->query_dmabuf_modifiers = v3d_screen_query_dmabuf_modifiers;
+        pscreen->is_dmabuf_modifier_supported =
+                v3d_screen_is_dmabuf_modifier_supported;
 
         return pscreen;
 

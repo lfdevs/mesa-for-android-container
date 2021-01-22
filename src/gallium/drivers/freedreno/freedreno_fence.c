@@ -28,6 +28,7 @@
 #include "util/u_inlines.h"
 
 #include "freedreno_fence.h"
+#include "freedreno_batch.h"
 #include "freedreno_context.h"
 #include "freedreno_util.h"
 /* TODO: Use the interface drm/freedreno_drmif.h instead of calling directly */

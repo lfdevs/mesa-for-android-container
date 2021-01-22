@@ -1239,9 +1239,19 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
       }
    }
 
+   bool serialize = false;
+   struct nv50_miptree *mt = nv50_miptree(dst);
    if (screen->eng3d->oclass >= TU102_3D_CLASS) {
       IMMED_NVC0(push, SUBC_3D(TU102_3D_SET_COLOR_RENDER_TO_ZETA_SURFACE),
                  util_format_is_depth_or_stencil(info->dst.format));
+   } else {
+      /* When flipping a surface from zeta <-> color "mode", we have to wait for
+       * the GPU to flush its current draws.
+       */
+      serialize = util_format_is_depth_or_stencil(info->dst.format);
+      if (serialize && mt->base.status & NOUVEAU_BUFFER_STATUS_GPU_WRITING) {
+         IMMED_NVC0(push, NVC0_3D(SERIALIZE), 0);
+      }
    }
 
    IMMED_NVC0(push, NVC0_3D(VIEWPORT_TRANSFORM_EN), 0);
@@ -1386,6 +1396,11 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
    IMMED_NVC0(push, NVC0_3D(VIEWPORT_TRANSFORM_EN), 1);
    if (screen->eng3d->oclass >= TU102_3D_CLASS)
       IMMED_NVC0(push, SUBC_3D(TU102_3D_SET_COLOR_RENDER_TO_ZETA_SURFACE), 0);
+   else if (serialize)
+      /* mark the surface as reading, which will force a serialize next time
+       * it's used for writing.
+       */
+      mt->base.status |= NOUVEAU_BUFFER_STATUS_GPU_READING;
 }
 
 static void

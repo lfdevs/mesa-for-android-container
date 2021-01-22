@@ -269,7 +269,6 @@ ALU1(FBL)
 ALU1(CBIT)
 ALU2(ADDC)
 ALU2(SUBB)
-ALU2(MAC)
 
 #undef ALU1
 #undef ALU2
@@ -1010,6 +1009,63 @@ brw_dp_typed_surface_rw_desc(const struct gen_device_info *devinfo,
    }
 
    return brw_dp_surface_desc(devinfo, msg_type, msg_control);
+}
+
+static inline uint32_t
+brw_mdc_sm2(unsigned exec_size)
+{
+   assert(exec_size == 8 || exec_size == 16);
+   return exec_size > 8;
+}
+
+static inline uint32_t
+brw_mdc_sm2_exec_size(uint32_t sm2)
+{
+   assert(sm2 <= 1);
+   return 8 << sm2;
+}
+
+static inline uint32_t
+brw_btd_spawn_desc(const struct gen_device_info *devinfo,
+                   unsigned exec_size, unsigned msg_type)
+{
+   assert(devinfo->has_ray_tracing);
+
+   return SET_BITS(0, 19, 19) | /* No header */
+          SET_BITS(msg_type, 17, 14) |
+          SET_BITS(brw_mdc_sm2(exec_size), 8, 8);
+}
+
+static inline uint32_t
+brw_btd_spawn_msg_type(const struct gen_device_info *devinfo,
+                       uint32_t desc)
+{
+   return GET_BITS(desc, 17, 14);
+}
+
+static inline uint32_t
+brw_btd_spawn_exec_size(const struct gen_device_info *devinfo,
+                        uint32_t desc)
+{
+   return brw_mdc_sm2_exec_size(GET_BITS(desc, 8, 8));
+}
+
+static inline uint32_t
+brw_rt_trace_ray_desc(const struct gen_device_info *devinfo,
+                      unsigned exec_size)
+{
+   assert(devinfo->has_ray_tracing);
+
+   return SET_BITS(0, 19, 19) | /* No header */
+          SET_BITS(0, 17, 14) | /* Message type */
+          SET_BITS(brw_mdc_sm2(exec_size), 8, 8);
+}
+
+static inline uint32_t
+brw_rt_trace_ray_desc_exec_size(const struct gen_device_info *devinfo,
+                                uint32_t desc)
+{
+   return brw_mdc_sm2_exec_size(GET_BITS(desc, 8, 8));
 }
 
 /**

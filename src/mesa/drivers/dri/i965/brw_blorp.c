@@ -445,8 +445,6 @@ brw_blorp_copy_miptrees(struct brw_context *brw,
                         unsigned dst_x, unsigned dst_y,
                         unsigned src_width, unsigned src_height)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-
    DBG("%s from %dx %s mt %p %d %d (%d,%d) %dx%d"
        "to %dx %s mt %p %d %d (%d,%d)\n",
        __func__,
@@ -471,12 +469,7 @@ brw_blorp_copy_miptrees(struct brw_context *brw,
    case ISL_AUX_USAGE_MCS:
    case ISL_AUX_USAGE_CCS_E:
       src_aux_usage = src_mt->aux_usage;
-      /* Prior to gen9, fast-clear only supported 0/1 clear colors.  Since
-       * we're going to re-interpret the format as an integer format possibly
-       * with a different number of components, we can't handle clear colors
-       * until gen9.
-       */
-      src_clear_supported = devinfo->gen >= 9;
+      src_clear_supported = false;
       break;
    default:
       src_aux_usage = ISL_AUX_USAGE_NONE;
@@ -488,12 +481,7 @@ brw_blorp_copy_miptrees(struct brw_context *brw,
    case ISL_AUX_USAGE_MCS:
    case ISL_AUX_USAGE_CCS_E:
       dst_aux_usage = dst_mt->aux_usage;
-      /* Prior to gen9, fast-clear only supported 0/1 clear colors.  Since
-       * we're going to re-interpret the format as an integer format possibly
-       * with a different number of components, we can't handle clear colors
-       * until gen9.
-       */
-      dst_clear_supported = devinfo->gen >= 9;
+      dst_clear_supported = false;
       break;
    default:
       dst_aux_usage = ISL_AUX_USAGE_NONE;

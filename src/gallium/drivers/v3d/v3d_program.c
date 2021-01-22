@@ -446,6 +446,8 @@ v3d_setup_shared_key(struct v3d_context *v3d, struct v3d_key *key,
         const struct v3d_device_info *devinfo = &v3d->screen->devinfo;
 
         key->num_tex_used = texstate->num_textures;
+        key->num_samplers_used = texstate->num_textures;
+        assert(key->num_tex_used == key->num_samplers_used);
         for (int i = 0; i < texstate->num_textures; i++) {
                 struct pipe_sampler_view *sampler = texstate->textures[i];
                 struct v3d_sampler_view *v3d_sampler = v3d_sampler_view(sampler);
@@ -455,7 +457,7 @@ v3d_setup_shared_key(struct v3d_context *v3d, struct v3d_key *key,
                 if (!sampler)
                         continue;
 
-                key->tex[i].return_size =
+                key->sampler[i].return_size =
                         v3d_get_tex_return_size(devinfo,
                                                 sampler->format,
                                                 sampler_state->compare_mode);
@@ -464,17 +466,17 @@ v3d_setup_shared_key(struct v3d_context *v3d, struct v3d_key *key,
                  * channels (meaning no recompiles for most statechanges),
                  * while for 32 we actually scale the returns with channels.
                  */
-                if (key->tex[i].return_size == 16) {
-                        key->tex[i].return_channels = 2;
+                if (key->sampler[i].return_size == 16) {
+                        key->sampler[i].return_channels = 2;
                 } else if (devinfo->ver > 40) {
-                        key->tex[i].return_channels = 4;
+                        key->sampler[i].return_channels = 4;
                 } else {
-                        key->tex[i].return_channels =
+                        key->sampler[i].return_channels =
                                 v3d_get_tex_return_channels(devinfo,
                                                             sampler->format);
                 }
 
-                if (key->tex[i].return_size == 32 && devinfo->ver < 40) {
+                if (key->sampler[i].return_size == 32 && devinfo->ver < 40) {
                         memcpy(key->tex[i].swizzle,
                                v3d_sampler->swizzle,
                                sizeof(v3d_sampler->swizzle));
@@ -505,10 +507,15 @@ v3d_setup_shared_precompile_key(struct v3d_uncompiled_shader *uncompiled,
 {
         nir_shader *s = uncompiled->base.ir.nir;
 
+        /* Note that below we access they key's texture and sampler fields
+         * using the same index. On OpenGL they are the same (they are
+         * combined)
+         */
         key->num_tex_used = s->info.num_textures;
+        key->num_samplers_used = s->info.num_textures;
         for (int i = 0; i < s->info.num_textures; i++) {
-                key->tex[i].return_size = 16;
-                key->tex[i].return_channels = 2;
+                key->sampler[i].return_size = 16;
+                key->sampler[i].return_channels = 2;
 
                 key->tex[i].swizzle[0] = PIPE_SWIZZLE_X;
                 key->tex[i].swizzle[1] = PIPE_SWIZZLE_Y;
@@ -559,9 +566,9 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
                 key->sample_alpha_to_one = v3d->blend->base.alpha_to_one;
         }
 
-        if (v3d->zsa->base.alpha.enabled) {
+        if (v3d->zsa->base.alpha_enabled) {
                 key->alpha_test = true;
-                key->alpha_test_func = v3d->zsa->base.alpha.func;
+                key->alpha_test_func = v3d->zsa->base.alpha_func;
         }
 
         key->swap_color_rb = v3d->swap_color_rb;

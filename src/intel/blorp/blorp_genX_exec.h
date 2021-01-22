@@ -1715,18 +1715,11 @@ blorp_emit_gen8_hiz_op(struct blorp_batch *batch,
     */
    assert(params->depth.enabled || params->stencil.enabled);
 
-   /* The stencil buffer should only be enabled on GEN == 12, if a fast clear
-    * or full resolve operation is requested. On rest of the GEN, if a fast
-    * clear operation is requested.
+   /* The stencil buffer should only be enabled if a fast clear operation is
+    * requested.
     */
-   if (params->stencil.enabled) {
-#if GEN_GEN >= 12
-      assert(params->hiz_op == ISL_AUX_OP_FAST_CLEAR ||
-             params->hiz_op == ISL_AUX_OP_FULL_RESOLVE);
-#else
+   if (params->stencil.enabled)
       assert(params->hiz_op == ISL_AUX_OP_FAST_CLEAR);
-#endif
-   }
 
    /* From the BDW PRM Volume 2, 3DSTATE_WM_HZ_OP:
     *
@@ -1753,38 +1746,14 @@ blorp_emit_gen8_hiz_op(struct blorp_batch *batch,
       blorp_emit_cc_viewport(batch);
    }
 
-   if (GEN_GEN >= 12 && params->stencil.enabled &&
-       params->hiz_op == ISL_AUX_OP_FULL_RESOLVE) {
-      /* GEN:BUG:1605967699
-       *
-       * This workaround requires that the Force Thread Dispatch Enable flag
-       * needs to be set to ForceOFF on the first WM_HZ_OP state cycle
-       * (followed by a CS Stall):
-       *
-       *    "Workaround: There is a potential software workaround for the
-       *    issue by doing these 2 steps 1) setting the force thread dispatch
-       *    enable(bits 20:19) in the 3dstate_WM_body state to be set to
-       *    Force_OFF (value of 1) along with the first WM_HZ_OP state cycle.
-       *    The second WM_HZ_OP state which is required by programming
-       *    sequencing to complete the HZ_OP operation can reprogram the
-       *    3dstate_WM_body to set to NORMAL(value of 0)."
-       */
-      blorp_emit(batch, GENX(3DSTATE_WM), wm) {
-         wm.ForceThreadDispatchEnable = ForceOff;
-      }
-      blorp_emit(batch, GENX(PIPE_CONTROL), pipe) {
-         pipe.CommandStreamerStallEnable = true;
-      }
-   } else {
-      /* According to the SKL PRM formula for WM_INT::ThreadDispatchEnable, the
-       * 3DSTATE_WM::ForceThreadDispatchEnable field can force WM thread dispatch
-       * even when WM_HZ_OP is active.  However, WM thread dispatch is normally
-       * disabled for HiZ ops and it appears that force-enabling it can lead to
-       * GPU hangs on at least Skylake.  Since we don't know the current state of
-       * the 3DSTATE_WM packet, just emit a dummy one prior to 3DSTATE_WM_HZ_OP.
-       */
-      blorp_emit(batch, GENX(3DSTATE_WM), wm);
-   }
+   /* According to the SKL PRM formula for WM_INT::ThreadDispatchEnable, the
+    * 3DSTATE_WM::ForceThreadDispatchEnable field can force WM thread dispatch
+    * even when WM_HZ_OP is active.  However, WM thread dispatch is normally
+    * disabled for HiZ ops and it appears that force-enabling it can lead to
+    * GPU hangs on at least Skylake.  Since we don't know the current state of
+    * the 3DSTATE_WM packet, just emit a dummy one prior to 3DSTATE_WM_HZ_OP.
+    */
+   blorp_emit(batch, GENX(3DSTATE_WM), wm);
 
    /* If we can't alter the depth stencil config and multiple layers are
     * involved, the HiZ op will fail. This is because the op requires that a
@@ -1806,13 +1775,7 @@ blorp_emit_gen8_hiz_op(struct blorp_batch *batch,
          break;
       case ISL_AUX_OP_FULL_RESOLVE:
          assert(params->full_surface_hiz_op);
-         hzp.DepthBufferResolveEnable = params->depth.enabled;
-#if GEN_GEN >= 12
-         if (params->stencil.enabled) {
-            assert(params->stencil.aux_usage == ISL_AUX_USAGE_STC_CCS);
-            hzp.StencilBufferResolveEnable = true;
-         }
-#endif
+         hzp.DepthBufferResolveEnable = true;
          break;
       case ISL_AUX_OP_AMBIGUATE:
          assert(params->full_surface_hiz_op);
@@ -1844,18 +1807,6 @@ blorp_emit_gen8_hiz_op(struct blorp_batch *batch,
    blorp_emit(batch, GENX(PIPE_CONTROL), pc) {
       pc.PostSyncOperation = WriteImmediateData;
       pc.Address = blorp_get_workaround_address(batch);
-   }
-
-
-   if (GEN_GEN >= 12 && params->stencil.enabled &&
-       params->hiz_op == ISL_AUX_OP_FULL_RESOLVE) {
-      /* GEN:BUG:1605967699
-       *
-       *    The second WM_HZ_OP state which is required by programming
-       *    sequencing to complete the HZ_OP operation can reprogram the
-       *    3dstate_WM_body to set to NORMAL(value of 0)."
-       */
-      blorp_emit(batch, GENX(3DSTATE_WM), wm);
    }
 
    blorp_emit(batch, GENX(3DSTATE_WM_HZ_OP), hzp);

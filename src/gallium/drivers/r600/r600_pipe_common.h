@@ -474,7 +474,7 @@ struct r600_viewports {
 };
 
 struct r600_ring {
-	struct radeon_cmdbuf		*cs;
+	struct radeon_cmdbuf		cs;
 	void (*flush)(void *ctx, unsigned flags,
 		      struct pipe_fence_handle **fence);
 };
@@ -508,7 +508,7 @@ struct r600_common_context {
 	unsigned			last_num_draw_calls;
 
 	struct threaded_context		*tc;
-	struct u_suballocator		*allocator_zeroed_memory;
+	struct u_suballocator		allocator_zeroed_memory;
 	struct slab_child_pool		pool_transfers;
 	struct slab_child_pool		pool_transfers_unsync; /* for threaded_context */
 

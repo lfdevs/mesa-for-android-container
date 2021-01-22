@@ -342,7 +342,7 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
 
                 case QUNIFORM_ALPHA_REF:
                         cl_aligned_f(&uniforms,
-                                     vc4->zsa->base.alpha.ref_value);
+                                     vc4->zsa->base.alpha_ref_value);
                         break;
 
                 case QUNIFORM_SAMPLE_MASK:

@@ -41,7 +41,7 @@ brw_generate_mipmap(struct gl_context *ctx, GLenum target,
    struct brw_context *brw = brw_context(ctx);
    struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct intel_texture_object *intel_obj = intel_texture_object(tex_obj);
-   const unsigned base_level = tex_obj->BaseLevel;
+   const unsigned base_level = tex_obj->Attrib.BaseLevel;
    unsigned last_level, first_layer, last_layer;
 
    /* Blorp doesn't handle combined depth/stencil surfaces on Gen4-5 yet. */
@@ -120,7 +120,7 @@ brw_generate_mipmap(struct gl_context *ctx, GLenum target,
     *     encode and decode steps, sRGB mipmap generation should match
     *     the mipmap generation for a non-sRGB texture."
     */
-   bool do_srgb = tex_obj->Sampler.sRGBDecode == GL_DECODE_EXT;
+   bool do_srgb = tex_obj->Sampler.Attrib.sRGBDecode == GL_DECODE_EXT;
 
    for (unsigned dst_level = base_level + 1;
         dst_level <= last_level;

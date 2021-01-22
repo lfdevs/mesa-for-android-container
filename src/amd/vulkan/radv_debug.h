@@ -58,18 +58,21 @@ enum {
 	RADV_DEBUG_LLVM              = 1u << 27,
 	RADV_DEBUG_FORCE_COMPRESS    = 1u << 28,
 	RADV_DEBUG_HANG              = 1u << 29,
+	RADV_DEBUG_IMG               = 1u << 30,
+	RADV_DEBUG_NO_UMR            = 1u << 31,
 	RADV_DEBUG_INVARIANT_GEOM    = 1ull << 32,
 };
 
 enum {
-	RADV_PERFTEST_LOCAL_BOS       = 1 << 0,
-	RADV_PERFTEST_DCC_MSAA        = 1 << 1,
-	RADV_PERFTEST_BO_LIST         = 1 << 2,
-	RADV_PERFTEST_TC_COMPAT_CMASK = 1 << 3,
-	RADV_PERFTEST_CS_WAVE_32      = 1 << 4,
-	RADV_PERFTEST_PS_WAVE_32      = 1 << 5,
-	RADV_PERFTEST_GE_WAVE_32      = 1 << 6,
-	RADV_PERFTEST_DFSM            = 1 << 7,
+	RADV_PERFTEST_LOCAL_BOS       = 1u << 0,
+	RADV_PERFTEST_DCC_MSAA        = 1u << 1,
+	RADV_PERFTEST_BO_LIST         = 1u << 2,
+	RADV_PERFTEST_TC_COMPAT_CMASK = 1u << 3,
+	RADV_PERFTEST_CS_WAVE_32      = 1u << 4,
+	RADV_PERFTEST_PS_WAVE_32      = 1u << 5,
+	RADV_PERFTEST_GE_WAVE_32      = 1u << 6,
+	RADV_PERFTEST_DFSM            = 1u << 7,
+	RADV_PERFTEST_NO_SAM          = 1u << 8,
 };
 
 bool

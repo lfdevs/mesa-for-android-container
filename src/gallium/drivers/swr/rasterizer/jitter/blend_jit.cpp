@@ -185,7 +185,7 @@ struct BlendJit : public Builder
             break;
 
         case SWR_TYPE_UNKNOWN:
-            SWR_INVALID("Unsupport format type: %d", type);
+            SWR_INVALID("Unsupported format type: %d", type);
         }
     }
 

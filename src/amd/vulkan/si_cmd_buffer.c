@@ -154,7 +154,7 @@ static void
 si_set_raster_config(struct radv_physical_device *physical_device,
 		     struct radeon_cmdbuf *cs)
 {
-	unsigned num_rb = MIN2(physical_device->rad_info.num_render_backends, 16);
+	unsigned num_rb = MIN2(physical_device->rad_info.max_render_backends, 16);
 	unsigned rb_mask = physical_device->rad_info.enabled_rb_mask;
 	unsigned raster_config, raster_config_1;
 
@@ -347,9 +347,19 @@ si_emit_graphics(struct radv_device *device,
 			} else {
 				late_alloc_wave64 = (num_cu_per_sh - 2) * 4;
 
-				/* CU2 & CU3 disabled because of the dual CU design */
-				cu_mask_vs = 0xfff3;
-				cu_mask_gs = 0xfff3; /* NGG only */
+				/* Gfx10: CU2 & CU3 must be disabled to
+				 * prevent a hw deadlock.  Others: CU1 must be
+				 * disabled to prevent a hw deadlock.
+				 *
+				 * The deadlock is caused by late alloc, which
+				 * usually increases performance.
+				 */
+				cu_mask_vs &= physical_device->rad_info.chip_class == GFX10 ?
+					      ~BITFIELD_RANGE(2, 2) : ~BITFIELD_RANGE(1, 1);
+
+				if (physical_device->use_ngg) {
+					cu_mask_gs = cu_mask_vs;
+				}
 			}
 
 			late_alloc_wave64_gs = late_alloc_wave64;
@@ -426,7 +436,7 @@ si_emit_graphics(struct radv_device *device,
 		unsigned meta_write_policy, meta_read_policy;
 
 		/* TODO: investigate whether LRU improves performance on other chips too */
-		if (physical_device->rad_info.num_render_backends <= 4) {
+		if (physical_device->rad_info.max_render_backends <= 4) {
 			meta_write_policy = V_02807C_CACHE_LRU_WR; /* cache writes */
 			meta_read_policy =  V_02807C_CACHE_LRU_RD; /* cache reads */
 		} else {
@@ -481,6 +491,15 @@ si_emit_graphics(struct radv_device *device,
                         /* This allows sample shading. */
 			radeon_set_context_reg(cs, R_028848_PA_CL_VRS_CNTL,
                                                S_028848_SAMPLE_ITER_COMBINER_MODE(1));
+
+			/* This is the main VRS register and also the last
+			 * combiner, set it to passthrough mode because other
+			 * combiners are configured with PA_CL_VRS_CNTL.
+			 */
+			radeon_set_context_reg(cs, R_028064_DB_VRS_OVERRIDE_CNTL,
+					       S_028064_VRS_OVERRIDE_RATE_COMBINER_MODE(V_028064_VRS_COMB_MODE_PASSTHRU) |
+					       S_028064_VRS_OVERRIDE_RATE_X(0) |
+					       S_028064_VRS_OVERRIDE_RATE_Y(0));
 		}
 
 		if (physical_device->rad_info.chip_class == GFX10) {
@@ -608,7 +627,8 @@ cik_create_gfx_config(struct radv_device *device)
 
 	device->gfx_init = device->ws->buffer_create(device->ws,
 						     cs->cdw * 4, 4096,
-						     RADEON_DOMAIN_GTT,
+						     radv_cmdbuffer_domain(&device->physical_device->rad_info,
+									   device->instance->perftest_flags),
 						     RADEON_FLAG_CPU_ACCESS|
 						     RADEON_FLAG_NO_INTERPROCESS_SHARING |
 						     RADEON_FLAG_READ_ONLY |
@@ -1083,12 +1103,9 @@ gfx10_cs_emit_cache_flush(struct radeon_cmdbuf *cs,
 		            S_586_GLM_WB(1) | S_586_GLM_INV(1);
 
 		*sqtt_flush_bits |= RGP_FLUSH_FLUSH_L2;
-	}
-
-	/* TODO: Implement this new flag for GFX9+.
-	else if (flush_bits & RADV_CMD_FLAG_INV_L2_METADATA)
+	} else if (flush_bits & RADV_CMD_FLAG_INV_L2_METADATA) {
 		gcr_cntl |= S_586_GLM_INV(1) | S_586_GLM_WB(1);
-	*/
+	}
 
 	if (flush_bits & (RADV_CMD_FLAG_FLUSH_AND_INV_CB | RADV_CMD_FLAG_FLUSH_AND_INV_DB)) {
 		/* TODO: trigger on RADV_CMD_FLAG_FLUSH_AND_INV_CB_META */
@@ -1355,10 +1372,10 @@ si_cs_emit_cache_flush(struct radeon_cmdbuf *cs,
 		 * TCL1                  = invalidate L1
 		 */
 		tc_flags = EVENT_TC_ACTION_ENA |
-		           EVENT_TC_MD_ACTION_ENA;
+			   EVENT_TC_MD_ACTION_ENA;
 
 		*sqtt_flush_bits |= RGP_FLUSH_FLUSH_CB | RGP_FLUSH_INVAL_CB |
-		                    RGP_FLUSH_FLUSH_DB | RGP_FLUSH_INVAL_DB;
+			            RGP_FLUSH_FLUSH_DB | RGP_FLUSH_INVAL_DB;
 
 		/* Ideally flush TC together with CB/DB. */
 		if (flush_bits & RADV_CMD_FLAG_INV_L2) {
@@ -1374,6 +1391,7 @@ si_cs_emit_cache_flush(struct radeon_cmdbuf *cs,
 
 			*sqtt_flush_bits |= RGP_FLUSH_INVAL_L2;
 		}
+
 		assert(flush_cnt);
 		(*flush_cnt)++;
 
@@ -1478,6 +1496,7 @@ si_emit_cache_flush(struct radv_cmd_buffer *cmd_buffer)
 	                                          RADV_CMD_FLAG_FLUSH_AND_INV_CB_META |
 	                                          RADV_CMD_FLAG_FLUSH_AND_INV_DB |
 	                                          RADV_CMD_FLAG_FLUSH_AND_INV_DB_META |
+	                                          RADV_CMD_FLAG_INV_L2_METADATA |
 	                                          RADV_CMD_FLAG_PS_PARTIAL_FLUSH |
 	                                          RADV_CMD_FLAG_VS_PARTIAL_FLUSH |
 	                                          RADV_CMD_FLAG_VGT_FLUSH |
@@ -1522,12 +1541,15 @@ si_emit_cache_flush(struct radv_cmd_buffer *cmd_buffer)
 /* sets the CP predication state using a boolean stored at va */
 void
 si_emit_set_predication_state(struct radv_cmd_buffer *cmd_buffer,
-			      bool draw_visible, uint64_t va)
+			      bool draw_visible, unsigned pred_op, uint64_t va)
 {
 	uint32_t op = 0;
 
 	if (va) {
-		op = PRED_OP(PREDICATION_OP_BOOL64);
+		assert(pred_op == PREDICATION_OP_BOOL32 ||
+		       pred_op == PREDICATION_OP_BOOL64);
+
+		op = PRED_OP(pred_op);
 
 		/* PREDICATION_DRAW_VISIBLE means that if the 32-bit value is
 		 * zero, all rendering commands are discarded. Otherwise, they
@@ -1743,10 +1765,17 @@ void si_cp_dma_buffer_copy(struct radv_cmd_buffer *cmd_buffer,
 		unsigned dma_flags = 0;
 		unsigned byte_count = MIN2(size, cp_dma_max_byte_count(cmd_buffer));
 
-		if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX10) {
+		if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX9) {
 			/* DMA operations via L2 are coherent and faster.
-			 * TODO: GFX7-GFX9 should also support this but it
+			 * TODO: GFX7-GFX8 should also support this but it
 			 * requires tests/benchmarks.
+			 *
+			 * Also enable on GFX9 so we can use L2 at rest on GFX9+. On Raven
+			 * this didn't seem to be worse.
+			 *
+			 * Note that we only use CP DMA for sizes < RADV_BUFFER_OPS_CS_THRESHOLD,
+			 * which is 4k at the moment, so this is really unlikely to cause
+			 * significant thrashing.
 			 */
 			dma_flags |= CP_DMA_USE_L2;
 		}
@@ -1795,10 +1824,12 @@ void si_cp_dma_clear_buffer(struct radv_cmd_buffer *cmd_buffer, uint64_t va,
 		unsigned byte_count = MIN2(size, cp_dma_max_byte_count(cmd_buffer));
 		unsigned dma_flags = CP_DMA_CLEAR;
 
-		if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX10) {
+		if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX9) {
 			/* DMA operations via L2 are coherent and faster.
-			 * TODO: GFX7-GFX9 should also support this but it
+			 * TODO: GFX7-GFX8 should also support this but it
 			 * requires tests/benchmarks.
+			 *
+			 * Also enable on GFX9 so we can use L2 at rest on GFX9+.
 			 */
 			dma_flags |= CP_DMA_USE_L2;
 		}

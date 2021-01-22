@@ -27,6 +27,23 @@
 
 using namespace clover;
 
+namespace {
+   std::string
+   supported_il_versions_as_string(const device &dev) {
+      std::string il_versions_string;
+
+      for (const auto &il_version : dev.supported_il_versions()) {
+         if (!il_versions_string.empty())
+            il_versions_string += " ";
+
+         il_versions_string += std::string(il_version.name) + "_" +
+            std::to_string(CL_VERSION_MAJOR(il_version.version)) + "." +
+            std::to_string(CL_VERSION_MINOR(il_version.version));
+      }
+      return il_versions_string;
+   }
+}
+
 CLOVER_API cl_int
 clGetDeviceIDs(cl_platform_id d_platform, cl_device_type device_type,
                cl_uint num_entries, cl_device_id *rd_devices,
@@ -321,11 +338,11 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
       break;
 
    case CL_DEVICE_VERSION:
-      buf.as_string() = "OpenCL " + dev.device_version() + " Mesa " PACKAGE_VERSION MESA_GIT_SHA1;
+      buf.as_string() = "OpenCL " + dev.device_version_as_string() + " Mesa " PACKAGE_VERSION MESA_GIT_SHA1;
       break;
 
    case CL_DEVICE_EXTENSIONS:
-      buf.as_string() = dev.supported_extensions();
+      buf.as_string() = dev.supported_extensions_as_string();
       break;
 
    case CL_DEVICE_PLATFORM:
@@ -365,13 +382,11 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
       break;
 
    case CL_DEVICE_OPENCL_C_VERSION:
-      buf.as_string() = "OpenCL C " + dev.device_clc_version() + " ";
+      buf.as_string() = "OpenCL C " + dev.device_clc_version_as_string() + " ";
       break;
 
    case CL_DEVICE_PRINTF_BUFFER_SIZE:
-      // Per the spec, the minimum value for the FULL profile is 1 MB.
-      // However, clover is not ready yet to support it
-      buf.as_scalar<size_t>() = 0 /* 1024 */;
+      buf.as_scalar<size_t>() = dev.max_printf_buffer_size();
       break;
 
    case CL_DEVICE_PREFERRED_INTEROP_USER_SYNC:
@@ -407,6 +422,96 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
    case CL_DEVICE_SVM_CAPABILITIES:
    case CL_DEVICE_SVM_CAPABILITIES_ARM:
       buf.as_scalar<cl_device_svm_capabilities>() = dev.svm_support();
+      break;
+
+   case CL_DEVICE_NUMERIC_VERSION:
+      buf.as_scalar<cl_version>() = dev.device_version();
+      break;
+
+   case CL_DEVICE_OPENCL_C_NUMERIC_VERSION_KHR:
+      buf.as_scalar<cl_version>() = dev.device_clc_version();
+      break;
+
+   case CL_DEVICE_OPENCL_C_ALL_VERSIONS:
+      buf.as_vector<cl_name_version>() = dev.opencl_c_all_versions();
+      break;
+
+   case CL_DEVICE_EXTENSIONS_WITH_VERSION:
+      buf.as_vector<cl_name_version>() = dev.supported_extensions();
+      break;
+
+   case CL_DEVICE_OPENCL_C_FEATURES:
+      buf.as_vector<cl_name_version>() = dev.opencl_c_features();
+      break;
+
+   case CL_DEVICE_IL_VERSION:
+      if (dev.supported_extensions_as_string().find("cl_khr_il_program") == std::string::npos)
+         throw error(CL_INVALID_VALUE);
+      buf.as_string() = supported_il_versions_as_string(dev);
+      break;
+
+   case CL_DEVICE_ILS_WITH_VERSION:
+      buf.as_vector<cl_name_version>() = dev.supported_il_versions();
+      break;
+
+   case CL_DEVICE_BUILT_IN_KERNELS_WITH_VERSION:
+      buf.as_vector<cl_name_version>() = std::vector<cl_name_version>{};
+      break;
+
+   case CL_DEVICE_MAX_READ_WRITE_IMAGE_ARGS:
+   case CL_DEVICE_IMAGE_PITCH_ALIGNMENT:
+   case CL_DEVICE_IMAGE_BASE_ADDRESS_ALIGNMENT:
+   case CL_DEVICE_PREFERRED_PLATFORM_ATOMIC_ALIGNMENT:
+   case CL_DEVICE_PREFERRED_GLOBAL_ATOMIC_ALIGNMENT:
+   case CL_DEVICE_PREFERRED_LOCAL_ATOMIC_ALIGNMENT:
+   case CL_DEVICE_MAX_NUM_SUB_GROUPS:
+   case CL_DEVICE_QUEUE_ON_DEVICE_PREFERRED_SIZE:
+   case CL_DEVICE_QUEUE_ON_DEVICE_MAX_SIZE:
+   case CL_DEVICE_MAX_ON_DEVICE_QUEUES:
+   case CL_DEVICE_MAX_ON_DEVICE_EVENTS:
+   case CL_DEVICE_MAX_PIPE_ARGS:
+   case CL_DEVICE_PIPE_MAX_ACTIVE_RESERVATIONS:
+   case CL_DEVICE_PIPE_MAX_PACKET_SIZE:
+      buf.as_scalar<cl_uint>() = 0;
+      break;
+
+   case CL_DEVICE_MAX_GLOBAL_VARIABLE_SIZE:
+   case CL_DEVICE_GLOBAL_VARIABLE_PREFERRED_TOTAL_SIZE:
+      buf.as_scalar<size_t>() = 0;
+      break;
+
+   case CL_DEVICE_SUB_GROUP_INDEPENDENT_FORWARD_PROGRESS:
+   case CL_DEVICE_NON_UNIFORM_WORK_GROUP_SUPPORT:
+   case CL_DEVICE_WORK_GROUP_COLLECTIVE_FUNCTIONS_SUPPORT:
+   case CL_DEVICE_GENERIC_ADDRESS_SPACE_SUPPORT:
+   case CL_DEVICE_PIPE_SUPPORT:
+      buf.as_scalar<cl_bool>() = CL_FALSE;
+      break;
+
+   case CL_DEVICE_QUEUE_ON_DEVICE_PROPERTIES:
+      buf.as_scalar<cl_command_queue_properties>() = 0;
+      break;
+
+   case CL_DEVICE_ATOMIC_MEMORY_CAPABILITIES:
+      buf.as_scalar<cl_device_atomic_capabilities>() = (CL_DEVICE_ATOMIC_ORDER_RELAXED |
+                                                        CL_DEVICE_ATOMIC_SCOPE_WORK_GROUP);
+      break;
+   case CL_DEVICE_ATOMIC_FENCE_CAPABILITIES:
+      buf.as_scalar<cl_device_atomic_capabilities>() = (CL_DEVICE_ATOMIC_ORDER_RELAXED |
+                                                        CL_DEVICE_ATOMIC_ORDER_ACQ_REL |
+                                                        CL_DEVICE_ATOMIC_SCOPE_WORK_GROUP);
+      break;
+
+   case CL_DEVICE_DEVICE_ENQUEUE_CAPABILITIES:
+      buf.as_scalar<cl_device_device_enqueue_capabilities>() = 0;
+      break;
+
+   case CL_DEVICE_PREFERRED_WORK_GROUP_SIZE_MULTIPLE:
+      buf.as_scalar<size_t>() = 1;
+      break;
+
+   case CL_DEVICE_LATEST_CONFORMANCE_VERSION_PASSED:
+      buf.as_string() = "";
       break;
 
    default:

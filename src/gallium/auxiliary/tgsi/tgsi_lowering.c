@@ -28,6 +28,7 @@
 #include "tgsi/tgsi_scan.h"
 #include "tgsi/tgsi_dump.h"
 
+#include "util/compiler.h"
 #include "util/u_debug.h"
 #include "util/u_math.h"
 
@@ -1068,7 +1069,7 @@ transform_samp(struct tgsi_transform_context *tctx,
       if (ctx->config->saturate_r & smask)
          mask |= TGSI_WRITEMASK_Z;
       pmask |= TGSI_WRITEMASK_Z;
-      /* fallthrough */
+      FALLTHROUGH;
 
    case TGSI_TEXTURE_2D:
    case TGSI_TEXTURE_2D_ARRAY:
@@ -1079,7 +1080,7 @@ transform_samp(struct tgsi_transform_context *tctx,
       if (ctx->config->saturate_t & smask)
          mask |= TGSI_WRITEMASK_Y;
       pmask |= TGSI_WRITEMASK_Y;
-      /* fallthrough */
+      FALLTHROUGH;
 
    case TGSI_TEXTURE_1D:
    case TGSI_TEXTURE_1D_ARRAY:

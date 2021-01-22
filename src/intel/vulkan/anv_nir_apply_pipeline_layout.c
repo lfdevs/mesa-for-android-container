@@ -530,18 +530,14 @@ build_ssbo_descriptor_load(const VkDescriptorType desc_type,
    desc_offset = nir_iadd(b, desc_offset_base,
                              nir_imul_imm(b, array_index, descriptor_size));
 
-   nir_intrinsic_instr *desc_load =
-      nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_ubo);
-   desc_load->src[0] = nir_src_for_ssa(desc_buffer_index);
-   desc_load->src[1] = nir_src_for_ssa(desc_offset);
-   nir_intrinsic_set_align(desc_load, 8, 0);
-   desc_load->num_components = 4;
-   nir_ssa_dest_init(&desc_load->instr, &desc_load->dest, 4, 32, NULL);
-   nir_builder_instr_insert(b, &desc_load->instr);
-   nir_intrinsic_set_range_base(desc_load, 0);
-   nir_intrinsic_set_range(desc_load, ~0);
+   nir_ssa_def *desc_load =
+      nir_load_ubo(b, 4, 32, desc_buffer_index, desc_offset,
+                   .align_mul = 8,
+                   .align_offset = 0,
+                   .range_base = 0,
+                   .range = ~0);
 
-   return &desc_load->dest.ssa;
+   return desc_load;
 }
 
 static void
@@ -625,20 +621,14 @@ lower_load_vulkan_descriptor(nir_intrinsic_instr *intrin,
                                          nir_imm_int(b, MAX_DYNAMIC_BUFFERS));
          }
 
-         nir_intrinsic_instr *dyn_load =
-            nir_intrinsic_instr_create(b->shader,
-                                       nir_intrinsic_load_push_constant);
-         nir_intrinsic_set_base(dyn_load, offsetof(struct anv_push_constants,
-                                                   dynamic_offsets));
-         nir_intrinsic_set_range(dyn_load, MAX_DYNAMIC_BUFFERS * 4);
-         dyn_load->src[0] = nir_src_for_ssa(nir_imul_imm(b, dyn_offset_idx, 4));
-         dyn_load->num_components = 1;
-         nir_ssa_dest_init(&dyn_load->instr, &dyn_load->dest, 1, 32, NULL);
-         nir_builder_instr_insert(b, &dyn_load->instr);
+         nir_ssa_def *dyn_load =
+            nir_load_push_constant(b, 1, 32, nir_imul_imm(b, dyn_offset_idx, 4),
+                                   .base = offsetof(struct anv_push_constants, dynamic_offsets),
+                                   .range = MAX_DYNAMIC_BUFFERS * 4);
 
          nir_ssa_def *dynamic_offset =
             nir_bcsel(b, nir_ieq_imm(b, dyn_offset_base, 0xff),
-                         nir_imm_int(b, 0), &dyn_load->dest.ssa);
+                         nir_imm_int(b, 0), dyn_load);
 
          switch (state->ssbo_addr_format) {
          case nir_address_format_64bit_bounded_global: {
@@ -738,19 +728,14 @@ build_descriptor_load(nir_deref_instr *deref, unsigned offset,
                              nir_imul_imm(b, arr_index, descriptor_size));
    }
 
-   nir_intrinsic_instr *desc_load =
-      nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_ubo);
-   desc_load->src[0] = nir_src_for_ssa(desc_buffer_index);
-   desc_load->src[1] = nir_src_for_ssa(desc_offset);
-   nir_intrinsic_set_align(desc_load, 8, offset % 8);
-   desc_load->num_components = num_components;
-   nir_ssa_dest_init(&desc_load->instr, &desc_load->dest,
-                     num_components, bit_size, NULL);
-   nir_builder_instr_insert(b, &desc_load->instr);
-   nir_intrinsic_set_range_base(desc_load, 0);
-   nir_intrinsic_set_range(desc_load, ~0);
+   nir_ssa_def *desc_load =
+      nir_load_ubo(b, num_components, bit_size, desc_buffer_index, desc_offset,
+                   .align_mul = 8,
+                   .align_offset =  offset % 8,
+                   .range_base = 0,
+                   .range = ~0);
 
-   return &desc_load->dest.ssa;
+   return desc_load;
 }
 
 static void
@@ -844,19 +829,12 @@ lower_load_constant(nir_intrinsic_instr *intrin,
    } else {
       nir_ssa_def *index = nir_imm_int(b, state->constants_offset);
 
-      nir_intrinsic_instr *load_ubo =
-         nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_ubo);
-      load_ubo->num_components = intrin->num_components;
-      load_ubo->src[0] = nir_src_for_ssa(index);
-      load_ubo->src[1] = nir_src_for_ssa(offset);
-      nir_intrinsic_set_align(load_ubo, intrin->dest.ssa.bit_size / 8, 0);
-      nir_intrinsic_set_range_base(load_ubo, nir_intrinsic_base(intrin));
-      nir_intrinsic_set_range(load_ubo, nir_intrinsic_range(intrin));
-      nir_ssa_dest_init(&load_ubo->instr, &load_ubo->dest,
-                        intrin->dest.ssa.num_components,
-                        intrin->dest.ssa.bit_size, NULL);
-      nir_builder_instr_insert(b, &load_ubo->instr);
-      data = &load_ubo->dest.ssa;
+      data = nir_load_ubo(b, intrin->num_components, intrin->dest.ssa.bit_size,
+                          index, offset,
+                          .align_mul = intrin->dest.ssa.bit_size / 8,
+                          .align_offset =  0,
+                          .range_base = nir_intrinsic_base(intrin),
+                          .range = nir_intrinsic_range(intrin));
    }
 
    nir_ssa_def_rewrite_uses(&intrin->dest.ssa, nir_src_for_ssa(data));

@@ -387,6 +387,40 @@ is_integral(struct hash_table *ht, nir_alu_instr *instr, unsigned src,
    return r.is_integral;
 }
 
+/**
+ * Is the value finite?
+ *
+ * Doesn't actually use range tracking.  Just checks that the value is a
+ * constant that is finite.
+ */
+static inline bool
+is_finite(UNUSED struct hash_table *ht, nir_alu_instr *instr, unsigned src,
+          unsigned num_components, const uint8_t *swizzle)
+{
+   if (nir_src_as_const_value(instr->src[src].src) == NULL)
+      return false;
+
+   for (unsigned i = 0; i < num_components; i++) {
+      nir_alu_type type = nir_op_infos[instr->op].input_types[src];
+      switch (nir_alu_type_get_base_type(type)) {
+      case nir_type_float:
+         if (!isfinite(nir_src_comp_as_float(instr->src[src].src, swizzle[i])))
+            return false;
+         break;
+      case nir_type_bool:
+      case nir_type_int:
+      case nir_type_uint:
+         /* Non-float types are always finite. */
+         break;
+      default:
+         return false;
+      }
+   }
+
+   return true;
+}
+
+
 #define RELATION(r)                                                     \
 static inline bool                                                      \
 is_ ## r (struct hash_table *ht, nir_alu_instr *instr, unsigned src,                           \

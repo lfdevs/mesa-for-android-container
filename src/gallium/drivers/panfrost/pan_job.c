@@ -558,8 +558,8 @@ panfrost_batch_add_resource_bos(struct panfrost_batch *batch,
         panfrost_batch_add_bo(batch, rsrc->bo, flags);
 
         for (unsigned i = 0; i < MAX_MIP_LEVELS; i++)
-                if (rsrc->slices[i].checksum_bo)
-                        panfrost_batch_add_bo(batch, rsrc->slices[i].checksum_bo, flags);
+                if (rsrc->checksum_bo)
+                        panfrost_batch_add_bo(batch, rsrc->checksum_bo, flags);
 
         if (rsrc->separate_stencil)
                 panfrost_batch_add_bo(batch, rsrc->separate_stencil->bo, flags);
@@ -759,7 +759,7 @@ panfrost_load_surface(struct panfrost_batch *batch, struct pipe_surface *surf, u
         struct panfrost_resource *rsrc = pan_resource(surf->texture);
         unsigned level = surf->u.tex.level;
 
-        if (!rsrc->slices[level].initialized)
+        if (!rsrc->layout.slices[level].initialized)
                 return;
 
         if (!rsrc->damage.inverted_len)
@@ -808,16 +808,14 @@ panfrost_load_surface(struct panfrost_batch *batch, struct pipe_surface *surf, u
                 .depth0 = rsrc->base.depth0,
                 .format = format,
                 .dim = dim,
-                .modifier = rsrc->modifier,
                 .array_size = rsrc->base.array_size,
                 .first_level = level,
                 .last_level = level,
                 .first_layer = surf->u.tex.first_layer,
                 .last_layer = surf->u.tex.last_layer,
                 .nr_samples = rsrc->base.nr_samples,
-                .cubemap_stride = rsrc->cubemap_stride,
                 .bo = rsrc->bo,
-                .slices = rsrc->slices
+                .layout = &rsrc->layout,
         };
 
         mali_ptr blend_shader = 0;
@@ -825,7 +823,9 @@ panfrost_load_surface(struct panfrost_batch *batch, struct pipe_surface *surf, u
         if (loc >= FRAG_RESULT_DATA0 && !panfrost_can_fixed_blend(rsrc->base.format)) {
                 struct panfrost_blend_shader *b =
                         panfrost_get_blend_shader(batch->ctx, batch->ctx->blit_blend,
-                                                  rsrc->base.format, loc - FRAG_RESULT_DATA0,
+                                                  rsrc->base.format,
+                                                  rsrc->base.nr_samples,
+                                                  loc - FRAG_RESULT_DATA0,
                                                   NULL);
 
                 struct panfrost_bo *bo = panfrost_batch_create_bo(batch, b->size,
@@ -891,17 +891,17 @@ panfrost_batch_draw_wallpaper(struct panfrost_batch *batch)
         /* Assume combined. If either depth or stencil is written, they will
          * both be written so we need to be careful for reloading */
 
-        unsigned draws = batch->draws;
+        unsigned reload = batch->draws | batch->read;
 
-        if (draws & PIPE_CLEAR_DEPTHSTENCIL)
-                draws |= PIPE_CLEAR_DEPTHSTENCIL;
+        if (reload & PIPE_CLEAR_DEPTHSTENCIL)
+                reload |= PIPE_CLEAR_DEPTHSTENCIL;
 
         /* Mask of buffers which need reload since they are not cleared and
          * they are drawn. (If they are cleared, reload is useless; if they are
-         * not drawn and also not cleared, we can generally omit the attachment
-         * at the framebuffer descriptor level */
+         * not drawn or read and also not cleared, we can generally omit the
+         * attachment at the framebuffer descriptor level */
 
-        unsigned reload = ~batch->clear & draws;
+        reload &= ~batch->clear;
 
         for (unsigned i = 0; i < batch->key.nr_cbufs; ++i) {
                 if (reload & (PIPE_CLEAR_COLOR0 << i)) 
@@ -1193,7 +1193,7 @@ panfrost_batch_set_requirements(struct panfrost_batch *batch)
         if (ctx->rasterizer->base.multisample)
                 batch->requirements |= PAN_REQ_MSAA;
 
-        if (ctx->depth_stencil && ctx->depth_stencil->base.depth.writemask) {
+        if (ctx->depth_stencil && ctx->depth_stencil->base.depth_writemask) {
                 batch->requirements |= PAN_REQ_DEPTH_WRITE;
                 batch->draws |= PIPE_CLEAR_DEPTH;
         }

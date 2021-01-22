@@ -73,7 +73,7 @@ struct ruvd_decoder {
 
 	struct pipe_screen		*screen;
 	struct radeon_winsys*		ws;
-	struct radeon_cmdbuf*	cs;
+	struct radeon_cmdbuf	cs;
 
 	unsigned			cur_buffer;
 
@@ -102,14 +102,14 @@ struct ruvd_decoder {
 /* flush IB to the hardware */
 static int flush(struct ruvd_decoder *dec, unsigned flags)
 {
-	return dec->ws->cs_flush(dec->cs, flags, NULL);
+	return dec->ws->cs_flush(&dec->cs, flags, NULL);
 }
 
 /* add a new set register command to the IB */
 static void set_reg(struct ruvd_decoder *dec, unsigned reg, uint32_t val)
 {
-	radeon_emit(dec->cs, RUVD_PKT0(reg >> 2, 0));
-	radeon_emit(dec->cs, val);
+	radeon_emit(&dec->cs, RUVD_PKT0(reg >> 2, 0));
+	radeon_emit(&dec->cs, val);
 }
 
 /* send a command to the VCPU through the GPCOM registers */
@@ -119,7 +119,7 @@ static void send_cmd(struct ruvd_decoder *dec, unsigned cmd,
 {
 	int reloc_idx;
 
-	reloc_idx = dec->ws->cs_add_buffer(dec->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED,
+	reloc_idx = dec->ws->cs_add_buffer(&dec->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED,
 					   domain, 0);
 	if (!dec->use_legacy) {
 		uint64_t addr;
@@ -152,7 +152,7 @@ static void map_msg_fb_it_buf(struct ruvd_decoder *dec)
 	buf = &dec->msg_fb_it_buffers[dec->cur_buffer];
 
 	/* and map it for CPU access */
-	ptr = dec->ws->buffer_map(buf->res->buf, dec->cs,
+	ptr = dec->ws->buffer_map(buf->res->buf, &dec->cs,
                                   PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
 
 	/* calc buffer offsets */
@@ -809,7 +809,7 @@ static void ruvd_destroy(struct pipe_video_codec *decoder)
 
 	flush(dec, 0);
 
-	dec->ws->cs_destroy(dec->cs);
+	dec->ws->cs_destroy(&dec->cs);
 
 	for (i = 0; i < NUM_BUFFERS; ++i) {
 		rvid_destroy_buffer(&dec->msg_fb_it_buffers[i]);
@@ -842,7 +842,7 @@ static void ruvd_begin_frame(struct pipe_video_codec *decoder,
 	dec->bs_size = 0;
 	dec->bs_ptr = dec->ws->buffer_map(
 		dec->bs_buffers[dec->cur_buffer].res->buf,
-		dec->cs, PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
+		&dec->cs, PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
 }
 
 /**
@@ -890,12 +890,12 @@ static void ruvd_decode_bitstream(struct pipe_video_codec *decoder,
 		if (new_size > buf->res->buf->size) {
 			dec->ws->buffer_unmap(buf->res->buf);
 			dec->bs_ptr = NULL;
-			if (!rvid_resize_buffer(dec->screen, dec->cs, buf, new_size)) {
+			if (!rvid_resize_buffer(dec->screen, &dec->cs, buf, new_size)) {
 				RVID_ERR("Can't resize bitstream buffer!");
 				return;
 			}
 
-			dec->bs_ptr = dec->ws->buffer_map(buf->res->buf, dec->cs,
+			dec->bs_ptr = dec->ws->buffer_map(buf->res->buf, &dec->cs,
 							  PIPE_MAP_WRITE |
 							  RADEON_MAP_TEMPORARY);
 			if (!dec->bs_ptr)
@@ -1044,7 +1044,7 @@ struct pipe_video_codec *ruvd_create_decoder(struct pipe_context *context,
 	struct ruvd_decoder *dec;
 	int r, i;
 
-	ws->query_info(ws, &info);
+	ws->query_info(ws, &info, false, false);
 
 	switch(u_reduce_video_profile(templ->profile)) {
 	case PIPE_VIDEO_FORMAT_MPEG12:
@@ -1090,8 +1090,8 @@ struct pipe_video_codec *ruvd_create_decoder(struct pipe_context *context,
 	dec->stream_handle = rvid_alloc_stream_handle();
 	dec->screen = context->screen;
 	dec->ws = ws;
-	dec->cs = ws->cs_create(rctx->ctx, RING_UVD, NULL, NULL, false);
-	if (!dec->cs) {
+
+	if (!ws->cs_create(&dec->cs, rctx->ctx, RING_UVD, NULL, NULL, false)) {
 		RVID_ERR("Can't get command submission context.\n");
 		goto error;
 	}
@@ -1151,7 +1151,7 @@ struct pipe_video_codec *ruvd_create_decoder(struct pipe_context *context,
 	return &dec->base;
 
 error:
-	if (dec->cs) dec->ws->cs_destroy(dec->cs);
+	dec->ws->cs_destroy(&dec->cs);
 
 	for (i = 0; i < NUM_BUFFERS; ++i) {
 		rvid_destroy_buffer(&dec->msg_fb_it_buffers[i]);

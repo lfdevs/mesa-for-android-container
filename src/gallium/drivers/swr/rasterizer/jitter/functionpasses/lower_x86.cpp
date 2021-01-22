@@ -40,7 +40,7 @@ extern "C" void ScatterPS_256(uint8_t*, SIMD256::Integer, SIMD256::Float, uint8_
 
 namespace llvm
 {
-    // foward declare the initializer
+    // forward declare the initializer
     void initializeLowerX86Pass(PassRegistry&);
 } // namespace llvm
 
@@ -173,7 +173,9 @@ namespace SwrJit
 
     static uint32_t getBitWidth(VectorType *pVTy)
     {
-#if LLVM_VERSION_MAJOR >= 11
+#if LLVM_VERSION_MAJOR >= 12
+        return cast<FixedVectorType>(pVTy)->getNumElements() * pVTy->getElementType()->getPrimitiveSizeInBits();
+#elif LLVM_VERSION_MAJOR >= 11
         return pVTy->getNumElements() * pVTy->getElementType()->getPrimitiveSizeInBits();
 #else
         return pVTy->getBitWidth();
@@ -320,7 +322,9 @@ namespace SwrJit
         // Convert <N x i1> mask to <N x i32> x86 mask
         Value* VectorMask(Value* vi1Mask)
         {
-#if LLVM_VERSION_MAJOR >= 11
+#if LLVM_VERSION_MAJOR >= 12
+            uint32_t numElem = cast<FixedVectorType>(vi1Mask->getType())->getNumElements();
+#elif LLVM_VERSION_MAJOR >= 11
             uint32_t numElem = cast<VectorType>(vi1Mask->getType())->getNumElements();
 #else
             uint32_t numElem = vi1Mask->getType()->getVectorNumElements();
@@ -417,7 +421,7 @@ namespace SwrJit
         }
 
         //////////////////////////////////////////////////////////////////////////
-        /// @brief LLVM funtion pass run method.
+        /// @brief LLVM function pass run method.
         /// @param f- The function we're working on with this pass.
         virtual bool runOnFunction(Function& F)
         {
@@ -509,7 +513,9 @@ namespace SwrJit
         else
         {
             v32Result = UndefValue::get(v32A->getType());
-#if LLVM_VERSION_MAJOR >= 11
+#if LLVM_VERSION_MAJOR >= 12
+            uint32_t numElem = cast<FixedVectorType>(v32A->getType())->getNumElements();
+#elif LLVM_VERSION_MAJOR >= 11
             uint32_t numElem = cast<VectorType>(v32A->getType())->getNumElements();
 #else
             uint32_t numElem = v32A->getType()->getVectorNumElements();
@@ -536,7 +542,11 @@ namespace SwrJit
 
         pBase              = B->POINTER_CAST(pBase, PointerType::get(B->mInt8Ty, 0));
 #if LLVM_VERSION_MAJOR >= 11
+#if LLVM_VERSION_MAJOR >= 12
+        FixedVectorType* pVectorType = cast<FixedVectorType>(vSrc->getType());
+#else
         VectorType* pVectorType = cast<VectorType>(vSrc->getType());
+#endif
         uint32_t    numElem     = pVectorType->getNumElements();
         auto        srcTy       = pVectorType->getElementType();
 #else
@@ -609,14 +619,18 @@ namespace SwrJit
             else if (width == W512)
             {
                 // Double pump 4-wide for 64bit elements
-#if LLVM_VERSION_MAJOR >= 11
+#if LLVM_VERSION_MAJOR >= 12
+                if (cast<FixedVectorType>(vSrc->getType())->getElementType() == B->mDoubleTy)
+#elif LLVM_VERSION_MAJOR >= 11
                 if (cast<VectorType>(vSrc->getType())->getElementType() == B->mDoubleTy)
 #else
                 if (vSrc->getType()->getVectorElementType() == B->mDoubleTy)
 #endif
                 {
                     auto v64Mask = pThis->VectorMask(vi1Mask);
-#if LLVM_VERSION_MAJOR >= 11
+#if LLVM_VERSION_MAJOR >= 12
+                    uint32_t numElem = cast<FixedVectorType>(v64Mask->getType())->getNumElements();
+#elif LLVM_VERSION_MAJOR >= 11
                     uint32_t numElem = cast<VectorType>(v64Mask->getType())->getNumElements();
 #else
                     uint32_t numElem = v64Mask->getType()->getVectorNumElements();
@@ -633,7 +647,12 @@ namespace SwrJit
                     Value* mask0 = B->VSHUFFLE(v64Mask, v64Mask, B->C({0, 1, 2, 3}));
                     Value* mask1 = B->VSHUFFLE(v64Mask, v64Mask, B->C({4, 5, 6, 7}));
 
-#if LLVM_VERSION_MAJOR >= 11
+#if LLVM_VERSION_MAJOR >= 12
+                    uint32_t numElemSrc0  = cast<FixedVectorType>(src0->getType())->getNumElements();
+                    uint32_t numElemMask0 = cast<FixedVectorType>(mask0->getType())->getNumElements();
+                    uint32_t numElemSrc1  = cast<FixedVectorType>(src1->getType())->getNumElements();
+                    uint32_t numElemMask1 = cast<FixedVectorType>(mask1->getType())->getNumElements();
+#elif LLVM_VERSION_MAJOR >= 11
                     uint32_t numElemSrc0  = cast<VectorType>(src0->getType())->getNumElements();
                     uint32_t numElemMask0 = cast<VectorType>(mask0->getType())->getNumElements();
                     uint32_t numElemSrc1  = cast<VectorType>(src1->getType())->getNumElements();
@@ -891,7 +910,10 @@ namespace SwrJit
                 auto argType = arg.get()->getType();
                 if (argType->isVectorTy())
                 {
-#if LLVM_VERSION_MAJOR >= 11
+#if LLVM_VERSION_MAJOR >= 12
+                    uint32_t vecWidth  = cast<FixedVectorType>(argType)->getNumElements();
+                    auto     elemTy    = cast<FixedVectorType>(argType)->getElementType();
+#elif LLVM_VERSION_MAJOR >= 11
                     uint32_t vecWidth  = cast<VectorType>(argType)->getNumElements();
                     auto     elemTy    = cast<VectorType>(argType)->getElementType();
 #else
@@ -913,7 +935,10 @@ namespace SwrJit
         if (result[0]->getType()->isVectorTy())
         {
             assert(result[1]->getType()->isVectorTy());
-#if LLVM_VERSION_MAJOR >= 11
+#if LLVM_VERSION_MAJOR >= 12
+            vecWidth = cast<FixedVectorType>(result[0]->getType())->getNumElements() +
+                       cast<FixedVectorType>(result[1]->getType())->getNumElements();
+#elif LLVM_VERSION_MAJOR >= 11
             vecWidth = cast<VectorType>(result[0]->getType())->getNumElements() +
                        cast<VectorType>(result[1]->getType())->getNumElements();
 #else

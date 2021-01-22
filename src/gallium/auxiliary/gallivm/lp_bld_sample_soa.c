@@ -36,6 +36,7 @@
 #include "pipe/p_defines.h"
 #include "pipe/p_state.h"
 #include "pipe/p_shader_tokens.h"
+#include "util/compiler.h"
 #include "util/u_debug.h"
 #include "util/u_dump.h"
 #include "util/u_memory.h"
@@ -2172,7 +2173,7 @@ lp_build_sample_common(struct lp_build_sample_context *bld,
             break;
          case PIPE_TEX_MIPFILTER_NEAREST:
              *lod_fpart = lp_build_round(&bld->lodf_bld, *lod_fpart);
-             /* fallthrough */
+             FALLTHROUGH;
          case PIPE_TEX_MIPFILTER_LINEAR:
             *lod_fpart = lp_build_clamp(&bld->lodf_bld, *lod_fpart,
                                         bld->lodf_bld.zero, last_level);

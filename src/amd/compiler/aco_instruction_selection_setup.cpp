@@ -189,10 +189,7 @@ void fill_desc_set_info(isel_context *ctx, nir_function_impl *impl)
             res = intrin->src[0].ssa;
             break;
          case nir_intrinsic_store_ssbo:
-            if (nir_src_is_divergent(intrin->src[2]) ||
-                ctx->program->chip_class < GFX8 || ctx->program->chip_class >= GFX10_3 ||
-                (intrin->src[0].ssa->bit_size < 32 && !can_subdword_ssbo_store_use_smem(intrin)))
-               flags |= glc ? has_glc_vmem_store : has_nonglc_vmem_store;
+            flags |= glc ? has_glc_vmem_store : has_nonglc_vmem_store;
             res = intrin->src[1].ssa;
             break;
          case nir_intrinsic_load_global:
@@ -215,6 +212,7 @@ void fill_desc_set_info(isel_context *ctx, nir_function_impl *impl)
             flags |= has_glc_vmem_load | has_glc_vmem_store;
             break;
          case nir_intrinsic_image_deref_load:
+         case nir_intrinsic_image_deref_sparse_load:
             res = intrin->src[0].ssa;
             flags |= glc ? has_glc_vmem_load : has_nonglc_vmem_load;
             break;
@@ -330,7 +328,8 @@ setup_vs_output_info(isel_context *ctx, nir_shader *nir,
 
    outinfo->param_exports = 0;
    int pos_written = 0x1;
-   if (outinfo->writes_pointsize || outinfo->writes_viewport_index || outinfo->writes_layer)
+   if (outinfo->writes_pointsize || outinfo->writes_viewport_index || outinfo->writes_layer ||
+       outinfo->writes_primitive_shading_rate)
       pos_written |= 1 << 1;
 
    uint64_t mask = nir->info.outputs_written;
@@ -367,6 +366,15 @@ setup_vs_output_info(isel_context *ctx, nir_shader *nir,
       pos_written |= 1 << 3;
 
    outinfo->pos_exports = util_bitcount(pos_written);
+
+   /* GFX10+ early rasterization:
+    * When there are no param exports in an NGG (or legacy VS) shader,
+    * RADV sets NO_PC_EXPORT=1, which means the HW will start clipping and rasterization
+    * as soon as it encounters a DONE pos export. When this happens, PS waves can launch
+    * before the NGG (or VS) waves finish.
+    */
+   ctx->program->early_rast = ctx->program->chip_class >= GFX10 &&
+                              outinfo->param_exports == 0;
 }
 
 void
@@ -419,7 +427,8 @@ void setup_gs_variables(isel_context *ctx, nir_shader *nir)
       ctx->program->config->lds_size = (total_lds_bytes + ctx->program->lds_alloc_granule - 1) / ctx->program->lds_alloc_granule;
 
       /* Make sure we have enough room for emitted GS vertices */
-      assert((ngg_emit_bytes % (ctx->ngg_gs_emit_vtx_bytes * nir->info.gs.vertices_out)) == 0);
+      if (nir->info.gs.vertices_out)
+         assert((ngg_emit_bytes % (ctx->ngg_gs_emit_vtx_bytes * nir->info.gs.vertices_out)) == 0);
 
       /* See if the number of vertices and primitives are compile-time known */
       nir_gs_count_vertices_and_primitives(nir, ctx->ngg_gs_const_vtxcnt, ctx->ngg_gs_const_prmcnt, 4u);
@@ -671,7 +680,7 @@ void init_context(isel_context *ctx, nir_shader *shader)
             switch(instr->type) {
             case nir_instr_type_alu: {
                nir_alu_instr *alu_instr = nir_instr_as_alu(instr);
-               RegType type = RegType::sgpr;
+               RegType type = nir_dest_is_divergent(alu_instr->dest.dest) ? RegType::vgpr : RegType::sgpr;
                switch(alu_instr->op) {
                   case nir_op_fmul:
                   case nir_op_fadd:
@@ -736,11 +745,20 @@ void init_context(isel_context *ctx, nir_shader *shader)
                   case nir_op_b2f16:
                   case nir_op_b2f32:
                   case nir_op_mov:
-                     type = nir_dest_is_divergent(alu_instr->dest.dest) ? RegType::vgpr : RegType::sgpr;
                      break;
-                  case nir_op_bcsel:
-                     type = nir_dest_is_divergent(alu_instr->dest.dest) ? RegType::vgpr : RegType::sgpr;
-                     /* fallthrough */
+                  case nir_op_iadd:
+                  case nir_op_isub:
+                  case nir_op_imul:
+                  case nir_op_imin:
+                  case nir_op_imax:
+                  case nir_op_umin:
+                  case nir_op_umax:
+                  case nir_op_ishl:
+                  case nir_op_ishr:
+                  case nir_op_ushr:
+                     /* packed 16bit instructions have to be VGPR */
+                     type = alu_instr->dest.dest.ssa.num_components == 2 ? RegType::vgpr : type;
+                     FALLTHROUGH;
                   default:
                      for (unsigned i = 0; i < nir_op_infos[alu_instr->op].num_inputs; i++) {
                         if (regclasses[alu_instr->src[i].src.ssa->index].type() == RegType::vgpr)
@@ -799,6 +817,7 @@ void init_context(isel_context *ctx, nir_shader *shader)
                   case nir_intrinsic_load_barycentric_at_offset:
                   case nir_intrinsic_load_interpolated_input:
                   case nir_intrinsic_load_frag_coord:
+                  case nir_intrinsic_load_frag_shading_rate:
                   case nir_intrinsic_load_sample_pos:
                   case nir_intrinsic_load_layer_id:
                   case nir_intrinsic_load_local_invocation_id:
@@ -909,9 +928,19 @@ void init_context(isel_context *ctx, nir_shader *shader)
                            spi_ps_inputs |= S_0286CC_POS_X_FLOAT_ENA(1) << i;
 
                      }
+
+                     if (ctx->options->adjust_frag_coord_z &&
+                         intrinsic->intrinsic == nir_intrinsic_load_frag_coord &&
+                         G_0286CC_POS_Z_FLOAT_ENA(spi_ps_inputs)) {
+                        /* Enable ancillary for adjusting gl_FragCoord.z for
+                         * VRS due to a hw bug on some GFX10.3 chips.
+                         */
+                        spi_ps_inputs |= S_0286CC_ANCILLARY_ENA(1);
+                     }
                      break;
                   }
                   case nir_intrinsic_load_sample_id:
+                  case nir_intrinsic_load_frag_shading_rate:
                      spi_ps_inputs |= S_0286CC_ANCILLARY_ENA(1);
                      break;
                   case nir_intrinsic_load_sample_mask_in:

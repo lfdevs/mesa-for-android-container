@@ -129,11 +129,11 @@ INLINE void calcBoundingBoxIntVertical(const Integer<SIMD_T> (&vX)[3],
 //////////////////////////////////////////////////////////////////////////
 /// @brief  Gather scissor rect data based on per-prim viewport indices.
 /// @param pScissorsInFixedPoint - array of scissor rects in 16.8 fixed point.
-/// @param pViewportIndex - array of per-primitive vewport indexes.
-/// @param scisXmin - output vector of per-prmitive scissor rect Xmin data.
-/// @param scisYmin - output vector of per-prmitive scissor rect Ymin data.
-/// @param scisXmax - output vector of per-prmitive scissor rect Xmax data.
-/// @param scisYmax - output vector of per-prmitive scissor rect Ymax data.
+/// @param pViewportIndex - array of per-primitive viewport indexes.
+/// @param scisXmin - output vector of per-primitive scissor rect Xmin data.
+/// @param scisYmin - output vector of per-primitive scissor rect Ymin data.
+/// @param scisXmax - output vector of per-primitive scissor rect Xmax data.
+/// @param scisYmax - output vector of per-primitive scissor rect Ymax data.
 //
 /// @todo:  Look at speeding this up -- weigh against corresponding costs in rasterizer.
 static void GatherScissors(const SWR_RECT* pScissorsInFixedPoint,

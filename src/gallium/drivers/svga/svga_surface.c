@@ -541,7 +541,7 @@ svga_validate_surface_view(struct svga_context *svga, struct svga_surface *s)
 
    /**
     * DX spec explicitly specifies that no resource can be bound to a render
-    * target view and a shader resource view simultanously.
+    * target view and a shader resource view simultaneously.
     * So first check if the resource bound to this surface view collides with
     * a sampler view. If so, then we will clone this surface view and its
     * associated resource. We will then use the cloned surface view for

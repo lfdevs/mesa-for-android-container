@@ -71,13 +71,13 @@ etna_dump_shader(const struct etna_shader_variant *shader)
    printf("num loops: %i\n", shader->num_loops);
    printf("num temps: %i\n", shader->num_temps);
    printf("immediates:\n");
-   for (int idx = 0; idx < shader->uniforms.imm_count; ++idx) {
+   for (int idx = 0; idx < shader->uniforms.count; ++idx) {
       printf(" [%i].%s = %f (0x%08x) (%d)\n",
              idx / 4,
              tgsi_swizzle_names[idx % 4],
-             *((float *)&shader->uniforms.imm_data[idx]),
-             shader->uniforms.imm_data[idx],
-             shader->uniforms.imm_contents[idx]);
+             *((float *)&shader->uniforms.data[idx]),
+             shader->uniforms.data[idx],
+             shader->uniforms.contents[idx]);
    }
    printf("inputs:\n");
    for (int idx = 0; idx < shader->infile.num_reg; ++idx) {
@@ -302,8 +302,8 @@ etna_destroy_shader(struct etna_shader_variant *shader)
    assert(shader);
 
    FREE(shader->code);
-   FREE(shader->uniforms.imm_data);
-   FREE(shader->uniforms.imm_contents);
+   FREE(shader->uniforms.data);
+   FREE(shader->uniforms.contents);
    FREE(shader);
 }
 
@@ -389,7 +389,7 @@ dump_shader_info(struct etna_shader_variant *v, struct pipe_debug_callback *debu
          etna_shader_stage(v),
          v->code_size,
          v->num_temps,
-         v->uniforms.imm_count,
+         v->uniforms.count,
          v->num_loops);
 }
 

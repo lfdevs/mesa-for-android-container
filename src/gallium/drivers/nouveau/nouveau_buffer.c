@@ -762,7 +762,7 @@ nouveau_buffer_create_from_user(struct pipe_screen *pscreen,
     * existing code. It's correct nonetheless as the same pointer is equally
     * valid on the CPU and the GPU.
     */
-   buffer->address = (uint64_t)user_ptr;
+   buffer->address = (uintptr_t)user_ptr;
    buffer->data = user_ptr;
    buffer->status = NOUVEAU_BUFFER_STATUS_USER_PTR;
    buffer->base.screen = pscreen;

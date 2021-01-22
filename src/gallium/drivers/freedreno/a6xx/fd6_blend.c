@@ -27,6 +27,7 @@
 
 #include "pipe/p_state.h"
 #include "util/u_blend.h"
+#include "util/u_dual_blend.h"
 #include "util/u_string.h"
 #include "util/u_memory.h"
 
@@ -127,6 +128,7 @@ __fd6_setup_blend_variant(struct fd6_blend_stateobj *blend, unsigned sample_mask
 			.unk8              = true,
 			.alpha_to_coverage = cso->alpha_to_coverage,
 			.enabled           = !!mrt_blend,
+			.dual_color_in_enable = blend->use_dual_src_blend,
 		));
 
 	OUT_REG(ring, A6XX_RB_BLEND_CNTL(
@@ -134,7 +136,8 @@ __fd6_setup_blend_variant(struct fd6_blend_stateobj *blend, unsigned sample_mask
 			.alpha_to_coverage = cso->alpha_to_coverage,
 			.alpha_to_one = cso->alpha_to_one,
 			.independent_blend = cso->independent_blend_enable,
-			.sample_mask       = sample_mask
+			.sample_mask       = sample_mask,
+			.dual_color_in_enable = blend->use_dual_src_blend,
 		));
 
 	so->sample_mask = sample_mask;
@@ -160,6 +163,9 @@ fd6_blend_state_create(struct pipe_context *pctx,
 	if (cso->logicop_enable) {
 		so->reads_dest |= util_logicop_reads_dest(cso->logicop_func);
 	}
+
+	so->use_dual_src_blend =
+		cso->rt[0].blend_enable && util_blend_state_is_dual(cso, 0);
 
 	unsigned nr = cso->independent_blend_enable ? cso->max_rt : 0;
 	for (unsigned i = 0; i <= nr; i++) {

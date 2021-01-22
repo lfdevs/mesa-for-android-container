@@ -39,9 +39,11 @@
 #include "sw/null/null_sw_winsys.h"
 #include "sw/wrapper/wrapper_sw_winsys.h"
 #include "target-helpers/sw_helper_public.h"
+#include "target-helpers/inline_debug_helper.h"
 #include "frontend/drisw_api.h"
 #include "frontend/sw_driver.h"
 #include "frontend/sw_winsys.h"
+
 
 struct pipe_loader_sw_device {
    struct pipe_loader_device base;
@@ -316,7 +318,7 @@ pipe_loader_sw_create_screen(struct pipe_loader_device *dev,
    if (!screen)
       sdev->ws->destroy(sdev->ws);
 
-   return screen;
+   return screen ? debug_screen_wrap(screen) : NULL;
 }
 
 static const struct pipe_loader_ops pipe_loader_sw_ops = {

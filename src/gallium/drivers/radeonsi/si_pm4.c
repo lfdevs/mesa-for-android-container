@@ -109,10 +109,10 @@ void si_pm4_free_state(struct si_context *sctx, struct si_pm4_state *state, unsi
 
 void si_pm4_emit(struct si_context *sctx, struct si_pm4_state *state)
 {
-   struct radeon_cmdbuf *cs = sctx->gfx_cs;
+   struct radeon_cmdbuf *cs = &sctx->gfx_cs;
 
    if (state->shader) {
-      radeon_add_to_buffer_list(sctx, sctx->gfx_cs, state->shader->bo,
+      radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, state->shader->bo,
                                 RADEON_USAGE_READ, RADEON_PRIO_SHADER_BINARY);
    }
 

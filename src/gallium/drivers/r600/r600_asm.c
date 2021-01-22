@@ -2765,7 +2765,7 @@ void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
 		return NULL;
 	}
 
-	u_suballocator_alloc(rctx->allocator_fetch_shader, fs_size, 256,
+	u_suballocator_alloc(&rctx->allocator_fetch_shader, fs_size, 256,
 			     &shader->offset,
 			     (struct pipe_resource**)&shader->buffer);
 	if (!shader->buffer) {

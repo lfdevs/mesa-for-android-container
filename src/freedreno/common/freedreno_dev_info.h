@@ -42,6 +42,9 @@ struct freedreno_dev_info {
 	
 	uint32_t num_vsc_pipes;
 
+	/* Information for private memory calculations */
+	uint32_t num_sp_cores, fibers_per_sp;
+
 	union {
 		struct {
 			/* Whether the PC_MULTIVIEW_MASK register exists. */
@@ -51,6 +54,7 @@ struct freedreno_dev_info {
 			uint32_t ccu_offset_gmem;
 			uint32_t ccu_offset_bypass;
 			bool ccu_cntl_gmem_unk2;
+			bool has_z24uint_s8uint;
 
 			struct {
 				uint32_t RB_UNKNOWN_8E04_blit;

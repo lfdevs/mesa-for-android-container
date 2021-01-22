@@ -355,6 +355,7 @@ namespace {
       case TCS_OPCODE_SRC0_010_IS_ZERO:
       case TCS_OPCODE_GET_PRIMITIVE_ID:
       case TES_OPCODE_GET_PRIMITIVE_ID:
+      case SHADER_OPCODE_GET_DSS_ID:
          if (devinfo->gen >= 11) {
             return calculate_desc(info, unit_fpu, 0, 2, 0, 0, 2,
                                   0, 10, 6 /* XXX */, 14, 0, 0);
@@ -588,7 +589,7 @@ namespace {
       case BRW_OPCODE_WHILE:
       case BRW_OPCODE_BREAK:
       case BRW_OPCODE_CONTINUE:
-      case FS_OPCODE_DISCARD_JUMP:
+      case BRW_OPCODE_HALT:
          if (devinfo->gen >= 8)
             return calculate_desc(info, unit_null, 8, 0, 0, 0, 0,
                                   0, 0, 0, 0, 0, 0);
@@ -1086,12 +1087,18 @@ namespace {
             } else {
                abort();
             }
+
+         case GEN_RT_SFID_BINDLESS_THREAD_DISPATCH:
+         case GEN_RT_SFID_RAY_TRACE_ACCELERATOR:
+            return calculate_desc(info, unit_spawner, 2, 0, 0, 0 /* XXX */, 0,
+                                  10 /* XXX */, 0, 0, 0, 0, 0);
+
          default:
             abort();
          }
 
       case SHADER_OPCODE_UNDEF:
-      case FS_OPCODE_PLACEHOLDER_HALT:
+      case SHADER_OPCODE_HALT_TARGET:
       case FS_OPCODE_SCHEDULING_FENCE:
          return calculate_desc(info, unit_null, 0, 0, 0, 0, 0,
                                0, 0, 0, 0, 0, 0);
@@ -1533,7 +1540,7 @@ namespace {
       const float discard_weight = (dispatch_width > 16 || s->devinfo->gen < 12 ?
                                     1.0 : 0.5);
       const float loop_weight = 10;
-      unsigned discard_count = 0;
+      unsigned halt_count = 0;
       unsigned elapsed = 0;
       state st;
 
@@ -1545,7 +1552,7 @@ namespace {
 
             issue_instruction(st, s->devinfo, inst);
 
-            if (inst->opcode == FS_OPCODE_PLACEHOLDER_HALT && discard_count)
+            if (inst->opcode == SHADER_OPCODE_HALT_TARGET && halt_count)
                st.weight /= discard_weight;
 
             elapsed += (st.unit_ready[unit_fe] - clock0) * st.weight;
@@ -1554,7 +1561,7 @@ namespace {
                st.weight *= loop_weight;
             else if (inst->opcode == BRW_OPCODE_WHILE)
                st.weight /= loop_weight;
-            else if (inst->opcode == FS_OPCODE_DISCARD_JUMP && !discard_count++)
+            else if (inst->opcode == BRW_OPCODE_HALT && !halt_count++)
                st.weight *= discard_weight;
          }
 

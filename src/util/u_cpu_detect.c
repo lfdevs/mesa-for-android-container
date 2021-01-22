@@ -482,7 +482,7 @@ get_cpu_topology(void)
 
          if (util_set_current_thread_affinity(mask,
                                               !saved ? saved_mask : NULL,
-                                              UTIL_MAX_CPUS)) {
+                                              util_cpu_caps.num_cpu_mask_bits)) {
             saved = true;
             allowed_mask[i / 32] |= cpu_bit;
 
@@ -528,7 +528,8 @@ get_cpu_topology(void)
          }
 
          /* Restore the original affinity mask. */
-         util_set_current_thread_affinity(saved_mask, NULL, UTIL_MAX_CPUS);
+         util_set_current_thread_affinity(saved_mask, NULL,
+                                          util_cpu_caps.num_cpu_mask_bits);
       } else {
          if (debug_get_option_dump_cpu())
             fprintf(stderr, "Cannot set thread affinity for any thread.\n");
@@ -568,6 +569,8 @@ util_cpu_detect_once(void)
 #else
    util_cpu_caps.nr_cpus = 1;
 #endif
+
+   util_cpu_caps.num_cpu_mask_bits = align(util_cpu_caps.nr_cpus, 32);
 
    /* Make the fallback cacheline size nonzero so that it can be
     * safely passed to align().

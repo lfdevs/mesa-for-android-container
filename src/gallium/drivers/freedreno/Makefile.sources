@@ -14,8 +14,6 @@ C_SOURCES := \
 	freedreno_fence.h \
 	freedreno_gmem.c \
 	freedreno_gmem.h \
-	freedreno_log.c \
-	freedreno_log.h \
 	freedreno_program.c \
 	freedreno_program.h \
 	freedreno_query.c \
@@ -38,6 +36,10 @@ C_SOURCES := \
 	freedreno_texture.h \
 	freedreno_util.c \
 	freedreno_util.h
+
+GENERATED_SOURCES := \
+	freedreno_tracepoints.c \
+	freedreno_tracepoints.h
 
 a2xx_SOURCES := \
 	a2xx/fd2_blend.c \

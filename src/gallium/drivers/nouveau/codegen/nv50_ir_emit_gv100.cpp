@@ -862,7 +862,8 @@ CodeEmitterGV100::emitATOM()
    }
 
    emitPRED (81);
-   emitField(79, 2, 1);
+   emitField(79, 2, 2); // .INVALID0/./.STRONG/.INVALID3
+   emitField(77, 2, 3); // .CTA/.SM/.GPU/.SYS
    emitField(72, 1, insn->src(0).getIndirect(0)->getSize() == 8);
    emitGPR  (32, insn->src(1));
    emitADDR (24, 40, 24, 0, insn->src(0));
@@ -1100,7 +1101,7 @@ CodeEmitterGV100::emitRED()
    emitField(87, 3, insn->subOp);
    emitField(84, 3, 1); // 0=.EF, 1=, 2=.EL, 3=.LU, 4=.EU, 5=.NA
    emitField(79, 2, 2); // .INVALID0/./.STRONG/.INVALID3
-   emitField(77, 2, 2); // .CTA/.SM/.GPU/.SYS
+   emitField(77, 2, 3); // .CTA/.SM/.GPU/.SYS
    emitField(73, 3, dType);
    emitField(72, 1, insn->src(0).getIndirect(0)->getSize() == 8);
    emitGPR  (32, insn->src(1));

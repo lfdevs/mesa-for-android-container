@@ -692,7 +692,12 @@ public:
 	static unsigned dskip_mode;
 
 	sb_context() : src_stats(), opt_stats(), isa(0),
-			hw_chip(HW_CHIP_UNKNOWN), hw_class(HW_CLASS_UNKNOWN) {}
+			hw_chip(HW_CHIP_UNKNOWN), hw_class(HW_CLASS_UNKNOWN),
+			alu_temp_gprs(0), max_fetch(0), has_trans(false), vtx_src_num(0),
+			num_slots(0), uses_mova_gpr(false),
+			r6xx_gpr_index_workaround(false), stack_workaround_8xx(false),
+			stack_workaround_9xx(false), wavefront_size(0),
+			stack_entry_size(0) {}
 
 	int init(r600_isa *isa, sb_hw_chip chip, sb_hw_class cclass);
 

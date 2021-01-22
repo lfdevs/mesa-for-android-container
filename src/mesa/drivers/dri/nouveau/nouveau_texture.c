@@ -261,7 +261,7 @@ teximage_fits(struct gl_texture_object *t, int level)
 	if (!ti || !to_nouveau_teximage(ti)->surface.bo)
 		return GL_FALSE;
 
-	if (level == t->BaseLevel && (s->offset & 0x7f))
+	if (level == t->Attrib.BaseLevel && (s->offset & 0x7f))
 		return GL_FALSE;
 
 	return t->Target == GL_TEXTURE_RECTANGLE ||
@@ -296,19 +296,19 @@ validate_teximage(struct gl_context *ctx, struct gl_texture_object *t,
 static int
 get_last_level(struct gl_texture_object *t)
 {
-	struct gl_texture_image *base = t->Image[0][t->BaseLevel];
+	struct gl_texture_image *base = t->Image[0][t->Attrib.BaseLevel];
 
-	if (t->Sampler.MinFilter == GL_NEAREST ||
-	    t->Sampler.MinFilter == GL_LINEAR || !base)
-		return t->BaseLevel;
+	if (t->Sampler.Attrib.MinFilter == GL_NEAREST ||
+	    t->Sampler.Attrib.MinFilter == GL_LINEAR || !base)
+		return t->Attrib.BaseLevel;
 	else
-		return MIN2(t->BaseLevel + base->MaxNumLevels - 1, t->MaxLevel);
+		return MIN2(t->Attrib.BaseLevel + base->MaxNumLevels - 1, t->Attrib.MaxLevel);
 }
 
 static void
 relayout_texture(struct gl_context *ctx, struct gl_texture_object *t)
 {
-	struct gl_texture_image *base = t->Image[0][t->BaseLevel];
+	struct gl_texture_image *base = t->Image[0][t->Attrib.BaseLevel];
 
 	if (base && t->Target != GL_TEXTURE_RECTANGLE) {
 		struct nouveau_surface *ss = to_nouveau_texture(t)->surfaces;
@@ -325,7 +325,7 @@ relayout_texture(struct gl_context *ctx, struct gl_texture_object *t)
 			nouveau_bo_ref(NULL, &ss[i].bo);
 
 		/* Relayout the mipmap tree. */
-		for (i = t->BaseLevel; i <= last; i++) {
+		for (i = t->Attrib.BaseLevel; i <= last; i++) {
 			pitch = _mesa_format_row_stride(s->format, width);
 			size = get_format_blocksy(s->format, height) * pitch;
 
@@ -348,7 +348,7 @@ relayout_texture(struct gl_context *ctx, struct gl_texture_object *t)
 			height = minify(height, 1);
 		}
 
-		if (t->BaseLevel <= last) {
+		if (t->Attrib.BaseLevel <= last) {
 			/* Get new storage. */
 			size = align(offset, 64);
 			assert(size);
@@ -358,7 +358,7 @@ relayout_texture(struct gl_context *ctx, struct gl_texture_object *t)
 					     0, size, NULL, &ss[last].bo);
 			assert(!ret);
 
-			for (i = t->BaseLevel; i < last; i++)
+			for (i = t->Attrib.BaseLevel; i < last; i++)
 				nouveau_bo_ref(ss[last].bo, &ss[i].bo);
 		}
 	}
@@ -370,7 +370,7 @@ nouveau_texture_validate(struct gl_context *ctx, struct gl_texture_object *t)
 	struct nouveau_texture *nt = to_nouveau_texture(t);
 	int i, last = get_last_level(t);
 
-	if (!teximage_fits(t, t->BaseLevel) ||
+	if (!teximage_fits(t, t->Attrib.BaseLevel) ||
 	    !teximage_fits(t, last))
 		return GL_FALSE;
 
@@ -378,7 +378,7 @@ nouveau_texture_validate(struct gl_context *ctx, struct gl_texture_object *t)
 		nt->dirty = GL_FALSE;
 
 		/* Copy the teximages to the actual miptree. */
-		for (i = t->BaseLevel; i <= last; i++) {
+		for (i = t->Attrib.BaseLevel; i <= last; i++) {
 			struct nouveau_surface *s = &nt->surfaces[i];
 
 			validate_teximage(ctx, t, i, 0, 0, 0,
@@ -394,7 +394,7 @@ nouveau_texture_validate(struct gl_context *ctx, struct gl_texture_object *t)
 void
 nouveau_texture_reallocate(struct gl_context *ctx, struct gl_texture_object *t)
 {
-	if (!teximage_fits(t, t->BaseLevel) ||
+	if (!teximage_fits(t, t->Attrib.BaseLevel) ||
 	    !teximage_fits(t, get_last_level(t))) {
 		texture_dirty(t);
 		relayout_texture(ctx, t);
@@ -502,7 +502,7 @@ nouveau_teximage(struct gl_context *ctx, GLint dims,
 			texture_dirty(t);
 	}
 
-	if (level == t->BaseLevel) {
+	if (level == t->Attrib.BaseLevel) {
 		if (!teximage_fits(t, level))
 			relayout_texture(ctx, t);
 		nouveau_texture_validate(ctx, t);

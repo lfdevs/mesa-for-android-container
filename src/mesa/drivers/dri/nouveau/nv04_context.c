@@ -37,7 +37,7 @@ texunit_needs_combiners(struct gl_texture_unit *u,
                         struct gl_fixedfunc_texture_unit *f)
 {
 	struct gl_texture_object *t = u->_Current;
-	struct gl_texture_image *ti = t->Image[0][t->BaseLevel];
+	struct gl_texture_image *ti = t->Image[0][t->Attrib.BaseLevel];
 
 	return ti->TexFormat == MESA_FORMAT_A_UNORM8 ||
 		ti->TexFormat == MESA_FORMAT_L_UNORM8 ||

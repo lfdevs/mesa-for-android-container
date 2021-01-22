@@ -74,17 +74,9 @@ try_opt_bcsel_of_shuffle(nir_builder *b, nir_alu_instr *alu)
       return NULL;
 
    nir_ssa_def *index = nir_bcsel(b, alu->src[0].src.ssa, index1, index2);
-   nir_intrinsic_instr *shuffle =
-      nir_intrinsic_instr_create(b->shader, nir_intrinsic_shuffle);
-   shuffle->src[0] = nir_src_for_ssa(index);
-   shuffle->src[1] = nir_src_for_ssa(data1);
-   shuffle->num_components = alu->dest.dest.ssa.num_components;
-   nir_ssa_dest_init(&shuffle->instr, &shuffle->dest,
-                     alu->dest.dest.ssa.num_components,
-                     alu->dest.dest.ssa.bit_size, NULL);
-   nir_builder_instr_insert(b, &shuffle->instr);
+   nir_ssa_def *shuffle = nir_shuffle(b, index, data1);
 
-   return &shuffle->dest.ssa;
+   return shuffle;
 }
 
 static bool

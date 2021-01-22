@@ -53,14 +53,18 @@ struct zink_gfx_pipeline_state {
 
    VkSampleMask sample_mask;
    uint8_t rast_samples;
+   uint8_t vertices_per_patch;
 
    unsigned num_viewports;
 
    bool primitive_restart;
 
+   VkShaderModule modules[PIPE_SHADER_TYPES - 1];
+
    /* Pre-hashed value for table lookup, invalid when zero.
     * Members after this point are not included in pipeline state hash key */
    uint32_t hash;
+   bool dirty;
 };
 
 VkPipeline

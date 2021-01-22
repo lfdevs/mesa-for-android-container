@@ -46,7 +46,11 @@ bool set_variant(const char *name);
 inline bool set_variant(chip_class cls, const char *rest="")
 {
    char buf[8+strlen(rest)];
-   snprintf(buf, sizeof(buf), "gfx%d%s", cls - GFX6 + 6, rest);
+   if (cls != GFX10_3) {
+      snprintf(buf, sizeof(buf), "gfx%d%s", cls - GFX6 + 6, rest);
+   } else {
+      snprintf(buf, sizeof(buf), "gfx10_3%s", rest);
+   }
    return set_variant(buf);
 }
 

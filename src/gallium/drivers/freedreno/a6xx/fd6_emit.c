@@ -32,9 +32,9 @@
 #include "util/format/u_format.h"
 #include "util/u_viewport.h"
 
-#include "freedreno_log.h"
 #include "freedreno_resource.h"
 #include "freedreno_state.h"
+#include "freedreno_tracepoints.h"
 #include "freedreno_query_hw.h"
 #include "common/freedreno_guardband.h"
 
@@ -519,6 +519,8 @@ fd6_emit_combined_textures(struct fd_ringbuffer *ring, struct fd6_emit *emit,
 
 			fd6_emit_add_group(emit, tex->stateobj, s[type].state_id,
 					s[type].enable_mask);
+
+			fd6_texture_state_reference(&tex, NULL);
 		}
 	} else {
 		/* In the slow-path, create a one-shot texture state object
@@ -587,10 +589,11 @@ compute_ztest_mode(struct fd6_emit *emit, bool lrz_valid)
 	if (fs->shader->nir->info.fs.early_fragment_tests)
 		return A6XX_EARLY_Z;
 
-	if (fs->no_earlyz || fs->writes_pos || !zsa->base.depth.enabled) {
+	if (fs->no_earlyz || fs->writes_pos || !zsa->base.depth_enabled ||
+			fs->writes_stencilref) {
 		return A6XX_LATE_Z;
 	} else if ((fs->has_kill || zsa->alpha_test) &&
-			(zsa->base.depth.writemask || !pfb->zsbuf)) {
+			(zsa->base.depth_writemask || !pfb->zsbuf)) {
 		/* Slightly odd, but seems like the hw wants us to select
 		 * LATE_Z mode if there is no depth buffer + discard.  Either
 		 * that, or when occlusion query is enabled.  See:
@@ -642,7 +645,7 @@ compute_lrz_state(struct fd6_emit *emit, bool binning_pass)
 	 * we switch from GT/GE <-> LT/LE, those values cannot be
 	 * interpreted properly.
 	 */
-	if (zsa->base.depth.enabled &&
+	if (zsa->base.depth_enabled &&
 			(rsc->lrz_direction != FD_LRZ_UNKNOWN) &&
 			(rsc->lrz_direction != lrz.direction)) {
 		rsc->lrz_valid = false;
@@ -673,7 +676,7 @@ compute_lrz_state(struct fd6_emit *emit, bool binning_pass)
 	 * of direction, it is possible to increase/decrease the z value
 	 * to the point where the overly-conservative test is incorrect.
 	 */
-	if (zsa->base.depth.writemask) {
+	if (zsa->base.depth_writemask) {
 		rsc->lrz_direction = lrz.direction;
 	}
 
@@ -729,30 +732,38 @@ fd6_emit_streamout(struct fd_ringbuffer *ring, struct fd6_emit *emit, struct ir3
 	emit->streamout_mask = 0;
 
 	for (unsigned i = 0; i < so->num_targets; i++) {
-		struct pipe_stream_output_target *target = so->targets[i];
+		struct fd_stream_output_target *target = fd_stream_output_target(so->targets[i]);
 
 		if (!target)
 			continue;
 
 		OUT_PKT4(ring, REG_A6XX_VPC_SO_BUFFER_BASE_LO(i), 3);
 		/* VPC_SO[i].BUFFER_BASE_LO: */
-		OUT_RELOC(ring, fd_resource(target->buffer)->bo, target->buffer_offset, 0, 0);
-		OUT_RING(ring, target->buffer_size - target->buffer_offset);
+		OUT_RELOC(ring, fd_resource(target->base.buffer)->bo, 0, 0, 0);
+		OUT_RING(ring, target->base.buffer_size + target->base.buffer_offset);
+
+		struct fd_bo *offset_bo = fd_resource(target->offset_buf)->bo;
 
 		if (so->reset & (1 << i)) {
-			unsigned offset = (so->offsets[i] * info->stride[i] * 4);
+			assert(so->offsets[i] == 0);
+
+			OUT_PKT7(ring, CP_MEM_WRITE, 3);
+			OUT_RELOC(ring, offset_bo, 0, 0, 0);
+			OUT_RING(ring, target->base.buffer_offset);
+
 			OUT_PKT4(ring, REG_A6XX_VPC_SO_BUFFER_OFFSET(i), 1);
-			OUT_RING(ring, offset);
+			OUT_RING(ring, target->base.buffer_offset);
 		} else {
 			OUT_PKT7(ring, CP_MEM_TO_REG, 3);
 			OUT_RING(ring, CP_MEM_TO_REG_0_REG(REG_A6XX_VPC_SO_BUFFER_OFFSET(i)) |
 					CP_MEM_TO_REG_0_SHIFT_BY_2 | CP_MEM_TO_REG_0_UNK31 |
 					CP_MEM_TO_REG_0_CNT(0));
-			OUT_RELOC(ring, control_ptr(fd6_context(ctx), flush_base[i].offset));
+			OUT_RELOC(ring, offset_bo, 0, 0, 0);
 		}
 
+		// After a draw HW would write the new offset to offset_bo
 		OUT_PKT4(ring, REG_A6XX_VPC_SO_FLUSH_BASE_LO(i), 2);
-		OUT_RELOC(ring, control_ptr(fd6_context(ctx), flush_base[i]));
+		OUT_RELOC(ring, offset_bo, 0, 0, 0);
 
 		so->reset &= ~(1 << i);
 
@@ -953,23 +964,47 @@ fd6_emit_state(struct fd_ringbuffer *ring, struct fd6_emit *emit)
 						   FD6_GROUP_RASTERIZER, ENABLE_ALL);
 	}
 
-	if (dirty & (FD_DIRTY_FRAMEBUFFER | FD_DIRTY_RASTERIZER_DISCARD | FD_DIRTY_PROG)) {
+	if (dirty & (FD_DIRTY_FRAMEBUFFER | FD_DIRTY_RASTERIZER_DISCARD |
+				 FD_DIRTY_PROG | FD_DIRTY_BLEND_DUAL)) {
 		struct fd_ringbuffer *ring = fd_submit_new_ringbuffer(
-				emit->ctx->batch->submit, 5 * 4, FD_RINGBUFFER_STREAMING);
+				emit->ctx->batch->submit, 9 * 4, FD_RINGBUFFER_STREAMING);
 
 		unsigned nr = pfb->nr_cbufs;
 
 		if (ctx->rasterizer->rasterizer_discard)
 			nr = 0;
 
+		struct fd6_blend_stateobj *blend = fd6_blend_stateobj(ctx->blend);
+
+		if (blend->use_dual_src_blend)
+			nr++;
+
 		OUT_PKT4(ring, REG_A6XX_RB_FS_OUTPUT_CNTL0, 2);
 		OUT_RING(ring, COND(fs->writes_pos, A6XX_RB_FS_OUTPUT_CNTL0_FRAG_WRITES_Z) |
 				COND(fs->writes_smask && pfb->samples > 1,
-						A6XX_RB_FS_OUTPUT_CNTL0_FRAG_WRITES_SAMPMASK));
+						A6XX_RB_FS_OUTPUT_CNTL0_FRAG_WRITES_SAMPMASK) |
+				COND(fs->writes_stencilref,
+						A6XX_RB_FS_OUTPUT_CNTL0_FRAG_WRITES_STENCILREF) |
+				COND(blend->use_dual_src_blend,
+						A6XX_RB_FS_OUTPUT_CNTL0_DUAL_COLOR_IN_ENABLE));
 		OUT_RING(ring, A6XX_RB_FS_OUTPUT_CNTL1_MRT(nr));
 
 		OUT_PKT4(ring, REG_A6XX_SP_FS_OUTPUT_CNTL1, 1);
 		OUT_RING(ring, A6XX_SP_FS_OUTPUT_CNTL1_MRT(nr));
+
+		unsigned mrt_components = 0;
+		for (unsigned i = 0; i < pfb->nr_cbufs; i++) {
+			if (!pfb->cbufs[i])
+				continue;
+			mrt_components |= 0xf << (i * 4);
+		}
+
+		/* dual source blending has an extra fs output in the 2nd slot */
+		if (blend->use_dual_src_blend)
+			mrt_components |= 0xf << 4;
+
+		OUT_REG(ring, A6XX_SP_FS_RENDER_COMPONENTS(.dword = mrt_components));
+		OUT_REG(ring, A6XX_RB_RENDER_COMPONENTS(.dword = mrt_components));
 
 		fd6_emit_take_group(emit, ring, FD6_GROUP_PROG_FB_RAST, ENABLE_DRAW);
 	}
@@ -1147,7 +1182,9 @@ fd6_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
 {
 	//struct fd_context *ctx = batch->ctx;
 
-	fd_log(batch, "START RESTORE");
+	if (!batch->nondraw) {
+		trace_start_state_restore(&batch->trace);
+	}
 
 	fd6_cache_inv(batch, ring);
 
@@ -1215,8 +1252,6 @@ fd6_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
 
 	WRITE(REG_A6XX_PC_MULTIVIEW_CNTL, 0);
 
-	WRITE(REG_A6XX_SP_UNKNOWN_A81B, 0);
-
 	WRITE(REG_A6XX_SP_UNKNOWN_B183, 0);
 
 	WRITE(REG_A6XX_GRAS_UNKNOWN_8099, 0);
@@ -1265,7 +1300,9 @@ fd6_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
 	OUT_PKT4(ring, REG_A6XX_RB_LRZ_CNTL, 1);
 	OUT_RING(ring, 0x00000000);
 
-	fd_log(batch, "END RESTORE");
+	if (!batch->nondraw) {
+		trace_end_state_restore(&batch->trace);
+	}
 }
 
 static void

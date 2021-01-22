@@ -582,7 +582,7 @@ qpu_merge_inst(uint64_t a, uint64_t b)
                                 return 0;
                 } else {
                         /* Make sure we're not going to be putting new MUL
-                         * packing oneither half.
+                         * packing on either half.
                          */
                         if (new_a_pack &&
                             QPU_GET_FIELD(a, QPU_OP_MUL) != QPU_M_NOP)

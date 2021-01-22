@@ -39,6 +39,7 @@
 
 #include "pipe/p_defines.h"
 #include "pipe/p_state.h"
+#include "util/compiler.h"
 #include "util/u_blitter.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
@@ -78,13 +79,13 @@ etna_clear_blit_pack_rgba(enum pipe_format format, const union pipe_color_union 
    switch (util_format_get_blocksize(format)) {
    case 1:
       uc.ui[0] = uc.ui[0] << 8 | (uc.ui[0] & 0xff);
-      /* fallthrough */
+      FALLTHROUGH;
    case 2:
       uc.ui[0] =  uc.ui[0] << 16 | (uc.ui[0] & 0xffff);
-      /* fallthrough */
+      FALLTHROUGH;
    case 4:
       uc.ui[1] = uc.ui[0];
-      /* fallthrough */
+      FALLTHROUGH;
    default:
       return (uint64_t) uc.ui[1] << 32 | uc.ui[0];
    }

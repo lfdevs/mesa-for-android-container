@@ -110,7 +110,9 @@ struct __DRIimageRec {
    enum __DRIChromaSiting vertical_siting;
    /* \} */
 
-   void *data;
+   __DRIscreen *driScrnPriv;
+
+   void *loader_private;
 };
 
 #ifdef __cplusplus

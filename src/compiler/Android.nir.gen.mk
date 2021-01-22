@@ -117,3 +117,8 @@ nir_intrinsics_c_gen := $(LOCAL_PATH)/nir/nir_intrinsics_c.py
 $(intermediates)/nir/nir_intrinsics.c: $(LOCAL_PATH)/nir/nir_intrinsics.py $(nir_intrinsics_c_gen)
 	@mkdir -p $(dir $@)
 	$(hide) $(MESA_PYTHON2) $(nir_intrinsics_c_gen) --outdir $(dir $@) || ($(RM) $@; false)
+
+nir_intrinsics_indices_h_gen := $(LOCAL_PATH)/nir/nir_intrinsics_indices_h.py
+$(intermediates)/nir/nir_intrinsics_indices.h: $(LOCAL_PATH)/nir/nir_intrinsics.py $(nir_intrinsics_indices_h_gen)
+	@mkdir -p $(dir $@)
+	$(hide) $(MESA_PYTHON2) $(nir_intrinsics_indices_h_gen) --outdir $(dir $@) || ($(RM) $@; false)

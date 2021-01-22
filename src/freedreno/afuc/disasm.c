@@ -33,6 +33,8 @@
 #include <assert.h>
 #include <getopt.h>
 
+#include "util/os_file.h"
+
 #include "afuc.h"
 #include "rnn.h"
 #include "rnndec.h"
@@ -233,7 +235,7 @@ static int label_idx(uint32_t offset, bool create)
 static const char *
 label_name(uint32_t offset, bool allow_jt)
 {
-	static char name[8];
+	static char name[12];
 	int lidx;
 
 	if (allow_jt) {
@@ -279,7 +281,7 @@ static int fxn_idx(uint32_t offset, bool create)
 static const char *
 fxn_name(uint32_t offset)
 {
-	static char name[8];
+	static char name[14];
 	int fidx = fxn_idx(offset, false);
 	if (fidx < 0)
 		return NULL;
@@ -773,36 +775,6 @@ static void disasm(uint32_t *buf, int sizedwords)
 	}
 }
 
-#define CHUNKSIZE 4096
-
-static char * readfile(const char *path, int *sz)
-{
-	char *buf = NULL;
-	int fd, ret, n = 0;
-
-	fd = open(path, O_RDONLY);
-	if (fd < 0) {
-		*sz = 0;
-		return NULL;
-	}
-
-	while (1) {
-		buf = realloc(buf, n + CHUNKSIZE);
-		ret = read(fd, buf + n, CHUNKSIZE);
-		if (ret < 0) {
-			free(buf);
-			*sz = 0;
-			return NULL;
-		} else if (ret < CHUNKSIZE) {
-			n += ret;
-			*sz = n;
-			return buf;
-		} else {
-			n += CHUNKSIZE;
-		}
-	}
-}
-
 static void usage(void)
 {
 	fprintf(stderr, "Usage:\n"
@@ -819,7 +791,8 @@ int main(int argc, char **argv)
 	uint32_t *buf;
 	char *file, *control_reg_name;
 	bool colors = false;
-	int sz, c;
+	size_t sz;
+	int c;
 
 	/* Argument parsing: */
 	while ((c = getopt (argc, argv, "g:vc")) != -1) {
@@ -886,7 +859,7 @@ int main(int argc, char **argv)
 
 	rnndec_varadd(ctx, "chip", variant);
 
-	buf = (uint32_t *)readfile(file, &sz);
+	buf = (uint32_t *)os_read_file(file, &sz);
 
 	printf("; Disassembling microcode: %s\n", file);
 	printf("; Version: %08x\n\n", buf[1]);

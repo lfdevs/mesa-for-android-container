@@ -817,7 +817,7 @@ void *gfx10_create_sh_query_result_cs(struct si_context *sctx)
                                    "DCL BUFFER[2]\n"
                                    "DCL CONST[0][0..0]\n"
                                    "DCL TEMP[0..5]\n"
-                                   "IMM[0] UINT32 {0, 7, 0, 4294967295}\n"
+                                   "IMM[0] UINT32 {0, 7, 256, 4294967295}\n"
                                    "IMM[1] UINT32 {1, 2, 4, 8}\n"
                                    "IMM[2] UINT32 {16, 32, 64, 128}\n"
 
@@ -856,13 +856,13 @@ void *gfx10_create_sh_query_result_cs(struct si_context *sctx)
                                    "UADD TEMP[1].x, TEMP[1].xxxx, IMM[0].wwww\n"
 
                                    /*
-                                   fence = buffer[0]@(base_offset + 32);
+                                   fence = buffer[0]@(base_offset + sizeof(gfx10_sh_query_buffer_mem.stream));
                                    if (!fence) {
                                            acc_missing = ~0u;
                                            break;
                                    }
                                    */
-                                   "UADD TEMP[5].x, TEMP[1].yyyy, IMM[2].yyyy\n"
+                                   "UADD TEMP[5].x, TEMP[1].yyyy, IMM[2].wwww\n"
                                    "LOAD TEMP[5].x, BUFFER[0], TEMP[5].xxxx\n"
                                    "USEQ TEMP[5], TEMP[5].xxxx, IMM[0].xxxx\n"
                                    "UIF TEMP[5]\n"
@@ -898,22 +898,21 @@ void *gfx10_create_sh_query_result_cs(struct si_context *sctx)
 
                                    /*
                                    do {
-                                           generated = buffer[0]@stream_offset;
-                                           emitted = buffer[0]@(stream_offset + 16);
+                                           generated = buffer[0]@(stream_offset + 2 * sizeof(uint64_t));
+                                           emitted = buffer[0]@(stream_offset + 3 * sizeof(uint64_t));
                                            if (generated != emitted) {
                                                    acc_result = 1;
                                                    result_remaining = 0;
                                                    break;
                                            }
 
-                                           stream_offset += 4;
+                                           stream_offset += sizeof(gfx10_sh_query_buffer_mem.stream[0]);
                                    } while (--count);
                                    */
                                    "BGNLOOP\n"
                                    "UADD TEMP[5].x, TEMP[2].xxxx, IMM[2].xxxx\n"
-                                   "LOAD TEMP[4].x, BUFFER[0], TEMP[2].xxxx\n"
-                                   "LOAD TEMP[4].y, BUFFER[0], TEMP[5].xxxx\n"
-                                   "USNE TEMP[5], TEMP[4].xxxx, TEMP[4].yyyy\n"
+                                   "LOAD TEMP[4].xyzw, BUFFER[0], TEMP[5].xxxx\n"
+                                   "USNE TEMP[5], TEMP[4].xyxy, TEMP[4].zwzw\n"
                                    "UIF TEMP[5]\n"
                                    "MOV TEMP[0].x, IMM[1].xxxx\n"
                                    "MOV TEMP[1].y, IMM[0].xxxx\n"
@@ -925,15 +924,15 @@ void *gfx10_create_sh_query_result_cs(struct si_context *sctx)
                                    "UIF TEMP[5]\n"
                                    "BRK\n"
                                    "ENDIF\n"
-                                   "UADD TEMP[2].x, TEMP[2].xxxx, IMM[1].zzzz\n"
+                                   "UADD TEMP[2].x, TEMP[2].xxxx, IMM[2].yyyy\n"
                                    "ENDLOOP\n"
                                    "ENDIF\n"
 
                                    /*
-                                           base_offset += 64;
+                                           base_offset += sizeof(gfx10_sh_query_buffer_mem);
                                    } // end outer loop
                                    */
-                                   "UADD TEMP[1].y, TEMP[1].yyyy, IMM[2].zzzz\n"
+                                   "UADD TEMP[1].y, TEMP[1].yyyy, IMM[0].zzzz\n"
                                    "ENDLOOP\n"
 
                                    /*

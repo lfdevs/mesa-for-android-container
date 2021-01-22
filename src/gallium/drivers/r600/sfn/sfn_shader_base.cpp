@@ -295,18 +295,6 @@ bool ShaderFromNirProcessor::process_outputs(nir_variable *output)
    return do_process_outputs(output);
 }
 
-void ShaderFromNirProcessor::add_array_deref(nir_deref_instr *instr)
-{
-   nir_variable *var = nir_deref_instr_get_variable(instr);
-
-   assert(nir_deref_mode_is(instr, nir_var_function_temp));
-   assert(glsl_type_is_array(var->type));
-
-   // add an alias for the index to the register(s);
-
-
-}
-
 void ShaderFromNirProcessor::set_var_address(nir_deref_instr *instr)
 {
    auto& dest = instr->dest;
@@ -695,6 +683,8 @@ bool ShaderFromNirProcessor::emit_intrinsic_instruction(nir_intrinsic_instr* ins
    case nir_intrinsic_shared_atomic_exchange:
    case nir_intrinsic_shared_atomic_comp_swap:
       return emit_atomic_local_shared(instr);
+   case nir_intrinsic_shader_clock:
+      return emit_shader_clock(instr);
    case nir_intrinsic_copy_deref:
    case nir_intrinsic_load_constant:
    case nir_intrinsic_load_input:
@@ -777,6 +767,15 @@ bool ShaderFromNirProcessor::emit_load_scratch(nir_intrinsic_instr* instr)
    ir->prelude_append(new WaitAck(0));
    emit_instruction(ir);
    sh_info().needs_scratch_space = 1;
+   return true;
+}
+
+bool ShaderFromNirProcessor::emit_shader_clock(nir_intrinsic_instr* instr)
+{
+   emit_instruction(new AluInstruction(op1_mov, from_nir(instr->dest, 0),
+                                       PValue(new InlineConstValue(ALU_SRC_TIME_LO, 0)), EmitInstruction::write));
+   emit_instruction(new AluInstruction(op1_mov, from_nir(instr->dest, 1),
+                                       PValue(new InlineConstValue(ALU_SRC_TIME_HI, 0)), EmitInstruction::last_write));
    return true;
 }
 
@@ -979,8 +978,7 @@ bool ShaderFromNirProcessor::load_uniform(nir_intrinsic_instr* instr)
 
    if (literal) {
       AluInstruction *ir = nullptr;
-
-      for (int i = 0; i < instr->num_components ; ++i) {
+      for (unsigned i = 0; i < nir_dest_num_components(instr->dest); ++i) {
          PValue u = PValue(new UniformValue(512 + literal->u32 + base, i));
          sfn_log << SfnLog::io << "uniform "
                  << instr->dest.ssa.index << " const["<< i << "]: "<< instr->const_index[i] << "\n";

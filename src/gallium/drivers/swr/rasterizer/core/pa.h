@@ -1035,7 +1035,7 @@ struct PA_STATE_CUT : public PA_STATE
             }
             break;
         case 6:
-            SWR_ASSERT(this->adjExtraVert != -1, "Algorith failure!");
+            SWR_ASSERT(this->adjExtraVert != -1, "Algorithm failure!");
             AssembleTriStripAdj<gsEnabled>();
 
             uint32_t nextTri[6];

@@ -67,7 +67,7 @@ namespace ArchRast
             }
 
             // There could be multiple threads creating thread pools. We
-            // want to make sure they are uniquly identified by adding in
+            // want to make sure they are uniquely identified by adding in
             // the creator's thread id into the filename.
             std::stringstream fstr;
             fstr << outDir.str().c_str() << "\\ar_event" << std::this_thread::get_id();
@@ -75,7 +75,7 @@ namespace ArchRast
             mFilename = fstr.str();
 #else
             // There could be multiple threads creating thread pools. We
-            // want to make sure they are uniquly identified by adding in
+            // want to make sure they are uniquely identified by adding in
             // the creator's thread id into the filename.
             std::stringstream fstr;
             fstr << "/tmp/ar_event" << std::this_thread::get_id();

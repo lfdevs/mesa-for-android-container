@@ -50,10 +50,7 @@ lower_impl(nir_function_impl *impl)
 
          if (nir_intrinsic_execution_scope(intr) == NIR_SCOPE_WORKGROUP) {
             b.cursor = nir_after_instr(&intr->instr);
-            nir_intrinsic_instr *cbarrier =
-               nir_intrinsic_instr_create(b.shader,
-                                          nir_intrinsic_control_barrier);
-            nir_builder_instr_insert(&b, &cbarrier->instr);
+            nir_control_barrier(&b);
          }
 
          nir_intrinsic_set_execution_scope(intr, NIR_SCOPE_NONE);

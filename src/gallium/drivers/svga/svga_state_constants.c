@@ -841,7 +841,7 @@ emit_constbuf_vgpu10(struct svga_context *svga, enum pipe_shader_type shader)
             size = align(size, 16);
          }
          else {
-            /* round down to mulitple of 16 (this may cause rendering problems
+            /* round down to multiple of 16 (this may cause rendering problems
              * but should avoid a device error).
              */
             size &= ~15;

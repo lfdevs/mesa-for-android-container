@@ -659,7 +659,7 @@ add_parameter(struct gl_uniform_storage *uniform,
 
    struct gl_program_parameter_list *params = state->params;
    int base_index = params->NumParameters;
-   _mesa_reserve_parameter_storage(params, num_params);
+   _mesa_reserve_parameter_storage(params, num_params, num_params);
 
    if (ctx->Const.PackedDriverUniformStorage) {
       for (unsigned i = 0; i < num_params; i++) {

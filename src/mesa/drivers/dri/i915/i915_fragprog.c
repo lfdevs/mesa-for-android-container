@@ -186,7 +186,7 @@ src_vector(struct i915_fragment_program *p,
    case PROGRAM_STATE_VAR:
    case PROGRAM_UNIFORM: {
       struct gl_program_parameter_list *params = program->Parameters;
-      unsigned offset = params->ParameterValueOffset[source->Index];
+      unsigned offset = params->Parameters[source->Index].ValueOffset;
       src = i915_emit_param4fv(p, &params->ParameterValues[offset].f);
       break;
    }

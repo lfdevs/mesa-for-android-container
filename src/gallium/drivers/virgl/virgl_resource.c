@@ -460,7 +460,7 @@ static void virgl_resource_layout(struct pipe_resource *pt,
                                   uint32_t plane,
                                   uint32_t winsys_stride,
                                   uint32_t plane_offset,
-                                  uint32_t modifier)
+                                  uint64_t modifier)
 {
    unsigned level, nblocksy;
    unsigned width = pt->width0;

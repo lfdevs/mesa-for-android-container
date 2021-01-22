@@ -177,7 +177,7 @@ nv50_fragprog_validate(struct nv50_context *nv50)
    if (!fp || !rast)
       return;
 
-   if (nv50->zsa && nv50->zsa->pipe.alpha.enabled) {
+   if (nv50->zsa && nv50->zsa->pipe.alpha_enabled) {
       struct pipe_framebuffer_state *fb = &nv50->framebuffer;
       bool blendable = fb->nr_cbufs == 0 || !fb->cbufs[0] ||
          nv50->screen->base.base.is_format_supported(
@@ -195,7 +195,7 @@ nv50_fragprog_validate(struct nv50_context *nv50)
       if (fp->fp.alphatest || !blendable) {
          uint8_t alphatest = PIPE_FUNC_ALWAYS + 1;
          if (!blendable)
-            alphatest = nv50->zsa->pipe.alpha.func + 1;
+            alphatest = nv50->zsa->pipe.alpha_func + 1;
          if (!fp->fp.alphatest)
             nv50_program_destroy(nv50, fp);
          else if (fp->mem && fp->fp.alphatest != alphatest)
@@ -696,11 +696,17 @@ nv50_stream_output_validate(struct nv50_context *nv50)
 
       const unsigned n = nv50->screen->base.class_3d >= NVA0_3D_CLASS ? 4 : 3;
 
-      if (n == 4 && !targ->clean)
-         nv84_hw_query_fifo_wait(push, nv50_query(targ->pq));
+      uint32_t so_used = 0;
+
+      if (!targ->clean) {
+         if (n == 4)
+            nv84_hw_query_fifo_wait(push, nv50_query(targ->pq));
+         else
+            so_used = nv50->so_used[i];
+      }
       BEGIN_NV04(push, NV50_3D(STRMOUT_ADDRESS_HIGH(i)), n);
-      PUSH_DATAh(push, buf->address + targ->pipe.buffer_offset);
-      PUSH_DATA (push, buf->address + targ->pipe.buffer_offset);
+      PUSH_DATAh(push, buf->address + targ->pipe.buffer_offset + so_used);
+      PUSH_DATA (push, buf->address + targ->pipe.buffer_offset + so_used);
       PUSH_DATA (push, so->num_attribs[i]);
       if (n == 4) {
          PUSH_DATA(push, targ->pipe.buffer_size);
@@ -714,9 +720,10 @@ nv50_stream_output_validate(struct nv50_context *nv50)
             targ->clean = false;
          }
       } else {
-         const unsigned limit = targ->pipe.buffer_size /
+         const unsigned limit = (targ->pipe.buffer_size - so_used) /
             (so->stride[i] * nv50->state.prim_size);
          prims = MIN2(prims, limit);
+         targ->clean = false;
       }
       targ->stride = so->stride[i];
       BCTX_REFN(nv50->bufctx_3d, 3D_SO, buf, WR);

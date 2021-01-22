@@ -490,7 +490,7 @@ svga_set_stream_output_targets(struct pipe_context *pipe,
 
    if (svga_have_sm5(svga) && svga->current_so && begin_so_queries) {
 
-      /* If there are aleady active queries and we need to start a new streamout,
+      /* If there are already active queries and we need to start a new streamout,
        * we need to stop the current active queries first.
        */
       if (svga->in_streamout) {

@@ -61,7 +61,7 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
 	ws->info.use_display_dcc_unaligned = false;
 	ws->info.use_display_dcc_with_retile_blit = false;
 
-	ws->addrlib = ac_addrlib_create(&ws->info, &ws->amdinfo, &ws->info.max_alignment);
+	ws->addrlib = ac_addrlib_create(&ws->info, &ws->info.max_alignment);
 	if (!ws->addrlib) {
 		fprintf(stderr, "amdgpu: Cannot create addrlib.\n");
 		return false;
@@ -168,6 +168,7 @@ static void radv_amdgpu_winsys_destroy(struct radeon_winsys *rws)
 
 	pthread_mutex_destroy(&ws->syncobj_lock);
 	u_rwlock_destroy(&ws->global_bo_list_lock);
+	u_rwlock_destroy(&ws->log_bo_list_lock);
 	ac_addrlib_destroy(ws->addrlib);
 	amdgpu_device_deinitialize(ws->dev);
 	FREE(rws);
@@ -195,14 +196,18 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags)
 		goto winsys_fail;
 
 	ws->debug_all_bos = !!(debug_flags & RADV_DEBUG_ALL_BOS);
+	ws->debug_log_bos = debug_flags & RADV_DEBUG_HANG;
 	if (debug_flags & RADV_DEBUG_NO_IBS)
 		ws->use_ib_bos = false;
 
 	ws->use_local_bos = perftest_flags & RADV_PERFTEST_LOCAL_BOS;
 	ws->zero_all_vram_allocs = debug_flags & RADV_DEBUG_ZERO_VRAM;
 	ws->use_llvm = debug_flags & RADV_DEBUG_LLVM;
+	ws->cs_bo_domain = radv_cmdbuffer_domain(&ws->info, perftest_flags);
 	list_inithead(&ws->global_bo_list);
 	u_rwlock_init(&ws->global_bo_list_lock);
+	list_inithead(&ws->log_bo_list);
+	u_rwlock_init(&ws->log_bo_list_lock);
 	pthread_mutex_init(&ws->syncobj_lock, NULL);
 	ws->base.query_info = radv_amdgpu_winsys_query_info;
 	ws->base.query_value = radv_amdgpu_winsys_query_value;

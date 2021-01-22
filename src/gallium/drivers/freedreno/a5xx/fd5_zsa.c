@@ -45,7 +45,7 @@ fd5_zsa_state_create(struct pipe_context *pctx,
 
 	so->base = *cso;
 
-	switch (cso->depth.func) {
+	switch (cso->depth_func) {
 	case PIPE_FUNC_LESS:
 	case PIPE_FUNC_LEQUAL:
 		so->gras_lrz_cntl = A5XX_GRAS_LRZ_CNTL_ENABLE;
@@ -62,18 +62,18 @@ fd5_zsa_state_create(struct pipe_context *pctx,
 		break;
 	}
 
-	if (!(cso->stencil->enabled || cso->alpha.enabled || !cso->depth.writemask))
+	if (!(cso->stencil->enabled || cso->alpha_enabled || !cso->depth_writemask))
 		so->lrz_write = true;
 
 	so->rb_depth_cntl |=
-		A5XX_RB_DEPTH_CNTL_ZFUNC(cso->depth.func); /* maps 1:1 */
+		A5XX_RB_DEPTH_CNTL_ZFUNC(cso->depth_func); /* maps 1:1 */
 
-	if (cso->depth.enabled)
+	if (cso->depth_enabled)
 		so->rb_depth_cntl |=
 			A5XX_RB_DEPTH_CNTL_Z_ENABLE |
 			A5XX_RB_DEPTH_CNTL_Z_TEST_ENABLE;
 
-	if (cso->depth.writemask)
+	if (cso->depth_writemask)
 		so->rb_depth_cntl |= A5XX_RB_DEPTH_CNTL_Z_WRITE_ENABLE;
 
 	if (cso->stencil[0].enabled) {
@@ -105,12 +105,12 @@ fd5_zsa_state_create(struct pipe_context *pctx,
 		}
 	}
 
-	if (cso->alpha.enabled) {
-		uint32_t ref = cso->alpha.ref_value * 255.0;
+	if (cso->alpha_enabled) {
+		uint32_t ref = cso->alpha_ref_value * 255.0;
 		so->rb_alpha_control =
 			A5XX_RB_ALPHA_CONTROL_ALPHA_TEST |
 			A5XX_RB_ALPHA_CONTROL_ALPHA_REF(ref) |
-			A5XX_RB_ALPHA_CONTROL_ALPHA_TEST_FUNC(cso->alpha.func);
+			A5XX_RB_ALPHA_CONTROL_ALPHA_TEST_FUNC(cso->alpha_func);
 //		so->rb_depth_control |=
 //			A5XX_RB_DEPTH_CONTROL_EARLY_Z_DISABLE;
 	}

@@ -60,7 +60,7 @@ pb_slab_reclaim(struct pb_slabs *slabs, struct pb_slab_entry *entry)
    slab->num_free++;
 
    /* Add slab to the group's list if it isn't already linked. */
-   if (!slab->head.next) {
+   if (!list_is_linked(&slab->head)) {
       struct pb_slab_group *group = &slabs->groups[entry->group_index];
       list_addtail(&slab->head, &group->slabs);
    }

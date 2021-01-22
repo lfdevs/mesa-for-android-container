@@ -56,7 +56,7 @@ validate_error(struct ir3_validate_ctx *ctx, const char *condstr)
 static unsigned
 reg_class_flags(struct ir3_register *reg)
 {
-	return reg->flags & (IR3_REG_HALF | IR3_REG_HIGH);
+	return reg->flags & (IR3_REG_HALF | IR3_REG_SHARED);
 }
 
 static void
@@ -71,6 +71,9 @@ validate_src(struct ir3_validate_ctx *ctx, struct ir3_register *reg)
 	validate_assert(ctx, src->regs[0]->wrmask == reg->wrmask);
 	validate_assert(ctx, reg_class_flags(src->regs[0]) == reg_class_flags(reg));
 }
+
+#define validate_reg_size(ctx, reg, type) \
+	validate_assert(ctx, type_size(type) == (((reg)->flags & IR3_REG_HALF) ? 16 : 32))
 
 static void
 validate_instr(struct ir3_validate_ctx *ctx, struct ir3_instruction *instr)
@@ -103,6 +106,8 @@ validate_instr(struct ir3_validate_ctx *ctx, struct ir3_instruction *instr)
 				else
 					validate_assert(ctx, reg->flags & IR3_REG_HALF);
 			}
+		} else if (opc_cat(instr->opc) == 6) {
+			/* handled below */
 		} else if (n > 0) {
 			validate_assert(ctx, (last_reg->flags & IR3_REG_HALF) == (reg->flags & IR3_REG_HALF));
 		}
@@ -118,15 +123,14 @@ validate_instr(struct ir3_validate_ctx *ctx, struct ir3_instruction *instr)
 	 */
 	switch (opc_cat(instr->opc)) {
 	case 1: /* move instructions */
-		if (instr->regs[0]->flags & IR3_REG_HALF) {
-			validate_assert(ctx, instr->cat1.dst_type == half_type(instr->cat1.dst_type));
+		if (instr->opc == OPC_MOVMSK) {
+			validate_assert(ctx, instr->regs_count == 1);
+			validate_assert(ctx, instr->regs[0]->flags & IR3_REG_SHARED);
+			validate_assert(ctx, !(instr->regs[0]->flags & IR3_REG_HALF));
+			validate_assert(ctx, util_is_power_of_two_or_zero(instr->regs[0]->wrmask + 1));
 		} else {
-			validate_assert(ctx, instr->cat1.dst_type == full_type(instr->cat1.dst_type));
-		}
-		if (instr->regs[1]->flags & IR3_REG_HALF) {
-			validate_assert(ctx, instr->cat1.src_type == half_type(instr->cat1.src_type));
-		} else {
-			validate_assert(ctx, instr->cat1.src_type == full_type(instr->cat1.src_type));
+			validate_reg_size(ctx, instr->regs[0], instr->cat1.dst_type);
+			validate_reg_size(ctx, instr->regs[1], instr->cat1.src_type);
 		}
 		break;
 	case 3:
@@ -148,12 +152,36 @@ validate_instr(struct ir3_validate_ctx *ctx, struct ir3_instruction *instr)
 		}
 		break;
 	case 5:
-		if (instr->regs[0]->flags & IR3_REG_HALF) {
-			validate_assert(ctx, instr->cat5.type == half_type(instr->cat5.type));
-		} else {
-			validate_assert(ctx, instr->cat5.type == full_type(instr->cat5.type));
-		}
+		validate_reg_size(ctx, instr->regs[0], instr->cat5.type);
 		break;
+	case 6:
+		switch (instr->opc) {
+		case OPC_RESINFO:
+		case OPC_RESFMT:
+			validate_reg_size(ctx, instr->regs[0], instr->cat6.type);
+			validate_reg_size(ctx, instr->regs[1], instr->cat6.type);
+			break;
+		case OPC_L2G:
+		case OPC_G2L:
+			validate_assert(ctx, !(instr->regs[0]->flags & IR3_REG_HALF));
+			validate_assert(ctx, !(instr->regs[1]->flags & IR3_REG_HALF));
+			break;
+		case OPC_STG:
+		case OPC_STL:
+		case OPC_STP:
+		case OPC_STLW:
+		case OPC_STIB:
+			validate_assert(ctx, !(instr->regs[1]->flags & IR3_REG_HALF));
+			validate_reg_size(ctx, instr->regs[2], instr->cat6.type);
+			validate_assert(ctx, !(instr->regs[3]->flags & IR3_REG_HALF));
+			break;
+		default:
+			validate_reg_size(ctx, instr->regs[0], instr->cat6.type);
+			validate_assert(ctx, !(instr->regs[1]->flags & IR3_REG_HALF));
+			if (instr->regs_count > 2)
+				validate_assert(ctx, !(instr->regs[2]->flags & IR3_REG_HALF));
+			break;
+		}
 	}
 }
 

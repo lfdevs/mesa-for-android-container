@@ -95,7 +95,7 @@ fd5_emit_const_bo(struct fd_ringbuffer *ring, const struct ir3_shader_variant *v
 
 static void
 fd5_emit_const_ptrs(struct fd_ringbuffer *ring, gl_shader_stage type,
-		uint32_t regid, uint32_t num, struct pipe_resource **prscs, uint32_t *offsets)
+		uint32_t regid, uint32_t num, struct fd_bo **bos, uint32_t *offsets)
 {
 	uint32_t anum = align(num, 2);
 	uint32_t i;
@@ -112,8 +112,8 @@ fd5_emit_const_ptrs(struct fd_ringbuffer *ring, gl_shader_stage type,
 	OUT_RING(ring, CP_LOAD_STATE4_2_EXT_SRC_ADDR_HI(0));
 
 	for (i = 0; i < num; i++) {
-		if (prscs[i]) {
-			OUT_RELOC(ring, fd_resource(prscs[i])->bo, offsets[i], 0, 0);
+		if (bos[i]) {
+			OUT_RELOC(ring, bos[i], offsets[i], 0, 0);
 		} else {
 			OUT_RING(ring, 0xbad00000 | (i << 16));
 			OUT_RING(ring, 0xbad00000 | (i << 16));
@@ -135,11 +135,11 @@ is_stateobj(struct fd_ringbuffer *ring)
 static void
 emit_const_ptrs(struct fd_ringbuffer *ring,
 		const struct ir3_shader_variant *v, uint32_t dst_offset,
-		uint32_t num, struct pipe_resource **prscs, uint32_t *offsets)
+		uint32_t num, struct fd_bo **bos, uint32_t *offsets)
 {
 	/* TODO inline this */
 	assert(dst_offset + num <= v->constlen * 4);
-	fd5_emit_const_ptrs(ring, v->type, dst_offset, num, prscs, offsets);
+	fd5_emit_const_ptrs(ring, v->type, dst_offset, num, bos, offsets);
 }
 
 void
@@ -707,7 +707,7 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 				A5XX_SP_FS_OUTPUT_CNTL_SAMPLEMASK_REGID(regid(63, 0)));
 	}
 
-	ir3_emit_vs_consts(vp, ring, ctx, emit->info);
+	ir3_emit_vs_consts(vp, ring, ctx, emit->info, emit->indirect, emit->draw);
 	if (!emit->binning_pass)
 		ir3_emit_fs_consts(fp, ring, ctx);
 
@@ -716,26 +716,40 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		struct fd_streamout_stateobj *so = &ctx->streamout;
 
 		for (unsigned i = 0; i < so->num_targets; i++) {
-			struct pipe_stream_output_target *target = so->targets[i];
+			struct fd_stream_output_target *target = fd_stream_output_target(so->targets[i]);
 
 			if (!target)
 				continue;
 
-			unsigned offset = (so->offsets[i] * info->stride[i] * 4) +
-					target->buffer_offset;
-
 			OUT_PKT4(ring, REG_A5XX_VPC_SO_BUFFER_BASE_LO(i), 3);
 			/* VPC_SO[i].BUFFER_BASE_LO: */
-			OUT_RELOC(ring, fd_resource(target->buffer)->bo, 0, 0, 0);
-			OUT_RING(ring, target->buffer_size + offset);
+			OUT_RELOC(ring, fd_resource(target->base.buffer)->bo, 0, 0, 0);
+			OUT_RING(ring, target->base.buffer_size + target->base.buffer_offset);
 
-			OUT_PKT4(ring, REG_A5XX_VPC_SO_BUFFER_OFFSET(i), 3);
-			OUT_RING(ring, offset);
-			/* VPC_SO[i].FLUSH_BASE_LO/HI: */
-			// TODO just give hw a dummy addr for now.. we should
-			// be using this an then CP_MEM_TO_REG to set the
-			// VPC_SO[i].BUFFER_OFFSET for the next draw..
-			OUT_RELOC(ring, fd5_context(ctx)->blit_mem, 0x100, 0, 0);
+			struct fd_bo *offset_bo = fd_resource(target->offset_buf)->bo;
+
+			if (so->reset & (1 << i)) {
+				assert(so->offsets[i] == 0);
+
+				OUT_PKT7(ring, CP_MEM_WRITE, 3);
+				OUT_RELOC(ring, offset_bo, 0, 0, 0);
+				OUT_RING(ring, target->base.buffer_offset);
+
+				OUT_PKT4(ring, REG_A5XX_VPC_SO_BUFFER_OFFSET(i), 1);
+				OUT_RING(ring, target->base.buffer_offset);
+			} else {
+				OUT_PKT7(ring, CP_MEM_TO_REG, 3);
+				OUT_RING(ring, CP_MEM_TO_REG_0_REG(REG_A5XX_VPC_SO_BUFFER_OFFSET(i)) |
+						CP_MEM_TO_REG_0_SHIFT_BY_2 | CP_MEM_TO_REG_0_UNK31 |
+						CP_MEM_TO_REG_0_CNT(0));
+				OUT_RELOC(ring, offset_bo, 0, 0, 0);
+			}
+
+			// After a draw HW would write the new offset to offset_bo
+			OUT_PKT4(ring, REG_A5XX_VPC_SO_FLUSH_BASE_LO(i), 2);
+			OUT_RELOC(ring, offset_bo, 0, 0, 0);
+
+			so->reset &= ~(1 << i);
 
 			emit->streamout_mask |= (1 << i);
 		}

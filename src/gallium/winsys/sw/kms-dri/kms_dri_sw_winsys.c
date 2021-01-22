@@ -420,7 +420,7 @@ kms_sw_displaytarget_from_handle(struct sw_winsys *ws,
          }
          kms_sw_dt->ref_count --;
       }
-      /* fallthrough */
+      FALLTHROUGH;
    default:
       break;
    }
@@ -451,7 +451,7 @@ kms_sw_displaytarget_get_handle(struct sw_winsys *winsys,
          whandle->offset = plane->offset;
          return true;
       }
-      /* fallthrough */
+      FALLTHROUGH;
    default:
       whandle->handle = 0;
       whandle->stride = 0;

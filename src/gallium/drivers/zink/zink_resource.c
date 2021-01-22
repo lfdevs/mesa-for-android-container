@@ -38,7 +38,13 @@
 
 #include "frontend/sw_winsys.h"
 
+#ifndef _WIN32
+#define ZINK_USE_DMABUF
+#endif
+
+#ifdef ZINK_USE_DMABUF
 #include "drm-uapi/drm_fourcc.h"
+#endif
 
 static void
 zink_resource_destroy(struct pipe_screen *pscreen,
@@ -102,7 +108,7 @@ resource_create(struct pipe_screen *pscreen,
    pipe_reference_init(&res->base.reference, 1);
    res->base.screen = pscreen;
 
-   VkMemoryRequirements reqs;
+   VkMemoryRequirements reqs = {};
    VkMemoryPropertyFlags flags = 0;
 
    res->internal_format = templ->format;
@@ -197,8 +203,10 @@ resource_create(struct pipe_screen *pscreen,
           templ->target == PIPE_TEXTURE_CUBE_ARRAY)
          ici.arrayLayers *= 6;
 
-      if (templ->bind & PIPE_BIND_SHARED)
+      if (templ->bind & (PIPE_BIND_DISPLAY_TARGET |
+                         PIPE_BIND_SHARED)) {
          ici.tiling = VK_IMAGE_TILING_LINEAR;
+      }
 
       if (templ->usage == PIPE_USAGE_STAGING)
          ici.tiling = VK_IMAGE_TILING_LINEAR;
@@ -233,7 +241,7 @@ resource_create(struct pipe_screen *pscreen,
          .scanout = true,
       };
 
-      if (templ->bind & PIPE_BIND_SCANOUT)
+      if (screen->needs_mesa_wsi && (templ->bind & PIPE_BIND_SCANOUT))
          ici.pNext = &image_wsi_info;
 
       VkResult result = vkCreateImage(screen->dev, &ici, NULL, &res->image);
@@ -242,7 +250,7 @@ resource_create(struct pipe_screen *pscreen,
          return NULL;
       }
 
-      res->optimial_tiling = ici.tiling != VK_IMAGE_TILING_LINEAR;
+      res->optimal_tiling = ici.tiling != VK_IMAGE_TILING_LINEAR;
       res->aspect = aspect_from_format(templ->format);
 
       vkGetImageMemoryRequirements(screen->dev, res->image, &reqs);
@@ -285,7 +293,7 @@ resource_create(struct pipe_screen *pscreen,
       NULL,
    };
 
-   if (templ->bind & PIPE_BIND_SCANOUT) {
+   if (screen->needs_mesa_wsi && (templ->bind & PIPE_BIND_SCANOUT)) {
       memory_wsi_info.implicit_sync = true;
 
       memory_wsi_info.pNext = mai.pNext;
@@ -345,8 +353,6 @@ zink_resource_get_handle(struct pipe_screen *pscreen,
 {
    struct zink_resource *res = zink_resource(tex);
    struct zink_screen *screen = zink_screen(pscreen);
-   VkMemoryGetFdInfoKHR fd_info = {};
-   int fd;
 
    if (res->base.target != PIPE_BUFFER) {
       VkImageSubresource sub_res = {};
@@ -360,6 +366,9 @@ zink_resource_get_handle(struct pipe_screen *pscreen,
    }
 
    if (whandle->type == WINSYS_HANDLE_TYPE_FD) {
+#ifdef ZINK_USE_DMABUF
+      VkMemoryGetFdInfoKHR fd_info = {};
+      int fd;
       fd_info.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
       fd_info.memory = res->mem;
       fd_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
@@ -368,6 +377,9 @@ zink_resource_get_handle(struct pipe_screen *pscreen,
          return false;
       whandle->handle = fd;
       whandle->modifier = DRM_FORMAT_MOD_INVALID;
+#else
+      return false;
+#endif
    }
    return true;
 }
@@ -378,10 +390,14 @@ zink_resource_from_handle(struct pipe_screen *pscreen,
                  struct winsys_handle *whandle,
                  unsigned usage)
 {
+#ifdef ZINK_USE_DMABUF
    if (whandle->modifier != DRM_FORMAT_MOD_INVALID)
       return NULL;
 
    return resource_create(pscreen, templ, whandle, usage);
+#else
+   return NULL;
+#endif
 }
 
 static bool
@@ -537,7 +553,7 @@ zink_transfer_map(struct pipe_context *pctx,
       trans->base.layer_stride = 0;
       ptr = ((uint8_t *)ptr) + box->x;
    } else {
-      if (res->optimial_tiling || ((res->base.usage != PIPE_USAGE_STAGING))) {
+      if (res->optimal_tiling || ((res->base.usage != PIPE_USAGE_STAGING))) {
          enum pipe_format format = pres->format;
          if (usage & PIPE_MAP_DEPTH_ONLY)
             format = util_format_get_depth_only(pres->format);
@@ -584,7 +600,7 @@ zink_transfer_map(struct pipe_context *pctx,
             return NULL;
 
       } else {
-         assert(!res->optimial_tiling);
+         assert(!res->optimal_tiling);
          if (batch_uses >= ZINK_RESOURCE_ACCESS_WRITE)
             zink_fence_wait(pctx);
          VkResult result = vkMapMemory(screen->dev, res->mem, res->offset, res->size, 0, &ptr);
@@ -673,9 +689,8 @@ zink_resource_setup_transfer_layouts(struct zink_batch *batch, struct zink_resou
        * VK_IMAGE_LAYOUT_GENERAL. And since this isn't a present-related
        * operation, VK_IMAGE_LAYOUT_GENERAL seems most appropriate.
        */
-      if (src->layout != VK_IMAGE_LAYOUT_GENERAL)
-         zink_resource_barrier(batch->cmdbuf, src, src->aspect,
-                               VK_IMAGE_LAYOUT_GENERAL);
+      zink_resource_barrier(batch->cmdbuf, src, src->aspect,
+                            VK_IMAGE_LAYOUT_GENERAL);
    } else {
       if (src->layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
          zink_resource_barrier(batch->cmdbuf, src, src->aspect,

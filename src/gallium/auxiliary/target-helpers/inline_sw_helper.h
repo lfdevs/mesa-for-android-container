@@ -5,6 +5,7 @@
 #include "pipe/p_compiler.h"
 #include "util/u_debug.h"
 #include "frontend/sw_winsys.h"
+#include "target-helpers/inline_debug_helper.h"
 
 #ifdef GALLIUM_SWR
 #include "swr/swr_public.h"
@@ -25,6 +26,10 @@
 #ifdef GALLIUM_VIRGL
 #include "virgl/virgl_public.h"
 #include "virgl/vtest/virgl_vtest_public.h"
+#endif
+
+#ifdef GALLIUM_D3D12
+#include "d3d12/d3d12_public.h"
 #endif
 
 static inline struct pipe_screen *
@@ -60,30 +65,46 @@ sw_screen_create_named(struct sw_winsys *winsys, const char *driver)
       screen = zink_create_screen(winsys);
 #endif
 
-   return screen;
+#if defined(GALLIUM_D3D12)
+   if (screen == NULL && strcmp(driver, "d3d12") == 0)
+      screen = d3d12_create_dxcore_screen(winsys, NULL);
+#endif
+
+   return screen ? debug_screen_wrap(screen) : NULL;
 }
 
 
 static inline struct pipe_screen *
 sw_screen_create(struct sw_winsys *winsys)
 {
-   const char *default_driver;
-   const char *driver;
-
-#if defined(GALLIUM_LLVMPIPE)
-   default_driver = "llvmpipe";
-#elif defined(GALLIUM_SOFTPIPE)
-   default_driver = "softpipe";
-#elif defined(GALLIUM_SWR)
-   default_driver = "swr";
-#elif defined(GALLIUM_ZINK)
-   default_driver = "zink";
-#else
-   default_driver = "";
+   const char *drivers[] = {
+      debug_get_option("GALLIUM_DRIVER", ""),
+#if defined(GALLIUM_ZINK)
+      "zink",
 #endif
+#if defined(GALLIUM_D3D12)
+      "d3d12",
+#endif
+#if defined(GALLIUM_LLVMPIPE)
+      "llvmpipe",
+#endif
+#if defined(GALLIUM_SOFTPIPE)
+      "softpipe",
+#endif
+#if defined(GALLIUM_SWR)
+      "swr",
+#endif
+   };
 
-   driver = debug_get_option("GALLIUM_DRIVER", default_driver);
-   return sw_screen_create_named(winsys, driver);
+   for (unsigned i = 0; i < ARRAY_SIZE(drivers); i++) {
+      struct pipe_screen *screen = sw_screen_create_named(winsys, drivers[i]);
+      if (screen)
+         return screen;
+      /* If the env var is set, don't keep trying things */
+      else if (i == 0 && drivers[i][0] != '\0')
+         return NULL;
+   }
+   return NULL;
 }
 
 #endif

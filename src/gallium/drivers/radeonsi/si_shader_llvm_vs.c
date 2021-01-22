@@ -105,7 +105,7 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
       vb_desc = ac_get_arg(&ctx->ac, ctx->vb_descriptors[input_index]);
    } else {
       unsigned index = input_index - num_vbos_in_user_sgprs;
-      vb_desc = ac_build_load_to_sgpr(&ctx->ac, ac_get_arg(&ctx->ac, ctx->vertex_buffers),
+      vb_desc = ac_build_load_to_sgpr(&ctx->ac, ac_get_arg(&ctx->ac, ctx->args.vertex_buffers),
                                       LLVMConstInt(ctx->ac.i32, index, 0));
    }
 
@@ -158,7 +158,7 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
    for (unsigned i = 0; i < num_fetches; ++i) {
       LLVMValueRef voffset = LLVMConstInt(ctx->ac.i32, fetch_stride * i, 0);
       fetches[i] = ac_build_buffer_load_format(&ctx->ac, vb_desc, vertex_index, voffset,
-                                               channels_per_fetch, 0, true, false);
+                                               channels_per_fetch, 0, true, false, false);
    }
 
    if (num_fetches == 1 && channels_per_fetch > 1) {
@@ -277,7 +277,7 @@ void si_llvm_streamout_store_output(struct si_shader_context *ctx, LLVMValueRef 
       }
       /* as v4i32 (aligned to 4) */
       out[3] = LLVMGetUndef(ctx->ac.i32);
-      /* fall through */
+      FALLTHROUGH;
    case 4: /* as v4i32 */
       vdata = ac_build_gather_values(&ctx->ac, out, util_next_power_of_two(num_comps));
       break;
@@ -301,7 +301,7 @@ void si_llvm_emit_streamout(struct si_shader_context *ctx, struct si_shader_outp
    int i;
 
    /* Get bits [22:16], i.e. (so_param >> 16) & 127; */
-   LLVMValueRef so_vtx_count = si_unpack_param(ctx, ctx->streamout_config, 16, 7);
+   LLVMValueRef so_vtx_count = si_unpack_param(ctx, ctx->args.streamout_config, 16, 7);
 
    LLVMValueRef tid = ac_get_thread_id(&ctx->ac);
 
@@ -319,7 +319,7 @@ void si_llvm_emit_streamout(struct si_shader_context *ctx, struct si_shader_outp
        *                attrib_offset
        */
 
-      LLVMValueRef so_write_index = ac_get_arg(&ctx->ac, ctx->streamout_write_index);
+      LLVMValueRef so_write_index = ac_get_arg(&ctx->ac, ctx->args.streamout_write_index);
 
       /* Compute (streamout_write_index + thread_id). */
       so_write_index = LLVMBuildAdd(builder, so_write_index, tid, "");
@@ -338,7 +338,7 @@ void si_llvm_emit_streamout(struct si_shader_context *ctx, struct si_shader_outp
 
          so_buffers[i] = ac_build_load_to_sgpr(&ctx->ac, buf_ptr, offset);
 
-         LLVMValueRef so_offset = ac_get_arg(&ctx->ac, ctx->streamout_offset[i]);
+         LLVMValueRef so_offset = ac_get_arg(&ctx->ac, ctx->args.streamout_offset[i]);
          so_offset = LLVMBuildMul(builder, so_offset, LLVMConstInt(ctx->ac.i32, 4, 0), "");
 
          so_write_offset[i] = ac_build_imad(
@@ -495,10 +495,9 @@ static void si_vertex_color_clamping(struct si_shader_context *ctx,
           outputs[i].semantic != VARYING_SLOT_BFC1)
          continue;
 
-      for (unsigned j = 0; j < 4; j++) {
-         addr[i][j] = ac_build_alloca_undef(&ctx->ac, ctx->ac.f32, "");
-         LLVMBuildStore(ctx->ac.builder, outputs[i].values[j], addr[i][j]);
-      }
+      for (unsigned j = 0; j < 4; j++)
+         addr[i][j] = ac_build_alloca_init(&ctx->ac, outputs[i].values[j], "");
+
       has_colors = true;
    }
 
@@ -605,12 +604,13 @@ void si_llvm_build_vs_exports(struct si_shader_context *ctx,
 
    bool writes_psize = shader->selector->info.writes_psize && !shader->key.opt.kill_pointsize;
    bool pos_writes_edgeflag = shader->selector->info.writes_edgeflag && !shader->key.as_ngg;
+   bool writes_vrs = ctx->screen->options.vrs2x2;
 
    /* Write the misc vector (point size, edgeflag, layer, viewport). */
-   if (writes_psize || pos_writes_edgeflag ||
+   if (writes_psize || pos_writes_edgeflag || writes_vrs ||
        shader->selector->info.writes_viewport_index || shader->selector->info.writes_layer) {
       pos_args[1].enabled_channels = writes_psize |
-                                     (pos_writes_edgeflag << 1) |
+                                     ((pos_writes_edgeflag | writes_vrs) << 1) |
                                      (shader->selector->info.writes_layer << 2);
 
       pos_args[1].valid_mask = 0; /* EXEC mask */
@@ -633,6 +633,32 @@ void si_llvm_build_vs_exports(struct si_shader_context *ctx,
 
          /* The LLVM intrinsic expects a float. */
          pos_args[1].out[1] = ac_to_float(&ctx->ac, edgeflag_value);
+      }
+
+      if (writes_vrs) {
+         /* Bits [2:3] = VRS rate X
+          * Bits [4:5] = VRS rate Y
+          *
+          * The range is [-2, 1]. Values:
+          *   1: 2x coarser shading rate in that direction.
+          *   0: normal shading rate
+          *  -1: 2x finer shading rate (sample shading, not directional)
+          *  -2: 4x finer shading rate (sample shading, not directional)
+          *
+          * Sample shading can't go above 8 samples, so both numbers can't be -2
+          * at the same time.
+          */
+         LLVMValueRef rates = LLVMConstInt(ctx->ac.i32, (1 << 2) | (1 << 4), 0);
+
+         /* If Pos.W != 1 (typical for non-GUI elements), use 2x2 coarse shading. */
+         rates = LLVMBuildSelect(ctx->ac.builder,
+                                 LLVMBuildFCmp(ctx->ac.builder, LLVMRealUNE,
+                                               pos_args[0].out[3], ctx->ac.f32_1, ""),
+                                 rates, ctx->ac.i32_0, "");
+
+         LLVMValueRef v = ac_to_integer(&ctx->ac, pos_args[1].out[1]);
+         v = LLVMBuildOr(ctx->ac.builder, v, rates, "");
+         pos_args[1].out[1] = ac_to_float(&ctx->ac, v);
       }
 
       if (ctx->screen->info.chip_class >= GFX9) {
@@ -820,7 +846,7 @@ void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part
 
    if (key->vs_prolog.num_merged_next_stage_vgprs) {
       if (!key->vs_prolog.is_monolithic)
-         si_init_exec_from_input(ctx, merged_wave_info, 0);
+         ac_init_exec_full_mask(&ctx->ac);
 
       if (key->vs_prolog.as_ls && ctx->screen->info.has_ls_vgpr_init_bug) {
          /* If there are no HS threads, SPI loads the LS VGPRs
@@ -879,7 +905,9 @@ void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part
          };
          LLVMValueRef is_odd = LLVMBuildTrunc(ctx->ac.builder, thread_id_in_tg, ctx->ac.i1, "");
          LLVMValueRef flatshade_first = LLVMBuildICmp(
-            builder, LLVMIntEQ, si_unpack_param(ctx, ctx->vs_state_bits, 4, 2), ctx->ac.i32_0, "");
+            builder, LLVMIntEQ,
+            si_unpack_param(ctx, input_sgpr_param[8 + SI_SGPR_VS_STATE_BITS], 4, 2),
+            ctx->ac.i32_0, "");
 
          ac_build_triangle_strip_indices_to_triangle(&ctx->ac, is_odd, flatshade_first, index);
          input_vgprs[0] = index[0];
@@ -895,6 +923,48 @@ void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part
       input_vgprs[5] =
          LLVMBuildAdd(ctx->ac.builder, input_vgprs[5], thread_id_in_tg, ""); /* VertexID */
       input_vgprs[8] = input_vgprs[6];                                       /* InstanceID */
+
+      if (key->vs_prolog.gs_fast_launch_index_size_packed) {
+         LLVMTypeRef index_type = ctx->ac.voidt;
+
+         switch (key->vs_prolog.gs_fast_launch_index_size_packed) {
+         case 1:
+            index_type = ctx->ac.i8;
+            break;
+         case 2:
+            index_type = ctx->ac.i16;
+            break;
+         case 3:
+            index_type = ctx->ac.i32;
+            break;
+         default:
+            unreachable("invalid gs_fast_launch_index_size_packed");
+         }
+
+         LLVMValueRef sgprs[2] = {
+            ac_get_arg(&ctx->ac, input_sgpr_param[0]),
+            ac_get_arg(&ctx->ac, input_sgpr_param[1]),
+         };
+         LLVMValueRef indices = ac_build_gather_values(&ctx->ac, sgprs, 2);
+         indices = LLVMBuildBitCast(ctx->ac.builder, indices, ctx->ac.i64, "");
+         indices = LLVMBuildIntToPtr(ctx->ac.builder, indices,
+                                     LLVMPointerType(index_type, AC_ADDR_SPACE_CONST), "");
+
+         LLVMValueRef vertex_id = ac_build_alloca_init(&ctx->ac, input_vgprs[5], "");
+
+         /* if (is ES thread...) */
+         ac_build_ifcc(&ctx->ac,
+                       LLVMBuildICmp(ctx->ac.builder, LLVMIntULT, ac_get_thread_id(&ctx->ac),
+                                     si_unpack_param(ctx, merged_wave_info, 0, 8), ""), 0);
+         /* VertexID = indexBufferLoad(VertexID); */
+         LLVMValueRef index = LLVMBuildGEP(ctx->ac.builder, indices, &input_vgprs[5], 1, "");
+         index = LLVMBuildLoad(ctx->ac.builder, index, "");
+         index = LLVMBuildZExt(ctx->ac.builder, index, ctx->ac.i32, "");
+         LLVMBuildStore(ctx->ac.builder, index, vertex_id);
+         ac_build_endif(&ctx->ac, 0);
+
+         input_vgprs[5] = LLVMBuildLoad(ctx->ac.builder, vertex_id, "");
+      }
    }
 
    unsigned vertex_id_vgpr = first_vs_vgpr;
@@ -984,18 +1054,19 @@ void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part
    si_llvm_build_ret(ctx, ret);
 }
 
-static LLVMValueRef get_base_vertex(struct ac_shader_abi *abi)
+static LLVMValueRef get_base_vertex(struct ac_shader_abi *abi, bool non_indexed_is_zero)
 {
    struct si_shader_context *ctx = si_shader_context_from_abi(abi);
+
+   /* This doesn't happen with GL: */
+   if (!non_indexed_is_zero)
+      return ac_get_arg(&ctx->ac, ctx->args.base_vertex);
 
    /* For non-indexed draws, the base vertex set by the driver
     * (for direct draws) or the CP (for indirect draws) is the
     * first vertex ID, but GLSL expects 0 to be returned.
     */
-   LLVMValueRef vs_state = ac_get_arg(&ctx->ac, ctx->vs_state_bits);
-   LLVMValueRef indexed;
-
-   indexed = LLVMBuildLShr(ctx->ac.builder, vs_state, ctx->ac.i32_1, "");
+   LLVMValueRef indexed = si_unpack_param(ctx, ctx->vs_state_bits, 1, 1);
    indexed = LLVMBuildTrunc(ctx->ac.builder, indexed, ctx->ac.i1, "");
 
    return LLVMBuildSelect(ctx->ac.builder, indexed, ac_get_arg(&ctx->ac, ctx->args.base_vertex),

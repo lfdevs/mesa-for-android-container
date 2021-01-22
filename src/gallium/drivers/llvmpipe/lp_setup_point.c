@@ -270,7 +270,7 @@ setup_point_coefficients( struct lp_setup_context *setup,
             break;
          }
       }
-         /* fall-through */
+         FALLTHROUGH;
       case LP_INTERP_CONSTANT:
          for (i = 0; i < NUM_CHANNELS; i++) {
             if (usage_mask & (1 << i)) {

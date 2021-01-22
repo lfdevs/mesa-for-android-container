@@ -47,6 +47,9 @@ struct panfrost_blend_shader_key {
         unsigned logicop_enable : 1;
         unsigned logicop_func:4;
 
+        /* Number of samples */
+        unsigned nr_samples : 5;
+
         struct pipe_rt_blend_state equation;
 };
 
@@ -143,7 +146,7 @@ panfrost_get_blend_for_context(struct panfrost_context *ctx, unsigned rt, struct
 struct panfrost_blend_shader *
 panfrost_get_blend_shader(struct panfrost_context *ctx,
                           struct panfrost_blend_state *blend,
-                          enum pipe_format fmt,
+                          enum pipe_format fmt, unsigned nr_samples,
                           unsigned rt,
                           const float *constants);
 

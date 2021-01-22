@@ -612,7 +612,7 @@ choose_instruction_to_schedule(struct choose_scoreboard *scoreboard,
                                 continue;
 
                         /* Don't merge in something that will lock the TLB.
-                         * Hopwefully what we have in inst will release some
+                         * Hopefully what we have in inst will release some
                          * other instructions, allowing us to delay the
                          * TLB-locking instruction until later.
                          */

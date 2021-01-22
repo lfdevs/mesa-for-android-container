@@ -189,7 +189,7 @@ fd_blitter_clear(struct pipe_context *pctx, unsigned buffers,
 	struct pipe_stencil_ref sr = {
 		.ref_value = { stencil & 0xff }
 	};
-	pctx->set_stencil_ref(pctx, &sr);
+	pctx->set_stencil_ref(pctx, sr);
 
 	struct pipe_constant_buffer cb = {
 		.buffer_size = 16,
@@ -222,7 +222,12 @@ fd_blitter_clear(struct pipe_context *pctx, unsigned buffers,
 	pctx->set_vertex_buffers(pctx, blitter->vb_slot, 1,
 			&ctx->solid_vbuf_state.vertexbuf.vb[0]);
 	pctx->set_stream_output_targets(pctx, 0, NULL, NULL);
-	pctx->bind_vs_state(pctx, ctx->solid_prog.vs);
+
+	if (pfb->layers > 1)
+		pctx->bind_vs_state(pctx, ctx->solid_layered_prog.vs);
+	else
+		pctx->bind_vs_state(pctx, ctx->solid_prog.vs);
+
 	pctx->bind_fs_state(pctx, ctx->solid_prog.fs);
 
 	/* Clear geom/tess shaders, lest the draw emit code think we are
@@ -234,11 +239,14 @@ fd_blitter_clear(struct pipe_context *pctx, unsigned buffers,
 
 	struct pipe_draw_info info = {
 		.mode = PIPE_PRIM_MAX,    /* maps to DI_PT_RECTLIST */
-		.count = 2,
+                .index_bounds_valid = true,
 		.max_index = 1,
-		.instance_count = 1,
+		.instance_count = MAX2(1, pfb->layers),
 	};
-	pctx->draw_vbo(pctx, &info);
+        struct pipe_draw_start_count draw = {
+                .count = 2,
+        };
+	pctx->draw_vbo(pctx, &info, NULL, &draw, 1);
 
 	/* We expect that this should not have triggered a change in pfb: */
 	assert(util_framebuffer_state_equal(pfb, &ctx->framebuffer));

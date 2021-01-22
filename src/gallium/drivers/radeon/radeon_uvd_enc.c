@@ -58,8 +58,8 @@ static void radeon_uvd_enc_get_param(struct radeon_uvd_encoder *enc,
    enc->enc_pic.pic_order_cnt = pic->pic_order_cnt;
    enc->enc_pic.pic_order_cnt_type = pic->pic_order_cnt_type;
    enc->enc_pic.not_referenced = pic->not_referenced;
-   enc->enc_pic.is_iframe = (pic->picture_type == PIPE_H265_ENC_PICTURE_TYPE_IDR) ||
-                            (pic->picture_type == PIPE_H265_ENC_PICTURE_TYPE_I);
+   enc->enc_pic.is_iframe = (pic->picture_type == PIPE_H2645_ENC_PICTURE_TYPE_IDR) ||
+                            (pic->picture_type == PIPE_H2645_ENC_PICTURE_TYPE_I);
 
    if (pic->seq.conformance_window_flag) {
          enc->enc_pic.crop_left = pic->seq.conf_win_left_offset;
@@ -103,7 +103,7 @@ static void radeon_uvd_enc_get_param(struct radeon_uvd_encoder *enc,
 
 static void flush(struct radeon_uvd_encoder *enc)
 {
-   enc->ws->cs_flush(enc->cs, PIPE_FLUSH_ASYNC, NULL);
+   enc->ws->cs_flush(&enc->cs, PIPE_FLUSH_ASYNC, NULL);
 }
 
 static void radeon_uvd_enc_flush(struct pipe_video_codec *encoder)
@@ -235,7 +235,7 @@ static void radeon_uvd_enc_destroy(struct pipe_video_codec *encoder)
    }
 
    si_vid_destroy_buffer(&enc->cpb);
-   enc->ws->cs_destroy(enc->cs);
+   enc->ws->cs_destroy(&enc->cs);
    FREE(enc);
 }
 
@@ -247,7 +247,7 @@ static void radeon_uvd_enc_get_feedback(struct pipe_video_codec *encoder, void *
 
    if (NULL != size) {
       radeon_uvd_enc_feedback_t *fb_data = (radeon_uvd_enc_feedback_t *)enc->ws->buffer_map(
-         fb->res->buf, enc->cs, PIPE_MAP_READ_WRITE | RADEON_MAP_TEMPORARY);
+         fb->res->buf, &enc->cs, PIPE_MAP_READ_WRITE | RADEON_MAP_TEMPORARY);
 
       if (!fb_data->status)
          *size = fb_data->bitstream_size;
@@ -294,9 +294,8 @@ struct pipe_video_codec *radeon_uvd_create_encoder(struct pipe_context *context,
    enc->bits_in_shifter = 0;
    enc->screen = context->screen;
    enc->ws = ws;
-   enc->cs = ws->cs_create(sctx->ctx, RING_UVD_ENC, radeon_uvd_enc_cs_flush, enc, false);
 
-   if (!enc->cs) {
+   if (!ws->cs_create(&enc->cs, sctx->ctx, RING_UVD_ENC, radeon_uvd_enc_cs_flush, enc, false)) {
       RVID_ERR("Can't get command submission context.\n");
       goto error;
    }
@@ -342,8 +341,7 @@ struct pipe_video_codec *radeon_uvd_create_encoder(struct pipe_context *context,
    return &enc->base;
 
 error:
-   if (enc->cs)
-      enc->ws->cs_destroy(enc->cs);
+   enc->ws->cs_destroy(&enc->cs);
 
    si_vid_destroy_buffer(&enc->cpb);
 

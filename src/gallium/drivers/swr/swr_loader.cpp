@@ -145,10 +145,12 @@ swr_create_screen(struct sw_winsys *winsys)
 
 void
 swr_gdi_swap(struct pipe_screen *screen,
+             struct pipe_context *ctx,
              struct pipe_resource *res,
              void *hDC)
 {
    screen->flush_frontbuffer(screen,
+                             ctx,
                              res,
                              0, 0,
                              hDC,

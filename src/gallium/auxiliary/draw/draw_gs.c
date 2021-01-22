@@ -218,30 +218,8 @@ static void tgsi_gs_run(struct draw_geometry_shader *shader,
    /* run interpreter */
    tgsi_exec_machine_run(machine, 0);
 
-   for (i = 0; i < 4; i++) {
-      int prim_i;
-      int prim_c;
-      switch (i) {
-      case 0:
-         prim_i = TGSI_EXEC_TEMP_PRIMITIVE_I;
-         prim_c = TGSI_EXEC_TEMP_PRIMITIVE_C;
-         break;
-      case 1:
-         prim_i = TGSI_EXEC_TEMP_PRIMITIVE_S1_I;
-         prim_c = TGSI_EXEC_TEMP_PRIMITIVE_S1_C;
-         break;
-      case 2:
-         prim_i = TGSI_EXEC_TEMP_PRIMITIVE_S2_I;
-         prim_c = TGSI_EXEC_TEMP_PRIMITIVE_S2_C;
-         break;
-      case 3:
-         prim_i = TGSI_EXEC_TEMP_PRIMITIVE_S3_I;
-         prim_c = TGSI_EXEC_TEMP_PRIMITIVE_S3_C;
-         break;
-      };
-
-      out_prims[i] = machine->Temps[prim_i].xyzw[prim_c].u[0];
-   }
+   for (i = 0; i < 4; i++)
+      out_prims[i] = machine->OutputPrimCount[i];
 }
 
 #ifdef LLVM_AVAILABLE

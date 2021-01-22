@@ -114,7 +114,11 @@ anv_device_init_blorp(struct anv_device *device)
       device->blorp.exec = gen11_blorp_exec;
       break;
    case 12:
-      device->blorp.exec = gen12_blorp_exec;
+      if (gen_device_info_is_12hp(&device->info)) {
+         device->blorp.exec = gen125_blorp_exec;
+      } else {
+         device->blorp.exec = gen12_blorp_exec;
+      }
       break;
    default:
       unreachable("Unknown hardware generation");

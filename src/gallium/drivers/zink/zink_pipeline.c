@@ -136,7 +136,6 @@ zink_create_gfx_pipeline(struct zink_screen *screen,
 
    VkGraphicsPipelineCreateInfo pci = {};
    pci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-   pci.flags = VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
    pci.layout = prog->layout;
    pci.renderPass = state->render_pass->render_pass;
    pci.pVertexInputState = &vertex_input_state;
@@ -147,6 +146,17 @@ zink_create_gfx_pipeline(struct zink_screen *screen,
    pci.pViewportState = &viewport_state;
    pci.pDepthStencilState = &depth_stencil_state;
    pci.pDynamicState = &pipelineDynamicStateCreateInfo;
+
+   VkPipelineTessellationStateCreateInfo tci = {};
+   VkPipelineTessellationDomainOriginStateCreateInfo tdci = {};
+   if (prog->shaders[PIPE_SHADER_TESS_CTRL] && prog->shaders[PIPE_SHADER_TESS_EVAL]) {
+      tci.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+      tci.patchControlPoints = state->vertices_per_patch;
+      pci.pTessellationState = &tci;
+      tci.pNext = &tdci;
+      tdci.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO;
+      tdci.domainOrigin = VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT;
+   }
 
    VkPipelineShaderStageCreateInfo shader_stages[ZINK_SHADER_COUNT];
    uint32_t num_stages = 0;

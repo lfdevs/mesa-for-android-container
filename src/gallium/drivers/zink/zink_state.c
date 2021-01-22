@@ -84,7 +84,7 @@ zink_bind_vertex_elements_state(struct pipe_context *pctx,
    struct zink_context *ctx = zink_context(pctx);
    struct zink_gfx_pipeline_state *state = &ctx->gfx_pipeline_state;
    ctx->element_state = cso;
-   state->hash = 0;
+   state->dirty = true;
    state->divisors_present = 0;
    if (cso) {
       state->element_state = &ctx->element_state->hw_state;
@@ -106,6 +106,7 @@ static void
 zink_delete_vertex_elements_state(struct pipe_context *pctx,
                                   void *ves)
 {
+   FREE(ves);
 }
 
 static VkBlendFactor
@@ -270,7 +271,7 @@ zink_bind_blend_state(struct pipe_context *pctx, void *cso)
 
    if (state->blend_state != cso) {
       state->blend_state = cso;
-      state->hash = 0;
+      state->dirty = true;
    }
 }
 
@@ -336,15 +337,15 @@ zink_create_depth_stencil_alpha_state(struct pipe_context *pctx,
 
    cso->base = *depth_stencil_alpha;
 
-   if (depth_stencil_alpha->depth.enabled) {
+   if (depth_stencil_alpha->depth_enabled) {
       cso->hw_state.depth_test = VK_TRUE;
-      cso->hw_state.depth_compare_op = compare_op(depth_stencil_alpha->depth.func);
+      cso->hw_state.depth_compare_op = compare_op(depth_stencil_alpha->depth_func);
    }
 
-   if (depth_stencil_alpha->depth.bounds_test) {
+   if (depth_stencil_alpha->depth_bounds_test) {
       cso->hw_state.depth_bounds_test = VK_TRUE;
-      cso->hw_state.min_depth_bounds = depth_stencil_alpha->depth.bounds_min;
-      cso->hw_state.max_depth_bounds = depth_stencil_alpha->depth.bounds_max;
+      cso->hw_state.min_depth_bounds = depth_stencil_alpha->depth_bounds_min;
+      cso->hw_state.max_depth_bounds = depth_stencil_alpha->depth_bounds_max;
    }
 
    if (depth_stencil_alpha->stencil[0].enabled) {
@@ -357,7 +358,7 @@ zink_create_depth_stencil_alpha_state(struct pipe_context *pctx,
    else
       cso->hw_state.stencil_back = cso->hw_state.stencil_front;
 
-   cso->hw_state.depth_write = depth_stencil_alpha->depth.writemask;
+   cso->hw_state.depth_write = depth_stencil_alpha->depth_writemask;
 
    return cso;
 }
@@ -373,7 +374,7 @@ zink_bind_depth_stencil_alpha_state(struct pipe_context *pctx, void *cso)
       struct zink_gfx_pipeline_state *state = &ctx->gfx_pipeline_state;
       if (state->depth_stencil_alpha_state != &ctx->dsa_state->hw_state) {
          state->depth_stencil_alpha_state = &ctx->dsa_state->hw_state;
-         state->hash = 0;
+         state->dirty = true;
       }
    }
 }
@@ -452,12 +453,12 @@ zink_bind_rasterizer_state(struct pipe_context *pctx, void *cso)
    if (ctx->rast_state) {
       if (ctx->gfx_pipeline_state.rast_state != &ctx->rast_state->hw_state) {
          ctx->gfx_pipeline_state.rast_state = &ctx->rast_state->hw_state;
-         ctx->gfx_pipeline_state.hash = 0;
+         ctx->gfx_pipeline_state.dirty = true;
       }
 
       if (ctx->line_width != ctx->rast_state->line_width) {
          ctx->line_width = ctx->rast_state->line_width;
-         ctx->gfx_pipeline_state.hash = 0;
+         ctx->gfx_pipeline_state.dirty = true;
       }
    }
 }

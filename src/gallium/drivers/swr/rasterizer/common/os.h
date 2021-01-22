@@ -39,7 +39,9 @@
 #undef NOMINMAX
 #define UNICODE
 #else
+#undef UNICODE
 #include <windows.h>
+#define UNICODE
 #endif
 #include <intrin.h>
 #include <cstdint>

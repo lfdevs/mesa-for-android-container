@@ -122,7 +122,7 @@ static GLboolean r200VertexProgUpdateParams(struct gl_context *ctx, struct r200_
    }
 
    for(pi = 0; pi < paramList->NumParameters; pi++) {
-      unsigned pvo = paramList->ParameterValueOffset[pi];
+      unsigned pvo = paramList->Parameters[pi].ValueOffset;
 
       switch(paramList->Parameters[pi].Type) {
       case PROGRAM_STATE_VAR:
@@ -460,7 +460,7 @@ static GLboolean r200_translate_vertex_program(struct gl_context *ctx, struct r2
    if ((mesa_vp->info.outputs_written & (1 << VARYING_SLOT_FOGC)) &&
        !vp->fogpidx) {
       struct gl_program_parameter_list *paramList;
-      gl_state_index16 tokens[STATE_LENGTH] = { STATE_FOG_PARAMS, 0, 0, 0, 0 };
+      gl_state_index16 tokens[STATE_LENGTH] = { STATE_FOG_PARAMS, 0, 0, 0 };
       paramList = mesa_vp->Parameters;
       vp->fogpidx = _mesa_add_state_reference(paramList, tokens);
    }

@@ -64,7 +64,23 @@ panfrost_query_raw(
 static unsigned
 panfrost_query_gpu_version(int fd)
 {
+#ifndef NDEBUG
+        /* In debug builds, allow overriding the GPU ID, for example to run
+         * Bifrost shader-db on a Midgard machine. This is a bit less heavy
+         * handed than setting up the entirety of drm-shim */
+        char *override_version = getenv("PAN_GPU_ID");
+
+        if (override_version)
+                return strtol(override_version, NULL, 16);
+#endif
+
         return panfrost_query_raw(fd, DRM_PANFROST_PARAM_GPU_PROD_ID, true, 0);
+}
+
+static unsigned
+panfrost_query_gpu_revision(int fd)
+{
+        return panfrost_query_raw(fd, DRM_PANFROST_PARAM_GPU_REVISION, true, 0);
 }
 
 static unsigned
@@ -208,7 +224,8 @@ panfrost_open_device(void *memctx, int fd, struct panfrost_device *dev)
         dev->core_count = panfrost_query_core_count(fd);
         dev->thread_tls_alloc = panfrost_query_thread_tls_alloc(fd, dev->arch);
         dev->kernel_version = drmGetVersion(fd);
-        dev->quirks = panfrost_get_quirks(dev->gpu_id);
+        unsigned revision = panfrost_query_gpu_revision(fd);
+        dev->quirks = panfrost_get_quirks(dev->gpu_id, revision);
         dev->compressed_formats = panfrost_query_compressed_formats(fd);
 
         if (dev->quirks & HAS_SWIZZLES)

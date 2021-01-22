@@ -692,9 +692,9 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 		struct fd_batch *write_batch = NULL;
 
 		/* hold a reference, so it doesn't disappear under us: */
-		fd_context_lock(ctx);
+		fd_screen_lock(ctx->screen);
 		fd_batch_reference_locked(&write_batch, rsc->write_batch);
-		fd_context_unlock(ctx);
+		fd_screen_unlock(ctx->screen);
 
 		if ((usage & PIPE_MAP_WRITE) && write_batch &&
 				write_batch->back_blit) {

@@ -49,9 +49,9 @@ intel_update_max_level(struct gl_texture_object *tObj,
 
    if (!tObj->_MipmapComplete ||
        (tObj->_RenderToTexture &&
-        (sampler->MinFilter == GL_NEAREST ||
-         sampler->MinFilter == GL_LINEAR))) {
-      intelObj->_MaxLevel = tObj->BaseLevel;
+        (sampler->Attrib.MinFilter == GL_NEAREST ||
+         sampler->Attrib.MinFilter == GL_LINEAR))) {
+      intelObj->_MaxLevel = tObj->Attrib.BaseLevel;
    } else {
       intelObj->_MaxLevel = tObj->_MaxLevel;
    }
@@ -78,7 +78,7 @@ intel_finalize_mipmap_tree(struct brw_context *brw,
       return;
 
    /* What levels does this validated texture image require? */
-   int validate_first_level = tObj->BaseLevel;
+   int validate_first_level = tObj->Attrib.BaseLevel;
    int validate_last_level = intelObj->_MaxLevel;
 
    /* Skip the loop over images in the common case of no images having
@@ -103,7 +103,7 @@ intel_finalize_mipmap_tree(struct brw_context *brw,
     */
    assert(!tObj->Immutable || brw->screen->devinfo.gen < 6);
 
-   firstImage = intel_texture_image(tObj->Image[0][tObj->BaseLevel]);
+   firstImage = intel_texture_image(tObj->Image[0][tObj->Attrib.BaseLevel]);
 
    /* Check tree can hold all active levels.  Check tree matches
     * target, imageFormat, etc.

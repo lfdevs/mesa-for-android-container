@@ -104,8 +104,9 @@ lp_setup_alloc_triangle(struct lp_scene *scene,
    tri->inputs.stride = input_array_sz;
 
    {
-      char *a = (char *)tri;
-      char *b = (char *)&GET_PLANES(tri)[nr_planes];
+      ASSERTED char *a = (char *)tri;
+      ASSERTED char *b = (char *)&GET_PLANES(tri)[nr_planes];
+
       assert(b - a == *tri_size);
    }
 

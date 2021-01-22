@@ -35,7 +35,6 @@
 static nir_shader *
 build_nir_itob_compute_shader(struct radv_device *dev, bool is_3d)
 {
-	nir_builder b;
 	enum glsl_sampler_dim dim = is_3d ? GLSL_SAMPLER_DIM_3D : GLSL_SAMPLER_DIM_2D;
 	const struct glsl_type *sampler_type = glsl_sampler_type(dim,
 								 false,
@@ -44,8 +43,7 @@ build_nir_itob_compute_shader(struct radv_device *dev, bool is_3d)
 	const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_BUF,
 							   false,
 							   GLSL_TYPE_FLOAT);
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_COMPUTE, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, is_3d ? "meta_itob_cs_3d" : "meta_itob_cs");
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, NULL, is_3d ? "meta_itob_cs_3d" : "meta_itob_cs");
 	b.shader->info.cs.local_size[0] = 16;
 	b.shader->info.cs.local_size[1] = 16;
 	b.shader->info.cs.local_size[2] = 1;
@@ -68,25 +66,10 @@ build_nir_itob_compute_shader(struct radv_device *dev, bool is_3d)
 
 	nir_ssa_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
 
+	nir_ssa_def *offset = nir_load_push_constant(&b, is_3d ? 3 : 2, 32, nir_imm_int(&b, 0), .range=16);
+	nir_ssa_def *stride = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 12), .range=16);
 
-
-	nir_intrinsic_instr *offset = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(offset, 0);
-	nir_intrinsic_set_range(offset, 16);
-	offset->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
-	offset->num_components = is_3d ? 3 : 2;
-	nir_ssa_dest_init(&offset->instr, &offset->dest, is_3d ? 3 : 2, 32, "offset");
-	nir_builder_instr_insert(&b, &offset->instr);
-
-	nir_intrinsic_instr *stride = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(stride, 0);
-	nir_intrinsic_set_range(stride, 16);
-	stride->src[0] = nir_src_for_ssa(nir_imm_int(&b, 12));
-	stride->num_components = 1;
-	nir_ssa_dest_init(&stride->instr, &stride->dest, 1, 32, "stride");
-	nir_builder_instr_insert(&b, &stride->instr);
-
-	nir_ssa_def *img_coord = nir_iadd(&b, global_id, &offset->dest.ssa);
+	nir_ssa_def *img_coord = nir_iadd(&b, global_id, offset);
 	nir_ssa_def *input_img_deref = &nir_build_deref_var(&b, input_img)->dest.ssa;
 
 	nir_tex_instr *tex = nir_tex_instr_create(b.shader, 3);
@@ -108,21 +91,15 @@ build_nir_itob_compute_shader(struct radv_device *dev, bool is_3d)
 	nir_ssa_def *pos_x = nir_channel(&b, global_id, 0);
 	nir_ssa_def *pos_y = nir_channel(&b, global_id, 1);
 
-	nir_ssa_def *tmp = nir_imul(&b, pos_y, &stride->dest.ssa);
+	nir_ssa_def *tmp = nir_imul(&b, pos_y, stride);
 	tmp = nir_iadd(&b, tmp, pos_x);
 
 	nir_ssa_def *coord = nir_vec4(&b, tmp, tmp, tmp, tmp);
 
 	nir_ssa_def *outval = &tex->dest.ssa;
-	nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_deref_store);
-	store->num_components = 4;
-	store->src[0] = nir_src_for_ssa(&nir_build_deref_var(&b, output_img)->dest.ssa);
-	store->src[1] = nir_src_for_ssa(coord);
-	store->src[2] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
-	store->src[3] = nir_src_for_ssa(outval);
-	store->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0));
+	nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa,
+	                      coord, nir_ssa_undef(&b, 1, 32), outval, nir_imm_int(&b, 0));
 
-	nir_builder_instr_insert(&b, &store->instr);
 	return b.shader;
 }
 
@@ -264,7 +241,6 @@ radv_device_finish_meta_itob_state(struct radv_device *device)
 static nir_shader *
 build_nir_btoi_compute_shader(struct radv_device *dev, bool is_3d)
 {
-	nir_builder b;
 	enum glsl_sampler_dim dim = is_3d ? GLSL_SAMPLER_DIM_3D : GLSL_SAMPLER_DIM_2D;
 	const struct glsl_type *buf_type = glsl_sampler_type(GLSL_SAMPLER_DIM_BUF,
 							     false,
@@ -273,8 +249,7 @@ build_nir_btoi_compute_shader(struct radv_device *dev, bool is_3d)
 	const struct glsl_type *img_type = glsl_image_type(dim,
 							   false,
 							   GLSL_TYPE_FLOAT);
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_COMPUTE, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, is_3d ? "meta_btoi_cs_3d" : "meta_btoi_cs");
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, NULL, is_3d ? "meta_btoi_cs_3d" : "meta_btoi_cs");
 	b.shader->info.cs.local_size[0] = 16;
 	b.shader->info.cs.local_size[1] = 16;
 	b.shader->info.cs.local_size[2] = 1;
@@ -297,31 +272,18 @@ build_nir_btoi_compute_shader(struct radv_device *dev, bool is_3d)
 
 	nir_ssa_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
 
-	nir_intrinsic_instr *offset = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(offset, 0);
-	nir_intrinsic_set_range(offset, 16);
-	offset->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
-	offset->num_components = is_3d ? 3 : 2;
-	nir_ssa_dest_init(&offset->instr, &offset->dest, is_3d ? 3 : 2, 32, "offset");
-	nir_builder_instr_insert(&b, &offset->instr);
-
-	nir_intrinsic_instr *stride = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(stride, 0);
-	nir_intrinsic_set_range(stride, 16);
-	stride->src[0] = nir_src_for_ssa(nir_imm_int(&b, 12));
-	stride->num_components = 1;
-	nir_ssa_dest_init(&stride->instr, &stride->dest, 1, 32, "stride");
-	nir_builder_instr_insert(&b, &stride->instr);
+	nir_ssa_def *offset = nir_load_push_constant(&b, is_3d ? 3 : 2, 32, nir_imm_int(&b, 0), .range=16);
+	nir_ssa_def *stride = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 12), .range=16);
 
 	nir_ssa_def *pos_x = nir_channel(&b, global_id, 0);
 	nir_ssa_def *pos_y = nir_channel(&b, global_id, 1);
 
-	nir_ssa_def *tmp = nir_imul(&b, pos_y, &stride->dest.ssa);
+	nir_ssa_def *tmp = nir_imul(&b, pos_y, stride);
 	tmp = nir_iadd(&b, tmp, pos_x);
 
 	nir_ssa_def *buf_coord = nir_vec4(&b, tmp, tmp, tmp, tmp);
 
-	nir_ssa_def *img_coord = nir_iadd(&b, global_id, &offset->dest.ssa);
+	nir_ssa_def *img_coord = nir_iadd(&b, global_id, offset);
 	nir_ssa_def *input_img_deref = &nir_build_deref_var(&b, input_img)->dest.ssa;
 
 	nir_tex_instr *tex = nir_tex_instr_create(b.shader, 3);
@@ -341,15 +303,9 @@ build_nir_btoi_compute_shader(struct radv_device *dev, bool is_3d)
 	nir_builder_instr_insert(&b, &tex->instr);
 
 	nir_ssa_def *outval = &tex->dest.ssa;
-	nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_deref_store);
-	store->num_components = 4;
-	store->src[0] = nir_src_for_ssa(&nir_build_deref_var(&b, output_img)->dest.ssa);
-	store->src[1] = nir_src_for_ssa(img_coord);
-	store->src[2] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
-	store->src[3] = nir_src_for_ssa(outval);
-	store->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0));
+	nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa,
+	                      img_coord, nir_ssa_undef(&b, 1, 32), outval, nir_imm_int(&b, 0));
 
-	nir_builder_instr_insert(&b, &store->instr);
 	return b.shader;
 }
 
@@ -487,7 +443,6 @@ radv_device_finish_meta_btoi_state(struct radv_device *device)
 static nir_shader *
 build_nir_btoi_r32g32b32_compute_shader(struct radv_device *dev)
 {
-	nir_builder b;
 	const struct glsl_type *buf_type = glsl_sampler_type(GLSL_SAMPLER_DIM_BUF,
 							     false,
 							     false,
@@ -495,8 +450,7 @@ build_nir_btoi_r32g32b32_compute_shader(struct radv_device *dev)
 	const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_BUF,
 							   false,
 							   GLSL_TYPE_FLOAT);
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_COMPUTE, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, "meta_btoi_r32g32b32_cs");
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, NULL, "meta_btoi_r32g32b32_cs");
 	b.shader->info.cs.local_size[0] = 16;
 	b.shader->info.cs.local_size[1] = 16;
 	b.shader->info.cs.local_size[2] = 1;
@@ -519,43 +473,23 @@ build_nir_btoi_r32g32b32_compute_shader(struct radv_device *dev)
 
 	nir_ssa_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
 
-	nir_intrinsic_instr *offset = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(offset, 0);
-	nir_intrinsic_set_range(offset, 16);
-	offset->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
-	offset->num_components = 2;
-	nir_ssa_dest_init(&offset->instr, &offset->dest, 2, 32, "offset");
-	nir_builder_instr_insert(&b, &offset->instr);
-
-	nir_intrinsic_instr *pitch = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(pitch, 0);
-	nir_intrinsic_set_range(pitch, 16);
-	pitch->src[0] = nir_src_for_ssa(nir_imm_int(&b, 8));
-	pitch->num_components = 1;
-	nir_ssa_dest_init(&pitch->instr, &pitch->dest, 1, 32, "pitch");
-	nir_builder_instr_insert(&b, &pitch->instr);
-
-	nir_intrinsic_instr *stride = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(stride, 0);
-	nir_intrinsic_set_range(stride, 16);
-	stride->src[0] = nir_src_for_ssa(nir_imm_int(&b, 12));
-	stride->num_components = 1;
-	nir_ssa_dest_init(&stride->instr, &stride->dest, 1, 32, "stride");
-	nir_builder_instr_insert(&b, &stride->instr);
+	nir_ssa_def *offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range=16);
+	nir_ssa_def *pitch = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 8), .range=16);
+	nir_ssa_def *stride = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 12), .range=16);
 
 	nir_ssa_def *pos_x = nir_channel(&b, global_id, 0);
 	nir_ssa_def *pos_y = nir_channel(&b, global_id, 1);
 
-	nir_ssa_def *tmp = nir_imul(&b, pos_y, &stride->dest.ssa);
+	nir_ssa_def *tmp = nir_imul(&b, pos_y, stride);
 	tmp = nir_iadd(&b, tmp, pos_x);
 
 	nir_ssa_def *buf_coord = nir_vec4(&b, tmp, tmp, tmp, tmp);
 
-	nir_ssa_def *img_coord = nir_iadd(&b, global_id, &offset->dest.ssa);
+	nir_ssa_def *img_coord = nir_iadd(&b, global_id, offset);
 
 	nir_ssa_def *global_pos =
 		nir_iadd(&b,
-			 nir_imul(&b, nir_channel(&b, img_coord, 1), &pitch->dest.ssa),
+			 nir_imul(&b, nir_channel(&b, img_coord, 1), pitch),
 			 nir_imul(&b, nir_channel(&b, img_coord, 0), nir_imm_int(&b, 3)));
 
 	nir_ssa_def *input_img_deref = &nir_build_deref_var(&b, input_img)->dest.ssa;
@@ -581,17 +515,12 @@ build_nir_btoi_r32g32b32_compute_shader(struct radv_device *dev)
 		nir_ssa_def *local_pos =
                        nir_iadd(&b, global_pos, nir_imm_int(&b, chan));
 
-               nir_ssa_def *coord =
+		nir_ssa_def *coord =
                        nir_vec4(&b, local_pos, local_pos, local_pos, local_pos);
 
-		nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_deref_store);
-		store->num_components = 1;
-		store->src[0] = nir_src_for_ssa(&nir_build_deref_var(&b, output_img)->dest.ssa);
-		store->src[1] = nir_src_for_ssa(coord);
-		store->src[2] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
-		store->src[3] = nir_src_for_ssa(nir_channel(&b, outval, chan));
-		store->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0));
-		nir_builder_instr_insert(&b, &store->instr);
+		nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa,
+		                      coord, nir_ssa_undef(&b, 1, 32),
+		                      nir_channel(&b, outval, chan), nir_imm_int(&b, 0));
 	}
 
 	return b.shader;
@@ -694,7 +623,6 @@ radv_device_finish_meta_btoi_r32g32b32_state(struct radv_device *device)
 static nir_shader *
 build_nir_itoi_compute_shader(struct radv_device *dev, bool is_3d)
 {
-	nir_builder b;
 	enum glsl_sampler_dim dim = is_3d ? GLSL_SAMPLER_DIM_3D : GLSL_SAMPLER_DIM_2D;
 	const struct glsl_type *buf_type = glsl_sampler_type(dim,
 							     false,
@@ -703,8 +631,7 @@ build_nir_itoi_compute_shader(struct radv_device *dev, bool is_3d)
 	const struct glsl_type *img_type = glsl_image_type(dim,
 							   false,
 							   GLSL_TYPE_FLOAT);
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_COMPUTE, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, is_3d ? "meta_itoi_cs_3d" : "meta_itoi_cs");
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, NULL, is_3d ? "meta_itoi_cs_3d" : "meta_itoi_cs");
 	b.shader->info.cs.local_size[0] = 16;
 	b.shader->info.cs.local_size[1] = 16;
 	b.shader->info.cs.local_size[2] = 1;
@@ -727,26 +654,13 @@ build_nir_itoi_compute_shader(struct radv_device *dev, bool is_3d)
 
 	nir_ssa_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
 
-	nir_intrinsic_instr *src_offset = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(src_offset, 0);
-	nir_intrinsic_set_range(src_offset, 24);
-	src_offset->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
-	src_offset->num_components = is_3d ? 3 : 2;
-	nir_ssa_dest_init(&src_offset->instr, &src_offset->dest, is_3d ? 3 : 2, 32, "src_offset");
-	nir_builder_instr_insert(&b, &src_offset->instr);
+	nir_ssa_def *src_offset = nir_load_push_constant(&b, is_3d ? 3 : 2, 32, nir_imm_int(&b, 0), .range=24);
+	nir_ssa_def *dst_offset = nir_load_push_constant(&b, is_3d ? 3 : 2, 32, nir_imm_int(&b, 12), .range=24);
 
-	nir_intrinsic_instr *dst_offset = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(dst_offset, 0);
-	nir_intrinsic_set_range(dst_offset, 24);
-	dst_offset->src[0] = nir_src_for_ssa(nir_imm_int(&b, 12));
-	dst_offset->num_components = is_3d ? 3 : 2;
-	nir_ssa_dest_init(&dst_offset->instr, &dst_offset->dest, is_3d ? 3 : 2, 32, "dst_offset");
-	nir_builder_instr_insert(&b, &dst_offset->instr);
-
-	nir_ssa_def *src_coord = nir_iadd(&b, global_id, &src_offset->dest.ssa);
+	nir_ssa_def *src_coord = nir_iadd(&b, global_id, src_offset);
 	nir_ssa_def *input_img_deref = &nir_build_deref_var(&b, input_img)->dest.ssa;
 
-	nir_ssa_def *dst_coord = nir_iadd(&b, global_id, &dst_offset->dest.ssa);
+	nir_ssa_def *dst_coord = nir_iadd(&b, global_id, dst_offset);
 
 	nir_tex_instr *tex = nir_tex_instr_create(b.shader, 3);
 	tex->sampler_dim = dim;
@@ -765,15 +679,9 @@ build_nir_itoi_compute_shader(struct radv_device *dev, bool is_3d)
 	nir_builder_instr_insert(&b, &tex->instr);
 
 	nir_ssa_def *outval = &tex->dest.ssa;
-	nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_deref_store);
-	store->num_components = 4;
-	store->src[0] = nir_src_for_ssa(&nir_build_deref_var(&b, output_img)->dest.ssa);
-	store->src[1] = nir_src_for_ssa(dst_coord);
-	store->src[2] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
-	store->src[3] = nir_src_for_ssa(outval);
-	store->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0));
+	nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa,
+	                      dst_coord, nir_ssa_undef(&b, 1, 32), outval, nir_imm_int(&b, 0));
 
-	nir_builder_instr_insert(&b, &store->instr);
 	return b.shader;
 }
 
@@ -912,7 +820,6 @@ radv_device_finish_meta_itoi_state(struct radv_device *device)
 static nir_shader *
 build_nir_itoi_r32g32b32_compute_shader(struct radv_device *dev)
 {
-	nir_builder b;
 	const struct glsl_type *type = glsl_sampler_type(GLSL_SAMPLER_DIM_BUF,
 							 false,
 							 false,
@@ -920,8 +827,7 @@ build_nir_itoi_r32g32b32_compute_shader(struct radv_device *dev)
 	const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_BUF,
 							   false,
 							   GLSL_TYPE_FLOAT);
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_COMPUTE, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, "meta_itoi_r32g32b32_cs");
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, NULL, "meta_itoi_r32g32b32_cs");
 	b.shader->info.cs.local_size[0] = 16;
 	b.shader->info.cs.local_size[1] = 16;
 	b.shader->info.cs.local_size[2] = 1;
@@ -944,28 +850,14 @@ build_nir_itoi_r32g32b32_compute_shader(struct radv_device *dev)
 
 	nir_ssa_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
 
-	nir_intrinsic_instr *src_offset = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(src_offset, 0);
-	nir_intrinsic_set_range(src_offset, 24);
-	src_offset->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
-	src_offset->num_components = 3;
-	nir_ssa_dest_init(&src_offset->instr, &src_offset->dest, 3, 32, "src_offset");
-	nir_builder_instr_insert(&b, &src_offset->instr);
+	nir_ssa_def *src_offset = nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 0), .range=24);
+	nir_ssa_def *dst_offset = nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 12), .range=24);
 
-	nir_ssa_def *src_stride = nir_channel(&b, &src_offset->dest.ssa, 2);
+	nir_ssa_def *src_stride = nir_channel(&b, src_offset, 2);
+	nir_ssa_def *dst_stride = nir_channel(&b, dst_offset, 2);
 
-	nir_intrinsic_instr *dst_offset = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(dst_offset, 0);
-	nir_intrinsic_set_range(dst_offset, 24);
-	dst_offset->src[0] = nir_src_for_ssa(nir_imm_int(&b, 12));
-	dst_offset->num_components = 3;
-	nir_ssa_dest_init(&dst_offset->instr, &dst_offset->dest, 3, 32, "dst_offset");
-	nir_builder_instr_insert(&b, &dst_offset->instr);
-
-	nir_ssa_def *dst_stride = nir_channel(&b, &dst_offset->dest.ssa, 2);
-
-	nir_ssa_def *src_img_coord = nir_iadd(&b, global_id, &src_offset->dest.ssa);
-	nir_ssa_def *dst_img_coord = nir_iadd(&b, global_id, &dst_offset->dest.ssa);
+	nir_ssa_def *src_img_coord = nir_iadd(&b, global_id, src_offset);
+	nir_ssa_def *dst_img_coord = nir_iadd(&b, global_id, dst_offset);
 
 	nir_ssa_def *src_global_pos =
 		nir_iadd(&b,
@@ -1013,16 +905,9 @@ build_nir_itoi_r32g32b32_compute_shader(struct radv_device *dev)
 			nir_vec4(&b, dst_local_pos, dst_local_pos,
 				 dst_local_pos, dst_local_pos);
 
-		nir_intrinsic_instr *store =
-			nir_intrinsic_instr_create(b.shader,
-						   nir_intrinsic_image_deref_store);
-		store->num_components = 1;
-		store->src[0] = nir_src_for_ssa(&nir_build_deref_var(&b, output_img)->dest.ssa);
-		store->src[1] = nir_src_for_ssa(dst_coord);
-		store->src[2] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
-		store->src[3] = nir_src_for_ssa(nir_channel(&b, outval, 0));
-		store->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0));
-		nir_builder_instr_insert(&b, &store->instr);
+		nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa,
+		                      dst_coord, nir_ssa_undef(&b, 1, 32),
+		                      nir_channel(&b, outval, 0), nir_imm_int(&b, 0));
 	}
 
 	return b.shader;
@@ -1126,13 +1011,11 @@ radv_device_finish_meta_itoi_r32g32b32_state(struct radv_device *device)
 static nir_shader *
 build_nir_cleari_compute_shader(struct radv_device *dev, bool is_3d)
 {
-	nir_builder b;
 	enum glsl_sampler_dim dim = is_3d ? GLSL_SAMPLER_DIM_3D : GLSL_SAMPLER_DIM_2D;
 	const struct glsl_type *img_type = glsl_image_type(dim,
 							   false,
 							   GLSL_TYPE_FLOAT);
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_COMPUTE, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, is_3d ? "meta_cleari_cs_3d" : "meta_cleari_cs");
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, NULL, is_3d ? "meta_cleari_cs_3d" : "meta_cleari_cs");
 	b.shader->info.cs.local_size[0] = 16;
 	b.shader->info.cs.local_size[1] = 16;
 	b.shader->info.cs.local_size[2] = 1;
@@ -1151,23 +1034,10 @@ build_nir_cleari_compute_shader(struct radv_device *dev, bool is_3d)
 
 	nir_ssa_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
 
-	nir_intrinsic_instr *clear_val = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(clear_val, 0);
-	nir_intrinsic_set_range(clear_val, 20);
-	clear_val->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
-	clear_val->num_components = 4;
-	nir_ssa_dest_init(&clear_val->instr, &clear_val->dest, 4, 32, "clear_value");
-	nir_builder_instr_insert(&b, &clear_val->instr);
+	nir_ssa_def *clear_val = nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .range=20);
+	nir_ssa_def *layer = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 16), .range=20);
 
-	nir_intrinsic_instr *layer = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(layer, 0);
-	nir_intrinsic_set_range(layer, 20);
-	layer->src[0] = nir_src_for_ssa(nir_imm_int(&b, 16));
-	layer->num_components = 1;
-	nir_ssa_dest_init(&layer->instr, &layer->dest, 1, 32, "layer");
-	nir_builder_instr_insert(&b, &layer->instr);
-
-	nir_ssa_def *global_z = nir_iadd(&b, nir_channel(&b, global_id, 2), &layer->dest.ssa);
+	nir_ssa_def *global_z = nir_iadd(&b, nir_channel(&b, global_id, 2), layer);
 
 	nir_ssa_def *comps[4];
 	comps[0] = nir_channel(&b, global_id, 0);
@@ -1176,15 +1046,9 @@ build_nir_cleari_compute_shader(struct radv_device *dev, bool is_3d)
 	comps[3] = nir_imm_int(&b, 0);
 	global_id = nir_vec(&b, comps, 4);
 
-	nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_deref_store);
-	store->num_components = 4;
-	store->src[0] = nir_src_for_ssa(&nir_build_deref_var(&b, output_img)->dest.ssa);
-	store->src[1] = nir_src_for_ssa(global_id);
-	store->src[2] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
-	store->src[3] = nir_src_for_ssa(&clear_val->dest.ssa);
-	store->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0));
+	nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa,
+	                      global_id, nir_ssa_undef(&b, 1, 32), clear_val, nir_imm_int(&b, 0));
 
-	nir_builder_instr_insert(&b, &store->instr);
 	return b.shader;
 }
 
@@ -1319,12 +1183,10 @@ radv_device_finish_meta_cleari_state(struct radv_device *device)
 static nir_shader *
 build_nir_cleari_r32g32b32_compute_shader(struct radv_device *dev)
 {
-	nir_builder b;
 	const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_BUF,
 							   false,
 							   GLSL_TYPE_FLOAT);
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_COMPUTE, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, "meta_cleari_r32g32b32_cs");
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, NULL, "meta_cleari_r32g32b32_cs");
 	b.shader->info.cs.local_size[0] = 16;
 	b.shader->info.cs.local_size[1] = 16;
 	b.shader->info.cs.local_size[2] = 1;
@@ -1343,28 +1205,15 @@ build_nir_cleari_r32g32b32_compute_shader(struct radv_device *dev)
 
 	nir_ssa_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
 
-	nir_intrinsic_instr *clear_val = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(clear_val, 0);
-	nir_intrinsic_set_range(clear_val, 16);
-	clear_val->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
-	clear_val->num_components = 3;
-	nir_ssa_dest_init(&clear_val->instr, &clear_val->dest, 3, 32, "clear_value");
-	nir_builder_instr_insert(&b, &clear_val->instr);
-
-	nir_intrinsic_instr *stride = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(stride, 0);
-	nir_intrinsic_set_range(stride, 16);
-	stride->src[0] = nir_src_for_ssa(nir_imm_int(&b, 12));
-	stride->num_components = 1;
-	nir_ssa_dest_init(&stride->instr, &stride->dest, 1, 32, "stride");
-	nir_builder_instr_insert(&b, &stride->instr);
+	nir_ssa_def *clear_val = nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 0), .range=16);
+	nir_ssa_def *stride = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 12), .range=16);
 
 	nir_ssa_def *global_x = nir_channel(&b, global_id, 0);
 	nir_ssa_def *global_y = nir_channel(&b, global_id, 1);
 
 	nir_ssa_def *global_pos =
 		nir_iadd(&b,
-			 nir_imul(&b, global_y, &stride->dest.ssa),
+			 nir_imul(&b, global_y, stride),
 			 nir_imul(&b, global_x, nir_imm_int(&b, 3)));
 
 	for (unsigned chan = 0; chan < 3; chan++) {
@@ -1374,14 +1223,9 @@ build_nir_cleari_r32g32b32_compute_shader(struct radv_device *dev)
 		nir_ssa_def *coord =
 			nir_vec4(&b, local_pos, local_pos, local_pos, local_pos);
 
-		nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_deref_store);
-		store->num_components = 1;
-		store->src[0] = nir_src_for_ssa(&nir_build_deref_var(&b, output_img)->dest.ssa);
-		store->src[1] = nir_src_for_ssa(coord);
-		store->src[2] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
-		store->src[3] = nir_src_for_ssa(nir_channel(&b, &clear_val->dest.ssa, chan));
-		store->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0));
-		nir_builder_instr_insert(&b, &store->instr);
+		nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa,
+		                      coord, nir_ssa_undef(&b, 1, 32),
+		                      nir_channel(&b, clear_val, chan), nir_imm_int(&b, 0));
 	}
 
 	return b.shader;
@@ -1556,7 +1400,9 @@ create_iview(struct radv_cmd_buffer *cmd_buffer,
 					     .baseArrayLayer = surf->layer,
 					     .layerCount = 1
 				     },
-			     }, NULL);
+			     }, &(struct radv_image_view_extra_create_info) {
+				     .disable_compression = surf->disable_compression,
+			     });
 }
 
 static void

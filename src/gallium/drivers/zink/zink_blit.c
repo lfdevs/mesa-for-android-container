@@ -184,8 +184,17 @@ zink_blit(struct pipe_context *pctx,
    struct zink_resource *src = zink_resource(info->src.resource);
    struct zink_resource *dst = zink_resource(info->dst.resource);
    /* if we're copying between resources with matching aspects then we can probably just copy_region */
-   if (src->aspect == dst->aspect && util_try_blit_via_copy_region(pctx, info))
-      return;
+   if (src->aspect == dst->aspect) {
+      struct pipe_blit_info new_info = *info;
+
+      if (src->aspect & VK_IMAGE_ASPECT_STENCIL_BIT &&
+          new_info.render_condition_enable &&
+          !ctx->render_condition_active)
+         new_info.render_condition_enable = false;
+
+      if (util_try_blit_via_copy_region(pctx, &new_info))
+         return;
+   }
 
    if (!util_blitter_is_blit_supported(ctx->blitter, info)) {
       debug_printf("blit unsupported %s -> %s\n",
@@ -201,6 +210,8 @@ zink_blit(struct pipe_context *pctx,
    util_blitter_save_rasterizer(ctx->blitter, ctx->rast_state);
    util_blitter_save_fragment_shader(ctx->blitter, ctx->gfx_stages[PIPE_SHADER_FRAGMENT]);
    util_blitter_save_vertex_shader(ctx->blitter, ctx->gfx_stages[PIPE_SHADER_VERTEX]);
+   util_blitter_save_tessctrl_shader(ctx->blitter, ctx->gfx_stages[PIPE_SHADER_TESS_CTRL]);
+   util_blitter_save_tesseval_shader(ctx->blitter, ctx->gfx_stages[PIPE_SHADER_TESS_EVAL]);
    util_blitter_save_geometry_shader(ctx->blitter, ctx->gfx_stages[PIPE_SHADER_GEOMETRY]);
    util_blitter_save_framebuffer(ctx->blitter, &ctx->fb_state);
    util_blitter_save_viewport(ctx->blitter, ctx->viewport_states);

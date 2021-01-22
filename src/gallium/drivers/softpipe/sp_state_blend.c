@@ -114,11 +114,11 @@ softpipe_delete_depth_stencil_state(struct pipe_context *pipe, void *depth)
 
 static void
 softpipe_set_stencil_ref(struct pipe_context *pipe,
-                         const struct pipe_stencil_ref *stencil_ref)
+                         const struct pipe_stencil_ref stencil_ref)
 {
    struct softpipe_context *softpipe = softpipe_context(pipe);
 
-   softpipe->stencil_ref = *stencil_ref;
+   softpipe->stencil_ref = stencil_ref;
 
    softpipe->dirty |= SP_NEW_DEPTH_STENCIL_ALPHA;
 }

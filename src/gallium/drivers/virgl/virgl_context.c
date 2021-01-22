@@ -58,7 +58,7 @@ struct virgl_vertex_elements_state {
 static uint32_t next_handle;
 uint32_t virgl_object_assign_handle(void)
 {
-   return ++next_handle;
+   return p_atomic_inc_return(&next_handle);
 }
 
 bool
@@ -610,10 +610,10 @@ static void virgl_hw_set_vertex_buffers(struct virgl_context *vctx)
 }
 
 static void virgl_set_stencil_ref(struct pipe_context *ctx,
-                                 const struct pipe_stencil_ref *ref)
+                                 const struct pipe_stencil_ref ref)
 {
    struct virgl_context *vctx = virgl_context(ctx);
-   virgl_encoder_set_stencil_ref(vctx, ref);
+   virgl_encoder_set_stencil_ref(vctx, &ref);
 }
 
 static void virgl_set_blend_color(struct pipe_context *ctx,
@@ -848,32 +848,53 @@ static void virgl_clear_texture(struct pipe_context *ctx,
 }
 
 static void virgl_draw_vbo(struct pipe_context *ctx,
-                                   const struct pipe_draw_info *dinfo)
+                           const struct pipe_draw_info *dinfo,
+                           const struct pipe_draw_indirect_info *indirect,
+                           const struct pipe_draw_start_count *draws,
+                           unsigned num_draws)
 {
+   if (num_draws > 1) {
+      struct pipe_draw_info tmp_info = *dinfo;
+
+      for (unsigned i = 0; i < num_draws; i++) {
+         virgl_draw_vbo(ctx, &tmp_info, indirect, &draws[i], 1);
+         if (tmp_info.increment_draw_id)
+            tmp_info.drawid++;
+      }
+      return;
+   }
+
+   if (!indirect && (!draws[0].count || !dinfo->instance_count))
+      return;
+
    struct virgl_context *vctx = virgl_context(ctx);
    struct virgl_screen *rs = virgl_screen(ctx->screen);
    struct virgl_indexbuf ib = {};
    struct pipe_draw_info info = *dinfo;
 
-   if (!dinfo->count_from_stream_output && !dinfo->indirect &&
+   if (!indirect &&
        !dinfo->primitive_restart &&
-       !u_trim_pipe_prim(dinfo->mode, (unsigned*)&dinfo->count))
+       !u_trim_pipe_prim(dinfo->mode, (unsigned*)&draws[0].count))
       return;
 
    if (!(rs->caps.caps.v1.prim_mask & (1 << dinfo->mode))) {
       util_primconvert_save_rasterizer_state(vctx->primconvert, &vctx->rs_state.rs);
-      util_primconvert_draw_vbo(vctx->primconvert, dinfo);
+      util_primconvert_draw_vbo(vctx->primconvert, dinfo, &draws[0]);
       return;
    }
    if (info.index_size) {
            pipe_resource_reference(&ib.buffer, info.has_user_indices ? NULL : info.index.resource);
            ib.user_buffer = info.has_user_indices ? info.index.user : NULL;
            ib.index_size = dinfo->index_size;
-           ib.offset = info.start * ib.index_size;
+           ib.offset = draws[0].start * ib.index_size;
 
            if (ib.user_buffer) {
-                   u_upload_data(vctx->uploader, 0, info.count * ib.index_size, 4,
-                                 ib.user_buffer, &ib.offset, &ib.buffer);
+                   unsigned start_offset = draws[0].start * ib.index_size;
+                   u_upload_data(vctx->uploader, start_offset,
+                                 draws[0].count * ib.index_size, 4,
+                                 (char*)ib.user_buffer + start_offset,
+                                 &ib.offset, &ib.buffer);
+                   ib.offset -= start_offset;
                    ib.user_buffer = NULL;
            }
    }
@@ -886,7 +907,7 @@ static void virgl_draw_vbo(struct pipe_context *ctx,
    if (info.index_size)
       virgl_hw_set_index_buffer(vctx, &ib);
 
-   virgl_encoder_draw_vbo(vctx, &info);
+   virgl_encoder_draw_vbo(vctx, &info, indirect, &draws[0]);
 
    pipe_resource_reference(&ib.buffer, NULL);
 

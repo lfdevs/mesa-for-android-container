@@ -29,7 +29,7 @@ if with_ld_version_script
   opencl_link_deps += files('opencl.sym')
 endif
 
-llvm_libdir = dep_llvm.get_configtool_variable('libdir')
+llvm_libdir = dep_llvm.get_variable(cmake : 'LLVM_LIBRARY_DIR', configtool: 'libdir')
 opencl_libname = with_opencl_icd ? 'MesaOpenCL' : 'OpenCL'
 
 polly_dep = null_dep
@@ -85,16 +85,27 @@ if not (dep_clang.found() and dep_clang_usable)
   endif
 endif
 
+# Be explicit about only using this lib on Windows, to avoid picking
+# up random libs with the generic name 'libversion'
+if host_machine.system() == 'windows'
+  dep_version = cpp.find_library('version')
+else
+  dep_version = null_dep
+endif
+
+ocldef = files(opencl_libname + '.def')[0]
+
 libopencl = shared_library(
   opencl_libname,
   [],
+  vs_module_defs : ocldef,
   link_args : [ld_args_gc_sections, opencl_link_args],
   link_depends : opencl_link_deps,
   link_whole : libclover,
   link_with : [libpipe_loader_dynamic, libgallium],
   dependencies : [
     idep_mesautil,
-    dep_clock, dep_dl, dep_unwind, dep_elf, dep_clang
+    dep_clock, dep_dl, dep_unwind, dep_elf, dep_clang, dep_version
   ],
   version : '@0@.0.0'.format(opencl_version),
   install : true,

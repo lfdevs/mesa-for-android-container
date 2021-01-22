@@ -41,8 +41,7 @@
 
 #include "gallivm/lp_bld.h"
 
- 
-struct pipe_depth_state;
+struct lp_depth_state;
 struct gallivm_state;
 struct util_format_description;
 struct lp_type;
@@ -56,7 +55,7 @@ lp_depth_type(const struct util_format_description *format_desc,
 
 void
 lp_build_depth_stencil_test(struct gallivm_state *gallivm,
-                            const struct pipe_depth_state *depth,
+                            const struct lp_depth_state *depth,
                             const struct pipe_stencil_state stencil[2],
                             struct lp_type z_src_type,
                             const struct util_format_description *format_desc,

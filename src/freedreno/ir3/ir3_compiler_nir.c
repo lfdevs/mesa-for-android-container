@@ -55,7 +55,7 @@ create_input(struct ir3_context *ctx, unsigned compmask)
 {
 	struct ir3_instruction *in;
 
-	in = ir3_instr_create(ctx->in_block, OPC_META_INPUT);
+	in = ir3_instr_create(ctx->in_block, OPC_META_INPUT, 1);
 	in->input.sysval = ~0;
 	__ssa_dst(in)->wrmask = compmask;
 
@@ -816,8 +816,9 @@ emit_intrinsic_load_ubo(struct ir3_context *ctx, nir_intrinsic_instr *intr,
 
 	for (int i = 0; i < intr->num_components; i++) {
 		struct ir3_instruction *load =
-			ir3_LDG(b, addr, 0, create_immed(b, 1), 0, /* num components */
-					create_immed(b, off + i * 4), 0);
+			ir3_LDG(b, addr, 0,
+					create_immed(b, off + i * 4), 0,
+					create_immed(b, 1), 0); /* num components */
 		load->cat6.type = TYPE_U32;
 		dst[i] = load;
 	}
@@ -874,8 +875,8 @@ emit_intrinsic_load_shared(struct ir3_context *ctx, nir_intrinsic_instr *intr,
 	base   = nir_intrinsic_base(intr);
 
 	ldl = ir3_LDL(b, offset, 0,
-			create_immed(b, intr->num_components), 0,
-			create_immed(b, base), 0);
+			create_immed(b, base), 0,
+			create_immed(b, intr->num_components), 0);
 
 	ldl->cat6.type = utype_dst(intr->dest);
 	ldl->regs[0]->wrmask = MASK(intr->num_components);
@@ -928,8 +929,8 @@ emit_intrinsic_load_shared_ir3(struct ir3_context *ctx, nir_intrinsic_instr *int
 	base   = nir_intrinsic_base(intr);
 
 	load = ir3_LDLW(b, offset, 0,
-			create_immed(b, intr->num_components), 0,
-			create_immed(b, base), 0);
+			create_immed(b, base), 0,
+			create_immed(b, intr->num_components), 0);
 
 	/* for a650, use LDL for tess ctrl inputs: */
 	if (ctx->so->type == MESA_SHADER_TESS_CTRL && ctx->compiler->tess_use_shared)
@@ -1050,6 +1051,57 @@ emit_intrinsic_atomic_shared(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 	array_insert(b, b->keeps, atomic);
 
 	return atomic;
+}
+
+/* src[] = { offset }. */
+static void
+emit_intrinsic_load_scratch(struct ir3_context *ctx, nir_intrinsic_instr *intr,
+		struct ir3_instruction **dst)
+{
+	struct ir3_block *b = ctx->block;
+	struct ir3_instruction *ldp, *offset;
+
+	offset = ir3_get_src(ctx, &intr->src[0])[0];
+
+	ldp = ir3_LDP(b, offset, 0,
+			create_immed(b, 0), 0,
+			create_immed(b, intr->num_components), 0);
+
+	ldp->cat6.type = utype_dst(intr->dest);
+	ldp->regs[0]->wrmask = MASK(intr->num_components);
+
+	ldp->barrier_class = IR3_BARRIER_PRIVATE_R;
+	ldp->barrier_conflict = IR3_BARRIER_PRIVATE_W;
+
+	ir3_split_dest(b, dst, ldp, 0, intr->num_components);
+}
+
+/* src[] = { value, offset }. const_index[] = { write_mask } */
+static void
+emit_intrinsic_store_scratch(struct ir3_context *ctx, nir_intrinsic_instr *intr)
+{
+	struct ir3_block *b = ctx->block;
+	struct ir3_instruction *stp, *offset;
+	struct ir3_instruction * const *value;
+	unsigned wrmask, ncomp;
+
+	value  = ir3_get_src(ctx, &intr->src[0]);
+	offset = ir3_get_src(ctx, &intr->src[1])[0];
+
+	wrmask = nir_intrinsic_write_mask(intr);
+	ncomp  = ffs(~wrmask) - 1;
+
+	assert(wrmask == BITFIELD_MASK(intr->num_components));
+
+	stp = ir3_STP(b, offset, 0,
+		ir3_create_collect(ctx, value, ncomp), 0,
+		create_immed(b, ncomp), 0);
+	stp->cat6.dst_offset = 0;
+	stp->cat6.type = utype_src(intr->src[0]);
+	stp->barrier_class = IR3_BARRIER_PRIVATE_W;
+	stp->barrier_conflict = IR3_BARRIER_PRIVATE_R | IR3_BARRIER_PRIVATE_W;
+
+	array_insert(b, b->keeps, stp);
 }
 
 struct tex_src_info {
@@ -1615,8 +1667,8 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 		offset = ir3_get_src(ctx, &intr->src[1])[0];
 
 		struct ir3_instruction *load =
-			ir3_LDG(b, addr, 0, create_immed(ctx->block, dest_components),
-					0, offset, 0);
+			ir3_LDG(b, addr, 0, offset, 0,
+					create_immed(ctx->block, dest_components), 0);
 		load->cat6.type = TYPE_U32;
 		load->regs[0]->wrmask = MASK(dest_components);
 
@@ -1713,6 +1765,12 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 	case nir_intrinsic_shared_atomic_exchange:
 	case nir_intrinsic_shared_atomic_comp_swap:
 		dst[0] = emit_intrinsic_atomic_shared(ctx, intr);
+		break;
+	case nir_intrinsic_load_scratch:
+		emit_intrinsic_load_scratch(ctx, intr, dst);
+		break;
+	case nir_intrinsic_store_scratch:
+		emit_intrinsic_store_scratch(ctx, intr);
 		break;
 	case nir_intrinsic_image_load:
 		emit_intrinsic_load_image(ctx, intr, dst);
@@ -1862,7 +1920,7 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 		if (!ctx->work_group_id) {
 			ctx->work_group_id =
 				create_sysval_input(ctx, SYSTEM_VALUE_WORK_GROUP_ID, 0x7);
-			ctx->work_group_id->regs[0]->flags |= IR3_REG_HIGH;
+			ctx->work_group_id->regs[0]->flags |= IR3_REG_SHARED;
 		}
 		ir3_split_dest(b, dst, ctx->work_group_id, 0, 3);
 		break;
@@ -2423,9 +2481,8 @@ emit_tex(struct ir3_context *ctx, nir_tex_instr *tex)
 
 		compile_assert(ctx, tex->src[idx].src.is_ssa);
 
-		sam = ir3_META_TEX_PREFETCH(b);
-		__ssa_dst(sam)->wrmask = MASK(ncomp);   /* dst */
-		__ssa_src(sam, get_barycentric(ctx, IJ_PERSP_PIXEL), 0);
+		sam = ir3_SAM(b, opc, type, MASK(ncomp), 0, NULL,
+				get_barycentric(ctx, IJ_PERSP_PIXEL), 0);
 		sam->prefetch.input_offset =
 				ir3_nir_coord_offset(tex->src[idx].src.ssa);
 		/* make sure not to add irrelevant flags like S2EN */
@@ -3143,7 +3200,11 @@ setup_output(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 			so->writes_pos = true;
 			break;
 		case FRAG_RESULT_COLOR:
-			so->color0_mrt = 1;
+			if (!ctx->s->info.fs.color_is_dual_source) {
+				so->color0_mrt = 1;
+			} else {
+				slot = FRAG_RESULT_DATA0 + io.dual_source_blend_index;
+			}
 			break;
 		case FRAG_RESULT_SAMPLE_MASK:
 			so->writes_smask = true;
@@ -3346,6 +3407,8 @@ emit_instructions(struct ir3_context *ctx)
 	ctx->so->clip_mask = ctx->so->key.ucp_enables;
 	ctx->so->cull_mask = MASK(ctx->s->info.cull_distance_array_size) <<
 		ctx->s->info.clip_distance_array_size;
+
+	ctx->so->pvtmem_size = ctx->s->scratch_size;
 
 	/* NOTE: need to do something more clever when we support >1 fxn */
 	nir_foreach_register (reg, &fxn->registers) {
@@ -3820,7 +3883,7 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
 	collect_tex_prefetches(ctx, ir);
 
 	if (so->type == MESA_SHADER_FRAGMENT &&
-			ctx->s->info.fs.needs_helper_invocations)
+			ctx->s->info.fs.needs_quad_helper_invocations)
 		so->need_pixlod = true;
 
 out:

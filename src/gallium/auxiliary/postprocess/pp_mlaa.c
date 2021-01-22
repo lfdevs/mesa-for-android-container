@@ -85,7 +85,7 @@ pp_jimenezmlaa_run(struct pp_queue_t *ppq, struct pipe_resource *in,
 
    memset(&mstencil, 0, sizeof(mstencil));
 
-   cso_set_stencil_ref(p->cso, &ref);
+   cso_set_stencil_ref(p->cso, ref);
 
    /* Init the pixel size constant */
    if (dimensions[0] != p->framebuffer.width ||

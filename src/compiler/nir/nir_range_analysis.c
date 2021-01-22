@@ -864,6 +864,7 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
 
       case eq_zero:
          assert(r.is_integral);
+         FALLTHROUGH;
       case gt_zero:
       case ge_zero:
          /* The fsat doesn't add any information in these cases. */
@@ -1116,11 +1117,12 @@ search_phi_bcsel(nir_ssa_scalar scalar, nir_ssa_scalar *buf, unsigned buf_size, 
       if (buf_size >= num_sources_left) {
          unsigned total_added = 0;
          nir_foreach_phi_src(src, phi) {
+            num_sources_left--;
             unsigned added = search_phi_bcsel(
                (nir_ssa_scalar){src->src.ssa, 0}, buf + total_added, buf_size - num_sources_left, visited);
+            assert(added <= buf_size);
             buf_size -= added;
             total_added += added;
-            num_sources_left--;
          }
          return total_added;
       }

@@ -283,11 +283,11 @@ vlVaCreateConfig(VADriverContextP ctx, VAProfile profile, VAEntrypoint entrypoin
    for (int i = 0; i <num_attribs ; i++) {
       if (attrib_list[i].type == VAConfigAttribRateControl) {
          if (attrib_list[i].value == VA_RC_CBR)
-            config->rc = PIPE_H264_ENC_RATE_CONTROL_METHOD_CONSTANT;
+            config->rc = PIPE_H2645_ENC_RATE_CONTROL_METHOD_CONSTANT;
          else if (attrib_list[i].value == VA_RC_VBR)
-            config->rc = PIPE_H264_ENC_RATE_CONTROL_METHOD_VARIABLE;
+            config->rc = PIPE_H2645_ENC_RATE_CONTROL_METHOD_VARIABLE;
          else
-            config->rc = PIPE_H264_ENC_RATE_CONTROL_METHOD_DISABLE;
+            config->rc = PIPE_H2645_ENC_RATE_CONTROL_METHOD_DISABLE;
       }
       if (attrib_list[i].type == VAConfigAttribRTFormat) {
          if (attrib_list[i].value & supported_rt_formats) {

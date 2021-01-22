@@ -29,5 +29,8 @@ libfreedrenowinsys = static_library(
     inc_freedreno,
   ],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [dep_libdrm],
+  dependencies : [
+    dep_libdrm,
+    idep_mesautil,
+  ],
 )

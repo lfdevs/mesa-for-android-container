@@ -236,7 +236,7 @@ public:
 /// @note this enum needs to be kept in sync with SWR_TILE_STATE!
 enum HOTTILE_STATE
 {
-    HOTTILE_INVALID,  // tile is in unitialized state and should be loaded with surface contents
+    HOTTILE_INVALID,  // tile is in uninitialized state and should be loaded with surface contents
                       // before rendering
     HOTTILE_CLEAR,    // tile should be cleared
     HOTTILE_DIRTY,    // tile has been rendered to

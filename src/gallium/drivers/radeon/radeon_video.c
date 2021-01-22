@@ -129,7 +129,8 @@ error:
 void si_vid_clear_buffer(struct pipe_context *context, struct rvid_buffer *buffer)
 {
    struct si_context *sctx = (struct si_context *)context;
+   uint32_t zero = 0;
 
-   si_sdma_clear_buffer(sctx, &buffer->res->b.b, 0, buffer->res->b.b.width0, 0);
+   sctx->b.clear_buffer(&sctx->b, &buffer->res->b.b, 0, buffer->res->b.b.width0, &zero, 4);
    context->flush(context, NULL, 0);
 }

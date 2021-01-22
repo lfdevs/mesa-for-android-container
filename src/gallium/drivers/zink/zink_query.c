@@ -290,7 +290,7 @@ get_query_result(struct pipe_context *pctx,
          break;
 
       default:
-         debug_printf("unhangled query type: %s\n",
+         debug_printf("unhandled query type: %s\n",
                       util_str_query_type(query->type, true));
          unreachable("unexpected query type");
       }

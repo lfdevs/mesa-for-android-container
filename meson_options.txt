@@ -45,7 +45,7 @@ option(
   'dri-drivers',
   type : 'array',
   value : ['auto'],
-  choices : ['auto', 'i915', 'i965', 'r100', 'r200', 'nouveau', 'swrast'],
+  choices : ['auto', 'i915', 'i965', 'r100', 'r200', 'nouveau'],
   description : 'List of dri drivers to build. If this is set to auto all drivers applicable to the target OS/architecture will be built'
 )
 option(
@@ -67,7 +67,7 @@ option(
   choices : [
     'auto', 'kmsro', 'radeonsi', 'r300', 'r600', 'nouveau', 'freedreno',
     'swrast', 'v3d', 'vc4', 'etnaviv', 'tegra', 'i915', 'svga', 'virgl',
-    'swr', 'panfrost', 'iris', 'lima', 'zink'
+    'swr', 'panfrost', 'iris', 'lima', 'zink', 'd3d12'
   ],
   description : 'List of gallium drivers to build. If this is set to auto all drivers applicable to the target OS/architecture will be built'
 )
@@ -156,6 +156,12 @@ option(
   description : 'build gallium "clover" OpenCL frontend with SPIR-V binary support.',
 )
 option(
+  'opencl-native',
+  type : 'boolean',
+  value : true,
+  description : 'build gallium "clover" OpenCL frontend with native LLVM codegen support.',
+)
+option(
   'static-libclc',
   type : 'array',
   value : [],
@@ -193,6 +199,17 @@ option(
   type : 'boolean',
   value : true,
   description : 'If set to false, the feature is only activated when environment variable MESA_GLSL_CACHE_DISABLE is set to false',
+)
+option(
+  'shader-cache-max-size',
+  type : 'string',
+  value : '',
+  description : '''Default value for MESA_GLSL_CACHE_MAX_SIZE enviroment variable.
+   If set, determines the maximum size of the on-disk cache of compiled
+   GLSL programs, can be overriden by enviroment variable if needed. Should be set to a number optionally followed by
+   ``K``, ``M``, or ``G`` to specify a size in kilobytes, megabytes, or
+   gigabytes. By default, gigabytes will be assumed. And if unset, a
+   maximum size of 1GB will be used.'''
 )
 option(
   'vulkan-icd-dir',
@@ -267,6 +284,24 @@ option(
   description : 'Enable GLVND support.'
 )
 option(
+  'microsoft-clc',
+  type : 'feature',
+  value : 'auto',
+  description : 'Build support for the Microsoft CLC to DXIL compiler'
+)
+option(
+  'spirv-to-dxil',
+  type : 'boolean',
+  value : false,
+  description : 'Build support for the SPIR-V to DXIL library'
+)
+option(
+  'glvnd-vendor-name',
+  type : 'string',
+  value : 'mesa',
+  description : 'Vendor name string to use for glvnd libraries'
+)
+option(
    'glx-read-only-text',
    type : 'boolean',
    value : false,
@@ -333,9 +368,8 @@ option(
 )
 option(
   'osmesa',
-  type : 'combo',
-  value : 'none',
-  choices : ['none', 'classic', 'gallium'],
+  type : 'boolean',
+  value : false,
   description : 'Build OSmesa.'
 )
 option(
@@ -417,4 +451,16 @@ option(
   choices : ['auto', 'true', 'false', 'enabled', 'disabled'],
   value : 'auto',
   description : 'Use ZSTD instead of ZLIB in some cases.'
+)
+option(
+   'zlib',
+   type : 'feature',
+   value : 'enabled',
+   description : 'Use ZLIB to build driver. Default: enabled'
+)
+option(
+  'sse2',
+  type : 'boolean',
+  value : true,
+  description : 'use msse2 flag for mingw x86. Default: true',
 )

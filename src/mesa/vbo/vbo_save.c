@@ -40,8 +40,6 @@ void vbo_save_init( struct gl_context *ctx )
    struct vbo_context *vbo = vbo_context(ctx);
    struct vbo_save_context *save = &vbo->save;
 
-   save->ctx = ctx;
-
    vbo_save_api_init( save );
 
    for (gl_vertex_processing_mode vpm = VP_MODE_FF; vpm < VP_MODE_MAX; ++vpm)
@@ -63,6 +61,7 @@ void vbo_save_destroy( struct gl_context *ctx )
 
    if (save->prim_store) {
       if ( --save->prim_store->refcount == 0 ) {
+         free(save->prim_store->prims);
          free(save->prim_store);
          save->prim_store = NULL;
       }
@@ -72,4 +71,6 @@ void vbo_save_destroy( struct gl_context *ctx )
       free(save->vertex_store);
       save->vertex_store = NULL;
    }
+
+   _mesa_reference_buffer_object(ctx, &save->previous_ib, NULL);
 }

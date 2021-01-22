@@ -144,6 +144,11 @@ void * ir3_shader_assemble(struct ir3_shader_variant *v)
 	if (compiler->gpu_id >= 400)
 		v->constlen = align(v->constlen, 4);
 
+	/* Use the per-wave layout by default on a6xx. It should result in better
+	 * performance when loads/stores are to a uniform index.
+	 */
+	v->pvtmem_per_wave = compiler->gpu_id >= 600 && !v->info.multi_dword_ldp_stp;
+
 	fixup_regfootprint(v);
 
 	return bin;
@@ -172,14 +177,14 @@ compile_variant(struct ir3_shader_variant *v)
 {
 	int ret = ir3_compile_shader_nir(v->shader->compiler, v);
 	if (ret) {
-		_debug_printf("compile failed! (%s:%s)", v->shader->nir->info.name,
+		mesa_loge("compile failed! (%s:%s)", v->shader->nir->info.name,
 				v->shader->nir->info.label);
 		return false;
 	}
 
 	assemble_variant(v);
 	if (!v->bin) {
-		_debug_printf("assemble failed! (%s:%s)", v->shader->nir->info.name,
+		mesa_loge("assemble failed! (%s:%s)", v->shader->nir->info.name,
 				v->shader->nir->info.label);
 		return false;
 	}
@@ -686,4 +691,52 @@ uint64_t
 ir3_shader_outputs(const struct ir3_shader *so)
 {
 	return so->nir->info.outputs_written;
+}
+
+
+/* Add any missing varyings needed for stream-out.  Otherwise varyings not
+ * used by fragment shader will be stripped out.
+ */
+void
+ir3_link_stream_out(struct ir3_shader_linkage *l, const struct ir3_shader_variant *v)
+{
+	const struct ir3_stream_output_info *strmout = &v->shader->stream_output;
+
+	/*
+	 * First, any stream-out varyings not already in linkage map (ie. also
+	 * consumed by frag shader) need to be added:
+	 */
+	for (unsigned i = 0; i < strmout->num_outputs; i++) {
+		const struct ir3_stream_output *out = &strmout->output[i];
+		unsigned k = out->register_index;
+		unsigned compmask =
+			(1 << (out->num_components + out->start_component)) - 1;
+		unsigned idx, nextloc = 0;
+
+		/* psize/pos need to be the last entries in linkage map, and will
+		 * get added link_stream_out, so skip over them:
+		 */
+		if ((v->outputs[k].slot == VARYING_SLOT_PSIZ) ||
+				(v->outputs[k].slot == VARYING_SLOT_POS))
+			continue;
+
+		for (idx = 0; idx < l->cnt; idx++) {
+			if (l->var[idx].regid == v->outputs[k].regid)
+				break;
+			nextloc = MAX2(nextloc, l->var[idx].loc + 4);
+		}
+
+		/* add if not already in linkage map: */
+		if (idx == l->cnt)
+			ir3_link_add(l, v->outputs[k].regid, compmask, nextloc);
+
+		/* expand component-mask if needed, ie streaming out all components
+		 * but frag shader doesn't consume all components:
+		 */
+		if (compmask & ~l->var[idx].compmask) {
+			l->var[idx].compmask |= compmask;
+			l->max_loc = MAX2(l->max_loc,
+				l->var[idx].loc + util_last_bit(l->var[idx].compmask));
+		}
+	}
 }

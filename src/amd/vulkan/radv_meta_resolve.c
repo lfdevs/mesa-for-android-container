@@ -35,12 +35,9 @@ static nir_shader *
 build_nir_fs(void)
 {
 	const struct glsl_type *vec4 = glsl_vec4_type();
-	nir_builder b;
 	nir_variable *f_color; /* vec4, fragment output color */
 
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, NULL);
-	b.shader->info.name = ralloc_asprintf(b.shader,
-					       "meta_resolve_fs");
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, NULL, "meta_resolve_fs");
 
 	f_color = nir_variable_create(b.shader, nir_var_shader_out, vec4,
 				      "f_color");
@@ -288,7 +285,7 @@ radv_device_init_meta_resolve_state(struct radv_device *device, bool on_demand)
 
 	for (uint32_t i = 0; i < NUM_META_FS_KEYS; ++i) {
 		VkFormat format = radv_fs_key_format_exemplars[i];
-		unsigned fs_key = radv_format_meta_fs_key(format);
+		unsigned fs_key = radv_format_meta_fs_key(device, format);
 		res = create_pass(device, format, &state->resolve.pass[fs_key]);
 		if (res != VK_SUCCESS)
 			goto fail;
@@ -313,15 +310,20 @@ cleanup:
 
 static void
 emit_resolve(struct radv_cmd_buffer *cmd_buffer,
+             const struct radv_image *src_image,
+	     const struct radv_image *dst_image,
 	     VkFormat vk_format,
              const VkOffset2D *dest_offset,
              const VkExtent2D *resolve_extent)
 {
 	struct radv_device *device = cmd_buffer->device;
 	VkCommandBuffer cmd_buffer_h = radv_cmd_buffer_to_handle(cmd_buffer);
-	unsigned fs_key = radv_format_meta_fs_key(vk_format);
+	unsigned fs_key = radv_format_meta_fs_key(device, vk_format);
 
-	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB;
+	cmd_buffer->state.flush_bits |=
+		radv_src_access_flush(cmd_buffer, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, src_image) |
+		radv_dst_access_flush(cmd_buffer, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT, src_image) |
+		radv_dst_access_flush(cmd_buffer, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, dst_image);
 
 	radv_CmdBindPipeline(cmd_buffer_h, VK_PIPELINE_BIND_POINT_GRAPHICS,
 			     device->meta_state.resolve.pipeline[fs_key]);
@@ -341,7 +343,8 @@ emit_resolve(struct radv_cmd_buffer *cmd_buffer,
 	});
 
 	radv_CmdDraw(cmd_buffer_h, 3, 1, 0, 0);
-	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB;
+	cmd_buffer->state.flush_bits |=
+		radv_src_access_flush(cmd_buffer, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, dst_image);
 }
 
 enum radv_resolve_method {
@@ -365,6 +368,19 @@ static void radv_pick_resolve_method_images(struct radv_device *device,
 	                                                   cmd_buffer->queue_family_index);
 
 	if (vk_format_is_color(src_format)) {
+		/* Using the fragment resolve path is currently a hint to
+		 * avoid decompressing DCC for partial resolves and
+		 * re-initialize it after resolving using compute.
+		 * TODO: Add support for layered and int to the fragment path.
+		 */
+		if (radv_layout_dcc_compressed(device, dest_image, dest_image_layout,
+		                               dest_render_loop, queue_mask)) {
+			*method = RESOLVE_FRAGMENT;
+		} else if (dest_image->planes[0].surface.micro_tile_mode !=
+		           src_image->planes[0].surface.micro_tile_mode) {
+			*method = RESOLVE_COMPUTE;
+		}
+
 		if (src_format == VK_FORMAT_R16G16_UNORM ||
 		    src_format == VK_FORMAT_R16G16_SNORM)
 			*method = RESOLVE_COMPUTE;
@@ -373,14 +389,6 @@ static void radv_pick_resolve_method_images(struct radv_device *device,
 		else if (src_image->info.array_size > 1 ||
 			 dest_image->info.array_size > 1)
 			*method = RESOLVE_COMPUTE;
-
-		if (radv_layout_dcc_compressed(device, dest_image, dest_image_layout,
-		                               dest_render_loop, queue_mask)) {
-			*method = RESOLVE_FRAGMENT;
-		} else if (dest_image->planes[0].surface.micro_tile_mode !=
-		           src_image->planes[0].surface.micro_tile_mode) {
-			*method = RESOLVE_COMPUTE;
-		}
 	} else {
 		if (src_image->info.array_size > 1 ||
 		    dest_image->info.array_size > 1)
@@ -445,7 +453,7 @@ radv_meta_resolve_hardware_image(struct radv_cmd_buffer *cmd_buffer,
 	if (src_image->info.array_size > 1)
 		radv_finishme("vkCmdResolveImage: multisample array images");
 
-	unsigned fs_key = radv_format_meta_fs_key(dst_image->vk_format);
+	unsigned fs_key = radv_format_meta_fs_key(device, dst_image->vk_format);
 
 	/* From the Vulkan 1.0 spec:
 	 *
@@ -574,12 +582,12 @@ radv_meta_resolve_hardware_image(struct radv_cmd_buffer *cmd_buffer,
 							},
 							.clearValueCount = 0,
 							.pClearValues = NULL,
-					      });
+					      }, NULL);
 
 		radv_cmd_buffer_set_subpass(cmd_buffer,
 					    &cmd_buffer->state.pass->subpasses[0]);
 
-		emit_resolve(cmd_buffer,
+		emit_resolve(cmd_buffer, src_image, dst_image,
 			     dst_iview.vk_format,
 			     &(VkOffset2D) {
 				     .x = dstOffset.x,
@@ -858,6 +866,9 @@ radv_cmd_buffer_resolve_subpass(struct radv_cmd_buffer *cmd_buffer)
 		if (dest_att.attachment == VK_ATTACHMENT_UNUSED)
 			continue;
 
+		struct radv_image_view *src_iview = cmd_buffer->state.attachments[src_att.attachment].iview;
+		struct radv_image *src_img = src_iview->image;
+
 		struct radv_image_view *dest_iview = cmd_buffer->state.attachments[dest_att.attachment].iview;
 		struct radv_image *dst_img = dest_iview->image;
 
@@ -882,13 +893,13 @@ radv_cmd_buffer_resolve_subpass(struct radv_cmd_buffer *cmd_buffer)
 
 		radv_cmd_buffer_set_subpass(cmd_buffer, &resolve_subpass);
 
-		VkResult ret = build_resolve_pipeline(cmd_buffer->device, radv_format_meta_fs_key(dest_iview->vk_format));
+		VkResult ret = build_resolve_pipeline(cmd_buffer->device, radv_format_meta_fs_key(cmd_buffer->device, dest_iview->vk_format));
 		if (ret != VK_SUCCESS) {
 			cmd_buffer->record_result = ret;
 			continue;
 		}
 
-		emit_resolve(cmd_buffer,
+		emit_resolve(cmd_buffer, src_img, dst_img,
 			     dest_iview->vk_format,
 			     &(VkOffset2D) { 0, 0 },
 			     &(VkExtent2D) { fb->width, fb->height });

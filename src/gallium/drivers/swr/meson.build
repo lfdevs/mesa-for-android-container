@@ -397,7 +397,7 @@ libmesaswr = static_library(
   ],
   gnu_symbol_visibility : 'hidden',
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, swr_incs],
-  dependencies : dep_llvm,
+  dependencies : [dep_llvm, idep_mesautil],
 )
 
 link_libs = [libmesaswr]

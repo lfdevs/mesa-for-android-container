@@ -766,10 +766,11 @@ nvc0_draw_elements(struct nvc0_context *nvc0, bool shorten,
 
 static void
 nvc0_draw_stream_output(struct nvc0_context *nvc0,
-                        const struct pipe_draw_info *info)
+                        const struct pipe_draw_info *info,
+                        const struct pipe_draw_indirect_info *indirect)
 {
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
-   struct nvc0_so_target *so = nvc0_so_target(info->count_from_stream_output);
+   struct nvc0_so_target *so = nvc0_so_target(indirect->count_from_stream_output);
    struct nv04_resource *res = nv04_resource(so->pipe.buffer);
    unsigned mode = nvc0_prim_gl(info->mode);
    unsigned num_instances = info->instance_count;
@@ -802,13 +803,14 @@ nvc0_draw_stream_output(struct nvc0_context *nvc0,
 }
 
 static void
-nvc0_draw_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *info)
+nvc0_draw_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *info,
+                   const struct pipe_draw_indirect_info *indirect)
 {
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
-   struct nv04_resource *buf = nv04_resource(info->indirect->buffer);
-   struct nv04_resource *buf_count = nv04_resource(info->indirect->indirect_draw_count);
-   unsigned size, macro, count = info->indirect->draw_count, drawid = info->drawid;
-   uint32_t offset = buf->offset + info->indirect->offset;
+   struct nv04_resource *buf = nv04_resource(indirect->buffer);
+   struct nv04_resource *buf_count = nv04_resource(indirect->indirect_draw_count);
+   unsigned size, macro, count = indirect->draw_count, drawid = info->drawid;
+   uint32_t offset = buf->offset + indirect->offset;
    struct nvc0_screen *screen = nvc0->screen;
 
    PUSH_SPACE(push, 7);
@@ -857,7 +859,7 @@ nvc0_draw_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *info)
     */
    while (count) {
       unsigned draws = count, pushes, i;
-      if (info->indirect->stride == size * 4) {
+      if (indirect->stride == size * 4) {
          draws = MIN2(draws, (NV04_PFIFO_MAX_PACKET_LEN - 4) / size);
          pushes = 1;
       } else {
@@ -877,20 +879,20 @@ nvc0_draw_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *info)
       if (buf_count) {
          nouveau_pushbuf_data(push,
                               buf_count->bo,
-                              buf_count->offset + info->indirect->indirect_draw_count_offset,
+                              buf_count->offset + indirect->indirect_draw_count_offset,
                               NVC0_IB_ENTRY_1_NO_PREFETCH | 4);
       }
       if (pushes == 1) {
          nouveau_pushbuf_data(push,
                               buf->bo, offset,
                               NVC0_IB_ENTRY_1_NO_PREFETCH | (size * 4 * draws));
-         offset += draws * info->indirect->stride;
+         offset += draws * indirect->stride;
       } else {
          for (i = 0; i < pushes; i++) {
             nouveau_pushbuf_data(push,
                                  buf->bo, offset,
                                  NVC0_IB_ENTRY_1_NO_PREFETCH | (size * 4));
-            offset += info->indirect->stride;
+            offset += indirect->stride;
          }
       }
       count -= draws;
@@ -920,8 +922,25 @@ nvc0_update_prim_restart(struct nvc0_context *nvc0, bool en, uint32_t index)
 }
 
 void
-nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
+nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
+              const struct pipe_draw_indirect_info *indirect,
+              const struct pipe_draw_start_count *draws,
+              unsigned num_draws)
 {
+   if (num_draws > 1) {
+      struct pipe_draw_info tmp_info = *info;
+
+      for (unsigned i = 0; i < num_draws; i++) {
+         nvc0_draw_vbo(pipe, &tmp_info, indirect, &draws[i], 1);
+         if (tmp_info.increment_draw_id)
+            tmp_info.drawid++;
+      }
+      return;
+   }
+
+   if (!indirect && (!draws[0].count || !info->instance_count))
+      return;
+
    struct nvc0_context *nvc0 = nvc0_context(pipe);
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct nvc0_screen *screen = nvc0->screen;
@@ -929,8 +948,13 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    int s;
 
    /* NOTE: caller must ensure that (min_index + index_bias) is >= 0 */
-   nvc0->vb_elt_first = info->min_index + info->index_bias;
-   nvc0->vb_elt_limit = info->max_index - info->min_index;
+   if (info->index_bounds_valid) {
+      nvc0->vb_elt_first = info->min_index + (info->index_size ? info->index_bias : 0);
+      nvc0->vb_elt_limit = info->max_index - info->min_index;
+   } else {
+      nvc0->vb_elt_first = 0;
+      nvc0->vb_elt_limit = ~0;
+   }
    nvc0->instance_off = info->start_instance;
    nvc0->instance_max = info->instance_count - 1;
 
@@ -938,8 +962,8 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
     * if index count is larger and we expect repeated vertices, suggest upload.
     */
    nvc0->vbo_push_hint =
-      !info->indirect && info->index_size &&
-      (nvc0->vb_elt_limit >= (info->count * 2));
+      (!indirect || indirect->count_from_stream_output) && info->index_size &&
+      (nvc0->vb_elt_limit >= (draws[0].count * 2));
 
    /* Check whether we want to switch vertex-submission mode. */
    if (nvc0->vbo_user && !(nvc0->dirty_3d & (NVC0_NEW_3D_ARRAYS | NVC0_NEW_3D_VERTEX))) {
@@ -1005,7 +1029,7 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
 
    nvc0_state_validate_3d(nvc0, ~0);
 
-   if (nvc0->vertprog->vp.need_draw_parameters && !info->indirect) {
+   if (nvc0->vertprog->vp.need_draw_parameters && (!indirect || indirect->count_from_stream_output)) {
       PUSH_SPACE(push, 9);
       BEGIN_NVC0(push, NVC0_3D(CB_SIZE), 3);
       PUSH_DATA (push, NVC0_CB_AUX_SIZE);
@@ -1013,7 +1037,7 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       PUSH_DATA (push, screen->uniform_bo->offset + NVC0_CB_AUX_INFO(0));
       BEGIN_1IC0(push, NVC0_3D(CB_POS), 1 + 3);
       PUSH_DATA (push, NVC0_CB_AUX_DRAW_INFO);
-      PUSH_DATA (push, info->index_bias);
+      PUSH_DATA (push, info->index_size ? info->index_bias : 0);
       PUSH_DATA (push, info->start_instance);
       PUSH_DATA (push, info->drawid);
    }
@@ -1057,10 +1081,10 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    }
 
    if (nvc0->state.vbo_mode) {
-      if (info->indirect)
-         nvc0_push_vbo_indirect(nvc0, info);
+      if (indirect && indirect->buffer)
+         nvc0_push_vbo_indirect(nvc0, info, indirect, &draws[0]);
       else
-         nvc0_push_vbo(nvc0, info);
+         nvc0_push_vbo(nvc0, info, indirect, &draws[0]);
       goto cleanup;
    }
 
@@ -1088,24 +1112,24 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       nvc0->base.vbo_dirty = false;
    }
 
-   if (unlikely(info->indirect)) {
-      nvc0_draw_indirect(nvc0, info);
+   if (unlikely(indirect && indirect->buffer)) {
+      nvc0_draw_indirect(nvc0, info, indirect);
    } else
-   if (unlikely(info->count_from_stream_output)) {
-      nvc0_draw_stream_output(nvc0, info);
+   if (unlikely(indirect && indirect->count_from_stream_output)) {
+      nvc0_draw_stream_output(nvc0, info, indirect);
    } else
    if (info->index_size) {
-      bool shorten = info->max_index <= 65535;
+      bool shorten = info->index_bounds_valid && info->max_index <= 65535;
 
       if (info->primitive_restart && info->restart_index > 65535)
          shorten = false;
 
       nvc0_draw_elements(nvc0, shorten, info,
-                         info->mode, info->start, info->count,
+                         info->mode, draws[0].start, draws[0].count,
                          info->instance_count, info->index_bias, info->index_size);
    } else {
       nvc0_draw_arrays(nvc0,
-                       info->mode, info->start, info->count,
+                       info->mode, draws[0].start, draws[0].count,
                        info->instance_count);
    }
 

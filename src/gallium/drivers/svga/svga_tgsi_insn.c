@@ -2387,7 +2387,7 @@ emit_lit(struct svga_shader_emitter *emit,
       return emit_simple_instruction(emit, SVGA3DOP_LIT, insn);
    }
    else {
-      /* D3D vs. GL semantics can be fairly easily accomodated by
+      /* D3D vs. GL semantics can be fairly easily accommodated by
        * variations on this sequence.
        *
        * GL:

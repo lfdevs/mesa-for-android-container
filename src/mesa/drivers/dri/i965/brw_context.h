@@ -1202,6 +1202,7 @@ struct brw_context
    struct {
       bool in_progress;
       bool enable_cut_index;
+      unsigned restart_index;
    } prim_restart;
 
    /** Computed depth/stencil/hiz state from the current attached

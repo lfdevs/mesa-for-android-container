@@ -82,6 +82,9 @@ pan_prepare_bifrost_props(struct panfrost_shader_state *state,
                 if (state->writes_depth || state->writes_stencil) {
                         state->properties.bifrost.zs_update_operation = MALI_PIXEL_KILL_FORCE_LATE;
                         state->properties.bifrost.pixel_kill_operation = MALI_PIXEL_KILL_FORCE_LATE;
+                } else if (state->can_discard) {
+                        state->properties.bifrost.zs_update_operation = MALI_PIXEL_KILL_FORCE_LATE;
+                        state->properties.bifrost.pixel_kill_operation = MALI_PIXEL_KILL_WEAK_EARLY;
                 } else {
                         state->properties.bifrost.zs_update_operation = MALI_PIXEL_KILL_STRONG_EARLY;
                         state->properties.bifrost.pixel_kill_operation = MALI_PIXEL_KILL_FORCE_EARLY;
@@ -336,7 +339,7 @@ panfrost_shader_compile(struct panfrost_context *ctx,
         }
 
         state->can_discard = s->info.fs.uses_discard;
-        state->helper_invocations = s->info.fs.needs_helper_invocations;
+        state->helper_invocations = s->info.fs.needs_quad_helper_invocations;
         state->stack_size = program->tls_size;
 
         state->reads_frag_coord = (s->info.inputs_read & (1 << VARYING_SLOT_POS)) ||
@@ -377,7 +380,17 @@ panfrost_shader_compile(struct panfrost_context *ctx,
         /* Needed for linkage */
         state->attribute_count = attribute_count;
         state->varying_count = varying_count;
-        state->ubo_count = s->info.num_ubos + 1; /* off-by-one for uniforms */
+
+        /* off-by-one for uniforms. Not needed on Bifrost since uniforms
+         * have been lowered to UBOs using nir_lower_uniforms_to_ubo() which
+         * already increments s->info.num_ubos. We do have to account for the
+         * "no uniform, no UBO" case though, otherwise sysval passed through
+         * uniforms won't work correctly.
+         */
+        if (dev->quirks & IS_BIFROST)
+                state->ubo_count = MAX2(s->info.num_ubos, 1);
+        else
+                state->ubo_count = s->info.num_ubos + 1;
 
         /* Prepare the descriptors at compile-time */
         state->shader.shader = shader;

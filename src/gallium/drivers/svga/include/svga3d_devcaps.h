@@ -273,7 +273,7 @@ typedef enum {
     * If this cap is present, the provokingVertexLast field in the
     * rasterizer state is enabled.  (Guests can then set it to FALSE,
     * meaning that the first vertex is the provoking vertex, or TRUE,
-    * meaning that the last verteix is the provoking vertex.)
+    * meaning that the last vertex is the provoking vertex.)
     *
     * If this cap is FALSE, then guests should set the provokingVertexLast
     * to FALSE, otherwise rendering behavior is undefined.

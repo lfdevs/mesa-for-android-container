@@ -29,6 +29,10 @@
 #include "si_pm4.h"
 #include "util/u_blitter.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define SI_NUM_GRAPHICS_SHADERS (PIPE_SHADER_TESS_EVAL + 1)
 #define SI_NUM_SHADERS          (PIPE_SHADER_COMPUTE + 1)
 
@@ -251,7 +255,8 @@ struct si_shader_data {
 #define SI_TRACKED_PA_CL_VS_OUT_CNTL__VS_MASK                                                      \
    (S_02881C_USE_VTX_POINT_SIZE(1) | S_02881C_USE_VTX_EDGE_FLAG(1) |                               \
     S_02881C_USE_VTX_RENDER_TARGET_INDX(1) | S_02881C_USE_VTX_VIEWPORT_INDX(1) |                   \
-    S_02881C_VS_OUT_MISC_VEC_ENA(1) | S_02881C_VS_OUT_MISC_SIDE_BUS_ENA(1))
+    S_02881C_VS_OUT_MISC_VEC_ENA(1) | S_02881C_VS_OUT_MISC_SIDE_BUS_ENA(1) |                       \
+    S_02881C_USE_VTX_VRS_RATE(1))
 
 /* The list of registers whose emitted values are remembered by si_context. */
 enum si_tracked_reg
@@ -284,6 +289,7 @@ enum si_tracked_reg
 
    SI_TRACKED_PA_SC_BINNER_CNTL_0,
    SI_TRACKED_DB_DFSM_CONTROL,
+   SI_TRACKED_DB_VRS_OVERRIDE_CNTL,
 
    SI_TRACKED_PA_CL_GB_VERT_CLIP_ADJ, /* 4 consecutive registers */
    SI_TRACKED_PA_CL_GB_VERT_DISC_ADJ,
@@ -586,8 +592,8 @@ bool si_update_ngg(struct si_context *sctx);
 void si_emit_surface_sync(struct si_context *sctx, struct radeon_cmdbuf *cs,
                           unsigned cp_coher_cntl);
 void si_prim_discard_signal_next_compute_ib_start(struct si_context *sctx);
-void gfx10_emit_cache_flush(struct si_context *sctx);
-void si_emit_cache_flush(struct si_context *sctx);
+void gfx10_emit_cache_flush(struct si_context *sctx, struct radeon_cmdbuf *cs);
+void si_emit_cache_flush(struct si_context *sctx, struct radeon_cmdbuf *cs);
 void si_trace_emit(struct si_context *sctx);
 void si_init_draw_functions(struct si_context *sctx);
 
@@ -626,5 +632,9 @@ static inline unsigned si_get_image_slot(unsigned slot)
    /* images are in slots [31..16], while FMASKs are in slots [15..0] */
    return SI_NUM_IMAGE_SLOTS - 1 - slot;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

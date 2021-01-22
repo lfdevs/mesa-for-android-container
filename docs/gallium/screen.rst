@@ -165,6 +165,9 @@ The integer capabilities:
   TEXCOORD semantic.
   Also, TGSI_SEMANTIC_PCOORD becomes available, which labels a fragment shader
   input that will always be replaced with sprite coordinates.
+* ``PIPE_CAP_TEXTURE_BUFFER_SAMPLER``: Whether a sampler should still
+  be used for PIPE_BUFFER resources (normally a sampler is only used
+  if the texture target is PIPE_TEXTURE_*).
 * ``PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER``: Whether it is preferable
   to use a blit to implement a texture transfer which needs format conversions
   and swizzling in gallium frontends. Generally, all hardware drivers with
@@ -581,7 +584,6 @@ The integer capabilities:
 * ``PIPE_CAP_PACKED_STREAM_OUTPUT``: Driver supports packing optimization for stream output (e.g. GL transform feedback captured variables). Defaults to true.
 * ``PIPE_CAP_VIEWPORT_TRANSFORM_LOWERED``: Driver needs the nir_lower_viewport_transform pass to be enabled. This also means that the gl_Position value is modified and should be lowered for transform feedback, if needed. Defaults to false.
 * ``PIPE_CAP_PSIZ_CLAMPED``: Driver needs for the point size to be clamped. Additionally, the gl_PointSize has been modified and its value should be lowered for transform feedback, if needed. Defaults to false.
-* ``PIPE_CAP_DRAW_INFO_START_WITH_USER_INDICES``: pipe_draw_info::start can be non-zero with user indices.
 * ``PIPE_CAP_GL_BEGIN_END_BUFFER_SIZE``: Buffer size used to upload vertices for glBegin/glEnd.
 * ``PIPE_CAP_VIEWPORT_SWIZZLE``: Whether pipe_viewport_state::swizzle can be used to specify pre-clipping swizzling of coordinates (see GL_NV_viewport_swizzle).
 * ``PIPE_CAP_SYSTEM_SVM``: True if all application memory can be shared with the GPU without explicit mapping.
@@ -593,6 +595,7 @@ The integer capabilities:
 * ``PIPE_CAP_NO_CLIP_ON_COPY_TEX``: Driver doesn't want x/y/width/height clipped based on src size when doing a copy texture operation (eg: may want out-of-bounds reads that produce 0 instead of leaving the texture content undefined)
 * ``PIPE_CAP_MAX_TEXTURE_MB``: Maximum texture size in MB (default is 1024)
 * ``PIPE_CAP_DEVICE_PROTECTED_CONTENT``: Whether the device support protected / encrypted content.
+* ``PIPE_CAP_PREFER_REAL_BUFFER_IN_CONSTBUF0``: The state tracker is encouraged to upload constants into a real buffer and bind it into constant buffer 0 instead of binding a user pointer. This may enable a faster codepath in a gallium frontend for drivers that really prefer a real buffer.
 
 .. _pipe_capf:
 
@@ -1031,6 +1034,28 @@ Returns a pointer to a driver-specific on-disk shader cache. If the driver
 failed to create the cache or does not support an on-disk shader cache NULL is
 returned. The callback itself may also be NULL if the driver doesn't support
 an on-disk shader cache.
+
+
+is_dmabuf_modifier_supported
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Query whether the driver supports a **modifier** in combination with a
+**format**, and whether it is only supported with "external" texture targets.
+If the combination is supported in any fashion, true is returned.  If the
+**external_only** parameter is not NULL, the bool it points to is set to
+false if non-external texture targets are supported with the specified modifier+
+format, or true if only external texture targets are supported.
+
+
+get_dmabuf_modifier_planes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Query the number of planes required by the image layout specified by the
+**modifier** and **format** parameters.  The value returned includes both planes
+dictated by **format** and any additional planes required for driver-specific
+auxiliary data necessary for the layout defined by **modifier**.
+If the proc is NULL, no auxiliary planes are required for any layout supported by
+**screen** and the number of planes can be derived directly from **format**.
 
 
 Thread safety

@@ -114,7 +114,7 @@ static void radeon_enc_nalu_pps_hevc(struct radeon_encoder *enc)
 
    RADEON_ENC_BEGIN(enc->cmd.nalu);
    RADEON_ENC_CS(RENCODE_DIRECT_OUTPUT_NALU_TYPE_PPS);
-   size_in_bytes = &enc->cs->current.buf[enc->cs->current.cdw++];
+   size_in_bytes = &enc->cs.current.buf[enc->cs.current.cdw++];
 
    radeon_enc_reset(enc);
    radeon_enc_set_emulation_prevention(enc, false);

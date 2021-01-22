@@ -579,8 +579,28 @@ static LLVMValueRef do_alu_action(struct lp_build_nir_context *bld_base,
       result = LLVMBuildFPExt(builder, src[0],
                               bld_base->dbl_bld.vec_type, "");
       break;
+   case nir_op_f2i8:
+      result = LLVMBuildFPToSI(builder,
+                               src[0],
+                               bld_base->uint8_bld.vec_type, "");
+      break;
+   case nir_op_f2i16:
+      result = LLVMBuildFPToSI(builder,
+                               src[0],
+                               bld_base->uint16_bld.vec_type, "");
+      break;
    case nir_op_f2i32:
       result = LLVMBuildFPToSI(builder, src[0], bld_base->base.int_vec_type, "");
+      break;
+   case nir_op_f2u8:
+      result = LLVMBuildFPToUI(builder,
+                               src[0],
+                               bld_base->uint8_bld.vec_type, "");
+      break;
+   case nir_op_f2u16:
+      result = LLVMBuildFPToUI(builder,
+                               src[0],
+                               bld_base->uint16_bld.vec_type, "");
       break;
    case nir_op_f2u32:
       result = LLVMBuildFPToUI(builder,
@@ -958,6 +978,11 @@ static void visit_alu(struct lp_build_nir_context *bld_base, const nir_alu_instr
    case nir_op_cube_face_index:
       src_components = 3;
       break;
+   case nir_op_fsum2:
+   case nir_op_fsum3:
+   case nir_op_fsum4:
+      src_components = nir_src_num_components(instr->src[0].src);
+      break;
    default:
       src_components = num_components;
       break;
@@ -972,7 +997,14 @@ static void visit_alu(struct lp_build_nir_context *bld_base, const nir_alu_instr
       for (unsigned i = 0; i < nir_op_infos[instr->op].num_inputs; i++) {
          result[i] = cast_type(bld_base, src[i], nir_op_infos[instr->op].input_types[i], src_bit_size[i]);
       }
-   } else {
+   } else if (instr->op == nir_op_fsum4 || instr->op == nir_op_fsum3 || instr->op == nir_op_fsum2) {
+      for (unsigned c = 0; c < nir_src_num_components(instr->src[0].src); c++) {
+         LLVMValueRef temp_chan = LLVMBuildExtractValue(gallivm->builder,
+                                                          src[0], c, "");
+         temp_chan = cast_type(bld_base, temp_chan, nir_op_infos[instr->op].input_types[0], src_bit_size[0]);
+         result[0] = (c == 0) ? temp_chan : lp_build_add(get_flt_bld(bld_base, src_bit_size[0]), result[0], temp_chan);
+      }
+    } else {
       for (unsigned c = 0; c < num_components; c++) {
          LLVMValueRef src_chan[NIR_MAX_VEC_COMPONENTS];
 

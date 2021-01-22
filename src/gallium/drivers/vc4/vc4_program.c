@@ -2183,12 +2183,15 @@ static const nir_shader_compiler_options nir_options = {
         .lower_fsat = true,
         .lower_fsqrt = true,
         .lower_ldexp = true,
-        .lower_negate = true,
+        .lower_fneg = true,
+        .lower_ineg = true,
         .lower_rotate = true,
         .lower_to_scalar = true,
         .lower_umax = true,
         .lower_umin = true,
         .lower_isign = true,
+        .has_fsub = true,
+        .has_isub = true,
         .max_unroll_iterations = 32,
 };
 
@@ -2737,10 +2740,10 @@ vc4_update_compiled_fs(struct vc4_context *vc4, uint8_t prim_mode)
         key->stencil_enabled = vc4->zsa->stencil_uniforms[0] != 0;
         key->stencil_twoside = vc4->zsa->stencil_uniforms[1] != 0;
         key->stencil_full_writemasks = vc4->zsa->stencil_uniforms[2] != 0;
-        key->depth_enabled = (vc4->zsa->base.depth.enabled ||
+        key->depth_enabled = (vc4->zsa->base.depth_enabled ||
                               key->stencil_enabled);
-        if (vc4->zsa->base.alpha.enabled)
-                key->alpha_test_func = vc4->zsa->base.alpha.func;
+        if (vc4->zsa->base.alpha_enabled)
+                key->alpha_test_func = vc4->zsa->base.alpha_func;
         else
                 key->alpha_test_func = COMPARE_FUNC_ALWAYS;
 

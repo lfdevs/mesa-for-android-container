@@ -69,6 +69,8 @@ static const nir_shader_compiler_options bifrost_nir_options = {
         .lower_doubles_options = nir_lower_dmod,
 
         .lower_bitfield_extract_to_shifts = true,
+        .has_fsub = true,
+        .has_isub = true,
         .vectorize_io = true,
         .fuse_ffma16 = true,
         .fuse_ffma32 = true,

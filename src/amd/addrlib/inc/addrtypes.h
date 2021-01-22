@@ -649,7 +649,7 @@ typedef enum _AddrTileType
 #endif
 
 #ifndef INT_8
-#define INT_8   char
+#define INT_8   signed char
 #endif
 
 #ifndef UINT_8

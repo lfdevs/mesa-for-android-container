@@ -206,7 +206,7 @@ find_and_ref_external_bo(struct hash_table *ht, unsigned int key)
        * we hadn't yet closed it...and then reimported the same BO.  If it
        * is, then remove it since it's now been resurrected.
        */
-      if (bo->head.prev || bo->head.next)
+      if (list_is_linked(&bo->head))
          list_del(&bo->head);
 
       iris_bo_reference(bo);

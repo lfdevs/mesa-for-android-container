@@ -34,7 +34,7 @@ void enc_ReleaseTasks(struct list_head *head)
 {
    struct encode_task *i, *next;
 
-   if (!head || !head->next)
+   if (!head || !list_is_linked(head))
       return;
 
    LIST_FOR_EACH_ENTRY_SAFE(i, next, head, list) {
@@ -252,26 +252,26 @@ void enc_ControlPicture_common(vid_enc_PrivateType * priv, struct pipe_h264_enc_
    /* Get bitrate from port */
    switch (priv->bitrate.eControlRate) {
    case OMX_Video_ControlRateVariable:
-      rate_ctrl->rate_ctrl_method = PIPE_H264_ENC_RATE_CONTROL_METHOD_VARIABLE;
+      rate_ctrl->rate_ctrl_method = PIPE_H2645_ENC_RATE_CONTROL_METHOD_VARIABLE;
       break;
    case OMX_Video_ControlRateConstant:
-      rate_ctrl->rate_ctrl_method = PIPE_H264_ENC_RATE_CONTROL_METHOD_CONSTANT;
+      rate_ctrl->rate_ctrl_method = PIPE_H2645_ENC_RATE_CONTROL_METHOD_CONSTANT;
       break;
    case OMX_Video_ControlRateVariableSkipFrames:
-      rate_ctrl->rate_ctrl_method = PIPE_H264_ENC_RATE_CONTROL_METHOD_VARIABLE_SKIP;
+      rate_ctrl->rate_ctrl_method = PIPE_H2645_ENC_RATE_CONTROL_METHOD_VARIABLE_SKIP;
       break;
    case OMX_Video_ControlRateConstantSkipFrames:
-      rate_ctrl->rate_ctrl_method = PIPE_H264_ENC_RATE_CONTROL_METHOD_CONSTANT_SKIP;
+      rate_ctrl->rate_ctrl_method = PIPE_H2645_ENC_RATE_CONTROL_METHOD_CONSTANT_SKIP;
       break;
    default:
-      rate_ctrl->rate_ctrl_method = PIPE_H264_ENC_RATE_CONTROL_METHOD_DISABLE;
+      rate_ctrl->rate_ctrl_method = PIPE_H2645_ENC_RATE_CONTROL_METHOD_DISABLE;
       break;
    }
 
    rate_ctrl->frame_rate_den = OMX_VID_ENC_CONTROL_FRAME_RATE_DEN_DEFAULT;
    rate_ctrl->frame_rate_num = ((priv->frame_rate) >> 16) * rate_ctrl->frame_rate_den;
 
-   if (rate_ctrl->rate_ctrl_method != PIPE_H264_ENC_RATE_CONTROL_METHOD_DISABLE) {
+   if (rate_ctrl->rate_ctrl_method != PIPE_H2645_ENC_RATE_CONTROL_METHOD_DISABLE) {
       if (priv->bitrate.nTargetBitrate < OMX_VID_ENC_BITRATE_MIN)
          rate_ctrl->target_bitrate = OMX_VID_ENC_BITRATE_MIN;
       else if (priv->bitrate.nTargetBitrate < OMX_VID_ENC_BITRATE_MAX)

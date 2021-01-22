@@ -149,6 +149,7 @@ files_r600 = files(
   'sfn/sfn_liverange.h',
   'sfn/sfn_nir.cpp',
   'sfn/sfn_nir.h',
+  'sfn/sfn_nir_lower_64bit.cpp',
   'sfn/sfn_nir_lower_fs_out_to_vector.cpp',
   'sfn/sfn_nir_lower_fs_out_to_vector.h',
   'sfn/sfn_nir_lower_tess_io.cpp',

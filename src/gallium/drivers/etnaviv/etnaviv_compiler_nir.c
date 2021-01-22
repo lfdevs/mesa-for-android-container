@@ -41,6 +41,7 @@
 #include "compiler/nir/nir_builder.h"
 
 #include "tgsi/tgsi_strings.h"
+#include "util/compiler.h"
 #include "util/half_float.h"
 
 static bool
@@ -182,13 +183,13 @@ copy_uniform_state_to_shader(struct etna_shader_variant *sobj, uint64_t *consts,
 {
    struct etna_shader_uniform_info *uinfo = &sobj->uniforms;
 
-   uinfo->imm_count = count * 4;
-   uinfo->imm_data = MALLOC(uinfo->imm_count * sizeof(*uinfo->imm_data));
-   uinfo->imm_contents = MALLOC(uinfo->imm_count * sizeof(*uinfo->imm_contents));
+   uinfo->count = count * 4;
+   uinfo->data = MALLOC(uinfo->count * sizeof(*uinfo->data));
+   uinfo->contents = MALLOC(uinfo->count * sizeof(*uinfo->contents));
 
-   for (unsigned i = 0; i < uinfo->imm_count; i++) {
-      uinfo->imm_data[i] = consts[i];
-      uinfo->imm_contents[i] = consts[i] >> 32;
+   for (unsigned i = 0; i < uinfo->count; i++) {
+      uinfo->data[i] = consts[i];
+      uinfo->contents[i] = consts[i] >> 32;
    }
 
    etna_set_shader_uniforms_dirty_flags(sobj);
@@ -216,9 +217,9 @@ src_swizzle(hw_src src, unsigned swizzle)
  */
 
 #define CONST_VAL(a, b) (nir_const_value) {.u64 = (uint64_t)(a) << 32 | (uint64_t)(b)}
-#define CONST(x) CONST_VAL(ETNA_IMMEDIATE_CONSTANT, x)
-#define UNIFORM(x) CONST_VAL(ETNA_IMMEDIATE_UNIFORM, x)
-#define TEXSCALE(x, i) CONST_VAL(ETNA_IMMEDIATE_TEXRECT_SCALE_X + (i), x)
+#define CONST(x) CONST_VAL(ETNA_UNIFORM_CONSTANT, x)
+#define UNIFORM(x) CONST_VAL(ETNA_UNIFORM_UNIFORM, x)
+#define TEXSCALE(x, i) CONST_VAL(ETNA_UNIFORM_TEXRECT_SCALE_X + (i), x)
 
 static int
 const_add(uint64_t *c, uint64_t value)
@@ -237,7 +238,7 @@ const_src(struct etna_compile *c, nir_const_value *value, unsigned num_component
 {
    /* use inline immediates if possible */
    if (c->specs->halti >= 2 && num_components == 1 &&
-       value[0].u64 >> 32 == ETNA_IMMEDIATE_CONSTANT) {
+       value[0].u64 >> 32 == ETNA_UNIFORM_CONSTANT) {
       uint32_t bits = value[0].u32;
 
       /* "float" - shifted by 12 */
@@ -572,7 +573,7 @@ emit_intrinsic(struct etna_compile *c, nir_intrinsic_instr * intr)
          .type = INST_TYPE_U32,
          .dst = ra_dest(c, &intr->dest, &dst_swiz),
          .src[0] = get_src(c, &intr->src[1]),
-         .src[1] = const_src(c, &CONST_VAL(ETNA_IMMEDIATE_UBO0_ADDR + idx, 0), 1),
+         .src[1] = const_src(c, &CONST_VAL(ETNA_UNIFORM_UBO0_ADDR + idx, 0), 1),
       });
    } break;
    case nir_intrinsic_load_front_face:
@@ -852,7 +853,7 @@ lower_alu(struct etna_compile *c, nir_alu_instr *alu)
             need_mov = vec_dest_has_swizzle(alu, &nir_instr_as_intrinsic(instr)->dest.ssa);
             break;
          }
-         /* fallthrough */
+         FALLTHROUGH;
       default:
          need_mov = true;
       }
@@ -896,7 +897,7 @@ emit_shader(struct etna_compile *c, unsigned *num_temps, unsigned *num_consts)
             if (intr->intrinsic != nir_intrinsic_load_uniform)
                break;
             nir_const_value *off = nir_src_as_const_value(intr->src[0]);
-            if (!off || off[0].u64 >> 32 != ETNA_IMMEDIATE_CONSTANT) {
+            if (!off || off[0].u64 >> 32 != ETNA_UNIFORM_CONSTANT) {
                have_indirect_uniform = true;
                indirect_max = nir_intrinsic_base(intr) + nir_intrinsic_range(intr);
                break;
@@ -991,9 +992,9 @@ etna_compile_check_limits(struct etna_shader_variant *v)
       return false;
    }
 
-   if (v->uniforms.imm_count / 4 > max_uniforms) {
+   if (v->uniforms.count / 4 > max_uniforms) {
       DBG("Number of uniforms (%d) exceeds maximum %d",
-          v->uniforms.imm_count / 4, max_uniforms);
+          v->uniforms.count / 4, max_uniforms);
       return false;
    }
 
@@ -1117,9 +1118,6 @@ etna_compile_shader_nir(struct etna_shader_variant *v)
       NIR_PASS_V(s, nir_lower_idiv, nir_lower_idiv_fast);
       NIR_PASS_V(s, nir_lower_bool_to_int32);
    }
-
-   if (DBG_ENABLED(ETNA_DBG_DUMP_SHADERS))
-      nir_print_shader(s, stdout);
 
    while( OPT(s, nir_opt_vectorize, NULL, NULL) );
    NIR_PASS_V(s, nir_lower_alu_to_scalar, etna_alu_to_scalar_filter_cb, specs);

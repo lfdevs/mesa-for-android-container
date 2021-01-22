@@ -107,7 +107,7 @@ remap_patch_urb_offsets(nir_block *block, nir_builder *b,
                         GLenum tes_primitive_mode)
 {
    const bool is_passthrough_tcs = b->shader->info.name &&
-      strcmp(b->shader->info.name, "passthrough") == 0;
+      strcmp(b->shader->info.name, "passthrough TCS") == 0;
 
    nir_foreach_instr_safe(instr, block) {
       if (instr->type != nir_instr_type_intrinsic)
@@ -364,6 +364,45 @@ brw_nir_lower_tes_inputs(nir_shader *nir, const struct brw_vue_map *vue_map)
    }
 }
 
+/**
+ * Convert interpolateAtOffset() offsets from [-0.5, +0.5] floating point
+ * offsets to integer [-8, +7] offsets (in units of 1/16th of a pixel).
+ *
+ * We clamp to +7/16 on the upper end of the range, since +0.5 isn't
+ * representable in a S0.4 value; a naive conversion would give us -8/16,
+ * which is the opposite of what was intended.
+ *
+ * This is allowed by GL_ARB_gpu_shader5's quantization rules:
+ *
+ *    "Not all values of <offset> may be supported; x and y offsets may
+ *     be rounded to fixed-point values with the number of fraction bits
+ *     given by the implementation-dependent constant
+ *     FRAGMENT_INTERPOLATION_OFFSET_BITS."
+ */
+static bool
+lower_barycentric_at_offset(nir_builder *b, nir_instr *instr, void *data)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+
+   if (intrin->intrinsic != nir_intrinsic_load_barycentric_at_offset)
+      return false;
+
+   b->cursor = nir_before_instr(instr);
+
+   assert(intrin->src[0].ssa);
+   nir_ssa_def *offset =
+      nir_imin(b, nir_imm_int(b, 7),
+               nir_f2i32(b, nir_fmul(b, nir_imm_float(b, 16),
+                                     intrin->src[0].ssa)));
+
+   nir_instr_rewrite_src(instr, &intrin->src[0], nir_src_for_ssa(offset));
+
+   return true;
+}
+
 void
 brw_nir_lower_fs_inputs(nir_shader *nir,
                         const struct gen_device_info *devinfo,
@@ -403,6 +442,11 @@ brw_nir_lower_fs_inputs(nir_shader *nir,
    nir_lower_io(nir, nir_var_shader_in, type_size_vec4, lower_io_options);
    if (devinfo->gen >= 11)
       nir_lower_interpolation(nir, ~0);
+
+   nir_shader_instructions_pass(nir, lower_barycentric_at_offset,
+                                nir_metadata_block_index |
+                                nir_metadata_dominance,
+                                NULL);
 
    /* This pass needs actual constants */
    nir_opt_constant_folding(nir);
@@ -925,7 +969,8 @@ brw_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
                              unsigned bit_size,
                              unsigned num_components,
                              nir_intrinsic_instr *low,
-                             nir_intrinsic_instr *high)
+                             nir_intrinsic_instr *high,
+                             void *data)
 {
    /* Don't combine things to generate 64-bit loads/stores.  We have to split
     * those back into 32-bit ones anyway and UBO loads aren't split in NIR so
@@ -982,11 +1027,14 @@ brw_vectorize_lower_mem_access(nir_shader *nir,
    bool progress = false;
 
    if (is_scalar) {
-      OPT(nir_opt_load_store_vectorize,
-          nir_var_mem_ubo | nir_var_mem_ssbo |
-          nir_var_mem_global | nir_var_mem_shared,
-          brw_nir_should_vectorize_mem,
-          (nir_variable_mode)0);
+      nir_load_store_vectorize_options options = {
+         .modes = nir_var_mem_ubo | nir_var_mem_ssbo |
+                  nir_var_mem_global | nir_var_mem_shared,
+         .callback = brw_nir_should_vectorize_mem,
+         .robust_modes = (nir_variable_mode)0,
+      };
+
+      OPT(nir_opt_load_store_vectorize, &options);
    }
 
    OPT(brw_nir_lower_mem_access_bit_sizes, devinfo);
@@ -1135,7 +1183,7 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
 
    if (!is_scalar) {
       OPT(nir_move_vec_src_uses_to_dest);
-      OPT(nir_lower_vec_to_movs);
+      OPT(nir_lower_vec_to_movs, NULL, NULL);
    }
 
    OPT(nir_opt_dce);
@@ -1475,13 +1523,12 @@ brw_nir_create_passthrough_tcs(void *mem_ctx, const struct brw_compiler *compile
                                const nir_shader_compiler_options *options,
                                const struct brw_tcs_prog_key *key)
 {
-   nir_builder b;
-   nir_builder_init_simple_shader(&b, mem_ctx, MESA_SHADER_TESS_CTRL,
-                                  options);
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_TESS_CTRL,
+                                                  options, "passthrough TCS");
+   ralloc_adopt(mem_ctx, b.shader);
    nir_shader *nir = b.shader;
    nir_variable *var;
-   nir_intrinsic_instr *load;
-   nir_intrinsic_instr *store;
+   nir_ssa_def *load;
    nir_ssa_def *zero = nir_imm_int(&b, 0);
    nir_ssa_def *invoc_id = nir_load_invocation_id(&b);
 
@@ -1489,7 +1536,6 @@ brw_nir_create_passthrough_tcs(void *mem_ctx, const struct brw_compiler *compile
       ~(VARYING_BIT_TESS_LEVEL_INNER | VARYING_BIT_TESS_LEVEL_OUTER);
    nir->info.outputs_written = key->outputs_written;
    nir->info.tess.tcs_vertices_out = key->input_vertices;
-   nir->info.name = ralloc_strdup(nir, "passthrough");
    nir->num_uniforms = 8 * sizeof(uint32_t);
 
    var = nir_variable_create(nir, nir_var_uniform, glsl_vec4_type(), "hdr_0");
@@ -1499,20 +1545,11 @@ brw_nir_create_passthrough_tcs(void *mem_ctx, const struct brw_compiler *compile
 
    /* Write the patch URB header. */
    for (int i = 0; i <= 1; i++) {
-      load = nir_intrinsic_instr_create(nir, nir_intrinsic_load_uniform);
-      load->num_components = 4;
-      load->src[0] = nir_src_for_ssa(zero);
-      nir_ssa_dest_init(&load->instr, &load->dest, 4, 32, NULL);
-      nir_intrinsic_set_base(load, i * 4 * sizeof(uint32_t));
-      nir_builder_instr_insert(&b, &load->instr);
+      load = nir_load_uniform(&b, 4, 32, zero, .base = i * 4 * sizeof(uint32_t));
 
-      store = nir_intrinsic_instr_create(nir, nir_intrinsic_store_output);
-      store->num_components = 4;
-      store->src[0] = nir_src_for_ssa(&load->dest.ssa);
-      store->src[1] = nir_src_for_ssa(zero);
-      nir_intrinsic_set_base(store, VARYING_SLOT_TESS_LEVEL_INNER - i);
-      nir_intrinsic_set_write_mask(store, WRITEMASK_XYZW);
-      nir_builder_instr_insert(&b, &store->instr);
+      nir_store_output(&b, load, zero,
+                       .base = VARYING_SLOT_TESS_LEVEL_INNER - i,
+                       .write_mask = WRITEMASK_XYZW);
    }
 
    /* Copy inputs to outputs. */
@@ -1521,24 +1558,11 @@ brw_nir_create_passthrough_tcs(void *mem_ctx, const struct brw_compiler *compile
    while (varyings != 0) {
       const int varying = ffsll(varyings) - 1;
 
-      load = nir_intrinsic_instr_create(nir,
-                                        nir_intrinsic_load_per_vertex_input);
-      load->num_components = 4;
-      load->src[0] = nir_src_for_ssa(invoc_id);
-      load->src[1] = nir_src_for_ssa(zero);
-      nir_ssa_dest_init(&load->instr, &load->dest, 4, 32, NULL);
-      nir_intrinsic_set_base(load, varying);
-      nir_builder_instr_insert(&b, &load->instr);
+      load = nir_load_per_vertex_input(&b, 4, 32, invoc_id, zero, .base = varying);
 
-      store = nir_intrinsic_instr_create(nir,
-                                         nir_intrinsic_store_per_vertex_output);
-      store->num_components = 4;
-      store->src[0] = nir_src_for_ssa(&load->dest.ssa);
-      store->src[1] = nir_src_for_ssa(invoc_id);
-      store->src[2] = nir_src_for_ssa(zero);
-      nir_intrinsic_set_base(store, varying);
-      nir_intrinsic_set_write_mask(store, WRITEMASK_XYZW);
-      nir_builder_instr_insert(&b, &store->instr);
+      nir_store_per_vertex_output(&b, load, invoc_id, zero,
+                                  .base = varying,
+                                  .write_mask = WRITEMASK_XYZW);
 
       varyings &= ~BITFIELD64_BIT(varying);
    }

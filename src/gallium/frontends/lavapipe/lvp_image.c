@@ -67,6 +67,12 @@ lvp_image_create(VkDevice _device,
          break;
       }
 
+      if (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+         template.bind |= PIPE_BIND_RENDER_TARGET;
+
+      if (pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+         template.bind |= PIPE_BIND_DEPTH_STENCIL;
+
       template.format = vk_format_to_pipe(pCreateInfo->format);
       template.width0 = pCreateInfo->extent.width;
       template.height0 = pCreateInfo->extent.height;
@@ -249,6 +255,10 @@ VkResult lvp_CreateBuffer(
    {
       struct pipe_resource template;
       memset(&template, 0, sizeof(struct pipe_resource));
+
+      if (pCreateInfo->usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
+         template.bind |= PIPE_BIND_CONSTANT_BUFFER;
+
       template.screen = device->pscreen;
       template.target = PIPE_BUFFER;
       template.format = PIPE_FORMAT_R8_UNORM;

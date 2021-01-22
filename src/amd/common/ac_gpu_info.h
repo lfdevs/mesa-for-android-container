@@ -75,6 +75,7 @@ struct radeon_info {
    bool has_tc_compat_zrange_bug;
    bool has_msaa_sample_loc_bug;
    bool has_ls_vgpr_init_bug;
+   bool has_32bit_predication;
 
    /* Display features. */
    /* There are 2 display DCC codepaths, because display expects unaligned DCC. */
@@ -97,6 +98,8 @@ struct radeon_info {
    uint32_t min_alloc_size;
    uint32_t address32_hi;
    bool has_dedicated_vram;
+   bool all_vram_visible;
+   bool smart_access_memory;
    bool has_l2_uncached;
    bool r600_has_virtual_memory;
    uint32_t num_sdp_interfaces;
@@ -158,6 +161,7 @@ struct radeon_info {
    /* Whether SR-IOV is enabled or amdgpu.mcbp=1 was set on the kernel command line. */
    bool mid_command_buffer_preemption_enabled;
    bool has_tmz_support;
+   bool kernel_has_modifiers;
 
    /* Shader cores. */
    uint32_t cu_mask[4][2];
@@ -168,7 +172,7 @@ struct radeon_info {
    uint32_t min_good_cu_per_sa; /* min != max if SAs have different # of CUs */
    uint32_t max_se;             /* number of shader engines incl. disabled ones */
    uint32_t num_se;             /* number of enabled shader engines */
-   uint32_t max_sh_per_se;      /* shader arrays per shader engine */
+   uint32_t max_sa_per_se;      /* shader arrays per shader engine */
    uint32_t max_wave64_per_simd;
    uint32_t num_physical_sgprs_per_simd;
    uint32_t num_physical_wave64_vgprs_per_simd;
@@ -187,9 +191,10 @@ struct radeon_info {
    uint32_t r600_gb_backend_map; /* R600 harvest config */
    bool r600_gb_backend_map_valid;
    uint32_t r600_num_banks;
+   uint32_t mc_arb_ramcfg;
    uint32_t gb_addr_config;
    uint32_t pa_sc_tile_steering_override; /* CLEAR_STATE also sets this */
-   uint32_t num_render_backends;
+   uint32_t max_render_backends;  /* number of render backends incl. disabled ones */
    uint32_t num_tile_pipes; /* pipe count from PIPE_CONFIG */
    uint32_t pipe_interleave_bytes;
    uint32_t enabled_rb_mask; /* GCN harvest config */

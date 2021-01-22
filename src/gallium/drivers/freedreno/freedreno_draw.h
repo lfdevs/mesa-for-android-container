@@ -145,6 +145,7 @@ fd_draw_emit(struct fd_batch *batch, struct fd_ringbuffer *ring,
 		enum pc_di_primtype primtype,
 		enum pc_di_vis_cull_mode vismode,
 		const struct pipe_draw_info *info,
+                const struct pipe_draw_start_count *draw,
 		unsigned index_offset)
 {
 	struct pipe_resource *idx_buffer = NULL;
@@ -157,8 +158,8 @@ fd_draw_emit(struct fd_batch *batch, struct fd_ringbuffer *ring,
 
 		idx_buffer = info->index.resource;
 		idx_type = size2indextype(info->index_size);
-		idx_size = info->index_size * info->count;
-		idx_offset = index_offset + info->start * info->index_size;
+		idx_size = info->index_size * draw->count;
+		idx_offset = index_offset + draw->start * info->index_size;
 		src_sel = DI_SRC_SEL_DMA;
 	} else {
 		idx_buffer = NULL;
@@ -169,7 +170,7 @@ fd_draw_emit(struct fd_batch *batch, struct fd_ringbuffer *ring,
 	}
 
 	fd_draw(batch, ring, primtype, vismode, src_sel,
-			info->count, info->instance_count - 1,
+			draw->count, info->instance_count - 1,
 			idx_type, idx_size, idx_offset, idx_buffer);
 }
 

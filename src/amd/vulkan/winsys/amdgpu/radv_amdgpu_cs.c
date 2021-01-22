@@ -288,8 +288,7 @@ static void radv_amdgpu_cs_destroy(struct radeon_cmdbuf *rcs)
 		cs->ws->base.buffer_destroy(cs->old_ib_buffers[i]);
 
 	for (unsigned i = 0; i < cs->num_old_cs_buffers; ++i) {
-		struct radeon_cmdbuf *rcs = &cs->old_cs_buffers[i];
-		free(rcs->buf);
+		free(cs->old_cs_buffers[i].buf);
 	}
 
 	free(cs->old_cs_buffers);
@@ -324,7 +323,7 @@ radv_amdgpu_cs_create(struct radeon_winsys *ws,
 
 	if (cs->ws->use_ib_bos) {
 		cs->ib_buffer = ws->buffer_create(ws, ib_size, 0,
-						  RADEON_DOMAIN_GTT,
+						  cs->ws->cs_bo_domain,
 						  RADEON_FLAG_CPU_ACCESS |
 						  RADEON_FLAG_NO_INTERPROCESS_SHARING |
 						  RADEON_FLAG_READ_ONLY |
@@ -451,7 +450,7 @@ static void radv_amdgpu_cs_grow(struct radeon_cmdbuf *_cs, size_t min_size)
 	cs->old_ib_buffers[cs->num_old_ib_buffers++] = cs->ib_buffer;
 
 	cs->ib_buffer = cs->ws->base.buffer_create(&cs->ws->base, ib_size, 0,
-						   RADEON_DOMAIN_GTT,
+						   cs->ws->cs_bo_domain,
 						   RADEON_FLAG_CPU_ACCESS |
 						   RADEON_FLAG_NO_INTERPROCESS_SHARING |
 						   RADEON_FLAG_READ_ONLY |
@@ -638,7 +637,7 @@ static void radv_amdgpu_cs_add_virtual_buffer(struct radeon_cmdbuf *_cs,
 			MAX2(2, cs->max_num_virtual_buffers * 2);
 		struct radeon_winsys_bo **virtual_buffers =
 			realloc(cs->virtual_buffers,
-				sizeof(struct radv_amdgpu_virtual_virtual_buffer*) * max_num_virtual_buffers);
+				sizeof(struct radeon_winsys_bo*) * max_num_virtual_buffers);
 		if (!virtual_buffers) {
 			cs->status = VK_ERROR_OUT_OF_HOST_MEMORY;
 			return;
@@ -1091,7 +1090,6 @@ radv_amdgpu_winsys_cs_submit_sysmem(struct radeon_winsys_ctx *_ctx,
 		unsigned number_of_ibs;
 		uint32_t *ptr;
 		unsigned cnt = 0;
-		unsigned size = 0;
 		unsigned pad_words = 0;
 
 		/* Compute the number of IBs for this submit. */
@@ -1140,7 +1138,7 @@ radv_amdgpu_winsys_cs_submit_sysmem(struct radeon_winsys_ctx *_ctx,
 				}
 
 				bos[j] = ws->buffer_create(ws, 4 * size, 4096,
-							   RADEON_DOMAIN_GTT,
+							   aws->cs_bo_domain,
 							   RADEON_FLAG_CPU_ACCESS |
 							   RADEON_FLAG_NO_INTERPROCESS_SHARING |
 							   RADEON_FLAG_READ_ONLY,
@@ -1166,6 +1164,8 @@ radv_amdgpu_winsys_cs_submit_sysmem(struct radeon_winsys_ctx *_ctx,
 			cnt++;
 			free(new_cs_array);
 		} else {
+			unsigned size = 0;
+
 			if (preamble_cs)
 				size += preamble_cs->cdw;
 
@@ -1181,7 +1181,7 @@ radv_amdgpu_winsys_cs_submit_sysmem(struct radeon_winsys_ctx *_ctx,
 			assert(cnt);
 
 			bos[0] = ws->buffer_create(ws, 4 * size, 4096,
-						   RADEON_DOMAIN_GTT,
+						   aws->cs_bo_domain,
 						   RADEON_FLAG_CPU_ACCESS |
 						   RADEON_FLAG_NO_INTERPROCESS_SHARING |
 						   RADEON_FLAG_READ_ONLY,
@@ -1194,9 +1194,9 @@ radv_amdgpu_winsys_cs_submit_sysmem(struct radeon_winsys_ctx *_ctx,
 			}
 
 			for (unsigned j = 0; j < cnt; ++j) {
-				struct radv_amdgpu_cs *cs = radv_amdgpu_cs(cs_array[i + j]);
-				memcpy(ptr, cs->base.buf, 4 * cs->base.cdw);
-				ptr += cs->base.cdw;
+				struct radv_amdgpu_cs *cs2 = radv_amdgpu_cs(cs_array[i + j]);
+				memcpy(ptr, cs2->base.buf, 4 * cs2->base.cdw);
+				ptr += cs2->base.cdw;
 
 			}
 

@@ -222,7 +222,7 @@ public:
 };
 
 bool
-fs_generator::patch_discard_jumps_to_fb_writes()
+fs_generator::patch_halt_jumps()
 {
    if (this->discard_halt_patches.is_empty())
       return false;
@@ -1450,7 +1450,7 @@ fs_generator::generate_ddy(const fs_inst *inst,
 }
 
 void
-fs_generator::generate_discard_jump(fs_inst *)
+fs_generator::generate_halt(fs_inst *)
 {
    /* This HALT will be patched up at FB write time to point UIP at the end of
     * the program, and at brw_uip_jip() JIP will be set to the end of the
@@ -2375,8 +2375,8 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          send_count++;
          break;
 
-      case FS_OPCODE_DISCARD_JUMP:
-         generate_discard_jump(inst);
+      case BRW_OPCODE_HALT:
+         generate_halt(inst);
          break;
 
       case SHADER_OPCODE_SHADER_TIME_ADD:
@@ -2529,11 +2529,11 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
           generate_pack_half_2x16_split(inst, dst, src[0], src[1]);
           break;
 
-      case FS_OPCODE_PLACEHOLDER_HALT:
+      case SHADER_OPCODE_HALT_TARGET:
          /* This is the place where the final HALT needs to be inserted if
           * we've emitted any discards.  If not, this will emit no code.
           */
-         if (!patch_discard_jumps_to_fb_writes()) {
+         if (!patch_halt_jumps()) {
             if (unlikely(debug_flag)) {
                disasm_info->use_tail = true;
             }
@@ -2591,6 +2591,35 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          assert(src[0].file == BRW_IMMEDIATE_VALUE);
          assert(src[1].file == BRW_IMMEDIATE_VALUE);
          brw_float_controls_mode(p, src[0].d, src[1].d);
+         break;
+
+      case SHADER_OPCODE_GET_DSS_ID:
+         /* The Slice, Dual-SubSlice, SubSlice, EU, and Thread IDs are all
+          * stored in sr0.0.  Normally, for reading from HW regs, we'd just do
+          * this in the IR and let the back-end generate some code but these
+          * live in the state register which tends to have special rules.
+          *
+          * For convenience, we combine Slice ID and Dual-SubSlice ID into a
+          * single ID.
+          */
+         if (devinfo->gen == 12) {
+            /* There is a SWSB restriction that requires that any time sr0 is
+             * accessed both the instruction doing the access and the next one
+             * have SWSB set to RegDist(1).
+             */
+            if (brw_get_default_swsb(p).mode != TGL_SBID_NULL)
+               brw_SYNC(p, TGL_SYNC_NOP);
+            brw_set_default_swsb(p, tgl_swsb_regdist(1));
+            brw_SHR(p, dst, brw_sr0_reg(0), brw_imm_ud(9));
+            brw_set_default_swsb(p, tgl_swsb_regdist(1));
+            brw_AND(p, dst, dst, brw_imm_ud(0x1f));
+         } else {
+            /* These move around basically every hardware generation, so don't
+             * do any >= checks and fail if the platform hasn't explicitly
+             * been enabled here.
+             */
+            unreachable("Unsupported platform");
+         }
          break;
 
       default:

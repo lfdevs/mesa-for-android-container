@@ -53,7 +53,7 @@ libpipe_loader_static = static_library(
   c_args : [libpipe_loader_defines, '-DGALLIUM_STATIC_TARGETS=1'],
   gnu_symbol_visibility : 'hidden',
   link_with : [libpipe_loader_links],
-  dependencies : [dep_libdrm, idep_xmlconfig],
+  dependencies : [dep_libdrm, idep_xmlconfig, idep_mesautil],
   build_by_default : false,
 )
 
@@ -72,6 +72,6 @@ libpipe_loader_dynamic = static_library(
   ],
   gnu_symbol_visibility : 'hidden',
   link_with : [libpipe_loader_links],
-  dependencies : [dep_libdrm, idep_xmlconfig],
+  dependencies : [dep_libdrm, idep_xmlconfig, idep_mesautil],
   build_by_default : false,
 )

@@ -115,14 +115,14 @@ llvmpipe_create_depth_stencil_state(struct pipe_context *pipe,
    state = mem_dup(depth_stencil, sizeof *depth_stencil);
 
    if (LP_PERF & PERF_NO_DEPTH) {
-      state->depth.enabled = 0;
-      state->depth.writemask = 0;
+      state->depth_enabled = 0;
+      state->depth_writemask = 0;
       state->stencil[0].enabled = 0;
       state->stencil[1].enabled = 0;
    }
 
    if (LP_PERF & PERF_NO_ALPHATEST) {
-      state->alpha.enabled = 0;
+      state->alpha_enabled = 0;
    }
 
    return state;
@@ -155,19 +155,16 @@ llvmpipe_delete_depth_stencil_state(struct pipe_context *pipe, void *depth)
 
 static void
 llvmpipe_set_stencil_ref(struct pipe_context *pipe,
-                         const struct pipe_stencil_ref *stencil_ref)
+                         const struct pipe_stencil_ref stencil_ref)
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
 
-   if (!stencil_ref)
-      return;
-
-   if(memcmp(&llvmpipe->stencil_ref, stencil_ref, sizeof *stencil_ref) == 0)
+   if(memcmp(&llvmpipe->stencil_ref, &stencil_ref, sizeof stencil_ref) == 0)
       return;
 
    draw_flush(llvmpipe->draw);
 
-   memcpy(&llvmpipe->stencil_ref, stencil_ref, sizeof *stencil_ref);
+   memcpy(&llvmpipe->stencil_ref, &stencil_ref, sizeof stencil_ref);
 
    /* not sure. want new flag? */
    llvmpipe->dirty |= LP_NEW_DEPTH_STENCIL_ALPHA;

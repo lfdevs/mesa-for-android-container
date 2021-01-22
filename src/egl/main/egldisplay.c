@@ -70,6 +70,7 @@ static const struct {
    const char *name;
 } egl_platforms[] = {
    { _EGL_PLATFORM_X11, "x11" },
+   { _EGL_PLATFORM_XCB, "xcb" },
    { _EGL_PLATFORM_WAYLAND, "wayland" },
    { _EGL_PLATFORM_DRM, "drm" },
    { _EGL_PLATFORM_ANDROID, "android" },
@@ -505,6 +506,27 @@ _eglGetX11Display(Display *native_display,
    return _eglFindDisplay(_EGL_PLATFORM_X11, native_display, attrib_list);
 }
 #endif /* HAVE_X11_PLATFORM */
+
+#ifdef HAVE_XCB_PLATFORM
+_EGLDisplay*
+_eglGetXcbDisplay(xcb_connection_t *native_display,
+                  const EGLAttrib *attrib_list)
+{
+   /* EGL_EXT_platform_xcb recognizes exactly one attribute,
+    * EGL_PLATFORM_XCB_SCREEN_EXT, which is optional.
+    */
+   if (attrib_list != NULL) {
+      for (int i = 0; attrib_list[i] != EGL_NONE; i += 2) {
+         if (attrib_list[i] != EGL_PLATFORM_XCB_SCREEN_EXT) {
+            _eglError(EGL_BAD_ATTRIBUTE, "eglGetPlatformDisplay");
+            return NULL;
+         }
+      }
+   }
+
+   return _eglFindDisplay(_EGL_PLATFORM_XCB, native_display, attrib_list);
+}
+#endif /* HAVE_XCB_PLATFORM */
 
 #ifdef HAVE_DRM_PLATFORM
 _EGLDisplay*

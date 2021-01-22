@@ -36,25 +36,27 @@ class GeometryShaderFromNir : public VertexStage
 {
 public:
    GeometryShaderFromNir(r600_pipe_shader *sh, r600_pipe_shader_selector& sel, const r600_shader_key& key, enum chip_class chip_class);
-   bool do_emit_load_deref(const nir_variable *in_var, nir_intrinsic_instr* instr) override;
-   bool do_emit_store_deref(const nir_variable *out_var, nir_intrinsic_instr* instr) override;
+
    bool scan_sysvalue_access(nir_instr *instr) override;
    PValue primitive_id() override {return m_primitive_id;}
 
 private:
-   struct ArrayDeref {
-      const nir_variable *var;
-      const nir_src *index;
-   };
+   bool do_emit_load_deref(const nir_variable *in_var, nir_intrinsic_instr* instr) override;
+   bool do_emit_store_deref(const nir_variable *out_var, nir_intrinsic_instr* instr) override;
 
    bool do_process_inputs(nir_variable *input) override;
    bool do_allocate_reserved_registers() override;
    bool do_process_outputs(nir_variable *output) override;
-   bool emit_deref_instruction_override(nir_deref_instr* instr) override;
    bool emit_intrinsic_instruction_override(nir_intrinsic_instr* instr) override;
-   bool emit_load_from_array(nir_intrinsic_instr* instr, const ArrayDeref& array_deref);
+
    bool emit_vertex(nir_intrinsic_instr* instr, bool cut);
    void emit_adj_fix();
+
+   bool process_store_output(nir_intrinsic_instr* instr);
+   bool process_load_input(nir_intrinsic_instr* instr);
+
+   bool emit_store(nir_intrinsic_instr* instr);
+   bool emit_load_per_vertex_input(nir_intrinsic_instr* instr);
 
    void do_finalize() override;
 
@@ -64,16 +66,16 @@ private:
    std::array<PValue, 6> m_per_vertex_offsets;
    PValue m_primitive_id;
    PValue m_invocation_id;
-   PValue m_export_base;
+   PValue m_export_base[4];
    bool m_first_vertex_emitted;
 
-   std::map<unsigned, ArrayDeref> m_in_array_deref;
    int  m_offset;
    int  m_next_input_ring_offset;
    r600_shader_key m_key;
-   int m_num_clip_dist;
+   int m_clip_dist_mask;
    unsigned m_cur_ring_output;
    bool m_gs_tri_strip_adj_fix;
+   uint64_t m_input_mask;
 
    std::map<int, MemRingOutIntruction *> streamout_data;
 };

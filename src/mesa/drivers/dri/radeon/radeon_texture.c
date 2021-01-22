@@ -651,7 +651,7 @@ static radeon_mipmap_tree *radeon_miptree_create_for_teximage(radeonContextPtr r
 	height = texImage->Height;
 	depth = texImage->Depth;
 
-	if (texImage->Level > texObj->BaseLevel &&
+	if (texImage->Level > texObj->Attrib.BaseLevel &&
 	    (width == 1 ||
 	     (texObj->Target != GL_TEXTURE_1D && height == 1) ||
 	     (texObj->Target == GL_TEXTURE_3D && depth == 1))) {
@@ -663,10 +663,10 @@ static radeon_mipmap_tree *radeon_miptree_create_for_teximage(radeonContextPtr r
 		firstLevel = texImage->Level;
 		lastLevel = texImage->Level;
 	} else {
-		if (texImage->Level < texObj->BaseLevel)
+		if (texImage->Level < texObj->Attrib.BaseLevel)
 			firstLevel = 0;
 		else
-			firstLevel = texObj->BaseLevel;
+			firstLevel = texObj->Attrib.BaseLevel;
 
 		for (i = texImage->Level; i > firstLevel; i--) {
 			width <<= 1;
@@ -675,8 +675,8 @@ static radeon_mipmap_tree *radeon_miptree_create_for_teximage(radeonContextPtr r
 			if (depth != 1)
 				depth <<= 1;
 		}
-		if ((texObj->Sampler.MinFilter == GL_NEAREST ||
-		     texObj->Sampler.MinFilter == GL_LINEAR) &&
+		if ((texObj->Sampler.Attrib.MinFilter == GL_NEAREST ||
+		     texObj->Sampler.Attrib.MinFilter == GL_LINEAR) &&
 		    texImage->Level == firstLevel) {
 			lastLevel = firstLevel;
 		} else {

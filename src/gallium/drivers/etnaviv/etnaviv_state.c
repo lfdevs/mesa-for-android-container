@@ -48,18 +48,18 @@
 #include "util/u_upload_mgr.h"
 
 static void
-etna_set_stencil_ref(struct pipe_context *pctx, const struct pipe_stencil_ref *sr)
+etna_set_stencil_ref(struct pipe_context *pctx, const struct pipe_stencil_ref sr)
 {
    struct etna_context *ctx = etna_context(pctx);
    struct compiled_stencil_ref *cs = &ctx->stencil_ref;
 
-   ctx->stencil_ref_s = *sr;
+   ctx->stencil_ref_s = sr;
 
    for (unsigned i = 0; i < 2; i++) {
       cs->PE_STENCIL_CONFIG[i] =
-         VIVS_PE_STENCIL_CONFIG_REF_FRONT(sr->ref_value[i]);
+         VIVS_PE_STENCIL_CONFIG_REF_FRONT(sr.ref_value[i]);
       cs->PE_STENCIL_CONFIG_EXT[i] =
-         VIVS_PE_STENCIL_CONFIG_EXT_REF_BACK(sr->ref_value[!i]);
+         VIVS_PE_STENCIL_CONFIG_EXT_REF_BACK(sr.ref_value[!i]);
    }
    ctx->dirty |= ETNA_DIRTY_STENCIL_REF;
 }
@@ -610,6 +610,14 @@ etna_vertex_elements_state_bind(struct pipe_context *pctx, void *ve)
    ctx->dirty |= ETNA_DIRTY_VERTEX_ELEMENTS;
 }
 
+static void
+etna_set_stream_output_targets(struct pipe_context *pctx,
+      unsigned num_targets, struct pipe_stream_output_target **targets,
+      const unsigned *offsets)
+{
+   /* stub */
+}
+
 static bool
 etna_update_ts_config(struct etna_context *ctx)
 {
@@ -691,7 +699,7 @@ etna_update_zsa(struct etna_context *ctx)
       if (VIV_FEATURE(screen, chipMinorFeatures5, RA_WRITE_DEPTH) &&
           !VIV_FEATURE(screen, chipFeatures, NO_EARLY_Z) &&
           !zsa->stencil_enabled &&
-          !zsa_state->alpha.enabled &&
+          !zsa_state->alpha_enabled &&
           !shader_state->writes_z &&
           !shader_state->uses_discard)
          early_z_write = true;
@@ -710,7 +718,7 @@ etna_update_zsa(struct etna_context *ctx)
 
    new_pe_depth = VIVS_PE_DEPTH_CONFIG_DEPTH_FUNC(zsa->z_test_enabled ?
                      /* compare funcs have 1 to 1 mapping */
-                     zsa_state->depth.func : PIPE_FUNC_ALWAYS) |
+                     zsa_state->depth_func : PIPE_FUNC_ALWAYS) |
                   COND(zsa->z_write_enabled, VIVS_PE_DEPTH_CONFIG_WRITE_ENABLE) |
                   COND(early_z_test, VIVS_PE_DEPTH_CONFIG_EARLY_Z) |
                   COND(!late_z_write && !late_z_test && !zsa->stencil_enabled,
@@ -809,4 +817,6 @@ etna_state_init(struct pipe_context *pctx)
    pctx->create_vertex_elements_state = etna_vertex_elements_state_create;
    pctx->delete_vertex_elements_state = etna_vertex_elements_state_delete;
    pctx->bind_vertex_elements_state = etna_vertex_elements_state_bind;
+
+   pctx->set_stream_output_targets = etna_set_stream_output_targets;
 }

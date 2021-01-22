@@ -94,6 +94,9 @@ enum cso_cache_type {
    CSO_CACHE_MAX,
 };
 
+typedef void (*cso_delete_cso_callback)(void *ctx, void *state,
+                                        enum cso_cache_type type);
+
 typedef void (*cso_state_callback)(void *ctx, void *obj);
 
 typedef void (*cso_sanitize_callback)(struct cso_hash *hash,
@@ -101,34 +104,35 @@ typedef void (*cso_sanitize_callback)(struct cso_hash *hash,
                                       int max_size,
                                       void *user_data);
 
-struct cso_cache;
+struct cso_cache {
+   struct cso_hash hashes[CSO_CACHE_MAX];
+   int    max_size;
+
+   cso_sanitize_callback sanitize_cb;
+   void                 *sanitize_data;
+
+   cso_delete_cso_callback delete_cso;
+   void                    *delete_cso_ctx;
+};
 
 struct cso_blend {
    struct pipe_blend_state state;
    void *data;
-   cso_state_callback delete_state;
-   struct pipe_context *context;
 };
 
 struct cso_depth_stencil_alpha {
    struct pipe_depth_stencil_alpha_state state;
    void *data;
-   cso_state_callback delete_state;
-   struct pipe_context *context;
 };
 
 struct cso_rasterizer {
    struct pipe_rasterizer_state state;
    void *data;
-   cso_state_callback delete_state;
-   struct pipe_context *context;
 };
 
 struct cso_sampler {
    struct pipe_sampler_state state;
    void *data;
-   cso_state_callback delete_state;
-   struct pipe_context *context;
    unsigned hash_key;
 };
 
@@ -140,18 +144,17 @@ struct cso_velems_state {
 struct cso_velements {
    struct cso_velems_state state;
    void *data;
-   cso_state_callback delete_state;
-   struct pipe_context *context;
 };
 
-unsigned cso_construct_key(void *item, int item_size);
-
-struct cso_cache *cso_cache_create(void);
+void cso_cache_init(struct cso_cache *sc, struct pipe_context *pipe);
 void cso_cache_delete(struct cso_cache *sc);
 
 void cso_cache_set_sanitize_callback(struct cso_cache *sc,
                                      cso_sanitize_callback cb,
                                      void *user_data);
+void cso_cache_set_delete_cso_callback(struct cso_cache *sc,
+                                       cso_delete_cso_callback delete_cso,
+                                       void *ctx);
 
 struct cso_hash_iter cso_insert_state(struct cso_cache *sc,
                                       unsigned hash_key, enum cso_cache_type type,
@@ -161,13 +164,23 @@ struct cso_hash_iter cso_find_state(struct cso_cache *sc,
 struct cso_hash_iter cso_find_state_template(struct cso_cache *sc,
                                              unsigned hash_key, enum cso_cache_type type,
                                              void *templ, unsigned size);
-void cso_for_each_state(struct cso_cache *sc, enum cso_cache_type type,
-                        cso_state_callback func, void *user_data);
-void * cso_take_state(struct cso_cache *sc, unsigned hash_key,
+void cso_set_maximum_cache_size(struct cso_cache *sc, int number);
+void cso_delete_state(struct pipe_context *pipe, void *state,
                       enum cso_cache_type type);
 
-void cso_set_maximum_cache_size(struct cso_cache *sc, int number);
-int cso_maximum_cache_size(const struct cso_cache *sc);
+static inline unsigned
+cso_construct_key(void *key, int key_size)
+{
+   unsigned hash = 0, *ikey = (unsigned *)key;
+   unsigned num_elements = key_size / 4;
+
+   assert(key_size % 4 == 0);
+
+   for (unsigned i = 0; i < num_elements; i++)
+      hash ^= ikey[i];
+
+   return hash;
+}
 
 #ifdef	__cplusplus
 }

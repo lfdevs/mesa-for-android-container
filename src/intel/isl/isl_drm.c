@@ -29,6 +29,7 @@
 
 #include "isl.h"
 #include "dev/gen_device_info.h"
+#include "dev/gen_debug.h"
 
 uint32_t
 isl_tiling_to_i915_tiling(enum isl_tiling tiling)
@@ -72,7 +73,9 @@ isl_tiling_from_i915_tiling(uint32_t tiling)
    unreachable("Invalid i915 tiling");
 }
 
-static const struct isl_drm_modifier_info modifier_info[] = {
+/** Sentinel is DRM_FORMAT_MOD_INVALID. */
+const struct isl_drm_modifier_info
+isl_drm_modifier_info_list[] = {
    {
       .modifier = DRM_FORMAT_MOD_NONE,
       .name = "DRM_FORMAT_MOD_NONE",
@@ -109,15 +112,44 @@ static const struct isl_drm_modifier_info modifier_info[] = {
       .aux_usage = ISL_AUX_USAGE_MC,
       .supports_clear_color = false,
    },
+   {
+      .modifier = DRM_FORMAT_MOD_INVALID,
+   },
 };
 
 const struct isl_drm_modifier_info *
 isl_drm_modifier_get_info(uint64_t modifier)
 {
-   for (unsigned i = 0; i < ARRAY_SIZE(modifier_info); i++) {
-      if (modifier_info[i].modifier == modifier)
-         return &modifier_info[i];
+   isl_drm_modifier_info_for_each(info) {
+      if (info->modifier == modifier)
+         return info;
    }
 
    return NULL;
+}
+
+uint32_t
+isl_drm_modifier_get_score(const struct gen_device_info *devinfo,
+                           uint64_t modifier)
+{
+   /* FINISHME: Add gen12 modifiers */
+   switch (modifier) {
+   default:
+      return 0;
+   case DRM_FORMAT_MOD_LINEAR:
+      return 1;
+   case I915_FORMAT_MOD_X_TILED:
+      return 2;
+   case I915_FORMAT_MOD_Y_TILED:
+      return 3;
+   case I915_FORMAT_MOD_Y_TILED_CCS:
+      /* Gen12's CCS layout differs from Gen9-11. */
+      if (devinfo->gen >= 12)
+         return 0;
+
+      if (INTEL_DEBUG & DEBUG_NO_RBC)
+         return 0;
+
+      return 4;
+   }
 }

@@ -24,5 +24,5 @@ libswkmsdri = static_library(
   files('kms_dri_sw_winsys.c', 'kms_dri_sw_winsys.h'),
   gnu_symbol_visibility : 'hidden',
   include_directories : [inc_gallium, inc_include, inc_src, inc_gallium_aux],
-  dependencies : dep_libdrm,
+  dependencies : [dep_libdrm, idep_mesautil],
 )

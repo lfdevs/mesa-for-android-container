@@ -32,6 +32,8 @@
  ******************************************************************************/
 // clang-format off
 
+#include <llvm/IR/DerivedTypes.h>
+
 #pragma once
 
 namespace SwrJit
@@ -45,7 +47,11 @@ namespace SwrJit
         LLVMContext& ctx = pJitMgr->mContext;
 
         %endif
+#if LLVM_VERSION_MAJOR >= 12
+        StructType* pRetType = StructType::getTypeByName(pJitMgr->mContext, "${type['name']}");
+#else
         StructType* pRetType = pJitMgr->mpCurrentModule->getTypeByName("${type['name']}");
+#endif
         if (pRetType == nullptr)
         {
             std::vector<Type*> members =<% (max_type_len, max_name_len) = calc_max_len(type['members']) %>

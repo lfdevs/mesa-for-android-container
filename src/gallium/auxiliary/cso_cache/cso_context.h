@@ -120,16 +120,12 @@ void cso_set_viewport(struct cso_context *cso,
 void cso_set_viewport_dims(struct cso_context *ctx,
                            float width, float height, boolean invert);
 
-
-void cso_set_blend_color(struct cso_context *cso,
-                         const struct pipe_blend_color *bc);
-
 void cso_set_sample_mask(struct cso_context *cso, unsigned stencil_mask);
 
 void cso_set_min_samples(struct cso_context *cso, unsigned min_samples);
 
 void cso_set_stencil_ref(struct cso_context *cso,
-                         const struct pipe_stencil_ref *sr);
+                         const struct pipe_stencil_ref sr);
 
 void cso_set_render_condition(struct cso_context *cso,
                               struct pipe_query *query,
@@ -217,7 +213,16 @@ cso_set_vertex_buffers_and_elements(struct cso_context *ctx,
 
 void
 cso_draw_vbo(struct cso_context *cso,
-             const struct pipe_draw_info *info);
+             const struct pipe_draw_info *info,
+             const struct pipe_draw_indirect_info *indirect,
+             const struct pipe_draw_start_count draw);
+
+/* info->draw_id can be changed by the callee if increment_draw_id is true. */
+void
+cso_multi_draw(struct cso_context *cso,
+               struct pipe_draw_info *info,
+               const struct pipe_draw_start_count *draws,
+               unsigned num_draws);
 
 void
 cso_draw_arrays_instanced(struct cso_context *cso, uint mode,

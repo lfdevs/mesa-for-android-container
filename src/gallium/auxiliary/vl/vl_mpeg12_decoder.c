@@ -862,9 +862,9 @@ init_pipe_state(struct vl_mpeg12_decoder *dec)
    assert(dec);
 
    memset(&dsa, 0, sizeof dsa);
-   dsa.depth.enabled = 0;
-   dsa.depth.writemask = 0;
-   dsa.depth.func = PIPE_FUNC_ALWAYS;
+   dsa.depth_enabled = 0;
+   dsa.depth_writemask = 0;
+   dsa.depth_func = PIPE_FUNC_ALWAYS;
    for (i = 0; i < 2; ++i) {
       dsa.stencil[i].enabled = 0;
       dsa.stencil[i].func = PIPE_FUNC_ALWAYS;
@@ -874,9 +874,9 @@ init_pipe_state(struct vl_mpeg12_decoder *dec)
       dsa.stencil[i].valuemask = 0;
       dsa.stencil[i].writemask = 0;
    }
-   dsa.alpha.enabled = 0;
-   dsa.alpha.func = PIPE_FUNC_ALWAYS;
-   dsa.alpha.ref_value = 0;
+   dsa.alpha_enabled = 0;
+   dsa.alpha_func = PIPE_FUNC_ALWAYS;
+   dsa.alpha_ref_value = 0;
    dec->dsa = dec->context->create_depth_stencil_alpha_state(dec->context, &dsa);
    dec->context->bind_depth_stencil_alpha_state(dec->context, dec->dsa);
 

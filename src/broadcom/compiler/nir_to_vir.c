@@ -2955,6 +2955,7 @@ ntq_emit_jump(struct v3d_compile *c, nir_jump_instr *jump)
                 unreachable("All returns shouold be lowered\n");
                 break;
 
+        case nir_jump_halt:
         case nir_jump_goto:
         case nir_jump_goto_if:
                 unreachable("not supported\n");
@@ -3251,6 +3252,8 @@ const nir_shader_compiler_options v3d_nir_options = {
         .lower_wpos_pntc = true,
         .lower_rotate = true,
         .lower_to_scalar = true,
+        .has_fsub = true,
+        .has_isub = true,
 };
 
 /**

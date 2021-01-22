@@ -180,7 +180,10 @@ softpipe_set_sampler_views(struct pipe_context *pipe,
 
 void
 softpipe_draw_vbo(struct pipe_context *pipe,
-                  const struct pipe_draw_info *info);
+                  const struct pipe_draw_info *info,
+                  const struct pipe_draw_indirect_info *indirect,
+                  const struct pipe_draw_start_count *draws,
+                  unsigned num_draws);
 
 void
 softpipe_map_texture_surfaces(struct softpipe_context *sp);

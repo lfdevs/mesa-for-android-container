@@ -190,6 +190,19 @@ target_to_isl_surf_dim(enum pipe_texture_target target)
    unreachable("invalid texture type");
 }
 
+static inline bool is_modifier_external_only(enum pipe_format pfmt,
+                                             uint64_t modifier)
+{
+   /* Only allow external usage for the following cases: YUV formats
+    * and the media-compression modifier. The render engine lacks
+    * support for rendering to a media-compressed surface if the
+    * compression ratio is large enough. By requiring external usage
+    * of media-compressed surfaces, resolves are avoided.
+    */
+   return util_format_is_yuv(pfmt) ||
+      modifier == I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS;
+}
+
 static void
 iris_query_dmabuf_modifiers(struct pipe_screen *pscreen,
                             enum pipe_format pfmt,
@@ -221,15 +234,8 @@ iris_query_dmabuf_modifiers(struct pipe_screen *pscreen,
             modifiers[supported_mods] = all_modifiers[i];
 
          if (external_only) {
-            /* Only allow external usage for the following cases: YUV formats
-             * and the media-compression modifier. The render engine lacks
-             * support for rendering to a media-compressed surface if the
-             * compression ratio is large enough. By requiring external usage
-             * of media-compressed surfaces, resolves are avoided.
-             */
             external_only[supported_mods] =
-               util_format_is_yuv(pfmt) ||
-               all_modifiers[i] == I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS;
+               is_modifier_external_only(pfmt, all_modifiers[i]);
          }
       }
 
@@ -237,6 +243,40 @@ iris_query_dmabuf_modifiers(struct pipe_screen *pscreen,
    }
 
    *count = supported_mods;
+}
+
+static bool
+iris_is_dmabuf_modifier_supported(struct pipe_screen *pscreen,
+                                  uint64_t modifier, enum pipe_format pfmt,
+                                  bool *external_only)
+{
+   struct iris_screen *screen = (void *) pscreen;
+   const struct gen_device_info *devinfo = &screen->devinfo;
+
+   if (modifier_is_supported(devinfo, pfmt, modifier)) {
+      if (external_only)
+         *external_only = is_modifier_external_only(pfmt, modifier);
+
+      return true;
+   }
+
+   return false;
+}
+
+static unsigned int
+iris_get_dmabuf_modifier_planes(struct pipe_screen *pscreen, uint64_t modifier,
+                                enum pipe_format format)
+{
+   unsigned int planes = util_format_get_num_planes(format);
+
+   switch (modifier) {
+   case I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS:
+   case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
+   case I915_FORMAT_MOD_Y_TILED_CCS:
+      return 2 * planes;
+   default:
+      return planes;
+   }
 }
 
 enum isl_format
@@ -1459,50 +1499,6 @@ get_image_offset_el(const struct isl_surf *surf, unsigned level, unsigned z,
 }
 
 /**
- * This function computes the tile_w (in bytes) and tile_h (in rows) of
- * different tiling patterns.
- */
-static void
-iris_resource_get_tile_dims(enum isl_tiling tiling, uint32_t cpp,
-                            uint32_t *tile_w, uint32_t *tile_h)
-{
-   switch (tiling) {
-   case ISL_TILING_X:
-      *tile_w = 512;
-      *tile_h = 8;
-      break;
-   case ISL_TILING_Y0:
-      *tile_w = 128;
-      *tile_h = 32;
-      break;
-   case ISL_TILING_LINEAR:
-      *tile_w = cpp;
-      *tile_h = 1;
-      break;
-   default:
-      unreachable("not reached");
-   }
-
-}
-
-/**
- * This function computes masks that may be used to select the bits of the X
- * and Y coordinates that indicate the offset within a tile.  If the BO is
- * untiled, the masks are set to 0.
- */
-static void
-iris_resource_get_tile_masks(enum isl_tiling tiling, uint32_t cpp,
-                             uint32_t *mask_x, uint32_t *mask_y)
-{
-   uint32_t tile_w_bytes, tile_h;
-
-   iris_resource_get_tile_dims(tiling, cpp, &tile_w_bytes, &tile_h);
-
-   *mask_x = tile_w_bytes / cpp - 1;
-   *mask_y = tile_h - 1;
-}
-
-/**
  * Compute the offset (in bytes) from the start of the BO to the given x
  * and y coordinate.  For tiled BOs, caller must ensure that x and y are
  * multiples of the tile size.
@@ -1552,7 +1548,7 @@ iris_resource_get_tile_offsets(const struct iris_resource *res,
    const struct isl_format_layout *fmtl = isl_format_get_layout(res->surf.format);
    const unsigned cpp = fmtl->bpb / 8;
 
-   iris_resource_get_tile_masks(res->surf.tiling, cpp, &mask_x, &mask_y);
+   isl_get_tile_masks(res->surf.tiling, cpp, &mask_x, &mask_y);
    get_image_offset_el(&res->surf, level, z, &x, &y);
 
    *tile_x = x & mask_x;
@@ -2225,6 +2221,8 @@ void
 iris_init_screen_resource_functions(struct pipe_screen *pscreen)
 {
    pscreen->query_dmabuf_modifiers = iris_query_dmabuf_modifiers;
+   pscreen->is_dmabuf_modifier_supported = iris_is_dmabuf_modifier_supported;
+   pscreen->get_dmabuf_modifier_planes = iris_get_dmabuf_modifier_planes;
    pscreen->resource_create_with_modifiers =
       iris_resource_create_with_modifiers;
    pscreen->resource_create = u_transfer_helper_resource_create;

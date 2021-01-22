@@ -181,6 +181,9 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 	fd6_ctx->control_mem = fd_bo_new(screen->dev, 0x1000,
 			DRM_FREEDRENO_GEM_TYPE_KMEM, "control");
 
+	memset(fd_bo_map(fd6_ctx->control_mem), 0,
+			sizeof(struct fd6_control));
+
 	fd_context_setup_common_vbos(&fd6_ctx->base);
 
 	fd6_blitter_init(pctx);

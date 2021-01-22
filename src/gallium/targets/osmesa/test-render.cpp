@@ -162,3 +162,126 @@ INSTANTIATE_TEST_CASE_P(
    ),
    name_params
 );
+
+TEST(OSMesaRenderTest, depth)
+{
+   std::unique_ptr<osmesa_context, decltype(&OSMesaDestroyContext)> ctx{
+      OSMesaCreateContextExt(OSMESA_RGB_565, 24, 8, 0, NULL), &OSMesaDestroyContext};
+   ASSERT_TRUE(ctx);
+
+   int w = 3, h = 2;
+   uint8_t pixels[4096 * h * 2] = {0}; /* different cpp from our depth! */
+   auto ret = OSMesaMakeCurrent(ctx.get(), &pixels, GL_UNSIGNED_SHORT_5_6_5, w, h);
+   ASSERT_EQ(ret, GL_TRUE);
+
+   /* Expand the row length for the color buffer so we can see that it doesn't affect depth. */
+   OSMesaPixelStore(OSMESA_ROW_LENGTH, 4096);
+
+   uint32_t *depth;
+   GLint dw, dh, depth_cpp;
+   ASSERT_EQ(true, OSMesaGetDepthBuffer(ctx.get(), &dw, &dh, &depth_cpp, (void **)&depth));
+
+   ASSERT_EQ(dw, w);
+   ASSERT_EQ(dh, h);
+   ASSERT_EQ(depth_cpp, 4);
+
+   glClearDepth(1.0);
+   glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+   glFinish();
+   EXPECT_EQ(depth[w * 0 + 0], 0x00ffffff);
+   EXPECT_EQ(depth[w * 0 + 1], 0x00ffffff);
+   EXPECT_EQ(depth[w * 1 + 0], 0x00ffffff);
+   EXPECT_EQ(depth[w * 1 + 1], 0x00ffffff);
+
+   /* Scissor to the top half and clear */
+   glEnable(GL_SCISSOR_TEST);
+   glScissor(0, 1, 2, 1);
+   glClearDepth(0.0);
+   glClear(GL_DEPTH_BUFFER_BIT);
+   glFinish();
+   EXPECT_EQ(depth[w * 0 + 0], 0x00ffffff);
+   EXPECT_EQ(depth[w * 0 + 1], 0x00ffffff);
+   EXPECT_EQ(depth[w * 1 + 0], 0x00000000);
+   EXPECT_EQ(depth[w * 1 + 1], 0x00000000);
+
+   /* Y_UP didn't affect depth buffer orientation in classic osmesa. */
+   OSMesaPixelStore(OSMESA_Y_UP, false);
+   glScissor(0, 1, 1, 1);
+   glClearDepth(1.0);
+   glClear(GL_DEPTH_BUFFER_BIT);
+   glFinish();
+   EXPECT_EQ(depth[w * 0 + 0], 0x00ffffff);
+   EXPECT_EQ(depth[w * 0 + 1], 0x00ffffff);
+   EXPECT_EQ(depth[w * 1 + 0], 0x00ffffff);
+   EXPECT_EQ(depth[w * 1 + 1], 0x00000000);
+}
+
+TEST(OSMesaRenderTest, depth_get_no_attachment)
+{
+   std::unique_ptr<osmesa_context, decltype(&OSMesaDestroyContext)> ctx{
+      OSMesaCreateContextExt(OSMESA_RGBA, 0, 0, 0, NULL), &OSMesaDestroyContext};
+   ASSERT_TRUE(ctx);
+
+   uint32_t pixel;
+   auto ret = OSMesaMakeCurrent(ctx.get(), &pixel, GL_UNSIGNED_BYTE, 1, 1);
+   ASSERT_EQ(ret, GL_TRUE);
+
+   uint32_t *depth;
+   GLint dw = 1, dh = 1, depth_cpp = 1;
+   ASSERT_EQ(false, OSMesaGetDepthBuffer(ctx.get(), &dw, &dh, &depth_cpp, (void **)&depth));
+   ASSERT_EQ(depth_cpp, NULL);
+   ASSERT_EQ(dw, 0);
+   ASSERT_EQ(dh, 0);
+   ASSERT_EQ(depth_cpp, 0);
+}
+
+static uint32_t be_bswap32(uint32_t x)
+{
+   if (UTIL_ARCH_BIG_ENDIAN)
+      return util_bswap32(x);
+   else
+      return x;
+}
+
+TEST(OSMesaRenderTest, separate_buffers_per_context)
+{
+   std::unique_ptr<osmesa_context, decltype(&OSMesaDestroyContext)> ctx1{
+      OSMesaCreateContext(GL_RGBA, NULL), &OSMesaDestroyContext};
+   std::unique_ptr<osmesa_context, decltype(&OSMesaDestroyContext)> ctx2{
+      OSMesaCreateContext(GL_RGBA, NULL), &OSMesaDestroyContext};
+   ASSERT_TRUE(ctx1);
+   ASSERT_TRUE(ctx2);
+
+   uint32_t pixel1, pixel2;
+
+   ASSERT_EQ(OSMesaMakeCurrent(ctx1.get(), &pixel1, GL_UNSIGNED_BYTE, 1, 1), GL_TRUE);
+   glClearColor(1.0, 0.0, 0.0, 0.0);
+   glClear(GL_COLOR_BUFFER_BIT);
+   glFinish();
+   EXPECT_EQ(pixel1, be_bswap32(0x000000ff));
+
+   ASSERT_EQ(OSMesaMakeCurrent(ctx2.get(), &pixel2, GL_UNSIGNED_BYTE, 1, 1), GL_TRUE);
+   glClearColor(0.0, 1.0, 0.0, 0.0);
+   glClear(GL_COLOR_BUFFER_BIT);
+   glFinish();
+   EXPECT_EQ(pixel1, be_bswap32(0x000000ff));
+   EXPECT_EQ(pixel2, be_bswap32(0x0000ff00));
+
+   /* Leave a dangling render to pixel2 as we switch contexts (there should be
+    */
+   glClearColor(0.0, 0.0, 1.0, 0.0);
+   glClear(GL_COLOR_BUFFER_BIT);
+
+   ASSERT_EQ(OSMesaMakeCurrent(ctx1.get(), &pixel1, GL_UNSIGNED_BYTE, 1, 1), GL_TRUE);
+   /* Draw something off screen to trigger a real flush.  We should have the
+    * same contents in pixel1 as before
+    */
+   glBegin(GL_TRIANGLES);
+   glVertex2f(-2, -2);
+   glVertex2f(-2, -2);
+   glVertex2f(-2, -2);
+   glEnd();
+   glFinish();
+   EXPECT_EQ(pixel1, be_bswap32(0x000000ff));
+   EXPECT_EQ(pixel2, be_bswap32(0x00ff0000));
+}

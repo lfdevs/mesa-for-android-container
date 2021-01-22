@@ -708,6 +708,17 @@ ioctl(int fd, unsigned long request, ...)
          return ret;
       }
 
+      case DRM_IOCTL_I915_GEM_MMAP_OFFSET: {
+         ret = libc_ioctl(fd, request, argp);
+         if (ret == 0) {
+            struct drm_i915_gem_mmap_offset *mmap = argp;
+            struct bo *bo = get_bo(fd, mmap->handle);
+            bo->user_mapped = true;
+            bo->dirty = true;
+         }
+         return ret;
+      }
+
       default:
          return libc_ioctl(fd, request, argp);
       }

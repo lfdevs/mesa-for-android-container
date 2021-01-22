@@ -80,26 +80,23 @@ build_constant_load(nir_builder *b, nir_deref_instr *deref,
    UNUSED unsigned deref_size, deref_align;
    size_align(deref->type, &deref_size, &deref_align);
 
-   nir_intrinsic_instr *load =
-      nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_constant);
-   load->num_components = num_components;
-   nir_intrinsic_set_base(load, var->data.location);
-   nir_intrinsic_set_range(load, var_size);
-   nir_intrinsic_set_align(load, deref_align, 0);
-   load->src[0] = nir_src_for_ssa(nir_build_deref_offset(b, deref, size_align));
-   nir_ssa_dest_init(&load->instr, &load->dest,
-                     num_components, bit_size, NULL);
-   nir_builder_instr_insert(b, &load->instr);
+   nir_ssa_def *src = nir_build_deref_offset(b, deref, size_align);
+   nir_ssa_def *load =
+      nir_load_constant(b, num_components, bit_size, src,
+                        .base = var->data.location,
+                        .range = var_size,
+                        .align_mul = deref_align,
+                        .align_offset = 0);
 
-   if (load->dest.ssa.bit_size < 8) {
+   if (load->bit_size < 8) {
       /* Booleans are special-cased to be 32-bit */
       assert(glsl_type_is_boolean(deref->type));
       assert(deref_size == num_components * 4);
-      load->dest.ssa.bit_size = 32;
-      return nir_b2b1(b, &load->dest.ssa);
+      load->bit_size = 32;
+      return nir_b2b1(b, load);
    } else {
       assert(deref_size == num_components * bit_size / 8);
-      return &load->dest.ssa;
+      return load;
    }
 }
 

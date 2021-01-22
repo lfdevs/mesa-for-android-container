@@ -32,12 +32,12 @@
 
 static inline bool fd_depth_enabled(struct fd_context *ctx)
 {
-	return ctx->zsa && ctx->zsa->depth.enabled;
+	return ctx->zsa && ctx->zsa->depth_enabled;
 }
 
 static inline bool fd_depth_write_enabled(struct fd_context *ctx)
 {
-	return ctx->zsa && ctx->zsa->depth.writemask;
+	return ctx->zsa && ctx->zsa->depth_writemask;
 }
 
 static inline bool fd_stencil_enabled(struct fd_context *ctx)

@@ -477,7 +477,8 @@ intel_allocate_image(struct intel_screen *screen, int dri_format,
     }
 
     image->internal_format = _mesa_get_format_base_format(image->format);
-    image->data = loaderPrivate;
+    image->driScrnPriv = screen->driScrnPriv;
+    image->loader_private = loaderPrivate;
 
     return image;
 }
@@ -568,7 +569,8 @@ intel_create_image_from_renderbuffer(__DRIcontext *context,
    image->modifier = tiling_to_modifier(
                         isl_tiling_to_i915_tiling(irb->mt->surf.tiling));
    image->offset = 0;
-   image->data = loaderPrivate;
+   image->driScrnPriv = context->driScreenPriv;
+   image->loader_private = loaderPrivate;
    brw_bo_unreference(image->bo);
    image->bo = irb->mt->bo;
    brw_bo_reference(irb->mt->bo);
@@ -611,7 +613,7 @@ intel_create_image_from_texture(__DRIcontext *context, int target,
       return NULL;
    }
 
-   if (level < obj->BaseLevel || level > obj->_MaxLevel) {
+   if (level < obj->Attrib.BaseLevel || level > obj->_MaxLevel) {
       *error = __DRI_IMAGE_ERROR_BAD_MATCH;
       return NULL;
    }
@@ -630,7 +632,8 @@ intel_create_image_from_texture(__DRIcontext *context, int target,
    image->format = obj->Image[face][level]->TexFormat;
    image->modifier = tiling_to_modifier(
                         isl_tiling_to_i915_tiling(iobj->mt->surf.tiling));
-   image->data = loaderPrivate;
+   image->driScrnPriv = context->driScreenPriv;
+   image->loader_private = loaderPrivate;
    intel_setup_image_from_mipmap_tree(brw, image, iobj->mt, level, zoffset);
    image->dri_format = driGLFormatToImageFormat(image->format);
    image->has_depthstencil = iobj->mt->stencil_mt? true : false;
@@ -648,6 +651,18 @@ intel_create_image_from_texture(__DRIcontext *context, int target,
 static void
 intel_destroy_image(__DRIimage *image)
 {
+   const __DRIscreen * driScreen = image->driScrnPriv;
+   const __DRIimageLoaderExtension *imgLoader = driScreen->image.loader;
+   const __DRIdri2LoaderExtension *dri2Loader = driScreen->dri2.loader;
+
+   if (imgLoader && imgLoader->base.version >= 4 &&
+         imgLoader->destroyLoaderImageState) {
+      imgLoader->destroyLoaderImageState(image->loader_private);
+   } else if (dri2Loader && dri2Loader->base.version >= 5 &&
+         dri2Loader->destroyLoaderImageState) {
+      dri2Loader->destroyLoaderImageState(image->loader_private);
+   }
+
    brw_bo_unreference(image->bo);
    free(image);
 }
@@ -1007,7 +1022,8 @@ intel_dup_image(__DRIimage *orig_image, void *loaderPrivate)
    image->tile_x          = orig_image->tile_x;
    image->tile_y          = orig_image->tile_y;
    image->has_depthstencil = orig_image->has_depthstencil;
-   image->data            = loaderPrivate;
+   image->driScrnPriv     = orig_image->driScrnPriv;
+   image->loader_private  = loaderPrivate;
    image->aux_offset      = orig_image->aux_offset;
    image->aux_pitch       = orig_image->aux_pitch;
 

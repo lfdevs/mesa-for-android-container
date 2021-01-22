@@ -483,59 +483,6 @@ static const struct glx_context_vtable drisw_context_vtable = {
 };
 
 static struct glx_context *
-drisw_create_context(struct glx_screen *base,
-		     struct glx_config *config_base,
-		     struct glx_context *shareList, int renderType)
-{
-   struct drisw_context *pcp, *pcp_shared;
-   __GLXDRIconfigPrivate *config = (__GLXDRIconfigPrivate *) config_base;
-   struct drisw_screen *psc = (struct drisw_screen *) base;
-   __DRIcontext *shared = NULL;
-
-   if (!psc->base.driScreen)
-      return NULL;
-
-   /* Check the renderType value */
-   if (!validate_renderType_against_config(config_base, renderType))
-       return NULL;
-
-   if (shareList) {
-      /* If the shareList context is not a DRISW context, we cannot possibly
-       * create a DRISW context that shares it.
-       */
-      if (shareList->vtable->destroy != drisw_destroy_context) {
-	 return NULL;
-      }
-
-      pcp_shared = (struct drisw_context *) shareList;
-      shared = pcp_shared->driContext;
-   }
-
-   pcp = calloc(1, sizeof *pcp);
-   if (pcp == NULL)
-      return NULL;
-
-   if (!glx_context_init(&pcp->base, &psc->base, &config->base)) {
-      free(pcp);
-      return NULL;
-   }
-
-   pcp->base.renderType = renderType;
-
-   pcp->driContext =
-      (*psc->core->createNewContext) (psc->driScreen,
-				      config->driConfig, shared, pcp);
-   if (pcp->driContext == NULL) {
-      free(pcp);
-      return NULL;
-   }
-
-   pcp->base.vtable = &drisw_context_vtable;
-
-   return &pcp->base;
-}
-
-static struct glx_context *
 drisw_create_context_attribs(struct glx_screen *base,
 			     struct glx_config *config_base,
 			     struct glx_context *shareList,
@@ -587,6 +534,13 @@ drisw_create_context_attribs(struct glx_screen *base,
       return NULL;
 
    if (shareList) {
+      /* If the shareList context is not a DRISW context, we cannot possibly
+       * create a DRISW context that shares it.
+       */
+      if (shareList->vtable->destroy != drisw_destroy_context) {
+	 return NULL;
+      }
+
       pcp_shared = (struct drisw_context *) shareList;
       shared = pcp_shared->driContext;
    }
@@ -775,7 +729,7 @@ drisw_get_driver_name(struct glx_screen *glx_screen)
 }
 
 static const struct glx_screen_vtable drisw_screen_vtable = {
-   .create_context         = drisw_create_context,
+   .create_context         = dri_common_create_context,
    .create_context_attribs = drisw_create_context_attribs,
    .query_renderer_integer = drisw_query_renderer_integer,
    .query_renderer_string  = drisw_query_renderer_string,

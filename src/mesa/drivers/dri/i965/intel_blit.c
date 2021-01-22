@@ -285,8 +285,8 @@ emit_copy_blit(struct brw_context *brw,
        src_buffer, src_pitch, src_offset, src_x, src_y,
        dst_buffer, dst_pitch, dst_offset, dst_x, dst_y, w, h);
 
-   intel_get_tile_dims(src_tiling, cpp, &src_tile_w, &src_tile_h);
-   intel_get_tile_dims(dst_tiling, cpp, &dst_tile_w, &dst_tile_h);
+   isl_get_tile_dims(src_tiling, cpp, &src_tile_w, &src_tile_h);
+   isl_get_tile_dims(dst_tiling, cpp, &dst_tile_w, &dst_tile_h);
 
    /* For Tiled surfaces, the pitch has to be a multiple of the Tile width
     * (X direction width of the Tile). This is ensured while allocating the

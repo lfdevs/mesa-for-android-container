@@ -132,7 +132,7 @@ static void combine_flags(unsigned *dstflags, struct ir3_instruction *src)
 	*dstflags |= srcflags & IR3_REG_IMMED;
 	*dstflags |= srcflags & IR3_REG_RELATIV;
 	*dstflags |= srcflags & IR3_REG_ARRAY;
-	*dstflags |= srcflags & IR3_REG_HIGH;
+	*dstflags |= srcflags & IR3_REG_SHARED;
 
 	/* if src of the src is boolean we can drop the (abs) since we know
 	 * the source value is already a postitive integer.  This cleans
@@ -392,6 +392,13 @@ reg_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr,
 				if (instr->opc == OPC_MOV && !type_float(instr->cat1.src_type))
 					return false;
 				if (!is_cat2_float(instr->opc) && !is_cat3_float(instr->opc))
+					return false;
+			} else if (src->cat1.dst_type == TYPE_U16) {
+				/* Since we set CONSTANT_DEMOTION_ENABLE, a float reference of
+				 * what was a U16 value read from the constbuf would incorrectly
+				 * do 32f->16f conversion, when we want to read a 16f value.
+				 */
+				if (is_cat2_float(instr->opc) || is_cat3_float(instr->opc))
 					return false;
 			}
 

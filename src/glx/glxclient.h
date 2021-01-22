@@ -108,11 +108,6 @@ struct __GLXDRIscreenRec {
 
    void (*destroyScreen)(struct glx_screen *psc);
 
-   struct glx_context *(*createContext)(struct glx_screen *psc,
-					struct glx_config *config,
-					struct glx_context *shareList,
-					int renderType);
-
    __GLXDRIdrawable *(*createDrawable)(struct glx_screen *psc,
 				       XID drawable,
 				       GLXDrawable glxDrawable,
@@ -152,7 +147,6 @@ struct __GLXDRIdrawableRec
 ** dependent methods.
 */
 extern __GLXDRIdisplay *driswCreateDisplay(Display * dpy);
-extern __GLXDRIdisplay *driCreateDisplay(Display * dpy);
 extern __GLXDRIdisplay *dri2CreateDisplay(Display * dpy);
 extern __GLXDRIdisplay *dri3_create_display(Display * dpy);
 extern __GLXDRIdisplay *driwindowsCreateDisplay(Display * dpy);
@@ -613,7 +607,6 @@ struct glx_display
      * Per display direct rendering interface functions and data.
      */
    __GLXDRIdisplay *driswDisplay;
-   __GLXDRIdisplay *driDisplay;
    __GLXDRIdisplay *dri2Display;
    __GLXDRIdisplay *dri3Display;
 #endif

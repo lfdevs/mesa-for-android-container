@@ -124,9 +124,10 @@ objects. They all follow simple, one-method binding calls, e.g.
 Samplers
 ^^^^^^^^
 
-pipe_sampler_state objects control how textures are sampled (coordinate
-wrap modes, interpolation modes, etc).  Note that samplers are not used
-for texture buffer objects.  That is, pipe_context::bind_sampler_views()
+pipe_sampler_state objects control how textures are sampled
+(coordinate wrap modes, interpolation modes, etc).  Note that unless
+``PIPE_CAP_TEXTURE_BUFFER_SAMPLER`` is enabled, samplers are not used for
+texture buffer objects.  That is, pipe_context::bind_sampler_views()
 will not bind a sampler if the corresponding sampler view refers to a
 PIPE_BUFFER resource.
 
@@ -250,6 +251,10 @@ discussed above.
   draw_auto stage, i.e. it specifies how much data there is in the buffer
   for the purposes of the draw_auto stage. -1 means the buffer should
   be appended to, and everything else sets the internal offset.
+
+* ``stream_output_target_offset`` Retrieve the internal stream offset from
+  an streamout target. This is used to implement Vulkan pause/resume support
+  which needs to pass the internal offset to the API.
 
 NOTE: The currently-bound vertex or geometry shader must be compiled with
 the properly-filled-in structure pipe_stream_output_info describing which

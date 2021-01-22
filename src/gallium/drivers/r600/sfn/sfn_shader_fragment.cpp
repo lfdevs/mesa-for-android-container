@@ -47,8 +47,6 @@ FragmentShaderFromNir::FragmentShaderFromNir(const nir_shader& nir,
    m_need_back_color(false),
    m_front_face_loaded(false),
    m_depth_exports(0),
-   m_enable_centroid_interpolators(false),
-   m_enable_sample_interpolators(false),
    m_apply_sample_mask(key.ps.apply_sample_id_mask),
    m_dual_source_blend(key.ps.dual_source_blend)
 {
@@ -63,31 +61,140 @@ FragmentShaderFromNir::FragmentShaderFromNir(const nir_shader& nir,
 
 bool FragmentShaderFromNir::do_process_inputs(nir_variable *input)
 {
-   sfn_log << SfnLog::io << "Parse input variable "
-           << input->name << " location:" <<  input->data.location
-           << " driver-loc:" << input->data.driver_location
-           << " interpolation:" << input->data.interpolation
+   /*  inputs have been lowered */
+   return true;
+}
+
+bool FragmentShaderFromNir::do_emit_load_deref(const nir_variable *in_var, nir_intrinsic_instr* instr)
+{
+   assert(0 && "all input derefs should have benn lowered");
+   return false;
+}
+
+unsigned barycentric_ij_index(nir_intrinsic_instr *instr)
+{
+   unsigned index = 0;
+   switch (instr->intrinsic) {
+   case nir_intrinsic_load_barycentric_sample:
+      index = 0;
+      break;
+   case nir_intrinsic_load_barycentric_at_sample:
+   case nir_intrinsic_load_barycentric_at_offset:
+   case nir_intrinsic_load_barycentric_pixel:
+      index = 1;
+      break;
+   case nir_intrinsic_load_barycentric_centroid:
+      index = 2;
+      break;
+   default:
+      unreachable("Unknown interpolator intrinsic");
+   }
+
+   switch (nir_intrinsic_interp_mode(instr)) {
+   case INTERP_MODE_NONE:
+   case INTERP_MODE_SMOOTH:
+   case INTERP_MODE_COLOR:
+      return index;
+   case INTERP_MODE_NOPERSPECTIVE:
+      return index + 3;
+   case INTERP_MODE_FLAT:
+   case INTERP_MODE_EXPLICIT:
+   default:
+      unreachable("unknown/unsupported mode for load_interpolated");
+   }
+   return 0;
+}
+
+bool FragmentShaderFromNir::process_load_input(nir_intrinsic_instr *instr,
+                                               bool interpolated)
+{
+   sfn_log << SfnLog::io << "Parse " << instr->instr        
            << "\n";
 
-   if (input->data.location == VARYING_SLOT_FACE) {
+   auto index = nir_src_as_const_value(instr->src[interpolated ? 1 : 0]);
+   assert(index);
+
+   unsigned location = nir_intrinsic_io_semantics(instr).location + index->u32;
+   auto semantic = r600_get_varying_semantic(location);
+   tgsi_semantic name = (tgsi_semantic)semantic.first;
+   unsigned sid = semantic.second;
+
+
+   if (location == VARYING_SLOT_POS) {
+      m_sv_values.set(es_pos);
+      return true;
+   }
+
+   if (location == VARYING_SLOT_FACE) {
       m_sv_values.set(es_face);
       return true;
    }
 
-   unsigned name, sid;
-   auto semantic = r600_get_varying_semantic(input->data.location);
-   name = semantic.first;
-   sid = semantic.second;
 
-   tgsi_semantic sname = static_cast<tgsi_semantic>(name);
+   tgsi_interpolate_mode tgsi_interpolate = TGSI_INTERPOLATE_CONSTANT;
+   tgsi_interpolate_loc tgsi_loc = TGSI_INTERPOLATE_LOC_CENTER;
 
-   switch (sname) {
-   case TGSI_SEMANTIC_POSITION: {
-      m_sv_values.set(es_pos);
-      return true;
+   bool uses_interpol_at_centroid = false;
+
+   if (interpolated) {
+
+      glsl_interp_mode mode = INTERP_MODE_NONE;
+      auto parent = nir_instr_as_intrinsic(instr->src[0].ssa->parent_instr);
+      mode = (glsl_interp_mode)nir_intrinsic_interp_mode(parent);
+      switch (parent->intrinsic) {
+      case nir_intrinsic_load_barycentric_sample:
+         tgsi_loc = TGSI_INTERPOLATE_LOC_SAMPLE;
+         break;
+      case nir_intrinsic_load_barycentric_at_sample:
+      case nir_intrinsic_load_barycentric_at_offset:
+      case nir_intrinsic_load_barycentric_pixel:
+         tgsi_loc = TGSI_INTERPOLATE_LOC_CENTER;
+         break;
+      case nir_intrinsic_load_barycentric_centroid:
+         tgsi_loc = TGSI_INTERPOLATE_LOC_CENTROID;
+         uses_interpol_at_centroid = true;
+         break;
+      default:
+         std::cerr << "Instruction " << nir_intrinsic_infos[parent->intrinsic].name << " as parent of "
+                   << nir_intrinsic_infos[instr->intrinsic].name
+                   << " interpolator?\n";
+         assert(0);
+      }
+
+      switch (mode) {
+      case INTERP_MODE_NONE:
+         if (name == TGSI_SEMANTIC_COLOR) {
+            tgsi_interpolate = TGSI_INTERPOLATE_COLOR;
+            break;
+      }
+         /* fallthrough */
+      case INTERP_MODE_SMOOTH:
+         tgsi_interpolate = TGSI_INTERPOLATE_PERSPECTIVE;
+         break;
+      case INTERP_MODE_NOPERSPECTIVE:
+         tgsi_interpolate = TGSI_INTERPOLATE_LINEAR;
+         break;
+      case INTERP_MODE_FLAT:
+         break;
+      case INTERP_MODE_COLOR:
+         tgsi_interpolate = TGSI_INTERPOLATE_COLOR;
+         break;
+      case INTERP_MODE_EXPLICIT:
+      default:
+         assert(0);
+      }
+
+      m_interpolators_used.set(barycentric_ij_index(parent));
+
    }
+
+   switch (name) {
    case TGSI_SEMANTIC_COLOR: {
-      m_shaderio.add_input(new ShaderInputColor(sname, sid, input));
+      m_shaderio.add_input(new ShaderInputColor(name, sid,
+                                                nir_intrinsic_base(instr) + index->u32,
+                                                nir_intrinsic_component(instr),
+                                                nir_dest_num_components(instr->dest),
+                                                tgsi_interpolate, tgsi_loc));
       m_need_back_color = m_two_sided_color;
       return true;
    }
@@ -102,8 +209,15 @@ bool FragmentShaderFromNir::do_process_inputs(nir_variable *input)
    case TGSI_SEMANTIC_PCOORD:
    case TGSI_SEMANTIC_VIEWPORT_INDEX:
    case TGSI_SEMANTIC_CLIPDIST: {
-      if (!m_shaderio.find_varying(sname, sid, input->data.location_frac))
-         m_shaderio.add_input(new ShaderInputVarying(sname, sid, input));
+      auto varying = m_shaderio.find_varying(name, sid, nir_intrinsic_component(instr));
+      if (!varying) {
+         m_shaderio.add_input(new ShaderInputVarying(name, sid, nir_intrinsic_base(instr) + index->u32,
+                                                     nir_intrinsic_component(instr),
+                                                     nir_dest_num_components(instr->dest),
+                                                     tgsi_interpolate, tgsi_loc));
+      } else if (uses_interpol_at_centroid)
+         varying->set_uses_interpolate_at_centroid();
+
       return true;
    }
    default:
@@ -111,11 +225,13 @@ bool FragmentShaderFromNir::do_process_inputs(nir_variable *input)
    }
 }
 
+
 bool FragmentShaderFromNir::scan_sysvalue_access(nir_instr *instr)
 {
    switch (instr->type) {
    case nir_instr_type_intrinsic: {
       nir_intrinsic_instr *ii =  nir_instr_as_intrinsic(instr);
+
       switch (ii->intrinsic) {
       case nir_intrinsic_load_front_face:
          m_sv_values.set(es_face);
@@ -129,16 +245,14 @@ bool FragmentShaderFromNir::scan_sysvalue_access(nir_instr *instr)
       case nir_intrinsic_load_sample_id:
          m_sv_values.set(es_sample_id);
          break;
-      case nir_intrinsic_interp_deref_at_centroid:
-         /* This is not a sysvalue, should go elsewhere */
-         m_enable_centroid_interpolators = true;
-         break;
-      case nir_intrinsic_interp_deref_at_sample:
-         m_enable_sample_interpolators = true;
-         break;
       case nir_intrinsic_load_helper_invocation:
          m_sv_values.set(es_helper_invocation);
          break;
+      case nir_intrinsic_load_input:
+         return process_load_input(ii, false);
+      case nir_intrinsic_load_interpolated_input: {
+         return process_load_input(ii, true);
+      }
       default:
          ;
       }
@@ -156,22 +270,12 @@ bool FragmentShaderFromNir::do_allocate_reserved_registers()
    int face_reg_index = -1;
    int sample_id_index = -1;
    // enabled interpolators based on inputs
-   for (auto& i: m_shaderio.inputs()) {
-      int ij = i->ij_index();
-      if (ij >= 0) {
-         m_interpolator[ij].enabled = true;
+   for (unsigned i = 0; i < s_max_interpolators; ++i) {
+      if (m_interpolators_used.test(i)) {
+         sfn_log << SfnLog::io << "Interpolator " << i << " test enabled\n";
+         m_interpolator[i].enabled = true;
       }
    }
-
-   /* Lazy, enable both possible interpolators,
-    * TODO: check which ones are really needed */
-   if (m_enable_centroid_interpolators) {
-      m_interpolator[2].enabled = true; /* perspective */
-      m_interpolator[5].enabled = true; /* linear */
-   }
-
-   if (m_enable_sample_interpolators)
-      m_interpolator[1].enabled = true; /* perspective */
 
    // sort the varying inputs
    m_shaderio.sort_varying_inputs();
@@ -180,7 +284,7 @@ bool FragmentShaderFromNir::do_allocate_reserved_registers()
    int num_baryc = 0;
    for (int i = 0; i < 6; ++i) {
       if (m_interpolator[i].enabled) {
-         sfn_log << SfnLog::io << "Interpolator " << i << " is enabled\n";
+         sfn_log << SfnLog::io << "Interpolator " << i << " is enabled with ij=" << num_baryc <<" \n";
 
          m_interpolator[i].ij_index = num_baryc;
 
@@ -390,19 +494,249 @@ bool FragmentShaderFromNir::emit_intrinsic_instruction_override(nir_intrinsic_in
       return load_preloaded_value(instr->dest, 0, m_sample_id_reg);
    case nir_intrinsic_load_front_face:
       return load_preloaded_value(instr->dest, 0, m_front_face_reg);
-   case nir_intrinsic_interp_deref_at_sample:
-      return emit_interp_deref_at_sample(instr);
-   case nir_intrinsic_interp_deref_at_offset:
-      return emit_interp_deref_at_offset(instr);
-   case nir_intrinsic_interp_deref_at_centroid:
-      return emit_interp_deref_at_centroid(instr);
    case nir_intrinsic_load_sample_pos:
       return emit_load_sample_pos(instr);
    case nir_intrinsic_load_helper_invocation:
       return load_preloaded_value(instr->dest, 0, m_helper_invocation);
+   case nir_intrinsic_load_input:
+      return emit_load_input(instr);
+   case nir_intrinsic_load_barycentric_sample:
+   case nir_intrinsic_load_barycentric_pixel:
+   case nir_intrinsic_load_barycentric_centroid:  {
+      unsigned ij = barycentric_ij_index(instr);
+      return load_preloaded_value(instr->dest, 0, m_interpolator[ij].i) &&
+            load_preloaded_value(instr->dest, 1, m_interpolator[ij].j);
+   }
+   case nir_intrinsic_load_barycentric_at_offset:
+         return load_barycentric_at_offset(instr);
+   case nir_intrinsic_load_barycentric_at_sample:
+      return load_barycentric_at_sample(instr);
+
+   case nir_intrinsic_load_interpolated_input: {
+      return emit_load_interpolated_input(instr);
+   }
    default:
       return false;
    }
+}
+
+bool FragmentShaderFromNir::emit_load_interpolated_input(nir_intrinsic_instr* instr)
+{
+   unsigned loc = nir_intrinsic_io_semantics(instr).location;
+   switch (loc) {
+   case VARYING_SLOT_POS:
+      for (unsigned i = 0; i < nir_dest_num_components(instr->dest); ++i) {
+         load_preloaded_value(instr->dest, i, m_frag_pos[i]);
+      }
+      return true;
+   case VARYING_SLOT_FACE:
+      return load_preloaded_value(instr->dest, 0, m_front_face_reg);
+   default:
+      ;
+   }
+
+   auto param = nir_src_as_const_value(instr->src[1]);
+   assert(param && "Indirect PS inputs not (yet) supported");
+
+   auto& io = m_shaderio.input(param->u32 + nir_intrinsic_base(instr), nir_intrinsic_component(instr));
+   auto dst = nir_intrinsic_component(instr) ? get_temp_vec4() : vec_from_nir(instr->dest, 4);
+
+   io.set_gpr(dst.sel());
+
+   Interpolator ip = {true, 0, from_nir(instr->src[0], 0), from_nir(instr->src[0], 1)};
+
+
+   if (!load_interpolated(dst, io, ip, nir_dest_num_components(instr->dest),
+                          nir_intrinsic_component(instr)))
+      return false;
+
+   if (m_need_back_color && io.name() == TGSI_SEMANTIC_COLOR) {
+
+      auto & color_input  = static_cast<ShaderInputColor&> (io);
+      auto& bgio = m_shaderio.input(color_input.back_color_input_index());
+
+      bgio.set_gpr(allocate_temp_register());
+
+      GPRVector bgcol(bgio.gpr(), {0,1,2,3});
+      load_interpolated(bgcol, bgio, ip, nir_dest_num_components(instr->dest), 0);
+
+      load_front_face();
+
+      AluInstruction *ir = nullptr;
+      for (unsigned i = 0; i < 4 ; ++i) {
+         ir = new AluInstruction(op3_cnde, dst[i], m_front_face_reg, bgcol[i], dst[i], {alu_write});
+         emit_instruction(ir);
+      }
+      if (ir)
+         ir->set_flag(alu_last_instr);
+   }
+
+
+   AluInstruction *ir = nullptr;
+   if (nir_intrinsic_component(instr) != 0) {
+      for (unsigned i = 0; i < nir_dest_num_components(instr->dest); ++i) {
+         ir = new AluInstruction(op1_mov, from_nir(instr->dest, i), dst[i + nir_intrinsic_component(instr)], {alu_write});
+         emit_instruction(ir);
+      }
+      if (ir)
+         ir->set_flag(alu_last_instr);
+   }
+
+   return true;
+}
+
+bool FragmentShaderFromNir::load_barycentric_at_offset(nir_intrinsic_instr* instr)
+{
+   auto interpolator = m_interpolator[barycentric_ij_index(instr)];
+   PValue dummy(new GPRValue(interpolator.i->sel(), 0));
+
+   GPRVector help = get_temp_vec4();
+   GPRVector interp({interpolator.j, interpolator.i, dummy, dummy});
+
+   auto getgradh = new TexInstruction(TexInstruction::get_gradient_h, help, interp, 0, 0, PValue());
+   getgradh->set_dest_swizzle({0,1,7,7});
+   getgradh->set_flag(TexInstruction::x_unnormalized);
+   getgradh->set_flag(TexInstruction::y_unnormalized);
+   getgradh->set_flag(TexInstruction::z_unnormalized);
+   getgradh->set_flag(TexInstruction::w_unnormalized);
+   getgradh->set_flag(TexInstruction::grad_fine);
+   emit_instruction(getgradh);
+
+   auto getgradv = new TexInstruction(TexInstruction::get_gradient_v, help, interp, 0, 0, PValue());
+   getgradv->set_dest_swizzle({7,7,0,1});
+   getgradv->set_flag(TexInstruction::x_unnormalized);
+   getgradv->set_flag(TexInstruction::y_unnormalized);
+   getgradv->set_flag(TexInstruction::z_unnormalized);
+   getgradv->set_flag(TexInstruction::w_unnormalized);
+   getgradv->set_flag(TexInstruction::grad_fine);
+   emit_instruction(getgradv);
+
+   PValue ofs_x = from_nir(instr->src[0], 0);
+   PValue ofs_y = from_nir(instr->src[0], 1);
+   emit_instruction(new AluInstruction(op3_muladd, help.reg_i(0), help.reg_i(0), ofs_x, interpolator.j, {alu_write}));
+   emit_instruction(new AluInstruction(op3_muladd, help.reg_i(1), help.reg_i(1), ofs_x, interpolator.i, {alu_write, alu_last_instr}));
+   emit_instruction(new AluInstruction(op3_muladd, from_nir(instr->dest, 0), help.reg_i(3), ofs_y, help.reg_i(1), {alu_write}));
+   emit_instruction(new AluInstruction(op3_muladd, from_nir(instr->dest, 1), help.reg_i(2), ofs_y, help.reg_i(0), {alu_write, alu_last_instr}));
+
+   return true;
+}
+
+bool FragmentShaderFromNir::load_barycentric_at_sample(nir_intrinsic_instr* instr)
+{
+   GPRVector slope = get_temp_vec4();
+
+   auto fetch = new FetchInstruction(vc_fetch, no_index_offset, slope,
+                                     from_nir_with_fetch_constant(instr->src[0], 0),
+                                     0, R600_BUFFER_INFO_CONST_BUFFER, PValue(), bim_none);
+   fetch->set_flag(vtx_srf_mode);
+   emit_instruction(fetch);
+
+   GPRVector grad = get_temp_vec4();
+
+   auto interpolator = m_interpolator[barycentric_ij_index(instr)];
+   assert(interpolator.enabled);
+   PValue dummy(new GPRValue(interpolator.i->sel(), 0));
+
+   GPRVector src({interpolator.j, interpolator.i, dummy, dummy});
+
+   auto tex = new TexInstruction(TexInstruction::get_gradient_h, grad, src, 0, 0, PValue());
+   tex->set_flag(TexInstruction::grad_fine);
+   tex->set_flag(TexInstruction::x_unnormalized);
+   tex->set_flag(TexInstruction::y_unnormalized);
+   tex->set_flag(TexInstruction::z_unnormalized);
+   tex->set_flag(TexInstruction::w_unnormalized);
+   tex->set_dest_swizzle({0,1,7,7});
+   emit_instruction(tex);
+
+   tex = new TexInstruction(TexInstruction::get_gradient_v, grad, src, 0, 0, PValue());
+   tex->set_flag(TexInstruction::x_unnormalized);
+   tex->set_flag(TexInstruction::y_unnormalized);
+   tex->set_flag(TexInstruction::z_unnormalized);
+   tex->set_flag(TexInstruction::w_unnormalized);
+   tex->set_flag(TexInstruction::grad_fine);
+   tex->set_dest_swizzle({7,7,0,1});
+   emit_instruction(tex);
+
+   emit_instruction(new AluInstruction(op3_muladd, slope.reg_i(0), {grad.reg_i(0), slope.reg_i(2), interpolator.j}, {alu_write}));
+   emit_instruction(new AluInstruction(op3_muladd, slope.reg_i(1), {grad.reg_i(1), slope.reg_i(2), interpolator.i}, {alu_write, alu_last_instr}));
+
+   emit_instruction(new AluInstruction(op3_muladd, from_nir(instr->dest, 0), {grad.reg_i(3), slope.reg_i(3), slope.reg_i(1)}, {alu_write}));
+   emit_instruction(new AluInstruction(op3_muladd, from_nir(instr->dest, 1), {grad.reg_i(2), slope.reg_i(3), slope.reg_i(0)}, {alu_write, alu_last_instr}));
+
+   return true;
+}
+
+bool FragmentShaderFromNir::emit_load_input(nir_intrinsic_instr* instr)
+{
+   unsigned loc = nir_intrinsic_io_semantics(instr).location;
+   auto param = nir_src_as_const_value(instr->src[0]);
+   assert(param && "Indirect PS inputs not (yet) supported");
+
+   auto& io = m_shaderio.input(param->u32 + nir_intrinsic_base(instr), nir_intrinsic_component(instr));
+
+   assert(nir_intrinsic_io_semantics(instr).num_slots == 1);
+
+   unsigned num_components = nir_dest_num_components(instr->dest);
+
+   switch (loc) {
+   case VARYING_SLOT_POS:
+      for (unsigned i = 0; i < num_components; ++i) {
+         load_preloaded_value(instr->dest, i, m_frag_pos[i]);
+      }
+      return true;
+   case VARYING_SLOT_FACE:
+      return load_preloaded_value(instr->dest, 0, m_front_face_reg);
+   default:
+      ;
+   }
+
+   auto dst = nir_intrinsic_component(instr) ? get_temp_vec4() : vec_from_nir(instr->dest, 4);
+
+   AluInstruction *ir = nullptr;
+   for (unsigned i = 0; i < 4 ; ++i) {
+      ir = new AluInstruction(op1_interp_load_p0, dst[i],
+                              PValue(new InlineConstValue(ALU_SRC_PARAM_BASE +
+                                                          io.lds_pos(), i)),
+                              EmitInstruction::write);
+      emit_instruction(ir);
+   }
+   ir->set_flag(alu_last_instr);
+
+   /* TODO: back color */
+   if (m_need_back_color && io.name() == TGSI_SEMANTIC_COLOR) {
+      Interpolator ip = {false, 0, NULL, NULL};
+
+      auto & color_input  = static_cast<ShaderInputColor&> (io);
+      auto& bgio = m_shaderio.input(color_input.back_color_input_index());
+
+      bgio.set_gpr(allocate_temp_register());
+
+      GPRVector bgcol(bgio.gpr(), {0,1,2,3});
+      load_interpolated(bgcol, bgio, ip, num_components, 0);
+
+      load_front_face();
+
+      AluInstruction *ir = nullptr;
+      for (unsigned i = 0; i < 4 ; ++i) {
+         ir = new AluInstruction(op3_cnde, dst[i], m_front_face_reg, bgcol[i], dst[i], {alu_write});
+         emit_instruction(ir);
+      }
+      if (ir)
+         ir->set_flag(alu_last_instr);
+   }
+
+   if (nir_intrinsic_component(instr) != 0) {
+      std::cerr << "move in right pos \n";
+      for (unsigned i = 0; i < nir_dest_num_components(instr->dest); ++i) {
+         ir = new AluInstruction(op1_mov, from_nir(instr->dest, i), dst[i + nir_intrinsic_component(instr)], {alu_write});
+         emit_instruction(ir);
+      }
+      if (ir)
+         ir->set_flag(alu_last_instr);
+   }
+
+
+   return true;
 }
 
 void FragmentShaderFromNir::load_front_face()
@@ -445,210 +779,6 @@ bool FragmentShaderFromNir::emit_load_sample_pos(nir_intrinsic_instr* instr)
    return true;
 }
 
-bool FragmentShaderFromNir::emit_interp_deref_at_sample(nir_intrinsic_instr* instr)
-{
-   GPRVector slope = get_temp_vec4();
-
-   auto fetch = new FetchInstruction(vc_fetch, no_index_offset, slope,
-                                     from_nir_with_fetch_constant(instr->src[1], 0),
-                                     0, R600_BUFFER_INFO_CONST_BUFFER, PValue(), bim_none);
-   fetch->set_flag(vtx_srf_mode);
-   emit_instruction(fetch);
-
-   GPRVector grad = get_temp_vec4();
-   auto var = get_deref_location(instr->src[0]);
-   assert(var);
-
-   auto& io = m_shaderio.input(var->data.driver_location, var->data.location_frac);
-
-   auto interpolator = m_interpolator[1];
-   assert(interpolator.enabled);
-   PValue dummy(new GPRValue(interpolator.i->sel(), 0));
-
-   GPRVector src({interpolator.j, interpolator.i, dummy, dummy});
-
-   auto tex = new TexInstruction(TexInstruction::get_gradient_h, grad, src, 0, 0, PValue());
-   tex->set_flag(TexInstruction::grad_fine);
-   tex->set_flag(TexInstruction::x_unnormalized);
-   tex->set_flag(TexInstruction::y_unnormalized);
-   tex->set_flag(TexInstruction::z_unnormalized);
-   tex->set_flag(TexInstruction::w_unnormalized);
-   tex->set_dest_swizzle({0,1,7,7});
-   emit_instruction(tex);
-
-   tex = new TexInstruction(TexInstruction::get_gradient_v, grad, src, 0, 0, PValue());
-   tex->set_flag(TexInstruction::x_unnormalized);
-   tex->set_flag(TexInstruction::y_unnormalized);
-   tex->set_flag(TexInstruction::z_unnormalized);
-   tex->set_flag(TexInstruction::w_unnormalized);
-   tex->set_flag(TexInstruction::grad_fine);
-   tex->set_dest_swizzle({7,7,0,1});
-   emit_instruction(tex);
-
-   emit_instruction(new AluInstruction(op3_muladd, slope.reg_i(0), {grad.reg_i(0), slope.reg_i(2), interpolator.j}, {alu_write}));
-   emit_instruction(new AluInstruction(op3_muladd, slope.reg_i(1), {grad.reg_i(1), slope.reg_i(2), interpolator.i}, {alu_write, alu_last_instr}));
-
-   emit_instruction(new AluInstruction(op3_muladd, slope.reg_i(0), {grad.reg_i(2), slope.reg_i(3), slope.reg_i(0)}, {alu_write}));
-   emit_instruction(new AluInstruction(op3_muladd, slope.reg_i(1), {grad.reg_i(3), slope.reg_i(3), slope.reg_i(1)}, {alu_write, alu_last_instr}));
-
-   Interpolator ip = {true, 0, slope.reg_i(1), slope.reg_i(0)};
-
-   auto dst = vec_from_nir(instr->dest, 4);
-   int num_components = instr->dest.is_ssa ?
-                           instr->dest.ssa.num_components:
-                           instr->dest.reg.reg->num_components;
-
-   load_interpolated(dst, io, ip, num_components, var->data.location_frac);
-
-   return true;
-}
-
-bool FragmentShaderFromNir::emit_interp_deref_at_offset(nir_intrinsic_instr* instr)
-{
-   int temp = allocate_temp_register();
-
-   GPRVector help(temp, {0,1,2,3});
-
-   auto var = get_deref_location(instr->src[0]);
-   assert(var);
-
-   auto& io = m_shaderio.input(var->data.driver_location, var->data.location_frac);
-   auto interpolator = m_interpolator[io.ij_index()];
-   PValue dummy(new GPRValue(interpolator.i->sel(), 0));
-
-   GPRVector interp({interpolator.j, interpolator.i, dummy, dummy});
-
-   auto getgradh = new TexInstruction(TexInstruction::get_gradient_h, help, interp, 0, 0, PValue());
-   getgradh->set_dest_swizzle({0,1,7,7});
-   getgradh->set_flag(TexInstruction::x_unnormalized);
-   getgradh->set_flag(TexInstruction::y_unnormalized);
-   getgradh->set_flag(TexInstruction::z_unnormalized);
-   getgradh->set_flag(TexInstruction::w_unnormalized);
-   getgradh->set_flag(TexInstruction::grad_fine);
-   emit_instruction(getgradh);
-
-   auto getgradv = new TexInstruction(TexInstruction::get_gradient_v, help, interp, 0, 0, PValue());
-   getgradv->set_dest_swizzle({7,7,0,1});
-   getgradv->set_flag(TexInstruction::x_unnormalized);
-   getgradv->set_flag(TexInstruction::y_unnormalized);
-   getgradv->set_flag(TexInstruction::z_unnormalized);
-   getgradv->set_flag(TexInstruction::w_unnormalized);
-   getgradv->set_flag(TexInstruction::grad_fine);
-   emit_instruction(getgradv);
-
-   PValue ofs_x = from_nir(instr->src[1], 0);
-   PValue ofs_y = from_nir(instr->src[1], 1);
-   emit_instruction(new AluInstruction(op3_muladd, help.reg_i(0), help.reg_i(0), ofs_x, interpolator.j, {alu_write}));
-   emit_instruction(new AluInstruction(op3_muladd, help.reg_i(1), help.reg_i(1), ofs_x, interpolator.i, {alu_write, alu_last_instr}));
-   emit_instruction(new AluInstruction(op3_muladd, help.reg_i(0), help.reg_i(2), ofs_y, help.reg_i(0), {alu_write}));
-   emit_instruction(new AluInstruction(op3_muladd, help.reg_i(1), help.reg_i(3), ofs_y, help.reg_i(1), {alu_write, alu_last_instr}));
-
-   Interpolator ip = {true, 0, help.reg_i(1), help.reg_i(0)};
-
-   auto dst = vec_from_nir(instr->dest, 4);
-   load_interpolated(dst, io, ip, nir_dest_num_components(instr->dest),
-                     var->data.location_frac);
-
-   return true;
-}
-
-bool FragmentShaderFromNir::emit_interp_deref_at_centroid(nir_intrinsic_instr* instr)
-{
-   auto var = get_deref_location(instr->src[0]);
-   assert(var);
-
-   auto& io = m_shaderio.input(var->data.driver_location, var->data.location_frac);
-   io.set_uses_interpolate_at_centroid();
-
-   int ij_index = io.ij_index() >= 3 ? 5 : 2;
-   assert (m_interpolator[ij_index].enabled);
-   auto ip = m_interpolator[ij_index];
-
-   int num_components = nir_dest_num_components(instr->dest);
-
-   auto dst = vec_from_nir(instr->dest, 4);
-   load_interpolated(dst, io, ip, num_components, var->data.location_frac);
-   return true;
-}
-
-
-bool FragmentShaderFromNir::do_emit_load_deref(const nir_variable *in_var, nir_intrinsic_instr* instr)
-{
-   if (in_var->data.location == VARYING_SLOT_POS) {
-      assert(instr->dest.is_ssa);
-
-      for (int i = 0; i < instr->dest.ssa.num_components; ++i) {
-         inject_register(instr->dest.ssa.index, i, m_frag_pos[i], true);
-      }
-      return true;
-   }
-
-   if (in_var->data.location == VARYING_SLOT_FACE)
-      return load_preloaded_value(instr->dest, 0, m_front_face_reg);
-
-   // todo: replace io with ShaderInputVarying
-   auto& io = m_shaderio.input(in_var->data.driver_location, in_var->data.location_frac);
-   unsigned num_components  = 4;
-
-
-   if (instr->dest.is_ssa) {
-      num_components = instr->dest.ssa.num_components;
-   } else {
-      num_components = instr->dest.reg.reg->num_components;
-   }
-
-   auto dst = vec_from_nir(instr->dest, 4);
-
-   sfn_log << SfnLog::io << "Set input[" << in_var->data.driver_location
-           << "].gpr=" << dst.sel()
-           << " interp=" << io.ij_index()
-           << "\n";
-
-   io.set_gpr(dst.sel());
-
-   auto& ip = io.interpolate() ? m_interpolator[io.ij_index()] : m_interpolator[0];
-
-   load_interpolated(dst, io, ip, num_components, in_var->data.location_frac);
-
-   /* These results are expected starting in slot x..*/
-   if (in_var->data.location_frac > 0) {
-      int n = instr->dest.is_ssa ? instr->dest.ssa.num_components :
-                                   instr->dest.reg.reg->num_components;
-      AluInstruction *ir = nullptr;
-      for (int i = 0; i < n; ++i) {
-         ir = new AluInstruction(op1_mov, dst[i],
-                                 dst[i + in_var->data.location_frac], {alu_write});
-         emit_instruction(ir);
-      }
-      if (ir)
-         ir->set_flag(alu_last_instr);
-   }
-
-
-   if (m_need_back_color && io.name() == TGSI_SEMANTIC_COLOR) {
-
-      auto & color_input  = static_cast<ShaderInputColor&> (io);
-      auto& bgio = m_shaderio.input(color_input.back_color_input_index());
-
-      bgio.set_gpr(allocate_temp_register());
-
-      GPRVector bgcol(bgio.gpr(), {0,1,2,3});
-      load_interpolated(bgcol, bgio, ip, num_components, 0);
-
-      load_front_face();
-
-      AluInstruction *ir = nullptr;
-      for (unsigned i = 0; i < 4 ; ++i) {
-         ir = new AluInstruction(op3_cnde, dst[i], m_front_face_reg, bgcol[i], dst[i], {alu_write});
-         emit_instruction(ir);
-      }
-      if (ir)
-         ir->set_flag(alu_last_instr);
-   }
-
-   return true;
-}
-
 bool FragmentShaderFromNir::load_interpolated(GPRVector &dest,
                                               ShaderInput& io, const Interpolator &ip,
                                               int num_components, int start_comp)
@@ -656,7 +786,7 @@ bool FragmentShaderFromNir::load_interpolated(GPRVector &dest,
    // replace io with ShaderInputVarying
    if (io.interpolate() > 0) {
 
-      sfn_log << SfnLog::io << "Using Interpolator " << io.ij_index() << "\n";
+      sfn_log << SfnLog::io << "Using Interpolator (" << *ip.j << ", " << *ip.i <<  ")" << "\n";
 
       if (num_components == 1) {
          switch (start_comp) {
@@ -727,6 +857,8 @@ bool FragmentShaderFromNir::load_interpolated_two_comp(GPRVector &dest, ShaderIn
                                                        const Interpolator& ip, EAluOp op, int writemask)
 {
    AluInstruction *ir = nullptr;
+   assert(ip.j);
+   assert(ip.i);
    for (unsigned i = 0; i < 4 ; ++i) {
       ir = new AluInstruction(op, dest[i], i & 1 ? ip.j : ip.i, PValue(new InlineConstValue(ALU_SRC_PARAM_BASE + io.lds_pos(), i)),
                               (writemask & (1 << i)) ? EmitInstruction::write : EmitInstruction::empty);

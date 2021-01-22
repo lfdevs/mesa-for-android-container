@@ -404,7 +404,7 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
 
       if (!radeon_get_drm_value(ws->fd, RADEON_INFO_NUM_BACKENDS,
                                 "num backends",
-                                &ws->info.num_render_backends))
+                                &ws->info.max_render_backends))
          return false;
 
       /* get the GPU counter frequency, failure is not fatal */
@@ -444,7 +444,7 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
          ws->info.r600_gb_backend_map_valid = true;
 
       /* Default value. */
-      ws->info.enabled_rb_mask = u_bit_consecutive(0, ws->info.num_render_backends);
+      ws->info.enabled_rb_mask = u_bit_consecutive(0, ws->info.max_render_backends);
       /*
        * This fails (silently) on non-GCN or older kernels, overwriting the
        * default enabled_rb_mask with the result of the last query.
@@ -533,11 +533,11 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
    ws->info.num_se = ws->info.max_se;
 
    radeon_get_drm_value(ws->fd, RADEON_INFO_MAX_SH_PER_SE, NULL,
-                        &ws->info.max_sh_per_se);
+                        &ws->info.max_sa_per_se);
    if (ws->gen == DRV_SI) {
       ws->info.max_good_cu_per_sa =
       ws->info.min_good_cu_per_sa = ws->info.num_good_compute_units /
-                                    (ws->info.max_se * ws->info.max_sh_per_se);
+                                    (ws->info.max_se * ws->info.max_sa_per_se);
    }
 
    radeon_get_drm_value(ws->fd, RADEON_INFO_ACCEL_WORKING2, NULL,
@@ -607,6 +607,7 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
 
    ws->check_vm = strstr(debug_get_option("R600_DEBUG", ""), "check_vm") != NULL ||
                                                                             strstr(debug_get_option("AMD_DEBUG", ""), "check_vm") != NULL;
+   ws->noop_cs = debug_get_bool_option("RADEON_NOOP", false);
 
    return true;
 }
@@ -644,7 +645,9 @@ static void radeon_winsys_destroy(struct radeon_winsys *rws)
 }
 
 static void radeon_query_info(struct radeon_winsys *rws,
-                              struct radeon_info *info)
+                              struct radeon_info *info,
+                              bool enable_smart_access_memory,
+                              bool disable_smart_access_memory)
 {
    *info = ((struct radeon_drm_winsys *)rws)->info;
 }
@@ -802,7 +805,7 @@ static void radeon_pin_threads_to_L3_cache(struct radeon_winsys *ws,
    if (util_queue_is_initialized(&rws->cs_queue)) {
       util_set_thread_affinity(rws->cs_queue.threads[0],
                                util_cpu_caps.L3_affinity_mask[cache],
-                               NULL, UTIL_MAX_CPUS);
+                               NULL, util_cpu_caps.num_cpu_mask_bits);
    }
 }
 

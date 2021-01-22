@@ -64,6 +64,9 @@ struct panfrost_batch {
         /* Buffers drawn */
         unsigned draws;
 
+        /* Buffers read */
+        unsigned read;
+
         /* Packed clear values, indexed by both render target as well as word.
          * Essentially, a single pixel is packed, with some padding to bring it
          * up to a 32-bit interval; that pixel is then duplicated over to fill

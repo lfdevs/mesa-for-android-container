@@ -47,6 +47,8 @@ struct fd6_blend_variant {
 struct fd6_blend_stateobj {
 	struct pipe_blend_state base;
 
+	bool use_dual_src_blend;
+
 	struct fd_context *ctx;
 	bool reads_dest;
 	struct util_dynarray variants;

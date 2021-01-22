@@ -66,7 +66,7 @@ static void scan_io_usage(struct si_shader_info *info, nir_intrinsic_instr *intr
    unsigned mask, bit_size;
    bool is_output_load;
 
-   if (nir_intrinsic_infos[intr->intrinsic].index_map[NIR_INTRINSIC_WRMASK] > 0) {
+   if (nir_intrinsic_has_write_mask(intr)) {
       mask = nir_intrinsic_write_mask(intr); /* store */
       bit_size = nir_src_bit_size(intr->src[0]);
       is_output_load = false;
@@ -266,6 +266,37 @@ static void scan_instruction(const struct nir_shader *nir, struct si_shader_info
          unsigned index = intr->intrinsic == nir_intrinsic_load_color1;
          uint8_t mask = nir_ssa_def_components_read(&intr->dest.ssa);
          info->colors_read |= mask << (index * 4);
+
+         switch (info->color_interpolate[index]) {
+         case INTERP_MODE_SMOOTH:
+            if (info->color_interpolate_loc[index] == TGSI_INTERPOLATE_LOC_SAMPLE)
+               info->uses_persp_sample = true;
+            else if (info->color_interpolate_loc[index] == TGSI_INTERPOLATE_LOC_CENTROID)
+               info->uses_persp_centroid = true;
+            else if (info->color_interpolate_loc[index] == TGSI_INTERPOLATE_LOC_CENTER)
+               info->uses_persp_center = true;
+            break;
+         case INTERP_MODE_NOPERSPECTIVE:
+            if (info->color_interpolate_loc[index] == TGSI_INTERPOLATE_LOC_SAMPLE)
+               info->uses_linear_sample = true;
+            else if (info->color_interpolate_loc[index] == TGSI_INTERPOLATE_LOC_CENTROID)
+               info->uses_linear_centroid = true;
+            else if (info->color_interpolate_loc[index] == TGSI_INTERPOLATE_LOC_CENTER)
+               info->uses_linear_center = true;
+            break;
+         case INTERP_MODE_COLOR:
+            /* We don't know the final value. This will be FLAT if flatshading is enabled
+             * in the rasterizer state, otherwise it will be SMOOTH.
+             */
+            info->uses_interp_color = true;
+            if (info->color_interpolate_loc[index] == TGSI_INTERPOLATE_LOC_SAMPLE)
+               info->uses_persp_sample_color = true;
+            else if (info->color_interpolate_loc[index] == TGSI_INTERPOLATE_LOC_CENTROID)
+               info->uses_persp_centroid_color = true;
+            else if (info->color_interpolate_loc[index] == TGSI_INTERPOLATE_LOC_CENTER)
+               info->uses_persp_center_color = true;
+            break;
+         }
          break;
       }
       case nir_intrinsic_load_barycentric_at_offset:   /* uses center */
@@ -345,6 +376,8 @@ void si_nir_scan_shader(const struct nir_shader *nir, struct si_shader_info *inf
 
    info->uses_frontface = nir->info.system_values_read & BITFIELD64_BIT(SYSTEM_VALUE_FRONT_FACE);
    info->uses_instanceid = nir->info.system_values_read & BITFIELD64_BIT(SYSTEM_VALUE_INSTANCE_ID);
+   info->uses_base_vertex = nir->info.system_values_read & BITFIELD64_BIT(SYSTEM_VALUE_BASE_VERTEX);
+   info->uses_base_instance = nir->info.system_values_read & BITFIELD64_BIT(SYSTEM_VALUE_BASE_INSTANCE);
    info->uses_invocationid = nir->info.system_values_read & BITFIELD64_BIT(SYSTEM_VALUE_INVOCATION_ID);
    info->uses_grid_size = nir->info.system_values_read & BITFIELD64_BIT(SYSTEM_VALUE_NUM_WORK_GROUPS);
    info->uses_subgroup_info = nir->info.system_values_read & BITFIELD64_BIT(SYSTEM_VALUE_LOCAL_INVOCATION_INDEX) ||
@@ -392,6 +425,22 @@ void si_nir_scan_shader(const struct nir_shader *nir, struct si_shader_info *inf
    nir_foreach_block (block, func->impl) {
       nir_foreach_instr (instr, block)
          scan_instruction(nir, info, instr);
+   }
+
+   if (nir->info.stage == MESA_SHADER_FRAGMENT) {
+      info->allow_flat_shading = !(info->uses_persp_center || info->uses_persp_centroid ||
+                                   info->uses_persp_sample || info->uses_linear_center ||
+                                   info->uses_linear_centroid || info->uses_linear_sample ||
+                                   info->uses_interp_at_sample || nir->info.writes_memory ||
+                                   nir->info.fs.uses_fbfetch_output ||
+                                   nir->info.fs.needs_quad_helper_invocations ||
+                                   (nir->info.system_values_read &
+                                    (BITFIELD64_BIT(SYSTEM_VALUE_FRAG_COORD) |
+                                     BITFIELD64_BIT(SYSTEM_VALUE_POINT_COORD) |
+                                     BITFIELD64_BIT(SYSTEM_VALUE_SAMPLE_ID) |
+                                     BITFIELD64_BIT(SYSTEM_VALUE_SAMPLE_POS) |
+                                     BITFIELD64_BIT(SYSTEM_VALUE_SAMPLE_MASK_IN) |
+                                     BITFIELD64_BIT(SYSTEM_VALUE_HELPER_INVOCATION))));
    }
 
    /* Add color inputs to the list of inputs. */
@@ -674,6 +723,24 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
    NIR_PASS_V(nir, nir_lower_system_values);
    NIR_PASS_V(nir, nir_lower_compute_system_values, NULL);
 
+   if (nir->info.stage == MESA_SHADER_COMPUTE) {
+      if (nir->info.cs.derivative_group == DERIVATIVE_GROUP_QUADS) {
+         /* If we are shuffling local_invocation_id for quad derivatives, we
+          * need to derive local_invocation_index from local_invocation_id
+          * first, so that the value corresponds to the shuffled
+          * local_invocation_id.
+          */
+         nir_lower_compute_system_values_options options = {0};
+         options.lower_local_invocation_index = true;
+         NIR_PASS_V(nir, nir_lower_compute_system_values, &options);
+      }
+
+      nir_opt_cse(nir); /* CSE load_local_invocation_id */
+      nir_lower_compute_system_values_options options = {0};
+      options.shuffle_local_ids_for_quad_derivatives = true;
+      NIR_PASS_V(nir, nir_lower_compute_system_values, &options);
+   }
+
    if (nir->info.stage == MESA_SHADER_FRAGMENT &&
        sscreen->info.has_packed_math_16bit &&
        sscreen->b.get_shader_param(&sscreen->b, PIPE_SHADER_FRAGMENT, PIPE_SHADER_CAP_FP16))
@@ -711,8 +778,8 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
 
    NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
 
-   if (sscreen->debug_flags & DBG(FS_CORRECT_DERIVS_AFTER_KILL))
-      NIR_PASS_V(nir, nir_lower_discard_to_demote);
+   NIR_PASS_V(nir, nir_lower_discard_or_demote,
+              sscreen->debug_flags & DBG(FS_CORRECT_DERIVS_AFTER_KILL));
 }
 
 void si_finalize_nir(struct pipe_screen *screen, void *nirptr, bool optimize)

@@ -4477,7 +4477,10 @@ CodeEmitterGM107::prepareEmission(Program *prog)
 CodeEmitterGM107::CodeEmitterGM107(const TargetGM107 *target)
    : CodeEmitter(target),
      targGM107(target),
-     writeIssueDelays(target->hasSWSched)
+     progType(Program::TYPE_VERTEX),
+     insn(NULL),
+     writeIssueDelays(target->hasSWSched),
+     data(NULL)
 {
    code = NULL;
    codeSize = codeSizeLimit = 0;

@@ -51,6 +51,115 @@ nv50_m2mf_rect_setup(struct nv50_m2mf_rect *rect,
    }
 }
 
+/* This is very similar to nv50_2d_texture_do_copy, but doesn't require
+ * miptree objects. Maybe refactor? Although it's not straightforward.
+ */
+static void
+nv50_2d_transfer_rect(struct nv50_context *nv50,
+                      const struct nv50_m2mf_rect *dst,
+                      const struct nv50_m2mf_rect *src,
+                      uint32_t nblocksx, uint32_t nblocksy)
+{
+   struct nouveau_pushbuf *push = nv50->base.pushbuf;
+   struct nouveau_bufctx *bctx = nv50->bufctx;
+   const int cpp = dst->cpp;
+
+   nouveau_bufctx_refn(bctx, 0, src->bo, src->domain | NOUVEAU_BO_RD);
+   nouveau_bufctx_refn(bctx, 0, dst->bo, dst->domain | NOUVEAU_BO_WR);
+   nouveau_pushbuf_bufctx(push, bctx);
+   nouveau_pushbuf_validate(push);
+
+   uint32_t format;
+   switch (cpp) {
+   case 1:
+      format = G80_SURFACE_FORMAT_R8_UNORM;
+      break;
+   case 2:
+      format = G80_SURFACE_FORMAT_R16_UNORM;
+      break;
+   case 4:
+      format = G80_SURFACE_FORMAT_BGRA8_UNORM;
+      break;
+   case 8:
+      format = G80_SURFACE_FORMAT_RGBA16_FLOAT;
+      break;
+   case 16:
+      format = G80_SURFACE_FORMAT_RGBA32_FLOAT;
+      break;
+   default:
+      assert(!"Unexpected cpp");
+      format = G80_SURFACE_FORMAT_R8_UNORM;
+   }
+
+   if (nouveau_bo_memtype(src->bo)) {
+      BEGIN_NV04(push, NV50_2D(SRC_FORMAT), 5);
+      PUSH_DATA (push, format);
+      PUSH_DATA (push, 0);
+      PUSH_DATA (push, src->tile_mode);
+      PUSH_DATA (push, src->depth);
+      PUSH_DATA (push, src->z);
+      BEGIN_NV04(push, NV50_2D(SRC_WIDTH), 4);
+      PUSH_DATA (push, src->width);
+      PUSH_DATA (push, src->height);
+      PUSH_DATAh(push, src->bo->offset + src->base);
+      PUSH_DATA (push, src->bo->offset + src->base);
+   } else {
+      BEGIN_NV04(push, NV50_2D(SRC_FORMAT), 2);
+      PUSH_DATA (push, format);
+      PUSH_DATA (push, 1);
+      BEGIN_NV04(push, NV50_2D(SRC_PITCH), 5);
+      PUSH_DATA (push, src->pitch);
+      PUSH_DATA (push, src->width);
+      PUSH_DATA (push, src->height);
+      PUSH_DATAh(push, src->bo->offset + src->base);
+      PUSH_DATA (push, src->bo->offset + src->base);
+   }
+
+   if (nouveau_bo_memtype(dst->bo)) {
+      BEGIN_NV04(push, NV50_2D(DST_FORMAT), 5);
+      PUSH_DATA (push, format);
+      PUSH_DATA (push, 0);
+      PUSH_DATA (push, dst->tile_mode);
+      PUSH_DATA (push, dst->depth);
+      PUSH_DATA (push, dst->z);
+      BEGIN_NV04(push, NV50_2D(DST_WIDTH), 4);
+      PUSH_DATA (push, dst->width);
+      PUSH_DATA (push, dst->height);
+      PUSH_DATAh(push, dst->bo->offset + dst->base);
+      PUSH_DATA (push, dst->bo->offset + dst->base);
+   } else {
+      BEGIN_NV04(push, NV50_2D(DST_FORMAT), 2);
+      PUSH_DATA (push, format);
+      PUSH_DATA (push, 1);
+      BEGIN_NV04(push, NV50_2D(DST_PITCH), 5);
+      PUSH_DATA (push, dst->pitch);
+      PUSH_DATA (push, dst->width);
+      PUSH_DATA (push, dst->height);
+      PUSH_DATAh(push, dst->bo->offset + dst->base);
+      PUSH_DATA (push, dst->bo->offset + dst->base);
+   }
+
+   BEGIN_NV04(push, NV50_2D(BLIT_CONTROL), 1);
+   PUSH_DATA (push, NV50_2D_BLIT_CONTROL_FILTER_POINT_SAMPLE);
+   BEGIN_NV04(push, NV50_2D(BLIT_DST_X), 4);
+   PUSH_DATA (push, dst->x);
+   PUSH_DATA (push, dst->y);
+   PUSH_DATA (push, nblocksx);
+   PUSH_DATA (push, nblocksy);
+   BEGIN_NV04(push, NV50_2D(BLIT_DU_DX_FRACT), 4);
+   PUSH_DATA (push, 0);
+   PUSH_DATA (push, 1);
+   PUSH_DATA (push, 0);
+   PUSH_DATA (push, 1);
+   BEGIN_NV04(push, NV50_2D(BLIT_SRC_X_FRACT), 4);
+   PUSH_DATA (push, 0);
+   PUSH_DATA (push, src->x);
+   PUSH_DATA (push, 0);
+   PUSH_DATA (push, src->y);
+
+   nouveau_bufctx_reset(bctx, 0);
+}
+
 void
 nv50_m2mf_transfer_rect(struct nv50_context *nv50,
                         const struct nv50_m2mf_rect *dst,
@@ -67,6 +176,23 @@ nv50_m2mf_transfer_rect(struct nv50_context *nv50,
    uint32_t dy = dst->y;
 
    assert(dst->cpp == src->cpp);
+
+   /* Workaround: M2MF appears to break at the 64k boundary for tiled
+    * textures, which can really only happen with RGBA32 formats.
+    */
+   bool eng2d = false;
+   if (nouveau_bo_memtype(src->bo)) {
+      if (src->width * cpp > 65536)
+         eng2d = true;
+   }
+   if (nouveau_bo_memtype(dst->bo)) {
+      if (dst->width * cpp > 65536)
+         eng2d = true;
+   }
+   if (eng2d) {
+      nv50_2d_transfer_rect(nv50, dst, src, nblocksx, nblocksy);
+      return;
+   }
 
    nouveau_bufctx_refn(bctx, 0, src->bo, src->domain | NOUVEAU_BO_RD);
    nouveau_bufctx_refn(bctx, 0, dst->bo, dst->domain | NOUVEAU_BO_WR);

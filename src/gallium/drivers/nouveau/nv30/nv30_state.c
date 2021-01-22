@@ -220,15 +220,15 @@ nv30_zsa_state_create(struct pipe_context *pipe,
    so->pipe = *cso;
 
    SB_MTHD30(so, DEPTH_FUNC, 3);
-   SB_DATA  (so, nvgl_comparison_op(cso->depth.func));
-   SB_DATA  (so, cso->depth.writemask);
-   SB_DATA  (so, cso->depth.enabled);
+   SB_DATA  (so, nvgl_comparison_op(cso->depth_func));
+   SB_DATA  (so, cso->depth_writemask);
+   SB_DATA  (so, cso->depth_enabled);
 
    if (eng3d->oclass == NV35_3D_CLASS || eng3d->oclass >= NV40_3D_CLASS) {
       SB_MTHD35(so, DEPTH_BOUNDS_TEST_ENABLE, 3);
-      SB_DATA  (so, cso->depth.bounds_test);
-      SB_DATA  (so, fui(cso->depth.bounds_min));
-      SB_DATA  (so, fui(cso->depth.bounds_max));
+      SB_DATA  (so, cso->depth_bounds_test);
+      SB_DATA  (so, fui(cso->depth_bounds_min));
+      SB_DATA  (so, fui(cso->depth_bounds_max));
    }
 
    if (cso->stencil[0].enabled) {
@@ -263,9 +263,9 @@ nv30_zsa_state_create(struct pipe_context *pipe,
    }
 
    SB_MTHD30(so, ALPHA_FUNC_ENABLE, 3);
-   SB_DATA  (so, cso->alpha.enabled ? 1 : 0);
-   SB_DATA  (so, nvgl_comparison_op(cso->alpha.func));
-   SB_DATA  (so, float_to_ubyte(cso->alpha.ref_value));
+   SB_DATA  (so, cso->alpha_enabled ? 1 : 0);
+   SB_DATA  (so, nvgl_comparison_op(cso->alpha_func));
+   SB_DATA  (so, float_to_ubyte(cso->alpha_ref_value));
 
    return so;
 }
@@ -297,11 +297,11 @@ nv30_set_blend_color(struct pipe_context *pipe,
 
 static void
 nv30_set_stencil_ref(struct pipe_context *pipe,
-                     const struct pipe_stencil_ref *sr)
+                     const struct pipe_stencil_ref sr)
 {
     struct nv30_context *nv30 = nv30_context(pipe);
 
-    nv30->stencil_ref = *sr;
+    nv30->stencil_ref = sr;
     nv30->dirty |= NV30_NEW_STENCIL_REF;
 }
 

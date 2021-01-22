@@ -123,6 +123,7 @@ try_lower_input_load(nir_function_impl *impl, nir_intrinsic_instr *load,
    }
    tex->is_array = true;
    tex->is_shadow = false;
+   tex->is_sparse = load->intrinsic == nir_intrinsic_image_deref_sparse_load;
 
    tex->texture_index = 0;
    tex->sampler_index = 0;
@@ -145,11 +146,19 @@ try_lower_input_load(nir_function_impl *impl, nir_intrinsic_instr *load,
 
    tex->texture_non_uniform = nir_intrinsic_access(load) & ACCESS_NON_UNIFORM;
 
-   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, NULL);
+   nir_ssa_dest_init(&tex->instr, &tex->dest, nir_tex_instr_dest_size(tex), 32, NULL);
    nir_builder_instr_insert(&b, &tex->instr);
 
-   nir_ssa_def_rewrite_uses(&load->dest.ssa,
-                            nir_src_for_ssa(&tex->dest.ssa));
+   if (tex->is_sparse) {
+      unsigned load_result_size = load->dest.ssa.num_components - 1;
+      nir_ssa_def *res = nir_channels(
+         &b, &tex->dest.ssa, BITFIELD_MASK(load_result_size) | 0x10);
+
+      nir_ssa_def_rewrite_uses(&load->dest.ssa, nir_src_for_ssa(res));
+   } else {
+      nir_ssa_def_rewrite_uses(&load->dest.ssa,
+                               nir_src_for_ssa(&tex->dest.ssa));
+   }
 
    return true;
 }
@@ -208,7 +217,8 @@ nir_lower_input_attachments(nir_shader *shader,
             case nir_instr_type_intrinsic: {
                nir_intrinsic_instr *load = nir_instr_as_intrinsic(instr);
 
-               if (load->intrinsic == nir_intrinsic_image_deref_load) {
+               if (load->intrinsic == nir_intrinsic_image_deref_load ||
+                   load->intrinsic == nir_intrinsic_image_deref_sparse_load) {
                   progress |= try_lower_input_load(function->impl, load,
                                                    options);
                }

@@ -148,6 +148,7 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
 
    case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
    case PIPE_CAP_TGSI_TEXCOORD:
+   case PIPE_CAP_TEXTURE_BUFFER_SAMPLER:
       return 0;
 
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
@@ -415,7 +416,6 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
 
    case PIPE_CAP_OPENCL_INTEGER_FUNCTIONS:
    case PIPE_CAP_INTEGER_MULTIPLY_32X16:
-   case PIPE_CAP_DRAW_INFO_START_WITH_USER_INDICES:
       return 0;
    case PIPE_CAP_NIR_IMAGES_AS_DEREF:
       return 1;
@@ -439,6 +439,7 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_ALPHA_TO_COVERAGE_DITHER_CONTROL:
    case PIPE_CAP_NO_CLIP_ON_COPY_TEX:
    case PIPE_CAP_MAX_TEXTURE_MB:
+   case PIPE_CAP_PREFER_REAL_BUFFER_IN_CONSTBUF0:
       return 0;
 
    case PIPE_CAP_SHADER_ATOMIC_INT64:

@@ -68,7 +68,8 @@ fd6_last_shader(const struct fd6_program_state *state)
 		return state->vs;
 }
 
-void fd6_emit_shader(struct fd_ringbuffer *ring, const struct ir3_shader_variant *so);
+void fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
+					 const struct ir3_shader_variant *so);
 
 struct fd_ringbuffer * fd6_program_interp_state(struct fd6_emit *emit);
 

@@ -444,17 +444,14 @@ brw_instruction_name(const struct gen_device_info *devinfo, enum opcode op)
    case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_LOGICAL:
       return "varying_pull_const_logical";
 
-   case FS_OPCODE_DISCARD_JUMP:
-      return "discard_jump";
-
    case FS_OPCODE_SET_SAMPLE_ID:
       return "set_sample_id";
 
    case FS_OPCODE_PACK_HALF_2x16_SPLIT:
       return "pack_half_2x16_split";
 
-   case FS_OPCODE_PLACEHOLDER_HALT:
-      return "placeholder_halt";
+   case SHADER_OPCODE_HALT_TARGET:
+      return "halt_target";
 
    case FS_OPCODE_INTERPOLATE_AT_SAMPLE:
       return "interp_sample";
@@ -543,10 +540,19 @@ brw_instruction_name(const struct gen_device_info *devinfo, enum opcode op)
    case TES_OPCODE_GET_PRIMITIVE_ID:
       return "tes_get_primitive_id";
 
+   case RT_OPCODE_TRACE_RAY_LOGICAL:
+      return "rt_trace_ray_logical";
+
    case SHADER_OPCODE_RND_MODE:
       return "rnd_mode";
    case SHADER_OPCODE_FLOAT_CONTROL_MODE:
       return "float_control_mode";
+   case SHADER_OPCODE_GET_DSS_ID:
+      return "get_dss_id";
+   case SHADER_OPCODE_BTD_SPAWN_LOGICAL:
+      return "btd_spawn_logical";
+   case SHADER_OPCODE_BTD_RETIRE_LOGICAL:
+      return "btd_retire_logical";
    }
 
    unreachable("not reached");
@@ -1104,6 +1110,9 @@ backend_instruction::has_side_effects() const
    case FS_OPCODE_SCHEDULING_FENCE:
    case SHADER_OPCODE_OWORD_BLOCK_WRITE_LOGICAL:
    case SHADER_OPCODE_A64_OWORD_BLOCK_WRITE_LOGICAL:
+   case SHADER_OPCODE_BTD_SPAWN_LOGICAL:
+   case SHADER_OPCODE_BTD_RETIRE_LOGICAL:
+   case RT_OPCODE_TRACE_RAY_LOGICAL:
       return true;
    default:
       return eot;
@@ -1284,6 +1293,8 @@ brw_compile_tes(const struct brw_compiler *compiler,
    const struct gen_device_info *devinfo = compiler->devinfo;
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_TESS_EVAL];
    const unsigned *assembly;
+
+   prog_data->base.base.stage = MESA_SHADER_TESS_EVAL;
 
    nir->info.inputs_read = key->inputs_read;
    nir->info.patch_inputs_read = key->patch_inputs_read;

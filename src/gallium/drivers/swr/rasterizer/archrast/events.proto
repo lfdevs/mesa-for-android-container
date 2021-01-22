@@ -37,14 +37,14 @@ event Framework::ThreadStartWorkerEvent
 {
 };
 
-///@brief Used as a helper event to indicate end of frame. Does not gaurantee to capture end of frame on all APIs
+///@brief Used as a helper event to indicate end of frame. Does not guarantee to capture end of frame on all APIs
 event ApiSwr::FrameEndEvent
 {
     uint32_t frameId;       // current frame id
     uint32_t nextDrawId;    // next draw id (always incremental - does not reset)
 };
 
-///@brief Synchonization event.
+///@brief Synchronization event.
 event ApiSwr::SwrSyncEvent
 {
     uint32_t drawId;

@@ -111,9 +111,6 @@ bool cso_hash_contains(struct cso_hash *hash, unsigned key);
 unsigned cso_hash_iter_key(struct cso_hash_iter iter);
 
 
-struct cso_hash_iter cso_hash_iter_prev(struct cso_hash_iter iter);
-
-
 /**
  * Convenience routine to iterate over the collision list while doing a memory
  * comparison to see which entry in the list is a direct copy of our template

@@ -173,8 +173,8 @@ static void print_reg_name(struct ir3_register *reg)
 	if (reg->flags & IR3_REG_R)
 		printf("(r)");
 
-	if (reg->flags & IR3_REG_HIGH)
-		printf("H");
+	if (reg->flags & IR3_REG_SHARED)
+		printf("s");
 	if (reg->flags & IR3_REG_HALF)
 		printf("h");
 
@@ -290,7 +290,34 @@ print_instr(struct ir3_instruction *instr, int lvl)
 	if (is_flow(instr) && instr->cat0.target) {
 		/* the predicate register src is implied: */
 		if (instr->opc == OPC_B) {
-			printf("r %sp0.x", instr->cat0.inv ? "!" : "");
+			static const struct {
+				const char *suffix;
+				int nsrc;
+				bool idx;
+			} brinfo[7] = {
+				[BRANCH_PLAIN] = { "r",   1, false },
+				[BRANCH_OR]    = { "rao", 2, false },
+				[BRANCH_AND]   = { "raa", 2, false },
+				[BRANCH_CONST] = { "rac", 0, true  },
+				[BRANCH_ANY]   = { "any", 1, false },
+				[BRANCH_ALL]   = { "all", 1, false },
+				[BRANCH_X]     = { "rax", 0, false },
+			};
+
+			printf("%s", brinfo[instr->cat0.brtype].suffix);
+			if (brinfo[instr->cat0.brtype].idx) {
+				printf(".%u", instr->cat0.idx);
+			}
+			if (brinfo[instr->cat0.brtype].nsrc >= 1) {
+				printf(" %sp0.%c,", instr->cat0.inv1 ? "!" : "",
+						"xyzw"[instr->cat0.comp1 & 0x3]);
+			}
+			if (brinfo[instr->cat0.brtype].nsrc >= 2) {
+				printf(" %sp0.%c,", instr->cat0.inv2 ? "!" : "",
+						"xyzw"[instr->cat0.comp2 & 0x3]);
+			}
+
+			printf("r %sp0.%c", instr->cat0.inv1 ? "!" : "", "xyzw"[instr->cat0.comp1 & 0x3]);
 		}
 		printf(", target=block%u", block_id(instr->cat0.target));
 	}

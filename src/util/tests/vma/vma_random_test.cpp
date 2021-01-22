@@ -78,6 +78,11 @@ struct random_test {
       util_vma_heap_init(&heap, MEM_START_PAGE * MEM_PAGE_SIZE, MEM_SIZE);
    }
 
+   ~random_test()
+   {
+      util_vma_heap_finish(&heap);
+   }
+
    void test(unsigned long count)
    {
       std::uniform_int_distribution<> one_to_thousand(1, 1000);

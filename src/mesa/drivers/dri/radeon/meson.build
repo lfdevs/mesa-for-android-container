@@ -80,5 +80,5 @@ libr100 = static_library(
   ],
   c_args : ['-DRADEON_R100'],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [dep_libdrm, dep_libdrm_radeon],
+  dependencies : [dep_libdrm, dep_libdrm_radeon, idep_mesautil],
 )

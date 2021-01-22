@@ -3321,12 +3321,12 @@ sp_get_dims(const struct sp_sampler_view *sp_sview,
    switch (view->target) {
    case PIPE_TEXTURE_1D_ARRAY:
       dims[1] = view->u.tex.last_layer - view->u.tex.first_layer + 1;
-      /* fallthrough */
+      FALLTHROUGH;
    case PIPE_TEXTURE_1D:
       return;
    case PIPE_TEXTURE_2D_ARRAY:
       dims[2] = view->u.tex.last_layer - view->u.tex.first_layer + 1;
-      /* fallthrough */
+      FALLTHROUGH;
    case PIPE_TEXTURE_2D:
    case PIPE_TEXTURE_CUBE:
    case PIPE_TEXTURE_RECT:

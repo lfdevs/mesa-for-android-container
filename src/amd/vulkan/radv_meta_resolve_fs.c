@@ -35,10 +35,7 @@ static nir_shader *
 build_nir_vertex_shader(void)
 {
 	const struct glsl_type *vec4 = glsl_vec4_type();
-	nir_builder b;
-
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_VERTEX, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, "meta_resolve_vs");
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_VERTEX, NULL, "meta_resolve_vs");
 
 	nir_variable *pos_out = nir_variable_create(b.shader, nir_var_shader_out,
 						    vec4, "gl_Position");
@@ -53,17 +50,13 @@ build_nir_vertex_shader(void)
 static nir_shader *
 build_resolve_fragment_shader(struct radv_device *dev, bool is_integer, int samples)
 {
-	nir_builder b;
-	char name[64];
 	const struct glsl_type *vec4 = glsl_vec4_type();
 	const struct glsl_type *sampler_type = glsl_sampler_type(GLSL_SAMPLER_DIM_MS,
 								 false,
 								 false,
 								 GLSL_TYPE_FLOAT);
 
-	snprintf(name, 64, "meta_resolve_fs-%d-%s", samples, is_integer ? "int" : "float");
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, name);
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, NULL, "meta_resolve_fs-%d-%s", samples, is_integer ? "int" : "float");
 
 	nir_variable *input_img = nir_variable_create(b.shader, nir_var_uniform,
 						      sampler_type, "s_tex");
@@ -75,17 +68,11 @@ build_resolve_fragment_shader(struct radv_device *dev, bool is_integer, int samp
 	color_out->data.location = FRAG_RESULT_DATA0;
 
 	nir_ssa_def *pos_in = nir_channels(&b, nir_load_frag_coord(&b), 0x3);
-	nir_intrinsic_instr *src_offset = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(src_offset, 0);
-	nir_intrinsic_set_range(src_offset, 8);
-	src_offset->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
-	src_offset->num_components = 2;
-	nir_ssa_dest_init(&src_offset->instr, &src_offset->dest, 2, 32, "src_offset");
-	nir_builder_instr_insert(&b, &src_offset->instr);
+	nir_ssa_def *src_offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), 0, 8);
 
 	nir_ssa_def *pos_int = nir_f2i32(&b, pos_in);
 
-	nir_ssa_def *img_coord = nir_channels(&b, nir_iadd(&b, pos_int, &src_offset->dest.ssa), 0x3);
+	nir_ssa_def *img_coord = nir_channels(&b, nir_iadd(&b, pos_int, src_offset), 0x3);
 	nir_variable *color = nir_local_variable_create(b.impl, glsl_vec4_type(), "color");
 
 	radv_meta_build_resolve_shader_core(&b, is_integer, samples, input_img,
@@ -159,7 +146,7 @@ create_resolve_pipeline(struct radv_device *device,
 {
 	mtx_lock(&device->meta_state.mtx);
 
-	unsigned fs_key = radv_format_meta_fs_key(format);
+	unsigned fs_key = radv_format_meta_fs_key(device, format);
 	VkPipeline *pipeline = &device->meta_state.resolve_fragment.rc[samples_log2].pipeline[fs_key];
 	if (*pipeline) {
 		mtx_unlock(&device->meta_state.mtx);
@@ -359,20 +346,16 @@ build_depth_stencil_resolve_fragment_shader(struct radv_device *dev, int samples
 					    int index,
 					    VkResolveModeFlagBits resolve_mode)
 {
-	nir_builder b;
-	char name[64];
 	const struct glsl_type *vec4 = glsl_vec4_type();
 	const struct glsl_type *sampler_type = glsl_sampler_type(GLSL_SAMPLER_DIM_2D,
 								 false,
 								 false,
 								 GLSL_TYPE_FLOAT);
 
-	snprintf(name, 64, "meta_resolve_fs_%s-%s-%d",
-		 index == DEPTH_RESOLVE ? "depth" : "stencil",
-		 get_resolve_mode_str(resolve_mode), samples);
-
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, name);
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, NULL,
+						       "meta_resolve_fs_%s-%s-%d",
+						       index == DEPTH_RESOLVE ? "depth" : "stencil",
+						       get_resolve_mode_str(resolve_mode), samples);
 
 	nir_variable *input_img = nir_variable_create(b.shader, nir_var_uniform,
 						      sampler_type, "s_tex");
@@ -387,17 +370,9 @@ build_depth_stencil_resolve_fragment_shader(struct radv_device *dev, int samples
 
 	nir_ssa_def *pos_in = nir_channels(&b, nir_load_frag_coord(&b), 0x3);
 
-	nir_intrinsic_instr *src_offset = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(src_offset, 0);
-	nir_intrinsic_set_range(src_offset, 8);
-	src_offset->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
-	src_offset->num_components = 2;
-	nir_ssa_dest_init(&src_offset->instr, &src_offset->dest, 2, 32, "src_offset");
-	nir_builder_instr_insert(&b, &src_offset->instr);
-
 	nir_ssa_def *pos_int = nir_f2i32(&b, pos_in);
 
-	nir_ssa_def *img_coord = nir_channels(&b, nir_iadd(&b, pos_int, &src_offset->dest.ssa), 0x3);
+	nir_ssa_def *img_coord = nir_channels(&b, pos_int, 0x3);
 
 	nir_ssa_def *input_img_deref = &nir_build_deref_var(&b, input_img)->dest.ssa;
 
@@ -829,7 +804,7 @@ radv_get_resolve_pipeline(struct radv_cmd_buffer *cmd_buffer,
 			  struct radv_image_view *dst_iview)
 {
 	struct radv_device *device = cmd_buffer->device;
-	unsigned fs_key = radv_format_meta_fs_key(dst_iview->vk_format);
+	unsigned fs_key = radv_format_meta_fs_key(cmd_buffer->device, dst_iview->vk_format);
 	const uint32_t samples = src_iview->image->info.samples;
 	const uint32_t samples_log2 = ffs(samples) - 1;
 	VkPipeline *pipeline;
@@ -883,7 +858,9 @@ emit_resolve(struct radv_cmd_buffer *cmd_buffer,
 					      },
 				      });
 
-	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB;
+	cmd_buffer->state.flush_bits |=
+		radv_dst_access_flush(cmd_buffer, VK_ACCESS_SHADER_READ_BIT, src_iview->image) |
+		radv_dst_access_flush(cmd_buffer, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, dest_iview->image);
 
 	unsigned push_constants[2] = {
 		src_offset->x - dest_offset->x,
@@ -914,15 +891,14 @@ emit_resolve(struct radv_cmd_buffer *cmd_buffer,
 	});
 
 	radv_CmdDraw(cmd_buffer_h, 3, 1, 0, 0);
-	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB;
+	cmd_buffer->state.flush_bits |=
+		radv_src_access_flush(cmd_buffer, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, dest_iview->image);
 }
 
 static void
 emit_depth_stencil_resolve(struct radv_cmd_buffer *cmd_buffer,
 			   struct radv_image_view *src_iview,
 			   struct radv_image_view *dst_iview,
-			   const VkOffset2D *src_offset,
-			   const VkOffset2D *dst_offset,
 			   const VkExtent2D *resolve_extent,
 			   VkImageAspectFlags aspects,
 			   VkResolveModeFlagBits resolve_mode)
@@ -953,15 +929,6 @@ emit_depth_stencil_resolve(struct radv_cmd_buffer *cmd_buffer,
 						      }
 					      },
 				      });
-
-	unsigned push_constants[2] = {
-		src_offset->x - dst_offset->x,
-		src_offset->y - dst_offset->y,
-	};
-	radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer),
-			      device->meta_state.resolve_fragment.p_layout,
-			      VK_SHADER_STAGE_FRAGMENT_BIT, 0, 8,
-			      push_constants);
 
 	switch (resolve_mode) {
 	case VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR:
@@ -1006,8 +973,8 @@ emit_depth_stencil_resolve(struct radv_cmd_buffer *cmd_buffer,
 			     VK_PIPELINE_BIND_POINT_GRAPHICS, *pipeline);
 
 	radv_CmdSetViewport(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &(VkViewport) {
-		.x = dst_offset->x,
-		.y = dst_offset->y,
+		.x = 0,
+		.y = 0,
 		.width = resolve_extent->width,
 		.height = resolve_extent->height,
 		.minDepth = 0.0f,
@@ -1015,7 +982,7 @@ emit_depth_stencil_resolve(struct radv_cmd_buffer *cmd_buffer,
 	});
 
 	radv_CmdSetScissor(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &(VkRect2D) {
-		.offset = *dst_offset,
+		.offset = (VkOffset2D) { 0, 0 },
 		.extent = *resolve_extent,
 	});
 
@@ -1033,7 +1000,7 @@ void radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer,
 	struct radv_meta_saved_state saved_state;
 	const uint32_t samples = src_image->info.samples;
 	const uint32_t samples_log2 = ffs(samples) - 1;
-	unsigned fs_key = radv_format_meta_fs_key(dest_image->vk_format);
+	unsigned fs_key = radv_format_meta_fs_key(cmd_buffer->device, dest_image->vk_format);
 	unsigned dst_layout = radv_meta_dst_layout_from_layout(dest_image_layout);
 	VkRenderPass rp;
 
@@ -1134,7 +1101,7 @@ void radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer,
 								},
 							.clearValueCount = 0,
 							.pClearValues = NULL,
-					});
+					}, NULL);
 
 		radv_cmd_buffer_set_subpass(cmd_buffer,
 					    &cmd_buffer->state.pass->subpasses[0]);
@@ -1235,7 +1202,6 @@ radv_depth_stencil_resolve_subpass_fs(struct radv_cmd_buffer *cmd_buffer,
 
 	radv_meta_save(&saved_state, cmd_buffer,
 		       RADV_META_SAVE_GRAPHICS_PIPELINE |
-		       RADV_META_SAVE_CONSTANTS |
 		       RADV_META_SAVE_DESCRIPTORS);
 
 	struct radv_subpass_attachment src_att = *subpass->depth_stencil_attachment;
@@ -1272,8 +1238,6 @@ radv_depth_stencil_resolve_subpass_fs(struct radv_cmd_buffer *cmd_buffer,
 			      }, NULL);
 
 	emit_depth_stencil_resolve(cmd_buffer, &tsrc_iview, dst_iview,
-				   &(VkOffset2D) { 0, 0 },
-				   &(VkOffset2D) { 0, 0 },
 				   &(VkExtent2D) { fb->width, fb->height },
 				   aspects,
 				   resolve_mode);

@@ -32,13 +32,18 @@
 #include <assert.h>
 #include "hash_table.h"
 
+static void entry_free(struct hash_entry *entry)
+{
+   free((void *)entry->key);
+}
+
 int
 main(int argc, char **argv)
 {
    struct hash_table *ht;
-   const char *str1 = "test1";
-   const char *str2 = "test2";
-   const char *str3 = "test3";
+   const char *str1 = strdup("test1");
+   const char *str2 = strdup("test2");
+   const char *str3 = strdup("test3");
    struct hash_entry *entry1, *entry2;
    uint32_t bad_hash = 5;
    int i;
@@ -91,7 +96,7 @@ main(int argc, char **argv)
    entry2 = _mesa_hash_table_search_pre_hashed(ht, bad_hash, str2);
    assert(entry2->key == str2);
 
-   _mesa_hash_table_destroy(ht, NULL);
+   _mesa_hash_table_destroy(ht, entry_free);
 
    return 0;
 }

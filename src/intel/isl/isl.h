@@ -85,6 +85,10 @@ struct brw_image_param;
 #define ISL_DEV_IS_BAYTRAIL(__dev) ((__dev)->info->is_baytrail)
 #endif
 
+#ifndef ISL_DEV_IS_GEN12HP
+#define ISL_DEV_IS_GEN12HP(__dev) (gen_device_info_is_12hp((__dev)->info))
+#endif
+
 #ifndef ISL_DEV_USE_SEPARATE_STENCIL
 /**
  * You can define this as a compile-time constant in the CFLAGS. For example,
@@ -1133,6 +1137,9 @@ struct isl_format_layout {
       struct isl_channel_layout channels_array[7];
    };
 
+   /** Set if all channels have the same isl_base_type. Otherwise, ISL_BASE_VOID. */
+   enum isl_base_type uniform_channel_type;
+
    enum isl_colorspace colorspace;
    enum isl_txc txc;
 };
@@ -1845,6 +1852,13 @@ isl_aux_state_has_valid_aux(enum isl_aux_state state)
    return state != ISL_AUX_STATE_AUX_INVALID;
 }
 
+extern const struct isl_drm_modifier_info isl_drm_modifier_info_list[];
+
+#define isl_drm_modifier_info_for_each(__info) \
+   for (const struct isl_drm_modifier_info *__info = isl_drm_modifier_info_list; \
+        __info->modifier != DRM_FORMAT_MOD_INVALID; \
+        ++__info)
+
 const struct isl_drm_modifier_info * ATTRIBUTE_CONST
 isl_drm_modifier_get_info(uint64_t modifier);
 
@@ -1891,6 +1905,18 @@ isl_drm_modifier_get_default_aux_state(uint64_t modifier)
    return mod_info->supports_clear_color ? ISL_AUX_STATE_COMPRESSED_CLEAR :
                                            ISL_AUX_STATE_COMPRESSED_NO_CLEAR;
 }
+
+/**
+ * Return the modifier's score, which indicates the driver's preference for the
+ * modifier relative to others. A higher score is better. Zero means
+ * unsupported.
+ *
+ * Intended to assist selection of a modifier from an externally provided list,
+ * such as VkImageDrmFormatModifierListCreateInfoEXT.
+ */
+uint32_t
+isl_drm_modifier_get_score(const struct gen_device_info *devinfo,
+                           uint64_t modifier);
 
 struct isl_extent2d ATTRIBUTE_CONST
 isl_get_interleaved_msaa_px_size_sa(uint32_t samples);
@@ -2370,6 +2396,48 @@ isl_memcpy_tiled_to_linear(uint32_t xt1, uint32_t xt2,
                            enum isl_tiling tiling,
                            isl_memcpy_type copy_type);
 
+/**
+ * @brief computes the tile_w (in bytes) and tile_h (in rows) of
+ * different tiling patterns.
+ */
+static inline void
+isl_get_tile_dims(enum isl_tiling tiling, uint32_t cpp,
+                  uint32_t *tile_w, uint32_t *tile_h)
+{
+   switch (tiling) {
+   case ISL_TILING_X:
+      *tile_w = 512;
+      *tile_h = 8;
+      break;
+   case ISL_TILING_Y0:
+      *tile_w = 128;
+      *tile_h = 32;
+      break;
+   case ISL_TILING_LINEAR:
+      *tile_w = cpp;
+      *tile_h = 1;
+      break;
+   default:
+      unreachable("not reached");
+   }
+}
+
+/**
+ * @brief Computes masks that may be used to select the bits of the X
+ * and Y coordinates that indicate the offset within a tile.  If the BO is
+ * untiled, the masks are set to 0.
+ */
+static inline void
+isl_get_tile_masks(enum isl_tiling tiling, uint32_t cpp,
+                   uint32_t *mask_x, uint32_t *mask_y)
+{
+   uint32_t tile_w_bytes, tile_h;
+
+   isl_get_tile_dims(tiling, cpp, &tile_w_bytes, &tile_h);
+
+   *mask_x = tile_w_bytes / cpp - 1;
+   *mask_y = tile_h - 1;
+}
 #ifdef __cplusplus
 }
 #endif

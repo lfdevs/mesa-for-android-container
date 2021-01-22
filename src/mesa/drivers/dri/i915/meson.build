@@ -90,5 +90,5 @@ libi915 = static_library(
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_dri_common, inc_util],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [dep_libdrm, dep_libdrm_intel],
+  dependencies : [dep_libdrm, dep_libdrm_intel, idep_mesautil],
 )

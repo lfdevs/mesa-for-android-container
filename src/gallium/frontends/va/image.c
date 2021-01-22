@@ -212,8 +212,8 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
    /* This function is used by some programs to test for hardware decoding, but on
     * AMD devices, the buffers default to interlaced, which causes this function to fail.
     * Some programs expect this function to fail, while others, assume this means
-    * hardware acceleration is not available and give up without trying the fall-back 
-    * vaCreateImage + vaPutImage 
+    * hardware acceleration is not available and give up without trying the fall-back
+    * vaCreateImage + vaPutImage
     */
    const char *proc = util_get_process_name();
    const char *derive_interlaced_allowlist[] = {
@@ -244,6 +244,10 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
             break;
 
       if (i >= ARRAY_SIZE(derive_interlaced_allowlist))
+         return VA_STATUS_ERROR_OPERATION_FAILED;
+
+      if (!screen->get_video_param(screen, PIPE_VIDEO_PROFILE_UNKNOWN, PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
+                                   PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE))
          return VA_STATUS_ERROR_OPERATION_FAILED;
    }
 
@@ -311,6 +315,13 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
          new_template = surf->templat;
          new_template.interlaced = false;
          new_buffer = drv->pipe->create_video_buffer(drv->pipe, &new_template);
+
+         /* not all devices support non-interlaced buffers */
+         if (!new_buffer) {
+            FREE(img);
+            mtx_unlock(&drv->mutex);
+            return VA_STATUS_ERROR_OPERATION_FAILED;
+         }
 
          /* convert the interlaced to the progressive */
          src_rect.x0 = dst_rect.x0 = 0;

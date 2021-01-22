@@ -145,17 +145,12 @@ struct fd6_control {
 static inline void
 emit_marker6(struct fd_ringbuffer *ring, int scratch_idx)
 {
-	extern unsigned marker_cnt;
+	extern int32_t marker_cnt;
 	unsigned reg = REG_A6XX_CP_SCRATCH_REG(scratch_idx);
-#ifdef DEBUG
-#  define __EMIT_MARKER 1
-#else
-#  define __EMIT_MARKER 0
-#endif
 	if (__EMIT_MARKER) {
 		OUT_WFI5(ring);
 		OUT_PKT4(ring, reg, 1);
-		OUT_RING(ring, ++marker_cnt);
+		OUT_RING(ring, p_atomic_inc_return(&marker_cnt));
 	}
 }
 

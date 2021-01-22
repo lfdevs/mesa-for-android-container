@@ -30,8 +30,8 @@
 
 #include "freedreno_blitter.h"
 #include "freedreno_fence.h"
-#include "freedreno_log.h"
 #include "freedreno_resource.h"
+#include "freedreno_tracepoints.h"
 
 #include "fd6_blitter.h"
 #include "fd6_format.h"
@@ -808,6 +808,9 @@ handle_rgba_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 
 	fd_screen_unlock(ctx->screen);
 
+	ASSERTED bool ret = fd_batch_lock_submit(batch);
+	assert(ret);
+
 	/* Clearing last_fence must come after the batch dependency tracking
 	 * (resource_read()/resource_write()), as that can trigger a flush,
 	 * re-populating last_fence
@@ -816,30 +819,30 @@ handle_rgba_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 
 	fd_batch_set_stage(batch, FD_STAGE_BLIT);
 
-	fd_log_stream(batch, stream, util_dump_blit_info(stream, info));
-
 	emit_setup(batch);
+
+	trace_start_blit(&batch->trace, info->src.resource->target, info->dst.resource->target);
 
 	if ((info->src.resource->target == PIPE_BUFFER) &&
 			(info->dst.resource->target == PIPE_BUFFER)) {
 		assert(fd_resource(info->src.resource)->layout.tile_mode == TILE6_LINEAR);
 		assert(fd_resource(info->dst.resource)->layout.tile_mode == TILE6_LINEAR);
-		fd_log(batch, "START BLIT (BUFFER)");
 		emit_blit_buffer(ctx, batch->draw, info);
-		fd_log(batch, "END BLIT (BUFFER)");
 	} else {
 		/* I don't *think* we need to handle blits between buffer <-> !buffer */
 		debug_assert(info->src.resource->target != PIPE_BUFFER);
 		debug_assert(info->dst.resource->target != PIPE_BUFFER);
-		fd_log(batch, "START BLIT (TEXTURE)");
 		emit_blit_texture(ctx, batch->draw, info);
-		fd_log(batch, "END BLIT (TEXTURE)");
 	}
+
+	trace_end_blit(&batch->trace);
 
 	fd6_event_write(batch, batch->draw, PC_CCU_FLUSH_COLOR_TS, true);
 	fd6_event_write(batch, batch->draw, PC_CCU_FLUSH_DEPTH_TS, true);
 	fd6_event_write(batch, batch->draw, CACHE_FLUSH_TS, true);
 	fd6_cache_inv(batch, batch->draw);
+
+	fd_batch_unlock_submit(batch);
 
 	fd_resource(info->dst.resource)->valid = true;
 	batch->needs_flush = true;
@@ -880,6 +883,9 @@ handle_zs_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 		dump_blit_info(info);
 	}
 
+	struct fd_resource *src = fd_resource(info->src.resource);
+	struct fd_resource *dst = fd_resource(info->dst.resource);
+
 	switch (info->dst.format) {
 	case PIPE_FORMAT_S8_UINT:
 		debug_assert(info->mask == PIPE_MASK_S);
@@ -900,8 +906,8 @@ handle_zs_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 			blit.mask = PIPE_MASK_R;
 			blit.src.format = PIPE_FORMAT_R8_UINT;
 			blit.dst.format = PIPE_FORMAT_R8_UINT;
-			blit.src.resource = &fd_resource(info->src.resource)->stencil->base;
-			blit.dst.resource = &fd_resource(info->dst.resource)->stencil->base;
+			blit.src.resource = &src->stencil->base;
+			blit.dst.resource = &dst->stencil->base;
 			do_rewritten_blit(ctx, &blit);
 		}
 
@@ -930,6 +936,15 @@ handle_zs_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 			blit.mask |= PIPE_MASK_A;
 		blit.src.format = PIPE_FORMAT_Z24_UNORM_S8_UINT_AS_R8G8B8A8;
 		blit.dst.format = PIPE_FORMAT_Z24_UNORM_S8_UINT_AS_R8G8B8A8;
+		/* non-UBWC Z24_UNORM_S8_UINT_AS_R8G8B8A8 is broken on a630, fall back to
+		 * 8888_unorm.
+		 */
+		if (!ctx->screen->info.a6xx.has_z24uint_s8uint) {
+			if (!src->layout.ubwc)
+				blit.src.format = PIPE_FORMAT_RGBA8888_UNORM;
+			if (!dst->layout.ubwc)
+				blit.dst.format = PIPE_FORMAT_RGBA8888_UNORM;
+		}
 		return fd_blitter_blit(ctx, &blit);
 
 	default:

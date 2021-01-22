@@ -565,20 +565,16 @@ iris_setup_uniforms(const struct brw_compiler *compiler,
             continue;
          }
 
-         nir_intrinsic_instr *load =
-            nir_intrinsic_instr_create(nir, nir_intrinsic_load_ubo);
-         load->num_components = intrin->dest.ssa.num_components;
-         load->src[0] = nir_src_for_ssa(temp_ubo_name);
-         load->src[1] = nir_src_for_ssa(offset);
-         nir_intrinsic_set_align(load, 4, 0);
-         nir_intrinsic_set_range_base(load, 0);
-         nir_intrinsic_set_range(load, ~0);
-         nir_ssa_dest_init(&load->instr, &load->dest,
-                           intrin->dest.ssa.num_components,
-                           intrin->dest.ssa.bit_size, NULL);
-         nir_builder_instr_insert(&b, &load->instr);
+         nir_ssa_def *load =
+            nir_load_ubo(&b, intrin->dest.ssa.num_components, intrin->dest.ssa.bit_size,
+                         temp_ubo_name, offset,
+                         .align_mul = 4,
+                         .align_offset = 0,
+                         .range_base = 0,
+                         .range = ~0);
+
          nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                  nir_src_for_ssa(&load->dest.ssa));
+                                  nir_src_for_ssa(load));
          nir_instr_remove(instr);
       }
    }

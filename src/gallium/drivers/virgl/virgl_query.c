@@ -194,7 +194,7 @@ static bool virgl_get_query_result(struct pipe_context *ctx,
 
       host_state = vs->vws->resource_map(vs->vws, query->buf->hw_res);
 
-      /* The resouce is idle and the result should be available at this point,
+      /* The resource is idle and the result should be available at this point,
        * unless we are dealing with an older host.  In that case,
        * VIRGL_CCMD_GET_QUERY_RESULT is not fenced, the buffer is not
        * coherent, and transfers are unsynchronized.  We have to repeatedly

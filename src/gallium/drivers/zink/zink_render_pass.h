@@ -46,6 +46,7 @@ struct zink_render_pass {
    struct pipe_reference reference;
 
    VkRenderPass render_pass;
+   struct zink_render_pass_state state;
 };
 
 struct zink_render_pass *

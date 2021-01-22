@@ -988,7 +988,7 @@ void si_llvm_build_monolithic_ps(struct si_shader_context *ctx, struct si_shader
    si_llvm_build_ps_epilog(ctx, &epilog_key);
    parts[num_parts++] = ctx->main_fn;
 
-   si_build_wrapper_function(ctx, parts, num_parts, main_index, 0);
+   si_build_wrapper_function(ctx, parts, num_parts, main_index, 0, false);
 }
 
 void si_llvm_init_ps_callbacks(struct si_shader_context *ctx)

@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <inttypes.h>
 
+#include "util/compiler.h"
 #include "util/u_debug.h"
 #include "util/u_memory.h"
 #include "util/u_string.h"
@@ -173,7 +174,7 @@ lp_get_printf_arg_count(const char *fmt)
           p += 3;
                continue;
        }
-       /* fallthrough */
+       FALLTHROUGH;
     default:
        count ++;
       }

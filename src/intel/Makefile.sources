@@ -93,15 +93,22 @@ COMPILER_FILES = \
 	compiler/brw_nir_lower_conversions.c \
 	compiler/brw_nir_lower_cs_intrinsics.c \
 	compiler/brw_nir_lower_image_load_store.c \
+	compiler/brw_nir_lower_intersection_shader.c \
 	compiler/brw_nir_lower_mem_access_bit_sizes.c \
+	compiler/brw_nir_lower_rt_intrinsics.c \
 	compiler/brw_nir_lower_scoped_barriers.c \
+	compiler/brw_nir_lower_shader_calls.c \
 	compiler/brw_nir_opt_peephole_ffma.c \
+	compiler/brw_nir_rt.h \
+	compiler/brw_nir_rt.c \
+	compiler/brw_nir_rt_builder.h \
 	compiler/brw_nir_tcs_workarounds.c \
 	compiler/brw_packed_float.c \
 	compiler/brw_predicated_break.cpp \
 	compiler/brw_reg.h \
 	compiler/brw_reg_type.c \
 	compiler/brw_reg_type.h \
+	compiler/brw_rt.h \
 	compiler/brw_schedule_instructions.cpp \
 	compiler/brw_shader.cpp \
 	compiler/brw_shader.h \
@@ -153,7 +160,8 @@ GENXML_XML_FILES = \
 	genxml/gen8.xml \
 	genxml/gen9.xml \
 	genxml/gen11.xml \
-	genxml/gen12.xml
+	genxml/gen12.xml \
+	genxml/gen125.xml
 
 GENXML_GENERATED_PACK_FILES = \
 	genxml/gen4_pack.h \
@@ -165,7 +173,8 @@ GENXML_GENERATED_PACK_FILES = \
 	genxml/gen8_pack.h \
 	genxml/gen9_pack.h \
 	genxml/gen11_pack.h \
-	genxml/gen12_pack.h
+	genxml/gen12_pack.h \
+	genxml/gen125_pack.h
 
 GENXML_GENERATED_FILES = \
 	$(GENXML_GENERATED_PACK_FILES) \
@@ -227,6 +236,10 @@ ISL_GEN11_FILES = \
 ISL_GEN12_FILES = \
 	isl/isl_gen12.c \
 	isl/isl_gen12.h \
+	isl/isl_emit_depth_stencil.c \
+	isl/isl_surface_state.c
+
+ISL_GEN125_FILES = \
 	isl/isl_emit_depth_stencil.c \
 	isl/isl_surface_state.c
 
@@ -327,6 +340,10 @@ VULKAN_GEN11_FILES := \
 	$(VULKAN_GENX_FILES)
 
 VULKAN_GEN12_FILES := \
+	vulkan/gen8_cmd_buffer.c \
+	$(VULKAN_GENX_FILES)
+
+VULKAN_GEN125_FILES := \
 	vulkan/gen8_cmd_buffer.c \
 	$(VULKAN_GENX_FILES)
 

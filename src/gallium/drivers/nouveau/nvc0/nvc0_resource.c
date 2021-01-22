@@ -32,35 +32,36 @@ nvc0_resource_create_with_modifiers(struct pipe_screen *screen,
    }
 }
 
+static const uint64_t nvc0_supported_modifiers[] = {
+   DRM_FORMAT_MOD_LINEAR,
+   DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_ONE_GOB,
+   DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_TWO_GOB,
+   DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_FOUR_GOB,
+   DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_EIGHT_GOB,
+   DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_SIXTEEN_GOB,
+   DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_THIRTYTWO_GOB,
+};
+
 static void
 nvc0_query_dmabuf_modifiers(struct pipe_screen *screen,
                             enum pipe_format format, int max,
                             uint64_t *modifiers, unsigned int *external_only,
                             int *count)
 {
-   static const uint64_t supported_modifiers[] = {
-      DRM_FORMAT_MOD_LINEAR,
-      DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_ONE_GOB,
-      DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_TWO_GOB,
-      DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_FOUR_GOB,
-      DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_EIGHT_GOB,
-      DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_SIXTEEN_GOB,
-      DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_THIRTYTWO_GOB,
-   };
    int i, num = 0;
 
-   if (max > ARRAY_SIZE(supported_modifiers))
-      max = ARRAY_SIZE(supported_modifiers);
+   if (max > ARRAY_SIZE(nvc0_supported_modifiers))
+      max = ARRAY_SIZE(nvc0_supported_modifiers);
 
    if (!max) {
-      max = ARRAY_SIZE(supported_modifiers);
+      max = ARRAY_SIZE(nvc0_supported_modifiers);
       external_only = NULL;
       modifiers = NULL;
    }
 
    for (i = 0; i < max; i++) {
       if (modifiers)
-         modifiers[num] = supported_modifiers[i];
+         modifiers[num] = nvc0_supported_modifiers[i];
 
       if (external_only)
          external_only[num] = 0;
@@ -69,6 +70,25 @@ nvc0_query_dmabuf_modifiers(struct pipe_screen *screen,
    }
 
    *count = num;
+}
+
+static bool
+nvc0_is_dmabuf_modifier_supported(struct pipe_screen *screen,
+                                  uint64_t modifier, enum pipe_format format,
+                                  bool *external_only)
+{
+   int i;
+
+   for (i = 0; i < ARRAY_SIZE(nvc0_supported_modifiers); i++) {
+      if (nvc0_supported_modifiers[i] == modifier) {
+         if (external_only)
+            *external_only = false;
+
+         return true;
+      }
+   }
+
+   return false;
 }
 
 static struct pipe_resource *
@@ -130,6 +150,7 @@ nvc0_screen_init_resource_functions(struct pipe_screen *pscreen)
    pscreen->resource_create = nvc0_resource_create;
    pscreen->resource_create_with_modifiers = nvc0_resource_create_with_modifiers;
    pscreen->query_dmabuf_modifiers = nvc0_query_dmabuf_modifiers;
+   pscreen->is_dmabuf_modifier_supported = nvc0_is_dmabuf_modifier_supported;
    pscreen->resource_from_handle = nvc0_resource_from_handle;
    pscreen->resource_get_handle = u_resource_get_handle_vtbl;
    pscreen->resource_destroy = u_resource_destroy_vtbl;

@@ -76,8 +76,8 @@ void _aco_err(Program *program, const char *file, unsigned line,
 bool validate_ir(Program* program)
 {
    bool is_valid = true;
-   auto check = [&program, &is_valid](bool check, const char * msg, aco::Instruction * instr) -> void {
-      if (!check) {
+   auto check = [&program, &is_valid](bool success, const char * msg, aco::Instruction * instr) -> void {
+      if (!success) {
          char *out;
          size_t outsize;
          struct u_memstream mem;
@@ -95,8 +95,8 @@ bool validate_ir(Program* program)
       }
    };
 
-   auto check_block = [&program, &is_valid](bool check, const char * msg, aco::Block * block) -> void {
-      if (!check) {
+   auto check_block = [&program, &is_valid](bool success, const char * msg, aco::Block * block) -> void {
+      if (!success) {
          aco_err(program, "%s: BB%u", msg, block->index);
          is_valid = false;
       }
@@ -240,12 +240,13 @@ bool validate_ir(Program* program)
                      instr->format == Format::VOP1 ||
                      instr->format == Format::VOP2 ||
                      instr->format == Format::VOPC ||
-                     (instr->isVOP3() && program->chip_class >= GFX10),
+                     (instr->isVOP3() && program->chip_class >= GFX10) ||
+                     (instr->format == Format::VOP3P && program->chip_class >= GFX10),
                      "Literal applied on wrong instruction format", instr.get());
 
                check(literal.isUndefined() || (literal.size() == op.size() && literal.constantValue() == op.constantValue()), "Only 1 Literal allowed", instr.get());
                literal = op;
-               check(!instr->isVALU() || instr->isVOP3() || i == 0 || i == 2, "Wrong source position for Literal argument", instr.get());
+               check(instr->isSALU() || instr->isVOP3() || instr->format == Format::VOP3P || i == 0 || i == 2, "Wrong source position for Literal argument", instr.get());
             }
 
             /* check num sgprs for VALU */
@@ -257,7 +258,7 @@ bool validate_ir(Program* program)
                if (program->chip_class >= GFX10 && !is_shift64)
                   const_bus_limit = 2;
 
-               uint32_t scalar_mask = instr->isVOP3() ? 0x7 : 0x5;
+               uint32_t scalar_mask = instr->isVOP3() || instr->format == Format::VOP3P ? 0x7 : 0x5;
                if (instr->isSDWA())
                   scalar_mask = program->chip_class >= GFX9 ? 0x7 : 0x4;
 
@@ -351,7 +352,7 @@ bool validate_ir(Program* program)
                   has_literal |= op.isLiteral();
                }
 
-               check(!is_subdword || !has_const_sgpr || program->chip_class >= GFX9,
+               check(!is_subdword || !has_const_sgpr || program->chip_class >= GFX9 || instr->opcode == aco_opcode::p_unit_test,
                      "Sub-dword pseudo instructions can only take constants or SGPRs on GFX9+", instr.get());
             }
 
@@ -435,15 +436,18 @@ bool validate_ir(Program* program)
             break;
          }
          case Format::MIMG: {
-            check(instr->operands.size() == 3, "MIMG instructions must have exactly 3 operands", instr.get());
+            check(instr->operands.size() >= 3, "MIMG instructions must have 3 or 4 operands", instr.get());
+            check(instr->operands.size() <= 4, "MIMG instructions must have 3 or 4 operands", instr.get());
             check(instr->operands[0].hasRegClass() && (instr->operands[0].regClass() == s4 || instr->operands[0].regClass() == s8),
                   "MIMG operands[0] (resource constant) must be in 4 or 8 SGPRs", instr.get());
-            if (instr->operands[1].hasRegClass() && instr->operands[1].regClass().type() == RegType::sgpr)
+            if (instr->operands[1].hasRegClass())
                check(instr->operands[1].regClass() == s4, "MIMG operands[1] (sampler constant) must be 4 SGPRs", instr.get());
-            else if (instr->operands[1].hasRegClass() && instr->operands[1].regClass().type() == RegType::vgpr)
-               check((instr->definitions.empty() || instr->definitions[0].regClass() == instr->operands[1].regClass() ||
-                     instr->opcode == aco_opcode::image_atomic_cmpswap || instr->opcode == aco_opcode::image_atomic_fcmpswap),
-                     "MIMG operands[1] (VDATA) must be the same as definitions[0] for atomics", instr.get());
+            if (instr->operands.size() >= 4) {
+               bool is_cmpswap = instr->opcode == aco_opcode::image_atomic_cmpswap ||
+                                 instr->opcode == aco_opcode::image_atomic_fcmpswap;
+               check(instr->definitions.empty() || (instr->definitions[0].regClass() == instr->operands[3].regClass() || is_cmpswap),
+                     "MIMG operands[3] (VDATA) must be the same as definitions[0] for atomics and TFE/LWE loads", instr.get());
+            }
             check(instr->operands[2].hasRegClass() && instr->operands[2].regClass().type() == RegType::vgpr,
                   "MIMG operands[2] (VADDR) must be VGPR", instr.get());
             check(instr->definitions.empty() || (instr->definitions[0].isTemp() && instr->definitions[0].regClass().type() == RegType::vgpr),
@@ -467,7 +471,7 @@ bool validate_ir(Program* program)
          }
          case Format::FLAT:
             check(instr->operands[1].isUndefined(), "Flat instructions don't support SADDR", instr.get());
-            /* fallthrough */
+            FALLTHROUGH;
          case Format::GLOBAL:
          case Format::SCRATCH: {
             check(instr->operands[0].isTemp() && instr->operands[0].regClass().type() == RegType::vgpr, "FLAT/GLOBAL/SCRATCH address must be vgpr", instr.get());

@@ -526,7 +526,7 @@ INLINE bool FindFirstIncompleteDraw(SWR_CONTEXT* pContext,
 ///                      locked, then it will add that tile to the lockedTiles set. As a worker
 ///                      begins to work on future draws the lockedTiles ensure that it doesn't work
 ///                      on tiles that may still have work pending in a previous draw. Additionally,
-///                      the lockedTiles is hueristic that can steer a worker back to the same
+///                      the lockedTiles is heuristic that can steer a worker back to the same
 ///                      macrotile that it had been working on in a previous draw.
 /// @returns        true if worker thread should shutdown
 bool WorkOnFifoBE(SWR_CONTEXT* pContext,
@@ -1401,7 +1401,7 @@ void DestroyThreadPool(SWR_CONTEXT* pContext, THREAD_POOL* pPool)
         if (!pContext->threadInfo.SINGLE_THREADED)
         {
             // Detach from thread.  Cannot join() due to possibility (in Windows) of code
-            // in some DLLMain(THREAD_DETATCH case) blocking the thread until after this returns.
+            // in some DLLMain(THREAD_DETACH case) blocking the thread until after this returns.
             pPool->pThreads[t]->detach();
             delete (pPool->pThreads[t]);
         }

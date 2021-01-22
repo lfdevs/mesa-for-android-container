@@ -156,7 +156,7 @@ static void draw( void )
       ctx->delete_fs_state(ctx, fs);
    }
 
-   screen->flush_frontbuffer(screen, tex, 0, 0, window, NULL);
+   screen->flush_frontbuffer(screen, ctx, tex, 0, 0, window, NULL);
    ctx->destroy(ctx);
 
    exit(0);

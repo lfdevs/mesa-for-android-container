@@ -31,6 +31,7 @@
 #include "hw/state_3d.xml.h"
 
 #include "pipe/p_defines.h"
+#include "util/compiler.h"
 
 /* Specifies the table of all the formats and their features. Also supplies
  * the helpers that look up various data in those tables.
@@ -277,7 +278,7 @@ texture_use_int_filter(const struct pipe_sampler_view *sv,
    case PIPE_TEXTURE_2D_ARRAY:
       if (tex_desc)
          break;
-      /* fallthrough */
+      FALLTHROUGH;
    case PIPE_TEXTURE_3D:
       return false;
    default:

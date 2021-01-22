@@ -30,12 +30,12 @@
 
 static LLVMValueRef get_wave_id_in_tg(struct si_shader_context *ctx)
 {
-   return si_unpack_param(ctx, ctx->merged_wave_info, 24, 4);
+   return si_unpack_param(ctx, ctx->args.merged_wave_info, 24, 4);
 }
 
 static LLVMValueRef get_tgsize(struct si_shader_context *ctx)
 {
-   return si_unpack_param(ctx, ctx->merged_wave_info, 28, 4);
+   return si_unpack_param(ctx, ctx->args.merged_wave_info, 28, 4);
 }
 
 static LLVMValueRef get_thread_id_in_tg(struct si_shader_context *ctx)
@@ -49,17 +49,17 @@ static LLVMValueRef get_thread_id_in_tg(struct si_shader_context *ctx)
 
 static LLVMValueRef ngg_get_vtx_cnt(struct si_shader_context *ctx)
 {
-   return si_unpack_param(ctx, ctx->gs_tg_info, 12, 9);
+   return si_unpack_param(ctx, ctx->args.gs_tg_info, 12, 9);
 }
 
 static LLVMValueRef ngg_get_prim_cnt(struct si_shader_context *ctx)
 {
-   return si_unpack_param(ctx, ctx->gs_tg_info, 22, 9);
+   return si_unpack_param(ctx, ctx->args.gs_tg_info, 22, 9);
 }
 
 static LLVMValueRef ngg_get_ordered_id(struct si_shader_context *ctx)
 {
-   return si_unpack_param(ctx, ctx->gs_tg_info, 0, 12);
+   return si_unpack_param(ctx, ctx->args.gs_tg_info, 0, 12);
 }
 
 static LLVMValueRef ngg_get_query_buf(struct si_shader_context *ctx)
@@ -763,6 +763,17 @@ void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_out
 
       switch (info->output_semantic[i]) {
       case VARYING_SLOT_POS:
+         /* If we are going to cull everything (rasterizer_discard), discard
+          * the position. This is useful for analyzing maximum theoretical
+          * performance without VS input loads.
+          */
+         if (shader->key.opt.ngg_culling & SI_NGG_CULL_FRONT_FACE &&
+             shader->key.opt.ngg_culling & SI_NGG_CULL_BACK_FACE) {
+            for (unsigned j = 0; j < 4; j++)
+               LLVMBuildStore(builder, LLVMGetUndef(ctx->ac.f32), addrs[4 * i + j]);
+            break;
+         }
+
          pos_index = i;
          for (unsigned j = 0; j < 4; j++) {
             position[j] = LLVMBuildLoad(ctx->ac.builder, addrs[4 * i + j], "");
@@ -1000,11 +1011,11 @@ void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_out
          }
       } else {
          assert(ctx->stage == MESA_SHADER_TESS_EVAL);
-         LLVMBuildStore(builder, ac_to_integer(&ctx->ac, ac_get_arg(&ctx->ac, ctx->tes_u)),
+         LLVMBuildStore(builder, ac_to_integer(&ctx->ac, ac_get_arg(&ctx->ac, ctx->args.tes_u)),
                         ac_build_gep0(&ctx->ac, new_vtx, LLVMConstInt(ctx->ac.i32, lds_tes_u, 0)));
-         LLVMBuildStore(builder, ac_to_integer(&ctx->ac, ac_get_arg(&ctx->ac, ctx->tes_v)),
+         LLVMBuildStore(builder, ac_to_integer(&ctx->ac, ac_get_arg(&ctx->ac, ctx->args.tes_v)),
                         ac_build_gep0(&ctx->ac, new_vtx, LLVMConstInt(ctx->ac.i32, lds_tes_v, 0)));
-         LLVMBuildStore(builder, LLVMBuildTrunc(builder, ac_get_arg(&ctx->ac, ctx->tes_rel_patch_id), ctx->ac.i8, ""),
+         LLVMBuildStore(builder, LLVMBuildTrunc(builder, ac_get_arg(&ctx->ac, ctx->args.tes_rel_patch_id), ctx->ac.i8, ""),
                         si_build_gep_i8(ctx, new_vtx, lds_byte2_tes_rel_patch_id));
          if (uses_tes_prim_id) {
             LLVMBuildStore(
@@ -1037,20 +1048,20 @@ void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_out
                                  ngg_get_prim_cnt(ctx));
 
    /* Update thread counts in SGPRs. */
-   LLVMValueRef new_gs_tg_info = ac_get_arg(&ctx->ac, ctx->gs_tg_info);
-   LLVMValueRef new_merged_wave_info = ac_get_arg(&ctx->ac, ctx->merged_wave_info);
+   LLVMValueRef new_gs_tg_info = ac_get_arg(&ctx->ac, ctx->args.gs_tg_info);
+   LLVMValueRef new_merged_wave_info = ac_get_arg(&ctx->ac, ctx->args.merged_wave_info);
 
    /* This also converts the thread count from the total count to the per-wave count. */
    update_thread_counts(ctx, &new_num_es_threads, &new_gs_tg_info, 9, 12, &new_merged_wave_info, 8,
                         0);
 
-   /* Update vertex indices in VGPR0 (same format as NGG passthrough). */
-   LLVMValueRef new_vgpr0 = ac_build_alloca_undef(&ctx->ac, ctx->ac.i32, "");
-
-   /* Set the null flag at the beginning (culled), and then
+   /* Update vertex indices in VGPR0 (same format as NGG passthrough).
+    *
+    * Set the null flag at the beginning (culled), and then
     * overwrite it for accepted primitives.
     */
-   LLVMBuildStore(builder, LLVMConstInt(ctx->ac.i32, 1u << 31, 0), new_vgpr0);
+   LLVMValueRef new_vgpr0 =
+      ac_build_alloca_init(&ctx->ac, LLVMConstInt(ctx->ac.i32, 1u << 31, 0), "");
 
    /* Get vertex indices after vertex compaction. */
    ac_build_ifcc(&ctx->ac, LLVMBuildTrunc(builder, gs_accepted, ctx->ac.i1, ""), 16011);
@@ -1117,7 +1128,7 @@ void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_out
    ret = LLVMBuildInsertValue(ctx->ac.builder, ret, new_gs_tg_info, 2, "");
    ret = LLVMBuildInsertValue(ctx->ac.builder, ret, new_merged_wave_info, 3, "");
    if (ctx->stage == MESA_SHADER_TESS_EVAL)
-      ret = si_insert_input_ret(ctx, ret, ctx->tcs_offchip_offset, 4);
+      ret = si_insert_input_ret(ctx, ret, ctx->args.tess_offchip_offset, 4);
 
    ret = si_insert_input_ptr(ctx, ret, ctx->rw_buffers, 8 + SI_SGPR_RW_BUFFERS);
    ret = si_insert_input_ptr(ctx, ret, ctx->bindless_samplers_and_images,
@@ -1129,9 +1140,9 @@ void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_out
 
    if (ctx->stage == MESA_SHADER_VERTEX) {
       ret = si_insert_input_ptr(ctx, ret, ctx->args.base_vertex, 8 + SI_SGPR_BASE_VERTEX);
-      ret = si_insert_input_ptr(ctx, ret, ctx->args.start_instance, 8 + SI_SGPR_START_INSTANCE);
       ret = si_insert_input_ptr(ctx, ret, ctx->args.draw_id, 8 + SI_SGPR_DRAWID);
-      ret = si_insert_input_ptr(ctx, ret, ctx->vertex_buffers, 8 + SI_VS_NUM_USER_SGPR);
+      ret = si_insert_input_ptr(ctx, ret, ctx->args.start_instance, 8 + SI_SGPR_START_INSTANCE);
+      ret = si_insert_input_ptr(ctx, ret, ctx->args.vertex_buffers, 8 + SI_VS_NUM_USER_SGPR);
 
       for (unsigned i = 0; i < shader->selector->num_vbos_in_user_sgprs; i++) {
          ret = si_insert_input_v4i32(ctx, ret, ctx->vb_descriptors[i],
@@ -1304,8 +1315,7 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi, unsigned max_outputs, LL
          tmp = LLVMBuildLoad(builder, tmp, "");
          tmp = LLVMBuildTrunc(builder, tmp, ctx->ac.i1, "");
 
-         user_edgeflags[i] = ac_build_alloca_undef(&ctx->ac, ctx->ac.i1, "");
-         LLVMBuildStore(builder, tmp, user_edgeflags[i]);
+         user_edgeflags[i] = ac_build_alloca_init(&ctx->ac, tmp, "");
       }
       ac_build_endif(&ctx->ac, 5400);
    }
@@ -1941,7 +1951,10 @@ bool gfx10_ngg_calculate_subgroup_info(struct si_shader *shader)
    unsigned max_esverts_base = 128;
 
    if (shader->key.opt.ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_TRI_LIST) {
-      max_gsprims_base = 128 / 3;
+      /* Exactly 1 wave32 executes culling in primitive threads (there is no
+       * divergence), other waves are idle.
+       */
+      max_gsprims_base = 32;
       max_esverts_base = max_gsprims_base * 3;
    } else if (shader->key.opt.ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_TRI_STRIP) {
       max_gsprims_base = 126;
@@ -2037,8 +2050,12 @@ retry_select_mode:
             max_esverts =
                MIN2(max_esverts, (max_lds_size - max_gsprims * gsprim_lds_size) / esvert_lds_size);
          max_esverts = MIN2(max_esverts, max_gsprims * max_verts_per_prim);
+
          /* Hardware restriction: minimum value of max_esverts */
-         max_esverts = MAX2(max_esverts, min_esverts - 1 + max_verts_per_prim);
+         if (gs_sel->screen->info.chip_class == GFX10)
+            max_esverts = MAX2(max_esverts, min_esverts - 1 + max_verts_per_prim);
+         else
+            max_esverts = MAX2(max_esverts, min_esverts);
 
          max_gsprims = align(max_gsprims, wavesize);
          max_gsprims = MIN2(max_gsprims, max_gsprims_base);
@@ -2056,10 +2073,16 @@ retry_select_mode:
       } while (orig_max_esverts != max_esverts || orig_max_gsprims != max_gsprims);
 
       /* Verify the restriction. */
-      assert(max_esverts >= min_esverts - 1 + max_verts_per_prim);
+      if (gs_sel->screen->info.chip_class == GFX10)
+         assert(max_esverts >= min_esverts - 1 + max_verts_per_prim);
+      else
+         assert(max_esverts >= min_esverts);
    } else {
       /* Hardware restriction: minimum value of max_esverts */
-      max_esverts = MAX2(max_esverts, min_esverts - 1 + max_verts_per_prim);
+      if (gs_sel->screen->info.chip_class == GFX10)
+         max_esverts = MAX2(max_esverts, min_esverts - 1 + max_verts_per_prim);
+      else
+         max_esverts = MAX2(max_esverts, min_esverts);
    }
 
    unsigned max_out_vertices =
@@ -2077,12 +2100,16 @@ retry_select_mode:
       prim_amp_factor = gs_sel->info.base.gs.vertices_out;
    }
 
-   /* The GE only checks against the maximum number of ES verts after
+   /* On gfx10, the GE only checks against the maximum number of ES verts after
     * allocating a full GS primitive. So we need to ensure that whenever
     * this check passes, there is enough space for a full primitive without
     * vertex reuse.
     */
-   shader->ngg.hw_max_esverts = max_esverts - max_verts_per_prim + 1;
+   if (gs_sel->screen->info.chip_class == GFX10)
+      shader->ngg.hw_max_esverts = max_esverts - max_verts_per_prim + 1;
+   else
+      shader->ngg.hw_max_esverts = max_esverts;
+
    shader->ngg.max_gsprims = max_gsprims;
    shader->ngg.max_out_verts = max_out_vertices;
    shader->ngg.prim_amp_factor = prim_amp_factor;

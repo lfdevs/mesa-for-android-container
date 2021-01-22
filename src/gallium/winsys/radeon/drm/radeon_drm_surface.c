@@ -132,7 +132,7 @@ static void surf_winsys_to_drm(struct radeon_surface *surf_drm,
       break;
    case PIPE_TEXTURE_CUBE_ARRAY: /* cube array layout like 2d array */
       assert(tex->array_size % 6 == 0);
-      /* fall through */
+      FALLTHROUGH;
    case PIPE_TEXTURE_2D_ARRAY:
       surf_drm->flags |= RADEON_SURF_SET(RADEON_SURF_TYPE_2D_ARRAY, TYPE);
       surf_drm->array_size = tex->array_size;

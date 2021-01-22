@@ -616,7 +616,7 @@ v3d_setup_slices(struct v3d_resource *rsc, uint32_t winsys_stride,
 
                 /* The HW aligns level 1's base to a page if any of level 1 or
                  * below could be UIF XOR.  The lower levels then inherit the
-                 * alignment for as long as necesary, thanks to being power of
+                 * alignment for as long as necessary, thanks to being power of
                  * two aligned.
                  */
                 if (i == 1 &&

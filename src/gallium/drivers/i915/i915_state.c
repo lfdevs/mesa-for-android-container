@@ -207,11 +207,11 @@ static void i915_set_blend_color( struct pipe_context *pipe,
 }
 
 static void i915_set_stencil_ref( struct pipe_context *pipe,
-                                  const struct pipe_stencil_ref *stencil_ref )
+                                  const struct pipe_stencil_ref stencil_ref )
 {
    struct i915_context *i915 = i915_context(pipe);
 
-   i915->stencil_ref = *stencil_ref;
+   i915->stencil_ref = stencil_ref;
 
    i915->dirty |= I915_NEW_DEPTH_STENCIL;
 }
@@ -525,19 +525,19 @@ i915_create_depth_stencil_state(struct pipe_context *pipe,
       cso->bfo[1] = 0;
    }
 
-   if (depth_stencil->depth.enabled) {
-      int func = i915_translate_compare_func(depth_stencil->depth.func);
+   if (depth_stencil->depth_enabled) {
+      int func = i915_translate_compare_func(depth_stencil->depth_func);
 
       cso->depth_LIS6 |= (S6_DEPTH_TEST_ENABLE |
                           (func << S6_DEPTH_TEST_FUNC_SHIFT));
 
-      if (depth_stencil->depth.writemask)
+      if (depth_stencil->depth_writemask)
          cso->depth_LIS6 |= S6_DEPTH_WRITE_ENABLE;
    }
 
-   if (depth_stencil->alpha.enabled) {
-      int test = i915_translate_compare_func(depth_stencil->alpha.func);
-      ubyte refByte = float_to_ubyte(depth_stencil->alpha.ref_value);
+   if (depth_stencil->alpha_enabled) {
+      int test = i915_translate_compare_func(depth_stencil->alpha_func);
+      ubyte refByte = float_to_ubyte(depth_stencil->alpha_ref_value);
 
       cso->depth_LIS6 |= (S6_ALPHA_TEST_ENABLE |
 			  (test << S6_ALPHA_TEST_FUNC_SHIFT) |

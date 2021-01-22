@@ -157,12 +157,14 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_PACKED_UNIFORMS:
    case PIPE_CAP_SHADER_SAMPLES_IDENTICAL:
    case PIPE_CAP_GL_SPIRV:
-   case PIPE_CAP_DRAW_INFO_START_WITH_USER_INDICES:
    case PIPE_CAP_ALPHA_TO_COVERAGE_DITHER_CONTROL:
    case PIPE_CAP_MAP_UNSYNCHRONIZED_THREAD_SAFE:
    case PIPE_CAP_NO_CLIP_ON_COPY_TEX:
    case PIPE_CAP_SHADER_ATOMIC_INT64:
    case PIPE_CAP_FRONTEND_NOOP:
+   case PIPE_CAP_DEMOTE_TO_HELPER_INVOCATION:
+   case PIPE_CAP_PREFER_REAL_BUFFER_IN_CONSTBUF0:
+   case PIPE_CAP_COMPUTE_SHADER_DERIVATIVES:
       return 1;
 
    case PIPE_CAP_GLSL_ZERO_INIT:
@@ -363,34 +365,6 @@ static int si_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_typ
 {
    struct si_screen *sscreen = (struct si_screen *)pscreen;
 
-   switch (shader) {
-   case PIPE_SHADER_FRAGMENT:
-   case PIPE_SHADER_VERTEX:
-   case PIPE_SHADER_GEOMETRY:
-   case PIPE_SHADER_TESS_CTRL:
-   case PIPE_SHADER_TESS_EVAL:
-      break;
-   case PIPE_SHADER_COMPUTE:
-      switch (param) {
-      case PIPE_SHADER_CAP_SUPPORTED_IRS: {
-         int ir = 1 << PIPE_SHADER_IR_NATIVE;
-
-         if (sscreen->info.has_indirect_compute_dispatch)
-            ir |= 1 << PIPE_SHADER_IR_NIR;
-
-         return ir;
-      }
-      default:
-         /* If compute shaders don't require a special value
-          * for this cap, we can return the same value we
-          * do for other shader types. */
-         break;
-      }
-      break;
-   default:
-      return 0;
-   }
-
    switch (param) {
    /* Shader limits. */
    case PIPE_SHADER_CAP_MAX_INSTRUCTIONS:
@@ -423,6 +397,16 @@ static int si_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_typ
    case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
       return 4;
 
+   case PIPE_SHADER_CAP_SUPPORTED_IRS:
+      if (shader == PIPE_SHADER_COMPUTE) {
+         return (1 << PIPE_SHADER_IR_NATIVE) |
+                (sscreen->info.has_indirect_compute_dispatch ?
+                    (1 << PIPE_SHADER_IR_NIR) |
+                    (1 << PIPE_SHADER_IR_TGSI) : 0);
+      }
+      return (1 << PIPE_SHADER_IR_TGSI) |
+             (1 << PIPE_SHADER_IR_NIR);
+
    /* Supported boolean features. */
    case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
@@ -446,7 +430,6 @@ static int si_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_typ
    case PIPE_SHADER_CAP_INT16:
    case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
    case PIPE_SHADER_CAP_SUBROUTINES:
-   case PIPE_SHADER_CAP_SUPPORTED_IRS:
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
       return 0;
@@ -583,6 +566,10 @@ static int si_get_video_param(struct pipe_screen *screen, enum pipe_video_profil
          if (sscreen->info.family < CHIP_RAVEN)
             return false;
          return true;
+      case PIPE_VIDEO_FORMAT_AV1:
+         if (sscreen->info.family < CHIP_SIENNA_CICHLID)
+            return false;
+         return true;
       default:
          return false;
       }
@@ -592,6 +579,7 @@ static int si_get_video_param(struct pipe_screen *screen, enum pipe_video_profil
       switch (codec) {
       case PIPE_VIDEO_FORMAT_HEVC:
       case PIPE_VIDEO_FORMAT_VP9:
+      case PIPE_VIDEO_FORMAT_AV1:
          return (sscreen->info.family < CHIP_RENOIR)
                    ? ((sscreen->info.family < CHIP_TONGA) ? 2048 : 4096)
                    : 8192;
@@ -602,6 +590,7 @@ static int si_get_video_param(struct pipe_screen *screen, enum pipe_video_profil
       switch (codec) {
       case PIPE_VIDEO_FORMAT_HEVC:
       case PIPE_VIDEO_FORMAT_VP9:
+      case PIPE_VIDEO_FORMAT_AV1:
          return (sscreen->info.family < CHIP_RENOIR)
                    ? ((sscreen->info.family < CHIP_TONGA) ? 1152 : 4096)
                    : 4352;
@@ -620,11 +609,7 @@ static int si_get_video_param(struct pipe_screen *screen, enum pipe_video_profil
    case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED: {
       enum pipe_video_format format = u_reduce_video_profile(profile);
 
-      if (format == PIPE_VIDEO_FORMAT_HEVC)
-         return false; // The firmware doesn't support interlaced HEVC.
-      else if (format == PIPE_VIDEO_FORMAT_JPEG)
-         return false;
-      else if (format == PIPE_VIDEO_FORMAT_VP9)
+      if (format >= PIPE_VIDEO_FORMAT_HEVC)
          return false;
       return true;
    }
@@ -941,18 +926,19 @@ void si_init_screen_get_functions(struct si_screen *sscreen)
       .lower_fdiv = true,
       .lower_bitfield_insert_to_bitfield_select = true,
       .lower_bitfield_extract = true,
-      .lower_sub = true,
       /*        |---------------------------------- Performance & Availability --------------------------------|
        *        |MAD/MAC/MADAK/MADMK|MAD_LEGACY|MAC_LEGACY|    FMA     |FMAC/FMAAK/FMAMK|FMA_LEGACY|PK_FMA_F16,|Best choice
        * Arch   |    F32,F16,F64    | F32,F16  | F32,F16  |F32,F16,F64 |    F32,F16     | F32,F16  |PK_FMAC_F16|F16,F32,F64
        * ------------------------------------------------------------------------------------------------------------------
        * gfx6,7 |     1 , - , -     |  1 , -   |  1 , -   |1/4, - ,1/16|     - , -      |  - , -   |   - , -   | - ,MAD,FMA
        * gfx8   |     1 , 1 , -     |  1 , -   |  - , -   |1/4, 1 ,1/16|     - , -      |  - , -   |   - , -   |MAD,MAD,FMA
-       * gfx9   |     1 , 1 , -     |  1 , -   |  1 , -   | 1 , 1 ,1/16|     - , -      |  - , 1   |   2 , -   |FMA,MAD,FMA
-       * gfx10  |     1 , 1 , -     |  1 , -   |  1 , -   | 1 , 1 ,1/16|     1 , 1      |  - , -   |   2 , 2   |FMA,MAD,FMA
+       * gfx9   |     1 ,1|0, -     |  1 , -   |  - , -   | 1 , 1 ,1/16|    0|1, -      |  - , 1   |   2 , -   |FMA,MAD,FMA
+       * gfx10  |     1 , - , -     |  1 , -   |  1 , -   | 1 , 1 ,1/16|     1 , 1      |  - , -   |   2 , 2   |FMA,MAD,FMA
        * gfx10.3|     - , - , -     |  - , -   |  - , -   | 1 , 1 ,1/16|     1 , 1      |  1 , -   |   2 , 2   |  all FMA
        *
        * Tahiti, Hawaii, Carrizo, Vega20: FMA_F32 is full rate, FMA_F64 is 1/4
+       * gfx9 supports MAD_F16 only on Vega10, Raven, Raven2, Renoir.
+       * gfx9 supports FMAC_F32 only on Vega20, but doesn't support FMAAK and FMAMK.
        *
        * gfx8 prefers MAD for F16 because of MAC/MADAK/MADMK.
        * gfx9 and newer prefer FMA for F16 because of the packed instruction.

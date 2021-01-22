@@ -40,13 +40,32 @@ LOCAL_SRC_FILES := \
 LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/ir3 \
 	$(MESA_TOP)/include \
-	$(MESA_TOP)/src/freedreno/common
+	$(MESA_TOP)/src/freedreno/common \
+	$(call generated-sources-dir-for,STATIC_LIBRARIES,libmesa_gallium,,)/util
 
 LOCAL_GENERATED_SOURCES := $(MESA_GEN_NIR_H)
 
 LOCAL_SHARED_LIBRARIES := libdrm libsync
 LOCAL_STATIC_LIBRARIES := libmesa_glsl libmesa_nir libfreedreno_drm libfreedreno_ir3 libfreedreno_perfcntrs libfreedreno_registers
 LOCAL_MODULE := libmesa_pipe_freedreno
+
+LOCAL_MODULE_CLASS := STATIC_LIBRARIES
+
+intermediates := $(call local-generated-sources-dir)
+
+LOCAL_GENERATED_SOURCES += $(addprefix $(intermediates)/, $(GENERATED_SOURCES))
+
+freedreno_tracepoints_deps := \
+	$(MESA_TOP)/src/gallium/drivers/freedreno/freedreno_tracepoints.py \
+	$(MESA_TOP)/src/gallium/auxiliary/util/u_trace.py
+
+freedreno_tracepoints_c := $(intermediates)/freedreno_tracepoints.c
+freedreno_tracepoints_h := $(intermediates)/freedreno_tracepoints.h
+
+$(intermediates)/freedreno_tracepoints.c \
+$(intermediates)/freedreno_tracepoints.h: $(freedreno_tracepoints_deps)
+	@mkdir -p $(dir $@)
+	$(hide) $(MESA_PYTHON3) $< -p $(MESA_TOP)/src/gallium/auxiliary/util -C $(freedreno_tracepoints_c) -H $(freedreno_tracepoints_h)
 
 include $(GALLIUM_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)

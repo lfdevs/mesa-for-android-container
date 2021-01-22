@@ -206,6 +206,9 @@ struct radeon_cmdbuf {
    uint64_t used_vram;
    uint64_t used_gart;
    uint64_t gpu_address;
+
+   /* Private winsys data. */
+   void *priv;
 };
 
 /* Tiling info for display code, DRI sharing, and other data. */
@@ -281,7 +284,9 @@ struct radeon_winsys {
     * \param ws        The winsys this function is called from.
     * \param info      Return structure
     */
-   void (*query_info)(struct radeon_winsys *ws, struct radeon_info *info);
+   void (*query_info)(struct radeon_winsys *ws, struct radeon_info *info,
+                      bool enable_smart_access_memory,
+                      bool disable_smart_access_memory);
 
    /**
     * A hint for the winsys that it should pin its execution threads to
@@ -482,15 +487,19 @@ struct radeon_winsys {
    /**
     * Create a command stream.
     *
+    * \param cs        The returned structure that is initialized by cs_create.
     * \param ctx       The submission context
     * \param ring_type The ring type (GFX, DMA, UVD)
     * \param flush     Flush callback function associated with the command stream.
     * \param user      User pointer that will be passed to the flush callback.
+    *
+    * \return true on success
     */
-   struct radeon_cmdbuf *(*cs_create)(struct radeon_winsys_ctx *ctx, enum ring_type ring_type,
-                                      void (*flush)(void *ctx, unsigned flags,
-                                                    struct pipe_fence_handle **fence),
-                                      void *flush_ctx, bool stop_exec_on_failure);
+   bool (*cs_create)(struct radeon_cmdbuf *cs,
+                     struct radeon_winsys_ctx *ctx, enum ring_type ring_type,
+                     void (*flush)(void *ctx, unsigned flags,
+                                   struct pipe_fence_handle **fence),
+                     void *flush_ctx, bool stop_exec_on_failure);
 
    /**
     * Add a parallel compute IB to a gfx IB. It will share the buffer list
@@ -501,13 +510,16 @@ struct radeon_winsys {
     * to use a wait packet for synchronization.
     *
     * The returned IB is only a stream for writing packets to the new
-    * IB. Calling other winsys functions with it is not allowed, not even
-    * "cs_destroy". Use the gfx IB instead.
+    * IB. The only function that can be used on the compute cs is cs_check_space.
     *
-    * \param cs              Gfx IB
+    * \param compute_cs      The returned structure of the command stream.
+    * \param gfx_cs          Gfx IB
+    *
+    * \return true on success
     */
-   struct radeon_cmdbuf *(*cs_add_parallel_compute_ib)(struct radeon_cmdbuf *cs,
-                                                       bool uses_gds_ordered_append);
+   bool (*cs_add_parallel_compute_ib)(struct radeon_cmdbuf *compute_cs,
+                                      struct radeon_cmdbuf *gfx_cs,
+                                      bool uses_gds_ordered_append);
 
    /**
     * Set up and enable mid command buffer preemption for the command stream.
@@ -817,6 +829,7 @@ static inline unsigned radeon_flags_from_heap(enum radeon_heap heap)
    case RADEON_HEAP_GTT_UNCACHED_WC_READ_ONLY_32BIT:
    case RADEON_HEAP_GTT_UNCACHED_WC_32BIT:
       flags |= RADEON_FLAG_32BIT;
+      FALLTHROUGH;
    default:
       break;
    }

@@ -86,16 +86,8 @@ create_face_input(nir_shader *shader)
 static nir_ssa_def *
 load_input(nir_builder *b, nir_variable *in)
 {
-   nir_intrinsic_instr *load;
-
-   load = nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_input);
-   load->num_components = 4;
-   nir_intrinsic_set_base(load, in->data.driver_location);
-   load->src[0] = nir_src_for_ssa(nir_imm_int(b, 0));
-   nir_ssa_dest_init(&load->instr, &load->dest, 4, 32, NULL);
-   nir_builder_instr_insert(b, &load->instr);
-
-   return &load->dest.ssa;
+   return nir_load_input(b, 4, 32, nir_imm_int(b, 0),
+                         .base = in->data.driver_location);
 }
 
 static int

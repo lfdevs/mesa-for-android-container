@@ -66,6 +66,7 @@
 #include "gallivm/lp_bld_pack.h"
 
 #include "lp_bld_depth.h"
+#include "lp_state_fs.h"
 
 
 /** Used to select fields from pipe_stencil_state */
@@ -822,7 +823,7 @@ lp_build_depth_stencil_write_swizzled(struct gallivm_state *gallivm,
  */
 void
 lp_build_depth_stencil_test(struct gallivm_state *gallivm,
-                            const struct pipe_depth_state *depth,
+                            const struct lp_depth_state *depth,
                             const struct pipe_stencil_state stencil[2],
                             struct lp_type z_src_type,
                             const struct util_format_description *format_desc,
@@ -880,8 +881,8 @@ lp_build_depth_stencil_test(struct gallivm_state *gallivm,
 
    /* Sanity checking */
    {
-      const unsigned z_swizzle = format_desc->swizzle[0];
-      const unsigned s_swizzle = format_desc->swizzle[1];
+      ASSERTED const unsigned z_swizzle = format_desc->swizzle[0];
+      ASSERTED const unsigned s_swizzle = format_desc->swizzle[1];
 
       assert(z_swizzle != PIPE_SWIZZLE_NONE ||
              s_swizzle != PIPE_SWIZZLE_NONE);

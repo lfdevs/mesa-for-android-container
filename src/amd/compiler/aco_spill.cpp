@@ -63,10 +63,10 @@ struct spill_ctx {
    std::map<Instruction *, bool> remat_used;
    unsigned wave_size;
 
-   spill_ctx(const RegisterDemand target_pressure, Program* program,
-             std::vector<std::vector<RegisterDemand>> register_demand)
-      : target_pressure(target_pressure), program(program),
-        register_demand(std::move(register_demand)), renames(program->blocks.size()),
+   spill_ctx(const RegisterDemand target_pressure_, Program* program_,
+             std::vector<std::vector<RegisterDemand>> register_demand_)
+      : target_pressure(target_pressure_), program(program_),
+        register_demand(std::move(register_demand_)), renames(program->blocks.size()),
         spills_entry(program->blocks.size()), spills_exit(program->blocks.size()),
         processed(program->blocks.size(), false), wave_size(program->wave_size) {}
 
@@ -316,7 +316,7 @@ void get_rematerialize_info(spill_ctx& ctx)
          if (logical && should_rematerialize(instr)) {
             for (const Definition& def : instr->definitions) {
                if (def.isTemp()) {
-                  ctx.remat[def.getTemp()] = (remat_info){instr.get()};
+                  ctx.remat[def.getTemp()] = remat_info{instr.get()};
                   ctx.remat_used[instr.get()] = false;
                }
             }
@@ -384,26 +384,28 @@ RegisterDemand init_live_in_vars(spill_ctx& ctx, Block* block, unsigned block_id
       }
       unsigned loop_end = i;
 
-      /* keep live-through spilled */
-      for (std::pair<Temp, std::pair<uint32_t, uint32_t>> pair : ctx.next_use_distances_end[block_idx - 1]) {
-         if (pair.second.first < loop_end)
+      for (auto spilled : ctx.spills_exit[block_idx - 1]) {
+         auto map = ctx.next_use_distances_end[block_idx - 1];
+         auto it = map.find(spilled.first);
+
+         /* variable is not even live at the predecessor: probably from a phi */
+         if (it == map.end())
             continue;
 
-         Temp to_spill = pair.first;
-         auto it = ctx.spills_exit[block_idx - 1].find(to_spill);
-         if (it == ctx.spills_exit[block_idx - 1].end())
-            continue;
-
-         ctx.spills_entry[block_idx][to_spill] = it->second;
-         spilled_registers += to_spill;
+         /* keep constants and live-through variables spilled */
+         if (it->second.first >= loop_end || ctx.remat.count(spilled.first)) {
+            ctx.spills_entry[block_idx][spilled.first] = spilled.second;
+            spilled_registers += spilled.first;
+         }
       }
 
-      /* select live-through vgpr variables */
+      /* select live-through vgpr variables and constants */
       while (new_demand.vgpr - spilled_registers.vgpr > ctx.target_pressure.vgpr) {
          unsigned distance = 0;
          Temp to_spill;
          for (std::pair<Temp, std::pair<uint32_t, uint32_t>> pair : ctx.next_use_distances_end[block_idx - 1]) {
             if (pair.first.type() == RegType::vgpr &&
+                (pair.second.first >= loop_end || ctx.remat.count(pair.first)) &&
                 pair.second.first >= loop_end &&
                 pair.second.second > distance &&
                 ctx.spills_entry[block_idx].find(pair.first) == ctx.spills_entry[block_idx].end()) {
@@ -425,13 +427,13 @@ RegisterDemand init_live_in_vars(spill_ctx& ctx, Block* block, unsigned block_id
          spilled_registers.vgpr += to_spill.size();
       }
 
-      /* select live-through sgpr variables */
+      /* select live-through sgpr variables and constants */
       while (new_demand.sgpr - spilled_registers.sgpr > ctx.target_pressure.sgpr) {
          unsigned distance = 0;
          Temp to_spill;
          for (std::pair<Temp, std::pair<uint32_t, uint32_t>> pair : ctx.next_use_distances_end[block_idx - 1]) {
             if (pair.first.type() == RegType::sgpr &&
-                pair.second.first >= loop_end &&
+                (pair.second.first >= loop_end || ctx.remat.count(pair.first)) &&
                 pair.second.second > distance &&
                 ctx.spills_entry[block_idx].find(pair.first) == ctx.spills_entry[block_idx].end()) {
                to_spill = pair.first;
@@ -733,10 +735,11 @@ void add_coupling_code(spill_ctx& ctx, Block* block, unsigned block_idx)
       assert(ctx.register_demand[block_idx].size() == block->instructions.size());
       std::vector<RegisterDemand> reg_demand;
       unsigned insert_idx = 0;
-      unsigned pred_idx = block->linear_preds[0];
       RegisterDemand demand_before = get_demand_before(ctx, block_idx, 0);
 
       for (std::pair<Temp, std::pair<uint32_t, uint32_t>> live : ctx.next_use_distances_start[block_idx]) {
+         const unsigned pred_idx = block->linear_preds[0];
+
          if (!live.first.is_linear())
             continue;
          /* still spilled */
@@ -1225,11 +1228,9 @@ void spill_block(spill_ctx& ctx, unsigned block_idx)
                   !ctx.renames[block_idx].empty() ||
                   ctx.remat_used.size();
 
-   std::map<Temp, uint32_t>::iterator it = current_spills.begin();
-   while (!process && it != current_spills.end()) {
+   for (auto it = current_spills.begin(); !process && it != current_spills.end(); ++it) {
       if (ctx.next_use_distances_start[block_idx][it->first].first == block_idx)
          process = true;
-      ++it;
    }
 
    if (process)
@@ -1278,14 +1279,12 @@ void spill_block(spill_ctx& ctx, unsigned block_idx)
             instr_it++;
          }
 
-         std::map<Temp, std::pair<uint32_t, uint32_t>>::iterator it = ctx.next_use_distances_start[idx].find(rename.first);
-
          /* variable is not live at beginning of this block */
-         if (it == ctx.next_use_distances_start[idx].end())
+         if (ctx.next_use_distances_start[idx].count(rename.first) == 0)
             continue;
 
          /* if the variable is live at the block's exit, add rename */
-         if (ctx.next_use_distances_end[idx].find(rename.first) != ctx.next_use_distances_end[idx].end())
+         if (ctx.next_use_distances_end[idx].count(rename.first) != 0)
             ctx.renames[idx].insert(rename);
 
          /* rename all uses in this block */
@@ -1614,8 +1613,8 @@ void assign_spill_slots(spill_ctx& ctx, unsigned spills_to_vgpr) {
                   } else {
                      assert(last_top_level_block_idx < block.index);
                      /* insert before the branch at last top level block */
-                     std::vector<aco_ptr<Instruction>>& instructions = ctx.program->blocks[last_top_level_block_idx].instructions;
-                     instructions.insert(std::next(instructions.begin(), instructions.size() - 1), std::move(create));
+                     std::vector<aco_ptr<Instruction>>& block_instrs = ctx.program->blocks[last_top_level_block_idx].instructions;
+                     block_instrs.insert(std::prev(block_instrs.end()), std::move(create));
                   }
                }
 
@@ -1683,8 +1682,8 @@ void assign_spill_slots(spill_ctx& ctx, unsigned spills_to_vgpr) {
                   } else {
                      assert(last_top_level_block_idx < block.index);
                      /* insert before the branch at last top level block */
-                     std::vector<aco_ptr<Instruction>>& instructions = ctx.program->blocks[last_top_level_block_idx].instructions;
-                     instructions.insert(std::next(instructions.begin(), instructions.size() - 1), std::move(create));
+                     std::vector<aco_ptr<Instruction>>& block_instrs = ctx.program->blocks[last_top_level_block_idx].instructions;
+                     block_instrs.insert(std::prev(block_instrs.end()), std::move(create));
                   }
                }
 

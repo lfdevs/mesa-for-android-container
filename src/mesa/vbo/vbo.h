@@ -37,13 +37,15 @@
 #include "main/draw.h"
 #include "main/macros.h"
 #include "vbo_attrib.h"
+#include "gallium/include/pipe/p_state.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct gl_context;
-struct vbo_module;
+struct pipe_draw_info;
+struct pipe_draw_start_count;
 
 /**
  * Max number of primitives (number of glBegin/End pairs) per VBO.
@@ -79,20 +81,41 @@ struct vbo_exec_copied_vtx {
    GLuint nr;
 };
 
+struct vbo_markers
+{
+   /**
+    * If false and the primitive is a line loop, the first vertex is
+    * the beginning of the line loop and it won't be drawn.
+    * Instead, it will be moved to the end.
+    *
+    * Drivers shouldn't reset the line stipple pattern walker if begin is
+    * false and mode is a line strip.
+    */
+   bool begin;
+
+   /**
+    * If true and the primitive is a line loop, it will be closed.
+    */
+   bool end;
+};
+
 struct vbo_exec_context
 {
-   struct gl_context *ctx;
    GLvertexformat vtxfmt;
    GLvertexformat vtxfmt_noop;
 
    struct {
+      /* Multi draw where the mode can vary between draws. */
+      struct pipe_draw_info info;
+      struct pipe_draw_start_count draw[VBO_MAX_PRIM];
+      GLubyte mode[VBO_MAX_PRIM];            /**< primitive modes per draw */
+      struct vbo_markers markers[VBO_MAX_PRIM];
+      unsigned prim_count;
+
       struct gl_buffer_object *bufferobj;
 
       GLuint vertex_size;       /* in dwords */
       GLuint vertex_size_no_pos;
-
-      struct _mesa_prim prim[VBO_MAX_PRIM];
-      GLuint prim_count;
 
       fi_type *buffer_map;
       fi_type *buffer_ptr;              /* cursor, points into buffer */
@@ -134,7 +157,6 @@ struct vbo_save_copied_vtx {
 };
 
 struct vbo_save_context {
-   struct gl_context *ctx;
    GLvertexformat vtxfmt;
    GLvertexformat vtxfmt_noop;  /**< Used if out_of_memory is true */
 
@@ -156,6 +178,8 @@ struct vbo_save_context {
 
    struct vbo_save_vertex_store *vertex_store;
    struct vbo_save_primitive_store *prim_store;
+   struct gl_buffer_object *previous_ib;
+   unsigned ib_first_free_index;
 
    fi_type *buffer_map;            /**< Mapping of vertex_store's buffer */
    fi_type *buffer_ptr;		   /**< cursor, points into buffer_map */
@@ -228,7 +252,15 @@ vbo_get_minmax_index_mapped(unsigned count, unsigned index_size,
 void
 vbo_get_minmax_indices(struct gl_context *ctx, const struct _mesa_prim *prim,
                        const struct _mesa_index_buffer *ib,
-                       GLuint *min_index, GLuint *max_index, GLuint nr_prims);
+                       GLuint *min_index, GLuint *max_index, GLuint nr_prims,
+                       bool primitive_restart,
+                       unsigned restart_index);
+
+bool
+vbo_get_minmax_indices_gallium(struct gl_context *ctx,
+                               struct pipe_draw_info *info,
+                               const struct pipe_draw_start_count *draws,
+                               unsigned num_draws);
 
 void
 vbo_sw_primitive_restart(struct gl_context *ctx,
@@ -237,7 +269,9 @@ vbo_sw_primitive_restart(struct gl_context *ctx,
                          const struct _mesa_index_buffer *ib,
                          GLuint num_instances, GLuint base_instance,
                          struct gl_buffer_object *indirect,
-                         GLsizeiptr indirect_offset);
+                         GLsizeiptr indirect_offset,
+                         bool primitive_restart,
+                         unsigned restart_index);
 
 
 const struct gl_array_attributes*

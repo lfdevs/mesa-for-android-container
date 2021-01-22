@@ -370,6 +370,8 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_TESS_CTRL];
    const unsigned *assembly;
 
+   vue_prog_data->base.stage = MESA_SHADER_TESS_CTRL;
+
    nir->info.outputs_written = key->outputs_written;
    nir->info.patch_outputs_written = key->patch_outputs_written;
 

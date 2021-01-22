@@ -90,20 +90,20 @@ struct etna_shader_state {
    struct etna_shader_variant *vs, *fs;
 };
 
-enum etna_immediate_contents {
-   ETNA_IMMEDIATE_UNUSED = 0,
-   ETNA_IMMEDIATE_CONSTANT,
-   ETNA_IMMEDIATE_UNIFORM,
-   ETNA_IMMEDIATE_TEXRECT_SCALE_X,
-   ETNA_IMMEDIATE_TEXRECT_SCALE_Y,
-   ETNA_IMMEDIATE_UBO0_ADDR,
-   ETNA_IMMEDIATE_UBOMAX_ADDR = ETNA_IMMEDIATE_UBO0_ADDR + ETNA_MAX_CONST_BUF - 1,
+enum etna_uniform_contents {
+   ETNA_UNIFORM_UNUSED = 0,
+   ETNA_UNIFORM_CONSTANT,
+   ETNA_UNIFORM_UNIFORM,
+   ETNA_UNIFORM_TEXRECT_SCALE_X,
+   ETNA_UNIFORM_TEXRECT_SCALE_Y,
+   ETNA_UNIFORM_UBO0_ADDR,
+   ETNA_UNIFORM_UBOMAX_ADDR = ETNA_UNIFORM_UBO0_ADDR + ETNA_MAX_CONST_BUF - 1,
 };
 
 struct etna_shader_uniform_info {
-   enum etna_immediate_contents *imm_contents;
-   uint32_t *imm_data;
-   uint32_t imm_count;
+   enum etna_uniform_contents *contents;
+   uint32_t *data;
+   uint32_t count;
 };
 
 struct etna_context {

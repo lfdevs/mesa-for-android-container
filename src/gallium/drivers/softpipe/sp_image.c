@@ -175,7 +175,7 @@ get_dimensions(const struct pipe_image_view *iview,
       else
          *depth = spr->base.array_size;
 
-      /* Make sure the resource and view have compatiable formats */
+      /* Make sure the resource and view have compatible formats */
       if (util_format_get_blocksize(pformat) >
           util_format_get_blocksize(spr->base.format))
          return false;
@@ -729,12 +729,12 @@ sp_tgsi_get_dims(const struct tgsi_image *image,
    switch (params->tgsi_tex_instr) {
    case TGSI_TEXTURE_1D_ARRAY:
       dims[1] = iview->u.tex.last_layer - iview->u.tex.first_layer + 1;
-      /* fallthrough */
+      FALLTHROUGH;
    case TGSI_TEXTURE_1D:
       return;
    case TGSI_TEXTURE_2D_ARRAY:
       dims[2] = iview->u.tex.last_layer - iview->u.tex.first_layer + 1;
-      /* fallthrough */
+      FALLTHROUGH;
    case TGSI_TEXTURE_2D:
    case TGSI_TEXTURE_CUBE:
    case TGSI_TEXTURE_RECT:

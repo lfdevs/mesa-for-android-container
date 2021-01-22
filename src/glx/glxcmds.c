@@ -276,7 +276,8 @@ glx_context_init(struct glx_context *gc,
  *
  * \param dpy        Display where the context was created.
  * \param contextID  ID of the context to be tested.
- * \param error      Out parameter, set to True on error if not NULL
+ * \param error      Out parameter, set to True on error if not NULL,
+ *                   otherwise raise the error to the application.
  *
  * \returns \c True if the context is direct rendering or not.
  */
@@ -301,7 +302,8 @@ __glXIsDirect(Display * dpy, GLXContextID contextID, Bool *error)
    if (err != NULL) {
       if (error)
          *error = True;
-      __glXSendErrorForXcb(dpy, err);
+      else
+         __glXSendErrorForXcb(dpy, err);
       free(err);
    }
 
@@ -1421,15 +1423,9 @@ glXImportContextEXT(Display *dpy, GLXContextID contextID)
     *     context then no error is generated but glXImportContextEXT returns
     *     NULL."
     *
-    * If contextID is None, generate BadContext on the client-side.  Other
-    * sorts of invalid contexts will be detected by the server in the
-    * __glXIsDirect call.
+    * We can handle both conditions with the __glXIsDirect call, because
+    * passing None to a GLXIsDirect request will throw GLXBadContext.
     */
-   if (contextID == None) {
-      __glXSendError(dpy, GLXBadContext, contextID, X_GLXIsDirect, false);
-      return NULL;
-   }
-
    if (__glXIsDirect(dpy, contextID, NULL))
       return NULL;
 

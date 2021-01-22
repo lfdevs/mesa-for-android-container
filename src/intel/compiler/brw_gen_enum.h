@@ -25,17 +25,18 @@
 #include "dev/gen_device_info.h"
 
 enum gen {
-   GEN4  = (1 << 0),
-   GEN45 = (1 << 1),
-   GEN5  = (1 << 2),
-   GEN6  = (1 << 3),
-   GEN7  = (1 << 4),
-   GEN75 = (1 << 5),
-   GEN8  = (1 << 6),
-   GEN9  = (1 << 7),
-   GEN10 = (1 << 8),
-   GEN11 = (1 << 9),
-   GEN12 = (1 << 10),
+   GEN4    = (1 << 0),
+   GEN45   = (1 << 1),
+   GEN5    = (1 << 2),
+   GEN6    = (1 << 3),
+   GEN7    = (1 << 4),
+   GEN75   = (1 << 5),
+   GEN8    = (1 << 6),
+   GEN9    = (1 << 7),
+   GEN10   = (1 << 8),
+   GEN11   = (1 << 9),
+   GEN12   = (1 << 10),
+   GEN125  = (1 << 11),
    GEN_ALL = ~0
 };
 
@@ -54,7 +55,7 @@ gen_from_devinfo(const struct gen_device_info *devinfo)
    case 8: return GEN8;
    case 9: return GEN9;
    case 11: return GEN11;
-   case 12: return GEN12;
+   case 12: return gen_device_info_is_12hp(devinfo) ? GEN125 : GEN12;
    default:
       unreachable("not reached");
    }

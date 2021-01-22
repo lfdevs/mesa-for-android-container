@@ -183,11 +183,6 @@ dri_is_thread_safe(void *loaderPrivate)
       return false;
 #endif
 
-#ifdef HAVE_WAYLAND_PLATFORM
-   if (display->Platform == _EGL_PLATFORM_WAYLAND)
-      return true;
-#endif
-
    return true;
 }
 
@@ -1181,6 +1176,7 @@ dri2_initialize(_EGLDisplay *disp)
       ret = dri2_initialize_device(disp);
       break;
    case _EGL_PLATFORM_X11:
+   case _EGL_PLATFORM_XCB:
       ret = dri2_initialize_x11(disp);
       break;
    case _EGL_PLATFORM_DRM:
@@ -1241,8 +1237,15 @@ dri2_display_destroy(_EGLDisplay *disp)
    }
    if (dri2_dpy->fd >= 0)
       close(dri2_dpy->fd);
+
+   /* Don't dlclose the driver when building with the address sanitizer, so you
+    * get good symbols from the leak reports.
+    */
+#if !BUILT_WITH_ASAN || defined(NDEBUG)
    if (dri2_dpy->driver)
       dlclose(dri2_dpy->driver);
+#endif
+
    free(dri2_dpy->driver_name);
 
 #ifdef HAVE_WAYLAND_PLATFORM
@@ -2458,7 +2461,7 @@ dri2_create_image_khr_texture(_EGLDisplay *disp, _EGLContext *ctx,
                                               depth,
                                               attrs.GLTextureLevel,
                                               &error,
-                                              dri2_img);
+                                              NULL);
    dri2_create_image_khr_texture_error(error);
 
    if (!dri2_img->dri_image) {

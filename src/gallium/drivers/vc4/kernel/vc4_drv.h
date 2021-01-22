@@ -120,7 +120,7 @@ struct vc4_exec_info {
  * contents in p0, and validate that the offset combined with
  * width/height/stride/etc. from p1 and p2/p3 doesn't sample outside the BO.
  * Note that the hardware treats unprovided config parameters as 0, so not all
- * of them need to be set up for every texure sample, and we'll store ~0 as
+ * of them need to be set up for every texture sample, and we'll store ~0 as
  * the offset to mark the unused ones.
  *
  * See the VC4 3D architecture guide page 41 ("Texture and Memory Lookup Unit

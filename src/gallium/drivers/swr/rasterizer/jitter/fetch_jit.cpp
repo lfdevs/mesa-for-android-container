@@ -54,7 +54,7 @@ enum ConversionType
 //////////////////////////////////////////////////////////////////////////
 struct FetchJit : public BuilderGfxMem
 {
-    FetchJit(JitManager* pJitMgr) : BuilderGfxMem(pJitMgr) {}
+    FetchJit(JitManager* pJitMgr) : BuilderGfxMem(pJitMgr), mpFetchInfo(NULL) {}
 
     Function* Create(const FETCH_COMPILE_STATE& fetchState);
 
@@ -701,8 +701,8 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
         vOffsets        = ADD(vOffsets, vAlignmentOffsets);
 
         // if instance stride enable is:
-        //  true  - add product of the instanceID and advancement state to the offst into the VB
-        //  false - value of vInstanceStride has been initialialized to zero
+        //  true  - add product of the instanceID and advancement state to the offset into the VB
+        //  false - value of vInstanceStride has been initialized to zero
         vOffsets = ADD(vOffsets, vInstanceStride);
 
         // Packing and component control
@@ -1334,7 +1334,7 @@ void FetchJit::Shuffle8bpcGatherd16(Shuffle8bpcArgs& args)
              char(z),     char(z + 4),  char(z + 8), char(z + 12), char(w),     char(w + 4),
              char(w + 8), char(w + 12)});
 
-        // SIMD16 PSHUFB isnt part of AVX-512F, so split into SIMD8 for the sake of KNL, for now..
+        // SIMD16 PSHUFB isn't part of AVX-512F, so split into SIMD8 for the sake of KNL, for now..
 
         Value* vGatherResult_lo = EXTRACT_16(vGatherResult, 0);
         Value* vGatherResult_hi = EXTRACT_16(vGatherResult, 1);
@@ -1709,7 +1709,7 @@ void FetchJit::Shuffle16bpcGather16(Shuffle16bpcArgs& args)
         Value* vi128XY_hi = nullptr;
         if (isComponentEnabled(compMask, 0) || isComponentEnabled(compMask, 1))
         {
-            // SIMD16 PSHUFB isnt part of AVX-512F, so split into SIMD8 for the sake of KNL, for
+            // SIMD16 PSHUFB isn't part of AVX-512F, so split into SIMD8 for the sake of KNL, for
             // now..
 
             Value* vGatherResult_lo = BITCAST(EXTRACT_16(vGatherResult[0], 0), v32x8Ty);
@@ -1895,7 +1895,7 @@ void FetchJit::Shuffle16bpcGather16(Shuffle16bpcArgs& args)
                     // if x or y, use vi128XY permute result, else use vi128ZW
                     uint32_t selectedGather = (i < 2) ? 0 : 1;
 
-                    // SIMD16 PSHUFB isnt part of AVX-512F, so split into SIMD8 for the sake of KNL,
+                    // SIMD16 PSHUFB isn't part of AVX-512F, so split into SIMD8 for the sake of KNL,
                     // for now..
 
                     Value* vGatherResult_lo = EXTRACT_16(vGatherResult[selectedGather], 0);

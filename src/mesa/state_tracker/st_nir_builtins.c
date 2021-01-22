@@ -30,15 +30,13 @@
 
 struct pipe_shader_state *
 st_nir_finish_builtin_shader(struct st_context *st,
-                             nir_shader *nir,
-                             const char *name)
+                             nir_shader *nir)
 {
    struct pipe_context *pipe = st->pipe;
-   struct pipe_screen *screen = pipe->screen;
+   struct pipe_screen *screen = st->screen;
    gl_shader_stage stage = nir->info.stage;
    enum pipe_shader_type sh = pipe_shader_type_from_mesa(stage);
 
-   nir->info.name = ralloc_strdup(nir, name);
    nir->info.separate_shader = true;
    if (stage == MESA_SHADER_FRAGMENT)
       nir->info.fs.untyped_color_outputs = true;
@@ -81,7 +79,6 @@ st_nir_finish_builtin_shader(struct st_context *st,
        screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_PREFERRED_IR)) {
       state.type = PIPE_SHADER_IR_TGSI;
       state.tokens = nir_to_tgsi(nir, screen);
-      ralloc_free(nir);
    }
 
    struct pipe_shader_state *shader;
@@ -125,12 +122,12 @@ st_nir_make_passthrough_shader(struct st_context *st,
                                unsigned *interpolation_modes,
                                unsigned sysval_mask)
 {
-   struct nir_builder b;
    const struct glsl_type *vec4 = glsl_vec4_type();
    const nir_shader_compiler_options *options =
       st_get_nir_compiler_options(st, stage);
 
-   nir_builder_init_simple_shader(&b, NULL, stage, options);
+   nir_builder b = nir_builder_init_simple_shader(stage, options,
+                                                  "%s", shader_name);
 
    char var_name[15];
 
@@ -157,5 +154,5 @@ st_nir_make_passthrough_shader(struct st_context *st,
       nir_copy_var(&b, out, in);
    }
 
-   return st_nir_finish_builtin_shader(st, b.shader, shader_name);
+   return st_nir_finish_builtin_shader(st, b.shader);
 }

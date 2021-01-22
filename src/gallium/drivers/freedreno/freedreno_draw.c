@@ -59,7 +59,8 @@ resource_written(struct fd_batch *batch, struct pipe_resource *prsc)
 }
 
 static void
-batch_draw_tracking(struct fd_batch *batch, const struct pipe_draw_info *info)
+batch_draw_tracking(struct fd_batch *batch, const struct pipe_draw_info *info,
+                    const struct pipe_draw_indirect_info *indirect)
 {
 	struct fd_context *ctx = batch->ctx;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
@@ -175,8 +176,8 @@ batch_draw_tracking(struct fd_batch *batch, const struct pipe_draw_info *info)
 		resource_read(batch, info->index.resource);
 
 	/* Mark indirect draw buffer as being read */
-	if (info->indirect)
-		resource_read(batch, info->indirect->buffer);
+	if (indirect && indirect->buffer)
+		resource_read(batch, indirect->buffer);
 
 	/* Mark textures as being read */
 	if (ctx->dirty_shader[PIPE_SHADER_VERTEX] & FD_DIRTY_SHADER_TEX) {
@@ -210,23 +211,40 @@ batch_draw_tracking(struct fd_batch *batch, const struct pipe_draw_info *info)
 }
 
 static void
-fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
+fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
+            const struct pipe_draw_indirect_info *indirect,
+            const struct pipe_draw_start_count *draws,
+            unsigned num_draws)
 {
+	if (num_draws > 1) {
+           struct pipe_draw_info tmp_info = *info;
+
+           for (unsigned i = 0; i < num_draws; i++) {
+              fd_draw_vbo(pctx, &tmp_info, indirect, &draws[i], 1);
+              if (tmp_info.increment_draw_id)
+                 tmp_info.drawid++;
+           }
+           return;
+	}
+
+        if (!indirect && (!draws[0].count || !info->instance_count))
+           return;
+
 	struct fd_context *ctx = fd_context(pctx);
 
 	/* for debugging problems with indirect draw, it is convenient
 	 * to be able to emulate it, to determine if game is feeding us
 	 * bogus data:
 	 */
-	if (info->indirect && (fd_mesa_debug & FD_DBG_NOINDR)) {
-		util_draw_indirect(pctx, info);
+	if (indirect && indirect->buffer && (fd_mesa_debug & FD_DBG_NOINDR)) {
+		util_draw_indirect(pctx, info, indirect);
 		return;
 	}
 
 	if (info->mode != PIPE_PRIM_MAX &&
-	    !info->count_from_stream_output && !info->indirect &&
+	    !indirect &&
 	    !info->primitive_restart &&
-	    !u_trim_pipe_prim(info->mode, (unsigned*)&info->count))
+	    !u_trim_pipe_prim(info->mode, (unsigned*)&draws[0].count))
 		return;
 
 	/* TODO: push down the region versions into the tiles */
@@ -236,9 +254,9 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	/* emulate unsupported primitives: */
 	if (!fd_supported_prim(ctx, info->mode)) {
 		if (ctx->streamout.num_targets > 0)
-			debug_error("stream-out with emulated prims");
+			mesa_loge("stream-out with emulated prims");
 		util_primconvert_save_rasterizer_state(ctx->primconvert, ctx->rasterizer);
-		util_primconvert_draw_vbo(ctx->primconvert, info);
+		util_primconvert_draw_vbo(ctx->primconvert, info, &draws[0]);
 		return;
 	}
 
@@ -248,7 +266,8 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	struct pipe_draw_info new_info;
 	if (info->index_size) {
 		if (info->has_user_indices) {
-			if (!util_upload_index_buffer(pctx, info, &indexbuf, &index_offset, 4))
+			if (!util_upload_index_buffer(pctx, info, &draws[0],
+                                                      &indexbuf, &index_offset, 4))
 				return;
 			new_info = *info;
 			new_info.index.resource = indexbuf;
@@ -259,23 +278,23 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 		}
 	}
 
-	struct fd_batch *batch = NULL;
-	fd_batch_reference(&batch, fd_context_batch(ctx));
+	struct fd_batch *batch = fd_context_batch(ctx);
 
 	if (ctx->in_discard_blit) {
 		fd_batch_reset(batch);
 		fd_context_all_dirty(ctx);
 	}
 
-	batch_draw_tracking(batch, info);
+	batch_draw_tracking(batch, info, indirect);
 
-	if (unlikely(ctx->batch != batch)) {
+	while (unlikely(!fd_batch_lock_submit(batch))) {
 		/* The current batch was flushed in batch_draw_tracking()
 		 * so start anew.  We know this won't happen a second time
 		 * since we are dealing with a fresh batch:
 		 */
-		fd_batch_reference(&batch, fd_context_batch(ctx));
-		batch_draw_tracking(batch, info);
+		fd_batch_reference(&batch, NULL);
+		batch = fd_context_batch(ctx);
+		batch_draw_tracking(batch, info, indirect);
 		assert(ctx->batch == batch);
 	}
 
@@ -290,7 +309,7 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	unsigned prims;
 	if ((info->mode != PIPE_PRIM_PATCHES) &&
 			(info->mode != PIPE_PRIM_MAX))
-		prims = u_reduced_prims_for_vertices(info->mode, info->count);
+		prims = u_reduced_prims_for_vertices(info->mode, draws[0].count);
 	else
 		prims = 0;
 
@@ -318,17 +337,18 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 		util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
 		util_format_short_name(pipe_surface_format(pfb->zsbuf)));
 
-	if (ctx->draw_vbo(ctx, info, index_offset))
+	if (ctx->draw_vbo(ctx, info, indirect, &draws[0], index_offset))
 		batch->needs_flush = true;
 
-	batch->num_vertices += info->count * info->instance_count;
+	batch->num_vertices += draws[0].count * info->instance_count;
 
 	for (unsigned i = 0; i < ctx->streamout.num_targets; i++)
-		ctx->streamout.offsets[i] += info->count;
+		ctx->streamout.offsets[i] += draws[0].count;
 
 	if (fd_mesa_debug & FD_DBG_DDRAW)
 		fd_context_all_dirty(ctx);
 
+	fd_batch_unlock_submit(batch);
 	fd_batch_check_size(batch);
 	fd_batch_reference(&batch, NULL);
 
@@ -397,8 +417,7 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
 	if (!fd_render_condition_check(pctx))
 		return;
 
-	struct fd_batch *batch = NULL;
-	fd_batch_reference(&batch, fd_context_batch(ctx));
+	struct fd_batch *batch = fd_context_batch(ctx);
 
 	if (ctx->in_discard_blit) {
 		fd_batch_reset(batch);
@@ -407,12 +426,13 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
 
 	batch_clear_tracking(batch, buffers);
 
-	if (unlikely(ctx->batch != batch)) {
+	while (unlikely(!fd_batch_lock_submit(batch))) {
 		/* The current batch was flushed in batch_clear_tracking()
 		 * so start anew.  We know this won't happen a second time
 		 * since we are dealing with a fresh batch:
 		 */
-		fd_batch_reference(&batch, fd_context_batch(ctx));
+		fd_batch_reference(&batch, NULL);
+		batch = fd_context_batch(ctx);
 		batch_clear_tracking(batch, buffers);
 		assert(ctx->batch == batch);
 	}
@@ -445,11 +465,13 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
 		}
 	}
 
+	fd_batch_unlock_submit(batch);
+	fd_batch_check_size(batch);
+
 	if (fallback) {
 		fd_blitter_clear(pctx, buffers, color, depth, stencil);
 	}
 
-	fd_batch_check_size(batch);
 	fd_batch_reference(&batch, NULL);
 }
 

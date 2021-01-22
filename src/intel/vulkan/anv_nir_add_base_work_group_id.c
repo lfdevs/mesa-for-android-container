@@ -49,19 +49,13 @@ anv_nir_add_base_work_group_id(nir_shader *shader)
 
             b.cursor = nir_after_instr(&load_id->instr);
 
-            nir_intrinsic_instr *load_base =
-               nir_intrinsic_instr_create(shader, nir_intrinsic_load_push_constant);
-            load_base->num_components = 3;
-            load_base->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
-            nir_ssa_dest_init(&load_base->instr, &load_base->dest, 3, 32, NULL);
-            nir_intrinsic_set_base(load_base,
-                                   offsetof(struct anv_push_constants,
-                                            cs.base_work_group_id));
-            nir_intrinsic_set_range(load_base, 3 * sizeof(uint32_t));
-            nir_builder_instr_insert(&b, &load_base->instr);
+            nir_ssa_def *load_base =
+               nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 0),
+                                      .base = offsetof(struct anv_push_constants, cs.base_work_group_id),
+                                      .range = 3 * sizeof(uint32_t));
 
             nir_ssa_def *id = nir_iadd(&b, &load_id->dest.ssa,
-                                           &load_base->dest.ssa);
+                                           load_base);
 
             nir_ssa_def_rewrite_uses_after(&load_id->dest.ssa,
                                            nir_src_for_ssa(id),

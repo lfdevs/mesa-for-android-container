@@ -293,6 +293,27 @@ const float fract_values[] = {
  * Unary test cases.
  */
 
+#ifdef _MSC_VER
+#define WRAP(func) \
+static float \
+wrap_ ## func ## (float x) \
+{ \
+   return func(x); \
+}
+WRAP(expf)
+WRAP(logf)
+WRAP(sinf)
+WRAP(cosf)
+WRAP(floorf)
+WRAP(ceilf)
+#define expf wrap_expf
+#define logf wrap_logf
+#define sinf wrap_sinf
+#define cosf wrap_cosf
+#define floorf wrap_floorf
+#define ceilf wrap_ceilf
+#endif
+
 static const struct unary_test_t
 unary_tests[] = {
    {"abs", &lp_build_abs, &fabsf, sgn_values, ARRAY_SIZE(sgn_values), 20.0 },

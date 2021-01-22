@@ -1110,17 +1110,13 @@ ttn_ucmp(nir_builder *b, nir_op op, nir_alu_dest dest, nir_ssa_def **src)
 static void
 ttn_barrier(nir_builder *b)
 {
-   nir_intrinsic_instr *barrier =
-      nir_intrinsic_instr_create(b->shader, nir_intrinsic_control_barrier);
-   nir_builder_instr_insert(b, &barrier->instr);
+   nir_control_barrier(b);
 }
 
 static void
 ttn_kill(nir_builder *b, nir_op op, nir_alu_dest dest, nir_ssa_def **src)
 {
-   nir_intrinsic_instr *discard =
-      nir_intrinsic_instr_create(b->shader, nir_intrinsic_discard);
-   nir_builder_instr_insert(b, &discard->instr);
+   nir_discard(b);
    b->shader->info.fs.uses_discard = true;
 }
 
@@ -1132,10 +1128,7 @@ ttn_kill_if(nir_builder *b, nir_op op, nir_alu_dest dest, nir_ssa_def **src)
    nir_ssa_def *cmp = nir_bany(b, nir_flt(b, src[0], nir_imm_float(b, 0.0)));
    b->exact = false;
 
-   nir_intrinsic_instr *discard =
-      nir_intrinsic_instr_create(b->shader, nir_intrinsic_discard_if);
-   discard->src[0] = nir_src_for_ssa(cmp);
-   nir_builder_instr_insert(b, &discard->instr);
+   nir_discard_if(b, cmp);
    b->shader->info.fs.uses_discard = true;
 }
 
@@ -2299,9 +2292,8 @@ ttn_compile_init(const void *tgsi_tokens,
          screen->get_compiler_options(screen, PIPE_SHADER_IR_NIR, scan.processor);
    }
 
-   nir_builder_init_simple_shader(&c->build, NULL,
-                                  tgsi_processor_to_shader_stage(scan.processor),
-                                  options);
+   c->build = nir_builder_init_simple_shader(tgsi_processor_to_shader_stage(scan.processor),
+                                             options, "TTN");
 
    s = c->build.shader;
 

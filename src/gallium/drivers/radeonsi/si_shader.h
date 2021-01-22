@@ -141,6 +141,10 @@
 
 #include <stdio.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Use LDS symbols when supported by LLVM. Can be disabled for testing the old
 // path on newer LLVM for now. Should be removed in the long term.
 #define USE_LDS_SYMBOLS (true)
@@ -174,8 +178,8 @@ enum
 
    /* all VS variants */
    SI_SGPR_BASE_VERTEX = SI_NUM_VS_STATE_RESOURCE_SGPRS,
-   SI_SGPR_START_INSTANCE,
    SI_SGPR_DRAWID,
+   SI_SGPR_START_INSTANCE,
    SI_VS_NUM_USER_SGPR,
 
    SI_SGPR_VS_BLIT_DATA = SI_SGPR_CONST_AND_SHADER_BUFFERS,
@@ -278,7 +282,9 @@ enum
 #define SI_NGG_CULL_FRONT_FACE               (1 << 2)   /* front faces */
 #define SI_NGG_CULL_GS_FAST_LAUNCH_TRI_LIST  (1 << 3)   /* GS fast launch: triangles */
 #define SI_NGG_CULL_GS_FAST_LAUNCH_TRI_STRIP (1 << 4)   /* GS fast launch: triangle strip */
-#define SI_NGG_CULL_GS_FAST_LAUNCH_ALL       (0x3 << 3) /* GS fast launch (both prim types) */
+#define SI_NGG_CULL_GS_FAST_LAUNCH_INDEX_SIZE_PACKED(x)     (((x) & 0x3) << 5) /* 0->0, 1->1, 2->2, 3->4 */
+#define SI_GET_NGG_CULL_GS_FAST_LAUNCH_INDEX_SIZE_PACKED(x) (((x) >> 5) & 0x3)
+#define SI_NGG_CULL_GS_FAST_LAUNCH_ALL       (0xf << 3) /* GS fast launch (both prim types) */
 
 /**
  * For VS shader keys, describe any fixups required for vertex fetch.
@@ -357,6 +363,10 @@ struct si_shader_info {
    bool writes_stencil;     /**< does fragment shader write stencil value? */
    bool writes_samplemask;  /**< does fragment shader write sample mask? */
    bool writes_edgeflag;    /**< vertex shader outputs edgeflag */
+   bool uses_interp_color;
+   bool uses_persp_center_color;
+   bool uses_persp_centroid_color;
+   bool uses_persp_sample_color;
    bool uses_persp_center;
    bool uses_persp_centroid;
    bool uses_persp_sample;
@@ -365,6 +375,8 @@ struct si_shader_info {
    bool uses_linear_sample;
    bool uses_interp_at_sample;
    bool uses_instanceid;
+   bool uses_base_vertex;
+   bool uses_base_instance;
    bool uses_drawid;
    bool uses_primid;
    bool uses_frontface;
@@ -385,6 +397,11 @@ struct si_shader_info {
 
    /** Whether all codepaths write tess factors in all invocations. */
    bool tessfactors_are_def_in_all_invocs;
+
+   /* A flag to check if vrs2x2 can be enabled to reduce number of
+    * fragment shader invocations if flat shading.
+    */
+   bool allow_flat_shading;
 };
 
 /* A shader selector is a gallium CSO and contains shader variants and
@@ -431,11 +448,11 @@ struct si_shader_selector {
    ubyte num_vs_inputs;
    ubyte num_vbos_in_user_sgprs;
    unsigned pa_cl_vs_out_cntl;
-   unsigned ngg_cull_vert_threshold; /* 0 = disabled */
-   unsigned ngg_cull_nonindexed_fast_launch_vert_threshold; /* 0 = disabled */
+   unsigned ngg_cull_vert_threshold; /* UINT32_MAX = disabled */
+   unsigned ngg_cull_nonindexed_fast_launch_vert_threshold; /* UINT32_MAX = disabled */
    ubyte clipdist_mask;
    ubyte culldist_mask;
-   ubyte rast_prim;
+   enum pipe_prim_type rast_prim;
 
    /* ES parameters. */
    uint16_t esgs_itemsize; /* vertex stride */
@@ -461,6 +478,7 @@ struct si_shader_selector {
    uint32_t patch_outputs_written;     /* "get_unique_index_patch" bits */
 
    uint64_t inputs_read; /* "get_unique_index" bits */
+   uint64_t tcs_vgpr_only_inputs; /* TCS inputs that are only in VGPRs, not LDS. */
 
    /* bitmasks of used descriptor slots */
    uint64_t active_const_and_shader_buffers;
@@ -516,7 +534,6 @@ struct si_tcs_epilog_bits {
 
 struct si_gs_prolog_bits {
    unsigned tri_strip_adj_fix : 1;
-   unsigned gfx9_prev_is_vs : 1;
 };
 
 /* Common PS bits between the shader key and the prolog key. */
@@ -558,6 +575,7 @@ union si_shader_part_key {
       unsigned as_prim_discard_cs : 1;
       unsigned gs_fast_launch_tri_list : 1;  /* for NGG culling */
       unsigned gs_fast_launch_tri_strip : 1; /* for NGG culling */
+      unsigned gs_fast_launch_index_size_packed : 2;
       /* Prologs for monolithic shaders shouldn't set EXEC. */
       unsigned is_monolithic : 1;
    } vs_prolog;
@@ -566,8 +584,6 @@ union si_shader_part_key {
    } tcs_epilog;
    struct {
       struct si_gs_prolog_bits states;
-      /* Prologs of monolithic shaders shouldn't set EXEC. */
-      unsigned is_monolithic : 1;
       unsigned as_ngg : 1;
    } gs_prolog;
    struct {
@@ -651,7 +667,7 @@ struct si_shader_key {
       unsigned kill_pointsize : 1;
 
       /* For NGG VS and TES. */
-      unsigned ngg_culling : 5; /* SI_NGG_CULL_* */
+      unsigned ngg_culling : 7; /* SI_NGG_CULL_* */
 
       /* For shaders where monolithic variants have better code.
        *
@@ -673,6 +689,10 @@ struct si_shader_key {
       unsigned cs_cull_back : 1;
       unsigned cs_cull_z : 1;
       unsigned cs_halfz_clip_space : 1;
+
+      /* VS and TCS have the same number of patch vertices. */
+      unsigned same_patch_vertices:1;
+
       unsigned inline_uniforms:1;
 
       uint32_t inlined_uniform_values[MAX_INLINABLE_UNIFORMS];
@@ -738,6 +758,12 @@ struct si_shader {
    struct si_shader_binary binary;
    struct ac_shader_config config;
    struct si_shader_binary_info info;
+
+   /* SI_SGPR_VS_STATE_BITS */
+   bool uses_vs_state_provoking_vertex;
+   bool uses_vs_state_outprim;
+
+   bool uses_base_instance;
 
    struct {
       uint16_t ngg_emit_size; /* in dwords */
@@ -893,5 +919,9 @@ static inline bool si_shader_uses_bindless_images(struct si_shader_selector *sel
 {
    return selector ? selector->info.uses_bindless_images : false;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -500,7 +500,7 @@ PIPE_FORMAT_R4G4B4A4_UINT           , plain, 1, 1, 1, up4 , up4 , up4 , up4 , xy
 PIPE_FORMAT_B4G4R4A4_UINT           , plain, 1, 1, 1, up4 , up4 , up4 , up4 , zyxw, rgb, up4 , up4 , up4 , up4 , yzwx
 PIPE_FORMAT_A4R4G4B4_UINT           , plain, 1, 1, 1, up4 , up4 , up4 , up4 , yzwx, rgb, up4 , up4 , up4 , up4 , zyxw
 PIPE_FORMAT_A4B4G4R4_UINT           , plain, 1, 1, 1, up4 , up4 , up4 , up4 , wzyx, rgb, up4 , up4 , up4 , up4 , xyzw
-PIPE_FORMAT_A1R5G5B5_UINT           , plain, 1, 1, 1, up1 , up5 , up5 , up5 , wzyx, rgb, up5 , up5 , up5 , up1 , zyxw
+PIPE_FORMAT_A1R5G5B5_UINT           , plain, 1, 1, 1, up1 , up5 , up5 , up5 , yzwx, rgb, up5 , up5 , up5 , up1 , zyxw
 PIPE_FORMAT_A1B5G5R5_UINT           , plain, 1, 1, 1, up1 , up5 , up5 , up5 , wzyx, rgb, up5 , up5 , up5 , up1 , xyzw
 PIPE_FORMAT_R5G5B5A1_UINT           , plain, 1, 1, 1, up5 , up5 , up5 , up1 , xyzw, rgb, up5 , up5 , up5 , up1 , wzyx
 PIPE_FORMAT_B5G5R5A1_UINT           , plain, 1, 1, 1, up5 , up5 , up5 , up1 , zyxw, rgb, up1 , up5 , up5 , up5 , yzwx

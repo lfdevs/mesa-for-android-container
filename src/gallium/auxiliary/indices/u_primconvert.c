@@ -97,9 +97,11 @@ util_primconvert_save_rasterizer_state(struct primconvert_context *pc,
 
 void
 util_primconvert_draw_vbo(struct primconvert_context *pc,
-                          const struct pipe_draw_info *info)
+                          const struct pipe_draw_info *info,
+                          const struct pipe_draw_start_count *draw)
 {
    struct pipe_draw_info new_info;
+   struct pipe_draw_start_count new_draw;
    struct pipe_transfer *src_transfer = NULL;
    u_translate_func trans_func;
    u_generate_func gen_func;
@@ -108,9 +110,10 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
    unsigned ib_offset;
 
    util_draw_init_info(&new_info);
+   new_info.index_bounds_valid = info->index_bounds_valid;
    new_info.min_index = info->min_index;
    new_info.max_index = info->max_index;
-   new_info.index_bias = info->index_bias;
+   new_info.index_bias = info->index_size ? info->index_bias : 0;
    new_info.start_instance = info->start_instance;
    new_info.instance_count = info->instance_count;
    new_info.primitive_restart = info->primitive_restart;
@@ -120,10 +123,10 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
       unsigned index_size;
 
       u_index_translator(pc->cfg.primtypes_mask,
-                         info->mode, info->index_size, info->count,
+                         info->mode, info->index_size, draw->count,
                          pc->api_pv, pc->api_pv,
                          info->primitive_restart ? PR_ENABLE : PR_DISABLE,
-                         &mode, &index_size, &new_info.count,
+                         &mode, &index_size, &new_draw.count,
                          &trans_func);
       new_info.mode = mode;
       new_info.index_size = index_size;
@@ -139,31 +142,31 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
       unsigned index_size;
 
       u_index_generator(pc->cfg.primtypes_mask,
-                        info->mode, info->start, info->count,
+                        info->mode, draw->start, draw->count,
                         pc->api_pv, pc->api_pv,
-                        &mode, &index_size, &new_info.count,
+                        &mode, &index_size, &new_draw.count,
                         &gen_func);
       new_info.mode = mode;
       new_info.index_size = index_size;
    }
 
-   u_upload_alloc(pc->pipe->stream_uploader, 0, new_info.index_size * new_info.count, 4,
+   u_upload_alloc(pc->pipe->stream_uploader, 0, new_info.index_size * new_draw.count, 4,
                   &ib_offset, &new_info.index.resource, &dst);
-   new_info.start = ib_offset / new_info.index_size;
+   new_draw.start = ib_offset / new_info.index_size;
 
    if (info->index_size) {
-      trans_func(src, info->start, info->count, new_info.count, info->restart_index, dst);
+      trans_func(src, draw->start, draw->count, new_draw.count, info->restart_index, dst);
 
       if (pc->cfg.fixed_prim_restart && info->primitive_restart) {
          new_info.restart_index = (1ull << (new_info.index_size * 8)) - 1;
          if (info->restart_index != new_info.restart_index)
             util_translate_prim_restart_data(new_info.index_size, dst, dst,
-                                             new_info.count,
+                                             new_draw.count,
                                              info->restart_index);
       }
    }
    else {
-      gen_func(info->start, new_info.count, dst);
+      gen_func(draw->start, new_draw.count, dst);
    }
 
    if (src_transfer)
@@ -172,7 +175,7 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
    u_upload_unmap(pc->pipe->stream_uploader);
 
    /* to the translated draw: */
-   pc->pipe->draw_vbo(pc->pipe, &new_info);
+   pc->pipe->draw_vbo(pc->pipe, &new_info, NULL, &new_draw, 1);
 
    pipe_resource_reference(&new_info.index.resource, NULL);
 }

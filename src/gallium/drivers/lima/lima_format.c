@@ -45,6 +45,12 @@
 #define LIMA_TEXEL_FORMAT_RGBA_8888    0x16
 #define LIMA_TEXEL_FORMAT_RGBX_8888    0x17
 #define LIMA_TEXEL_FORMAT_ETC1_RGB8    0x20
+#define LIMA_TEXEL_FORMAT_L16_FLOAT    0x22
+#define LIMA_TEXEL_FORMAT_A16_FLOAT    0x23
+#define LIMA_TEXEL_FORMAT_I16_FLOAT    0x24
+#define LIMA_TEXEL_FORMAT_L16A16_FLOAT 0x25
+#define LIMA_TEXEL_FORMAT_R16G16B16A16_FLOAT 0x26
+#define LIMA_TEXEL_FORMAT_R16G16B16_FLOAT 0x2f
 #define LIMA_TEXEL_FORMAT_Z24X8        0x2c
 /* This format is only used for depth/stencil reload */
 #define LIMA_TEXEL_FORMAT_Z24S8_RLD    0x32
@@ -57,6 +63,7 @@
 #define LIMA_PIXEL_FORMAT_G8B8         0x05
 #define LIMA_PIXEL_FORMAT_Z16          0x0e
 #define LIMA_PIXEL_FORMAT_Z24S8        0x0f
+#define LIMA_PIXEL_FORMAT_R16G16B16A16_FLOAT 0x26
 
 struct lima_format {
    bool present;
@@ -109,6 +116,12 @@ static const struct lima_format lima_texel_formats[] = {
    LIMA_TEXEL_FORMAT(ETC1_RGB8,          ETC1_RGB8, false, SWIZ(X, Y, Z, W)),
    LIMA_TEXEL_FORMAT(R8_UNORM,           L8,        false, SWIZ(X, 0, 0, 1)),
    LIMA_TEXEL_FORMAT(R8G8_UNORM,         L8A8,      false, SWIZ(X, W, 0, 1)),
+   LIMA_TEXEL_FORMAT(R16G16B16_FLOAT,    R16G16B16_FLOAT, true, SWIZ(X, Y, Z, W)),
+   LIMA_TEXEL_FORMAT(R16G16B16A16_FLOAT, R16G16B16A16_FLOAT, true, SWIZ(X, Y, Z, W)),
+   LIMA_TEXEL_FORMAT(L16_FLOAT,          L16_FLOAT, false, SWIZ(X, Y, Z, W)),
+   LIMA_TEXEL_FORMAT(A16_FLOAT,          A16_FLOAT, false, SWIZ(X, Y, Z, W)),
+   LIMA_TEXEL_FORMAT(I16_FLOAT,          I16_FLOAT, false, SWIZ(X, Y, Z, W)),
+   LIMA_TEXEL_FORMAT(L16A16_FLOAT,       L16A16_FLOAT, false, SWIZ(X, Y, Z, W)),
 };
 
 static const struct lima_format lima_pixel_formats[] = {
@@ -126,6 +139,7 @@ static const struct lima_format lima_pixel_formats[] = {
    //LIMA_PIXEL_FORMAT(R8G8_UNORM,         G8B8,     true,  0x8888),
    LIMA_PIXEL_FORMAT(Z24_UNORM_S8_UINT,  Z24S8,    false, 0x0000),
    LIMA_PIXEL_FORMAT(Z24X8_UNORM,        Z24S8,    false, 0x0000),
+   LIMA_PIXEL_FORMAT(R16G16B16A16_FLOAT, R16G16B16A16_FLOAT, true, 0x0000),
 };
 
 static const struct lima_format *

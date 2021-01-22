@@ -27,6 +27,10 @@
 
 #include "radeon/radeon_winsys.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define SI_PM4_MAX_DW 176
 
 // forward defines
@@ -62,5 +66,9 @@ void si_pm4_free_state(struct si_context *sctx, struct si_pm4_state *state, unsi
 
 void si_pm4_emit(struct si_context *sctx, struct si_pm4_state *state);
 void si_pm4_reset_emitted(struct si_context *sctx, bool first_cs);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

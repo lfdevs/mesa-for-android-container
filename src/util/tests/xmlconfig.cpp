@@ -30,6 +30,11 @@ protected:
    xmlconfig_test();
    ~xmlconfig_test();
 
+   driOptionCache drirc_init(const char *driver, const char *drm,
+                             const char *exec_name,
+                             const char *app, int appver,
+                             const char *engine, int enginever);
+
    driOptionCache options;
 };
 
@@ -153,3 +158,98 @@ TEST_F(xmlconfig_test, copy_cache)
 
    driDestroyOptionCache(&cache);
 }
+
+driOptionCache
+xmlconfig_test::drirc_init(const char *driver, const char *drm,
+                           const char *exec_name,
+                           const char *app, int appver,
+                           const char *engine, int enginever)
+{
+   /* Make the parser look in the directory of config files for the test,
+    * passed in by meson.build.
+    */
+   driInjectDataDir(getenv("DRIRC_CONFIGDIR"));
+
+   driInjectExecName(exec_name);
+
+   driOptionDescription driconf[] = {
+      DRI_CONF_SECTION_MISCELLANEOUS
+      DRI_CONF_OPT_I(mesa_drirc_option, 0, 0, 200, "description")
+   };
+   driParseOptionInfo(&options, driconf, ARRAY_SIZE(driconf));
+
+   driOptionCache cache;
+
+   /* This should parse the "user" drirc files under ./tests/drirc_test/,
+    * based on the setting of $HOME by meson.build.
+    */
+   driParseConfigFiles(&cache, &options,
+                       0, driver, drm,
+                       app, appver,
+                       engine, enginever);
+
+   return cache;
+}
+
+TEST_F(xmlconfig_test, drirc_app)
+{
+   driOptionCache cache = drirc_init("driver", "drm",
+                                     "app1",
+                                     NULL, 0,
+                                     NULL, 0);
+#if WITH_XMLCONFIG
+   EXPECT_EQ(driQueryOptioni(&cache, "mesa_drirc_option"), 1);
+#else
+   EXPECT_EQ(driQueryOptioni(&cache, "mesa_drirc_option"), 0);
+#endif
+   driDestroyOptionCache(&cache);
+}
+
+TEST_F(xmlconfig_test, drirc_user_app)
+{
+   driOptionCache cache = drirc_init("driver", "drm",
+                                     "app3",
+                                     NULL, 0,
+                                     NULL, 0);
+#if WITH_XMLCONFIG
+   EXPECT_EQ(driQueryOptioni(&cache, "mesa_drirc_option"), 10);
+#else
+   EXPECT_EQ(driQueryOptioni(&cache, "mesa_drirc_option"), 0);
+#endif
+   driDestroyOptionCache(&cache);
+}
+
+TEST_F(xmlconfig_test, drirc_env_override)
+{
+   setenv("mesa_drirc_option", "7", 1);
+   driOptionCache cache = drirc_init("driver", "drm",
+                                     "app1",
+                                     NULL, 0,
+                                     NULL, 0);
+   /* env var takes precedence over config files */
+   EXPECT_EQ(driQueryOptioni(&cache, "mesa_drirc_option"), 7);
+   unsetenv("mesa_drirc_option");
+   driDestroyOptionCache(&cache);
+}
+
+#if WITH_XMLCONFIG
+TEST_F(xmlconfig_test, drirc_app_versioned)
+{
+   driOptionCache cache = drirc_init("driver", "drm",
+                                     NULL,
+                                     "Versioned App Name", 1,
+                                     NULL, 0);
+   EXPECT_EQ(driQueryOptioni(&cache, "mesa_drirc_option"), 3);
+   driDestroyOptionCache(&cache);
+}
+
+TEST_F(xmlconfig_test, drirc_engine_versioned)
+{
+   driOptionCache cache = drirc_init("driver", "drm",
+                                     NULL,
+                                     "unknownapp", 0,
+                                     "Versioned Engine Name", 1);
+   EXPECT_EQ(driQueryOptioni(&cache, "mesa_drirc_option"), 5);
+   driDestroyOptionCache(&cache);
+}
+#endif

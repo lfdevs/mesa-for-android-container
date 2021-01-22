@@ -72,16 +72,14 @@ C_TEMPLATE = Template(textwrap.dedent(u"""\
     const char *
     vk_${enum.name[2:]}_to_str(${enum.name} input)
     {
-        #pragma GCC diagnostic push
-        #pragma GCC diagnostic ignored "-Wswitch"
         switch(input) {
-        % for v in sorted(enum.values.keys()):
-            case ${v}:
-                return "${enum.values[v]}";
-        % endfor
+    % for v in sorted(enum.values.keys()):
+        case ${v}:
+            return "${enum.values[v]}";
+    % endfor
+        default:
+            unreachable("Undefined enum value.");
         }
-        #pragma GCC diagnostic pop
-        unreachable("Undefined enum value.");
     }
 
       % if enum.guard:
@@ -91,9 +89,7 @@ C_TEMPLATE = Template(textwrap.dedent(u"""\
 
     size_t vk_structure_type_size(const struct VkBaseInStructure *item)
     {
-        #pragma GCC diagnostic push
-        #pragma GCC diagnostic ignored "-Wswitch"
-        switch(item->sType) {
+        switch((int)item->sType) {
     % for struct in structs:
         % if struct.extension is not None and struct.extension.define is not None:
     #ifdef ${struct.extension.define}
@@ -105,9 +101,9 @@ C_TEMPLATE = Template(textwrap.dedent(u"""\
     %endfor
         case VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO: return sizeof(VkLayerInstanceCreateInfo);
         case VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO: return sizeof(VkLayerDeviceCreateInfo);
+        default:
+            unreachable("Undefined struct type.");
         }
-        #pragma GCC diagnostic pop
-        unreachable("Undefined struct type.");
     }
 
     void vk_load_instance_commands(VkInstance instance,

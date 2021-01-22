@@ -51,7 +51,7 @@ r600_create_so_target(struct pipe_context *ctx,
 		return NULL;
 	}
 
-	u_suballocator_alloc(rctx->allocator_zeroed_memory, 4, 4,
+	u_suballocator_alloc(&rctx->allocator_zeroed_memory, 4, 4,
 			     &t->buf_filled_size_offset,
 			     (struct pipe_resource**)&t->buf_filled_size);
 	if (!t->buf_filled_size) {
@@ -154,7 +154,7 @@ void r600_set_streamout_targets(struct pipe_context *ctx,
 
 static void r600_flush_vgt_streamout(struct r600_common_context *rctx)
 {
-	struct radeon_cmdbuf *cs = rctx->gfx.cs;
+	struct radeon_cmdbuf *cs = &rctx->gfx.cs;
 	unsigned reg_strmout_cntl;
 
 	/* The register is at different places on different ASICs. */
@@ -180,7 +180,7 @@ static void r600_flush_vgt_streamout(struct r600_common_context *rctx)
 
 static void r600_emit_streamout_begin(struct r600_common_context *rctx, struct r600_atom *atom)
 {
-	struct radeon_cmdbuf *cs = rctx->gfx.cs;
+	struct radeon_cmdbuf *cs = &rctx->gfx.cs;
 	struct r600_so_target **t = rctx->streamout.targets;
 	uint16_t *stride_in_dw = rctx->streamout.stride_in_dw;
 	unsigned i, update_flags = 0;
@@ -253,7 +253,7 @@ static void r600_emit_streamout_begin(struct r600_common_context *rctx, struct r
 
 void r600_emit_streamout_end(struct r600_common_context *rctx)
 {
-	struct radeon_cmdbuf *cs = rctx->gfx.cs;
+	struct radeon_cmdbuf *cs = &rctx->gfx.cs;
 	struct r600_so_target **t = rctx->streamout.targets;
 	unsigned i;
 	uint64_t va;
@@ -315,8 +315,8 @@ static void r600_emit_streamout_enable(struct r600_common_context *rctx,
 			S_028B94_STREAMOUT_2_EN(r600_get_strmout_en(rctx)) |
 			S_028B94_STREAMOUT_3_EN(r600_get_strmout_en(rctx));
 	}
-	radeon_set_context_reg(rctx->gfx.cs, strmout_buffer_reg, strmout_buffer_val);
-	radeon_set_context_reg(rctx->gfx.cs, strmout_config_reg, strmout_config_val);
+	radeon_set_context_reg(&rctx->gfx.cs, strmout_buffer_reg, strmout_buffer_val);
+	radeon_set_context_reg(&rctx->gfx.cs, strmout_config_reg, strmout_config_val);
 }
 
 static void r600_set_streamout_enable(struct r600_common_context *rctx, bool enable)

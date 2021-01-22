@@ -28,6 +28,7 @@
 #include <math.h>
 
 #include "aco_ir.h"
+#include "sid.h"
 
 namespace aco {
 
@@ -203,9 +204,9 @@ struct wait_entry {
    bool has_vmem_nosampler:1;
    bool has_vmem_sampler:1;
 
-   wait_entry(wait_event event, wait_imm imm, bool logical, bool wait_on_read)
-           : imm(imm), events(event), counters(get_counters_for_event(event)),
-             wait_on_read(wait_on_read), logical(logical),
+   wait_entry(wait_event event_, wait_imm imm_, bool logical_, bool wait_on_read_)
+           : imm(imm_), events(event_), counters(get_counters_for_event(event_)),
+             wait_on_read(wait_on_read_), logical(logical_),
              has_vmem_nosampler(false), has_vmem_sampler(false) {}
 
    bool join(const wait_entry& other)
@@ -329,7 +330,7 @@ struct wait_ctx {
 
       for (unsigned i = 0; i < storage_count; i++) {
          changed |= barrier_imm[i].combine(other->barrier_imm[i]);
-         changed |= other->barrier_events[i] & ~barrier_events[i];
+         changed |= (other->barrier_events[i] & ~barrier_events[i]) != 0;
          barrier_events[i] |= other->barrier_events[i];
       }
 
@@ -527,6 +528,24 @@ wait_imm kill(Instruction* instr, wait_ctx& ctx, memory_sync_info sync_info)
           !smem->definitions.empty() &&
           !smem->sync.can_reorder()) {
          imm.lgkm = 0;
+      }
+   }
+
+   if (ctx.program->early_rast &&
+       instr->opcode == aco_opcode::exp) {
+
+      Export_instruction *exp = static_cast<Export_instruction *>(instr);
+      if (exp->dest >= V_008DFC_SQ_EXP_POS &&
+          exp->dest < V_008DFC_SQ_EXP_PRIM) {
+
+         /* With early_rast, the HW will start clipping and rasterization after the 1st DONE pos export.
+          * Wait for all stores (and atomics) to complete, so PS can read them.
+          * TODO: This only really applies to DONE pos exports. Consider setting the DONE bit earlier.
+          */
+         if (ctx.vs_cnt > 0)
+            imm.vs = 0;
+         if (ctx.vm_cnt > 0)
+            imm.vm = 0;
       }
    }
 
@@ -831,10 +850,10 @@ void gen(Instruction* instr, wait_ctx& ctx)
          insert_wait_entry(ctx, instr->operands[3], event_vmem_gpr_lock);
       } else if (ctx.chip_class == GFX6 &&
                  instr->format == Format::MIMG &&
-                 instr->operands[1].regClass().type() == RegType::vgpr) {
+                 instr->operands.size() >= 4) {
          ctx.exp_cnt++;
          update_counters(ctx, event_vmem_gpr_lock);
-         insert_wait_entry(ctx, instr->operands[1], event_vmem_gpr_lock);
+         insert_wait_entry(ctx, instr->operands[3], event_vmem_gpr_lock);
       }
 
       break;

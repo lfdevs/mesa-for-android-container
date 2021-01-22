@@ -69,9 +69,9 @@ v3dv_CreateShaderModule(VkDevice _device,
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO);
    assert(pCreateInfo->flags == 0);
 
-   module = vk_alloc2(&device->alloc, pAllocator,
-                      sizeof(*module) + pCreateInfo->codeSize, 8,
-                      VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   module = vk_object_zalloc(&device->vk, pAllocator,
+                             sizeof(*module) + pCreateInfo->codeSize,
+                             VK_OBJECT_TYPE_SHADER_MODULE);
    if (module == NULL)
       return vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
 
@@ -124,7 +124,7 @@ v3dv_DestroyShaderModule(VkDevice _device,
     */
    assert(module->nir == NULL);
 
-   vk_free2(&device->alloc, pAllocator, module);
+   vk_object_free(&device->vk, pAllocator, module);
 }
 
 void
@@ -134,7 +134,7 @@ v3dv_shader_variant_destroy(struct v3dv_device *device,
    if (variant->assembly_bo)
       v3dv_bo_free(device, variant->assembly_bo);
    ralloc_free(variant->prog_data.base);
-   vk_free(&device->alloc, variant);
+   vk_free(&device->vk.alloc, variant);
 }
 
 static void
@@ -148,7 +148,7 @@ destroy_pipeline_stage(struct v3dv_device *device,
    ralloc_free(p_stage->nir);
    if (p_stage->current_variant)
       v3dv_shader_variant_unref(device, p_stage->current_variant);
-   vk_free2(&device->alloc, pAllocator, p_stage);
+   vk_free2(&device->vk.alloc, pAllocator, p_stage);
 }
 
 static void
@@ -177,13 +177,7 @@ v3dv_destroy_pipeline(struct v3dv_pipeline *pipeline,
       pipeline->default_attribute_values = NULL;
    }
 
-   if (pipeline->combined_index_map)
-      _mesa_hash_table_destroy(pipeline->combined_index_map, NULL);
-
-   if (pipeline->default_attribute_values)
-      v3dv_bo_free(device, pipeline->default_attribute_values);
-
-   vk_free2(&device->alloc, pAllocator, pipeline);
+   vk_object_free(&device->vk, pAllocator, pipeline);
 }
 
 void
@@ -256,6 +250,8 @@ const nir_shader_compiler_options v3dv_nir_options = {
    .lower_wpos_pntc = true,
    .lower_rotate = true,
    .lower_to_scalar = true,
+   .has_fsub = true,
+   .has_isub = true,
    .vertex_id_zero_based = false, /* FIXME: to set this to true, the intrinsic
                                    * needs to be supported */
    .lower_interpolate_at = true,
@@ -535,15 +531,19 @@ type_size_vec4(const struct glsl_type *type, bool bindless)
    return glsl_count_attribute_slots(type, false);
 }
 
+/* FIXME: the number of parameters for this method is somewhat big. Perhaps
+ * rethink.
+ */
 static unsigned
 descriptor_map_add(struct v3dv_descriptor_map *map,
                    int set,
                    int binding,
                    int array_index,
                    int array_size,
-                   bool is_shadow)
+                   uint8_t return_size)
 {
    assert(array_index < array_size);
+   assert(return_size == 16 || return_size == 32);
 
    unsigned index = 0;
    for (unsigned i = 0; i < map->num_desc; i++) {
@@ -551,6 +551,14 @@ descriptor_map_add(struct v3dv_descriptor_map *map,
           binding == map->binding[i] &&
           array_index == map->array_index[i]) {
          assert(array_size == map->array_size[i]);
+         if (return_size != map->return_size[index]) {
+            /* It the return_size is different it means that the same sampler
+             * was used for operations with different precision
+             * requirement. In this case we need to ensure that we use the
+             * larger one.
+             */
+            map->return_size[index] = 32;
+         }
          return index;
       }
       index++;
@@ -562,7 +570,7 @@ descriptor_map_add(struct v3dv_descriptor_map *map,
    map->binding[map->num_desc] = binding;
    map->array_index[map->num_desc] = array_index;
    map->array_size[map->num_desc] = array_size;
-   map->is_shadow[map->num_desc] = is_shadow;
+   map->return_size[map->num_desc] = return_size;
    map->num_desc++;
 
    return index;
@@ -609,7 +617,7 @@ lower_vulkan_resource_index(nir_builder *b,
       index = descriptor_map_add(descriptor_map, set, binding,
                                  const_val->u32,
                                  binding_layout->array_size,
-                                 false /* is_shadow: Doesn't really matter in this case */);
+                                 32 /* return_size: doesn't really apply for this case */);
 
       if (nir_intrinsic_desc_type(instr) == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
          /* skip index 0 which is used for push constants */
@@ -634,43 +642,10 @@ lower_vulkan_resource_index(nir_builder *b,
    nir_instr_remove(&instr->instr);
 }
 
-static struct hash_table *
-pipeline_ensure_combined_index_map(struct v3dv_pipeline *pipeline)
-{
-   if (pipeline->combined_index_map == NULL) {
-      pipeline->combined_index_map =
-         _mesa_hash_table_create(NULL, _mesa_hash_u32, _mesa_key_u32_equal);
-      pipeline->next_combined_index = 0;
-   }
-
-   assert(pipeline->combined_index_map);
-
-   return pipeline->combined_index_map;
-}
-
-static uint32_t
-get_combined_index(struct v3dv_pipeline *pipeline,
-                   uint32_t texture_index,
-                   uint32_t sampler_index)
-{
-   struct hash_table *ht = pipeline_ensure_combined_index_map(pipeline);
-   uint32_t key = v3dv_pipeline_combined_index_key_create(texture_index, sampler_index);
-   struct hash_entry *entry = _mesa_hash_table_search(ht, &key);
-
-   if (entry)
-      return (uint32_t)(uintptr_t) (entry->data);
-
-   uint32_t new_index = pipeline->next_combined_index;
-   pipeline->next_combined_index++;
-
-   pipeline->combined_index_to_key_map[new_index] = key;
-   _mesa_hash_table_insert(ht, &pipeline->combined_index_to_key_map[new_index],
-                           (void *)(uintptr_t) (new_index));
-
-   return new_index;
-}
-
-static void
+/* Returns return_size, so it could be used for the case of not having a
+ * sampler object
+ */
+static uint8_t
 lower_tex_src_to_offset(nir_builder *b, nir_tex_instr *instr, unsigned src_idx,
                         struct v3dv_pipeline *pipeline,
                         const struct v3dv_pipeline_layout *layout)
@@ -729,6 +704,13 @@ lower_tex_src_to_offset(nir_builder *b, nir_tex_instr *instr, unsigned src_idx,
 
    uint32_t set = deref->var->data.descriptor_set;
    uint32_t binding = deref->var->data.binding;
+   /* FIXME: this is a really simplified check for the precision to be used
+    * for the sampling. Right now we are ony checking for the variables used
+    * on the operation itself, but there are other cases that we could use to
+    * infer the precision requirement.
+    */
+   bool relaxed_precision = deref->var->data.precision == GLSL_PRECISION_MEDIUM ||
+                            deref->var->data.precision == GLSL_PRECISION_LOW;
    struct v3dv_descriptor_set_layout *set_layout = layout->set[set].layout;
    struct v3dv_descriptor_set_binding_layout *binding_layout =
       &set_layout->binding[binding];
@@ -740,6 +722,8 @@ lower_tex_src_to_offset(nir_builder *b, nir_tex_instr *instr, unsigned src_idx,
       deref->var->data.index + base_index :
       base_index;
 
+   uint8_t return_size = relaxed_precision || instr->is_shadow ? 16 : 32;
+
    int desc_index =
       descriptor_map_add(is_sampler ?
                          &pipeline->sampler_map : &pipeline->texture_map,
@@ -747,12 +731,14 @@ lower_tex_src_to_offset(nir_builder *b, nir_tex_instr *instr, unsigned src_idx,
                          deref->var->data.binding,
                          array_index,
                          binding_layout->array_size,
-                         instr->is_shadow);
+                         return_size);
 
    if (is_sampler)
       instr->sampler_index = desc_index;
    else
       instr->texture_index = desc_index;
+
+   return return_size;
 }
 
 static bool
@@ -760,11 +746,13 @@ lower_sampler(nir_builder *b, nir_tex_instr *instr,
               struct v3dv_pipeline *pipeline,
               const struct v3dv_pipeline_layout *layout)
 {
+   uint8_t return_size;
+
    int texture_idx =
       nir_tex_instr_src_index(instr, nir_tex_src_texture_deref);
 
    if (texture_idx >= 0)
-      lower_tex_src_to_offset(b, instr, texture_idx, pipeline, layout);
+      return_size = lower_tex_src_to_offset(b, instr, texture_idx, pipeline, layout);
 
    int sampler_idx =
       nir_tex_instr_src_index(instr, nir_tex_src_sampler_deref);
@@ -775,13 +763,13 @@ lower_sampler(nir_builder *b, nir_tex_instr *instr,
    if (texture_idx < 0 && sampler_idx < 0)
       return false;
 
-   int combined_index =
-      get_combined_index(pipeline,
-                         instr->texture_index,
-                         sampler_idx < 0 ? V3DV_NO_SAMPLER_IDX : instr->sampler_index);
-
-   instr->texture_index = combined_index;
-   instr->sampler_index = combined_index;
+   /* If we don't have a sampler, we assign it the idx we reserve for this
+    * case, and we ensure that it is using the correct return size.
+    */
+   if (sampler_idx < 0) {
+      instr->sampler_index = return_size == 16 ?
+         V3DV_NO_SAMPLER_16BIT_IDX : V3DV_NO_SAMPLER_32BIT_IDX;
+   }
 
    return true;
 }
@@ -845,15 +833,15 @@ lower_image_deref(nir_builder *b,
                          deref->var->data.binding,
                          array_index,
                          binding_layout->array_size,
-                         false /* is_shadow: Doesn't really matter in this case */);
+                         32 /* return_size: doesn't apply for textures */);
 
-   /* We still need to get a combined_index, as we are integrating images with
-    * the rest of the texture/sampler support
+   /* Note: we don't need to do anything here in relation to the precision and
+    * the output size because for images we can infer that info from the image
+    * intrinsic, that includes the image format (see
+    * NIR_INTRINSIC_FORMAT). That is done by the v3d compiler.
     */
-   int combined_index =
-      get_combined_index(pipeline, desc_index, V3DV_NO_SAMPLER_IDX);
 
-   index = nir_imm_int(b, combined_index);
+   index = nir_imm_int(b, desc_index);
 
    nir_rewrite_image_intrinsic(instr, index, false);
 }
@@ -1012,31 +1000,32 @@ pipeline_populate_v3d_key(struct v3d_key *key,
                           bool robust_buffer_access)
 {
    /* The following values are default values used at pipeline create. We use
-    * there 16 bit as default return size.
+    * there 32 bit as default return size.
     */
+   struct v3dv_descriptor_map *sampler_map = &p_stage->pipeline->sampler_map;
+   struct v3dv_descriptor_map *texture_map = &p_stage->pipeline->texture_map;
 
-   /* We don't use the nir shader info.num_textures because that doesn't take
-    * into account input attachments, even after calling
-    * nir_lower_input_attachments. As a general rule that makes sense, but on
-    * our case we are handling them mostly as textures. We iterate through the
-    * combined_index_map that was filled with the textures sused on th sader.
-    */
-   uint32_t tex_idx = 0;
-   if (p_stage->pipeline->combined_index_map) {
-      hash_table_foreach(p_stage->pipeline->combined_index_map, entry) {
-         key->tex[tex_idx].swizzle[0] = PIPE_SWIZZLE_X;
-         key->tex[tex_idx].swizzle[1] = PIPE_SWIZZLE_Y;
-         key->tex[tex_idx].swizzle[2] = PIPE_SWIZZLE_Z;
-         key->tex[tex_idx].swizzle[3] = PIPE_SWIZZLE_W;
-
-         key->tex[tex_idx].return_size = 16;
-         key->tex[tex_idx].return_channels = 2;
-
-         tex_idx++;
-      }
-   }
-   key->num_tex_used = tex_idx;
+   key->num_tex_used = texture_map->num_desc;
    assert(key->num_tex_used <= V3D_MAX_TEXTURE_SAMPLERS);
+   for (uint32_t tex_idx = 0; tex_idx < texture_map->num_desc; tex_idx++) {
+      key->tex[tex_idx].swizzle[0] = PIPE_SWIZZLE_X;
+      key->tex[tex_idx].swizzle[1] = PIPE_SWIZZLE_Y;
+      key->tex[tex_idx].swizzle[2] = PIPE_SWIZZLE_Z;
+      key->tex[tex_idx].swizzle[3] = PIPE_SWIZZLE_W;
+   }
+
+   key->num_samplers_used = sampler_map->num_desc;
+   assert(key->num_samplers_used <= V3D_MAX_TEXTURE_SAMPLERS);
+   for (uint32_t sampler_idx = 0; sampler_idx < sampler_map->num_desc;
+        sampler_idx++) {
+      key->sampler[sampler_idx].return_size =
+         sampler_map->return_size[sampler_idx];
+
+      key->sampler[sampler_idx].return_channels =
+         key->sampler[sampler_idx].return_size == 32 ? 4 : 2;
+   }
+
+
 
    /* default value. Would be override on the vs/gs populate methods when GS
     * gets supported
@@ -1281,7 +1270,7 @@ pipeline_stage_create_vs_bin(const struct v3dv_pipeline_stage *src,
    struct v3dv_device *device = src->pipeline->device;
 
    struct v3dv_pipeline_stage *p_stage =
-      vk_zalloc2(&device->alloc, pAllocator, sizeof(*p_stage), 8,
+      vk_zalloc2(&device->vk.alloc, pAllocator, sizeof(*p_stage), 8,
                  VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
    if (p_stage == NULL)
@@ -1439,7 +1428,7 @@ v3dv_shader_variant_create(struct v3dv_device *device,
                            VkResult *out_vk_result)
 {
    struct v3dv_shader_variant *variant =
-      vk_zalloc(&device->alloc, sizeof(*variant), 8,
+      vk_zalloc(&device->vk.alloc, sizeof(*variant), 8,
                 VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
    if (variant == NULL) {
@@ -1460,7 +1449,7 @@ v3dv_shader_variant_create(struct v3dv_device *device,
       if (!upload_assembly(device, variant, stage, is_coord,
                            qpu_insts, qpu_insts_size)) {
          ralloc_free(variant->prog_data.base);
-         vk_free(&device->alloc, variant);
+         vk_free(&device->vk.alloc, variant);
 
          *out_vk_result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
          return NULL;
@@ -1587,36 +1576,15 @@ v3dv_get_shader_variant(struct v3dv_pipeline_stage *p_stage,
    return variant;
 }
 
-/* This methods updates the return size for a given key. It assumes that it
- * was already properly populated. So for example values for key->num_tex_used
- * should be correct at this point
- *
- * Note that even the @return_size to set is 32bit, it could be overriden to
- * 16bit, like for shadow textures, that we know in advance that they are
- * always 16bit.
- */
-void
-v3d_key_update_return_size(struct v3dv_pipeline *pipeline,
-                           struct v3d_key *key,
-                           uint32_t return_size)
-{
-   assert(return_size == 32 || return_size == 16);
-   struct v3dv_descriptor_map *texture_map = &pipeline->texture_map;
-
-   for (uint32_t tex_idx = 0; tex_idx < key->num_tex_used; tex_idx++) {
-      key->tex[tex_idx].return_size =
-         texture_map->is_shadow[tex_idx] ? 16 : return_size;
-
-      key->tex[tex_idx].return_channels =
-         key->tex[tex_idx].return_size == 16 ? 2 : 4;
-   }
-}
-
 /*
  * To avoid needed too many shader re-compilation after pipeline creation
  * time, we pre-generate several options, so they are available on the default
- * cache. The poster boy here is return size for texture acceses, as the real
- * value needed would depend on the texture format used.
+ * cache.
+ *
+ * NOTE: although some time ago we pre-generated two variants, right now we
+ * only create one variant. We maintain this method because it is really
+ * likely that we would need to rely on multiple variants as we keep working
+ * on possible optimizations that can't be decided at pipeline creation time.
  */
 static struct v3dv_shader_variant*
 pregenerate_shader_variants(struct v3dv_pipeline_stage *p_stage,
@@ -1626,34 +1594,24 @@ pregenerate_shader_variants(struct v3dv_pipeline_stage *p_stage,
                             const VkAllocationCallbacks *pAllocator,
                             VkResult *out_vk_result)
 {
-   /* We assume that we receive the default 16 return size*/
-   struct v3dv_shader_variant *variant_16 =
+   struct v3dv_shader_variant *default_variant =
       v3dv_get_shader_variant(p_stage, cache, key, key_size,
                               pAllocator, out_vk_result);
 
    if (*out_vk_result != VK_SUCCESS)
-      return variant_16;
+      return default_variant;
 
    if (!p_stage->pipeline->device->instance->default_pipeline_cache_enabled) {
       /* If pipeline cache is disabled it doesn't make sense to pre-generate,
        * as we are relying on the default pipeline cache to save the different
        * pre-compiled variants
        */
-      return variant_16;
+      return default_variant;
    }
 
-   v3d_key_update_return_size(p_stage->pipeline, key, 32);
+   /* FIXME: placeholder. Here we would pre-generate other variants if needed */
 
-   struct v3dv_shader_variant *variant_32 =
-      v3dv_get_shader_variant(p_stage, cache, key, key_size,
-                              pAllocator, out_vk_result);
-
-   /* get_shader_variant returns a new ref, so as we are going to use
-    * variant_16, we need to unref this.
-    */
-   v3dv_shader_variant_unref(p_stage->pipeline->device, variant_32);
-
-   return variant_16;
+   return default_variant;
 }
 
 /* FIXME: C&P from st, common place? */
@@ -1753,6 +1711,23 @@ pipeline_lower_nir(struct v3dv_pipeline *pipeline,
                    struct v3dv_pipeline_layout *layout)
 {
    nir_shader_gather_info(p_stage->nir, nir_shader_get_entrypoint(p_stage->nir));
+
+   /* We add this because we need a valid sampler for nir_lower_tex to do
+    * unpacking of the texture operation result, even for the case where there
+    * is no sampler state.
+    *
+    * We add two of those, one for the case we need a 16bit return_size, and
+    * another for the case we need a 32bit return size.
+    */
+   UNUSED unsigned index =
+      descriptor_map_add(&pipeline->sampler_map,
+                         -1, -1, -1, 0, 16);
+   assert(index == V3DV_NO_SAMPLER_16BIT_IDX);
+
+   index =
+      descriptor_map_add(&pipeline->sampler_map,
+                         -2, -2, -2, 0, 32);
+   assert(index == V3DV_NO_SAMPLER_32BIT_IDX);
 
    /* Apply the actual pipeline layout to UBOs, SSBOs, and textures */
    NIR_PASS_V(p_stage->nir, lower_pipeline_layout_info, pipeline, layout);
@@ -1947,7 +1922,7 @@ pipeline_compile_graphics(struct v3dv_pipeline *pipeline,
       gl_shader_stage stage = vk_to_mesa_shader_stage(sinfo->stage);
 
       struct v3dv_pipeline_stage *p_stage =
-         vk_zalloc2(&device->alloc, pAllocator, sizeof(*p_stage), 8,
+         vk_zalloc2(&device->vk.alloc, pAllocator, sizeof(*p_stage), 8,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
       if (p_stage == NULL)
@@ -1995,13 +1970,12 @@ pipeline_compile_graphics(struct v3dv_pipeline *pipeline,
 
    /* Add a no-op fragment shader if needed */
    if (!pipeline->fs) {
-      nir_builder b;
-      nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT,
-                                     &v3dv_nir_options);
-      b.shader->info.name = ralloc_strdup(b.shader, "noop_fs");
+      nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT,
+                                                     &v3dv_nir_options,
+                                                     "noop_fs");
 
       struct v3dv_pipeline_stage *p_stage =
-         vk_zalloc2(&device->alloc, pAllocator, sizeof(*p_stage), 8,
+         vk_zalloc2(&device->vk.alloc, pAllocator, sizeof(*p_stage), 8,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
       if (p_stage == NULL)
@@ -2986,8 +2960,9 @@ graphics_pipeline_create(VkDevice _device,
    if (cache == NULL && device->instance->default_pipeline_cache_enabled)
        cache = &device->default_pipeline_cache;
 
-   pipeline = vk_zalloc2(&device->alloc, pAllocator, sizeof(*pipeline), 8,
-                         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   pipeline = vk_object_zalloc(&device->vk, pAllocator, sizeof(*pipeline),
+                               VK_OBJECT_TYPE_PIPELINE);
+
    if (pipeline == NULL)
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
 
@@ -3068,7 +3043,7 @@ pipeline_compile_compute(struct v3dv_pipeline *pipeline,
    gl_shader_stage stage = vk_to_mesa_shader_stage(sinfo->stage);
 
    struct v3dv_pipeline_stage *p_stage =
-      vk_zalloc2(&device->alloc, alloc, sizeof(*p_stage), 8,
+      vk_zalloc2(&device->vk.alloc, alloc, sizeof(*p_stage), 8,
                  VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!p_stage)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -3141,8 +3116,8 @@ compute_pipeline_create(VkDevice _device,
    if (cache == NULL && device->instance->default_pipeline_cache_enabled)
        cache = &device->default_pipeline_cache;
 
-   pipeline = vk_zalloc2(&device->alloc, pAllocator, sizeof(*pipeline), 8,
-                         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   pipeline = vk_object_zalloc(&device->vk, pAllocator, sizeof(*pipeline),
+                               VK_OBJECT_TYPE_PIPELINE);
    if (pipeline == NULL)
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
 

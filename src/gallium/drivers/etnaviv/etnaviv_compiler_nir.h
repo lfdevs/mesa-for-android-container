@@ -30,6 +30,7 @@
 #include "compiler/nir/nir.h"
 #include "etnaviv_asm.h"
 #include "etnaviv_compiler.h"
+#include "util/compiler.h"
 
 struct etna_compile {
    nir_shader *nir;
@@ -144,7 +145,7 @@ real_dest(nir_dest *dest, unsigned *swiz, unsigned *mask)
              nir_instr_as_alu(p_instr)->op == nir_op_mov) {
             break;
          }
-         /* fallthrough */
+         FALLTHROUGH;
       default:
          can_bypass_src = false;
          break;

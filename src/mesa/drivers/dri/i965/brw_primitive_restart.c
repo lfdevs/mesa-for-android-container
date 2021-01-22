@@ -41,7 +41,8 @@
  */
 static bool
 can_cut_index_handle_restart_index(struct gl_context *ctx,
-                                   const struct _mesa_index_buffer *ib)
+                                   const struct _mesa_index_buffer *ib,
+                                   unsigned restart_index)
 {
    /* The FixedIndex variant means 0xFF, 0xFFFF, or 0xFFFFFFFF based on
     * the index buffer type, which corresponds exactly to the hardware.
@@ -53,13 +54,13 @@ can_cut_index_handle_restart_index(struct gl_context *ctx,
 
    switch (ib->index_size_shift) {
    case 0:
-      cut_index_will_work = ctx->Array.RestartIndex == 0xff;
+      cut_index_will_work = restart_index == 0xff;
       break;
    case 1:
-      cut_index_will_work = ctx->Array.RestartIndex == 0xffff;
+      cut_index_will_work = restart_index == 0xffff;
       break;
    case 2:
-      cut_index_will_work = ctx->Array.RestartIndex == 0xffffffff;
+      cut_index_will_work = restart_index == 0xffffffff;
       break;
    default:
       unreachable("not reached");
@@ -76,7 +77,8 @@ static bool
 can_cut_index_handle_prims(struct gl_context *ctx,
                            const struct _mesa_prim *prim,
                            GLuint nr_prims,
-                           const struct _mesa_index_buffer *ib)
+                           const struct _mesa_index_buffer *ib,
+                           unsigned restart_index)
 {
    struct brw_context *brw = brw_context(ctx);
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
@@ -85,7 +87,7 @@ can_cut_index_handle_prims(struct gl_context *ctx,
    if (devinfo->gen >= 8 || devinfo->is_haswell)
       return true;
 
-   if (!can_cut_index_handle_restart_index(ctx, ib)) {
+   if (!can_cut_index_handle_restart_index(ctx, ib, restart_index)) {
       /* The primitive restart index can't be handled, so take
        * the software path
        */
@@ -130,7 +132,9 @@ brw_handle_primitive_restart(struct gl_context *ctx,
                              const struct _mesa_prim *prims,
                              GLuint nr_prims,
                              const struct _mesa_index_buffer *ib,
-                             GLuint num_instances, GLuint base_instance)
+                             GLuint num_instances, GLuint base_instance,
+                             bool primitive_restart,
+                             unsigned restart_index)
 {
    struct brw_context *brw = brw_context(ctx);
 
@@ -149,7 +153,7 @@ brw_handle_primitive_restart(struct gl_context *ctx,
    /* If PrimitiveRestart is not enabled, then we aren't concerned about
     * handling this draw.
     */
-   if (!(ctx->Array._PrimitiveRestart)) {
+   if (!primitive_restart) {
       return GL_FALSE;
    }
 
@@ -158,12 +162,14 @@ brw_handle_primitive_restart(struct gl_context *ctx,
     */
    brw->prim_restart.in_progress = true;
 
-   if (can_cut_index_handle_prims(ctx, prims, nr_prims, ib)) {
+   if (can_cut_index_handle_prims(ctx, prims, nr_prims, ib, restart_index)) {
       /* Cut index should work for primitive restart, so use it
        */
       brw->prim_restart.enable_cut_index = true;
-      brw_draw_prims(ctx, prims, nr_prims, ib, GL_FALSE, -1, -1,
-                     num_instances, base_instance, NULL, 0);
+      brw->prim_restart.restart_index = restart_index;
+      brw_draw_prims(ctx, prims, nr_prims, ib, false, primitive_restart,
+                     restart_index, -1, -1,
+                     num_instances, base_instance);
       brw->prim_restart.enable_cut_index = false;
    } else {
       /* Not all the primitive draw modes are supported by the cut index,
@@ -176,7 +182,8 @@ brw_handle_primitive_restart(struct gl_context *ctx,
 
       vbo_sw_primitive_restart(ctx, prims, nr_prims, ib, num_instances,
                                base_instance, indirect_data,
-                               brw->draw.draw_indirect_offset);
+                               brw->draw.draw_indirect_offset,
+                               primitive_restart, restart_index);
    }
 
    brw->prim_restart.in_progress = false;

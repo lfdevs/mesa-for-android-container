@@ -160,7 +160,7 @@ struct etna_compile {
    bool dead_inst[ETNA_MAX_TOKENS];
 
    /* Immediate data */
-   enum etna_immediate_contents imm_contents[ETNA_MAX_IMM];
+   enum etna_uniform_contents imm_contents[ETNA_MAX_IMM];
    uint32_t imm_data[ETNA_MAX_IMM];
    uint32_t imm_base; /* base of immediates (in 32 bit units) */
    uint32_t imm_size; /* size of immediates (in 32 bit units) */
@@ -369,7 +369,7 @@ assign_inouts_to_temporaries(struct etna_compile *c, uint file)
  * there is already an immediate with that value, return that.
  */
 static struct etna_inst_src
-alloc_imm(struct etna_compile *c, enum etna_immediate_contents contents,
+alloc_imm(struct etna_compile *c, enum etna_uniform_contents contents,
           uint32_t value)
 {
    int idx;
@@ -383,7 +383,7 @@ alloc_imm(struct etna_compile *c, enum etna_immediate_contents contents,
    /* look if there is an unused slot */
    if (idx == c->imm_size) {
       for (idx = 0; idx < c->imm_size; ++idx) {
-         if (c->imm_contents[idx] == ETNA_IMMEDIATE_UNUSED)
+         if (c->imm_contents[idx] == ETNA_UNIFORM_UNUSED)
             break;
       }
    }
@@ -411,11 +411,11 @@ alloc_imm(struct etna_compile *c, enum etna_immediate_contents contents,
 static struct etna_inst_src
 alloc_imm_u32(struct etna_compile *c, uint32_t value)
 {
-   return alloc_imm(c, ETNA_IMMEDIATE_CONSTANT, value);
+   return alloc_imm(c, ETNA_UNIFORM_CONSTANT, value);
 }
 
 static struct etna_inst_src
-alloc_imm_vec4u(struct etna_compile *c, enum etna_immediate_contents contents,
+alloc_imm_vec4u(struct etna_compile *c, enum etna_uniform_contents contents,
                 const uint32_t *values)
 {
    struct etna_inst_src imm_src = { };
@@ -479,7 +479,7 @@ etna_imm_vec4f(struct etna_compile *c, const float *vec4)
    for (int i = 0; i < 4; i++)
       val[i] = fui(vec4[i]);
 
-   return alloc_imm_vec4u(c, ETNA_IMMEDIATE_CONSTANT, val);
+   return alloc_imm_vec4u(c, ETNA_UNIFORM_CONSTANT, val);
 }
 
 /* Pass -- check register file declarations and immediates */
@@ -504,7 +504,7 @@ etna_compile_parse_declarations(struct etna_compile *c)
             unsigned idx = c->imm_size++;
 
             c->imm_data[idx] = imm->u[i].Uint;
-            c->imm_contents[idx] = ETNA_IMMEDIATE_CONSTANT;
+            c->imm_contents[idx] = ETNA_UNIFORM_CONSTANT;
          }
       }
       break;
@@ -1699,12 +1699,12 @@ trans_sampler(const struct instr_translater *t, struct etna_compile *c,
       ins[0].opcode = INST_OPCODE_MUL;
       ins[0].dst = etna_native_to_dst(temp, INST_COMPS_X);
       ins[0].src[0] = src[0];
-      ins[0].src[1] = alloc_imm(c, ETNA_IMMEDIATE_TEXRECT_SCALE_X, unit);
+      ins[0].src[1] = alloc_imm(c, ETNA_UNIFORM_TEXRECT_SCALE_X, unit);
 
       ins[1].opcode = INST_OPCODE_MUL;
       ins[1].dst = etna_native_to_dst(temp, INST_COMPS_Y);
       ins[1].src[0] = src[0];
-      ins[1].src[1] = alloc_imm(c, ETNA_IMMEDIATE_TEXRECT_SCALE_Y, unit);
+      ins[1].src[1] = alloc_imm(c, ETNA_UNIFORM_TEXRECT_SCALE_Y, unit);
 
       emit_inst(c, &ins[0]);
       emit_inst(c, &ins[1]);
@@ -2290,17 +2290,17 @@ copy_uniform_state_to_shader(struct etna_compile *c, struct etna_shader_variant 
    uint32_t count = c->imm_base + c->imm_size;
    struct etna_shader_uniform_info *uinfo = &sobj->uniforms;
 
-   uinfo->imm_count = count;
+   uinfo->count = count;
 
-   uinfo->imm_data = malloc(count * sizeof(*c->imm_data));
+   uinfo->data = malloc(count * sizeof(*c->imm_data));
    for (unsigned i = 0; i < c->imm_base; i++)
-      uinfo->imm_data[i] = i;
-   memcpy(&uinfo->imm_data[c->imm_base], c->imm_data, c->imm_size * sizeof(*c->imm_data));
+      uinfo->data[i] = i;
+   memcpy(&uinfo->data[c->imm_base], c->imm_data, c->imm_size * sizeof(*c->imm_data));
 
-   uinfo->imm_contents = malloc(count * sizeof(*c->imm_contents));
+   uinfo->contents = malloc(count * sizeof(*c->imm_contents));
    for (unsigned i = 0; i < c->imm_base; i++)
-      uinfo->imm_contents[i] = ETNA_IMMEDIATE_UNIFORM;
-   memcpy(&uinfo->imm_contents[c->imm_base], c->imm_contents, c->imm_size * sizeof(*c->imm_contents));
+      uinfo->contents[i] = ETNA_UNIFORM_UNIFORM;
+   memcpy(&uinfo->contents[c->imm_base], c->imm_contents, c->imm_size * sizeof(*c->imm_contents));
 
    etna_set_shader_uniforms_dirty_flags(sobj);
 }

@@ -2219,7 +2219,11 @@ isl_surf_get_ccs_surf(const struct isl_device *dev,
       isl_gen11_##func(__VA_ARGS__);               \
       break;                                       \
    case 12:                                        \
-      isl_gen12_##func(__VA_ARGS__);               \
+      if (ISL_DEV_IS_GEN12HP(dev)) {               \
+         isl_gen125_##func(__VA_ARGS__);           \
+      } else {                                     \
+         isl_gen12_##func(__VA_ARGS__);            \
+      }                                            \
       break;                                       \
    default:                                        \
       assert(!"Unknown hardware generation");      \

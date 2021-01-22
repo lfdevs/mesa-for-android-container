@@ -97,7 +97,7 @@ static void
 pause_query(struct fd_batch *batch, struct fd_hw_query *hq,
 		struct fd_ringbuffer *ring)
 {
-	int idx = pidx(hq->provider->query_type);
+	ASSERTED int idx = pidx(hq->provider->query_type);
 	DBG("%p", hq);
 	assert(idx >= 0);   /* query never would have been created otherwise */
 	assert(hq->period && !hq->period->end);
@@ -135,7 +135,7 @@ fd_hw_destroy_query(struct fd_context *ctx, struct fd_query *q)
 static void
 fd_hw_begin_query(struct fd_context *ctx, struct fd_query *q)
 {
-	struct fd_batch *batch = fd_context_batch(ctx);
+	struct fd_batch *batch = fd_context_batch_locked(ctx);
 	struct fd_hw_query *hq = fd_hw_query(q);
 
 	DBG("%p", q);
@@ -149,12 +149,15 @@ fd_hw_begin_query(struct fd_context *ctx, struct fd_query *q)
 	/* add to active list: */
 	assert(list_is_empty(&hq->list));
 	list_addtail(&hq->list, &ctx->hw_active_queries);
+
+	fd_batch_unlock_submit(batch);
+	fd_batch_reference(&batch, NULL);
 }
 
 static void
 fd_hw_end_query(struct fd_context *ctx, struct fd_query *q)
 {
-	struct fd_batch *batch = fd_context_batch(ctx);
+	struct fd_batch *batch = fd_context_batch_locked(ctx);
 	struct fd_hw_query *hq = fd_hw_query(q);
 
 	DBG("%p", q);
@@ -164,6 +167,9 @@ fd_hw_end_query(struct fd_context *ctx, struct fd_query *q)
 
 	/* remove from active list: */
 	list_delinit(&hq->list);
+
+	fd_batch_unlock_submit(batch);
+	fd_batch_reference(&batch, NULL);
 }
 
 /* helper to get ptr to specified sample: */
@@ -225,7 +231,7 @@ fd_hw_get_query_result(struct fd_context *ctx, struct fd_query *q,
 	/* sum the result across all sample periods: */
 	LIST_FOR_EACH_ENTRY(period, &hq->periods, list) {
 		struct fd_hw_sample *start = period->start;
-		struct fd_hw_sample *end = period->end;
+		ASSERTED struct fd_hw_sample *end = period->end;
 		unsigned i;
 
 		/* start and end samples should be from same batch: */

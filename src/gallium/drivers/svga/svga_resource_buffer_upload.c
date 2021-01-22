@@ -481,7 +481,7 @@ svga_buffer_upload_gb_command(struct svga_context *svga,
       if (!invalidate_cmd)
          return PIPE_ERROR_OUT_OF_MEMORY;
 
-      cicmd = container_of(invalidate_cmd, cicmd, body);
+      cicmd = container_of(invalidate_cmd, struct svga_3d_invalidate_gb_image, body);
       cicmd->header.size = sizeof(*invalidate_cmd);
       swc->surface_relocation(swc, &invalidate_cmd->image.sid, NULL,
                               sbuf->handle,
@@ -513,7 +513,7 @@ svga_buffer_upload_gb_command(struct svga_context *svga,
       /* The whole_update_command is a SVGA3dCmdHeader plus the
        * SVGA3dCmdUpdateGBImage command.
        */
-      whole_update_cmd = container_of(update_cmd, whole_update_cmd, body);
+      whole_update_cmd = container_of(update_cmd, struct svga_3d_update_gb_image, body);
    }
 
    /* Init the first UPDATE_GB_IMAGE command */
@@ -730,9 +730,6 @@ svga_buffer_upload_flush(struct svga_context *svga, struct svga_buffer *sbuf)
 
    assert(sbuf->head.prev && sbuf->head.next);
    list_del(&sbuf->head);  /* remove from svga->dirty_buffers list */
-#ifdef DEBUG
-   sbuf->head.next = sbuf->head.prev = NULL;
-#endif
    sbuf->dma.pending = FALSE;
    sbuf->dma.flags.discard = FALSE;
    sbuf->dma.flags.unsynchronized = FALSE;

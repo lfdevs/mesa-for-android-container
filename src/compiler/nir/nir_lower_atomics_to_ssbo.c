@@ -205,6 +205,7 @@ nir_lower_atomics_to_ssbo(nir_shader *shader)
 
             ssbo = nir_variable_create(shader, nir_var_mem_ssbo, type, name);
             ssbo->data.binding = ssbo_offset + var->data.binding;
+            ssbo->data.explicit_binding = var->data.explicit_binding;
 
             /* We can't use num_abos, because it only represents the number of
              * active atomic counters, and currently unlike SSBO's they aren't

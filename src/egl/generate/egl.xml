@@ -590,9 +590,10 @@
         <enum value="0x31D7" name="EGL_PLATFORM_GBM_MESA" alias="EGL_PLATFORM_GBM_KHR"/>
         <enum value="0x31D8" name="EGL_PLATFORM_WAYLAND_KHR"/>
         <enum value="0x31D8" name="EGL_PLATFORM_WAYLAND_EXT" alias="EGL_PLATFORM_WAYLAND_KHR"/>
-            <unused start="0x31DC" end="0x31DC"/>
+        <enum value="0x31DC" name="EGL_PLATFORM_XCB_EXT"/>
         <enum value="0x31DD" name="EGL_PLATFORM_SURFACELESS_MESA"/>
-            <unused start="0x31DE" end="0x31DF"/>
+        <enum value="0x31DE" name="EGL_PLATFORM_XCB_SCREEN_EXT"/>
+            <unused start="0x31DF" end="0x31DF"/>
     </enums>
 
     <!-- Due to an oversight in development, these enums alias the above MESA
@@ -2544,6 +2545,12 @@
             <require>
                 <enum name="EGL_PLATFORM_X11_EXT"/>
                 <enum name="EGL_PLATFORM_X11_SCREEN_EXT"/>
+            </require>
+        </extension>
+        <extension name="EGL_EXT_platform_xcb" supported="egl">
+            <require>
+                <enum name="EGL_PLATFORM_XCB_EXT"/>
+                <enum name="EGL_PLATFORM_XCB_SCREEN_EXT"/>
             </require>
         </extension>
         <extension name="EGL_EXT_protected_content" supported="egl">

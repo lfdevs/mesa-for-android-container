@@ -42,7 +42,7 @@ nv30_context_kick_notify(struct nouveau_pushbuf *push)
 
    if (!push->user_priv)
       return;
-   nv30 = container_of(push->user_priv, nv30, bufctx);
+   nv30 = container_of(push->user_priv, struct nv30_context, bufctx);
    screen = &nv30->screen->base;
 
    nouveau_fence_next(screen);

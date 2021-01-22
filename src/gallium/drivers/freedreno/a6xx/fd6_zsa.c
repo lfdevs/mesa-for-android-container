@@ -103,20 +103,20 @@ fd6_zsa_state_create(struct pipe_context *pctx,
 	so->base = *cso;
 
 	so->rb_depth_cntl |=
-		A6XX_RB_DEPTH_CNTL_ZFUNC(cso->depth.func); /* maps 1:1 */
+		A6XX_RB_DEPTH_CNTL_ZFUNC(cso->depth_func); /* maps 1:1 */
 
-	if (cso->depth.enabled) {
+	if (cso->depth_enabled) {
 		so->rb_depth_cntl |=
 			A6XX_RB_DEPTH_CNTL_Z_ENABLE |
 			A6XX_RB_DEPTH_CNTL_Z_TEST_ENABLE;
 
 		so->lrz.test = true;
 
-		if (cso->depth.writemask) {
+		if (cso->depth_writemask) {
 			so->lrz.write = true;
 		}
 
-		switch (cso->depth.func) {
+		switch (cso->depth_func) {
 		case PIPE_FUNC_LESS:
 		case PIPE_FUNC_LEQUAL:
 			so->lrz.enable = true;
@@ -145,7 +145,7 @@ fd6_zsa_state_create(struct pipe_context *pctx,
 		}
 	}
 
-	if (cso->depth.writemask)
+	if (cso->depth_writemask)
 		so->rb_depth_cntl |= A6XX_RB_DEPTH_CNTL_Z_WRITE_ENABLE;
 
 	if (cso->stencil[0].enabled) {
@@ -185,20 +185,20 @@ fd6_zsa_state_create(struct pipe_context *pctx,
 		}
 	}
 
-	if (cso->alpha.enabled) {
+	if (cso->alpha_enabled) {
 		/* Alpha test is functionally a conditional discard, so we can't
 		 * write LRZ before seeing if we end up discarding or not
 		 */
-		if (cso->alpha.func != PIPE_FUNC_ALWAYS) {
+		if (cso->alpha_func != PIPE_FUNC_ALWAYS) {
 			so->lrz.write = false;
 			so->alpha_test = true;
 		}
 
-		uint32_t ref = cso->alpha.ref_value * 255.0;
+		uint32_t ref = cso->alpha_ref_value * 255.0;
 		so->rb_alpha_control =
 			A6XX_RB_ALPHA_CONTROL_ALPHA_TEST |
 			A6XX_RB_ALPHA_CONTROL_ALPHA_REF(ref) |
-			A6XX_RB_ALPHA_CONTROL_ALPHA_TEST_FUNC(cso->alpha.func);
+			A6XX_RB_ALPHA_CONTROL_ALPHA_TEST_FUNC(cso->alpha_func);
 	}
 
 	for (int i = 0; i < 4; i++) {

@@ -55,7 +55,7 @@ struct wqm_ctx {
    std::vector<bool> branch_wqm; /* true if the branch condition in this block should be in wqm */
    bool loop;
    bool wqm;
-   wqm_ctx(Program* program) : program(program),
+   wqm_ctx(Program* program_) : program(program_),
                                defined_in(program->peekAllocationId(), 0xFFFF),
                                needs_wqm(program->peekAllocationId()),
                                branch_wqm(program->blocks.size()),
@@ -74,8 +74,8 @@ struct loop_info {
    bool has_divergent_break;
    bool has_divergent_continue;
    bool has_discard; /* has a discard or demote */
-   loop_info(Block* b, uint16_t num, uint8_t needs, bool breaks, bool cont, bool discard) :
-             loop_header(b), num_exec_masks(num), needs(needs), has_divergent_break(breaks),
+   loop_info(Block* b, uint16_t num, uint8_t needs_, bool breaks, bool cont, bool discard) :
+             loop_header(b), num_exec_masks(num), needs(needs_), has_divergent_break(breaks),
              has_divergent_continue(cont), has_discard(discard) {}
 };
 
@@ -93,44 +93,8 @@ struct exec_ctx {
    std::vector<block_info> info;
    std::vector<loop_info> loop;
    bool handle_wqm = false;
-   exec_ctx(Program *program) : program(program), info(program->blocks.size()) {}
+   exec_ctx(Program *program_) : program(program_), info(program->blocks.size()) {}
 };
-
-bool pred_by_exec_mask(aco_ptr<Instruction>& instr) {
-   if (instr->isSALU())
-      return instr->reads_exec();
-   if (instr->format == Format::SMEM || instr->isSALU())
-      return false;
-   if (instr->format == Format::PSEUDO_BARRIER)
-      return false;
-
-   if (instr->format == Format::PSEUDO) {
-      switch (instr->opcode) {
-      case aco_opcode::p_create_vector:
-      case aco_opcode::p_extract_vector:
-      case aco_opcode::p_split_vector:
-      case aco_opcode::p_parallelcopy:
-         for (Definition def : instr->definitions) {
-            if (def.getTemp().type() == RegType::vgpr)
-               return true;
-         }
-         return false;
-      case aco_opcode::p_spill:
-      case aco_opcode::p_reload:
-         return false;
-      default:
-         break;
-      }
-   }
-
-   if (instr->opcode == aco_opcode::v_readlane_b32 ||
-       instr->opcode == aco_opcode::v_readlane_b32_e64 ||
-       instr->opcode == aco_opcode::v_writelane_b32 ||
-       instr->opcode == aco_opcode::v_writelane_b32_e64)
-      return false;
-
-   return true;
-}
 
 bool needs_exact(aco_ptr<Instruction>& instr) {
    if (instr->format == Format::MUBUF) {
@@ -146,7 +110,7 @@ bool needs_exact(aco_ptr<Instruction>& instr) {
       FLAT_instruction *flat = static_cast<FLAT_instruction *>(instr.get());
       return flat->disable_wqm;
    } else {
-      return instr->format == Format::EXP || instr->opcode == aco_opcode::p_fs_buffer_store_smem;
+      return instr->format == Format::EXP;
    }
 }
 
@@ -218,7 +182,7 @@ void get_block_needs(wqm_ctx &ctx, exec_ctx &exec_ctx, Block* block)
       WQMState needs = needs_exact(instr) ? Exact : Unspecified;
       bool propagate_wqm = instr->opcode == aco_opcode::p_wqm;
       bool preserve_wqm = instr->opcode == aco_opcode::p_discard_if;
-      bool pred_by_exec = pred_by_exec_mask(instr);
+      bool pred_by_exec = needs_exec_mask(instr.get());
       for (const Definition& definition : instr->definitions) {
          if (!definition.isTemp())
             continue;
@@ -323,14 +287,7 @@ void transition_to_WQM(exec_ctx& ctx, Builder bld, unsigned idx)
       return;
    if (ctx.info[idx].exec.back().second & mask_type_global) {
       Temp exec_mask = ctx.info[idx].exec.back().first;
-      /* TODO: we might generate better code if we pass the uncopied "exec_mask"
-       * directly to the s_wqm (we still need to keep this parallelcopy for
-       * potential later uses of exec_mask though). We currently can't do this
-       * because of a RA bug. */
-      exec_mask = bld.pseudo(aco_opcode::p_parallelcopy, bld.def(bld.lm), bld.exec(exec_mask));
-      ctx.info[idx].exec.back().first = exec_mask;
-
-      exec_mask = bld.sop1(Builder::s_wqm, bld.def(bld.lm, exec), bld.def(s1, scc), exec_mask);
+      exec_mask = bld.sop1(Builder::s_wqm, bld.def(bld.lm, exec), bld.def(s1, scc), bld.exec(exec_mask));
       ctx.info[idx].exec.emplace_back(exec_mask, mask_type_global | mask_type_wqm);
       return;
    }
@@ -477,23 +434,26 @@ unsigned add_coupling_code(exec_ctx& ctx, Block* block,
 
       /* fill the loop header phis */
       std::vector<unsigned>& header_preds = header->linear_preds;
-      int k = 0;
+      int instr_idx = 0;
       if (info.has_discard) {
-         while (k < info.num_exec_masks - 1) {
-            aco_ptr<Instruction>& phi = header->instructions[k];
+         while (instr_idx < info.num_exec_masks - 1) {
+            aco_ptr<Instruction>& phi = header->instructions[instr_idx];
             assert(phi->opcode == aco_opcode::p_linear_phi);
             for (unsigned i = 1; i < phi->operands.size(); i++)
-               phi->operands[i] = Operand(ctx.info[header_preds[i]].exec[k].first);
-            k++;
+               phi->operands[i] = Operand(ctx.info[header_preds[i]].exec[instr_idx].first);
+            instr_idx++;
          }
       }
-      aco_ptr<Instruction>& phi = header->instructions[k++];
-      assert(phi->opcode == aco_opcode::p_linear_phi);
-      for (unsigned i = 1; i < phi->operands.size(); i++)
-         phi->operands[i] = Operand(ctx.info[header_preds[i]].exec[info.num_exec_masks - 1].first);
+
+      {
+         aco_ptr<Instruction>& phi = header->instructions[instr_idx++];
+         assert(phi->opcode == aco_opcode::p_linear_phi);
+         for (unsigned i = 1; i < phi->operands.size(); i++)
+            phi->operands[i] = Operand(ctx.info[header_preds[i]].exec[info.num_exec_masks - 1].first);
+      }
 
       if (info.has_divergent_break) {
-         aco_ptr<Instruction>& phi = header->instructions[k];
+         aco_ptr<Instruction>& phi = header->instructions[instr_idx];
          assert(phi->opcode == aco_opcode::p_linear_phi);
          for (unsigned i = 1; i < phi->operands.size(); i++)
             phi->operands[i] = Operand(ctx.info[header_preds[i]].exec[info.num_exec_masks].first);
@@ -503,17 +463,17 @@ unsigned add_coupling_code(exec_ctx& ctx, Block* block,
 
       /* create the loop exit phis if not trivial */
       bool need_parallelcopy = false;
-      for (unsigned k = 0; k < info.num_exec_masks; k++) {
-         Temp same = ctx.info[preds[0]].exec[k].first;
-         uint8_t type = ctx.info[header_preds[0]].exec[k].second;
+      for (unsigned exec_idx = 0; exec_idx < info.num_exec_masks; exec_idx++) {
+         Temp same = ctx.info[preds[0]].exec[exec_idx].first;
+         uint8_t type = ctx.info[header_preds[0]].exec[exec_idx].second;
          bool trivial = true;
 
          for (unsigned i = 1; i < preds.size() && trivial; i++) {
-            if (ctx.info[preds[i]].exec[k].first != same)
+            if (ctx.info[preds[i]].exec[exec_idx].first != same)
                trivial = false;
          }
 
-         if (k == info.num_exec_masks - 1u) {
+         if (exec_idx == info.num_exec_masks - 1u) {
             bool all_liveout_exec = true;
             bool all_not_liveout_exec = true;
             for (unsigned pred : preds) {
@@ -534,12 +494,12 @@ unsigned add_coupling_code(exec_ctx& ctx, Block* block,
             /* create phi for loop footer */
             aco_ptr<Pseudo_instruction> phi{create_instruction<Pseudo_instruction>(aco_opcode::p_linear_phi, Format::PSEUDO, preds.size(), 1)};
             phi->definitions[0] = bld.def(bld.lm);
-            if (k == info.num_exec_masks - 1u) {
+            if (exec_idx == info.num_exec_masks - 1u) {
                phi->definitions[0].setFixed(exec);
                need_parallelcopy = false;
             }
             for (unsigned i = 0; i < phi->operands.size(); i++)
-               phi->operands[i] = Operand(ctx.info[preds[i]].exec[k].first);
+               phi->operands[i] = Operand(ctx.info[preds[i]].exec[exec_idx].first);
             ctx.info[idx].exec.emplace_back(bld.insert(std::move(phi)), type);
          }
       }
@@ -589,7 +549,10 @@ unsigned add_coupling_code(exec_ctx& ctx, Block* block,
       /* if one of the predecessors ends in exact mask, we pop it from stack */
       unsigned num_exec_masks = std::min(ctx.info[preds[0]].exec.size(),
                                          ctx.info[preds[1]].exec.size());
-      if (block->kind & block_kind_top_level && !(block->kind & block_kind_merge))
+
+      if (block->kind & block_kind_merge)
+         num_exec_masks--;
+      else if (block->kind & block_kind_top_level)
          num_exec_masks = std::min(num_exec_masks, 2u);
 
       /* create phis for diverged exec masks */
@@ -615,9 +578,6 @@ unsigned add_coupling_code(exec_ctx& ctx, Block* block,
       bld.insert(std::move(block->instructions[i]));
       i++;
    }
-
-   if (block->kind & block_kind_merge)
-      ctx.info[idx].exec.pop_back();
 
    if (block->kind & block_kind_top_level && ctx.info[idx].exec.size() == 3) {
       assert(ctx.info[idx].exec.back().second == mask_type_exact);
@@ -648,43 +608,6 @@ unsigned add_coupling_code(exec_ctx& ctx, Block* block,
    }
 
    return i;
-}
-
-void lower_fs_buffer_store_smem(Builder& bld, bool need_check, aco_ptr<Instruction>& instr, Temp cur_exec)
-{
-   Operand offset = instr->operands[1];
-   if (need_check) {
-      /* if exec is zero, then use UINT32_MAX as an offset and make this store a no-op */
-      Temp nonempty = bld.sopc(Builder::s_cmp_lg, bld.def(s1, scc), cur_exec, Operand(0u, bld.lm == s2));
-
-      if (offset.isLiteral())
-         offset = bld.copy(bld.def(s1), offset);
-
-      offset = bld.sop2(aco_opcode::s_cselect_b32, bld.hint_m0(bld.def(s1)),
-                        offset, Operand(UINT32_MAX), bld.scc(nonempty));
-   } else if (offset.isConstant() && offset.constantValue() > 0xFFFFF) {
-      offset = bld.copy(bld.hint_m0(bld.def(s1)), offset);
-   }
-   if (!offset.isConstant())
-      offset.setFixed(m0);
-
-   switch (instr->operands[2].size()) {
-   case 1:
-      instr->opcode = aco_opcode::s_buffer_store_dword;
-      break;
-   case 2:
-      instr->opcode = aco_opcode::s_buffer_store_dwordx2;
-      break;
-   case 4:
-      instr->opcode = aco_opcode::s_buffer_store_dwordx4;
-      break;
-   default:
-      unreachable("Invalid SMEM buffer store size");
-   }
-   instr->operands[1] = offset;
-   /* as_uniform() needs to be done here so it's done in exact mode and helper
-    * lanes don't contribute. */
-   instr->operands[2] = Operand(bld.as_uniform(instr->operands[2]));
 }
 
 void process_instructions(exec_ctx& ctx, Block* block,
@@ -833,10 +756,6 @@ void process_instructions(exec_ctx& ctx, Block* block,
          instr->operands[0] = bld.scc(exit_cond);
          state = Exact;
 
-      } else if (instr->opcode == aco_opcode::p_fs_buffer_store_smem) {
-         bool need_check = ctx.info[block->index].exec.size() != 1 &&
-                           !(ctx.info[block->index].exec[ctx.info[block->index].exec.size() - 2].second & Exact);
-         lower_fs_buffer_store_smem(bld, need_check, instr, ctx.info[block->index].exec.back().first);
       }
 
       bld.insert(std::move(instr));

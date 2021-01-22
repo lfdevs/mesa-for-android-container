@@ -614,7 +614,7 @@ struct {
  *    reused.
  *
  * SVGA_CAP_CMD_BUFFERS_2 --
- *    Enable support for the prepend command buffer submision
+ *    Enable support for the prepend command buffer submission
  *    registers.  SVGA_REG_CMD_PREPEND_LOW and
  *    SVGA_REG_CMD_PREPEND_HIGH.
  *
@@ -877,7 +877,7 @@ enum {
  *
  *         1. If the guest wishes to fully sync (drain) the FIFO,
  *            it will write once to SYNC then poll on the BUSY
- *            register. The FIFO is sync'ed once BUSY is zero.
+ *            register. The FIFO is synced once BUSY is zero.
  *
  *         2. If the guest wants to asynchronously wake up the host,
  *            it will write once to SYNC without polling on BUSY.
@@ -1205,7 +1205,7 @@ typedef struct SVGADisplayTopology {
  *    memory must come from the GFB.  The guest is not allowed to
  *    access the memory and doing so will have undefined results.  The
  *    backing store is required to be page aligned and the size is
- *    padded to the next page boundry.  The number of pages is:
+ *    padded to the next page boundary.  The number of pages is:
  *       (bytesPerLine * size.width * 4 + PAGE_SIZE - 1) / PAGE_SIZE
  *
  *    The pitch in the backingStore is required to be at least large
@@ -1777,7 +1777,7 @@ struct {
  *    identically-sized region on the same or a different screen.
  *
  *    Note that the source pixels for the COPY in this annotation are
- *    sampled before applying the anqnotation's associated blit. They
+ *    sampled before applying the annotation's associated blit. They
  *    are allowed to overlap with the blit's destination pixels.
  *
  *    The copy source rectangle is specified the same way as the blit

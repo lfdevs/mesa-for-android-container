@@ -3,6 +3,7 @@
 %{
 #include <string.h>
 #include "i965_asm.h"
+#undef ALIGN16
 #include "i965_gram.tab.h"
 
 /* Locations */

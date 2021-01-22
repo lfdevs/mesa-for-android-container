@@ -105,10 +105,10 @@ intel_miptree_create_for_teximage(struct brw_context *brw,
     * resizable buffers, or require that buffers implement lazy
     * pagetable arrangements.
     */
-   if ((intelObj->base.Sampler.MinFilter == GL_NEAREST ||
-        intelObj->base.Sampler.MinFilter == GL_LINEAR) &&
+   if ((intelObj->base.Sampler.Attrib.MinFilter == GL_NEAREST ||
+        intelObj->base.Sampler.Attrib.MinFilter == GL_LINEAR) &&
        intelImage->base.Base.Level == 0 &&
-       !intelObj->base.GenerateMipmap) {
+       !intelObj->base.Attrib.GenerateMipmap) {
       lastLevel = 0;
    } else {
       lastLevel = _mesa_get_tex_max_num_levels(intelObj->base.Target,

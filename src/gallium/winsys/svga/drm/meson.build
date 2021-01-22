@@ -43,5 +43,5 @@ libsvgadrm = static_library(
     inc_src, inc_include, inc_gallium, inc_gallium_aux,
     include_directories('../../../drivers/svga', '../../../drivers/svga/include'),
   ],
-  dependencies : dep_libdrm,
+  dependencies : [dep_libdrm, idep_mesautil],
 )

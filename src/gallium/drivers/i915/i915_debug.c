@@ -35,7 +35,7 @@
 
 
 
-static const struct debug_named_value debug_options[] = {
+static const struct debug_named_value i915_debug_options[] = {
    {"blit",      DBG_BLIT,      "Print when using the 2d blitter"},
    {"emit",      DBG_EMIT,      "State emit information"},
    {"atoms",     DBG_ATOMS,     "Print dirty state atoms"},
@@ -47,7 +47,7 @@ static const struct debug_named_value debug_options[] = {
 
 unsigned i915_debug = 0;
 
-DEBUG_GET_ONCE_FLAGS_OPTION(i915_debug, "I915_DEBUG", debug_options, 0)
+DEBUG_GET_ONCE_FLAGS_OPTION(i915_debug, "I915_DEBUG", i915_debug_options, 0)
 DEBUG_GET_ONCE_BOOL_OPTION(i915_no_tiling, "I915_NO_TILING", FALSE)
 DEBUG_GET_ONCE_BOOL_OPTION(i915_lie, "I915_LIE", TRUE)
 DEBUG_GET_ONCE_BOOL_OPTION(i915_use_blitter, "I915_USE_BLITTER", FALSE)

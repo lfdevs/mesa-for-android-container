@@ -33,7 +33,10 @@
 
 #include "util/u_math.h"
 #include "util/u_memory.h"
+#include "util/ralloc.h"
 #include "pipe/p_shader_tokens.h"
+#include "pipe/p_context.h"
+#include "nir/nir_to_tgsi.h"
 
 #include "draw_private.h"
 #include "draw_context.h"
@@ -221,16 +224,23 @@ draw_create_vs_exec(struct draw_context *draw,
    if (!vs)
       return NULL;
 
-   /* we make a private copy of the tokens */
-   vs->base.state.tokens = tgsi_dup_tokens(state->tokens);
-   if (!vs->base.state.tokens) {
-      FREE(vs);
-      return NULL;
+   if (state->type == PIPE_SHADER_IR_NIR) {
+      vs->base.state.type = PIPE_SHADER_IR_TGSI;
+      vs->base.state.tokens = nir_to_tgsi(state->ir.nir, draw->pipe->screen);
+   } else {
+      assert(state->type == PIPE_SHADER_IR_TGSI);
+      vs->base.state.type = state->type;
+
+      /* we need to keep a local copy of the tokens */
+      vs->base.state.tokens = tgsi_dup_tokens(state->tokens);
+      if (!vs->base.state.tokens) {
+         FREE(vs);
+         return NULL;
+      }
    }
 
-   tgsi_scan_shader(state->tokens, &vs->base.info);
+   tgsi_scan_shader(vs->base.state.tokens, &vs->base.info);
 
-   vs->base.state.type = state->type;
    vs->base.state.stream_output = state->stream_output;
    vs->base.draw = draw;
    vs->base.prepare = vs_exec_prepare;

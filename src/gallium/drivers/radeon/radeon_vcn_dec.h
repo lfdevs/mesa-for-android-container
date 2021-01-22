@@ -74,6 +74,7 @@
 #define RDECODE_CODEC_JPEG                                  0x00000008
 #define RDECODE_CODEC_H265                                  0x00000010
 #define RDECODE_CODEC_VP9                                   0x00000011
+#define RDECODE_CODEC_AV1                                   0x00000013
 
 #define RDECODE_ARRAY_MODE_LINEAR                           0x00000000
 #define RDECODE_ARRAY_MODE_MACRO_LINEAR_MICRO_TILED         0x00000001
@@ -114,6 +115,7 @@
 #define RDECODE_MESSAGE_MPEG4_ASP_VLD                       0x0000000B
 #define RDECODE_MESSAGE_HEVC                                0x0000000D
 #define RDECODE_MESSAGE_VP9                                 0x0000000E
+#define RDECODE_MESSAGE_AV1                                 0x00000011
 
 #define RDECODE_FEEDBACK_PROFILING                          0x00000001
 
@@ -293,6 +295,73 @@
 #define SAMU_DRM_DISABLE 0x00000000
 #define SAMU_DRM_ENABLE  0x00000001
 
+/* AV1 Frame header flags */
+#define RDECODE_FRAME_HDR_INFO_AV1_DISABLE_REF_FRAME_MVS_SHIFT        (31)
+#define RDECODE_FRAME_HDR_INFO_AV1_SKIP_REFERENCE_UPDATE_SHIFT        (30)
+#define RDECODE_FRAME_HDR_INFO_AV1_SWITCHABLE_SKIP_MODE_SHIFT         (29)
+#define RDECODE_FRAME_HDR_INFO_AV1_DELTA_LF_MULTI_SHIFT               (28)
+#define RDECODE_FRAME_HDR_INFO_AV1_SEGMENTATION_TEMPORAL_UPDATE_SHIFT (27)
+#define RDECODE_FRAME_HDR_INFO_AV1_SEGMENTATION_UPDATE_MAP_SHIFT      (26)
+#define RDECODE_FRAME_HDR_INFO_AV1_SEGMENTATION_ENABLED_SHIFT         (25)
+#define RDECODE_FRAME_HDR_INFO_AV1_REDUCED_TX_SET_USED_SHIFT          (24)
+#define RDECODE_FRAME_HDR_INFO_AV1_DELTA_LF_PRESENT_FLAG_SHIFT        (23)
+#define RDECODE_FRAME_HDR_INFO_AV1_DELTA_Q_PRESENT_FLAG_SHIFT         (22)
+#define RDECODE_FRAME_HDR_INFO_AV1_MODE_REF_DELTA_UPDATE_SHIFT        (21)
+#define RDECODE_FRAME_HDR_INFO_AV1_MODE_REF_DELTA_ENABLED_SHIFT       (20)
+#define RDECODE_FRAME_HDR_INFO_AV1_CUR_FRAME_FORCE_INTEGER_MV_SHIFT   (19)
+#define RDECODE_FRAME_HDR_INFO_AV1_ALLOW_SCREEN_CONTENT_TOOLS_SHIFT   (18)
+#define RDECODE_FRAME_HDR_INFO_AV1_ALLOW_REF_FRAME_MVS_SHIFT          (17)
+#define RDECODE_FRAME_HDR_INFO_AV1_ENABLE_JNT_COMP_SHIFT              (16)
+#define RDECODE_FRAME_HDR_INFO_AV1_ENABLE_ORDER_HINT_SHIFT            (15)
+#define RDECODE_FRAME_HDR_INFO_AV1_ENABLE_DUAL_FILTER_SHIFT           (14)
+#define RDECODE_FRAME_HDR_INFO_AV1_ALLOW_WARPED_MOTION_SHIFT          (13)
+#define RDECODE_FRAME_HDR_INFO_AV1_ENABLE_MASKED_COMPOUND_SHIFT       (12)
+#define RDECODE_FRAME_HDR_INFO_AV1_ENABLE_INTERINTRA_COMPOUND_SHIFT   (11)
+#define RDECODE_FRAME_HDR_INFO_AV1_ENABLE_INTRA_EDGE_FILTER_SHIFT     (10)
+#define RDECODE_FRAME_HDR_INFO_AV1_ENABLE_FILTER_INTRA_SHIFT          (9)
+#define RDECODE_FRAME_HDR_INFO_AV1_USING_QMATRIX_SHIFT                (8)
+#define RDECODE_FRAME_HDR_INFO_AV1_SKIP_MODE_FLAG_SHIFT               (7)
+#define RDECODE_FRAME_HDR_INFO_AV1_MONOCHROME_SHIFT                   (6)
+#define RDECODE_FRAME_HDR_INFO_AV1_ALLOW_HIGH_PRECISION_MV_SHIFT      (5)
+#define RDECODE_FRAME_HDR_INFO_AV1_ALLOW_INTRABC_SHIFT                (4)
+#define RDECODE_FRAME_HDR_INFO_AV1_INTRA_ONLY_SHIFT                   (3)
+#define RDECODE_FRAME_HDR_INFO_AV1_REFRESH_FRAME_CONTEXT_SHIFT        (2)
+#define RDECODE_FRAME_HDR_INFO_AV1_DISABLE_CDF_UPDATE_SHIFT           (1)
+#define RDECODE_FRAME_HDR_INFO_AV1_SHOW_FRAME_SHIFT                   (0)
+
+#define RDECODE_FRAME_HDR_INFO_AV1_DISABLE_REF_FRAME_MVS_MASK         (0x80000000)
+#define RDECODE_FRAME_HDR_INFO_AV1_SKIP_REFERENCE_UPDATE_MASK         (0x40000000)
+#define RDECODE_FRAME_HDR_INFO_AV1_SWITCHABLE_SKIP_MODE_MASK          (0x20000000)
+#define RDECODE_FRAME_HDR_INFO_AV1_DELTA_LF_MULTI_MASK                (0x10000000)
+#define RDECODE_FRAME_HDR_INFO_AV1_SEGMENTATION_TEMPORAL_UPDATE_MASK  (0x08000000)
+#define RDECODE_FRAME_HDR_INFO_AV1_SEGMENTATION_UPDATE_MAP_MASK       (0x04000000)
+#define RDECODE_FRAME_HDR_INFO_AV1_SEGMENTATION_ENABLED_MASK          (0x02000000)
+#define RDECODE_FRAME_HDR_INFO_AV1_REDUCED_TX_SET_USED_MASK           (0x01000000)
+#define RDECODE_FRAME_HDR_INFO_AV1_DELTA_LF_PRESENT_FLAG_MASK         (0x00800000)
+#define RDECODE_FRAME_HDR_INFO_AV1_DELTA_Q_PRESENT_FLAG_MASK          (0x00400000)
+#define RDECODE_FRAME_HDR_INFO_AV1_MODE_REF_DELTA_UPDATE_MASK         (0x00200000)
+#define RDECODE_FRAME_HDR_INFO_AV1_MODE_REF_DELTA_ENABLED_MASK        (0x00100000)
+#define RDECODE_FRAME_HDR_INFO_AV1_CUR_FRAME_FORCE_INTEGER_MV_MASK    (0x00080000)
+#define RDECODE_FRAME_HDR_INFO_AV1_ALLOW_SCREEN_CONTENT_TOOLS_MASK    (0x00040000)
+#define RDECODE_FRAME_HDR_INFO_AV1_ALLOW_REF_FRAME_MVS_MASK           (0x00020000)
+#define RDECODE_FRAME_HDR_INFO_AV1_ENABLE_JNT_COMP_MASK               (0x00010000)
+#define RDECODE_FRAME_HDR_INFO_AV1_ENABLE_ORDER_HINT_MASK             (0x00008000)
+#define RDECODE_FRAME_HDR_INFO_AV1_ENABLE_DUAL_FILTER_MASK            (0x00004000)
+#define RDECODE_FRAME_HDR_INFO_AV1_ALLOW_WARPED_MOTION_MASK           (0x00002000)
+#define RDECODE_FRAME_HDR_INFO_AV1_ENABLE_MASKED_COMPOUND_MASK        (0x00001000)
+#define RDECODE_FRAME_HDR_INFO_AV1_ENABLE_INTERINTRA_COMPOUND_MASK    (0x00000800)
+#define RDECODE_FRAME_HDR_INFO_AV1_ENABLE_INTRA_EDGE_FILTER_MASK      (0x00000400)
+#define RDECODE_FRAME_HDR_INFO_AV1_ENABLE_FILTER_INTRA_MASK           (0x00000200)
+#define RDECODE_FRAME_HDR_INFO_AV1_USING_QMATRIX_MASK                 (0x00000100)
+#define RDECODE_FRAME_HDR_INFO_AV1_SKIP_MODE_FLAG_MASK                (0x00000080)
+#define RDECODE_FRAME_HDR_INFO_AV1_MONOCHROME_MASK                    (0x08000040)
+#define RDECODE_FRAME_HDR_INFO_AV1_ALLOW_HIGH_PRECISION_MV_MASK       (0x00000020)
+#define RDECODE_FRAME_HDR_INFO_AV1_ALLOW_INTRABC_MASK                 (0x00000010)
+#define RDECODE_FRAME_HDR_INFO_AV1_INTRA_ONLY_MASK                    (0x00000008)
+#define RDECODE_FRAME_HDR_INFO_AV1_REFRESH_FRAME_CONTEXT_MASK         (0x00000004)
+#define RDECODE_FRAME_HDR_INFO_AV1_DISABLE_CDF_UPDATE_MASK            (0x00000002)
+#define RDECODE_FRAME_HDR_INFO_AV1_SHOW_FRAME_MASK                    (0x00000001)
+
 typedef struct rvcn_dec_message_index_s {
    unsigned int message_id;
    unsigned int offset;
@@ -360,9 +429,10 @@ typedef struct rvcn_dec_message_decode_s {
    unsigned int dt_chromaV_top_offset;
    unsigned int dt_chromaV_bottom_offset;
 
-   unsigned char dpbRefArraySlice[16];
-   unsigned char dpbCurArraySlice;
-   unsigned char dpbReserved[3];
+   unsigned int mif_wrc_en;
+   unsigned int db_pitch_uv;
+
+   unsigned char reserved1[20];
 } rvcn_dec_message_decode_t;
 
 typedef struct rvcn_dec_message_drm_s {
@@ -682,6 +752,136 @@ typedef struct rvcn_dec_message_vp9_s {
    unsigned int uncompressed_header_size;
 } rvcn_dec_message_vp9_t;
 
+typedef enum {
+   RVCN_DEC_AV1_IDENTITY = 0,
+   RVCN_DEC_AV1_TRANSLATION = 1,
+   RVCN_DEC_AV1_ROTZOOM = 2,
+   RVCN_DEC_AV1_AFFINE = 3,
+   RVCN_DEC_AV1_HORTRAPEZOID = 4,
+   RVCN_DEC_AV1_VERTRAPEZOID = 5,
+   RVCN_DEC_AV1_HOMOGRAPHY = 6,
+   RVCN_DEC_AV1_TRANS_TYPES = 7,
+} rvcn_dec_transformation_type_e;
+
+typedef struct {
+   rvcn_dec_transformation_type_e wmtype;
+   int wmmat[8];
+   short alpha, beta, gamma, delta;
+} rvcn_dec_warped_motion_params_t;
+
+typedef struct {
+   unsigned char apply_grain;
+   unsigned char scaling_points_y[14][2];
+   unsigned char num_y_points;
+   unsigned char scaling_points_cb[10][2];
+   unsigned char num_cb_points;
+   unsigned char scaling_points_cr[10][2];
+   unsigned char num_cr_points;
+   unsigned char scaling_shift;
+   unsigned char ar_coeff_lag;
+   signed char ar_coeffs_y[24];
+   signed char ar_coeffs_cb[25];
+   signed char ar_coeffs_cr[25];
+   unsigned char ar_coeff_shift;
+   unsigned char cb_mult;
+   unsigned char cb_luma_mult;
+   unsigned short cb_offset;
+   unsigned char cr_mult;
+   unsigned char cr_luma_mult;
+   unsigned short cr_offset;
+   unsigned char overlap_flag;
+   unsigned char clip_to_restricted_range;
+   unsigned char bit_depth_minus_8;
+   unsigned char chroma_scaling_from_luma;
+   unsigned char grain_scale_shift;
+   unsigned short random_seed;
+} rvcn_dec_film_grain_params_t;
+
+typedef struct rvcn_dec_av1_tile_info_s {
+   unsigned int offset;
+   unsigned int size;
+} rvcn_dec_av1_tile_info_t;
+
+typedef struct rvcn_dec_message_av1_s {
+   unsigned int frame_header_flags;
+   unsigned int current_frame_id;
+   unsigned int frame_offset;
+
+   unsigned char profile;
+   unsigned char is_annexb;
+   unsigned char frame_type;
+   unsigned char primary_ref_frame;
+   unsigned char curr_pic_idx;
+
+   unsigned char sb_size;
+   unsigned char interp_filter;
+   unsigned char filter_level[2];
+   unsigned char filter_level_u;
+   unsigned char filter_level_v;
+   unsigned char sharpness_level;
+   signed char ref_deltas[8];
+   signed char mode_deltas[2];
+   unsigned char base_qindex;
+   signed char y_dc_delta_q;
+   signed char u_dc_delta_q;
+   signed char v_dc_delta_q;
+   signed char u_ac_delta_q;
+   signed char v_ac_delta_q;
+   signed char qm_y;
+   signed char qm_u;
+   signed char qm_v;
+   signed char delta_q_res;
+   signed char delta_lf_res;
+
+   unsigned char tile_cols;
+   unsigned char tile_rows;
+   unsigned char tx_mode;
+   unsigned char reference_mode;
+   unsigned char chroma_format;
+   unsigned int tile_size_bytes;
+   unsigned int context_update_tile_id;
+   unsigned int tile_col_start_sb[65];
+   unsigned int tile_row_start_sb[65];
+   unsigned int max_width;
+   unsigned int max_height;
+   unsigned int width;
+   unsigned int height;
+   unsigned int superres_upscaled_width;
+   unsigned char superres_scale_denominator;
+   unsigned char order_hint_bits;
+
+   unsigned char ref_frame_map[8];
+   unsigned int ref_frame_offset[8];
+   unsigned char frame_refs[7];
+   unsigned char ref_frame_sign_bias[7];
+
+   unsigned char bit_depth_luma_minus8;
+   unsigned char bit_depth_chroma_minus8;
+
+   int feature_data[8][8];
+   unsigned char feature_mask[8];
+
+   unsigned char cdef_damping;
+   unsigned char cdef_bits;
+   unsigned short cdef_strengths[16];
+   unsigned short cdef_uv_strengths[16];
+   unsigned char frame_restoration_type[3];
+   unsigned char log2_restoration_unit_size_minus5[3];
+
+   unsigned char p010_mode;
+   unsigned char msb_mode;
+   unsigned char luma_10to8;
+   unsigned char chroma_10to8;
+   unsigned char preskip_segid;
+   unsigned char last_active_segid;
+   unsigned char seg_lossless_flag;
+   unsigned char coded_lossless;
+   rvcn_dec_film_grain_params_t film_grain;
+   unsigned int uncompressed_header_size;
+   rvcn_dec_warped_motion_params_t global_motion[8];
+   rvcn_dec_av1_tile_info_t tile_info[256];
+} rvcn_dec_message_av1_t;
+
 typedef struct rvcn_dec_feature_index_s {
    unsigned int feature_id;
    unsigned int offset;
@@ -801,6 +1001,27 @@ typedef struct rvcn_dec_vp9_probs_segment_s {
    };
 } rvcn_dec_vp9_probs_segment_t;
 
+typedef struct rvcn_dec_av1_fg_init_buf_s {
+   short luma_grain_block[64][96];
+   short cb_grain_block[32][48];
+   short cr_grain_block[32][48];
+   short scaling_lut_y[256];
+   short scaling_lut_cb[256];
+   short scaling_lut_cr[256];
+   unsigned short temp_tile_left_seed[256];
+} rvcn_dec_av1_fg_init_buf_t;
+
+typedef struct rvcn_dec_av1_segment_fg_s {
+   union {
+      struct {
+         unsigned char feature_data[128];
+         unsigned char feature_mask[8];
+      } seg;
+      unsigned char segment_data[256];
+   };
+   rvcn_dec_av1_fg_init_buf_t fg_buf;
+} rvcn_dec_av1_segment_fg_t;
+
 struct jpeg_params {
    unsigned bsd_size;
    unsigned dt_pitch;
@@ -819,7 +1040,7 @@ struct radeon_decoder {
 
    struct pipe_screen *screen;
    struct radeon_winsys *ws;
-   struct radeon_cmdbuf *cs;
+   struct radeon_cmdbuf cs;
 
    void *msg;
    uint32_t *fb;

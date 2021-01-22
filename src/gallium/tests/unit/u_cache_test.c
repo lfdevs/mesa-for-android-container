@@ -89,6 +89,7 @@ int main() {
          *key = 0xdeadbeef;
          value_out = (cache_test_value *) util_cache_get(cache, key);
          assert(value_out == NULL);
+         (void)value_out;
          free(key);
 
 

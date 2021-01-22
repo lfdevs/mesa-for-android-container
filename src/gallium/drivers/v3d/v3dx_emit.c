@@ -514,13 +514,13 @@ v3dX(emit_state)(struct pipe_context *pctx)
                          */
                         config.early_z_updates_enable =
                                 (job->ez_state != VC5_EZ_DISABLED);
-                        if (v3d->zsa->base.depth.enabled) {
+                        if (v3d->zsa->base.depth_enabled) {
                                 config.z_updates_enable =
-                                        v3d->zsa->base.depth.writemask;
+                                        v3d->zsa->base.depth_writemask;
                                 config.early_z_enable =
                                         config.early_z_updates_enable;
                                 config.depth_test_function =
-                                        v3d->zsa->base.depth.func;
+                                        v3d->zsa->base.depth_func;
                         } else {
                                 config.depth_test_function = PIPE_FUNC_ALWAYS;
                         }
@@ -748,7 +748,7 @@ v3dX(emit_state)(struct pipe_context *pctx)
                 }
         }
 
-        /* Set up the trasnform feedback buffers. */
+        /* Set up the transform feedback buffers. */
         if (v3d->dirty & VC5_DIRTY_STREAMOUT) {
                 struct v3d_uncompiled_shader *tf_shader = get_tf_shader(v3d);
                 struct v3d_streamout_stateobj *so = &v3d->streamout;

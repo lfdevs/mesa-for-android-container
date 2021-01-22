@@ -381,7 +381,13 @@ DIType* JitManager::GetDebugIntegerType(Type* pTy)
 DIType* JitManager::GetDebugVectorType(Type* pTy)
 {
     DIBuilder                 builder(*mpCurrentModule);
+#if LLVM_VERSION_MAJOR >= 12
+    FixedVectorType*          pVecTy    = cast<FixedVectorType>(pTy);
+#elif LLVM_VERSION_MAJOR >= 11
     VectorType*               pVecTy    = cast<VectorType>(pTy);
+#else
+    auto                      pVecTy    = pTy;
+#endif
     DataLayout                DL        = DataLayout(mpCurrentModule);
     uint32_t                  size      = DL.getTypeAllocSizeInBits(pVecTy);
     uint32_t                  alignment = DL.getABITypeAlignment(pVecTy);

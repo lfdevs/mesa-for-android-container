@@ -680,6 +680,7 @@ static void update_global_ambient( struct gl_context *ctx )
 static void update_light_colors( struct gl_context *ctx, GLuint p )
 {
    struct gl_light *l = &ctx->Light.Light[p];
+   struct gl_light_uniforms *lu = &ctx->Light.LightSource[p];
 
 /*     fprintf(stderr, "%s\n", __func__); */
 
@@ -687,9 +688,9 @@ static void update_light_colors( struct gl_context *ctx, GLuint p )
       r100ContextPtr rmesa = R100_CONTEXT(ctx);
       float *fcmd = (float *)RADEON_DB_STATE( lit[p] );
 
-      COPY_4V( &fcmd[LIT_AMBIENT_RED], l->Ambient );
-      COPY_4V( &fcmd[LIT_DIFFUSE_RED], l->Diffuse );
-      COPY_4V( &fcmd[LIT_SPECULAR_RED], l->Specular );
+      COPY_4V( &fcmd[LIT_AMBIENT_RED], lu->Ambient );
+      COPY_4V( &fcmd[LIT_DIFFUSE_RED], lu->Diffuse );
+      COPY_4V( &fcmd[LIT_SPECULAR_RED], lu->Specular );
 
       RADEON_DB_STATECHANGE( rmesa, &rmesa->hw.lit[p] );
    }
@@ -894,9 +895,10 @@ static void update_light( struct gl_context *ctx )
       while (mask) {
          const int p = u_bit_scan(&mask);
          struct gl_light *l = &ctx->Light.Light[p];
+         struct gl_light_uniforms *lu = &ctx->Light.LightSource[p];
          GLfloat *fcmd = (GLfloat *)RADEON_DB_STATE( lit[p] );
 
-         if (l->EyePosition[3] == 0.0) {
+         if (lu->EyePosition[3] == 0.0) {
             COPY_3FV( &fcmd[LIT_POSITION_X], l->_VP_inf_norm );
             COPY_3FV( &fcmd[LIT_DIRECTION_X], l->_h_inf_norm );
             fcmd[LIT_POSITION_W] = 0;
@@ -919,7 +921,7 @@ static void radeonLightfv( struct gl_context *ctx, GLenum light,
 {
    r100ContextPtr rmesa = R100_CONTEXT(ctx);
    GLint p = light - GL_LIGHT0;
-   struct gl_light *l = &ctx->Light.Light[p];
+   struct gl_light_uniforms *lu = &ctx->Light.LightSource[p];
    GLfloat *fcmd = (GLfloat *)rmesa->hw.lit[p].cmd;
 
 
@@ -946,7 +948,7 @@ static void radeonLightfv( struct gl_context *ctx, GLenum light,
 	 flag = RADEON_LIGHT_0_IS_LOCAL;
 
       RADEON_STATECHANGE(rmesa, tcl);
-      if (l->EyePosition[3] != 0.0F)
+      if (lu->EyePosition[3] != 0.0F)
 	 rmesa->hw.tcl.cmd[idx] |= flag;
       else
 	 rmesa->hw.tcl.cmd[idx] &= ~flag;
@@ -963,10 +965,10 @@ static void radeonLightfv( struct gl_context *ctx, GLenum light,
       GLuint idx = TCL_PER_LIGHT_CTL_0 + p/2;
 
       RADEON_STATECHANGE(rmesa, lit[p]);
-      fcmd[LIT_SPOT_CUTOFF] = l->_CosCutoff;
+      fcmd[LIT_SPOT_CUTOFF] = lu->_CosCutoff;
 
       RADEON_STATECHANGE(rmesa, tcl);
-      if (l->SpotCutoff != 180.0F)
+      if (lu->SpotCutoff != 180.0F)
 	 rmesa->hw.tcl.cmd[idx] |= flag;
       else
 	 rmesa->hw.tcl.cmd[idx] &= ~flag;
@@ -1008,7 +1010,7 @@ static void radeonLightfv( struct gl_context *ctx, GLenum light,
       GLuint atten_const_flag = ( p&1 ) ? RADEON_LIGHT_1_CONSTANT_RANGE_ATTEN
 				  : RADEON_LIGHT_0_CONSTANT_RANGE_ATTEN;
 
-      if ( l->EyePosition[3] == 0.0F ||
+      if ( lu->EyePosition[3] == 0.0F ||
 	   ( ( fcmd[LIT_ATTEN_CONST] == 0.0 || fcmd[LIT_ATTEN_CONST] == 1.0 ) &&
 	     fcmd[LIT_ATTEN_QUADRATIC] == 0.0 && fcmd[LIT_ATTEN_LINEAR] == 0.0 ) ) {
 	 /* Disable attenuation */

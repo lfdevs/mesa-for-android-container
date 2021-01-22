@@ -329,12 +329,13 @@ void MemRingOutIntruction::remap_registers_child(std::vector<rename_reg_pair>& m
    map[m_index->sel()].used = true;
 }
 
-void MemRingOutIntruction::patch_ring(int stream)
+void MemRingOutIntruction::patch_ring(int stream, PValue index)
 {
    const ECFOpCode ring_op[4] = {cf_mem_ring, cf_mem_ring1, cf_mem_ring2, cf_mem_ring3};
 
    assert(stream < 4);
    m_ring_op = ring_op[stream];
+   m_index = index;
 }
 
 }

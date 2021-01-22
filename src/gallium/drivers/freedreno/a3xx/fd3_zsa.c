@@ -46,14 +46,14 @@ fd3_zsa_state_create(struct pipe_context *pctx,
 	so->base = *cso;
 
 	so->rb_depth_control |=
-			A3XX_RB_DEPTH_CONTROL_ZFUNC(cso->depth.func); /* maps 1:1 */
+			A3XX_RB_DEPTH_CONTROL_ZFUNC(cso->depth_func); /* maps 1:1 */
 
-	if (cso->depth.enabled)
+	if (cso->depth_enabled)
 		so->rb_depth_control |=
 			A3XX_RB_DEPTH_CONTROL_Z_ENABLE |
 			A3XX_RB_DEPTH_CONTROL_Z_TEST_ENABLE;
 
-	if (cso->depth.writemask)
+	if (cso->depth_writemask)
 		so->rb_depth_control |= A3XX_RB_DEPTH_CONTROL_Z_WRITE_ENABLE;
 
 	if (cso->stencil[0].enabled) {
@@ -87,13 +87,13 @@ fd3_zsa_state_create(struct pipe_context *pctx,
 		}
 	}
 
-	if (cso->alpha.enabled) {
+	if (cso->alpha_enabled) {
 		so->rb_render_control =
 			A3XX_RB_RENDER_CONTROL_ALPHA_TEST |
-			A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC(cso->alpha.func);
+			A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC(cso->alpha_func);
 		so->rb_alpha_ref =
-			A3XX_RB_ALPHA_REF_UINT(cso->alpha.ref_value * 255.0) |
-			A3XX_RB_ALPHA_REF_FLOAT(cso->alpha.ref_value);
+			A3XX_RB_ALPHA_REF_UINT(cso->alpha_ref_value * 255.0) |
+			A3XX_RB_ALPHA_REF_FLOAT(cso->alpha_ref_value);
 		so->rb_depth_control |=
 			A3XX_RB_DEPTH_CONTROL_EARLY_Z_DISABLE;
 	}

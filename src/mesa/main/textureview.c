@@ -169,6 +169,7 @@ static const struct internal_format_class_info compatible_internal_formats[] = {
    {GL_VIEW_CLASS_16_BITS, GL_RG8},
    {GL_VIEW_CLASS_16_BITS, GL_R16},
    {GL_VIEW_CLASS_16_BITS, GL_RG8_SNORM},
+   {GL_VIEW_CLASS_16_BITS, GL_SRG8_EXT},
    {GL_VIEW_CLASS_16_BITS, GL_R16_SNORM},
    {GL_VIEW_CLASS_8_BITS, GL_R8UI},
    {GL_VIEW_CLASS_8_BITS, GL_R8I},
@@ -503,7 +504,8 @@ _mesa_set_texture_view_state(struct gl_context *ctx,
    case GL_TEXTURE_2D_MULTISAMPLE_ARRAY:
       texObj->NumLevels = 1;
       texObj->ImmutableLevels = 1;
-      /* fallthrough - to set NumLayers */
+      FALLTHROUGH;
+      /* fallthrough to set NumLayers */
 
    case GL_TEXTURE_2D_ARRAY:
    case GL_TEXTURE_CUBE_MAP_ARRAY:

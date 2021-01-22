@@ -147,6 +147,7 @@ struct fd6_texture_key {
 };
 
 struct fd6_texture_state {
+	struct pipe_reference reference;
 	struct fd6_texture_key key;
 	struct fd_ringbuffer *stateobj;
 	bool needs_border;
@@ -154,5 +155,21 @@ struct fd6_texture_state {
 
 struct fd6_texture_state * fd6_texture_state(struct fd_context *ctx,
 		enum pipe_shader_type type, struct fd_texture_stateobj *tex);
+
+/* not called directly: */
+void __fd6_texture_state_describe(char* buf, const struct fd6_texture_state *tex);
+void __fd6_texture_state_destroy(struct fd6_texture_state *tex);
+
+static inline void
+fd6_texture_state_reference(struct fd6_texture_state **ptr, struct fd6_texture_state *tex)
+{
+	struct fd6_texture_state *old_tex = *ptr;
+
+	if (pipe_reference_described(&(*ptr)->reference, &tex->reference,
+			(debug_reference_descriptor)__fd6_texture_state_describe))
+		__fd6_texture_state_destroy(old_tex);
+
+	*ptr = tex;
+}
 
 #endif /* FD6_TEXTURE_H_ */

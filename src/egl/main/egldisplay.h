@@ -45,6 +45,7 @@ extern "C" {
 
 enum _egl_platform_type {
    _EGL_PLATFORM_X11,
+   _EGL_PLATFORM_XCB,
    _EGL_PLATFORM_WAYLAND,
    _EGL_PLATFORM_DRM,
    _EGL_PLATFORM_ANDROID,
@@ -292,6 +293,12 @@ _eglNumAttribs(const EGLAttrib *attribs)
 #ifdef HAVE_X11_PLATFORM
 _EGLDisplay*
 _eglGetX11Display(Display *native_display, const EGLAttrib *attrib_list);
+#endif
+
+#ifdef HAVE_XCB_PLATFORM
+typedef struct xcb_connection_t xcb_connection_t;
+_EGLDisplay*
+_eglGetXcbDisplay(xcb_connection_t *native_display, const EGLAttrib *attrib_list);
 #endif
 
 #ifdef HAVE_DRM_PLATFORM

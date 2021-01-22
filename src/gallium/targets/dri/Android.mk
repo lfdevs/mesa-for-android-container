@@ -91,6 +91,8 @@ LOCAL_WHOLE_STATIC_LIBRARIES := \
 	libmesa_util \
 	libmesa_loader
 
+LOCAL_SHARED_LIBRARIES += libcutils
+
 # sort GALLIUM_SHARED_LIBS to remove any duplicates
 LOCAL_SHARED_LIBRARIES += $(sort $(GALLIUM_SHARED_LIBS))
 

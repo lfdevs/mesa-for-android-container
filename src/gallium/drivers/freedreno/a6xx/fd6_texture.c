@@ -37,7 +37,13 @@
 #include "fd6_format.h"
 #include "fd6_emit.h"
 
-static void fd6_texture_state_destroy(struct fd6_texture_state *state);
+static void
+remove_tex_entry(struct fd6_context *fd6_ctx, struct hash_entry *entry)
+{
+	struct fd6_texture_state *tex = entry->data;
+	_mesa_hash_table_remove(fd6_ctx->tex_cache, entry);
+	fd6_texture_state_reference(&tex, NULL);
+}
 
 static enum a6xx_tex_clamp
 tex_clamp(unsigned wrap, bool clamp_to_edge, bool *needs_border)
@@ -149,20 +155,24 @@ fd6_sampler_state_create(struct pipe_context *pctx,
 static void
 fd6_sampler_state_delete(struct pipe_context *pctx, void *hwcso)
 {
-	struct fd6_context *fd6_ctx = fd6_context(fd_context(pctx));
+	struct fd_context *ctx = fd_context(pctx);
+	struct fd6_context *fd6_ctx = fd6_context(ctx);
 	struct fd6_sampler_stateobj *samp = hwcso;
+
+	fd_screen_lock(ctx->screen);
 
 	hash_table_foreach(fd6_ctx->tex_cache, entry) {
 		struct fd6_texture_state *state = entry->data;
 
 		for (unsigned i = 0; i < ARRAY_SIZE(state->key.samp); i++) {
 			if (samp->seqno == state->key.samp[i].seqno) {
-				fd6_texture_state_destroy(entry->data);
-				_mesa_hash_table_remove(fd6_ctx->tex_cache, entry);
+				remove_tex_entry(fd6_ctx, entry);
 				break;
 			}
 		}
 	}
+
+	fd_screen_unlock(ctx->screen);
 
 	free(hwcso);
 }
@@ -364,20 +374,24 @@ static void
 fd6_sampler_view_destroy(struct pipe_context *pctx,
 		struct pipe_sampler_view *_view)
 {
-	struct fd6_context *fd6_ctx = fd6_context(fd_context(pctx));
+	struct fd_context *ctx = fd_context(pctx);
+	struct fd6_context *fd6_ctx = fd6_context(ctx);
 	struct fd6_pipe_sampler_view *view = fd6_pipe_sampler_view(_view);
+
+	fd_screen_lock(ctx->screen);
 
 	hash_table_foreach(fd6_ctx->tex_cache, entry) {
 		struct fd6_texture_state *state = entry->data;
 
 		for (unsigned i = 0; i < ARRAY_SIZE(state->key.view); i++) {
 			if (view->seqno == state->key.view[i].seqno) {
-				fd6_texture_state_destroy(entry->data);
-				_mesa_hash_table_remove(fd6_ctx->tex_cache, entry);
+				remove_tex_entry(fd6_ctx, entry);
 				break;
 			}
 		}
 	}
+
+	fd_screen_unlock(ctx->screen);
 
 	pipe_resource_reference(&view->base.texture, NULL);
 
@@ -405,6 +419,7 @@ fd6_texture_state(struct fd_context *ctx, enum pipe_shader_type type,
 		struct fd_texture_stateobj *tex)
 {
 	struct fd6_context *fd6_ctx = fd6_context(ctx);
+	struct fd6_texture_state *state = NULL;
 	struct fd6_texture_key key;
 	bool needs_border = false;
 
@@ -437,15 +452,19 @@ fd6_texture_state(struct fd_context *ctx, enum pipe_shader_type type,
 	key.bcolor_offset = fd6_border_color_offset(ctx, type, tex);
 
 	uint32_t hash = key_hash(&key);
+	fd_screen_lock(ctx->screen);
 	struct hash_entry *entry =
 		_mesa_hash_table_search_pre_hashed(fd6_ctx->tex_cache, hash, &key);
 
 	if (entry) {
-		return entry->data;
+		fd6_texture_state_reference(&state, entry->data);
+		goto out_unlock;
 	}
 
-	struct fd6_texture_state *state = CALLOC_STRUCT(fd6_texture_state);
+	state = CALLOC_STRUCT(fd6_texture_state);
 
+	/* NOTE: one ref for tex_cache, and second ref for returned state: */
+	pipe_reference_init(&state->reference, 2);
 	state->key = key;
 	state->stateobj = fd_ringbuffer_new_object(ctx->pipe, 0x1000);
 	state->needs_border = needs_border;
@@ -459,11 +478,19 @@ fd6_texture_state(struct fd_context *ctx, enum pipe_shader_type type,
 	_mesa_hash_table_insert_pre_hashed(fd6_ctx->tex_cache, hash,
 			&state->key, state);
 
+out_unlock:
+	fd_screen_unlock(ctx->screen);
 	return state;
 }
 
-static void
-fd6_texture_state_destroy(struct fd6_texture_state *state)
+void
+__fd6_texture_state_describe(char* buf, const struct fd6_texture_state *tex)
+{
+	sprintf(buf, "fd6_texture_state<%p>", tex);
+}
+
+void
+__fd6_texture_state_destroy(struct fd6_texture_state *state)
 {
 	fd_ringbuffer_del(state->stateobj);
 	free(state);
@@ -472,6 +499,8 @@ fd6_texture_state_destroy(struct fd6_texture_state *state)
 static void
 fd6_rebind_resource(struct fd_context *ctx, struct fd_resource *rsc)
 {
+	fd_screen_assert_locked(ctx->screen);
+
 	if (!(rsc->dirty & FD_DIRTY_TEX))
 		return;
 
@@ -482,8 +511,7 @@ fd6_rebind_resource(struct fd_context *ctx, struct fd_resource *rsc)
 
 		for (unsigned i = 0; i < ARRAY_SIZE(state->key.view); i++) {
 			if (rsc->seqno == state->key.view[i].rsc_seqno) {
-				fd6_texture_state_destroy(entry->data);
-				_mesa_hash_table_remove(fd6_ctx->tex_cache, entry);
+				remove_tex_entry(fd6_ctx, entry);
 				break;
 			}
 		}
@@ -512,10 +540,16 @@ fd6_texture_init(struct pipe_context *pctx)
 void
 fd6_texture_fini(struct pipe_context *pctx)
 {
-	struct fd6_context *fd6_ctx = fd6_context(fd_context(pctx));
+	struct fd_context *ctx = fd_context(pctx);
+	struct fd6_context *fd6_ctx = fd6_context(ctx);
+
+	fd_screen_lock(ctx->screen);
 
 	hash_table_foreach(fd6_ctx->tex_cache, entry) {
-		fd6_texture_state_destroy(entry->data);
+		remove_tex_entry(fd6_ctx, entry);
 	}
+
+	fd_screen_unlock(ctx->screen);
+
 	ralloc_free(fd6_ctx->tex_cache);
 }

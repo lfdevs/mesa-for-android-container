@@ -408,13 +408,5 @@ GLboolean r200CreateContext( gl_api api,
 
 void r200DestroyContext( __DRIcontext *driContextPriv )
 {
-	int i;
-	r200ContextPtr rmesa = (r200ContextPtr)driContextPriv->driverPrivate;
-	if (rmesa)
-	{
-		for ( i = 0 ; i < R200_MAX_TEXTURE_UNITS ; i++ ) {
-			_math_matrix_dtr( &rmesa->TexGenMatrix[i] );
-		}
-	}
 	radeonDestroyContext(driContextPriv);
 }

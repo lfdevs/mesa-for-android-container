@@ -188,19 +188,10 @@ vc4_nir_lower_vertex_attr(struct vc4_compile *c, nir_builder *b,
          * shader by ntq_setup_inputs().
          */
         nir_ssa_def *vpm_reads[4];
-        for (int i = 0; i < align(attr_size, 4) / 4; i++) {
-                nir_intrinsic_instr *intr_comp =
-                        nir_intrinsic_instr_create(c->s,
-                                                   nir_intrinsic_load_input);
-                intr_comp->num_components = 1;
-                nir_intrinsic_set_base(intr_comp, nir_intrinsic_base(intr));
-                nir_intrinsic_set_component(intr_comp, i);
-                intr_comp->src[0] = nir_src_for_ssa(nir_imm_int(b, 0));
-                nir_ssa_dest_init(&intr_comp->instr, &intr_comp->dest, 1, 32, NULL);
-                nir_builder_instr_insert(b, &intr_comp->instr);
-
-                vpm_reads[i] = &intr_comp->dest.ssa;
-        }
+        for (int i = 0; i < align(attr_size, 4) / 4; i++)
+                vpm_reads[i] = nir_load_input(b, 1, 32, nir_imm_int(b, 0),
+                                              .base = nir_intrinsic_base(intr),
+                                              .component = i);
 
         bool format_warned = false;
         const struct util_format_description *desc =

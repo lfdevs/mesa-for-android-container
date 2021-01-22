@@ -56,7 +56,7 @@ files_libiris = files(
 )
 
 iris_gen_libs = []
-foreach v : ['80', '90', '110', '120']
+foreach v : ['80', '90', '110', '120', '125']
   iris_gen_libs += static_library(
     'iris_gen@0@'.format(v),
     ['iris_blorp.c', 'iris_query.c', 'iris_state.c', gen_xml_pack],

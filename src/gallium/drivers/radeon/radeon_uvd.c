@@ -65,7 +65,7 @@ struct ruvd_decoder {
 
    struct pipe_screen *screen;
    struct radeon_winsys *ws;
-   struct radeon_cmdbuf *cs;
+   struct radeon_cmdbuf cs;
 
    unsigned cur_buffer;
 
@@ -96,14 +96,14 @@ struct ruvd_decoder {
 /* flush IB to the hardware */
 static int flush(struct ruvd_decoder *dec, unsigned flags)
 {
-   return dec->ws->cs_flush(dec->cs, flags, NULL);
+   return dec->ws->cs_flush(&dec->cs, flags, NULL);
 }
 
 /* add a new set register command to the IB */
 static void set_reg(struct ruvd_decoder *dec, unsigned reg, uint32_t val)
 {
-   radeon_emit(dec->cs, RUVD_PKT0(reg >> 2, 0));
-   radeon_emit(dec->cs, val);
+   radeon_emit(&dec->cs, RUVD_PKT0(reg >> 2, 0));
+   radeon_emit(&dec->cs, val);
 }
 
 /* send a command to the VCPU through the GPCOM registers */
@@ -112,7 +112,7 @@ static void send_cmd(struct ruvd_decoder *dec, unsigned cmd, struct pb_buffer *b
 {
    int reloc_idx;
 
-   reloc_idx = dec->ws->cs_add_buffer(dec->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED, domain, 0);
+   reloc_idx = dec->ws->cs_add_buffer(&dec->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED, domain, 0);
    if (!dec->use_legacy) {
       uint64_t addr;
       addr = dec->ws->buffer_get_virtual_address(buf);
@@ -144,7 +144,7 @@ static void map_msg_fb_it_buf(struct ruvd_decoder *dec)
 
    /* and map it for CPU access */
    ptr =
-      dec->ws->buffer_map(buf->res->buf, dec->cs, PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
+      dec->ws->buffer_map(buf->res->buf, &dec->cs, PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
 
    /* calc buffer offsets */
    dec->msg = (struct ruvd_msg *)ptr;
@@ -983,7 +983,7 @@ static void ruvd_destroy(struct pipe_video_codec *decoder)
 
    flush(dec, 0);
 
-   dec->ws->cs_destroy(dec->cs);
+   dec->ws->cs_destroy(&dec->cs);
 
    for (i = 0; i < NUM_BUFFERS; ++i) {
       si_vid_destroy_buffer(&dec->msg_fb_it_buffers[i]);
@@ -1013,7 +1013,7 @@ static void ruvd_begin_frame(struct pipe_video_codec *decoder, struct pipe_video
                                        &ruvd_destroy_associated_data);
 
    dec->bs_size = 0;
-   dec->bs_ptr = dec->ws->buffer_map(dec->bs_buffers[dec->cur_buffer].res->buf, dec->cs,
+   dec->bs_ptr = dec->ws->buffer_map(dec->bs_buffers[dec->cur_buffer].res->buf, &dec->cs,
                                      PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
 }
 
@@ -1052,12 +1052,12 @@ static void ruvd_decode_bitstream(struct pipe_video_codec *decoder,
 
       if (new_size > buf->res->buf->size) {
          dec->ws->buffer_unmap(buf->res->buf);
-         if (!si_vid_resize_buffer(dec->screen, dec->cs, buf, new_size)) {
+         if (!si_vid_resize_buffer(dec->screen, &dec->cs, buf, new_size)) {
             RVID_ERR("Can't resize bitstream buffer!");
             return;
          }
 
-         dec->bs_ptr = dec->ws->buffer_map(buf->res->buf, dec->cs,
+         dec->bs_ptr = dec->ws->buffer_map(buf->res->buf, &dec->cs,
                                            PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
          if (!dec->bs_ptr)
             return;
@@ -1229,7 +1229,7 @@ struct pipe_video_codec *si_common_uvd_create_decoder(struct pipe_context *conte
       if (templ->entrypoint > PIPE_VIDEO_ENTRYPOINT_BITSTREAM)
          return vl_create_mpeg12_decoder(context, templ);
 
-      /* fall through */
+      FALLTHROUGH;
    case PIPE_VIDEO_FORMAT_MPEG4:
       width = align(width, VL_MACROBLOCK_WIDTH);
       height = align(height, VL_MACROBLOCK_HEIGHT);
@@ -1268,8 +1268,8 @@ struct pipe_video_codec *si_common_uvd_create_decoder(struct pipe_context *conte
    dec->stream_handle = si_vid_alloc_stream_handle();
    dec->screen = context->screen;
    dec->ws = ws;
-   dec->cs = ws->cs_create(sctx->ctx, RING_UVD, NULL, NULL, false);
-   if (!dec->cs) {
+
+   if (!ws->cs_create(&dec->cs, sctx->ctx, RING_UVD, NULL, NULL, false)) {
       RVID_ERR("Can't get command submission context.\n");
       goto error;
    }
@@ -1356,8 +1356,7 @@ struct pipe_video_codec *si_common_uvd_create_decoder(struct pipe_context *conte
    return &dec->base;
 
 error:
-   if (dec->cs)
-      dec->ws->cs_destroy(dec->cs);
+   dec->ws->cs_destroy(&dec->cs);
 
    for (i = 0; i < NUM_BUFFERS; ++i) {
       si_vid_destroy_buffer(&dec->msg_fb_it_buffers[i]);

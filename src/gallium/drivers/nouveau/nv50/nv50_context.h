@@ -161,6 +161,11 @@ struct nv50_context {
    uint8_t num_so_targets;
    uint8_t so_targets_dirty;
    struct pipe_stream_output_target *so_target[4];
+   /* keeps track of how much of an SO is used. normally this doesn't work in
+    * the presence of GS, but this only needs to work for ES 3.0 which doesn't
+    * have GS or any other oddities. only used pre-NVA0.
+    */
+   uint32_t so_used[4];
 
    struct pipe_framebuffer_state framebuffer;
    struct pipe_blend_color blend_colour;
@@ -291,7 +296,10 @@ nv50_cb_push(struct nouveau_context *nv,
              unsigned offset, unsigned words, const uint32_t *data);
 
 /* nv50_vbo.c */
-void nv50_draw_vbo(struct pipe_context *, const struct pipe_draw_info *);
+void nv50_draw_vbo(struct pipe_context *, const struct pipe_draw_info *,
+                   const struct pipe_draw_indirect_info *indirect,
+                   const struct pipe_draw_start_count *draws,
+                   unsigned num_draws);
 
 void *
 nv50_vertex_state_create(struct pipe_context *pipe,
@@ -303,7 +311,9 @@ nv50_vertex_state_delete(struct pipe_context *pipe, void *hwcso);
 void nv50_vertex_arrays_validate(struct nv50_context *nv50);
 
 /* nv50_push.c */
-void nv50_push_vbo(struct nv50_context *, const struct pipe_draw_info *);
+void nv50_push_vbo(struct nv50_context *, const struct pipe_draw_info *,
+                   const struct pipe_draw_indirect_info *indirect,
+                   const struct pipe_draw_start_count *draw);
 
 /* nv84_video.c */
 struct pipe_video_codec *

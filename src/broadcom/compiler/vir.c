@@ -564,7 +564,8 @@ v3d_lower_nir(struct v3d_compile *c)
         /* Lower the format swizzle and (for 32-bit returns)
          * ARB_texture_swizzle-style swizzle.
          */
-        for (int i = 0; i < ARRAY_SIZE(c->key->tex); i++) {
+        assert(c->key->num_tex_used <= ARRAY_SIZE(c->key->tex));
+        for (int i = 0; i < c->key->num_tex_used; i++) {
                 for (int j = 0; j < 4; j++)
                         tex_options.swizzles[i][j] = c->key->tex[i].swizzle[j];
 
@@ -574,7 +575,11 @@ v3d_lower_nir(struct v3d_compile *c)
                         tex_options.saturate_t |= 1 << i;
                 if (c->key->tex[i].clamp_r)
                         tex_options.saturate_r |= 1 << i;
-                if (c->key->tex[i].return_size == 16) {
+        }
+
+        assert(c->key->num_samplers_used <= ARRAY_SIZE(c->key->sampler));
+        for (int i = 0; i < c->key->num_samplers_used; i++) {
+                if (c->key->sampler[i].return_size == 16) {
                         tex_options.lower_tex_packing[i] =
                                 nir_lower_tex_packing_16;
                 }

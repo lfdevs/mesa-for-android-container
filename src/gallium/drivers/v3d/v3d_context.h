@@ -280,6 +280,7 @@ struct v3d_ssbo_stateobj {
 struct v3d_job_key {
         struct pipe_surface *cbufs[4];
         struct pipe_surface *zsbuf;
+        struct pipe_surface *bbuf;
 };
 
 enum v3d_ez_state {
@@ -336,9 +337,15 @@ struct v3d_job {
         /* Size of the submit.bo_handles array. */
         uint32_t bo_handles_size;
 
-        /** @{ Surfaces to submit rendering for. */
+        /** @{
+         * Surfaces to submit rendering for.
+         * For blit operations, bbuf is the source surface, and cbufs[0] is
+         * the destination surface.
+         */
+        uint32_t nr_cbufs;
         struct pipe_surface *cbufs[4];
         struct pipe_surface *zsbuf;
+        struct pipe_surface *bbuf;
         /** @} */
         /** @{
          * Bounding box of the scissor across all queued drawing.
@@ -645,8 +652,10 @@ void v3d_job_init(struct v3d_context *v3d);
 struct v3d_job *v3d_job_create(struct v3d_context *v3d);
 void v3d_job_free(struct v3d_context *v3d, struct v3d_job *job);
 struct v3d_job *v3d_get_job(struct v3d_context *v3d,
+                            uint32_t nr_cbufs,
                             struct pipe_surface **cbufs,
-                            struct pipe_surface *zsbuf);
+                            struct pipe_surface *zsbuf,
+                            struct pipe_surface *bbuf);
 struct v3d_job *v3d_get_job_for_fbo(struct v3d_context *v3d);
 void v3d_job_add_bo(struct v3d_job *job, struct v3d_bo *bo);
 void v3d_job_add_write_resource(struct v3d_job *job, struct pipe_resource *prsc);
@@ -682,7 +691,10 @@ void v3d_get_internal_type_bpp_for_output_format(const struct v3d_device_info *d
                                                  uint32_t *type,
                                                  uint32_t *bpp);
 bool v3d_tfu_supports_tex_format(const struct v3d_device_info *devinfo,
-                                 uint32_t tex_format);
+                                 uint32_t tex_format,
+                                 bool for_mipmap);
+bool v3d_format_supports_tlb_msaa_resolve(const struct v3d_device_info *devinfo,
+                                          enum pipe_format f);
 
 void v3d_init_query_functions(struct v3d_context *v3d);
 void v3d_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info);
@@ -708,6 +720,14 @@ void v3d_flag_dirty_sampler_state(struct v3d_context *v3d,
 
 void v3d_create_texture_shader_state_bo(struct v3d_context *v3d,
                                         struct v3d_sampler_view *so);
+
+void v3d_get_tile_buffer_size(bool is_msaa,
+                              uint32_t nr_cbufs,
+                              struct pipe_surface **cbufs,
+                              struct pipe_surface *bbuf,
+                              uint32_t *tile_width,
+                              uint32_t *tile_height,
+                              uint32_t *max_bpp);
 
 #ifdef v3dX
 #  include "v3dx_context.h"

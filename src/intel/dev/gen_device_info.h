@@ -80,6 +80,7 @@ struct gen_device_info
    bool disable_ccs_repack;
    bool has_aux_map;
    bool has_tiling_uapi;
+   bool has_ray_tracing;
 
    /**
     * \name Intel hardware quirks
@@ -272,8 +273,21 @@ struct gen_device_info
    /** @} */
 };
 
+#ifdef GEN_GEN
+
+#define gen_device_info_is_9lp(devinfo) \
+   (GEN_GEN == 9 && ((devinfo)->is_broxton || (devinfo)->is_geminilake))
+
+#define gen_device_info_is_12hp(devinfo) false
+
+#else
+
 #define gen_device_info_is_9lp(devinfo) \
    ((devinfo)->is_broxton || (devinfo)->is_geminilake)
+
+#define gen_device_info_is_12hp(devinfo) false
+
+#endif
 
 static inline bool
 gen_device_info_subslice_available(const struct gen_device_info *devinfo,
@@ -291,6 +305,12 @@ gen_device_info_eu_available(const struct gen_device_info *devinfo,
       subslice * devinfo->eu_subslice_stride;
 
    return (devinfo->eu_masks[subslice_offset + eu / 8] & (1U << eu % 8)) != 0;
+}
+
+static inline unsigned
+gen_device_info_num_dual_subslices(const struct gen_device_info *devinfo)
+{
+   unreachable("TODO");
 }
 
 int gen_device_name_to_pci_device_id(const char *name);

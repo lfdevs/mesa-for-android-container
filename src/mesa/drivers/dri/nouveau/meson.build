@@ -84,5 +84,5 @@ libnouveau_vieux = static_library(
   files_nouveau_vieux,
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_dri_common, inc_util],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [dep_libdrm, dep_libdrm_nouveau],
+  dependencies : [dep_libdrm, dep_libdrm_nouveau, idep_mesautil],
 )

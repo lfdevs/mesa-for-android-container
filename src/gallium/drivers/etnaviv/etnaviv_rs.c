@@ -39,6 +39,7 @@
 
 #include "pipe/p_defines.h"
 #include "pipe/p_state.h"
+#include "util/compiler.h"
 #include "util/u_blitter.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
@@ -516,14 +517,14 @@ etna_compute_tileoffset(const struct pipe_box *box, enum pipe_format format,
       break;
    case ETNA_LAYOUT_MULTI_TILED:
       y >>= 1;
-      /* fall-through */
+      FALLTHROUGH;
    case ETNA_LAYOUT_TILED:
       assert(!(x & 0x03) && !(y & 0x03));
       offset = (y & ~0x03) * stride + blocksize * ((x & ~0x03) << 2);
       break;
    case ETNA_LAYOUT_MULTI_SUPERTILED:
       y >>= 1;
-      /* fall-through */
+      FALLTHROUGH;
    case ETNA_LAYOUT_SUPER_TILED:
       assert(!(x & 0x3f) && !(y & 0x3f));
       offset = (y & ~0x3f) * stride + blocksize * ((x & ~0x3f) << 6);

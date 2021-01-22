@@ -55,7 +55,7 @@ struct STREAMOUT_DECL
 //////////////////////////////////////////////////////////////////////////
 struct STREAMOUT_STREAM
 {
-    // numnber of decls for this stream
+    // number of decls for this stream
     uint32_t numDecls;
 
     // array of numDecls decls

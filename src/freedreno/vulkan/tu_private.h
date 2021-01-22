@@ -64,6 +64,7 @@
 #include "a6xx.xml.h"
 #include "fdl/freedreno_layout.h"
 #include "common/freedreno_dev_info.h"
+#include "perfcntrs/freedreno_perfcntr.h"
 
 #include "tu_descriptor_set.h"
 #include "tu_extensions.h"
@@ -203,8 +204,6 @@ struct tu_physical_device
    int msm_major_version;
    int msm_minor_version;
 
-   bool limited_z24s8;
-
    /* This is the drivers on-disk cache used as a fallback as opposed to
     * the pipeline cache defined by apps.
     */
@@ -224,6 +223,7 @@ enum tu_debug_flags
    TU_DEBUG_NOUBWC = 1 << 6,
    TU_DEBUG_NOMULTIPOS = 1 << 7,
    TU_DEBUG_NOLRZ = 1 << 8,
+   TU_DEBUG_PERFC = 1 << 9,
 };
 
 struct tu_instance
@@ -310,6 +310,7 @@ struct tu_bo
 enum global_shader {
    GLOBAL_SH_VS,
    GLOBAL_SH_FS_BLIT,
+   GLOBAL_SH_FS_BLIT_ZSCALE,
    GLOBAL_SH_FS_CLEAR0,
    GLOBAL_SH_FS_CLEAR_MAX = GLOBAL_SH_FS_CLEAR0 + MAX_RTS,
    GLOBAL_SH_COUNT,
@@ -337,6 +338,8 @@ struct tu6_global
       uint32_t offset;
       uint32_t pad[7];
    } flush_base[4];
+
+   ALIGN16 uint32_t cs_indirect_xyz[3];
 
    /* note: larger global bo will be used for customBorderColors */
    struct bcolor_entry bcolor_builtin[TU_BORDER_COLOR_BUILTIN], bcolor[];
@@ -392,6 +395,10 @@ struct tu_device
    uint32_t *bo_idx;
    uint32_t bo_count, bo_list_size, bo_idx_size;
    mtx_t bo_mutex;
+
+   /* Command streams to set pass index to a scratch reg */
+   struct tu_cs *perfcntrs_pass_cs;
+   struct tu_cs_entry *perfcntrs_pass_cs_entries;
 };
 
 VkResult _tu_device_set_lost(struct tu_device *device,
@@ -1156,10 +1163,18 @@ void tu6_emit_window_scissor(struct tu_cs *cs, uint32_t x1, uint32_t y1, uint32_
 
 void tu6_emit_window_offset(struct tu_cs *cs, uint32_t x1, uint32_t y1);
 
+struct tu_pvtmem_config {
+   uint64_t iova;
+   uint32_t per_fiber_size;
+   uint32_t per_sp_size;
+   bool per_wave;
+};
+
 void
 tu6_emit_xs_config(struct tu_cs *cs,
                    gl_shader_stage stage,
                    const struct ir3_shader_variant *xs,
+                   const struct tu_pvtmem_config *pvtmem,
                    uint64_t binary_iova);
 
 void
@@ -1448,6 +1463,8 @@ struct tu_subpass
 {
    uint32_t input_count;
    uint32_t color_count;
+   uint32_t resolve_count;
+   bool resolve_depth_stencil;
    struct tu_subpass_attachment *input_attachments;
    struct tu_subpass_attachment *color_attachments;
    struct tu_subpass_attachment *resolve_attachments;
@@ -1491,6 +1508,17 @@ struct tu_render_pass
    struct tu_subpass subpasses[0];
 };
 
+#define PERF_CNTRS_REG 4
+
+struct tu_perf_query_data
+{
+   uint32_t gid;      /* group-id */
+   uint32_t cid;      /* countable-id within the group */
+   uint32_t cntr_reg; /* counter register within the group */
+   uint32_t pass;     /* pass index that countables can be requested */
+   uint32_t app_idx;  /* index provided by apps */
+};
+
 struct tu_query_pool
 {
    struct vk_object_base base;
@@ -1500,7 +1528,16 @@ struct tu_query_pool
    uint64_t size;
    uint32_t pipeline_statistics;
    struct tu_bo bo;
+
+   /* For performance query */
+   const struct fd_perfcntr_group *perf_group;
+   uint32_t perf_group_count;
+   uint32_t counter_index_count;
+   struct tu_perf_query_data perf_query_data[0];
 };
+
+uint32_t
+tu_subpass_get_attachment_to_resolve(const struct tu_subpass *subpass, uint32_t index);
 
 void
 tu_update_descriptor_sets(VkDescriptorSet overrideSet,

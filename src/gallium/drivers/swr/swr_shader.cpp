@@ -1522,7 +1522,7 @@ BuilderSWR::CompileGS(struct swr_context *ctx, swr_jit_gs_key &key)
    pGS->vertexAttribOffset = VERTEX_POSITION_SLOT;
    pGS->inputVertStride = pGS->numInputAttribs + pGS->vertexAttribOffset;
    pGS->outputVertexSize = SWR_VTX_NUM_SLOTS;
-   pGS->controlDataSize = 8; // GS ouputs max of 8 32B units
+   pGS->controlDataSize = 8; // GS outputs max of 8 32B units
    pGS->controlDataOffset = VERTEX_COUNT_SIZE;
    pGS->outputVertexOffset = pGS->controlDataOffset + CONTROL_HEADER_SIZE;
 
@@ -1922,7 +1922,7 @@ BuilderSWR::CompileTES(struct swr_context *ctx, swr_jit_tes_key &key)
       case TGSI_SEMANTIC_PSIZE:
          break;
       default:
-         assert(!"Unexpected semantic found while builiding TES input map");
+         assert(!"Unexpected semantic found while building TES input map");
       }
       if (semantic_name == TGSI_SEMANTIC_PATCH) {
          STORE(C(tcs_slot), patchAttribMap, {0, slot});

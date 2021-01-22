@@ -30,7 +30,10 @@
 #include "util/u_inlines.h"
 #include "util/u_transfer.h"
 
-static void noop_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info)
+static void noop_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info,
+                          const struct pipe_draw_indirect_info *indirect,
+                          const struct pipe_draw_start_count *draws,
+                          unsigned num_draws)
 {
 }
 
@@ -144,7 +147,7 @@ static void noop_set_scissor_states(struct pipe_context *ctx,
 }
 
 static void noop_set_stencil_ref(struct pipe_context *ctx,
-                                 const struct pipe_stencil_ref *state)
+                                 const struct pipe_stencil_ref state)
 {
 }
 

@@ -75,17 +75,9 @@
 static inline nir_ssa_def *
 load_output(nir_builder *b, int num_components, int offset, int component)
 {
-   nir_intrinsic_instr *load =
-      nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_output);
-   nir_ssa_dest_init(&load->instr, &load->dest, num_components, 32, NULL);
-   load->num_components = num_components;
-   load->src[0] = nir_src_for_ssa(nir_imm_int(b, 0));
-   nir_intrinsic_set_base(load, offset);
-   nir_intrinsic_set_component(load, component);
-
-   nir_builder_instr_insert(b, &load->instr);
-
-   return &load->dest.ssa;
+   return nir_load_output(b, num_components, 32, nir_imm_int(b, 0),
+                          .base = offset,
+                          .component = component);
 }
 
 static void
@@ -105,14 +97,9 @@ emit_quads_workaround(nir_builder *b, nir_block *block)
    inner = nir_bcsel(b, nir_fge(b, nir_imm_float(b, 1.0f), inner),
                         nir_imm_float(b, 2.0f), inner);
 
-   nir_intrinsic_instr *store =
-      nir_intrinsic_instr_create(b->shader, nir_intrinsic_store_output);
-   store->num_components = 2;
-   nir_intrinsic_set_write_mask(store, WRITEMASK_XY);
-   nir_intrinsic_set_component(store, 2);
-   store->src[0] = nir_src_for_ssa(inner);
-   store->src[1] = nir_src_for_ssa(nir_imm_int(b, 0));
-   nir_builder_instr_insert(b, &store->instr);
+   nir_store_output(b, inner, nir_imm_int(b, 0),
+                    .component = 2,
+                    .write_mask = WRITEMASK_XY);
 
    nir_pop_if(b, NULL);
 }

@@ -69,7 +69,7 @@
 struct panfrost_blend_shader *
 panfrost_get_blend_shader(struct panfrost_context *ctx,
                           struct panfrost_blend_state *blend,
-                          enum pipe_format fmt,
+                          enum pipe_format fmt, unsigned nr_samples,
                           unsigned rt,
                           const float *constants)
 {
@@ -81,6 +81,7 @@ panfrost_get_blend_shader(struct panfrost_context *ctx,
         struct panfrost_blend_shader_key key = {
                 .rt = rt,
                 .format = fmt,
+                .nr_samples = MAX2(nr_samples, 1),
                 .has_constants = constants != NULL,
                 .logicop_enable = blend->base.logicop_enable,
         };
@@ -254,9 +255,12 @@ panfrost_get_blend_for_context(struct panfrost_context *ctx, unsigned rti, struc
                 }
         }
 
+        unsigned nr_samples = fb->cbufs[rti]->nr_samples ? :
+                              fb->cbufs[rti]->texture->nr_samples;
+
         /* Otherwise, we need to grab a shader */
         struct panfrost_blend_shader *shader =
-                panfrost_get_blend_shader(ctx, blend, fmt, rti,
+                panfrost_get_blend_shader(ctx, blend, fmt, nr_samples, rti,
                                           rt->constant_mask ?
                                           ctx->blend_color.color : NULL);
 

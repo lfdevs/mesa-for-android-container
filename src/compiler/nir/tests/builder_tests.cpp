@@ -67,21 +67,16 @@ protected:
 
    std::vector<nir_intrinsic_instr *> stores;
 
-   void *mem_ctx;
-   void *lin_ctx;
-
-   nir_builder *b;
+   nir_builder *b, _b;
 };
 
 nir_builder_test::nir_builder_test()
 {
    glsl_type_singleton_init_or_ref();
 
-   mem_ctx = ralloc_context(NULL);
-   lin_ctx = linear_alloc_parent(mem_ctx, 0);
    static const nir_shader_compiler_options options = { };
-   b = rzalloc(mem_ctx, nir_builder);
-   nir_builder_init_simple_shader(b, mem_ctx, MESA_SHADER_COMPUTE, &options);
+   _b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &options, "builder test");
+   b = &_b;
 }
 
 nir_builder_test::~nir_builder_test()
@@ -91,7 +86,7 @@ nir_builder_test::~nir_builder_test()
       nir_print_shader(b->shader, stdout);
    }
 
-   ralloc_free(mem_ctx);
+   ralloc_free(b->shader);
 
    glsl_type_singleton_decref();
 }

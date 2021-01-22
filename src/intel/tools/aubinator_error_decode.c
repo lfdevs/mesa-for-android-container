@@ -746,13 +746,56 @@ print_help(const char *progname, FILE *file)
            progname);
 }
 
+static FILE *
+open_error_state_file(const char *path)
+{
+   FILE *file;
+   struct stat st;
+
+   if (stat(path, &st))
+      return NULL;
+
+   if (S_ISDIR(st.st_mode)) {
+      ASSERTED int ret;
+      char *filename;
+
+      ret = asprintf(&filename, "%s/i915_error_state", path);
+      assert(ret > 0);
+      file = fopen(filename, "r");
+      free(filename);
+      if (!file) {
+         int minor;
+         for (minor = 0; minor < 64; minor++) {
+            ret = asprintf(&filename, "%s/%d/i915_error_state", path, minor);
+            assert(ret > 0);
+
+            file = fopen(filename, "r");
+            free(filename);
+            if (file)
+               break;
+         }
+      }
+      if (!file) {
+         fprintf(stderr, "Failed to find i915_error_state beneath %s\n",
+                 path);
+         exit(EXIT_FAILURE);
+      }
+   } else {
+      file = fopen(path, "r");
+      if (!file) {
+         fprintf(stderr, "Failed to open %s: %s\n", path, strerror(errno));
+         exit(EXIT_FAILURE);
+      }
+   }
+
+   return file;
+}
+
 int
 main(int argc, char *argv[])
 {
    FILE *file;
-   const char *path;
-   struct stat st;
-   int c, i, error;
+   int c, i;
    bool help = false, pager = true;
    const struct option aubinator_opts[] = {
       { "help",       no_argument,       (int *) &help,                 true },
@@ -783,45 +826,46 @@ main(int argc, char *argv[])
       case 'x':
          xml_path = strdup(optarg);
          break;
+      case '?':
+         print_help(argv[0], stderr);
+         exit(EXIT_FAILURE);
       default:
          break;
       }
    }
 
-   if (help || argc == 1) {
+   if (help) {
       print_help(argv[0], stderr);
       exit(EXIT_SUCCESS);
    }
 
    if (optind >= argc) {
       if (isatty(0)) {
-         path = "/sys/class/drm/card0/error";
-         error = stat(path, &st);
-         if (error != 0) {
-            path = "/debug/dri";
-            error = stat(path, &st);
-         }
-         if (error != 0) {
-            path = "/sys/kernel/debug/dri";
-            error = stat(path, &st);
-         }
-         if (error != 0) {
+         file = open_error_state_file("/sys/class/drm/card0/error");
+         if (!file)
+            file = open_error_state_file("/debug/dri");
+         if (!file)
+            file = open_error_state_file("/sys/kernel/debug/dri");
+
+         if (file == NULL) {
             errx(1,
                  "Couldn't find i915 debugfs directory.\n\n"
                  "Is debugfs mounted? You might try mounting it with a command such as:\n\n"
                  "\tsudo mount -t debugfs debugfs /sys/kernel/debug\n");
          }
       } else {
-         read_data_file(stdin);
-         exit(EXIT_SUCCESS);
+         file = stdin;
       }
    } else {
-      path = argv[optind];
-      error = stat(path, &st);
-      if (error != 0) {
-         fprintf(stderr, "Error opening %s: %s\n",
-                 path, strerror(errno));
-         exit(EXIT_FAILURE);
+      const char *path = argv[optind];
+      if (strcmp(path, "-") == 0) {
+         file = stdin;
+      } else {
+         file = open_error_state_file(path);
+         if (file == NULL) {
+            fprintf(stderr, "Error opening %s: %s\n", path, strerror(errno));
+            exit(EXIT_FAILURE);
+         }
       }
    }
 
@@ -830,41 +874,6 @@ main(int argc, char *argv[])
 
    if (isatty(1) && pager)
       setup_pager();
-
-   if (S_ISDIR(st.st_mode)) {
-      ASSERTED int ret;
-      char *filename;
-
-      ret = asprintf(&filename, "%s/i915_error_state", path);
-      assert(ret > 0);
-      file = fopen(filename, "r");
-      if (!file) {
-         int minor;
-         free(filename);
-         for (minor = 0; minor < 64; minor++) {
-            ret = asprintf(&filename, "%s/%d/i915_error_state", path, minor);
-            assert(ret > 0);
-
-            file = fopen(filename, "r");
-            if (file)
-               break;
-
-            free(filename);
-         }
-      }
-      if (!file) {
-         fprintf(stderr, "Failed to find i915_error_state beneath %s\n",
-                 path);
-         return EXIT_FAILURE;
-      }
-   } else {
-      file = fopen(path, "r");
-      if (!file) {
-         fprintf(stderr, "Failed to open %s: %s\n",
-                 path, strerror(errno));
-         return EXIT_FAILURE;
-      }
-   }
 
    read_data_file(file);
    fclose(file);

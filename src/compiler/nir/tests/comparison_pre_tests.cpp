@@ -31,7 +31,8 @@ protected:
       glsl_type_singleton_init_or_ref();
 
       static const nir_shader_compiler_options options = { };
-      nir_builder_init_simple_shader(&bld, NULL, MESA_SHADER_VERTEX, &options);
+      bld = nir_builder_init_simple_shader(MESA_SHADER_VERTEX, &options,
+                                           "comparison test");
 
       v1 = nir_imm_vec4(&bld, -2.0, -1.0,  1.0,  2.0);
       v2 = nir_imm_vec4(&bld,  2.0,  1.0, -1.0, -2.0);

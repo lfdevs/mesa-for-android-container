@@ -37,13 +37,21 @@
 #include "util/macros.h"
 #include "disasm.h"
 
-#define INSTR_5XX(i, d) { .gpu_id = 540, .instr = #i, .expected = d }
-#define INSTR_6XX(i, d) { .gpu_id = 630, .instr = #i, .expected = d }
+#include "ir3.h"
+#include "ir3_assembler.h"
+#include "ir3_shader.h"
+
+#define INSTR_5XX(i, d, ...) { .gpu_id = 540, .instr = #i, .expected = d, __VA_ARGS__ }
+#define INSTR_6XX(i, d, ...) { .gpu_id = 630, .instr = #i, .expected = d, __VA_ARGS__ }
 
 static const struct test {
 	int gpu_id;
 	const char *instr;
 	const char *expected;
+	/**
+	 * Do we expect asm parse fail (ie. for things not (yet) supported by ir3_parser.y)
+	 */
+	bool parse_fail;
 } tests[] = {
 	/* cat0 */
 	INSTR_6XX(00000000_00000000, "nop"),
@@ -54,6 +62,13 @@ static const struct test {
 	INSTR_6XX(03820000_00000015, "shps #21"), /* emit */
 	INSTR_6XX(04021000_00000000, "(ss)shpe"), /* cut */
 	INSTR_6XX(02820000_00000014, "getone #20"), /* kill p0.x */
+	INSTR_6XX(00906020_00000007, "brao !p0.x, !p0.y, #7"),
+	INSTR_6XX(00804040_00000003, "braa p0.x, p0.y, #3"),
+	INSTR_6XX(07820000_00000000, "prede"),
+	INSTR_6XX(00800063_0000001e, "brac.3 #30"),
+	INSTR_6XX(06820000_00000000, "predt p0.x"),
+	INSTR_6XX(07020000_00000000, "predf p0.x"),
+	INSTR_6XX(07820000_00000000, "prede"),
 
 	/* cat1 */
 	INSTR_6XX(20244000_00000020, "mov.f32f32 r0.x, c8.x"),
@@ -62,12 +77,32 @@ static const struct test {
 	INSTR_6XX(20156004_00000c11, "(ul)mov.s32s32 r1.x, c<a0.x + 17>"),
 	INSTR_6XX(201100f4_00000000, "mova a0.x, hr0.x"),
 	INSTR_6XX(20244905_00000410, "(rpt1)mov.f32f32 r1.y, (r)c260.x"),
+	INSTR_6XX(20174004_00000008, "mov.s32s32 r<a0.x + 4>, r2.x"),
+	INSTR_6XX(20130000_00000005, "mov.s16s16 hr<a0.x>, hr1.y"),
+	INSTR_6XX(20110004_00000800, "mov.s16s16 hr1.x, hr<a0.x>"),
+	/* dEQP-VK.subgroups.ballot.compute.compute */
+	INSTR_6XX(260cc3c0_00000000, "movmsk.w128 r48.x"), /* movmsk.w128 sr48.x */
+
+	INSTR_6XX(20510005_0000ffff, "mov.s16s16 hr1.y, -1"),
+	INSTR_6XX(20400005_00003900, "mov.f16f16 hr1.y, h(0.625000)"),
+	INSTR_6XX(20400006_00003800, "mov.f16f16 hr1.z, h(0.500000)"),
+	INSTR_6XX(204880f5_00000000, "mova1 a1.x, 0"),
 
 	/* cat2 */
 	INSTR_6XX(40104002_0c210001, "add.f hr0.z, r0.y, c<a0.x + 33>"),
 	INSTR_6XX(40b80804_10408004, "(nop3) cmps.f.lt r1.x, (abs)r1.x, c16.x"),
 	INSTR_6XX(47308a02_00002000, "(rpt2)bary.f (ei)r0.z, (r)0, r0.x"),
 	INSTR_6XX(43480801_00008001, "(nop3) absneg.s hr0.y, (abs)hr0.y"),
+	INSTR_6XX(50600004_2c010004, "(sy)mul.f hr1.x, hr1.x, h(0.5)"),
+	INSTR_6XX(42280807_27ff0000, "(nop3) add.s hr1.w, hr0.x, h(-1)"),
+	INSTR_6XX(40a500f8_2c000004, "cmps.f.ne p0.x, hr1.x, h(0.0)"),
+	INSTR_6XX(438000f8_20010009, "and.b p0.x, hr2.y, h(1)"),
+	INSTR_6XX(438000f9_00020001, "and.b p0.y, hr0.y, hr0.z"),
+	INSTR_6XX(40080902_50200006, "(rpt1)add.f hr0.z, (r)hr1.z, (neg)(r)hc8.x"),
+	INSTR_6XX(42380c01_00040001, "(sat)(nop3) add.s r0.y, r0.y, r1.x"),
+	INSTR_6XX(42480000_48801086, "(nop2) sub.u hr0.x, hc33.z, (neg)hr<a0.x + 128>"),
+	INSTR_6XX(46b00001_00001020, "clz.b r0.y, c8.x"),
+	INSTR_6XX(46700009_00000009, "bfrev.b r2.y, r2.y"),
 
 	/* cat3 */
 	INSTR_6XX(66000000_10421041, "sel.f16 hr0.x, hc16.y, hr0.x, hc16.z"),
@@ -76,6 +111,7 @@ static const struct test {
 	INSTR_6XX(64818902_20041032, "(rpt1)sel.b32 r0.z, (r)c12.z, r0.w, (r)r1.x"),
 	INSTR_6XX(63820005_10315030, "mad.f32 r1.y, (neg)c12.x, r1.x, c12.y"),
 	INSTR_6XX(62050009_00091000, "mad.u24 r2.y, c0.x, r2.z, r2.y"),
+	INSTR_6XX(61828008_00081033, "madsh.m16 r2.x, c12.w, r1.y, r2.x"),
 
 	/* cat4 */
 	INSTR_6XX(8010000a_00000003, "rcp r2.z, r0.w"),
@@ -90,12 +126,33 @@ static const struct test {
 	INSTR_6XX(a6201105_00000001, "dsxpp.1.p (x)r1.y, r0.x"), /* dsxpp.1 (xOOO)r1.y, r0.x */
 
 	INSTR_6XX(a2802f00_00000001, "getsize (u16)(xyzw)hr0.x, r0.x, t#0"),
+	INSTR_6XX(a0c89f04_c4600005, "sam.base1 (f32)(xyzw)r1.x, r0.z, s#3, t#2"),  /* sam.s2en.mode6.base1 (f32)(xyzw)r1.x, r0.z, 35 */
+	INSTR_6XX(a1c85f00_c0200005, "getlod.base0 (s32)(xyzw)r0.x, r0.z, s#1, t#0"),  /* getlod.s2en.mode6.base0 (s32)(xyzw)r0.x, r0.z, 1 */
+	INSTR_6XX(a1000f00_00000004, "samb (f16)(xyzw)hr0.x, hr0.z, hr0.x, s#0, t#0"),
+	INSTR_6XX(a1000f00_00000003, "samb (f16)(xyzw)hr0.x, r0.y, r0.x, s#0, t#0"),
+	INSTR_6XX(a0c00f00_04400002, "sam (f16)(xyzw)hr0.x, hr0.y, s#2, t#2"),
+	INSTR_6XX(a6c02f00_00000000, "rgetinfo (u16)(xyzw)hr0.x"),
+	INSTR_6XX(a3482f08_c0000000, "getinfo.base0 (u16)(xyzw)hr2.x, t#0"),
+
 
 	/* cat6 */
 
-	INSTR_6XX(c0c00000_00000000, "stg.f16 g[hr0.x], hr0.x, hr0.x"),
+	INSTR_5XX(c6e60000_00010600, "ldgb.untyped.4d.u32.1 r0.x, g[0], r1.x, r0.x"),
+	INSTR_5XX(d7660204_02000a01, "(sy)stib.typed.2d.u32.1 g[1], r0.x, r0.z, r1.x"),
+
+	INSTR_6XX(c0c00000_00000000, "stg.f16 g[hr0.x], hr0.x, hr0.x", .parse_fail=true),
 	/* dEQP-GLES31.functional.tessellation.invariance.outer_edge_symmetry.isolines_equal_spacing_ccw */
 	INSTR_6XX(c0d20906_02800004, "stg.f32 g[r1.x+r1.z], r0.z, 2"), /* stg.a.f32 g[r1.x+(r1.z<<2)], r0.z, 2 */
+	INSTR_6XX(c0da052e_01800042, "stg.s32 g[r0.z+r11.z], r8.y, 1"), /* stg.a.s32 g[r0.z+(r11.z<<2)], r8.y, 1 */
+	INSTR_6XX(c0ca0505_03800042, "stg.s32 g[r0.z+5], r8.y, 3"),
+	INSTR_6XX(c0ca0500_03800042, "stg.s32 g[r0.z], r8.y, 3"),
+	INSTR_6XX(c0ca0531_03800242, "stg.s32 g[r0.z+305], r8.y, 3"),
+
+	INSTR_6XX(c0020011_04c08023, "ldg.f32 r4.y, g[r0.z+r4.y], 4"), /* ldg.a.f32 r4.y, g[r0.z+(r4.y<<2)], 4 */
+	INSTR_6XX(c0060006_01c18017, "ldg.u32 r1.z, g[r1.z+r2.w], 1"), /* ldg.a.u32 r1.z, g[r1.z+(r2.w<<2)], 1 */
+	INSTR_6XX(c0060006_0181800f, "ldg.u32 r1.z, g[r1.z+7], 1"),
+	INSTR_6XX(c0060006_01818001, "ldg.u32 r1.z, g[r1.z], 1"),
+	INSTR_6XX(c0060003_0180c269, "ldg.u32 r0.w, g[r0.w+308], 1"),
 
 	/* TODO: We don't support disasm of stc yet and produce a stgb instead
 	 * (same as their disasm does for other families.  They're used as part
@@ -108,9 +165,18 @@ static const struct test {
 	/* INSTR_6XX(c7060020_03800000, "stc c[32], r0.x, 3"), */
 
 	/* dEQP-VK.image.image_size.cube_array.readonly_writeonly_1x1x12 */
-	INSTR_6XX(c0260200_03676100, "stib.untyped.1d.u32.3.imm.base0 r0.x, r0.w, 1"), /* stib.untyped.u32.1d.3.mode4.base0 r0.x, r0.w, 1 */
+	INSTR_6XX(c0260200_03676100, "stib.b.untyped.1d.u32.3.imm.base0 r0.x, r0.w, 1"), /* stib.untyped.u32.1d.3.mode4.base0 r0.x, r0.w, 1 */
+#if 0
+	/* TODO blob sometimes/frequently sets b0, although there does not seem
+	 * to be an obvious pattern and our encoding never sets it.  AFAICT it
+	 * is a dontcare bit
+	 */
 	/* dEQP-VK.texture.filtering.cube.formats.a8b8g8r8_srgb_nearest_mipmap_nearest.txt */
-	INSTR_6XX(c0220200_0361b801, "ldib.typed.1d.f32.4.imm r0.x, r0.w, 1"), /* ldib.f32.1d.4.mode0.base0 r0.x, r0.w, 1 */
+	INSTR_6XX(c0220200_0361b801, "ldib.b.typed.1d.f32.4.imm r0.x, r0.w, 1"), /* ldib.f32.1d.4.mode0.base0 r0.x, r0.w, 1 */
+#else
+	/* dEQP-VK.texture.filtering.cube.formats.a8b8g8r8_srgb_nearest_mipmap_nearest.txt */
+	INSTR_6XX(c0220200_0361b800, "ldib.b.typed.1d.f32.4.imm r0.x, r0.w, 1"), /* ldib.f32.1d.4.mode0.base0 r0.x, r0.w, 1 */
+#endif
 
 	/* dEQP-GLES31.functional.tessellation.invariance.outer_edge_symmetry.isolines_equal_spacing_ccw */
 	INSTR_6XX(c2c21100_04800006, "stlw.f32 l[r2.x], r0.w, 4"),
@@ -121,18 +187,32 @@ static const struct test {
 	INSTR_6XX(c1060500_01800008, "stl.u32 l[r0.z], r1.x, 1"),
 	INSTR_6XX(c0460001_01804001, "ldl.u32 r0.y, l[r0.y], 1"),
 
+	INSTR_6XX(c0860018_03820001, "ldp.u32 r6.x, p[r2.x], 3"),
+	INSTR_6XX(c0420002_01808019, "ldl.f32 r0.z, l[r0.z+12], 1"),
+	INSTR_6XX(c1021710_04800000, "stl.f32 l[r2.w+16], r0.x, 4"),
+	INSTR_6XX(d7c60011_03c00000, "(sy)ldlv.u32 r4.y, l[0], 3"),
+
 	/* resinfo */
-	INSTR_6XX(c0260000_0063c200, "resinfo.untyped.2d.u32.1.imm r0.x, 0"), /* resinfo.u32.2d.mode0.base0 r0.x, 0 */
+	INSTR_6XX(c0260000_0063c200, "resinfo.b.untyped.2d.u32.1.imm r0.x, 0"), /* resinfo.u32.2d.mode0.base0 r0.x, 0 */
 	/* dEQP-GLES31.functional.image_load_store.buffer.image_size.writeonly_7.txt */
-	INSTR_6XX(c0260000_0063c000, "resinfo.untyped.1d.u32.1.imm r0.x, 0"), /* resinfo.u32.1d.mode0.base0 r0.x, 0 */
+	INSTR_6XX(c0260000_0063c000, "resinfo.b.untyped.1d.u32.1.imm r0.x, 0"), /* resinfo.u32.1d.mode0.base0 r0.x, 0 */
 	/* dEQP-VK.image.image_size.2d.readonly_12x34.txt */
-	INSTR_6XX(c0260000_0063c300, "resinfo.untyped.2d.u32.1.imm.base0 r0.x, 0"), /* resinfo.u32.2d.mode4.base0 r0.x, 0 */
-	/* dEQP-GLES31.functional.image_load_store.buffer.image_size.readonly_writeonly_7 */
-	INSTR_5XX(c3e60000_00000e00, "resinfo.4d r0.x, g[0]"), /* resinfo.u32.1dtype r0.x, 0 */
+	INSTR_6XX(c0260000_0063c300, "resinfo.b.untyped.2d.u32.1.imm.base0 r0.x, 0"), /* resinfo.u32.2d.mode4.base0 r0.x, 0 */
+
 	/* dEQP-GLES31.functional.image_load_store.2d.image_size.readonly_writeonly_32x32.txt */
 	INSTR_5XX(c3e60000_00000200, "resinfo.2d r0.x, g[0]"), /* resinfo.u32.2d r0.x, 0 */
+#if 0
+	/* TODO our encoding differs in b11 ('typed'), which seems to be a dontcare bit */
+	/* dEQP-GLES31.functional.image_load_store.buffer.image_size.readonly_writeonly_7 */
+	INSTR_5XX(c3e60000_00000e00, "resinfo.4d r0.x, g[0]"), /* resinfo.u32.1dtype r0.x, 0 */
 	/* dEQP-GLES31.functional.image_load_store.3d.image_size.readonly_writeonly_12x34x56 */
 	INSTR_5XX(c3e60000_00000c00, "resinfo.3d r0.x, g[0]"), /* resinfo.u32.3d r0.x, 0 */
+#else
+	/* dEQP-GLES31.functional.image_load_store.buffer.image_size.readonly_writeonly_7 */
+	INSTR_5XX(c3e60000_00000600, "resinfo.4d r0.x, g[0]"), /* resinfo.u32.1dtype r0.x, 0 */
+	/* dEQP-GLES31.functional.image_load_store.2d.image_size.readonly_writeonly_32x32.txt */
+	INSTR_5XX(c3e60000_00000400, "resinfo.3d r0.x, g[0]"), /* resinfo.u32.3d r0.x, 0 */
+#endif
 
 	/* ldgb */
 	/* dEQP-GLES31.functional.ssbo.layout.single_basic_type.packed.mediump_vec4 */
@@ -144,6 +224,10 @@ static const struct test {
 	/* dEQP-GLES31.functional.ssbo.layout.random.vector_types.0 */
 	INSTR_5XX(c6ea0008_14002600, "ldgb.untyped.4d.s32.3 r2.x, g[0], r0.x, r5.x"), /* ldgb.a.untyped.1dtype.s32.3 r2.x, g[r0.x], r5.x, 0 */
 	INSTR_5XX(c6ea0204_1401a600, "ldgb.untyped.4d.s32.3 r1.x, g[1], r1.z, r5.x"), /* ldgb.a.untyped.1dtype.s32.3 r1.x, g[r1.z], r5.x, 1 */
+
+	/* stgb */
+	INSTR_5XX(c7220028_0480000d, "stgb.untyped.1d.f32.1 g[0], r1.z, 4, r10.x"), /* stgb.untyped.1d.1 g[r10.x], r1.z, 4, r0.x */
+	INSTR_5XX(c7260023_02800009, "stgb.untyped.1d.u32.1 g[0], r1.x, 2, r8.w"),  /* stgb.untyped.1d.1 g[r8.w], r1.x, 2, r0.x */
 
 	/* discard stuff */
 	INSTR_6XX(42b400f8_20010004, "cmps.s.eq p0.x, r1.x, 1"),
@@ -166,12 +250,22 @@ static const struct test {
 	/* LDC.  Our disasm differs greatly from qcom here, and we've got some
 	 * important info they lack(?!), but same goes the other way.
 	 */
+#if 0
+	/* TODO our encoding differs in b23 for these four.. unsure if that is dontcare bit */
 	/* dEQP-GLES31.functional.shaders.opaque_type_indexing.ubo.uniform_fragment */
 	INSTR_6XX(c0260000_00c78040, "ldc.offset0.1.uniform r0.x, r0.x, r0.x"), /* ldc.1.mode1.base0 r0.x, 0, r0.x */
 	INSTR_6XX(c0260201_00c78040, "ldc.offset0.1.uniform r0.y, r0.x, r0.y"), /* ldc.1.mode1.base0 r0.y, 0, r0.y */
 	/* dEQP-GLES31.functional.shaders.opaque_type_indexing.ubo.dynamically_uniform_fragment  */
 	INSTR_6XX(c0260000_00c78080, "ldc.offset0.1.nonuniform r0.x, r0.x, r0.x"), /* ldc.1.mode2.base0 r0.x, 0, r0.x */
 	INSTR_6XX(c0260201_00c78080, "ldc.offset0.1.nonuniform r0.y, r0.x, r0.y"), /* ldc.1.mode2.base0 r0.y, 0, r0.y */
+#else
+	/* dEQP-GLES31.functional.shaders.opaque_type_indexing.ubo.uniform_fragment */
+	INSTR_6XX(c0260000_00478040, "ldc.offset0.1.uniform r0.x, r0.x, r0.x"), /* ldc.1.mode1.base0 r0.x, 0, r0.x */
+	INSTR_6XX(c0260201_00478040, "ldc.offset0.1.uniform r0.y, r0.x, r0.y"), /* ldc.1.mode1.base0 r0.y, 0, r0.y */
+	/* dEQP-GLES31.functional.shaders.opaque_type_indexing.ubo.dynamically_uniform_fragment  */
+	INSTR_6XX(c0260000_00478080, "ldc.offset0.1.nonuniform r0.x, r0.x, r0.x"), /* ldc.1.mode2.base0 r0.x, 0, r0.x */
+	INSTR_6XX(c0260201_00478080, "ldc.offset0.1.nonuniform r0.y, r0.x, r0.y"), /* ldc.1.mode2.base0 r0.y, 0, r0.y */
+#endif
 	/* custom shaders, loading .x, .y, .z, .w from an array of vec4 in block 0 */
 	INSTR_6XX(c0260000_00478000, "ldc.offset0.1.imm r0.x, r0.x, 0"), /* ldc.1.mode0.base0 r0.x, r0.x, 0 */
 	INSTR_6XX(c0260000_00478200, "ldc.offset1.1.imm r0.x, r0.x, 0"), /* ldc.1.mode0.base0 r0.x, r0.x, 0 */
@@ -186,12 +280,32 @@ static const struct test {
 	/* Custom stp based on above to catch a disasm bug. */
 	INSTR_6XX(c1465b00_0180022a, "stp.u32 p[r11.y+256], r5.y, 1"),
 
+	/* Atomic: */
+#if 0
+	/* TODO our encoding differs in b53 for these two */
+	INSTR_5XX(c4d60002_00008001, "atomic.inc.untyped.1d.u32.1.g r0.z, g[0], r0.z, r0.x, r0.x"),
+	INSTR_5XX(c4160205_03000001, "atomic.add.untyped.1d.u32.1.g r1.y, g[1], r0.x, r0.w, r0.x"),
+#else
+	INSTR_5XX(c4f60002_00008001, "atomic.inc.untyped.1d.u32.1.g r0.z, g[0], r0.z, r0.x, r0.x"),
+	INSTR_5XX(c4360205_03000001, "atomic.add.untyped.1d.u32.1.g r1.y, g[1], r0.x, r0.w, r0.x"),
+#endif
+	INSTR_6XX(d5c60003_03008001, "(sy)atomic.max.untyped.1d.u32.1.l r0.w, l[r0.z], r0.w"),
+
+	/* Bindless atomic: */
+	INSTR_6XX(c03a0003_01640001, "atomic.add.b.untyped.1d.s32.1.imm r0.w, r0.y, 0"), /* atomic.b.add.g.s32.1d.mode0.base0 r0.w,r0.y,0 */
+	INSTR_6XX(c03a0003_01660001, "atomic.and.b.untyped.1d.s32.1.imm r0.w, r0.y, 0"), /* atomic.b.and.g.s32.1d.mode0.base0 r0.w,r0.y,0 */
+	INSTR_6XX(c0360000_0365c801, "atomic.max.b.typed.1d.u32.1.imm r0.x, r0.w, 0"),   /* atomic.b.max.g.u32.1d.mode0.base0 r0.x,r0.w,0 */
+
 	/* dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.const_literal.fragment.sampler2d */
 	INSTR_6XX(a0c01f04_0cc00005, "sam (f32)(xyzw)r1.x, r0.z, s#6, t#6"),
 	/* dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.fragment.sampler2d (looks like maybe the compiler didn't figure out */
 	INSTR_6XX(a0c81f07_0100000b, "sam.s2en (f32)(xyzw)r1.w, r1.y, hr2.x"), /* sam.s2en.mode0 (f32)(xyzw)r1.w, r1.y, hr2.x */
 	/* dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.fragment.sampler2d */
-	INSTR_6XX(a0c81f07_8100000b, "sam.s2en.uniform (f32)(xyzw)r1.w, r1.y, hr2.x"), /* sam.s2en.mode4 (f32)(xyzw)r1.w, r1.y, hr2.x */
+	INSTR_6XX(a0c81f07_8100000b, "sam.s2en.uniform (f32)(xyzw)r1.w, r1.y, hr2.x", .parse_fail=true), /* sam.s2en.mode4 (f32)(xyzw)r1.w, r1.y, hr2.x */
+
+	/* Custom test since we've never seen the blob emit these. */
+	INSTR_6XX(c0260004_00490000, "getspid.u32 r1.x"),
+	INSTR_6XX(c0260005_00494000, "getwid.u32 r1.y"),
 };
 
 static void
@@ -205,6 +319,7 @@ int
 main(int argc, char **argv)
 {
 	int retval = 0;
+	int decode_fails = 0, asm_fails = 0, encode_fails = 0;
 	const int output_size = 4096;
 	char *disasm_output = malloc(output_size);
 	FILE *fdisasm = fmemopen(disasm_output, output_size, "w+");
@@ -213,6 +328,8 @@ main(int argc, char **argv)
 		return 1;
 	}
 
+	struct ir3_compiler *compilers[10] = {};
+
 	for (int i = 0; i < ARRAY_SIZE(tests); i++) {
 		const struct test *test = &tests[i];
 		printf("Testing a%d %s: \"%s\"...\n",
@@ -220,6 +337,10 @@ main(int argc, char **argv)
 
 		rewind(fdisasm);
 		memset(disasm_output, 0, output_size);
+
+		/*
+		 * Test disassembly:
+		 */
 
 		uint32_t code[2] = {
 			strtoll(&test->instr[9], NULL, 16),
@@ -231,12 +352,74 @@ main(int argc, char **argv)
 		trim(disasm_output);
 
 		if (strcmp(disasm_output, test->expected) != 0) {
-			printf("FAIL\n");
+			printf("FAIL: disasm\n");
 			printf("  Expected: \"%s\"\n", test->expected);
 			printf("  Got:      \"%s\"\n", disasm_output);
 			retval = 1;
+			decode_fails++;
 			continue;
 		}
+
+		/*
+		 * Test assembly, which should result in the identical binary:
+		 */
+
+		unsigned gen = test->gpu_id / 100;
+		if (!compilers[gen]) {
+			compilers[gen] = ir3_compiler_create(NULL, test->gpu_id);
+		}
+
+		FILE *fasm = fmemopen((void *)test->expected, strlen(test->expected), "r");
+
+		struct ir3_kernel_info info = {};
+		struct ir3_shader *shader = ir3_parse_asm(compilers[gen], &info, fasm);
+		fclose(fasm);
+		if (!shader) {
+			printf("FAIL: %sexpected assembler fail\n", test->parse_fail ? "" : "un");
+			asm_fails++;
+			/* If this is an instruction that the asm parser is not expected
+			 * to handle, don't count it as a fail.
+			 */
+			if (!test->parse_fail)
+				retval = 1;
+			continue;
+		} else if (test->parse_fail) {
+			/* If asm parse starts passing, and we don't expect that, flag
+			 * it as a fail so we don't forget to update the test vector:
+			 */
+			printf("FAIL: unexpected parse success, please remove '.parse_fail=true'\n");
+			retval = 1;
+		}
+
+		struct ir3_shader_variant *v = shader->variants;
+		if (memcmp(v->bin, code, sizeof(code))) {
+			printf("FAIL: assembler\n");
+			printf("  Expected: %08x_%08x\n", code[1], code[0]);
+			printf("  Got:      %08x_%08x\n", v->bin[1], v->bin[0]);
+			retval = 1;
+			encode_fails++;
+		}
+
+		ir3_shader_destroy(shader);
+	}
+
+	if (decode_fails)
+		printf("%d/%d decode fails\n", decode_fails, (int)ARRAY_SIZE(tests));
+	if (asm_fails)
+		printf("%d/%d assembler fails\n", asm_fails, (int)ARRAY_SIZE(tests));
+	if (encode_fails)
+		printf("%d/%d encode fails\n", encode_fails, (int)ARRAY_SIZE(tests));
+
+	if (retval) {
+		printf("FAILED!\n");
+	} else {
+		printf("PASSED!\n");
+	}
+
+	for (unsigned i = 0; i < ARRAY_SIZE(compilers); i++) {
+		if (!compilers[i])
+			continue;
+		ir3_compiler_destroy(compilers[i]);
 	}
 
 	fclose(fdisasm);

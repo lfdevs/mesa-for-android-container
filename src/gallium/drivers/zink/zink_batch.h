@@ -35,6 +35,7 @@ struct zink_framebuffer;
 struct zink_gfx_program;
 struct zink_render_pass;
 struct zink_resource;
+struct zink_screen;
 struct zink_sampler_view;
 
 #define ZINK_BATCH_DESC_SIZE 1000
@@ -57,6 +58,10 @@ struct zink_batch {
 
    struct set *active_queries; /* zink_query objects which were active at some point in this batch */
 };
+
+/* release all resources attached to batch */
+void
+zink_batch_release(struct zink_screen *screen, struct zink_batch *batch);
 
 void
 zink_start_batch(struct zink_context *ctx, struct zink_batch *batch);

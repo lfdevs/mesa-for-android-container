@@ -52,6 +52,8 @@
 #include "vl/vl_compositor.h"
 #include "vl/vl_winsys.h"
 
+#include "drm-uapi/drm_fourcc.h"
+
 struct vl_dri_screen
 {
    struct vl_screen base;
@@ -118,6 +120,7 @@ vl_dri2_get_flush_reply(struct vl_dri_screen *scrn)
 
 static void
 vl_dri2_flush_frontbuffer(struct pipe_screen *screen,
+                          struct pipe_context *pipe,
                           struct pipe_resource *resource,
                           unsigned level, unsigned layer,
                           void *context_private, struct pipe_box *sub_box)
@@ -234,6 +237,7 @@ vl_dri2_screen_texture_from_drawable(struct vl_screen *vscreen, void *drawable)
    dri2_handle.type = WINSYS_HANDLE_TYPE_SHARED;
    dri2_handle.handle = back_left->name;
    dri2_handle.stride = back_left->pitch;
+   dri2_handle.modifier = DRM_FORMAT_MOD_INVALID;
 
    memset(&templ, 0, sizeof(templ));
    templ.target = PIPE_TEXTURE_2D;

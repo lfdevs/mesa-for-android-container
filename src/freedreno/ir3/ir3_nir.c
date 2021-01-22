@@ -72,6 +72,8 @@ static const nir_shader_compiler_options options = {
 		.lower_rotate = true,
 		.lower_to_scalar = true,
 		.has_imul24 = true,
+		.has_fsub = true,
+		.has_isub = true,
 		.lower_wpos_pntc = true,
 		.lower_cs_local_index_from_id = true,
 
@@ -125,6 +127,8 @@ static const nir_shader_compiler_options options_a6xx = {
 		.vectorize_io = true,
 		.lower_to_scalar = true,
 		.has_imul24 = true,
+		.has_fsub = true,
+		.has_isub = true,
 		.max_unroll_iterations = 32,
 		.lower_wpos_pntc = true,
 		.lower_cs_local_index_from_id = true,
@@ -150,7 +154,8 @@ ir3_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
 		unsigned bit_size,
 		unsigned num_components,
 		nir_intrinsic_instr *low,
-		nir_intrinsic_instr *high)
+		nir_intrinsic_instr *high,
+		void *data)
 {
 	assert(bit_size >= 8);
 	if (bit_size != 32)
@@ -218,8 +223,12 @@ ir3_optimize_loop(nir_shader *s)
 		progress |= OPT(s, nir_lower_pack);
 		progress |= OPT(s, nir_opt_constant_folding);
 
-		progress |= OPT(s, nir_opt_load_store_vectorize, nir_var_mem_ubo,
-				ir3_nir_should_vectorize_mem, 0);
+		nir_load_store_vectorize_options vectorize_opts = {
+		   .modes = nir_var_mem_ubo,
+		   .callback = ir3_nir_should_vectorize_mem,
+		   .robust_modes = 0,
+		};
+		progress |= OPT(s, nir_opt_load_store_vectorize, &vectorize_opts);
 
 		if (lower_flrp != 0) {
 			if (OPT(s, nir_lower_flrp,
@@ -261,6 +270,7 @@ should_split_wrmask(const nir_instr *instr, const void *data)
 	case nir_intrinsic_store_ssbo:
 	case nir_intrinsic_store_shared:
 	case nir_intrinsic_store_global:
+	case nir_intrinsic_store_scratch:
 		return true;
 	default:
 		return false;
@@ -495,10 +505,35 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
 		progress |= OPT(s, nir_lower_tex, &tex_options);
 	}
 
+	/* Move large constant variables to the constants attached to the NIR
+	 * shader, which we will upload in the immediates range.  This generates
+	 * amuls, so we need to clean those up after.
+	 *
+	 * Passing no size_align, we would get packed values, which if we end up
+	 * having to load with LDC would result in extra reads to unpack from
+	 * straddling loads.  Align everything to vec4 to avoid that, though we
+	 * could theoretically do better.
+	 */
+	OPT_V(s, nir_opt_large_constants, glsl_get_vec4_size_align_bytes, 32 /* bytes */);
+	OPT_V(s, ir3_nir_lower_load_constant, so);
+
 	if (!so->binning_pass)
 		OPT_V(s, ir3_nir_analyze_ubo_ranges, so);
 
 	progress |= OPT(s, ir3_nir_lower_ubo_loads, so);
+
+	/* Lower large temporaries to scratch, which in Qualcomm terms is private
+	 * memory, to avoid excess register pressure. This should happen after
+	 * nir_opt_large_constants, because loading from a UBO is much, much less
+	 * expensive.
+	 */
+	if (so->shader->compiler->has_pvtmem) {
+		NIR_PASS_V(s, nir_lower_vars_to_scratch, nir_var_function_temp,
+				   16 * 16 /* bytes */, glsl_get_natural_size_align_bytes);
+	}
+
+
+	OPT_V(s, nir_lower_amul, ir3_glsl_type_size);
 
 	/* UBO offset lowering has to come after we've decided what will
 	 * be left as load_ubo
@@ -509,6 +544,13 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
 	OPT_V(s, ir3_nir_lower_io_offsets, so->shader->compiler->gpu_id);
 
 	if (progress)
+		ir3_optimize_loop(s);
+
+	/* Fixup indirect load_uniform's which end up with a const base offset
+	 * which is too large to encode.  Do this late(ish) so we actually
+	 * can differentiate indirect vs non-indirect.
+	 */
+	if (OPT(s, ir3_nir_fixup_load_uniform))
 		ir3_optimize_loop(s);
 
 	/* Do late algebraic optimization to turn add(a, neg(b)) back into

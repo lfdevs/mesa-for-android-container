@@ -83,7 +83,7 @@ v3d_begin_query(struct pipe_context *pctx, struct pipe_query *query)
                 break;
         case PIPE_QUERY_PRIMITIVES_EMITTED:
                 /* If we are inside transform feedback we need to update the
-                 * primitive counts to skip primtives recorded before this.
+                 * primitive counts to skip primitives recorded before this.
                  */
                 if (v3d->streamout.num_targets > 0)
                         v3d_update_primitive_counters(v3d);

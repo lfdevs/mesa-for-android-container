@@ -101,9 +101,9 @@ static void si_emit_cull_state(struct si_context *sctx)
    }
 
    /* This will end up in SGPR6 as (value << 8), shifted by the hw. */
-   radeon_add_to_buffer_list(sctx, sctx->gfx_cs, sctx->small_prim_cull_info_buf,
+   radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, sctx->small_prim_cull_info_buf,
                              RADEON_USAGE_READ, RADEON_PRIO_CONST_BUFFER);
-   radeon_set_sh_reg(sctx->gfx_cs, R_00B220_SPI_SHADER_PGM_LO_GS,
+   radeon_set_sh_reg(&sctx->gfx_cs, R_00B220_SPI_SHADER_PGM_LO_GS,
                      sctx->small_prim_cull_info_address >> 8);
 
    /* Set VS_STATE.SMALL_PRIM_PRECISION for NGG culling.
@@ -350,7 +350,7 @@ static void si_emit_guardband(struct si_context *ctx)
     * R_028BE8_PA_CL_GB_VERT_CLIP_ADJ, R_028BEC_PA_CL_GB_VERT_DISC_ADJ
     * R_028BF0_PA_CL_GB_HORZ_CLIP_ADJ, R_028BF4_PA_CL_GB_HORZ_DISC_ADJ
     */
-   unsigned initial_cdw = ctx->gfx_cs->current.cdw;
+   unsigned initial_cdw = ctx->gfx_cs.current.cdw;
    radeon_opt_set_context_reg4(ctx, R_028BE8_PA_CL_GB_VERT_CLIP_ADJ,
                                SI_TRACKED_PA_CL_GB_VERT_CLIP_ADJ, fui(guardband_y), fui(discard_y),
                                fui(guardband_x), fui(discard_x));
@@ -362,13 +362,13 @@ static void si_emit_guardband(struct si_context *ctx)
       ctx, R_028BE4_PA_SU_VTX_CNTL, SI_TRACKED_PA_SU_VTX_CNTL,
       S_028BE4_PIX_CENTER(rs->half_pixel_center) |
          S_028BE4_QUANT_MODE(V_028BE4_X_16_8_FIXED_POINT_1_256TH + vp_as_scissor.quant_mode));
-   if (initial_cdw != ctx->gfx_cs->current.cdw)
+   if (initial_cdw != ctx->gfx_cs.current.cdw)
       ctx->context_roll = true;
 }
 
 static void si_emit_scissors(struct si_context *ctx)
 {
-   struct radeon_cmdbuf *cs = ctx->gfx_cs;
+   struct radeon_cmdbuf *cs = &ctx->gfx_cs;
    struct pipe_scissor_state *states = ctx->scissors;
    bool scissor_enabled = ctx->queued.named.rasterizer->scissor_enable;
 
@@ -475,7 +475,7 @@ static void si_set_viewport_states(struct pipe_context *pctx, unsigned start_slo
 
 static void si_emit_one_viewport(struct si_context *ctx, struct pipe_viewport_state *state)
 {
-   struct radeon_cmdbuf *cs = ctx->gfx_cs;
+   struct radeon_cmdbuf *cs = &ctx->gfx_cs;
 
    radeon_emit(cs, fui(state->scale[0]));
    radeon_emit(cs, fui(state->translate[0]));
@@ -487,7 +487,7 @@ static void si_emit_one_viewport(struct si_context *ctx, struct pipe_viewport_st
 
 static void si_emit_viewports(struct si_context *ctx)
 {
-   struct radeon_cmdbuf *cs = ctx->gfx_cs;
+   struct radeon_cmdbuf *cs = &ctx->gfx_cs;
    struct pipe_viewport_state *states = ctx->viewports.states;
 
    /* The simple case: Only 1 viewport is active. */
@@ -518,7 +518,7 @@ static inline void si_viewport_zmin_zmax(const struct pipe_viewport_state *vp, b
 
 static void si_emit_depth_ranges(struct si_context *ctx)
 {
-   struct radeon_cmdbuf *cs = ctx->gfx_cs;
+   struct radeon_cmdbuf *cs = &ctx->gfx_cs;
    struct pipe_viewport_state *states = ctx->viewports.states;
    bool clip_halfz = ctx->queued.named.rasterizer->clip_halfz;
    bool window_space = ctx->vs_disables_clipping_viewport;
@@ -605,7 +605,7 @@ static void si_emit_window_rectangles(struct si_context *sctx)
     *
     * If CLIPRECT_RULE & (1 << number), the pixel is rasterized.
     */
-   struct radeon_cmdbuf *cs = sctx->gfx_cs;
+   struct radeon_cmdbuf *cs = &sctx->gfx_cs;
    static const unsigned outside[4] = {
       /* outside rectangle 0 */
       V_02820C_OUT | V_02820C_IN_1 | V_02820C_IN_2 | V_02820C_IN_21 | V_02820C_IN_3 |

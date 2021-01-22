@@ -81,6 +81,20 @@ void
 _mesa_initialize_exec_dispatch(const struct gl_context *ctx,
                                struct _glapi_table *exec);
 
+void
+_mesa_draw_gallium_fallback(struct gl_context *ctx,
+                            struct pipe_draw_info *info,
+                            const struct pipe_draw_start_count *draws,
+                            unsigned num_draws);
+
+void
+_mesa_draw_gallium_complex_fallback(struct gl_context *ctx,
+                                    struct pipe_draw_info *info,
+                                    const struct pipe_draw_start_count *draws,
+                                    const unsigned char *mode,
+                                    const int *base_vertex,
+                                    unsigned num_draws);
+
 void GLAPIENTRY
 _mesa_EvalMesh1(GLenum mode, GLint i1, GLint i2);
 

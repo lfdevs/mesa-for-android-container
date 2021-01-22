@@ -166,12 +166,12 @@ ptn_get_src(struct ptn_compile *c, const struct prog_src_register *prog_src)
       case PROGRAM_CONSTANT:
          if ((c->prog->arb.IndirectRegisterFiles &
               (1 << PROGRAM_CONSTANT)) == 0) {
-            unsigned pvo = plist->ParameterValueOffset[prog_src->Index];
+            unsigned pvo = plist->Parameters[prog_src->Index].ValueOffset;
             float *v = (float *) plist->ParameterValues + pvo;
             src.src = nir_src_for_ssa(nir_imm_vec4(b, v[0], v[1], v[2], v[3]));
             break;
          }
-         /* FALLTHROUGH */
+         FALLTHROUGH;
       case PROGRAM_STATE_VAR: {
          assert(c->parameters != NULL);
 
@@ -461,10 +461,47 @@ ptn_kil(nir_builder *b, nir_ssa_def **src)
    nir_ssa_def *cmp = nir_bany(b, nir_flt(b, src[0], nir_imm_float(b, 0.0)));
    b->exact = false;
 
-   nir_intrinsic_instr *discard =
-      nir_intrinsic_instr_create(b->shader, nir_intrinsic_discard_if);
-   discard->src[0] = nir_src_for_ssa(cmp);
-   nir_builder_instr_insert(b, &discard->instr);
+   nir_discard_if(b, cmp);
+}
+
+enum glsl_sampler_dim
+_mesa_texture_index_to_sampler_dim(gl_texture_index index, bool *is_array)
+{
+   *is_array = false;
+
+   switch (index) {
+   case TEXTURE_2D_MULTISAMPLE_INDEX:
+      return GLSL_SAMPLER_DIM_MS;
+   case TEXTURE_2D_MULTISAMPLE_ARRAY_INDEX:
+      *is_array = true;
+      return GLSL_SAMPLER_DIM_MS;
+   case TEXTURE_BUFFER_INDEX:
+      return GLSL_SAMPLER_DIM_BUF;
+   case TEXTURE_1D_INDEX:
+      return GLSL_SAMPLER_DIM_1D;
+   case TEXTURE_2D_INDEX:
+      return GLSL_SAMPLER_DIM_2D;
+   case TEXTURE_3D_INDEX:
+      return GLSL_SAMPLER_DIM_3D;
+   case TEXTURE_CUBE_INDEX:
+      return GLSL_SAMPLER_DIM_CUBE;
+   case TEXTURE_CUBE_ARRAY_INDEX:
+      *is_array = true;
+      return GLSL_SAMPLER_DIM_CUBE;
+   case TEXTURE_RECT_INDEX:
+      return GLSL_SAMPLER_DIM_RECT;
+   case TEXTURE_1D_ARRAY_INDEX:
+      *is_array = true;
+      return GLSL_SAMPLER_DIM_1D;
+   case TEXTURE_2D_ARRAY_INDEX:
+      *is_array = true;
+      return GLSL_SAMPLER_DIM_2D;
+   case TEXTURE_EXTERNAL_INDEX:
+      return GLSL_SAMPLER_DIM_EXTERNAL;
+   case NUM_TEXTURE_TARGETS:
+      break;
+   }
+   unreachable("unknown texture target");
 }
 
 static void
@@ -513,26 +550,8 @@ ptn_tex(struct ptn_compile *c, nir_alu_dest dest, nir_ssa_def **src,
    instr->dest_type = nir_type_float;
    instr->is_shadow = prog_inst->TexShadow;
 
-   switch (prog_inst->TexSrcTarget) {
-   case TEXTURE_1D_INDEX:
-      instr->sampler_dim = GLSL_SAMPLER_DIM_1D;
-      break;
-   case TEXTURE_2D_INDEX:
-      instr->sampler_dim = GLSL_SAMPLER_DIM_2D;
-      break;
-   case TEXTURE_3D_INDEX:
-      instr->sampler_dim = GLSL_SAMPLER_DIM_3D;
-      break;
-   case TEXTURE_CUBE_INDEX:
-      instr->sampler_dim = GLSL_SAMPLER_DIM_CUBE;
-      break;
-   case TEXTURE_RECT_INDEX:
-      instr->sampler_dim = GLSL_SAMPLER_DIM_RECT;
-      break;
-   default:
-      fprintf(stderr, "Unknown texture target %d\n", prog_inst->TexSrcTarget);
-      abort();
-   }
+   bool is_array;
+   instr->sampler_dim = _mesa_texture_index_to_sampler_dim(prog_inst->TexSrcTarget, &is_array);
 
    instr->coord_components =
       glsl_get_sampler_dim_coordinate_components(instr->sampler_dim);
@@ -969,7 +988,7 @@ prog_to_nir(const struct gl_program *prog,
       return NULL;
    c->prog = prog;
 
-   nir_builder_init_simple_shader(&c->build, NULL, stage, options);
+   c->build = nir_builder_init_simple_shader(stage, options, NULL);
 
    /* Copy the shader_info from the gl_program */
    c->build.shader->info = prog->info;

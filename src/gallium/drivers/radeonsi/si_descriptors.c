@@ -30,7 +30,7 @@
  * descriptors in CPU memory and re-uploads a whole list if some slots have
  * been changed.
  *
- * This code is also reponsible for updating shader pointers to those lists.
+ * This code is also responsible for updating shader pointers to those lists.
  *
  * Note that CP DMA can't be used for updating the lists, because a GPU hang
  * could leave the list in a mid-IB state and the next IB would get wrong
@@ -164,7 +164,7 @@ static bool si_upload_descriptors(struct si_context *sctx, struct si_descriptors
    util_memcpy_cpu_to_le32(ptr, (char *)desc->list + first_slot_offset, upload_size);
    desc->gpu_list = ptr - first_slot_offset / 4;
 
-   radeon_add_to_buffer_list(sctx, sctx->gfx_cs, desc->buffer, RADEON_USAGE_READ,
+   radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, desc->buffer, RADEON_USAGE_READ,
                              RADEON_PRIO_DESCRIPTORS);
 
    /* The shader pointer should point to slot 0. */
@@ -185,7 +185,7 @@ si_add_descriptors_to_bo_list(struct si_context *sctx, struct si_descriptors *de
    if (!desc->buffer)
       return;
 
-   radeon_add_to_buffer_list(sctx, sctx->gfx_cs, desc->buffer, RADEON_USAGE_READ,
+   radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, desc->buffer, RADEON_USAGE_READ,
                              RADEON_PRIO_DESCRIPTORS);
 }
 
@@ -906,7 +906,7 @@ void si_update_ps_colorbuf0_slot(struct si_context *sctx)
       si_set_shader_image_desc(sctx, &view, true, desc, desc + 8);
 
       pipe_resource_reference(&buffers->buffers[slot], &tex->buffer.b.b);
-      radeon_add_to_buffer_list(sctx, sctx->gfx_cs, &tex->buffer, RADEON_USAGE_READ,
+      radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, &tex->buffer, RADEON_USAGE_READ,
                                 RADEON_PRIO_SHADER_RW_IMAGE);
       buffers->enabled_mask |= 1llu << slot;
    } else {
@@ -1003,7 +1003,7 @@ static void si_buffer_resources_begin_new_cs(struct si_context *sctx,
       int i = u_bit_scan64(&mask);
 
       radeon_add_to_buffer_list(
-         sctx, sctx->gfx_cs, si_resource(buffers->buffers[i]),
+         sctx, &sctx->gfx_cs, si_resource(buffers->buffers[i]),
          buffers->writable_mask & (1llu << i) ? RADEON_USAGE_READWRITE : RADEON_USAGE_READ,
          i < SI_NUM_SHADER_BUFFERS ? buffers->priority : buffers->priority_constbuf);
    }
@@ -1062,14 +1062,14 @@ static void si_vertex_buffers_begin_new_cs(struct si_context *sctx)
       if (!sctx->vertex_buffer[vb].buffer.resource)
          continue;
 
-      radeon_add_to_buffer_list(sctx, sctx->gfx_cs,
+      radeon_add_to_buffer_list(sctx, &sctx->gfx_cs,
                                 si_resource(sctx->vertex_buffer[vb].buffer.resource),
                                 RADEON_USAGE_READ, RADEON_PRIO_VERTEX_BUFFER);
    }
 
    if (!sctx->vb_descriptors_buffer)
       return;
-   radeon_add_to_buffer_list(sctx, sctx->gfx_cs, sctx->vb_descriptors_buffer, RADEON_USAGE_READ,
+   radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, sctx->vb_descriptors_buffer, RADEON_USAGE_READ,
                              RADEON_PRIO_DESCRIPTORS);
 }
 
@@ -1393,7 +1393,7 @@ void si_set_ring_buffer(struct si_context *sctx, uint slot, struct pipe_resource
       }
 
       pipe_resource_reference(&buffers->buffers[slot], buffer);
-      radeon_add_to_buffer_list(sctx, sctx->gfx_cs, si_resource(buffer), RADEON_USAGE_READWRITE,
+      radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, si_resource(buffer), RADEON_USAGE_READWRITE,
                                 buffers->priority);
       buffers->enabled_mask |= 1llu << slot;
    } else {
@@ -1482,11 +1482,12 @@ void si_update_needs_color_decompress_masks(struct si_context *sctx)
 /* Reset descriptors of buffer resources after \p buf has been invalidated.
  * If buf == NULL, reset all descriptors.
  */
-static void si_reset_buffer_resources(struct si_context *sctx, struct si_buffer_resources *buffers,
+static bool si_reset_buffer_resources(struct si_context *sctx, struct si_buffer_resources *buffers,
                                       unsigned descriptors_idx, uint64_t slot_mask,
                                       struct pipe_resource *buf, enum radeon_bo_priority priority)
 {
    struct si_descriptors *descs = &sctx->descriptors[descriptors_idx];
+   bool noop = true;
    uint64_t mask = buffers->enabled_mask & slot_mask;
 
    while (mask) {
@@ -1501,8 +1502,10 @@ static void si_reset_buffer_resources(struct si_context *sctx, struct si_buffer_
             sctx, si_resource(buffer),
             buffers->writable_mask & (1llu << i) ? RADEON_USAGE_READWRITE : RADEON_USAGE_READ,
             priority, true);
+         noop = false;
       }
    }
+   return !noop;
 }
 
 /* Update all buffer bindings where the buffer is bound, including
@@ -1577,11 +1580,15 @@ void si_rebind_buffer(struct si_context *sctx, struct pipe_resource *buf)
    }
 
    if (!buffer || buffer->bind_history & PIPE_BIND_SHADER_BUFFER) {
-      for (shader = 0; shader < SI_NUM_SHADERS; shader++)
-         si_reset_buffer_resources(sctx, &sctx->const_and_shader_buffers[shader],
-                                   si_const_and_shader_buffer_descriptors_idx(shader),
-                                   u_bit_consecutive64(0, SI_NUM_SHADER_BUFFERS), buf,
-                                   sctx->const_and_shader_buffers[shader].priority);
+      for (shader = 0; shader < SI_NUM_SHADERS; shader++) {
+         if (si_reset_buffer_resources(sctx, &sctx->const_and_shader_buffers[shader],
+                                       si_const_and_shader_buffer_descriptors_idx(shader),
+                                       u_bit_consecutive64(0, SI_NUM_SHADER_BUFFERS), buf,
+                                       sctx->const_and_shader_buffers[shader].priority) &&
+             shader == PIPE_SHADER_COMPUTE) {
+            sctx->compute_shaderbuf_sgprs_dirty = true;
+         }
+      }
    }
 
    if (!buffer || buffer->bind_history & PIPE_BIND_SAMPLER_VIEW) {
@@ -1633,6 +1640,9 @@ void si_rebind_buffer(struct si_context *sctx, struct pipe_resource *buf)
                radeon_add_to_gfx_buffer_list_check_mem(sctx, si_resource(buffer),
                                                        RADEON_USAGE_READWRITE,
                                                        RADEON_PRIO_SAMPLER_BUFFER, true);
+
+               if (shader == PIPE_SHADER_COMPUTE)
+                  sctx->compute_image_sgprs_dirty = true;
             }
          }
       }
@@ -1723,7 +1733,7 @@ static void si_upload_bindless_descriptors(struct si_context *sctx)
     * descriptors directly in memory, in case the GPU is using them.
     */
    sctx->flags |= SI_CONTEXT_PS_PARTIAL_FLUSH | SI_CONTEXT_CS_PARTIAL_FLUSH;
-   sctx->emit_cache_flush(sctx);
+   sctx->emit_cache_flush(sctx, &sctx->gfx_cs);
 
    util_dynarray_foreach (&sctx->resident_tex_handles, struct si_texture_handle *, tex_handle) {
       unsigned desc_slot = (*tex_handle)->desc_slot;
@@ -1963,7 +1973,7 @@ static void si_emit_shader_pointer_body(struct si_screen *sscreen, struct radeon
 static void si_emit_shader_pointer(struct si_context *sctx, struct si_descriptors *desc,
                                    unsigned sh_base)
 {
-   struct radeon_cmdbuf *cs = sctx->gfx_cs;
+   struct radeon_cmdbuf *cs = &sctx->gfx_cs;
    unsigned sh_offset = sh_base + desc->shader_userdata_offset;
 
    si_emit_shader_pointer_head(cs, sh_offset, 1);
@@ -1976,7 +1986,7 @@ static void si_emit_consecutive_shader_pointers(struct si_context *sctx, unsigne
    if (!sh_base)
       return;
 
-   struct radeon_cmdbuf *cs = sctx->gfx_cs;
+   struct radeon_cmdbuf *cs = &sctx->gfx_cs;
    unsigned mask = sctx->shader_pointers_dirty & pointer_mask;
 
    while (mask) {
@@ -2044,7 +2054,7 @@ void si_emit_graphics_shader_pointers(struct si_context *sctx)
    sctx->shader_pointers_dirty &= ~u_bit_consecutive(SI_DESCS_RW_BUFFERS, SI_DESCS_FIRST_COMPUTE);
 
    if (sctx->vertex_buffer_pointer_dirty && sctx->num_vertex_elements) {
-      struct radeon_cmdbuf *cs = sctx->gfx_cs;
+      struct radeon_cmdbuf *cs = &sctx->gfx_cs;
 
       /* Find the location of the VB descriptor pointer. */
       unsigned sh_dw_offset = SI_VS_NUM_USER_SGPR;
@@ -2064,7 +2074,7 @@ void si_emit_graphics_shader_pointers(struct si_context *sctx)
 
    if (sctx->vertex_buffer_user_sgprs_dirty && sctx->num_vertex_elements &&
        sctx->screen->num_vbos_in_user_sgprs) {
-      struct radeon_cmdbuf *cs = sctx->gfx_cs;
+      struct radeon_cmdbuf *cs = &sctx->gfx_cs;
       unsigned num_desc = MIN2(sctx->num_vertex_elements, sctx->screen->num_vbos_in_user_sgprs);
       unsigned sh_offset = sh_base[PIPE_SHADER_VERTEX] + SI_SGPR_VS_VB_DESCRIPTOR_FIRST * 4;
 
@@ -2081,7 +2091,7 @@ void si_emit_graphics_shader_pointers(struct si_context *sctx)
 
 void si_emit_compute_shader_pointers(struct si_context *sctx)
 {
-   struct radeon_cmdbuf *cs = sctx->gfx_cs;
+   struct radeon_cmdbuf *cs = &sctx->gfx_cs;
    struct si_shader_selector *shader = &sctx->cs_shader_state.program->sel;
    unsigned base = R_00B900_COMPUTE_USER_DATA_0;
 

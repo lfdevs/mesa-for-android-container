@@ -52,7 +52,7 @@ static void get_rate_control_param(struct rvce_encoder *enc, struct pipe_h264_en
     * target bitrate (e.g. no over +/-10%), vbv_buffer_size should be same
     * as target bitrate.
     */
-   if (enc->enc_pic.rc.rc_method == PIPE_H264_ENC_RATE_CONTROL_METHOD_CONSTANT) {
+   if (enc->enc_pic.rc.rc_method == PIPE_H2645_ENC_RATE_CONTROL_METHOD_CONSTANT) {
            enc->enc_pic.rc.vbv_buffer_size = pic->rate_ctrl.target_bitrate;
    } else {
            enc->enc_pic.rc.vbv_buffer_size = pic->rate_ctrl.vbv_buffer_size;
@@ -107,8 +107,6 @@ static void get_pic_control_param(struct rvce_encoder *enc, struct pipe_h264_enc
    enc->enc_pic.pc.enc_num_default_active_ref_l1 = 0x00000001;
    enc->enc_pic.pc.enc_cabac_enable = pic->pic_ctrl.enc_cabac_enable;
    enc->enc_pic.pc.enc_constraint_set_flags = pic->pic_ctrl.enc_constraint_set_flags;
-   enc->enc_pic.pc.enc_num_default_active_ref_l0 = 0x00000001;
-   enc->enc_pic.pc.enc_num_default_active_ref_l1 = 0x00000001;
 }
 
 static void get_task_info_param(struct rvce_encoder *enc)
@@ -176,7 +174,7 @@ void si_vce_52_get_param(struct rvce_encoder *enc, struct pipe_h264_enc_picture_
       enc->enc_pic.addrmode_arraymode_disrdo_distwoinstants = 0x00000201;
    else
       enc->enc_pic.addrmode_arraymode_disrdo_distwoinstants = 0x01000201;
-   enc->enc_pic.is_idr = (pic->picture_type == PIPE_H264_ENC_PICTURE_TYPE_IDR);
+   enc->enc_pic.is_idr = (pic->picture_type == PIPE_H2645_ENC_PICTURE_TYPE_IDR);
 }
 
 static void create(struct rvce_encoder *enc)
@@ -221,7 +219,7 @@ static void encode(struct rvce_encoder *enc)
    if (enc->dual_inst) {
       if (bs_idx == 0)
          dep = 1;
-      else if (enc->enc_pic.picture_type == PIPE_H264_ENC_PICTURE_TYPE_IDR)
+      else if (enc->enc_pic.picture_type == PIPE_H2645_ENC_PICTURE_TYPE_IDR)
          dep = 0;
       else
          dep = 2;
@@ -287,9 +285,9 @@ static void encode(struct rvce_encoder *enc)
       enc->enc_pic.eo.enc_input_pic_addr_array_disable2pipe_disablemboffload = 0x00010000;
    RVCE_CS(enc->enc_pic.eo.enc_input_pic_addr_array_disable2pipe_disablemboffload);
    RVCE_CS(enc->enc_pic.eo.enc_input_pic_tile_config);
-   RVCE_CS(enc->enc_pic.picture_type);                                   // encPicType
-   RVCE_CS(enc->enc_pic.picture_type == PIPE_H264_ENC_PICTURE_TYPE_IDR); // encIdrFlag
-   if ((enc->enc_pic.picture_type == PIPE_H264_ENC_PICTURE_TYPE_IDR) &&
+   RVCE_CS(enc->enc_pic.picture_type);                                    // encPicType
+   RVCE_CS(enc->enc_pic.picture_type == PIPE_H2645_ENC_PICTURE_TYPE_IDR); // encIdrFlag
+   if ((enc->enc_pic.picture_type == PIPE_H2645_ENC_PICTURE_TYPE_IDR) &&
        (enc->enc_pic.eo.enc_idr_pic_id != 0))
       enc->enc_pic.eo.enc_idr_pic_id = enc->enc_pic.idr_pic_id - 1;
    else
@@ -303,7 +301,7 @@ static void encode(struct rvce_encoder *enc)
    RVCE_CS(enc->enc_pic.eo.num_ref_idx_l1_active_minus1);
 
    i = enc->enc_pic.frame_num - enc->enc_pic.ref_idx_l0;
-   if (i > 1 && enc->enc_pic.picture_type == PIPE_H264_ENC_PICTURE_TYPE_P) {
+   if (i > 1 && enc->enc_pic.picture_type == PIPE_H2645_ENC_PICTURE_TYPE_P) {
       enc->enc_pic.eo.enc_ref_list_modification_op = 0x00000001;
       enc->enc_pic.eo.enc_ref_list_modification_num = i - 1;
       RVCE_CS(enc->enc_pic.eo.enc_ref_list_modification_op);
@@ -331,8 +329,8 @@ static void encode(struct rvce_encoder *enc)
 
    // encReferencePictureL0[0]
    RVCE_CS(0x00000000); // pictureStructure
-   if (enc->enc_pic.picture_type == PIPE_H264_ENC_PICTURE_TYPE_P ||
-       enc->enc_pic.picture_type == PIPE_H264_ENC_PICTURE_TYPE_B) {
+   if (enc->enc_pic.picture_type == PIPE_H2645_ENC_PICTURE_TYPE_P ||
+       enc->enc_pic.picture_type == PIPE_H2645_ENC_PICTURE_TYPE_B) {
       struct rvce_cpb_slot *l0 = si_l0_slot(enc);
       si_vce_frame_offset(enc, l0, &luma_offset, &chroma_offset);
       RVCE_CS(l0->picture_type);
@@ -369,7 +367,7 @@ static void encode(struct rvce_encoder *enc)
 
    // encReferencePictureL1[0]
    RVCE_CS(0x00000000); // pictureStructure
-   if (enc->enc_pic.picture_type == PIPE_H264_ENC_PICTURE_TYPE_B) {
+   if (enc->enc_pic.picture_type == PIPE_H2645_ENC_PICTURE_TYPE_B) {
       struct rvce_cpb_slot *l1 = si_l1_slot(enc);
       si_vce_frame_offset(enc, l1, &luma_offset, &chroma_offset);
       RVCE_CS(l1->picture_type);
@@ -589,11 +587,11 @@ static void task_info(struct rvce_encoder *enc, uint32_t op, uint32_t dep, uint3
    RVCE_BEGIN(0x00000002); // task info
    if (op == 0x3) {
       if (enc->task_info_idx) {
-         uint32_t offs = enc->cs->current.cdw - enc->task_info_idx + 3;
+         uint32_t offs = enc->cs.current.cdw - enc->task_info_idx + 3;
          // Update offsetOfNextTaskInfo
-         enc->cs->current.buf[enc->task_info_idx] = offs;
+         enc->cs.current.buf[enc->task_info_idx] = offs;
       }
-      enc->task_info_idx = enc->cs->current.cdw;
+      enc->task_info_idx = enc->cs.current.cdw;
    }
    enc->enc_pic.ti.task_operation = op;
    enc->enc_pic.ti.reference_picture_dependency = dep;

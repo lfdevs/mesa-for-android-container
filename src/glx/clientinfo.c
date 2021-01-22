@@ -39,11 +39,56 @@ __glX_send_client_info(struct glx_display *glx_dpy)
    Bool any_screen_has_ARB_create_context = False;
    Bool any_screen_has_ARB_create_context_profile = False;
    unsigned i;
+   /* You need GLX_ARB_create_context_profile to get beyond 3.1 anyway */
    static const uint32_t gl_versions[] = {
-      1, 4,
+      2, 1,
+      3, 0,
+      3, 1,
    };
+   /*
+    * This is weird, but it matches what NVIDIA does/expects. For big-GL
+    * below 3.2 there is no such thing as a "profile", so we name them all
+    * with no profile bits. Except we don't name anything lower than 2.1,
+    * since GLX_ARB_create_context_profile says:
+    *
+    *   "Only the highest supported version below 3.0 should be sent, since
+    *   OpenGL 2.1 is backwards compatible with all earlier versions."
+    *
+    * In order to also support GLES below 3.2, we name every possible GLES
+    * version with the ES2 bit set, which happens to just mean GLES generally
+    * and not a particular major version. 3.2 happens to be a legal version
+    * number for both big-GL and GLES, so it gets all three bits set.
+    * Everything 3.3 and above is big-GL only so gets the core and compat
+    * bits set.
+    */
    static const uint32_t gl_versions_profiles[] = {
-      1, 4, 0x00000000,
+      1, 0, GLX_CONTEXT_ES2_PROFILE_BIT_EXT,
+      1, 1, GLX_CONTEXT_ES2_PROFILE_BIT_EXT,
+      2, 0, GLX_CONTEXT_ES2_PROFILE_BIT_EXT,
+      2, 1, 0x0,
+      3, 0, 0x0,
+      3, 0, GLX_CONTEXT_ES2_PROFILE_BIT_EXT,
+      3, 1, 0x0,
+      3, 1, GLX_CONTEXT_ES2_PROFILE_BIT_EXT,
+      3, 2, GLX_CONTEXT_CORE_PROFILE_BIT_ARB |
+            GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB |
+            GLX_CONTEXT_ES2_PROFILE_BIT_EXT,
+      3, 3, GLX_CONTEXT_CORE_PROFILE_BIT_ARB |
+            GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
+      4, 0, GLX_CONTEXT_CORE_PROFILE_BIT_ARB |
+            GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
+      4, 1, GLX_CONTEXT_CORE_PROFILE_BIT_ARB |
+            GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
+      4, 2, GLX_CONTEXT_CORE_PROFILE_BIT_ARB |
+            GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
+      4, 3, GLX_CONTEXT_CORE_PROFILE_BIT_ARB |
+            GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
+      4, 4, GLX_CONTEXT_CORE_PROFILE_BIT_ARB |
+            GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
+      4, 5, GLX_CONTEXT_CORE_PROFILE_BIT_ARB |
+            GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
+      4, 6, GLX_CONTEXT_CORE_PROFILE_BIT_ARB |
+            GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
    };
    static const char glx_extensions[] =
       "GLX_ARB_create_context GLX_ARB_create_context_profile";
@@ -70,8 +115,6 @@ __glX_send_client_info(struct glx_display *glx_dpy)
     * imagine an implementation that supports GLX_SGIX_fbconfig and
     * GLX_ARB_create_context but not GLX 1.4.  Making GLX 1.4 a hard
     * requirement in this case does not seem like a limitation.
-    *
-    * This library currently only supports struct GLXClientInfo.
     */
 
    if (glx_dpy->majorVersion == 1 && glx_dpy->minorVersion == 0)

@@ -183,7 +183,6 @@ with_dri_i965 = dri_drivers.contains('i965')
 with_dri_r100 = dri_drivers.contains('r100')
 with_dri_r200 = dri_drivers.contains('r200')
 with_dri_nouveau = dri_drivers.contains('nouveau')
-with_dri_swrast = dri_drivers.contains('swrast')
 
 with_dri = dri_drivers.length() != 0
 
@@ -235,6 +234,7 @@ with_gallium_virgl = gallium_drivers.contains('virgl')
 with_gallium_swr = gallium_drivers.contains('swr')
 with_gallium_lima = gallium_drivers.contains('lima')
 with_gallium_zink = gallium_drivers.contains('zink')
+with_gallium_d3d12 = gallium_drivers.contains('d3d12')
 
 with_gallium = gallium_drivers.length() != 0
 
@@ -282,9 +282,6 @@ with_any_intel = with_dri_i965 or with_intel_vk or with_gallium_iris
 if with_swrast_vk and not with_gallium_softpipe
   error('swrast vulkan requires gallium swrast')
 endif
-if with_dri_swrast and (with_gallium_softpipe or with_gallium_swr)
-  error('Only one swrast provider can be built')
-endif
 if with_dri_i915 and with_gallium_i915
   error('Only one i915 provider can be built')
 endif
@@ -297,6 +294,21 @@ endif
 if with_aco_tests and not with_amd_vk
   error('ACO tests require Radv')
 endif
+
+dep_clang = dependency(
+  'clang',
+  method : 'cmake',
+  static : true,
+  modules : [
+    'clangBasic', 'clangCodeGen', 'clangDriver', 'clangFrontend', 'clangFrontendTool',
+    'clangHandleCXX', 'clangHandleLLVM',
+  ],
+  required : get_option('microsoft-clc'),
+)
+with_microsoft_clc = dep_clang.found()
+with_clc = dep_clang.found()
+
+with_spirv_to_dxil = get_option('spirv-to-dxil')
 
 if host_machine.system() == 'darwin'
   with_dri_platform = 'apple'
@@ -420,7 +432,7 @@ if _egl == 'auto'
     with_dri and with_shared_glapi
   )
 elif _egl == 'enabled'
-  if not with_dri
+  if not with_dri and not with_platform_haiku
     error('EGL requires dri')
   elif not with_shared_glapi
     error('EGL requires shared-glapi')
@@ -436,7 +448,7 @@ endif
 
 # Android uses emutls for versions <= P/28. For USE_ELF_TLS we need ELF TLS.
 use_elf_tls = false
-if not ['windows', 'freebsd', 'openbsd'].contains(host_machine.system()) and (not with_platform_android or get_option('platform-sdk-version') >= 29)
+if not ['windows', 'freebsd', 'openbsd', 'haiku'].contains(host_machine.system()) and (not with_platform_android or get_option('platform-sdk-version') >= 29)
   pre_args += '-DUSE_ELF_TLS'
   use_elf_tls = true
 endif
@@ -464,6 +476,7 @@ if with_glx != 'disabled'
 endif
 
 with_glvnd = get_option('glvnd')
+glvnd_vendor_name = get_option('glvnd-vendor-name')
 if with_glvnd
   if with_platform_windows
     error('glvnd cannot be used on Windows')
@@ -502,8 +515,8 @@ if with_any_vk and (with_platform_x11 and not with_dri3)
   error('Vulkan drivers require dri3 for X11 support')
 endif
 if with_dri
-  if with_glx == 'disabled' and not with_egl and not with_gbm and with_osmesa != 'classic'
-    error('building dri drivers require at least one windowing system or classic osmesa')
+  if with_glx == 'disabled' and not with_egl and not with_gbm
+    error('building dri drivers require at least one windowing system')
   endif
 endif
 
@@ -555,6 +568,12 @@ endif
 
 if with_gallium_zink
   dep_vulkan = dependency('vulkan')
+endif
+
+if with_gallium_d3d12 or with_microsoft_clc
+  dep_dxheaders = dependency('DirectX-Headers', fallback : ['DirectX-Headers', 'dep_dxheaders'],
+    required : with_gallium_d3d12
+  ) 
 endif
 
 if with_vulkan_overlay_layer or with_aco_tests
@@ -818,6 +837,7 @@ gl_pkgconfig_c_flags = []
 if with_platform_x11
   if with_any_vk or with_egl or (with_glx == 'dri' and with_dri_platform == 'drm')
     pre_args += '-DHAVE_X11_PLATFORM'
+    pre_args += '-DHAVE_XCB_PLATFORM'
   endif
   if with_glx == 'xlib' or with_glx == 'gallium-xlib'
     pre_args += '-DUSE_XSHM'
@@ -918,9 +938,16 @@ if _shader_cache != 'disabled'
   endif
 endif
 
+if with_shader_cache 
+  shader_cache_max_size = get_option('shader-cache-max-size')
+  if shader_cache_max_size != ''
+    pre_args += '-DMESA_GLSL_CACHE_MAX_SIZE="@0@"'.format(shader_cache_max_size)
+  endif
+endif
+
 # Check for GCC style builtins
 foreach b : ['bswap32', 'bswap64', 'clz', 'clzll', 'ctz', 'expect', 'ffs',
-             'ffsll', 'popcount', 'popcountll', 'unreachable']
+             'ffsll', 'popcount', 'popcountll', 'unreachable', 'types_compatible_p']
   if cc.has_function(b)
     pre_args += '-DHAVE___BUILTIN_@0@'.format(b.to_upper())
   endif
@@ -943,7 +970,7 @@ if cc.compiles('__uint128_t foo(void) { return 0; }',
 endif
 
 # TODO: this is very incomplete
-if ['linux', 'cygwin', 'gnu', 'freebsd', 'gnu/kfreebsd'].contains(host_machine.system())
+if ['linux', 'cygwin', 'gnu', 'freebsd', 'gnu/kfreebsd', 'haiku'].contains(host_machine.system())
   pre_args += '-D_GNU_SOURCE'
 elif host_machine.system() == 'sunos'
   pre_args += '-D__EXTENSIONS__'
@@ -962,6 +989,7 @@ elif host_machine.system() == 'windows'
       '-D_SCL_SECURE_NO_DEPRECATE',
       '-D_ALLOW_KEYWORD_MACROS',
       '-D_HAS_EXCEPTIONS=0', # Tell C++ STL to not use exceptions
+      '-DNOMINMAX',
     ]
   else
     pre_args += ['-D__MSVCRT_VERSION__=0x0700']
@@ -1062,7 +1090,7 @@ else
   # Check for C and C++ arguments for MSVC compatibility. These are only used
   # in parts of the mesa code base that need to compile with MSVC, mainly
   # common code
-  foreach a : ['-Werror=pointer-arith', '-Werror=vla', '-Werror=gnu-empty-initializer']
+  foreach a : ['-Werror=pointer-arith', '-Werror=gnu-empty-initializer']
     if cc.has_argument(a)
       c_msvc_compat_args += a
     endif
@@ -1101,6 +1129,21 @@ if host_machine.system() == 'windows'
       language : ['c', 'cpp'],
     )
   endif
+endif
+
+if get_option('sse2') and host_machine.system() == 'windows' and host_machine.cpu_family() == 'x86' and cc.get_id() == 'gcc'
+  # These settings make generated MinGW code match MSVC and follow
+  # GCC advice on https://gcc.gnu.org/wiki/FloatingPointMath#x86note
+  #
+  # NOTE: We need to ensure stack is realigned given that we
+  # produce shared objects, and have no control over the stack
+  # alignment policy of the application. Therefore we need
+  # -mstackrealign or -mincoming-stack-boundary=2.
+  #
+  # XXX: We could have SSE without -mstackrealign if we always used
+  # __attribute__((force_align_arg_pointer)), but that's not
+  # always the case.
+  c_args += ['-msse', '-msse2', '-mfpmath=sse', '-mstackrealign']
 endif
 
 if host_machine.cpu_family().startswith('x86') and cc.get_id() != 'msvc'
@@ -1330,9 +1373,12 @@ else
   dep_clock = cc.find_library('rt')
 endif
 
-# TODO: some of these may be conditional
-dep_zlib = dependency('zlib', version : '>= 1.2.3', fallback : ['zlib', 'zlib_dep'])
-pre_args += '-DHAVE_ZLIB'
+dep_zlib = dependency('zlib', version : '>= 1.2.3',
+                      fallback : ['zlib', 'zlib_dep'],
+                      required : get_option('zlib'))
+if dep_zlib.found()
+  pre_args += '-DHAVE_ZLIB'
+endif
 
 _zstd = get_option('zstd')
 if _zstd == 'true'
@@ -1371,6 +1417,10 @@ endif
 # this only exists on linux so either this is linux and it will be found, or
 # it's not linux and wont
 dep_m = cc.find_library('m', required : false)
+
+if with_platform_haiku
+  dep_network = cc.find_library('network')
+endif
 
 # Check for libdrm. Various drivers have different libdrm version requirements,
 # but we always want to use the same version for all libdrm modules. That means
@@ -1453,12 +1503,21 @@ if with_amd_vk or with_gallium_radeonsi or with_gallium_r600
 endif
 if with_gallium_opencl
   llvm_modules += [
-    'all-targets', 'linker', 'coverage', 'instrumentation', 'ipo', 'irreader',
-    'lto', 'option', 'objcarcopts', 'profiledata',
+    'linker', 'coverage', 'instrumentation', 'ipo', 'irreader',
+    'lto', 'option', 'objcarcopts', 'profiledata'
   ]
+  llvm_optional_modules += ['frontendopenmp']
+endif
+if with_microsoft_clc
+  llvm_modules += ['target', 'linker', 'irreader', 'option', 'libdriver']
+endif
+if with_tests
+  llvm_modules += 'native'
 endif
 
-if with_amd_vk or with_gallium_radeonsi or with_gallium_opencl
+if with_microsoft_clc
+  _llvm_version = '>= 10.0.0'
+elif with_amd_vk or with_gallium_radeonsi or with_gallium_opencl
   _llvm_version = '>= 8.0.0'
 elif with_gallium_swr
   _llvm_version = '>= 6.0.0'
@@ -1508,11 +1567,12 @@ if _llvm != 'disabled'
     optional_modules : llvm_optional_modules,
     required : (
       with_amd_vk or with_gallium_radeonsi or with_gallium_swr or
-      with_gallium_opencl or _llvm == 'enabled'
+      with_gallium_opencl or with_microsoft_clc or _llvm == 'enabled'
     ),
     static : not _shared_llvm,
     method : _llvm_method,
     fallback : ['llvm', 'dep_llvm'],
+    include_type : 'system',
   )
   with_llvm = dep_llvm.found()
 endif
@@ -1550,9 +1610,11 @@ elif with_amd_vk or with_gallium_radeonsi or with_gallium_swr
   error('The following drivers require LLVM: Radv, RadeonSI, SWR. One of these is enabled, but LLVM is disabled.')
 elif with_gallium_opencl
   error('The OpenCL "Clover" state tracker requires LLVM, but LLVM is disabled.')
+elif with_microsoft_clc
+  error('The Microsoft CLC compiler requires LLVM, but LLVM is disabled.')
 endif
 
-with_opencl_spirv = _opencl != 'disabled' and get_option('opencl-spirv')
+with_opencl_spirv = (_opencl != 'disabled' and get_option('opencl-spirv')) or with_microsoft_clc
 if with_opencl_spirv
   chosen_llvm_version_array = dep_llvm.version().split('.')
   chosen_llvm_version_major = chosen_llvm_version_array[0].to_int()
@@ -1577,7 +1639,10 @@ else
   dep_llvmspirvlib = null_dep
 endif
 
-if (with_amd_vk or with_gallium_radeonsi or with_gallium_opencl or
+with_opencl_native = _opencl != 'disabled' and get_option('opencl-native')
+
+if (with_amd_vk or with_gallium_radeonsi or
+    (with_gallium_opencl and with_opencl_native) or
     (with_gallium_r600 and with_llvm))
   dep_elf = dependency('libelf', required : false)
   if not dep_elf.found()
@@ -1610,7 +1675,14 @@ else
   dep_valgrind = null_dep
 endif
 
-# pthread stubs. Lets not and say we didn't
+# AddressSanitizer's leak reports need all the symbols to be present at exit to
+# decode well, which runs afoul of our dlopen()/dlclose()ing of the DRI drivers.
+# Set a flag so we can skip the dlclose for asan builds.
+if ['address', 'address,undefined'].contains(get_option('b_sanitize'))
+  asan_c_args = ['-DBUILT_WITH_ASAN=1']
+else
+  asan_c_args = ['-DBUILT_WITH_ASAN=0']
+endif
 
 if host_machine.system() == 'windows'
   # Prefer the winflexbison versions, they're much easier to install and have
@@ -1622,7 +1694,7 @@ if host_machine.system() == 'windows'
     # _fileno functions)
     prog_flex = [prog_flex, '--wincompat', '-D__STDC_VERSION__=199901']
   else
-    prog_flex = [find_program('lex', 'flex', required : with_any_opengl)]
+    prog_flex = [find_program('flex', 'lex', required : with_any_opengl)]
   endif
   # Force flex to use const keyword in prototypes, as relies on __cplusplus or
   # __STDC__ macro to determine whether it's safe to use const keyword, but
@@ -1631,7 +1703,7 @@ if host_machine.system() == 'windows'
 
   prog_bison = find_program('win_bison', required : false)
   if not prog_bison.found()
-    prog_bison = find_program('yacc', 'bison', required : with_any_opengl)
+    prog_bison = find_program('bison', 'yacc', required : with_any_opengl)
   endif
 else
   prog_bison = find_program('bison', required : with_any_opengl)
@@ -1669,8 +1741,8 @@ else
   dep_unwind = null_dep
 endif
 
-if with_osmesa != 'none'
-  if with_osmesa == 'gallium' and not with_gallium_softpipe
+if with_osmesa
+  if not with_gallium_softpipe
     error('OSMesa gallium requires gallium softpipe or llvmpipe.')
   endif
   if host_machine.system() == 'windows'
@@ -1701,8 +1773,8 @@ if with_platform_wayland
     wl_scanner_arg = 'code'
   endif
   dep_wl_protocols = dependency('wayland-protocols', version : '>= 1.8')
-  dep_wayland_client = dependency('wayland-client', version : '>=1.11')
-  dep_wayland_server = dependency('wayland-server', version : '>=1.11')
+  dep_wayland_client = dependency('wayland-client', version : '>=1.18')
+  dep_wayland_server = dependency('wayland-server', version : '>=1.18')
   if with_egl
     dep_wayland_egl = dependency('wayland-egl-backend', version : '>= 3')
     dep_wayland_egl_headers = dep_wayland_egl.partial_dependency(compile_args : true)
@@ -1716,7 +1788,6 @@ endif
 
 dep_x11 = null_dep
 dep_xext = null_dep
-dep_xdamage = null_dep
 dep_xfixes = null_dep
 dep_x11_xcb = null_dep
 dep_xcb = null_dep
@@ -1742,7 +1813,6 @@ if with_platform_x11
   elif with_glx == 'dri'
     dep_x11 = dependency('x11')
     dep_xext = dependency('xext')
-    dep_xdamage = dependency('xdamage', version : '>= 1.1')
     dep_xfixes = dependency('xfixes', version : '>= 2.0')
     dep_xcb_glx = dependency('xcb-glx', version : '>= 1.8.1')
     dep_xcb_shm = dependency('xcb-shm')
@@ -1844,7 +1914,7 @@ if with_glx == 'xlib' or with_glx == 'gallium-xlib'
   gl_priv_reqs += ['x11', 'xext', 'xcb']
 elif with_glx == 'dri'
   gl_priv_reqs += [
-    'x11', 'xext', 'xdamage >= 1.1', 'xfixes', 'x11-xcb', 'xcb',
+    'x11', 'xext', 'xfixes', 'x11-xcb', 'xcb',
     'xcb-glx >= 1.8.1']
   if with_dri_platform == 'drm'
     gl_priv_reqs += 'xcb-dri2 >= 1.8'
@@ -1910,13 +1980,9 @@ lines = ['',
                                                     with_gles2 ? 'yes' : 'no'),
 ]
 
-if with_osmesa != 'none'
+if with_osmesa
   lines += ''
-  suffix = ''
-  if with_osmesa == 'gallium'
-    suffix = '(Gallium)'
-  endif
-  lines += 'OSMesa:          lib' + osmesa_lib_name + suffix
+  lines += 'OSMesa:          lib' + osmesa_lib_name
 else
   lines += 'OSMesa:          no'
 endif

@@ -244,6 +244,18 @@ struct InstrPred {
                return false;
             return true;
          }
+         case Format::VOP3P: {
+            VOP3P_instruction* a3P = static_cast<VOP3P_instruction*>(a);
+            VOP3P_instruction* b3P = static_cast<VOP3P_instruction*>(b);
+            for (unsigned i = 0; i < 3; i++) {
+               if (a3P->neg_lo[i] != b3P->neg_lo[i] ||
+                   a3P->neg_hi[i] != b3P->neg_hi[i])
+                  return false;
+            }
+            return a3P->opsel_lo == b3P->opsel_lo &&
+                   a3P->opsel_hi == b3P->opsel_hi &&
+                   a3P->clamp == b3P->clamp;
+         }
          case Format::PSEUDO_REDUCTION: {
             Pseudo_reduction_instruction *aR = static_cast<Pseudo_reduction_instruction*>(a);
             Pseudo_reduction_instruction *bR = static_cast<Pseudo_reduction_instruction*>(b);
@@ -342,7 +354,7 @@ struct vn_ctx {
     */
    uint32_t exec_id = 1;
 
-   vn_ctx(Program* program) : program(program) {
+   vn_ctx(Program* program_) : program(program_) {
       static_assert(sizeof(Temp) == 4, "Temp must fit in 32bits");
       unsigned size = 0;
       for (Block& block : program->blocks)
@@ -383,7 +395,7 @@ void process_block(vn_ctx& ctx, Block& block)
           instr->opcode == aco_opcode::p_demote_to_helper)
          ctx.exec_id++;
 
-      if (instr->definitions.empty() || instr->opcode == aco_opcode::p_phi || instr->opcode == aco_opcode::p_linear_phi) {
+      if (instr->definitions.empty() || is_phi(instr) || instr->definitions[0].isNoCSE()) {
          new_instructions.emplace_back(std::move(instr));
          continue;
       }

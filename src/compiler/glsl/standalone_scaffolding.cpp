@@ -142,6 +142,7 @@ void
 _mesa_delete_linked_shader(struct gl_context *,
                            struct gl_linked_shader *sh)
 {
+   ralloc_free(sh->Program);
    ralloc_free(sh);
 }
 
@@ -184,7 +185,6 @@ void initialize_context_to_defaults(struct gl_context *ctx, gl_api api)
 
    ctx->API = api;
 
-   ctx->Extensions.dummy_false = false;
    ctx->Extensions.dummy_true = true;
    ctx->Extensions.ARB_compute_shader = true;
    ctx->Extensions.ARB_compute_variable_group_size = true;

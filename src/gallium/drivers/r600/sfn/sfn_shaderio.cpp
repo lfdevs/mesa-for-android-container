@@ -109,12 +109,38 @@ void ShaderInputSystemValue::set_specific_ioinfo(r600_shader_io& io) const
    io.ij_index = 0;
 }
 
+ShaderInputVarying::ShaderInputVarying(tgsi_semantic _name, int sid, unsigned driver_location,
+                                       unsigned frac, unsigned components,
+                                       tgsi_interpolate_mode interpolate,
+                                       tgsi_interpolate_loc interp_loc):
+   ShaderInput(_name),
+   m_driver_location(driver_location),
+   m_location_frac(frac),
+   m_sid(sid),
+   m_interpolate(interpolate),
+   m_interpolate_loc(interp_loc),
+   m_ij_index(-10),
+   m_lds_pos(0),
+   m_mask((1 << components) - 1)
+{
+   evaluate_spi_sid();
+
+   m_ij_index = interpolate == TGSI_INTERPOLATE_LINEAR ? 3 : 0;
+   switch (interp_loc) {
+   case TGSI_INTERPOLATE_LOC_CENTROID: m_ij_index += 2; break;
+   case TGSI_INTERPOLATE_LOC_CENTER: m_ij_index += 1; break;
+   default:
+      ;
+   }
+}
+
 ShaderInputVarying::ShaderInputVarying(tgsi_semantic _name, int sid, nir_variable *input):
    ShaderInput(_name),
    m_driver_location(input->data.driver_location),
    m_location_frac(input->data.location_frac),
    m_sid(sid),
    m_ij_index(-10),
+   m_lds_pos(0),
    m_mask((1 << input->type->components()) - 1)
 {
    sfn_log << SfnLog::io << __func__
@@ -156,6 +182,10 @@ ShaderInputVarying::ShaderInputVarying(tgsi_semantic _name, int sid, nir_variabl
       break;
 
    case INTERP_MODE_FLAT:
+      m_interpolate = TGSI_INTERPOLATE_CONSTANT;
+      break;
+
+   default:
       m_interpolate = TGSI_INTERPOLATE_CONSTANT;
       break;
    }
@@ -217,7 +247,8 @@ ShaderInputVarying::ShaderInputVarying(tgsi_semantic name,
    m_interpolate(orig.m_interpolate),
    m_interpolate_loc(orig.m_interpolate_loc),
    m_ij_index(orig.m_ij_index),
-   m_lds_pos(0)
+   m_lds_pos(0),
+   m_mask(0)
 {
    evaluate_spi_sid();
 }
@@ -261,6 +292,15 @@ ShaderInputColor::ShaderInputColor(tgsi_semantic name, int sid, nir_variable *in
    m_back_color_input_idx(0)
 {
    sfn_log << SfnLog::io << __func__ << "name << " << name << " sid << " << sid << "\n";
+}
+
+ShaderInputColor::ShaderInputColor(tgsi_semantic _name, int sid, unsigned driver_location,
+                                   unsigned frac, unsigned components, tgsi_interpolate_mode interpolate,
+                                   tgsi_interpolate_loc interp_loc):
+   ShaderInputVarying(_name, sid, driver_location,frac, components, interpolate, interp_loc),
+   m_back_color_input_idx(0)
+{
+   sfn_log << SfnLog::io << __func__ << "name << " << _name << " sid << " << sid << "\n";
 }
 
 void ShaderInputColor::set_back_color(unsigned back_color_input_idx)

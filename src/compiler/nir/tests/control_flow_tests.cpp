@@ -37,7 +37,7 @@ nir_cf_test::nir_cf_test()
    glsl_type_singleton_init_or_ref();
 
    static const nir_shader_compiler_options options = { };
-   nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_VERTEX, &options);
+   b = nir_builder_init_simple_shader(MESA_SHADER_VERTEX, &options, "cf test");
 }
 
 nir_cf_test::~nir_cf_test()

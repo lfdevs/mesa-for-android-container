@@ -199,9 +199,8 @@ static void *vc4_get_yuv_vs(struct pipe_context *pctx)
                                          PIPE_SHADER_IR_NIR,
                                          PIPE_SHADER_VERTEX);
 
-   nir_builder b;
-   nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_VERTEX, options);
-   b.shader->info.name = ralloc_strdup(b.shader, "linear_blit_vs");
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_VERTEX, options,
+                                                  "linear_blit_vs");
 
    const struct glsl_type *vec4 = glsl_vec4_type();
    nir_variable *pos_in = nir_variable_create(b.shader, nir_var_shader_in,
@@ -246,9 +245,8 @@ static void *vc4_get_yuv_fs(struct pipe_context *pctx, int cpp)
                                          PIPE_SHADER_IR_NIR,
                                          PIPE_SHADER_FRAGMENT);
 
-   nir_builder b;
-   nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, options);
-   b.shader->info.name = ralloc_strdup(b.shader, name);
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT,
+                                                  options, "%s", name);
 
    const struct glsl_type *vec4 = glsl_vec4_type();
    const struct glsl_type *glsl_int = glsl_int_type();
@@ -293,19 +291,15 @@ static void *vc4_get_yuv_fs(struct pipe_context *pctx, int cpp)
            y_offset = nir_imul(&b, y, stride);
    }
 
-   nir_intrinsic_instr *load =
-           nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_ubo);
-   load->num_components = 1;
-   nir_ssa_dest_init(&load->instr, &load->dest, load->num_components, 32, NULL);
-   load->src[0] = nir_src_for_ssa(one);
-   load->src[1] = nir_src_for_ssa(nir_iadd(&b, x_offset, y_offset));
-   nir_intrinsic_set_align(load,  4, 0);
-   nir_intrinsic_set_range_base(load, 0);
-   nir_intrinsic_set_range(load, ~0);
-   nir_builder_instr_insert(&b, &load->instr);
+   nir_ssa_def *load =
+      nir_load_ubo(&b, 1, 32, one, nir_iadd(&b, x_offset, y_offset),
+                   .align_mul = 4,
+                   .align_offset = 0,
+                   .range_base = 0,
+                   .range = ~0);
 
    nir_store_var(&b, color_out,
-                 nir_unpack_unorm_4x8(&b, &load->dest.ssa),
+                 nir_unpack_unorm_4x8(&b, load),
                  0xf);
 
    struct pipe_shader_state shader_tmpl = {

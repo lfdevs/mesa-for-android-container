@@ -28,6 +28,8 @@
 #include <strings.h>
 #include "i965_asm.h"
 
+#undef ALIGN16
+
 #define YYLTYPE YYLTYPE
 typedef struct YYLTYPE
 {

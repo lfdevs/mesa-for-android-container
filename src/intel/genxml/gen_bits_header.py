@@ -80,7 +80,16 @@ static inline uint32_t ATTRIBUTE_PURE
 ${item.token_name}_${prop}(const struct gen_device_info *devinfo)
 {
    switch (devinfo->gen) {
-   case 12: return ${item.get_prop(prop, 12)};
+   case 12:
+%if item.get_prop(prop, 12.5) == item.get_prop(prop, 12):
+      return ${item.get_prop(prop, 12)};
+%else:
+      if (gen_device_info_is_12hp(devinfo)) {
+         return ${item.get_prop(prop, 12.5)};
+      } else {
+         return ${item.get_prop(prop, 12)};
+      }
+%endif
    case 11: return ${item.get_prop(prop, 11)};
    case 9: return ${item.get_prop(prop, 9)};
    case 8: return ${item.get_prop(prop, 8)};

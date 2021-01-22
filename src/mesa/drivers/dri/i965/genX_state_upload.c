@@ -23,6 +23,8 @@
 
 #include <assert.h>
 
+#include "main/samplerobj.h"
+
 #include "dev/gen_device_info.h"
 #include "common/gen_sample_positions.h"
 #include "genxml/gen_macros.h"
@@ -52,7 +54,6 @@
 #include "main/fbobject.h"
 #include "main/framebuffer.h"
 #include "main/glformats.h"
-#include "main/samplerobj.h"
 #include "main/shaderapi.h"
 #include "main/stencil.h"
 #include "main/transformfeedback.h"
@@ -900,12 +901,10 @@ static const struct brw_tracked_state genX(index_buffer) = {
 static void
 genX(upload_cut_index)(struct brw_context *brw)
 {
-   const struct gl_context *ctx = &brw->ctx;
-
    brw_batch_emit(brw, GENX(3DSTATE_VF), vf) {
-      if (ctx->Array._PrimitiveRestart && brw->ib.ib) {
+      if (brw->prim_restart.enable_cut_index && brw->ib.ib) {
          vf.IndexedDrawCutIndexEnable = true;
-         vf.CutIndex = ctx->Array._RestartIndex[brw->ib.index_size - 1];
+         vf.CutIndex = brw->prim_restart.restart_index;
       }
    }
 }
@@ -4967,40 +4966,40 @@ genX(upload_default_color)(struct brw_context *brw,
        * R channel, while the hardware uses A.  Spam R into all the
        * channels for safety.
        */
-      color.ui[0] = sampler->BorderColor.ui[0];
-      color.ui[1] = sampler->BorderColor.ui[0];
-      color.ui[2] = sampler->BorderColor.ui[0];
-      color.ui[3] = sampler->BorderColor.ui[0];
+      color.ui[0] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[1] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[2] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[3] = sampler->Attrib.BorderColor.ui[0];
       break;
    case GL_ALPHA:
       color.ui[0] = 0u;
       color.ui[1] = 0u;
       color.ui[2] = 0u;
-      color.ui[3] = sampler->BorderColor.ui[3];
+      color.ui[3] = sampler->Attrib.BorderColor.ui[3];
       break;
    case GL_INTENSITY:
-      color.ui[0] = sampler->BorderColor.ui[0];
-      color.ui[1] = sampler->BorderColor.ui[0];
-      color.ui[2] = sampler->BorderColor.ui[0];
-      color.ui[3] = sampler->BorderColor.ui[0];
+      color.ui[0] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[1] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[2] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[3] = sampler->Attrib.BorderColor.ui[0];
       break;
    case GL_LUMINANCE:
-      color.ui[0] = sampler->BorderColor.ui[0];
-      color.ui[1] = sampler->BorderColor.ui[0];
-      color.ui[2] = sampler->BorderColor.ui[0];
+      color.ui[0] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[1] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[2] = sampler->Attrib.BorderColor.ui[0];
       color.ui[3] = float_as_int(1.0);
       break;
    case GL_LUMINANCE_ALPHA:
-      color.ui[0] = sampler->BorderColor.ui[0];
-      color.ui[1] = sampler->BorderColor.ui[0];
-      color.ui[2] = sampler->BorderColor.ui[0];
-      color.ui[3] = sampler->BorderColor.ui[3];
+      color.ui[0] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[1] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[2] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[3] = sampler->Attrib.BorderColor.ui[3];
       break;
    default:
-      color.ui[0] = sampler->BorderColor.ui[0];
-      color.ui[1] = sampler->BorderColor.ui[1];
-      color.ui[2] = sampler->BorderColor.ui[2];
-      color.ui[3] = sampler->BorderColor.ui[3];
+      color.ui[0] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[1] = sampler->Attrib.BorderColor.ui[1];
+      color.ui[2] = sampler->Attrib.BorderColor.ui[2];
+      color.ui[3] = sampler->Attrib.BorderColor.ui[3];
       break;
    }
 
@@ -5201,7 +5200,7 @@ genX(update_sampler_state)(struct brw_context *brw,
    struct GENX(SAMPLER_STATE) samp_st = { 0 };
 
    /* Select min and mip filters. */
-   switch (sampler->MinFilter) {
+   switch (sampler->Attrib.MinFilter) {
    case GL_NEAREST:
       samp_st.MinModeFilter = MAPFILTER_NEAREST;
       samp_st.MipModeFilter = MIPFILTER_NONE;
@@ -5231,21 +5230,21 @@ genX(update_sampler_state)(struct brw_context *brw,
    }
 
    /* Select mag filter. */
-   samp_st.MagModeFilter = sampler->MagFilter == GL_LINEAR ?
+   samp_st.MagModeFilter = sampler->Attrib.MagFilter == GL_LINEAR ?
       MAPFILTER_LINEAR : MAPFILTER_NEAREST;
 
    /* Enable anisotropic filtering if desired. */
    samp_st.MaximumAnisotropy = RATIO21;
 
-   if (sampler->MaxAnisotropy > 1.0f) {
+   if (sampler->Attrib.MaxAnisotropy > 1.0f) {
       if (samp_st.MinModeFilter == MAPFILTER_LINEAR)
          samp_st.MinModeFilter = MAPFILTER_ANISOTROPIC;
       if (samp_st.MagModeFilter == MAPFILTER_LINEAR)
          samp_st.MagModeFilter = MAPFILTER_ANISOTROPIC;
 
-      if (sampler->MaxAnisotropy > 2.0f) {
+      if (sampler->Attrib.MaxAnisotropy > 2.0f) {
          samp_st.MaximumAnisotropy =
-            MIN2((sampler->MaxAnisotropy - 2) / 2, RATIO161);
+            MIN2((sampler->Attrib.MaxAnisotropy - 2) / 2, RATIO161);
       }
    }
 
@@ -5263,10 +5262,10 @@ genX(update_sampler_state)(struct brw_context *brw,
    }
 
    bool either_nearest =
-      sampler->MinFilter == GL_NEAREST || sampler->MagFilter == GL_NEAREST;
-   unsigned wrap_s = translate_wrap_mode(sampler->WrapS, either_nearest);
-   unsigned wrap_t = translate_wrap_mode(sampler->WrapT, either_nearest);
-   unsigned wrap_r = translate_wrap_mode(sampler->WrapR, either_nearest);
+      sampler->Attrib.MinFilter == GL_NEAREST || sampler->Attrib.MagFilter == GL_NEAREST;
+   unsigned wrap_s = translate_wrap_mode(sampler->Attrib.WrapS, either_nearest);
+   unsigned wrap_t = translate_wrap_mode(sampler->Attrib.WrapT, either_nearest);
+   unsigned wrap_r = translate_wrap_mode(sampler->Attrib.WrapR, either_nearest);
 
    if (target == GL_TEXTURE_CUBE_MAP ||
        target == GL_TEXTURE_CUBE_MAP_ARRAY) {
@@ -5276,7 +5275,7 @@ genX(update_sampler_state)(struct brw_context *brw,
        * Ivybridge and Baytrail seem to have problems with CUBE mode and
        * integer formats.  Fall back to CLAMP for now.
        */
-      if ((tex_cube_map_seamless || sampler->CubeMapSeamless) &&
+      if ((tex_cube_map_seamless || sampler->Attrib.CubeMapSeamless) &&
           !(GEN_GEN == 7 && !GEN_IS_HASWELL && texObj->_IsIntegerFormat)) {
          wrap_s = TCM_CUBE;
          wrap_t = TCM_CUBE;
@@ -5300,8 +5299,8 @@ genX(update_sampler_state)(struct brw_context *brw,
    samp_st.TCZAddressControlMode = wrap_r;
 
    samp_st.ShadowFunction =
-      sampler->CompareMode == GL_COMPARE_R_TO_TEXTURE_ARB ?
-      intel_translate_shadow_compare_func(sampler->CompareFunc) : 0;
+      sampler->Attrib.CompareMode == GL_COMPARE_R_TO_TEXTURE_ARB ?
+      intel_translate_shadow_compare_func(sampler->Attrib.CompareFunc) : 0;
 
 #if GEN_GEN >= 7
    /* Set shadow function. */
@@ -5315,14 +5314,14 @@ genX(update_sampler_state)(struct brw_context *brw,
 #endif
 
    const float hw_max_lod = GEN_GEN >= 7 ? 14 : 13;
-   samp_st.MinLOD = CLAMP(sampler->MinLod, 0, hw_max_lod);
-   samp_st.MaxLOD = CLAMP(sampler->MaxLod, 0, hw_max_lod);
+   samp_st.MinLOD = CLAMP(sampler->Attrib.MinLod, 0, hw_max_lod);
+   samp_st.MaxLOD = CLAMP(sampler->Attrib.MaxLod, 0, hw_max_lod);
    samp_st.TextureLODBias =
-      CLAMP(tex_unit_lod_bias + sampler->LodBias, -16, 15);
+      CLAMP(tex_unit_lod_bias + sampler->Attrib.LodBias, -16, 15);
 
 #if GEN_GEN == 6
    samp_st.BaseMipLevel =
-      CLAMP(texObj->MinLevel + texObj->BaseLevel, 0, hw_max_lod);
+      CLAMP(texObj->MinLevel + texObj->Attrib.BaseLevel, 0, hw_max_lod);
    samp_st.MinandMagStateNotEqual =
       samp_st.MinModeFilter != samp_st.MagModeFilter;
 #endif
@@ -5337,7 +5336,7 @@ genX(update_sampler_state)(struct brw_context *brw,
        wrap_mode_needs_border_color(wrap_r)) {
       genX(upload_default_color)(brw, sampler, format, base_format,
                                  texObj->_IsIntegerFormat,
-                                 texObj->StencilSampling,
+                                 texObj->Attrib.StencilSampling,
                                  &border_color_offset);
    }
 #if GEN_GEN < 6
@@ -5370,7 +5369,7 @@ update_sampler_state(struct brw_context *brw,
    if (texObj->Target == GL_TEXTURE_BUFFER)
       return;
 
-   struct gl_texture_image *firstImage = texObj->Image[0][texObj->BaseLevel];
+   struct gl_texture_image *firstImage = texObj->Image[0][texObj->Attrib.BaseLevel];
    genX(update_sampler_state)(brw, texObj->Target,
                               ctx->Texture.CubeMapSeamless,
                               texUnit->LodBias,

@@ -46,6 +46,7 @@ struct si_shader_output_values {
 struct si_shader_context {
    struct ac_llvm_context ac;
    struct si_shader *shader;
+   struct si_shader_selector *next_shader_sel;
    struct si_screen *screen;
 
    gl_shader_stage stage;
@@ -79,15 +80,9 @@ struct si_shader_context {
 
    struct ac_arg rw_buffers;
    struct ac_arg bindless_samplers_and_images;
-   /* Common inputs for merged shaders. */
-   struct ac_arg merged_wave_info;
-   struct ac_arg merged_scratch_offset;
    struct ac_arg small_prim_cull_info;
    /* API VS */
-   struct ac_arg vertex_buffers;
    struct ac_arg vb_descriptors[5];
-   struct ac_arg rel_auto_id;
-   struct ac_arg vs_prim_id;
    struct ac_arg vertex_index0;
    /* VS states and layout of LS outputs / TCS inputs at the end
     *   [0] = clamp vertex color
@@ -109,58 +104,37 @@ struct si_shader_context {
     */
    struct ac_arg vs_state_bits;
    struct ac_arg vs_blit_inputs;
-   /* HW VS */
-   struct ac_arg streamout_config;
-   struct ac_arg streamout_write_index;
-   struct ac_arg streamout_offset[4];
 
    /* API TCS & TES */
    /* Layout of TCS outputs in the offchip buffer
     * # 6 bits
-    *   [0:5] = the number of patches per threadgroup, max = NUM_PATCHES (40)
-    * # 6 bits
-    *   [6:11] = the number of output vertices per patch, max = 32
-    * # 20 bits
-    *   [12:31] = the offset of per patch attributes in the buffer in bytes.
-    *             max = NUM_PATCHES*32*32*16
+    *   [0:5] = the number of patches per threadgroup - 1, max = 63
+    * # 5 bits
+    *   [6:10] = the number of output vertices per patch - 1, max = 31
+    * # 21 bits
+    *   [11:31] = the offset of per patch attributes in the buffer in bytes.
+    *             max = NUM_PATCHES*32*32*16 = 1M
     */
    struct ac_arg tcs_offchip_layout;
 
    /* API TCS */
    /* Offsets where TCS outputs and TCS patch outputs live in LDS:
-    *   [0:15] = TCS output patch0 offset / 16, max = NUM_PATCHES * 32 * 32
+    *   [0:15] = TCS output patch0 offset / 16, max = NUM_PATCHES * 32 * 32 = 64K (TODO: not enough bits)
     *   [16:31] = TCS output patch0 offset for per-patch / 16
-    *             max = (NUM_PATCHES + 1) * 32*32
+    *             max = (NUM_PATCHES + 1) * 32*32 = 66624 (TODO: not enough bits)
     */
    struct ac_arg tcs_out_lds_offsets;
    /* Layout of TCS outputs / TES inputs:
     *   [0:12] = stride between output patches in DW, num_outputs * num_vertices * 4
-    *            max = 32*32*4 + 32*4
+    *            max = 32*32*4 + 32*4 = 4224
     *   [13:18] = gl_PatchVerticesIn, max = 32
     *   [19:31] = high 13 bits of the 32-bit address of tessellation ring buffers
     */
    struct ac_arg tcs_out_lds_layout;
-   struct ac_arg tcs_offchip_offset;
-   struct ac_arg tcs_factor_offset;
 
    /* API TES */
    struct ac_arg tes_offchip_addr;
-   struct ac_arg tes_u;
-   struct ac_arg tes_v;
-   struct ac_arg tes_rel_patch_id;
-   /* HW ES */
-   struct ac_arg es2gs_offset;
-   /* HW GS */
-   /* On gfx10:
-    *  - bits 0..11: ordered_wave_id
-    *  - bits 12..20: number of vertices in group
-    *  - bits 22..30: number of primitives in group
-    */
-   struct ac_arg gs_tg_info;
    /* API GS */
-   struct ac_arg gs2vs_offset;
-   struct ac_arg gs_wave_id;       /* GFX6 */
-   struct ac_arg gs_vtx_offset[6]; /* in dwords (GFX6) */
    struct ac_arg gs_vtx01_offset;  /* in dwords (GFX9) */
    struct ac_arg gs_vtx23_offset;  /* in dwords (GFX9) */
    struct ac_arg gs_vtx45_offset;  /* in dwords (GFX9) */
@@ -190,22 +164,32 @@ struct si_shader_context {
 
 static inline struct si_shader_context *si_shader_context_from_abi(struct ac_shader_abi *abi)
 {
-   struct si_shader_context *ctx = NULL;
-   return container_of(abi, ctx, abi);
+   return container_of(abi, struct si_shader_context, abi);
 }
 
+/* si_shader.c */
 bool si_is_multi_part_shader(struct si_shader *shader);
 bool si_is_merged_shader(struct si_shader *shader);
 void si_add_arg_checked(struct ac_shader_args *args, enum ac_arg_regfile file, unsigned registers,
                         enum ac_arg_type type, struct ac_arg *arg, unsigned idx);
+void si_init_shader_args(struct si_shader_context *ctx, bool ngg_cull_shader);
 unsigned si_get_max_workgroup_size(const struct si_shader *shader);
+bool si_vs_needs_prolog(const struct si_shader_selector *sel,
+                        const struct si_vs_prolog_bits *prolog_key,
+                        const struct si_shader_key *key, bool ngg_cull_shader);
+void si_get_vs_prolog_key(const struct si_shader_info *info, unsigned num_input_sgprs,
+                          bool ngg_cull_shader, const struct si_vs_prolog_bits *prolog_key,
+                          struct si_shader *shader_out, union si_shader_part_key *key);
+struct nir_shader *si_get_nir_shader(struct si_shader_selector *sel,
+                                     const struct si_shader_key *key,
+                                     bool *free_nir);
 bool si_need_ps_prolog(const union si_shader_part_key *key);
 void si_get_ps_prolog_key(struct si_shader *shader, union si_shader_part_key *key,
                           bool separate_prolog);
 void si_get_ps_epilog_key(struct si_shader *shader, union si_shader_part_key *key);
 void si_fix_resource_usage(struct si_screen *sscreen, struct si_shader *shader);
-void si_create_function(struct si_shader_context *ctx, bool ngg_cull_shader);
 
+/* gfx10_shader_ngg.c */
 bool gfx10_ngg_export_prim_early(struct si_shader *shader);
 void gfx10_ngg_build_sendmsg_gs_alloc_req(struct si_shader_context *ctx);
 void gfx10_ngg_build_export_prim(struct si_shader_context *ctx, LLVMValueRef user_edgeflags[3],
@@ -228,6 +212,7 @@ void si_llvm_context_init(struct si_shader_context *ctx, struct si_screen *sscre
                           struct ac_llvm_compiler *compiler, unsigned wave_size);
 void si_llvm_create_func(struct si_shader_context *ctx, const char *name, LLVMTypeRef *return_types,
                          unsigned num_return_elems, unsigned max_workgroup_size);
+void si_llvm_create_main_func(struct si_shader_context *ctx, bool ngg_cull_shader);
 void si_llvm_optimize_module(struct si_shader_context *ctx);
 void si_llvm_dispose(struct si_shader_context *ctx);
 LLVMValueRef si_buffer_load_const(struct si_shader_context *ctx, LLVMValueRef resource,
@@ -242,17 +227,17 @@ LLVMValueRef si_insert_input_ptr(struct si_shader_context *ctx, LLVMValueRef ret
 LLVMValueRef si_prolog_get_rw_buffers(struct si_shader_context *ctx);
 void si_llvm_emit_barrier(struct si_shader_context *ctx);
 void si_llvm_declare_esgs_ring(struct si_shader_context *ctx);
-void si_init_exec_from_input(struct si_shader_context *ctx, struct ac_arg param,
-                             unsigned bitoffset);
 LLVMValueRef si_unpack_param(struct si_shader_context *ctx, struct ac_arg param, unsigned rshift,
                              unsigned bitwidth);
 LLVMValueRef si_get_primitive_id(struct si_shader_context *ctx, unsigned swizzle);
-LLVMValueRef si_llvm_get_block_size(struct ac_shader_abi *abi);
-void si_llvm_declare_compute_memory(struct si_shader_context *ctx);
-bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *nir);
 void si_build_wrapper_function(struct si_shader_context *ctx, LLVMValueRef *parts,
                                unsigned num_parts, unsigned main_part,
-                               unsigned next_shader_first_part);
+                               unsigned next_shader_first_part, bool same_thread_count);
+bool si_llvm_translate_nir(struct si_shader_context *ctx, struct si_shader *shader,
+                           struct nir_shader *nir, bool free_nir, bool ngg_cull_shader);
+bool si_llvm_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
+                            struct si_shader *shader, struct pipe_debug_callback *debug,
+                            struct nir_shader *nir, bool free_nir);
 
 /* si_shader_llvm_gs.c */
 LLVMValueRef si_is_es_thread(struct si_shader_context *ctx);

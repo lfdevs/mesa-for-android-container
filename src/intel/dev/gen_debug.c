@@ -95,7 +95,9 @@ static const struct debug_control debug_control[] = {
    { "nofc",        DEBUG_NO_FAST_CLEAR },
    { "no32",        DEBUG_NO32 },
    { "shaders",     DEBUG_WM | DEBUG_VS | DEBUG_TCS |
-                    DEBUG_TES | DEBUG_GS | DEBUG_CS },
+                    DEBUG_TES | DEBUG_GS | DEBUG_CS |
+                    DEBUG_RT },
+   { "rt",          DEBUG_RT },
    { NULL,    0 }
 };
 
@@ -109,8 +111,14 @@ intel_debug_flag_for_shader_stage(gl_shader_stage stage)
       [MESA_SHADER_GEOMETRY] = DEBUG_GS,
       [MESA_SHADER_FRAGMENT] = DEBUG_WM,
       [MESA_SHADER_COMPUTE] = DEBUG_CS,
+
+      [MESA_SHADER_RAYGEN]       = DEBUG_RT,
+      [MESA_SHADER_ANY_HIT]      = DEBUG_RT,
+      [MESA_SHADER_CLOSEST_HIT]  = DEBUG_RT,
+      [MESA_SHADER_MISS]         = DEBUG_RT,
+      [MESA_SHADER_INTERSECTION] = DEBUG_RT,
+      [MESA_SHADER_CALLABLE]     = DEBUG_RT,
    };
-   STATIC_ASSERT(MESA_SHADER_STAGES == 6);
    return flags[stage];
 }
 

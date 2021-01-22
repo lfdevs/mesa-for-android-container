@@ -785,13 +785,14 @@ CodeEmitterNV50::emitMOV(const Instruction *i)
    } else {
       if (i->encSize == 4) {
          code[0] = 0x10008000;
+         defId(i->def(0), 2);
       } else {
          code[0] = 0x10000001;
          code[1] = (typeSizeof(i->dType) == 2) ? 0 : 0x04000000;
          code[1] |= (i->lanes << 14);
+         setDst(i, 0);
          emitFlagsRd(i);
       }
-      defId(i->def(0), 2);
       srcId(i->src(0), 9);
    }
    if (df == FILE_SHADER_OUTPUT) {

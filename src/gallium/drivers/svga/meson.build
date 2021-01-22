@@ -87,9 +87,15 @@ libsvga = static_library(
     inc_src, inc_include, inc_gallium, inc_gallium_aux,
     include_directories('include')
   ],
+  dependencies : idep_mesautil,
 )
+
+svga_deps = [libsvga]
+if not with_platform_windows
+  svga_deps += libsvgadrm
+endif
 
 driver_svga = declare_dependency(
   compile_args : '-DGALLIUM_VMWGFX',
-  link_with : [libsvga, libsvgadrm],
+  link_with : svga_deps,
 )

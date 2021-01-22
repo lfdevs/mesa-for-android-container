@@ -309,7 +309,7 @@ v3d_write_uniforms(struct v3d_context *v3d, struct v3d_job *job,
 
                 case QUNIFORM_ALPHA_REF:
                         cl_aligned_f(&uniforms,
-                                     v3d->zsa->base.alpha.ref_value);
+                                     v3d->zsa->base.alpha_ref_value);
                         break;
 
                 case QUNIFORM_LINE_WIDTH:

@@ -111,8 +111,8 @@ struct FETCH_COMPILE_STATE
     bool bForceSequentialAccessEnable{false};
     bool bInstanceIDOffsetEnable{false};
 
-    FETCH_COMPILE_STATE(bool diableIndexOOBCheck = false) :
-        bDisableIndexOOBCheck(diableIndexOOBCheck){};
+    FETCH_COMPILE_STATE(bool disableIndexOOBCheck = false) :
+        bDisableIndexOOBCheck(disableIndexOOBCheck){};
 
     bool operator==(const FETCH_COMPILE_STATE& other) const
     {

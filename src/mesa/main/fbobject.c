@@ -60,20 +60,6 @@
 
 
 
-/*
- * When glGenRender/FramebuffersEXT() is called we insert pointers to
- * these placeholder objects into the hash table.
- * Later, when the object ID is first bound, we replace the placeholder
- * with the real frame/renderbuffer.
- */
-static struct gl_framebuffer DummyFramebuffer;
-static struct gl_renderbuffer DummyRenderbuffer;
-
-/* We bind this framebuffer when applications pass a NULL
- * drawable/surface in make current. */
-static struct gl_framebuffer IncompleteFramebuffer;
-
-
 static void
 delete_dummy_renderbuffer(struct gl_context *ctx, struct gl_renderbuffer *rb)
 {
@@ -87,16 +73,28 @@ delete_dummy_framebuffer(struct gl_framebuffer *fb)
 }
 
 
-void
-_mesa_init_fbobjects(struct gl_context *ctx)
-{
-   simple_mtx_init(&DummyFramebuffer.Mutex, mtx_plain);
-   simple_mtx_init(&DummyRenderbuffer.Mutex, mtx_plain);
-   simple_mtx_init(&IncompleteFramebuffer.Mutex, mtx_plain);
-   DummyFramebuffer.Delete = delete_dummy_framebuffer;
-   DummyRenderbuffer.Delete = delete_dummy_renderbuffer;
-   IncompleteFramebuffer.Delete = delete_dummy_framebuffer;
-}
+/*
+ * When glGenRender/FramebuffersEXT() is called we insert pointers to
+ * these placeholder objects into the hash table.
+ * Later, when the object ID is first bound, we replace the placeholder
+ * with the real frame/renderbuffer.
+ */
+static struct gl_framebuffer DummyFramebuffer = {
+   .Mutex = _SIMPLE_MTX_INITIALIZER_NP,
+   .Delete = delete_dummy_framebuffer,
+};
+static struct gl_renderbuffer DummyRenderbuffer = {
+   .Mutex = _SIMPLE_MTX_INITIALIZER_NP,
+   .Delete = delete_dummy_renderbuffer,
+};
+
+/* We bind this framebuffer when applications pass a NULL
+ * drawable/surface in make current. */
+static struct gl_framebuffer IncompleteFramebuffer = {
+   .Mutex = _SIMPLE_MTX_INITIALIZER_NP,
+   .Delete = delete_dummy_framebuffer,
+};
+
 
 struct gl_framebuffer *
 _mesa_get_incomplete_framebuffer(void)
@@ -301,7 +299,7 @@ get_attachment(struct gl_context *ctx, struct gl_framebuffer *fb,
    case GL_DEPTH_STENCIL_ATTACHMENT:
       if (!_mesa_is_desktop_gl(ctx) && !_mesa_is_gles3(ctx))
          return NULL;
-      /* fall-through */
+      FALLTHROUGH;
    case GL_DEPTH_ATTACHMENT_EXT:
       return &fb->Attachment[BUFFER_DEPTH];
    case GL_STENCIL_ATTACHMENT_EXT:
@@ -816,6 +814,7 @@ is_format_color_renderable(const struct gl_context *ctx, mesa_format format,
    case GL_RGB10:
    case GL_RGB9_E5:
    case GL_SR8_EXT:
+   case GL_SRG8_EXT:
       return GL_FALSE;
    default:
       break;
@@ -3122,9 +3121,6 @@ _mesa_bind_framebuffers(struct gl_context *ctx,
    if (bindReadBuf) {
       FLUSH_VERTICES(ctx, _NEW_BUFFERS);
 
-      /* check if old readbuffer was render-to-texture */
-      check_end_texture_render(ctx, oldReadFb);
-
       _mesa_reference_framebuffer(&ctx->ReadBuffer, newReadFb);
    }
 
@@ -5059,7 +5055,7 @@ invalidate_framebuffer_storage(struct gl_context *ctx,
              */
             if (_mesa_is_desktop_gl(ctx) || _mesa_is_gles3(ctx))
                break;
-            /* fallthrough */
+            FALLTHROUGH;
          case GL_COLOR_ATTACHMENT0:
          case GL_COLOR_ATTACHMENT1:
          case GL_COLOR_ATTACHMENT2:

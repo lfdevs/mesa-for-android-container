@@ -89,7 +89,10 @@ trace_surface_unwrap(struct trace_context *tr_ctx,
 
 static void
 trace_context_draw_vbo(struct pipe_context *_pipe,
-                       const struct pipe_draw_info *info)
+                       const struct pipe_draw_info *info,
+                       const struct pipe_draw_indirect_info *indirect,
+                       const struct pipe_draw_start_count *draws,
+                       unsigned num_draws)
 {
    struct trace_context *tr_ctx = trace_context(_pipe);
    struct pipe_context *pipe = tr_ctx->pipe;
@@ -98,10 +101,13 @@ trace_context_draw_vbo(struct pipe_context *_pipe,
 
    trace_dump_arg(ptr,  pipe);
    trace_dump_arg(draw_info, info);
+   trace_dump_arg(draw_indirect_info, indirect);
+   trace_dump_struct_array(draw_start_count, draws, num_draws);
+   trace_dump_arg(uint, num_draws);
 
    trace_dump_trace_flush();
 
-   pipe->draw_vbo(pipe, info);
+   pipe->draw_vbo(pipe, info, indirect, draws, num_draws);
 
    trace_dump_call_end();
 }
@@ -690,7 +696,7 @@ trace_context_set_blend_color(struct pipe_context *_pipe,
 
 static void
 trace_context_set_stencil_ref(struct pipe_context *_pipe,
-                              const struct pipe_stencil_ref *state)
+                              const struct pipe_stencil_ref state)
 {
    struct trace_context *tr_ctx = trace_context(_pipe);
    struct pipe_context *pipe = tr_ctx->pipe;
@@ -698,7 +704,7 @@ trace_context_set_stencil_ref(struct pipe_context *_pipe,
    trace_dump_call_begin("pipe_context", "set_stencil_ref");
 
    trace_dump_arg(ptr, pipe);
-   trace_dump_arg(stencil_ref, state);
+   trace_dump_arg(stencil_ref, &state);
 
    pipe->set_stencil_ref(pipe, state);
 

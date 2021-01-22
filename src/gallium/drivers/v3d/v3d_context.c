@@ -117,7 +117,7 @@ v3d_invalidate_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
 }
 
 /**
- * Flushes the current job to get up-to-date primive counts written to the
+ * Flushes the current job to get up-to-date primitive counts written to the
  * primitive counts BO, then accumulates the transform feedback primitive count
  * in the context and the corresponding vertex counts in the bound stream
  * output targets.
@@ -224,6 +224,52 @@ v3d_create_texture_shader_state_bo(struct v3d_context *v3d,
                 v3d41_create_texture_shader_state_bo(v3d, so);
         else
                 v3d33_create_texture_shader_state_bo(v3d, so);
+}
+
+void
+v3d_get_tile_buffer_size(bool is_msaa,
+                         uint32_t nr_cbufs,
+                         struct pipe_surface **cbufs,
+                         struct pipe_surface *bbuf,
+                         uint32_t *tile_width,
+                         uint32_t *tile_height,
+                         uint32_t *max_bpp)
+{
+        static const uint8_t tile_sizes[] = {
+                64, 64,
+                64, 32,
+                32, 32,
+                32, 16,
+                16, 16,
+        };
+        int tile_size_index = 0;
+        if (is_msaa)
+                tile_size_index += 2;
+
+        if (cbufs[3] || cbufs[2])
+                tile_size_index += 2;
+        else if (cbufs[1])
+                tile_size_index++;
+
+        *max_bpp = 0;
+        for (int i = 0; i < nr_cbufs; i++) {
+                if (cbufs[i]) {
+                        struct v3d_surface *surf = v3d_surface(cbufs[i]);
+                        *max_bpp = MAX2(*max_bpp, surf->internal_bpp);
+                }
+        }
+
+        if (bbuf) {
+                struct v3d_surface *bsurf = v3d_surface(bbuf);
+                assert(bbuf->texture->nr_samples <= 1 || is_msaa);
+                *max_bpp = MAX2(*max_bpp, bsurf->internal_bpp);
+        }
+
+        tile_size_index += *max_bpp;
+
+        assert(tile_size_index < ARRAY_SIZE(tile_sizes));
+        *tile_width = tile_sizes[tile_size_index * 2 + 0];
+        *tile_height = tile_sizes[tile_size_index * 2 + 1];
 }
 
 static void

@@ -111,8 +111,7 @@ no ``parallel`` field set and:
 .. code-block:: yaml
 
     variables:
-      CI_NODE_INDEX: 1
-      CI_NODE_TOTAL: 10
+      DEQP_FRACTION: 10
 
 to just run 1/10th of the test list.
 
@@ -161,10 +160,10 @@ apt cache, and other such common pitfalls of building Docker images).
 
 When running a container job, the templates will look for an existing
 build of that image in the container registry under
-``FDO_DISTRIBUTION_TAG``.  If it's found it will be reused, and if
+``MESA_IMAGE_TAG``.  If it's found it will be reused, and if
 not, the associated `.gitlab-ci/containers/<jobname>.sh`` will be run
 to build it.  So, when developing any change to container build
-scripts, you need to update the associated ``FDO_DISTRIBUTION_TAG`` to
+scripts, you need to update the associated ``MESA_IMAGE_TAG`` to
 a new unique string.  We recommend using the current date plus some
 string related to your branch (so that if you rebase on someone else's
 container update from the same day, you will get a Git conflict

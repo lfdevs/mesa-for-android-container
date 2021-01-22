@@ -27,7 +27,7 @@
 #include "u_queue.h"
 
 #include "c11/threads.h"
-
+#include "util/u_cpu_detect.h"
 #include "util/os_time.h"
 #include "util/u_string.h"
 #include "util/u_thread.h"
@@ -258,7 +258,8 @@ util_queue_thread_func(void *input)
       uint32_t mask[UTIL_MAX_CPUS / 32];
 
       memset(mask, 0xff, sizeof(mask));
-      util_set_current_thread_affinity(mask, NULL, UTIL_MAX_CPUS);
+      util_set_current_thread_affinity(mask, NULL,
+                                       util_cpu_caps.num_cpu_mask_bits);
    }
 
 #if defined(__linux__)

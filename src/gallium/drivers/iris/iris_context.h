@@ -627,11 +627,6 @@ struct iris_context {
       struct iris_bo *scratch_bos[1 << 4][MESA_SHADER_STAGES];
    } shaders;
 
-   struct {
-      struct iris_query *query;
-      bool condition;
-   } condition;
-
    struct gen_perf_context *perf_ctx;
 
    /** Frame number for debug prints */
@@ -822,7 +817,10 @@ void iris_copy_region(struct blorp_context *blorp,
 
 /* iris_draw.c */
 
-void iris_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info);
+void iris_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *info,
+                   const struct pipe_draw_indirect_info *indirect,
+                   const struct pipe_draw_start_count *draws,
+                   unsigned num_draws);
 void iris_launch_grid(struct pipe_context *, const struct pipe_grid_info *);
 
 /* iris_pipe_control.c */
@@ -980,6 +978,9 @@ void gen9_toggle_preemption(struct iris_context *ice,
 #  include "iris_genx_protos.h"
 #  undef genX
 #  define genX(x) gen12_##x
+#  include "iris_genx_protos.h"
+#  undef genX
+#  define genX(x) gen125_##x
 #  include "iris_genx_protos.h"
 #  undef genX
 #endif

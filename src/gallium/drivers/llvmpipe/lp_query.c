@@ -215,7 +215,8 @@ llvmpipe_get_query_result_resource(struct pipe_context *pipe,
    }
 
 
-   uint64_t value = 0;
+   uint64_t value = 0, value2 = 0;
+   unsigned num_values = 1;
    if (index == -1)
       if (unsignalled)
          value = 0;
@@ -258,6 +259,11 @@ llvmpipe_get_query_result_resource(struct pipe_context *pipe,
                value = pq->end[i];
             }
          }
+         break;
+      case PIPE_QUERY_SO_STATISTICS:
+         value = pq->num_primitives_written[0];
+         value2 = pq->num_primitives_generated[0];
+         num_values = 2;
          break;
       case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
          value = 0;
@@ -315,33 +321,42 @@ llvmpipe_get_query_result_resource(struct pipe_context *pipe,
    }
 
    void *dst = (uint8_t *)lpr->data + offset;
-   switch (result_type) {
-   case PIPE_QUERY_TYPE_I32: {
-      int32_t *iptr = (int32_t *)dst;
-      if (value > 0x7fffffff)
-         *iptr = 0x7fffffff;
-      else
-         *iptr = (int32_t)value;
-      break;
-   }
-   case PIPE_QUERY_TYPE_U32: {
-      uint32_t *uptr = (uint32_t *)dst;
-      if (value > 0xffffffff)
-         *uptr = 0xffffffff;
-      else
-         *uptr = (uint32_t)value;
-      break;
-   }
-   case PIPE_QUERY_TYPE_I64: {
-      int64_t *iptr = (int64_t *)dst;
-      *iptr = (int64_t)value;
-      break;
-   }
-   case PIPE_QUERY_TYPE_U64: {
-      uint64_t *uptr = (uint64_t *)dst;
-      *uptr = (uint64_t)value;
-      break;
-   }
+
+   for (unsigned i = 0; i < num_values; i++) {
+
+      if (i == 1) {
+         value = value2;
+         dst = (char *)dst + ((result_type == PIPE_QUERY_TYPE_I64 ||
+                               result_type == PIPE_QUERY_TYPE_U64) ? 8 : 4);
+      }
+      switch (result_type) {
+      case PIPE_QUERY_TYPE_I32: {
+         int32_t *iptr = (int32_t *)dst;
+         if (value > 0x7fffffff)
+            *iptr = 0x7fffffff;
+         else
+            *iptr = (int32_t)value;
+         break;
+      }
+      case PIPE_QUERY_TYPE_U32: {
+         uint32_t *uptr = (uint32_t *)dst;
+         if (value > 0xffffffff)
+            *uptr = 0xffffffff;
+         else
+            *uptr = (uint32_t)value;
+         break;
+      }
+      case PIPE_QUERY_TYPE_I64: {
+         int64_t *iptr = (int64_t *)dst;
+         *iptr = (int64_t)value;
+         break;
+      }
+      case PIPE_QUERY_TYPE_U64: {
+         uint64_t *uptr = (uint64_t *)dst;
+         *uptr = (uint64_t)value;
+         break;
+      }
+      }
    }
 }
 

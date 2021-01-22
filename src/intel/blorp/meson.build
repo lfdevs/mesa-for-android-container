@@ -34,5 +34,5 @@ libblorp = static_library(
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [idep_nir_headers, idep_genxml],
+  dependencies : [idep_nir_headers, idep_genxml, idep_mesautil],
 )

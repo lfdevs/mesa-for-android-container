@@ -180,8 +180,8 @@ nv20_emit_tex_obj(struct gl_context *ctx, int emit)
 	}
 
 	t = ctx->Texture.Unit[i]._Current;
-	s = &to_nouveau_texture(t)->surfaces[t->BaseLevel];
-	ti = t->Image[0][t->BaseLevel];
+	s = &to_nouveau_texture(t)->surfaces[t->Attrib.BaseLevel];
+	ti = t->Image[0][t->Attrib.BaseLevel];
 	sa = _mesa_get_samplerobj(ctx, i);
 
 	if (!nouveau_texture_validate(ctx, t))
@@ -199,24 +199,24 @@ nv20_emit_tex_obj(struct gl_context *ctx, int emit)
 	case GL_TEXTURE_1D:
 		tx_wrap = NV20_3D_TEX_WRAP_R_CLAMP_TO_EDGE
 			| NV20_3D_TEX_WRAP_T_CLAMP_TO_EDGE
-			| nvgl_wrap_mode_nv20(sa->WrapS) << 0;
+			| nvgl_wrap_mode_nv20(sa->Attrib.WrapS) << 0;
 		break;
 
 	default:
-		tx_wrap = nvgl_wrap_mode_nv20(sa->WrapR) << 16
-			| nvgl_wrap_mode_nv20(sa->WrapT) << 8
-			| nvgl_wrap_mode_nv20(sa->WrapS) << 0;
+		tx_wrap = nvgl_wrap_mode_nv20(sa->Attrib.WrapR) << 16
+			| nvgl_wrap_mode_nv20(sa->Attrib.WrapT) << 8
+			| nvgl_wrap_mode_nv20(sa->Attrib.WrapS) << 0;
 		break;
 	}
 
-	tx_filter = nvgl_filter_mode(sa->MagFilter) << 24
-		| nvgl_filter_mode(sa->MinFilter) << 16
+	tx_filter = nvgl_filter_mode(sa->Attrib.MagFilter) << 24
+		| nvgl_filter_mode(sa->Attrib.MinFilter) << 16
 		| 2 << 12;
 
-	r = FLOAT_TO_UBYTE(sa->BorderColor.f[0]);
-	g = FLOAT_TO_UBYTE(sa->BorderColor.f[1]);
-	b = FLOAT_TO_UBYTE(sa->BorderColor.f[2]);
-	a = FLOAT_TO_UBYTE(sa->BorderColor.f[3]);
+	r = FLOAT_TO_UBYTE(sa->Attrib.BorderColor.f[0]);
+	g = FLOAT_TO_UBYTE(sa->Attrib.BorderColor.f[1]);
+	b = FLOAT_TO_UBYTE(sa->Attrib.BorderColor.f[2]);
+	a = FLOAT_TO_UBYTE(sa->Attrib.BorderColor.f[3]);
 	switch (ti->_BaseFormat) {
 	case GL_LUMINANCE:
 		a = 0xff;
@@ -237,7 +237,7 @@ nv20_emit_tex_obj(struct gl_context *ctx, int emit)
 	tx_bcolor = b << 0 | g << 8 | r << 16 | a << 24;
 
 	tx_enable = NV20_3D_TEX_ENABLE_ENABLE
-		| log2i(sa->MaxAnisotropy) << 4;
+		| log2i(sa->Attrib.MaxAnisotropy) << 4;
 
 	if (t->Target == GL_TEXTURE_RECTANGLE) {
 		BEGIN_NV04(push, NV20_3D(TEX_NPOT_PITCH(i)), 1);
@@ -250,11 +250,11 @@ nv20_emit_tex_obj(struct gl_context *ctx, int emit)
 		tx_format |= get_tex_format_pot(ti);
 	}
 
-	if (sa->MinFilter != GL_NEAREST &&
-	    sa->MinFilter != GL_LINEAR) {
-		int lod_min = sa->MinLod;
-		int lod_max = MIN2(sa->MaxLod, t->_MaxLambda);
-		int lod_bias = sa->LodBias
+	if (sa->Attrib.MinFilter != GL_NEAREST &&
+	    sa->Attrib.MinFilter != GL_LINEAR) {
+		int lod_min = sa->Attrib.MinLod;
+		int lod_max = MIN2(sa->Attrib.MaxLod, t->_MaxLambda);
+		int lod_bias = sa->Attrib.LodBias
 			+ ctx->Texture.Unit[i].LodBias;
 
 		lod_max = CLAMP(lod_max, 0, 15);

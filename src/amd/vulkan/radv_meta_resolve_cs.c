@@ -67,8 +67,6 @@ static nir_ssa_def *radv_meta_build_resolve_srgb_conversion(nir_builder *b,
 static nir_shader *
 build_resolve_compute_shader(struct radv_device *dev, bool is_integer, bool is_srgb, int samples)
 {
-	nir_builder b;
-	char name[64];
 	const struct glsl_type *sampler_type = glsl_sampler_type(GLSL_SAMPLER_DIM_MS,
 								 false,
 								 false,
@@ -76,9 +74,10 @@ build_resolve_compute_shader(struct radv_device *dev, bool is_integer, bool is_s
 	const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_2D,
 							   false,
 							   GLSL_TYPE_FLOAT);
-	snprintf(name, 64, "meta_resolve_cs-%d-%s", samples, is_integer ? "int" : (is_srgb ? "srgb" : "float"));
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_COMPUTE, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, name);
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, NULL,
+						       "meta_resolve_cs-%d-%s",
+						       samples,
+						       is_integer ? "int" : (is_srgb ? "srgb" : "float"));
 	b.shader->info.cs.local_size[0] = 16;
 	b.shader->info.cs.local_size[1] = 16;
 	b.shader->info.cs.local_size[2] = 1;
@@ -101,23 +100,10 @@ build_resolve_compute_shader(struct radv_device *dev, bool is_integer, bool is_s
 
 	nir_ssa_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
 
-	nir_intrinsic_instr *src_offset = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(src_offset, 0);
-	nir_intrinsic_set_range(src_offset, 16);
-	src_offset->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
-	src_offset->num_components = 2;
-	nir_ssa_dest_init(&src_offset->instr, &src_offset->dest, 2, 32, "src_offset");
-	nir_builder_instr_insert(&b, &src_offset->instr);
+	nir_ssa_def *src_offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range=16);
+	nir_ssa_def *dst_offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 8), .range=16);
 
-	nir_intrinsic_instr *dst_offset = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(dst_offset, 0);
-	nir_intrinsic_set_range(dst_offset, 16);
-	dst_offset->src[0] = nir_src_for_ssa(nir_imm_int(&b, 8));
-	dst_offset->num_components = 2;
-	nir_ssa_dest_init(&dst_offset->instr, &dst_offset->dest, 2, 32, "dst_offset");
-	nir_builder_instr_insert(&b, &dst_offset->instr);
-
-	nir_ssa_def *img_coord = nir_channels(&b, nir_iadd(&b, global_id, &src_offset->dest.ssa), 0x3);
+	nir_ssa_def *img_coord = nir_channels(&b, nir_iadd(&b, global_id, src_offset), 0x3);
 	nir_variable *color = nir_local_variable_create(b.impl, glsl_vec4_type(), "color");
 
 	radv_meta_build_resolve_shader_core(&b, is_integer, samples, input_img,
@@ -127,15 +113,9 @@ build_resolve_compute_shader(struct radv_device *dev, bool is_integer, bool is_s
 	if (is_srgb)
 		outval = radv_meta_build_resolve_srgb_conversion(&b, outval);
 
-	nir_ssa_def *coord = nir_iadd(&b, global_id, &dst_offset->dest.ssa);
-	nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_deref_store);
-	store->num_components = 4;
-	store->src[0] = nir_src_for_ssa(&nir_build_deref_var(&b, output_img)->dest.ssa);
-	store->src[1] = nir_src_for_ssa(coord);
-	store->src[2] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
-	store->src[3] = nir_src_for_ssa(outval);
-	store->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0));
-	nir_builder_instr_insert(&b, &store->instr);
+	nir_ssa_def *coord = nir_iadd(&b, global_id, dst_offset);
+	nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa,
+	                      coord, nir_ssa_undef(&b, 1, 32), outval, nir_imm_int(&b, 0));
 	return b.shader;
 }
 
@@ -166,21 +146,18 @@ build_depth_stencil_resolve_compute_shader(struct radv_device *dev, int samples,
 					   int index,
 					   VkResolveModeFlagBits resolve_mode)
 {
-	nir_builder b;
-	char name[64];
 	const struct glsl_type *sampler_type = glsl_sampler_type(GLSL_SAMPLER_DIM_MS,
 								 false,
-								 false,
+								 true,
 								 GLSL_TYPE_FLOAT);
 	const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_2D,
-							   false,
+							   true,
 							   GLSL_TYPE_FLOAT);
-	snprintf(name, 64, "meta_resolve_cs_%s-%s-%d",
-		 index == DEPTH_RESOLVE ? "depth" : "stencil",
-		 get_resolve_mode_str(resolve_mode), samples);
 
-	nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_COMPUTE, NULL);
-	b.shader->info.name = ralloc_strdup(b.shader, name);
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, NULL,
+						       "meta_resolve_cs_%s-%s-%d",
+						       index == DEPTH_RESOLVE ? "depth" : "stencil",
+						       get_resolve_mode_str(resolve_mode), samples);
 	b.shader->info.cs.local_size[0] = 16;
 	b.shader->info.cs.local_size[1] = 16;
 	b.shader->info.cs.local_size[2] = 1;
@@ -202,24 +179,11 @@ build_depth_stencil_resolve_compute_shader(struct radv_device *dev, int samples,
 						b.shader->info.cs.local_size[2], 0);
 
 	nir_ssa_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
+	nir_ssa_def *layer_id = nir_channel(&b, wg_id, 2);
 
-	nir_intrinsic_instr *src_offset = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(src_offset, 0);
-	nir_intrinsic_set_range(src_offset, 16);
-	src_offset->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
-	src_offset->num_components = 2;
-	nir_ssa_dest_init(&src_offset->instr, &src_offset->dest, 2, 32, "src_offset");
-	nir_builder_instr_insert(&b, &src_offset->instr);
-
-	nir_intrinsic_instr *dst_offset = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
-	nir_intrinsic_set_base(dst_offset, 0);
-	nir_intrinsic_set_range(dst_offset, 16);
-	dst_offset->src[0] = nir_src_for_ssa(nir_imm_int(&b, 8));
-	dst_offset->num_components = 2;
-	nir_ssa_dest_init(&dst_offset->instr, &dst_offset->dest, 2, 32, "dst_offset");
-	nir_builder_instr_insert(&b, &dst_offset->instr);
-
-	nir_ssa_def *img_coord = nir_channels(&b, nir_iadd(&b, global_id, &src_offset->dest.ssa), 0x3);
+	nir_ssa_def *img_coord = nir_vec3(&b, nir_channel(&b, global_id, 0),
+					      nir_channel(&b, global_id, 1),
+					      layer_id);
 
 	nir_ssa_def *input_img_deref = &nir_build_deref_var(&b, input_img)->dest.ssa;
 
@@ -235,8 +199,8 @@ build_depth_stencil_resolve_compute_shader(struct radv_device *dev, int samples,
 	tex->src[2].src_type = nir_tex_src_texture_deref;
 	tex->src[2].src = nir_src_for_ssa(input_img_deref);
 	tex->dest_type = type;
-	tex->is_array = false;
-	tex->coord_components = 2;
+	tex->is_array = true;
+	tex->coord_components = 3;
 
 	nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, "tex");
 	nir_builder_instr_insert(&b, &tex->instr);
@@ -255,8 +219,8 @@ build_depth_stencil_resolve_compute_shader(struct radv_device *dev, int samples,
 			tex_add->src[2].src_type = nir_tex_src_texture_deref;
 			tex_add->src[2].src = nir_src_for_ssa(input_img_deref);
 			tex_add->dest_type = type;
-			tex_add->is_array = false;
-			tex_add->coord_components = 2;
+			tex_add->is_array = true;
+			tex_add->coord_components = 3;
 
 			nir_ssa_dest_init(&tex_add->instr, &tex_add->dest, 4, 32, "tex");
 			nir_builder_instr_insert(&b, &tex_add->instr);
@@ -287,15 +251,12 @@ build_depth_stencil_resolve_compute_shader(struct radv_device *dev, int samples,
 			outval = nir_fdiv(&b, outval, nir_imm_float(&b, samples));
 	}
 
-	nir_ssa_def *coord = nir_iadd(&b, global_id, &dst_offset->dest.ssa);
-	nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_deref_store);
-	store->num_components = 4;
-	store->src[0] = nir_src_for_ssa(&nir_build_deref_var(&b, output_img)->dest.ssa);
-	store->src[1] = nir_src_for_ssa(coord);
-	store->src[2] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
-	store->src[3] = nir_src_for_ssa(outval);
-	store->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0));
-	nir_builder_instr_insert(&b, &store->instr);
+	nir_ssa_def *coord = nir_vec4(&b, nir_channel(&b, img_coord, 0),
+					  nir_channel(&b, img_coord, 1),
+					  nir_channel(&b, img_coord, 2),
+					  nir_imm_int(&b, 0));
+	nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa,
+	                      coord, nir_ssa_undef(&b, 1, 32), outval, nir_imm_int(&b, 0));
 	return b.shader;
 }
 
@@ -701,9 +662,7 @@ static void
 emit_depth_stencil_resolve(struct radv_cmd_buffer *cmd_buffer,
 			   struct radv_image_view *src_iview,
 			   struct radv_image_view *dest_iview,
-			   const VkOffset2D *src_offset,
-			   const VkOffset2D *dest_offset,
-			   const VkExtent2D *resolve_extent,
+			   const VkExtent3D *resolve_extent,
 			   VkImageAspectFlags aspects,
 			   VkResolveModeFlagBits resolve_mode)
 {
@@ -790,17 +749,8 @@ emit_depth_stencil_resolve(struct radv_cmd_buffer *cmd_buffer,
 	radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer),
 			     VK_PIPELINE_BIND_POINT_COMPUTE, *pipeline);
 
-	unsigned push_constants[4] = {
-		src_offset->x,
-		src_offset->y,
-		dest_offset->x,
-		dest_offset->y,
-	};
-	radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer),
-			      device->meta_state.resolve_compute.p_layout,
-			      VK_SHADER_STAGE_COMPUTE_BIT, 0, 16,
-			      push_constants);
-	radv_unaligned_dispatch(cmd_buffer, resolve_extent->width, resolve_extent->height, 1);
+	radv_unaligned_dispatch(cmd_buffer, resolve_extent->width,
+				resolve_extent->height, resolve_extent->depth);
 
 }
 
@@ -817,6 +767,30 @@ void radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer,
 
 	radv_decompress_resolve_src(cmd_buffer, src_image, src_image_layout,
 				    region);
+
+	/* For partial resolves, DCC should be decompressed before resolving
+	 * because the metadata is re-initialized to the uncompressed after.
+	 */
+	uint32_t queue_mask = radv_image_queue_family_mask(dest_image,
+	                                                   cmd_buffer->queue_family_index,
+	                                                   cmd_buffer->queue_family_index);
+
+	if (radv_layout_dcc_compressed(cmd_buffer->device, dest_image,
+				       dest_image_layout, false, queue_mask) &&
+	    (region->dstOffset.x ||
+	     region->dstOffset.y ||
+	     region->dstOffset.z ||
+	     region->extent.width != dest_image->info.width ||
+	     region->extent.height != dest_image->info.height ||
+	     region->extent.depth != dest_image->info.depth)) {
+		radv_decompress_dcc(cmd_buffer, dest_image, &(VkImageSubresourceRange) {
+					.aspectMask = region->dstSubresource.aspectMask,
+					.baseMipLevel = region->dstSubresource.mipLevel,
+					.levelCount = 1,
+					.baseArrayLayer = region->dstSubresource.baseArrayLayer,
+					.layerCount = region->dstSubresource.layerCount,
+				    });
+	}
 
 	radv_meta_save(&saved_state, cmd_buffer,
 		       RADV_META_SAVE_COMPUTE_PIPELINE |
@@ -886,6 +860,23 @@ void radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer,
 	}
 
 	radv_meta_restore(&saved_state, cmd_buffer);
+
+	if (radv_layout_dcc_compressed(cmd_buffer->device, dest_image,
+				       dest_image_layout, false, queue_mask)) {
+
+		cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
+			                        RADV_CMD_FLAG_INV_VCACHE;
+
+		VkImageSubresourceRange range = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.baseMipLevel = region->dstSubresource.mipLevel,
+			.levelCount = 1,
+			.baseArrayLayer = dest_base_layer,
+			.layerCount = region->dstSubresource.layerCount,
+		};
+
+		radv_initialize_dcc(cmd_buffer, dest_image, &range, 0xffffffff);
+	}
 }
 
 /**
@@ -907,7 +898,8 @@ radv_cmd_buffer_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer)
 	 */
 	barrier.src_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	barrier.src_access_mask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	barrier.dst_access_mask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+	barrier.dst_access_mask = VK_ACCESS_SHADER_READ_BIT |
+	                          VK_ACCESS_SHADER_WRITE_BIT;
 	radv_subpass_barrier(cmd_buffer, &barrier);
 
 	for (uint32_t i = 0; i < subpass->color_count; ++i) {
@@ -922,7 +914,7 @@ radv_cmd_buffer_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer)
 
 		VkImageResolve2KHR region = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_RESOLVE_2_KHR,
-			.extent = (VkExtent3D){ fb->width, fb->height, 0 },
+			.extent = (VkExtent3D){ fb->width, fb->height, 1 },
 			.srcSubresource = (VkImageSubresourceLayers) {
 				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 				.mipLevel = src_iview->base_mip,
@@ -949,8 +941,9 @@ radv_cmd_buffer_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer)
 						&region);
 	}
 
-	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
-	                                RADV_CMD_FLAG_INV_VCACHE;
+	cmd_buffer->state.flush_bits |=
+		RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
+		radv_src_access_flush(cmd_buffer, VK_ACCESS_SHADER_WRITE_BIT, NULL);
 }
 
 void
@@ -961,7 +954,6 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
 	struct radv_framebuffer *fb = cmd_buffer->state.framebuffer;
 	const struct radv_subpass *subpass = cmd_buffer->state.subpass;
 	struct radv_meta_saved_state saved_state;
-	struct radv_subpass_barrier barrier;
 	uint32_t layer_count = fb->layers;
 
 	if (subpass->view_mask)
@@ -970,16 +962,15 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
 	/* Resolves happen before the end-of-subpass barriers get executed, so
 	 * we have to make the attachment shader-readable.
 	 */
-	barrier.src_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	barrier.src_access_mask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-	barrier.dst_access_mask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
-	radv_subpass_barrier(cmd_buffer, &barrier);
+	cmd_buffer->state.flush_bits |=
+		radv_src_access_flush(cmd_buffer, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, NULL) |
+		radv_dst_access_flush(cmd_buffer, VK_ACCESS_SHADER_READ_BIT, NULL) |
+		radv_dst_access_flush(cmd_buffer, VK_ACCESS_SHADER_WRITE_BIT, NULL);
 
 	radv_decompress_resolve_subpass_src(cmd_buffer);
 
 	radv_meta_save(&saved_state, cmd_buffer,
 		       RADV_META_SAVE_COMPUTE_PIPELINE |
-		       RADV_META_SAVE_CONSTANTS |
 		       RADV_META_SAVE_DESCRIPTORS);
 
 	struct radv_subpass_attachment src_att = *subpass->depth_stencil_attachment;
@@ -993,10 +984,9 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
 	struct radv_image *src_image = src_iview->image;
 	struct radv_image *dst_image = dst_iview->image;
 
-	for (uint32_t layer = 0; layer < layer_count; layer++) {
-		struct radv_image_view tsrc_iview;
-		radv_image_view_init(&tsrc_iview, cmd_buffer->device,
-				     &(VkImageViewCreateInfo) {
+	struct radv_image_view tsrc_iview;
+	radv_image_view_init(&tsrc_iview, cmd_buffer->device,
+			     &(VkImageViewCreateInfo) {
 					.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 					.image = radv_image_to_handle(src_image),
 					.viewType = radv_meta_get_view_type(src_image),
@@ -1005,14 +995,14 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
 						.aspectMask = aspects,
 						.baseMipLevel = src_iview->base_mip,
 						.levelCount = 1,
-						.baseArrayLayer = src_iview->base_layer + layer,
-						.layerCount = 1,
+						.baseArrayLayer = src_iview->base_layer,
+						.layerCount = layer_count,
 					},
-				     }, NULL);
+			     }, NULL);
 
-		struct radv_image_view tdst_iview;
-		radv_image_view_init(&tdst_iview, cmd_buffer->device,
-				     &(VkImageViewCreateInfo) {
+	struct radv_image_view tdst_iview;
+	radv_image_view_init(&tdst_iview, cmd_buffer->device,
+			     &(VkImageViewCreateInfo) {
 					.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 					.image = radv_image_to_handle(dst_image),
 					.viewType = radv_meta_get_view_type(dst_image),
@@ -1021,46 +1011,39 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
 						.aspectMask = aspects,
 						.baseMipLevel = dst_iview->base_mip,
 						.levelCount = 1,
-						.baseArrayLayer = dst_iview->base_layer + layer,
-						.layerCount = 1,
+						.baseArrayLayer = dst_iview->base_layer,
+						.layerCount = layer_count,
 					},
-				     }, NULL);
+			     }, NULL);
 
-		emit_depth_stencil_resolve(cmd_buffer, &tsrc_iview, &tdst_iview,
-					   &(VkOffset2D) { 0, 0 },
-					   &(VkOffset2D) { 0, 0 },
-					   &(VkExtent2D) { fb->width, fb->height },
-					   aspects,
-					   resolve_mode);
-	}
+	emit_depth_stencil_resolve(cmd_buffer, &tsrc_iview, &tdst_iview,
+				   &(VkExtent3D) { fb->width, fb->height, layer_count },
+				   aspects, resolve_mode);
 
-	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
-	                                RADV_CMD_FLAG_INV_VCACHE;
+	cmd_buffer->state.flush_bits |=
+		RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
+		radv_src_access_flush(cmd_buffer, VK_ACCESS_SHADER_WRITE_BIT, NULL);
 
-	if (radv_image_has_htile(dst_image)) {
-		if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT) {
-			VkImageSubresourceRange range = {0};
-			range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-			range.baseMipLevel = dst_iview->base_mip;
-			range.levelCount = 1;
-			range.baseArrayLayer = dst_iview->base_layer;
-			range.layerCount = layer_count;
+	VkImageLayout layout =
+		cmd_buffer->state.attachments[dest_att.attachment].current_layout;
+	uint32_t queue_mask = radv_image_queue_family_mask(dst_image,
+							   cmd_buffer->queue_family_index,
+							   cmd_buffer->queue_family_index);
 
-			uint32_t clear_value = 0xfffc000f;
+	if (radv_layout_is_htile_compressed(cmd_buffer->device, dst_image,
+					    layout, false, queue_mask)) {
+		VkImageSubresourceRange range = {0};
+		range.aspectMask = aspects;
+		range.baseMipLevel = dst_iview->base_mip;
+		range.levelCount = 1;
+		range.baseArrayLayer = dst_iview->base_layer;
+		range.layerCount = layer_count;
 
-			if (vk_format_is_stencil(dst_image->vk_format) &&
-			    subpass->stencil_resolve_mode != VK_RESOLVE_MODE_NONE_KHR) {
-				/* Only clear the stencil part of the HTILE
-				 * buffer if it's resolved, otherwise this
-				 * might break if the stencil has been cleared.
-				 */
-				clear_value = 0xfffff30f;
-			}
+		uint32_t htile_value =
+			radv_get_htile_initial_value(cmd_buffer->device, dst_image);
 
-			cmd_buffer->state.flush_bits |=
-				radv_clear_htile(cmd_buffer, dst_image, &range,
-						 clear_value);
-		}
+		cmd_buffer->state.flush_bits |=
+			radv_clear_htile(cmd_buffer, dst_image, &range, htile_value);
 	}
 
 	radv_meta_restore(&saved_state, cmd_buffer);

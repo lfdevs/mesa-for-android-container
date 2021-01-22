@@ -89,6 +89,7 @@ etna_create_sampler_state_state(struct pipe_context *pipe,
    struct etna_context *ctx = etna_context(pipe);
    struct etna_screen *screen = ctx->screen;
    const bool ansio = ss->max_anisotropy > 1;
+   const bool mipmap = ss->min_mip_filter != PIPE_TEX_MIPFILTER_NONE;
 
    if (!cs)
       return NULL;
@@ -113,19 +114,19 @@ etna_create_sampler_state_state(struct pipe_context *pipe,
       COND(ss->seamless_cube_map, VIVS_TE_SAMPLER_CONFIG1_SEAMLESS_CUBE_MAP) : 0;
 
    cs->TE_SAMPLER_LOD_CONFIG =
-      COND(ss->lod_bias != 0.0, VIVS_TE_SAMPLER_LOD_CONFIG_BIAS_ENABLE) |
+      COND(ss->lod_bias != 0.0 && mipmap, VIVS_TE_SAMPLER_LOD_CONFIG_BIAS_ENABLE) |
       VIVS_TE_SAMPLER_LOD_CONFIG_BIAS(etna_float_to_fixp55(ss->lod_bias));
 
    cs->TE_SAMPLER_3D_CONFIG =
       VIVS_TE_SAMPLER_3D_CONFIG_WRAP(translate_texture_wrapmode(ss->wrap_r));
 
-   if (ss->min_mip_filter != PIPE_TEX_MIPFILTER_NONE) {
+   if (mipmap) {
       cs->min_lod = etna_float_to_fixp55(ss->min_lod);
       cs->max_lod = etna_float_to_fixp55(ss->max_lod);
    } else {
       /* when not mipmapping, we need to set max/min lod so that always
        * lowest LOD is selected */
-      cs->min_lod = cs->max_lod = etna_float_to_fixp55(ss->min_lod);
+      cs->min_lod = cs->max_lod = etna_float_to_fixp55(0.0f);
    }
 
    /* if max_lod is 0, MIN filter will never be used (GC3000)
@@ -368,13 +369,14 @@ etna_emit_texture_state(struct etna_context *ctx)
             ss = etna_sampler_state(ctx->sampler[x]);
             sv = etna_sampler_view(ctx->sampler_view[x]);
 
-            unsigned max_lod = MAX2(MIN2(ss->max_lod, sv->max_lod), ss->max_lod_min);
+            unsigned max_lod = MAX2(MIN2(ss->max_lod + sv->min_lod, sv->max_lod), ss->max_lod_min);
+            unsigned min_lod = MIN2(MAX2(ss->min_lod + sv->min_lod, sv->min_lod), max_lod);
 
             /* min and max lod is determined both by the sampler and the view */
             /*020C0*/ EMIT_STATE(TE_SAMPLER_LOD_CONFIG(x),
                                  ss->TE_SAMPLER_LOD_CONFIG |
                                  VIVS_TE_SAMPLER_LOD_CONFIG_MAX(max_lod) |
-                                 VIVS_TE_SAMPLER_LOD_CONFIG_MIN(MAX2(ss->min_lod, sv->min_lod)));
+                                 VIVS_TE_SAMPLER_LOD_CONFIG_MIN(min_lod));
          }
       }
       for (int x = 0; x < VIVS_TE_SAMPLER__LEN; ++x) {

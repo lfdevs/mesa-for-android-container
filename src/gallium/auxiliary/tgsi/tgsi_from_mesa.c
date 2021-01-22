@@ -25,6 +25,8 @@
 
 #include "pipe/p_compiler.h"
 
+#include "util/compiler.h"
+
 /**
  * Determine the semantic index that is used when the given varying is mapped
  * to TGSI_SEMANTIC_GENERIC.
@@ -157,7 +159,7 @@ tgsi_get_gl_varying_semantic(gl_varying_slot attr,
          *semantic_index = attr - VARYING_SLOT_TEX0;
          break;
       }
-      /* fall through */
+      FALLTHROUGH;
    case VARYING_SLOT_VAR0:
    default:
       assert(attr >= VARYING_SLOT_VAR0 ||

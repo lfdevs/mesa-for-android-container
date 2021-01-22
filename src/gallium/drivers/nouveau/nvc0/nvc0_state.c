@@ -367,18 +367,18 @@ nvc0_zsa_state_create(struct pipe_context *pipe,
 
    so->pipe = *cso;
 
-   SB_IMMED_3D(so, DEPTH_TEST_ENABLE, cso->depth.enabled);
-   if (cso->depth.enabled) {
-      SB_IMMED_3D(so, DEPTH_WRITE_ENABLE, cso->depth.writemask);
+   SB_IMMED_3D(so, DEPTH_TEST_ENABLE, cso->depth_enabled);
+   if (cso->depth_enabled) {
+      SB_IMMED_3D(so, DEPTH_WRITE_ENABLE, cso->depth_writemask);
       SB_BEGIN_3D(so, DEPTH_TEST_FUNC, 1);
-      SB_DATA    (so, nvgl_comparison_op(cso->depth.func));
+      SB_DATA    (so, nvgl_comparison_op(cso->depth_func));
    }
 
-   SB_IMMED_3D(so, DEPTH_BOUNDS_EN, cso->depth.bounds_test);
-   if (cso->depth.bounds_test) {
+   SB_IMMED_3D(so, DEPTH_BOUNDS_EN, cso->depth_bounds_test);
+   if (cso->depth_bounds_test) {
       SB_BEGIN_3D(so, DEPTH_BOUNDS(0), 2);
-      SB_DATA    (so, fui(cso->depth.bounds_min));
-      SB_DATA    (so, fui(cso->depth.bounds_max));
+      SB_DATA    (so, fui(cso->depth_bounds_min));
+      SB_DATA    (so, fui(cso->depth_bounds_max));
    }
 
    if (cso->stencil[0].enabled) {
@@ -411,11 +411,11 @@ nvc0_zsa_state_create(struct pipe_context *pipe,
       SB_IMMED_3D(so, STENCIL_TWO_SIDE_ENABLE, 0);
    }
 
-   SB_IMMED_3D(so, ALPHA_TEST_ENABLE, cso->alpha.enabled);
-   if (cso->alpha.enabled) {
+   SB_IMMED_3D(so, ALPHA_TEST_ENABLE, cso->alpha_enabled);
+   if (cso->alpha_enabled) {
       SB_BEGIN_3D(so, ALPHA_TEST_REF, 2);
-      SB_DATA    (so, fui(cso->alpha.ref_value));
-      SB_DATA    (so, nvgl_comparison_op(cso->alpha.func));
+      SB_DATA    (so, fui(cso->alpha_ref_value));
+      SB_DATA    (so, nvgl_comparison_op(cso->alpha_func));
    }
 
    assert(so->size <= ARRAY_SIZE(so->state));
@@ -841,11 +841,11 @@ nvc0_set_blend_color(struct pipe_context *pipe,
 
 static void
 nvc0_set_stencil_ref(struct pipe_context *pipe,
-                     const struct pipe_stencil_ref *sr)
+                     const struct pipe_stencil_ref sr)
 {
     struct nvc0_context *nvc0 = nvc0_context(pipe);
 
-    nvc0->stencil_ref = *sr;
+    nvc0->stencil_ref = sr;
     nvc0->dirty_3d |= NVC0_NEW_3D_STENCIL_REF;
 }
 

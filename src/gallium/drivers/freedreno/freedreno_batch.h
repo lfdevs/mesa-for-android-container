@@ -29,8 +29,11 @@
 
 #include "util/u_inlines.h"
 #include "util/u_queue.h"
+#include "util/u_trace.h"
 #include "util/list.h"
+#include "util/simple_mtx.h"
 
+#include "freedreno_context.h"
 #include "freedreno_util.h"
 
 #ifdef DEBUG
@@ -39,31 +42,7 @@
 #  define BATCH_DEBUG 0
 #endif
 
-struct fd_context;
 struct fd_resource;
-enum fd_resource_status;
-
-/* Bitmask of stages in rendering that a particular query query is
- * active.  Queries will be automatically started/stopped (generating
- * additional fd_hw_sample_period's) on entrance/exit from stages that
- * are applicable to the query.
- *
- * NOTE: set the stage to NULL at end of IB to ensure no query is still
- * active.  Things aren't going to work out the way you want if a query
- * is active across IB's (or between tile IB and draw IB)
- */
-enum fd_render_stage {
-	FD_STAGE_NULL     = 0x00,
-	FD_STAGE_DRAW     = 0x01,
-	FD_STAGE_CLEAR    = 0x02,
-	/* used for driver internal draws (ie. util_blitter_blit()): */
-	FD_STAGE_BLIT     = 0x04,
-	FD_STAGE_ALL      = 0xff,
-};
-
-#define MAX_HW_SAMPLE_PROVIDERS 7
-struct fd_hw_sample_provider;
-struct fd_hw_sample;
 
 /* A batch tracks everything about a cmdstream batch/submit, including the
  * ringbuffers used for binning, draw, and gmem cmds, list of associated
@@ -74,11 +53,21 @@ struct fd_batch {
 	unsigned seqno;
 	unsigned idx;       /* index into cache->batches[] */
 
+	struct u_trace trace;
+
+	/* To detect cases where we can skip cmdstream to record timestamp: */
+	uint32_t *last_timestamp_cmd;
+
 	int in_fence_fd;
 	bool needs_out_fence_fd;
 	struct pipe_fence_handle *fence;
 
 	struct fd_context *ctx;
+
+	/* emit_lock serializes cmdstream emission and flush.  Acquire before
+	 * screen->lock.
+	 */
+	simple_mtx_t submit_lock;
 
 	/* do we need to mem2gmem before rendering.  We don't, if for example,
 	 * there was a glClear() that invalidated the entire previous buffer
@@ -257,8 +246,6 @@ struct fd_batch {
 	uint32_t tessparam_size;
 
 	struct fd_ringbuffer *tess_addrs_constobj;
-
-	struct list_head log_chunks;  /* list of unflushed log chunks in fifo order */
 };
 
 struct fd_batch * fd_batch_create(struct fd_context *ctx, bool nondraw);
@@ -289,11 +276,6 @@ void __fd_batch_destroy(struct fd_batch *batch);
  * you.
  */
 
-/* fwd-decl prototypes to untangle header dependency :-/ */
-static inline void fd_context_assert_locked(struct fd_context *ctx);
-static inline void fd_context_lock(struct fd_context *ctx);
-static inline void fd_context_unlock(struct fd_context *ctx);
-
 static inline void
 fd_batch_reference_locked(struct fd_batch **ptr, struct fd_batch *batch)
 {
@@ -301,7 +283,7 @@ fd_batch_reference_locked(struct fd_batch **ptr, struct fd_batch *batch)
 
 	/* only need lock if a reference is dropped: */
 	if (old_batch)
-		fd_context_assert_locked(old_batch->ctx);
+		fd_screen_assert_locked(old_batch->ctx->screen);
 
 	if (pipe_reference_described(&(*ptr)->reference, &batch->reference,
 			(debug_reference_descriptor)__fd_batch_describe))
@@ -317,15 +299,44 @@ fd_batch_reference(struct fd_batch **ptr, struct fd_batch *batch)
 	struct fd_context *ctx = old_batch ? old_batch->ctx : NULL;
 
 	if (ctx)
-		fd_context_lock(ctx);
+		fd_screen_lock(ctx->screen);
 
 	fd_batch_reference_locked(ptr, batch);
 
 	if (ctx)
-		fd_context_unlock(ctx);
+		fd_screen_unlock(ctx->screen);
 }
 
-#include "freedreno_context.h"
+static inline void
+fd_batch_unlock_submit(struct fd_batch *batch)
+{
+	simple_mtx_unlock(&batch->submit_lock);
+}
+
+/**
+ * Returns true if emit-lock was aquired, false if failed to aquire lock,
+ * ie. batch already flushed.
+ */
+static inline bool MUST_CHECK
+fd_batch_lock_submit(struct fd_batch *batch)
+{
+	simple_mtx_lock(&batch->submit_lock);
+	bool ret = !batch->flushed;
+	if (!ret)
+		fd_batch_unlock_submit(batch);
+	return ret;
+}
+
+static inline void
+fd_batch_set_stage(struct fd_batch *batch, enum fd_render_stage stage)
+{
+	struct fd_context *ctx = batch->ctx;
+
+	if (ctx->query_set_stage)
+		ctx->query_set_stage(batch, stage);
+
+	batch->stage = stage;
+}
 
 static inline void
 fd_reset_wfi(struct fd_batch *batch)

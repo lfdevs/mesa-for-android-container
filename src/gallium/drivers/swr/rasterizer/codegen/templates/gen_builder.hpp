@@ -46,7 +46,9 @@ ${func['decl']}
     %for arg in func['args']:
     argTypes.push_back(${arg}->getType());
     %endfor
-#if LLVM_VERSION_MAJOR >= 11
+#if LLVM_VERSION_MAJOR >= 12
+    #define VEC_GET_NUM_ELEMS cast<FixedVectorType>(a->getType())->getNumElements()
+#elif LLVM_VERSION_MAJOR >= 11
     #define VEC_GET_NUM_ELEMS cast<VectorType>(a->getType())->getNumElements()
 #else
     #define VEC_GET_NUM_ELEMS a->getType()->getVectorNumElements()

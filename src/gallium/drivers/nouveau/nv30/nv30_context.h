@@ -195,13 +195,15 @@ nv30_fragtex_set_sampler_views(struct pipe_context *pipe,
                                unsigned nr, struct pipe_sampler_view **views);
 
 void
-nv30_push_vbo(struct nv30_context *nv30, const struct pipe_draw_info *info);
+nv30_push_vbo(struct nv30_context *nv30, const struct pipe_draw_info *info,
+              const struct pipe_draw_start_count *draw);
 
 void
 nv30_draw_init(struct pipe_context *pipe);
 
 void
-nv30_render_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info);
+nv30_render_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
+                const struct pipe_draw_start_count *draw);
 
 bool
 nv30_state_validate(struct nv30_context *nv30, uint32_t mask, bool hwtnl);

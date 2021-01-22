@@ -232,6 +232,7 @@ unsigned EmitAluInstruction::num_src_comp(const nir_alu_instr& instr)
    case nir_op_ball_iequal2:
    case nir_op_bany_fnequal2:
    case nir_op_ball_fequal2:
+   case nir_op_unpack_64_2x32_split_y:
       return 2;
 
    case nir_op_fdot3:

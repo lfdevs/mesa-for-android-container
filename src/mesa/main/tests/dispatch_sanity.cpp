@@ -79,7 +79,9 @@ extern const struct function gles31_functions_possible[];
 class DispatchSanity_test : public ::testing::Test {
 public:
    virtual void SetUp();
+   virtual void TearDown();
    void SetUpCtx(gl_api api, unsigned int version);
+   void TearDownCtx();
 
    struct gl_config visual;
    struct dd_function_table driver_functions;
@@ -103,6 +105,12 @@ DispatchSanity_test::SetUp()
 }
 
 void
+DispatchSanity_test::TearDown()
+{
+   free(nop_table);
+}
+
+void
 DispatchSanity_test::SetUpCtx(gl_api api, unsigned int version)
 {
    _mesa_initialize_context(&ctx,
@@ -117,6 +125,13 @@ DispatchSanity_test::SetUpCtx(gl_api api, unsigned int version)
 
    _mesa_initialize_dispatch_tables(&ctx);
    _mesa_initialize_vbo_vtxfmt(&ctx);
+}
+
+void
+DispatchSanity_test::TearDownCtx()
+{
+   _vbo_DestroyContext(&ctx);
+   _mesa_free_context_data(&ctx, false);
 }
 
 static const char *
@@ -182,6 +197,7 @@ TEST_F(DispatchSanity_test, GL31_CORE)
    validate_functions(&ctx, common_desktop_functions_possible, nop_table);
    validate_functions(&ctx, gl_core_functions_possible, nop_table);
    validate_nops(&ctx, nop_table);
+   TearDownCtx();
 }
 
 TEST_F(DispatchSanity_test, GL30)
@@ -190,6 +206,7 @@ TEST_F(DispatchSanity_test, GL30)
    validate_functions(&ctx, common_desktop_functions_possible, nop_table);
    validate_functions(&ctx, gl_compatibility_functions_possible, nop_table);
    validate_nops(&ctx, nop_table);
+   TearDownCtx();
 }
 
 TEST_F(DispatchSanity_test, GLES11)
@@ -197,6 +214,7 @@ TEST_F(DispatchSanity_test, GLES11)
    SetUpCtx(API_OPENGLES, 11);
    validate_functions(&ctx, gles11_functions_possible, nop_table);
    validate_nops(&ctx, nop_table);
+   TearDownCtx();
 }
 
 TEST_F(DispatchSanity_test, GLES2)
@@ -204,6 +222,7 @@ TEST_F(DispatchSanity_test, GLES2)
    SetUpCtx(API_OPENGLES2, 20);
    validate_functions(&ctx, gles2_functions_possible, nop_table);
    validate_nops(&ctx, nop_table);
+   TearDownCtx();
 }
 
 TEST_F(DispatchSanity_test, GLES3)
@@ -212,6 +231,7 @@ TEST_F(DispatchSanity_test, GLES3)
    validate_functions(&ctx, gles2_functions_possible, nop_table);
    validate_functions(&ctx, gles3_functions_possible, nop_table);
    validate_nops(&ctx, nop_table);
+   TearDownCtx();
 }
 
 TEST_F(DispatchSanity_test, GLES31)
@@ -221,6 +241,7 @@ TEST_F(DispatchSanity_test, GLES31)
    validate_functions(&ctx, gles3_functions_possible, nop_table);
    validate_functions(&ctx, gles31_functions_possible, nop_table);
    validate_nops(&ctx, nop_table);
+   TearDownCtx();
 }
 
 const struct function common_desktop_functions_possible[] = {
@@ -1443,6 +1464,7 @@ const struct function common_desktop_functions_possible[] = {
    { "glViewportSwizzleNV", 11, -1 },
 
    { "glInternalBufferSubDataCopyMESA", 11, -1 },
+   { "glInternalSetError", 20, -1 },
 
    { NULL, 0, -1 }
 };
@@ -2494,6 +2516,7 @@ const struct function gles2_functions_possible[] = {
    { "glMaxShaderCompilerThreadsKHR", 20, -1 },
 
    { "glInternalBufferSubDataCopyMESA", 20, -1 },
+   { "glInternalSetError", 20, -1 },
 
    { NULL, 0, -1 }
 };

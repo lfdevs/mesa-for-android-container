@@ -460,7 +460,7 @@ void si_build_prim_discard_compute_shader(struct si_shader_context *ctx)
    if (key->opt.cs_indexed) {
       for (unsigned i = 0; i < 3; i++) {
          index[i] = ac_build_buffer_load_format(&ctx->ac, input_indexbuf, index[i], ctx->ac.i32_0,
-                                                1, 0, true, false);
+                                                1, 0, true, false, false);
          index[i] = ac_to_integer(&ctx->ac, index[i]);
       }
    }
@@ -539,7 +539,7 @@ void si_build_prim_discard_compute_shader(struct si_shader_context *ctx)
             LLVMValueRef strip_start = ac_build_umsb(&ctx->ac, preceding_reset_threadmask, NULL);
             strip_start = LLVMBuildAdd(builder, strip_start, ctx->ac.i32_1, "");
 
-            /* This flips the orientatino based on reset indices within this wave only. */
+            /* This flips the orientation based on reset indices within this wave only. */
             first_is_odd = LLVMBuildTrunc(builder, strip_start, ctx->ac.i1, "");
 
             LLVMValueRef last_strip_start, prev_wave_state, ret, tmp;
@@ -905,7 +905,7 @@ static bool si_initialize_prim_discard_cmdbuf(struct si_context *sctx)
    if (sctx->index_ring)
       return true;
 
-   if (!sctx->prim_discard_compute_cs) {
+   if (!sctx->prim_discard_compute_cs.priv) {
       struct radeon_winsys *ws = sctx->ws;
       unsigned gds_size =
          VERTEX_COUNTER_GDS_MODE == 1 ? GDS_SIZE_UNORDERED : VERTEX_COUNTER_GDS_MODE == 2 ? 8 : 0;
@@ -917,7 +917,7 @@ static bool si_initialize_prim_discard_cmdbuf(struct si_context *sctx)
          if (!sctx->gds)
             return false;
 
-         ws->cs_add_buffer(sctx->gfx_cs, sctx->gds, RADEON_USAGE_READWRITE, 0, 0);
+         ws->cs_add_buffer(&sctx->gfx_cs, sctx->gds, RADEON_USAGE_READWRITE, 0, 0);
       }
       if (num_oa_counters) {
          assert(gds_size);
@@ -926,12 +926,11 @@ static bool si_initialize_prim_discard_cmdbuf(struct si_context *sctx)
          if (!sctx->gds_oa)
             return false;
 
-         ws->cs_add_buffer(sctx->gfx_cs, sctx->gds_oa, RADEON_USAGE_READWRITE, 0, 0);
+         ws->cs_add_buffer(&sctx->gfx_cs, sctx->gds_oa, RADEON_USAGE_READWRITE, 0, 0);
       }
 
-      sctx->prim_discard_compute_cs =
-         ws->cs_add_parallel_compute_ib(sctx->gfx_cs, num_oa_counters > 0);
-      if (!sctx->prim_discard_compute_cs)
+      if (!ws->cs_add_parallel_compute_ib(&sctx->prim_discard_compute_cs,
+                                          &sctx->gfx_cs, num_oa_counters > 0))
          return false;
    }
 
@@ -966,7 +965,7 @@ si_prepare_prim_discard_or_split_draw(struct si_context *sctx, const struct pipe
    if (!si_initialize_prim_discard_cmdbuf(sctx))
       return SI_PRIM_DISCARD_DISABLED;
 
-   struct radeon_cmdbuf *gfx_cs = sctx->gfx_cs;
+   struct radeon_cmdbuf *gfx_cs = &sctx->gfx_cs;
    unsigned prim = info->mode;
    unsigned count = total_count;
    unsigned instance_count = info->instance_count;
@@ -1000,7 +999,7 @@ si_prepare_prim_discard_or_split_draw(struct si_context *sctx, const struct pipe
          for (unsigned i = 0; i < num_draws; i++) {
             if (count && count + draws[i].count > vert_count_per_subdraw) {
                /* Submit previous draws.  */
-               sctx->b.multi_draw(&sctx->b, info, draws + first_draw, num_draws_split);
+               sctx->b.draw_vbo(&sctx->b, info, NULL, draws + first_draw, num_draws_split);
                count = 0;
                first_draw = i;
                num_draws_split = 0;
@@ -1008,7 +1007,7 @@ si_prepare_prim_discard_or_split_draw(struct si_context *sctx, const struct pipe
 
             if (draws[i].count > vert_count_per_subdraw) {
                /* Submit just 1 draw. It will be split. */
-               sctx->b.multi_draw(&sctx->b, info, draws + i, 1);
+               sctx->b.draw_vbo(&sctx->b, info, NULL, draws + i, 1);
                assert(count == 0);
                assert(first_draw == i);
                assert(num_draws_split == 0);
@@ -1036,7 +1035,7 @@ si_prepare_prim_discard_or_split_draw(struct si_context *sctx, const struct pipe
             split_draw_range.start = base_start + start;
             split_draw_range.count = MIN2(count - start, vert_count_per_subdraw);
 
-            sctx->b.multi_draw(&sctx->b, &split_draw, &split_draw_range, 1);
+            sctx->b.draw_vbo(&sctx->b, &split_draw, NULL, &split_draw_range, 1);
          }
       } else if (prim == PIPE_PRIM_TRIANGLE_STRIP) {
          /* No primitive pair can be split, because strips reverse orientation
@@ -1047,7 +1046,7 @@ si_prepare_prim_discard_or_split_draw(struct si_context *sctx, const struct pipe
             split_draw_range.start = base_start + start;
             split_draw_range.count = MIN2(count - start, vert_count_per_subdraw + 2);
 
-            sctx->b.multi_draw(&sctx->b, &split_draw, &split_draw_range, 1);
+            sctx->b.draw_vbo(&sctx->b, &split_draw, NULL, &split_draw_range, 1);
 
             if (start == 0 && primitive_restart &&
                 sctx->cs_prim_discard_state.current->key.opt.cs_need_correct_orientation)
@@ -1093,7 +1092,7 @@ si_prepare_prim_discard_or_split_draw(struct si_context *sctx, const struct pipe
    }
 
    /* The compute IB is always chained, but we need to call cs_check_space to add more space. */
-   struct radeon_cmdbuf *cs = sctx->prim_discard_compute_cs;
+   struct radeon_cmdbuf *cs = &sctx->prim_discard_compute_cs;
    ASSERTED bool compute_has_space = sctx->ws->cs_check_space(cs, need_compute_dw, false);
    assert(compute_has_space);
    assert(si_check_ring_space(sctx, out_indexbuf_size));
@@ -1102,7 +1101,7 @@ si_prepare_prim_discard_or_split_draw(struct si_context *sctx, const struct pipe
 
 void si_compute_signal_gfx(struct si_context *sctx)
 {
-   struct radeon_cmdbuf *cs = sctx->prim_discard_compute_cs;
+   struct radeon_cmdbuf *cs = &sctx->prim_discard_compute_cs;
    unsigned writeback_L2_flags = 0;
 
    /* The writeback L2 flags vary with each chip generation. */
@@ -1141,8 +1140,8 @@ void si_dispatch_prim_discard_cs_and_draw(struct si_context *sctx,
                                           unsigned base_vertex, uint64_t input_indexbuf_va,
                                           unsigned input_indexbuf_num_elements)
 {
-   struct radeon_cmdbuf *gfx_cs = sctx->gfx_cs;
-   struct radeon_cmdbuf *cs = sctx->prim_discard_compute_cs;
+   struct radeon_cmdbuf *gfx_cs = &sctx->gfx_cs;
+   struct radeon_cmdbuf *cs = &sctx->prim_discard_compute_cs;
    unsigned num_prims_per_instance = u_decomposed_prims_for_vertices(info->mode, count);
    if (!num_prims_per_instance)
       return;
@@ -1227,7 +1226,7 @@ void si_dispatch_prim_discard_cs_and_draw(struct si_context *sctx,
 
       /* Disable ordered alloc for OA resources. */
       for (unsigned i = 0; i < 2; i++) {
-         radeon_set_uconfig_reg_seq(cs, R_031074_GDS_OA_CNTL, 3);
+         radeon_set_uconfig_reg_seq(cs, R_031074_GDS_OA_CNTL, 3, false);
          radeon_emit(cs, S_031074_INDEX(i));
          radeon_emit(cs, 0);
          radeon_emit(cs, S_03107C_ENABLE(0));

@@ -36,7 +36,6 @@ fd_create_surface(struct pipe_context *pctx,
 		struct pipe_resource *ptex,
 		const struct pipe_surface *surf_tmpl)
 {
-//	struct fd_resource* tex = fd_resource(ptex);
 	struct fd_surface* surface = CALLOC_STRUCT(fd_surface);
 
 	if (!surface)
@@ -63,9 +62,6 @@ fd_create_surface(struct pipe_context *pctx,
 		psurf->u.tex.first_layer = surf_tmpl->u.tex.first_layer;
 		psurf->u.tex.last_layer = surf_tmpl->u.tex.last_layer;
 	}
-
-	// TODO
-	DBG("TODO: %ux%u", psurf->width, psurf->height);
 
 	return &surface->base;
 }

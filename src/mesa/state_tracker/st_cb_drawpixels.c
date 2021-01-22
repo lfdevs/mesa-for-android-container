@@ -148,11 +148,13 @@ make_drawpix_z_stencil_program_nir(struct st_context *st,
                                    bool write_depth,
                                    bool write_stencil)
 {
-   struct nir_builder b;
    const nir_shader_compiler_options *options =
       st_get_nir_compiler_options(st, MESA_SHADER_FRAGMENT);
 
-   nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, options);
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, options,
+                                                  "drawpixels %s%s",
+                                                  write_depth ? "Z" : "",
+                                                  write_stencil ? "S" : "");
 
    nir_variable *texcoord =
       nir_variable_create(b.shader, nir_var_shader_in, glsl_vec_type(2),
@@ -191,22 +193,18 @@ make_drawpix_z_stencil_program_nir(struct st_context *st,
       nir_store_var(&b, out, stencil, 0x1);
    }
 
-   char name[14];
-   snprintf(name, 14, "drawpixels %s%s",
-            write_depth ? "Z" : "", write_stencil ? "S" : "");
-
-   return st_nir_finish_builtin_shader(st, b.shader, name);
+   return st_nir_finish_builtin_shader(st, b.shader);
 }
 
 static void *
 make_drawpix_zs_to_color_program_nir(struct st_context *st,
                                    bool rgba)
 {
-   struct nir_builder b;
    const nir_shader_compiler_options *options =
       st_get_nir_compiler_options(st, MESA_SHADER_FRAGMENT);
 
-   nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_FRAGMENT, options);
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, options,
+                                                  "copypixels ZStoC");
 
    nir_variable *texcoord =
       nir_variable_create(b.shader, nir_var_shader_in, glsl_vec_type(2),
@@ -251,10 +249,7 @@ make_drawpix_zs_to_color_program_nir(struct st_context *st,
       nir_store_var(&b, color_out, swizzled_ds, 0xf);
    }
 
-   char name[17];
-   snprintf(name, 17, "copypixels ZStoC");
-
-   return st_nir_finish_builtin_shader(st, b.shader, name);
+   return st_nir_finish_builtin_shader(st, b.shader);
 }
 
 
@@ -750,7 +745,6 @@ draw_textured_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
                    GLboolean write_depth, GLboolean write_stencil)
 {
    struct st_context *st = st_context(ctx);
-   struct pipe_context *pipe = st->pipe;
    struct cso_context *cso = st->cso_context;
    const unsigned fb_width = _mesa_geometric_width(ctx->DrawBuffer);
    const unsigned fb_height = _mesa_geometric_height(ctx->DrawBuffer);
@@ -765,8 +759,8 @@ draw_textured_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
    /* XXX if DrawPixels image is larger than max texture size, break
     * it up into chunks.
     */
-   maxSize = pipe->screen->get_param(pipe->screen,
-                                     PIPE_CAP_MAX_TEXTURE_2D_SIZE);
+   maxSize = st->screen->get_param(st->screen,
+                                   PIPE_CAP_MAX_TEXTURE_2D_SIZE);
    assert(width <= maxSize);
    assert(height <= maxSize);
 
@@ -815,9 +809,9 @@ draw_textured_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
       dsa.stencil[0].zpass_op = PIPE_STENCIL_OP_REPLACE;
       if (write_depth) {
          /* writing depth+stencil: depth test always passes */
-         dsa.depth.enabled = 1;
-         dsa.depth.writemask = ctx->Depth.Mask;
-         dsa.depth.func = PIPE_FUNC_ALWAYS;
+         dsa.depth_enabled = 1;
+         dsa.depth_writemask = ctx->Depth.Mask;
+         dsa.depth_func = PIPE_FUNC_ALWAYS;
       }
       cso_set_depth_stencil_alpha(cso, &dsa);
 
@@ -962,14 +956,6 @@ draw_stencil_pixels(struct gl_context *ctx, GLint x, GLint y,
    struct gl_pixelstore_attrib clippedUnpack = *unpack;
    GLubyte *sValues;
    GLuint *zValues;
-
-   if (!zoom) {
-      if (!_mesa_clip_drawpixels(ctx, &x, &y, &width, &height,
-                                 &clippedUnpack)) {
-         /* totally clipped */
-         return;
-      }
-   }
 
    strb = st_renderbuffer(ctx->DrawBuffer->
                           Attachment[BUFFER_STENCIL].Renderbuffer);
@@ -1190,11 +1176,11 @@ get_color_index_fp_variant(struct st_context *st)
  * Clamp glDrawPixels width and height to the maximum texture size.
  */
 static void
-clamp_size(struct pipe_context *pipe, GLsizei *width, GLsizei *height,
+clamp_size(struct st_context *st, GLsizei *width, GLsizei *height,
            struct gl_pixelstore_attrib *unpack)
 {
-   const int maxSize = pipe->screen->get_param(pipe->screen,
-                                               PIPE_CAP_MAX_TEXTURE_2D_SIZE);
+   const int maxSize = st->screen->get_param(st->screen,
+                                             PIPE_CAP_MAX_TEXTURE_2D_SIZE);
 
    if (*width > maxSize) {
       if (unpack->RowLength == 0)
@@ -1309,7 +1295,6 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
 {
    void *driver_fp;
    struct st_context *st = st_context(ctx);
-   struct pipe_context *pipe = st->pipe;
    GLboolean write_stencil = GL_FALSE, write_depth = GL_FALSE;
    struct pipe_sampler_view *sv[2] = { NULL };
    int num_sampler_view = 1;
@@ -1327,13 +1312,19 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
 
    st_validate_state(st, ST_PIPELINE_META);
 
+   clippedUnpack = *unpack;
+   unpack = &clippedUnpack;
+
+   /* Skip totally clipped DrawPixels. */
+   if (ctx->Pixel.ZoomX == 1 && ctx->Pixel.ZoomY == 1 &&
+       !_mesa_clip_drawpixels(ctx, &x, &y, &width, &height, &clippedUnpack))
+      return;
+
    /* Limit the size of the glDrawPixels to the max texture size.
     * Strictly speaking, that's not correct but since we don't handle
     * larger images yet, this is better than crashing.
     */
-   clippedUnpack = *unpack;
-   unpack = &clippedUnpack;
-   clamp_size(st->pipe, &width, &height, &clippedUnpack);
+   clamp_size(st, &width, &height, &clippedUnpack);
 
    if (format == GL_DEPTH_STENCIL)
       write_stencil = write_depth = GL_TRUE;
@@ -1343,7 +1334,7 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
       write_depth = GL_TRUE;
 
    if (write_stencil &&
-       !pipe->screen->get_param(pipe->screen, PIPE_CAP_SHADER_STENCIL_EXPORT)) {
+       !st->screen->get_param(st->screen, PIPE_CAP_SHADER_STENCIL_EXPORT)) {
       /* software fallback */
       draw_stencil_pixels(ctx, x, y, width, height, format, type,
                           unpack, pixels);
@@ -1556,7 +1547,7 @@ blit_copy_pixels(struct gl_context *ctx, GLint srcx, GLint srcy,
 {
    struct st_context *st = st_context(ctx);
    struct pipe_context *pipe = st->pipe;
-   struct pipe_screen *screen = pipe->screen;
+   struct pipe_screen *screen = st->screen;
    struct gl_pixelstore_attrib pack, unpack;
    GLint readX, readY, readW, readH, drawX, drawY, drawW, drawH;
 
@@ -1571,15 +1562,16 @@ blit_copy_pixels(struct gl_context *ctx, GLint srcx, GLint srcy,
          !ctx->Color.AlphaEnabled &&
          (!ctx->Color.ColorLogicOpEnabled || ctx->Color.LogicOp == GL_COPY) &&
          !ctx->Depth.BoundsTest &&
-         !ctx->Depth.Test &&
+         (!ctx->Depth.Test || (ctx->Depth.Func == GL_ALWAYS && !ctx->Depth.Mask)) &&
          !ctx->Fog.Enabled &&
-         !ctx->Stencil.Enabled &&
+         (!ctx->Stencil.Enabled ||
+          (ctx->Stencil.FailFunc[0] == GL_KEEP &&
+           ctx->Stencil.ZPassFunc[0] == GL_KEEP &&
+           ctx->Stencil.ZFailFunc[0] == GL_KEEP)) &&
          !ctx->FragmentProgram.Enabled &&
-         !ctx->VertexProgram.Enabled &&
          !ctx->_Shader->CurrentProgram[MESA_SHADER_FRAGMENT] &&
          !_mesa_ati_fragment_shader_enabled(ctx) &&
          ctx->DrawBuffer->_NumColorDrawBuffers == 1)) &&
-       !ctx->Query.CondRenderQuery &&
        !ctx->Query.CurrentOcclusionObject) {
       struct st_renderbuffer *rbRead, *rbDraw;
 
@@ -1664,6 +1656,7 @@ blit_copy_pixels(struct gl_context *ctx, GLint srcx, GLint srcy,
          blit.dst.box.height = drawH;
          blit.dst.box.depth = 1;
          blit.filter = PIPE_TEX_FILTER_NEAREST;
+         blit.render_condition_enable = ctx->Query.CondRenderQuery != NULL;
 
          if (type == GL_COLOR)
             blit.mask |= PIPE_MASK_RGBA;
@@ -1704,7 +1697,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
 {
    struct st_context *st = st_context(ctx);
    struct pipe_context *pipe = st->pipe;
-   struct pipe_screen *screen = pipe->screen;
+   struct pipe_screen *screen = st->screen;
    struct st_renderbuffer *rbRead;
    void *driver_fp;
    struct pipe_resource *pt;
@@ -1731,7 +1724,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
 
    /* fallback if the driver can't do stencil exports */
    if (type == GL_DEPTH_STENCIL &&
-      !pipe->screen->get_param(pipe->screen, PIPE_CAP_SHADER_STENCIL_EXPORT)) {
+      !st->screen->get_param(st->screen, PIPE_CAP_SHADER_STENCIL_EXPORT)) {
       st_CopyPixels(ctx, srcx, srcy, width, height, dstx, dsty, GL_STENCIL);
       st_CopyPixels(ctx, srcx, srcy, width, height, dstx, dsty, GL_DEPTH);
       return;
@@ -1739,7 +1732,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
 
    /* fallback if the driver can't do stencil exports */
    if (type == GL_STENCIL &&
-       !pipe->screen->get_param(pipe->screen, PIPE_CAP_SHADER_STENCIL_EXPORT)) {
+       !st->screen->get_param(st->screen, PIPE_CAP_SHADER_STENCIL_EXPORT)) {
       copy_stencil_pixels(ctx, srcx, srcy, width, height, dstx, dsty);
       return;
    }

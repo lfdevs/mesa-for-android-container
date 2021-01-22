@@ -21,7 +21,7 @@
 inc_egl = include_directories('.', 'main')
 inc_egl_dri2 = include_directories('drivers/dri2')
 
-c_args_for_egl = []
+c_args_for_egl = [asan_c_args]
 link_for_egl = []
 deps_for_egl = []
 incs_for_egl = [inc_include, inc_src, inc_egl]
@@ -144,13 +144,18 @@ if not with_glvnd
   egl_lib_name = 'EGL' + get_option('egl-lib-suffix')
   egl_lib_version = '1.0.0'
 else
-  egl_lib_name = 'EGL_mesa'
+  egl_lib_name = 'EGL_@0@'.format(glvnd_vendor_name)
   egl_lib_version = '0.0.0'
   deps_for_egl += dep_glvnd
   files_egl += [g_egldispatchstubs_h, g_egldispatchstubs_c]
   files_egl += files('main/eglglvnd.c', 'main/egldispatchstubs.c')
-  install_data(
-    'main/50_mesa.json',
+  glvnd_config = configuration_data()
+  glvnd_config.set('glvnd_vendor_name', get_option('glvnd-vendor-name'))
+  configure_file(
+    configuration: glvnd_config,
+    input : 'main/50_mesa.json',
+    output: '50_@0@.json'.format(glvnd_vendor_name),
+    install : true,
     install_dir : join_paths(get_option('datadir'), 'glvnd', 'egl_vendor.d')
   )
 endif

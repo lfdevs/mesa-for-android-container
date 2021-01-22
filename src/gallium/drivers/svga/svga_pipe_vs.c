@@ -116,7 +116,7 @@ svga_create_vs_state(struct pipe_context *pipe,
    tgsi_scan_shader(vs->base.tokens, &vs->base.info);
 
    {
-      /* Need to do construct a new template in case we substitued a
+      /* Need to do construct a new template in case we substituted a
        * debug shader.
        */
       struct pipe_shader_state tmp2 = *templ;

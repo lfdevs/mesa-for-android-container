@@ -164,7 +164,7 @@ void
 nv10_get_fog_coeff(struct gl_context *ctx, float k[3]);
 
 void
-nv10_get_spot_coeff(struct gl_light *l, float k[7]);
+nv10_get_spot_coeff(struct gl_light *l, struct gl_light_uniforms *lu, float k[7]);
 
 void
 nv10_get_shininess_coeff(float s, float k[6]);

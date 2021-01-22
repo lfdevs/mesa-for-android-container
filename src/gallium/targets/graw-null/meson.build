@@ -24,6 +24,7 @@ libgraw_util = static_library(
   c_args : [c_msvc_compat_args],
   gnu_symbol_visibility : 'hidden',
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
+  dependencies : idep_mesautil,
 )
 
 libgraw_null = shared_library(

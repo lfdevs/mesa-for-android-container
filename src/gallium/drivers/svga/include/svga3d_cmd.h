@@ -1113,7 +1113,7 @@ SVGA3dCmdEndQuery;                  /* SVGA_3D_CMD_END_QUERY */
  *
  *    A query will be identified by the gmrId and offset of the guestResult
  *    member. If the device can't find an SVGA_3D_CMD_END_QUERY that has
- *    been sent previously with an indentical gmrId and offset, it will
+ *    been sent previously with an identical gmrId and offset, it will
  *    effectively end all queries with an identical type issued with the
  *    same cid, and the SVGA3dQueryResult structure pointed to by
  *    guestResult will not be written to. This property can be used to

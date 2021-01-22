@@ -932,6 +932,13 @@ gen_mi_store_address(struct gen_mi_builder *b,
 static inline void
 gen_mi_self_mod_barrier(struct gen_mi_builder *b)
 {
+   /* First make sure all the memory writes from previous modifying commands
+    * have landed. We want to do this before going through the CS cache,
+    * otherwise we could be fetching memory that hasn't been written to yet.
+    */
+   gen_mi_builder_emit(b, GENX(PIPE_CONTROL), pc) {
+      pc.CommandStreamerStallEnable = true;
+   }
    /* Documentation says Gen11+ should be able to invalidate the command cache
     * but experiment show it doesn't work properly, so for now just get over
     * the CS prefetch.

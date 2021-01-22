@@ -76,7 +76,7 @@ namespace {
       case BRW_OPCODE_SYNC:
       case BRW_OPCODE_DO:
       case SHADER_OPCODE_UNDEF:
-      case FS_OPCODE_PLACEHOLDER_HALT:
+      case SHADER_OPCODE_HALT_TARGET:
       case FS_OPCODE_SCHEDULING_FENCE:
          return 0;
       default:

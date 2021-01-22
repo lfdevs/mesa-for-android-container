@@ -75,9 +75,9 @@ class Opcode(object):
       assert isinstance(algebraic_properties, str)
       assert isinstance(const_expr, str)
       assert len(input_sizes) == len(input_types)
-      assert 0 <= output_size <= 4 or (output_size == 8) or (output_size == 16)
+      assert 0 <= output_size <= 5 or (output_size == 8) or (output_size == 16)
       for size in input_sizes:
-         assert 0 <= size <= 4 or (size == 8) or (size == 16)
+         assert 0 <= size <= 5 or (size == 8) or (size == 16)
          if output_size != 0:
             assert size != 0
       self.name = name
@@ -195,9 +195,24 @@ unop("mov", tuint, "src0")
 unop("ineg", tint, "-src0")
 unop("fneg", tfloat, "-src0")
 unop("inot", tint, "~src0") # invert every bit of the integer
+
+# nir_op_fsign roughly implements the OpenGL / Vulkan rules for sign(float).
+# The GLSL.std.450 FSign instruction is defined as:
+#
+#    Result is 1.0 if x > 0, 0.0 if x = 0, or -1.0 if x < 0.
+#
+# If the source is equal to zero, there is a preference for the result to have
+# the same sign, but this is not required (it is required by OpenCL).  If the
+# source is not a number, there is a preference for the result to be +0.0, but
+# this is not required (it is required by OpenCL).  If the source is not a
+# number, and the result is not +0.0, the result should definitely **not** be
+# NaN.
+#
+# The values returned for constant folding match the behavior required by
+# OpenCL.
 unop("fsign", tfloat, ("bit_size == 64 ? " +
-                       "((src0 == 0.0) ? 0.0 : ((src0 > 0.0) ? 1.0 : -1.0)) : " +
-                       "((src0 == 0.0f) ? 0.0f : ((src0 > 0.0f) ? 1.0f : -1.0f))"))
+                       "(isnan(src0) ? 0.0  : ((src0 == 0.0 ) ? src0 : (src0 > 0.0 ) ? 1.0  : -1.0 )) : " +
+                       "(isnan(src0) ? 0.0f : ((src0 == 0.0f) ? src0 : (src0 > 0.0f) ? 1.0f : -1.0f))"))
 unop("isign", tint, "(src0 == 0) ? 0 : ((src0 > 0) ? 1 : -1)")
 unop("iabs", tint, "(src0 < 0) ? -src0 : src0")
 unop("fabs", tfloat, "fabs(src0)")
@@ -560,6 +575,9 @@ def binop_reduce(name, output_size, output_type, src_type, prereduce_expr,
    opcode(name + "3" + suffix, output_size, output_type,
           [3, 3], [src_type, src_type], False, _2src_commutative,
           final(reduce_(reduce_(srcs[2], srcs[1]), srcs[0])))
+   opcode(name + "5" + suffix, output_size, output_type,
+          [5, 5], [src_type, src_type], False, _2src_commutative,
+          final(reduce_(srcs[4], reduce_(reduce_(srcs[3], srcs[2]), reduce_(srcs[1], srcs[0])))))
 
 def binop_reduce_all_sizes(name, output_size, src_type, prereduce_expr,
                            reduce_expr, final_expr):
@@ -1077,6 +1095,16 @@ dst.x = src0.x;
 dst.y = src1.x;
 dst.z = src2.x;
 dst.w = src3.x;
+""")
+
+opcode("vec5", 5, tuint,
+       [1] * 5, [tuint] * 5,
+       False, "", """
+dst.x = src0.x;
+dst.y = src1.x;
+dst.z = src2.x;
+dst.w = src3.x;
+dst.e = src4.x;
 """)
 
 opcode("vec8", 8, tuint,

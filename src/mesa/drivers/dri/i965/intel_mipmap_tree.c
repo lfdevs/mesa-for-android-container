@@ -1156,52 +1156,6 @@ intel_miptree_get_image_offset(const struct intel_mipmap_tree *mt,
    *y = y_offset_sa;
 }
 
-
-/**
- * This function computes the tile_w (in bytes) and tile_h (in rows) of
- * different tiling patterns. If the BO is untiled, tile_w is set to cpp
- * and tile_h is set to 1.
- */
-void
-intel_get_tile_dims(enum isl_tiling tiling, uint32_t cpp,
-                    uint32_t *tile_w, uint32_t *tile_h)
-{
-   switch (tiling) {
-   case ISL_TILING_X:
-      *tile_w = 512;
-      *tile_h = 8;
-      break;
-   case ISL_TILING_Y0:
-      *tile_w = 128;
-      *tile_h = 32;
-      break;
-   case ISL_TILING_LINEAR:
-      *tile_w = cpp;
-      *tile_h = 1;
-      break;
-   default:
-      unreachable("not reached");
-   }
-}
-
-
-/**
- * This function computes masks that may be used to select the bits of the X
- * and Y coordinates that indicate the offset within a tile.  If the BO is
- * untiled, the masks are set to 0.
- */
-void
-intel_get_tile_masks(enum isl_tiling tiling, uint32_t cpp,
-                     uint32_t *mask_x, uint32_t *mask_y)
-{
-   uint32_t tile_w_bytes, tile_h;
-
-   intel_get_tile_dims(tiling, cpp, &tile_w_bytes, &tile_h);
-
-   *mask_x = tile_w_bytes / cpp - 1;
-   *mask_y = tile_h - 1;
-}
-
 /**
  * Compute the offset (in bytes) from the start of the BO to the given x
  * and y coordinate.  For tiled BOs, caller must ensure that x and y are
@@ -1249,7 +1203,7 @@ intel_miptree_get_tile_offsets(const struct intel_mipmap_tree *mt,
    uint32_t x, y;
    uint32_t mask_x, mask_y;
 
-   intel_get_tile_masks(mt->surf.tiling, mt->cpp, &mask_x, &mask_y);
+   isl_get_tile_masks(mt->surf.tiling, mt->cpp, &mask_x, &mask_y);
    intel_miptree_get_image_offset(mt, level, slice, &x, &y);
 
    *tile_x = x & mask_x;

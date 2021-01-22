@@ -76,6 +76,9 @@ public:
 
 class ShaderInputVarying : public ShaderInput {
 public:
+   ShaderInputVarying(tgsi_semantic _name, int sid, unsigned driver_location,
+                      unsigned frac, unsigned components, tgsi_interpolate_mode interpolate,
+                      tgsi_interpolate_loc interp_loc);
    ShaderInputVarying(tgsi_semantic name, int sid, nir_variable *input);
    ShaderInputVarying(tgsi_semantic name, const ShaderInputVarying& orig,
                       size_t location);
@@ -115,6 +118,9 @@ private:
 
 class ShaderInputColor: public ShaderInputVarying {
 public:
+   ShaderInputColor(tgsi_semantic _name, int sid, unsigned driver_location,
+                    unsigned frac, unsigned components, tgsi_interpolate_mode interpolate,
+                    tgsi_interpolate_loc interp_loc);
    ShaderInputColor(tgsi_semantic name, int sid, nir_variable *input);
    void set_back_color(unsigned back_color_input_idx);
    unsigned back_color_input_index() const {

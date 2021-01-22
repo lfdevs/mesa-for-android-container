@@ -34,10 +34,10 @@ void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
 			boolean count_draw_in, unsigned num_atomics)
 {
 	/* Flush the DMA IB if it's not empty. */
-	if (radeon_emitted(ctx->b.dma.cs, 0))
+	if (radeon_emitted(&ctx->b.dma.cs, 0))
 		ctx->b.dma.flush(ctx, PIPE_FLUSH_ASYNC, NULL);
 
-	if (!radeon_cs_memory_below_limit(ctx->b.screen, ctx->b.gfx.cs,
+	if (!radeon_cs_memory_below_limit(ctx->b.screen, &ctx->b.gfx.cs,
 					  ctx->b.vram, ctx->b.gtt)) {
 		ctx->b.gtt = 0;
 		ctx->b.vram = 0;
@@ -84,14 +84,14 @@ void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
 	num_dw += 10;
 
 	/* Flush if there's not enough space. */
-	if (!ctx->b.ws->cs_check_space(ctx->b.gfx.cs, num_dw, false)) {
+	if (!ctx->b.ws->cs_check_space(&ctx->b.gfx.cs, num_dw, false)) {
 		ctx->b.gfx.flush(ctx, PIPE_FLUSH_ASYNC, NULL);
 	}
 }
 
 void r600_flush_emit(struct r600_context *rctx)
 {
-	struct radeon_cmdbuf *cs = rctx->b.gfx.cs;
+	struct radeon_cmdbuf *cs = &rctx->b.gfx.cs;
 	unsigned cp_coher_cntl = 0;
 	unsigned wait_until = 0;
 
@@ -260,7 +260,7 @@ void r600_context_gfx_flush(void *context, unsigned flags,
 			    struct pipe_fence_handle **fence)
 {
 	struct r600_context *ctx = context;
-	struct radeon_cmdbuf *cs = ctx->b.gfx.cs;
+	struct radeon_cmdbuf *cs = &ctx->b.gfx.cs;
 	struct radeon_winsys *ws = ctx->b.ws;
 
 	if (!radeon_emitted(cs, ctx->b.initial_gfx_cs_size))
@@ -345,7 +345,7 @@ void r600_begin_new_cs(struct r600_context *ctx)
 	ctx->b.vram = 0;
 
 	/* Begin a new CS. */
-	r600_emit_command_buffer(ctx->b.gfx.cs, &ctx->start_cs_cmd);
+	r600_emit_command_buffer(&ctx->b.gfx.cs, &ctx->start_cs_cmd);
 
 	/* Re-emit states. */
 	r600_mark_atom_dirty(ctx, &ctx->alphatest_state.atom);
@@ -430,13 +430,13 @@ void r600_begin_new_cs(struct r600_context *ctx)
 	ctx->last_rast_prim      = -1;
 	ctx->current_rast_prim   = -1;
 
-	assert(!ctx->b.gfx.cs->prev_dw);
-	ctx->b.initial_gfx_cs_size = ctx->b.gfx.cs->current.cdw;
+	assert(!ctx->b.gfx.cs.prev_dw);
+	ctx->b.initial_gfx_cs_size = ctx->b.gfx.cs.current.cdw;
 }
 
 void r600_emit_pfp_sync_me(struct r600_context *rctx)
 {
-	struct radeon_cmdbuf *cs = rctx->b.gfx.cs;
+	struct radeon_cmdbuf *cs = &rctx->b.gfx.cs;
 
 	if (rctx->b.chip_class >= EVERGREEN &&
 	    rctx->b.screen->info.drm_minor >= 46) {
@@ -451,7 +451,7 @@ void r600_emit_pfp_sync_me(struct r600_context *rctx)
 		uint64_t va;
 
 		/* 16-byte address alignment is required by WAIT_REG_MEM. */
-		u_suballocator_alloc(rctx->b.allocator_zeroed_memory, 4, 16,
+		u_suballocator_alloc(&rctx->b.allocator_zeroed_memory, 4, 16,
 				     &offset, (struct pipe_resource**)&buf);
 		if (!buf) {
 			/* This is too heavyweight, but will work. */
@@ -502,7 +502,7 @@ void r600_cp_dma_copy_buffer(struct r600_context *rctx,
 			     struct pipe_resource *src, uint64_t src_offset,
 			     unsigned size)
 {
-	struct radeon_cmdbuf *cs = rctx->b.gfx.cs;
+	struct radeon_cmdbuf *cs = &rctx->b.gfx.cs;
 
 	assert(size);
 	assert(rctx->screen->b.has_cp_dma);
@@ -584,7 +584,7 @@ void r600_dma_copy_buffer(struct r600_context *rctx,
 			  uint64_t src_offset,
 			  uint64_t size)
 {
-	struct radeon_cmdbuf *cs = rctx->b.dma.cs;
+	struct radeon_cmdbuf *cs = &rctx->b.dma.cs;
 	unsigned i, ncopy, csize;
 	struct r600_resource *rdst = (struct r600_resource*)dst;
 	struct r600_resource *rsrc = (struct r600_resource*)src;

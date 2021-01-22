@@ -387,7 +387,7 @@ get_atomic_dest_mov(struct ir3_instruction *atomic)
 		return atomic->data;
 
 	/* We are already out of SSA here, so we can't use the nice builders: */
-	mov = ir3_instr_create(atomic->block, OPC_MOV);
+	mov = ir3_instr_create(atomic->block, OPC_MOV, 2);
 	ir3_reg_create(mov, 0, 0);    /* dst */
 	ir3_reg_create(mov, 0, 0);    /* src */
 

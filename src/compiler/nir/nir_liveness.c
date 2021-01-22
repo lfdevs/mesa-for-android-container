@@ -54,7 +54,7 @@ struct live_ssa_defs_state {
 /* Initialize the liveness data to zero and add the given block to the
  * worklist.
  */
-static bool
+static void
 init_liveness_block(nir_block *block,
                     struct live_ssa_defs_state *state)
 {
@@ -67,8 +67,6 @@ init_liveness_block(nir_block *block,
    memset(block->live_out, 0, state->bitset_words * sizeof(BITSET_WORD));
 
    nir_block_worklist_push_head(&state->worklist, block);
-
-   return true;
 }
 
 static bool
@@ -212,6 +210,64 @@ nir_live_ssa_defs_impl(nir_function_impl *impl)
 
    ralloc_free(state.tmp_live);
    nir_block_worklist_fini(&state.worklist);
+}
+
+/** Return the live set at a cursor
+ *
+ * Note: The bitset returned may be the live_in or live_out from the block in
+ *       which the instruction lives.  Do not ralloc_free() it directly;
+ *       instead, provide a mem_ctx and free that.
+ */
+const BITSET_WORD *
+nir_get_live_ssa_defs(nir_cursor cursor, void *mem_ctx)
+{
+   nir_block *block = nir_cursor_current_block(cursor);
+   nir_function_impl *impl = nir_cf_node_get_function(&block->cf_node);
+   assert(impl->valid_metadata & nir_metadata_live_ssa_defs);
+
+   switch (cursor.option) {
+   case nir_cursor_before_block:
+      return cursor.block->live_in;
+
+   case nir_cursor_after_block:
+      return cursor.block->live_out;
+
+   case nir_cursor_before_instr:
+      if (cursor.instr == nir_block_first_instr(cursor.instr->block))
+         return cursor.instr->block->live_in;
+      break;
+
+   case nir_cursor_after_instr:
+      if (cursor.instr == nir_block_last_instr(cursor.instr->block))
+         return cursor.instr->block->live_out;
+      break;
+   }
+
+   /* If we got here, we're an instruction cursor mid-block */
+   const unsigned bitset_words = BITSET_WORDS(impl->ssa_alloc);
+   BITSET_WORD *live = ralloc_array(mem_ctx, BITSET_WORD, bitset_words);
+   memcpy(live, block->live_out, bitset_words * sizeof(BITSET_WORD));
+
+   nir_foreach_instr_reverse(instr, block) {
+      if (cursor.option == nir_cursor_after_instr && instr == cursor.instr)
+         break;
+
+      /* If someone asked for liveness in the middle of a bunch of phis,
+       * that's an error.  Since we are going backwards and they are at the
+       * beginning, we can just blow up as soon as we see one.
+       */
+      assert(instr->type != nir_instr_type_phi);
+      if (instr->type == nir_instr_type_phi)
+         break;
+
+      nir_foreach_ssa_def(instr, set_ssa_def_dead, live);
+      nir_foreach_src(instr, set_src_live, live);
+
+      if (cursor.option == nir_cursor_before_instr && instr == cursor.instr)
+         break;
+   }
+
+   return live;
 }
 
 static bool

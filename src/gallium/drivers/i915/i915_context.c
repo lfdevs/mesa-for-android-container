@@ -51,14 +51,28 @@ DEBUG_GET_ONCE_BOOL_OPTION(i915_no_vbuf, "I915_NO_VBUF", FALSE)
 
 
 static void
-i915_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
+i915_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
+              const struct pipe_draw_indirect_info *indirect,
+              const struct pipe_draw_start_count *draws,
+              unsigned num_draws)
 {
+   if (num_draws > 1) {
+      struct pipe_draw_info tmp_info = *info;
+
+      for (unsigned i = 0; i < num_draws; i++) {
+         i915_draw_vbo(pipe, &tmp_info, indirect, &draws[i], 1);
+         if (tmp_info.increment_draw_id)
+            tmp_info.drawid++;
+      }
+      return;
+   }
+
    struct i915_context *i915 = i915_context(pipe);
    struct draw_context *draw = i915->draw;
    const void *mapped_indices = NULL;
    unsigned i;
 
-   if (!u_trim_pipe_prim(info->mode, (unsigned*)&info->count))
+   if (!u_trim_pipe_prim(info->mode, (unsigned*)&draws[0].count))
       return;
 
    /*
@@ -109,7 +123,7 @@ i915_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    /*
     * Do the drawing
     */
-   draw_vbo(i915->draw, info);
+   draw_vbo(i915->draw, info, NULL, draws, num_draws);
 
    /*
     * unmap vertex/index buffers

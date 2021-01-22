@@ -315,10 +315,10 @@ void radeonTexUpdateParameters(struct gl_context *ctx, GLuint unit)
    struct gl_sampler_object *samp = _mesa_get_samplerobj(ctx, unit);
    radeonTexObj* t = radeon_tex_obj(ctx->Texture.Unit[unit]._Current);
 
-   radeonSetTexMaxAnisotropy(t , samp->MaxAnisotropy);
-   radeonSetTexFilter(t, samp->MinFilter, samp->MagFilter);
-   radeonSetTexWrap(t, samp->WrapS, samp->WrapT);
-   radeonSetTexBorderColor(t, samp->BorderColor.f);
+   radeonSetTexMaxAnisotropy(t , samp->Attrib.MaxAnisotropy);
+   radeonSetTexFilter(t, samp->Attrib.MinFilter, samp->Attrib.MagFilter);
+   radeonSetTexWrap(t, samp->Attrib.WrapS, samp->Attrib.WrapT);
+   radeonSetTexBorderColor(t, samp->Attrib.BorderColor.f);
 }
 
 
@@ -337,6 +337,7 @@ static void radeonTexParameter( struct gl_context *ctx,
 	       _mesa_enum_to_string( pname ) );
 
    switch ( pname ) {
+   case GL_ALL_ATTRIB_BITS: /* meaning is all pnames, internal */
    case GL_TEXTURE_BASE_LEVEL:
    case GL_TEXTURE_MAX_LEVEL:
    case GL_TEXTURE_MIN_LOD:
@@ -410,7 +411,7 @@ radeonNewTextureObject( struct gl_context *ctx, GLuint name, GLenum target )
    radeonTexObj* t = CALLOC_STRUCT(radeon_tex_obj);
 
    _mesa_initialize_texture_object(ctx, &t->base, name, target);
-   t->base.Sampler.MaxAnisotropy = rmesa->radeon.initialMaxAnisotropy;
+   t->base.Sampler.Attrib.MaxAnisotropy = rmesa->radeon.initialMaxAnisotropy;
 
    t->border_fallback = GL_FALSE;
 
@@ -418,10 +419,10 @@ radeonNewTextureObject( struct gl_context *ctx, GLuint name, GLenum target )
    t->pp_txformat = (RADEON_TXFORMAT_ENDIAN_NO_SWAP |
 		     RADEON_TXFORMAT_PERSPECTIVE_ENABLE);
 
-   radeonSetTexWrap( t, t->base.Sampler.WrapS, t->base.Sampler.WrapT );
-   radeonSetTexMaxAnisotropy( t, t->base.Sampler.MaxAnisotropy );
-   radeonSetTexFilter( t, t->base.Sampler.MinFilter, t->base.Sampler.MagFilter );
-   radeonSetTexBorderColor( t, t->base.Sampler.BorderColor.f );
+   radeonSetTexWrap( t, t->base.Sampler.Attrib.WrapS, t->base.Sampler.Attrib.WrapT );
+   radeonSetTexMaxAnisotropy( t, t->base.Sampler.Attrib.MaxAnisotropy );
+   radeonSetTexFilter( t, t->base.Sampler.Attrib.MinFilter, t->base.Sampler.Attrib.MagFilter );
+   radeonSetTexBorderColor( t, t->base.Sampler.Attrib.BorderColor.f );
    return &t->base;
 }
 
@@ -432,7 +433,7 @@ radeonNewSamplerObject(struct gl_context *ctx, GLuint name)
    r100ContextPtr rmesa = R100_CONTEXT(ctx);
    struct gl_sampler_object *samp = _mesa_new_sampler_object(ctx, name);
    if (samp)
-      samp->MaxAnisotropy = rmesa->radeon.initialMaxAnisotropy;
+      samp->Attrib.MaxAnisotropy = rmesa->radeon.initialMaxAnisotropy;
    return samp;
 }
 

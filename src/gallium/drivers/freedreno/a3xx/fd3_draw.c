@@ -67,10 +67,10 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	OUT_RING(ring, 0x0000000b);             /* PC_VERTEX_REUSE_BLOCK_CNTL */
 
 	OUT_PKT0(ring, REG_A3XX_VFD_INDEX_MIN, 4);
-	OUT_RING(ring, add_sat(info->min_index, info->index_bias)); /* VFD_INDEX_MIN */
-	OUT_RING(ring, add_sat(info->max_index, info->index_bias)); /* VFD_INDEX_MAX */
+	OUT_RING(ring, info->index_bounds_valid ? add_sat(info->min_index, info->index_size ? info->index_bias : 0) : 0);  /* VFD_INDEX_MIN */
+	OUT_RING(ring, info->index_bounds_valid ? add_sat(info->max_index, info->index_size ? info->index_bias : 0) : ~0); /* VFD_INDEX_MAX */
 	OUT_RING(ring, info->start_instance);   /* VFD_INSTANCEID_OFFSET */
-	OUT_RING(ring, info->index_size ? info->index_bias : info->start); /* VFD_INDEX_OFFSET */
+	OUT_RING(ring, info->index_size ? info->index_bias : emit->draw->start); /* VFD_INDEX_OFFSET */
 
 	OUT_PKT0(ring, REG_A3XX_PC_RESTART_INDEX, 1);
 	OUT_RING(ring, info->primitive_restart ? /* PC_RESTART_INDEX */
@@ -84,7 +84,7 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 	fd_draw_emit(ctx->batch, ring, primtype,
 			emit->binning_pass ? IGNORE_VISIBILITY : USE_VISIBILITY,
-			info, index_offset);
+			info, emit->draw, index_offset);
 }
 
 /* fixup dirty shader state in case some "unrelated" (from the state-
@@ -114,6 +114,8 @@ fixup_shader_state(struct fd_context *ctx, struct ir3_shader_key *key)
 
 static bool
 fd3_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
+             const struct pipe_draw_indirect_info *indirect,
+             const struct pipe_draw_start_count *draw,
              unsigned index_offset)
 {
 	struct fd3_context *fd3_ctx = fd3_context(ctx);
@@ -122,6 +124,8 @@ fd3_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 		.vtx  = &ctx->vtx,
 		.prog = &ctx->prog,
 		.info = info,
+                .indirect = indirect,
+                .draw = draw,
 		.key = {
 			.color_two_side = ctx->rasterizer->light_twoside,
 			.vclamp_color = ctx->rasterizer->clamp_vertex_color,

@@ -173,25 +173,25 @@ nv10_emit_tex_obj(struct gl_context *ctx, int emit)
 	}
 
 	t = ctx->Texture.Unit[i]._Current;
-	s = &to_nouveau_texture(t)->surfaces[t->BaseLevel];
-	ti = t->Image[0][t->BaseLevel];
+	s = &to_nouveau_texture(t)->surfaces[t->Attrib.BaseLevel];
+	ti = t->Image[0][t->Attrib.BaseLevel];
 	sa = _mesa_get_samplerobj(ctx, i);
 
 	if (!nouveau_texture_validate(ctx, t))
 		return;
 
 	/* Recompute the texturing registers. */
-	tx_format = nvgl_wrap_mode(sa->WrapT) << 28
-		| nvgl_wrap_mode(sa->WrapS) << 24
+	tx_format = nvgl_wrap_mode(sa->Attrib.WrapT) << 28
+		| nvgl_wrap_mode(sa->Attrib.WrapS) << 24
 		| ti->HeightLog2 << 20
 		| ti->WidthLog2 << 16
 		| 5 << 4 | 1 << 12;
 
-	tx_filter = nvgl_filter_mode(sa->MagFilter) << 28
-		| nvgl_filter_mode(sa->MinFilter) << 24;
+	tx_filter = nvgl_filter_mode(sa->Attrib.MagFilter) << 28
+		| nvgl_filter_mode(sa->Attrib.MinFilter) << 24;
 
 	tx_enable = NV10_3D_TEX_ENABLE_ENABLE
-		| log2i(sa->MaxAnisotropy) << 4;
+		| log2i(sa->Attrib.MaxAnisotropy) << 4;
 
 	if (t->Target == GL_TEXTURE_RECTANGLE) {
 		BEGIN_NV04(push, NV10_3D(TEX_NPOT_PITCH(i)), 1);
@@ -204,11 +204,11 @@ nv10_emit_tex_obj(struct gl_context *ctx, int emit)
 		tx_format |= get_tex_format_pot(ti);
 	}
 
-	if (sa->MinFilter != GL_NEAREST &&
-	    sa->MinFilter != GL_LINEAR) {
-		int lod_min = sa->MinLod;
-		int lod_max = MIN2(sa->MaxLod, t->_MaxLambda);
-		int lod_bias = sa->LodBias
+	if (sa->Attrib.MinFilter != GL_NEAREST &&
+	    sa->Attrib.MinFilter != GL_LINEAR) {
+		int lod_min = sa->Attrib.MinLod;
+		int lod_max = MIN2(sa->Attrib.MaxLod, t->_MaxLambda);
+		int lod_bias = sa->Attrib.LodBias
 			+ ctx->Texture.Unit[i].LodBias;
 
 		lod_max = CLAMP(lod_max, 0, 15);

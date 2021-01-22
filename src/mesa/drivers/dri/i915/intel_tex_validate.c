@@ -24,9 +24,9 @@ intel_update_max_level(struct intel_texture_object *intelObj,
    struct gl_texture_object *tObj = &intelObj->base;
    int maxlevel;
 
-   if (sampler->MinFilter == GL_NEAREST ||
-       sampler->MinFilter == GL_LINEAR) {
-      maxlevel = tObj->BaseLevel;
+   if (sampler->Attrib.MinFilter == GL_NEAREST ||
+       sampler->Attrib.MinFilter == GL_LINEAR) {
+      maxlevel = tObj->Attrib.BaseLevel;
    } else {
       maxlevel = tObj->_MaxLevel;
    }
@@ -62,13 +62,13 @@ intel_finalize_mipmap_tree(struct intel_context *intel, GLuint unit)
    /* What levels must the tree include at a minimum?
     */
    intel_update_max_level(intelObj, sampler);
-   if (intelObj->mt && intelObj->mt->first_level != tObj->BaseLevel)
+   if (intelObj->mt && intelObj->mt->first_level != tObj->Attrib.BaseLevel)
       intelObj->needs_validate = true;
 
    if (!intelObj->needs_validate)
       return true;
 
-   firstImage = intel_texture_image(tObj->Image[0][tObj->BaseLevel]);
+   firstImage = intel_texture_image(tObj->Image[0][tObj->Attrib.BaseLevel]);
 
    /* Check tree can hold all active levels.  Check tree matches
     * target, imageFormat, etc.
@@ -80,7 +80,7 @@ intel_finalize_mipmap_tree(struct intel_context *intel, GLuint unit)
     */
    if (intelObj->mt &&
        (!intel_miptree_match_image(intelObj->mt, &firstImage->base.Base) ||
-	intelObj->mt->first_level != tObj->BaseLevel ||
+	intelObj->mt->first_level != tObj->Attrib.BaseLevel ||
 	intelObj->mt->last_level < intelObj->_MaxLevel)) {
       intel_miptree_release(&intelObj->mt);
    }
@@ -95,12 +95,12 @@ intel_finalize_mipmap_tree(struct intel_context *intel, GLuint unit)
       perf_debug("Creating new %s %dx%dx%d %d..%d miptree to handle finalized "
                  "texture miptree.\n",
                  _mesa_get_format_name(firstImage->base.Base.TexFormat),
-                 width, height, depth, tObj->BaseLevel, intelObj->_MaxLevel);
+                 width, height, depth, tObj->Attrib.BaseLevel, intelObj->_MaxLevel);
 
       intelObj->mt = intel_miptree_create(intel,
                                           intelObj->base.Target,
 					  firstImage->base.Base.TexFormat,
-                                          tObj->BaseLevel,
+                                          tObj->Attrib.BaseLevel,
                                           intelObj->_MaxLevel,
                                           width,
                                           height,
@@ -115,7 +115,7 @@ intel_finalize_mipmap_tree(struct intel_context *intel, GLuint unit)
     */
    nr_faces = _mesa_num_tex_faces(intelObj->base.Target);
    for (face = 0; face < nr_faces; face++) {
-      for (i = tObj->BaseLevel; i <= intelObj->_MaxLevel; i++) {
+      for (i = tObj->Attrib.BaseLevel; i <= intelObj->_MaxLevel; i++) {
          struct intel_texture_image *intelImage =
             intel_texture_image(intelObj->base.Image[face][i]);
 	 /* skip too small size mipmap */

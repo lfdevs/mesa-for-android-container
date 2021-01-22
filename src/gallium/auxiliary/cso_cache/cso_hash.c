@@ -251,44 +251,6 @@ struct cso_node *cso_hash_data_next(struct cso_node *node)
    return a.e;
 }
 
-
-static struct cso_node *cso_hash_data_prev(struct cso_node *node)
-{
-   union {
-      struct cso_node *e;
-      struct cso_hash *d;
-   } a;
-   int start;
-   struct cso_node *sentinel;
-   struct cso_node **bucket;
-
-   a.e = node;
-   while (a.e->next)
-      a.e = a.e->next;
-
-   if (node == a.e)
-      start = a.d->numBuckets - 1;
-   else
-      start = node->key % a.d->numBuckets;
-
-   sentinel = node;
-   bucket = a.d->buckets + start;
-   while (start >= 0) {
-      if (*bucket != sentinel) {
-         struct cso_node *prev = *bucket;
-         while (prev->next != sentinel)
-            prev = prev->next;
-         return prev;
-      }
-
-      sentinel = a.e;
-      --bucket;
-      --start;
-   }
-   debug_printf("iterating backward beyond first element\n");
-   return a.e;
-}
-
 void *cso_hash_take(struct cso_hash *hash, unsigned akey)
 {
    struct cso_node **node = cso_hash_find_node(hash, akey);
@@ -303,13 +265,6 @@ void *cso_hash_take(struct cso_hash *hash, unsigned akey)
       return t;
    }
    return NULL;
-}
-
-struct cso_hash_iter cso_hash_iter_prev(struct cso_hash_iter iter)
-{
-   struct cso_hash_iter prev = {iter.hash,
-                                cso_hash_data_prev(iter.node)};
-   return prev;
 }
 
 struct cso_hash_iter cso_hash_first_node(struct cso_hash *hash)

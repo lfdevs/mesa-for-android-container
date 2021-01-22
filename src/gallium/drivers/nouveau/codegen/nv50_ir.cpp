@@ -1169,13 +1169,16 @@ FlowInstruction::clone(ClonePolicy<Function>& pol, Instruction *i) const
 Program::Program(Type type, Target *arch)
    : progType(type),
      target(arch),
+     tlsSize(0),
      mem_Instruction(sizeof(Instruction), 6),
      mem_CmpInstruction(sizeof(CmpInstruction), 4),
      mem_TexInstruction(sizeof(TexInstruction), 4),
      mem_FlowInstruction(sizeof(FlowInstruction), 4),
      mem_LValue(sizeof(LValue), 8),
      mem_Symbol(sizeof(Symbol), 7),
-     mem_ImmediateValue(sizeof(ImmediateValue), 7)
+     mem_ImmediateValue(sizeof(ImmediateValue), 7),
+     driver(NULL),
+     driver_out(NULL)
 {
    code = NULL;
    binSize = 0;

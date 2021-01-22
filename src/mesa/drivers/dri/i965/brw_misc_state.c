@@ -140,8 +140,8 @@ rebase_depth_stencil(struct brw_context *brw, struct intel_renderbuffer *irb,
    struct gl_context *ctx = &brw->ctx;
    uint32_t tile_mask_x = 0, tile_mask_y = 0;
 
-   intel_get_tile_masks(irb->mt->surf.tiling, irb->mt->cpp,
-                        &tile_mask_x, &tile_mask_y);
+   isl_get_tile_masks(irb->mt->surf.tiling, irb->mt->cpp,
+                      &tile_mask_x, &tile_mask_y);
    assert(!intel_miptree_level_has_hiz(irb->mt, irb->mt_level));
 
    uint32_t tile_x = irb->draw_x & tile_mask_x;

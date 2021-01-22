@@ -41,7 +41,7 @@ destroy_buffer_locked(struct pb_cache_entry *entry)
    struct pb_buffer *buf = entry->buffer;
 
    assert(!pipe_is_referenced(&buf->reference));
-   if (entry->head.next) {
+   if (list_is_linked(&entry->head)) {
       list_del(&entry->head);
       assert(mgr->num_buffers);
       --mgr->num_buffers;

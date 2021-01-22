@@ -1162,10 +1162,7 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_batch *batch,
       blorp_nir_mcs_is_clear_color(&b, mcs, blorp_key.num_samples);
 
    /* If we aren't the clear value, discard. */
-   nir_intrinsic_instr *discard =
-      nir_intrinsic_instr_create(b.shader, nir_intrinsic_discard_if);
-   discard->src[0] = nir_src_for_ssa(nir_inot(&b, is_clear));
-   nir_builder_instr_insert(&b, &discard->instr);
+   nir_discard_if(&b, nir_inot(&b, is_clear));
 
    nir_ssa_def *clear_color = nir_load_var(&b, v_color);
    if (blorp_key.indirect_clear_color && blorp->isl_dev->info->gen <= 8) {

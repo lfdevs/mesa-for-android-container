@@ -413,6 +413,7 @@ nouveau_tex_parameter(struct gl_context *ctx,
 	case GL_TEXTURE_MIN_FILTER:
 	case GL_TEXTURE_BASE_LEVEL:
 	case GL_TEXTURE_MAX_LEVEL:
+	case GL_ALL_ATTRIB_BITS: /* meaning is all pnames, internal */
 		nouveau_texture_reallocate(ctx, t);
 		context_dirty_i(ctx, TEX_OBJ, ctx->Texture.CurrentUnit);
 		break;

@@ -8,8 +8,7 @@ using std::priority_queue;
 
 VertexStageExportBase::VertexStageExportBase(VertexStage& proc):
    m_proc(proc),
-   m_cur_clip_pos(1),
-   m_cur_param(0)
+   m_cur_clip_pos(1)
 {
 
 }
@@ -19,10 +18,40 @@ VertexStageExportBase::~VertexStageExportBase()
 
 }
 
+bool VertexStageExportBase::do_process_outputs(nir_variable *output)
+{
+   return true;
+}
+
+void VertexStageExportBase::emit_shader_start()
+{
+
+}
+
+void VertexStageExportBase::scan_store_output(nir_intrinsic_instr* instr)
+{
+
+}
+
+bool VertexStageExportBase::store_output(nir_intrinsic_instr* instr)
+{
+   auto index = nir_src_as_const_value(instr->src[1]);
+   assert(index && "Indirect outputs not supported");
+
+   const store_loc store_info  = {
+      nir_intrinsic_component(instr),
+      nir_intrinsic_io_semantics(instr).location,
+      (unsigned)nir_intrinsic_base(instr) + index->u32,
+      0
+   };
+
+   return do_store_output(store_info, instr);
+}
+
 VertexStageExportForFS::VertexStageExportForFS(VertexStage& proc,
                                                const pipe_stream_output_info *so_info,
                                                r600_pipe_shader *pipe_shader, const r600_shader_key &key):
-   VertexStageExportBase(proc),
+   VertexStageWithOutputInfo(proc),
    m_last_param_export(nullptr),
    m_last_pos_export(nullptr),
    m_num_clip_dist(0),
@@ -33,7 +62,7 @@ VertexStageExportForFS::VertexStageExportForFS(VertexStage& proc,
 {
 }
 
-bool VertexStageExportBase::do_process_outputs(nir_variable *output)
+bool VertexStageWithOutputInfo::do_process_outputs(nir_variable *output)
 {
    if (output->data.location == VARYING_SLOT_COL0 ||
        output->data.location == VARYING_SLOT_COL1 ||
@@ -73,60 +102,58 @@ bool VertexStageExportBase::do_process_outputs(nir_variable *output)
           output->data.location != VARYING_SLOT_EDGE &&
           output->data.location != VARYING_SLOT_PSIZ &&
           output->data.location != VARYING_SLOT_CLIP_VERTEX)
-         m_param_map[output->data.location] = m_cur_param++;
+         m_param_driver_locations.push(output->data.driver_location);
 
       return true;
    }
    return false;
 }
 
-
-bool VertexStageExportForFS::store_deref(const nir_variable *out_var, nir_intrinsic_instr* instr)
+bool VertexStageExportForFS::do_store_output(const store_loc& store_info, nir_intrinsic_instr* instr)
 {
-
-   switch (out_var->data.location) {
+   switch (store_info.location) {
    case VARYING_SLOT_PSIZ:
       m_proc.sh_info().vs_out_point_size = 1;
       m_proc.sh_info().vs_out_misc_write = 1;
       /* fallthrough */
    case VARYING_SLOT_POS:
-      return emit_varying_pos(out_var, instr);
+      return emit_varying_pos(store_info, instr);
    case VARYING_SLOT_EDGE: {
       std::array<uint32_t, 4> swizzle_override = {7 ,0, 7, 7};
-      return emit_varying_pos(out_var, instr, &swizzle_override);
+      return emit_varying_pos(store_info, instr, &swizzle_override);
    }
    case VARYING_SLOT_VIEWPORT: {
       std::array<uint32_t, 4> swizzle_override = {7, 7, 7, 0};
-      return emit_varying_pos(out_var, instr, &swizzle_override) &&
-            emit_varying_param(out_var, instr);
+      return emit_varying_pos(store_info, instr, &swizzle_override) &&
+            emit_varying_param(store_info, instr);
    }
    case VARYING_SLOT_CLIP_VERTEX:
-      return emit_clip_vertices(out_var, instr);
+      return emit_clip_vertices(store_info, instr);
    case VARYING_SLOT_CLIP_DIST0:
    case VARYING_SLOT_CLIP_DIST1:
       m_num_clip_dist += 4;
-      return emit_varying_param(out_var, instr) && emit_varying_pos(out_var, instr);
+      return emit_varying_param(store_info, instr) && emit_varying_pos(store_info, instr);
    case VARYING_SLOT_LAYER: {
       m_proc.sh_info().vs_out_misc_write = 1;
       m_proc.sh_info().vs_out_layer = 1;
       std::array<uint32_t, 4> swz = {7,7,0,7};
-      return emit_varying_pos(out_var, instr, &swz) &&
-            emit_varying_param(out_var, instr);
+      return emit_varying_pos(store_info, instr, &swz) &&
+            emit_varying_param(store_info, instr);
    }
    case VARYING_SLOT_VIEW_INDEX:
-      return emit_varying_pos(out_var, instr) &&
-            emit_varying_param(out_var, instr);
+      return emit_varying_pos(store_info, instr) &&
+            emit_varying_param(store_info, instr);
 
    default:
-         return emit_varying_param(out_var, instr);
+         return emit_varying_param(store_info, instr);
    }
 
    fprintf(stderr, "r600-NIR: Unimplemented store_deref for %d\n",
-           out_var->data.location);
+           store_info.location);
    return false;
 }
 
-bool VertexStageExportForFS::emit_varying_pos(const nir_variable *out_var, nir_intrinsic_instr* instr,
+bool VertexStageExportForFS::emit_varying_pos(const store_loc &store_info, nir_intrinsic_instr* instr,
                                               std::array<uint32_t, 4> *swizzle_override)
 {
    std::array<uint32_t,4> swizzle;
@@ -139,25 +166,25 @@ bool VertexStageExportForFS::emit_varying_pos(const nir_variable *out_var, nir_i
             write_mask |= 1 << i;
       }
    } else {
-      write_mask = nir_intrinsic_write_mask(instr) << out_var->data.location_frac;
+      write_mask = nir_intrinsic_write_mask(instr) << store_info.frac;
       for (int i = 0; i < 4; ++i)
-         swizzle[i] = ((1 << i) & write_mask) ? i - out_var->data.location_frac : 7;
+         swizzle[i] = ((1 << i) & write_mask) ? i - store_info.frac : 7;
    }
 
-   m_proc.sh_info().output[out_var->data.driver_location].write_mask = write_mask;
+   m_proc.sh_info().output[store_info.driver_location].write_mask = write_mask;
 
-   GPRVector value = m_proc.vec_from_nir_with_fetch_constant(instr->src[1], write_mask, swizzle);
-   m_proc.set_output(out_var->data.driver_location, value.sel());
+   GPRVector value = m_proc.vec_from_nir_with_fetch_constant(instr->src[store_info.data_loc], write_mask, swizzle);
+   m_proc.set_output(store_info.driver_location, value.sel());
 
    int export_slot = 0;
 
-   switch (out_var->data.location) {
+   switch (store_info.location) {
    case VARYING_SLOT_EDGE: {
       m_proc.sh_info().vs_out_misc_write = 1;
       m_proc.sh_info().vs_out_edgeflag = 1;
       m_proc.emit_instruction(op1_mov, value.reg_i(1), {value.reg_i(1)}, {alu_write, alu_dst_clamp, alu_last_instr});
       m_proc.emit_instruction(op1_flt_to_int, value.reg_i(1), {value.reg_i(1)}, {alu_write, alu_last_instr});
-      m_proc.sh_info().output[out_var->data.driver_location].write_mask = 0xf;
+      m_proc.sh_info().output[store_info.driver_location].write_mask = 0xf;
    }
       /* fallthrough */
    case VARYING_SLOT_PSIZ:
@@ -177,53 +204,51 @@ bool VertexStageExportForFS::emit_varying_pos(const nir_variable *out_var, nir_i
       break;
    default:
       sfn_log << SfnLog::err << __func__ << "Unsupported location "
-              << out_var->data.location << "\n";
+              << store_info.location << "\n";
       return false;
    }
 
    m_last_pos_export = new ExportInstruction(export_slot, value, ExportInstruction::et_pos);
    m_proc.emit_export_instruction(m_last_pos_export);
-   m_proc.add_param_output_reg(out_var->data.driver_location, m_last_pos_export->gpr_ptr());
+   m_proc.add_param_output_reg(store_info.driver_location, m_last_pos_export->gpr_ptr());
    return true;
 }
 
-bool VertexStageExportForFS::emit_varying_param(const nir_variable *out_var, nir_intrinsic_instr* instr)
+bool VertexStageExportForFS::emit_varying_param(const store_loc &store_info, nir_intrinsic_instr* instr)
 {
-   assert(out_var->data.driver_location < m_proc.sh_info().noutput);
-   sfn_log << SfnLog::io << __func__ << ": emit DDL: " << out_var->data.driver_location << "\n";
+   assert(store_info.driver_location < m_proc.sh_info().noutput);
+   sfn_log << SfnLog::io << __func__ << ": emit DDL: " << store_info.driver_location << "\n";
 
-   int write_mask = nir_intrinsic_write_mask(instr) << out_var->data.location_frac;
+   int write_mask = nir_intrinsic_write_mask(instr) << store_info.frac;
    std::array<uint32_t,4> swizzle;
    for (int i = 0; i < 4; ++i)
-      swizzle[i] = ((1 << i) & write_mask) ? i - out_var->data.location_frac : 7;
+      swizzle[i] = ((1 << i) & write_mask) ? i - store_info.frac : 7;
 
-   m_proc.sh_info().output[out_var->data.driver_location].write_mask = write_mask;
+   //m_proc.sh_info().output[store_info.driver_location].write_mask = write_mask;
 
-   GPRVector value = m_proc.vec_from_nir_with_fetch_constant(instr->src[1], write_mask, swizzle, true);
-   m_proc.sh_info().output[out_var->data.driver_location].gpr = value.sel();
+   GPRVector value = m_proc.vec_from_nir_with_fetch_constant(instr->src[store_info.data_loc], write_mask, swizzle, true);
+   m_proc.sh_info().output[store_info.driver_location].gpr = value.sel();
 
    /* This should use the registers!! */
-   m_proc.set_output(out_var->data.driver_location, value.sel());
+   m_proc.set_output(store_info.driver_location, value.sel());
 
-   auto param_loc = m_param_map.find(out_var->data.location);
-   assert(param_loc != m_param_map.end());
-
-   m_last_param_export = new ExportInstruction(param_loc->second, value, ExportInstruction::et_param);
+   m_last_param_export = new ExportInstruction(param_id(store_info.driver_location),
+                                               value, ExportInstruction::et_param);
    m_proc.emit_export_instruction(m_last_param_export);
-   m_proc.add_param_output_reg(out_var->data.driver_location, m_last_param_export->gpr_ptr());
+   m_proc.add_param_output_reg(store_info.driver_location, m_last_param_export->gpr_ptr());
    return true;
 }
 
-bool VertexStageExportForFS::emit_clip_vertices(const nir_variable *out_var, nir_intrinsic_instr* instr)
+bool VertexStageExportForFS::emit_clip_vertices(const store_loc &store_info, nir_intrinsic_instr* instr)
 {
    m_proc.sh_info().cc_dist_mask = 0xff;
    m_proc.sh_info().clip_dist_write = 0xff;
 
-   m_clip_vertex = m_proc.vec_from_nir_with_fetch_constant(instr->src[1], 0xf, {0,1,2,3});
-   m_proc.add_param_output_reg(out_var->data.driver_location, &m_clip_vertex);
+   m_clip_vertex = m_proc.vec_from_nir_with_fetch_constant(instr->src[store_info.data_loc], 0xf, {0,1,2,3});
+   m_proc.add_param_output_reg(store_info.driver_location, &m_clip_vertex);
 
    for (int i = 0; i < 4; ++i)
-      m_proc.sh_info().output[out_var->data.driver_location].write_mask |= 1 << i;
+      m_proc.sh_info().output[store_info.driver_location].write_mask |= 1 << i;
 
    GPRVector clip_dist[2] = { m_proc.get_temp_vec4(), m_proc.get_temp_vec4()};
 
@@ -249,12 +274,68 @@ bool VertexStageExportForFS::emit_clip_vertices(const nir_variable *out_var, nir
    return true;
 }
 
+VertexStageWithOutputInfo::VertexStageWithOutputInfo(VertexStage& proc):
+   VertexStageExportBase(proc),
+   m_current_param(0)
+{
+
+}
+
+void VertexStageWithOutputInfo::scan_store_output(nir_intrinsic_instr* instr)
+{
+   auto location = nir_intrinsic_io_semantics(instr).location;
+   auto driver_location = nir_intrinsic_base(instr);
+   auto index = nir_src_as_const_value(instr->src[1]);
+   assert(index);
+
+   r600_shader_io& io = m_proc.sh_info().output[driver_location + index->u32];
+   auto semantic = r600_get_varying_semantic(location + index->u32);
+   io.name = semantic.first;
+   io.sid = semantic.second;
+   m_proc.evaluate_spi_sid(io);
+   io.write_mask = nir_intrinsic_write_mask(instr);
+   ++m_proc.sh_info().noutput;
+
+   if (location == VARYING_SLOT_PSIZ ||
+       location == VARYING_SLOT_EDGE ||
+       location == VARYING_SLOT_LAYER) // VIEWPORT?
+      m_cur_clip_pos = 2;
+
+   if (location != VARYING_SLOT_POS &&
+       location != VARYING_SLOT_EDGE &&
+       location != VARYING_SLOT_PSIZ &&
+       location != VARYING_SLOT_CLIP_VERTEX) {
+      m_param_driver_locations.push(driver_location + index->u32);
+   }
+}
+
+unsigned VertexStageWithOutputInfo::param_id(unsigned driver_location)
+{
+   auto param_loc = m_param_map.find(driver_location);
+   assert(param_loc != m_param_map.end());
+   return param_loc->second;
+}
+
+void VertexStageWithOutputInfo::emit_shader_start()
+{
+   while (!m_param_driver_locations.empty()) {
+      auto loc = m_param_driver_locations.top();
+      m_param_driver_locations.pop();
+      m_param_map[loc] = m_current_param++;
+   }
+}
+
+unsigned VertexStageWithOutputInfo::current_param() const
+{
+   return m_current_param;
+}
+
 void VertexStageExportForFS::finalize_exports()
 {
    if (m_key.vs.as_gs_a) {
       PValue o(new GPRValue(0,PIPE_SWIZZLE_0));
       GPRVector primid({m_proc.primitive_id(), o,o,o});
-      m_last_param_export = new ExportInstruction(m_cur_param, primid, ExportInstruction::et_param);
+      m_last_param_export = new ExportInstruction(current_param(), primid, ExportInstruction::et_param);
       m_proc.emit_export_instruction(m_last_param_export);
       int i;
       i = m_proc.sh_info().noutput++;
@@ -375,20 +456,19 @@ bool VertexStageExportForFS::emit_stream(int stream)
 
 VertexStageExportForGS::VertexStageExportForGS(VertexStage &proc,
                                                const r600_shader *gs_shader):
-   VertexStageExportBase(proc),
+   VertexStageWithOutputInfo(proc),
    m_num_clip_dist(0),
    m_gs_shader(gs_shader)
 {
 
 }
 
-bool VertexStageExportForGS::store_deref(const nir_variable *out_var, nir_intrinsic_instr* instr)
+bool VertexStageExportForGS::do_store_output(const store_loc& store_info, nir_intrinsic_instr* instr)
 {
-
    int ring_offset = -1;
-   const r600_shader_io& out_io = m_proc.sh_info().output[out_var->data.driver_location];
+   const r600_shader_io& out_io = m_proc.sh_info().output[store_info.driver_location];
 
-   sfn_log << SfnLog::io << "check output " << out_var->data.driver_location
+   sfn_log << SfnLog::io << "check output " << store_info.driver_location
            << " name=" << out_io.name<< " sid=" << out_io.sid << "\n";
    for (unsigned k = 0; k < m_gs_shader->ninput; ++k) {
       auto& in_io = m_gs_shader->input[k];
@@ -401,7 +481,7 @@ bool VertexStageExportForGS::store_deref(const nir_variable *out_var, nir_intrin
       }
    }
 
-   if (out_var->data.location == VARYING_SLOT_VIEWPORT) {
+   if (store_info.location == VARYING_SLOT_VIEWPORT) {
       m_proc.sh_info().vs_out_viewport = 1;
       m_proc.sh_info().vs_out_misc_write = 1;
       return true;
@@ -409,23 +489,23 @@ bool VertexStageExportForGS::store_deref(const nir_variable *out_var, nir_intrin
 
    if (ring_offset == -1) {
       sfn_log << SfnLog::err << "VS defines output at "
-              << out_var->data.driver_location << "name=" << out_io.name
+              << store_info.driver_location << "name=" << out_io.name
               << " sid=" << out_io.sid << " that is not consumed as GS input\n";
       return true;
    }
 
    uint32_t write_mask =  (1 << instr->num_components) - 1;
 
-   GPRVector value = m_proc.vec_from_nir_with_fetch_constant(instr->src[1], write_mask,
+   GPRVector value = m_proc.vec_from_nir_with_fetch_constant(instr->src[store_info.data_loc], write_mask,
          swizzle_from_comps(instr->num_components), true);
 
    auto ir = new MemRingOutIntruction(cf_mem_ring, mem_write, value,
                                       ring_offset >> 2, 4, PValue());
    m_proc.emit_export_instruction(ir);
 
-   m_proc.sh_info().output[out_var->data.driver_location].write_mask |= write_mask;
-   if (out_var->data.location == VARYING_SLOT_CLIP_DIST0 ||
-       out_var->data.location == VARYING_SLOT_CLIP_DIST1)
+   m_proc.sh_info().output[store_info.driver_location].write_mask |= write_mask;
+   if (store_info.location == VARYING_SLOT_CLIP_DIST0 ||
+       store_info.location == VARYING_SLOT_CLIP_DIST1)
       m_num_clip_dist += 4;
 
    return true;
@@ -441,7 +521,7 @@ VertexStageExportForES::VertexStageExportForES(VertexStage& proc):
 {
 }
 
-bool VertexStageExportForES::store_deref(const nir_variable *out_var, nir_intrinsic_instr* instr)
+bool VertexStageExportForES::do_store_output(const store_loc& store_info, nir_intrinsic_instr* instr)
 {
    return true;
 }

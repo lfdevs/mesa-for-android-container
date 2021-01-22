@@ -1210,6 +1210,8 @@ GCRA::RIG_Node::addRegPreference(RIG_Node *node)
 }
 
 GCRA::GCRA(Function *fn, SpillCodeInserter& spill, MergedDefs& mergedDefs) :
+   nodes(NULL),
+   nodeCount(0),
    func(fn),
    regs(fn->getProgram()->getTarget()),
    spill(spill),

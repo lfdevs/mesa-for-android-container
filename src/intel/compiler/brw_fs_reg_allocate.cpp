@@ -1208,7 +1208,8 @@ fs_reg_alloc::spill_reg(unsigned spill_reg)
       }
 
       if (inst->dst.file == VGRF &&
-          inst->dst.nr == spill_reg) {
+          inst->dst.nr == spill_reg &&
+          inst->opcode != SHADER_OPCODE_UNDEF) {
          int subset_spill_offset = spill_offset +
             ROUND_DOWN_TO(inst->dst.offset, REG_SIZE);
          fs_reg spill_src = alloc_spill_reg(regs_written(inst), ip);

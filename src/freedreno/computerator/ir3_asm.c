@@ -31,6 +31,8 @@ ir3_asm_assemble(struct ir3_compiler *c, FILE *in)
 {
 	struct ir3_kernel *kernel = calloc(1, sizeof(*kernel));
 	struct ir3_shader *shader = ir3_parse_asm(c, &kernel->info, in);
+	if (!shader)
+		errx(-1, "assembler failed");
 	struct ir3_shader_variant *v = shader->variants;
 
 	v->mergedregs = true;
@@ -42,7 +44,7 @@ ir3_asm_assemble(struct ir3_compiler *c, FILE *in)
 	kernel->base.num_bufs = kernel->info.num_bufs;
 	memcpy(kernel->base.buf_sizes, kernel->info.buf_sizes, sizeof(kernel->base.buf_sizes));
 
-	unsigned sz = v->info.sizedwords * 4;
+	unsigned sz = v->info.size;
 
 	v->bo = fd_bo_new(c->dev, sz,
 			DRM_FREEDRENO_GEM_CACHE_WCOMBINE |

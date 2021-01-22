@@ -339,7 +339,7 @@ nv50_validate_derived_2(struct nv50_context *nv50)
 {
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
 
-   if (nv50->zsa && nv50->zsa->pipe.alpha.enabled &&
+   if (nv50->zsa && nv50->zsa->pipe.alpha_enabled &&
        nv50->framebuffer.nr_cbufs == 0) {
       nv50_fb_set_null_rt(push, 0);
       BEGIN_NV04(push, NV50_3D(RT_CONTROL), 1);

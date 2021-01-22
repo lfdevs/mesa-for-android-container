@@ -30,53 +30,6 @@
 
 #include <stddef.h>
 
-/**
- * The query buffer is written to by ESGS NGG shaders with statistics about
- * generated and (streamout-)emitted primitives.
- *
- * The context maintains a ring of these query buffers, and queries simply
- * point into the ring, allowing an arbitrary number of queries to be active
- * without additional GPU cost.
- */
-struct gfx10_sh_query_buffer {
-   struct list_head list;
-   struct si_resource *buf;
-   unsigned refcount;
-
-   /* Offset into the buffer in bytes; points at the first un-emitted entry. */
-   unsigned head;
-};
-
-/* Memory layout of the query buffer. Must be kept in sync with shaders
- * (including QBO shaders) and should be aligned to cachelines.
- *
- * The somewhat awkward memory layout is for compatibility with the
- * SET_PREDICATION packet, which also means that we're setting the high bit
- * of all those values unconditionally.
- */
-struct gfx10_sh_query_buffer_mem {
-   struct {
-      uint64_t generated_primitives_start_dummy;
-      uint64_t emitted_primitives_start_dummy;
-      uint64_t generated_primitives;
-      uint64_t emitted_primitives;
-   } stream[4];
-   uint32_t fence; /* bottom-of-pipe fence: set to ~0 when draws have finished */
-   uint32_t pad[31];
-};
-
-/* Shader-based queries. */
-struct gfx10_sh_query {
-   struct si_query b;
-
-   struct gfx10_sh_query_buffer *first;
-   struct gfx10_sh_query_buffer *last;
-   unsigned first_begin;
-   unsigned last_end;
-
-   unsigned stream;
-};
-
 static void emit_shader_query(struct si_context *sctx)
 {
    assert(!list_is_empty(&sctx->shader_query_buffers));
@@ -126,7 +79,7 @@ static bool gfx10_alloc_query_buffer(struct si_context *sctx)
 
       qbuf = list_first_entry(&sctx->shader_query_buffers, struct gfx10_sh_query_buffer, list);
       if (!qbuf->refcount &&
-          !si_rings_is_buffer_referenced(sctx, qbuf->buf->buf, RADEON_USAGE_READWRITE) &&
+          !si_cs_is_buffer_referenced(sctx, qbuf->buf->buf, RADEON_USAGE_READWRITE) &&
           sctx->ws->buffer_wait(qbuf->buf->buf, 0, RADEON_USAGE_READWRITE)) {
          /* Can immediately re-use the oldest buffer */
          list_del(&qbuf->list);
@@ -223,16 +176,14 @@ static bool gfx10_sh_query_end(struct si_context *sctx, struct si_query *rquery)
       uint64_t fence_va = query->last->buf->gpu_address;
       fence_va += query->last_end - sizeof(struct gfx10_sh_query_buffer_mem);
       fence_va += offsetof(struct gfx10_sh_query_buffer_mem, fence);
-      si_cp_release_mem(sctx, sctx->gfx_cs, V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM,
+      si_cp_release_mem(sctx, &sctx->gfx_cs, V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM,
                         EOP_INT_SEL_NONE, EOP_DATA_SEL_VALUE_32BIT, query->last->buf, fence_va,
                         0xffffffff, PIPE_QUERY_GPU_FINISHED);
    }
 
    sctx->num_active_shader_queries--;
 
-   if (sctx->num_active_shader_queries > 0) {
-      gfx10_alloc_query_buffer(sctx);
-   } else {
+   if (sctx->num_active_shader_queries <= 0 || !si_is_atom_dirty(sctx, &sctx->atoms.s.shader_query)) {
       si_set_rw_shader_buffer(sctx, GFX10_GS_QUERY_BUF, NULL);
       sctx->current_vs_state &= C_VS_STATE_STREAMOUT_QUERY_ENABLED;
 
@@ -298,7 +249,7 @@ static bool gfx10_sh_query_get_result(struct si_context *sctx, struct si_query *
       if (rquery->b.flushed)
          map = sctx->ws->buffer_map(qbuf->buf->buf, NULL, usage);
       else
-         map = si_buffer_map_sync_with_rings(sctx, qbuf->buf, usage);
+         map = si_buffer_map(sctx, qbuf->buf, usage);
 
       if (!map)
          return false;
@@ -341,7 +292,7 @@ static void gfx10_sh_query_get_result_resource(struct si_context *sctx, struct s
    }
 
    if (query->first != query->last) {
-      u_suballocator_alloc(sctx->allocator_zeroed_memory, 16, 16, &tmp_buffer_offset, &tmp_buffer);
+      u_suballocator_alloc(&sctx->allocator_zeroed_memory, 16, 16, &tmp_buffer_offset, &tmp_buffer);
       if (!tmp_buffer)
          return;
    }
@@ -360,11 +311,11 @@ static void gfx10_sh_query_get_result_resource(struct si_context *sctx, struct s
    if (index >= 0) {
       switch (query->b.type) {
       case PIPE_QUERY_PRIMITIVES_GENERATED:
-         consts.offset = sizeof(uint32_t) * query->stream;
+         consts.offset = 4 * sizeof(uint64_t) * query->stream + 2 * sizeof(uint64_t);
          consts.config = 0;
          break;
       case PIPE_QUERY_PRIMITIVES_EMITTED:
-         consts.offset = sizeof(uint32_t) * (4 + query->stream);
+         consts.offset = 4 * sizeof(uint64_t) * query->stream + 3 * sizeof(uint64_t);
          consts.config = 0;
          break;
       case PIPE_QUERY_SO_STATISTICS:
@@ -372,7 +323,7 @@ static void gfx10_sh_query_get_result_resource(struct si_context *sctx, struct s
          consts.config = 0;
          break;
       case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
-         consts.offset = sizeof(uint32_t) * query->stream;
+         consts.offset = 4 * sizeof(uint64_t) * query->stream;
          consts.config = 2;
          break;
       case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
@@ -451,11 +402,12 @@ static void gfx10_sh_query_get_result_resource(struct si_context *sctx, struct s
          va += end - sizeof(struct gfx10_sh_query_buffer_mem);
          va += offsetof(struct gfx10_sh_query_buffer_mem, fence);
 
-         si_cp_wait_mem(sctx, sctx->gfx_cs, va, 0x00000001, 0x00000001, 0);
+         si_cp_wait_mem(sctx, &sctx->gfx_cs, va, 0x00000001, 0x00000001, 0);
       }
 
-      sctx->b.launch_grid(&sctx->b, &grid);
-      sctx->flags |= SI_CONTEXT_CS_PARTIAL_FLUSH;
+      void *saved_cs = sctx->cs_shader_state.program;
+      si_launch_grid_internal((struct si_context *)&sctx->b, &grid, saved_cs,
+                              SI_CS_WAIT_FOR_IDLE | SI_CS_PARTIAL_FLUSH_DISABLE);
 
       if (qbuf == query->last)
          break;

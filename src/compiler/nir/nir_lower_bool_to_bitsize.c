@@ -103,6 +103,7 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
    case nir_op_vec2:
    case nir_op_vec3:
    case nir_op_vec4:
+   case nir_op_vec5:
    case nir_op_vec8:
    case nir_op_vec16:
    case nir_op_inot:
@@ -111,7 +112,7 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
    case nir_op_ixor:
       if (nir_dest_bit_size(alu->dest.dest) > 1)
          return false; /* Not a boolean instruction */
-      /* Fallthrough */
+      FALLTHROUGH;
 
    case nir_op_ball_fequal2:
    case nir_op_ball_fequal3:
@@ -152,6 +153,7 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
    case nir_op_vec2:
    case nir_op_vec3:
    case nir_op_vec4:
+   case nir_op_vec5:
    case nir_op_vec8:
    case nir_op_vec16:
    case nir_op_inot:

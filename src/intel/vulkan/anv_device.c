@@ -1560,7 +1560,7 @@ void anv_GetPhysicalDeviceProperties(
       .maxTessellationEvaluationInputComponents = 128,
       .maxTessellationEvaluationOutputComponents = 128,
       .maxGeometryShaderInvocations             = 32,
-      .maxGeometryInputComponents               = 64,
+      .maxGeometryInputComponents               = devinfo->gen >= 8 ? 128 : 64,
       .maxGeometryOutputComponents              = 128,
       .maxGeometryOutputVertices                = 256,
       .maxGeometryTotalOutputComponents         = 1024,
@@ -3025,7 +3025,10 @@ VkResult anv_CreateDevice(
       result = gen11_init_device_state(device);
       break;
    case 12:
-      result = gen12_init_device_state(device);
+      if (gen_device_info_is_12hp(&device->info))
+         result = gen125_init_device_state(device);
+      else
+         result = gen12_init_device_state(device);
       break;
    default:
       /* Shouldn't get here as we don't create physical devices for any other

@@ -188,12 +188,14 @@ determineTextureFormat(const int *attribs, int numAttribs)
 
    return 0;
 }
+#endif
 
 static GLboolean
 CreateDRIDrawable(Display *dpy, struct glx_config *config,
 		  XID drawable, XID glxdrawable,
 		  const int *attrib_list, size_t num_attribs)
 {
+#ifdef GLX_DIRECT_RENDERING
    struct glx_display *const priv = __glXInitialize(dpy);
    __GLXDRIdrawable *pdraw;
    struct glx_screen *psc;
@@ -221,6 +223,7 @@ CreateDRIDrawable(Display *dpy, struct glx_config *config,
 
    pdraw->textureTarget = determineTextureTarget(attrib_list, num_attribs);
    pdraw->textureFormat = determineTextureFormat(attrib_list, num_attribs);
+#endif
 
    return GL_TRUE;
 }
@@ -228,6 +231,7 @@ CreateDRIDrawable(Display *dpy, struct glx_config *config,
 static void
 DestroyDRIDrawable(Display *dpy, GLXDrawable drawable, int destroy_xdrawable)
 {
+#ifdef GLX_DIRECT_RENDERING
    struct glx_display *const priv = __glXInitialize(dpy);
    __GLXDRIdrawable *pdraw = GetGLXDRIDrawable(dpy, drawable);
    XID xid;
@@ -239,24 +243,8 @@ DestroyDRIDrawable(Display *dpy, GLXDrawable drawable, int destroy_xdrawable)
       if (destroy_xdrawable)
          XFreePixmap(priv->dpy, xid);
    }
-}
-
-#else
-
-static GLboolean
-CreateDRIDrawable(Display *dpy, const struct glx_config * fbconfig,
-		  XID drawable, XID glxdrawable,
-		  const int *attrib_list, size_t num_attribs)
-{
-    return GL_TRUE;
-}
-
-static void
-DestroyDRIDrawable(Display *dpy, GLXDrawable drawable, int destroy_xdrawable)
-{
-}
-
 #endif
+}
 
 /**
  * Get a drawable's attribute.
