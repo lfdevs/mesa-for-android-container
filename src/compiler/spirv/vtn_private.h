@@ -674,6 +674,13 @@ struct vtn_builder {
     */
    struct hash_table *phi_table;
 
+   /* In Vulkan, when lowering some modes variable access, the derefs of the
+    * variables are replaced with a resource index intrinsics, leaving the
+    * variable hanging.  This set keeps track of them so they can be filtered
+    * (and not removed) in nir_remove_dead_variables.
+    */
+   struct set *vars_used_indirectly;
+
    unsigned num_specializations;
    struct nir_spirv_specialization *specializations;
 

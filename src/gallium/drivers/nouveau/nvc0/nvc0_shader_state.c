@@ -118,6 +118,16 @@ nvc0_fragprog_validate(struct nvc0_context *nvc0)
       fp->fp.force_persample_interp = rast->force_persample_interp;
    }
 
+   if (fp->fp.msaa != rast->multisample) {
+      /* Force the program to be reuploaded, which will trigger interp fixups
+       * to get applied
+       */
+      if (fp->mem)
+         nouveau_heap_free(&fp->mem);
+
+      fp->fp.msaa = rast->multisample;
+   }
+
    /* Shade model works well enough when both colors follow it. However if one
     * (or both) is explicitly set, then we have to go the patching route.
     */

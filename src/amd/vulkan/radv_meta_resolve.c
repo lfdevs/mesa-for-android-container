@@ -353,6 +353,19 @@ enum radv_resolve_method {
 	RESOLVE_FRAGMENT,
 };
 
+static bool image_hw_resolve_compat(const struct radv_device *device,
+				    struct radv_image *src_image,
+				    struct radv_image *dst_image)
+{
+	if (device->physical_device->rad_info.chip_class >= GFX9) {
+		return dst_image->planes[0].surface.u.gfx9.surf.swizzle_mode ==
+		       src_image->planes[0].surface.u.gfx9.surf.swizzle_mode;
+	} else {
+		return dst_image->planes[0].surface.micro_tile_mode ==
+		       src_image->planes[0].surface.micro_tile_mode;
+	}
+}
+
 static void radv_pick_resolve_method_images(struct radv_device *device,
 					    struct radv_image *src_image,
 					    VkFormat src_format,
@@ -376,8 +389,11 @@ static void radv_pick_resolve_method_images(struct radv_device *device,
 		if (radv_layout_dcc_compressed(device, dest_image, dest_image_layout,
 		                               dest_render_loop, queue_mask)) {
 			*method = RESOLVE_FRAGMENT;
-		} else if (dest_image->planes[0].surface.micro_tile_mode !=
-		           src_image->planes[0].surface.micro_tile_mode) {
+		} else if (!image_hw_resolve_compat(device, src_image, dest_image)) {
+			/* The micro tile mode only needs to match for the HW
+			 * resolve path which is the default path for non-DCC
+			 * resolves.
+			 */
 			*method = RESOLVE_COMPUTE;
 		}
 

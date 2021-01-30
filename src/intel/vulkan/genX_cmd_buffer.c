@@ -462,8 +462,10 @@ anv_image_init_aux_tt(struct anv_cmd_buffer *cmd_buffer,
 {
    uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
 
+   const struct anv_surface *surface = &image->planes[plane].surface;
    uint64_t base_address =
-      anv_address_physical(image->planes[plane].address);
+      anv_address_physical(anv_address_add(image->planes[plane].address,
+                                           surface->offset));
 
    const struct isl_surf *isl_surf = &image->planes[plane].surface.isl;
    uint64_t format_bits = gen_aux_map_format_bits_for_isl_surf(isl_surf);
@@ -1231,6 +1233,17 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
             uint32_t level_layer_count =
                MIN2(layer_count, aux_layers - base_layer);
 
+            /* If will_full_fast_clear is set, the caller promises to
+             * fast-clear the largest portion of the specified range as it can.
+             * For color images, that means only the first LOD and array slice.
+             */
+            if (level == 0 && base_layer == 0 && will_full_fast_clear) {
+               base_layer++;
+               level_layer_count--;
+               if (level_layer_count == 0)
+                  continue;
+            }
+
             anv_image_ccs_op(cmd_buffer, image,
                              image->planes[plane].surface.isl.format,
                              ISL_SWIZZLE_IDENTITY,
@@ -1249,6 +1262,12 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
                           "Doing a potentially unnecessary fast-clear to "
                           "define an MCS buffer.");
          }
+
+         /* If will_full_fast_clear is set, the caller promises to fast-clear
+          * the largest portion of the specified range as it can.
+          */
+         if (will_full_fast_clear)
+            return;
 
          assert(base_level == 0 && level_count == 1);
          anv_image_mcs_op(cmd_buffer, image,

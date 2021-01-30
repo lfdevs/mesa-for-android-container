@@ -1213,7 +1213,16 @@ void
 gk110_selpFlip(const FixupEntry *entry, uint32_t *code, const FixupData& data)
 {
    int loc = entry->loc;
-   if (data.force_persample_interp)
+   bool val = false;
+   switch (entry->ipa) {
+   case 0:
+      val = data.force_persample_interp;
+      break;
+   case 1:
+      val = data.msaa;
+      break;
+   }
+   if (val)
       code[loc + 1] |= 1 << 13;
    else
       code[loc + 1] &= ~(1 << 13);
@@ -1226,8 +1235,8 @@ void CodeEmitterGK110::emitSELP(const Instruction *i)
    if (i->src(2).mod & Modifier(NV50_IR_MOD_NOT))
       code[1] |= 1 << 13;
 
-   if (i->subOp == 1) {
-      addInterp(0, 0, gk110_selpFlip);
+   if (i->subOp >= 1) {
+      addInterp(i->subOp - 1, 0, gk110_selpFlip);
    }
 }
 

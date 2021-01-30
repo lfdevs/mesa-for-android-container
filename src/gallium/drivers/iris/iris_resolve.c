@@ -803,7 +803,9 @@ iris_resource_set_aux_state(struct iris_context *ice,
       if (res->aux.state[level][start_layer + a] != aux_state) {
          res->aux.state[level][start_layer + a] = aux_state;
          /* XXX: Need to track which bindings to make dirty */
-         ice->state.dirty |= IRIS_DIRTY_RENDER_BUFFER;
+         ice->state.dirty |= IRIS_DIRTY_RENDER_BUFFER |
+                             IRIS_DIRTY_RENDER_RESOLVES_AND_FLUSHES |
+                             IRIS_DIRTY_COMPUTE_RESOLVES_AND_FLUSHES;
          ice->state.stage_dirty |= IRIS_ALL_STAGE_DIRTY_BINDINGS;
       }
    }

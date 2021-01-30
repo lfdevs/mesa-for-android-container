@@ -54,6 +54,7 @@ struct nvc0_program {
       bool flatshade;
       bool reads_framebuffer;
       bool post_depth_coverage;
+      bool msaa;
    } fp;
    struct {
       uint32_t tess_mode; /* ~0 if defined by the other stage */

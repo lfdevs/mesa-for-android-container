@@ -1179,6 +1179,16 @@ panfrost_set_shader_buffers(
 }
 
 static void
+panfrost_set_shader_images(
+        struct pipe_context *pctx,
+        enum pipe_shader_type shader,
+        unsigned start, unsigned count,
+        const struct pipe_image_view *images)
+{
+        /* TODO */
+}
+
+static void
 panfrost_set_framebuffer_state(struct pipe_context *pctx,
                                const struct pipe_framebuffer_state *fb)
 {
@@ -1587,6 +1597,7 @@ panfrost_create_context(struct pipe_screen *screen, void *priv, unsigned flags)
         gallium->set_vertex_buffers = panfrost_set_vertex_buffers;
         gallium->set_constant_buffer = panfrost_set_constant_buffer;
         gallium->set_shader_buffers = panfrost_set_shader_buffers;
+        gallium->set_shader_images = panfrost_set_shader_images;
 
         gallium->set_stencil_ref = panfrost_set_stencil_ref;
 

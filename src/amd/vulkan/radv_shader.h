@@ -135,6 +135,7 @@ struct radv_nir_compiler_options {
 	bool explicit_scratch_args;
 	bool clamp_shadow_reference;
 	bool robust_buffer_access;
+	bool robust_buffer_access2;
 	bool adjust_frag_coord_z;
 	bool dump_shader;
 	bool dump_preoptir;
@@ -576,9 +577,11 @@ get_tcs_num_patches(unsigned tcs_num_input_vertices,
 	if (chip_class >= GFX7 && family != CHIP_STONEY)
 		hardware_lds_size = 65536;
 
-	num_patches = MIN2(num_patches, hardware_lds_size / (input_patch_size + output_patch_size));
+	if (input_patch_size + output_patch_size)
+		num_patches = MIN2(num_patches, hardware_lds_size / (input_patch_size + output_patch_size));
 	/* Make sure the output data fits in the offchip buffer */
-	num_patches = MIN2(num_patches, (tess_offchip_block_dw_size * 4) / output_patch_size);
+	if (output_patch_size)
+		num_patches = MIN2(num_patches, (tess_offchip_block_dw_size * 4) / output_patch_size);
 	/* Not necessary for correctness, but improves performance. The
 	 * specific value is taken from the proprietary driver.
 	 */

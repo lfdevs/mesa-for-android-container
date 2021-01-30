@@ -860,7 +860,8 @@ void label_instruction(opt_ctx &ctx, Block& block, aco_ptr<Instruction>& instr)
          if (info.is_temp() && info.temp.type() == RegType::sgpr) {
             instr->operands[i].setTemp(info.temp);
             info = ctx.info[info.temp.id()];
-         } else if (info.is_temp() && info.temp.type() == RegType::vgpr) {
+         } else if (info.is_temp() && info.temp.type() == RegType::vgpr &&
+                    info.temp.bytes() == instr->operands[i].bytes()) {
             /* propagate vgpr if it can take it */
             switch (instr->opcode) {
             case aco_opcode::p_create_vector:
@@ -1388,7 +1389,6 @@ void label_instruction(opt_ctx &ctx, Block& block, aco_ptr<Instruction>& instr)
           instr->operands[1].isTemp() && ctx.info[instr->operands[1].tempId()].is_vcc())
          ctx.info[instr->definitions[0].tempId()].set_temp(ctx.info[instr->operands[1].tempId()].temp);
       break;
-   case aco_opcode::p_phi:
    case aco_opcode::p_linear_phi: {
       /* lower_bool_phis() can create phis like this */
       bool all_same_temp = instr->operands[0].isTemp();

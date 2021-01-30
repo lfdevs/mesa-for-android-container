@@ -2105,8 +2105,8 @@ iris_get_scratch_space(struct iris_context *ice,
     * in the base configuration.
     */
    unsigned subslice_total = screen->subslice_total;
-   if (devinfo->gen >= 12)
-      subslice_total = devinfo->num_subslices[0];
+   if (devinfo->gen == 12)
+      subslice_total = (devinfo->is_dg1 || devinfo->gt == 2 ? 6 : 2);
    else if (devinfo->gen == 11)
       subslice_total = 8;
    else if (devinfo->gen < 11)

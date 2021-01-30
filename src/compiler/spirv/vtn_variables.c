@@ -237,6 +237,11 @@ vtn_variable_resource_index(struct vtn_builder *b, struct vtn_variable *var,
       desc_array_index = nir_imm_int(&b->nb, 0);
    }
 
+   if (b->vars_used_indirectly) {
+      vtn_assert(var->var);
+      _mesa_set_add(b->vars_used_indirectly, var->var);
+   }
+
    nir_intrinsic_instr *instr =
       nir_intrinsic_instr_create(b->nb.shader,
                                  nir_intrinsic_vulkan_resource_index);

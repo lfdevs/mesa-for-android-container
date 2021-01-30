@@ -368,6 +368,7 @@ uint32_t radv_fill_buffer(struct radv_cmd_buffer *cmd_buffer,
 		fill_buffer_shader(cmd_buffer, bo, offset, size, value);
 
 		flush_bits = RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
+			     RADV_CMD_FLAG_INV_VCACHE |
 			     radv_src_access_flush(cmd_buffer, VK_ACCESS_SHADER_WRITE_BIT, image);
 	} else if (size) {
 		uint64_t va = radv_buffer_get_va(bo);

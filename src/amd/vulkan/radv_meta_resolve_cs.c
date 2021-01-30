@@ -943,6 +943,7 @@ radv_cmd_buffer_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer)
 
 	cmd_buffer->state.flush_bits |=
 		RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
+		RADV_CMD_FLAG_INV_VCACHE |
 		radv_src_access_flush(cmd_buffer, VK_ACCESS_SHADER_WRITE_BIT, NULL);
 }
 
@@ -1022,6 +1023,7 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
 
 	cmd_buffer->state.flush_bits |=
 		RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
+		RADV_CMD_FLAG_INV_VCACHE |
 		radv_src_access_flush(cmd_buffer, VK_ACCESS_SHADER_WRITE_BIT, NULL);
 
 	VkImageLayout layout =

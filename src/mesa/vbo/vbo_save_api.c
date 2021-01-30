@@ -670,7 +670,6 @@ compile_vertex_list(struct gl_context *ctx)
       int available = save->previous_ib ? (save->previous_ib->Size / 4 - save->ib_first_free_index) : 0;
       if (available >= max_indices_count) {
          indices_offset = save->ib_first_free_index;
-         node->min_index = node->max_index = indices_offset;
       }
       int size = max_indices_count * sizeof(uint32_t);
       uint32_t* indices = (uint32_t*) malloc(size);
@@ -689,7 +688,7 @@ compile_vertex_list(struct gl_context *ctx)
             continue;
          }
 
-         /* Line strips get converted to lines */
+         /* Line strips may get converted to lines */
          if (mode == GL_LINE_STRIP)
             mode = GL_LINES;
 
@@ -740,6 +739,9 @@ compile_vertex_list(struct gl_context *ctx)
                }
             }
          } else {
+            /* We didn't convert to LINES, so restore the original mode */
+            mode = original_prims[i].mode;
+
             for (unsigned j = 0; j < vertex_count; j++) {
                indices[idx++] = original_prims[i].start + j;
             }

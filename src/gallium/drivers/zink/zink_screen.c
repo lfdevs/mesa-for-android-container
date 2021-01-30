@@ -107,6 +107,8 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1;
 
    case PIPE_CAP_MULTI_DRAW_INDIRECT:
+      return screen->info.feats.features.multiDrawIndirect;
+
    case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
       return screen->vk_CmdDrawIndirectCount &&
              screen->vk_CmdDrawIndexedIndirectCount;
@@ -144,8 +146,10 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return screen->timestamp_valid_bits > 0;
 
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
-   case PIPE_CAP_SAMPLE_SHADING:
       return 1;
+
+   case PIPE_CAP_SAMPLE_SHADING:
+      return screen->info.feats.features.sampleRateShading;
 
    case PIPE_CAP_TEXTURE_SWIZZLE:
       return 1;
@@ -157,21 +161,21 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
       return 1 + util_logbase2(screen->info.props.limits.maxImageDimensionCube);
 
-   case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
    case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
    case PIPE_CAP_VERTEX_SHADER_SATURATE:
       return 1;
 
+   case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_INDEP_BLEND_ENABLE:
    case PIPE_CAP_INDEP_BLEND_FUNC:
-      return 1;
+      return screen->info.feats.features.independentBlend;
 
    case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
       return screen->info.have_EXT_transform_feedback ? screen->info.tf_props.maxTransformFeedbackBuffers : 0;
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
    case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
-      return 1;
+      return screen->info.have_EXT_transform_feedback;
 
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
       return screen->info.props.limits.maxImageArrayLayers;
@@ -405,7 +409,8 @@ zink_get_shader_param(struct pipe_screen *pscreen,
          return INT_MAX;
       case PIPE_SHADER_TESS_CTRL:
       case PIPE_SHADER_TESS_EVAL:
-         if (screen->info.feats.features.tessellationShader &&
+         if (screen->info.have_KHR_vulkan_memory_model &&
+             screen->info.feats.features.tessellationShader &&
              (screen->instance_info.have_KHR_maintenance2 ||
               VK_MAKE_VERSION(1,1,0) <= screen->loader_version))
             return INT_MAX;

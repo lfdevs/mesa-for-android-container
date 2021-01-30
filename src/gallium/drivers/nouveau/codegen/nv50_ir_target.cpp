@@ -495,7 +495,7 @@ nv50_ir_relocate_code(void *relocData, uint32_t *code,
 void
 nv50_ir_apply_fixups(void *fixupData, uint32_t *code,
                      bool force_persample_interp, bool flatshade,
-                     uint8_t alphatest)
+                     uint8_t alphatest, bool msaa)
 {
    nv50_ir::FixupInfo *info = reinterpret_cast<nv50_ir::FixupInfo *>(
       fixupData);
@@ -503,7 +503,8 @@ nv50_ir_apply_fixups(void *fixupData, uint32_t *code,
    // force_persample_interp: all non-flat -> per-sample
    // flatshade: all color -> flat
    // alphatest: PIPE_FUNC_* to use with alphatest
-   nv50_ir::FixupData data(force_persample_interp, flatshade, alphatest);
+   // msaa: false = sample id -> 0 for interpolateAtSample
+   nv50_ir::FixupData data(force_persample_interp, flatshade, alphatest, msaa);
    for (unsigned i = 0; i < info->count; ++i)
       info->entry[i].apply(&info->entry[i], code, data);
 }

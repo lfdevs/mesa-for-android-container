@@ -481,8 +481,6 @@ zink_set_vertex_buffers(struct pipe_context *pctx,
       for (int i = 0; i < num_buffers; ++i) {
          const struct pipe_vertex_buffer *vb = buffers + i;
          struct zink_resource *res = zink_resource(vb->buffer.resource);
-
-         ctx->gfx_pipeline_state.bindings[start_slot + i].stride = vb->stride;
          if (res && res->needs_xfb_barrier) {
             /* if we're binding a previously-used xfb buffer, we need cmd buffer synchronization to ensure
              * that we use the right buffer data
@@ -491,7 +489,6 @@ zink_set_vertex_buffers(struct pipe_context *pctx,
             res->needs_xfb_barrier = false;
          }
       }
-      ctx->gfx_pipeline_state.dirty = true;
    }
 
    util_set_vertex_buffers_mask(ctx->buffers, &ctx->buffers_enabled_mask,

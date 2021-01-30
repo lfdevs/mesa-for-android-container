@@ -844,7 +844,8 @@ nvc0_program_upload_code(struct nvc0_context *nvc0, struct nvc0_program *prog)
       nv50_ir_apply_fixups(prog->fixups, prog->code,
                            prog->fp.force_persample_interp,
                            prog->fp.flatshade,
-                           0 /* alphatest */);
+                           0 /* alphatest */,
+                           prog->fp.msaa);
       for (int i = 0; i < 2; i++) {
          unsigned mask = prog->fp.color_interp[i] >> 4;
          unsigned interp = prog->fp.color_interp[i] & 3;

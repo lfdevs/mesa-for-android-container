@@ -3046,11 +3046,19 @@ Converter::handleINTERP(Value *dst[4])
    case TGSI_OPCODE_INTERP_CENTROID:
       mode |= NV50_IR_INTERP_CENTROID;
       break;
-   case TGSI_OPCODE_INTERP_SAMPLE:
-      insn = mkOp1(OP_PIXLD, TYPE_U32, (offset = getScratch()), fetchSrc(1, 0));
+   case TGSI_OPCODE_INTERP_SAMPLE: {
+      // When using a non-MS buffer, we're supposed to always use the center
+      // (i.e. sample 0). This adds a SELP which will be always true or false
+      // based on a data fixup.
+      Value *sample = getScratch();
+      mkOp3(OP_SELP, TYPE_U32, sample, mkImm(0), fetchSrc(1, 0), mkImm(0))
+         ->subOp = 2;
+
+      insn = mkOp1(OP_PIXLD, TYPE_U32, (offset = getScratch()), sample);
       insn->subOp = NV50_IR_SUBOP_PIXLD_OFFSET;
       mode |= NV50_IR_INTERP_OFFSET;
       break;
+   }
    case TGSI_OPCODE_INTERP_OFFSET: {
       // The input in src1.xy is float, but we need a single 32-bit value
       // where the upper and lower 16 bits are encoded in S0.12 format. We need

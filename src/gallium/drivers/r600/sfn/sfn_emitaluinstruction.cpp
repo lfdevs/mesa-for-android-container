@@ -165,6 +165,21 @@ bool EmitAluInstruction::do_emit(nir_instr* ir)
    case nir_op_ball_fequal3: return emit_any_all_fcomp(instr, op2_sete, 3, true);
    case nir_op_ball_fequal4: return emit_any_all_fcomp(instr, op2_sete, 4, true);
 
+   case nir_op_b32any_inequal2: return emit_any_all_icomp(instr, op2_setne_int, 2, false);
+   case nir_op_b32any_inequal3: return emit_any_all_icomp(instr, op2_setne_int, 3, false);
+   case nir_op_b32any_inequal4: return emit_any_all_icomp(instr, op2_setne_int, 4, false);
+
+   case nir_op_b32all_iequal2: return emit_any_all_icomp(instr, op2_sete_int, 2, true);
+   case nir_op_b32all_iequal3: return emit_any_all_icomp(instr, op2_sete_int, 3, true);
+   case nir_op_b32all_iequal4: return emit_any_all_icomp(instr, op2_sete_int, 4, true);
+
+   case nir_op_b32any_fnequal2: return emit_any_all_fcomp2(instr, op2_setne_dx10, false);
+   case nir_op_b32any_fnequal3: return emit_any_all_fcomp(instr, op2_setne, 3, false);
+   case nir_op_b32any_fnequal4: return emit_any_all_fcomp(instr, op2_setne, 4, false);
+
+   case nir_op_b32all_fequal2: return emit_any_all_fcomp2(instr, op2_sete_dx10, true);
+   case nir_op_b32all_fequal3: return emit_any_all_fcomp(instr, op2_sete, 3, true);
+   case nir_op_b32all_fequal4: return emit_any_all_fcomp(instr, op2_sete, 4, true);
 
    case nir_op_ffma: return emit_alu_op3(instr, op3_muladd_ieee);
    case nir_op_b32csel: return emit_alu_op3(instr, op3_cnde,  {0, 2, 1});
@@ -232,6 +247,10 @@ unsigned EmitAluInstruction::num_src_comp(const nir_alu_instr& instr)
    case nir_op_ball_iequal2:
    case nir_op_bany_fnequal2:
    case nir_op_ball_fequal2:
+   case nir_op_b32any_inequal2:
+   case nir_op_b32all_iequal2:
+   case nir_op_b32any_fnequal2:
+   case nir_op_b32all_fequal2:
    case nir_op_unpack_64_2x32_split_y:
       return 2;
 
@@ -240,6 +259,10 @@ unsigned EmitAluInstruction::num_src_comp(const nir_alu_instr& instr)
    case nir_op_ball_iequal3:
    case nir_op_bany_fnequal3:
    case nir_op_ball_fequal3:
+   case nir_op_b32any_inequal3:
+   case nir_op_b32all_iequal3:
+   case nir_op_b32any_fnequal3:
+   case nir_op_b32all_fequal3:
       return 3;
 
    case nir_op_fdot4:
@@ -248,6 +271,10 @@ unsigned EmitAluInstruction::num_src_comp(const nir_alu_instr& instr)
    case nir_op_ball_iequal4:
    case nir_op_bany_fnequal4:
    case nir_op_ball_fequal4:
+   case nir_op_b32any_inequal4:
+   case nir_op_b32all_iequal4:
+   case nir_op_b32any_fnequal4:
+   case nir_op_b32all_fequal4:
       return 4;
 
    case nir_op_vec2:

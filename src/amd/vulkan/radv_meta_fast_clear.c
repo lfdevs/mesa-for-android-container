@@ -949,6 +949,7 @@ radv_decompress_dcc_compute(struct radv_cmd_buffer *cmd_buffer,
 	radv_meta_restore(&saved_state, cmd_buffer);
 
 	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
+					RADV_CMD_FLAG_INV_VCACHE |
 			radv_src_access_flush(cmd_buffer, VK_ACCESS_SHADER_WRITE_BIT, image);
 
 	/* Initialize the DCC metadata as "fully expanded". */

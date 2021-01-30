@@ -953,7 +953,16 @@ void
 gm107_selpFlip(const FixupEntry *entry, uint32_t *code, const FixupData& data)
 {
    int loc = entry->loc;
-   if (data.force_persample_interp)
+   bool val = false;
+   switch (entry->ipa) {
+   case 0:
+      val = data.force_persample_interp;
+      break;
+   case 1:
+      val = data.msaa;
+      break;
+   }
+   if (val)
       code[loc + 1] |= 1 << 10;
    else
       code[loc + 1] &= ~(1 << 10);
@@ -985,8 +994,8 @@ CodeEmitterGM107::emitSEL()
    emitGPR (0x08, insn->src(0));
    emitGPR (0x00, insn->def(0));
 
-   if (insn->subOp == 1) {
-      addInterp(0, 0, gm107_selpFlip);
+   if (insn->subOp >= 1) {
+      addInterp(insn->subOp - 1, 0, gm107_selpFlip);
    }
 }
 

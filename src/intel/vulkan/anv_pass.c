@@ -23,6 +23,7 @@
 
 #include "anv_private.h"
 
+#include "vk_format_info.h"
 #include "vk_util.h"
 
 static void
@@ -406,6 +407,70 @@ num_subpass_attachments2(const VkSubpassDescription2KHR *desc)
           (ds_resolve && ds_resolve->pDepthStencilResolveAttachment);
 }
 
+static bool
+vk_image_layout_depth_only(VkImageLayout layout)
+{
+   switch (layout) {
+   case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL:
+   case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL:
+      return true;
+
+   default:
+      return false;
+   }
+}
+
+/* From the Vulkan Specification 1.2.166 - VkAttachmentReference2:
+ *
+ *   "If layout only specifies the layout of the depth aspect of the
+ *    attachment, the layout of the stencil aspect is specified by the
+ *    stencilLayout member of a VkAttachmentReferenceStencilLayout structure
+ *    included in the pNext chain. Otherwise, layout describes the layout for
+ *    all relevant image aspects."
+ */
+static VkImageLayout
+stencil_ref_layout(const VkAttachmentReference2KHR *att_ref)
+{
+   if (!vk_image_layout_depth_only(att_ref->layout))
+      return att_ref->layout;
+
+   const VkAttachmentReferenceStencilLayoutKHR *stencil_ref =
+      vk_find_struct_const(att_ref->pNext,
+                           ATTACHMENT_REFERENCE_STENCIL_LAYOUT_KHR);
+   if (!stencil_ref)
+      return VK_IMAGE_LAYOUT_UNDEFINED;
+   return stencil_ref->stencilLayout;
+}
+
+/* From the Vulkan Specification 1.2.166 - VkAttachmentDescription2:
+ *
+ *   "If format is a depth/stencil format, and initialLayout only specifies
+ *    the initial layout of the depth aspect of the attachment, the initial
+ *    layout of the stencil aspect is specified by the stencilInitialLayout
+ *    member of a VkAttachmentDescriptionStencilLayout structure included in
+ *    the pNext chain. Otherwise, initialLayout describes the initial layout
+ *    for all relevant image aspects."
+ */
+static VkImageLayout
+stencil_desc_layout(const VkAttachmentDescription2KHR *att_desc, bool final)
+{
+   if (!vk_format_has_stencil(att_desc->format))
+      return VK_IMAGE_LAYOUT_UNDEFINED;
+
+   const VkImageLayout main_layout =
+      final ? att_desc->finalLayout : att_desc->initialLayout;
+   if (!vk_image_layout_depth_only(main_layout))
+      return main_layout;
+
+   const VkAttachmentDescriptionStencilLayoutKHR *stencil_desc =
+      vk_find_struct_const(att_desc->pNext,
+                           ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT_KHR);
+   assert(stencil_desc);
+   return final ?
+      stencil_desc->stencilFinalLayout :
+      stencil_desc->stencilInitialLayout;
+}
+
 VkResult anv_CreateRenderPass2(
     VkDevice                                    _device,
     const VkRenderPassCreateInfo2KHR*           pCreateInfo,
@@ -450,10 +515,6 @@ VkResult anv_CreateRenderPass2(
    pass->subpass_flushes = subpass_flushes;
 
    for (uint32_t i = 0; i < pCreateInfo->attachmentCount; i++) {
-      const VkAttachmentDescriptionStencilLayoutKHR *stencil_layout =
-         vk_find_struct_const(pCreateInfo->pAttachments[i].pNext,
-                              ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT_KHR);
-
       pass->attachments[i] = (struct anv_render_pass_attachment) {
          .format                 = pCreateInfo->pAttachments[i].format,
          .samples                = pCreateInfo->pAttachments[i].samples,
@@ -463,12 +524,10 @@ VkResult anv_CreateRenderPass2(
          .initial_layout         = pCreateInfo->pAttachments[i].initialLayout,
          .final_layout           = pCreateInfo->pAttachments[i].finalLayout,
 
-         .stencil_initial_layout = (stencil_layout ?
-                                    stencil_layout->stencilInitialLayout :
-                                    pCreateInfo->pAttachments[i].initialLayout),
-         .stencil_final_layout   = (stencil_layout ?
-                                    stencil_layout->stencilFinalLayout :
-                                    pCreateInfo->pAttachments[i].finalLayout),
+         .stencil_initial_layout = stencil_desc_layout(&pCreateInfo->pAttachments[i],
+                                                       false),
+         .stencil_final_layout   = stencil_desc_layout(&pCreateInfo->pAttachments[i],
+                                                       true),
       };
    }
 
@@ -487,17 +546,11 @@ VkResult anv_CreateRenderPass2(
          subpass_attachments += desc->inputAttachmentCount;
 
          for (uint32_t j = 0; j < desc->inputAttachmentCount; j++) {
-            const VkAttachmentReferenceStencilLayoutKHR *stencil_layout =
-               vk_find_struct_const(desc->pInputAttachments[j].pNext,
-                                    ATTACHMENT_REFERENCE_STENCIL_LAYOUT_KHR);
-
             subpass->input_attachments[j] = (struct anv_subpass_attachment) {
                .usage =          VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
                .attachment =     desc->pInputAttachments[j].attachment,
                .layout =         desc->pInputAttachments[j].layout,
-               .stencil_layout = (stencil_layout ?
-                                  stencil_layout->stencilLayout :
-                                  desc->pInputAttachments[j].layout),
+               .stencil_layout = stencil_ref_layout(&desc->pInputAttachments[j]),
             };
          }
       }
@@ -531,17 +584,11 @@ VkResult anv_CreateRenderPass2(
       if (desc->pDepthStencilAttachment) {
          subpass->depth_stencil_attachment = subpass_attachments++;
 
-         const VkAttachmentReferenceStencilLayoutKHR *stencil_attachment =
-            vk_find_struct_const(desc->pDepthStencilAttachment->pNext,
-                                 ATTACHMENT_REFERENCE_STENCIL_LAYOUT_KHR);
-
          *subpass->depth_stencil_attachment = (struct anv_subpass_attachment) {
             .usage =          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
             .attachment =     desc->pDepthStencilAttachment->attachment,
             .layout =         desc->pDepthStencilAttachment->layout,
-            .stencil_layout = stencil_attachment ?
-                              stencil_attachment->stencilLayout :
-                              desc->pDepthStencilAttachment->layout,
+            .stencil_layout = stencil_ref_layout(desc->pDepthStencilAttachment),
          };
       }
 
@@ -552,17 +599,11 @@ VkResult anv_CreateRenderPass2(
       if (ds_resolve && ds_resolve->pDepthStencilResolveAttachment) {
          subpass->ds_resolve_attachment = subpass_attachments++;
 
-         const VkAttachmentReferenceStencilLayoutKHR *stencil_resolve_attachment =
-            vk_find_struct_const(ds_resolve->pDepthStencilResolveAttachment->pNext,
-                                 ATTACHMENT_REFERENCE_STENCIL_LAYOUT_KHR);
-
          *subpass->ds_resolve_attachment = (struct anv_subpass_attachment) {
             .usage =          VK_IMAGE_USAGE_TRANSFER_DST_BIT,
             .attachment =     ds_resolve->pDepthStencilResolveAttachment->attachment,
             .layout =         ds_resolve->pDepthStencilResolveAttachment->layout,
-            .stencil_layout = stencil_resolve_attachment ?
-                              stencil_resolve_attachment->stencilLayout :
-                              ds_resolve->pDepthStencilResolveAttachment->layout,
+            .stencil_layout = stencil_ref_layout(ds_resolve->pDepthStencilResolveAttachment),
          };
          subpass->depth_resolve_mode = ds_resolve->depthResolveMode;
          subpass->stencil_resolve_mode = ds_resolve->stencilResolveMode;

@@ -256,7 +256,7 @@ zink_draw_vbo(struct pipe_context *pctx,
       return;
    }
    if (ctx->gfx_pipeline_state.vertices_per_patch != dinfo->vertices_per_patch)
-      ctx->gfx_pipeline_state.hash = 0;
+      ctx->gfx_pipeline_state.dirty = true;
    ctx->gfx_pipeline_state.vertices_per_patch = dinfo->vertices_per_patch;
    struct zink_gfx_program *gfx_program = get_gfx_program(ctx);
    if (!gfx_program)
@@ -265,6 +265,15 @@ zink_draw_vbo(struct pipe_context *pctx,
    if (ctx->gfx_pipeline_state.primitive_restart != !!dinfo->primitive_restart)
       ctx->gfx_pipeline_state.dirty = true;
    ctx->gfx_pipeline_state.primitive_restart = !!dinfo->primitive_restart;
+
+   for (unsigned i = 0; i < ctx->element_state->hw_state.num_bindings; i++) {
+      unsigned binding = ctx->element_state->binding_map[i];
+      const struct pipe_vertex_buffer *vb = ctx->buffers + binding;
+      if (ctx->gfx_pipeline_state.bindings[i].stride != vb->stride) {
+         ctx->gfx_pipeline_state.bindings[i].stride = vb->stride;
+         ctx->gfx_pipeline_state.dirty = true;
+      }
+   }
 
    VkPipeline pipeline = zink_get_gfx_pipeline(screen, gfx_program,
                                                &ctx->gfx_pipeline_state,

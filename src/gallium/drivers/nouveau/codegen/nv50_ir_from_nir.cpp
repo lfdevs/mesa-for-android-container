@@ -1809,7 +1809,10 @@ Converter::visit(nir_intrinsic_instr *insn)
          mode = NV50_IR_INTERP_DEFAULT;
       } else if (op == nir_intrinsic_load_barycentric_at_sample) {
          info_out->prop.fp.readsSampleLocations = true;
-         mkOp1(OP_PIXLD, TYPE_U32, newDefs[0], getSrc(&insn->src[0], 0))->subOp = NV50_IR_SUBOP_PIXLD_OFFSET;
+         Value *sample = getSSA();
+         mkOp3(OP_SELP, TYPE_U32, sample, mkImm(0), getSrc(&insn->src[0], 0), mkImm(0))
+            ->subOp = 2;
+         mkOp1(OP_PIXLD, TYPE_U32, newDefs[0], sample)->subOp = NV50_IR_SUBOP_PIXLD_OFFSET;
          mode = NV50_IR_INTERP_OFFSET;
       } else {
          unreachable("all intrinsics already handled above");

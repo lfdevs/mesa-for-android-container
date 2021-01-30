@@ -271,7 +271,6 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
          break;
 
      case PIPE_VIDEO_FORMAT_HEVC:
-         context->templat.max_references = num_render_targets;
          if (config->entrypoint != PIPE_VIDEO_ENTRYPOINT_ENCODE) {
             context->desc.h265.pps = CALLOC_STRUCT(pipe_h265_pps);
             if (!context->desc.h265.pps) {
@@ -288,7 +287,6 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
          break;
 
       case PIPE_VIDEO_FORMAT_VP9:
-         context->templat.max_references = num_render_targets;
          break;
 
       default:

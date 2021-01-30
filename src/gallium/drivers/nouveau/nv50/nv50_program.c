@@ -510,7 +510,8 @@ nv50_program_upload_code(struct nv50_context *nv50, struct nv50_program *prog)
       nv50_ir_apply_fixups(prog->interps, prog->code,
                            prog->fp.force_persample_interp,
                            false /* flatshade */,
-                           prog->fp.alphatest - 1);
+                           prog->fp.alphatest - 1,
+                           false /* msaa */);
 
    nv50_sifc_linear_u8(&nv50->base, nv50->screen->code,
                        (prog_type << NV50_CODE_BO_SIZE_LOG2) + prog->code_base,

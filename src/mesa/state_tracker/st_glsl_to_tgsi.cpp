@@ -3263,6 +3263,7 @@ glsl_to_tgsi_visitor::visit(ir_assignment *ir)
               ir->rhs == ((glsl_to_tgsi_instruction *)this->instructions.get_tail())->ir &&
               !((glsl_to_tgsi_instruction *)this->instructions.get_tail())->is_64bit_expanded &&
               type_size(ir->lhs->type) == 1 &&
+              !ir->lhs->type->is_64bit() &&
               l.writemask == ((glsl_to_tgsi_instruction *)this->instructions.get_tail())->dst[0].writemask) {
       /* To avoid emitting an extra MOV when assigning an expression to a
        * variable, emit the last instruction of the expression again, but

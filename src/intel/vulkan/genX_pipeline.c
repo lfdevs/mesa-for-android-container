@@ -1180,7 +1180,22 @@ emit_cb_state(struct anv_graphics_pipeline *pipeline,
 #endif
          .LogicOpEnable = info->logicOpEnable,
          .LogicOpFunction = vk_to_gen_logic_op[info->logicOp],
-         .ColorBufferBlendEnable = a->blendEnable,
+         /* Vulkan specification 1.2.168, VkLogicOp:
+          *
+          *   "Logical operations are controlled by the logicOpEnable and
+          *    logicOp members of VkPipelineColorBlendStateCreateInfo. If
+          *    logicOpEnable is VK_TRUE, then a logical operation selected by
+          *    logicOp is applied between each color attachment and the
+          *    fragment’s corresponding output value, and blending of all
+          *    attachments is treated as if it were disabled."
+          *
+          * From the Broadwell PRM Volume 2d: Command Reference: Structures:
+          * BLEND_STATE_ENTRY:
+          *
+          *   "Enabling LogicOp and Color Buffer Blending at the same time is
+          *    UNDEFINED"
+          */
+         .ColorBufferBlendEnable = !info->logicOpEnable && a->blendEnable,
          .ColorClampRange = COLORCLAMP_RTFORMAT,
          .PreBlendColorClampEnable = true,
          .PostBlendColorClampEnable = true,

@@ -1,3 +1,9 @@
+mesa (21.0.0~rc3-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Sat, 30 Jan 2021 12:25:57 +0200
+
 mesa (21.0.0~rc2-1) experimental; urgency=medium
 
   * New upstream release candidate.

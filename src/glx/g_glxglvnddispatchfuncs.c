@@ -87,6 +87,7 @@ const char * const __glXDispatchTableStrings[DI_LAST_INDEX] = {
     __ATTRIB(SelectEventSGIX),
     // glXSwapBuffers implemented by libglvnd
     __ATTRIB(SwapBuffersMscOML),
+    __ATTRIB(SwapIntervalEXT),
     __ATTRIB(SwapIntervalMESA),
     __ATTRIB(SwapIntervalSGI),
     // glXUseXFont implemented by libglvnd
@@ -893,6 +894,24 @@ static int dispatch_SwapIntervalMESA(unsigned int interval)
 
 
 
+static void dispatch_SwapIntervalEXT(Display *dpy, GLXDrawable drawable, int interval)
+{
+    PFNGLXSWAPINTERVALEXTPROC pSwapIntervalEXT;
+    __GLXvendorInfo *dd;
+
+    dd = GetDispatchFromDrawable(dpy, drawable);
+    if (dd == NULL)
+        return;
+
+    __FETCH_FUNCTION_PTR(SwapIntervalEXT);
+    if (pSwapIntervalEXT == NULL)
+        return;
+
+    pSwapIntervalEXT(dpy, drawable, interval);
+}
+
+
+
 static Bool dispatch_WaitForMscOML(Display *dpy, GLXDrawable drawable,
                                       int64_t target_msc, int64_t divisor,
                                       int64_t remainder, int64_t *ust,
@@ -974,6 +993,7 @@ const void * const __glXDispatchFunctions[DI_LAST_INDEX + 1] = {
     __ATTRIB(ReleaseTexImageEXT),
     __ATTRIB(SelectEventSGIX),
     __ATTRIB(SwapBuffersMscOML),
+    __ATTRIB(SwapIntervalEXT),
     __ATTRIB(SwapIntervalMESA),
     __ATTRIB(SwapIntervalSGI),
     __ATTRIB(WaitForMscOML),

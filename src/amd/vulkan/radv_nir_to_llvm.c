@@ -3797,7 +3797,7 @@ static void ac_nir_fixup_ls_hs_input_vgprs(struct radv_shader_context *ctx)
 	LLVMValueRef hs_empty = LLVMBuildICmp(ctx->ac.builder, LLVMIntEQ, count,
 	                                      ctx->ac.i32_0, "");
 	ctx->abi.instance_id = LLVMBuildSelect(ctx->ac.builder, hs_empty,
-					       ac_get_arg(&ctx->ac, ctx->args->ac.vs_rel_patch_id),
+					       ac_get_arg(&ctx->ac, ctx->args->ac.vertex_id),
 					       ctx->abi.instance_id, "");
 	ctx->vs_rel_patch_id = LLVMBuildSelect(ctx->ac.builder, hs_empty,
 					   ac_get_arg(&ctx->ac, ctx->args->ac.tcs_rel_ids),

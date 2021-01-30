@@ -241,7 +241,7 @@ panfrost_create_surface(struct pipe_context *pipe,
 {
         struct pipe_surface *ps = NULL;
 
-        ps = rzalloc(pipe, struct pipe_surface);
+        ps = CALLOC_STRUCT(pipe_surface);
 
         if (ps) {
                 pipe_reference_init(&ps->reference, 1);
@@ -277,7 +277,7 @@ panfrost_surface_destroy(struct pipe_context *pipe,
 {
         assert(surf->texture);
         pipe_resource_reference(&surf->texture, NULL);
-        ralloc_free(surf);
+        free(surf);
 }
 
 static struct pipe_resource *

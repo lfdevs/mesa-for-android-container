@@ -117,6 +117,24 @@ pandecode_inject_mmap(uint64_t gpu_va, void *cpu, unsigned sz, const char *name)
                 _mesa_hash_table_u64_insert(mmap_table, gpu_va + i, mapped_mem);
 }
 
+void
+pandecode_inject_free(uint64_t gpu_va, unsigned sz)
+{
+        struct pandecode_mapped_memory *mem =
+                pandecode_find_mapped_gpu_mem_containing_rw(gpu_va);
+
+        if (!mem)
+                return;
+
+        assert(mem->gpu_va == gpu_va);
+        assert(mem->length == sz);
+
+        free(mem);
+
+        for (unsigned i = 0; i < sz; i += 4096)
+                _mesa_hash_table_u64_remove(mmap_table, gpu_va + i);
+}
+
 char *
 pointer_as_memory_reference(uint64_t ptr)
 {

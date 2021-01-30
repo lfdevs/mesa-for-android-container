@@ -356,7 +356,6 @@ static inline bool
 _mesa_has_half_float_textures(const struct gl_context *ctx)
 {
    return _mesa_has_ARB_texture_float(ctx) ||
-          _mesa_has_ARB_half_float_pixel(ctx) ||
           _mesa_has_OES_texture_half_float(ctx);
 }
 

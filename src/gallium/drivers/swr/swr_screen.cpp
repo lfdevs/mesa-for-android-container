@@ -349,8 +349,10 @@ swr_get_shader_param(struct pipe_screen *screen,
        shader != PIPE_SHADER_TESS_EVAL)
       return 0;
 
-   if (param == PIPE_SHADER_CAP_MAX_SHADER_BUFFERS)
+   if (param == PIPE_SHADER_CAP_MAX_SHADER_BUFFERS ||
+       param == PIPE_SHADER_CAP_MAX_SHADER_IMAGES) {
       return 0;
+   }
 
    return gallivm_get_shader_param(param);
 }

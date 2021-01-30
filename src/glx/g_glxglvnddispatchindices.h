@@ -79,6 +79,7 @@ typedef enum __GLXdispatchIndex {
     DI_SelectEventSGIX,
     // SwapBuffers implemented by libglvnd
     DI_SwapBuffersMscOML,
+    DI_SwapIntervalEXT,
     DI_SwapIntervalMESA,
     DI_SwapIntervalSGI,
     // UseXFont implemented by libglvnd

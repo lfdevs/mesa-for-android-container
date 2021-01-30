@@ -2677,6 +2677,24 @@ get_output_prim_type_mode(uint16_t type)
    return 0;
 }
 
+static SpvExecutionMode
+get_depth_layout_mode(enum gl_frag_depth_layout depth_layout)
+{
+   switch (depth_layout) {
+   case FRAG_DEPTH_LAYOUT_NONE:
+   case FRAG_DEPTH_LAYOUT_ANY:
+      return SpvExecutionModeDepthReplacing;
+   case FRAG_DEPTH_LAYOUT_GREATER:
+      return SpvExecutionModeDepthGreater;
+   case FRAG_DEPTH_LAYOUT_LESS:
+      return SpvExecutionModeDepthLess;
+   case FRAG_DEPTH_LAYOUT_UNCHANGED:
+      return SpvExecutionModeDepthUnchanged;
+   default:
+      unreachable("unexpected depth layout");
+   }
+}
+
 struct spirv_shader *
 nir_to_spirv(struct nir_shader *s, const struct zink_so_info *so_info,
              unsigned char *shader_slot_map, unsigned char *shader_slots_reserved)
@@ -2814,7 +2832,7 @@ nir_to_spirv(struct nir_shader *s, const struct zink_so_info *so_info,
                                    SpvExecutionModeOriginUpperLeft);
       if (s->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH))
          spirv_builder_emit_exec_mode(&ctx.builder, entry_point,
-                                      SpvExecutionModeDepthReplacing);
+                                      get_depth_layout_mode(s->info.fs.depth_layout));
       break;
    case MESA_SHADER_TESS_CTRL:
       spirv_builder_emit_exec_mode_literal(&ctx.builder, entry_point, SpvExecutionModeOutputVertices, s->info.tess.tcs_vertices_out);

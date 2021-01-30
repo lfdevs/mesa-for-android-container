@@ -3267,11 +3267,62 @@ static void radv_stage_flush(struct radv_cmd_buffer *cmd_buffer,
 	}
 }
 
+/* Determine if the image is affected by the pipe misaligned metadata issue
+ * which requires to invalidate L2.
+ */
+static bool
+radv_image_is_pipe_misaligned(const struct radv_device *device,
+			      const struct radv_image *image)
+{
+	struct radeon_info *rad_info = &device->physical_device->rad_info;
+	unsigned log2_samples = util_logbase2(image->info.samples);
+	unsigned log2_bpp = util_logbase2(vk_format_get_blocksize(image->vk_format));
+	unsigned log2_bpp_and_samples;
+
+	assert(rad_info->chip_class >= GFX10);
+
+	if (rad_info->chip_class >= GFX10_3) {
+		log2_bpp_and_samples = log2_bpp + log2_samples;
+	} else {
+		if (vk_format_is_depth(image->vk_format) &&
+		     image->info.array_size >= 8) {
+			log2_bpp = 2;
+		}
+
+		log2_bpp_and_samples = MIN2(6, log2_bpp + log2_samples);
+	}
+
+	unsigned num_pipes = G_0098F8_NUM_PIPES(rad_info->gb_addr_config);
+	int overlap = MAX2(0, log2_bpp_and_samples + num_pipes - 8);
+
+	if (vk_format_is_depth(image->vk_format)) {
+		if (radv_image_is_tc_compat_htile(image) && overlap) {
+			return true;
+		}
+	} else {
+		unsigned max_compressed_frags = G_0098F8_MAX_COMPRESSED_FRAGS(rad_info->gb_addr_config);
+		int log2_samples_frag_diff = MAX2(0, log2_samples - max_compressed_frags);
+		int samples_overlap = MIN2(log2_samples, overlap);
+
+		/* TODO: It shouldn't be necessary if the image has DCC but
+		 * not readable by shader.
+		 */
+		if ((radv_image_has_dcc(image) ||
+		     radv_image_is_tc_compat_cmask(image)) &&
+		     (samples_overlap > log2_samples_frag_diff)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static bool
 radv_image_is_l2_coherent(const struct radv_device *device, const struct radv_image *image)
 {
 	if (device->physical_device->rad_info.chip_class >= GFX10) {
-		return !device->physical_device->rad_info.tcc_harvested;
+		return !device->physical_device->rad_info.tcc_harvested &&
+			(image && !radv_image_is_pipe_misaligned(device, image));
 	} else if (device->physical_device->rad_info.chip_class == GFX9 && image) {
 		if (image->info.samples == 1 &&
 		    (image->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
@@ -3461,11 +3512,28 @@ radv_dst_access_flush(struct radv_cmd_buffer *cmd_buffer,
 void radv_subpass_barrier(struct radv_cmd_buffer *cmd_buffer,
 			  const struct radv_subpass_barrier *barrier)
 {
-	cmd_buffer->state.flush_bits |= radv_src_access_flush(cmd_buffer, barrier->src_access_mask,
-							      NULL);
+	struct radv_framebuffer *fb = cmd_buffer->state.framebuffer;
+	if (fb && !fb->imageless) {
+		for (int i = 0; i < fb->attachment_count; ++i) {
+			cmd_buffer->state.flush_bits |= radv_src_access_flush(cmd_buffer, barrier->src_access_mask,
+									      fb->attachments[i]->image);
+		}
+	} else {
+		cmd_buffer->state.flush_bits |= radv_src_access_flush(cmd_buffer, barrier->src_access_mask,
+								      NULL);
+	}
+
 	radv_stage_flush(cmd_buffer, barrier->src_stage_mask);
-	cmd_buffer->state.flush_bits |= radv_dst_access_flush(cmd_buffer, barrier->dst_access_mask,
-	                                                      NULL);
+
+	if (fb && !fb->imageless) {
+		for (int i = 0; i < fb->attachment_count; ++i) {
+			cmd_buffer->state.flush_bits |= radv_dst_access_flush(cmd_buffer, barrier->dst_access_mask,
+									      fb->attachments[i]->image);
+		}
+	} else {
+		cmd_buffer->state.flush_bits |= radv_dst_access_flush(cmd_buffer, barrier->dst_access_mask,
+		                                                      NULL);
+	}
 }
 
 uint32_t

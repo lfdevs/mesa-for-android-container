@@ -1447,8 +1447,8 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
     * For, Gen11+, scratch space allocation is based on the number of threads
     * in the base configuration.
     */
-   if (devinfo->gen >= 12)
-      subslices = devinfo->num_subslices[0];
+   if (devinfo->gen == 12)
+      subslices = (devinfo->is_dg1 || devinfo->gt == 2 ? 6 : 2);
    else if (devinfo->gen == 11)
       subslices = 8;
    else if (devinfo->gen >= 9)

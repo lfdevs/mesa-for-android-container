@@ -354,7 +354,16 @@ void
 gv100_selpFlip(const FixupEntry *entry, uint32_t *code, const FixupData& data)
 {
    int loc = entry->loc;
-   if (data.force_persample_interp)
+   bool val = false;
+   switch (entry->ipa) {
+   case 0:
+      val = data.force_persample_interp;
+      break;
+   case 1:
+      val = data.msaa;
+      break;
+   }
+   if (val)
       code[loc + 2] |= 1 << 26;
    else
       code[loc + 2] &= ~(1 << 26);
@@ -366,8 +375,8 @@ CodeEmitterGV100::emitSEL()
    emitFormA(0x007, FA_RRR | FA_RIR | FA_RCR, __(0), __(1), EMPTY);
    emitNOT  (90, insn->src(2));
    emitPRED (87, insn->src(2));
-   if (insn->subOp == 1)
-      addInterp(0, 0, gv100_selpFlip);
+   if (insn->subOp >= 1)
+      addInterp(insn->subOp - 1, 0, gv100_selpFlip);
 }
 
 void
