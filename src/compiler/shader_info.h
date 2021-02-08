@@ -25,6 +25,7 @@
 #ifndef SHADER_INFO_H
 #define SHADER_INFO_H
 
+#include "util/bitset.h"
 #include "shader_enums.h"
 #include <stdint.h>
 
@@ -144,7 +145,7 @@ typedef struct shader_info {
    /* Which outputs are actually read */
    uint64_t outputs_read;
    /* Which system values are actually read */
-   uint64_t system_values_read;
+   BITSET_DECLARE(system_values_read, SYSTEM_VALUE_MAX);
 
    /* Which patch inputs are actually read */
    uint32_t patch_inputs_read;

@@ -978,9 +978,9 @@ panfrost_batch_submit_ioctl(struct panfrost_batch *batch,
         panfrost_pool_get_bo_handles(&batch->invisible_pool, bo_handles + submit.bo_handle_count);
         submit.bo_handle_count += panfrost_pool_num_bos(&batch->invisible_pool);
 
-        /* Used by all tiler jobs (XXX: skip for compute-only) */
-        if (!(reqs & PANFROST_JD_REQ_FS))
-                bo_handles[submit.bo_handle_count++] = dev->tiler_heap->gem_handle;
+        /* Used by all tiler jobs, and occasionally by fragment jobs.
+         * (XXX: skip for compute-only) */
+        bo_handles[submit.bo_handle_count++] = dev->tiler_heap->gem_handle;
 
         submit.bo_handles = (u64) (uintptr_t) bo_handles;
         ret = drmIoctl(dev->fd, DRM_IOCTL_PANFROST_SUBMIT, &submit);

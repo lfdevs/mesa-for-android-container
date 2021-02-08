@@ -180,7 +180,7 @@ intelInitExtensions(struct gl_context *ctx)
 
    if (devinfo->gen >= 6) {
       ctx->Extensions.ARB_blend_func_extended =
-         !driQueryOptionb(&brw->optionCache, "disable_blend_func_extended");
+         !driQueryOptionb(&brw->screen->optionCache, "disable_blend_func_extended");
       ctx->Extensions.ARB_conditional_render_inverted = true;
       ctx->Extensions.ARB_cull_distance = true;
       ctx->Extensions.ARB_draw_buffers_blend = true;

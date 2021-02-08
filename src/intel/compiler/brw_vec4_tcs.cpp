@@ -392,7 +392,7 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    brw_postprocess_nir(nir, compiler, is_scalar);
 
    bool has_primitive_id =
-      nir->info.system_values_read & (1 << SYSTEM_VALUE_PRIMITIVE_ID);
+      BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID);
 
    prog_data->patch_count_threshold = brw::get_patch_count_threshold(key->input_vertices);
 

@@ -174,14 +174,14 @@ _mesa_update_primitive_id_is_unused(struct gl_context *ctx)
     * then the restriction on fragment shaders reading gl_PrimitiveID can be lifted.
     */
    ctx->_PrimitiveIDIsUnused = !(
-         (tcs && (tcs->info.system_values_read & BITFIELD64_BIT(SYSTEM_VALUE_PRIMITIVE_ID) ||
-                  tcs->info.inputs_read & VARYING_BIT_PRIMITIVE_ID)) ||
-         (tes && (tes->info.system_values_read & BITFIELD64_BIT(SYSTEM_VALUE_PRIMITIVE_ID) ||
-                  tes->info.inputs_read & VARYING_BIT_PRIMITIVE_ID)) ||
-         (gs && (gs->info.system_values_read & BITFIELD64_BIT(SYSTEM_VALUE_PRIMITIVE_ID) ||
-                 gs->info.inputs_read & VARYING_BIT_PRIMITIVE_ID)) ||
-         (fs && (fs->info.system_values_read & BITFIELD64_BIT(SYSTEM_VALUE_PRIMITIVE_ID) ||
-                 fs->info.inputs_read & VARYING_BIT_PRIMITIVE_ID)));
+      (tcs && (BITSET_TEST(tcs->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID) ||
+               tcs->info.inputs_read & VARYING_BIT_PRIMITIVE_ID)) ||
+      (tes && (BITSET_TEST(tes->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID) ||
+               tes->info.inputs_read & VARYING_BIT_PRIMITIVE_ID)) ||
+      (gs && (BITSET_TEST(gs->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID) ||
+              gs->info.inputs_read & VARYING_BIT_PRIMITIVE_ID)) ||
+      (fs && (BITSET_TEST(fs->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID) ||
+              fs->info.inputs_read & VARYING_BIT_PRIMITIVE_ID)));
 }
 
 

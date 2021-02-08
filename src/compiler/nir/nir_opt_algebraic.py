@@ -358,8 +358,12 @@ optimizations.extend([
    (('fneu', ('fsat(is_used_once)', a), '#b(is_gt_0_and_lt_1)'), ('fneu', a, b)),
 
    (('fge', ('fsat(is_used_once)', a), 1.0), ('fge', a, 1.0)),
-   (('flt', ('fsat(is_used_once)', a), 1.0), ('flt', a, 1.0)),
-   (('fge', 0.0, ('fsat(is_used_once)', a)), ('fge', 0.0, a)),
+   # flt(fsat(a), 1.0) is inexact because it returns True if a is NaN
+   # (fsat(NaN) is 0), while flt(a, 1.0) always returns FALSE.
+   (('~flt', ('fsat(is_used_once)', a), 1.0), ('flt', a, 1.0)),
+   # fge(0.0, fsat(a)) is inexact because it returns True if a is NaN
+   # (fsat(NaN) is 0), while fge(0.0, a) always returns FALSE.
+   (('~fge', 0.0, ('fsat(is_used_once)', a)), ('fge', 0.0, a)),
    (('flt', 0.0, ('fsat(is_used_once)', a)), ('flt', 0.0, a)),
 
    # 0.0 >= b2f(a)
@@ -2120,10 +2124,15 @@ late_optimizations = [
    # new patterns like these.  The patterns that compare with zero are removed
    # because they are unlikely to be created in by anything in
    # late_optimizations.
-   (('flt', ('fsat(is_used_once)', a), '#b(is_gt_0_and_lt_1)'), ('flt', a, b)),
+
+   # flt(fsat(a), b > 0 && b < 1) is inexact if a is NaN (fsat(NaN) is 0)
+   # because it returns True while flt(a, b) always returns False.
+   (('~flt', ('fsat(is_used_once)', a), '#b(is_gt_0_and_lt_1)'), ('flt', a, b)),
    (('flt', '#b(is_gt_0_and_lt_1)', ('fsat(is_used_once)', a)), ('flt', b, a)),
    (('fge', ('fsat(is_used_once)', a), '#b(is_gt_0_and_lt_1)'), ('fge', a, b)),
-   (('fge', '#b(is_gt_0_and_lt_1)', ('fsat(is_used_once)', a)), ('fge', b, a)),
+   # fge(b > 0 && b < 1, fsat(a)) is inexact if a is NaN (fsat(NaN) is 0)
+   # because it returns True while fge(b, a) always returns False.
+   (('~fge', '#b(is_gt_0_and_lt_1)', ('fsat(is_used_once)', a)), ('fge', b, a)),
    (('feq', ('fsat(is_used_once)', a), '#b(is_gt_0_and_lt_1)'), ('feq', a, b)),
    (('fneu', ('fsat(is_used_once)', a), '#b(is_gt_0_and_lt_1)'), ('fneu', a, b)),
 

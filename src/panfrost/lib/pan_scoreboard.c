@@ -123,12 +123,12 @@ panfrost_add_job(
                  * job must depend on the write value job, whose index we
                  * reserve now */
 
-                if (is_bifrost && !scoreboard->write_value_index)
+                if (!is_bifrost && !scoreboard->write_value_index)
                         scoreboard->write_value_index = ++scoreboard->job_index;
 
                 if (scoreboard->tiler_dep && !inject)
                         global_dep = scoreboard->tiler_dep;
-                else if (is_bifrost)
+                else if (!is_bifrost)
                         global_dep = scoreboard->write_value_index;
         }
 

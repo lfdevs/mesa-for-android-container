@@ -1016,9 +1016,9 @@ void radv_GetPhysicalDeviceFeatures(
 		.shaderInt64                              = true,
 		.shaderInt16                              = true,
 		.sparseBinding                            = true,
-		.sparseResidencyBuffer                    = pdevice->rad_info.chip_class >= GFX8,
-		.sparseResidencyImage2D                   = pdevice->rad_info.chip_class >= GFX8,
-		.sparseResidencyAliased                   = pdevice->rad_info.chip_class >= GFX8,
+		.sparseResidencyBuffer                    = pdevice->rad_info.family >= CHIP_POLARIS10,
+		.sparseResidencyImage2D                   = pdevice->rad_info.family >= CHIP_POLARIS10,
+		.sparseResidencyAliased                   = pdevice->rad_info.family >= CHIP_POLARIS10,
 		.variableMultisampleRate                  = true,
 		.shaderResourceMinLod                     = true,
 		.shaderResourceResidency                  = true,
@@ -1665,8 +1665,8 @@ void radv_GetPhysicalDeviceProperties(
 		.deviceType = pdevice->rad_info.has_dedicated_vram ? VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU : VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU,
 		.limits = limits,
 		.sparseProperties = {
-			.residencyNonResidentStrict = pdevice->rad_info.chip_class >= GFX8,
-			.residencyStandard2DBlockShape = pdevice->rad_info.chip_class >= GFX8,
+			.residencyNonResidentStrict = pdevice->rad_info.family >= CHIP_POLARIS10,
+			.residencyStandard2DBlockShape = pdevice->rad_info.family >= CHIP_POLARIS10,
 		},
 	};
 
@@ -2414,24 +2414,28 @@ radv_queue_init(struct radv_device *device, struct radv_queue *queue,
 		VkDeviceQueueCreateFlags flags,
 		const VkDeviceQueueGlobalPriorityCreateInfoEXT *global_priority)
 {
-	queue->_loader_data.loaderMagic = ICD_LOADER_MAGIC;
 	queue->device = device;
 	queue->queue_family_index = queue_family_index;
 	queue->queue_idx = idx;
 	queue->priority = radv_get_queue_global_priority(global_priority);
 	queue->flags = flags;
 
+	vk_object_base_init(&device->vk, &queue->base, VK_OBJECT_TYPE_QUEUE);
+
 	VkResult result = device->ws->ctx_create(device->ws, queue->priority, &queue->hw_ctx);
-	if (result != VK_SUCCESS)
+	if (result != VK_SUCCESS) {
+		vk_object_base_finish(&queue->base);
 		return vk_error(device->instance, result);
+	}
 
 	list_inithead(&queue->pending_submissions);
 	mtx_init(&queue->pending_mutex, mtx_plain);
 
 	mtx_init(&queue->thread_mutex, mtx_plain);
 	if (u_cnd_monotonic_init(&queue->thread_cond)) {
-		result = VK_ERROR_INITIALIZATION_FAILED;
-		return vk_error(device->instance, result);
+		device->ws->ctx_destroy(queue->hw_ctx);
+		vk_object_base_finish(&queue->base);
+		return vk_error(device->instance, VK_ERROR_INITIALIZATION_FAILED);
 	}
 	queue->cond_created = true;
 
@@ -2480,6 +2484,8 @@ radv_queue_finish(struct radv_queue *queue)
 		queue->device->ws->buffer_destroy(queue->gds_oa_bo);
 	if (queue->compute_scratch_bo)
 		queue->device->ws->buffer_destroy(queue->compute_scratch_bo);
+
+	vk_object_base_finish(&queue->base);
 }
 
 static void

@@ -8139,7 +8139,7 @@ void visit_intrinsic(isel_context *ctx, nir_intrinsic_instr *instr)
       Temp src = get_ssa_temp(ctx, instr->src[0].ssa);
       Temp dst = get_ssa_temp(ctx, &instr->dest.ssa);
       Definition tmp = bld.def(dst.regClass());
-      Definition lanemask_tmp = dst.size() == bld.lm.size() ? tmp : bld.def(src.regClass());
+      Definition lanemask_tmp = dst.size() == bld.lm.size() ? tmp : bld.def(bld.lm);
       if (instr->src[0].ssa->bit_size == 1) {
          assert(src.regClass() == bld.lm);
          bld.sop2(Builder::s_and, lanemask_tmp, bld.def(s1, scc), Operand(exec, bld.lm), src);

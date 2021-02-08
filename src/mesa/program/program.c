@@ -524,8 +524,8 @@ _mesa_get_min_invocations_per_fragment(struct gl_context *ctx,
        *  forces per-sample shading"
        */
       if (prog->info.fs.uses_sample_qualifier ||
-          (prog->info.system_values_read & (SYSTEM_BIT_SAMPLE_ID |
-                                            SYSTEM_BIT_SAMPLE_POS)))
+          BITSET_TEST(prog->info.system_values_read, SYSTEM_VALUE_SAMPLE_ID) ||
+          BITSET_TEST(prog->info.system_values_read, SYSTEM_VALUE_SAMPLE_POS))
          return MAX2(_mesa_geometric_samples(ctx->DrawBuffer), 1);
       else if (ctx->Multisample.SampleShading)
          return MAX2(ceilf(ctx->Multisample.MinSampleShadingValue *

@@ -1132,8 +1132,8 @@ intel_fbo_init(struct brw_context *brw)
    dd->EGLImageTargetRenderbufferStorage =
       intel_image_target_renderbuffer_storage;
 
-   brw->render_cache = _mesa_hash_table_create(brw, _mesa_hash_pointer,
+   brw->render_cache = _mesa_hash_table_create(brw->mem_ctx, _mesa_hash_pointer,
                                                _mesa_key_pointer_equal);
-   brw->depth_cache = _mesa_set_create(brw, _mesa_hash_pointer,
+   brw->depth_cache = _mesa_set_create(brw->mem_ctx, _mesa_hash_pointer,
                                        _mesa_key_pointer_equal);
 }

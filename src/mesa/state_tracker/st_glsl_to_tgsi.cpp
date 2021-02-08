@@ -6886,49 +6886,41 @@ st_translate_program(
 
    /* Declare misc input registers
     */
-   {
-      GLbitfield64 sysInputs = proginfo->info.system_values_read;
+   BITSET_FOREACH_SET(i, proginfo->info.system_values_read, SYSTEM_VALUE_MAX) {
+      enum tgsi_semantic semName = tgsi_get_sysval_semantic(i);
 
-      for (i = 0; sysInputs; i++) {
-         if (sysInputs & (1ull << i)) {
-            enum tgsi_semantic semName = tgsi_get_sysval_semantic(i);
+      t->systemValues[i] = ureg_DECL_system_value(ureg, semName, 0);
 
-            t->systemValues[i] = ureg_DECL_system_value(ureg, semName, 0);
-
-            if (semName == TGSI_SEMANTIC_INSTANCEID ||
-                semName == TGSI_SEMANTIC_VERTEXID) {
-               /* From Gallium perspective, these system values are always
-                * integer, and require native integer support.  However, if
-                * native integer is supported on the vertex stage but not the
-                * pixel stage (e.g, i915g + draw), Mesa will generate IR that
-                * assumes these system values are floats. To resolve the
-                * inconsistency, we insert a U2F.
-                */
-               struct st_context *st = st_context(ctx);
-               struct pipe_screen *pscreen = st->screen;
-               assert(procType == PIPE_SHADER_VERTEX);
-               assert(pscreen->get_shader_param(pscreen, PIPE_SHADER_VERTEX, PIPE_SHADER_CAP_INTEGERS));
-               (void) pscreen;
-               if (!ctx->Const.NativeIntegers) {
-                  struct ureg_dst temp = ureg_DECL_local_temporary(t->ureg);
-                  ureg_U2F(t->ureg, ureg_writemask(temp, TGSI_WRITEMASK_X),
-                           t->systemValues[i]);
-                  t->systemValues[i] = ureg_scalar(ureg_src(temp), 0);
-               }
-            }
-
-            if (procType == PIPE_SHADER_FRAGMENT &&
-                semName == TGSI_SEMANTIC_POSITION)
-               emit_wpos(st_context(ctx), t, proginfo, ureg,
-                         program->wpos_transform_const);
-
-            if (procType == PIPE_SHADER_FRAGMENT &&
-                semName == TGSI_SEMANTIC_SAMPLEPOS)
-               emit_samplepos_adjustment(t, program->wpos_transform_const);
-
-            sysInputs &= ~(1ull << i);
+      if (semName == TGSI_SEMANTIC_INSTANCEID ||
+          semName == TGSI_SEMANTIC_VERTEXID) {
+         /* From Gallium perspective, these system values are always
+          * integer, and require native integer support.  However, if
+          * native integer is supported on the vertex stage but not the
+          * pixel stage (e.g, i915g + draw), Mesa will generate IR that
+          * assumes these system values are floats. To resolve the
+          * inconsistency, we insert a U2F.
+          */
+         struct st_context *st = st_context(ctx);
+         struct pipe_screen *pscreen = st->screen;
+         assert(procType == PIPE_SHADER_VERTEX);
+         assert(pscreen->get_shader_param(pscreen, PIPE_SHADER_VERTEX, PIPE_SHADER_CAP_INTEGERS));
+         (void) pscreen;
+         if (!ctx->Const.NativeIntegers) {
+            struct ureg_dst temp = ureg_DECL_local_temporary(t->ureg);
+            ureg_U2F(t->ureg, ureg_writemask(temp, TGSI_WRITEMASK_X),
+                     t->systemValues[i]);
+            t->systemValues[i] = ureg_scalar(ureg_src(temp), 0);
          }
       }
+
+      if (procType == PIPE_SHADER_FRAGMENT &&
+          semName == TGSI_SEMANTIC_POSITION)
+         emit_wpos(st_context(ctx), t, proginfo, ureg,
+                   program->wpos_transform_const);
+
+      if (procType == PIPE_SHADER_FRAGMENT &&
+          semName == TGSI_SEMANTIC_SAMPLEPOS)
+         emit_samplepos_adjustment(t, program->wpos_transform_const);
    }
 
    t->array_sizes = program->array_sizes;
@@ -7231,8 +7223,8 @@ get_mesa_program_tgsi(struct gl_context *ctx,
    /* This must be done before the uniform storage is associated. */
    if (shader->Stage == MESA_SHADER_FRAGMENT &&
        (prog->info.inputs_read & VARYING_BIT_POS ||
-        prog->info.system_values_read & (1ull << SYSTEM_VALUE_FRAG_COORD) ||
-        prog->info.system_values_read & (1ull << SYSTEM_VALUE_SAMPLE_POS))) {
+        BITSET_TEST(prog->info.system_values_read, SYSTEM_VALUE_FRAG_COORD) ||
+        BITSET_TEST(prog->info.system_values_read, SYSTEM_VALUE_SAMPLE_POS))) {
       static const gl_state_index16 wposTransformState[STATE_LENGTH] = {
          STATE_INTERNAL, STATE_FB_WPOS_Y_TRANSFORM
       };

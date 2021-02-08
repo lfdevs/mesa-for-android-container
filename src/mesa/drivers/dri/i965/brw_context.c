@@ -579,7 +579,7 @@ brw_initialize_context_constants(struct brw_context *brw)
    int max_samples;
    const int *msaa_modes = intel_supported_msaa_modes(brw->screen);
    const int clamp_max_samples =
-      driQueryOptioni(&brw->optionCache, "clamp_max_samples");
+      driQueryOptioni(&brw->screen->optionCache, "clamp_max_samples");
 
    if (clamp_max_samples < 0) {
       max_samples = msaa_modes[0];
@@ -858,11 +858,7 @@ brw_process_driconf_options(struct brw_context *brw)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
-
-   driOptionCache *options = &brw->optionCache;
-   driParseConfigFiles(options, &brw->screen->optionCache,
-                       brw->driContext->driScreenPriv->myNum,
-                       "i965", NULL, NULL, 0, NULL, 0);
+   const driOptionCache *const options = &brw->screen->optionCache;
 
    if (INTEL_DEBUG & DEBUG_NO_HIZ) {
        brw->has_hiz = false;
@@ -889,9 +885,9 @@ brw_process_driconf_options(struct brw_context *brw)
       brw->disable_throttling = true;
    }
 
-   brw->precompile = driQueryOptionb(&brw->optionCache, "shader_precompile");
+   brw->precompile = driQueryOptionb(&brw->screen->optionCache, "shader_precompile");
 
-   if (driQueryOptionb(&brw->optionCache, "precise_trig"))
+   if (driQueryOptionb(&brw->screen->optionCache, "precise_trig"))
       brw->screen->compiler->precise_trig = true;
 
    ctx->Const.ForceGLSLExtensionsWarn =
@@ -928,7 +924,8 @@ brw_process_driconf_options(struct brw_context *brw)
    if (*vendor_str)
       ctx->Const.VendorOverride = vendor_str;
 
-   ctx->Const.dri_config_options_sha1 = ralloc_array(brw, unsigned char, 20);
+   ctx->Const.dri_config_options_sha1 =
+      ralloc_array(brw->mem_ctx, unsigned char, 20);
    driComputeOptionsSha1(&brw->screen->optionCache,
                          ctx->Const.dri_config_options_sha1);
 }
@@ -972,13 +969,14 @@ brwCreateContext(gl_api api,
       ((ctx_config->attribute_mask & __DRIVER_CONTEXT_ATTRIB_RESET_STRATEGY) &&
        ctx_config->reset_strategy != __DRI_CTX_RESET_NO_NOTIFICATION);
 
-   struct brw_context *brw = rzalloc(NULL, struct brw_context);
+   struct brw_context *brw = align_calloc(sizeof(struct brw_context), 16);
    if (!brw) {
       fprintf(stderr, "%s: failed to alloc context\n", __func__);
       *dri_ctx_error = __DRI_CTX_ERROR_NO_MEMORY;
       return false;
    }
-   brw->perf_ctx = gen_perf_new_context(brw);
+   brw->mem_ctx = ralloc_context(NULL);
+   brw->perf_ctx = gen_perf_new_context(brw->mem_ctx);
 
    driContextPriv->driverPrivate = brw;
    brw->driContext = driContextPriv;
@@ -1244,12 +1242,11 @@ intelDestroyContext(__DRIcontext * driContextPriv)
    brw->throttle_batch[1] = NULL;
    brw->throttle_batch[0] = NULL;
 
-   driDestroyOptionCache(&brw->optionCache);
-
    /* free the Mesa context */
    _mesa_free_context_data(&brw->ctx, true);
 
-   ralloc_free(brw);
+   ralloc_free(brw->mem_ctx);
+   align_free(brw);
    driContextPriv->driverPrivate = NULL;
 }
 

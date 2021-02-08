@@ -506,6 +506,8 @@ set_tex_parameteri(struct gl_context *ctx,
          if (texObj->Attrib.StencilSampling == stencil)
             return GL_FALSE;
 
+         /* This should not be restored by glPopAttrib. */
+         FLUSH_VERTICES(ctx, _NEW_TEXTURE_OBJECT);
          texObj->Attrib.StencilSampling = stencil;
          return GL_TRUE;
       }

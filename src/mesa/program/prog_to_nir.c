@@ -904,10 +904,8 @@ setup_registers_and_variables(struct ptn_compile *c)
    }
 
    /* Create system value variables */
-   uint64_t system_values_read = c->prog->info.system_values_read;
-   while (system_values_read) {
-      const int i = u_bit_scan64(&system_values_read);
-
+   int i;
+   BITSET_FOREACH_SET(i, c->prog->info.system_values_read, SYSTEM_VALUE_MAX) {
       nir_variable *var =
          nir_variable_create(shader, nir_var_system_value, glsl_vec4_type(),
                              ralloc_asprintf(shader, "sv_%d", i));

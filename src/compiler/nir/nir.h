@@ -4300,9 +4300,6 @@ nir_gather_explicit_io_initializers(nir_shader *shader,
                                     void *dst, size_t dst_size,
                                     nir_variable_mode mode);
 
-bool nir_lower_mem_constant_vars(nir_shader *shader,
-                                 glsl_type_size_align_func type_info);
-
 bool nir_lower_vec3_to_vec4(nir_shader *shader, nir_variable_mode modes);
 
 typedef enum {

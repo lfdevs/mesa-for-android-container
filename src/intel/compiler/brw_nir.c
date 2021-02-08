@@ -186,11 +186,10 @@ brw_nir_lower_vs_inputs(nir_shader *nir,
     * included here as it lives in its own vec4.
     */
    const bool has_sgvs =
-      nir->info.system_values_read &
-      (BITFIELD64_BIT(SYSTEM_VALUE_FIRST_VERTEX) |
-       BITFIELD64_BIT(SYSTEM_VALUE_BASE_INSTANCE) |
-       BITFIELD64_BIT(SYSTEM_VALUE_VERTEX_ID_ZERO_BASE) |
-       BITFIELD64_BIT(SYSTEM_VALUE_INSTANCE_ID));
+      BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FIRST_VERTEX) ||
+      BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_BASE_INSTANCE) ||
+      BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_VERTEX_ID_ZERO_BASE) ||
+      BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_INSTANCE_ID);
 
    const unsigned num_inputs = util_bitcount64(nir->info.inputs_read);
 

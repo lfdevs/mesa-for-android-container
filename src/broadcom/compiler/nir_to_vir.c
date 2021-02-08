@@ -1620,14 +1620,16 @@ ntq_setup_vs_inputs(struct v3d_compile *c)
 
         unsigned num_components = 0;
         uint32_t vpm_components_queued = 0;
-        bool uses_iid = c->s->info.system_values_read &
-                (1ull << SYSTEM_VALUE_INSTANCE_ID |
-                 1ull << SYSTEM_VALUE_INSTANCE_INDEX);
-        bool uses_biid = c->s->info.system_values_read &
-                (1ull << SYSTEM_VALUE_BASE_INSTANCE);
-        bool uses_vid = c->s->info.system_values_read &
-                (1ull << SYSTEM_VALUE_VERTEX_ID |
-                 1ull << SYSTEM_VALUE_VERTEX_ID_ZERO_BASE);
+        bool uses_iid = BITSET_TEST(c->s->info.system_values_read,
+                                    SYSTEM_VALUE_INSTANCE_ID) ||
+                        BITSET_TEST(c->s->info.system_values_read,
+                                    SYSTEM_VALUE_INSTANCE_INDEX);
+        bool uses_biid = BITSET_TEST(c->s->info.system_values_read,
+                                     SYSTEM_VALUE_BASE_INSTANCE);
+        bool uses_vid = BITSET_TEST(c->s->info.system_values_read,
+                                    SYSTEM_VALUE_VERTEX_ID) ||
+                        BITSET_TEST(c->s->info.system_values_read,
+                                    SYSTEM_VALUE_VERTEX_ID_ZERO_BASE);
 
         num_components += uses_iid;
         num_components += uses_biid;
@@ -2079,16 +2081,16 @@ ntq_emit_load_input(struct v3d_compile *c, nir_intrinsic_instr *instr)
                 * be slower if the VPM unit is busy with another QPU.
                 */
                int index = 0;
-               if (c->s->info.system_values_read &
-                   (1ull << SYSTEM_VALUE_INSTANCE_ID)) {
+               if (BITSET_TEST(c->s->info.system_values_read,
+                               SYSTEM_VALUE_INSTANCE_ID)) {
                       index++;
                }
-               if (c->s->info.system_values_read &
-                   (1ull << SYSTEM_VALUE_BASE_INSTANCE)) {
+               if (BITSET_TEST(c->s->info.system_values_read,
+                               SYSTEM_VALUE_BASE_INSTANCE)) {
                       index++;
                }
-               if (c->s->info.system_values_read &
-                   (1ull << SYSTEM_VALUE_VERTEX_ID)) {
+               if (BITSET_TEST(c->s->info.system_values_read,
+                               SYSTEM_VALUE_VERTEX_ID)) {
                       index++;
                }
                for (int i = 0; i < offset; i++)
@@ -3130,16 +3132,18 @@ nir_to_vir(struct v3d_compile *c)
                         c->uses_implicit_point_line_varyings = true;
                 } else if (c->fs_key->is_lines &&
                            (c->devinfo->ver < 40 ||
-                            (c->s->info.system_values_read &
-                             BITFIELD64_BIT(SYSTEM_VALUE_LINE_COORD)))) {
+                            BITSET_TEST(c->s->info.system_values_read,
+                                        SYSTEM_VALUE_LINE_COORD))) {
                         c->line_x = emit_fragment_varying(c, NULL, -1, 0, 0);
                         c->uses_implicit_point_line_varyings = true;
                 }
 
                 c->force_per_sample_msaa =
                    c->s->info.fs.uses_sample_qualifier ||
-                   (c->s->info.system_values_read & (SYSTEM_BIT_SAMPLE_ID |
-                                                     SYSTEM_BIT_SAMPLE_POS));
+                   BITSET_TEST(c->s->info.system_values_read,
+                               SYSTEM_VALUE_SAMPLE_ID) ||
+                   BITSET_TEST(c->s->info.system_values_read,
+                               SYSTEM_VALUE_SAMPLE_POS);
                 break;
         case MESA_SHADER_COMPUTE:
                 /* Set up the TSO for barriers, assuming we do some. */

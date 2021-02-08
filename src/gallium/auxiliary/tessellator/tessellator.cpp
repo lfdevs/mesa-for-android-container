@@ -194,9 +194,13 @@ INT32 floatToIDotF( const float& input )
         {
 //            assert( iShift < 32 );
 #if defined(_MSC_VER)
-#pragma warning( suppress : 4293 )
+#pragma warning( push )
+#pragma warning( disable : 4293 26452 )
 #endif
             _fxpMaxPosValueFloat -= INT32( 1 ) << iShift;
+#if defined(_MSC_VER)
+#pragma warning( pop )
+#endif
         }
 
         // The maximum negative fixed point value is -2^(i-1).
@@ -216,9 +220,13 @@ INT32 floatToIDotF( const float& input )
         {
 //            assert( iShift < 32 );
 #if defined(_MSC_VER)
-#pragma warning( suppress : 4293 )
+#pragma warning( push )
+#pragma warning( disable : 4293 26452 )
 #endif
             _fxpMaxPosValueFloat -= INT32( 1 ) << iShift;
+#if defined(_MSC_VER)
+#pragma warning( pop )
+#endif
         }
 
         // The maximum negative fixed point value is 0.

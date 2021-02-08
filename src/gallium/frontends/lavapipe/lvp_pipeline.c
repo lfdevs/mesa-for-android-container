@@ -792,8 +792,8 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
 
    if (pipeline->pipeline_nir[MESA_SHADER_FRAGMENT]) {
       if (pipeline->pipeline_nir[MESA_SHADER_FRAGMENT]->info.fs.uses_sample_qualifier ||
-          pipeline->pipeline_nir[MESA_SHADER_FRAGMENT]->info.system_values_read & (SYSTEM_BIT_SAMPLE_ID |
-                                                                                   SYSTEM_BIT_SAMPLE_POS))
+          BITSET_TEST(pipeline->pipeline_nir[MESA_SHADER_FRAGMENT]->info.system_values_read, SYSTEM_VALUE_SAMPLE_ID) ||
+          BITSET_TEST(pipeline->pipeline_nir[MESA_SHADER_FRAGMENT]->info.system_values_read, SYSTEM_VALUE_SAMPLE_POS))
          pipeline->force_min_sample = true;
    }
    if (pipeline->pipeline_nir[MESA_SHADER_TESS_CTRL]) {

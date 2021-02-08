@@ -1060,7 +1060,7 @@ tu6_blit_image(struct tu_cmd_buffer *cmd,
                const VkImageBlit *info,
                VkFilter filter)
 {
-   const struct blit_ops *ops = &r3d_ops;
+   const struct blit_ops *ops = &r2d_ops;
    struct tu_cs *cs = &cmd->cs;
    bool z_scale = false;
    uint32_t layers = info->dstOffsets[1].z - info->dstOffsets[0].z;

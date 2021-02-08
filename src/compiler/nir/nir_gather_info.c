@@ -495,40 +495,40 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    case nir_intrinsic_load_barycentric_model:
    case nir_intrinsic_load_gs_header_ir3:
    case nir_intrinsic_load_tcs_header_ir3:
-      shader->info.system_values_read |=
-         (1ull << nir_system_value_from_intrinsic(instr->intrinsic));
+      BITSET_SET(shader->info.system_values_read,
+                 nir_system_value_from_intrinsic(instr->intrinsic));
       break;
 
    case nir_intrinsic_load_barycentric_pixel:
       if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_SMOOTH ||
           nir_intrinsic_interp_mode(instr) == INTERP_MODE_NONE) {
-         shader->info.system_values_read |=
-            BITFIELD64_BIT(SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL);
+         BITSET_SET(shader->info.system_values_read,
+                    SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL);
       } else if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_NOPERSPECTIVE) {
-         shader->info.system_values_read |=
-            BITFIELD64_BIT(SYSTEM_VALUE_BARYCENTRIC_LINEAR_PIXEL);
+         BITSET_SET(shader->info.system_values_read,
+                    SYSTEM_VALUE_BARYCENTRIC_LINEAR_PIXEL);
       }
       break;
 
    case nir_intrinsic_load_barycentric_centroid:
       if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_SMOOTH ||
           nir_intrinsic_interp_mode(instr) == INTERP_MODE_NONE) {
-         shader->info.system_values_read |=
-            BITFIELD64_BIT(SYSTEM_VALUE_BARYCENTRIC_PERSP_CENTROID);
+         BITSET_SET(shader->info.system_values_read,
+                    SYSTEM_VALUE_BARYCENTRIC_PERSP_CENTROID);
       } else if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_NOPERSPECTIVE) {
-         shader->info.system_values_read |=
-            BITFIELD64_BIT(SYSTEM_VALUE_BARYCENTRIC_LINEAR_CENTROID);
+         BITSET_SET(shader->info.system_values_read,
+                    SYSTEM_VALUE_BARYCENTRIC_LINEAR_CENTROID);
       }
       break;
 
    case nir_intrinsic_load_barycentric_sample:
       if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_SMOOTH ||
           nir_intrinsic_interp_mode(instr) == INTERP_MODE_NONE) {
-         shader->info.system_values_read |=
-            BITFIELD64_BIT(SYSTEM_VALUE_BARYCENTRIC_PERSP_SAMPLE);
+         BITSET_SET(shader->info.system_values_read,
+                    SYSTEM_VALUE_BARYCENTRIC_PERSP_SAMPLE);
       } else if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_NOPERSPECTIVE) {
-         shader->info.system_values_read |=
-            BITFIELD64_BIT(SYSTEM_VALUE_BARYCENTRIC_LINEAR_SAMPLE);
+         BITSET_SET(shader->info.system_values_read,
+                    SYSTEM_VALUE_BARYCENTRIC_LINEAR_SAMPLE);
       }
       if (shader->info.stage == MESA_SHADER_FRAGMENT)
          shader->info.fs.uses_sample_qualifier = true;
@@ -831,7 +831,7 @@ nir_shader_gather_info(nir_shader *shader, nir_function_impl *entrypoint)
    shader->info.patch_outputs_read = 0;
    shader->info.patch_inputs_read = 0;
    shader->info.patch_outputs_written = 0;
-   shader->info.system_values_read = 0;
+   BITSET_ZERO(shader->info.system_values_read);
    shader->info.inputs_read_indirectly = 0;
    shader->info.outputs_accessed_indirectly = 0;
    shader->info.patch_inputs_read_indirectly = 0;
@@ -864,8 +864,8 @@ nir_shader_gather_info(nir_shader *shader, nir_function_impl *entrypoint)
 
    if (shader->info.stage == MESA_SHADER_FRAGMENT &&
        (shader->info.fs.uses_sample_qualifier ||
-        (shader->info.system_values_read & BITFIELD64_BIT(SYSTEM_VALUE_SAMPLE_ID)) ||
-         shader->info.system_values_read & BITFIELD64_BIT(SYSTEM_VALUE_SAMPLE_POS))) {
+        (BITSET_TEST(shader->info.system_values_read, SYSTEM_VALUE_SAMPLE_ID) ||
+         BITSET_TEST(shader->info.system_values_read, SYSTEM_VALUE_SAMPLE_POS)))) {
       /* This shouldn't be cleared because if optimizations remove all
        * sample-qualified inputs and that pass is run again, the sample
        * shading must stay enabled.

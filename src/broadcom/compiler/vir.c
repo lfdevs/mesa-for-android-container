@@ -640,16 +640,18 @@ v3d_vs_set_prog_data(struct v3d_compile *c,
                 prog_data->vpm_input_size += c->vattr_sizes[i];
         }
 
-        prog_data->uses_vid = (c->s->info.system_values_read &
-                               (1ull << SYSTEM_VALUE_VERTEX_ID |
-                                1ull << SYSTEM_VALUE_VERTEX_ID_ZERO_BASE));
+        prog_data->uses_vid = BITSET_TEST(c->s->info.system_values_read,
+                                          SYSTEM_VALUE_VERTEX_ID) ||
+                              BITSET_TEST(c->s->info.system_values_read,
+                                          SYSTEM_VALUE_VERTEX_ID_ZERO_BASE);
 
-        prog_data->uses_biid = (c->s->info.system_values_read &
-                                (1ull << SYSTEM_VALUE_BASE_INSTANCE));
+        prog_data->uses_biid = BITSET_TEST(c->s->info.system_values_read,
+                                           SYSTEM_VALUE_BASE_INSTANCE);
 
-        prog_data->uses_iid = (c->s->info.system_values_read &
-                               (1ull << SYSTEM_VALUE_INSTANCE_ID |
-                                1ull << SYSTEM_VALUE_INSTANCE_INDEX));
+        prog_data->uses_iid = BITSET_TEST(c->s->info.system_values_read,
+                                          SYSTEM_VALUE_INSTANCE_ID) ||
+                              BITSET_TEST(c->s->info.system_values_read,
+                                          SYSTEM_VALUE_INSTANCE_INDEX);
 
         if (prog_data->uses_vid)
                 prog_data->vpm_input_size++;
@@ -703,8 +705,8 @@ v3d_gs_set_prog_data(struct v3d_compile *c,
          * it after reading it if necessary, so it doesn't add to the VPM
          * size requirements.
          */
-        prog_data->uses_pid = (c->s->info.system_values_read &
-                               (1ull << SYSTEM_VALUE_PRIMITIVE_ID));
+        prog_data->uses_pid = BITSET_TEST(c->s->info.system_values_read,
+                                          SYSTEM_VALUE_PRIMITIVE_ID);
 
         /* Output segment size is in sectors (8 rows of 32 bits per channel) */
         prog_data->vpm_output_size = align(c->vpm_output_size, 8) / 8;

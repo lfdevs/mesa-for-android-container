@@ -258,7 +258,9 @@ dri2_create_image_from_renderbuffer2(__DRIcontext *context,
 				     int renderbuffer, void *loaderPrivate,
                                      unsigned *error)
 {
-   struct gl_context *ctx = ((struct st_context *)dri_context(context)->st)->ctx;
+   struct st_context *st_ctx = (struct st_context *)dri_context(context)->st;
+   struct gl_context *ctx = st_ctx->ctx;
+   struct pipe_context *p_ctx = st_ctx->pipe;
    struct gl_renderbuffer *rb;
    struct pipe_resource *tex;
    __DRIimage *img;
@@ -300,6 +302,13 @@ dri2_create_image_from_renderbuffer2(__DRIcontext *context,
 
    pipe_resource_reference(&img->texture, tex);
 
+   /* If the resource supports EGL_MESA_image_dma_buf_export, make sure that
+    * it's in a shareable state. Do this now while we still have the access to
+    * the context.
+    */
+   if (dri2_get_mapping_by_format(img->dri_format))
+      p_ctx->flush_resource(p_ctx, tex);
+
    *error = __DRI_IMAGE_ERROR_SUCCESS;
    return img;
 }
@@ -338,7 +347,9 @@ dri2_create_from_texture(__DRIcontext *context, int target, unsigned texture,
                          void *loaderPrivate)
 {
    __DRIimage *img;
-   struct gl_context *ctx = ((struct st_context *)dri_context(context)->st)->ctx;
+   struct st_context *st_ctx = (struct st_context *)dri_context(context)->st;
+   struct gl_context *ctx = st_ctx->ctx;
+   struct pipe_context *p_ctx = st_ctx->pipe;
    struct gl_texture_object *obj;
    struct pipe_resource *tex;
    GLuint face = 0;
@@ -388,6 +399,13 @@ dri2_create_from_texture(__DRIcontext *context, int target, unsigned texture,
    img->sPriv = context->driScreenPriv;
 
    pipe_resource_reference(&img->texture, tex);
+
+   /* If the resource supports EGL_MESA_image_dma_buf_export, make sure that
+    * it's in a shareable state. Do this now while we still have the access to
+    * the context.
+    */
+   if (dri2_get_mapping_by_format(img->dri_format))
+      p_ctx->flush_resource(p_ctx, tex);
 
    *error = __DRI_IMAGE_ERROR_SUCCESS;
    return img;
@@ -560,6 +578,9 @@ dri2_get_mapping_by_fourcc(int fourcc)
 const struct dri2_format_mapping *
 dri2_get_mapping_by_format(int format)
 {
+   if (format == __DRI_IMAGE_FORMAT_NONE)
+      return NULL;
+
    for (unsigned i = 0; i < ARRAY_SIZE(dri2_format_table); i++) {
       if (dri2_format_table[i].dri_format == format)
          return &dri2_format_table[i];

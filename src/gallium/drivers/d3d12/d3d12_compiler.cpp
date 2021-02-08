@@ -521,7 +521,7 @@ validate_geometry_shader_variant(struct d3d12_selection_context *sel_ctx)
    if (sel_ctx->fill_mode_lowered != PIPE_POLYGON_MODE_FILL) {
       key.fill_mode = sel_ctx->fill_mode_lowered;
       key.cull_mode = sel_ctx->cull_mode_lowered;
-      key.has_front_face = (fs->initial->info.system_values_read & SYSTEM_BIT_FRONT_FACE) ? 1 : 0;
+      key.has_front_face = BITSET_TEST(fs->initial->info.system_values_read, SYSTEM_VALUE_FRONT_FACE);
       if (key.cull_mode != PIPE_FACE_NONE || key.has_front_face)
          key.front_ccw = ctx->gfx_pipeline_state.rast->base.front_ccw ^ (ctx->flip_y < 0);
       key.edge_flag_fix = needs_edge_flag_fix(ctx->initial_api_prim);

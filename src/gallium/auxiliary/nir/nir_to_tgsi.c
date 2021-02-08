@@ -2668,7 +2668,7 @@ nir_to_tgsi(struct nir_shader *s,
        * gl-2.1-polygon-stipple-fs on softpipe.
        */
       if ((s->info.inputs_read & VARYING_BIT_POS) ||
-          (s->info.system_values_read & (1ull << SYSTEM_VALUE_FRAG_COORD))) {
+          BITSET_TEST(s->info.system_values_read, SYSTEM_VALUE_FRAG_COORD)) {
          ureg_property(c->ureg, TGSI_PROPERTY_FS_COORD_ORIGIN,
                        s->info.fs.origin_upper_left ?
                        TGSI_FS_COORD_ORIGIN_UPPER_LEFT :

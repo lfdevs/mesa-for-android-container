@@ -1405,23 +1405,6 @@ _mesa_free_context_data(struct gl_context *ctx, bool destroy_debug_output)
 
 
 /**
- * Destroy a struct gl_context structure.
- *
- * \param ctx GL context.
- *
- * Calls _mesa_free_context_data() and frees the gl_context object itself.
- */
-void
-_mesa_destroy_context( struct gl_context *ctx )
-{
-   if (ctx) {
-      _mesa_free_context_data(ctx, true);
-      free( (void *) ctx );
-   }
-}
-
-
-/**
  * Copy attribute groups from one context to another.
  *
  * \param src source context

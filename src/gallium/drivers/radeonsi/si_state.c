@@ -1392,7 +1392,7 @@ static void si_emit_db_render_state(struct si_context *sctx)
       S_028010_DISABLE_ZMASK_EXPCLEAR_OPTIMIZATION(sctx->db_depth_disable_expclear) |
       S_028010_DISABLE_SMEM_EXPCLEAR_OPTIMIZATION(sctx->db_stencil_disable_expclear) |
       S_028010_DECOMPRESS_Z_ON_FLUSH(sctx->framebuffer.nr_samples >= 4) |
-      S_028010_CENTROID_COMPUTATION_MODE(sctx->chip_class >= GFX10_3 ? 2 : 0));
+      S_028010_CENTROID_COMPUTATION_MODE(sctx->chip_class >= GFX10_3 ? 1 : 0));
 
    db_shader_control = sctx->ps_db_shader_control;
 

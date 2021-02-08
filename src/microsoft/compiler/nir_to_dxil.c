@@ -4214,7 +4214,7 @@ allocate_sysvalues(struct ntd_context *ctx, nir_shader *s)
 
    for (unsigned i = 0; i < ARRAY_SIZE(possible_sysvalues); ++i) {
       struct sysvalue_name *info = &possible_sysvalues[i];
-      if ((1 << info->value) & s->info.system_values_read) {
+      if (BITSET_TEST(s->info.system_values_read, info->value)) {
          if (!append_input_or_sysvalue(ctx, s, info->slot,
                                        info->value, info->name,
                                        driver_location++))

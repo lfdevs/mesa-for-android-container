@@ -1537,7 +1537,7 @@ iris_update_compiled_tes(struct iris_context *ice)
 
    /* TODO: Could compare and avoid flagging this. */
    const struct shader_info *tes_info = &ish->nir->info;
-   if (tes_info->system_values_read & (1ull << SYSTEM_VALUE_VERTICES_IN)) {
+   if (BITSET_TEST(tes_info->system_values_read, SYSTEM_VALUE_VERTICES_IN)) {
       ice->state.stage_dirty |= IRIS_STAGE_DIRTY_CONSTANTS_TES;
       ice->state.shaders[MESA_SHADER_TESS_EVAL].sysvals_need_upload = true;
    }

@@ -121,10 +121,6 @@ extern void
 _mesa_free_context_data(struct gl_context *ctx, bool destroy_debug_output);
 
 extern void
-_mesa_destroy_context( struct gl_context *ctx );
-
-
-extern void
 _mesa_copy_context(const struct gl_context *src, struct gl_context *dst, GLuint mask);
 
 extern GLboolean

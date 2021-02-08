@@ -46,6 +46,15 @@ struct from_ssa_state {
 
 /* Returns if def @a comes after def @b.
  *
+ * The core observation that makes the Boissinot algorithm efficient
+ * is that, given two properly sorted sets, we can check for
+ * interference in these sets via a linear walk. This is accomplished
+ * by doing single combined walk over union of the two sets in DFS
+ * order. It doesn't matter what DFS we do so long as we're
+ * consistent. Fortunately, the dominance algorithm we ran prior to
+ * this pass did such a walk and recorded the pre- and post-indices in
+ * the blocks.
+ *
  * We treat SSA undefs as always coming before other instruction types.
  */
 static bool
@@ -57,7 +66,15 @@ def_after(nir_ssa_def *a, nir_ssa_def *b)
    if (b->parent_instr->type == nir_instr_type_ssa_undef)
       return true;
 
-   return a->parent_instr->index > b->parent_instr->index;
+   /* If they're in the same block, we can rely on whichever instruction
+    * comes first in the block.
+    */
+   if (a->parent_instr->block == b->parent_instr->block)
+      return a->parent_instr->index > b->parent_instr->index;
+
+   /* Otherwise, if blocks are distinct, we sort them in DFS pre-order */
+   return a->parent_instr->block->dom_pre_index >
+          b->parent_instr->block->dom_pre_index;
 }
 
 /* Returns true if a dominates b */

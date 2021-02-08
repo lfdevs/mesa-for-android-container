@@ -2880,7 +2880,7 @@ radv_flush_vertex_descriptors(struct radv_cmd_buffer *cmd_buffer,
 			}
 
 			if (cmd_buffer->device->physical_device->rad_info.chip_class != GFX8 && stride)
-				num_records /= stride;
+				num_records = DIV_ROUND_UP(num_records, stride);
 
 			uint32_t rsrc_word3 = S_008F0C_DST_SEL_X(V_008F0C_SQ_SEL_X) |
 					      S_008F0C_DST_SEL_Y(V_008F0C_SQ_SEL_Y) |

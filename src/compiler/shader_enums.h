@@ -383,15 +383,6 @@ const char *gl_varying_slot_name_for_stage(gl_varying_slot slot,
 /*@}*/
 
 /**
- * Bitflags for system values.
- */
-#define SYSTEM_BIT_SAMPLE_ID ((uint64_t)1 << SYSTEM_VALUE_SAMPLE_ID)
-#define SYSTEM_BIT_SAMPLE_POS ((uint64_t)1 << SYSTEM_VALUE_SAMPLE_POS)
-#define SYSTEM_BIT_SAMPLE_MASK_IN ((uint64_t)1 << SYSTEM_VALUE_SAMPLE_MASK_IN)
-#define SYSTEM_BIT_LOCAL_INVOCATION_ID ((uint64_t)1 << SYSTEM_VALUE_LOCAL_INVOCATION_ID)
-#define SYSTEM_BIT_FRONT_FACE ((uint64_t)1 << SYSTEM_VALUE_FRONT_FACE)
-
-/**
  * If the gl_register_file is PROGRAM_SYSTEM_VALUE, the register index will be
  * one of these values.  If a NIR variable's mode is nir_var_system_value, it
  * will be one of these values.

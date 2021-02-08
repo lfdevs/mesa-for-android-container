@@ -614,15 +614,17 @@ static bool dump_clause(FILE *fp, uint32_t *words, unsigned *size, unsigned offs
                                 consts.raw[const_idx + 1] = const1;
 
                                 /* Calculate M values from A, B and 4-bit
-                                 * unsigned arithmetic */
+                                 * unsigned arithmetic. Mathematically it
+                                 * should be (A - B) % 16 but we use this
+                                 * alternate form to avoid sign issues */
 
-                                signed A1 = bits(words[2], 0, 4);
-                                signed B1 = bits(words[3], 28, 32);
-                                signed A2 = bits(words[1], 0, 4);
-                                signed B2 = bits(words[2], 28, 32);
+                                unsigned A1 = bits(words[2], 0, 4);
+                                unsigned B1 = bits(words[3], 28, 32);
+                                unsigned A2 = bits(words[1], 0, 4);
+                                unsigned B2 = bits(words[2], 28, 32);
 
-                                unsigned M1 = (A1 - B1) % 16;
-                                unsigned M2 = (A2 - B2) % 16;
+                                unsigned M1 = (16 + A1 - B1) & 0xF;
+                                unsigned M2 = (16 + A2 - B2) & 0xF;
 
                                 decode_M(&consts.mods[const_idx], M1, M2, false);
 

@@ -1165,6 +1165,20 @@ iris_flush_resource(struct pipe_context *ctx, struct pipe_resource *resource)
                                 0, INTEL_REMAINING_LAYERS,
                                 mod ? mod->aux_usage : ISL_AUX_USAGE_NONE,
                                 mod ? mod->supports_clear_color : false);
+
+   if (!res->mod_info && res->aux.usage != ISL_AUX_USAGE_NONE) {
+      /* flush_resource may be used to prepare an image for sharing external
+       * to the driver (e.g. via eglCreateImage). To account for this, make
+       * sure to get rid of any compression that a consumer wouldn't know how
+       * to handle.
+       */
+      for (int i = 0; i < IRIS_BATCH_COUNT; i++) {
+         if (iris_batch_references(&ice->batches[i], res->bo))
+            iris_batch_flush(&ice->batches[i]);
+      }
+
+      iris_resource_disable_aux(res);
+   }
 }
 
 static void

@@ -699,7 +699,7 @@ struct radv_deferred_queue_submission;
 enum ring_type radv_queue_family_to_ring(int f);
 
 struct radv_queue {
-	VK_LOADER_DATA                              _loader_data;
+	struct vk_object_base                       base;
 	struct radv_device *                         device;
 	struct radeon_winsys_ctx                    *hw_ctx;
 	enum radeon_ctx_priority                     priority;

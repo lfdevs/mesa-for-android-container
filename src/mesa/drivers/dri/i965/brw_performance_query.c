@@ -487,7 +487,7 @@ brw_init_perf_query_info(struct gl_context *ctx)
    if (!oa_metrics_kernel_support(brw->screen->fd, devinfo))
       return 0;
 
-   perf_cfg = gen_perf_new(ctx);
+   perf_cfg = gen_perf_new(brw->mem_ctx);
 
    perf_cfg->vtbl.bo_alloc = brw_oa_bo_alloc;
    perf_cfg->vtbl.bo_unreference = (bo_unreference_t)brw_bo_unreference;
