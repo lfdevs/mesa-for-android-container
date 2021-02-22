@@ -509,7 +509,7 @@ bi_emit_load_ubo(bi_builder *b, nir_intrinsic_instr *instr)
                 }
         }
 
-        bi_load_to(b, instr->num_components * 32,
+        bi_load_to(b, instr->num_components * nir_dest_bit_size(instr->dest),
                         bi_dest_index(&instr->dest), offset_is_const ?
                         bi_imm_u32(const_offset) : dyn_offset,
                         bi_src_index(&instr->src[0]),
@@ -2267,9 +2267,13 @@ bifrost_compile_shader_nir(void *mem_ctx, nir_shader *nir,
                                 bifrost_debug & BIFROST_DBG_VERBOSE);
         }
 
-        /* Pad the shader with enough zero bytes to trick the prefetcher */
-        memset(util_dynarray_grow(&program->compiled, uint8_t, BIFROST_SHADER_PREFETCH),
-               0, BIFROST_SHADER_PREFETCH);
+        /* Pad the shader with enough zero bytes to trick the prefetcher,
+         * unless we're compiling an empty shader (in which case we don't pad
+         * so the size remains 0) */
+        if (program->compiled.size) {
+                memset(util_dynarray_grow(&program->compiled, uint8_t, BIFROST_SHADER_PREFETCH),
+                       0, BIFROST_SHADER_PREFETCH);
+        }
 
         program->tls_size = ctx->tls_size;
 

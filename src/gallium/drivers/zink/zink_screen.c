@@ -704,7 +704,7 @@ static VkPhysicalDevice
 choose_pdev(const VkInstance instance)
 {
    uint32_t i, pdev_count;
-   VkPhysicalDevice *pdevs, pdev;
+   VkPhysicalDevice *pdevs, pdev = NULL;
    vkEnumeratePhysicalDevices(instance, &pdev_count, NULL);
    assert(pdev_count > 0);
 
@@ -712,11 +712,10 @@ choose_pdev(const VkInstance instance)
    vkEnumeratePhysicalDevices(instance, &pdev_count, pdevs);
    assert(pdev_count > 0);
 
-   pdev = pdevs[0];
    for (i = 0; i < pdev_count; ++i) {
       VkPhysicalDeviceProperties props;
       vkGetPhysicalDeviceProperties(pdevs[i], &props);
-      if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+      if (props.deviceType != VK_PHYSICAL_DEVICE_TYPE_CPU) {
          pdev = pdevs[i];
          break;
       }
@@ -1114,6 +1113,9 @@ zink_internal_create_screen(const struct pipe_screen_config *config)
       debug_printf("ZINK: failed to setup debug utils\n");
 
    screen->pdev = choose_pdev(screen->instance);
+   if (!screen->pdev)
+      goto fail;
+
    update_queue_props(screen);
 
    screen->have_X8_D24_UNORM_PACK32 = zink_is_depth_format_supported(screen,

@@ -2742,10 +2742,6 @@ vc4_update_compiled_fs(struct vc4_context *vc4, uint8_t prim_mode)
         key->stencil_full_writemasks = vc4->zsa->stencil_uniforms[2] != 0;
         key->depth_enabled = (vc4->zsa->base.depth_enabled ||
                               key->stencil_enabled);
-        if (vc4->zsa->base.alpha_enabled)
-                key->alpha_test_func = vc4->zsa->base.alpha_func;
-        else
-                key->alpha_test_func = COMPARE_FUNC_ALWAYS;
 
         if (key->is_points) {
                 key->point_sprite_mask =

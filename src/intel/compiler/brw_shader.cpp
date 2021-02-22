@@ -949,6 +949,7 @@ backend_instruction::can_do_source_mods() const
    case SHADER_OPCODE_BROADCAST:
    case SHADER_OPCODE_CLUSTER_BROADCAST:
    case SHADER_OPCODE_MOV_INDIRECT:
+   case SHADER_OPCODE_SHUFFLE:
       return false;
    default:
       return true;

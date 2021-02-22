@@ -84,7 +84,11 @@ struct d3d12_validation_tools
 
 struct d3d12_validation_tools *d3d12_validator_create()
 {
-   return new d3d12_validation_tools();
+   d3d12_validation_tools *tools = new d3d12_validation_tools();
+   if (tools->validator)
+      return tools;
+   delete tools;
+   return nullptr;
 }
 
 void d3d12_validator_destroy(struct d3d12_validation_tools *validator)
@@ -192,10 +196,12 @@ compile_nir(struct d3d12_context *ctx, struct d3d12_shader_selector *sel,
          shader->cb_bindings[shader->num_cb_bindings++].binding = i;
       }
    }
-   ctx->validation_tools->validate_and_sign(&tmp);
+   if (ctx->validation_tools) {
+      ctx->validation_tools->validate_and_sign(&tmp);
 
-   if (d3d12_debug & D3D12_DEBUG_DISASS) {
-      ctx->validation_tools->disassemble(&tmp);
+      if (d3d12_debug & D3D12_DEBUG_DISASS) {
+         ctx->validation_tools->disassemble(&tmp);
+      }
    }
 
    blob_finish_get_buffer(&tmp, &shader->bytecode, &shader->bytecode_length);
@@ -1255,8 +1261,6 @@ bool d3d12_validation_tools::validate_and_sign(struct blob *dxil)
    ShaderBlob source(dxil);
 
    ComPtr<IDxcOperationResult> result;
-   if (!validator)
-      return false;
 
    validator->Validate(&source, DxcValidatorFlags_InPlaceEdit, &result);
    HRESULT validationStatus;

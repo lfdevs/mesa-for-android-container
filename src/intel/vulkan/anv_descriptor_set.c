@@ -1805,6 +1805,9 @@ void anv_DestroyDescriptorUpdateTemplate(
    ANV_FROM_HANDLE(anv_descriptor_update_template, template,
                    descriptorUpdateTemplate);
 
+   if (!template)
+      return;
+
    vk_object_base_finish(&template->base);
    vk_free2(&device->vk.alloc, pAllocator, template);
 }

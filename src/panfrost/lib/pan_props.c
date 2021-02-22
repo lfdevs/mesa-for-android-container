@@ -247,11 +247,14 @@ panfrost_open_device(void *memctx, int fd, struct panfrost_device *dev)
 
         dev->tiler_heap = panfrost_bo_create(dev, 4096 * 4096,
                         PAN_BO_INVISIBLE | PAN_BO_GROWABLE);
+
+        pthread_mutex_init(&dev->submit_lock, NULL);
 }
 
 void
 panfrost_close_device(struct panfrost_device *dev)
 {
+        pthread_mutex_destroy(&dev->submit_lock);
         panfrost_bo_unreference(dev->blit_shaders.bo);
         panfrost_bo_unreference(dev->tiler_heap);
         panfrost_bo_cache_evict_all(dev);

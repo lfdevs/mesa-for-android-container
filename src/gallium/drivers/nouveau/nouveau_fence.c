@@ -111,17 +111,15 @@ nouveau_fence_del(struct nouveau_fence *fence)
 void
 nouveau_fence_cleanup(struct nouveau_screen *screen)
 {
-   struct nouveau_fence *fence, *next;
-
-   for (fence = screen->fence.head; fence; fence = next) {
-      next = fence->next;
-      nouveau_fence_trigger_work(fence);
-      nouveau_fence_ref(NULL, &fence);
-   }
-   screen->fence.head = NULL;
-   screen->fence.tail = NULL;
    if (screen->fence.current) {
-      nouveau_fence_trigger_work(screen->fence.current);
+      struct nouveau_fence *current = NULL;
+
+      /* nouveau_fence_wait will create a new current fence, so wait on the
+       * _current_ one, and remove both.
+       */
+      nouveau_fence_ref(screen->fence.current, &current);
+      nouveau_fence_wait(current, NULL);
+      nouveau_fence_ref(NULL, &current);
       nouveau_fence_ref(NULL, &screen->fence.current);
    }
 }

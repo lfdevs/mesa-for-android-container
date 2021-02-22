@@ -993,18 +993,24 @@ anv_queue_submit(struct anv_queue *queue,
       }
 
       case ANV_SEMAPHORE_TYPE_TIMELINE:
+         assert(in_values);
+         if (in_values[i] == 0)
+            break;
          result = anv_queue_submit_add_timeline_wait(submit, device,
                                                      &impl->timeline,
-                                                     in_values ? in_values[i] : 0);
+                                                     in_values[i]);
          if (result != VK_SUCCESS)
             goto error;
          break;
 
       case ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ_TIMELINE:
+         assert(in_values);
+         if (in_values[i] == 0)
+            break;
          result = anv_queue_submit_add_syncobj(submit, device,
                                                impl->syncobj,
                                                I915_EXEC_FENCE_WAIT,
-                                               in_values ? in_values[i] : 0);
+                                               in_values[i]);
          if (result != VK_SUCCESS)
             goto error;
          break;
@@ -1057,17 +1063,23 @@ anv_queue_submit(struct anv_queue *queue,
       }
 
       case ANV_SEMAPHORE_TYPE_TIMELINE:
+         assert(out_values);
+         if (out_values[i] == 0)
+            break;
          result = anv_queue_submit_add_timeline_signal(submit, device,
                                                        &impl->timeline,
-                                                       out_values ? out_values[i] : 0);
+                                                       out_values[i]);
          if (result != VK_SUCCESS)
             goto error;
          break;
 
       case ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ_TIMELINE:
+         assert(out_values);
+         if (out_values[i] == 0)
+            break;
          result = anv_queue_submit_add_syncobj(submit, device, impl->syncobj,
                                                I915_EXEC_FENCE_SIGNAL,
-                                               out_values ? out_values[i] : 0);
+                                               out_values[i]);
          if (result != VK_SUCCESS)
             goto error;
          break;
@@ -1266,7 +1278,8 @@ VkResult anv_QueueSubmit(
             num_in_semaphores = pSubmits[i].waitSemaphoreCount;
          }
 
-         if (j == pSubmits[i].commandBufferCount - 1) {
+         const bool is_last_cmd_buffer = j == pSubmits[i].commandBufferCount - 1;
+         if (is_last_cmd_buffer) {
             /* Only the last batch gets the out semaphores */
             out_semaphores = pSubmits[i].pSignalSemaphores;
             out_values = signal_values;
@@ -1276,7 +1289,8 @@ VkResult anv_QueueSubmit(
          result = anv_queue_submit(queue, cmd_buffer,
                                    in_semaphores, in_values, num_in_semaphores,
                                    out_semaphores, out_values, num_out_semaphores,
-                                   wsi_signal_bo, execbuf_fence,
+                                   is_last_cmd_buffer ? wsi_signal_bo : NULL,
+                                   execbuf_fence,
                                    perf_info ? perf_info->counterPassIndex : 0);
          if (result != VK_SUCCESS)
             goto out;

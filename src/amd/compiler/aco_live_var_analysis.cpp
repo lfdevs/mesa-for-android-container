@@ -91,13 +91,6 @@ void process_live_temps_per_block(Program *program, live& lives, Block* block,
    block->register_demand = RegisterDemand();
    IDSet live = lives.live_out[block->index];
 
-   /* add the live_out_exec to live */
-   bool exec_live = false;
-   if (block->live_out_exec != Temp()) {
-      live.insert(block->live_out_exec.id());
-      exec_live = true;
-   }
-
    /* initialize register demand */
    for (unsigned t : live)
       new_demand += Temp(t, program->temp_rc[t]);
@@ -110,10 +103,7 @@ void process_live_temps_per_block(Program *program, live& lives, Block* block,
       if (is_phi(insn))
          break;
 
-      /* substract the 1 or 2 sgprs from exec */
-      if (exec_live)
-         assert(new_demand.sgpr >= (int16_t) program->lane_mask.size());
-      register_demand[idx] = RegisterDemand(new_demand.vgpr, new_demand.sgpr - (exec_live ? program->lane_mask.size() : 0));
+      register_demand[idx] = RegisterDemand(new_demand.vgpr, new_demand.sgpr);
 
       /* KILL */
       for (Definition& definition : insn->definitions) {
@@ -133,9 +123,6 @@ void process_live_temps_per_block(Program *program, live& lives, Block* block,
             register_demand[idx] += temp;
             definition.setKill(true);
          }
-
-         if (definition.isFixed() && definition.physReg() == exec)
-            exec_live = false;
       }
 
       /* GEN */
@@ -169,9 +156,6 @@ void process_live_temps_per_block(Program *program, live& lives, Block* block,
                   register_demand[idx] += temp;
                new_demand += temp;
             }
-
-            if (operand.isFixed() && operand.physReg() == exec)
-               exec_live = true;
          }
       }
 
@@ -179,9 +163,6 @@ void process_live_temps_per_block(Program *program, live& lives, Block* block,
    }
 
    /* update block's register demand for a last time */
-   if (exec_live)
-      assert(new_demand.sgpr >= (int16_t) program->lane_mask.size());
-   new_demand.sgpr -= exec_live ? program->lane_mask.size() : 0;
    block->register_demand.update(new_demand);
 
    /* handle phi definitions */

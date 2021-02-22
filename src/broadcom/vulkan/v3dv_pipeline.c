@@ -1134,10 +1134,6 @@ pipeline_populate_v3d_fs_key(struct v3d_fs_key *key,
       }
    }
 
-   /* Vulkan doesn't support alpha test */
-   key->alpha_test = false;
-   key->alpha_test_func = COMPARE_FUNC_NEVER;
-
    /* This is intended for V3D versions before 4.1, otherwise we just use the
     * tile buffer load/store swap R/B bit.
     */

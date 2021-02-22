@@ -403,7 +403,6 @@ namespace brw {
       ALU3(BFI2)
       ALU1(BFREV)
       ALU1(CBIT)
-      ALU2(CMPN)
       ALU3(CSEL)
       ALU1(DIM)
       ALU2(DP2)
@@ -466,6 +465,31 @@ namespace brw {
           */
          return set_condmod(condition,
                             emit(BRW_OPCODE_CMP, retype(dst, src0.type),
+                                 fix_unsigned_negate(src0),
+                                 fix_unsigned_negate(src1)));
+      }
+
+      /**
+       * CMPN: Behaves like CMP, but produces true if src1 is NaN.
+       */
+      instruction *
+      CMPN(const dst_reg &dst, const src_reg &src0, const src_reg &src1,
+          brw_conditional_mod condition) const
+      {
+         /* Take the instruction:
+          *
+          * CMPN null<d> src0<f> src1<f>
+          *
+          * Original gen4 does type conversion to the destination type
+          * before comparison, producing garbage results for floating
+          * point comparisons.
+          *
+          * The destination type doesn't matter on newer generations,
+          * so we set the type to match src0 so we can compact the
+          * instruction.
+          */
+         return set_condmod(condition,
+                            emit(BRW_OPCODE_CMPN, retype(dst, src0.type),
                                  fix_unsigned_negate(src0),
                                  fix_unsigned_negate(src1)));
       }

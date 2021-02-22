@@ -1281,6 +1281,12 @@ void brw_CMP(struct brw_codegen *p,
 	     struct brw_reg src0,
 	     struct brw_reg src1);
 
+void brw_CMPN(struct brw_codegen *p,
+              struct brw_reg dest,
+              unsigned conditional,
+              struct brw_reg src0,
+              struct brw_reg src1);
+
 void
 brw_untyped_atomic(struct brw_codegen *p,
                    struct brw_reg dst,

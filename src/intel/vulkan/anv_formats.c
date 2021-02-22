@@ -571,6 +571,9 @@ anv_get_image_format_features(const struct gen_device_info *devinfo,
                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
                VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
 
+      if (aspects & VK_IMAGE_ASPECT_DEPTH_BIT)
+         flags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+
       if ((aspects & VK_IMAGE_ASPECT_DEPTH_BIT) && devinfo->gen >= 9)
          flags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT;
 

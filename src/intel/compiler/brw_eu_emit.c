@@ -1986,6 +1986,36 @@ void brw_CMP(struct brw_codegen *p,
    }
 }
 
+void brw_CMPN(struct brw_codegen *p,
+              struct brw_reg dest,
+              unsigned conditional,
+              struct brw_reg src0,
+              struct brw_reg src1)
+{
+   const struct gen_device_info *devinfo = p->devinfo;
+   brw_inst *insn = next_insn(p, BRW_OPCODE_CMPN);
+
+   brw_inst_set_cond_modifier(devinfo, insn, conditional);
+   brw_set_dest(p, insn, dest);
+   brw_set_src0(p, insn, src0);
+   brw_set_src1(p, insn, src1);
+
+   /* Page 166 of the Ivy Bridge PRM Volume 4 part 3 (Execution Unit ISA)
+    * says:
+    *
+    *    If the destination is the null register, the {Switch} instruction
+    *    option must be used.
+    *
+    * Page 77 of the Haswell PRM Volume 2b contains the same text.
+    */
+   if (devinfo->gen == 7) {
+      if (dest.file == BRW_ARCHITECTURE_REGISTER_FILE &&
+          dest.nr == BRW_ARF_NULL) {
+         brw_inst_set_thread_control(devinfo, insn, BRW_THREAD_SWITCH);
+      }
+   }
+}
+
 /***********************************************************************
  * Helpers for the various SEND message types:
  */

@@ -273,17 +273,23 @@ for s in [8, 16, 32, 64]:
 # Optimize a pattern of address calculation created by DXVK where the offset is
 # divided by 4 and then multipled by 4. This can be turned into an iand and the
 # additions before can be reassociated to CSE the iand instruction.
+
+for size, mask in ((8, 0xff), (16, 0xffff), (32, 0xffffffff), (64, 0xffffffffffffffff)):
+    a_sz = 'a@{}'.format(size)
+
+    optimizations.extend([
+       # 'a >> #b << #b' -> 'a & ~((1 << #b) - 1)'
+       (('ishl', ('ushr', a_sz, '#b'), b), ('iand', a, ('ishl', mask, b))),
+    ])
+
 for log2 in range(1, 7): # powers of two from 2 to 64
    v = 1 << log2
    mask = 0xffffffff & ~(v - 1)
    b_is_multiple = '#b(is_unsigned_multiple_of_{})'.format(v)
 
    optimizations.extend([
-       # 'a >> #b << #b' -> 'a & ~((1 << #b) - 1)'
-       (('ishl', ('ushr', a, log2), log2), ('iand', a, mask)),
-
        # Reassociate for improved CSE
-       (('iand', ('iadd', a, b_is_multiple), mask), ('iadd', ('iand', a, mask), b)),
+       (('iand@32', ('iadd@32', a, b_is_multiple), mask), ('iadd', ('iand', a, mask), b)),
    ])
 
 # To save space in the state tables, reduce to the set that is known to help.

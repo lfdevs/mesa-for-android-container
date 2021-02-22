@@ -504,9 +504,12 @@ VkResult genX(CreateSampler)(
       /* From Broadwell PRM, SAMPLER_STATE:
        *   "Mip Mode Filter must be set to MIPFILTER_NONE for Planar YUV surfaces."
        */
+      const bool isl_format_is_planar_yuv = sampler->conversion &&
+         isl_format_is_yuv(sampler->conversion->format->planes[0].isl_format) &&
+         isl_format_is_planar(sampler->conversion->format->planes[0].isl_format);
+
       const uint32_t mip_filter_mode =
-         (sampler->conversion &&
-          isl_format_is_yuv(sampler->conversion->format->planes[0].isl_format)) ?
+         isl_format_is_planar_yuv ?
          MIPFILTER_NONE : vk_to_gen_mipmap_mode[pCreateInfo->mipmapMode];
 
       struct GENX(SAMPLER_STATE) sampler_state = {

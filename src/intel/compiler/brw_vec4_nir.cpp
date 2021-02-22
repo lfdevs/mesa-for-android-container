@@ -1797,20 +1797,31 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       }
       break;
 
+   /* For all shift operations:
+    *
+    * Gen4 - Gen7: After application of source modifiers, the low 5-bits of
+    * src1 are used an unsigned value for the shift count.
+    *
+    * Later platforms alter this behavior, but those platforms are not
+    * supported by this code generator.
+    */
    case nir_op_ishl:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(type_sz(op[0].type) == 4);
       try_immediate_source(instr, op, false);
       emit(SHL(dst, op[0], op[1]));
       break;
 
    case nir_op_ishr:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(type_sz(op[0].type) == 4);
       try_immediate_source(instr, op, false);
       emit(ASR(dst, op[0], op[1]));
       break;
 
    case nir_op_ushr:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      assert(type_sz(op[0].type) == 4);
       try_immediate_source(instr, op, false);
       emit(SHR(dst, op[0], op[1]));
       break;

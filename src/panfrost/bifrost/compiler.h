@@ -294,14 +294,11 @@ typedef struct {
                 enum bi_atom_opc atom_opc; /* atomics */
                 enum bi_func func; /* FPOW_SC_DET */
                 enum bi_function function; /* LD_VAR_FLAT */
-                enum bi_mode mode; /* FLOG_TABLE */
                 enum bi_mux mux; /* MUX */
-                enum bi_precision precision; /* FLOG_TABLE */
                 enum bi_sem sem; /* FMAX, FMIN */
                 enum bi_source source; /* LD_GCLK */
                 bool scale; /* VN_ASST2, FSINCOS_OFFSET */
                 bool offset; /* FSIN_TABLE, FOCS_TABLE */
-                bool divzero; /* FRSQ_APPROX, FRSQ */
                 bool mask; /* CLZ */
                 bool threads; /* IMULD, IMOV_FMA */
                 bool combine; /* BRANCHC */
@@ -363,6 +360,12 @@ typedef struct {
                 struct {
                         bool sqrt; /* FREXPM */
                         bool log; /* FREXPM */
+                };
+
+                struct {
+                        enum bi_mode mode; /* FLOG_TABLE */
+                        enum bi_precision precision; /* FLOG_TABLE */
+                        bool divzero; /* FRSQ_APPROX, FRSQ */
                 };
         };
 } bi_instr;

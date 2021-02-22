@@ -197,8 +197,9 @@ static Temp emit_bpermute(isel_context *ctx, Builder &bld, Temp index, Temp data
       /* GFX10 wave64 mode: emulate full-wave bpermute */
       if (!ctx->has_gfx10_wave64_bpermute) {
          ctx->has_gfx10_wave64_bpermute = true;
-         ctx->program->config->num_shared_vgprs = 8; /* Shared VGPRs are allocated in groups of 8 */
-         ctx->program->vgpr_limit -= 4; /* We allocate 8 shared VGPRs, so we'll have 4 fewer normal VGPRs */
+         /* Shared VGPRs are allocated in groups of 8/16 */
+         ctx->program->config->num_shared_vgprs = ctx->program->chip_class >= GFX10_3 ? 16 : 8;
+         ctx->program->vgpr_limit -= ctx->program->chip_class >= GFX10_3 ? 8 : 4;
       }
 
       Temp index_is_lo = bld.vopc(aco_opcode::v_cmp_ge_u32, bld.def(bld.lm), Operand(31u), index);

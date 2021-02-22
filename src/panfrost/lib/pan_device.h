@@ -151,6 +151,14 @@ struct panfrost_device {
          * costly per-context allocation. */
 
         struct panfrost_bo *tiler_heap;
+
+        /* The tiler heap is shared by all contexts, and is written by tiler
+         * jobs and read by fragment job. We need to ensure that a
+         * vertex/tiler job chain from one context is not inserted between
+         * the vertex/tiler and fragment job of another context, otherwise
+         * we end up with tiler heap corruption.
+         */
+        pthread_mutex_t submit_lock;
 };
 
 void

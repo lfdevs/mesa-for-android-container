@@ -232,10 +232,8 @@ vtn_variable_resource_index(struct vtn_builder *b, struct vtn_variable *var,
 {
    vtn_assert(b->options->environment == NIR_SPIRV_VULKAN);
 
-   if (!desc_array_index) {
-      vtn_assert(var->type->base_type != vtn_base_type_array);
+   if (!desc_array_index)
       desc_array_index = nir_imm_int(&b->nb, 0);
-   }
 
    if (b->vars_used_indirectly) {
       vtn_assert(var->var);

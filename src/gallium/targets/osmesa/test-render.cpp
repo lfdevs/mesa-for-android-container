@@ -169,7 +169,7 @@ TEST(OSMesaRenderTest, depth)
       OSMesaCreateContextExt(OSMESA_RGB_565, 24, 8, 0, NULL), &OSMesaDestroyContext};
    ASSERT_TRUE(ctx);
 
-   int w = 3, h = 2;
+   const int w = 3, h = 2;
    uint8_t pixels[4096 * h * 2] = {0}; /* different cpp from our depth! */
    auto ret = OSMesaMakeCurrent(ctx.get(), &pixels, GL_UNSIGNED_SHORT_5_6_5, w, h);
    ASSERT_EQ(ret, GL_TRUE);

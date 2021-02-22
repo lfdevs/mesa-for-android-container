@@ -153,7 +153,8 @@ radv_get_visible_vram_size(struct radv_physical_device *device)
 static uint64_t
 radv_get_vram_size(struct radv_physical_device *device)
 {
-	return radv_get_adjusted_vram_size(device) - device->rad_info.vram_vis_size;
+	uint64_t total_size = radv_get_adjusted_vram_size(device);
+	return total_size - MIN2(total_size, device->rad_info.vram_vis_size);
 }
 
 enum radv_heap {
@@ -7795,6 +7796,11 @@ static uint32_t radv_compute_valid_memory_types(struct radv_physical_device *dev
 {
 	enum radeon_bo_flag ignore_flags = ~(RADEON_FLAG_NO_CPU_ACCESS | RADEON_FLAG_GTT_WC);
 	uint32_t bits = radv_compute_valid_memory_types_attempt(dev, domains, flags, ignore_flags);
+
+	if (!bits) {
+		ignore_flags |= RADEON_FLAG_GTT_WC;
+		bits = radv_compute_valid_memory_types_attempt(dev, domains, flags, ignore_flags);
+	}
 
 	if (!bits) {
 		ignore_flags |= RADEON_FLAG_NO_CPU_ACCESS;

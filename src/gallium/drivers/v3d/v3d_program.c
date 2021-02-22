@@ -566,11 +566,6 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
                 key->sample_alpha_to_one = v3d->blend->base.alpha_to_one;
         }
 
-        if (v3d->zsa->base.alpha_enabled) {
-                key->alpha_test = true;
-                key->alpha_test_func = v3d->zsa->base.alpha_func;
-        }
-
         key->swap_color_rb = v3d->swap_color_rb;
 
         for (int i = 0; i < v3d->framebuffer.nr_cbufs; i++) {

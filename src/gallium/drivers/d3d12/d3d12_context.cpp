@@ -58,7 +58,8 @@ static void
 d3d12_context_destroy(struct pipe_context *pctx)
 {
    struct d3d12_context *ctx = d3d12_context(pctx);
-   d3d12_validator_destroy(ctx->validation_tools);
+   if (ctx->validation_tools)
+      d3d12_validator_destroy(ctx->validation_tools);
 
    if (ctx->timestamp_query)
       pctx->destroy_query(pctx, ctx->timestamp_query);

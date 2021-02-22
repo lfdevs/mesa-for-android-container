@@ -261,8 +261,6 @@ enum quniform_contents {
         QUNIFORM_IMAGE_DEPTH,
         QUNIFORM_IMAGE_ARRAY_SIZE,
 
-        QUNIFORM_ALPHA_REF,
-
         QUNIFORM_LINE_WIDTH,
 
         /* The line width sent to hardware. This includes the expanded width
@@ -367,7 +365,6 @@ struct v3d_fs_key {
         bool is_points;
         bool is_lines;
         bool line_smoothing;
-        bool alpha_test;
         bool point_coord_upper_left;
         bool light_twoside;
         bool msaa;
@@ -395,7 +392,6 @@ struct v3d_fs_key {
                 const uint8_t *swizzle;
         } color_fmt[V3D_MAX_DRAW_BUFFERS];
 
-        uint8_t alpha_test_func;
         uint8_t logicop_func;
         uint32_t point_sprite_mask;
 

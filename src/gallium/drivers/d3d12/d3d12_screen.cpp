@@ -715,11 +715,21 @@ create_device(IUnknown *adapter)
    }
 
 #ifdef _WIN32
-   if (d3d12_debug & D3D12_DEBUG_EXPERIMENTAL)
+   if (!(d3d12_debug & D3D12_DEBUG_EXPERIMENTAL)) {
+      struct d3d12_validation_tools *validation_tools = d3d12_validator_create();
+      if (!validation_tools) {
+         debug_printf("D3D12: failed to initialize validator with experimental shader models disabled\n");
+         return nullptr;
+      }
+      d3d12_validator_destroy(validation_tools);
+   } else
 #endif
    {
       D3D12EnableExperimentalFeatures = (PFN_D3D12ENABLEEXPERIMENTALFEATURES)util_dl_get_proc_address(d3d12_mod, "D3D12EnableExperimentalFeatures");
-      D3D12EnableExperimentalFeatures(1, &D3D12ExperimentalShaderModels, NULL, NULL);
+      if (FAILED(D3D12EnableExperimentalFeatures(1, &D3D12ExperimentalShaderModels, NULL, NULL))) {
+         debug_printf("D3D12: failed to enable experimental shader models\n");
+         return nullptr;
+      }
    }
 
    D3D12CreateDevice = (PFN_D3D12CREATEDEVICE)util_dl_get_proc_address(d3d12_mod, "D3D12CreateDevice");

@@ -599,6 +599,9 @@ fs_generator::generate_shuffle(fs_inst *inst,
                                struct brw_reg src,
                                struct brw_reg idx)
 {
+   assert(src.file == BRW_GENERAL_REGISTER_FILE);
+   assert(!src.abs && !src.negate);
+
    /* Ivy bridge has some strange behavior that makes this a real pain to
     * implement for 64-bit values so we just don't bother.
     */
@@ -2114,6 +2117,18 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          }
          brw_CMP(p, dst, inst->conditional_mod, src[0], src[1]);
 	 break;
+      case BRW_OPCODE_CMPN:
+         if (inst->exec_size >= 16 && devinfo->gen == 7 && !devinfo->is_haswell &&
+             dst.file == BRW_ARCHITECTURE_REGISTER_FILE) {
+            /* For unknown reasons the WaCMPInstFlagDepClearedEarly workaround
+             * implemented in the compiler is not sufficient. Overriding the
+             * type when the destination is the null register is necessary but
+             * not sufficient by itself.
+             */
+            dst.type = BRW_REGISTER_TYPE_D;
+         }
+         brw_CMPN(p, dst, inst->conditional_mod, src[0], src[1]);
+         break;
       case BRW_OPCODE_SEL:
 	 brw_SEL(p, dst, src[0], src[1]);
 	 break;

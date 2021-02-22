@@ -1199,6 +1199,10 @@ radv_shader_variant_create(struct radv_device *device,
 			unsigned alloc_granularity = device->physical_device->rad_info.chip_class >= GFX7 ? 512 : 256;
 			config.lds_size = align(rtld_binary.lds_size, alloc_granularity) / alloc_granularity;
 		}
+		if (!config.lds_size && binary->stage == MESA_SHADER_TESS_CTRL) {
+			/* This is used for reporting LDS statistics */
+			config.lds_size = binary->info.tcs.num_lds_blocks;
+		}
 
 		variant->code_size = rtld_binary.rx_size;
 		variant->exec_size = rtld_binary.exec_size;
@@ -1330,7 +1334,8 @@ shader_variant_compile(struct radv_device *device,
 	options->address32_hi = device->physical_device->rad_info.address32_hi;
 	options->has_ls_vgpr_init_bug = device->physical_device->rad_info.has_ls_vgpr_init_bug;
 	options->use_ngg_streamout = device->physical_device->use_ngg_streamout;
-	options->enable_mrt_output_nan_fixup = device->instance->enable_mrt_output_nan_fixup;
+	options->enable_mrt_output_nan_fixup = module && !module->nir &&
+					       device->instance->enable_mrt_output_nan_fixup;
 	options->adjust_frag_coord_z = device->adjust_frag_coord_z;
 	options->debug.func = radv_compiler_debug;
 	options->debug.private_data = &debug_data;

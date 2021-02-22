@@ -1869,11 +1869,19 @@ vec4_visitor::lower_minmax()
 
       if (inst->opcode == BRW_OPCODE_SEL &&
           inst->predicate == BRW_PREDICATE_NONE) {
-         /* FIXME: Using CMP doesn't preserve the NaN propagation semantics of
-          *        the original SEL.L/GE instruction
+         /* If src1 is an immediate value that is not NaN, then it can't be
+          * NaN.  In that case, emit CMP because it is much better for cmod
+          * propagation.  Likewise if src1 is not float.  Gen4 and Gen5 don't
+          * support HF or DF, so it is not necessary to check for those.
           */
-         ibld.CMP(ibld.null_reg_d(), inst->src[0], inst->src[1],
-                  inst->conditional_mod);
+         if (inst->src[1].type != BRW_REGISTER_TYPE_F ||
+             (inst->src[1].file == IMM && !isnan(inst->src[1].f))) {
+            ibld.CMP(ibld.null_reg_d(), inst->src[0], inst->src[1],
+                     inst->conditional_mod);
+         } else {
+            ibld.CMPN(ibld.null_reg_d(), inst->src[0], inst->src[1],
+                      inst->conditional_mod);
+         }
          inst->predicate = BRW_PREDICATE_NORMAL;
          inst->conditional_mod = BRW_CONDITIONAL_NONE;
 

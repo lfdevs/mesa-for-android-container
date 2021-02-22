@@ -518,6 +518,7 @@ etna_vertex_elements_state_create(struct pipe_context *pctx,
    if (num_elements > screen->specs.vertex_max_elements) {
       BUG("number of elements (%u) exceeds chip maximum (%u)", num_elements,
           screen->specs.vertex_max_elements);
+      FREE(cs);
       return NULL;
    }
 

@@ -460,8 +460,10 @@ setup_tcs_info(isel_context *ctx, nir_shader *nir, nir_shader *vs)
 
    if (ctx->tcs_in_out_eq) {
       ctx->tcs_temp_only_inputs = ~nir->info.tess.tcs_cross_invocation_inputs_read &
-                                    ~nir->info.inputs_read_indirectly &
-                                    nir->info.inputs_read;
+                                  ~nir->info.inputs_read_indirectly &
+                                  ~vs->info.outputs_accessed_indirectly &
+                                  nir->info.inputs_read &
+                                  vs->info.outputs_written;
    }
 
    ctx->tcs_num_inputs = ctx->program->info->tcs.num_linked_inputs;
@@ -488,8 +490,7 @@ setup_tcs_info(isel_context *ctx, nir_shader *nir, nir_shader *vs)
 
    ctx->args->shader_info->tcs.num_patches = ctx->tcs_num_patches;
    ctx->args->shader_info->tcs.num_lds_blocks = lds_size;
-   ctx->program->config->lds_size = (lds_size + ctx->program->lds_alloc_granule - 1) /
-                                    ctx->program->lds_alloc_granule;
+   ctx->program->config->lds_size = lds_size; /* Already in blocks of the encoding granule */
 }
 
 void

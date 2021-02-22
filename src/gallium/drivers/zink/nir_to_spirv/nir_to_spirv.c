@@ -315,9 +315,9 @@ handle_handle_slot(struct ntv_context *ctx, struct nir_variable *var, bool outpu
    if (var->data.patch) {
       assert(var->data.location >= VARYING_SLOT_PATCH0);
       return var->data.location - VARYING_SLOT_PATCH0;
-   } else if ((output && ctx->stage == MESA_SHADER_TESS_CTRL) ||
-              (!output && ctx->stage == MESA_SHADER_TESS_EVAL)) {
-      assert(var->data.location >= VARYING_SLOT_VAR0);
+   } else if (var->data.location >= VARYING_SLOT_VAR0 &&
+              ((output && ctx->stage == MESA_SHADER_TESS_CTRL) ||
+              (!output && ctx->stage == MESA_SHADER_TESS_EVAL))) {
       return var->data.location - VARYING_SLOT_VAR0;
    }
    return handle_slot(ctx, var->data.location);
@@ -2080,8 +2080,9 @@ emit_intrinsic(struct ntv_context *ctx, nir_intrinsic_instr *intr)
 static void
 emit_undef(struct ntv_context *ctx, nir_ssa_undef_instr *undef)
 {
-   SpvId type = get_uvec_type(ctx, undef->def.bit_size,
-                              undef->def.num_components);
+   SpvId type = undef->def.bit_size == 1 ? get_bvec_type(ctx, undef->def.num_components) :
+                                           get_uvec_type(ctx, undef->def.bit_size,
+                                                         undef->def.num_components);
 
    store_ssa_def(ctx, &undef->def,
                  spirv_builder_emit_undef(&ctx->builder, type));
@@ -2931,8 +2932,8 @@ nir_to_spirv(struct nir_shader *s, const struct zink_so_info *so_info,
 
    emit_cf_list(&ctx, &entry->body);
 
-   /* vertex shader emits copied xfb outputs at the end of the shader */
-   if (so_info && ctx.stage == MESA_SHADER_VERTEX)
+   /* vertex/tess shader emits copied xfb outputs at the end of the shader */
+   if (so_info && (ctx.stage == MESA_SHADER_VERTEX || ctx.stage == MESA_SHADER_TESS_EVAL))
       emit_so_outputs(&ctx, so_info);
 
    spirv_builder_return(&ctx.builder); // doesn't belong here, but whatevz

@@ -691,7 +691,7 @@ zink_create_tes_state(struct pipe_context *pctx,
    else
       nir = (struct nir_shader *)shader->ir.nir;
 
-   return zink_shader_create(zink_screen(pctx->screen), nir, NULL);
+   return zink_shader_create(zink_screen(pctx->screen), nir, &shader->stream_output);
 }
 
 static void
