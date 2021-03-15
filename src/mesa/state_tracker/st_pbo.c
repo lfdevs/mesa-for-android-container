@@ -484,9 +484,14 @@ create_fs(struct st_context *st, bool download,
             src_layer = nir_iadd(&b, layer, layer_offset);
          }
 
-         texcoord = nir_vec3(&b, nir_channel(&b, texcoord, 0),
-                                 nir_channel(&b, texcoord, 1),
-                                 src_layer);
+         if (target == PIPE_TEXTURE_1D_ARRAY) {
+            texcoord = nir_vec2(&b, nir_channel(&b, texcoord, 0),
+                                    src_layer);
+         } else {
+            texcoord = nir_vec3(&b, nir_channel(&b, texcoord, 0),
+                                    nir_channel(&b, texcoord, 1),
+                                    src_layer);
+         }
       }
    } else {
       texcoord = pbo_addr;

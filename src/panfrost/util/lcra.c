@@ -207,15 +207,13 @@ lcra_set_node_spill_cost(struct lcra_state *l, unsigned node, signed cost)
                 l->spill_cost[node] = cost;
 }
 
-/* Count along the lower triangle */
-
 static unsigned
 lcra_count_constraints(struct lcra_state *l, unsigned i)
 {
         unsigned count = 0;
         unsigned *constraints = &l->linear[i * l->node_count];
 
-        for (unsigned j = 0; j < i; ++j)
+        for (unsigned j = 0; j < l->node_count; ++j)
                 count += util_bitcount(constraints[j]);
 
         return count;

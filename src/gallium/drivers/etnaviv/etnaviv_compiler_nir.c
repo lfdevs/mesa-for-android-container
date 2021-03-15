@@ -146,7 +146,7 @@ etna_optimize_loop(nir_shader *s)
 
       NIR_PASS_V(s, nir_lower_vars_to_ssa);
       progress |= OPT(s, nir_opt_copy_prop_vars);
-      progress |= OPT(s, nir_opt_shrink_vectors);
+      progress |= OPT(s, nir_opt_shrink_vectors, true);
       progress |= OPT(s, nir_copy_prop);
       progress |= OPT(s, nir_opt_dce);
       progress |= OPT(s, nir_opt_cse);

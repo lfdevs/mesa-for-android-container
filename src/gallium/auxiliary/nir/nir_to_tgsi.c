@@ -2309,7 +2309,7 @@ ntt_optimize_nir(struct nir_shader *s, struct pipe_screen *screen)
          .robust_modes = 0,
       };
       NIR_PASS(progress, s, nir_opt_load_store_vectorize, &vectorize_opts);
-      NIR_PASS(progress, s, nir_opt_shrink_vectors);
+      NIR_PASS(progress, s, nir_opt_shrink_vectors, true);
       NIR_PASS(progress, s, nir_opt_trivial_continues);
       NIR_PASS(progress, s, nir_opt_vectorize, ntt_should_vectorize_instr, NULL);
       NIR_PASS(progress, s, nir_opt_undef);

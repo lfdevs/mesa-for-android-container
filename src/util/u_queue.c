@@ -183,7 +183,11 @@ _util_queue_fence_wait_timeout(struct util_queue_fence *fence,
    if (rel > 0) {
       struct timespec ts;
 
+#ifdef HAVE_TIMESPEC_GET
       timespec_get(&ts, TIME_UTC);
+#else
+      clock_gettime(CLOCK_REALTIME, &ts);
+#endif
 
       ts.tv_sec += abs_timeout / (1000*1000*1000);
       ts.tv_nsec += abs_timeout % (1000*1000*1000);
@@ -258,6 +262,10 @@ util_queue_thread_func(void *input)
       uint32_t mask[UTIL_MAX_CPUS / 32];
 
       memset(mask, 0xff, sizeof(mask));
+
+      /* Ensure util_cpu_caps.num_cpu_mask_bits is initialized: */
+      util_cpu_detect();
+
       util_set_current_thread_affinity(mask, NULL,
                                        util_cpu_caps.num_cpu_mask_bits);
    }

@@ -514,7 +514,7 @@ st_init_driver_flags(struct st_context *st)
    f->NewScissorTest = ST_NEW_SCISSOR | ST_NEW_RASTERIZER;
 
    if (st->lower_alpha_test)
-      f->NewAlphaTest = ST_NEW_FS_STATE;
+      f->NewAlphaTest = ST_NEW_FS_STATE | ST_NEW_FS_CONSTANTS;
    else
       f->NewAlphaTest = ST_NEW_DSA;
 

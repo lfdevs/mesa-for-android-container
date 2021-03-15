@@ -1150,7 +1150,7 @@ static void gfx10_shader_ngg(struct si_screen *sscreen, struct si_shader *shader
    unsigned wave_size = si_get_shader_wave_size(shader);
 
    si_pm4_set_reg(pm4, R_00B320_SPI_SHADER_PGM_LO_ES, va >> 8);
-   si_pm4_set_reg(pm4, R_00B324_SPI_SHADER_PGM_HI_ES, va >> 40);
+   si_pm4_set_reg(pm4, R_00B324_SPI_SHADER_PGM_HI_ES, S_00B324_MEM_BASE(va >> 40));
    si_pm4_set_reg(
       pm4, R_00B228_SPI_SHADER_PGM_RSRC1_GS,
       S_00B228_VGPRS((shader->config.num_vgprs - 1) / (wave_size == 32 ? 8 : 4)) |

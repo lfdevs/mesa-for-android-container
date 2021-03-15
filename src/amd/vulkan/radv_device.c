@@ -640,6 +640,10 @@ radv_handle_per_app_options(struct radv_instance *instance,
 		driQueryOptionb(&instance->dri_options,
 				"radv_enable_mrt_output_nan_fixup");
 
+	instance->disable_shrink_image_store =
+		driQueryOptionb(&instance->dri_options,
+				"radv_disable_shrink_image_store");
+
 	if (driQueryOptionb(&instance->dri_options, "radv_no_dynamic_bounds"))
 		instance->debug_flags |= RADV_DEBUG_NO_DYNAMIC_BOUNDS;
 }
@@ -652,6 +656,7 @@ static const driOptionDescription radv_dri_options[] = {
 		DRI_CONF_VK_X11_ENSURE_MIN_IMAGE_COUNT(false)
 		DRI_CONF_RADV_REPORT_LLVM9_VERSION_STRING(false)
 		DRI_CONF_RADV_ENABLE_MRT_OUTPUT_NAN_FIXUP(false)
+		DRI_CONF_RADV_DISABLE_SHRINK_IMAGE_STORE(false)
 		DRI_CONF_RADV_NO_DYNAMIC_BOUNDS(false)
 		DRI_CONF_RADV_OVERRIDE_UNIFORM_OFFSET_ALIGNMENT(0)
 	DRI_CONF_SECTION_END
@@ -1769,7 +1774,7 @@ radv_get_physical_device_properties_1_2(struct radv_physical_device *pdevice,
 	p->shaderStorageBufferArrayNonUniformIndexingNative = false;
 	p->shaderStorageImageArrayNonUniformIndexingNative = false;
 	p->shaderInputAttachmentArrayNonUniformIndexingNative = false;
-	p->robustBufferAccessUpdateAfterBind = false;
+	p->robustBufferAccessUpdateAfterBind = true;
 	p->quadDivergentImplicitLod = false;
 
 	size_t max_descriptor_set_size = ((1ull << 31) - 16 * MAX_DYNAMIC_BUFFERS -
@@ -3373,7 +3378,7 @@ radv_get_hs_offchip_param(struct radv_device *device, uint32_t *max_offchip_buff
 	 * Follow AMDVLK here.
 	 */
 	if (device->physical_device->rad_info.chip_class >= GFX10) {
-		max_offchip_buffers_per_se = 256;
+		max_offchip_buffers_per_se = 128;
 	} else if (device->physical_device->rad_info.family == CHIP_VEGA10 ||
 		   device->physical_device->rad_info.chip_class == GFX7 ||
 		   device->physical_device->rad_info.chip_class == GFX6)
@@ -5503,7 +5508,7 @@ static VkResult radv_alloc_memory(struct radv_device *device,
 		domain = device->physical_device->memory_domains[pAllocateInfo->memoryTypeIndex];
 		flags |= device->physical_device->memory_flags[pAllocateInfo->memoryTypeIndex];
 
-		if (!dedicate_info && !import_info && (!export_info || !export_info->handleTypes)) {
+		if (!import_info && (!export_info || !export_info->handleTypes)) {
 			flags |= RADEON_FLAG_NO_INTERPROCESS_SHARING;
 			if (device->use_global_bo_list) {
 				flags |= RADEON_FLAG_PREFER_LOCAL_BO;
@@ -7150,18 +7155,15 @@ radv_initialise_ds_surface(struct radv_device *device,
 	case VK_FORMAT_D24_UNORM_S8_UINT:
 	case VK_FORMAT_X8_D24_UNORM_PACK32:
 		ds->pa_su_poly_offset_db_fmt_cntl = S_028B78_POLY_OFFSET_NEG_NUM_DB_BITS(-24);
-		ds->offset_scale = 2.0f;
 		break;
 	case VK_FORMAT_D16_UNORM:
 	case VK_FORMAT_D16_UNORM_S8_UINT:
 		ds->pa_su_poly_offset_db_fmt_cntl = S_028B78_POLY_OFFSET_NEG_NUM_DB_BITS(-16);
-		ds->offset_scale = 4.0f;
 		break;
 	case VK_FORMAT_D32_SFLOAT:
 	case VK_FORMAT_D32_SFLOAT_S8_UINT:
 		ds->pa_su_poly_offset_db_fmt_cntl = S_028B78_POLY_OFFSET_NEG_NUM_DB_BITS(-23) |
 			S_028B78_POLY_OFFSET_DB_IS_FLOAT_FMT(1);
-		ds->offset_scale = 1.0f;
 		break;
 	case VK_FORMAT_S8_UINT:
 		stencil_only = true;

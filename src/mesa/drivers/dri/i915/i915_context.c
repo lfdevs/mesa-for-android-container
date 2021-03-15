@@ -37,6 +37,7 @@
 #include "tnl/t_context.h"
 #include "tnl/t_pipeline.h"
 #include "tnl/t_vertex.h"
+#include "util/u_memory.h"
 
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
@@ -164,7 +165,7 @@ i915CreateContext(int api,
                   void *sharedContextPrivate)
 {
    struct dd_function_table functions;
-   struct i915_context *i915 = rzalloc(NULL, struct i915_context);
+   struct i915_context *i915 = align_calloc(sizeof(struct i915_context), 16);
    struct intel_context *intel = &i915->intel;
    struct gl_context *ctx = &intel->ctx;
 
@@ -181,7 +182,7 @@ i915CreateContext(int api,
                          mesaVis, driContextPriv,
                          sharedContextPrivate, &functions,
                          error)) {
-      ralloc_free(i915);
+      align_free(i915);
       return false;
    }
 

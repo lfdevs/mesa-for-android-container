@@ -304,11 +304,16 @@ VkResult anv_QueuePresentKHR(
       /* Make sure all of the dependency semaphores have materialized when
        * using a threaded submission.
        */
-      uint32_t *syncobjs = vk_alloc(&device->vk.alloc,
-                                    sizeof(*syncobjs) * pPresentInfo->waitSemaphoreCount, 8,
-                                    VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+      ANV_MULTIALLOC(ma);
 
-      if (!syncobjs)
+      uint64_t *values;
+      uint32_t *syncobjs;
+
+      anv_multialloc_add(&ma, &values, pPresentInfo->waitSemaphoreCount);
+      anv_multialloc_add(&ma, &syncobjs, pPresentInfo->waitSemaphoreCount);
+
+      if (!anv_multialloc_alloc(&ma, &device->vk.alloc,
+                                VK_SYSTEM_ALLOCATION_SCOPE_COMMAND))
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
       uint32_t wait_count = 0;
@@ -321,18 +326,22 @@ VkResult anv_QueuePresentKHR(
          if (impl->type == ANV_SEMAPHORE_TYPE_DUMMY)
             continue;
          assert(impl->type == ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ);
-         syncobjs[wait_count++] = impl->syncobj;
+         syncobjs[wait_count] = impl->syncobj;
+         values[wait_count] = 0;
+         wait_count++;
       }
 
       int ret = 0;
       if (wait_count > 0) {
          ret =
-            anv_gem_syncobj_wait(device, syncobjs, wait_count,
-                                 anv_get_absolute_timeout(INT64_MAX),
-                                 true /* wait_all */);
+            anv_gem_syncobj_timeline_wait(device,
+                                          syncobjs, values, wait_count,
+                                          anv_get_absolute_timeout(INT64_MAX),
+                                          true /* wait_all */,
+                                          true /* wait_materialize */);
       }
 
-      vk_free(&device->vk.alloc, syncobjs);
+      vk_free(&device->vk.alloc, values);
 
       if (ret)
          return vk_error(VK_ERROR_DEVICE_LOST);

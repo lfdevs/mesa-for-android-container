@@ -534,6 +534,11 @@ st_Clear(struct gl_context *ctx, GLbitfield mask)
          scissor_state.miny = MAX2(miny, 0);
          scissor_state.maxy = MAX2(maxy, 0);
       }
+      if (have_scissor_buffers) {
+         const struct gl_framebuffer *fb = ctx->DrawBuffer;
+         scissor_state.maxx = MIN2(scissor_state.maxx, fb->Width);
+         scissor_state.maxy = MIN2(scissor_state.maxy, fb->Height);
+      }
       /* We can't translate the clear color to the colorbuffer format,
        * because different colorbuffers may have different formats.
        */

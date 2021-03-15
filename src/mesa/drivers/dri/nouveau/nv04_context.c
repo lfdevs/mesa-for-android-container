@@ -134,7 +134,7 @@ nv04_context_destroy(struct gl_context *ctx)
 	nouveau_object_del(&nctx->hw.surf3d);
 
 	nouveau_context_deinit(ctx);
-	free(ctx);
+	align_free(ctx);
 }
 
 static struct gl_context *
@@ -147,7 +147,7 @@ nv04_context_create(struct nouveau_screen *screen, gl_api api,
 	struct gl_context *ctx;
 	int ret;
 
-	nctx = CALLOC_STRUCT(nv04_context);
+	nctx = align_calloc(sizeof(struct nv04_context), 16);
 	if (!nctx)
 		return NULL;
 

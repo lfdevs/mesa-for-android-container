@@ -157,6 +157,7 @@ libgl = shared_library(
     dep_xcb_shm, extra_deps_libgl,
   ],
   version : gl_lib_version,
+  darwin_versions : '4.0.0',
   install : true,
 )
 

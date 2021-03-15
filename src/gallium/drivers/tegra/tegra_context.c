@@ -75,13 +75,14 @@ tegra_draw_vbo(struct pipe_context *pcontext,
       if (pindirect && pindirect->buffer) {
          memcpy(&indirect, pindirect, sizeof(indirect));
          indirect.buffer = tegra_resource_unwrap(pindirect->buffer);
+         indirect.indirect_draw_count = tegra_resource_unwrap(pindirect->indirect_draw_count);
+         pindirect = &indirect;
       }
 
       if (pinfo->index_size && !pinfo->has_user_indices)
          info.index.resource = tegra_resource_unwrap(info.index.resource);
 
       pinfo = &info;
-      pindirect = &indirect;
    }
 
    context->gpu->draw_vbo(context->gpu, pinfo, pindirect, draws, num_draws);

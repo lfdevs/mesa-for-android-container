@@ -551,4 +551,11 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
       ctx->index_ring_base = ctx->index_ring_size_per_ib;
 
    ctx->index_ring_offset = 0;
+
+   /* All buffer references are removed on a flush, so si_check_needs_implicit_sync
+    * cannot determine if si_make_CB_shader_coherent() needs to be called.
+    * ctx->force_cb_shader_coherent will be cleared by the first call to
+    * si_make_CB_shader_coherent.
+    */
+   ctx->force_cb_shader_coherent = true;
 }

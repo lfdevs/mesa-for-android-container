@@ -66,6 +66,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "utils.h"
 #include "util/driconf.h" /* for symbolic values of enum-type options */
+#include "util/u_memory.h"
 
 /* Return various strings for glGetString().
  */
@@ -200,7 +201,7 @@ GLboolean r200CreateContext( gl_api api,
    assert(screen);
 
    /* Allocate the R200 context */
-   rmesa = calloc(1, sizeof(*rmesa));
+   rmesa = align_calloc(sizeof(*rmesa), 16);
    if ( !rmesa ) {
       *error = __DRI_CTX_ERROR_NO_MEMORY;
       return GL_FALSE;
@@ -238,7 +239,7 @@ GLboolean r200CreateContext( gl_api api,
    if (!radeonInitContext(&rmesa->radeon, api, &functions,
 			  glVisual, driContextPriv,
 			  sharedContextPrivate)) {
-     free(rmesa);
+     align_free(rmesa);
      *error = __DRI_CTX_ERROR_NO_MEMORY;
      return GL_FALSE;
    }

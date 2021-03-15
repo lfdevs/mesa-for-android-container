@@ -246,6 +246,7 @@ get_fragment_shader_param(struct lima_screen *screen,
    case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
       return 1;
 
+   case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       return 16; /* need investigate */
 

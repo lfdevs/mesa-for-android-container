@@ -121,6 +121,9 @@ i915_get_shader_param(struct pipe_screen *screen,
             return PIPE_MAX_SAMPLERS;
          else
             return 0;
+      case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+      case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+         return 0;
        default:
          return draw_get_shader_param(shader, cap);
       }

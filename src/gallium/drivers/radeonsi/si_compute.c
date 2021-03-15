@@ -800,6 +800,47 @@ static void si_emit_dispatch_packets(struct si_context *sctx, const struct pipe_
    }
 }
 
+static bool si_check_needs_implicit_sync(struct si_context *sctx)
+{
+   /* If the compute shader is going to read from a texture/image written by a
+    * previous draw, we must wait for its completion before continuing.
+    * Buffers and image stores (from the draw) are not taken into consideration
+    * because that's the app responsibility.
+    *
+    * The OpenGL 4.6 spec says:
+    *
+    *    buffer object and texture stores performed by shaders are not
+    *    automatically synchronized
+    */
+   struct si_shader_info *info = &sctx->cs_shader_state.program->sel.info;
+   struct si_samplers *samplers = &sctx->samplers[PIPE_SHADER_COMPUTE];
+   unsigned mask = samplers->enabled_mask & info->base.textures_used;
+
+   while (mask) {
+      int i = u_bit_scan(&mask);
+      struct si_sampler_view *sview = (struct si_sampler_view *)samplers->views[i];
+
+      struct si_resource *res = si_resource(sview->base.texture);
+      if (sctx->ws->cs_is_buffer_referenced(&sctx->gfx_cs, res->buf,
+                                            RADEON_USAGE_NEEDS_IMPLICIT_SYNC))
+         return true;
+   }
+
+   struct si_images *images = &sctx->images[PIPE_SHADER_COMPUTE];
+   mask = u_bit_consecutive(0, info->base.num_images) & images->enabled_mask;
+
+   while (mask) {
+      int i = u_bit_scan(&mask);
+      struct pipe_image_view *sview = &images->views[i];
+
+      struct si_resource *res = si_resource(sview->resource);
+      if (sctx->ws->cs_is_buffer_referenced(&sctx->gfx_cs, res->buf,
+                                            RADEON_USAGE_NEEDS_IMPLICIT_SYNC))
+         return true;
+   }
+   return false;
+}
+
 static void si_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info *info)
 {
    struct si_context *sctx = (struct si_context *)ctx;
@@ -826,6 +867,11 @@ static void si_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info
       if (sctx->last_num_draw_calls != sctx->num_draw_calls) {
          si_update_fb_dirtiness_after_rendering(sctx);
          sctx->last_num_draw_calls = sctx->num_draw_calls;
+
+         if (sctx->force_cb_shader_coherent || si_check_needs_implicit_sync(sctx))
+            si_make_CB_shader_coherent(sctx, 0,
+                                       sctx->framebuffer.CB_has_shader_readable_metadata,
+                                       sctx->framebuffer.all_DCC_pipe_aligned);
       }
 
       si_decompress_textures(sctx, 1 << PIPE_SHADER_COMPUTE);

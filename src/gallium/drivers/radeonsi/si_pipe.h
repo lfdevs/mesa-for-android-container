@@ -1271,6 +1271,8 @@ struct si_context {
    struct list_head shader_query_buffers;
    unsigned num_active_shader_queries;
 
+   bool force_cb_shader_coherent;
+
    /* Statistics gathering for the DCC enablement heuristic. It can't be
     * in si_texture because si_texture can be shared by multiple
     * contexts. This is for back buffers only. We shouldn't get too many
@@ -1739,6 +1741,7 @@ static inline void si_make_CB_shader_coherent(struct si_context *sctx, unsigned 
                                               bool shaders_read_metadata, bool dcc_pipe_aligned)
 {
    sctx->flags |= SI_CONTEXT_FLUSH_AND_INV_CB | SI_CONTEXT_INV_VCACHE;
+   sctx->force_cb_shader_coherent = false;
 
    if (sctx->chip_class >= GFX10) {
       if (sctx->screen->info.tcc_harvested)

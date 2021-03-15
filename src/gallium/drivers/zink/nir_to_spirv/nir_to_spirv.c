@@ -1039,12 +1039,18 @@ emit_so_outputs(struct ntv_context *ctx,
               * and re-pack them into the desired output type
               */
              for (unsigned c = 0; c < so_output.num_components; c++) {
-                uint32_t member[] = { so_output.start_component + c };
-                SpvId base_type = get_glsl_type(ctx, glsl_without_array(out_type));
+                uint32_t member[2];
+                unsigned member_idx = 0;
+                if (glsl_type_is_matrix(out_type)) {
+                   member_idx = 1;
+                   member[0] = so_output.register_index;
+                }
+                member[member_idx] = so_output.start_component + c;
+                SpvId base_type = get_glsl_basetype(ctx, glsl_get_base_type(glsl_without_array_or_matrix(out_type)));
 
                 if (slot == VARYING_SLOT_CLIP_DIST1)
-                   member[0] += 4;
-                components[c] = spirv_builder_emit_composite_extract(&ctx->builder, base_type, src, member, 1);
+                   member[member_idx] += 4;
+                components[c] = spirv_builder_emit_composite_extract(&ctx->builder, base_type, src, member, 1 + member_idx);
              }
              result = spirv_builder_emit_composite_construct(&ctx->builder, type, components, so_output.num_components);
          }

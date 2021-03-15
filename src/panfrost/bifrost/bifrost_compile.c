@@ -419,7 +419,12 @@ bi_emit_fragment_out(bi_builder *b, nir_intrinsic_instr *instr)
                 /* Explicit copy since BLEND inputs are precoloured to R0-R3,
                  * TODO: maybe schedule around this or implement in RA as a
                  * spill */
-                if (rt > 0) {
+                bool has_mrt = false;
+
+                nir_foreach_shader_out_variable(var, b->shader->nir)
+                        has_mrt |= (var->data.location > FRAG_RESULT_DATA0);
+
+                if (has_mrt) {
                         bi_index srcs[4] = { color, color, color, color };
                         unsigned channels[4] = { 0, 1, 2, 3 };
                         color = bi_temp(b->shader);

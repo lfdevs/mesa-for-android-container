@@ -754,7 +754,8 @@ void handle_block(Program *program, Ctx& ctx, Block& block)
 
    std::vector<aco_ptr<Instruction>> old_instructions = std::move(block.instructions);
 
-   block.instructions.reserve(block.instructions.size());
+   block.instructions.clear(); // Silence clang-analyzer-cplusplus.Move warning
+   block.instructions.reserve(old_instructions.size());
 
    for (aco_ptr<Instruction>& instr : old_instructions) {
       Handle(program, &block, ctx, instr, block.instructions);

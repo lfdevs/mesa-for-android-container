@@ -450,6 +450,10 @@
    DRI_CONF_OPT_B(radv_no_dynamic_bounds, def, \
                   "Disabling bounds checking for dynamic buffer descriptors")
 
+#define DRI_CONF_RADV_DISABLE_SHRINK_IMAGE_STORE(def) \
+   DRI_CONF_OPT_B(radv_disable_shrink_image_store, def, \
+                  "Disabling shrinking of image stores based on the format")
+
 #define DRI_CONF_RADV_OVERRIDE_UNIFORM_OFFSET_ALIGNMENT(def) \
    DRI_CONF_OPT_I(radv_override_uniform_offset_alignment, def, 0, 128, \
                   "Override the minUniformBufferOffsetAlignment exposed to the application. (0 = default)")

@@ -60,6 +60,7 @@ libosmesa = shared_library(
   name_prefix : host_machine.system() == 'windows' ? '' : 'lib',  # otherwise mingw will create libosmesa.dll
   soversion : host_machine.system() == 'windows' ? '' : '8',
   version : '8.0.0',
+  darwin_versions : '9.0.0',
   install : true,
 )
 

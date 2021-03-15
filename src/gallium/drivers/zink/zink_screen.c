@@ -860,17 +860,6 @@ load_instance_extensions(struct zink_screen *screen)
       GET_PROC_ADDR_INSTANCE(GetPhysicalDeviceProperties2);
    }
 
-   if (screen->instance_info.have_KHR_draw_indirect_count) {
-      GET_PROC_ADDR_INSTANCE_LOCAL(screen->instance, CmdDrawIndirectCountKHR);
-      GET_PROC_ADDR_INSTANCE_LOCAL(screen->instance, CmdDrawIndexedIndirectCountKHR);
-      screen->vk_CmdDrawIndirectCount = vk_CmdDrawIndirectCountKHR;
-      screen->vk_CmdDrawIndexedIndirectCount = vk_CmdDrawIndexedIndirectCountKHR;
-   } else if (VK_MAKE_VERSION(1,2,0) <= screen->loader_version) {
-      // Get Vk 1.1+ Instance functions
-      GET_PROC_ADDR_INSTANCE(CmdDrawIndirectCount);
-      GET_PROC_ADDR_INSTANCE(CmdDrawIndexedIndirectCount);
-   }
-
    return true;
 }
 
@@ -891,6 +880,11 @@ load_device_extensions(struct zink_screen *screen)
    if (screen->info.have_EXT_conditional_rendering) {
       GET_PROC_ADDR(CmdBeginConditionalRenderingEXT);
       GET_PROC_ADDR(CmdEndConditionalRenderingEXT);
+   }
+
+   if (screen->info.have_KHR_draw_indirect_count) {
+      GET_PROC_ADDR(CmdDrawIndexedIndirectCount);
+      GET_PROC_ADDR(CmdDrawIndirectCount);
    }
 
    if (screen->info.have_EXT_calibrated_timestamps) {

@@ -214,7 +214,7 @@ deep_copy_viewport_state(void *mem_ctx,
       LVP_PIPELINE_DUP(dst->pScissors,
                        src->pScissors,
                        VkRect2D,
-                       src->viewportCount);
+                       src->scissorCount);
    } else
       dst->pScissors = NULL;
    dst->scissorCount = src->scissorCount;

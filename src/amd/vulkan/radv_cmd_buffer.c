@@ -1234,10 +1234,8 @@ radv_emit_rbplus_state(struct radv_cmd_buffer *cmd_buffer)
 			break;
 
 		case V_028C70_COLOR_10_11_11:
-			if (spi_format == V_028714_SPI_SHADER_FP16_ABGR) {
+			if (spi_format == V_028714_SPI_SHADER_FP16_ABGR)
 				sx_ps_downconvert |= V_028754_SX_RT_EXPORT_10_11_11 << (i * 4);
-				sx_blend_opt_epsilon |= V_028758_11BIT_FORMAT << (i * 4);
-			}
 			break;
 
 		case V_028C70_COLOR_2_10_10_10:
@@ -1466,16 +1464,14 @@ radv_emit_depth_bias(struct radv_cmd_buffer *cmd_buffer)
 {
 	struct radv_dynamic_state *d = &cmd_buffer->state.dynamic;
 	unsigned slope = fui(d->depth_bias.slope * 16.0f);
-	unsigned bias = fui(d->depth_bias.bias * cmd_buffer->state.offset_scale);
-
 
 	radeon_set_context_reg_seq(cmd_buffer->cs,
 				   R_028B7C_PA_SU_POLY_OFFSET_CLAMP, 5);
 	radeon_emit(cmd_buffer->cs, fui(d->depth_bias.clamp)); /* CLAMP */
 	radeon_emit(cmd_buffer->cs, slope); /* FRONT SCALE */
-	radeon_emit(cmd_buffer->cs, bias); /* FRONT OFFSET */
+	radeon_emit(cmd_buffer->cs, fui(d->depth_bias.bias)); /* FRONT OFFSET */
 	radeon_emit(cmd_buffer->cs, slope); /* BACK SCALE */
-	radeon_emit(cmd_buffer->cs, bias); /* BACK OFFSET */
+	radeon_emit(cmd_buffer->cs, fui(d->depth_bias.bias)); /* BACK OFFSET */
 }
 
 static void
@@ -2413,11 +2409,6 @@ radv_emit_framebuffer_state(struct radv_cmd_buffer *cmd_buffer)
 		radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, cmd_buffer->state.attachments[idx].iview->bo);
 
 		radv_emit_fb_ds_state(cmd_buffer, &cmd_buffer->state.attachments[idx].ds, iview, layout, in_render_loop);
-
-		if (cmd_buffer->state.attachments[idx].ds.offset_scale != cmd_buffer->state.offset_scale) {
-			cmd_buffer->state.dirty |= RADV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS;
-			cmd_buffer->state.offset_scale = cmd_buffer->state.attachments[idx].ds.offset_scale;
-		}
 
 		if (radv_layout_is_htile_compressed(cmd_buffer->device, iview->image, layout, in_render_loop,
 						    radv_image_queue_family_mask(iview->image,

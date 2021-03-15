@@ -1054,6 +1054,13 @@ anv_queue_submit(struct anv_queue *queue,
          break;
 
       case ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ: {
+         /*
+          * Reset the content of the syncobj so it doesn't contain a
+          * previously signaled dma-fence, until one is added by EXECBUFFER by
+          * the submission thread.
+          */
+         anv_gem_syncobj_reset(device, impl->syncobj);
+
          result = anv_queue_submit_add_syncobj(submit, device, impl->syncobj,
                                                I915_EXEC_FENCE_SIGNAL,
                                                0);

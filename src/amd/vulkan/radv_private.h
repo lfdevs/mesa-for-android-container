@@ -361,6 +361,7 @@ struct radv_instance {
 	 */
 	bool enable_mrt_output_nan_fixup;
 	bool disable_tc_compat_htile_in_general;
+	bool disable_shrink_image_store;
 };
 
 VkResult radv_init_wsi(struct radv_physical_device *physical_device);
@@ -1269,7 +1270,6 @@ struct radv_ds_buffer_info {
 	uint32_t pa_su_poly_offset_db_fmt_cntl;
 	uint32_t db_z_info2; /* GFX9 only */
 	uint32_t db_stencil_info2; /* GFX9 only */
-	float offset_scale;
 };
 
 void
@@ -1376,7 +1376,6 @@ struct radv_cmd_state {
 	bool                                         perfect_occlusion_queries_enabled;
 	unsigned                                     active_pipeline_queries;
 	unsigned                                     active_pipeline_gds_queries;
-	float					     offset_scale;
 	uint32_t                                      trace_id;
 	uint32_t                                      last_ia_multi_vgt_param;
 

@@ -1,3 +1,11 @@
+mesa (21.0.0-1) experimental; urgency=medium
+
+  * New upstream release. (LP: #1917763)
+  * control: Add directx-headers-dev to build-depends for amd64 and arm64
+    on Linux, which is what WSL2 currently supports.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 15 Mar 2021 19:22:33 +0200
+
 mesa (21.0.0~rc5-1) experimental; urgency=medium
 
   * New upstream release candidate.

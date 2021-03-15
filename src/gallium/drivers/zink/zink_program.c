@@ -698,7 +698,15 @@ static void
 zink_bind_tes_state(struct pipe_context *pctx,
                    void *cso)
 {
-   bind_stage(zink_context(pctx), PIPE_SHADER_TESS_EVAL, cso);
+   struct zink_context *ctx = zink_context(pctx);
+   if (!!ctx->gfx_stages[PIPE_SHADER_TESS_EVAL] != !!cso) {
+      if (!cso) {
+         /* if unsetting a TESS that uses a generated TCS, ensure the TCS is unset */
+         if (ctx->gfx_stages[PIPE_SHADER_TESS_EVAL]->generated)
+            ctx->gfx_stages[PIPE_SHADER_TESS_CTRL] = NULL;
+      }
+   }
+   bind_stage(ctx, PIPE_SHADER_TESS_EVAL, cso);
 }
 
 static void

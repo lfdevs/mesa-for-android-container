@@ -90,6 +90,11 @@ else
 	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x))
 		confflags_VALGRIND += -Dvalgrind=enabled
 	endif
+
+	# WSL supports only amd64 and arm64
+	ifneq (,$(filter amd64 arm64,$(DEB_HOST_ARCH_CPU)))
+		GALLIUM_DRIVERS += d3d12
+	endif
   endif
 
   # Build intel drivers on archs where libdrm-intel is installed

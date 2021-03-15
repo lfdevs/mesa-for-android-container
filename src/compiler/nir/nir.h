@@ -5012,7 +5012,7 @@ bool nir_opt_rematerialize_compares(nir_shader *shader);
 bool nir_opt_remove_phis(nir_shader *shader);
 bool nir_opt_remove_phis_block(nir_block *block);
 
-bool nir_opt_shrink_vectors(nir_shader *shader);
+bool nir_opt_shrink_vectors(nir_shader *shader, bool shrink_image_store);
 
 bool nir_opt_trivial_continues(nir_shader *shader);
 

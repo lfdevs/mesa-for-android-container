@@ -667,6 +667,7 @@ void PipelineBuilder::create_graphics_pipeline() {
    ds_state.front.depthFailOp = VK_STENCIL_OP_REPLACE;
    ds_state.front.compareOp = VK_COMPARE_OP_ALWAYS;
    ds_state.front.compareMask = 0xffffffff,
+   ds_state.front.writeMask = 0;
    ds_state.front.reference = 0;
    ds_state.back = ds_state.front;
 

@@ -489,10 +489,11 @@ optimizations.extend([
    # a != fsat(a)
    (('ior', ('flt', a, 0.0), ('flt', 1.0, a)), ('fneu', a, ('fsat', a)), '!options->lower_fsat'),
 
+   # Note: fmin(-a, -b) == -fmax(a, b)
    (('fmax',                        ('b2f(is_used_once)', 'a@1'),           ('b2f', 'b@1')),           ('b2f', ('ior', a, b))),
-   (('fmax', ('fneg(is_used_once)', ('b2f(is_used_once)', 'a@1')), ('fneg', ('b2f', 'b@1'))), ('fneg', ('b2f', ('ior', a, b)))),
+   (('fmax', ('fneg(is_used_once)', ('b2f(is_used_once)', 'a@1')), ('fneg', ('b2f', 'b@1'))), ('fneg', ('b2f', ('iand', a, b)))),
    (('fmin',                        ('b2f(is_used_once)', 'a@1'),           ('b2f', 'b@1')),           ('b2f', ('iand', a, b))),
-   (('fmin', ('fneg(is_used_once)', ('b2f(is_used_once)', 'a@1')), ('fneg', ('b2f', 'b@1'))), ('fneg', ('b2f', ('iand', a, b)))),
+   (('fmin', ('fneg(is_used_once)', ('b2f(is_used_once)', 'a@1')), ('fneg', ('b2f', 'b@1'))), ('fneg', ('b2f', ('ior', a, b)))),
 
    # fmin(b2f(a), b)
    # bcsel(a, fmin(b2f(a), b), fmin(b2f(a), b))

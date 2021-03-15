@@ -168,14 +168,14 @@ void lower_divergent_bool_phi(Program *program, ssa_state *state, Block *block, 
    Builder bld(program);
 
    if (!state->checked_preds_for_uniform) {
-      state->all_preds_uniform = !(block->kind & block_kind_merge);
+      state->all_preds_uniform = !(block->kind & block_kind_merge) &&
+                                 block->linear_preds.size() == block->logical_preds.size();
       for (unsigned pred : block->logical_preds)
          state->all_preds_uniform = state->all_preds_uniform && (program->blocks[pred].kind & block_kind_uniform);
       state->checked_preds_for_uniform = true;
    }
 
    if (state->all_preds_uniform) {
-      assert(block->logical_preds.size() == block->linear_preds.size());
       phi->opcode = aco_opcode::p_linear_phi;
       return;
    }

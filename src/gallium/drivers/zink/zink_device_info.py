@@ -64,6 +64,7 @@ EXTENSIONS = [
     Extension("VK_KHR_external_memory"),
     Extension("VK_KHR_external_memory_fd"),
     Extension("VK_KHR_vulkan_memory_model"),
+    Extension("VK_KHR_draw_indirect_count"),
     Extension("VK_EXT_conditional_rendering",
         alias="cond_render", 
         features=True, 
