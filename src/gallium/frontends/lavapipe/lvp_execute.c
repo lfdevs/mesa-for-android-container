@@ -2354,7 +2354,9 @@ static void handle_compute_push_descriptor_set(struct lvp_cmd_buffer_entry *cmd,
 
    if (!(layout->shader_stages & VK_SHADER_STAGE_COMPUTE_BIT))
       return;
-
+   for (unsigned i = 0; i < pds->set; i++) {
+      increment_dyn_info(dyn_info, pds->layout->set[i].layout, false);
+   }
    unsigned info_idx = 0;
    for (unsigned i = 0; i < pds->descriptor_write_count; i++) {
       struct lvp_write_descriptor *desc = &pds->descriptors[i];
@@ -2386,6 +2388,10 @@ static void handle_push_descriptor_set(struct lvp_cmd_buffer_entry *cmd,
    dyn_info.dyn_index = 0;
    if (pds->bind_point == VK_PIPELINE_BIND_POINT_COMPUTE) {
       handle_compute_push_descriptor_set(cmd, &dyn_info, state);
+   }
+
+   for (unsigned i = 0; i < pds->set; i++) {
+      increment_dyn_info(&dyn_info, pds->layout->set[i].layout, false);
    }
 
    unsigned info_idx = 0;

@@ -263,7 +263,7 @@ handleVAProtectedSliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
 {
 	uint8_t* encrypted_data = (uint8_t*) buf->data;
 
-	unsigned int drm_key_size = 56 * 4;
+	unsigned int drm_key_size = buf->size;
 
 	context->desc.base.decrypt_key = CALLOC(1, drm_key_size);
 	memcpy(context->desc.base.decrypt_key, encrypted_data, drm_key_size);

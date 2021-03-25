@@ -928,10 +928,16 @@ _mesa_PopAttrib(void)
 
          memcpy(ctx->Light.LightSource, attr->Light.LightSource,
                 sizeof(attr->Light.LightSource));
-         memcpy(&ctx->Light.Light, &attr->Light.Light,
-                sizeof(attr->Light.Light));
          memcpy(&ctx->Light.Model, &attr->Light.Model,
                 sizeof(attr->Light.Model));
+
+         for (i = 0; i < ctx->Const.MaxLights; i++) {
+            TEST_AND_UPDATE(ctx->Light.Light[i].Enabled,
+                            attr->Light.Light[i].Enabled,
+                            GL_LIGHT0 + i);
+            memcpy(&ctx->Light.Light[i], &attr->Light.Light[i],
+                   sizeof(struct gl_light));
+         }
       }
       /* shade model */
       TEST_AND_CALL1(Light.ShadeModel, ShadeModel);

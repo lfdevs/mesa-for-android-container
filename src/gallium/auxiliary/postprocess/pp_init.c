@@ -324,6 +324,10 @@ pp_init_fbos(struct pp_queue_t *ppq, unsigned int w,
 
    p->viewport.scale[0] = p->viewport.translate[0] = (float) w / 2.0f;
    p->viewport.scale[1] = p->viewport.translate[1] = (float) h / 2.0f;
+   p->viewport.swizzle_x = PIPE_VIEWPORT_SWIZZLE_POSITIVE_X;
+   p->viewport.swizzle_y = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Y;
+   p->viewport.swizzle_z = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Z;
+   p->viewport.swizzle_w = PIPE_VIEWPORT_SWIZZLE_POSITIVE_W;
 
    ppq->fbos_init = true;
 

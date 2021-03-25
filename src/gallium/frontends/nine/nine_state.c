@@ -769,6 +769,10 @@ update_viewport(struct NineDevice9 *device)
     pvport.translate[0] = (float)vport->Width * 0.5f + (float)vport->X;
     pvport.translate[1] = (float)vport->Height * 0.5f + (float)vport->Y;
     pvport.translate[2] = vport->MinZ;
+    pvport.swizzle_x = PIPE_VIEWPORT_SWIZZLE_POSITIVE_X;
+    pvport.swizzle_y = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Y;
+    pvport.swizzle_z = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Z;
+    pvport.swizzle_w = PIPE_VIEWPORT_SWIZZLE_POSITIVE_W;
 
     /* We found R600 and SI cards have some imprecision
      * on the barycentric coordinates used for interpolation.

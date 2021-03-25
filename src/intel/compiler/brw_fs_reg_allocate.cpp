@@ -384,6 +384,16 @@ void fs_visitor::calculate_payload_ranges(int payload_node_count,
          }
       }
 
+      if (inst->dst.file == FIXED_GRF) {
+         int node_nr = inst->dst.nr;
+         if (node_nr < payload_node_count) {
+            for (unsigned j = 0; j < regs_written(inst); j++) {
+               payload_last_use_ip[node_nr + j] = use_ip;
+               assert(node_nr + j < unsigned(payload_node_count));
+            }
+         }
+      }
+
       /* Special case instructions which have extra implied registers used. */
       switch (inst->opcode) {
       case CS_OPCODE_CS_TERMINATE:

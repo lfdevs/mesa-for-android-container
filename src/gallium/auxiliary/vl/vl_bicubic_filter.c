@@ -422,6 +422,10 @@ vl_bicubic_filter_render(struct vl_bicubic_filter *filter,
       viewport.scale[1] = dst->height;
    }
    viewport.scale[2] = 1;
+   viewport.swizzle_x = PIPE_VIEWPORT_SWIZZLE_POSITIVE_X;
+   viewport.swizzle_y = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Y;
+   viewport.swizzle_z = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Z;
+   viewport.swizzle_w = PIPE_VIEWPORT_SWIZZLE_POSITIVE_W;
 
    struct pipe_constant_buffer cb = {0};
    float *ptr = NULL;

@@ -345,6 +345,10 @@ renderer_bind_destination(struct xa_context *r,
     viewport.translate[0] = width / 2.f;
     viewport.translate[1] = height / 2.f;
     viewport.translate[2] = 0.0;
+    viewport.swizzle_x = PIPE_VIEWPORT_SWIZZLE_POSITIVE_X;
+    viewport.swizzle_y = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Y;
+    viewport.swizzle_z = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Z;
+    viewport.swizzle_w = PIPE_VIEWPORT_SWIZZLE_POSITIVE_W;
 
     /* Constant buffer set up to match viewport dimensions:
      */

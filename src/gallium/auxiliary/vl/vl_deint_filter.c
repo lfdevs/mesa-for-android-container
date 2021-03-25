@@ -472,6 +472,10 @@ vl_deint_filter_render(struct vl_deint_filter *filter,
    /* prepare viewport */
    memset(&viewport, 0, sizeof(viewport));
    viewport.scale[2] = 1;
+   viewport.swizzle_x = PIPE_VIEWPORT_SWIZZLE_POSITIVE_X;
+   viewport.swizzle_y = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Y;
+   viewport.swizzle_z = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Z;
+   viewport.swizzle_w = PIPE_VIEWPORT_SWIZZLE_POSITIVE_W;
 
    /* prepare framebuffer */
    memset(&fb_state, 0, sizeof(fb_state));

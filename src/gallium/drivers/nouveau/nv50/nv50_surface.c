@@ -1137,6 +1137,7 @@ nv50_blit_set_src(struct nv50_blitctx *blit,
 
    target = nv50_blit_reinterpret_pipe_texture_target(res->target);
 
+   templ.target = target;
    templ.format = format;
    templ.u.tex.first_level = templ.u.tex.last_level = level;
    templ.u.tex.first_layer = templ.u.tex.last_layer = layer;

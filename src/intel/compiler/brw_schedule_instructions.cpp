@@ -1198,9 +1198,12 @@ fs_instruction_scheduler::calculate_deps()
          }
       } else if (inst->dst.file == FIXED_GRF) {
          if (post_reg_alloc) {
-            for (unsigned r = 0; r < regs_written(inst); r++)
+            for (unsigned r = 0; r < regs_written(inst); r++) {
+               add_dep(last_grf_write[inst->dst.nr + r], n);
                last_grf_write[inst->dst.nr + r] = n;
+            }
          } else {
+            add_dep(last_fixed_grf_write, n);
             last_fixed_grf_write = n;
          }
       } else if (inst->dst.is_accumulator()) {
@@ -1428,6 +1431,7 @@ vec4_instruction_scheduler::calculate_deps()
          add_dep(last_mrf_write[inst->dst.nr], n);
          last_mrf_write[inst->dst.nr] = n;
      } else if (inst->dst.file == FIXED_GRF) {
+         add_dep(last_fixed_grf_write, n);
          last_fixed_grf_write = n;
       } else if (inst->dst.is_accumulator()) {
          add_dep(last_accumulator_write, n);

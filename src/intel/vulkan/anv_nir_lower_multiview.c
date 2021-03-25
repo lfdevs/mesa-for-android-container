@@ -150,6 +150,21 @@ build_view_index(struct lower_multiview_state *state)
    return state->view_index;
 }
 
+static bool
+is_load_view_index(const nir_instr *instr, const void *data)
+{
+   return instr->type == nir_instr_type_intrinsic &&
+          nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_load_view_index;
+}
+
+static nir_ssa_def *
+replace_load_view_index_with_zero(struct nir_builder *b,
+                                  nir_instr *instr, void *data)
+{
+   assert(is_load_view_index(instr, data));
+   return nir_imm_zero(b, 1, 32);
+}
+
 bool
 anv_nir_lower_multiview(nir_shader *shader,
                         struct anv_graphics_pipeline *pipeline)
@@ -157,9 +172,11 @@ anv_nir_lower_multiview(nir_shader *shader,
    assert(shader->info.stage != MESA_SHADER_COMPUTE);
    uint32_t view_mask = pipeline->subpass->view_mask;
 
-   /* If multiview isn't enabled, we have nothing to do. */
-   if (view_mask == 0)
-      return false;
+   /* If multiview isn't enabled, just lower the ViewIndex builtin to zero. */
+   if (view_mask == 0) {
+      return nir_shader_lower_instructions(shader, is_load_view_index,
+                                           replace_load_view_index_with_zero, NULL);
+   }
 
    /* This pass assumes a single entrypoint */
    nir_function_impl *entrypoint = nir_shader_get_entrypoint(shader);

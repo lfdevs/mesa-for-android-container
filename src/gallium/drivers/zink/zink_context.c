@@ -194,7 +194,7 @@ zink_create_sampler_state(struct pipe_context *pctx,
    } else {
       sci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
       sci.minLod = 0;
-      sci.maxLod = 0;
+      sci.maxLod = 0.25f;
    }
 
    sci.addressModeU = sampler_address_mode(state->wrap_s);
@@ -346,12 +346,11 @@ zink_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *pres,
       ivci.components.b = component_mapping(state->swizzle_b);
       ivci.components.a = component_mapping(state->swizzle_a);
       ivci.subresourceRange.aspectMask = sampler_aspect_from_format(state->format);
-      /* samplers for stencil aspects of packed formats need to always use stencil type */
+      /* samplers for stencil aspects of packed formats need to always use stencil swizzle */
       if (ivci.subresourceRange.aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT) {
-         ivci.format = VK_FORMAT_S8_UINT;
          ivci.components.g = VK_COMPONENT_SWIZZLE_R;
-      } else
-         ivci.format = zink_get_format(screen, state->format);
+      }
+      ivci.format = zink_get_format(screen, state->format);
       assert(ivci.format);
 
       ivci.subresourceRange.baseMipLevel = state->u.tex.first_level;

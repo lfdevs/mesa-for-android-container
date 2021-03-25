@@ -809,11 +809,15 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    st->shader_has_one_variant[MESA_SHADER_TESS_EVAL] =
          st->has_shareable_shaders &&
          !st->clamp_frag_depth_in_shader &&
-         !st->clamp_vert_color_in_shader;
+         !st->clamp_vert_color_in_shader &&
+         !st->lower_point_size &&
+         !st->lower_ucp;
+
    st->shader_has_one_variant[MESA_SHADER_GEOMETRY] =
          st->has_shareable_shaders &&
          !st->clamp_frag_depth_in_shader &&
          !st->clamp_vert_color_in_shader &&
+         !st->lower_point_size &&
          !st->lower_ucp;
    st->shader_has_one_variant[MESA_SHADER_COMPUTE] = st->has_shareable_shaders;
 

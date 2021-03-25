@@ -1234,6 +1234,18 @@ Temp emit_floor_f64(isel_context *ctx, Builder& bld, Definition dst, Temp val)
    return add->definitions[0].getTemp();
 }
 
+Temp uadd32_sat(Builder& bld, Definition dst, Temp src0, Temp src1)
+{
+   if (bld.program->chip_class >= GFX9) {
+      Builder::Result add = bld.vop2_e64(aco_opcode::v_add_u32, dst, src0, src1);
+      static_cast<VOP3A_instruction*>(add.instr)->clamp = 1;
+   } else {
+      Builder::Result add = bld.vadd32(bld.def(v1), src0, src1, true);
+      bld.vop2_e64(aco_opcode::v_cndmask_b32, dst, add.def(0).getTemp(), Operand((uint32_t) -1), add.def(1).getTemp());
+   }
+   return dst.getTemp();
+}
+
 void visit_alu_instr(isel_context *ctx, nir_alu_instr *instr)
 {
    if (!instr->dest.dest.is_ssa) {
@@ -1619,6 +1631,22 @@ void visit_alu_instr(isel_context *ctx, nir_alu_instr *instr)
          emit_vop1_instruction(ctx, instr, op, msb_rev);
          Temp msb = bld.tmp(v1);
          Temp carry = bld.vsub32(Definition(msb), Operand(31u), Operand(msb_rev), true).def(1).getTemp();
+         bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(dst), msb, Operand((uint32_t)-1), carry);
+      } else if (src.regClass() == v2) {
+         aco_opcode op = instr->op == nir_op_ufind_msb ? aco_opcode::v_ffbh_u32 : aco_opcode::v_ffbh_i32;
+
+         Temp lo = bld.tmp(v1), hi = bld.tmp(v1);
+         bld.pseudo(aco_opcode::p_split_vector, Definition(lo), Definition(hi), src);
+
+         lo = uadd32_sat(bld, bld.def(v1), bld.copy(bld.def(s1), Operand(32u)),
+                                           bld.vop1(op, bld.def(v1), lo));
+         hi = bld.vop1(op, bld.def(v1), hi);
+         Temp found_hi = bld.vopc(aco_opcode::v_cmp_lg_u32, bld.def(bld.lm), Operand((uint32_t)-1), hi);
+
+         Temp msb_rev = bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1), lo, hi, found_hi);
+
+         Temp msb = bld.tmp(v1);
+         Temp carry = bld.vsub32(Definition(msb), Operand(63u), Operand(msb_rev), true).def(1).getTemp();
          bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(dst), msb, Operand((uint32_t)-1), carry);
       } else {
          isel_err(&instr->instr, "Unimplemented NIR instr bit size");
@@ -3506,14 +3534,16 @@ Temp lds_load_callback(Builder& bld, const LoadEmitInfo &info,
       op = aco_opcode::ds_read_u8;
    }
 
-   unsigned max_offset_plus_one = read2 ? 254 * (size / 2u) + 1 : 65536;
-   if (const_offset >= max_offset_plus_one) {
-      offset = bld.vadd32(bld.def(v1), offset, Operand(const_offset / max_offset_plus_one));
-      const_offset %= max_offset_plus_one;
+   unsigned const_offset_unit = read2 ? size / 2u : 1u;
+   unsigned const_offset_range = read2 ? 255 * const_offset_unit : 65536;
+
+   if (const_offset > (const_offset_range - const_offset_unit)) {
+      unsigned excess = const_offset - (const_offset % const_offset_range);
+      offset = bld.vadd32(bld.def(v1), offset, Operand(excess));
+      const_offset -= excess;
    }
 
-   if (read2)
-      const_offset /= (size / 2u);
+   const_offset /= const_offset_unit;
 
    RegClass rc = RegClass(RegType::vgpr, DIV_ROUND_UP(size, 4));
    Temp val = rc == info.dst.regClass() && dst_hint.id() ? dst_hint : bld.tmp(rc);
@@ -10654,6 +10684,7 @@ static bool export_fs_mrt_color(isel_context *ctx, int slot)
    unsigned target, col_format;
    unsigned enabled_channels = 0;
    aco_opcode compr_op = (aco_opcode)0;
+   bool compr = false;
 
    slot -= FRAG_RESULT_DATA0;
    target = V_008DFC_SQ_EXP_MRT + slot;
@@ -10708,7 +10739,7 @@ static bool export_fs_mrt_color(isel_context *ctx, int slot)
       for (int i = 0; i < 2; i++) {
          bool enabled = (write_mask >> (i*2)) & 0x3;
          if (enabled) {
-            enabled_channels |= 1 << i;
+            enabled_channels |= 0x3 << (i*2);
             if (is_16bit) {
                values[i] = bld.pseudo(aco_opcode::p_create_vector, bld.def(v1),
                                       values[i*2].isUndefined() ? Operand(v2b) : values[i*2],
@@ -10726,6 +10757,9 @@ static bool export_fs_mrt_color(isel_context *ctx, int slot)
             values[i] = Operand(v1);
          }
       }
+      values[2] = Operand(v1);
+      values[3] = Operand(v1);
+      compr = true;
       break;
 
    case V_028714_SPI_SHADER_UNORM16_ABGR:
@@ -10812,7 +10846,7 @@ static bool export_fs_mrt_color(isel_context *ctx, int slot)
          /* check if at least one of the values to be compressed is enabled */
          bool enabled = (write_mask >> (i*2)) & 0x3;
          if (enabled) {
-            enabled_channels |= 1 << (i*2);
+            enabled_channels |= 0x3 << (i*2);
             values[i] = bld.vop3(compr_op, bld.def(v1),
                                  values[i*2].isUndefined() ? Operand(0u) : values[i*2],
                                  values[i*2+1].isUndefined() ? Operand(0u): values[i*2+1]);
@@ -10822,13 +10856,14 @@ static bool export_fs_mrt_color(isel_context *ctx, int slot)
       }
       values[2] = Operand(v1);
       values[3] = Operand(v1);
-   } else {
+      compr = true;
+   } else if (!compr) {
       for (int i = 0; i < 4; i++)
          values[i] = enabled_channels & (1 << i) ? values[i] : Operand(v1);
    }
 
    bld.exp(aco_opcode::exp, values[0], values[1], values[2], values[3],
-           enabled_channels, target, (bool) compr_op);
+           enabled_channels, target, compr);
    return true;
 }
 

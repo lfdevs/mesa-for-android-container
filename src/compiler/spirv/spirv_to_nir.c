@@ -2166,7 +2166,10 @@ vtn_handle_constant(struct vtn_builder *b, SpvOp opcode,
    }
 
    /* Now that we have the value, update the workgroup size if needed */
-   vtn_foreach_decoration(b, val, handle_workgroup_size_decoration_cb, NULL);
+   if (b->entry_point_stage == MESA_SHADER_COMPUTE ||
+       b->entry_point_stage == MESA_SHADER_KERNEL)
+      vtn_foreach_decoration(b, val, handle_workgroup_size_decoration_cb,
+                             NULL);
 }
 
 static void
@@ -3138,6 +3141,7 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
       break;
 
    case SpvOpImageQuerySize:
+   case SpvOpImageQuerySamples:
       res_val = vtn_untyped_value(b, w[3]);
       image.image = vtn_get_image(b, w[3], &access);
       image.coord = NULL;
@@ -3269,6 +3273,7 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
    OP(AtomicFAddEXT,             atomic_fadd)
    OP(ImageQueryFormat,          format)
    OP(ImageQueryOrder,           order)
+   OP(ImageQuerySamples,         samples)
 #undef OP
    default:
       vtn_fail_with_opcode("Invalid image opcode", opcode);
@@ -3279,6 +3284,7 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
    intrin->src[0] = nir_src_for_ssa(&image.image->dest.ssa);
 
    switch (opcode) {
+   case SpvOpImageQuerySamples:
    case SpvOpImageQuerySize:
    case SpvOpImageQuerySizeLod:
    case SpvOpImageQueryFormat:
@@ -3310,6 +3316,7 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
    nir_intrinsic_set_access(intrin, access);
 
    switch (opcode) {
+   case SpvOpImageQuerySamples:
    case SpvOpImageQueryFormat:
    case SpvOpImageQueryOrder:
       /* No additional sources */
@@ -5307,7 +5314,6 @@ vtn_handle_body_instruction(struct vtn_builder *b, SpvOp opcode,
    case SpvOpImageSparseDrefGather:
    case SpvOpImageQueryLod:
    case SpvOpImageQueryLevels:
-   case SpvOpImageQuerySamples:
       vtn_handle_texture(b, opcode, w, count);
       break;
 
@@ -5320,6 +5326,7 @@ vtn_handle_body_instruction(struct vtn_builder *b, SpvOp opcode,
       vtn_handle_image(b, opcode, w, count);
       break;
 
+   case SpvOpImageQuerySamples:
    case SpvOpImageQuerySizeLod:
    case SpvOpImageQuerySize: {
       struct vtn_type *image_type = vtn_get_value_type(b, w[3]);
@@ -5897,6 +5904,7 @@ spirv_to_nir(const uint32_t *words, size_t word_count,
                                  vtn_handle_execution_mode_id, NULL);
 
    if (b->workgroup_size_builtin) {
+      vtn_assert(stage == MESA_SHADER_COMPUTE || stage == MESA_SHADER_KERNEL);
       vtn_assert(b->workgroup_size_builtin->type->type ==
                  glsl_vector_type(GLSL_TYPE_UINT, 3));
 

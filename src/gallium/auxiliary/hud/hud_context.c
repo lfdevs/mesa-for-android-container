@@ -524,6 +524,10 @@ hud_draw_results(struct hud_context *hud, struct pipe_resource *tex)
    viewport.translate[0] = 0.5f * hud->fb_width;
    viewport.translate[1] = 0.5f * hud->fb_height;
    viewport.translate[2] = 0.0f;
+   viewport.swizzle_x = PIPE_VIEWPORT_SWIZZLE_POSITIVE_X;
+   viewport.swizzle_y = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Y;
+   viewport.swizzle_z = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Z;
+   viewport.swizzle_w = PIPE_VIEWPORT_SWIZZLE_POSITIVE_W;
 
    cso_set_framebuffer(cso, &fb);
    cso_set_sample_mask(cso, ~0);

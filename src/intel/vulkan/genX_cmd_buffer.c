@@ -4137,7 +4137,7 @@ emit_draw_count_predicate_with_conditional_render(
    pred = gen_mi_iand(b, pred, gen_mi_reg64(ANV_PREDICATE_RESULT_REG));
 
 #if GEN_GEN >= 8
-   gen_mi_store(b, gen_mi_reg64(MI_PREDICATE_RESULT), pred);
+   gen_mi_store(b, gen_mi_reg32(MI_PREDICATE_RESULT), pred);
 #else
    /* MI_PREDICATE_RESULT is not whitelisted in i915 command parser
     * so we emit MI_PREDICATE to set it.

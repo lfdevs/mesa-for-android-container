@@ -317,7 +317,7 @@ LOCAL_WHOLE_STATIC_LIBRARIES := \
 	libmesa_anv_gen125 \
 	libmesa_intel_compiler
 
-LOCAL_SHARED_LIBRARIES := $(ANV_SHARED_LIBRARIES) libz libsync liblog
+LOCAL_SHARED_LIBRARIES := $(ANV_SHARED_LIBRARIES) libz libsync liblog libcutils
 LOCAL_HEADER_LIBRARIES += $(VULKAN_COMMON_HEADER_LIBRARIES)
 
 # If Android version >=8 MESA should static link libexpat else should dynamic link

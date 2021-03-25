@@ -193,7 +193,7 @@ int check_output(char **argv)
       write(stdin_pipe[1], checker_stdin_data, checker_stdin_size);
       close(stdin_pipe[0]);
       close(stdin_pipe[1]);
-      exit(0);
+      _exit(0);
    }
 }
 
