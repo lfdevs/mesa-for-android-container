@@ -1722,16 +1722,24 @@ static void handle_copy_image(struct lvp_cmd_buffer_entry *cmd,
       struct pipe_box src_box;
       src_box.x = copycmd->regions[i].srcOffset.x;
       src_box.y = copycmd->regions[i].srcOffset.y;
-      src_box.z = copycmd->regions[i].srcOffset.z + copycmd->regions[i].srcSubresource.baseArrayLayer;
       src_box.width = copycmd->regions[i].extent.width;
       src_box.height = copycmd->regions[i].extent.height;
-      src_box.depth = copycmd->regions[i].extent.depth;
+      if (copycmd->src->bo->target == PIPE_TEXTURE_3D) {
+         src_box.depth = copycmd->regions[i].extent.depth;
+         src_box.z = copycmd->regions[i].srcOffset.z;
+      } else {
+         src_box.depth = copycmd->regions[i].srcSubresource.layerCount;
+         src_box.z = copycmd->regions[i].srcSubresource.baseArrayLayer;
+      }
 
+      unsigned dstz = copycmd->dst->bo->target == PIPE_TEXTURE_3D ?
+                      copycmd->regions[i].dstOffset.z :
+                      copycmd->regions[i].dstSubresource.baseArrayLayer;
       state->pctx->resource_copy_region(state->pctx, copycmd->dst->bo,
                                         copycmd->regions[i].dstSubresource.mipLevel,
                                         copycmd->regions[i].dstOffset.x,
                                         copycmd->regions[i].dstOffset.y,
-                                        copycmd->regions[i].dstOffset.z + copycmd->regions[i].dstSubresource.baseArrayLayer,
+                                        dstz,
                                         copycmd->src->bo,
                                         copycmd->regions[i].srcSubresource.mipLevel,
                                         &src_box);
@@ -2096,7 +2104,7 @@ static void handle_copy_query_pool_results(struct lvp_cmd_buffer_entry *cmd,
    struct lvp_query_pool *pool = copycmd->pool;
 
    for (unsigned i = copycmd->first_query; i < copycmd->first_query + copycmd->query_count; i++) {
-      unsigned offset = copycmd->dst->offset + (copycmd->stride * (i - copycmd->first_query));
+      unsigned offset = copycmd->dst_offset + copycmd->dst->offset + (copycmd->stride * (i - copycmd->first_query));
       if (pool->queries[i]) {
          if (copycmd->flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
             state->pctx->get_query_result_resource(state->pctx,
@@ -2106,21 +2114,35 @@ static void handle_copy_query_pool_results(struct lvp_cmd_buffer_entry *cmd,
                                                    -1,
                                                    copycmd->dst->bo,
                                                    offset + (copycmd->flags & VK_QUERY_RESULT_64_BIT ? 8 : 4));
-         state->pctx->get_query_result_resource(state->pctx,
-                                                pool->queries[i],
-                                                copycmd->flags & VK_QUERY_RESULT_WAIT_BIT,
-                                                copycmd->flags & VK_QUERY_RESULT_64_BIT ? PIPE_QUERY_TYPE_U64 : PIPE_QUERY_TYPE_U32,
-                                                0,
-                                                copycmd->dst->bo,
-                                                offset);
+         if (pool->type == VK_QUERY_TYPE_PIPELINE_STATISTICS) {
+            unsigned num_results = 0;
+            unsigned result_size = copycmd->flags & VK_QUERY_RESULT_64_BIT ? 8 : 4;
+            u_foreach_bit(bit, pool->pipeline_stats)
+               state->pctx->get_query_result_resource(state->pctx,
+                                                      pool->queries[i],
+                                                      copycmd->flags & VK_QUERY_RESULT_WAIT_BIT,
+                                                      copycmd->flags & VK_QUERY_RESULT_64_BIT ? PIPE_QUERY_TYPE_U64 : PIPE_QUERY_TYPE_U32,
+                                                      bit,
+                                                      copycmd->dst->bo,
+                                                      offset + num_results++ * result_size);
+         } else {
+            state->pctx->get_query_result_resource(state->pctx,
+                                                   pool->queries[i],
+                                                   copycmd->flags & VK_QUERY_RESULT_WAIT_BIT,
+                                                   copycmd->flags & VK_QUERY_RESULT_64_BIT ? PIPE_QUERY_TYPE_U64 : PIPE_QUERY_TYPE_U32,
+                                                   0,
+                                                   copycmd->dst->bo,
+                                                   offset);
+         }
       } else {
          /* if no queries emitted yet, just reset the buffer to 0 so avail is reported correctly */
          if (copycmd->flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) {
             struct pipe_transfer *src_t;
             uint32_t *map;
 
-            struct pipe_box box = {};
-            box.width = copycmd->stride * copycmd->query_count;
+            struct pipe_box box = {0};
+            box.x = offset;
+            box.width = copycmd->stride;
             box.height = 1;
             box.depth = 1;
             map = state->pctx->transfer_map(state->pctx,

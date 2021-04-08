@@ -114,7 +114,9 @@ radv_expand_fmask_image_inplace(struct radv_cmd_buffer *cmd_buffer,
 	radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer),
 			     VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 
-	cmd_buffer->state.flush_bits |= radv_dst_access_flush(cmd_buffer, VK_ACCESS_SHADER_WRITE_BIT, image);
+	cmd_buffer->state.flush_bits |=
+		radv_dst_access_flush(cmd_buffer, VK_ACCESS_SHADER_READ_BIT |
+						  VK_ACCESS_SHADER_WRITE_BIT, image);
 
 	for (unsigned l = 0; l < radv_get_layerCount(image, subresourceRange); l++) {
 		struct radv_image_view iview;

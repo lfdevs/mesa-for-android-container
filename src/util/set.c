@@ -165,7 +165,7 @@ key_u32_equals(const void *a, const void *b)
 struct set *
 _mesa_set_create_u32_keys(void *mem_ctx)
 {
-   return _mesa_set_create(NULL, key_u32_hash, key_u32_equals);
+   return _mesa_set_create(mem_ctx, key_u32_hash, key_u32_equals);
 }
 
 struct set *

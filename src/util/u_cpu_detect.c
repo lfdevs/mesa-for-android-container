@@ -444,19 +444,13 @@ get_cpu_topology(void)
        util_cpu_caps.family < CPU_AMD_LAST) {
       uint32_t regs[4];
 
-      /* Query the L3 cache count. */
-      cpuid_count(0x8000001D, 3, regs);
-      unsigned cache_level = (regs[0] >> 5) & 0x7;
-      unsigned cores_per_L3 = ((regs[0] >> 14) & 0xfff) + 1;
-
-      if (cache_level != 3 || cores_per_L3 == util_cpu_caps.nr_cpus)
-         return;
-
       uint32_t saved_mask[UTIL_MAX_CPUS / 32] = {0};
       uint32_t mask[UTIL_MAX_CPUS / 32] = {0};
-      uint32_t allowed_mask[UTIL_MAX_CPUS / 32] = {0};
-      uint32_t apic_id[UTIL_MAX_CPUS];
       bool saved = false;
+
+      uint32_t L3_found[UTIL_MAX_CPUS] = {0};
+      uint32_t num_L3_caches = 0;
+      util_affinity_mask *L3_affinity_masks = NULL;
 
       /* Query APIC IDs from each CPU core.
        *
@@ -484,39 +478,58 @@ get_cpu_topology(void)
                                               !saved ? saved_mask : NULL,
                                               util_cpu_caps.num_cpu_mask_bits)) {
             saved = true;
-            allowed_mask[i / 32] |= cpu_bit;
 
             /* Query the APIC ID of the current core. */
             cpuid(0x00000001, regs);
-            apic_id[i] = regs[1] >> 24;
+            unsigned apic_id = regs[1] >> 24;
+
+            /* Query the total core count for the CPU */
+            uint32_t core_count = 1;
+            if (regs[3] & (1 << 28))
+               core_count = (regs[1] >> 16) & 0xff;
+
+            core_count = util_next_power_of_two(core_count);
+
+            /* Query the L3 cache count. */
+            cpuid_count(0x8000001D, 3, regs);
+            unsigned cache_level = (regs[0] >> 5) & 0x7;
+            unsigned cores_per_L3 = ((regs[0] >> 14) & 0xfff) + 1;
+
+            if (cache_level != 3)
+               continue;
+
+            unsigned local_core_id = apic_id & (core_count - 1);
+            unsigned phys_id = (apic_id & ~(core_count - 1)) >> util_logbase2(core_count);
+            unsigned local_l3_cache_index = local_core_id / util_next_power_of_two(cores_per_L3);
+#define L3_ID(p, i) (p << 16 | i << 1 | 1);
+
+            unsigned l3_id = L3_ID(phys_id, local_l3_cache_index);
+            int idx = -1;
+            for (unsigned c = 0; c < num_L3_caches; c++) {
+               if (L3_found[c] == l3_id) {
+                  idx = c;
+                  break;
+               }
+            }
+            if (idx == -1) {
+               idx = num_L3_caches;
+               L3_found[num_L3_caches++] = l3_id;
+               L3_affinity_masks = realloc(L3_affinity_masks, sizeof(util_affinity_mask) * num_L3_caches);
+               if (!L3_affinity_masks)
+                  return;
+               memset(&L3_affinity_masks[num_L3_caches - 1], 0, sizeof(util_affinity_mask));
+            }
+            util_cpu_caps.cpu_to_L3[i] = idx;
+            L3_affinity_masks[idx][i / 32] |= cpu_bit;
+
          }
          mask[i / 32] = 0;
       }
 
+      util_cpu_caps.num_L3_caches = num_L3_caches;
+      util_cpu_caps.L3_affinity_mask = L3_affinity_masks;
+
       if (saved) {
-
-         /* We succeeded in using at least one CPU. */
-         util_cpu_caps.num_L3_caches = util_cpu_caps.nr_cpus / cores_per_L3;
-         util_cpu_caps.cores_per_L3 = cores_per_L3;
-         util_cpu_caps.L3_affinity_mask = calloc(sizeof(util_affinity_mask),
-                                                 util_cpu_caps.num_L3_caches);
-
-         for (unsigned i = 0; i < util_cpu_caps.nr_cpus && i < UTIL_MAX_CPUS;
-              i++) {
-            uint32_t cpu_bit = 1u << (i % 32);
-
-            if (allowed_mask[i / 32] & cpu_bit) {
-               /* Each APIC ID bit represents a topology level, so we need
-                * to round up to the next power of two.
-                */
-               unsigned L3_index = apic_id[i] /
-                                   util_next_power_of_two(cores_per_L3);
-
-               util_cpu_caps.L3_affinity_mask[L3_index][i / 32] |= cpu_bit;
-               util_cpu_caps.cpu_to_L3[i] = L3_index;
-            }
-         }
-
          if (debug_get_option_dump_cpu()) {
             fprintf(stderr, "CPU <-> L3 cache mapping:\n");
             for (unsigned i = 0; i < util_cpu_caps.num_L3_caches; i++) {

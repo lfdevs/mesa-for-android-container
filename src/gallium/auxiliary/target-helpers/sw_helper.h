@@ -86,9 +86,6 @@ sw_screen_create(struct sw_winsys *winsys)
    UNUSED bool only_sw = env_var_as_boolean("LIBGL_ALWAYS_SOFTWARE", false);
    const char *drivers[] = {
       debug_get_option("GALLIUM_DRIVER", ""),
-#if defined(GALLIUM_ZINK)
-      only_sw ? "" : "zink",
-#endif
 #if defined(GALLIUM_D3D12)
       only_sw ? "" : "d3d12",
 #endif
@@ -100,6 +97,9 @@ sw_screen_create(struct sw_winsys *winsys)
 #endif
 #if defined(GALLIUM_SWR)
       "swr",
+#endif
+#if defined(GALLIUM_ZINK)
+      only_sw ? "" : "zink",
 #endif
    };
 

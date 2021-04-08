@@ -799,6 +799,7 @@ void init_context(isel_context *ctx, nir_shader *shader)
                   case nir_intrinsic_read_invocation:
                   case nir_intrinsic_first_invocation:
                   case nir_intrinsic_ballot:
+                  case nir_intrinsic_image_deref_samples:
                      type = RegType::sgpr;
                      break;
                   case nir_intrinsic_load_sample_id:

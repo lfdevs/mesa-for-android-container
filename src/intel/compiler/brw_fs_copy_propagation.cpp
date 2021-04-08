@@ -367,7 +367,8 @@ is_logic_op(enum opcode opcode)
 }
 
 static bool
-can_take_stride(fs_inst *inst, unsigned arg, unsigned stride,
+can_take_stride(fs_inst *inst, brw_reg_type dst_type,
+                unsigned arg, unsigned stride,
                 const gen_device_info *devinfo)
 {
    if (stride > 4)
@@ -377,9 +378,9 @@ can_take_stride(fs_inst *inst, unsigned arg, unsigned stride,
     * of the corresponding channel of the destination, and the provided stride
     * would break this restriction.
     */
-   if (has_dst_aligned_region_restriction(devinfo, inst) &&
+   if (has_dst_aligned_region_restriction(devinfo, inst, dst_type) &&
        !(type_sz(inst->src[arg].type) * stride ==
-           type_sz(inst->dst.type) * inst->dst.stride ||
+           type_sz(dst_type) * inst->dst.stride ||
          stride == 0))
       return false;
 
@@ -528,10 +529,15 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
    if (instruction_requires_packed_data(inst) && entry_stride != 1)
       return false;
 
+   const brw_reg_type dst_type = (has_source_modifiers &&
+                                  entry->dst.type != inst->src[arg].type) ?
+      entry->dst.type : inst->dst.type;
+
    /* Bail if the result of composing both strides would exceed the
     * hardware limit.
     */
-   if (!can_take_stride(inst, arg, entry_stride * inst->src[arg].stride,
+   if (!can_take_stride(inst, dst_type, arg,
+                        entry_stride * inst->src[arg].stride,
                         devinfo))
       return false;
 

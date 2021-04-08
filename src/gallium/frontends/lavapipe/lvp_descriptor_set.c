@@ -567,11 +567,12 @@ void lvp_UpdateDescriptorSetWithTemplate(VkDevice _device,
       struct lvp_descriptor *desc =
          &set->descriptors[bind_layout->descriptor_index];
       for (j = 0; j < entry->descriptorCount; ++j) {
+         unsigned idx = j + entry->dstArrayElement;
          switch (entry->descriptorType) {
          case VK_DESCRIPTOR_TYPE_SAMPLER: {
             LVP_FROM_HANDLE(lvp_sampler, sampler,
                             *(VkSampler *)pSrc);
-            desc[j] = (struct lvp_descriptor) {
+            desc[idx] = (struct lvp_descriptor) {
                .type = VK_DESCRIPTOR_TYPE_SAMPLER,
                .info.sampler = sampler,
             };
@@ -579,7 +580,7 @@ void lvp_UpdateDescriptorSetWithTemplate(VkDevice _device,
          }
          case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: {
             VkDescriptorImageInfo *info = (VkDescriptorImageInfo *)pSrc;
-            desc[j] = (struct lvp_descriptor) {
+            desc[idx] = (struct lvp_descriptor) {
                .type = entry->descriptorType,
                .info.iview = lvp_image_view_from_handle(info->imageView),
                .info.sampler = lvp_sampler_from_handle(info->sampler),
@@ -591,7 +592,7 @@ void lvp_UpdateDescriptorSetWithTemplate(VkDevice _device,
          case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: {
             LVP_FROM_HANDLE(lvp_image_view, iview,
                             ((VkDescriptorImageInfo *)pSrc)->imageView);
-            desc[j] = (struct lvp_descriptor) {
+            desc[idx] = (struct lvp_descriptor) {
                .type = entry->descriptorType,
                .info.iview = iview,
             };
@@ -601,7 +602,7 @@ void lvp_UpdateDescriptorSetWithTemplate(VkDevice _device,
          case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER: {
             LVP_FROM_HANDLE(lvp_buffer_view, bview,
                             *(VkBufferView *)pSrc);
-            desc[j] = (struct lvp_descriptor) {
+            desc[idx] = (struct lvp_descriptor) {
                .type = entry->descriptorType,
                .info.buffer_view = bview,
             };
@@ -613,7 +614,7 @@ void lvp_UpdateDescriptorSetWithTemplate(VkDevice _device,
          case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
          case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: {
             VkDescriptorBufferInfo *info = (VkDescriptorBufferInfo *)pSrc;
-            desc[j] = (struct lvp_descriptor) {
+            desc[idx] = (struct lvp_descriptor) {
                .type = entry->descriptorType,
                .info.offset = info->offset,
                .info.buffer = lvp_buffer_from_handle(info->buffer),

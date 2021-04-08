@@ -718,7 +718,7 @@ dri2_initialize_drm(_EGLDisplay *disp)
       goto cleanup;
    }
 
-   dev = _eglAddDevice(dri2_dpy->fd, disp->Options.ForceSoftware);
+   dev = _eglAddDevice(dri2_dpy->fd, dri2_dpy->gbm_dri->software);
    if (!dev) {
       err = "DRI2: failed to find EGLDevice";
       goto cleanup;

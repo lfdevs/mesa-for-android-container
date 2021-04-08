@@ -2444,11 +2444,24 @@ void visit_alu_instr(isel_context *ctx, nir_alu_instr *instr)
    case nir_op_i2f16: {
       assert(dst.regClass() == v2b);
       Temp src = get_alu_src(ctx, instr->src[0]);
-      if (instr->src[0].src.ssa->bit_size == 8)
-         src = convert_int(ctx, bld, src, 8, 16, true);
-      else if (instr->src[0].src.ssa->bit_size == 64)
+      const unsigned input_size = instr->src[0].src.ssa->bit_size;
+      if (input_size <= 16) {
+         /* Expand integer to the size expected by the uint→float converter used below */
+         unsigned target_size = (ctx->program->chip_class >= GFX8 ? 16 : 32);
+         if (input_size != target_size) {
+            src = convert_int(ctx, bld, src, input_size, target_size, true);
+         }
+      } else if (input_size == 64) {
          src = convert_int(ctx, bld, src, 64, 32, false);
-      bld.vop1(aco_opcode::v_cvt_f16_i16, Definition(dst), src);
+      }
+
+      if (ctx->program->chip_class >= GFX8) {
+         bld.vop1(aco_opcode::v_cvt_f16_i16, Definition(dst), src);
+      } else {
+         /* GFX7 and earlier do not support direct f16⟷i16 conversions */
+         src = bld.vop1(aco_opcode::v_cvt_f32_i32, bld.def(v1), src);
+         bld.vop1(aco_opcode::v_cvt_f16_f32, Definition(dst), src);
+      }
       break;
    }
    case nir_op_i2f32: {
@@ -2483,11 +2496,24 @@ void visit_alu_instr(isel_context *ctx, nir_alu_instr *instr)
    case nir_op_u2f16: {
       assert(dst.regClass() == v2b);
       Temp src = get_alu_src(ctx, instr->src[0]);
-      if (instr->src[0].src.ssa->bit_size == 8)
-         src = convert_int(ctx, bld, src, 8, 16, false);
-      else if (instr->src[0].src.ssa->bit_size == 64)
+      const unsigned input_size = instr->src[0].src.ssa->bit_size;
+      if (input_size <= 16) {
+         /* Expand integer to the size expected by the uint→float converter used below */
+         unsigned target_size = (ctx->program->chip_class >= GFX8 ? 16 : 32);
+         if (input_size != target_size) {
+            src = convert_int(ctx, bld, src, input_size, target_size, false);
+         }
+      } else if (input_size == 64) {
          src = convert_int(ctx, bld, src, 64, 32, false);
-      bld.vop1(aco_opcode::v_cvt_f16_u16, Definition(dst), src);
+      }
+
+      if (ctx->program->chip_class >= GFX8) {
+         bld.vop1(aco_opcode::v_cvt_f16_u16, Definition(dst), src);
+      } else {
+         /* GFX7 and earlier do not support direct f16⟷u16 conversions */
+         src = bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), src);
+         bld.vop1(aco_opcode::v_cvt_f16_f32, Definition(dst), src);
+      }
       break;
    }
    case nir_op_u2f32: {
@@ -2524,22 +2550,46 @@ void visit_alu_instr(isel_context *ctx, nir_alu_instr *instr)
    }
    case nir_op_f2i8:
    case nir_op_f2i16: {
-      if (instr->src[0].src.ssa->bit_size == 16)
-         emit_vop1_instruction(ctx, instr, aco_opcode::v_cvt_i16_f16, dst);
-      else if (instr->src[0].src.ssa->bit_size == 32)
+      if (instr->src[0].src.ssa->bit_size == 16) {
+         if (ctx->program->chip_class >= GFX8) {
+            emit_vop1_instruction(ctx, instr, aco_opcode::v_cvt_i16_f16, dst);
+         } else {
+            /* GFX7 and earlier do not support direct f16⟷i16 conversions */
+            Temp tmp = bld.tmp(v1);
+            emit_vop1_instruction(ctx, instr, aco_opcode::v_cvt_f32_f16, tmp);
+            tmp = bld.vop1(aco_opcode::v_cvt_i32_f32, bld.def(v1), tmp);
+            tmp = convert_int(ctx, bld, tmp, 32, 16, false, (dst.type() == RegType::sgpr) ? Temp() : dst);
+            if (dst.type() == RegType::sgpr) {
+               bld.pseudo(aco_opcode::p_as_uniform, Definition(dst), tmp);
+            }
+         }
+      } else if (instr->src[0].src.ssa->bit_size == 32) {
          emit_vop1_instruction(ctx, instr, aco_opcode::v_cvt_i32_f32, dst);
-      else
+      } else {
          emit_vop1_instruction(ctx, instr, aco_opcode::v_cvt_i32_f64, dst);
+      }
       break;
    }
    case nir_op_f2u8:
    case nir_op_f2u16: {
-      if (instr->src[0].src.ssa->bit_size == 16)
-         emit_vop1_instruction(ctx, instr, aco_opcode::v_cvt_u16_f16, dst);
-      else if (instr->src[0].src.ssa->bit_size == 32)
+      if (instr->src[0].src.ssa->bit_size == 16) {
+         if (ctx->program->chip_class >= GFX8) {
+            emit_vop1_instruction(ctx, instr, aco_opcode::v_cvt_u16_f16, dst);
+         } else {
+            /* GFX7 and earlier do not support direct f16⟷u16 conversions */
+            Temp tmp = bld.tmp(v1);
+            emit_vop1_instruction(ctx, instr, aco_opcode::v_cvt_f32_f16, tmp);
+            tmp = bld.vop1(aco_opcode::v_cvt_u32_f32, bld.def(v1), tmp);
+            tmp = convert_int(ctx, bld, tmp, 32, 16, false, (dst.type() == RegType::sgpr) ? Temp() : dst);
+            if (dst.type() == RegType::sgpr) {
+               bld.pseudo(aco_opcode::p_as_uniform, Definition(dst), tmp);
+            }
+         }
+      } else if (instr->src[0].src.ssa->bit_size == 32) {
          emit_vop1_instruction(ctx, instr, aco_opcode::v_cvt_u32_f32, dst);
-      else
+      } else {
          emit_vop1_instruction(ctx, instr, aco_opcode::v_cvt_u32_f64, dst);
+      }
       break;
    }
    case nir_op_f2i32: {
@@ -6456,6 +6506,37 @@ void visit_image_size(isel_context *ctx, nir_intrinsic_instr *instr)
    emit_split_vector(ctx, dst, instr->dest.ssa.num_components);
 }
 
+void get_image_samples(isel_context *ctx, Definition dst, Temp resource)
+{
+   Builder bld(ctx->program, ctx->block);
+
+   Temp dword3 = emit_extract_vector(ctx, resource, 3, s1);
+   Temp samples_log2 = bld.sop2(aco_opcode::s_bfe_u32, bld.def(s1), bld.def(s1, scc), dword3, Operand(16u | 4u<<16));
+   Temp samples = bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), bld.def(s1, scc), Operand(1u), samples_log2);
+   Temp type = bld.sop2(aco_opcode::s_bfe_u32, bld.def(s1), bld.def(s1, scc), dword3, Operand(28u | 4u<<16 /* offset=28, width=4 */));
+
+   Operand default_sample = Operand(1u);
+   if (ctx->options->robust_buffer_access) {
+      /* Extract the second dword of the descriptor, if it's
+       * all zero, then it's a null descriptor.
+       */
+      Temp dword1 = emit_extract_vector(ctx, resource, 1, s1);
+      Temp is_non_null_descriptor = bld.sopc(aco_opcode::s_cmp_gt_u32, bld.def(s1, scc), dword1, Operand(0u));
+      default_sample = Operand(is_non_null_descriptor);
+   }
+
+   Temp is_msaa = bld.sopc(aco_opcode::s_cmp_ge_u32, bld.def(s1, scc), type, Operand(14u));
+   bld.sop2(aco_opcode::s_cselect_b32, dst, samples, default_sample, bld.scc(is_msaa));
+}
+
+void visit_image_samples(isel_context *ctx, nir_intrinsic_instr *instr)
+{
+   Builder bld(ctx->program, ctx->block);
+   Temp dst = get_ssa_temp(ctx, &instr->dest.ssa);
+   Temp resource = get_sampler_desc(ctx, nir_instr_as_deref(instr->src[0].ssa->parent_instr), ACO_DESC_IMAGE, NULL, true, false);
+   get_image_samples(ctx, Definition(dst), resource);
+}
+
 void visit_load_ssbo(isel_context *ctx, nir_intrinsic_instr *instr)
 {
    Builder bld(ctx->program, ctx->block);
@@ -8060,6 +8141,9 @@ void visit_intrinsic(isel_context *ctx, nir_intrinsic_instr *instr)
    case nir_intrinsic_image_deref_size:
       visit_image_size(ctx, instr);
       break;
+   case nir_intrinsic_image_deref_samples:
+      visit_image_samples(ctx, instr);
+      break;
    case nir_intrinsic_load_ssbo:
       visit_load_ssbo(ctx, instr);
       break;
@@ -9006,25 +9090,7 @@ void visit_tex(isel_context *ctx, nir_tex_instr *instr)
       return get_buffer_size(ctx, resource, get_ssa_temp(ctx, &instr->dest.ssa), true);
 
    if (instr->op == nir_texop_texture_samples) {
-      Temp dword3 = emit_extract_vector(ctx, resource, 3, s1);
-
-      Temp samples_log2 = bld.sop2(aco_opcode::s_bfe_u32, bld.def(s1), bld.def(s1, scc), dword3, Operand(16u | 4u<<16));
-      Temp samples = bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), bld.def(s1, scc), Operand(1u), samples_log2);
-      Temp type = bld.sop2(aco_opcode::s_bfe_u32, bld.def(s1), bld.def(s1, scc), dword3, Operand(28u | 4u<<16 /* offset=28, width=4 */));
-
-      Operand default_sample = Operand(1u);
-      if (ctx->options->robust_buffer_access) {
-         /* Extract the second dword of the descriptor, if it's
-	  * all zero, then it's a null descriptor.
-	  */
-         Temp dword1 = emit_extract_vector(ctx, resource, 1, s1);
-         Temp is_non_null_descriptor = bld.sopc(aco_opcode::s_cmp_gt_u32, bld.def(s1, scc), dword1, Operand(0u));
-         default_sample = Operand(is_non_null_descriptor);
-      }
-
-      Temp is_msaa = bld.sopc(aco_opcode::s_cmp_ge_u32, bld.def(s1, scc), type, Operand(14u));
-      bld.sop2(aco_opcode::s_cselect_b32, Definition(get_ssa_temp(ctx, &instr->dest.ssa)),
-               samples, default_sample, bld.scc(is_msaa));
+      get_image_samples(ctx, Definition(get_ssa_temp(ctx, &instr->dest.ssa)), resource);
       return;
    }
 

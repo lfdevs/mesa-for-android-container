@@ -1321,7 +1321,7 @@ st_create_fp_variant(struct st_context *st,
                    key->external.lower_yuv)) {
          NIR_PASS_V(state.ir.nir, st_nir_lower_tex_src_plane,
                     ~stfp->Base.SamplersUsed,
-                    key->external.lower_nv12 || key->external.lower_xy_uxvx ||
+                    key->external.lower_nv12 | key->external.lower_xy_uxvx |
                        key->external.lower_yx_xuxv,
                     key->external.lower_iyuv);
          finalize = true;

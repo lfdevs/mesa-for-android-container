@@ -1761,7 +1761,7 @@ iris_create_rasterizer_state(struct pipe_context *ctx,
       sf.SmoothPointEnable = (state->point_smooth || state->multisample) &&
                              !state->point_quad_rasterization;
       sf.PointWidthSource = state->point_size_per_vertex ? Vertex : State;
-      sf.PointWidth = state->point_size;
+      sf.PointWidth = CLAMP(state->point_size, 0.125f, 255.875f);
 
       if (state->flatshade_first) {
          sf.TriangleFanProvokingVertexSelect = 1;

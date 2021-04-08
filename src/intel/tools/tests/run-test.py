@@ -7,7 +7,6 @@ import os
 import pathlib
 import subprocess
 import sys
-import tempfile
 
 # The meson version handles windows paths better, but if it's not available
 # fall back to shlex
@@ -37,18 +36,17 @@ success = True
 for asm_file in args.gen_folder.glob('*.asm'):
     expected_file = asm_file.stem + '.expected'
     expected_path = args.gen_folder / expected_file
-    out_path = tempfile.NamedTemporaryFile()
 
     try:
         command = i965_asm + [
             '--type', 'hex',
             '--gen', args.gen_name,
-            '--output', out_path.name,
             asm_file
         ]
-        subprocess.run(command,
-                       stdout=subprocess.DEVNULL,
-                       stderr=subprocess.STDOUT)
+        with subprocess.Popen(command,
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL) as cmd:
+            lines_after = [line.decode('ascii') for line in cmd.stdout.readlines()]
     except OSError as e:
         if e.errno == errno.ENOEXEC:
             print('Skipping due to inability to run host binaries.',
@@ -58,7 +56,6 @@ for asm_file in args.gen_folder.glob('*.asm'):
 
     with expected_path.open() as f:
         lines_before = f.readlines()
-    lines_after = [line.decode('ascii') for line in out_path]
 
     diff = ''.join(difflib.unified_diff(lines_before, lines_after,
                                         expected_file, asm_file.stem + '.out'))

@@ -696,6 +696,7 @@ vlVaPutImage(VADriverContextP ctx, VASurfaceID surface, VAImageID image,
          }
       }
    }
+   drv->pipe->flush(drv->pipe, NULL, 0);
    mtx_unlock(&drv->mutex);
 
    return VA_STATUS_SUCCESS;

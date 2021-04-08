@@ -229,7 +229,9 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return LLVM_VERSION_MAJOR < 9 && !sscreen->info.has_unaligned_shader_loads;
 
    case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
-      return sscreen->info.has_sparse_vm_mappings ? RADEON_SPARSE_PAGE_SIZE : 0;
+      /* Gfx8 (Polaris11) hangs, so don't enable this on Gfx8 and older chips. */
+      return sscreen->info.chip_class >= GFX9 &&
+             sscreen->info.has_sparse_vm_mappings ? RADEON_SPARSE_PAGE_SIZE : 0;
 
    case PIPE_CAP_UMA:
    case PIPE_CAP_PREFER_IMM_ARRAYS_AS_CONSTBUF:
