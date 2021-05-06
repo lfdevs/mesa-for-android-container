@@ -361,7 +361,7 @@ void
 radeon_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable,
 			    GLboolean front_only)
 {
-	unsigned int attachments[10];
+	unsigned int attachments[__DRI_BUFFER_COUNT];
 	__DRIbuffer *buffers = NULL;
 	__DRIscreen *screen;
 	struct radeon_renderbuffer *rb;
@@ -605,7 +605,7 @@ GLboolean radeonMakeCurrent(__DRIcontext * driContextPriv,
 	}
 
 	if(driDrawPriv == NULL && driReadPriv == NULL) {
-		drfb = _mesa_create_framebuffer(&radeon->glCtx.Visual);
+		drfb = _mesa_get_incomplete_framebuffer();
 		readfb = drfb;
 	}
 	else {

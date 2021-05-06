@@ -855,19 +855,19 @@ static GLboolean radeon_validate_texgen( struct gl_context *ctx, GLuint unit )
    case GL_OBJECT_LINEAR:
       rmesa->TexGenEnabled |= RADEON_TEXGEN_INPUT_OBJ << inputshift;
       set_texgen_matrix( rmesa, unit,
-			 texUnit->GenS.ObjectPlane,
-			 texUnit->GenT.ObjectPlane,
-			 texUnit->GenR.ObjectPlane,
-			 texUnit->GenQ.ObjectPlane);
+			 texUnit->ObjectPlane[GEN_S],
+			 texUnit->ObjectPlane[GEN_T],
+			 texUnit->ObjectPlane[GEN_R],
+			 texUnit->ObjectPlane[GEN_Q]);
       break;
 
    case GL_EYE_LINEAR:
       rmesa->TexGenEnabled |= RADEON_TEXGEN_INPUT_EYE << inputshift;
       set_texgen_matrix( rmesa, unit,
-			 texUnit->GenS.EyePlane,
-			 texUnit->GenT.EyePlane,
-			 texUnit->GenR.EyePlane,
-			 texUnit->GenQ.EyePlane);
+			 texUnit->EyePlane[GEN_S],
+			 texUnit->EyePlane[GEN_T],
+			 texUnit->EyePlane[GEN_R],
+			 texUnit->EyePlane[GEN_Q]);
       break;
 
    case GL_REFLECTION_MAP_NV:

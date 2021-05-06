@@ -354,6 +354,18 @@ BuildUtil::mkClobber(DataFile f, uint32_t rMask, int unit)
 }
 
 ImmediateValue *
+BuildUtil::mkImm(uint16_t u)
+{
+   ImmediateValue *imm = new_ImmediateValue(prog, (uint32_t)0);
+
+   imm->reg.size = 2;
+   imm->reg.type = TYPE_U16;
+   imm->reg.data.u32 = u;
+
+   return imm;
+}
+
+ImmediateValue *
 BuildUtil::mkImm(uint32_t u)
 {
    unsigned int pos = u32Hash(u);
@@ -408,6 +420,12 @@ Value *
 BuildUtil::loadImm(Value *dst, double d)
 {
    return mkOp1v(OP_MOV, TYPE_F64, dst ? dst : getScratch(8), mkImm(d));
+}
+
+Value *
+BuildUtil::loadImm(Value *dst, uint16_t u)
+{
+   return mkOp1v(OP_MOV, TYPE_U16, dst ? dst : getScratch(2), mkImm(u));
 }
 
 Value *

@@ -205,6 +205,9 @@ expandIntegerMUL(BuildUtil *bld, Instruction *mul)
 
 class NV50LegalizePostRA : public Pass
 {
+public:
+   NV50LegalizePostRA() : r63(NULL) { }
+
 private:
    virtual bool visit(Function *);
    virtual bool visit(BasicBlock *);
@@ -623,6 +626,7 @@ private:
    bool handlePFETCH(Instruction *);
    bool handleEXPORT(Instruction *);
    bool handleLOAD(Instruction *);
+   bool handleLDST(Instruction *);
 
    bool handleDIV(Instruction *);
    bool handleSQRT(Instruction *);
@@ -688,6 +692,8 @@ void NV50LoweringPreSSA::loadTexMsInfo(uint32_t off, Value **ms,
    if (prog->getType() > Program::TYPE_VERTEX)
       off += 16 * 2 * 4;
    if (prog->getType() > Program::TYPE_GEOMETRY)
+      off += 16 * 2 * 4;
+   if (prog->getType() > Program::TYPE_FRAGMENT)
       off += 16 * 2 * 4;
    *ms_x = bld.mkLoadv(TYPE_U32, bld.mkSymbol(
                              FILE_MEMORY_CONST, b, TYPE_U32, off + 0), NULL);
@@ -1032,8 +1038,22 @@ bool
 NV50LoweringPreSSA::handleTXQ(TexInstruction *i)
 {
    Value *ms, *ms_x, *ms_y;
-   if (i->tex.query == TXQ_DIMS)
+   if (i->tex.query == TXQ_DIMS) {
+      if (i->tex.target.isMS()) {
+         bld.setPosition(i, true);
+         loadTexMsInfo(i->tex.r * 4 * 2, &ms, &ms_x, &ms_y);
+         int d = 0;
+         if (i->tex.mask & 1) {
+            bld.mkOp2(OP_SHR, TYPE_U32, i->getDef(d), i->getDef(d), ms_x);
+            d++;
+         }
+         if (i->tex.mask & 2) {
+            bld.mkOp2(OP_SHR, TYPE_U32, i->getDef(d), i->getDef(d), ms_y);
+            d++;
+         }
+      }
       return true;
+   }
    assert(i->tex.query == TXQ_TYPE);
    assert(i->tex.mask == 4);
 
@@ -1176,19 +1196,13 @@ NV50LoweringPreSSA::handleRDSV(Instruction *i)
       break;
    case SV_NCTAID:
    case SV_CTAID:
-   case SV_NTID:
-      if ((sv == SV_NCTAID && idx >= 2) ||
-          (sv == SV_NTID && idx >= 3)) {
-         bld.mkMov(def, bld.mkImm(1));
-      } else if (sv == SV_CTAID && idx >= 2) {
-         bld.mkMov(def, bld.mkImm(0));
-      } else {
-         Value *x = bld.getSSA(2);
-         bld.mkOp1(OP_LOAD, TYPE_U16, x,
-                   bld.mkSymbol(FILE_MEMORY_SHARED, 0, TYPE_U16, addr));
-         bld.mkCvt(OP_CVT, TYPE_U32, def, TYPE_U16, x);
-      }
+   case SV_NTID: {
+      Value *x = bld.getSSA(2);
+      bld.mkOp1(OP_LOAD, TYPE_U16, x,
+                bld.mkSymbol(FILE_MEMORY_SHARED, 0, TYPE_U16, addr));
+      bld.mkCvt(OP_CVT, TYPE_U32, def, TYPE_U16, x);
       break;
+   }
    case SV_TID:
       if (idx == 0) {
          bld.mkOp2(OP_AND, TYPE_U32, def, tid, bld.mkImm(0x0000ffff));
@@ -1216,6 +1230,11 @@ NV50LoweringPreSSA::handleRDSV(Instruction *i)
                  off);
       break;
    }
+   case SV_THREAD_KILL:
+      // Not actually supported. But it's implementation-dependent, so we can
+      // always just say it's not a helper.
+      bld.mkMov(def, bld.loadImm(NULL, 0));
+      break;
    default:
       bld.mkFetch(i->getDef(0), i->dType,
                   FILE_SHADER_INPUT, addr, i->getIndirect(0, 0), NULL);
@@ -1295,6 +1314,15 @@ bool
 NV50LoweringPreSSA::handleLOAD(Instruction *i)
 {
    ValueRef src = i->src(0);
+   Symbol *sym = i->getSrc(0)->asSym();
+
+   if (prog->getType() == Program::TYPE_COMPUTE) {
+      if (sym->inFile(FILE_MEMORY_SHARED) ||
+          sym->inFile(FILE_MEMORY_BUFFER) ||
+          sym->inFile(FILE_MEMORY_GLOBAL)) {
+         return handleLDST(i);
+      }
+   }
 
    if (src.isIndirect(1)) {
       assert(prog->getType() == Program::TYPE_GEOMETRY);
@@ -1326,6 +1354,54 @@ NV50LoweringPreSSA::handleLOAD(Instruction *i)
 
       i->setIndirect(0, 1, NULL);
       i->setIndirect(0, 0, addr);
+   }
+
+   return true;
+}
+
+bool
+NV50LoweringPreSSA::handleLDST(Instruction *i)
+{
+   ValueRef src = i->src(0);
+   Symbol *sym = i->getSrc(0)->asSym();
+
+   if (prog->getType() != Program::TYPE_COMPUTE) {
+      return true;
+   }
+
+   // Buffers just map directly to the different global memory spaces
+   if (sym->inFile(FILE_MEMORY_BUFFER)) {
+      sym->reg.file = FILE_MEMORY_GLOBAL;
+   }
+
+   if (sym->inFile(FILE_MEMORY_SHARED)) {
+
+      if (src.isIndirect(0)) {
+         Value *addr = i->getIndirect(0, 0);
+
+         if (!addr->inFile(FILE_ADDRESS)) {
+            // Move address from GPR into an address register
+            Value *new_addr = bld.getSSA(2, FILE_ADDRESS);
+            bld.mkMov(new_addr, addr);
+
+            i->setIndirect(0, 0, new_addr);
+         }
+      }
+   } else if (sym->inFile(FILE_MEMORY_GLOBAL)) {
+      // All global access must be indirect. There are no instruction forms
+      // with direct access.
+      Value *addr = i->getIndirect(0, 0);
+
+      Value *offset = bld.loadImm(bld.getSSA(), sym->reg.data.offset);
+      Value *sum;
+      if (addr != NULL)
+         sum = bld.mkOp2v(OP_ADD, TYPE_U32, bld.getSSA(), addr,
+                          offset);
+      else
+         sum = offset;
+
+      i->setIndirect(0, 0, sum);
+      sym->reg.data.offset = 0;
    }
 
    return true;
@@ -1428,6 +1504,9 @@ NV50LoweringPreSSA::visit(Instruction *i)
       return handleEXPORT(i);
    case OP_LOAD:
       return handleLOAD(i);
+   case OP_ATOM:
+   case OP_STORE:
+      return handleLDST(i);
    case OP_RDSV:
       return handleRDSV(i);
    case OP_WRSV:

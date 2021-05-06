@@ -78,7 +78,7 @@ public:
 
    FetchInstruction(GPRVector dst, PValue src, int scratch_size);
 
-   void replace_values(const ValueSet& candiates, PValue new_value) override;
+   void replace_values(const ValueSet& candidates, PValue new_value) override;
    EVFetchInstr vc_opcode() const { return m_vc_opcode;}
    EVFetchType fetch_type() const { return m_fetch_type;}
 
@@ -130,6 +130,9 @@ public:
    const std::vector<PInstruction>& prelude() const;
 
    bool has_prelude() const {return !m_prelude.empty();}
+
+   bool accept(InstructionVisitor& visitor) override {return visitor.visit(*this);}
+   bool accept(ConstInstructionVisitor& visitor) const override {return visitor.visit(*this);}
 
 private:
    bool is_equal_to(const Instruction& lhs) const override;

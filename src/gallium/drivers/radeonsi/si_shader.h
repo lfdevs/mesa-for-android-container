@@ -156,17 +156,12 @@ struct si_context;
 #define SI_MAX_ATTRIBS    16
 #define SI_MAX_VS_OUTPUTS 40
 
-/* Shader IO unique indices are supported for VARYING_SLOT_VARn with an
- * index smaller than this.
- */
-#define SI_MAX_IO_GENERIC 32
-
 #define SI_NGG_PRIM_EDGE_FLAG_BITS ((1 << 9) | (1 << 19) | (1 << 29))
 
 /* SGPR user data indices */
 enum
 {
-   SI_SGPR_RW_BUFFERS, /* rings (& stream-out, VS only) */
+   SI_SGPR_INTERNAL_BINDINGS,
    SI_SGPR_BINDLESS_SAMPLERS_AND_IMAGES,
    SI_SGPR_CONST_AND_SHADER_BUFFERS, /* or just a constant buffer 0 pointer */
    SI_SGPR_SAMPLERS_AND_IMAGES,
@@ -338,8 +333,9 @@ struct si_shader_info {
    ubyte input_semantic[PIPE_MAX_SHADER_INPUTS];
    ubyte input_interpolate[PIPE_MAX_SHADER_INPUTS];
    ubyte input_usage_mask[PIPE_MAX_SHADER_INPUTS];
+   ubyte input_fp16_lo_hi_valid[PIPE_MAX_SHADER_INPUTS];
    ubyte output_semantic[PIPE_MAX_SHADER_OUTPUTS];
-   char output_semantic_to_slot[VARYING_SLOT_TESS_MAX];
+   char output_semantic_to_slot[VARYING_SLOT_VAR15_16BIT + 1];
    ubyte output_usagemask[PIPE_MAX_SHADER_OUTPUTS];
    ubyte output_readmask[PIPE_MAX_SHADER_OUTPUTS];
    ubyte output_streams[PIPE_MAX_SHADER_OUTPUTS];
@@ -394,6 +390,10 @@ struct si_shader_info {
    bool writes_layer;
    bool uses_bindless_samplers;
    bool uses_bindless_images;
+   bool uses_indirect_descriptor;
+
+   bool uses_vmem_return_type_sampler_or_bvh;
+   bool uses_vmem_return_type_other; /* all other VMEM loads and atomics with return */
 
    /** Whether all codepaths write tess factors in all invocations. */
    bool tessfactors_are_def_in_all_invocs;
@@ -449,7 +449,6 @@ struct si_shader_selector {
    ubyte num_vbos_in_user_sgprs;
    unsigned pa_cl_vs_out_cntl;
    unsigned ngg_cull_vert_threshold; /* UINT32_MAX = disabled */
-   unsigned ngg_cull_nonindexed_fast_launch_vert_threshold; /* UINT32_MAX = disabled */
    ubyte clipdist_mask;
    ubyte culldist_mask;
    enum pipe_prim_type rast_prim;
@@ -720,6 +719,9 @@ struct si_shader_binary {
    const char *elf_buffer;
    size_t elf_size;
 
+   char *uploaded_code;
+   size_t uploaded_code_size;
+
    char *llvm_ir_string;
 };
 
@@ -878,6 +880,7 @@ struct si_shader *si_generate_gs_copy_shader(struct si_screen *sscreen,
 /* si_shader_nir.c */
 void si_nir_scan_shader(const struct nir_shader *nir, struct si_shader_info *info);
 void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first);
+void si_nir_late_opts(nir_shader *nir);
 void si_finalize_nir(struct pipe_screen *screen, void *nirptr, bool optimize);
 
 /* si_state_shaders.c */

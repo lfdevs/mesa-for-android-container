@@ -870,6 +870,7 @@ static void emit_store_global(struct lp_build_nir_context *bld_base,
 static void emit_atomic_global(struct lp_build_nir_context *bld_base,
                                nir_intrinsic_op nir_op,
                                unsigned addr_bit_size,
+                               unsigned val_bit_size,
                                LLVMValueRef addr,
                                LLVMValueRef val, LLVMValueRef val2,
                                LLVMValueRef *result)
@@ -877,7 +878,7 @@ static void emit_atomic_global(struct lp_build_nir_context *bld_base,
    struct gallivm_state *gallivm = bld_base->base.gallivm;
    LLVMBuilderRef builder = gallivm->builder;
    struct lp_build_context *uint_bld = &bld_base->uint_bld;
-
+   struct lp_build_context *atom_bld = get_int_bld(bld_base, true, val_bit_size);
    LLVMValueRef atom_res = lp_build_alloca(gallivm,
                                            LLVMTypeOf(val), "");
    LLVMValueRef exec_mask = mask_vec(bld_base);
@@ -897,10 +898,11 @@ static void emit_atomic_global(struct lp_build_nir_context *bld_base,
    cond = LLVMBuildExtractElement(gallivm->builder, cond, loop_state.counter, "");
    lp_build_if(&ifthen, gallivm, cond);
 
+   addr_ptr = LLVMBuildBitCast(gallivm->builder, addr_ptr, LLVMPointerType(LLVMTypeOf(value_ptr), 0), "");
    if (nir_op == nir_intrinsic_global_atomic_comp_swap) {
       LLVMValueRef cas_src_ptr = LLVMBuildExtractElement(gallivm->builder, val2,
                                                          loop_state.counter, "");
-      cas_src_ptr = LLVMBuildBitCast(gallivm->builder, cas_src_ptr, uint_bld->elem_type, "");
+      cas_src_ptr = LLVMBuildBitCast(gallivm->builder, cas_src_ptr, atom_bld->elem_type, "");
       scalar = LLVMBuildAtomicCmpXchg(builder, addr_ptr, value_ptr,
                                       cas_src_ptr,
                                       LLVMAtomicOrderingSequentiallyConsistent,
@@ -914,7 +916,7 @@ static void emit_atomic_global(struct lp_build_nir_context *bld_base,
          op = LLVMAtomicRMWBinOpAdd;
          break;
       case nir_intrinsic_global_atomic_exchange:
-         addr_ptr = LLVMBuildBitCast(gallivm->builder, addr_ptr, LLVMPointerType(LLVMTypeOf(value_ptr), 0), "");
+
          op = LLVMAtomicRMWBinOpXchg;
          break;
       case nir_intrinsic_global_atomic_and:
@@ -953,7 +955,19 @@ static void emit_atomic_global(struct lp_build_nir_context *bld_base,
    lp_build_else(&ifthen);
    temp_res = LLVMBuildLoad(builder, atom_res, "");
    bool is_float = LLVMTypeOf(val) == bld_base->base.vec_type;
-   LLVMValueRef zero_val = is_float ? lp_build_const_float(gallivm, 0) : lp_build_const_int32(gallivm, 0);
+   LLVMValueRef zero_val;
+   if (is_float) {
+      if (val_bit_size == 64)
+         zero_val = lp_build_const_double(gallivm, 0);
+      else
+         zero_val = lp_build_const_float(gallivm, 0);
+   } else {
+      if (val_bit_size == 64)
+         zero_val = lp_build_const_int64(gallivm, 0);
+      else
+         zero_val = lp_build_const_int32(gallivm, 0);
+   }
+
    temp_res = LLVMBuildInsertElement(builder, temp_res, zero_val, loop_state.counter, "");
    LLVMBuildStore(builder, temp_res, atom_res);
    lp_build_endif(&ifthen);
@@ -974,15 +988,14 @@ static void emit_load_ubo(struct lp_build_nir_context *bld_base,
    struct gallivm_state *gallivm = bld_base->base.gallivm;
    LLVMBuilderRef builder = gallivm->builder;
    struct lp_build_context *uint_bld = &bld_base->uint_bld;
-   struct lp_build_context *bld_broad = bit_size == 64 ? &bld_base->dbl_bld : &bld_base->base;
+   struct lp_build_context *bld_broad = get_int_bld(bld_base, true, bit_size);
    LLVMValueRef consts_ptr = lp_build_array_get(gallivm, bld->consts_ptr, index);
    unsigned size_shift = bit_size_to_shift_size(bit_size);
    if (size_shift)
       offset = lp_build_shr(uint_bld, offset, lp_build_const_int_vec(gallivm, uint_bld->type, size_shift));
-   if (bit_size == 64) {
-      LLVMTypeRef dptr_type = LLVMPointerType(bld_base->dbl_bld.elem_type, 0);
-      consts_ptr = LLVMBuildBitCast(builder, consts_ptr, dptr_type, "");
-   }
+
+   LLVMTypeRef ptr_type = LLVMPointerType(bld_broad->elem_type, 0);
+   consts_ptr = LLVMBuildBitCast(builder, consts_ptr, ptr_type, "");
 
    if (offset_is_uniform) {
       offset = LLVMBuildExtractElement(builder, offset, lp_build_const_int32(gallivm, 0), "");
@@ -998,6 +1011,13 @@ static void emit_load_ubo(struct lp_build_nir_context *bld_base,
       LLVMValueRef num_consts = lp_build_array_get(gallivm, bld->const_sizes_ptr, index);
 
       num_consts = lp_build_broadcast_scalar(uint_bld, num_consts);
+      if (bit_size == 64)
+         num_consts = lp_build_shr_imm(uint_bld, num_consts, 1);
+      else if (bit_size == 16)
+         num_consts = lp_build_shl_imm(uint_bld, num_consts, 1);
+      else if (bit_size == 8)
+         num_consts = lp_build_shl_imm(uint_bld, num_consts, 2);
+
       for (unsigned c = 0; c < nc; c++) {
          LLVMValueRef this_offset = lp_build_add(uint_bld, offset, lp_build_const_int_vec(gallivm, uint_bld->type, c));
          overflow_mask = lp_build_compare(gallivm, uint_bld->type, PIPE_FUNC_GEQUAL,
@@ -1154,6 +1174,7 @@ static void emit_store_mem(struct lp_build_nir_context *bld_base,
 
 static void emit_atomic_mem(struct lp_build_nir_context *bld_base,
                             nir_intrinsic_op nir_op,
+                            uint32_t bit_size,
                             LLVMValueRef index, LLVMValueRef offset,
                             LLVMValueRef val, LLVMValueRef val2,
                             LLVMValueRef *result)
@@ -1164,7 +1185,8 @@ static void emit_atomic_mem(struct lp_build_nir_context *bld_base,
    LLVMValueRef ssbo_ptr;
    struct lp_build_context *uint_bld = &bld_base->uint_bld;
    LLVMValueRef ssbo_limit = NULL;
-
+   uint32_t shift_val = bit_size_to_shift_size(bit_size);
+   struct lp_build_context *atomic_bld = get_int_bld(bld_base, true, bit_size);
    if (index) {
       LLVMValueRef ssbo_size_ptr = lp_build_array_get(gallivm, bld->ssbo_sizes_ptr, LLVMBuildExtractElement(builder, index, lp_build_const_int32(gallivm, 0), ""));
       ssbo_limit = LLVMBuildAShr(gallivm->builder, ssbo_size_ptr, lp_build_const_int32(gallivm, 2), "");
@@ -1173,9 +1195,9 @@ static void emit_atomic_mem(struct lp_build_nir_context *bld_base,
    } else
       ssbo_ptr = bld->shared_ptr;
 
-   offset = lp_build_shr_imm(uint_bld, offset, 2);
+   offset = lp_build_shr_imm(uint_bld, offset, shift_val);
    LLVMValueRef atom_res = lp_build_alloca(gallivm,
-                                           uint_bld->vec_type, "");
+                                           atomic_bld->vec_type, "");
 
    LLVMValueRef exec_mask = mask_vec(bld_base);
    if (ssbo_limit) {
@@ -1188,13 +1210,17 @@ static void emit_atomic_mem(struct lp_build_nir_context *bld_base,
 
    LLVMValueRef value_ptr = LLVMBuildExtractElement(gallivm->builder, val,
                                                     loop_state.counter, "");
-   value_ptr = LLVMBuildBitCast(gallivm->builder, value_ptr, uint_bld->elem_type, "");
+   value_ptr = LLVMBuildBitCast(gallivm->builder, value_ptr, atomic_bld->elem_type, "");
 
    offset = LLVMBuildExtractElement(gallivm->builder, offset,
                                    loop_state.counter, "");
 
-   LLVMValueRef scalar_ptr = LLVMBuildGEP(builder, ssbo_ptr,
-                                          &offset, 1, "");
+   LLVMValueRef scalar_ptr;
+   if (bit_size != 32) {
+      LLVMValueRef ssbo_ptr2 = LLVMBuildBitCast(builder, ssbo_ptr, LLVMPointerType(atomic_bld->elem_type, 0), "");
+      scalar_ptr = LLVMBuildGEP(builder, ssbo_ptr2, &offset, 1, "");
+   } else
+      scalar_ptr = LLVMBuildGEP(builder, ssbo_ptr, &offset, 1, "");
 
    struct lp_build_if_state ifthen;
    LLVMValueRef cond, temp_res;
@@ -1206,7 +1232,7 @@ static void emit_atomic_mem(struct lp_build_nir_context *bld_base,
    if (nir_op == nir_intrinsic_ssbo_atomic_comp_swap || nir_op == nir_intrinsic_shared_atomic_comp_swap) {
       LLVMValueRef cas_src_ptr = LLVMBuildExtractElement(gallivm->builder, val2,
                                                          loop_state.counter, "");
-      cas_src_ptr = LLVMBuildBitCast(gallivm->builder, cas_src_ptr, uint_bld->elem_type, "");
+      cas_src_ptr = LLVMBuildBitCast(gallivm->builder, cas_src_ptr, atomic_bld->elem_type, "");
       scalar = LLVMBuildAtomicCmpXchg(builder, scalar_ptr, value_ptr,
                                       cas_src_ptr,
                                       LLVMAtomicOrderingSequentiallyConsistent,
@@ -1266,7 +1292,8 @@ static void emit_atomic_mem(struct lp_build_nir_context *bld_base,
    LLVMBuildStore(builder, temp_res, atom_res);
    lp_build_else(&ifthen);
    temp_res = LLVMBuildLoad(builder, atom_res, "");
-   temp_res = LLVMBuildInsertElement(builder, temp_res, lp_build_const_int32(gallivm, 0), loop_state.counter, "");
+   LLVMValueRef zero = bit_size == 64 ? lp_build_const_int64(gallivm, 0) : lp_build_const_int32(gallivm, 0);
+   temp_res = LLVMBuildInsertElement(builder, temp_res, zero, loop_state.counter, "");
    LLVMBuildStore(builder, temp_res, atom_res);
    lp_build_endif(&ifthen);
 
@@ -1476,6 +1503,9 @@ static void emit_sysval_intrin(struct lp_build_nir_context *bld_base,
    case nir_intrinsic_load_base_vertex:
       result[0] = bld->system_values.basevertex;
       break;
+   case nir_intrinsic_load_first_vertex:
+      result[0] = bld->system_values.firstvertex;
+      break;
    case nir_intrinsic_load_vertex_id:
       result[0] = bld->system_values.vertex_id;
       break;
@@ -1556,6 +1586,22 @@ static void emit_sysval_intrin(struct lp_build_nir_context *bld_base,
       break;
    case nir_intrinsic_load_sample_mask_in:
       result[0] = bld->system_values.sample_mask_in;
+      break;
+   case nir_intrinsic_load_view_index:
+      result[0] = lp_build_broadcast_scalar(&bld_base->uint_bld, bld->system_values.view_index);
+      break;
+   case nir_intrinsic_load_subgroup_invocation: {
+      LLVMValueRef elems[LP_MAX_VECTOR_LENGTH];
+      for(unsigned i = 0; i < bld->bld_base.base.type.length; ++i)
+         elems[i] = lp_build_const_int32(gallivm, i);
+      result[0] = LLVMConstVector(elems, bld->bld_base.base.type.length);
+      break;
+   }
+   case nir_intrinsic_load_subgroup_id:
+      result[0] = lp_build_broadcast_scalar(&bld_base->uint_bld, bld->system_values.subgroup_id);
+      break;
+   case nir_intrinsic_load_num_subgroups:
+      result[0] = lp_build_broadcast_scalar(&bld_base->uint_bld, bld->system_values.num_subgroups);
       break;
    }
 }
@@ -1772,19 +1818,21 @@ emit_prologue(struct lp_build_nir_soa_context *bld)
    }
 }
 
-static void emit_vote(struct lp_build_nir_context *bld_base, LLVMValueRef src, nir_intrinsic_instr *instr, LLVMValueRef result[4])
+static void emit_vote(struct lp_build_nir_context *bld_base, LLVMValueRef src,
+                      nir_intrinsic_instr *instr, LLVMValueRef result[4])
 {
    struct gallivm_state * gallivm = bld_base->base.gallivm;
    LLVMBuilderRef builder = gallivm->builder;
-
+   uint32_t bit_size = nir_src_bit_size(instr->src[0]);
    LLVMValueRef exec_mask = mask_vec(bld_base);
    struct lp_build_loop_state loop_state;
-
    LLVMValueRef outer_cond = LLVMBuildICmp(builder, LLVMIntNE, exec_mask, bld_base->uint_bld.zero, "");
 
-   LLVMValueRef res_store = lp_build_alloca(gallivm, bld_base->int_bld.elem_type, "");
+   LLVMValueRef res_store = lp_build_alloca(gallivm, bld_base->uint_bld.elem_type, "");
+   LLVMValueRef eq_store = lp_build_alloca(gallivm, get_int_bld(bld_base, true, bit_size)->elem_type, "");
    LLVMValueRef init_val = NULL;
-   if (instr->intrinsic == nir_intrinsic_vote_ieq) {
+   if (instr->intrinsic == nir_intrinsic_vote_ieq ||
+       instr->intrinsic == nir_intrinsic_vote_feq) {
       /* for equal we unfortunately have to loop and find the first valid one. */
       lp_build_loop_begin(&loop_state, gallivm, lp_build_const_int32(gallivm, 0));
       LLVMValueRef if_cond = LLVMBuildExtractElement(gallivm->builder, outer_cond, loop_state.counter, "");
@@ -1793,11 +1841,12 @@ static void emit_vote(struct lp_build_nir_context *bld_base, LLVMValueRef src, n
       lp_build_if(&ifthen, gallivm, if_cond);
       LLVMValueRef value_ptr = LLVMBuildExtractElement(gallivm->builder, src,
                                                        loop_state.counter, "");
-      LLVMBuildStore(builder, value_ptr, res_store);
+      LLVMBuildStore(builder, value_ptr, eq_store);
+      LLVMBuildStore(builder, lp_build_const_int32(gallivm, -1), res_store);
       lp_build_endif(&ifthen);
       lp_build_loop_end_cond(&loop_state, lp_build_const_int32(gallivm, bld_base->uint_bld.type.length),
-			     NULL, LLVMIntUGE);
-      init_val = LLVMBuildLoad(builder, res_store, "");
+                             NULL, LLVMIntUGE);
+      init_val = LLVMBuildLoad(builder, eq_store, "");
    } else {
       LLVMBuildStore(builder, lp_build_const_int32(gallivm, instr->intrinsic == nir_intrinsic_vote_any ? 0 : -1), res_store);
    }
@@ -1813,10 +1862,17 @@ static void emit_vote(struct lp_build_nir_context *bld_base, LLVMValueRef src, n
    lp_build_if(&ifthen, gallivm, if_cond);
    res = LLVMBuildLoad(builder, res_store, "");
 
-   if (instr->intrinsic == nir_intrinsic_vote_ieq) {
+   if (instr->intrinsic == nir_intrinsic_vote_feq) {
+      struct lp_build_context *flt_bld = get_flt_bld(bld_base, bit_size);
+      LLVMValueRef tmp = LLVMBuildFCmp(builder, LLVMRealUEQ,
+                                       LLVMBuildBitCast(builder, init_val, flt_bld->elem_type, ""),
+                                       LLVMBuildBitCast(builder, value_ptr, flt_bld->elem_type, ""), "");
+      tmp = LLVMBuildSExt(builder, tmp, bld_base->uint_bld.elem_type, "");
+      res = LLVMBuildAnd(builder, res, tmp, "");
+   } else if (instr->intrinsic == nir_intrinsic_vote_ieq) {
       LLVMValueRef tmp = LLVMBuildICmp(builder, LLVMIntEQ, init_val, value_ptr, "");
       tmp = LLVMBuildSExt(builder, tmp, bld_base->uint_bld.elem_type, "");
-      res = LLVMBuildOr(builder, res, tmp, "");
+      res = LLVMBuildAnd(builder, res, tmp, "");
    } else if (instr->intrinsic == nir_intrinsic_vote_any)
       res = LLVMBuildOr(builder, res, value_ptr, "");
    else
@@ -1824,8 +1880,255 @@ static void emit_vote(struct lp_build_nir_context *bld_base, LLVMValueRef src, n
    LLVMBuildStore(builder, res, res_store);
    lp_build_endif(&ifthen);
    lp_build_loop_end_cond(&loop_state, lp_build_const_int32(gallivm, bld_base->uint_bld.type.length),
-			  NULL, LLVMIntUGE);
+                          NULL, LLVMIntUGE);
    result[0] = lp_build_broadcast_scalar(&bld_base->uint_bld, LLVMBuildLoad(builder, res_store, ""));
+}
+
+static void emit_ballot(struct lp_build_nir_context *bld_base, LLVMValueRef src, nir_intrinsic_instr *instr, LLVMValueRef result[4])
+{
+   struct gallivm_state * gallivm = bld_base->base.gallivm;
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMValueRef exec_mask = mask_vec(bld_base);
+   struct lp_build_loop_state loop_state;
+   src = LLVMBuildAnd(builder, src, exec_mask, "");
+   LLVMValueRef res_store = lp_build_alloca(gallivm, bld_base->int_bld.elem_type, "");
+   LLVMValueRef res;
+   lp_build_loop_begin(&loop_state, gallivm, lp_build_const_int32(gallivm, 0));
+   LLVMValueRef value_ptr = LLVMBuildExtractElement(gallivm->builder, src,
+                                                    loop_state.counter, "");
+   res = LLVMBuildLoad(builder, res_store, "");
+   res = LLVMBuildOr(builder,
+                     res,
+                     LLVMBuildAnd(builder, value_ptr, LLVMBuildShl(builder, lp_build_const_int32(gallivm, 1), loop_state.counter, ""), ""), "");
+   LLVMBuildStore(builder, res, res_store);
+
+   lp_build_loop_end_cond(&loop_state, lp_build_const_int32(gallivm, bld_base->uint_bld.type.length),
+                          NULL, LLVMIntUGE);
+   result[0] = lp_build_broadcast_scalar(&bld_base->uint_bld, LLVMBuildLoad(builder, res_store, ""));
+}
+
+static void emit_elect(struct lp_build_nir_context *bld_base, LLVMValueRef result[4])
+{
+   struct gallivm_state *gallivm = bld_base->base.gallivm;
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMValueRef exec_mask = mask_vec(bld_base);
+   struct lp_build_loop_state loop_state;
+
+   LLVMValueRef idx_store = lp_build_alloca(gallivm, bld_base->int_bld.elem_type, "");
+   LLVMValueRef found_store = lp_build_alloca(gallivm, bld_base->int_bld.elem_type, "");
+   lp_build_loop_begin(&loop_state, gallivm, lp_build_const_int32(gallivm, 0));
+   LLVMValueRef value_ptr = LLVMBuildExtractElement(gallivm->builder, exec_mask,
+                                                    loop_state.counter, "");
+   LLVMValueRef cond = LLVMBuildICmp(gallivm->builder,
+                                     LLVMIntEQ,
+                                     value_ptr,
+                                     lp_build_const_int32(gallivm, -1), "");
+   LLVMValueRef cond2 = LLVMBuildICmp(gallivm->builder,
+                                      LLVMIntEQ,
+                                      LLVMBuildLoad(builder, found_store, ""),
+                                      lp_build_const_int32(gallivm, 0), "");
+
+   cond = LLVMBuildAnd(builder, cond, cond2, "");
+   struct lp_build_if_state ifthen;
+   lp_build_if(&ifthen, gallivm, cond);
+   LLVMBuildStore(builder, lp_build_const_int32(gallivm, 1), found_store);
+   LLVMBuildStore(builder, loop_state.counter, idx_store);
+   lp_build_endif(&ifthen);
+   lp_build_loop_end_cond(&loop_state, lp_build_const_int32(gallivm, bld_base->uint_bld.type.length),
+                          NULL, LLVMIntUGE);
+
+   result[0] = LLVMBuildInsertElement(builder, bld_base->uint_bld.zero,
+                                      lp_build_const_int32(gallivm, -1),
+                                      LLVMBuildLoad(builder, idx_store, ""),
+                                      "");
+}
+
+static void emit_reduce(struct lp_build_nir_context *bld_base, LLVMValueRef src,
+                        nir_intrinsic_instr *instr, LLVMValueRef result[4])
+{
+   struct gallivm_state *gallivm = bld_base->base.gallivm;
+   LLVMBuilderRef builder = gallivm->builder;
+   uint32_t bit_size = nir_src_bit_size(instr->src[0]);
+   /* can't use llvm reduction intrinsics because of exec_mask */
+   LLVMValueRef exec_mask = mask_vec(bld_base);
+   struct lp_build_loop_state loop_state;
+   nir_op reduction_op = nir_intrinsic_reduction_op(instr);
+
+   LLVMValueRef res_store = NULL;
+   LLVMValueRef scan_store;
+   struct lp_build_context *int_bld = get_int_bld(bld_base, true, bit_size);
+
+   if (instr->intrinsic != nir_intrinsic_reduce)
+      res_store = lp_build_alloca(gallivm, int_bld->vec_type, "");
+
+   scan_store = lp_build_alloca(gallivm, int_bld->elem_type, "");
+
+   struct lp_build_context elem_bld;
+   bool is_flt = reduction_op == nir_op_fadd ||
+      reduction_op == nir_op_fmul ||
+      reduction_op == nir_op_fmin ||
+      reduction_op == nir_op_fmax;
+   bool is_unsigned = reduction_op == nir_op_umin ||
+      reduction_op == nir_op_umax;
+
+   struct lp_build_context *vec_bld = is_flt ? get_flt_bld(bld_base, bit_size) :
+      get_int_bld(bld_base, is_unsigned, bit_size);
+
+   lp_build_context_init(&elem_bld, gallivm, lp_elem_type(vec_bld->type));
+
+   LLVMValueRef store_val = NULL;
+   /*
+    * Put the identity value for the operation into the storage
+    */
+   switch (reduction_op) {
+   case nir_op_fmin: {
+      LLVMValueRef flt_max = bit_size == 64 ? LLVMConstReal(LLVMDoubleTypeInContext(gallivm->context), INFINITY) :
+         lp_build_const_float(gallivm, INFINITY);
+      store_val = LLVMBuildBitCast(builder, flt_max, int_bld->elem_type, "");
+      break;
+   }
+   case nir_op_fmax: {
+      LLVMValueRef flt_min = bit_size == 64 ? LLVMConstReal(LLVMDoubleTypeInContext(gallivm->context), -INFINITY) :
+         lp_build_const_float(gallivm, -INFINITY);
+      store_val = LLVMBuildBitCast(builder, flt_min, int_bld->elem_type, "");
+      break;
+   }
+   case nir_op_fmul: {
+      LLVMValueRef flt_one = bit_size == 64 ? LLVMConstReal(LLVMDoubleTypeInContext(gallivm->context), 1.0) :
+         lp_build_const_float(gallivm, 1.0);
+      store_val = LLVMBuildBitCast(builder, flt_one, int_bld->elem_type, "");
+      break;
+   }
+   case nir_op_umin:
+      store_val = lp_build_const_int32(gallivm, UINT_MAX);
+      break;
+   case nir_op_imin:
+      store_val = lp_build_const_int32(gallivm, INT_MAX);
+      break;
+   case nir_op_imax:
+      store_val = lp_build_const_int32(gallivm, INT_MIN);
+      break;
+   case nir_op_imul:
+      store_val = lp_build_const_int32(gallivm, 1);
+      break;
+   case nir_op_iand:
+      store_val = lp_build_const_int32(gallivm, 0xffffffff);
+      break;
+   default:
+      break;
+   }
+   if (store_val)
+      LLVMBuildStore(builder, store_val, scan_store);
+
+   LLVMValueRef outer_cond = LLVMBuildICmp(builder, LLVMIntNE, exec_mask, bld_base->uint_bld.zero, "");
+
+   lp_build_loop_begin(&loop_state, gallivm, lp_build_const_int32(gallivm, 0));
+
+   struct lp_build_if_state ifthen;
+   LLVMValueRef if_cond = LLVMBuildExtractElement(gallivm->builder, outer_cond, loop_state.counter, "");
+   lp_build_if(&ifthen, gallivm, if_cond);
+   LLVMValueRef value = LLVMBuildExtractElement(gallivm->builder, src, loop_state.counter, "");
+
+   LLVMValueRef res = NULL;
+   LLVMValueRef scan_val = LLVMBuildLoad(gallivm->builder, scan_store, "");
+   if (instr->intrinsic != nir_intrinsic_reduce)
+      res = LLVMBuildLoad(gallivm->builder, res_store, "");
+
+   if (instr->intrinsic == nir_intrinsic_exclusive_scan)
+      res = LLVMBuildInsertElement(builder, res, scan_val, loop_state.counter, "");
+
+   if (is_flt) {
+      scan_val = LLVMBuildBitCast(builder, scan_val, elem_bld.elem_type, "");
+      value = LLVMBuildBitCast(builder, value, elem_bld.elem_type, "");
+   }
+   switch (reduction_op) {
+   case nir_op_fadd:
+   case nir_op_iadd:
+      scan_val = lp_build_add(&elem_bld, value, scan_val);
+      break;
+   case nir_op_fmul:
+   case nir_op_imul:
+      scan_val = lp_build_mul(&elem_bld, value, scan_val);
+      break;
+   case nir_op_imin:
+   case nir_op_umin:
+   case nir_op_fmin:
+      scan_val = lp_build_min(&elem_bld, value, scan_val);
+      break;
+   case nir_op_imax:
+   case nir_op_umax:
+   case nir_op_fmax:
+      scan_val = lp_build_max(&elem_bld, value, scan_val);
+      break;
+   case nir_op_iand:
+      scan_val = lp_build_and(&elem_bld, value, scan_val);
+      break;
+   case nir_op_ior:
+      scan_val = lp_build_or(&elem_bld, value, scan_val);
+      break;
+   case nir_op_ixor:
+      scan_val = lp_build_xor(&elem_bld, value, scan_val);
+      break;
+   default:
+      assert(0);
+      break;
+   }
+   if (is_flt)
+      scan_val = LLVMBuildBitCast(builder, scan_val, int_bld->elem_type, "");
+   LLVMBuildStore(builder, scan_val, scan_store);
+
+   if (instr->intrinsic == nir_intrinsic_inclusive_scan) {
+      res = LLVMBuildInsertElement(builder, res, scan_val, loop_state.counter, "");
+   }
+
+   if (instr->intrinsic != nir_intrinsic_reduce)
+      LLVMBuildStore(builder, res, res_store);
+   lp_build_endif(&ifthen);
+
+   lp_build_loop_end_cond(&loop_state, lp_build_const_int32(gallivm, bld_base->uint_bld.type.length),
+                          NULL, LLVMIntUGE);
+   if (instr->intrinsic == nir_intrinsic_reduce)
+      result[0] = lp_build_broadcast_scalar(int_bld, LLVMBuildLoad(builder, scan_store, ""));
+   else
+      result[0] = LLVMBuildLoad(builder, res_store, "");
+}
+
+static void emit_read_invocation(struct lp_build_nir_context *bld_base,
+                                 LLVMValueRef src,
+                                 unsigned bit_size,
+                                 LLVMValueRef invoc,
+                                 LLVMValueRef result[4])
+{
+   struct gallivm_state *gallivm = bld_base->base.gallivm;
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMValueRef idx;
+   struct lp_build_context *uint_bld = get_int_bld(bld_base, true, bit_size);
+   if (invoc) {
+      idx = invoc;
+      idx = LLVMBuildExtractElement(gallivm->builder, idx, lp_build_const_int32(gallivm, 0), "");
+   } else {
+      /* have to find the first active invocation */
+      LLVMValueRef exec_mask = mask_vec(bld_base);
+      struct lp_build_loop_state loop_state;
+      LLVMValueRef res_store = lp_build_alloca(gallivm, bld_base->int_bld.elem_type, "");
+      LLVMValueRef outer_cond = LLVMBuildICmp(builder, LLVMIntNE, exec_mask, bld_base->uint_bld.zero, "");
+      lp_build_loop_begin(&loop_state, gallivm, lp_build_const_int32(gallivm, bld_base->uint_bld.type.length));
+
+      LLVMValueRef if_cond = LLVMBuildExtractElement(gallivm->builder, outer_cond, loop_state.counter, "");
+      struct lp_build_if_state ifthen;
+
+      lp_build_if(&ifthen, gallivm, if_cond);
+      LLVMBuildStore(builder, loop_state.counter, res_store);
+      lp_build_endif(&ifthen);
+
+      lp_build_loop_end_cond(&loop_state, lp_build_const_int32(gallivm, -1),
+                             lp_build_const_int32(gallivm, -1), LLVMIntEQ);
+      idx = LLVMBuildLoad(builder, res_store, "");
+   }
+
+   LLVMValueRef value = LLVMBuildExtractElement(gallivm->builder,
+                                                src, idx, "");
+   result[0] = lp_build_broadcast_scalar(uint_bld, value);
 }
 
 static void
@@ -2073,6 +2376,10 @@ void lp_build_nir_soa(struct gallivm_state *gallivm,
    bld.bld_base.image_op = emit_image_op;
    bld.bld_base.image_size = emit_image_size;
    bld.bld_base.vote = emit_vote;
+   bld.bld_base.elect = emit_elect;
+   bld.bld_base.reduce = emit_reduce;
+   bld.bld_base.ballot = emit_ballot;
+   bld.bld_base.read_invocation = emit_read_invocation;
    bld.bld_base.helper_invocation = emit_helper_invocation;
    bld.bld_base.interp_at = emit_interp_at;
    bld.bld_base.load_scratch = emit_load_scratch;

@@ -122,7 +122,7 @@ apply_attr_wa_block(nir_block *block, struct attr_wa_state *state)
                                                : nir_u2f32(b, val);
       }
 
-      nir_ssa_def_rewrite_uses_after(&intrin->dest.ssa, nir_src_for_ssa(val),
+      nir_ssa_def_rewrite_uses_after(&intrin->dest.ssa, val,
                                      val->parent_instr);
       state->impl_progress = true;
    }

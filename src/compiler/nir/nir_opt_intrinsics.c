@@ -107,7 +107,7 @@ opt_intrinsics_alu(nir_builder *b, nir_alu_instr *alu,
 
    if (replacement) {
       nir_ssa_def_rewrite_uses(&alu->dest.dest.ssa,
-                               nir_src_for_ssa(replacement));
+                               replacement);
       nir_instr_remove(&alu->instr);
       return true;
    } else {
@@ -149,7 +149,7 @@ opt_intrinsics_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
                   new_expr = nir_inot(b, new_expr);
 
                nir_ssa_def_rewrite_uses(&alu->dest.dest.ssa,
-                                        nir_src_for_ssa(new_expr));
+                                        new_expr);
                nir_instr_remove(&alu->instr);
                progress = true;
             }

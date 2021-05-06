@@ -153,6 +153,9 @@ unsigned ac_get_tbuffer_format(enum chip_class chip_class, unsigned dfmt, unsign
       case V_008F0C_BUF_DATA_FORMAT_2_10_10_10:
          format = V_008F0C_IMG_FORMAT_2_10_10_10_UINT;
          break;
+      case V_008F0C_BUF_DATA_FORMAT_10_11_11:
+         format = V_008F0C_IMG_FORMAT_10_11_11_UINT;
+         break;
       }
 
       // Use the regularity properties of the combined format enum.

@@ -29,9 +29,9 @@
 #include "swrast/swrast.h"
 #include "drivers/common/meta.h"
 
-#include "intel_batchbuffer.h"
-#include "intel_fbo.h"
-#include "intel_mipmap_tree.h"
+#include "brw_batch.h"
+#include "brw_fbo.h"
+#include "brw_mipmap_tree.h"
 
 #include "brw_context.h"
 #include "brw_blorp.h"
@@ -47,7 +47,6 @@ static const char *buffer_names[] = {
    [BUFFER_DEPTH] = "depth",
    [BUFFER_STENCIL] = "stencil",
    [BUFFER_ACCUM] = "accum",
-   [BUFFER_AUX0] = "aux0",
    [BUFFER_COLOR0] = "color0",
    [BUFFER_COLOR1] = "color1",
    [BUFFER_COLOR2] = "color2",
@@ -66,8 +65,8 @@ debug_mask(const char *name, GLbitfield mask)
    if (INTEL_DEBUG & DEBUG_BLIT) {
       DBG("%s clear:", name);
       for (i = 0; i < BUFFER_COUNT; i++) {
-	 if (mask & (1 << i))
-	    DBG(" %s", buffer_names[i]);
+         if (mask & (1 << i))
+            DBG(" %s", buffer_names[i]);
       }
       DBG("\n");
    }
@@ -86,7 +85,7 @@ noop_scissor(struct gl_framebuffer *fb)
 }
 
 /**
- * Implements fast depth clears on gen6+.
+ * Implements fast depth clears on gfx6+.
  *
  * Fast clears basically work by setting a flag in each of the subspans
  * represented in the HiZ buffer that says "When you need the depth values for
@@ -102,19 +101,19 @@ brw_fast_clear_depth(struct gl_context *ctx)
 {
    struct brw_context *brw = brw_context(ctx);
    struct gl_framebuffer *fb = ctx->DrawBuffer;
-   struct intel_renderbuffer *depth_irb =
-      intel_get_renderbuffer(fb, BUFFER_DEPTH);
-   struct intel_mipmap_tree *mt = depth_irb->mt;
+   struct brw_renderbuffer *depth_irb =
+      brw_get_renderbuffer(fb, BUFFER_DEPTH);
+   struct brw_mipmap_tree *mt = depth_irb->mt;
    struct gl_renderbuffer_attachment *depth_att = &fb->Attachment[BUFFER_DEPTH];
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    if (INTEL_DEBUG & DEBUG_NO_FAST_CLEAR)
       return false;
 
-   if (devinfo->gen < 6)
+   if (devinfo->ver < 6)
       return false;
 
-   if (!intel_renderbuffer_has_hiz(depth_irb))
+   if (!brw_renderbuffer_has_hiz(depth_irb))
       return false;
 
    /* We only handle full buffer clears -- otherwise you'd have to track whether
@@ -152,10 +151,10 @@ brw_fast_clear_depth(struct gl_context *ctx)
        *        width of the map (LOD0) is not multiple of 16, fast clear
        *        optimization must be disabled.
        */
-      if (devinfo->gen == 6 &&
+      if (devinfo->ver == 6 &&
           (minify(mt->surf.phys_level0_sa.width,
                   depth_irb->mt_level - mt->first_level) % 16) != 0)
-	 return false;
+         return false;
       break;
 
    default:
@@ -179,7 +178,7 @@ brw_fast_clear_depth(struct gl_context *ctx)
     */
    if (mt->fast_clear_color.f32[0] != clear_value) {
       for (uint32_t level = mt->first_level; level <= mt->last_level; level++) {
-         if (!intel_miptree_level_has_hiz(mt, level))
+         if (!brw_miptree_level_has_hiz(mt, level))
             continue;
 
          const unsigned level_layers = brw_get_num_logical_layers(mt, level);
@@ -193,7 +192,7 @@ brw_fast_clear_depth(struct gl_context *ctx)
             }
 
             enum isl_aux_state aux_state =
-               intel_miptree_get_aux_state(mt, level, layer);
+               brw_miptree_get_aux_state(mt, level, layer);
 
             if (aux_state != ISL_AUX_STATE_CLEAR &&
                 aux_state != ISL_AUX_STATE_COMPRESSED_CLEAR) {
@@ -207,30 +206,29 @@ brw_fast_clear_depth(struct gl_context *ctx)
              * Fortunately, few applications ever change their depth clear
              * value so this shouldn't happen often.
              */
-            intel_hiz_exec(brw, mt, level, layer, 1,
-                           ISL_AUX_OP_FULL_RESOLVE);
-            intel_miptree_set_aux_state(brw, mt, level, layer, 1,
+            brw_hiz_exec(brw, mt, level, layer, 1, ISL_AUX_OP_FULL_RESOLVE);
+            brw_miptree_set_aux_state(brw, mt, level, layer, 1,
                                         ISL_AUX_STATE_RESOLVED);
          }
       }
 
       const union isl_color_value clear_color = { .f32 = {clear_value, } };
-      intel_miptree_set_clear_color(brw, mt, clear_color);
+      brw_miptree_set_clear_color(brw, mt, clear_color);
    }
 
    for (unsigned a = 0; a < num_layers; a++) {
       enum isl_aux_state aux_state =
-         intel_miptree_get_aux_state(mt, depth_irb->mt_level,
+         brw_miptree_get_aux_state(mt, depth_irb->mt_level,
                                      depth_irb->mt_layer + a);
 
       if (aux_state != ISL_AUX_STATE_CLEAR) {
-         intel_hiz_exec(brw, mt, depth_irb->mt_level,
-                        depth_irb->mt_layer + a, 1,
-                        ISL_AUX_OP_FAST_CLEAR);
+         brw_hiz_exec(brw, mt, depth_irb->mt_level,
+                      depth_irb->mt_layer + a, 1,
+                      ISL_AUX_OP_FAST_CLEAR);
       }
    }
 
-   intel_miptree_set_aux_state(brw, mt, depth_irb->mt_level,
+   brw_miptree_set_aux_state(brw, mt, depth_irb->mt_level,
                                depth_irb->mt_layer, num_layers,
                                ISL_AUX_STATE_CLEAR);
    return true;
@@ -254,13 +252,13 @@ brw_clear(struct gl_context *ctx, GLbitfield mask)
       brw->front_buffer_dirty = true;
    }
 
-   intel_prepare_render(brw);
+   brw_prepare_render(brw);
    brw_workaround_depthstencil_alignment(brw, partial_clear ? 0 : mask);
 
    if (mask & BUFFER_BIT_DEPTH) {
       if (brw_fast_clear_depth(ctx)) {
-	 DBG("fast clear: depth\n");
-	 mask &= ~BUFFER_BIT_DEPTH;
+         DBG("fast clear: depth\n");
+         mask &= ~BUFFER_BIT_DEPTH;
       }
    }
 
@@ -271,7 +269,7 @@ brw_clear(struct gl_context *ctx, GLbitfield mask)
       mask &= ~BUFFER_BITS_COLOR;
    }
 
-   if (devinfo->gen >= 6 && (mask & BUFFER_BITS_DEPTH_STENCIL)) {
+   if (devinfo->ver >= 6 && (mask & BUFFER_BITS_DEPTH_STENCIL)) {
       brw_blorp_clear_depth_stencil(brw, fb, mask, partial_clear);
       debug_mask("blorp depth/stencil", mask & BUFFER_BITS_DEPTH_STENCIL);
       mask &= ~BUFFER_BITS_DEPTH_STENCIL;
@@ -298,7 +296,7 @@ brw_clear(struct gl_context *ctx, GLbitfield mask)
 
 
 void
-intelInitClearFuncs(struct dd_function_table *functions)
+brw_init_clear_functions(struct dd_function_table *functions)
 {
    functions->Clear = brw_clear;
 }

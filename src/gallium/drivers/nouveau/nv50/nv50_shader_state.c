@@ -37,13 +37,13 @@ nv50_constbufs_validate(struct nv50_context *nv50)
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
    unsigned s;
 
-   for (s = 0; s < 3; ++s) {
+   for (s = 0; s < NV50_MAX_3D_SHADER_STAGES; ++s) {
       unsigned p;
 
-      if (s == PIPE_SHADER_FRAGMENT)
+      if (s == NV50_SHADER_STAGE_FRAGMENT)
          p = NV50_3D_SET_PROGRAM_CB_PROGRAM_FRAGMENT;
       else
-      if (s == PIPE_SHADER_GEOMETRY)
+      if (s == NV50_SHADER_STAGE_GEOMETRY)
          p = NV50_3D_SET_PROGRAM_CB_PROGRAM_GEOMETRY;
       else
          p = NV50_3D_SET_PROGRAM_CB_PROGRAM_VERTEX;
@@ -109,6 +109,11 @@ nv50_constbufs_validate(struct nv50_context *nv50)
          }
       }
    }
+
+   /* Invalidate all COMPUTE constbufs because they are aliased with 3D. */
+   nv50->dirty_cp |= NV50_NEW_CP_CONSTBUF;
+   nv50->constbuf_dirty[NV50_SHADER_STAGE_COMPUTE] |= nv50->constbuf_valid[NV50_SHADER_STAGE_COMPUTE];
+   nv50->state.uniform_buffer_bound[NV50_SHADER_STAGE_COMPUTE] = false;
 }
 
 static bool

@@ -34,7 +34,7 @@
 #include "main/enums.h"
 
 #include "program/program.h"
-#include "intel_batchbuffer.h"
+#include "brw_batch.h"
 
 #include "brw_defines.h"
 #include "brw_context.h"
@@ -90,7 +90,7 @@ static void brw_ff_gs_alloc_regs(struct brw_ff_gs_compile *c,
  * The following information is passed to the GS thread in R0, and needs to be
  * included in the first URB_WRITE or FF_SYNC message sent by the GS:
  *
- * - DWORD 0 [31:0] handle info (Gen4 only)
+ * - DWORD 0 [31:0] handle info (Gfx4 only)
  * - DWORD 5 [7:0] FFTID
  * - DWORD 6 [31:0] Debug info
  * - DWORD 7 [31:0] Debug info
@@ -247,7 +247,7 @@ brw_ff_gs_quads(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key)
    /* Use polygons for correct edgeflag behaviour. Note that vertex 3
     * is the PV for quads, but vertex 0 for polygons:
     */
-   if (c->func.devinfo->gen == 5)
+   if (c->func.devinfo->ver == 5)
       brw_ff_gs_ff_sync(c, 1);
    brw_ff_gs_overwrite_header_dw2(
       c, ((_3DPRIM_POLYGON << URB_WRITE_PRIM_TYPE_SHIFT)
@@ -283,7 +283,7 @@ brw_ff_gs_quad_strip(struct brw_ff_gs_compile *c,
    brw_ff_gs_alloc_regs(c, 4, false);
    brw_ff_gs_initialize_header(c);
 
-   if (c->func.devinfo->gen == 5)
+   if (c->func.devinfo->ver == 5)
       brw_ff_gs_ff_sync(c, 1);
    brw_ff_gs_overwrite_header_dw2(
       c, ((_3DPRIM_POLYGON << URB_WRITE_PRIM_TYPE_SHIFT)
@@ -317,7 +317,7 @@ void brw_ff_gs_lines(struct brw_ff_gs_compile *c)
    brw_ff_gs_alloc_regs(c, 2, false);
    brw_ff_gs_initialize_header(c);
 
-   if (c->func.devinfo->gen == 5)
+   if (c->func.devinfo->ver == 5)
       brw_ff_gs_ff_sync(c, 1);
    brw_ff_gs_overwrite_header_dw2(
       c, ((_3DPRIM_LINESTRIP << URB_WRITE_PRIM_TYPE_SHIFT)
@@ -330,12 +330,12 @@ void brw_ff_gs_lines(struct brw_ff_gs_compile *c)
 }
 
 /**
- * Generate the geometry shader program used on Gen6 to perform stream output
+ * Generate the geometry shader program used on Gfx6 to perform stream output
  * (transform feedback).
  */
 void
-gen6_sol_program(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key,
-	         unsigned num_verts, bool check_edge_flags)
+gfx6_sol_program(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key,
+                 unsigned num_verts, bool check_edge_flags)
 {
    struct brw_codegen *p = &c->func;
    brw_inst *inst;
@@ -358,10 +358,10 @@ gen6_sol_program(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key,
        * Make sure that the buffers have enough room for all the vertices.
        */
       brw_ADD(p, get_element_ud(c->reg.temp, 0),
-	         get_element_ud(c->reg.SVBI, 0), brw_imm_ud(num_verts));
+                 get_element_ud(c->reg.SVBI, 0), brw_imm_ud(num_verts));
       brw_CMP(p, vec1(brw_null_reg()), BRW_CONDITIONAL_LE,
-	         get_element_ud(c->reg.temp, 0),
-	         get_element_ud(c->reg.SVBI, 4));
+                 get_element_ud(c->reg.temp, 0),
+                 get_element_ud(c->reg.SVBI, 4));
       brw_IF(p, BRW_EXECUTE_1);
 
       /* Compute the destination indices to write to.  Usually we use SVBI[0]
@@ -453,7 +453,7 @@ gen6_sol_program(struct brw_ff_gs_compile *c, struct brw_ff_gs_prog_key *key,
                           final_write ? c->reg.temp : brw_null_reg(), /* dest */
                           1, /* msg_reg_nr */
                           c->reg.header, /* src0 */
-                          BRW_GEN6_SOL_BINDING_START + binding, /* binding_table_index */
+                          BRW_GFX6_SOL_BINDING_START + binding, /* binding_table_index */
                           final_write); /* send_commit_msg */
          }
       }

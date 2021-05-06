@@ -66,6 +66,10 @@ static struct ir3_shader_variant *variant;
  */
 static struct ir3_block          *block;   /* current shader block */
 static struct ir3_instruction    *instr;   /* current instruction */
+static unsigned ip; /* current instruction pointer */
+static struct hash_table *labels;
+
+void *ir3_parser_dead_ctx;
 
 static struct {
 	unsigned flags;
@@ -80,6 +84,12 @@ static struct {
 
 int ir3_yyget_lineno(void);
 
+static void new_label(const char *name)
+{
+	ralloc_steal(labels, (void *) name);
+	_mesa_hash_table_insert(labels, name, (void *)(uintptr_t)ip);
+}
+
 static struct ir3_instruction * new_instr(opc_t opc)
 {
 	instr = ir3_instr_create(block, opc, 5);
@@ -88,6 +98,7 @@ static struct ir3_instruction * new_instr(opc_t opc)
 	instr->nop = iflags.nop;
 	instr->line = ir3_yyget_lineno();
 	iflags.flags = iflags.repeat = iflags.nop = 0;
+	ip++;
 	return instr;
 }
 
@@ -96,6 +107,9 @@ static void new_shader(void)
 	variant->ir = ir3_create(variant->shader->compiler, variant);
 	block = ir3_block_create(variant->ir);
 	list_addtail(&block->node, &variant->ir->block_list);
+	ip = 0;
+	labels = _mesa_hash_table_create(variant, _mesa_hash_string, _mesa_key_string_equal);
+	ir3_parser_dead_ctx = ralloc_context(NULL);
 }
 
 static type_t parse_type(const char **type)
@@ -167,7 +181,12 @@ static void fixup_cat5_s2en(void)
 	 * fix things up.
 	 */
 	struct ir3_register *s2en_src = instr->regs[instr->regs_count - 1];
-	assert(s2en_src->flags & IR3_REG_HALF);
+
+	if (instr->flags & IR3_INSTR_B)
+		assert(!(s2en_src->flags & IR3_REG_HALF));
+	else
+		assert(s2en_src->flags & IR3_REG_HALF);
+
 	for (int i = 1; i < instr->regs_count - 1; i++) {
 		instr->regs[i+1] = instr->regs[i];
 	}
@@ -204,6 +223,24 @@ static void add_sysval(unsigned reg, unsigned compmask, gl_system_value sysval)
 	variant->total_in++;
 }
 
+static bool resolve_labels(void)
+{
+	int instr_ip = 0;
+	foreach_instr (instr, &block->instr_list) {
+		if (opc_cat(instr->opc) == 0 && instr->cat0.target_label) {
+			struct hash_entry *entry = _mesa_hash_table_search(labels, instr->cat0.target_label);
+			if (!entry) {
+				fprintf(stderr, "unknown label %s\n", instr->cat0.target_label);
+				return false;
+			}
+			int target_ip = (uintptr_t)entry->data;
+			instr->cat0.immed = target_ip - instr_ip;
+		}
+		instr_ip++;
+	}
+	return true;
+}
+
 #ifdef YYDEBUG
 int yydebug;
 #endif
@@ -229,10 +266,12 @@ struct ir3 * ir3_parse(struct ir3_shader_variant *v,
 #endif
 	info = k;
 	variant = v;
-	if (yyparse()) {
+	if (yyparse() || !resolve_labels()) {
 		ir3_destroy(variant->ir);
 		variant->ir = NULL;
 	}
+	ralloc_free(labels);
+	ralloc_free(ir3_parser_dead_ctx);
 	return variant->ir;
 }
 %}
@@ -276,6 +315,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_A_INVOCATIONID
 %token <tok> T_A_WGID
 %token <tok> T_A_NUMWG
+%token <tok> T_A_BRANCHSTACK
 %token <tok> T_A_IN
 %token <tok> T_A_OUT
 %token <tok> T_A_TEX
@@ -289,7 +329,6 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 
 %token <tok> T_HR
 %token <tok> T_HC
-%token <tok> T_HP
 
 /* dst register flags */
 %token <tok> T_EVEN
@@ -515,6 +554,10 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_OP_GETSPID
 %token <tok> T_OP_GETWID
 
+/* category 7: */
+%token <tok> T_OP_BAR
+%token <tok> T_OP_FENCE
+
 /* type qualifiers: */
 %token <tok> T_TYPE_F16
 %token <tok> T_TYPE_F32
@@ -587,6 +630,7 @@ header:            localsize_header
 |                  invocationid_header
 |                  wgid_header
 |                  numwg_header
+|                  branchstack_header
 |                  in_header
 |                  out_header
 |                  tex_header
@@ -597,9 +641,9 @@ const_val:         T_FLOAT   { $$ = fui($1); }
 |                  T_HEX     { $$ = $1;      }
 
 localsize_header:  T_A_LOCALSIZE const_val ',' const_val ',' const_val {
-                       info->local_size[0] = $2;
-                       info->local_size[1] = $4;
-                       info->local_size[2] = $6;
+                       variant->local_size[0] = $2;
+                       variant->local_size[1] = $4;
+                       variant->local_size[2] = $6;
 }
 
 const_header:      T_A_CONST '(' T_CONSTANT ')' const_val ',' const_val ',' const_val ',' const_val {
@@ -632,6 +676,8 @@ numwg_header:      T_A_NUMWG '(' T_CONSTANT ')' {
                        /* reserve space in immediates for the actual value to be plugged in later: */
                        add_const($3, 0, 0, 0, 0);
 }
+
+branchstack_header: T_A_BRANCHSTACK const_val { variant->branchstack = $2; }
 
 /* Stubs for now */
 in_header:         T_A_IN '(' T_REGISTER ')' T_IDENTIFIER '(' T_IDENTIFIER '=' integer ')' { }
@@ -666,6 +712,10 @@ instr:             iflags cat0_instr
 |                  iflags cat4_instr
 |                  iflags cat5_instr { fixup_cat5_s2en(); }
 |                  iflags cat6_instr
+|                  iflags cat7_instr
+|                  label
+
+label:             T_IDENTIFIER ':' { new_label($1); }
 
 cat0_src1:         '!' T_P0        { instr->cat0.inv1 = true; instr->cat0.comp1 = $2 >> 1; }
 |                  T_P0            { instr->cat0.comp1 = $1 >> 1; }
@@ -674,6 +724,7 @@ cat0_src2:         '!' T_P0        { instr->cat0.inv2 = true; instr->cat0.comp2 
 |                  T_P0            { instr->cat0.comp2 = $1 >> 1; }
 
 cat0_immed:        '#' integer     { instr->cat0.immed = $2; }
+|                  '#' T_IDENTIFIER { ralloc_steal(instr, (void *)$2); instr->cat0.target_label = $2; }
 
 cat0_instr:        T_OP_NOP        { new_instr(OPC_NOP); }
 |                  T_OP_BR         { new_instr(OPC_B)->cat0.brtype = BRANCH_PLAIN; } cat0_src1 ',' cat0_immed
@@ -873,6 +924,7 @@ cat5_flag:         '.' T_3D       { instr->flags |= IR3_INSTR_3D; }
 |                  '.' 'p'        { instr->flags |= IR3_INSTR_P; }
 |                  '.' 's'        { instr->flags |= IR3_INSTR_S; }
 |                  '.' T_S2EN     { instr->flags |= IR3_INSTR_S2EN; }
+|                  '.' T_NONUNIFORM  { instr->flags |= IR3_INSTR_NONUNIF; }
 |                  '.' T_BASE     { instr->flags |= IR3_INSTR_B; instr->cat5.tex_base = $2; }
 cat5_flags:
 |                  cat5_flag cat5_flags
@@ -880,13 +932,16 @@ cat5_flags:
 cat5_samp:         T_SAMP         { instr->cat5.samp = $1; }
 cat5_tex:          T_TEX          { if (instr->flags & IR3_INSTR_B) instr->cat5.samp |= ($1 << 4); else instr->cat5.tex = $1; }
 cat5_type:         '(' type ')'   { instr->cat5.type = $2; }
+cat5_a1:           src_reg        { instr->flags |= IR3_INSTR_A1EN; }
 
 cat5_instr:        cat5_opc_dsxypp cat5_flags dst_reg ',' src_reg
+|                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' src_reg ',' src_reg
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' src_reg ',' cat5_samp ',' cat5_tex
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' src_reg ',' cat5_samp
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' src_reg ',' cat5_tex
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' src_reg
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' cat5_samp ',' cat5_tex
+|                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' cat5_samp ',' cat5_a1
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' cat5_samp
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg ',' cat5_tex
 |                  cat5_opc cat5_flags cat5_type dst_reg ',' src_reg
@@ -960,12 +1015,12 @@ cat6_atomic_l:     cat6_atomic_opc cat6_typed cat6_dim cat6_type '.' cat6_immed 
 cat6_atomic:       cat6_atomic_g
 |                  cat6_atomic_l
 
-cat6_ibo_opc_1src: T_OP_RESINFO   { new_instr(OPC_RESINFO)->cat6.type = TYPE_U32; }
+cat6_ibo_opc_1src: T_OP_RESINFO   { new_instr(OPC_RESINFO); }
 
 cat6_ibo_opc_ldgb: T_OP_LDGB      { new_instr(OPC_LDGB); }
 cat6_ibo_opc_stgb: T_OP_STGB      { new_instr(OPC_STGB); }
 
-cat6_ibo:          cat6_ibo_opc_1src cat6_dim dst_reg ',' 'g' '[' cat6_reg_or_immed ']'
+cat6_ibo:          cat6_ibo_opc_1src cat6_type cat6_dim dst_reg ',' 'g' '[' cat6_reg_or_immed ']'
 |                  cat6_ibo_opc_ldgb cat6_typed cat6_dim cat6_type '.' cat6_immed dst_reg ',' 'g' '[' cat6_reg_or_immed ']' ',' reg ',' reg
 |                  cat6_ibo_opc_stgb cat6_typed cat6_dim cat6_type '.' cat6_immed { dummy_dst(); } 'g' '[' cat6_reg_or_immed ']' ',' reg ',' cat6_reg_or_immed ',' reg
 
@@ -1037,6 +1092,19 @@ cat6_instr:        cat6_load
 |                  cat6_bindless_ibo
 |                  cat6_todo
 
+cat7_scope:        '.' 'w'  { instr->cat7.w = true; }
+|                  '.' 'r'  { instr->cat7.r = true; }
+|                  '.' 'l'  { instr->cat7.l = true; }
+|                  '.' 'g'  { instr->cat7.g = true; }
+
+cat7_scopes:
+|                  cat7_scope cat7_scopes
+
+cat7_barrier:      T_OP_BAR                { new_instr(OPC_BAR); } cat7_scopes
+|                  T_OP_FENCE              { new_instr(OPC_FENCE); } cat7_scopes
+
+cat7_instr:        cat7_barrier
+
 reg:               T_REGISTER     { $$ = new_reg($1, 0); }
 |                  T_A0           { $$ = new_reg((61 << 3), IR3_REG_HALF); }
 |                  T_A1           { $$ = new_reg((61 << 3) + 1, IR3_REG_HALF); }
@@ -1101,16 +1169,16 @@ relative:          relative_gpr
 immediate_cat1:    integer             { new_reg(0, IR3_REG_IMMED)->iim_val = type_size(instr->cat1.src_type) < 32 ? $1 & 0xffff : $1; }
 |                  '(' integer ')'     { new_reg(0, IR3_REG_IMMED)->fim_val = $2; }
 |                  '(' float ')'       { new_reg(0, IR3_REG_IMMED)->fim_val = $2; }
-|                  T_HP integer ')'    { new_reg(0, IR3_REG_IMMED | IR3_REG_HALF)->iim_val = $2 & 0xffff; }
-|                  T_HP float ')'      { new_reg(0, IR3_REG_IMMED | IR3_REG_HALF)->uim_val = _mesa_float_to_half($2); }
+|                  'h' '(' integer ')' { new_reg(0, IR3_REG_IMMED | IR3_REG_HALF)->iim_val = $3 & 0xffff; }
+|                  'h' '(' float ')'   { new_reg(0, IR3_REG_IMMED | IR3_REG_HALF)->uim_val = _mesa_float_to_half($3); }
 |                  '(' T_NAN ')'       { new_reg(0, IR3_REG_IMMED)->fim_val = NAN; }
 |                  '(' T_INF ')'       { new_reg(0, IR3_REG_IMMED)->fim_val = INFINITY; }
 
 immediate:         integer             { new_reg(0, IR3_REG_IMMED)->iim_val = $1; }
 |                  '(' integer ')'     { new_reg(0, IR3_REG_IMMED)->fim_val = $2; }
-|                  '(' flut_immed ')'  { new_reg(0, IR3_REG_IMMED)->uim_val = $2; }
-|                  T_HP integer ')'    { new_reg(0, IR3_REG_IMMED | IR3_REG_HALF)->iim_val = $2; }
-|                  T_HP flut_immed ')' { new_reg(0, IR3_REG_IMMED | IR3_REG_HALF)->uim_val = $2; }
+|                  flut_immed          { new_reg(0, IR3_REG_IMMED)->uim_val = $1; }
+|                  'h' '(' integer ')' { new_reg(0, IR3_REG_IMMED | IR3_REG_HALF)->iim_val = $3; }
+|                  'h' flut_immed      { new_reg(0, IR3_REG_IMMED | IR3_REG_HALF)->uim_val = $2; }
 
 /* Float LUT values accepted as immed: */
 flut_immed:        T_FLUT_0_0

@@ -3242,10 +3242,17 @@ dri2_bind_wayland_display_wl(_EGLDisplay *disp, struct wl_display *wl_dpy)
       .is_format_supported = dri2_wl_is_format_supported
    };
    int flags = 0;
+   char *device_name;
    uint64_t cap;
 
    if (dri2_dpy->wl_server_drm)
            return EGL_FALSE;
+
+   device_name = drmGetRenderDeviceNameFromFd(dri2_dpy->fd);
+   if (!device_name)
+      device_name = strdup(dri2_dpy->device_name);
+   if (!device_name)
+      return EGL_FALSE;
 
    if (drmGetCap(dri2_dpy->fd, DRM_CAP_PRIME, &cap) == 0 &&
        cap == (DRM_PRIME_CAP_IMPORT | DRM_PRIME_CAP_EXPORT) &&
@@ -3254,8 +3261,10 @@ dri2_bind_wayland_display_wl(_EGLDisplay *disp, struct wl_display *wl_dpy)
       flags |= WAYLAND_DRM_PRIME;
 
    dri2_dpy->wl_server_drm =
-           wayland_drm_init(wl_dpy, dri2_dpy->device_name,
+           wayland_drm_init(wl_dpy, device_name,
                             &wl_drm_callbacks, disp, flags);
+
+   free(device_name);
 
    if (!dri2_dpy->wl_server_drm)
            return EGL_FALSE;

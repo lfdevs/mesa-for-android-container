@@ -272,7 +272,7 @@ clc_lower_input_image_deref(nir_builder *b, struct clc_image_lower_context *cont
                }
 
                /* No actual intrinsic needed here, just reference the loaded variable */
-               nir_ssa_def_rewrite_uses(&intrinsic->dest.ssa, nir_src_for_ssa(*cached_deref));
+               nir_ssa_def_rewrite_uses(&intrinsic->dest.ssa, *cached_deref);
                nir_instr_remove(&intrinsic->instr);
                break;
             }
@@ -369,7 +369,7 @@ clc_lower_64bit_semantics(nir_shader *nir)
                nir_ssa_def *i64 = nir_u2u64(&b, &intrinsic->dest.ssa);
                nir_ssa_def_rewrite_uses_after(
                   &intrinsic->dest.ssa,
-                  nir_src_for_ssa(i64),
+                  i64,
                   i64->parent_instr);
             }
          }
@@ -826,7 +826,7 @@ split_unaligned_load(nir_builder *b, nir_intrinsic_instr *intrin, unsigned align
    }
 
    nir_ssa_def *new_dest = nir_extract_bits(b, srcs, num_loads, 0, num_comps, intrin->dest.ssa.bit_size);
-   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, nir_src_for_ssa(new_dest));
+   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, new_dest);
    nir_instr_remove(&intrin->instr);
 }
 
@@ -976,7 +976,7 @@ scale_fdiv(nir_shader *nir)
             if (instr->type != nir_instr_type_alu)
                continue;
             nir_alu_instr *alu = nir_instr_as_alu(instr);
-            if (alu->op != nir_op_fdiv)
+            if (alu->op != nir_op_fdiv || alu->src[0].src.ssa->bit_size != 32)
                continue;
 
             b.cursor = nir_before_instr(instr);
@@ -1014,8 +1014,6 @@ clc_to_dxil(struct clc_context *ctx,
 {
    struct clc_dxil_object *dxil;
    struct nir_shader *nir;
-   char *err_log;
-   int ret;
 
    dxil = calloc(1, sizeof(*dxil));
    if (!dxil) {
@@ -1147,43 +1145,22 @@ clc_to_dxil(struct clc_context *ctx,
       } while (progress);
    }
 
-   // Before removing dead uniforms, dedupe constant samplers to make more dead uniforms
-   NIR_PASS_V(nir, clc_nir_dedupe_const_samplers);
-   NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_uniform | nir_var_mem_ubo | nir_var_mem_constant | nir_var_function_temp, NULL);
-
    NIR_PASS_V(nir, scale_fdiv);
 
    dxil_wrap_sampler_state int_sampler_states[PIPE_MAX_SHADER_SAMPLER_VIEWS] = { {{0}} };
    unsigned sampler_id = 0;
 
-   struct exec_list tmp_list;
-   exec_list_make_empty(&tmp_list);
+   struct exec_list inline_samplers_list;
+   exec_list_make_empty(&inline_samplers_list);
 
-   // Assign bindings for constant samplers, and move them to the end of the variable list
+   // Move inline samplers to the end of the uniforms list
    nir_foreach_variable_with_modes_safe(var, nir, nir_var_uniform) {
       if (glsl_type_is_sampler(var->type) && var->data.sampler.is_inline_sampler) {
-         int_sampler_states[sampler_id].wrap[0] =
-            int_sampler_states[sampler_id].wrap[1] =
-            int_sampler_states[sampler_id].wrap[2] =
-            wrap_from_cl_addressing(var->data.sampler.addressing_mode);
-         int_sampler_states[sampler_id].is_nonnormalized_coords =
-            !var->data.sampler.normalized_coordinates;
-         int_sampler_states[sampler_id].is_linear_filtering =
-            var->data.sampler.filter_mode == SAMPLER_FILTER_MODE_LINEAR;
-         var->data.binding = sampler_id++;
-
-         assert(metadata->num_const_samplers < CLC_MAX_SAMPLERS);
-         metadata->const_samplers[metadata->num_const_samplers].sampler_id = var->data.binding;
-         metadata->const_samplers[metadata->num_const_samplers].addressing_mode = var->data.sampler.addressing_mode;
-         metadata->const_samplers[metadata->num_const_samplers].normalized_coords = var->data.sampler.normalized_coordinates;
-         metadata->const_samplers[metadata->num_const_samplers].filter_mode = var->data.sampler.filter_mode;
-         metadata->num_const_samplers++;
-
          exec_node_remove(&var->node);
-         exec_list_push_tail(&tmp_list, &var->node);
+         exec_list_push_tail(&inline_samplers_list, &var->node);
       }
    }
-   exec_node_insert_list_after(exec_list_get_tail(&nir->variables), &tmp_list);
+   exec_node_insert_list_after(exec_list_get_tail(&nir->variables), &inline_samplers_list);
 
    NIR_PASS_V(nir, nir_lower_variable_initializers, ~(nir_var_function_temp | nir_var_shader_temp));
 
@@ -1276,6 +1253,32 @@ clc_to_dxil(struct clc_context *ctx,
       }
    }
 
+   // Before removing dead uniforms, dedupe constant samplers to make more dead uniforms
+   NIR_PASS_V(nir, clc_nir_dedupe_const_samplers);
+   NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_uniform | nir_var_mem_ubo | nir_var_mem_constant | nir_var_function_temp, NULL);
+
+   // Fill out inline sampler metadata, now that they've been deduped and dead ones removed
+   nir_foreach_variable_with_modes(var, nir, nir_var_uniform) {
+      if (glsl_type_is_sampler(var->type) && var->data.sampler.is_inline_sampler) {
+         int_sampler_states[sampler_id].wrap[0] =
+            int_sampler_states[sampler_id].wrap[1] =
+            int_sampler_states[sampler_id].wrap[2] =
+            wrap_from_cl_addressing(var->data.sampler.addressing_mode);
+         int_sampler_states[sampler_id].is_nonnormalized_coords =
+            !var->data.sampler.normalized_coordinates;
+         int_sampler_states[sampler_id].is_linear_filtering =
+            var->data.sampler.filter_mode == SAMPLER_FILTER_MODE_LINEAR;
+         var->data.binding = sampler_id++;
+
+         assert(metadata->num_const_samplers < CLC_MAX_SAMPLERS);
+         metadata->const_samplers[metadata->num_const_samplers].sampler_id = var->data.binding;
+         metadata->const_samplers[metadata->num_const_samplers].addressing_mode = var->data.sampler.addressing_mode;
+         metadata->const_samplers[metadata->num_const_samplers].normalized_coords = var->data.sampler.normalized_coordinates;
+         metadata->const_samplers[metadata->num_const_samplers].filter_mode = var->data.sampler.filter_mode;
+         metadata->num_const_samplers++;
+      }
+   }
+
    // Needs to come before lower_explicit_io
    NIR_PASS_V(nir, nir_lower_cl_images_to_tex);
    struct clc_image_lower_context image_lower_context = { metadata, &srv_id, &uav_id };
@@ -1356,7 +1359,7 @@ clc_to_dxil(struct clc_context *ctx,
    NIR_PASS_V(nir, dxil_nir_lower_loads_stores_to_dxil);
    NIR_PASS_V(nir, dxil_nir_opt_alu_deref_srcs);
    NIR_PASS_V(nir, dxil_nir_lower_atomics_to_dxil);
-   NIR_PASS_V(nir, dxil_nir_lower_fp16_casts);
+   NIR_PASS_V(nir, nir_lower_fp16_casts);
    NIR_PASS_V(nir, nir_lower_convert_alu_types, NULL);
 
    // Convert pack to pack_split
@@ -1396,12 +1399,12 @@ clc_to_dxil(struct clc_context *ctx,
        */
       unsigned alignment = size < 128 ? (1 << (ffs(size) - 1)) : 128;
 
-      nir->info.cs.shared_size = align(nir->info.cs.shared_size, alignment);
-      metadata->args[i].localptr.sharedmem_offset = nir->info.cs.shared_size;
-      nir->info.cs.shared_size += size;
+      nir->info.shared_size = align(nir->info.shared_size, alignment);
+      metadata->args[i].localptr.sharedmem_offset = nir->info.shared_size;
+      nir->info.shared_size += size;
    }
 
-   metadata->local_mem_size = nir->info.cs.shared_size;
+   metadata->local_mem_size = nir->info.shared_size;
    metadata->priv_mem_size = nir->scratch_size;
 
    /* DXIL double math is too limited compared to what NIR expects. Let's refuse

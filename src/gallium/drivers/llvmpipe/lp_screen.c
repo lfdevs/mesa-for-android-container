@@ -223,8 +223,9 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 64;
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
       return 1;
+   /* Adressing that many 64bpp texels fits in an i32 so this is a reasonable value */
    case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
-      return 65536;
+      return 134217728;
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
       return 16;
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
@@ -233,6 +234,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return PIPE_MAX_VIEWPORTS;
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_NATIVE;
+   case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
    case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
       return 1;
    case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
@@ -324,6 +326,13 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
    case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
       return 0;
+
+   case PIPE_CAP_SHAREABLE_SHADERS:
+      /* Can't expose shareable shaders because the draw shaders reference the
+       * draw module's state, which is per-context.
+       */
+      return 0;
+
    case PIPE_CAP_MAX_GS_INVOCATIONS:
       return 32;
    case PIPE_CAP_MAX_SHADER_BUFFER_SIZE:
@@ -332,11 +341,13 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_TG4_COMPONENT_IN_SWIZZLE:
    case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
       return 1;
+   case PIPE_CAP_SAMPLER_REDUCTION_MINMAX:
    case PIPE_CAP_TGSI_TXQS:
    case PIPE_CAP_TGSI_VOTE:
    case PIPE_CAP_LOAD_CONSTBUF:
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
    case PIPE_CAP_SAMPLE_SHADING:
+   case PIPE_CAP_GL_SPIRV:
    case PIPE_CAP_POST_DEPTH_COVERAGE:
    case PIPE_CAP_PACKED_UNIFORMS: {
       struct llvmpipe_screen *lscreen = llvmpipe_screen(screen);
@@ -677,6 +688,10 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
       }
    }
 
+   if (!(bind & PIPE_BIND_VERTEX_BUFFER) &&
+       util_format_is_scaled(format))
+      return false;
+
    if (bind & PIPE_BIND_DISPLAY_TARGET) {
       if(!winsys->is_displaytarget_format_supported(winsys, bind, format))
          return false;
@@ -691,8 +706,7 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
    }
 
    if (format_desc->layout == UTIL_FORMAT_LAYOUT_ASTC ||
-       format_desc->layout == UTIL_FORMAT_LAYOUT_ATC ||
-       format_desc->layout == UTIL_FORMAT_LAYOUT_FXT1) {
+       format_desc->layout == UTIL_FORMAT_LAYOUT_ATC) {
       /* Software decoding is not hooked up. */
       return false;
    }
@@ -919,7 +933,7 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
 
    screen->allow_cl = !!getenv("LP_CL");
    screen->use_tgsi = (LP_DEBUG & DEBUG_TGSI_IR);
-   screen->num_threads = util_cpu_caps.nr_cpus > 1 ? util_cpu_caps.nr_cpus : 0;
+   screen->num_threads = util_get_cpu_caps()->nr_cpus > 1 ? util_get_cpu_caps()->nr_cpus : 0;
 #ifdef EMBEDDED_DEVICE
    screen->num_threads = 0;
 #endif

@@ -28,6 +28,7 @@
 
 #include "util/u_dynarray.h"
 #include "pipe/p_state.h"
+#include "pan_cs.h"
 #include "pan_pool.h"
 #include "pan_resource.h"
 #include "pan_scoreboard.h"
@@ -47,9 +48,6 @@ struct panfrost_batch_fence {
          */
         struct panfrost_batch *batch;
 };
-
-#define PAN_REQ_MSAA            (1 << 0)
-#define PAN_REQ_DEPTH_WRITE     (1 << 1)
 
 /* A panfrost_batch corresponds to a bound FBO we're rendering to,
  * collecting over multiple draws. */
@@ -82,10 +80,6 @@ struct panfrost_batch {
         /* Amount of shared memory needed per workgroup (for compute) */
         unsigned shared_size;
 
-        /* Whether this job uses the corresponding requirement (PAN_REQ_*
-         * bitmask) */
-        unsigned requirements;
-
         /* The bounding box covered by this job, taking scissors into account.
          * Basically, the bounding box we have to run fragment shaders for */
 
@@ -115,23 +109,24 @@ struct panfrost_batch {
         /* Shared memory BO bound to the batch, or NULL if none bound yet */
         struct panfrost_bo *shared_memory;
 
-        /* Tiler heap BO bound to the batch, or NULL if none bound yet */
-        struct panfrost_bo *tiler_heap;
-
-        /* Dummy tiler BO bound to the batch, or NULL if none bound yet */
-        struct panfrost_bo *tiler_dummy;
-
         /* Framebuffer descriptor. */
         struct panfrost_ptr framebuffer;
 
-        /* Bifrost tiler meta descriptor. */
-        mali_ptr tiler_meta;
+        /* Thread local storage descriptor. */
+        struct panfrost_ptr tls;
+
+        /* Tiler context */
+        struct pan_tiler_context tiler_ctx;
 
         /* Output sync object. Only valid when submitted is true. */
         struct panfrost_batch_fence *out_sync;
 
         /* Batch dependencies */
         struct util_dynarray dependencies;
+
+        /* Indirect draw data */
+        struct panfrost_ptr indirect_draw_ctx;
+        unsigned indirect_draw_job_id;
 };
 
 /* Functions for managing the above */
@@ -182,12 +177,6 @@ panfrost_batch_get_scratchpad(struct panfrost_batch *batch, unsigned size, unsig
 struct panfrost_bo *
 panfrost_batch_get_shared_memory(struct panfrost_batch *batch, unsigned size, unsigned workgroup_count);
 
-mali_ptr
-panfrost_batch_get_polygon_list(struct panfrost_batch *batch, unsigned size);
-
-struct panfrost_bo *
-panfrost_batch_get_tiler_dummy(struct panfrost_batch *batch);
-
 void
 panfrost_batch_clear(struct panfrost_batch *batch,
                      unsigned buffers,
@@ -204,13 +193,13 @@ panfrost_batch_intersection_scissor(struct panfrost_batch *batch,
                                     unsigned minx, unsigned miny,
                                     unsigned maxx, unsigned maxy);
 
-bool
-panfrost_batch_is_scanout(struct panfrost_batch *batch);
-
 mali_ptr
 panfrost_batch_get_bifrost_tiler(struct panfrost_batch *batch, unsigned vertex_count);
 
 mali_ptr
 panfrost_batch_reserve_framebuffer(struct panfrost_batch *batch);
+
+mali_ptr
+panfrost_batch_reserve_tls(struct panfrost_batch *batch, bool compute);
 
 #endif

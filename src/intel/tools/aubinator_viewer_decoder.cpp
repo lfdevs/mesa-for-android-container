@@ -32,8 +32,8 @@ aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
                            struct aub_viewer_cfg *cfg,
                            struct aub_viewer_decode_cfg *decode_cfg,
                            const struct gen_device_info *devinfo,
-                           struct gen_spec *spec,
-                           struct gen_batch_decode_bo (*get_bo)(void *, bool, uint64_t),
+                           struct intel_spec *spec,
+                           struct intel_batch_decode_bo (*get_bo)(void *, bool, uint64_t),
                            unsigned (*get_state_size)(void *, uint32_t),
                            void *user_data)
 {
@@ -52,15 +52,15 @@ aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
 
 static void
 aub_viewer_print_group(struct aub_viewer_decode_ctx *ctx,
-                       struct gen_group *group,
+                       struct intel_group *group,
                        uint64_t address, const void *map)
 {
-   struct gen_field_iterator iter;
+   struct intel_field_iterator iter;
    int last_dword = -1;
    const uint32_t *p = (const uint32_t *) map;
 
-   gen_field_iterator_init(&iter, group, p, 0, false);
-   while (gen_field_iterator_next(&iter)) {
+   intel_field_iterator_init(&iter, group, p, 0, false);
+   while (intel_field_iterator_next(&iter)) {
       if (ctx->decode_cfg->show_dwords) {
          int iter_dword = iter.end_bit / 32;
          if (last_dword != iter_dword) {
@@ -72,9 +72,9 @@ aub_viewer_print_group(struct aub_viewer_decode_ctx *ctx,
             last_dword = iter_dword;
          }
       }
-      if (!gen_field_is_header(iter.field)) {
+      if (!intel_field_is_header(iter.field)) {
          if (ctx->decode_cfg->field_filter.PassFilter(iter.name)) {
-            if (iter.field->type.kind == gen_type::GEN_TYPE_BOOL && iter.raw_value) {
+            if (iter.field->type.kind == intel_type::INTEL_TYPE_BOOL && iter.raw_value) {
                ImGui::Text("%s: ", iter.name); ImGui::SameLine();
                ImGui::TextColored(ctx->cfg->boolean_color, "true");
             } else {
@@ -91,10 +91,10 @@ aub_viewer_print_group(struct aub_viewer_decode_ctx *ctx,
    }
 }
 
-static struct gen_batch_decode_bo
+static struct intel_batch_decode_bo
 ctx_get_bo(struct aub_viewer_decode_ctx *ctx, bool ppgtt, uint64_t addr)
 {
-   if (gen_spec_get_gen(ctx->spec) >= gen_make_gen(8,0)) {
+   if (intel_spec_get_gen(ctx->spec) >= intel_make_gen(8,0)) {
       /* On Broadwell and above, we have 48-bit addresses which consume two
        * dwords.  Some packets require that these get stored in a "canonical
        * form" which means that bit 47 is sign-extended through the upper
@@ -104,9 +104,9 @@ ctx_get_bo(struct aub_viewer_decode_ctx *ctx, bool ppgtt, uint64_t addr)
       addr &= (~0ull >> 16);
    }
 
-   struct gen_batch_decode_bo bo = ctx->get_bo(ctx->user_data, ppgtt, addr);
+   struct intel_batch_decode_bo bo = ctx->get_bo(ctx->user_data, ppgtt, addr);
 
-   if (gen_spec_get_gen(ctx->spec) >= gen_make_gen(8,0))
+   if (intel_spec_get_gen(ctx->spec) >= intel_make_gen(8,0))
       bo.addr &= (~0ull >> 16);
 
    /* We may actually have an offset into the bo */
@@ -144,7 +144,7 @@ ctx_disassemble_program(struct aub_viewer_decode_ctx *ctx,
                         uint32_t ksp, const char *type)
 {
    uint64_t addr = ctx->instruction_base + ksp;
-   struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, addr);
+   struct intel_batch_decode_bo bo = ctx_get_bo(ctx, true, addr);
    if (!bo.map) {
       ImGui::TextColored(ctx->cfg->missing_color,
                          "Shader unavailable addr=0x%012" PRIx64, addr);
@@ -159,16 +159,16 @@ ctx_disassemble_program(struct aub_viewer_decode_ctx *ctx,
 
 static void
 handle_state_base_address(struct aub_viewer_decode_ctx *ctx,
-                          struct gen_group *inst,
+                          struct intel_group *inst,
                           const uint32_t *p)
 {
-   struct gen_field_iterator iter;
-   gen_field_iterator_init(&iter, inst, p, 0, false);
+   struct intel_field_iterator iter;
+   intel_field_iterator_init(&iter, inst, p, 0, false);
 
    uint64_t surface_base = 0, dynamic_base = 0, instruction_base = 0;
    bool surface_modify = 0, dynamic_modify = 0, instruction_modify = 0;
 
-   while (gen_field_iterator_next(&iter)) {
+   while (intel_field_iterator_next(&iter)) {
       if (strcmp(iter.name, "Surface State Base Address") == 0) {
          surface_base = iter.raw_value;
       } else if (strcmp(iter.name, "Dynamic State Base Address") == 0) {
@@ -197,8 +197,8 @@ handle_state_base_address(struct aub_viewer_decode_ctx *ctx,
 static void
 dump_binding_table(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count)
 {
-   struct gen_group *strct =
-      gen_spec_find_struct(ctx->spec, "RENDER_SURFACE_STATE");
+   struct intel_group *strct =
+      intel_spec_find_struct(ctx->spec, "RENDER_SURFACE_STATE");
    if (strct == NULL) {
       ImGui::TextColored(ctx->cfg->missing_color, "did not find RENDER_SURFACE_STATE info");
       return;
@@ -212,7 +212,7 @@ dump_binding_table(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count
       return;
    }
 
-   struct gen_batch_decode_bo bind_bo =
+   struct intel_batch_decode_bo bind_bo =
       ctx_get_bo(ctx, true, ctx->surface_base + offset);
 
    if (bind_bo.map == NULL) {
@@ -228,7 +228,7 @@ dump_binding_table(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count
          continue;
 
       uint64_t addr = ctx->surface_base + pointers[i];
-      struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, addr);
+      struct intel_batch_decode_bo bo = ctx_get_bo(ctx, true, addr);
       uint32_t size = strct->dw_length * 4;
 
       if (pointers[i] % 32 != 0 ||
@@ -250,13 +250,10 @@ dump_binding_table(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count
 static void
 dump_samplers(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count)
 {
-   struct gen_group *strct = gen_spec_find_struct(ctx->spec, "SAMPLER_STATE");
-
-   if (count < 0)
-      count = update_count(ctx, offset, strct->dw_length, 4);
+   struct intel_group *strct = intel_spec_find_struct(ctx->spec, "SAMPLER_STATE");
 
    uint64_t state_addr = ctx->dynamic_base + offset;
-   struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, state_addr);
+   struct intel_batch_decode_bo bo = ctx_get_bo(ctx, true, state_addr);
    const uint8_t *state_map = (const uint8_t *) bo.map;
 
    if (state_map == NULL) {
@@ -265,8 +262,15 @@ dump_samplers(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count)
       return;
    }
 
-   if (offset % 32 != 0 || state_addr - bo.addr >= bo.size) {
+   if (offset % 32 != 0) {
       ImGui::TextColored(ctx->cfg->missing_color, "invalid sampler state pointer");
+      return;
+   }
+
+   const unsigned sampler_state_size = strct->dw_length * 4;
+
+   if (count * sampler_state_size >= bo.size) {
+      ImGui::TextColored(ctx->cfg->missing_color, "sampler state ends after bo ends");
       return;
    }
 
@@ -276,24 +280,24 @@ dump_samplers(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count)
          aub_viewer_print_group(ctx, strct, state_addr, state_map);
          ImGui::TreePop();
       }
-      state_addr += 16;
-      state_map += 16;
+      state_addr += sampler_state_size;
+      state_map += sampler_state_size;
    }
 }
 
 static void
 handle_media_interface_descriptor_load(struct aub_viewer_decode_ctx *ctx,
-                                       struct gen_group *inst,
+                                       struct intel_group *inst,
                                        const uint32_t *p)
 {
-   struct gen_group *desc =
-      gen_spec_find_struct(ctx->spec, "INTERFACE_DESCRIPTOR_DATA");
+   struct intel_group *desc =
+      intel_spec_find_struct(ctx->spec, "INTERFACE_DESCRIPTOR_DATA");
 
-   struct gen_field_iterator iter;
-   gen_field_iterator_init(&iter, inst, p, 0, false);
+   struct intel_field_iterator iter;
+   intel_field_iterator_init(&iter, inst, p, 0, false);
    uint32_t descriptor_offset = 0;
    int descriptor_count = 0;
-   while (gen_field_iterator_next(&iter)) {
+   while (intel_field_iterator_next(&iter)) {
       if (strcmp(iter.name, "Interface Descriptor Data Start Address") == 0) {
          descriptor_offset = strtol(iter.value, NULL, 16);
       } else if (strcmp(iter.name, "Interface Descriptor Total Length") == 0) {
@@ -303,7 +307,7 @@ handle_media_interface_descriptor_load(struct aub_viewer_decode_ctx *ctx,
    }
 
    uint64_t desc_addr = ctx->dynamic_base + descriptor_offset;
-   struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, desc_addr);
+   struct intel_batch_decode_bo bo = ctx_get_bo(ctx, true, desc_addr);
    const uint32_t *desc_map = (const uint32_t *) bo.map;
 
    if (desc_map == NULL) {
@@ -317,11 +321,11 @@ handle_media_interface_descriptor_load(struct aub_viewer_decode_ctx *ctx,
 
       aub_viewer_print_group(ctx, desc, desc_addr, desc_map);
 
-      gen_field_iterator_init(&iter, desc, desc_map, 0, false);
+      intel_field_iterator_init(&iter, desc, desc_map, 0, false);
       uint64_t ksp = 0;
       uint32_t sampler_offset = 0, sampler_count = 0;
       uint32_t binding_table_offset = 0, binding_entry_count = 0;
-      while (gen_field_iterator_next(&iter)) {
+      while (intel_field_iterator_next(&iter)) {
          if (strcmp(iter.name, "Kernel Start Pointer") == 0) {
             ksp = strtoll(iter.value, NULL, 16);
          } else if (strcmp(iter.name, "Sampler State Pointer") == 0) {
@@ -347,28 +351,28 @@ handle_media_interface_descriptor_load(struct aub_viewer_decode_ctx *ctx,
 
 static void
 handle_3dstate_vertex_buffers(struct aub_viewer_decode_ctx *ctx,
-                              struct gen_group *inst,
+                              struct intel_group *inst,
                               const uint32_t *p)
 {
-   struct gen_group *vbs = gen_spec_find_struct(ctx->spec, "VERTEX_BUFFER_STATE");
+   struct intel_group *vbs = intel_spec_find_struct(ctx->spec, "VERTEX_BUFFER_STATE");
 
-   struct gen_batch_decode_bo vb = {};
+   struct intel_batch_decode_bo vb = {};
    uint32_t vb_size = 0;
    int index = -1;
    int pitch = -1;
    bool ready = false;
 
-   struct gen_field_iterator iter;
-   gen_field_iterator_init(&iter, inst, p, 0, false);
-   while (gen_field_iterator_next(&iter)) {
+   struct intel_field_iterator iter;
+   intel_field_iterator_init(&iter, inst, p, 0, false);
+   while (intel_field_iterator_next(&iter)) {
       if (iter.struct_desc != vbs)
          continue;
 
       uint64_t buffer_addr = 0;
 
-      struct gen_field_iterator vbs_iter;
-      gen_field_iterator_init(&vbs_iter, vbs, &iter.p[iter.start_bit / 32], 0, false);
-      while (gen_field_iterator_next(&vbs_iter)) {
+      struct intel_field_iterator vbs_iter;
+      intel_field_iterator_init(&vbs_iter, vbs, &iter.p[iter.start_bit / 32], 0, false);
+      while (intel_field_iterator_next(&vbs_iter)) {
          if (strcmp(vbs_iter.name, "Vertex Buffer Index") == 0) {
             index = vbs_iter.raw_value;
          } else if (strcmp(vbs_iter.name, "Buffer Pitch") == 0) {
@@ -412,17 +416,17 @@ handle_3dstate_vertex_buffers(struct aub_viewer_decode_ctx *ctx,
 
 static void
 handle_3dstate_index_buffer(struct aub_viewer_decode_ctx *ctx,
-                            struct gen_group *inst,
+                            struct intel_group *inst,
                             const uint32_t *p)
 {
-   struct gen_batch_decode_bo ib = {};
+   struct intel_batch_decode_bo ib = {};
    uint64_t buffer_addr = 0;
    uint32_t ib_size = 0;
    uint32_t format = 0;
 
-   struct gen_field_iterator iter;
-   gen_field_iterator_init(&iter, inst, p, 0, false);
-   while (gen_field_iterator_next(&iter)) {
+   struct intel_field_iterator iter;
+   intel_field_iterator_init(&iter, inst, p, 0, false);
+   while (intel_field_iterator_next(&iter)) {
       if (strcmp(iter.name, "Index Format") == 0) {
          format = iter.raw_value;
       } else if (strcmp(iter.name, "Buffer Starting Address") == 0) {
@@ -459,16 +463,16 @@ handle_3dstate_index_buffer(struct aub_viewer_decode_ctx *ctx,
 
 static void
 decode_single_ksp(struct aub_viewer_decode_ctx *ctx,
-                  struct gen_group *inst,
+                  struct intel_group *inst,
                   const uint32_t *p)
 {
    uint64_t ksp = 0;
-   bool is_simd8 = false; /* vertex shaders on Gen8+ only */
+   bool is_simd8 = false; /* vertex shaders on Gfx8+ only */
    bool is_enabled = true;
 
-   struct gen_field_iterator iter;
-   gen_field_iterator_init(&iter, inst, p, 0, false);
-   while (gen_field_iterator_next(&iter)) {
+   struct intel_field_iterator iter;
+   intel_field_iterator_init(&iter, inst, p, 0, false);
+   while (intel_field_iterator_next(&iter)) {
       if (strcmp(iter.name, "Kernel Start Pointer") == 0) {
          ksp = iter.raw_value;
       } else if (strcmp(iter.name, "SIMD8 Dispatch Enable") == 0) {
@@ -499,15 +503,15 @@ decode_single_ksp(struct aub_viewer_decode_ctx *ctx,
 
 static void
 decode_ps_kernels(struct aub_viewer_decode_ctx *ctx,
-                  struct gen_group *inst,
+                  struct intel_group *inst,
                   const uint32_t *p)
 {
    uint64_t ksp[3] = {0, 0, 0};
    bool enabled[3] = {false, false, false};
 
-   struct gen_field_iterator iter;
-   gen_field_iterator_init(&iter, inst, p, 0, false);
-   while (gen_field_iterator_next(&iter)) {
+   struct intel_field_iterator iter;
+   intel_field_iterator_init(&iter, inst, p, 0, false);
+   while (intel_field_iterator_next(&iter)) {
       if (strncmp(iter.name, "Kernel Start Pointer ",
                   strlen("Kernel Start Pointer ")) == 0) {
          int idx = iter.name[strlen("Kernel Start Pointer ")] - '0';
@@ -546,26 +550,26 @@ decode_ps_kernels(struct aub_viewer_decode_ctx *ctx,
 
 static void
 decode_3dstate_constant(struct aub_viewer_decode_ctx *ctx,
-                        struct gen_group *inst,
+                        struct intel_group *inst,
                         const uint32_t *p)
 {
-   struct gen_group *body =
-      gen_spec_find_struct(ctx->spec, "3DSTATE_CONSTANT_BODY");
+   struct intel_group *body =
+      intel_spec_find_struct(ctx->spec, "3DSTATE_CONSTANT_BODY");
 
    uint32_t read_length[4] = {0};
    uint64_t read_addr[4];
 
-   struct gen_field_iterator outer;
-   gen_field_iterator_init(&outer, inst, p, 0, false);
-   while (gen_field_iterator_next(&outer)) {
+   struct intel_field_iterator outer;
+   intel_field_iterator_init(&outer, inst, p, 0, false);
+   while (intel_field_iterator_next(&outer)) {
       if (outer.struct_desc != body)
          continue;
 
-      struct gen_field_iterator iter;
-      gen_field_iterator_init(&iter, body, &outer.p[outer.start_bit / 32],
-                              0, false);
+      struct intel_field_iterator iter;
+      intel_field_iterator_init(&iter, body, &outer.p[outer.start_bit / 32],
+                                0, false);
 
-      while (gen_field_iterator_next(&iter)) {
+      while (intel_field_iterator_next(&iter)) {
          int idx;
          if (sscanf(iter.name, "Read Length[%d]", &idx) == 1) {
             read_length[idx] = iter.raw_value;
@@ -578,7 +582,7 @@ decode_3dstate_constant(struct aub_viewer_decode_ctx *ctx,
          if (read_length[i] == 0)
             continue;
 
-         struct gen_batch_decode_bo buffer = ctx_get_bo(ctx, true, read_addr[i]);
+         struct intel_batch_decode_bo buffer = ctx_get_bo(ctx, true, read_addr[i]);
          if (!buffer.map) {
             ImGui::TextColored(ctx->cfg->missing_color,
                                "constant buffer %d unavailable addr=0x%012" PRIx64,
@@ -599,7 +603,7 @@ decode_3dstate_constant(struct aub_viewer_decode_ctx *ctx,
 
 static void
 decode_3dstate_binding_table_pointers(struct aub_viewer_decode_ctx *ctx,
-                                      struct gen_group *inst,
+                                      struct intel_group *inst,
                                       const uint32_t *p)
 {
    dump_binding_table(ctx, p[1], -1);
@@ -607,20 +611,20 @@ decode_3dstate_binding_table_pointers(struct aub_viewer_decode_ctx *ctx,
 
 static void
 decode_3dstate_sampler_state_pointers(struct aub_viewer_decode_ctx *ctx,
-                                      struct gen_group *inst,
+                                      struct intel_group *inst,
                                       const uint32_t *p)
 {
-   dump_samplers(ctx, p[1], -1);
+   dump_samplers(ctx, p[1], 1);
 }
 
 static void
-decode_3dstate_sampler_state_pointers_gen6(struct aub_viewer_decode_ctx *ctx,
-                                           struct gen_group *inst,
+decode_3dstate_sampler_state_pointers_gfx6(struct aub_viewer_decode_ctx *ctx,
+                                           struct intel_group *inst,
                                            const uint32_t *p)
 {
-   dump_samplers(ctx, p[1], -1);
-   dump_samplers(ctx, p[2], -1);
-   dump_samplers(ctx, p[3], -1);
+   dump_samplers(ctx, p[1], 1);
+   dump_samplers(ctx, p[2], 1);
+   dump_samplers(ctx, p[3], 1);
 }
 
 static bool
@@ -635,14 +639,14 @@ str_ends_with(const char *str, const char *end)
 
 static void
 decode_dynamic_state_pointers(struct aub_viewer_decode_ctx *ctx,
-                              struct gen_group *inst, const uint32_t *p,
+                              struct intel_group *inst, const uint32_t *p,
                               const char *struct_type,  int count)
 {
    uint32_t state_offset = 0;
 
-   struct gen_field_iterator iter;
-   gen_field_iterator_init(&iter, inst, p, 0, false);
-   while (gen_field_iterator_next(&iter)) {
+   struct intel_field_iterator iter;
+   intel_field_iterator_init(&iter, inst, p, 0, false);
+   while (intel_field_iterator_next(&iter)) {
       if (str_ends_with(iter.name, "Pointer")) {
          state_offset = iter.raw_value;
          break;
@@ -650,7 +654,7 @@ decode_dynamic_state_pointers(struct aub_viewer_decode_ctx *ctx,
    }
 
    uint64_t state_addr = ctx->dynamic_base + state_offset;
-   struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, state_addr);
+   struct intel_batch_decode_bo bo = ctx_get_bo(ctx, true, state_addr);
    const uint8_t *state_map = (const uint8_t *) bo.map;
 
    if (state_map == NULL) {
@@ -660,7 +664,7 @@ decode_dynamic_state_pointers(struct aub_viewer_decode_ctx *ctx,
       return;
    }
 
-   struct gen_group *state = gen_spec_find_struct(ctx->spec, struct_type);
+   struct intel_group *state = intel_spec_find_struct(ctx->spec, struct_type);
    if (strcmp(struct_type, "BLEND_STATE") == 0) {
       /* Blend states are different from the others because they have a header
        * struct called BLEND_STATE which is followed by a variable number of
@@ -673,7 +677,7 @@ decode_dynamic_state_pointers(struct aub_viewer_decode_ctx *ctx,
       state_map += state->dw_length * 4;
 
       struct_type = "BLEND_STATE_ENTRY";
-      state = gen_spec_find_struct(ctx->spec, struct_type);
+      state = intel_spec_find_struct(ctx->spec, struct_type);
    }
 
    for (int i = 0; i < count; i++) {
@@ -687,7 +691,7 @@ decode_dynamic_state_pointers(struct aub_viewer_decode_ctx *ctx,
 
 static void
 decode_3dstate_viewport_state_pointers_cc(struct aub_viewer_decode_ctx *ctx,
-                                          struct gen_group *inst,
+                                          struct intel_group *inst,
                                           const uint32_t *p)
 {
    decode_dynamic_state_pointers(ctx, inst, p, "CC_VIEWPORT", 4);
@@ -695,7 +699,7 @@ decode_3dstate_viewport_state_pointers_cc(struct aub_viewer_decode_ctx *ctx,
 
 static void
 decode_3dstate_viewport_state_pointers_sf_clip(struct aub_viewer_decode_ctx *ctx,
-                                               struct gen_group *inst,
+                                               struct intel_group *inst,
                                                const uint32_t *p)
 {
    decode_dynamic_state_pointers(ctx, inst, p, "SF_CLIP_VIEWPORT", 4);
@@ -703,7 +707,7 @@ decode_3dstate_viewport_state_pointers_sf_clip(struct aub_viewer_decode_ctx *ctx
 
 static void
 decode_3dstate_blend_state_pointers(struct aub_viewer_decode_ctx *ctx,
-                                    struct gen_group *inst,
+                                    struct intel_group *inst,
                                     const uint32_t *p)
 {
    decode_dynamic_state_pointers(ctx, inst, p, "BLEND_STATE", 1);
@@ -711,7 +715,7 @@ decode_3dstate_blend_state_pointers(struct aub_viewer_decode_ctx *ctx,
 
 static void
 decode_3dstate_cc_state_pointers(struct aub_viewer_decode_ctx *ctx,
-                                 struct gen_group *inst,
+                                 struct intel_group *inst,
                                  const uint32_t *p)
 {
    decode_dynamic_state_pointers(ctx, inst, p, "COLOR_CALC_STATE", 1);
@@ -719,7 +723,7 @@ decode_3dstate_cc_state_pointers(struct aub_viewer_decode_ctx *ctx,
 
 static void
 decode_3dstate_scissor_state_pointers(struct aub_viewer_decode_ctx *ctx,
-                                      struct gen_group *inst,
+                                      struct intel_group *inst,
                                       const uint32_t *p)
 {
    decode_dynamic_state_pointers(ctx, inst, p, "SCISSOR_RECT", 1);
@@ -727,10 +731,10 @@ decode_3dstate_scissor_state_pointers(struct aub_viewer_decode_ctx *ctx,
 
 static void
 decode_load_register_imm(struct aub_viewer_decode_ctx *ctx,
-                         struct gen_group *inst,
+                         struct intel_group *inst,
                          const uint32_t *p)
 {
-   struct gen_group *reg = gen_spec_find_register(ctx->spec, p[1]);
+   struct intel_group *reg = intel_spec_find_register(ctx->spec, p[1]);
 
    if (reg != NULL &&
        ImGui::TreeNodeEx(&p[1], ImGuiTreeNodeFlags_Framed,
@@ -743,7 +747,7 @@ decode_load_register_imm(struct aub_viewer_decode_ctx *ctx,
 
 static void
 decode_3dprimitive(struct aub_viewer_decode_ctx *ctx,
-                   struct gen_group *inst,
+                   struct intel_group *inst,
                    const uint32_t *p)
 {
    if (ctx->display_urb) {
@@ -754,12 +758,12 @@ decode_3dprimitive(struct aub_viewer_decode_ctx *ctx,
 
 static void
 handle_urb(struct aub_viewer_decode_ctx *ctx,
-           struct gen_group *inst,
+           struct intel_group *inst,
            const uint32_t *p)
 {
-   struct gen_field_iterator iter;
-   gen_field_iterator_init(&iter, inst, p, 0, false);
-   while (gen_field_iterator_next(&iter)) {
+   struct intel_field_iterator iter;
+   intel_field_iterator_init(&iter, inst, p, 0, false);
+   while (intel_field_iterator_next(&iter)) {
       if (strstr(iter.name, "URB Starting Address")) {
          ctx->urb_stages[ctx->stage].start = iter.raw_value * 8192;
       } else if (strstr(iter.name, "URB Entry Allocation Size")) {
@@ -777,12 +781,12 @@ handle_urb(struct aub_viewer_decode_ctx *ctx,
 
 static void
 handle_urb_read(struct aub_viewer_decode_ctx *ctx,
-                struct gen_group *inst,
+                struct intel_group *inst,
                 const uint32_t *p)
 {
-   struct gen_field_iterator iter;
-   gen_field_iterator_init(&iter, inst, p, 0, false);
-   while (gen_field_iterator_next(&iter)) {
+   struct intel_field_iterator iter;
+   intel_field_iterator_init(&iter, inst, p, 0, false);
+   while (intel_field_iterator_next(&iter)) {
       /* Workaround the "Force * URB Entry Read Length" fields */
       if (iter.end_bit - iter.start_bit < 2)
          continue;
@@ -801,24 +805,24 @@ handle_urb_read(struct aub_viewer_decode_ctx *ctx,
 
 static void
 handle_urb_constant(struct aub_viewer_decode_ctx *ctx,
-                    struct gen_group *inst,
+                    struct intel_group *inst,
                     const uint32_t *p)
 {
-   struct gen_group *body =
-      gen_spec_find_struct(ctx->spec, "3DSTATE_CONSTANT_BODY");
+   struct intel_group *body =
+      intel_spec_find_struct(ctx->spec, "3DSTATE_CONSTANT_BODY");
 
-   struct gen_field_iterator outer;
-   gen_field_iterator_init(&outer, inst, p, 0, false);
-   while (gen_field_iterator_next(&outer)) {
+   struct intel_field_iterator outer;
+   intel_field_iterator_init(&outer, inst, p, 0, false);
+   while (intel_field_iterator_next(&outer)) {
       if (outer.struct_desc != body)
          continue;
 
-      struct gen_field_iterator iter;
-      gen_field_iterator_init(&iter, body, &outer.p[outer.start_bit / 32],
-                              0, false);
+      struct intel_field_iterator iter;
+      intel_field_iterator_init(&iter, body, &outer.p[outer.start_bit / 32],
+                                0, false);
 
       ctx->urb_stages[ctx->stage].const_rd_length = 0;
-      while (gen_field_iterator_next(&iter)) {
+      while (intel_field_iterator_next(&iter)) {
          int idx;
          if (sscanf(iter.name, "Read Length[%d]", &idx) == 1) {
             ctx->urb_stages[ctx->stage].const_rd_length += iter.raw_value * 32;
@@ -830,7 +834,7 @@ handle_urb_constant(struct aub_viewer_decode_ctx *ctx,
 struct custom_decoder {
    const char *cmd_name;
    void (*decode)(struct aub_viewer_decode_ctx *ctx,
-                  struct gen_group *inst,
+                  struct intel_group *inst,
                   const uint32_t *p);
    enum aub_decode_stage stage;
 } display_decoders[] = {
@@ -860,7 +864,7 @@ struct custom_decoder {
    { "3DSTATE_SAMPLER_STATE_POINTERS_DS", decode_3dstate_sampler_state_pointers, AUB_DECODE_STAGE_DS, },
    { "3DSTATE_SAMPLER_STATE_POINTERS_HS", decode_3dstate_sampler_state_pointers, AUB_DECODE_STAGE_HS, },
    { "3DSTATE_SAMPLER_STATE_POINTERS_PS", decode_3dstate_sampler_state_pointers, AUB_DECODE_STAGE_PS, },
-   { "3DSTATE_SAMPLER_STATE_POINTERS", decode_3dstate_sampler_state_pointers_gen6 },
+   { "3DSTATE_SAMPLER_STATE_POINTERS", decode_3dstate_sampler_state_pointers_gfx6 },
 
    { "3DSTATE_VIEWPORT_STATE_POINTERS_CC", decode_3dstate_viewport_state_pointers_cc },
    { "3DSTATE_VIEWPORT_STATE_POINTERS_SF_CLIP", decode_3dstate_viewport_state_pointers_sf_clip },
@@ -894,7 +898,7 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
                         const void *_batch, uint32_t batch_size,
                         uint64_t batch_addr, bool from_ring)
 {
-   struct gen_group *inst;
+   struct intel_group *inst;
    const uint32_t *p, *batch = (const uint32_t *) _batch, *end = batch + batch_size / sizeof(uint32_t);
    int length;
 
@@ -907,8 +911,8 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
    ctx->n_batch_buffer_start++;
 
    for (p = batch; p < end; p += length) {
-      inst = gen_spec_find_instruction(ctx->spec, ctx->engine, p);
-      length = gen_group_get_length(inst, p);
+      inst = intel_spec_find_instruction(ctx->spec, ctx->engine, p);
+      length = intel_group_get_length(inst, p);
       assert(inst == NULL || length > 0);
       length = MAX2(1, length);
 
@@ -921,7 +925,7 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
          continue;
       }
 
-      const char *inst_name = gen_group_get_name(inst);
+      const char *inst_name = intel_group_get_name(inst);
 
       for (unsigned i = 0; i < ARRAY_SIZE(info_decoders); i++) {
          if (strcmp(inst_name, info_decoders[i].cmd_name) == 0) {
@@ -958,9 +962,9 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
          uint64_t next_batch_addr = 0xd0d0d0d0;
          bool ppgtt = false;
          bool second_level = false;
-         struct gen_field_iterator iter;
-         gen_field_iterator_init(&iter, inst, p, 0, false);
-         while (gen_field_iterator_next(&iter)) {
+         struct intel_field_iterator iter;
+         intel_field_iterator_init(&iter, inst, p, 0, false);
+         while (intel_field_iterator_next(&iter)) {
             if (strcmp(iter.name, "Batch Buffer Start Address") == 0) {
                next_batch_addr = iter.raw_value;
             } else if (strcmp(iter.name, "Second Level Batch Buffer") == 0) {
@@ -970,7 +974,7 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
             }
          }
 
-         struct gen_batch_decode_bo next_batch = ctx_get_bo(ctx, ppgtt, next_batch_addr);
+         struct intel_batch_decode_bo next_batch = ctx_get_bo(ctx, ppgtt, next_batch_addr);
 
          if (next_batch.map == NULL) {
             ImGui::TextColored(ctx->cfg->missing_color,

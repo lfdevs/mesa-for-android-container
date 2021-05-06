@@ -6,7 +6,7 @@ Missing Features:
  - Sparse memory
 
 Performance:
- - Multi-{sampled/gen8,LOD} HiZ
+ - Multi-{sampled/gfx8,LOD} HiZ
  - MSAA fast clears
  - Pushing pieces of UBOs?
  - Enable guardband clipping

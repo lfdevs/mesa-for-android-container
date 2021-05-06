@@ -39,7 +39,7 @@ BEGIN_TEST(regalloc.subdword_alloc.reuse_16bit_operands)
       for (bool pessimistic : { false, true }) {
          const char* subvariant = pessimistic ? "/pessimistic" : "/optimistic";
 
-         //>> v1: %_:v[#a], s2: %_:exec = p_startpgm
+         //>> v1: %_:v[#a] = p_startpgm
          if (!setup_cs("v1", (chip_class)cc, CHIP_UNKNOWN, subvariant))
             return;
 
@@ -57,4 +57,23 @@ BEGIN_TEST(regalloc.subdword_alloc.reuse_16bit_operands)
          finish_ra_test(ra_test_policy { pessimistic });
       }
    }
+END_TEST
+
+BEGIN_TEST(regalloc.32bit_partial_write)
+   //>> v1: %_:v[0] = p_startpgm
+   if (!setup_cs("v1", GFX10))
+      return;
+
+   /* ensure high 16 bits are occupied */
+   //! v2b: %_:v[0][0:16], v2b: %_:v[0][16:32] = p_split_vector %_:v[0]
+   Temp hi = bld.pseudo(aco_opcode::p_split_vector, bld.def(v2b), bld.def(v2b), inputs[0]).def(1).getTemp();
+
+   /* This test checks if this instruction uses SDWA. */
+   //! v2b: %_:v[0][0:16] = v_not_b32 0 dst_preserve
+   Temp lo = bld.vop1(aco_opcode::v_not_b32, bld.def(v2b), Operand(0u));
+
+   //! v1: %_:v[0] = p_create_vector %_:v[0][0:16], %_:v[0][16:32]
+   bld.pseudo(aco_opcode::p_create_vector, bld.def(v1), lo, hi);
+
+   finish_ra_test(ra_test_policy());
 END_TEST

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 ##########################################################################
 #
 # Copyright 2008 VMware, Inc.
@@ -164,9 +164,9 @@ class WindowsConsoleFormatter(Formatter):
 
 
 def DefaultFormatter(stream):
-    if sys.platform in ('linux2', 'cygwin'):
+    if sys.platform in ('linux2', 'linux', 'cygwin'):
         return AnsiFormatter(stream)
-    elif sys.platform in ('win32',):
+    elif sys.platform in ('win32', ):
         return WindowsConsoleFormatter(stream)
     else:
         return Formatter(stream)

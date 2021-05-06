@@ -683,7 +683,7 @@ intel_query_dri2_buffers(struct intel_context *intel,
    __DRIscreen *screen = intel->intelScreen->driScrnPriv;
    struct gl_framebuffer *fb = drawable->driverPrivate;
    int i = 0;
-   unsigned attachments[8];
+   unsigned attachments[__DRI_BUFFER_COUNT];
 
    struct intel_renderbuffer *front_rb;
    struct intel_renderbuffer *back_rb;

@@ -166,7 +166,7 @@ lower_load_deref(nir_builder *b, nir_intrinsic_instr *intr)
    nir_deref_path_finish(&path);
    assert(comp_idx == num_components);
    nir_ssa_def *result = nir_vec(b, comps, num_components);
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_src_for_ssa(result));
+   nir_ssa_def_rewrite_uses(&intr->dest.ssa, result);
    nir_instr_remove(&intr->instr);
    return true;
 }
@@ -308,7 +308,7 @@ lower_load_ssbo(nir_builder *b, nir_intrinsic_instr *intr)
 
    assert(comp_idx == num_components);
    nir_ssa_def *result = nir_vec(b, comps, num_components);
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_src_for_ssa(result));
+   nir_ssa_def_rewrite_uses(&intr->dest.ssa, result);
    nir_instr_remove(&intr->instr);
    return true;
 }
@@ -458,7 +458,7 @@ lower_32b_offset_load(nir_builder *b, nir_intrinsic_instr *intr)
    }
 
    nir_ssa_def *result = nir_vec(b, comps, num_components);
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_src_for_ssa(result));
+   nir_ssa_def_rewrite_uses(&intr->dest.ssa, result);
    nir_instr_remove(&intr->instr);
 
    return true;
@@ -696,7 +696,7 @@ lower_load_ubo(nir_builder *b, nir_intrinsic_instr *intr)
                              nir_dest_num_components(intr->dest),
                              nir_dest_bit_size(intr->dest));
 
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_src_for_ssa(result));
+   nir_ssa_def_rewrite_uses(&intr->dest.ssa, result);
    nir_instr_remove(&intr->instr);
    return true;
 }
@@ -774,7 +774,7 @@ lower_shared_atomic(nir_builder *b, nir_intrinsic_instr *intr,
    nir_ssa_dest_init(&atomic->instr, &atomic->dest, 1, 32, intr->dest.ssa.name);
 
    nir_builder_instr_insert(b, &atomic->instr);
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_src_for_ssa(&atomic->dest.ssa));
+   nir_ssa_def_rewrite_uses(&intr->dest.ssa, &atomic->dest.ssa);
    nir_instr_remove(&intr->instr);
    return true;
 }
@@ -847,7 +847,7 @@ lower_deref_ssbo(nir_builder *b, nir_deref_instr *deref)
          nir_build_deref_cast(b, ptr, nir_var_mem_ssbo, deref->type,
                               glsl_get_explicit_stride(var->type));
       nir_ssa_def_rewrite_uses(&deref->dest.ssa,
-                               nir_src_for_ssa(&deref_cast->dest.ssa));
+                               &deref_cast->dest.ssa);
       nir_instr_remove(&deref->instr);
 
       deref = deref_cast;
@@ -1063,7 +1063,7 @@ cast_phi(nir_builder *b, nir_phi_instr *phi, unsigned new_bit_size)
       assert(num_components == 0 || num_components == src->src.ssa->num_components);
       num_components = src->src.ssa->num_components;
 
-      b->cursor = nir_after_instr(src->src.ssa->parent_instr);
+      b->cursor = nir_after_instr_and_phis(src->src.ssa->parent_instr);
 
       nir_ssa_def *cast = nir_build_alu(b, upcast_op, src->src.ssa, NULL, NULL, NULL);
 
@@ -1082,7 +1082,7 @@ cast_phi(nir_builder *b, nir_phi_instr *phi, unsigned new_bit_size)
    b->cursor = nir_after_phis(nir_cursor_current_block(b->cursor));
    nir_ssa_def *result = nir_build_alu(b, downcast_op, &lowered->dest.ssa, NULL, NULL, NULL);
 
-   nir_ssa_def_rewrite_uses(&phi->dest.ssa, nir_src_for_ssa(result));
+   nir_ssa_def_rewrite_uses(&phi->dest.ssa, result);
    nir_instr_remove(&phi->instr);
 }
 
@@ -1131,219 +1131,165 @@ dxil_nir_lower_upcast_phis(nir_shader *shader, unsigned min_bit_size)
    return progress;
 }
 
-/* The following float-to-half conversion routines are based on the "half" library:
- * https://sourceforge.net/projects/half/
+/* In GLSL and SPIR-V, clip and cull distance are arrays of floats (with a limit of 8).
+ * In DXIL, clip and cull distances are up to 2 float4s combined.
+ * Coming from GLSL, we can request this 2 float4 format, but coming from SPIR-V,
+ * we can't, and have to accept a "compact" array of scalar floats.
  *
- * half - IEEE 754-based half-precision floating-point library.
- *
- * Copyright (c) 2012-2019 Christian Rau <rauy@users.sourceforge.net>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation
- * files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy,
- * modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
- * WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
- * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * Version 2.1.0
+ * To help emitting a valid input signature for this case, split the variables so that they
+ * match what we need to put in the signature (e.g. { float clip[4]; float clip1; float cull[3]; })
  */
-
-
-static bool
-lower_fp16_casts_filter(const nir_instr *instr, const void *data)
+bool
+dxil_nir_split_clip_cull_distance(nir_shader *shader)
 {
-   if (instr->type == nir_instr_type_alu) {
-      nir_alu_instr *alu = nir_instr_as_alu(instr);
-      /* TODO: DXIL has instructions for f2f16_rtz. For CL, it's not precise enough
-       * due to denorm handling. If the f2f16 instruction has undef rounding mode,
-       * we could map that too, but for CL, f2f16 is implied to mean rtne.
-       */
-      switch (alu->op) {
-      case nir_op_f2f16:
-      case nir_op_f2f16_rtne:
-      case nir_op_f2f16_rtz:
-         return true;
-      default:
-         return false;
+   nir_variable *new_var = NULL;
+   nir_foreach_function(function, shader) {
+      if (!function->impl)
+         continue;
+
+      bool progress = false;
+      nir_builder b;
+      nir_builder_init(&b, function->impl);
+      nir_foreach_block(block, function->impl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type != nir_instr_type_deref)
+               continue;
+            nir_deref_instr *deref = nir_instr_as_deref(instr);
+            nir_variable *var = nir_deref_instr_get_variable(deref);
+            if (!var ||
+                var->data.location < VARYING_SLOT_CLIP_DIST0 ||
+                var->data.location > VARYING_SLOT_CULL_DIST1 ||
+                !var->data.compact)
+               continue;
+
+            /* The location should only be inside clip distance, because clip
+             * and cull should've been merged by nir_lower_clip_cull_distance_arrays()
+             */
+            assert(var->data.location == VARYING_SLOT_CLIP_DIST0 ||
+                   var->data.location == VARYING_SLOT_CLIP_DIST1);
+
+            /* The deref chain to the clip/cull variables should be simple, just the 
+             * var and an array with a constant index, otherwise more lowering/optimization
+             * might be needed before this pass, e.g. copy prop, lower_io_to_temporaries,
+             * split_var_copies, and/or lower_var_copies
+             */
+            assert(deref->deref_type == nir_deref_type_var ||
+                   deref->deref_type == nir_deref_type_array);
+
+            b.cursor = nir_before_instr(instr);
+            if (!new_var) {
+               /* Update lengths for new and old vars */
+               int old_length = glsl_array_size(var->type);
+               int new_length = (old_length + var->data.location_frac) - 4;
+               old_length -= new_length;
+
+               /* The existing variable fits in the float4 */
+               if (new_length <= 0)
+                  continue;
+
+               new_var = nir_variable_clone(var, shader);
+               nir_shader_add_variable(shader, new_var);
+               assert(glsl_get_base_type(glsl_get_array_element(var->type)) == GLSL_TYPE_FLOAT);
+               var->type = glsl_array_type(glsl_float_type(), old_length, 0);
+               new_var->type = glsl_array_type(glsl_float_type(), new_length, 0);
+               new_var->data.location++;
+               new_var->data.location_frac = 0;
+            }
+
+            /* Update the type for derefs of the old var */
+            if (deref->deref_type == nir_deref_type_var) {
+               deref->type = var->type;
+               continue;
+            }
+
+            nir_const_value *index = nir_src_as_const_value(deref->arr.index);
+            assert(index);
+
+            /* Treat this array as a vector starting at the component index in location_frac,
+             * so if location_frac is 1 and index is 0, then it's accessing the 'y' component
+             * of the vector. If index + location_frac is >= 4, there's no component there,
+             * so we need to add a new variable and adjust the index.
+             */
+            unsigned total_index = index->u32 + var->data.location_frac;
+            if (total_index < 4)
+               continue;
+
+            nir_deref_instr *new_var_deref = nir_build_deref_var(&b, new_var);
+            nir_deref_instr *new_array_deref = nir_build_deref_array(&b, new_var_deref, nir_imm_int(&b, total_index % 4));
+            nir_ssa_def_rewrite_uses(&deref->dest.ssa, &new_array_deref->dest.ssa);
+            progress = true;
+         }
       }
-   } else if (instr->type == nir_instr_type_intrinsic) {
-      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-      return intrin->intrinsic == nir_intrinsic_convert_alu_types &&
-         nir_intrinsic_dest_type(intrin) == nir_type_float16;
-   }
-   return false;
-}
-
-static nir_ssa_def *
-half_rounded(nir_builder *b, nir_ssa_def *value, nir_ssa_def *guard, nir_ssa_def *sticky,
-             nir_ssa_def *sign, nir_rounding_mode mode)
-{
-   switch (mode) {
-   case nir_rounding_mode_rtne:
-      return nir_iadd(b, value, nir_iand(b, guard, nir_ior(b, sticky, value)));
-   case nir_rounding_mode_ru:
-      sign = nir_ushr(b, sign, nir_imm_int(b, 31));
-      return nir_iadd(b, value, nir_iand(b, nir_inot(b, sign),
-                                            nir_ior(b, guard, sticky)));
-   case nir_rounding_mode_rd:
-      sign = nir_ushr(b, sign, nir_imm_int(b, 31));
-      return nir_iadd(b, value, nir_iand(b, sign,
-                                            nir_ior(b, guard, sticky)));
-   default:
-      return value;
-   }
-}
-
-static nir_ssa_def *
-float_to_half_impl(nir_builder *b, nir_ssa_def *src, nir_rounding_mode mode)
-{
-   nir_ssa_def *f32infinity = nir_imm_int(b, 255 << 23);
-   nir_ssa_def *f16max = nir_imm_int(b, (127 + 16) << 23);
-   nir_ssa_def *sign = nir_iand(b, src, nir_imm_int(b, 0x80000000));
-   nir_ssa_def *one = nir_imm_int(b, 1);
-
-   nir_ssa_def *abs = nir_iand(b, src, nir_imm_int(b, 0x7FFFFFFF));
-   /* NaN or INF. For rtne, overflow also becomes INF, so combine the comparisons */
-   nir_push_if(b, nir_ige(b, abs, mode == nir_rounding_mode_rtne ? f16max : f32infinity));
-   nir_ssa_def *inf_nanfp16 = nir_bcsel(b,
-                                    nir_ilt(b, f32infinity, abs),
-                                    nir_imm_int(b, 0x7E00),
-                                    nir_imm_int(b, 0x7C00));
-   nir_push_else(b, NULL);
-
-   nir_ssa_def *overflowed_fp16 = NULL;
-   if (mode != nir_rounding_mode_rtne) {
-      /* Handle overflow */
-      nir_push_if(b, nir_ige(b, abs, f16max));
-      switch (mode) {
-      case nir_rounding_mode_rtz:
-         overflowed_fp16 = nir_imm_int(b, 0x7BFF);
-         break;
-      case nir_rounding_mode_ru:
-         /* Negative becomes max float, positive becomes inf */
-         overflowed_fp16 = nir_bcsel(b, nir_i2b1(b, sign), nir_imm_int(b, 0x7BFF), nir_imm_int(b, 0x7C00));
-         break;
-      case nir_rounding_mode_rd:
-         /* Negative becomes inf, positive becomes max float */
-         overflowed_fp16 = nir_bcsel(b, nir_i2b1(b, sign), nir_imm_int(b, 0x7C00), nir_imm_int(b, 0x7BFF));
-         break;
-      default: unreachable("Should've been handled already");
-      }
-      nir_push_else(b, NULL);
-   }
-
-   nir_push_if(b, nir_ige(b, abs, nir_imm_int(b, 113 << 23)));
-
-   /* FP16 will be normal */
-   nir_ssa_def *zero = nir_imm_int(b, 0);
-   nir_ssa_def *value = nir_ior(b,
-                                nir_ishl(b,
-                                         nir_isub(b,
-                                                  nir_ushr(b, abs, nir_imm_int(b, 23)),
-                                                  nir_imm_int(b, 112)),
-                                         nir_imm_int(b, 10)),
-                                nir_iand(b, nir_ushr(b, abs, nir_imm_int(b, 13)), nir_imm_int(b, 0x3FFF)));
-   nir_ssa_def *guard = nir_iand(b, nir_ushr(b, abs, nir_imm_int(b, 12)), one);
-   nir_ssa_def *sticky = nir_bcsel(b, nir_ine(b, nir_iand(b, abs, nir_imm_int(b, 0xFFF)), zero), one, zero);
-   nir_ssa_def *normal_fp16 = half_rounded(b, value, guard, sticky, sign, mode);
-
-   nir_push_else(b, NULL);
-   nir_push_if(b, nir_ige(b, abs, nir_imm_int(b, 102 << 23)));
-   
-   /* FP16 will be denormal */
-   nir_ssa_def *i = nir_isub(b, nir_imm_int(b, 125), nir_ushr(b, abs, nir_imm_int(b, 23)));
-   nir_ssa_def *masked = nir_ior(b, nir_iand(b, abs, nir_imm_int(b, 0x7FFFFF)), nir_imm_int(b, 0x800000));
-   value = nir_ushr(b, masked, nir_iadd(b, i, one));
-   guard = nir_iand(b, nir_ushr(b, masked, i), one);
-   sticky = nir_bcsel(b, nir_ine(b, nir_iand(b, masked, nir_isub(b, nir_ishl(b, one, i), one)), zero), one, zero);
-   nir_ssa_def *denormal_fp16 = half_rounded(b, value, guard, sticky, sign, mode);
-
-   nir_push_else(b, NULL);
-
-   /* Handle underflow. Nonzero values need to shift up or down for round-up or round-down */
-   nir_ssa_def *underflowed_fp16 = zero;
-   if (mode == nir_rounding_mode_ru ||
-       mode == nir_rounding_mode_rd) {
-      nir_push_if(b, nir_i2b1(b, abs));
-
-      if (mode == nir_rounding_mode_ru)
-         underflowed_fp16 = nir_bcsel(b, nir_i2b1(b, sign), zero, one);
+      if (progress)
+         nir_metadata_preserve(function->impl, nir_metadata_block_index |
+                                               nir_metadata_dominance |
+                                               nir_metadata_loop_analysis);
       else
-         underflowed_fp16 = nir_bcsel(b, nir_i2b1(b, sign), one, zero);
-
-      nir_push_else(b, NULL);
-      nir_pop_if(b, NULL);
-      underflowed_fp16 = nir_if_phi(b, underflowed_fp16, zero);
+         nir_metadata_preserve(function->impl, nir_metadata_all);
    }
 
-   nir_pop_if(b, NULL);
-   nir_ssa_def *underflowed_or_denorm_fp16 = nir_if_phi(b, denormal_fp16, underflowed_fp16);
-
-   nir_pop_if(b, NULL);
-   nir_ssa_def *finite_fp16 = nir_if_phi(b, normal_fp16, underflowed_or_denorm_fp16);
-
-   nir_ssa_def *finite_or_overflowed_fp16 = finite_fp16;
-   if (mode != nir_rounding_mode_rtne) {
-      nir_pop_if(b, NULL);
-      finite_or_overflowed_fp16 = nir_if_phi(b, overflowed_fp16, finite_fp16);
-   }
-
-   nir_pop_if(b, NULL);
-   nir_ssa_def *fp16 = nir_if_phi(b, inf_nanfp16, finite_or_overflowed_fp16);
-
-   return nir_u2u16(b, nir_ior(b, fp16, nir_ushr(b, sign, nir_imm_int(b, 16))));
-}
-
-static nir_ssa_def *
-lower_fp16_cast_impl(nir_builder *b, nir_instr *instr, void *data)
-{
-   nir_ssa_def *src, *dst;
-   uint8_t *swizzle = NULL;
-   nir_rounding_mode mode = nir_rounding_mode_rtne;
-
-   if (instr->type == nir_instr_type_alu) {
-      nir_alu_instr *alu = nir_instr_as_alu(instr);
-      src = alu->src[0].src.ssa;
-      swizzle = alu->src[0].swizzle;
-      dst = &alu->dest.dest.ssa;
-      assert(src->bit_size == 32);
-      switch (alu->op) {
-      case nir_op_f2f16:
-      case nir_op_f2f16_rtne:
-         break;
-      case nir_op_f2f16_rtz:
-         mode = nir_rounding_mode_rtz;
-         break;
-      default: unreachable("Should've been filtered");
-      }
-   } else {
-      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-      assert(nir_intrinsic_src_type(intrin) == nir_type_float32);
-      src = intrin->src[0].ssa;
-      dst = &intrin->dest.ssa;
-      mode = nir_intrinsic_rounding_mode(intrin);
-   }
-
-   nir_ssa_def *rets[NIR_MAX_VEC_COMPONENTS] = { NULL };
-
-   for (unsigned i = 0; i < dst->num_components; i++) {
-      nir_ssa_def *comp = nir_channel(b, src, swizzle ? swizzle[i] : i);
-      rets[i] = float_to_half_impl(b, comp, mode);
-   }
-
-   return nir_vec(b, rets, dst->num_components);
+   return new_var != NULL;
 }
 
 bool
-dxil_nir_lower_fp16_casts(nir_shader *shader)
+dxil_nir_lower_double_math(nir_shader *shader)
 {
-   return nir_shader_lower_instructions(shader,
-                                        lower_fp16_casts_filter,
-                                        lower_fp16_cast_impl,
-                                        NULL);
+   bool progress = false;
+   nir_foreach_function(func, shader) {
+      bool func_progress = false;
+      if (!func->impl)
+         continue;
+
+      nir_builder b;
+      nir_builder_init(&b, func->impl);
+      nir_foreach_block(block, func->impl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type != nir_instr_type_alu)
+               continue;
+
+            nir_alu_instr *alu = nir_instr_as_alu(instr);
+
+            /* TODO: See if we can apply this explicitly to packs/unpacks that are then
+             * used as a double. As-is, if we had an app explicitly do a 64bit integer op,
+             * then try to bitcast to double (not expressible in HLSL, but it is in other
+             * source languages), this would unpack the integer and repack as a double, when
+             * we probably want to just send the bitcast through to the backend.
+             */
+
+            b.cursor = nir_before_instr(&alu->instr);
+
+            for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; ++i) {
+               if (nir_alu_type_get_base_type(nir_op_infos[alu->op].input_types[i]) == nir_type_float &&
+                   alu->src[i].src.ssa->bit_size == 64) {
+                  nir_ssa_def *packed_double = nir_channel(&b, alu->src[i].src.ssa, alu->src[i].swizzle[0]);
+                  nir_ssa_def *unpacked_double = nir_unpack_64_2x32(&b, packed_double);
+                  nir_ssa_def *repacked_double = nir_pack_double_2x32_dxil(&b, unpacked_double);
+                  nir_instr_rewrite_src_ssa(instr, &alu->src[i].src, repacked_double);
+                  memset(alu->src[i].swizzle, 0, ARRAY_SIZE(alu->src[i].swizzle));
+                  func_progress = true;
+               }
+            }
+
+            if (nir_alu_type_get_base_type(nir_op_infos[alu->op].output_type) == nir_type_float &&
+                alu->dest.dest.ssa.bit_size == 64) {
+               b.cursor = nir_after_instr(&alu->instr);
+               nir_ssa_def *packed_double = &alu->dest.dest.ssa;
+               nir_ssa_def *unpacked_double = nir_unpack_double_2x32_dxil(&b, packed_double);
+               nir_ssa_def *repacked_double = nir_pack_64_2x32(&b, unpacked_double);
+               nir_ssa_def_rewrite_uses_after(packed_double, repacked_double, unpacked_double->parent_instr);
+               func_progress = true;
+            }
+         }
+      }
+      
+      if (func_progress)
+         nir_metadata_preserve(func->impl, nir_metadata_block_index |
+                                           nir_metadata_dominance |
+                                           nir_metadata_loop_analysis);
+      else
+         nir_metadata_preserve(func->impl, nir_metadata_all);
+      progress |= func_progress;
+   }
+
+   return progress;
 }

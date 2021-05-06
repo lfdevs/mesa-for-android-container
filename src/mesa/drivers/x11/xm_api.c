@@ -71,6 +71,7 @@
 #include "main/framebuffer.h"
 #include "main/macros.h"
 #include "main/renderbuffer.h"
+#include "main/state.h"
 #include "main/teximage.h"
 #include "main/version.h"
 #include "main/vtxfmt.h"
@@ -846,19 +847,15 @@ XMesaVisual XMesaCreateVisual( XMesaDisplay *display,
       alpha_bits = v->mesa_visual.alphaBits;
    }
 
-   if (!_mesa_initialize_visual(&v->mesa_visual,
-                                db_flag, stereo_flag,
-                                red_bits, green_bits,
-                                blue_bits, alpha_bits,
-                                depth_size,
-                                stencil_size,
-                                accum_red_size, accum_green_size,
-                                accum_blue_size, accum_alpha_size,
-                                0)) {
-      free(v->visinfo);
-      free(v);
-      return NULL;
-   }
+   _mesa_initialize_visual(&v->mesa_visual,
+                           db_flag, stereo_flag,
+                           red_bits, green_bits,
+                           blue_bits, alpha_bits,
+                           depth_size,
+                           stencil_size,
+                           accum_red_size, accum_green_size,
+                           accum_blue_size, accum_alpha_size,
+                           0);
 
    /* XXX minor hack */
    v->mesa_visual.level = level;
@@ -920,6 +917,7 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list )
    if (0) {
       mesaCtx->VertexProgram._MaintainTnlProgram = GL_TRUE;
       mesaCtx->FragmentProgram._MaintainTexEnvProgram = GL_TRUE;
+      _mesa_reset_vertex_processing_mode(mesaCtx);
    }
 
    _mesa_enable_sw_extensions(mesaCtx);

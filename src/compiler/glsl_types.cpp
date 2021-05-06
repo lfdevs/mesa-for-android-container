@@ -26,6 +26,7 @@
 #include "compiler/glsl/glsl_parser_extras.h"
 #include "glsl_types.h"
 #include "util/hash_table.h"
+#include "util/u_cpu_detect.h"
 #include "util/u_string.h"
 
 
@@ -518,6 +519,11 @@ hash_free_type_function(struct hash_entry *entry)
 void
 glsl_type_singleton_init_or_ref()
 {
+   /* This is required for _mesa_half_to_float() which is
+    * required for constant-folding 16-bit float ops.
+    */
+   util_cpu_detect();
+
    mtx_lock(&glsl_type::hash_mutex);
    glsl_type_users++;
    mtx_unlock(&glsl_type::hash_mutex);
@@ -1623,6 +1629,72 @@ glsl_type::component_slots() const
    case GLSL_TYPE_SAMPLER:
    case GLSL_TYPE_IMAGE:
       return 2;
+
+   case GLSL_TYPE_SUBROUTINE:
+      return 1;
+
+   case GLSL_TYPE_FUNCTION:
+   case GLSL_TYPE_ATOMIC_UINT:
+   case GLSL_TYPE_VOID:
+   case GLSL_TYPE_ERROR:
+      break;
+   }
+
+   return 0;
+}
+
+unsigned
+glsl_type::component_slots_aligned(unsigned offset) const
+{
+   /* Align 64bit type only if it crosses attribute slot boundary. */
+   switch (this->base_type) {
+   case GLSL_TYPE_UINT:
+   case GLSL_TYPE_INT:
+   case GLSL_TYPE_UINT8:
+   case GLSL_TYPE_INT8:
+   case GLSL_TYPE_UINT16:
+   case GLSL_TYPE_INT16:
+   case GLSL_TYPE_FLOAT:
+   case GLSL_TYPE_FLOAT16:
+   case GLSL_TYPE_BOOL:
+      return this->components();
+
+   case GLSL_TYPE_DOUBLE:
+   case GLSL_TYPE_UINT64:
+   case GLSL_TYPE_INT64: {
+      unsigned size = 2 * this->components();
+      if (offset % 2 == 1 && (offset % 4 + size) > 4) {
+         size++;
+      }
+
+      return size;
+   }
+
+   case GLSL_TYPE_STRUCT:
+   case GLSL_TYPE_INTERFACE: {
+      unsigned size = 0;
+
+      for (unsigned i = 0; i < this->length; i++) {
+         const glsl_type *member = this->fields.structure[i].type;
+         size += member->component_slots_aligned(size + offset);
+      }
+
+      return size;
+   }
+
+   case GLSL_TYPE_ARRAY: {
+      unsigned size = 0;
+
+      for (unsigned i = 0; i < this->length; i++) {
+         size += this->fields.array->component_slots_aligned(size + offset);
+      }
+
+      return size;
+   }
+
+   case GLSL_TYPE_SAMPLER:
+   case GLSL_TYPE_IMAGE:
+      return 2 + ((offset % 4) == 3 ? 1 : 0);
 
    case GLSL_TYPE_SUBROUTINE:
       return 1;

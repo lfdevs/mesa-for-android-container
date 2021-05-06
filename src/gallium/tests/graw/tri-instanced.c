@@ -152,7 +152,7 @@ static void set_vertices( void )
                                                  sizeof(inst_data),
                                                  inst_data);
 
-   ctx->set_vertex_buffers(ctx, 0, 2, vbuf);
+   ctx->set_vertex_buffers(ctx, 0, 2, 0, false, vbuf);
 }
 
 static void set_vertex_shader( void )

@@ -26,9 +26,9 @@
 #include "main/samplerobj.h"
 
 #include "dev/gen_device_info.h"
-#include "common/gen_sample_positions.h"
+#include "common/intel_sample_positions.h"
 #include "genxml/gen_macros.h"
-#include "common/gen_guardband.h"
+#include "common/intel_guardband.h"
 
 #include "main/bufferobj.h"
 #include "main/context.h"
@@ -46,9 +46,9 @@
 #include "brw_wm.h"
 #include "brw_util.h"
 
-#include "intel_batchbuffer.h"
-#include "intel_buffer_objects.h"
-#include "intel_fbo.h"
+#include "brw_batch.h"
+#include "brw_buffer_objects.h"
+#include "brw_fbo.h"
 
 #include "main/enums.h"
 #include "main/fbobject.h"
@@ -61,7 +61,7 @@
 #include "main/viewport.h"
 #include "util/half_float.h"
 
-#if GEN_GEN == 4
+#if GFX_VER == 4
 static struct brw_address
 KSP(struct brw_context *brw, uint32_t offset)
 {
@@ -75,7 +75,7 @@ KSP(UNUSED struct brw_context *brw, uint32_t offset)
 }
 #endif
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
 static void
 emit_lrm(struct brw_context *brw, uint32_t reg, struct brw_address addr)
 {
@@ -86,7 +86,7 @@ emit_lrm(struct brw_context *brw, uint32_t reg, struct brw_address addr)
 }
 #endif
 
-#if GEN_GEN == 7
+#if GFX_VER == 7
 static void
 emit_lri(struct brw_context *brw, uint32_t reg, uint32_t imm)
 {
@@ -246,32 +246,32 @@ genX(emit_vertex_buffer_state)(struct brw_context *brw,
        * the address space.
        */
       .BufferStartingAddress = ro_32_bo(bo, start_offset),
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
       .BufferSize = end_offset - start_offset,
 #endif
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
       .AddressModifyEnable = true,
 #endif
 
-#if GEN_GEN < 8
+#if GFX_VER < 8
       .BufferAccessType = step_rate ? INSTANCEDATA : VERTEXDATA,
       .InstanceDataStepRate = step_rate,
-#if GEN_GEN >= 5
+#if GFX_VER >= 5
       .EndAddress = ro_bo(bo, end_offset - 1),
 #endif
 #endif
 
-#if GEN_GEN == 11
+#if GFX_VER == 11
       .MOCS = ICL_MOCS_WB,
-#elif GEN_GEN == 10
+#elif GFX_VER == 10
       .MOCS = CNL_MOCS_WB,
-#elif GEN_GEN == 9
+#elif GFX_VER == 9
       .MOCS = SKL_MOCS_WB,
-#elif GEN_GEN == 8
+#elif GFX_VER == 8
       .MOCS = BDW_MOCS_WB,
-#elif GEN_GEN == 7
-      .MOCS = GEN7_MOCS_L3,
+#elif GFX_VER == 7
+      .MOCS = GFX7_MOCS_L3,
 #endif
    };
 
@@ -400,12 +400,12 @@ pinned_bo_high_bits(struct brw_bo *bo)
  * we can't apply this workaround.  Instead, we tell the kernel to move it
  * to the low 4GB regardless.
  *
- * This HW issue is gone on Gen11+.
+ * This HW issue is gone on Gfx11+.
  */
 static void
 vf_invalidate_for_vb_48bit_transitions(UNUSED struct brw_context *brw)
 {
-#if GEN_GEN >= 8 && GEN_GEN < 11
+#if GFX_VER >= 8 && GFX_VER < 11
    bool need_invalidate = false;
 
    for (unsigned i = 0; i < brw->vb.nr_buffers; i++) {
@@ -444,7 +444,7 @@ vf_invalidate_for_vb_48bit_transitions(UNUSED struct brw_context *brw)
 static void
 vf_invalidate_for_ib_48bit_transition(UNUSED struct brw_context *brw)
 {
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    uint16_t high_bits = pinned_bo_high_bits(brw->ib.bo);
 
    if (high_bits != brw->ib.last_bo_high_bits) {
@@ -463,14 +463,14 @@ genX(emit_vertices)(struct brw_context *brw)
    brw_prepare_vertices(brw);
    brw_prepare_shader_draw_parameters(brw);
 
-#if GEN_GEN < 6
+#if GFX_VER < 6
    brw_emit_query_begin(brw);
 #endif
 
    const struct brw_vs_prog_data *vs_prog_data =
       brw_vs_prog_data(brw->vs.base.prog_data);
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    struct gl_context *ctx = &brw->ctx;
    const bool uses_edge_flag = (ctx->Polygon.FrontMode != GL_FILL ||
                                 ctx->Polygon.BackMode != GL_FILL);
@@ -528,7 +528,7 @@ genX(emit_vertices)(struct brw_context *brw)
    unsigned nr_elements =
       brw->vb.nr_enabled + needs_sgvs_element + uses_derived_draw_params;
 
-#if GEN_GEN < 8
+#if GFX_VER < 8
    /* If any of the formats of vb.enabled needs more that one upload, we need
     * to add it to nr_elements
     */
@@ -570,7 +570,7 @@ genX(emit_vertices)(struct brw_context *brw)
    vf_invalidate_for_vb_48bit_transitions(brw);
 
    if (nr_buffers) {
-      assert(nr_buffers <= (GEN_GEN >= 6 ? 33 : 17));
+      assert(nr_buffers <= (GFX_VER >= 6 ? 33 : 17));
 
       dw = brw_batch_emitn(brw, GENX(3DSTATE_VERTEX_BUFFERS),
                            1 + GENX(VERTEX_BUFFER_STATE_length) * nr_buffers);
@@ -583,7 +583,7 @@ genX(emit_vertices)(struct brw_context *brw)
           * vertex element may poke over the end of the buffer by 2 bytes.
           */
          const unsigned padding =
-            (GEN_GEN <= 7 && !GEN_IS_HASWELL && !devinfo->is_baytrail) * 2;
+            (GFX_VERx10 < 75 && !devinfo->is_baytrail) * 2;
          const unsigned end = buffer->offset + buffer->size + padding;
          dw = genX(emit_vertex_buffer_state)(brw, dw, i, buffer->bo,
                                              buffer->offset,
@@ -614,9 +614,9 @@ genX(emit_vertices)(struct brw_context *brw)
    /* The hardware allows one more VERTEX_ELEMENTS than VERTEX_BUFFERS,
     * presumably for VertexID/InstanceID.
     */
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
    assert(nr_elements <= 34);
-   const struct brw_vertex_element *gen6_edgeflag_input = NULL;
+   const struct brw_vertex_element *gfx6_edgeflag_input = NULL;
 #else
    assert(nr_elements <= 18);
 #endif
@@ -632,10 +632,10 @@ genX(emit_vertices)(struct brw_context *brw)
       uint32_t comp1 = VFCOMP_STORE_SRC;
       uint32_t comp2 = VFCOMP_STORE_SRC;
       uint32_t comp3 = VFCOMP_STORE_SRC;
-      const unsigned num_uploads = GEN_GEN < 8 ?
+      const unsigned num_uploads = GFX_VER < 8 ?
          uploads_needed(format, input->is_dual_slot) : 1;
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
       /* From the BDW PRM, Volume 2d, page 588 (VERTEX_ELEMENT_STATE):
        * "Any SourceElementFormat of *64*_PASSTHRU cannot be used with an
        * element which has edge flag enabled."
@@ -643,32 +643,32 @@ genX(emit_vertices)(struct brw_context *brw)
       assert(!(is_passthru_format(format) && uses_edge_flag));
 #endif
 
-      /* The gen4 driver expects edgeflag to come in as a float, and passes
+      /* The gfx4 driver expects edgeflag to come in as a float, and passes
        * that float on to the tests in the clipper.  Mesa's current vertex
        * attribute value for EdgeFlag is stored as a float, which works out.
        * glEdgeFlagPointer, on the other hand, gives us an unnormalized
        * integer ubyte.  Just rewrite that to convert to a float.
        *
-       * Gen6+ passes edgeflag as sideband along with the vertex, instead
+       * Gfx6+ passes edgeflag as sideband along with the vertex, instead
        * of in the VUE.  We have to upload it sideband as the last vertex
        * element according to the B-Spec.
        */
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
       if (input == &brw->vb.inputs[VERT_ATTRIB_EDGEFLAG]) {
-         gen6_edgeflag_input = input;
+         gfx6_edgeflag_input = input;
          continue;
       }
 #endif
 
       for (unsigned c = 0; c < num_uploads; c++) {
-         const uint32_t upload_format = GEN_GEN >= 8 ? format :
+         const uint32_t upload_format = GFX_VER >= 8 ? format :
             downsize_format_if_needed(format, c);
          /* If we need more that one upload, the offset stride would be 128
           * bits (16 bytes), as for previous uploads we are using the full
           * entry. */
          const unsigned offset = input->offset + c * 16;
 
-         const int size = (GEN_GEN < 8 && is_passthru_format(format)) ?
+         const int size = (GFX_VER < 8 && is_passthru_format(format)) ?
             upload_format_size(upload_format) : glformat->Size;
 
          switch (size) {
@@ -676,7 +676,7 @@ genX(emit_vertices)(struct brw_context *brw)
             case 1: comp1 = VFCOMP_STORE_0; /* fallthrough */
             case 2: comp2 = VFCOMP_STORE_0; /* fallthrough */
             case 3:
-               if (GEN_GEN >= 8 && glformat->Doubles) {
+               if (GFX_VER >= 8 && glformat->Doubles) {
                   comp3 = VFCOMP_STORE_0;
                } else if (glformat->Integer) {
                   comp3 = VFCOMP_STORE_1_INT;
@@ -687,7 +687,7 @@ genX(emit_vertices)(struct brw_context *brw)
                break;
          }
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
          /* From the BDW PRM, Volume 2d, page 586 (VERTEX_ELEMENT_STATE):
           *
           *     "When SourceElementFormat is set to one of the *64*_PASSTHRU
@@ -721,7 +721,7 @@ genX(emit_vertices)(struct brw_context *brw)
             .Component1Control = comp1,
             .Component2Control = comp2,
             .Component3Control = comp3,
-#if GEN_GEN < 5
+#if GFX_VER < 5
             .DestinationElementOffset = i * 4,
 #endif
          };
@@ -738,12 +738,12 @@ genX(emit_vertices)(struct brw_context *brw)
          .Component1Control = VFCOMP_STORE_0,
          .Component2Control = VFCOMP_STORE_0,
          .Component3Control = VFCOMP_STORE_0,
-#if GEN_GEN < 5
+#if GFX_VER < 5
          .DestinationElementOffset = i * 4,
 #endif
       };
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
       if (uses_draw_params) {
          elem_state.VertexBufferIndex = brw->vb.nr_buffers;
          elem_state.SourceElementFormat = ISL_FORMAT_R32G32_UINT;
@@ -778,7 +778,7 @@ genX(emit_vertices)(struct brw_context *brw)
          .Component1Control = VFCOMP_STORE_SRC,
          .Component2Control = VFCOMP_STORE_0,
          .Component3Control = VFCOMP_STORE_0,
-#if GEN_GEN < 5
+#if GFX_VER < 5
          .DestinationElementOffset = i * 4,
 #endif
       };
@@ -787,17 +787,17 @@ genX(emit_vertices)(struct brw_context *brw)
       dw += GENX(VERTEX_ELEMENT_STATE_length);
    }
 
-#if GEN_GEN >= 6
-   if (gen6_edgeflag_input) {
-      const struct gl_vertex_format *glformat = gen6_edgeflag_input->glformat;
+#if GFX_VER >= 6
+   if (gfx6_edgeflag_input) {
+      const struct gl_vertex_format *glformat = gfx6_edgeflag_input->glformat;
       const uint32_t format = brw_get_vertex_surface_type(brw, glformat);
 
       struct GENX(VERTEX_ELEMENT_STATE) elem_state = {
          .Valid = true,
-         .VertexBufferIndex = gen6_edgeflag_input->buffer,
+         .VertexBufferIndex = gfx6_edgeflag_input->buffer,
          .EdgeFlagEnable = true,
          .SourceElementFormat = format,
-         .SourceElementOffset = gen6_edgeflag_input->offset,
+         .SourceElementOffset = gfx6_edgeflag_input->offset,
          .Component0Control = VFCOMP_STORE_SRC,
          .Component1Control = VFCOMP_STORE_0,
          .Component2Control = VFCOMP_STORE_0,
@@ -809,7 +809,7 @@ genX(emit_vertices)(struct brw_context *brw)
    }
 #endif
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    for (unsigned i = 0, j = 0; i < brw->vb.nr_enabled; i++) {
       const struct brw_vertex_element *input = brw->vb.enabled[i];
       const struct brw_vertex_buffer *buffer = &brw->vb.buffers[input->buffer];
@@ -819,7 +819,7 @@ genX(emit_vertices)(struct brw_context *brw)
        * above so we need to compensate for that in the element indices used
        * below.
        */
-      if (input == gen6_edgeflag_input)
+      if (input == gfx6_edgeflag_input)
          element_index = nr_elements - 1;
       else
          element_index = j++;
@@ -864,7 +864,7 @@ genX(emit_index_buffer)(struct brw_context *brw)
    vf_invalidate_for_ib_48bit_transition(brw);
 
    brw_batch_emit(brw, GENX(3DSTATE_INDEX_BUFFER), ib) {
-#if GEN_GEN < 8 && !GEN_IS_HASWELL
+#if GFX_VERx10 < 75
       assert(brw->ib.enable_cut_index == brw->prim_restart.enable_cut_index);
       ib.CutIndexEnable = brw->ib.enable_cut_index;
 #endif
@@ -878,8 +878,8 @@ genX(emit_index_buffer)(struct brw_context *brw)
        * the address space.
        */
       ib.BufferStartingAddress = ro_32_bo(brw->ib.bo, 0);
-#if GEN_GEN >= 8
-      ib.MOCS = GEN_GEN >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
+#if GFX_VER >= 8
+      ib.MOCS = GFX_VER >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
       ib.BufferSize = brw->ib.size;
 #else
       ib.BufferEndingAddress = ro_bo(brw->ib.bo, brw->ib.size - 1);
@@ -897,7 +897,7 @@ static const struct brw_tracked_state genX(index_buffer) = {
    .emit = genX(emit_index_buffer),
 };
 
-#if GEN_IS_HASWELL || GEN_GEN >= 8
+#if GFX_VERx10 >= 75
 static void
 genX(upload_cut_index)(struct brw_context *brw)
 {
@@ -934,7 +934,7 @@ const struct brw_tracked_state genX(vf_statistics) = {
    .emit = genX(upload_vf_statistics),
 };
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
 /**
  * Determine the appropriate attribute override value to store into the
  * 3DSTATE_SF structure for a given fragment shader attribute.  The attribute
@@ -1162,9 +1162,9 @@ genX(calculate_attr_overrides)(const struct brw_context *brw,
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
 typedef struct GENX(3DSTATE_WM_DEPTH_STENCIL) DEPTH_STENCIL_GENXML;
-#elif GEN_GEN >= 6
+#elif GFX_VER >= 6
 typedef struct GENX(DEPTH_STENCIL_STATE)      DEPTH_STENCIL_GENXML;
 #else
 typedef struct GENX(COLOR_CALC_STATE)         DEPTH_STENCIL_GENXML;
@@ -1176,8 +1176,8 @@ set_depth_stencil_bits(struct brw_context *brw, DEPTH_STENCIL_GENXML *ds)
    struct gl_context *ctx = &brw->ctx;
 
    /* _NEW_BUFFERS */
-   struct intel_renderbuffer *depth_irb =
-      intel_get_renderbuffer(ctx->DrawBuffer, BUFFER_DEPTH);
+   struct brw_renderbuffer *depth_irb =
+      brw_get_renderbuffer(ctx->DrawBuffer, BUFFER_DEPTH);
 
    /* _NEW_DEPTH */
    struct gl_depthbuffer_attrib *depth = &ctx->Depth;
@@ -1189,7 +1189,7 @@ set_depth_stencil_bits(struct brw_context *brw, DEPTH_STENCIL_GENXML *ds)
    if (depth->Test && depth_irb) {
       ds->DepthTestEnable = true;
       ds->DepthBufferWriteEnable = brw_depth_writes_enabled(brw);
-      ds->DepthTestFunction = intel_translate_compare_func(depth->Func);
+      ds->DepthTestFunction = brw_translate_compare_func(depth->Func);
    }
 
    if (brw->stencil_enabled) {
@@ -1198,13 +1198,13 @@ set_depth_stencil_bits(struct brw_context *brw, DEPTH_STENCIL_GENXML *ds)
       ds->StencilTestMask = stencil->ValueMask[0] & 0xff;
 
       ds->StencilTestFunction =
-         intel_translate_compare_func(stencil->Function[0]);
+         brw_translate_compare_func(stencil->Function[0]);
       ds->StencilFailOp =
-         intel_translate_stencil_op(stencil->FailFunc[0]);
+         brw_translate_stencil_op(stencil->FailFunc[0]);
       ds->StencilPassDepthPassOp =
-         intel_translate_stencil_op(stencil->ZPassFunc[0]);
+         brw_translate_stencil_op(stencil->ZPassFunc[0]);
       ds->StencilPassDepthFailOp =
-         intel_translate_stencil_op(stencil->ZFailFunc[0]);
+         brw_translate_stencil_op(stencil->ZFailFunc[0]);
 
       ds->StencilBufferWriteEnable = brw->stencil_write_enabled;
 
@@ -1214,27 +1214,27 @@ set_depth_stencil_bits(struct brw_context *brw, DEPTH_STENCIL_GENXML *ds)
          ds->BackfaceStencilTestMask = stencil->ValueMask[b] & 0xff;
 
          ds->BackfaceStencilTestFunction =
-            intel_translate_compare_func(stencil->Function[b]);
+            brw_translate_compare_func(stencil->Function[b]);
          ds->BackfaceStencilFailOp =
-            intel_translate_stencil_op(stencil->FailFunc[b]);
+            brw_translate_stencil_op(stencil->FailFunc[b]);
          ds->BackfaceStencilPassDepthPassOp =
-            intel_translate_stencil_op(stencil->ZPassFunc[b]);
+            brw_translate_stencil_op(stencil->ZPassFunc[b]);
          ds->BackfaceStencilPassDepthFailOp =
-            intel_translate_stencil_op(stencil->ZFailFunc[b]);
+            brw_translate_stencil_op(stencil->ZFailFunc[b]);
       }
 
-#if GEN_GEN <= 5 || GEN_GEN >= 9
+#if GFX_VER <= 5 || GFX_VER >= 9
       ds->StencilReferenceValue = _mesa_get_stencil_ref(ctx, 0);
       ds->BackfaceStencilReferenceValue = _mesa_get_stencil_ref(ctx, b);
 #endif
    }
 }
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
 static void
 genX(upload_depth_stencil_state)(struct brw_context *brw)
 {
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    brw_batch_emit(brw, GENX(3DSTATE_WM_DEPTH_STENCIL), wmds) {
       set_depth_stencil_bits(brw, &wmds);
    }
@@ -1245,7 +1245,7 @@ genX(upload_depth_stencil_state)(struct brw_context *brw)
    }
 
    /* Now upload a pointer to the indirect state */
-#if GEN_GEN == 6
+#if GFX_VER == 6
    brw_batch_emit(brw, GENX(3DSTATE_CC_STATE_POINTERS), ptr) {
       ptr.PointertoDEPTH_STENCIL_STATE = ds_offset;
       ptr.DEPTH_STENCIL_STATEChange = true;
@@ -1264,7 +1264,7 @@ static const struct brw_tracked_state genX(depth_stencil_state) = {
               _NEW_DEPTH |
               _NEW_STENCIL,
       .brw  = BRW_NEW_BLORP |
-              (GEN_GEN >= 8 ? BRW_NEW_CONTEXT
+              (GFX_VER >= 8 ? BRW_NEW_CONTEXT
                             : BRW_NEW_BATCH |
                               BRW_NEW_STATE_BASE_ADDRESS),
    },
@@ -1274,14 +1274,14 @@ static const struct brw_tracked_state genX(depth_stencil_state) = {
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN <= 5
+#if GFX_VER <= 5
 
 static void
 genX(upload_clip_state)(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
 
-   ctx->NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
+   ctx->NewDriverState |= BRW_NEW_GFX4_UNIT_STATE;
    brw_state_emit(brw, GENX(CLIP_STATE), 32, &brw->clip.state_offset, clip) {
       clip.KernelStartPointer = KSP(brw, brw->clip.prog_offset);
       clip.GRFRegisterCount =
@@ -1309,7 +1309,7 @@ genX(upload_clip_state)(struct brw_context *brw)
          /* Although up to 16 concurrent Clip threads are allowed on Ironlake,
           * only 2 threads can output VUEs at a time.
           */
-         clip.MaximumNumberofThreads = (GEN_GEN == 5 ? 16 : 2) - 1;
+         clip.MaximumNumberofThreads = (GFX_VER == 5 ? 16 : 2) - 1;
       } else {
          assert(brw->urb.nr_clip_entries >= 5);
          clip.MaximumNumberofThreads = 1 - 1;
@@ -1332,7 +1332,7 @@ genX(upload_clip_state)(struct brw_context *brw)
                                        ctx->Transform.DepthClampFar);
 
       /* _NEW_TRANSFORM */
-      if (GEN_GEN == 5 || GEN_IS_G4X) {
+      if (GFX_VER == 5 || GFX_VERx10 == 45) {
          clip.UserClipDistanceClipTestEnableBitmask =
             ctx->Transform.ClipPlanesEnabled;
       } else {
@@ -1352,7 +1352,7 @@ genX(upload_clip_state)(struct brw_context *brw)
 
       clip.ClipMode = brw->clip.prog_data->clip_mode;
 
-#if GEN_IS_G4X
+#if GFX_VERx10 == 45
       clip.NegativeWClipTestEnable = true;
 #endif
    }
@@ -1393,11 +1393,11 @@ genX(upload_clip_state)(struct brw_context *brw)
           BRW_BARYCENTRIC_NONPERSPECTIVE_BITS)
          clip.NonPerspectiveBarycentricEnable = true;
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
       clip.EarlyCullEnable = true;
 #endif
 
-#if GEN_GEN == 7
+#if GFX_VER == 7
       clip.FrontWinding = brw->polygon_front_bit != fb->FlipY;
 
       if (ctx->Polygon.CullFlag) {
@@ -1419,7 +1419,7 @@ genX(upload_clip_state)(struct brw_context *brw)
       }
 #endif
 
-#if GEN_GEN < 8
+#if GFX_VER < 8
       clip.UserClipDistanceCullTestEnableBitmask =
          brw_vue_prog_data(brw->vs.base.prog_data)->cull_distance_mask;
 
@@ -1442,7 +1442,7 @@ genX(upload_clip_state)(struct brw_context *brw)
       clip.UserClipDistanceClipTestEnableBitmask =
          ctx->Transform.ClipPlanesEnabled;
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
       clip.ForceUserClipDistanceClipTestEnableBitmask = true;
 #endif
 
@@ -1458,7 +1458,7 @@ genX(upload_clip_state)(struct brw_context *brw)
 
       if (ctx->RasterDiscard) {
          clip.ClipMode = CLIPMODE_REJECT_ALL;
-#if GEN_GEN == 6
+#if GFX_VER == 6
          perf_debug("Rasterizer discard is currently implemented via the "
                     "clipper; having the GS not write primitives would "
                     "likely be faster.\n");
@@ -1512,17 +1512,17 @@ genX(upload_sf)(struct brw_context *brw)
    struct gl_context *ctx = &brw->ctx;
    float point_size;
 
-#if GEN_GEN <= 7
+#if GFX_VER <= 7
    /* _NEW_BUFFERS */
    bool flip_y = ctx->DrawBuffer->FlipY;
    UNUSED const bool multisampled_fbo =
       _mesa_geometric_samples(ctx->DrawBuffer) > 1;
 #endif
 
-#if GEN_GEN < 6
+#if GFX_VER < 6
    const struct brw_sf_prog_data *sf_prog_data = brw->sf.prog_data;
 
-   ctx->NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
+   ctx->NewDriverState |= BRW_NEW_GFX4_UNIT_STATE;
 
    brw_state_emit(brw, GENX(SF_STATE), 64, &brw->sf.state_offset, sf) {
       sf.KernelStartPointer = KSP(brw, brw->sf.prog_offset);
@@ -1547,7 +1547,7 @@ genX(upload_sf)(struct brw_context *brw)
       /* sf.ConstantURBEntryReadOffset = brw->curbe.vs_start * 2; */
 
       sf.MaximumNumberofThreads =
-         MIN2(GEN_GEN == 5 ? 48 : 24, brw->urb.nr_sf_entries) - 1;
+         MIN2(GFX_VER == 5 ? 48 : 24, brw->urb.nr_sf_entries) - 1;
 
       sf.SpritePointEnable = ctx->Point.PointSprite;
 
@@ -1559,15 +1559,15 @@ genX(upload_sf)(struct brw_context *brw)
 #endif
       sf.ViewportTransformEnable = true;
 
-#if GEN_GEN == 7
+#if GFX_VER == 7
       /* _NEW_BUFFERS */
       sf.DepthBufferSurfaceFormat = brw_depthbuffer_format(brw);
 #endif
 
-#if GEN_GEN <= 7
+#if GFX_VER <= 7
       /* _NEW_POLYGON */
       sf.FrontWinding = brw->polygon_front_bit != flip_y;
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
       sf.GlobalDepthOffsetEnableSolid = ctx->Polygon.OffsetFill;
       sf.GlobalDepthOffsetEnableWireframe = ctx->Polygon.OffsetLine;
       sf.GlobalDepthOffsetEnablePoint = ctx->Polygon.OffsetPoint;
@@ -1628,14 +1628,14 @@ genX(upload_sf)(struct brw_context *brw)
          sf.CullMode = CULLMODE_NONE;
       }
 
-#if GEN_IS_HASWELL
+#if GFX_VERx10 == 75
       sf.LineStippleEnable = ctx->Line.StippleFlag;
 #endif
 
 #endif
 
       /* _NEW_LINE */
-#if GEN_GEN == 8
+#if GFX_VER == 8
       const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
       if (devinfo->is_cherryview)
@@ -1648,7 +1648,7 @@ genX(upload_sf)(struct brw_context *brw)
 
       if (ctx->Line.SmoothFlag) {
          sf.LineEndCapAntialiasingRegionWidth = _10pixels;
-#if GEN_GEN <= 7
+#if GFX_VER <= 7
          sf.AntialiasingEnable = true;
 #endif
       }
@@ -1662,14 +1662,14 @@ genX(upload_sf)(struct brw_context *brw)
       if (use_state_point_size(brw))
          sf.PointWidthSource = State;
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
       /* _NEW_POINT | _NEW_MULTISAMPLE */
       if ((ctx->Point.SmoothFlag || _mesa_is_multisample_enabled(ctx)) &&
           !ctx->Point.PointSprite)
          sf.SmoothPointEnable = true;
 #endif
 
-#if GEN_GEN == 10
+#if GFX_VER == 10
       /* _NEW_BUFFERS
        * Smooth Point Enable bit MUST not be set when NUM_MULTISAMPLES > 1.
        */
@@ -1679,7 +1679,7 @@ genX(upload_sf)(struct brw_context *brw)
          sf.SmoothPointEnable = false;
 #endif
 
-#if GEN_IS_G4X || GEN_GEN >= 5
+#if GFX_VERx10 >= 45
       sf.AALineDistanceMode = AALINEDISTANCE_TRUE;
 #endif
 
@@ -1692,7 +1692,7 @@ genX(upload_sf)(struct brw_context *brw)
          sf.TriangleFanProvokingVertexSelect = 1;
       }
 
-#if GEN_GEN == 6
+#if GFX_VER == 6
       /* BRW_NEW_FS_PROG_DATA */
       const struct brw_wm_prog_data *wm_prog_data =
          brw_wm_prog_data(brw->wm.base.prog_data);
@@ -1733,24 +1733,24 @@ static const struct brw_tracked_state genX(sf_state) = {
                _NEW_LINE |
                _NEW_POINT |
                _NEW_PROGRAM |
-               (GEN_GEN >= 6 ? _NEW_MULTISAMPLE : 0) |
-               (GEN_GEN <= 7 ? _NEW_BUFFERS | _NEW_POLYGON : 0) |
-               (GEN_GEN == 10 ? _NEW_BUFFERS : 0),
+               (GFX_VER >= 6 ? _NEW_MULTISAMPLE : 0) |
+               (GFX_VER <= 7 ? _NEW_BUFFERS | _NEW_POLYGON : 0) |
+               (GFX_VER == 10 ? _NEW_BUFFERS : 0),
       .brw   = BRW_NEW_BLORP |
                BRW_NEW_VUE_MAP_GEOM_OUT |
-               (GEN_GEN <= 5 ? BRW_NEW_BATCH |
+               (GFX_VER <= 5 ? BRW_NEW_BATCH |
                                BRW_NEW_PROGRAM_CACHE |
                                BRW_NEW_SF_PROG_DATA |
                                BRW_NEW_SF_VP |
                                BRW_NEW_URB_FENCE
                              : 0) |
-               (GEN_GEN >= 6 ? BRW_NEW_CONTEXT : 0) |
-               (GEN_GEN >= 6 && GEN_GEN <= 7 ?
+               (GFX_VER >= 6 ? BRW_NEW_CONTEXT : 0) |
+               (GFX_VER >= 6 && GFX_VER <= 7 ?
                                BRW_NEW_GS_PROG_DATA |
                                BRW_NEW_PRIMITIVE |
                                BRW_NEW_TES_PROG_DATA
                              : 0) |
-               (GEN_GEN == 6 ? BRW_NEW_FS_PROG_DATA |
+               (GFX_VER == 6 ? BRW_NEW_FS_PROG_DATA |
                                BRW_NEW_FRAGMENT_PROGRAM
                              : 0),
    },
@@ -1797,8 +1797,8 @@ genX(upload_wm)(struct brw_context *brw)
    UNUSED struct brw_stage_state *stage_state = &brw->wm.base;
    UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-#if GEN_GEN == 6
-   /* We can't fold this into gen6_upload_wm_push_constants(), because
+#if GFX_VER == 6
+   /* We can't fold this into gfx6_upload_wm_push_constants(), because
     * according to the SNB PRM, vol 2 part 1 section 7.2.2
     * (3DSTATE_CONSTANT_PS [DevSNB]):
     *
@@ -1808,7 +1808,7 @@ genX(upload_wm)(struct brw_context *brw)
       if (wm_prog_data->base.nr_params != 0) {
          wmcp.Buffer0Valid = true;
          /* Pointer to the WM constant buffer.  Covered by the set of
-          * state flags from gen6_upload_wm_push_constants.
+          * state flags from gfx6_upload_wm_push_constants.
           */
          wmcp.ConstantBody.PointertoConstantBuffer0 = stage_state->push_const_offset;
          wmcp.ConstantBody.ConstantBuffer0ReadLength = stage_state->push_const_size - 1;
@@ -1816,21 +1816,21 @@ genX(upload_wm)(struct brw_context *brw)
    }
 #endif
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
    brw_batch_emit(brw, GENX(3DSTATE_WM), wm) {
 #else
-   ctx->NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
+   ctx->NewDriverState |= BRW_NEW_GFX4_UNIT_STATE;
    brw_state_emit(brw, GENX(WM_STATE), 64, &stage_state->state_offset, wm) {
 #endif
 
-#if GEN_GEN <= 6
+#if GFX_VER <= 6
       wm._8PixelDispatchEnable = wm_prog_data->dispatch_8;
       wm._16PixelDispatchEnable = wm_prog_data->dispatch_16;
       wm._32PixelDispatchEnable = wm_prog_data->dispatch_32;
 #endif
 
-#if GEN_GEN == 4
-      /* On gen4, we only have one shader kernel */
+#if GFX_VER == 4
+      /* On gfx4, we only have one shader kernel */
       if (brw_wm_state_has_ksp(wm, 0)) {
          assert(brw_wm_prog_data_prog_offset(wm_prog_data, wm, 0) == 0);
          wm.KernelStartPointer0 = KSP(brw, stage_state->prog_offset);
@@ -1838,8 +1838,8 @@ genX(upload_wm)(struct brw_context *brw)
          wm.DispatchGRFStartRegisterForConstantSetupData0 =
             brw_wm_prog_data_dispatch_grf_start_reg(wm_prog_data, wm, 0);
       }
-#elif GEN_GEN == 5
-      /* On gen5, we have multiple shader kernels but only one GRF start
+#elif GFX_VER == 5
+      /* On gfx5, we have multiple shader kernels but only one GRF start
        * register for all kernels
        */
       wm.KernelStartPointer0 = stage_state->prog_offset +
@@ -1856,7 +1856,7 @@ genX(upload_wm)(struct brw_context *brw)
       wm.DispatchGRFStartRegisterForConstantSetupData0 =
          wm_prog_data->base.dispatch_grf_start_reg;
 
-      /* Dispatch GRF Start should be the same for all shaders on gen5 */
+      /* Dispatch GRF Start should be the same for all shaders on gfx5 */
       if (brw_wm_state_has_ksp(wm, 1)) {
          assert(wm_prog_data->base.dispatch_grf_start_reg ==
                 brw_wm_prog_data_dispatch_grf_start_reg(wm_prog_data, wm, 1));
@@ -1865,8 +1865,8 @@ genX(upload_wm)(struct brw_context *brw)
          assert(wm_prog_data->base.dispatch_grf_start_reg ==
                 brw_wm_prog_data_dispatch_grf_start_reg(wm_prog_data, wm, 2));
       }
-#elif GEN_GEN == 6
-      /* On gen6, we have multiple shader kernels and we no longer specify a
+#elif GFX_VER == 6
+      /* On gfx6, we have multiple shader kernels and we no longer specify a
        * register count for each one.
        */
       wm.KernelStartPointer0 = stage_state->prog_offset +
@@ -1884,7 +1884,7 @@ genX(upload_wm)(struct brw_context *brw)
          brw_wm_prog_data_dispatch_grf_start_reg(wm_prog_data, wm, 2);
 #endif
 
-#if GEN_GEN <= 5
+#if GFX_VER <= 5
       wm.ConstantURBEntryReadLength = wm_prog_data->base.curb_read_length;
       /* BRW_NEW_PUSH_CONSTANT_ALLOCATION */
       wm.ConstantURBEntryReadOffset = brw->curbe.wm_start * 2;
@@ -1893,7 +1893,7 @@ genX(upload_wm)(struct brw_context *brw)
       wm.EarlyDepthTestEnable = true;
 #endif
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
       wm.LineAntialiasingRegionWidth = _10pixels;
       wm.LineEndCapAntialiasingRegionWidth = _05pixels;
 
@@ -1926,23 +1926,23 @@ genX(upload_wm)(struct brw_context *brw)
 #endif
 
       /* BRW_NEW_STATS_WM */
-      wm.StatisticsEnable = GEN_GEN >= 6 || brw->stats_wm;
+      wm.StatisticsEnable = GFX_VER >= 6 || brw->stats_wm;
 
-#if GEN_GEN < 7
+#if GFX_VER < 7
       if (wm_prog_data->base.use_alt_mode)
          wm.FloatingPointMode = FLOATING_POINT_MODE_Alternate;
 
-      wm.SamplerCount = GEN_GEN == 5 ?
+      wm.SamplerCount = GFX_VER == 5 ?
          0 : DIV_ROUND_UP(stage_state->sampler_count, 4);
 
       wm.BindingTableEntryCount =
          wm_prog_data->base.binding_table.size_bytes / 4;
       wm.MaximumNumberofThreads = devinfo->max_wm_threads - 1;
 
-#if GEN_GEN == 6
+#if GFX_VER == 6
       wm.DualSourceBlendEnable =
          wm_prog_data->dual_src_blend && (ctx->Color.BlendEnabled & 1) &&
-         ctx->Color.Blend[0]._UsesDualSrc;
+         ctx->Color._BlendUsesDualSrc & 0x1;
       wm.oMaskPresenttoRenderTarget = wm_prog_data->uses_omask;
       wm.NumberofSFOutputAttributes = wm_prog_data->num_varying_inputs;
 
@@ -1979,9 +1979,9 @@ genX(upload_wm)(struct brw_context *brw)
       /* _NEW_POLYGON */
       wm.PolygonStippleEnable = ctx->Polygon.StippleFlag;
 
-#if GEN_GEN < 8
+#if GFX_VER < 8
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
       wm.PixelShaderUsesSourceW = wm_prog_data->uses_src_w;
 
       /* _NEW_BUFFERS */
@@ -2007,18 +2007,18 @@ genX(upload_wm)(struct brw_context *brw)
       if (wm_prog_data->uses_kill ||
           _mesa_is_alpha_test_enabled(ctx) ||
           _mesa_is_alpha_to_coverage_enabled(ctx) ||
-          (GEN_GEN >= 6 && wm_prog_data->uses_omask)) {
+          (GFX_VER >= 6 && wm_prog_data->uses_omask)) {
          wm.PixelShaderKillsPixel = true;
       }
 
       /* _NEW_BUFFERS | _NEW_COLOR */
       if (brw_color_buffer_write_enabled(brw) || writes_depth ||
           wm.PixelShaderKillsPixel ||
-          (GEN_GEN >= 6 && wm_prog_data->has_side_effects)) {
+          (GFX_VER >= 6 && wm_prog_data->has_side_effects)) {
          wm.ThreadDispatchEnable = true;
       }
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
       wm.PixelShaderComputedDepthMode = wm_prog_data->computed_depth_mode;
       wm.PixelShaderUsesInputCoverageMask = wm_prog_data->uses_sample_mask;
 #endif
@@ -2027,19 +2027,19 @@ genX(upload_wm)(struct brw_context *brw)
        * seem to have an effect on the HW-assisted coherency mechanism which we
        * don't need, and the rasterization-related UAV_ONLY flag and the
        * DISPATCH_ENABLE bit can be set independently from it.
-       * C.f. gen8_upload_ps_extra().
+       * C.f. gfx8_upload_ps_extra().
        *
        * BRW_NEW_FRAGMENT_PROGRAM | BRW_NEW_FS_PROG_DATA | _NEW_BUFFERS |
        * _NEW_COLOR
        */
-#if GEN_IS_HASWELL
+#if GFX_VERx10 == 75
       if (!(brw_color_buffer_write_enabled(brw) || writes_depth) &&
           wm_prog_data->has_side_effects)
          wm.PSUAVonly = ON;
 #endif
 #endif
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
       /* BRW_NEW_FS_PROG_DATA */
       if (wm_prog_data->early_fragment_tests)
          wm.EarlyDepthStencilControl = EDSC_PREPS;
@@ -2048,7 +2048,7 @@ genX(upload_wm)(struct brw_context *brw)
 #endif
    }
 
-#if GEN_GEN <= 5
+#if GFX_VER <= 5
    if (brw->wm.offset_clamp != ctx->Polygon.OffsetClamp) {
       brw_batch_emit(brw, GENX(3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP), clamp) {
          clamp.GlobalDepthOffsetClamp = ctx->Polygon.OffsetClamp;
@@ -2063,21 +2063,21 @@ static const struct brw_tracked_state genX(wm_state) = {
    .dirty = {
       .mesa  = _NEW_LINE |
                _NEW_POLYGON |
-               (GEN_GEN < 8 ? _NEW_BUFFERS |
+               (GFX_VER < 8 ? _NEW_BUFFERS |
                               _NEW_COLOR :
                               0) |
-               (GEN_GEN == 6 ? _NEW_PROGRAM_CONSTANTS : 0) |
-               (GEN_GEN < 6 ? _NEW_POLYGONSTIPPLE : 0) |
-               (GEN_GEN < 8 && GEN_GEN >= 6 ? _NEW_MULTISAMPLE : 0),
+               (GFX_VER == 6 ? _NEW_PROGRAM_CONSTANTS : 0) |
+               (GFX_VER < 6 ? _NEW_POLYGONSTIPPLE : 0) |
+               (GFX_VER < 8 && GFX_VER >= 6 ? _NEW_MULTISAMPLE : 0),
       .brw   = BRW_NEW_BLORP |
                BRW_NEW_FS_PROG_DATA |
-               (GEN_GEN < 6 ? BRW_NEW_PUSH_CONSTANT_ALLOCATION |
+               (GFX_VER < 6 ? BRW_NEW_PUSH_CONSTANT_ALLOCATION |
                               BRW_NEW_FRAGMENT_PROGRAM |
                               BRW_NEW_PROGRAM_CACHE |
                               BRW_NEW_SAMPLER_STATE_TABLE |
                               BRW_NEW_STATS_WM
                             : 0) |
-               (GEN_GEN < 7 ? BRW_NEW_BATCH : BRW_NEW_CONTEXT),
+               (GFX_VER < 7 ? BRW_NEW_BATCH : BRW_NEW_CONTEXT),
    },
    .emit = genX(upload_wm),
 };
@@ -2094,9 +2094,9 @@ static const struct brw_tracked_state genX(wm_state) = {
 
 #define INIT_THREAD_DISPATCH_FIELDS(pkt, prefix) \
    pkt.KernelStartPointer = KSP(brw, stage_state->prog_offset);           \
-   /* WA_1606682166 */                                                    \
+   /* Wa_1606682166 */                                                    \
    pkt.SamplerCount       =                                               \
-      GEN_GEN == 11 ?                                                     \
+      GFX_VER == 11 ?                                                     \
       0 :                                                                 \
       DIV_ROUND_UP(CLAMP(stage_state->sampler_count, 0, 16), 4);          \
    pkt.BindingTableEntryCount =                                           \
@@ -2131,10 +2131,10 @@ genX(upload_vs_state)(struct brw_context *brw)
 
    assert(vue_prog_data->dispatch_mode == DISPATCH_MODE_SIMD8 ||
           vue_prog_data->dispatch_mode == DISPATCH_MODE_4X2_DUAL_OBJECT);
-   assert(GEN_GEN < 11 ||
+   assert(GFX_VER < 11 ||
           vue_prog_data->dispatch_mode == DISPATCH_MODE_SIMD8);
 
-#if GEN_GEN == 6
+#if GFX_VER == 6
    /* From the BSpec, 3D Pipeline > Geometry > Vertex Shader > State,
     * 3DSTATE_VS, Dword 5.0 "VS Function Enable":
     *
@@ -2155,25 +2155,25 @@ genX(upload_vs_state)(struct brw_context *brw)
    }
 #endif
 
-   if (GEN_GEN == 7 && devinfo->is_ivybridge)
-      gen7_emit_vs_workaround_flush(brw);
+   if (GFX_VER == 7 && devinfo->is_ivybridge)
+      gfx7_emit_vs_workaround_flush(brw);
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
    brw_batch_emit(brw, GENX(3DSTATE_VS), vs) {
 #else
-   ctx->NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
+   ctx->NewDriverState |= BRW_NEW_GFX4_UNIT_STATE;
    brw_state_emit(brw, GENX(VS_STATE), 32, &stage_state->state_offset, vs) {
 #endif
       INIT_THREAD_DISPATCH_FIELDS(vs, Vertex);
 
       vs.MaximumNumberofThreads = devinfo->max_vs_threads - 1;
 
-#if GEN_GEN < 6
+#if GFX_VER < 6
       vs.GRFRegisterCount = DIV_ROUND_UP(vue_prog_data->total_grf, 16) - 1;
       vs.ConstantURBEntryReadLength = stage_prog_data->curb_read_length;
       vs.ConstantURBEntryReadOffset = brw->curbe.vs_start * 2;
 
-      vs.NumberofURBEntries = brw->urb.nr_vs_entries >> (GEN_GEN == 5 ? 2 : 0);
+      vs.NumberofURBEntries = brw->urb.nr_vs_entries >> (GFX_VER == 5 ? 2 : 0);
       vs.URBEntryAllocationSize = brw->urb.vsize - 1;
 
       vs.MaximumNumberofThreads =
@@ -2184,7 +2184,7 @@ genX(upload_vs_state)(struct brw_context *brw)
          ro_bo(brw->batch.state.bo, stage_state->sampler_offset);
 #endif
 
-#if GEN_GEN == 5
+#if GFX_VER == 5
       /* Force single program flow on Ironlake.  We cannot reliably get
        * all applications working without it.  See:
        * https://bugs.freedesktop.org/show_bug.cgi?id=29172
@@ -2196,7 +2196,7 @@ genX(upload_vs_state)(struct brw_context *brw)
       vs.SamplerCount = 0; /* hardware requirement */
 #endif
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
       vs.SIMD8DispatchEnable =
          vue_prog_data->dispatch_mode == DISPATCH_MODE_SIMD8;
 
@@ -2205,7 +2205,7 @@ genX(upload_vs_state)(struct brw_context *brw)
 #endif
    }
 
-#if GEN_GEN == 6
+#if GFX_VER == 6
    /* Based on my reading of the simulator, the VS constants don't get
     * pulled into the VS FF unit until an appropriate pipeline flush
     * happens, and instead the 3DSTATE_CONSTANT_VS packet just adds
@@ -2232,13 +2232,13 @@ genX(upload_vs_state)(struct brw_context *brw)
 
 static const struct brw_tracked_state genX(vs_state) = {
    .dirty = {
-      .mesa  = (GEN_GEN == 6 ? (_NEW_PROGRAM_CONSTANTS | _NEW_TRANSFORM) : 0),
+      .mesa  = (GFX_VER == 6 ? (_NEW_PROGRAM_CONSTANTS | _NEW_TRANSFORM) : 0),
       .brw   = BRW_NEW_BATCH |
                BRW_NEW_BLORP |
                BRW_NEW_CONTEXT |
                BRW_NEW_VS_PROG_DATA |
-               (GEN_GEN == 6 ? BRW_NEW_VERTEX_PROGRAM : 0) |
-               (GEN_GEN <= 5 ? BRW_NEW_PUSH_CONSTANT_ALLOCATION |
+               (GFX_VER == 6 ? BRW_NEW_VERTEX_PROGRAM : 0) |
+               (GFX_VER <= 5 ? BRW_NEW_PUSH_CONSTANT_ALLOCATION |
                                BRW_NEW_PROGRAM_CACHE |
                                BRW_NEW_SAMPLER_STATE_TABLE |
                                BRW_NEW_URB_FENCE
@@ -2283,11 +2283,11 @@ genX(upload_cc_viewport)(struct brw_context *brw)
       cc_map += GENX(CC_VIEWPORT_length);
    }
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
    brw_batch_emit(brw, GENX(3DSTATE_VIEWPORT_STATE_POINTERS_CC), ptr) {
       ptr.CCViewportPointer = cc_vp_offset;
    }
-#elif GEN_GEN == 6
+#elif GFX_VER == 6
    brw_batch_emit(brw, GENX(3DSTATE_VIEWPORT_STATE_POINTERS), vp) {
       vp.CCViewportStateChange = 1;
       vp.PointertoCC_VIEWPORT = cc_vp_offset;
@@ -2350,7 +2350,7 @@ set_scissor_bits(const struct gl_context *ctx, int i,
    }
 }
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
 static void
 genX(upload_scissor_state)(struct brw_context *brw)
 {
@@ -2364,7 +2364,7 @@ genX(upload_scissor_state)(struct brw_context *brw)
 
    /* BRW_NEW_VIEWPORT_COUNT */
    const unsigned viewport_count = brw->clip.viewport_count;
-   /* GEN:BUG:1409725701:
+   /* Wa_1409725701:
     *    "The viewport-specific state used by the SF unit (SCISSOR_RECT) is
     *    stored as an array of up to 16 elements. The location of first
     *    element of the array, as specified by Pointer to SCISSOR_RECT, should
@@ -2424,7 +2424,7 @@ genX(upload_sf_clip_viewport)(struct brw_context *brw)
    const uint32_t fb_width = (float)_mesa_geometric_width(ctx->DrawBuffer);
    const uint32_t fb_height = (float)_mesa_geometric_height(ctx->DrawBuffer);
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
 #define clv sfv
    struct GENX(SF_CLIP_VIEWPORT) sfv;
    uint32_t sf_clip_vp_offset;
@@ -2463,12 +2463,12 @@ genX(upload_sf_clip_viewport)(struct brw_context *brw)
       sfv.ViewportMatrixElementm30 = translate[0],
       sfv.ViewportMatrixElementm31 = translate[1] * y_scale + y_bias,
       sfv.ViewportMatrixElementm32 = translate[2],
-      gen_calculate_guardband_size(fb_width, fb_height,
-                                   sfv.ViewportMatrixElementm00,
-                                   sfv.ViewportMatrixElementm11,
-                                   sfv.ViewportMatrixElementm30,
-                                   sfv.ViewportMatrixElementm31,
-                                   &gb_xmin, &gb_xmax, &gb_ymin, &gb_ymax);
+      intel_calculate_guardband_size(fb_width, fb_height,
+                                     sfv.ViewportMatrixElementm00,
+                                     sfv.ViewportMatrixElementm11,
+                                     sfv.ViewportMatrixElementm30,
+                                     sfv.ViewportMatrixElementm31,
+                                     &gb_xmin, &gb_xmax, &gb_ymin, &gb_ymax);
 
 
       clv.XMinClipGuardband = gb_xmin;
@@ -2476,10 +2476,10 @@ genX(upload_sf_clip_viewport)(struct brw_context *brw)
       clv.YMinClipGuardband = gb_ymin;
       clv.YMaxClipGuardband = gb_ymax;
 
-#if GEN_GEN < 6
+#if GFX_VER < 6
       set_scissor_bits(ctx, i, flip_y, fb_width, fb_height,
                        &sfv.ScissorRectangle);
-#elif GEN_GEN >= 8
+#elif GFX_VER >= 8
       /* _NEW_VIEWPORT | _NEW_BUFFERS: Screen Space Viewport
        * The hardware will take the intersection of the drawing rectangle,
        * scissor rectangle, and the viewport extents.  However, emitting
@@ -2507,7 +2507,7 @@ genX(upload_sf_clip_viewport)(struct brw_context *brw)
       }
 #endif
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
       GENX(SF_CLIP_VIEWPORT_pack)(NULL, sf_clip_map, &sfv);
       sf_clip_map += GENX(SF_CLIP_VIEWPORT_length);
 #else
@@ -2518,11 +2518,11 @@ genX(upload_sf_clip_viewport)(struct brw_context *brw)
 #endif
    }
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
    brw_batch_emit(brw, GENX(3DSTATE_VIEWPORT_STATE_POINTERS_SF_CLIP), ptr) {
       ptr.SFClipViewportPointer = sf_clip_vp_offset;
    }
-#elif GEN_GEN == 6
+#elif GFX_VER == 6
    brw_batch_emit(brw, GENX(3DSTATE_VIEWPORT_STATE_POINTERS), vp) {
       vp.SFViewportStateChange = 1;
       vp.CLIPViewportStateChange = 1;
@@ -2540,7 +2540,7 @@ static const struct brw_tracked_state genX(sf_clip_viewport) = {
    .dirty = {
       .mesa = _NEW_BUFFERS |
               _NEW_VIEWPORT |
-              (GEN_GEN <= 5 ? _NEW_SCISSOR : 0),
+              (GFX_VER <= 5 ? _NEW_SCISSOR : 0),
       .brw = BRW_NEW_BATCH |
              BRW_NEW_BLORP |
              BRW_NEW_VIEWPORT_COUNT,
@@ -2558,18 +2558,18 @@ genX(upload_gs_state)(struct brw_context *brw)
    const struct brw_stage_state *stage_state = &brw->gs.base;
    const struct gl_program *gs_prog = brw->programs[MESA_SHADER_GEOMETRY];
    /* BRW_NEW_GEOMETRY_PROGRAM */
-   bool active = GEN_GEN >= 6 && gs_prog;
+   bool active = GFX_VER >= 6 && gs_prog;
 
    /* BRW_NEW_GS_PROG_DATA */
    struct brw_stage_prog_data *stage_prog_data = stage_state->prog_data;
    UNUSED const struct brw_vue_prog_data *vue_prog_data =
       brw_vue_prog_data(stage_prog_data);
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
    const struct brw_gs_prog_data *gs_prog_data =
       brw_gs_prog_data(stage_prog_data);
 #endif
 
-#if GEN_GEN == 6
+#if GFX_VER == 6
    brw_batch_emit(brw, GENX(3DSTATE_CONSTANT_GS), cgs) {
       if (active && stage_state->push_const_size != 0) {
          cgs.Buffer0Valid = true;
@@ -2579,7 +2579,7 @@ genX(upload_gs_state)(struct brw_context *brw)
    }
 #endif
 
-#if GEN_GEN == 7 && !GEN_IS_HASWELL
+#if GFX_VERx10 == 70
    /**
     * From Graphics BSpec: 3D-Media-GPGPU Engine > 3D Pipeline Stages >
     * Geometry > Geometry Shader > State:
@@ -2593,21 +2593,21 @@ genX(upload_gs_state)(struct brw_context *brw)
     * Stall" bit set.
     */
    if (devinfo->gt == 2 && brw->gs.enabled != active)
-      gen7_emit_cs_stall_flush(brw);
+      gfx7_emit_cs_stall_flush(brw);
 #endif
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
    brw_batch_emit(brw, GENX(3DSTATE_GS), gs) {
 #else
-   ctx->NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
+   ctx->NewDriverState |= BRW_NEW_GFX4_UNIT_STATE;
    brw_state_emit(brw, GENX(GS_STATE), 32, &brw->ff_gs.state_offset, gs) {
 #endif
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
       if (active) {
          INIT_THREAD_DISPATCH_FIELDS(gs, Vertex);
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
          gs.OutputVertexSize = gs_prog_data->output_vertex_size_hwords * 2 - 1;
          gs.OutputTopology = gs_prog_data->output_topology;
          gs.ControlDataHeaderSize =
@@ -2621,7 +2621,7 @@ genX(upload_gs_state)(struct brw_context *brw)
          gs.ControlDataFormat = gs_prog_data->control_data_format;
 #endif
 
-         /* Note: the meaning of the GEN7_GS_REORDER_TRAILING bit changes between
+         /* Note: the meaning of the GFX7_GS_REORDER_TRAILING bit changes between
           * Ivy Bridge and Haswell.
           *
           * On Ivy Bridge, setting this bit causes the vertices of a triangle
@@ -2649,25 +2649,25 @@ genX(upload_gs_state)(struct brw_context *brw)
           */
          gs.ReorderMode = TRAILING;
          gs.MaximumNumberofThreads =
-            GEN_GEN == 8 ? (devinfo->max_gs_threads / 2 - 1)
+            GFX_VER == 8 ? (devinfo->max_gs_threads / 2 - 1)
                          : (devinfo->max_gs_threads - 1);
 
-#if GEN_GEN < 7
+#if GFX_VER < 7
          gs.SOStatisticsEnable = true;
          if (gs_prog->info.has_transform_feedback_varyings)
             gs.SVBIPayloadEnable = _mesa_is_xfb_active_and_unpaused(ctx);
 
-         /* GEN6_GS_SPF_MODE and GEN6_GS_VECTOR_MASK_ENABLE are enabled as it
-          * was previously done for gen6.
+         /* GFX6_GS_SPF_MODE and GFX6_GS_VECTOR_MASK_ENABLE are enabled as it
+          * was previously done for gfx6.
           *
           * TODO: test with both disabled to see if the HW is behaving
-          * as expected, like in gen7.
+          * as expected, like in gfx7.
           */
          gs.SingleProgramFlow = true;
          gs.VectorMaskEnable = true;
 #endif
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
          gs.ExpectedVertexCount = gs_prog_data->vertices_in;
 
          if (gs_prog_data->static_vertex_count != -1) {
@@ -2690,18 +2690,18 @@ genX(upload_gs_state)(struct brw_context *brw)
       }
 #endif
 
-#if GEN_GEN <= 6
+#if GFX_VER <= 6
       if (!active && brw->ff_gs.prog_active) {
-         /* In gen6, transform feedback for the VS stage is done with an
+         /* In gfx6, transform feedback for the VS stage is done with an
           * ad-hoc GS program. This function provides the needed 3DSTATE_GS
           * for this.
           */
          gs.KernelStartPointer = KSP(brw, brw->ff_gs.prog_offset);
          gs.SingleProgramFlow = true;
-         gs.DispatchGRFStartRegisterForURBData = GEN_GEN == 6 ? 2 : 1;
+         gs.DispatchGRFStartRegisterForURBData = GFX_VER == 6 ? 2 : 1;
          gs.VertexURBEntryReadLength = brw->ff_gs.prog_data->urb_read_length;
 
-#if GEN_GEN <= 5
+#if GFX_VER <= 5
          gs.GRFRegisterCount =
             DIV_ROUND_UP(brw->ff_gs.prog_data->total_grf, 16) - 1;
          /* BRW_NEW_URB_FENCE */
@@ -2722,45 +2722,45 @@ genX(upload_gs_state)(struct brw_context *brw)
       }
 #endif
       if (!active && !brw->ff_gs.prog_active) {
-#if GEN_GEN < 8
+#if GFX_VER < 8
          gs.DispatchGRFStartRegisterForURBData = 1;
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
          gs.IncludeVertexHandles = true;
 #endif
 #endif
       }
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
       gs.StatisticsEnable = true;
 #endif
-#if GEN_GEN == 5 || GEN_GEN == 6
+#if GFX_VER == 5 || GFX_VER == 6
       gs.RenderingEnabled = true;
 #endif
-#if GEN_GEN <= 5
+#if GFX_VER <= 5
       gs.MaximumVPIndex = brw->clip.viewport_count - 1;
 #endif
    }
 
-#if GEN_GEN == 6
+#if GFX_VER == 6
    brw->gs.enabled = active;
 #endif
 }
 
 static const struct brw_tracked_state genX(gs_state) = {
    .dirty = {
-      .mesa  = (GEN_GEN == 6 ? _NEW_PROGRAM_CONSTANTS : 0),
+      .mesa  = (GFX_VER == 6 ? _NEW_PROGRAM_CONSTANTS : 0),
       .brw   = BRW_NEW_BATCH |
                BRW_NEW_BLORP |
-               (GEN_GEN <= 5 ? BRW_NEW_PUSH_CONSTANT_ALLOCATION |
+               (GFX_VER <= 5 ? BRW_NEW_PUSH_CONSTANT_ALLOCATION |
                                BRW_NEW_PROGRAM_CACHE |
                                BRW_NEW_URB_FENCE |
                                BRW_NEW_VIEWPORT_COUNT
                              : 0) |
-               (GEN_GEN >= 6 ? BRW_NEW_CONTEXT |
+               (GFX_VER >= 6 ? BRW_NEW_CONTEXT |
                                BRW_NEW_GEOMETRY_PROGRAM |
                                BRW_NEW_GS_PROG_DATA
                              : 0) |
-               (GEN_GEN < 7 ? BRW_NEW_FF_GS_PROG_DATA : 0),
+               (GFX_VER < 7 ? BRW_NEW_FF_GS_PROG_DATA : 0),
    },
    .emit = genX(upload_gs_state),
 };
@@ -2806,7 +2806,7 @@ brw_fix_xRGB_alpha(GLenum function)
    return function;
 }
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
 typedef struct GENX(BLEND_STATE_ENTRY) BLEND_ENTRY_GENXML;
 #else
 typedef struct GENX(COLOR_CALC_STATE) BLEND_ENTRY_GENXML;
@@ -2831,7 +2831,7 @@ set_blend_entry_bits(struct brw_context *brw, BLEND_ENTRY_GENXML *entry, int i,
     */
    const bool integer = ctx->DrawBuffer->_IntegerBuffers & (0x1 << i);
 
-   const unsigned blend_enabled = GEN_GEN >= 6 ?
+   const unsigned blend_enabled = GFX_VER >= 6 ?
       ctx->Color.BlendEnabled & (1 << i) : ctx->Color.BlendEnabled;
 
    /* _NEW_COLOR */
@@ -2844,13 +2844,13 @@ set_blend_entry_bits(struct brw_context *brw, BLEND_ENTRY_GENXML *entry, int i,
                 "renderbuffer\n",
                 _mesa_enum_to_string(ctx->Color.LogicOp),
                 _mesa_enum_to_string(rb_type));
-      if (GEN_GEN >= 8 || rb_type == GL_UNSIGNED_NORMALIZED) {
+      if (GFX_VER >= 8 || rb_type == GL_UNSIGNED_NORMALIZED) {
          entry->LogicOpEnable = true;
          entry->LogicOpFunction = ctx->Color._LogicOp;
       }
    } else if (blend_enabled &&
               ctx->Color._AdvancedBlendMode == BLEND_NONE
-              && (GEN_GEN <= 5 || !integer)) {
+              && (GFX_VER <= 5 || !integer)) {
       GLenum eqRGB = ctx->Color.Blend[i].EquationRGB;
       GLenum eqA = ctx->Color.Blend[i].EquationA;
       GLenum srcRGB = ctx->Color.Blend[i].SrcRGB;
@@ -2885,7 +2885,7 @@ set_blend_entry_bits(struct brw_context *brw, BLEND_ENTRY_GENXML *entry, int i,
        * We override SRC1_ALPHA to ONE and ONE_MINUS_SRC1_ALPHA to ZERO,
        * and leave it enabled anyway.
        */
-      if (GEN_GEN >= 6 && ctx->Color.Blend[i]._UsesDualSrc && alpha_to_one) {
+      if (GFX_VER >= 6 && ctx->Color._BlendUsesDualSrc & (1 << i) && alpha_to_one) {
          srcRGB = fix_dual_blend_alpha_to_one(srcRGB);
          srcA = fix_dual_blend_alpha_to_one(srcA);
          dstRGB = fix_dual_blend_alpha_to_one(dstRGB);
@@ -2910,7 +2910,7 @@ set_blend_entry_bits(struct brw_context *brw, BLEND_ENTRY_GENXML *entry, int i,
        * so we just disable the blending to prevent possible issues.
        */
       entry->ColorBufferBlendEnable =
-         !ctx->Color.Blend[0]._UsesDualSrc || wm_prog_data->dual_src_blend;
+         !(ctx->Color._BlendUsesDualSrc & 0x1) || wm_prog_data->dual_src_blend;
 
       entry->DestinationBlendFactor = blend_factor(dstRGB);
       entry->SourceBlendFactor = blend_factor(srcRGB);
@@ -2926,7 +2926,7 @@ set_blend_entry_bits(struct brw_context *brw, BLEND_ENTRY_GENXML *entry, int i,
    return independent_alpha_blend;
 }
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
 static void
 genX(upload_blend_state)(struct brw_context *brw)
 {
@@ -2944,14 +2944,14 @@ genX(upload_blend_state)(struct brw_context *brw)
       nr_draw_buffers = 1;
 
    size = GENX(BLEND_STATE_ENTRY_length) * 4 * nr_draw_buffers;
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    size += GENX(BLEND_STATE_length) * 4;
 #endif
 
    uint32_t *blend_map;
    blend_map = brw_state_batch(brw, size, 64, &brw->cc.blend_state_offset);
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    struct GENX(BLEND_STATE) blend = { 0 };
    {
 #else
@@ -2969,7 +2969,7 @@ genX(upload_blend_state)(struct brw_context *brw)
          if (_mesa_is_multisample_enabled(ctx)) {
             if (ctx->Multisample.SampleAlphaToCoverage) {
                blend.AlphaToCoverageEnable = true;
-               blend.AlphaToCoverageDitherEnable = GEN_GEN >= 7;
+               blend.AlphaToCoverageDitherEnable = GFX_VER >= 7;
             }
             if (ctx->Multisample.SampleAlphaToOne)
                blend.AlphaToOneEnable = true;
@@ -2979,7 +2979,7 @@ genX(upload_blend_state)(struct brw_context *brw)
          if (ctx->Color.AlphaEnabled) {
             blend.AlphaTestEnable = true;
             blend.AlphaTestFunction =
-               intel_translate_compare_func(ctx->Color.AlphaFunc);
+               brw_translate_compare_func(ctx->Color.AlphaFunc);
          }
 
          if (ctx->Color.DitherFlag) {
@@ -2987,7 +2987,7 @@ genX(upload_blend_state)(struct brw_context *brw)
          }
       }
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
       for (int i = 0; i < nr_draw_buffers; i++) {
          struct GENX(BLEND_STATE_ENTRY) entry = { 0 };
 #else
@@ -3023,7 +3023,7 @@ genX(upload_blend_state)(struct brw_context *brw)
          entry.WriteDisableBlue  = !GET_COLORMASK_BIT(ctx->Color.ColorMask, i, 2);
          entry.WriteDisableAlpha = !GET_COLORMASK_BIT(ctx->Color.ColorMask, i, 3);
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
          GENX(BLEND_STATE_ENTRY_pack)(NULL, &blend_map[1 + i * 2], &entry);
 #else
          GENX(BLEND_STATE_ENTRY_pack)(NULL, &blend_map[i * 2], &entry);
@@ -3031,11 +3031,11 @@ genX(upload_blend_state)(struct brw_context *brw)
       }
    }
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    GENX(BLEND_STATE_pack)(NULL, blend_map, &blend);
 #endif
 
-#if GEN_GEN < 7
+#if GFX_VER < 7
    brw_batch_emit(brw, GENX(3DSTATE_CC_STATE_POINTERS), ptr) {
       ptr.PointertoBLEND_STATE = brw->cc.blend_state_offset;
       ptr.BLEND_STATEChange = true;
@@ -3043,7 +3043,7 @@ genX(upload_blend_state)(struct brw_context *brw)
 #else
    brw_batch_emit(brw, GENX(3DSTATE_BLEND_STATE_POINTERS), ptr) {
       ptr.BlendStatePointer = brw->cc.blend_state_offset;
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
       ptr.BlendStatePointerValid = true;
 #endif
    }
@@ -3066,7 +3066,7 @@ UNUSED static const struct brw_tracked_state genX(blend_state) = {
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
 UNUSED static const uint32_t push_constant_opcodes[] = {
    [MESA_SHADER_VERTEX]                      = 21,
    [MESA_SHADER_TESS_CTRL]                   = 25, /* HS */
@@ -3082,7 +3082,7 @@ genX(upload_push_constant_packets)(struct brw_context *brw)
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
 
-   UNUSED uint32_t mocs = GEN_GEN < 8 ? GEN7_MOCS_L3 : 0;
+   UNUSED uint32_t mocs = GFX_VER < 8 ? GFX7_MOCS_L3 : 0;
 
    struct brw_stage_state *stage_states[] = {
       &brw->vs.base,
@@ -3092,9 +3092,9 @@ genX(upload_push_constant_packets)(struct brw_context *brw)
       &brw->wm.base,
    };
 
-   if (GEN_GEN == 7 && !GEN_IS_HASWELL && !devinfo->is_baytrail &&
+   if (GFX_VERx10 == 70 && !devinfo->is_baytrail &&
        stage_states[MESA_SHADER_VERTEX]->push_constants_dirty)
-      gen7_emit_vs_workaround_flush(brw);
+      gfx7_emit_vs_workaround_flush(brw);
 
    for (int stage = 0; stage <= MESA_SHADER_FRAGMENT; stage++) {
       struct brw_stage_state *stage_state = stage_states[stage];
@@ -3106,7 +3106,7 @@ genX(upload_push_constant_packets)(struct brw_context *brw)
       brw_batch_emit(brw, GENX(3DSTATE_CONSTANT_VS), pkt) {
          pkt._3DCommandSubOpcode = push_constant_opcodes[stage];
          if (stage_state->prog_data) {
-#if GEN_GEN >= 8 || GEN_IS_HASWELL
+#if GFX_VERx10 >= 75
             /* The Skylake PRM contains the following restriction:
              *
              *    "The driver must ensure The following case does not occur
@@ -3146,8 +3146,8 @@ genX(upload_push_constant_packets)(struct brw_context *brw)
 
                assert(binding->Offset % 32 == 0);
 
-               struct brw_bo *bo = intel_bufferobj_buffer(brw,
-                  intel_buffer_object(binding->BufferObject),
+               struct brw_bo *bo = brw_bufferobj_buffer(brw,
+                  brw_buffer_object(binding->BufferObject),
                   binding->Offset, range->length * 32, false);
 
                pkt.ConstantBody.ReadLength[n] = range->length;
@@ -3172,7 +3172,7 @@ genX(upload_push_constant_packets)(struct brw_context *brw)
       }
 
       stage_state->push_constants_dirty = false;
-      brw->ctx.NewDriverState |= GEN_GEN >= 9 ? BRW_NEW_SURFACES : 0;
+      brw->ctx.NewDriverState |= GFX_VER >= 9 ? BRW_NEW_SURFACES : 0;
    }
 }
 
@@ -3185,7 +3185,7 @@ const struct brw_tracked_state genX(push_constant_packets) = {
 };
 #endif
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
 static void
 genX(upload_vs_push_constants)(struct brw_context *brw)
 {
@@ -3196,7 +3196,7 @@ genX(upload_vs_push_constants)(struct brw_context *brw)
    /* BRW_NEW_VS_PROG_DATA */
    const struct brw_stage_prog_data *prog_data = brw->vs.base.prog_data;
 
-   gen6_upload_push_constants(brw, vp, prog_data, stage_state);
+   gfx6_upload_push_constants(brw, vp, prog_data, stage_state);
 }
 
 static const struct brw_tracked_state genX(vs_push_constants) = {
@@ -3222,7 +3222,7 @@ genX(upload_gs_push_constants)(struct brw_context *brw)
    /* BRW_NEW_GS_PROG_DATA */
    struct brw_stage_prog_data *prog_data = brw->gs.base.prog_data;
 
-   gen6_upload_push_constants(brw, gp, prog_data, stage_state);
+   gfx6_upload_push_constants(brw, gp, prog_data, stage_state);
 }
 
 static const struct brw_tracked_state genX(gs_push_constants) = {
@@ -3246,7 +3246,7 @@ genX(upload_wm_push_constants)(struct brw_context *brw)
    /* BRW_NEW_FS_PROG_DATA */
    const struct brw_stage_prog_data *prog_data = brw->wm.base.prog_data;
 
-   gen6_upload_push_constants(brw, fp, prog_data, stage_state);
+   gfx6_upload_push_constants(brw, fp, prog_data, stage_state);
 }
 
 static const struct brw_tracked_state genX(wm_push_constants) = {
@@ -3263,7 +3263,7 @@ static const struct brw_tracked_state genX(wm_push_constants) = {
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
 static unsigned
 genX(determine_sample_mask)(struct brw_context *brw)
 {
@@ -3305,21 +3305,21 @@ genX(emit_3dstate_multisample2)(struct brw_context *brw,
    brw_batch_emit(brw, GENX(3DSTATE_MULTISAMPLE), multi) {
       multi.PixelLocation = CENTER;
       multi.NumberofMultisamples = log2_samples;
-#if GEN_GEN == 6
-      GEN_SAMPLE_POS_4X(multi.Sample);
-#elif GEN_GEN == 7
+#if GFX_VER == 6
+      INTEL_SAMPLE_POS_4X(multi.Sample);
+#elif GFX_VER == 7
       switch (num_samples) {
       case 1:
-         GEN_SAMPLE_POS_1X(multi.Sample);
+         INTEL_SAMPLE_POS_1X(multi.Sample);
          break;
       case 2:
-         GEN_SAMPLE_POS_2X(multi.Sample);
+         INTEL_SAMPLE_POS_2X(multi.Sample);
          break;
       case 4:
-         GEN_SAMPLE_POS_4X(multi.Sample);
+         INTEL_SAMPLE_POS_4X(multi.Sample);
          break;
       case 8:
-         GEN_SAMPLE_POS_8X(multi.Sample);
+         INTEL_SAMPLE_POS_8X(multi.Sample);
          break;
       default:
          break;
@@ -3343,7 +3343,7 @@ genX(upload_multisample_state)(struct brw_context *brw)
 static const struct brw_tracked_state genX(multisample_state) = {
    .dirty = {
       .mesa = _NEW_MULTISAMPLE |
-              (GEN_GEN == 10 ? _NEW_BUFFERS : 0),
+              (GFX_VER == 10 ? _NEW_BUFFERS : 0),
       .brw = BRW_NEW_BLORP |
              BRW_NEW_CONTEXT |
              BRW_NEW_NUM_SAMPLES,
@@ -3360,7 +3360,7 @@ genX(upload_color_calc_state)(struct brw_context *brw)
    struct gl_context *ctx = &brw->ctx;
 
    brw_state_emit(brw, GENX(COLOR_CALC_STATE), 64, &brw->cc.state_offset, cc) {
-#if GEN_GEN <= 5
+#if GFX_VER <= 5
       cc.IndependentAlphaBlendEnable =
          set_blend_entry_bits(brw, &cc, 0, false);
       set_depth_stencil_bits(brw, &cc);
@@ -3369,7 +3369,7 @@ genX(upload_color_calc_state)(struct brw_context *brw)
           ctx->DrawBuffer->_NumColorDrawBuffers <= 1) {
          cc.AlphaTestEnable = true;
          cc.AlphaTestFunction =
-            intel_translate_compare_func(ctx->Color.AlphaFunc);
+            brw_translate_compare_func(ctx->Color.AlphaFunc);
       }
 
       cc.ColorDitherEnable = ctx->Color.DitherFlag;
@@ -3385,7 +3385,7 @@ genX(upload_color_calc_state)(struct brw_context *brw)
       cc.BlendConstantColorBlue = ctx->Color.BlendColorUnclamped[2];
       cc.BlendConstantColorAlpha = ctx->Color.BlendColorUnclamped[3];
 
-#if GEN_GEN < 9
+#if GFX_VER < 9
       /* _NEW_STENCIL */
       cc.StencilReferenceValue = _mesa_get_stencil_ref(ctx, 0);
       cc.BackfaceStencilReferenceValue =
@@ -3399,15 +3399,15 @@ genX(upload_color_calc_state)(struct brw_context *brw)
                                ctx->Color.AlphaRef);
    }
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
    brw_batch_emit(brw, GENX(3DSTATE_CC_STATE_POINTERS), ptr) {
       ptr.ColorCalcStatePointer = brw->cc.state_offset;
-#if GEN_GEN != 7
+#if GFX_VER != 7
       ptr.ColorCalcStatePointerValid = true;
 #endif
    }
 #else
-   brw->ctx.NewDriverState |= BRW_NEW_GEN4_UNIT_STATE;
+   brw->ctx.NewDriverState |= BRW_NEW_GFX4_UNIT_STATE;
 #endif
 }
 
@@ -3415,12 +3415,12 @@ UNUSED static const struct brw_tracked_state genX(color_calc_state) = {
    .dirty = {
       .mesa = _NEW_COLOR |
               _NEW_STENCIL |
-              (GEN_GEN <= 5 ? _NEW_BUFFERS |
+              (GFX_VER <= 5 ? _NEW_BUFFERS |
                               _NEW_DEPTH
                             : 0),
       .brw = BRW_NEW_BATCH |
              BRW_NEW_BLORP |
-             (GEN_GEN <= 5 ? BRW_NEW_CC_VP |
+             (GFX_VER <= 5 ? BRW_NEW_CC_VP |
                              BRW_NEW_STATS_WM
                            : BRW_NEW_CC_STATE |
                              BRW_NEW_STATE_BASE_ADDRESS),
@@ -3431,7 +3431,7 @@ UNUSED static const struct brw_tracked_state genX(color_calc_state) = {
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_IS_HASWELL
+#if GFX_VERx10 == 75
 static void
 genX(upload_color_calc_and_blend_state)(struct brw_context *brw)
 {
@@ -3460,7 +3460,7 @@ static const struct brw_tracked_state genX(cc_and_blend_state) = {
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
 static void
 genX(upload_sbe)(struct brw_context *brw)
 {
@@ -3470,7 +3470,7 @@ genX(upload_sbe)(struct brw_context *brw)
    /* BRW_NEW_FS_PROG_DATA */
    const struct brw_wm_prog_data *wm_prog_data =
       brw_wm_prog_data(brw->wm.base.prog_data);
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    struct GENX(SF_OUTPUT_ATTRIBUTE_DETAIL) attr_overrides[16] = { { 0 } };
 #else
 #define attr_overrides sbe.Attribute
@@ -3520,19 +3520,19 @@ genX(upload_sbe)(struct brw_context *brw)
       sbe.PointSpriteTextureCoordinateEnable = point_sprite_enables;
       sbe.ConstantInterpolationEnable = wm_prog_data->flat_inputs;
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
       sbe.ForceVertexURBEntryReadLength = true;
       sbe.ForceVertexURBEntryReadOffset = true;
 #endif
 
-#if GEN_GEN >= 9
+#if GFX_VER >= 9
       /* prepare the active component dwords */
       for (int i = 0; i < 32; i++)
          sbe.AttributeActiveComponentFormat[i] = ACTIVE_COMPONENT_XYZW;
 #endif
    }
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    brw_batch_emit(brw, GENX(3DSTATE_SBE_SWIZ), sbes) {
       for (int i = 0; i < 16; i++)
          sbes.Attribute[i] = attr_overrides[i];
@@ -3556,7 +3556,7 @@ static const struct brw_tracked_state genX(sbe_state) = {
                BRW_NEW_GS_PROG_DATA |
                BRW_NEW_TES_PROG_DATA |
                BRW_NEW_VUE_MAP_GEOM_OUT |
-               (GEN_GEN == 7 ? BRW_NEW_PRIMITIVE
+               (GFX_VER == 7 ? BRW_NEW_PRIMITIVE
                              : 0),
    },
    .emit = genX(upload_sbe),
@@ -3565,7 +3565,7 @@ static const struct brw_tracked_state genX(sbe_state) = {
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
 /**
  * Outputs the 3DSTATE_SO_DECL_LIST command.
  *
@@ -3671,21 +3671,21 @@ genX(upload_3dstate_so_buffers)(struct brw_context *brw)
    /* BRW_NEW_TRANSFORM_FEEDBACK */
    struct gl_transform_feedback_object *xfb_obj =
       ctx->TransformFeedback.CurrentObject;
-#if GEN_GEN < 8
+#if GFX_VER < 8
    const struct gl_transform_feedback_info *linked_xfb_info =
       xfb_obj->program->sh.LinkedTransformFeedback;
 #else
    struct brw_transform_feedback_object *brw_obj =
       (struct brw_transform_feedback_object *) xfb_obj;
-   uint32_t mocs_wb = GEN_GEN >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
+   uint32_t mocs_wb = GFX_VER >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
 #endif
 
    /* Set up the up to 4 output buffers.  These are the ranges defined in the
     * gl_transform_feedback_object.
     */
    for (int i = 0; i < 4; i++) {
-      struct intel_buffer_object *bufferobj =
-         intel_buffer_object(xfb_obj->Buffers[i]);
+      struct brw_buffer_object *bufferobj =
+         brw_buffer_object(xfb_obj->Buffers[i]);
       uint32_t start = xfb_obj->Offset[i];
       uint32_t end = ALIGN(start + xfb_obj->Size[i], 4);
       uint32_t const size = end - start;
@@ -3699,14 +3699,14 @@ genX(upload_3dstate_so_buffers)(struct brw_context *brw)
 
       assert(start % 4 == 0);
       struct brw_bo *bo =
-         intel_bufferobj_buffer(brw, bufferobj, start, size, true);
+         brw_bufferobj_buffer(brw, bufferobj, start, size, true);
       assert(end <= bo->size);
 
       brw_batch_emit(brw, GENX(3DSTATE_SO_BUFFER), sob) {
          sob.SOBufferIndex = i;
 
          sob.SurfaceBaseAddress = rw_bo(bo, start);
-#if GEN_GEN < 8
+#if GFX_VER < 8
          sob.SurfacePitch = linked_xfb_info->Buffers[i].Stride * 4;
          sob.SurfaceEndAddress = rw_bo(bo, end);
 #else
@@ -3730,7 +3730,7 @@ genX(upload_3dstate_so_buffers)(struct brw_context *brw)
       }
    }
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    brw_obj->zero_offsets = false;
 #endif
 }
@@ -3773,7 +3773,7 @@ genX(upload_3dstate_streamout)(struct brw_context *brw, bool active,
          if (ctx->Light.ProvokingVertex != GL_FIRST_VERTEX_CONVENTION)
             sos.ReorderMode = TRAILING;
 
-#if GEN_GEN < 8
+#if GFX_VER < 8
          sos.SOBufferEnable0 = xfb_obj->Buffers[0] != NULL;
          sos.SOBufferEnable1 = xfb_obj->Buffers[1] != NULL;
          sos.SOBufferEnable2 = xfb_obj->Buffers[2] != NULL;
@@ -3845,7 +3845,7 @@ static const struct brw_tracked_state genX(sol_state) = {
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
 static void
 genX(upload_ps)(struct brw_context *brw)
 {
@@ -3857,7 +3857,7 @@ genX(upload_ps)(struct brw_context *brw)
       brw_wm_prog_data(brw->wm.base.prog_data);
    const struct brw_stage_state *stage_state = &brw->wm.base;
 
-#if GEN_GEN < 8
+#if GFX_VER < 8
 #endif
 
    brw_batch_emit(brw, GENX(3DSTATE_PS), ps) {
@@ -3865,14 +3865,14 @@ genX(upload_ps)(struct brw_context *brw)
        * incorrect for subspans where some of the pixels are unlit.  We believe
        * the bit just didn't take effect in previous generations.
        */
-      ps.VectorMaskEnable = GEN_GEN >= 8;
+      ps.VectorMaskEnable = GFX_VER >= 8;
 
-      /* WA_1606682166:
+      /* Wa_1606682166:
        * "Incorrect TDL's SSP address shift in SARB for 16:6 & 18:8 modes.
        * Disable the Sampler state prefetch functionality in the SARB by
        * programming 0xB000[30] to '1'."
        */
-      ps.SamplerCount = GEN_GEN == 11 ?
+      ps.SamplerCount = GFX_VER == 11 ?
          0 : DIV_ROUND_UP(CLAMP(stage_state->sampler_count, 0, 16), 4);
 
       /* BRW_NEW_FS_PROG_DATA */
@@ -3886,20 +3886,20 @@ genX(upload_ps)(struct brw_context *brw)
        */
 
       /* _NEW_BUFFERS, _NEW_MULTISAMPLE */
-#if GEN_IS_HASWELL
+#if GFX_VERx10 == 75
       ps.SampleMask = genX(determine_sample_mask(brw));
 #endif
 
       /* 3DSTATE_PS expects the number of threads per PSD, which is always 64
-       * for pre Gen11 and 128 for gen11+; On gen11+ If a programmed value is
+       * for pre Gfx11 and 128 for gfx11+; On gfx11+ If a programmed value is
        * k, it implies 2(k+1) threads. It implicitly scales for different GT
        * levels (which have some # of PSDs).
        *
-       * In Gen8 the format is U8-2 whereas in Gen9+ it is U9-1.
+       * In Gfx8 the format is U8-2 whereas in Gfx9+ it is U9-1.
        */
-#if GEN_GEN >= 9
+#if GFX_VER >= 9
       ps.MaximumNumberofThreadsPerPSD = 64 - 1;
-#elif GEN_GEN >= 8
+#elif GFX_VER >= 8
       ps.MaximumNumberofThreadsPerPSD = 64 - 2;
 #else
       ps.MaximumNumberofThreads = devinfo->max_wm_threads - 1;
@@ -3909,7 +3909,7 @@ genX(upload_ps)(struct brw_context *brw)
           prog_data->base.ubo_ranges[0].length > 0)
          ps.PushConstantEnable = true;
 
-#if GEN_GEN < 8
+#if GFX_VER < 8
       /* From the IVB PRM, volume 2 part 1, page 287:
        * "This bit is inserted in the PS payload header and made available to
        * the DataPort (either via the message header or via header bypass) to
@@ -3926,7 +3926,7 @@ genX(upload_ps)(struct brw_context *brw)
        */
       ps.DualSourceBlendEnable = prog_data->dual_src_blend &&
                                  (ctx->Color.BlendEnabled & 1) &&
-                                 ctx->Color.Blend[0]._UsesDualSrc;
+                                 ctx->Color._BlendUsesDualSrc & 0x1;
 
       /* BRW_NEW_FS_PROG_DATA */
       ps.AttributeEnable = (prog_data->num_varying_inputs != 0);
@@ -3964,7 +3964,7 @@ genX(upload_ps)(struct brw_context *brw)
        *
        * BRW_NEW_NUM_SAMPLES
        */
-      if (GEN_GEN >= 9 && !prog_data->persample_dispatch &&
+      if (GFX_VER >= 9 && !prog_data->persample_dispatch &&
           brw->num_samples == 16) {
          assert(ps._8PixelDispatchEnable || ps._16PixelDispatchEnable);
          ps._32PixelDispatchEnable = false;
@@ -3995,13 +3995,13 @@ genX(upload_ps)(struct brw_context *brw)
 static const struct brw_tracked_state genX(ps_state) = {
    .dirty = {
       .mesa  = _NEW_MULTISAMPLE |
-               (GEN_GEN < 8 ? _NEW_BUFFERS |
+               (GFX_VER < 8 ? _NEW_BUFFERS |
                               _NEW_COLOR
                             : 0),
       .brw   = BRW_NEW_BATCH |
                BRW_NEW_BLORP |
                BRW_NEW_FS_PROG_DATA |
-               (GEN_GEN >= 9 ? BRW_NEW_NUM_SAMPLES : 0),
+               (GFX_VER >= 9 ? BRW_NEW_NUM_SAMPLES : 0),
    },
    .emit = genX(upload_ps),
 };
@@ -4009,7 +4009,7 @@ static const struct brw_tracked_state genX(ps_state) = {
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
 static void
 genX(upload_hs_state)(struct brw_context *brw)
 {
@@ -4034,7 +4034,7 @@ genX(upload_hs_state)(struct brw_context *brw)
 
          hs.MaximumNumberofThreads = devinfo->max_tcs_threads - 1;
 
-#if GEN_GEN >= 9
+#if GFX_VER >= 9
          hs.DispatchMode = vue_prog_data->dispatch_mode;
          hs.IncludePrimitiveID = tcs_prog_data->include_primitive_id;
 #endif
@@ -4069,7 +4069,7 @@ genX(upload_ds_state)(struct brw_context *brw)
    if (!tes_prog_data) {
       brw_batch_emit(brw, GENX(3DSTATE_DS), ds);
    } else {
-      assert(GEN_GEN < 11 ||
+      assert(GFX_VER < 11 ||
              vue_prog_data->dispatch_mode == DISPATCH_MODE_SIMD8);
 
       brw_batch_emit(brw, GENX(3DSTATE_DS), ds) {
@@ -4079,7 +4079,7 @@ genX(upload_ds_state)(struct brw_context *brw)
         ds.ComputeWCoordinateEnable =
            tes_prog_data->domain == BRW_TESS_DOMAIN_TRI;
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
         if (vue_prog_data->dispatch_mode == DISPATCH_MODE_SIMD8)
            ds.DispatchMode = DISPATCH_MODE_SIMD8_SINGLE_PATCH;
         ds.UserClipDistanceCullTestEnableBitmask =
@@ -4148,7 +4148,7 @@ genX(upload_tes_push_constants)(struct brw_context *brw)
 
    /* BRW_NEW_TES_PROG_DATA */
    const struct brw_stage_prog_data *prog_data = brw->tes.base.prog_data;
-   gen6_upload_push_constants(brw, tep, prog_data, stage_state);
+   gfx6_upload_push_constants(brw, tep, prog_data, stage_state);
 }
 
 static const struct brw_tracked_state genX(tes_push_constants) = {
@@ -4172,7 +4172,7 @@ genX(upload_tcs_push_constants)(struct brw_context *brw)
    /* BRW_NEW_TCS_PROG_DATA */
    const struct brw_stage_prog_data *prog_data = brw->tcs.base.prog_data;
 
-   gen6_upload_push_constants(brw, tcp, prog_data, stage_state);
+   gfx6_upload_push_constants(brw, tcp, prog_data, stage_state);
 }
 
 static const struct brw_tracked_state genX(tcs_push_constants) = {
@@ -4191,7 +4191,7 @@ static const struct brw_tracked_state genX(tcs_push_constants) = {
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
 static void
 genX(upload_cs_push_constants)(struct brw_context *brw)
 {
@@ -4284,7 +4284,7 @@ genX(upload_cs_state)(struct brw_context *brw)
    uint32_t *bind = brw_state_batch(brw, prog_data->binding_table.size_bytes,
                                     32, &stage_state->bind_bo_offset);
 
-   /* The MEDIA_VFE_STATE documentation for Gen8+ says:
+   /* The MEDIA_VFE_STATE documentation for Gfx8+ says:
     *
     * "A stalling PIPE_CONTROL is required before MEDIA_VFE_STATE unless
     *  the only bits that are changed are scoreboard related: Scoreboard
@@ -4300,12 +4300,12 @@ genX(upload_cs_state)(struct brw_context *brw)
       if (prog_data->total_scratch) {
          uint32_t per_thread_scratch_value;
 
-         if (GEN_GEN >= 8) {
+         if (GFX_VER >= 8) {
             /* Broadwell's Per Thread Scratch Space is in the range [0, 11]
              * where 0 = 1k, 1 = 2k, 2 = 4k, ..., 11 = 2M.
              */
             per_thread_scratch_value = ffs(stage_state->per_thread_scratch) - 11;
-         } else if (GEN_IS_HASWELL) {
+         } else if (GFX_VERx10 == 75) {
             /* Haswell's Per Thread Scratch Space is in the range [0, 10]
              * where 0 = 2k, 1 = 4k, 2 = 8k, ..., 10 = 2M.
              */
@@ -4329,22 +4329,22 @@ genX(upload_cs_state)(struct brw_context *brw)
        */
       const uint32_t subslices = MAX2(brw->screen->subslice_total, 1);
       vfe.MaximumNumberofThreads = devinfo->max_cs_threads * subslices - 1;
-      vfe.NumberofURBEntries = GEN_GEN >= 8 ? 2 : 0;
-#if GEN_GEN < 11
+      vfe.NumberofURBEntries = GFX_VER >= 8 ? 2 : 0;
+#if GFX_VER < 11
       vfe.ResetGatewayTimer =
          Resettingrelativetimerandlatchingtheglobaltimestamp;
 #endif
-#if GEN_GEN < 9
+#if GFX_VER < 9
       vfe.BypassGatewayControl = BypassingOpenGatewayCloseGatewayprotocol;
 #endif
-#if GEN_GEN == 7
+#if GFX_VER == 7
       vfe.GPGPUMode = 1;
 #endif
 
       /* We are uploading duplicated copies of push constant uniforms for each
        * thread. Although the local id data needs to vary per thread, it won't
        * change for other uniform data. Unfortunately this duplication is
-       * required for gen7. As of Haswell, this duplication can be avoided,
+       * required for gfx7. As of Haswell, this duplication can be avoided,
        * but this older mechanism with duplicated data continues to work.
        *
        * FINISHME: As of Haswell, we could make use of the
@@ -4359,7 +4359,7 @@ genX(upload_cs_state)(struct brw_context *brw)
        * Note: The constant data is built in brw_upload_cs_push_constants
        * below.
        */
-      vfe.URBEntryAllocationSize = GEN_GEN >= 8 ? 2 : 0;
+      vfe.URBEntryAllocationSize = GFX_VER >= 8 ? 2 : 0;
 
       const uint32_t vfe_curbe_allocation =
          ALIGN(cs_prog_data->push.per_thread.regs * cs_params.threads +
@@ -4385,16 +4385,16 @@ genX(upload_cs_state)(struct brw_context *brw)
    const struct GENX(INTERFACE_DESCRIPTOR_DATA) idd = {
       .KernelStartPointer = ksp,
       .SamplerStatePointer = stage_state->sampler_offset,
-      /* WA_1606682166 */
-      .SamplerCount = GEN_GEN == 11 ? 0 :
+      /* Wa_1606682166 */
+      .SamplerCount = GFX_VER == 11 ? 0 :
                       DIV_ROUND_UP(CLAMP(stage_state->sampler_count, 0, 16), 4),
       .BindingTablePointer = stage_state->bind_bo_offset,
       .ConstantURBEntryReadLength = cs_prog_data->push.per_thread.regs,
       .NumberofThreadsinGPGPUThreadGroup = cs_params.threads,
-      .SharedLocalMemorySize = encode_slm_size(GEN_GEN,
+      .SharedLocalMemorySize = encode_slm_size(GFX_VER,
                                                prog_data->total_shared),
       .BarrierEnable = cs_prog_data->uses_barrier,
-#if GEN_GEN >= 8 || GEN_IS_HASWELL
+#if GFX_VERx10 >= 75
       .CrossThreadConstantDataReadLength =
          cs_prog_data->push.cross_thread.regs,
 #endif
@@ -4438,7 +4438,7 @@ prepare_indirect_gpgpu_walker(struct brw_context *brw)
    emit_lrm(brw, GPGPU_DISPATCHDIMY, ro_bo(bo, indirect_offset + 4));
    emit_lrm(brw, GPGPU_DISPATCHDIMZ, ro_bo(bo, indirect_offset + 8));
 
-#if GEN_GEN <= 7
+#if GFX_VER <= 7
    /* Clear upper 32-bits of SRC0 and all 64-bits of SRC1 */
    emit_lri(brw, MI_PREDICATE_SRC0 + 4, 0);
    emit_lri(brw, MI_PREDICATE_SRC1    , 0);
@@ -4500,7 +4500,7 @@ genX(emit_gpgpu_walker)(struct brw_context *brw)
 
    brw_batch_emit(brw, GENX(GPGPU_WALKER), ggw) {
       ggw.IndirectParameterEnable      = indirect;
-      ggw.PredicateEnable              = GEN_GEN <= 7 && indirect;
+      ggw.PredicateEnable              = GFX_VER <= 7 && indirect;
       ggw.SIMDSize                     = cs_params.simd_size / 16;
       ggw.ThreadDepthCounterMaximum    = 0;
       ggw.ThreadHeightCounterMaximum   = 0;
@@ -4519,7 +4519,7 @@ genX(emit_gpgpu_walker)(struct brw_context *brw)
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
 static void
 genX(upload_raster)(struct brw_context *brw)
 {
@@ -4596,7 +4596,7 @@ genX(upload_raster)(struct brw_context *brw)
       /* _NEW_LINE */
       raster.AntialiasingEnable = ctx->Line.SmoothFlag;
 
-#if GEN_GEN == 10
+#if GFX_VER == 10
       /* _NEW_BUFFERS
        * Antialiasing Enable bit MUST not be set when NUM_MULTISAMPLES > 1.
        */
@@ -4610,13 +4610,13 @@ genX(upload_raster)(struct brw_context *brw)
       raster.ScissorRectangleEnable = ctx->Scissor.EnableFlags;
 
       /* _NEW_TRANSFORM */
-#if GEN_GEN < 9
+#if GFX_VER < 9
       if (!(ctx->Transform.DepthClampNear &&
             ctx->Transform.DepthClampFar))
          raster.ViewportZClipTestEnable = true;
 #endif
 
-#if GEN_GEN >= 9
+#if GFX_VER >= 9
       if (!ctx->Transform.DepthClampNear)
          raster.ViewportZNearClipTestEnable = true;
 
@@ -4625,7 +4625,7 @@ genX(upload_raster)(struct brw_context *brw)
 #endif
 
       /* BRW_NEW_CONSERVATIVE_RASTERIZATION */
-#if GEN_GEN >= 9
+#if GFX_VER >= 9
       raster.ConservativeRasterizationEnable =
          ctx->IntelConservativeRasterization;
 #endif
@@ -4656,7 +4656,7 @@ static const struct brw_tracked_state genX(raster_state) = {
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
 static void
 genX(upload_ps_extra)(struct brw_context *brw)
 {
@@ -4676,7 +4676,7 @@ genX(upload_ps_extra)(struct brw_context *brw)
 
       /* _NEW_MULTISAMPLE | BRW_NEW_CONSERVATIVE_RASTERIZATION */
       if (prog_data->uses_sample_mask) {
-#if GEN_GEN >= 9
+#if GFX_VER >= 9
          if (prog_data->post_depth_coverage)
             psx.InputCoverageMaskState = ICMS_DEPTH_COVERAGE;
          else if (prog_data->inner_coverage && ctx->IntelConservativeRasterization)
@@ -4689,7 +4689,7 @@ genX(upload_ps_extra)(struct brw_context *brw)
       }
 
       psx.oMaskPresenttoRenderTarget = prog_data->uses_omask;
-#if GEN_GEN >= 9
+#if GFX_VER >= 9
       psx.PixelShaderPullsBary = prog_data->pulls_bary;
       psx.PixelShaderComputesStencil = prog_data->computed_stencil;
 #endif
@@ -4707,16 +4707,16 @@ genX(upload_ps_extra)(struct brw_context *brw)
        * the bit set finishes execution.
        *
        * It would be nice to disable it, but in some cases we can't because on
-       * Gen8+ it also has an influence on rasterization via the PS UAV-only
+       * Gfx8+ it also has an influence on rasterization via the PS UAV-only
        * signal (which could be set independently from the coherency mechanism
-       * in the 3DSTATE_WM command on Gen7), and because in some cases it will
+       * in the 3DSTATE_WM command on Gfx7), and because in some cases it will
        * determine whether the hardware skips execution of the fragment shader
        * or not via the ThreadDispatchEnable signal.  However if we know that
-       * GEN8_PS_BLEND_HAS_WRITEABLE_RT is going to be set and
-       * GEN8_PSX_PIXEL_SHADER_NO_RT_WRITE is not set it shouldn't make any
+       * GFX8_PS_BLEND_HAS_WRITEABLE_RT is going to be set and
+       * GFX8_PSX_PIXEL_SHADER_NO_RT_WRITE is not set it shouldn't make any
        * difference so we may just disable it here.
        *
-       * Gen8 hardware tries to compute ThreadDispatchEnable for us but doesn't
+       * Gfx8 hardware tries to compute ThreadDispatchEnable for us but doesn't
        * take into account KillPixels when no depth or stencil writes are
        * enabled.  In order for occlusion queries to work correctly with no
        * attachments, we need to force-enable here.
@@ -4745,7 +4745,7 @@ const struct brw_tracked_state genX(ps_extra) = {
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
 static void
 genX(upload_ps_blend)(struct brw_context *brw)
 {
@@ -4818,7 +4818,7 @@ genX(upload_ps_blend)(struct brw_context *brw)
          /* Alpha to One doesn't work with Dual Color Blending.  Override
           * SRC1_ALPHA to ONE and ONE_MINUS_SRC1_ALPHA to ZERO.
           */
-         if (alpha_to_one && color->Blend[0]._UsesDualSrc) {
+         if (alpha_to_one && color->_BlendUsesDualSrc & 0x1) {
             srcRGB = fix_dual_blend_alpha_to_one(srcRGB);
             srcA = fix_dual_blend_alpha_to_one(srcA);
             dstRGB = fix_dual_blend_alpha_to_one(dstRGB);
@@ -4843,7 +4843,7 @@ genX(upload_ps_blend)(struct brw_context *brw)
           * so we just disable the blending to prevent possible issues.
           */
          pb.ColorBufferBlendEnable =
-            !color->Blend[0]._UsesDualSrc || wm_prog_data->dual_src_blend;
+            !(color->_BlendUsesDualSrc & 0x1) || wm_prog_data->dual_src_blend;
          pb.SourceAlphaBlendFactor = brw_translate_blend_factor(srcA);
          pb.DestinationAlphaBlendFactor = brw_translate_blend_factor(dstA);
          pb.SourceBlendFactor = brw_translate_blend_factor(srcRGB);
@@ -4871,7 +4871,7 @@ static const struct brw_tracked_state genX(ps_blend) = {
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
 static void
 genX(emit_vf_topology)(struct brw_context *brw)
 {
@@ -4892,7 +4892,7 @@ static const struct brw_tracked_state genX(vf_topology) = {
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
 static void
 genX(emit_mi_report_perf_count)(struct brw_context *brw,
                                 struct brw_bo *bo,
@@ -4915,7 +4915,7 @@ static void
 genX(emit_sampler_state_pointers_xs)(UNUSED struct brw_context *brw,
                                      UNUSED struct brw_stage_state *stage_state)
 {
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
    static const uint16_t packet_headers[] = {
       [MESA_SHADER_VERTEX] = 43,
       [MESA_SHADER_TESS_CTRL] = 44,
@@ -4925,9 +4925,9 @@ genX(emit_sampler_state_pointers_xs)(UNUSED struct brw_context *brw,
    };
 
    /* Ivybridge requires a workaround flush before VS packets. */
-   if (GEN_GEN == 7 && !GEN_IS_HASWELL &&
+   if (GFX_VERx10 == 70 &&
        stage_state->stage == MESA_SHADER_VERTEX) {
-      gen7_emit_vs_workaround_flush(brw);
+      gfx7_emit_vs_workaround_flush(brw);
    }
 
    brw_batch_emit(brw, GENX(3DSTATE_SAMPLER_STATE_POINTERS_VS), ptr) {
@@ -5011,9 +5011,9 @@ genX(upload_default_color)(struct brw_context *brw,
       color.ui[3] = float_as_int(1.0);
 
    int alignment = 32;
-   if (GEN_GEN >= 8) {
+   if (GFX_VER >= 8) {
       alignment = 64;
-   } else if (GEN_IS_HASWELL && (is_integer_format || is_stencil_sampling)) {
+   } else if (GFX_VERx10 == 75 && (is_integer_format || is_stencil_sampling)) {
       alignment = 512;
    }
 
@@ -5044,14 +5044,14 @@ genX(upload_default_color)(struct brw_context *brw,
    macro(state.BorderColor ## _color_type ## Blue, src[2]);   \
    macro(state.BorderColor ## _color_type ## Alpha, src[3]);
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    /* On Broadwell, the border color is represented as four 32-bit floats,
     * integers, or unsigned values, interpreted according to the surface
     * format.  This matches the sampler->BorderColor union exactly; just
     * memcpy the values.
     */
    BORDER_COLOR_ATTR(ASSIGN, 32bit, color.ui);
-#elif GEN_IS_HASWELL
+#elif GFX_VERx10 == 75
    if (is_integer_format || is_stencil_sampling) {
       bool stencil = format == MESA_FORMAT_S_UINT8 || is_stencil_sampling;
       const int bits_per_channel =
@@ -5099,7 +5099,7 @@ genX(upload_default_color)(struct brw_context *brw,
    } else {
       BORDER_COLOR_ATTR(ASSIGN, Float, color.f);
    }
-#elif GEN_GEN == 5 || GEN_GEN == 6
+#elif GFX_VER == 5 || GFX_VER == 6
    BORDER_COLOR_ATTR(UNCLAMPED_FLOAT_TO_UBYTE, Unorm, color.f);
    BORDER_COLOR_ATTR(UNCLAMPED_FLOAT_TO_USHORT, Unorm16, color.f);
    BORDER_COLOR_ATTR(UNCLAMPED_FLOAT_TO_SHORT, Snorm16, color.f);
@@ -5117,7 +5117,7 @@ genX(upload_default_color)(struct brw_context *brw,
    state.BorderColorSnorm8Alpha = state.BorderColorSnorm16Alpha >> 8;
 
    BORDER_COLOR_ATTR(ASSIGN, Float, color.f);
-#elif GEN_GEN == 4
+#elif GFX_VER == 4
    BORDER_COLOR_ATTR(ASSIGN, , color.f);
 #else
    BORDER_COLOR_ATTR(ASSIGN, Float, color.f);
@@ -5136,17 +5136,17 @@ translate_wrap_mode(GLenum wrap, UNUSED bool using_nearest)
    case GL_REPEAT:
       return TCM_WRAP;
    case GL_CLAMP:
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
       /* GL_CLAMP is the weird mode where coordinates are clamped to
        * [0.0, 1.0], so linear filtering of coordinates outside of
        * [0.0, 1.0] give you half edge texel value and half border
        * color.
        *
-       * Gen8+ supports this natively.
+       * Gfx8+ supports this natively.
        */
       return TCM_HALF_BORDER;
 #else
-      /* On Gen4-7.5, we clamp the coordinates in the fragment shader
+      /* On Gfx4-7.5, we clamp the coordinates in the fragment shader
        * and set clamp_border here, which gets the result desired.
        * We just use clamp(_to_edge) for nearest, because for nearest
        * clamping to 1.0 gives border color instead of the desired
@@ -5176,7 +5176,7 @@ translate_wrap_mode(GLenum wrap, UNUSED bool using_nearest)
 static bool
 wrap_mode_needs_border_color(unsigned wrap_mode)
 {
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    return wrap_mode == TCM_CLAMP_BORDER ||
           wrap_mode == TCM_HALF_BORDER;
 #else
@@ -5276,7 +5276,7 @@ genX(update_sampler_state)(struct brw_context *brw,
        * integer formats.  Fall back to CLAMP for now.
        */
       if ((tex_cube_map_seamless || sampler->Attrib.CubeMapSeamless) &&
-          !(GEN_GEN == 7 && !GEN_IS_HASWELL && texObj->_IsIntegerFormat)) {
+          !(GFX_VERx10 == 70 && texObj->_IsIntegerFormat)) {
          wrap_s = TCM_CUBE;
          wrap_t = TCM_CUBE;
          wrap_r = TCM_CUBE;
@@ -5300,28 +5300,28 @@ genX(update_sampler_state)(struct brw_context *brw,
 
    samp_st.ShadowFunction =
       sampler->Attrib.CompareMode == GL_COMPARE_R_TO_TEXTURE_ARB ?
-      intel_translate_shadow_compare_func(sampler->Attrib.CompareFunc) : 0;
+      brw_translate_shadow_compare_func(sampler->Attrib.CompareFunc) : 0;
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
    /* Set shadow function. */
    samp_st.AnisotropicAlgorithm =
       samp_st.MinModeFilter == MAPFILTER_ANISOTROPIC ?
       EWAApproximation : LEGACY;
 #endif
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
    samp_st.NonnormalizedCoordinateEnable = target == GL_TEXTURE_RECTANGLE;
 #endif
 
-   const float hw_max_lod = GEN_GEN >= 7 ? 14 : 13;
+   const float hw_max_lod = GFX_VER >= 7 ? 14 : 13;
    samp_st.MinLOD = CLAMP(sampler->Attrib.MinLod, 0, hw_max_lod);
    samp_st.MaxLOD = CLAMP(sampler->Attrib.MaxLod, 0, hw_max_lod);
    samp_st.TextureLODBias =
       CLAMP(tex_unit_lod_bias + sampler->Attrib.LodBias, -16, 15);
 
-#if GEN_GEN == 6
+#if GFX_VER == 6
    samp_st.BaseMipLevel =
-      CLAMP(texObj->MinLevel + texObj->Attrib.BaseLevel, 0, hw_max_lod);
+      CLAMP(texObj->Attrib.MinLevel + texObj->Attrib.BaseLevel, 0, hw_max_lod);
    samp_st.MinandMagStateNotEqual =
       samp_st.MinModeFilter != samp_st.MagModeFilter;
 #endif
@@ -5336,17 +5336,17 @@ genX(update_sampler_state)(struct brw_context *brw,
        wrap_mode_needs_border_color(wrap_r)) {
       genX(upload_default_color)(brw, sampler, format, base_format,
                                  texObj->_IsIntegerFormat,
-                                 texObj->Attrib.StencilSampling,
+                                 texObj->StencilSampling,
                                  &border_color_offset);
    }
-#if GEN_GEN < 6
+#if GFX_VER < 6
       samp_st.BorderColorPointer =
          ro_bo(brw->batch.state.bo, border_color_offset);
 #else
       samp_st.BorderColorPointer = border_color_offset;
 #endif
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    samp_st.LODPreClampMode = CLAMP_MODE_OGL;
 #else
    samp_st.LODPreClampEnable = true;
@@ -5411,7 +5411,7 @@ genX(upload_sampler_state_table)(struct brw_context *brw,
       sampler_state += dwords;
    }
 
-   if (GEN_GEN >= 7 && stage_state->stage != MESA_SHADER_COMPUTE) {
+   if (GFX_VER >= 7 && stage_state->stage != MESA_SHADER_COMPUTE) {
       /* Emit a 3DSTATE_SAMPLER_STATE_POINTERS_XS packet. */
       genX(emit_sampler_state_pointers_xs)(brw, stage_state);
    } else {
@@ -5458,7 +5458,7 @@ static const struct brw_tracked_state genX(vs_samplers) = {
    .emit = genX(upload_vs_samplers),
 };
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
 static void
 genX(upload_gs_samplers)(struct brw_context *brw)
 {
@@ -5482,7 +5482,7 @@ static const struct brw_tracked_state genX(gs_samplers) = {
 };
 #endif
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
 static void
 genX(upload_tcs_samplers)(struct brw_context *brw)
 {
@@ -5505,7 +5505,7 @@ static const struct brw_tracked_state genX(tcs_samplers) = {
 };
 #endif
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
 static void
 genX(upload_tes_samplers)(struct brw_context *brw)
 {
@@ -5528,7 +5528,7 @@ static const struct brw_tracked_state genX(tes_samplers) = {
 };
 #endif
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
 static void
 genX(upload_cs_samplers)(struct brw_context *brw)
 {
@@ -5553,7 +5553,7 @@ const struct brw_tracked_state genX(cs_samplers) = {
 
 /* ---------------------------------------------------------------------- */
 
-#if GEN_GEN <= 5
+#if GFX_VER <= 5
 
 static void genX(upload_blend_constant_color)(struct brw_context *brw)
 {
@@ -5582,7 +5582,7 @@ static const struct brw_tracked_state genX(blend_constant_color) = {
 void
 genX(init_atoms)(struct brw_context *brw)
 {
-#if GEN_GEN < 6
+#if GFX_VER < 6
    static const struct brw_tracked_state *render_atoms[] =
    {
       &genX(vf_statistics),
@@ -5640,7 +5640,7 @@ genX(init_atoms)(struct brw_context *brw)
 
       &brw_constant_buffer
    };
-#elif GEN_GEN == 6
+#elif GFX_VER == 6
    static const struct brw_tracked_state *render_atoms[] =
    {
       &genX(vf_statistics),
@@ -5651,10 +5651,10 @@ genX(init_atoms)(struct brw_context *brw)
 
       &genX(cc_vp),
 
-      &gen6_urb,
-      &genX(blend_state),		/* must do before cc unit */
-      &genX(color_calc_state),	/* must do before cc unit */
-      &genX(depth_stencil_state),	/* must do before cc unit */
+      &gfx6_urb,
+      &genX(blend_state),         /* must do before cc unit */
+      &genX(color_calc_state),    /* must do before cc unit */
+      &genX(depth_stencil_state), /* must do before cc unit */
 
       &genX(vs_push_constants), /* Before vs_state */
       &genX(gs_push_constants), /* Before gs_state */
@@ -5669,18 +5669,18 @@ genX(init_atoms)(struct brw_context *brw)
       &brw_gs_ubo_surfaces,
       &brw_wm_pull_constants,
       &brw_wm_ubo_surfaces,
-      &gen6_renderbuffer_surfaces,
+      &gfx6_renderbuffer_surfaces,
       &brw_renderbuffer_read_surfaces,
       &brw_texture_surfaces,
-      &gen6_sol_surface,
+      &gfx6_sol_surface,
       &brw_vs_binding_table,
-      &gen6_gs_binding_table,
+      &gfx6_gs_binding_table,
       &brw_wm_binding_table,
 
       &genX(fs_samplers),
       &genX(vs_samplers),
       &genX(gs_samplers),
-      &gen6_sampler_state,
+      &gfx6_sampler_state,
       &genX(multisample_state),
 
       &genX(vs_state),
@@ -5691,7 +5691,7 @@ genX(init_atoms)(struct brw_context *brw)
 
       &genX(scissor_state),
 
-      &gen6_binding_table_pointers,
+      &gfx6_binding_table_pointers,
 
       &brw_depthbuffer,
 
@@ -5706,7 +5706,7 @@ genX(init_atoms)(struct brw_context *brw)
       &genX(index_buffer),
       &genX(vertices),
    };
-#elif GEN_GEN == 7
+#elif GFX_VER == 7
    static const struct brw_tracked_state *render_atoms[] =
    {
       &genX(vf_statistics),
@@ -5716,16 +5716,16 @@ genX(init_atoms)(struct brw_context *brw)
       &genX(cc_vp),
       &genX(sf_clip_viewport),
 
-      &gen7_l3_state,
-      &gen7_push_constant_space,
-      &gen7_urb,
-#if GEN_IS_HASWELL
+      &gfx7_l3_state,
+      &gfx7_push_constant_space,
+      &gfx7_urb,
+#if GFX_VERx10 == 75
       &genX(cc_and_blend_state),
 #else
-      &genX(blend_state),		/* must do before cc unit */
-      &genX(color_calc_state),	/* must do before cc unit */
+      &genX(blend_state),         /* must do before cc unit */
+      &genX(color_calc_state),    /* must do before cc unit */
 #endif
-      &genX(depth_stencil_state),	/* must do before cc unit */
+      &genX(depth_stencil_state), /* must do before cc unit */
 
       &brw_vs_image_surfaces, /* Before vs push/pull constants and binding table */
       &brw_tcs_image_surfaces, /* Before tcs push/pull constants and binding table */
@@ -5752,7 +5752,7 @@ genX(init_atoms)(struct brw_context *brw)
       &brw_gs_ubo_surfaces,
       &brw_wm_pull_constants,
       &brw_wm_ubo_surfaces,
-      &gen6_renderbuffer_surfaces,
+      &gfx6_renderbuffer_surfaces,
       &brw_renderbuffer_read_surfaces,
       &brw_texture_surfaces,
 
@@ -5798,11 +5798,11 @@ genX(init_atoms)(struct brw_context *brw)
       &genX(index_buffer),
       &genX(vertices),
 
-#if GEN_IS_HASWELL
+#if GFX_VERx10 == 75
       &genX(cut_index),
 #endif
    };
-#elif GEN_GEN >= 8
+#elif GFX_VER >= 8
    static const struct brw_tracked_state *render_atoms[] =
    {
       &genX(vf_statistics),
@@ -5810,9 +5810,9 @@ genX(init_atoms)(struct brw_context *brw)
       &genX(cc_vp),
       &genX(sf_clip_viewport),
 
-      &gen7_l3_state,
-      &gen7_push_constant_space,
-      &gen7_urb,
+      &gfx7_l3_state,
+      &gfx7_push_constant_space,
+      &gfx7_urb,
       &genX(blend_state),
       &genX(color_calc_state),
 
@@ -5841,7 +5841,7 @@ genX(init_atoms)(struct brw_context *brw)
       &brw_gs_ubo_surfaces,
       &brw_wm_pull_constants,
       &brw_wm_ubo_surfaces,
-      &gen6_renderbuffer_surfaces,
+      &gfx6_renderbuffer_surfaces,
       &brw_renderbuffer_read_surfaces,
       &brw_texture_surfaces,
 
@@ -5894,7 +5894,7 @@ genX(init_atoms)(struct brw_context *brw)
       &genX(vertices),
 
       &genX(cut_index),
-      &gen8_pma_fix,
+      &gfx8_pma_fix,
    };
 #endif
 
@@ -5902,10 +5902,10 @@ genX(init_atoms)(struct brw_context *brw)
    brw_copy_pipeline_atoms(brw, BRW_RENDER_PIPELINE,
                            render_atoms, ARRAY_SIZE(render_atoms));
 
-#if GEN_GEN >= 7
+#if GFX_VER >= 7
    static const struct brw_tracked_state *compute_atoms[] =
    {
-      &gen7_l3_state,
+      &gfx7_l3_state,
       &brw_cs_image_surfaces,
       &genX(cs_push_constants),
       &genX(cs_pull_constants),
@@ -5923,4 +5923,6 @@ genX(init_atoms)(struct brw_context *brw)
    brw->vtbl.emit_mi_report_perf_count = genX(emit_mi_report_perf_count);
    brw->vtbl.emit_compute_walker = genX(emit_gpgpu_walker);
 #endif
+
+   assert(brw->screen->devinfo.verx10 == GFX_VERx10);
 }

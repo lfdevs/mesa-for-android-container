@@ -124,6 +124,9 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
        * somehow on the client side. clean up the server resource and panic.
        */
       xcb_glx_destroy_context(c, xid);
+      /* increment dpy->request in order to give a unique serial number to the
+       * error */
+      XNoOp(dpy);
       __glXSendError(dpy, GLXBadFBConfig, xid, 0, False);
    } else {
       gc->xid = xid;

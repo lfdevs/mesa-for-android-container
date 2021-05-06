@@ -388,7 +388,7 @@ brw_disk_cache_write_compute_program(struct brw_context *brw)
 }
 
 void
-brw_disk_cache_init(struct intel_screen *screen)
+brw_disk_cache_init(struct brw_screen *screen)
 {
 #ifdef ENABLE_SHADER_CACHE
    if (INTEL_DEBUG & DEBUG_DISK_CACHE_DISABLE_MASK)

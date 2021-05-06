@@ -132,7 +132,6 @@ html_extra_path = [
   'libGL.txt',
   'README.UVD',
   'README.VCE',
-  'README.WIN32',
 ]
 
 html_redirects = [

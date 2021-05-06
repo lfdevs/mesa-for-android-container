@@ -24,6 +24,8 @@
 #include "helpers.h"
 #include "test_isel-spirv.h"
 
+#include <llvm/Config/llvm-config.h>
+
 using namespace aco;
 
 BEGIN_TEST(isel.interp.simple)
@@ -148,25 +150,34 @@ BEGIN_TEST(isel.sparse.clause)
             uint code[4];
          };
          void main() {
+            //! llvm_version: #llvm_ver
+            //; if llvm_ver >= 12:
+            //;    funcs['sample_res'] = lambda _: 'v[#_:#_]'
+            //;    funcs['sample_coords'] = lambda _: '[v#_, v#_, v#_]'
+            //; else:
+            //;    funcs['sample_res'] = lambda _: 'v#_'
+            //;    funcs['sample_coords'] = lambda _: '[v#_, v#_, v#_, v#_]'
             //>> v5: (noCSE)%zero0 = p_create_vector 0, 0, 0, 0, 0
-            //>> v5: %_ = image_sample_lz_o %_, %_, %_, %zero0 dmask:xyzw 2d tfe storage: semantics: scope:invocation
+            //>> v5: %_ = image_sample_lz_o %_, %_, %zero0, %_, %_, %_ dmask:xyzw 2d tfe storage: semantics: scope:invocation
             //>> v5: (noCSE)%zero1 = p_create_vector 0, 0, 0, 0, 0
-            //>> v5: %_ = image_sample_lz_o %_, %_, %_, %zero1 dmask:xyzw 2d tfe storage: semantics: scope:invocation
+            //>> v5: %_ = image_sample_lz_o %_, %_, %zero1, %_, %_, %_ dmask:xyzw 2d tfe storage: semantics: scope:invocation
             //>> v5: (noCSE)%zero2 = p_create_vector 0, 0, 0, 0, 0
-            //>> v5: %_ = image_sample_lz_o %_, %_, %_, %zero2 dmask:xyzw 2d tfe storage: semantics: scope:invocation
+            //>> v5: %_ = image_sample_lz_o %_, %_, %zero2, %_, %_, %_ dmask:xyzw 2d tfe storage: semantics: scope:invocation
             //>> v5: (noCSE)%zero3 = p_create_vector 0, 0, 0, 0, 0
-            //>> v5: %_ = image_sample_lz_o %_, %_, %_, %zero3 dmask:xyzw 2d tfe storage: semantics: scope:invocation
+            //>> v5: %_ = image_sample_lz_o %_, %_, %zero3, %_, %_, %_ dmask:xyzw 2d tfe storage: semantics: scope:invocation
             //>> s_clause 0x3
-            //! image_sample_lz_o v#_, v[#_:#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D tfe
-            //! image_sample_lz_o v#_, v[#_:#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D tfe
-            //! image_sample_lz_o v#_, v[#_:#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D tfe
-            //! image_sample_lz_o v#_, v[#_:#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D tfe
+            //! image_sample_lz_o @sample_res, @sample_coords, @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D tfe
+            //! image_sample_lz_o @sample_res, @sample_coords, @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D tfe
+            //! image_sample_lz_o @sample_res, @sample_coords, @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D tfe
+            //! image_sample_lz_o @sample_res, @sample_coords, @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D tfe
             code[0] = sparseTextureOffsetARB(tex, vec2(0.5), ivec2(1, 0), res[0]);
             code[1] = sparseTextureOffsetARB(tex, vec2(0.5), ivec2(2, 0), res[1]);
             code[2] = sparseTextureOffsetARB(tex, vec2(0.5), ivec2(3, 0), res[2]);
             code[3] = sparseTextureOffsetARB(tex, vec2(0.5), ivec2(4, 0), res[3]);
          }
       );
+
+      fprintf(output, "llvm_version: %u\n", LLVM_VERSION_MAJOR);
 
       PipelineBuilder pbld(get_vk_device((chip_class)i));
       pbld.add_cs(cs);

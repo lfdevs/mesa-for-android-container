@@ -78,6 +78,7 @@ static LLVMValueRef cast_type(struct lp_build_nir_context *bld_base, LLVMValueRe
          return LLVMBuildBitCast(builder, val, bld_base->uint8_bld.vec_type, "");
       case 16:
          return LLVMBuildBitCast(builder, val, bld_base->uint16_bld.vec_type, "");
+      case 1:
       case 32:
          return LLVMBuildBitCast(builder, val, bld_base->uint_bld.vec_type, "");
       case 64:
@@ -96,15 +97,6 @@ static LLVMValueRef cast_type(struct lp_build_nir_context *bld_base, LLVMValueRe
 }
 
 
-static struct lp_build_context *get_flt_bld(struct lp_build_nir_context *bld_base,
-                                            unsigned op_bit_size)
-{
-   if (op_bit_size == 64)
-      return &bld_base->dbl_bld;
-   else
-      return &bld_base->base;
-}
-
 static unsigned glsl_sampler_to_pipe(int sampler_dim, bool is_array)
 {
    unsigned pipe_target = PIPE_BUFFER;
@@ -113,14 +105,16 @@ static unsigned glsl_sampler_to_pipe(int sampler_dim, bool is_array)
       pipe_target = is_array ? PIPE_TEXTURE_1D_ARRAY : PIPE_TEXTURE_1D;
       break;
    case GLSL_SAMPLER_DIM_2D:
-   case GLSL_SAMPLER_DIM_SUBPASS:
       pipe_target = is_array ? PIPE_TEXTURE_2D_ARRAY : PIPE_TEXTURE_2D;
+      break;
+   case GLSL_SAMPLER_DIM_SUBPASS:
+   case GLSL_SAMPLER_DIM_SUBPASS_MS:
+      pipe_target = PIPE_TEXTURE_2D_ARRAY;
       break;
    case GLSL_SAMPLER_DIM_3D:
       pipe_target = PIPE_TEXTURE_3D;
       break;
    case GLSL_SAMPLER_DIM_MS:
-   case GLSL_SAMPLER_DIM_SUBPASS_MS:
       pipe_target = is_array ? PIPE_TEXTURE_2D_ARRAY : PIPE_TEXTURE_2D;
       break;
    case GLSL_SAMPLER_DIM_CUBE:
@@ -212,7 +206,9 @@ static LLVMValueRef int_to_bool32(struct lp_build_nir_context *bld_base,
    LLVMBuilderRef builder = bld_base->base.gallivm->builder;
    struct lp_build_context *int_bld = get_int_bld(bld_base, is_unsigned, src_bit_size);
    LLVMValueRef result = lp_build_compare(bld_base->base.gallivm, int_bld->type, PIPE_FUNC_NOTEQUAL, val, int_bld->zero);
-   if (src_bit_size == 64)
+   if (src_bit_size == 16)
+      result = LLVMBuildSExt(builder, result, bld_base->int_bld.vec_type, "");
+   else if (src_bit_size == 64)
       result = LLVMBuildTrunc(builder, result, bld_base->int_bld.vec_type, "");
    return result;
 }
@@ -875,7 +871,7 @@ static LLVMValueRef do_alu_action(struct lp_build_nir_context *bld_base,
       break;
    case nir_op_pack_64_2x32_split: {
       LLVMValueRef tmp = merge_64bit(bld_base, src[0], src[1]);
-      result = LLVMBuildBitCast(builder, tmp, bld_base->dbl_bld.vec_type, "");
+      result = LLVMBuildBitCast(builder, tmp, bld_base->uint64_bld.vec_type, "");
       break;
    }
    case nir_op_u2f32:
@@ -1278,10 +1274,11 @@ static void visit_ssbo_atomic(struct lp_build_nir_context *bld_base,
    LLVMValueRef offset = get_src(bld_base, instr->src[1]);
    LLVMValueRef val = get_src(bld_base, instr->src[2]);
    LLVMValueRef val2 = NULL;
+   int bitsize = nir_src_bit_size(instr->src[2]);
    if (instr->intrinsic == nir_intrinsic_ssbo_atomic_comp_swap)
       val2 = get_src(bld_base, instr->src[3]);
 
-   bld_base->atomic_mem(bld_base, instr->intrinsic, idx, offset, val, val2, &result[0]);
+   bld_base->atomic_mem(bld_base, instr->intrinsic, bitsize, idx, offset, val, val2, &result[0]);
 
 }
 
@@ -1504,10 +1501,11 @@ static void visit_shared_atomic(struct lp_build_nir_context *bld_base,
    LLVMValueRef offset = get_src(bld_base, instr->src[0]);
    LLVMValueRef val = get_src(bld_base, instr->src[1]);
    LLVMValueRef val2 = NULL;
+   int bitsize = nir_src_bit_size(instr->src[1]);
    if (instr->intrinsic == nir_intrinsic_shared_atomic_comp_swap)
       val2 = get_src(bld_base, instr->src[2]);
 
-   bld_base->atomic_mem(bld_base, instr->intrinsic, NULL, offset, val, val2, &result[0]);
+   bld_base->atomic_mem(bld_base, instr->intrinsic, bitsize, NULL, offset, val, val2, &result[0]);
 
 }
 
@@ -1567,10 +1565,12 @@ static void visit_global_atomic(struct lp_build_nir_context *bld_base,
    LLVMValueRef val = get_src(bld_base, instr->src[1]);
    LLVMValueRef val2 = NULL;
    int addr_bitsize = nir_src_bit_size(instr->src[0]);
+   int val_bitsize = nir_src_bit_size(instr->src[1]);
    if (instr->intrinsic == nir_intrinsic_global_atomic_comp_swap)
       val2 = get_src(bld_base, instr->src[2]);
 
-   bld_base->atomic_global(bld_base, instr->intrinsic, addr_bitsize, addr, val, val2, &result[0]);
+   bld_base->atomic_global(bld_base, instr->intrinsic, addr_bitsize,
+                           val_bitsize, addr, val, val2, &result[0]);
 }
 
 static void visit_interp(struct lp_build_nir_context *bld_base,
@@ -1661,6 +1661,7 @@ static void visit_intrinsic(struct lp_build_nir_context *bld_base,
    case nir_intrinsic_load_instance_id:
    case nir_intrinsic_load_base_instance:
    case nir_intrinsic_load_base_vertex:
+   case nir_intrinsic_load_first_vertex:
    case nir_intrinsic_load_work_group_id:
    case nir_intrinsic_load_local_invocation_id:
    case nir_intrinsic_load_num_work_groups:
@@ -1676,6 +1677,10 @@ static void visit_intrinsic(struct lp_build_nir_context *bld_base,
    case nir_intrinsic_load_sample_id:
    case nir_intrinsic_load_sample_pos:
    case nir_intrinsic_load_sample_mask_in:
+   case nir_intrinsic_load_view_index:
+   case nir_intrinsic_load_subgroup_invocation:
+   case nir_intrinsic_load_subgroup_id:
+   case nir_intrinsic_load_num_subgroups:
       bld_base->sysval_intrin(bld_base, instr, result);
       break;
    case nir_intrinsic_load_helper_invocation:
@@ -1780,8 +1785,29 @@ static void visit_intrinsic(struct lp_build_nir_context *bld_base,
    case nir_intrinsic_vote_all:
    case nir_intrinsic_vote_any:
    case nir_intrinsic_vote_ieq:
-      bld_base->vote(bld_base, cast_type(bld_base, get_src(bld_base, instr->src[0]), nir_type_int, 32), instr, result);
+   case nir_intrinsic_vote_feq:
+      bld_base->vote(bld_base, cast_type(bld_base, get_src(bld_base, instr->src[0]), nir_type_int, nir_src_bit_size(instr->src[0])), instr, result);
       break;
+   case nir_intrinsic_elect:
+      bld_base->elect(bld_base, result);
+      break;
+   case nir_intrinsic_reduce:
+   case nir_intrinsic_inclusive_scan:
+   case nir_intrinsic_exclusive_scan:
+      bld_base->reduce(bld_base, cast_type(bld_base, get_src(bld_base, instr->src[0]), nir_type_int, nir_src_bit_size(instr->src[0])), instr, result);
+      break;
+   case nir_intrinsic_ballot:
+      bld_base->ballot(bld_base, cast_type(bld_base, get_src(bld_base, instr->src[0]), nir_type_int, 32), instr, result);
+      break;
+   case nir_intrinsic_read_invocation:
+   case nir_intrinsic_read_first_invocation: {
+      LLVMValueRef src1 = NULL;
+
+      if (instr->intrinsic == nir_intrinsic_read_invocation)
+         src1 = cast_type(bld_base, get_src(bld_base, instr->src[1]), nir_type_int, 32);
+      bld_base->read_invocation(bld_base, get_src(bld_base, instr->src[0]), nir_src_bit_size(instr->src[0]), src1, result);
+      break;
+   }
    case nir_intrinsic_interp_deref_at_offset:
    case nir_intrinsic_interp_deref_at_centroid:
    case nir_intrinsic_interp_deref_at_sample:
@@ -2207,7 +2233,7 @@ handle_shader_output_decl(struct lp_build_nir_context *bld_base,
 static LLVMTypeRef get_register_type(struct lp_build_nir_context *bld_base,
                                      nir_register *reg)
 {
-   struct lp_build_context *int_bld = get_int_bld(bld_base, true, reg->bit_size);
+   struct lp_build_context *int_bld = get_int_bld(bld_base, true, reg->bit_size == 1 ? 32 : reg->bit_size);
 
    LLVMTypeRef type = int_bld->vec_type;
    if (reg->num_array_elems)
@@ -2284,7 +2310,7 @@ void lp_build_opt_nir(struct nir_shader *nir)
    NIR_PASS_V(nir, nir_lower_frexp);
 
    NIR_PASS_V(nir, nir_lower_flrp, 16|32|64, true);
-
+   NIR_PASS_V(nir, nir_lower_fp16_casts);
    do {
       progress = false;
       NIR_PASS_V(nir, nir_opt_constant_folding);
@@ -2293,6 +2319,15 @@ void lp_build_opt_nir(struct nir_shader *nir)
 
       nir_lower_tex_options options = { .lower_tex_without_implicit_lod = true };
       NIR_PASS_V(nir, nir_lower_tex, &options);
+
+      const nir_lower_subgroups_options subgroups_options = {
+	.subgroup_size = lp_native_vector_width / 32,
+	.ballot_bit_size = 32,
+	.lower_to_scalar = true,
+	.lower_subgroup_masks = true,
+      };
+      NIR_PASS_V(nir, nir_lower_subgroups, &subgroups_options);
+
    } while (progress);
    nir_lower_bool_to_int32(nir);
 }

@@ -43,10 +43,10 @@ enum
 
 void si_blitter_begin(struct si_context *sctx, enum si_blitter_op op)
 {
-   util_blitter_save_vertex_shader(sctx->blitter, sctx->vs_shader.cso);
-   util_blitter_save_tessctrl_shader(sctx->blitter, sctx->tcs_shader.cso);
-   util_blitter_save_tesseval_shader(sctx->blitter, sctx->tes_shader.cso);
-   util_blitter_save_geometry_shader(sctx->blitter, sctx->gs_shader.cso);
+   util_blitter_save_vertex_shader(sctx->blitter, sctx->shader.vs.cso);
+   util_blitter_save_tessctrl_shader(sctx->blitter, sctx->shader.tcs.cso);
+   util_blitter_save_tesseval_shader(sctx->blitter, sctx->shader.tes.cso);
+   util_blitter_save_geometry_shader(sctx->blitter, sctx->shader.gs.cso);
    util_blitter_save_so_targets(sctx->blitter, sctx->streamout.num_targets,
                                 (struct pipe_stream_output_target **)sctx->streamout.targets);
    util_blitter_save_rasterizer(sctx->blitter, sctx->queued.named.rasterizer);
@@ -55,7 +55,7 @@ void si_blitter_begin(struct si_context *sctx, enum si_blitter_op op)
       util_blitter_save_blend(sctx->blitter, sctx->queued.named.blend);
       util_blitter_save_depth_stencil_alpha(sctx->blitter, sctx->queued.named.dsa);
       util_blitter_save_stencil_ref(sctx->blitter, &sctx->stencil_ref.state);
-      util_blitter_save_fragment_shader(sctx->blitter, sctx->ps_shader.cso);
+      util_blitter_save_fragment_shader(sctx->blitter, sctx->shader.ps.cso);
       util_blitter_save_sample_mask(sctx->blitter, sctx->sample_mask);
       util_blitter_save_scissor(sctx->blitter, &sctx->scissors[0]);
       util_blitter_save_window_rectangles(sctx->blitter, sctx->window_rectangles_include,
@@ -74,28 +74,35 @@ void si_blitter_begin(struct si_context *sctx, enum si_blitter_op op)
    }
 
    if (op & SI_DISABLE_RENDER_COND)
-      sctx->render_cond_force_off = true;
+      sctx->render_cond_enabled = false;
 
    if (sctx->screen->dpbb_allowed) {
       sctx->dpbb_force_off = true;
       si_mark_atom_dirty(sctx, &sctx->atoms.s.dpbb_state);
    }
+
+   sctx->blitter_running = true;
 }
 
 void si_blitter_end(struct si_context *sctx)
 {
+   sctx->blitter_running = false;
+
    if (sctx->screen->dpbb_allowed) {
       sctx->dpbb_force_off = false;
       si_mark_atom_dirty(sctx, &sctx->atoms.s.dpbb_state);
    }
 
-   sctx->render_cond_force_off = false;
+   sctx->render_cond_enabled = sctx->render_cond;
 
    /* Restore shader pointers because the VS blit shader changed all
     * non-global VS user SGPRs. */
    sctx->shader_pointers_dirty |= SI_DESCS_SHADER_MASK(VERTEX);
-   sctx->vertex_buffer_pointer_dirty = sctx->vb_descriptors_buffer != NULL;
-   sctx->vertex_buffer_user_sgprs_dirty = sctx->num_vertex_elements > 0;
+   sctx->vertex_buffer_pointer_dirty = sctx->vb_descriptors_buffer != NULL &&
+                                       sctx->num_vertex_elements >
+                                       sctx->screen->num_vbos_in_user_sgprs;
+   sctx->vertex_buffer_user_sgprs_dirty = sctx->num_vertex_elements > 0 &&
+                                          sctx->screen->num_vbos_in_user_sgprs;
    si_mark_atom_dirty(sctx, &sctx->atoms.s.shader_pointers);
 }
 
@@ -367,6 +374,8 @@ static void si_decompress_depth(struct si_context *sctx, struct si_texture *tex,
        * the decompression is much worse.
        */
       if (has_htile && !tc_compat_htile &&
+          /* We can only transition the whole buffer in one clear, so no mipmapping: */
+          tex->buffer.b.b.last_level == 0 &&
           tex->surface.flags & RADEON_SURF_TC_COMPATIBLE_HTILE &&
           (inplace_planes & PIPE_MASK_Z || !tex->htile_stencil_disabled))
          tex->enable_tc_compatible_htile_next_clear = true;
@@ -431,7 +440,7 @@ static void si_blit_decompress_color(struct si_context *sctx, struct si_texture 
                    first_level, last_level, level_mask);
 
    if (need_dcc_decompress) {
-      assert(sctx->chip_class == GFX8);
+      assert(sctx->chip_class == GFX8 || tex->buffer.b.b.nr_storage_samples >= 2);
       custom_blend = sctx->custom_blend_dcc_decompress;
 
       assert(vi_dcc_enabled(tex, first_level));
@@ -479,6 +488,22 @@ static void si_blit_decompress_color(struct si_context *sctx, struct si_texture 
              custom_blend == sctx->custom_blend_dcc_decompress)
             sctx->flags |= SI_CONTEXT_FLUSH_AND_INV_CB;
 
+         /* When running FMASK decompresion with DCC, we need to run the "eliminate fast clear" pass
+          * separately because FMASK decompression doesn't eliminate DCC fast clear. This makes
+          * render->texture transitions more expensive. It can be disabled by
+          * allow_dcc_msaa_clear_to_reg_for_bpp.
+          *
+          * TODO: When we get here, change the compression to TC-compatible on the next clear
+          *       to disable both the FMASK decompression and fast clear elimination passes.
+          */
+         if (sctx->screen->allow_dcc_msaa_clear_to_reg_for_bpp[util_logbase2(tex->surface.bpe)] &&
+             custom_blend == sctx->custom_blend_fmask_decompress &&
+             vi_dcc_enabled(tex, level)) {
+            si_blitter_begin(sctx, SI_DECOMPRESS);
+            util_blitter_custom_color(sctx->blitter, cbsurf, sctx->custom_blend_eliminate_fastclear);
+            si_blitter_end(sctx);
+         }
+
          pipe_surface_reference(&cbsurf, NULL);
       }
 
@@ -491,7 +516,7 @@ static void si_blit_decompress_color(struct si_context *sctx, struct si_texture 
 
    sctx->decompression_enabled = false;
    si_make_CB_shader_coherent(sctx, tex->buffer.b.b.nr_samples, vi_dcc_enabled(tex, first_level),
-                              tex->surface.u.gfx9.dcc.pipe_aligned);
+                              tex->surface.u.gfx9.color.dcc.pipe_aligned);
 
 expand_fmask:
    if (need_fmask_expand && tex->surface.fmask_offset && !tex->fmask_is_identity) {
@@ -675,23 +700,15 @@ static void si_check_render_feedback(struct si_context *sctx)
    if (!si_get_total_colormask(sctx))
       return;
 
-   struct si_shader_ctx_state *shaders[SI_NUM_SHADERS] = {
-      [PIPE_SHADER_VERTEX] = &sctx->vs_shader,
-      [PIPE_SHADER_TESS_CTRL] = &sctx->tcs_shader,
-      [PIPE_SHADER_TESS_EVAL] = &sctx->tes_shader,
-      [PIPE_SHADER_GEOMETRY] = &sctx->gs_shader,
-      [PIPE_SHADER_FRAGMENT] = &sctx->ps_shader,
-   };
-
    for (int i = 0; i < SI_NUM_GRAPHICS_SHADERS; ++i) {
-      if (!shaders[i]->cso)
+      if (!sctx->shaders[i].cso)
          continue;
 
-      struct si_shader_info *info = &shaders[i]->cso->info;
+      struct si_shader_info *info = &sctx->shaders[i].cso->info;
       si_check_render_feedback_images(sctx, &sctx->images[i],
                                       u_bit_consecutive(0, info->base.num_images));
       si_check_render_feedback_textures(sctx, &sctx->samplers[i],
-                                        info->base.textures_used);
+                                        info->base.textures_used[0]);
    }
 
    si_check_render_feedback_resident_images(sctx);
@@ -739,7 +756,7 @@ void si_decompress_textures(struct si_context *sctx, unsigned shader_mask)
 {
    unsigned compressed_colortex_counter, mask;
 
-   if (sctx->blitter->running)
+   if (sctx->blitter_running)
       return;
 
    /* Update the compressed_colortex_mask if necessary. */
@@ -853,11 +870,10 @@ static void si_use_compute_copy_for_float_formats(struct si_context *sctx,
     * lost so we need to disable DCC as well.
     *
     * This makes KHR-GL45.texture_view.view_classes pass on gfx9.
-    * gfx10 has the same issue, but the test doesn't use a large enough texture
-    * to enable DCC and fail, so it always passes.
     */
    if (vi_dcc_enabled(tex, level) &&
-       util_format_is_float(texture->format)) {
+       util_format_is_float(texture->format) &&
+       sctx->chip_class < GFX10) {
       si_texture_disable_dcc(sctx, tex);
    }
 }
@@ -878,7 +894,7 @@ void si_resource_copy_region(struct pipe_context *ctx, struct pipe_resource *dst
 
    /* Handle buffers first. */
    if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
-      si_copy_buffer(sctx, dst, src, dstx, src_box->x, src_box->width);
+      si_copy_buffer(sctx, dst, src, dstx, src_box->x, src_box->width, SI_OP_SYNC_BEFORE_AFTER);
       return;
    }
 
@@ -886,11 +902,12 @@ void si_resource_copy_region(struct pipe_context *ctx, struct pipe_resource *dst
 
    if (!util_format_is_compressed(src->format) && !util_format_is_compressed(dst->format) &&
        !util_format_is_depth_or_stencil(src->format) && src->nr_samples <= 1 &&
-       !vi_dcc_enabled(sdst, dst_level) &&
+       /* DCC compression from image store is enabled for GFX10+. */
+       (!vi_dcc_enabled(sdst, dst_level) || sctx->chip_class >= GFX10) &&
        !(dst->target != src->target &&
          (src->target == PIPE_TEXTURE_1D_ARRAY || dst->target == PIPE_TEXTURE_1D_ARRAY))) {
       si_compute_copy_image(sctx, dst, dst_level, src, src_level, dstx, dsty, dstz,
-                            src_box, false);
+                            src_box, false, SI_OP_SYNC_BEFORE_AFTER);
       return;
    }
 
@@ -1034,6 +1051,28 @@ static void si_do_CB_resolve(struct si_context *sctx, const struct pipe_blit_inf
    si_make_CB_shader_coherent(sctx, 1, false, true /* no DCC */);
 }
 
+static bool resolve_formats_compatible(enum pipe_format src, enum pipe_format dst,
+                                       bool src_swaps_rgb_to_bgr, bool *need_rgb_to_bgr)
+{
+   *need_rgb_to_bgr = false;
+
+   if (src_swaps_rgb_to_bgr) {
+      /* We must only check the swapped format. */
+      enum pipe_format swapped_src = util_format_rgb_to_bgr(src);
+      assert(swapped_src);
+      return util_is_format_compatible(util_format_description(swapped_src),
+                                       util_format_description(dst));
+   }
+
+   if (util_is_format_compatible(util_format_description(src), util_format_description(dst)))
+      return true;
+
+   enum pipe_format swapped_src = util_format_rgb_to_bgr(src);
+   *need_rgb_to_bgr = util_is_format_compatible(util_format_description(swapped_src),
+                                                util_format_description(dst));
+   return *need_rgb_to_bgr;
+}
+
 static bool do_hardware_msaa_resolve(struct pipe_context *ctx, const struct pipe_blit_info *info)
 {
    struct si_context *sctx = (struct si_context *)ctx;
@@ -1060,19 +1099,22 @@ static bool do_hardware_msaa_resolve(struct pipe_context *ctx, const struct pipe
    if (format == PIPE_FORMAT_R16G16_SNORM)
       format = PIPE_FORMAT_R16A16_SNORM;
 
+   bool need_rgb_to_bgr = false;
+
    /* Check the remaining requirements for hw resolve. */
    if (util_max_layer(info->dst.resource, info->dst.level) == 0 && !info->scissor_enable &&
        (info->mask & PIPE_MASK_RGBA) == PIPE_MASK_RGBA &&
-       util_is_format_compatible(util_format_description(info->src.format),
-                                 util_format_description(info->dst.format)) &&
+       resolve_formats_compatible(info->src.format, info->dst.format,
+                                  src->swap_rgb_to_bgr, &need_rgb_to_bgr) &&
        dst_width == info->src.resource->width0 && dst_height == info->src.resource->height0 &&
        info->dst.box.x == 0 && info->dst.box.y == 0 && info->dst.box.width == dst_width &&
        info->dst.box.height == dst_height && info->dst.box.depth == 1 && info->src.box.x == 0 &&
        info->src.box.y == 0 && info->src.box.width == dst_width &&
        info->src.box.height == dst_height && info->src.box.depth == 1 && !dst->surface.is_linear &&
        (!dst->cmask_buffer || !dst->dirty_level_mask)) { /* dst cannot be fast-cleared */
-      /* Check the last constraint. */
-      if (src->surface.micro_tile_mode != dst->surface.micro_tile_mode) {
+      /* Check the remaining constraints. */
+      if (src->surface.micro_tile_mode != dst->surface.micro_tile_mode ||
+          need_rgb_to_bgr) {
          /* The next fast clear will switch to this mode to
           * get direct hw resolve next time if the mode is
           * different now.
@@ -1083,7 +1125,11 @@ static bool do_hardware_msaa_resolve(struct pipe_context *ctx, const struct pipe
           * destination texture instead, but the more general
           * solution is to implement compute shader resolve.
           */
-         src->last_msaa_resolve_target_micro_mode = dst->surface.micro_tile_mode;
+         if (src->surface.micro_tile_mode != dst->surface.micro_tile_mode)
+            src->last_msaa_resolve_target_micro_mode = dst->surface.micro_tile_mode;
+         if (need_rgb_to_bgr)
+            src->swap_rgb_to_bgr_on_next_clear = true;
+
          goto resolve_to_temp;
       }
 
@@ -1092,9 +1138,12 @@ static bool do_hardware_msaa_resolve(struct pipe_context *ctx, const struct pipe
        * This is still the fastest codepath even with this clear.
        */
       if (vi_dcc_enabled(dst, info->dst.level)) {
-         if (!vi_dcc_clear_level(sctx, dst, info->dst.level, DCC_UNCOMPRESSED))
+         struct si_clear_info clear_info;
+
+         if (!vi_dcc_get_clear_info(sctx, dst, info->dst.level, DCC_UNCOMPRESSED, &clear_info))
             goto resolve_to_temp;
 
+         si_execute_clears(sctx, &clear_info, 1, SI_CLEAR_TYPE_DCC);
          dst->dirty_level_mask &= ~(1 << info->dst.level);
       }
 
@@ -1129,6 +1178,8 @@ resolve_to_temp:
    if (!tmp)
       return false;
    stmp = (struct si_texture *)tmp;
+   /* Match the channel order of src. */
+   stmp->swap_rgb_to_bgr = src->swap_rgb_to_bgr;
 
    assert(!stmp->surface.is_linear);
    assert(src->surface.micro_tile_mode == stmp->surface.micro_tile_mode);
@@ -1157,6 +1208,9 @@ static void si_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
       return;
    }
 
+   if (unlikely(sctx->thread_trace_enabled))
+      sctx->sqtt_next_event = EventCmdCopyImage;
+
    /* Using compute for copying to a linear texture in GTT is much faster than
     * going through RBs (render backends). This improves DRI PRIME performance.
     */
@@ -1177,6 +1231,9 @@ static void si_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
                                          info->dst.format);
    si_decompress_subresource(ctx, info->src.resource, PIPE_MASK_RGBAZS, info->src.level,
                              info->src.box.z, info->src.box.z + info->src.box.depth - 1);
+
+   if (unlikely(sctx->thread_trace_enabled))
+      sctx->sqtt_next_event = EventCmdBlitImage;
 
    si_blitter_begin(sctx, SI_BLIT | (info->render_condition_enable ? 0 : SI_DISABLE_RENDER_COND));
    util_blitter_blit(sctx->blitter, info);
@@ -1278,34 +1335,54 @@ void si_flush_implicit_resources(struct si_context *sctx)
 
 void si_decompress_dcc(struct si_context *sctx, struct si_texture *tex)
 {
+   assert(!tex->is_depth);
+
    /* If graphics is disabled, we can't decompress DCC, but it shouldn't
     * be compressed either. The caller should simply discard it.
     */
-   if (!tex->surface.dcc_offset || !sctx->has_graphics)
+   if (!tex->surface.meta_offset || !sctx->has_graphics)
       return;
 
-   if (sctx->chip_class == GFX8) {
+   if (sctx->chip_class == GFX8 || tex->buffer.b.b.nr_storage_samples >= 2) {
       si_blit_decompress_color(sctx, tex, 0, tex->buffer.b.b.last_level, 0,
                                util_max_layer(&tex->buffer.b.b, 0), true, false);
    } else {
       struct pipe_resource *ptex = &tex->buffer.b.b;
+      assert(ptex->nr_storage_samples <= 1);
 
       /* DCC decompression using a compute shader. */
-      for (unsigned level = 0; level < tex->surface.num_dcc_levels; level++) {
+      for (unsigned level = 0; level < tex->surface.num_meta_levels; level++) {
          struct pipe_box box;
 
          u_box_3d(0, 0, 0, u_minify(ptex->width0, level),
                   u_minify(ptex->height0, level),
                   util_num_layers(ptex, level), &box);
-         si_compute_copy_image(sctx, ptex, level, ptex, level, 0, 0, 0, &box,
-                               true);
+         si_compute_copy_image(sctx, ptex, level, ptex, level, 0, 0, 0, &box, true,
+                               /* Sync before the first copy and after the last copy */
+                               (level == 0 ? SI_OP_SYNC_BEFORE : 0) |
+                               (level == tex->surface.num_meta_levels - 1 ? SI_OP_SYNC_AFTER : 0));
       }
 
-      /* Now clear DCC metadata to uncompressed. */
+      /* Now clear DCC metadata to uncompressed.
+       *
+       * This uses SI_COMPUTE_CLEAR_METHOD to avoid a failure when running this
+       * deqp caselist on gfx10:
+       *  dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba32f_rgba32ui
+       *  dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba32f_rgba32i
+       */
       uint32_t clear_value = DCC_UNCOMPRESSED;
-      si_clear_buffer(sctx, ptex, tex->surface.dcc_offset,
-                      tex->surface.dcc_size, &clear_value, 4,
-                      SI_COHERENCY_CB_META, false);
+      si_clear_buffer(sctx, ptex, tex->surface.meta_offset,
+                      tex->surface.meta_size, &clear_value, 4, SI_OP_SYNC_AFTER,
+                      SI_COHERENCY_CB_META, SI_COMPUTE_CLEAR_METHOD);
+      si_mark_display_dcc_dirty(sctx, tex);
+
+      /* Clearing DCC metadata requires flushing L2 and invalidating L2 metadata to make
+       * the metadata visible to L2 caches. This is because clear_buffer uses plain stores
+       * that can go to different L2 channels than where L2 metadata caches expect them.
+       * This is not done for fast clears because plain stores are visible to CB/DB. Only
+       * L2 metadata caches have the problem.
+       */
+      sctx->flags |= SI_CONTEXT_WB_L2 | SI_CONTEXT_INV_L2_METADATA;
    }
 }
 

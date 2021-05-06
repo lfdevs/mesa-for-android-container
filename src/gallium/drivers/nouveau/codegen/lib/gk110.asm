@@ -105,7 +105,7 @@ gk110_rcp_f64:
    add b32 $r3 $r2 0xffffffff
    joinat #rcp_rejoin
    // We want to check whether the exponent is 0 or 0x7ff (i.e. NaN, inf,
-   // denorm, or 0). Do this by substracting 1 from the exponent, which will
+   // denorm, or 0). Do this by subtracting 1 from the exponent, which will
    // mean that it's > 0x7fd in those cases when doing unsigned comparison
    set b32 $p0 0x1 gt u32 $r3 0x7fd
    // $r3: 0 for norms, 0x36 for denorms, -1 for others

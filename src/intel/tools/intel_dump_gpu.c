@@ -124,7 +124,7 @@ ensure_device_info(int fd)
       fail_if(!gen_get_device_info_from_fd(fd, &devinfo),
               "failed to identify chipset.\n");
       device = devinfo.chipset_id;
-   } else if (devinfo.gen == 0) {
+   } else if (devinfo.ver == 0) {
       fail_if(!gen_get_device_info_from_pci_id(device, &devinfo),
               "failed to identify chipset.\n");
    }
@@ -229,7 +229,7 @@ dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
 
       if (verbose)
          printf("[running, output file %s, chipset id 0x%04x, gen %d]\n",
-                output_filename, device, devinfo.gen);
+                output_filename, device, devinfo.ver);
    }
 
    if (aub_use_execlists(&aub_file))
@@ -251,6 +251,8 @@ dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
       }
 
       if (obj->flags & EXEC_OBJECT_PINNED) {
+         if (bo->offset != obj->offset)
+            bo->gtt_mapped = false;
          bo->offset = obj->offset;
       } else {
          if (obj->alignment != 0)
@@ -478,7 +480,7 @@ maybe_init(int fd)
    bos = calloc(MAX_FD_COUNT * MAX_BO_COUNT, sizeof(bos[0]));
    fail_if(bos == NULL, "out of memory\n");
 
-   int ret = get_pci_id(fd, &device);
+   ASSERTED int ret = get_pci_id(fd, &device);
    assert(ret == 0);
 
    aub_file_init(&aub_file, output_file,
@@ -488,7 +490,7 @@ maybe_init(int fd)
 
    if (verbose)
       printf("[running, output file %s, chipset id 0x%04x, gen %d]\n",
-             output_filename, device, devinfo.gen);
+             output_filename, device, devinfo.ver);
 }
 
 __attribute__ ((visibility ("default"))) int
@@ -558,7 +560,7 @@ ioctl(int fd, unsigned long request, ...)
                return 0;
 
             case I915_PARAM_HAS_EXEC_SOFTPIN:
-               *getparam->value = devinfo.gen >= 8 && !devinfo.is_cherryview;
+               *getparam->value = devinfo.ver >= 8 && !devinfo.is_cherryview;
                return 0;
 
             default:
@@ -579,7 +581,7 @@ ioctl(int fd, unsigned long request, ...)
             case I915_CONTEXT_PARAM_GTT_SIZE:
                if (devinfo.is_elkhartlake)
                   getparam->value = 1ull << 36;
-               else if (devinfo.gen >= 8 && !devinfo.is_cherryview)
+               else if (devinfo.ver >= 8 && !devinfo.is_cherryview)
                   getparam->value = 1ull << 48;
                else
                   getparam->value = 1ull << 31;
@@ -775,7 +777,7 @@ munmap_init_helper(void *addr, size_t length)
 static void __attribute__ ((destructor))
 fini(void)
 {
-   if (devinfo.gen != 0) {
+   if (devinfo.ver != 0) {
       free(output_filename);
       if (!capture_finished)
          aub_file_finish(&aub_file);

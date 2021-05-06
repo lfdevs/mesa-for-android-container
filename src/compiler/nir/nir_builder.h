@@ -815,6 +815,22 @@ nir_iadd_imm(nir_builder *build, nir_ssa_def *x, uint64_t y)
    }
 }
 
+static inline nir_ssa_def *
+nir_iadd_imm_nuw(nir_builder *b, nir_ssa_def *x, uint64_t y)
+{
+   nir_ssa_def *d = nir_iadd_imm(b, x, y);
+   if (d != x && d->parent_instr->type == nir_instr_type_alu)
+      nir_instr_as_alu(d->parent_instr)->no_unsigned_wrap = true;
+   return d;
+}
+
+static inline nir_ssa_def *
+nir_iadd_nuw(nir_builder *b, nir_ssa_def *x, nir_ssa_def *y)
+{
+   nir_ssa_def *d = nir_iadd(b, x, y);
+   nir_instr_as_alu(d->parent_instr)->no_unsigned_wrap = true;
+   return d;
+}
 
 static inline nir_ssa_def *
 nir_ieq_imm(nir_builder *build, nir_ssa_def *x, uint64_t y)
@@ -1510,6 +1526,32 @@ nir_load_param(nir_builder *build, uint32_t param_idx)
    return nir_build_load_param(build, param->num_components, param->bit_size, param_idx);
 }
 
+/**
+ * This function takes an I/O intrinsic like load/store_input,
+ * and emits a sequence that calculates the full offset of that instruction,
+ * including a stride to the base and component offsets.
+ */
+static inline nir_ssa_def *
+nir_build_calc_io_offset(nir_builder *b,
+                         nir_intrinsic_instr *intrin,
+                         nir_ssa_def *base_stride,
+                         unsigned component_stride)
+{
+   /* base is the driver_location, which is in slots (1 slot = 4x4 bytes) */
+   nir_ssa_def *base_op = nir_imul_imm(b, base_stride, nir_intrinsic_base(intrin));
+
+   /* offset should be interpreted in relation to the base,
+    * so the instruction effectively reads/writes another input/output
+    * when it has an offset
+    */
+   nir_ssa_def *offset_op = nir_imul(b, base_stride, nir_ssa_for_src(b, *nir_get_io_offset_src(intrin), 1));
+
+   /* component is in bytes */
+   unsigned const_op = nir_intrinsic_component(intrin) * component_stride;
+
+   return nir_iadd_imm_nuw(b, nir_iadd_nuw(b, base_op, offset_op), const_op);
+}
+
 static inline nir_ssa_def *
 nir_f2b(nir_builder *build, nir_ssa_def *f)
 {
@@ -1622,18 +1664,29 @@ nir_scoped_memory_barrier(nir_builder *b,
 }
 
 static inline nir_ssa_def *
+nir_type_convert(nir_builder *b,
+                    nir_ssa_def *src,
+                    nir_alu_type src_type,
+                    nir_alu_type dest_type)
+{
+   assert(nir_alu_type_get_type_size(src_type) == 0 ||
+          nir_alu_type_get_type_size(src_type) == src->bit_size);
+
+   src_type = (nir_alu_type) (src_type | src->bit_size);
+
+   nir_op opcode =
+      nir_type_conversion_op(src_type, dest_type, nir_rounding_mode_undef);
+
+   return nir_build_alu(b, opcode, src, NULL, NULL, NULL);
+}
+
+static inline nir_ssa_def *
 nir_convert_to_bit_size(nir_builder *b,
                     nir_ssa_def *src,
                     nir_alu_type type,
                     unsigned bit_size)
 {
-   nir_alu_type base_type = nir_alu_type_get_base_type(type);
-   nir_alu_type dst_type = (nir_alu_type)(bit_size | base_type);
-
-   nir_op opcode =
-      nir_type_conversion_op(type, dst_type, nir_rounding_mode_undef);
-
-   return nir_build_alu(b, opcode, src, NULL, NULL, NULL);
+   return nir_type_convert(b, src, type, (nir_alu_type) (type | bit_size));
 }
 
 static inline nir_ssa_def *
@@ -1658,6 +1711,34 @@ static inline nir_ssa_def *
 nir_f2fN(nir_builder *b, nir_ssa_def *src, unsigned bit_size)
 {
    return nir_convert_to_bit_size(b, src, nir_type_float, bit_size);
+}
+
+static inline nir_ssa_def *
+nir_i2fN(nir_builder *b, nir_ssa_def *src, unsigned bit_size)
+{
+   return nir_type_convert(b, src, nir_type_int,
+         (nir_alu_type) (nir_type_float | bit_size));
+}
+
+static inline nir_ssa_def *
+nir_u2fN(nir_builder *b, nir_ssa_def *src, unsigned bit_size)
+{
+   return nir_type_convert(b, src, nir_type_uint,
+         (nir_alu_type) (nir_type_float | bit_size));
+}
+
+static inline nir_ssa_def *
+nir_f2uN(nir_builder *b, nir_ssa_def *src, unsigned bit_size)
+{
+   return nir_type_convert(b, src, nir_type_float,
+         (nir_alu_type) (nir_type_uint | bit_size));
+}
+
+static inline nir_ssa_def *
+nir_f2iN(nir_builder *b, nir_ssa_def *src, unsigned bit_size)
+{
+   return nir_type_convert(b, src, nir_type_float,
+         (nir_alu_type) (nir_type_int | bit_size));
 }
 
 #endif /* NIR_BUILDER_H */

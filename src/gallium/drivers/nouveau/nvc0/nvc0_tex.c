@@ -58,15 +58,14 @@ nvc0_create_sampler_view(struct pipe_context *pipe,
    if (templ->target == PIPE_TEXTURE_RECT || templ->target == PIPE_BUFFER)
       flags |= NV50_TEXVIEW_SCALED_COORDS;
 
-   return nvc0_create_texture_view(pipe, res, templ, flags, templ->target);
+   return nvc0_create_texture_view(pipe, res, templ, flags);
 }
 
 static struct pipe_sampler_view *
 gm107_create_texture_view(struct pipe_context *pipe,
                           struct pipe_resource *texture,
                           const struct pipe_sampler_view *templ,
-                          uint32_t flags,
-                          enum pipe_texture_target target)
+                          uint32_t flags)
 {
    const struct util_format_description *desc;
    const struct nvc0_format *fmt;
@@ -172,7 +171,7 @@ gm107_create_texture_view(struct pipe_context *pipe,
    tic[1]  = address;
    tic[2] |= address >> 32;
 
-   switch (target) {
+   switch (templ->target) {
    case PIPE_TEXTURE_1D:
       tic[4] |= GM107_TIC2_4_TEXTURE_TYPE_ONE_D;
       break;
@@ -253,6 +252,7 @@ gm107_create_texture_view_from_image(struct pipe_context *pipe,
    if (target == PIPE_TEXTURE_CUBE || target == PIPE_TEXTURE_CUBE_ARRAY)
       target = PIPE_TEXTURE_2D_ARRAY;
 
+   templ.target = target;
    templ.format = view->format;
    templ.swizzle_r = PIPE_SWIZZLE_X;
    templ.swizzle_g = PIPE_SWIZZLE_Y;
@@ -270,15 +270,14 @@ gm107_create_texture_view_from_image(struct pipe_context *pipe,
 
    flags = NV50_TEXVIEW_SCALED_COORDS | NV50_TEXVIEW_IMAGE_GM107;
 
-   return nvc0_create_texture_view(pipe, &res->base, &templ, flags, target);
+   return nvc0_create_texture_view(pipe, &res->base, &templ, flags);
 }
 
 static struct pipe_sampler_view *
 gf100_create_texture_view(struct pipe_context *pipe,
                           struct pipe_resource *texture,
                           const struct pipe_sampler_view *templ,
-                          uint32_t flags,
-                          enum pipe_texture_target target)
+                          uint32_t flags)
 {
    const struct util_format_description *desc;
    const struct nvc0_format *fmt;
@@ -380,7 +379,7 @@ gf100_create_texture_view(struct pipe_context *pipe,
    tic[1] = address;
    tic[2] |= address >> 32;
 
-   switch (target) {
+   switch (templ->target) {
    case PIPE_TEXTURE_1D:
       tic[2] |= G80_TIC_2_TEXTURE_TYPE_ONE_D;
       break;
@@ -443,12 +442,11 @@ struct pipe_sampler_view *
 nvc0_create_texture_view(struct pipe_context *pipe,
                          struct pipe_resource *texture,
                          const struct pipe_sampler_view *templ,
-                         uint32_t flags,
-                         enum pipe_texture_target target)
+                         uint32_t flags)
 {
    if (nvc0_context(pipe)->screen->tic.maxwell)
-      return gm107_create_texture_view(pipe, texture, templ, flags, target);
-   return gf100_create_texture_view(pipe, texture, templ, flags, target);
+      return gm107_create_texture_view(pipe, texture, templ, flags);
+   return gf100_create_texture_view(pipe, texture, templ, flags);
 }
 
 bool

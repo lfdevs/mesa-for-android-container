@@ -238,7 +238,7 @@ nir_opt_large_constants(nir_shader *shader,
             continue;
          }
 
-         if (dst_deref && nir_deref_mode_is(dst_deref, nir_var_function_temp)) {
+         if (dst_deref && nir_deref_mode_must_be(dst_deref, nir_var_function_temp)) {
             nir_variable *var = nir_deref_instr_get_variable(dst_deref);
             if (var == NULL)
                continue;
@@ -266,7 +266,7 @@ nir_opt_large_constants(nir_shader *shader,
             }
          }
 
-         if (src_deref && nir_deref_mode_is(src_deref, nir_var_function_temp)) {
+         if (src_deref && nir_deref_mode_must_be(src_deref, nir_var_function_temp)) {
             nir_variable *var = nir_deref_instr_get_variable(src_deref);
             if (var == NULL)
                continue;
@@ -363,7 +363,7 @@ nir_opt_large_constants(nir_shader *shader,
                b.cursor = nir_after_instr(&intrin->instr);
                nir_ssa_def *val = build_constant_load(&b, deref, size_align);
                nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                        nir_src_for_ssa(val));
+                                        val);
                nir_instr_remove(&intrin->instr);
                nir_deref_instr_remove_if_unused(deref);
             }

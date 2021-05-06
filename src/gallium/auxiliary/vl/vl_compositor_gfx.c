@@ -665,7 +665,7 @@ draw_layers(struct vl_compositor *c, struct vl_compositor_state *s, struct u_rec
          c->pipe->bind_sampler_states(c->pipe, PIPE_SHADER_FRAGMENT, 0,
                                       num_sampler_views, layer->samplers);
          c->pipe->set_sampler_views(c->pipe, PIPE_SHADER_FRAGMENT, 0,
-                                    num_sampler_views, samplers);
+                                    num_sampler_views, 0, samplers);
 
          util_draw_arrays(c->pipe, PIPE_PRIM_QUADS, vb_index * 4, 4);
          vb_index++;
@@ -717,7 +717,7 @@ vl_compositor_gfx_render(struct vl_compositor_state *s,
 
    c->pipe->set_framebuffer_state(c->pipe, &c->fb_state);
    c->pipe->bind_vs_state(c->pipe, c->vs);
-   c->pipe->set_vertex_buffers(c->pipe, 0, 1, &c->vertex_buf);
+   c->pipe->set_vertex_buffers(c->pipe, 0, 1, 0, false, &c->vertex_buf);
    c->pipe->bind_vertex_elements_state(c->pipe, c->vertex_elems_state);
    pipe_set_constant_buffer(c->pipe, PIPE_SHADER_FRAGMENT, 0, s->shader_params);
    c->pipe->bind_rasterizer_state(c->pipe, c->rast);

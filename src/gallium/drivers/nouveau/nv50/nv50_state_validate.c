@@ -356,7 +356,7 @@ nv50_validate_clip(struct nv50_context *nv50)
 
    if (nv50->dirty_3d & NV50_NEW_3D_CLIP) {
       BEGIN_NV04(push, NV50_3D(CB_ADDR), 1);
-      PUSH_DATA (push, (NV50_CB_AUX_UCP_OFFSET << 8) | NV50_CB_AUX);
+      PUSH_DATA (push, NV50_CB_AUX_UCP_OFFSET << (8 - 2) | NV50_CB_AUX);
       BEGIN_NI04(push, NV50_3D(CB_DATA(0)), PIPE_MAX_CLIP_PLANES * 4);
       PUSH_DATAp(push, &nv50->clip.ucp[0][0], PIPE_MAX_CLIP_PLANES * 4);
    }
@@ -460,9 +460,9 @@ nv50_switch_pipe_context(struct nv50_context *ctx_to)
    ctx_to->viewports_dirty = ~0;
    ctx_to->scissors_dirty = ~0;
 
-   ctx_to->constbuf_dirty[0] =
-   ctx_to->constbuf_dirty[1] =
-   ctx_to->constbuf_dirty[2] = (1 << NV50_MAX_PIPE_CONSTBUFS) - 1;
+   ctx_to->constbuf_dirty[NV50_SHADER_STAGE_VERTEX] =
+   ctx_to->constbuf_dirty[NV50_SHADER_STAGE_GEOMETRY] =
+   ctx_to->constbuf_dirty[NV50_SHADER_STAGE_FRAGMENT] = (1 << NV50_MAX_PIPE_CONSTBUFS) - 1;
 
    if (!ctx_to->vertex)
       ctx_to->dirty_3d &= ~(NV50_NEW_3D_VERTEX | NV50_NEW_3D_ARRAYS);

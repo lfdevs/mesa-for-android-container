@@ -163,7 +163,7 @@ haiku_add_configs_for_visuals(_EGLDisplay *disp)
 	                      + conf->base.BlueSize
 	                      + conf->base.AlphaSize;
 	conf->base.ConfigCaveat = EGL_NONE;
-	conf->base.ConfigId = 1;
+	conf->base.ConfigID = 1;
 	conf->base.BindToTextureRGB = EGL_FALSE;
 	conf->base.BindToTextureRGBA = EGL_FALSE;
 	conf->base.StencilSize = 0;

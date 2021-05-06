@@ -109,7 +109,7 @@ void insert_before_logical_end(Block *block, aco_ptr<Instruction> instr)
    auto it = std::find_if(block->instructions.crbegin(), block->instructions.crend(), IsLogicalEnd);
 
    if (it == block->instructions.crend()) {
-      assert(block->instructions.back()->format == Format::PSEUDO_BRANCH);
+      assert(block->instructions.back()->isBranch());
       block->instructions.insert(std::prev(block->instructions.end()), std::move(instr));
    } else {
       block->instructions.insert(std::prev(it.base()), std::move(instr));

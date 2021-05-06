@@ -222,7 +222,9 @@ lcra_count_constraints(struct lcra_state *l, unsigned i)
 signed
 lcra_get_best_spill_node(struct lcra_state *l)
 {
-        float best_benefit = -1.0;
+        /* If there are no constraints on a node, do not pick it to spill under
+         * any circumstance, or else we would hang rather than fail RA */
+        float best_benefit = 0.0;
         signed best_node = -1;
 
         for (unsigned i = 0; i < l->node_count; ++i) {

@@ -77,7 +77,7 @@ enum pipe_control_flags
 /** @} */
 
 int brw_init_pipe_control(struct brw_context *brw,
-			  const struct gen_device_info *info);
+                          const struct gen_device_info *info);
 void brw_fini_pipe_control(struct brw_context *brw);
 
 void brw_emit_pipe_control_flush(struct brw_context *brw, uint32_t flags);
@@ -88,8 +88,8 @@ void brw_emit_end_of_pipe_sync(struct brw_context *brw, uint32_t flags);
 void brw_emit_mi_flush(struct brw_context *brw);
 void brw_emit_post_sync_nonzero_flush(struct brw_context *brw);
 void brw_emit_depth_stall_flushes(struct brw_context *brw);
-void gen7_emit_vs_workaround_flush(struct brw_context *brw);
-void gen7_emit_cs_stall_flush(struct brw_context *brw);
-void gen7_emit_isp_disable(struct brw_context *brw);
+void gfx7_emit_vs_workaround_flush(struct brw_context *brw);
+void gfx7_emit_cs_stall_flush(struct brw_context *brw);
+void gfx7_emit_isp_disable(struct brw_context *brw);
 
 #endif

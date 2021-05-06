@@ -76,7 +76,7 @@
  * driver for debug/profiling, just always return false here. */
 
 bool
-panfrost_format_supports_afbc(enum pipe_format format)
+panfrost_format_supports_afbc(const struct panfrost_device *dev, enum pipe_format format)
 {
         const struct util_format_description *desc =
                 util_format_description(format);

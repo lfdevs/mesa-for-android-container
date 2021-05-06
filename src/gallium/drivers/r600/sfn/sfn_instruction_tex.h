@@ -81,7 +81,7 @@ public:
    unsigned sampler_id() const {return m_sampler_id;}
    unsigned resource_id() const {return m_resource_id;}
 
-   void replace_values(const ValueSet& candiates, PValue new_value) override;
+   void replace_values(const ValueSet& candidates, PValue new_value) override;
 
    void set_offset(unsigned index, int32_t val);
    int get_offset(unsigned index) const;
@@ -113,6 +113,9 @@ public:
 
    void set_gather_comp(int cmp);
 
+   bool accept(InstructionVisitor& visitor) override {return visitor.visit(*this);}
+   bool accept(ConstInstructionVisitor& visitor) const override {return visitor.visit(*this);}
+
 private:
    bool is_equal_to(const Instruction& lhs) const override;
    void do_print(std::ostream& os) const override;
@@ -133,6 +136,7 @@ private:
 
 bool r600_nir_lower_int_tg4(nir_shader *nir);
 bool r600_nir_lower_txl_txf_array_or_cube(nir_shader *shader);
+bool r600_nir_lower_cube_to_2darray(nir_shader *shader);
 
 }
 

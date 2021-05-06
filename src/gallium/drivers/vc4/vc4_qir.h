@@ -330,7 +330,6 @@ struct vc4_fs_key {
         bool is_points;
         bool is_lines;
         bool point_coord_upper_left;
-        bool light_twoside;
         bool msaa;
         bool sample_coverage;
         bool sample_alpha_to_coverage;
@@ -349,7 +348,6 @@ struct vc4_vs_key {
         enum pipe_format attr_formats[8];
         bool is_coord;
         bool per_vertex_point_size;
-        bool clamp_color;
 };
 
 /** A basic block of QIR intructions. */

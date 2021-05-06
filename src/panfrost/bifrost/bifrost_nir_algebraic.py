@@ -50,51 +50,13 @@ for sz in ('8', '16', '32'):
             ((t + 'max', 'a@' + sz, 'b@' + sz), ('b' + sz + 'csel', (t + 'lt' + sz, b, a), a, b))
         ]
 
-# Midgard is able to type convert down by only one "step" per instruction; if
-# NIR wants more than one step, we need to break up into multiple instructions
-
-converts = []
-
-for op in ('u2u', 'i2i', 'f2f', 'i2f', 'u2f', 'f2i', 'f2u'):
-    srcsz_max = 64
-    dstsz_max = 64
-    # 8 bit float doesn't exist
-    srcsz_min = 8 if op[0] != 'f' else 16
-    dstsz_min = 8 if op[2] != 'f' else 16
-    dstsz = dstsz_min
-    # Iterate over all possible destination and source sizes
-    while dstsz <= dstsz_max:
-        srcsz = srcsz_min
-        while srcsz <= srcsz_max:
-            # Size converter lowering is only needed if src and dst sizes are
-            # spaced by a factor > 2.
-            # Type converter lowering is needed as soon as src_size != dst_size
-            if srcsz != dstsz and ((srcsz * 2 != dstsz and srcsz != dstsz * 2) or op[0] != op[2]):
-                cursz = srcsz
-                rule = a
-                # When converting down we first do the type conversion followed
-                # by one or more size conversions. When converting up, we do
-                # the type conversion at the end. This way we don't have to
-                # deal with the fact that f2f8 doesn't exists.
-                sizeconvop = op[0] + '2' + op[0] if srcsz < dstsz else op[2] + '2' + op[2]
-                if srcsz > dstsz and op[0] != op[2]:
-                    rule = (op + str(int(cursz)), rule)
-                while cursz != dstsz:
-                    cursz = cursz / 2 if dstsz < srcsz else cursz * 2
-                    rule = (sizeconvop + str(int(cursz)), rule)
-                if srcsz < dstsz and op[0] != op[2]:
-                    rule = (op + str(int(cursz)), rule)
-                converts += [((op + str(int(dstsz)), 'a@' + str(int(srcsz))), rule)]
-            srcsz *= 2
-        dstsz *= 2
-
 # Bifrost doesn't have fp16 for a lot of special ops
 SPECIAL = ['fexp2', 'flog2', 'fsin', 'fcos']
 
 for op in SPECIAL:
-        converts += [((op + '@16', a), ('f2f16', (op, ('f2f32', a))))]
+        algebraic_late += [((op + '@16', a), ('f2f16', (op, ('f2f32', a))))]
 
-converts += [(('f2b32', a), ('fneu32', a, 0.0)),
+algebraic_late += [(('f2b32', a), ('fneu32', a, 0.0)),
              (('i2b32', a), ('ine32', a, 0)),
              (('b2i32', a), ('iand', 'a@32', 1))]
 
@@ -112,7 +74,7 @@ def run():
     print('#include "bifrost_nir.h"')
 
     print(nir_algebraic.AlgebraicPass("bifrost_nir_lower_algebraic_late",
-                                      algebraic_late + converts).render())
+                                      algebraic_late).render())
 
 if __name__ == '__main__':
     main()

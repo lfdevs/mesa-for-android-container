@@ -753,6 +753,45 @@ gbm_dri_bo_get_handle_for_plane(struct gbm_bo *_bo, int plane)
    return ret;
 }
 
+static int
+gbm_dri_bo_get_plane_fd(struct gbm_bo *_bo, int plane)
+{
+   struct gbm_dri_device *dri = gbm_dri_device(_bo->gbm);
+   struct gbm_dri_bo *bo = gbm_dri_bo(_bo);
+   int fd = -1;
+
+   if (!dri->image || dri->image->base.version < 13 || !dri->image->fromPlanar) {
+      /* Preserve legacy behavior if plane is 0 */
+      if (plane == 0)
+         return gbm_dri_bo_get_fd(_bo);
+
+      errno = ENOSYS;
+      return -1;
+   }
+
+   /* dumb BOs can only utilize non-planar formats */
+   if (!bo->image) {
+      errno = EINVAL;
+      return -1;
+   }
+
+   if (plane >= get_number_planes(dri, bo->image)) {
+      errno = EINVAL;
+      return -1;
+   }
+
+   __DRIimage *image = dri->image->fromPlanar(bo->image, plane, NULL);
+   if (image) {
+      dri->image->queryImage(image, __DRI_IMAGE_ATTRIB_FD, &fd);
+      dri->image->destroyImage(image);
+   } else {
+      assert(plane == 0);
+      dri->image->queryImage(bo->image, __DRI_IMAGE_ATTRIB_FD, &fd);
+   }
+
+   return fd;
+}
+
 static uint32_t
 gbm_dri_bo_get_stride(struct gbm_bo *_bo, int plane)
 {
@@ -1112,7 +1151,8 @@ gbm_dri_bo_create(struct gbm_device *gbm,
    struct gbm_dri_device *dri = gbm_dri_device(gbm);
    struct gbm_dri_bo *bo;
    int dri_format;
-   unsigned dri_use = 0;
+   unsigned dri_use = 0, i;
+   bool has_valid_modifier;
 
    /* Callers of this may specify a modifier, or a dri usage, but not both. The
     * newer modifier interface deprecates the older usage flags.
@@ -1154,7 +1194,6 @@ gbm_dri_bo_create(struct gbm_device *gbm,
    if (modifiers) {
       if (!dri->image || dri->image->base.version < 14 ||
           !dri->image->createImageWithModifiers) {
-         fprintf(stderr, "Modifiers specified, but DRI is too old\n");
          errno = ENOSYS;
          goto failed;
       }
@@ -1165,8 +1204,14 @@ gbm_dri_bo_create(struct gbm_device *gbm,
        * the check here is a convenient debug check likely pointing at whatever
        * interface the client is using to build its modifier list.
        */
-      if (count == 1 && modifiers[0] == DRM_FORMAT_MOD_INVALID) {
-         fprintf(stderr, "Only invalid modifier specified\n");
+      has_valid_modifier = false;
+      for (i = 0; i < count; i++) {
+         if (modifiers[i] != DRM_FORMAT_MOD_INVALID) {
+            has_valid_modifier = true;
+            break;
+         }
+      }
+      if (!has_valid_modifier) {
          errno = EINVAL;
          goto failed;
       }
@@ -1379,6 +1424,7 @@ dri_device_create(int fd)
    dri->base.bo_get_fd = gbm_dri_bo_get_fd;
    dri->base.bo_get_planes = gbm_dri_bo_get_planes;
    dri->base.bo_get_handle = gbm_dri_bo_get_handle_for_plane;
+   dri->base.bo_get_plane_fd = gbm_dri_bo_get_plane_fd;
    dri->base.bo_get_stride = gbm_dri_bo_get_stride;
    dri->base.bo_get_offset = gbm_dri_bo_get_offset;
    dri->base.bo_get_modifier = gbm_dri_bo_get_modifier;

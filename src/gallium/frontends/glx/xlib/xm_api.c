@@ -675,7 +675,6 @@ initialize_visual_and_buffer(XMesaVisual v, XMesaBuffer b,
     */
    if (getenv("MESA_INFO")) {
       printf("X/Mesa visual = %p\n", (void *) v);
-      printf("X/Mesa level = %d\n", v->mesa_visual.level);
       printf("X/Mesa depth = %d\n", v->visinfo->depth);
       printf("X/Mesa bits per pixel = %d\n", v->BitsPerPixel);
    }
@@ -810,8 +809,6 @@ XMesaVisual XMesaCreateVisual( Display *display,
    v->visualType = xmesa_convert_from_x_visual_type(visinfo->c_class);
 #endif
 
-   v->mesa_visual.visualRating = visualCaveat;
-
    if (alpha_flag)
       v->mesa_visual.alphaBits = 8;
 
@@ -860,9 +857,6 @@ XMesaVisual XMesaCreateVisual( Display *display,
       vis->accumBlueBits  = accum_blue_size;
       vis->accumAlphaBits = accum_alpha_size;
 
-      vis->numAuxBuffers = 0;
-      vis->level = 0;
-      vis->sampleBuffers = num_samples > 1;
       vis->samples = num_samples;
    }
 
@@ -902,8 +896,6 @@ XMesaVisual XMesaCreateVisual( Display *display,
    v->stvis.samples = num_samples;
    v->stvis.render_buffer = ST_ATTACHMENT_INVALID;
 
-   /* XXX minor hack */
-   v->mesa_visual.level = level;
    return v;
 }
 
@@ -1029,7 +1021,7 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
 
    c->st->st_manager_private = (void *) c;
 
-   c->hud = hud_create(c->st->cso_context, NULL);
+   c->hud = hud_create(c->st->cso_context, c->st, NULL);
 
    return c;
 

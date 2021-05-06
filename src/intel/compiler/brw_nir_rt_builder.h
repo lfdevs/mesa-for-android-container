@@ -217,7 +217,7 @@ brw_nir_rt_load_globals(nir_builder *b,
    nir_ssa_def *addr = nir_load_btd_global_arg_addr_intel(b);
 
    nir_ssa_def *data;
-   data = nir_load_global_const_block_intel(b, 16, addr);
+   data = nir_load_global_const_block_intel(b, 16, addr, nir_imm_true(b));
    defs->base_mem_addr = nir_pack_64_2x32(b, nir_channels(b, data, 0x3));
 
    defs->call_stack_handler_addr =
@@ -240,7 +240,8 @@ brw_nir_rt_load_globals(nir_builder *b,
    defs->sw_stack_size = nir_channel(b, data, 12);
    defs->launch_size = nir_channels(b, data, 0x7u << 13);
 
-   data = nir_load_global_const_block_intel(b, 8, nir_iadd_imm(b, addr, 64));
+   data = nir_load_global_const_block_intel(b, 8, nir_iadd_imm(b, addr, 64),
+                                                  nir_imm_true(b));
    defs->call_sbt_addr =
       nir_pack_64_2x32_split(b, nir_channel(b, data, 0),
                                 nir_extract_i16(b, nir_channel(b, data, 1),

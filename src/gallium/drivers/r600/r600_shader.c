@@ -157,7 +157,7 @@ static int store_shader(struct pipe_context *ctx,
 		} else {
 			memcpy(ptr, shader->shader.bc.bytecode, shader->shader.bc.ndw * sizeof(*ptr));
 		}
-		rctx->b.ws->buffer_unmap(shader->bo->buf);
+		rctx->b.ws->buffer_unmap(rctx->b.ws, shader->bo->buf);
 	}
 
 	return 0;
@@ -179,14 +179,14 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 		pipe_shader_type_from_mesa(sel->nir->info.stage);
 	
 	bool dump = r600_can_dump_shader(&rctx->screen->b, processor);
-	unsigned use_sb = !(rctx->screen->b.debug_flags & DBG_NO_SB) &&
-		!(rscreen->b.debug_flags & DBG_NIR);
+	unsigned use_sb = !(rctx->screen->b.debug_flags & (DBG_NO_SB | DBG_NIR)) ||
+                          (rctx->screen->b.debug_flags & DBG_NIR_SB);
 	unsigned sb_disasm;
 	unsigned export_shader;
 	
 	shader->shader.bc.isa = rctx->isa;
 	
-	if (!(rscreen->b.debug_flags & DBG_NIR)) {
+	if (!(rscreen->b.debug_flags & DBG_NIR_PREFERRED)) {
 		assert(sel->ir_type == PIPE_SHADER_IR_TGSI);
 		r = r600_shader_from_tgsi(rctx, shader, key);
 		if (r) {
@@ -221,7 +221,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 				tgsi_dump(sel->tokens, 0);
 			}
 			
-			if (rscreen->b.debug_flags & DBG_NIR) {
+			if (rscreen->b.debug_flags & (DBG_NIR_PREFERRED)) {
 				fprintf(stderr, "--NIR --------------------------------------------------------\n");
 				nir_print_shader(sel->nir, stderr);
 			}
@@ -286,7 +286,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
            char fname[1024];
            snprintf(fname, 1024, "shader_from_%s_%d.cpp",
                     (sel->ir_type == PIPE_SHADER_IR_TGSI ?
-                        (rscreen->b.debug_flags & DBG_NIR ? "tgsi-nir" : "tgsi")
+                        (rscreen->b.debug_flags & DBG_NIR_PREFERRED ? "tgsi-nir" : "tgsi")
                       : "nir"), nshader);
            f = fopen(fname, "w");
            print_shader_info(f, nshader++, &shader->shader);
@@ -297,7 +297,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
               tgsi_dump_to_file(sel->tokens, 0, f);
            }
 
-           if (rscreen->b.debug_flags & DBG_NIR){
+           if (rscreen->b.debug_flags & DBG_NIR_PREFERRED){
               fprintf(f, "/****NIR **********************************\n");
               nir_print_shader(sel->nir, f);
            }
@@ -1702,7 +1702,7 @@ static void tgsi_src(struct r600_shader_ctx *ctx,
 			(tgsi_src->Register.SwizzleX == tgsi_src->Register.SwizzleW)) {
 
 			index = tgsi_src->Register.Index * 4 + tgsi_src->Register.SwizzleX;
-			r600_bytecode_special_constants(ctx->literals[index], &r600_src->sel, &r600_src->neg, r600_src->abs);
+			r600_bytecode_special_constants(ctx->literals[index], &r600_src->sel);
 			if (r600_src->sel != V_SQ_ALU_SRC_LITERAL)
 				return;
 		}
@@ -4714,6 +4714,14 @@ static int tgsi_op2_s(struct r600_shader_ctx *ctx, int swap, int trans_only)
 	    ctx->info.properties[TGSI_PROPERTY_MUL_ZERO_WINS])
 		op = ALU_OP2_MUL;
 
+	/* nir_to_tgsi lowers nir_op_isub to UADD + negate, since r600 doesn't support
+	 * source modifiers with integer ops we switch back to SUB_INT */
+	bool src1_neg = ctx->src[1].neg;
+	if (op == ALU_OP2_ADD_INT && src1_neg) {
+		src1_neg = false;
+		op = ALU_OP2_SUB_INT;
+	}
+
 	for (i = 0; i <= lasti; i++) {
 		if (!(write_mask & (1 << i)))
 			continue;
@@ -4731,6 +4739,7 @@ static int tgsi_op2_s(struct r600_shader_ctx *ctx, int swap, int trans_only)
 			for (j = 0; j < inst->Instruction.NumSrcRegs; j++) {
 				r600_bytecode_src(&alu.src[j], &ctx->src[j], i);
 			}
+			alu.src[1].neg = src1_neg;
 		} else {
 			r600_bytecode_src(&alu.src[0], &ctx->src[1], i);
 			r600_bytecode_src(&alu.src[1], &ctx->src[0], i);

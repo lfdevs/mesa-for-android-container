@@ -161,7 +161,7 @@ aub_file_init(struct aub_file *aub, FILE *file, FILE *debug, uint16_t pci_id, co
    aub->pci_id = pci_id;
    fail_if(!gen_get_device_info_from_pci_id(pci_id, &aub->devinfo),
            "failed to identify chipset=0x%x\n", pci_id);
-   aub->addr_bits = aub->devinfo.gen >= 8 ? 48 : 32;
+   aub->addr_bits = aub->devinfo.ver >= 8 ? 48 : 32;
 
    aub_write_header(aub, app_name);
 
@@ -170,7 +170,7 @@ aub_file_init(struct aub_file *aub, FILE *file, FILE *debug, uint16_t pci_id, co
    aub->pml4.phys_addr = aub->phys_addrs_allocator++ << 12;
 
    mem_trace_memory_write_header_out(aub, aub->ggtt_addrs_allocator++,
-                                     GEN8_PTE_SIZE,
+                                     GFX8_PTE_SIZE,
                                      AUB_MEM_TRACE_MEMORY_ADDRESS_SPACE_GGTT_ENTRY,
                                      "GGTT PT");
    dword_out(aub, 1);
@@ -190,7 +190,7 @@ aub_file_finish(struct aub_file *aub)
 uint32_t
 aub_gtt_size(struct aub_file *aub)
 {
-   return NUM_PT_ENTRIES * (aub->addr_bits > 32 ? GEN8_PTE_SIZE : PTE_SIZE);
+   return NUM_PT_ENTRIES * (aub->addr_bits > 32 ? GFX8_PTE_SIZE : PTE_SIZE);
 }
 
 static void
@@ -405,8 +405,8 @@ aub_map_ggtt(struct aub_file *aub, uint64_t virt_addr, uint64_t size)
    }
 
    mem_trace_memory_write_header_out(aub,
-                                     (virt_addr >> 12) * GEN8_PTE_SIZE,
-                                     ggtt_ptes * GEN8_PTE_SIZE,
+                                     (virt_addr >> 12) * GFX8_PTE_SIZE,
+                                     ggtt_ptes * GFX8_PTE_SIZE,
                                      AUB_MEM_TRACE_MEMORY_ADDRESS_SPACE_GGTT_ENTRY,
                                      "GGTT PT");
    for (uint32_t i = 0; i < ggtt_ptes; i++) {
@@ -429,7 +429,7 @@ aub_write_ggtt(struct aub_file *aub, uint64_t virt_addr, uint64_t size, const vo
    aub_map_ggtt(aub, virt_addr, size);
 
    /* We write the GGTT buffer through the GGTT aub command rather than the
-    * PHYSICAL aub command. This is because the Gen9 simulator seems to have 2
+    * PHYSICAL aub command. This is because the Gfx9 simulator seems to have 2
     * different set of memory pools for GGTT and physical (probably someone
     * didn't really understand the concept?).
     */
@@ -467,23 +467,23 @@ get_context_init(const struct gen_device_info *devinfo,
                  uint32_t *data,
                  uint32_t *size)
 {
-   static const gen_context_init_t gen8_contexts[] = {
-      [I915_ENGINE_CLASS_RENDER] = gen8_render_context_init,
-      [I915_ENGINE_CLASS_COPY] = gen8_blitter_context_init,
-      [I915_ENGINE_CLASS_VIDEO] = gen8_video_context_init,
+   static const gen_context_init_t gfx8_contexts[] = {
+      [I915_ENGINE_CLASS_RENDER] = gfx8_render_context_init,
+      [I915_ENGINE_CLASS_COPY] = gfx8_blitter_context_init,
+      [I915_ENGINE_CLASS_VIDEO] = gfx8_video_context_init,
    };
-   static const gen_context_init_t gen10_contexts[] = {
-      [I915_ENGINE_CLASS_RENDER] = gen10_render_context_init,
-      [I915_ENGINE_CLASS_COPY] = gen10_blitter_context_init,
-      [I915_ENGINE_CLASS_VIDEO] = gen10_video_context_init,
+   static const gen_context_init_t gfx10_contexts[] = {
+      [I915_ENGINE_CLASS_RENDER] = gfx10_render_context_init,
+      [I915_ENGINE_CLASS_COPY] = gfx10_blitter_context_init,
+      [I915_ENGINE_CLASS_VIDEO] = gfx10_video_context_init,
    };
 
-   assert(devinfo->gen >= 8);
+   assert(devinfo->ver >= 8);
 
-   if (devinfo->gen <= 10)
-      gen8_contexts[engine_class](params, data, size);
+   if (devinfo->ver <= 10)
+      gfx8_contexts[engine_class](params, data, size);
    else
-      gen10_contexts[engine_class](params, data, size);
+      gfx10_contexts[engine_class](params, data, size);
 }
 
 static uint64_t
@@ -743,7 +743,7 @@ aub_dump_ring_buffer_execlist(struct aub_file *aub,
 static void
 aub_dump_execlist(struct aub_file *aub, const struct engine *cs, uint64_t descriptor)
 {
-   if (aub->devinfo.gen >= 11) {
+   if (aub->devinfo.ver >= 11) {
       register_write_out(aub, cs->elsq_reg, descriptor & 0xFFFFFFFF);
       register_write_out(aub, cs->elsq_reg + sizeof(uint32_t), descriptor >> 32);
       register_write_out(aub, cs->control_reg, 1);
@@ -758,7 +758,7 @@ aub_dump_execlist(struct aub_file *aub, const struct engine *cs, uint64_t descri
    dword_out(aub, cs->status_reg);
    dword_out(aub, AUB_MEM_TRACE_REGISTER_SIZE_DWORD |
                   AUB_MEM_TRACE_REGISTER_SPACE_MMIO);
-   if (aub->devinfo.gen >= 11) {
+   if (aub->devinfo.ver >= 11) {
       dword_out(aub, 0x00000001);   /* mask lo */
       dword_out(aub, 0x00000000);   /* mask hi */
       dword_out(aub, 0x00000001);

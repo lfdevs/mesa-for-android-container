@@ -433,6 +433,7 @@ lp_build_init(void)
    /* For simulating less capable machines */
 #ifdef DEBUG
    if (debug_get_bool_option("LP_FORCE_SSE2", FALSE)) {
+      extern struct util_cpu_caps_t util_cpu_caps;
       assert(util_cpu_caps.has_sse2);
       util_cpu_caps.has_sse3 = 0;
       util_cpu_caps.has_ssse3 = 0;
@@ -445,7 +446,7 @@ lp_build_init(void)
    }
 #endif
 
-   if (util_cpu_caps.has_avx2 || util_cpu_caps.has_avx) {
+   if (util_get_cpu_caps()->has_avx2 || util_get_cpu_caps()->has_avx) {
       lp_native_vector_width = 256;
    } else {
       /* Leave it at 128, even when no SIMD extensions are available.
@@ -460,16 +461,16 @@ lp_build_init(void)
 #if LLVM_VERSION_MAJOR < 4
    if (lp_native_vector_width <= 128) {
       /* Hide AVX support, as often LLVM AVX intrinsics are only guarded by
-       * "util_cpu_caps.has_avx" predicate, and lack the
+       * "util_get_cpu_caps()->has_avx" predicate, and lack the
        * "lp_native_vector_width > 128" predicate. And also to ensure a more
        * consistent behavior, allowing one to test SSE2 on AVX machines.
        * XXX: should not play games with util_cpu_caps directly as it might
        * get used for other things outside llvm too.
        */
-      util_cpu_caps.has_avx = 0;
-      util_cpu_caps.has_avx2 = 0;
-      util_cpu_caps.has_f16c = 0;
-      util_cpu_caps.has_fma = 0;
+      util_get_cpu_caps()->has_avx = 0;
+      util_get_cpu_caps()->has_avx2 = 0;
+      util_get_cpu_caps()->has_f16c = 0;
+      util_get_cpu_caps()->has_fma = 0;
    }
 #endif
 
@@ -482,7 +483,7 @@ lp_build_init(void)
     * Right now denorms get explicitly disabled (but elsewhere) for x86,
     * whereas ppc64 explicitly enables them...
     */
-   if (util_cpu_caps.has_altivec) {
+   if (util_get_cpu_caps()->has_altivec) {
       unsigned short mask[] = { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
                                 0xFFFF, 0xFFFF, 0xFFFE, 0xFFFF };
       __asm (

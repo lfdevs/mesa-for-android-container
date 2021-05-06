@@ -134,7 +134,7 @@ void si_llvm_context_init(struct si_shader_context *ctx, struct si_screen *sscre
    ctx->compiler = compiler;
 
    ac_llvm_context_init(&ctx->ac, compiler, sscreen->info.chip_class, sscreen->info.family,
-                        AC_FLOAT_MODE_DEFAULT_OPENGL, wave_size, 64);
+                        &sscreen->info, AC_FLOAT_MODE_DEFAULT_OPENGL, wave_size, 64);
 }
 
 void si_llvm_create_func(struct si_shader_context *ctx, const char *name, LLVMTypeRef *return_types,
@@ -270,7 +270,8 @@ void si_llvm_dispose(struct si_shader_context *ctx)
 LLVMValueRef si_buffer_load_const(struct si_shader_context *ctx, LLVMValueRef resource,
                                   LLVMValueRef offset)
 {
-   return ac_build_buffer_load(&ctx->ac, resource, 1, NULL, offset, NULL, 0, 0, true, true);
+   return ac_build_buffer_load(&ctx->ac, resource, 1, NULL, offset, NULL, 0, ctx->ac.f32,
+                               0, true, true);
 }
 
 void si_llvm_build_ret(struct si_shader_context *ctx, LLVMValueRef ret)
@@ -305,12 +306,12 @@ LLVMValueRef si_insert_input_ptr(struct si_shader_context *ctx, LLVMValueRef ret
    return LLVMBuildInsertValue(builder, ret, ptr, return_index, "");
 }
 
-LLVMValueRef si_prolog_get_rw_buffers(struct si_shader_context *ctx)
+LLVMValueRef si_prolog_get_internal_bindings(struct si_shader_context *ctx)
 {
    LLVMValueRef ptr[2], list;
    bool merged_shader = si_is_merged_shader(ctx->shader);
 
-   ptr[0] = LLVMGetParam(ctx->main_fn, (merged_shader ? 8 : 0) + SI_SGPR_RW_BUFFERS);
+   ptr[0] = LLVMGetParam(ctx->main_fn, (merged_shader ? 8 : 0) + SI_SGPR_INTERNAL_BINDINGS);
    list =
       LLVMBuildIntToPtr(ctx->ac.builder, ptr[0], ac_array_in_const32_addr_space(ctx->ac.v4i32), "");
    return list;
@@ -411,14 +412,21 @@ static LLVMValueRef si_llvm_get_block_size(struct ac_shader_abi *abi)
 {
    struct si_shader_context *ctx = si_shader_context_from_abi(abi);
 
-   assert(ctx->shader->selector->info.base.cs.local_size_variable);
-   return ac_get_arg(&ctx->ac, ctx->block_size);
+   assert(ctx->shader->selector->info.base.cs.local_size_variable &&
+          ctx->shader->selector->info.uses_variable_block_size);
+
+   LLVMValueRef chan[3] = {
+      si_unpack_param(ctx, ctx->block_size, 0, 10),
+      si_unpack_param(ctx, ctx->block_size, 10, 10),
+      si_unpack_param(ctx, ctx->block_size, 20, 10),
+   };
+   return ac_build_gather_values(&ctx->ac, chan, 3);
 }
 
 static void si_llvm_declare_compute_memory(struct si_shader_context *ctx)
 {
    struct si_shader_selector *sel = ctx->shader->selector;
-   unsigned lds_size = sel->info.base.cs.shared_size;
+   unsigned lds_size = sel->info.base.shared_size;
 
    LLVMTypeRef i8p = LLVMPointerType(ctx->ac.i8, AC_ADDR_SPACE_LDS);
    LLVMValueRef var;
@@ -479,7 +487,7 @@ static bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *
                                                       nir->info.cs.user_data_components_amd);
       }
 
-      if (ctx->shader->selector->info.base.cs.shared_size)
+      if (ctx->shader->selector->info.base.shared_size)
          si_llvm_declare_compute_memory(ctx);
    }
 
@@ -494,7 +502,9 @@ static bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *
    for (unsigned i = 0; i < info->num_outputs; i++) {
       LLVMTypeRef type = ctx->ac.f32;
 
-      if (nir_alu_type_get_type_size(ctx->shader->selector->info.output_type[i]) == 16)
+      /* Only FS uses unpacked f16. Other stages pack 16-bit outputs into low and high bits of f32. */
+      if (nir->info.stage == MESA_SHADER_FRAGMENT &&
+          nir_alu_type_get_type_size(ctx->shader->selector->info.output_type[i]) == 16)
          type = ctx->ac.f16;
 
       for (unsigned j = 0; j < 4; j++)
@@ -819,7 +829,7 @@ bool si_llvm_translate_nir(struct si_shader_context *ctx, struct si_shader *shad
    ctx->num_const_buffers = info->base.num_ubos;
    ctx->num_shader_buffers = info->base.num_ssbos;
 
-   ctx->num_samplers = util_last_bit(info->base.textures_used);
+   ctx->num_samplers = BITSET_LAST_BIT(info->base.textures_used);
    ctx->num_images = info->base.num_images;
 
    si_llvm_init_resource_callbacks(ctx);

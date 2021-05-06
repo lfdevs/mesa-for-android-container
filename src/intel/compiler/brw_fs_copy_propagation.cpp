@@ -419,10 +419,10 @@ can_take_stride(fs_inst *inst, brw_reg_type dst_type,
     * restrictions.
     */
    if (inst->is_math()) {
-      if (devinfo->gen == 6 || devinfo->gen == 7) {
+      if (devinfo->ver == 6 || devinfo->ver == 7) {
          assert(inst->dst.stride == 1);
          return stride == 1 || stride == 0;
-      } else if (devinfo->gen >= 8) {
+      } else if (devinfo->ver >= 8) {
          return stride == inst->dst.stride || stride == 0;
       }
    }
@@ -495,7 +495,7 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
     * of a LINTERP instruction on platforms where the PLN instruction has
     * register alignment restrictions.
     */
-   if (devinfo->has_pln && devinfo->gen <= 6 &&
+   if (devinfo->has_pln && devinfo->ver <= 6 &&
        entry->src.file == FIXED_GRF && (entry->src.nr & 1) &&
        inst->opcode == FS_OPCODE_LINTERP && arg == 0)
       return false;
@@ -511,13 +511,19 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
 
    bool has_source_modifiers = entry->src.abs || entry->src.negate;
 
-   if ((has_source_modifiers || entry->src.file == UNIFORM ||
-        !entry->src.is_contiguous()) &&
-       !inst->can_do_source_mods(devinfo))
+   if (has_source_modifiers && !inst->can_do_source_mods(devinfo))
       return false;
 
+   /* Reject cases that would violate register regioning restrictions. */
+   if ((entry->src.file == UNIFORM || !entry->src.is_contiguous()) &&
+       ((devinfo->ver == 6 && inst->is_math()) ||
+        inst->is_send_from_grf() ||
+        inst->uses_indirect_addressing())) {
+      return false;
+   }
+
    if (has_source_modifiers &&
-       inst->opcode == SHADER_OPCODE_GEN4_SCRATCH_WRITE)
+       inst->opcode == SHADER_OPCODE_GFX4_SCRATCH_WRITE)
       return false;
 
    /* Some instructions implemented in the generator backend, such as
@@ -539,6 +545,28 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
    if (!can_take_stride(inst, dst_type, arg,
                         entry_stride * inst->src[arg].stride,
                         devinfo))
+      return false;
+
+   /* From the Cherry Trail/Braswell PRMs, Volume 7: 3D Media GPGPU:
+    *    EU Overview
+    *       Register Region Restrictions
+    *          Special Requirements for Handling Double Precision Data Types :
+    *
+    *   "When source or destination datatype is 64b or operation is integer
+    *    DWord multiply, regioning in Align1 must follow these rules:
+    *
+    *      1. Source and Destination horizontal stride must be aligned to the
+    *         same qword.
+    *      2. Regioning must ensure Src.Vstride = Src.Width * Src.Hstride.
+    *      3. Source and Destination offset must be the same, except the case
+    *         of scalar source."
+    *
+    * Most of this is already checked in can_take_stride(), we're only left
+    * with checking 3.
+    */
+   if (has_dst_aligned_region_restriction(devinfo, inst, dst_type) &&
+       entry_stride != 0 &&
+       (reg_offset(inst->dst) % REG_SIZE) != (reg_offset(entry->src) % REG_SIZE))
       return false;
 
    /* Bail if the source FIXED_GRF region of the copy cannot be trivially
@@ -591,7 +619,7 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
         type_sz(entry->dst.type) != type_sz(inst->src[arg].type)))
       return false;
 
-   if (devinfo->gen >= 8 && (entry->src.negate || entry->src.abs) &&
+   if (devinfo->ver >= 8 && (entry->src.negate || entry->src.abs) &&
        is_logic_op(inst->opcode)) {
       return false;
    }
@@ -724,14 +752,14 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
       val.type = inst->src[i].type;
 
       if (inst->src[i].abs) {
-         if ((devinfo->gen >= 8 && is_logic_op(inst->opcode)) ||
+         if ((devinfo->ver >= 8 && is_logic_op(inst->opcode)) ||
              !brw_abs_immediate(val.type, &val.as_brw_reg())) {
             continue;
          }
       }
 
       if (inst->src[i].negate) {
-         if ((devinfo->gen >= 8 && is_logic_op(inst->opcode)) ||
+         if ((devinfo->ver >= 8 && is_logic_op(inst->opcode)) ||
              !brw_negate_immediate(val.type, &val.as_brw_reg())) {
             continue;
          }
@@ -748,7 +776,7 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
       case SHADER_OPCODE_INT_QUOTIENT:
       case SHADER_OPCODE_INT_REMAINDER:
          /* FINISHME: Promote non-float constants and remove this. */
-         if (devinfo->gen < 8)
+         if (devinfo->ver < 8)
             break;
          /* fallthrough */
       case SHADER_OPCODE_POW:
@@ -756,7 +784,7 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
           * doesn't support scalar source math), and let constant combining
           * promote the constant on Gen < 8.
           */
-         if (devinfo->gen == 6)
+         if (devinfo->ver == 6)
             break;
          /* fallthrough */
       case BRW_OPCODE_BFI1:

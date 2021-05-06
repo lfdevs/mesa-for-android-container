@@ -117,7 +117,7 @@ void brw_clip_tri_alloc_regs( struct brw_clip_compile *c,
    c->reg.clipdistance_offset = retype(brw_vec1_grf(i, 1), BRW_REGISTER_TYPE_W);
    i++;
 
-   if (devinfo->gen == 5) {
+   if (devinfo->ver == 5) {
       c->reg.ff_sync = retype(brw_vec1_grf(i, 0), BRW_REGISTER_TYPE_UD);
       i++;
    }
@@ -250,7 +250,7 @@ load_clip_distance(struct brw_clip_compile *c, struct brw_indirect vtx,
 }
 
 
-/* Use mesa's clipping algorithms, translated to GEN4 assembly.
+/* Use mesa's clipping algorithms, translated to GFX4 assembly.
  */
 void brw_clip_tri( struct brw_clip_compile *c )
 {

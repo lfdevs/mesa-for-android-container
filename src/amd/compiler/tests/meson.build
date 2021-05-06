@@ -24,6 +24,7 @@ aco_tests_files = files(
   'main.cpp',
   'test_assembler.cpp',
   'test_builder.cpp',
+  'test_insert_nops.cpp',
   'test_isel.cpp',
   'test_optimizer.cpp',
   'test_regalloc.cpp',

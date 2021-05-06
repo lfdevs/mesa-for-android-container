@@ -183,7 +183,8 @@ void Target::destroy(Target *targ)
    delete targ;
 }
 
-CodeEmitter::CodeEmitter(const Target *target) : targ(target), fixupInfo(NULL)
+CodeEmitter::CodeEmitter(const Target *target) : targ(target), code(NULL),
+   codeSize(0), codeSizeLimit(0), relocInfo(NULL), fixupInfo(NULL)
 {
 }
 
@@ -222,7 +223,7 @@ CodeEmitter::prepareEmission(Program *prog)
       func->binPos = prog->binSize;
       prepareEmission(func);
 
-      // adjust sizes & positions for schedulding info:
+      // adjust sizes & positions for scheduling info:
       if (prog->getTarget()->hasSWSched) {
          uint32_t adjPos = func->binPos;
          BasicBlock *bb = NULL;
@@ -390,7 +391,7 @@ Program::emitBinary(struct nv50_ir_prog_info_out *info)
    info->bin.relocData = emit->getRelocInfo();
    info->bin.fixupData = emit->getFixupInfo();
 
-   // the nvc0 driver will print the binary iself together with the header
+   // the nvc0 driver will print the binary itself together with the header
    if ((dbgFlags & NV50_IR_DEBUG_BASIC) && getTarget()->getChipset() < 0xc0)
       emit->printBinary();
 

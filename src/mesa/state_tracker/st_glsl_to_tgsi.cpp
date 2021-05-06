@@ -1623,7 +1623,7 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
        * It is then multiplied with the source operand of DDY.
        */
       static const gl_state_index16 transform_y_state[STATE_LENGTH]
-         = { STATE_INTERNAL, STATE_FB_WPOS_Y_TRANSFORM };
+         = { STATE_FB_WPOS_Y_TRANSFORM };
 
       unsigned transform_y_index =
          _mesa_add_state_reference(this->prog->Parameters,
@@ -2235,7 +2235,7 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
    case ir_binop_interpolate_at_offset: {
       /* The y coordinate needs to be flipped for the default fb */
       static const gl_state_index16 transform_y_state[STATE_LENGTH]
-         = { STATE_INTERNAL, STATE_FB_WPOS_Y_TRANSFORM };
+         = { STATE_FB_WPOS_Y_TRANSFORM };
 
       unsigned transform_y_index =
          _mesa_add_state_reference(this->prog->Parameters,
@@ -4868,7 +4868,7 @@ count_resources(glsl_to_tgsi_visitor *v, gl_program *prog)
 {
    v->samplers_used = 0;
    v->images_used = 0;
-   prog->info.textures_used_by_txf = 0;
+   BITSET_ZERO(prog->info.textures_used_by_txf);
 
    foreach_in_list(glsl_to_tgsi_instruction, inst, &v->instructions) {
       if (inst->info->is_tex) {
@@ -4882,7 +4882,7 @@ count_resources(glsl_to_tgsi_visitor *v, gl_program *prog)
                st_translate_texture_target(inst->tex_target, inst->tex_shadow);
 
             if (inst->op == TGSI_OPCODE_TXF || inst->op == TGSI_OPCODE_TXF_LZ) {
-               prog->info.textures_used_by_txf |= 1u << idx;
+               BITSET_SET(prog->info.textures_used_by_txf, idx);
             }
          }
       }
@@ -6662,8 +6662,8 @@ st_translate_program(
    struct pipe_screen *screen = st_context(ctx)->screen;
    struct st_translate *t;
    unsigned i;
-   struct gl_program_constants *frag_const =
-      &ctx->Const.Program[MESA_SHADER_FRAGMENT];
+   struct gl_program_constants *prog_const =
+      &ctx->Const.Program[program->shader->Stage];
    enum pipe_error ret = PIPE_OK;
 
    assert(numInputs <= ARRAY_SIZE(t->inputs));
@@ -6999,7 +6999,7 @@ st_translate_program(
    assert(i == program->num_immediates);
 
    /* texture samplers */
-   for (i = 0; i < frag_const->MaxTextureImageUnits; i++) {
+   for (i = 0; i < prog_const->MaxTextureImageUnits; i++) {
       if (program->samplers_used & (1u << i)) {
          enum tgsi_return_type type =
             st_translate_texture_type(program->sampler_types[i]);
@@ -7020,7 +7020,7 @@ st_translate_program(
             unsigned index = (prog->info.num_ssbos +
                               prog->sh.AtomicBuffers[i]->Binding);
             assert(prog->sh.AtomicBuffers[i]->Binding <
-                   frag_const->MaxAtomicBuffers);
+                   prog_const->MaxAtomicBuffers);
             t->buffers[index] = ureg_DECL_buffer(ureg, index, true);
          }
       } else {
@@ -7033,7 +7033,7 @@ st_translate_program(
          }
       }
 
-      assert(prog->info.num_ssbos <= frag_const->MaxShaderStorageBlocks);
+      assert(prog->info.num_ssbos <= prog_const->MaxShaderStorageBlocks);
       for (i = 0; i < prog->info.num_ssbos; i++) {
          t->buffers[i] = ureg_DECL_buffer(ureg, i, false);
       }
@@ -7226,7 +7226,7 @@ get_mesa_program_tgsi(struct gl_context *ctx,
         BITSET_TEST(prog->info.system_values_read, SYSTEM_VALUE_FRAG_COORD) ||
         BITSET_TEST(prog->info.system_values_read, SYSTEM_VALUE_SAMPLE_POS))) {
       static const gl_state_index16 wposTransformState[STATE_LENGTH] = {
-         STATE_INTERNAL, STATE_FB_WPOS_Y_TRANSFORM
+         STATE_FB_WPOS_Y_TRANSFORM
       };
 
       v->wpos_transform_const = _mesa_add_state_reference(prog->Parameters,
@@ -7237,14 +7237,7 @@ get_mesa_program_tgsi(struct gl_context *ctx,
     * storage is only associated with the original parameter list.
     * This should be enough for Bitmap and DrawPixels constants.
     */
-   _mesa_reserve_parameter_storage(prog->Parameters, 8, 8);
-   _mesa_disallow_parameter_storage_realloc(prog->Parameters);
-
-   /* This has to be done last.  Any operation the can cause
-    * prog->ParameterValues to get reallocated (e.g., anything that adds a
-    * program constant) has to happen before creating this linkage.
-    */
-   _mesa_associate_uniform_storage(ctx, shader_program, prog);
+   _mesa_ensure_and_associate_uniform_storage(ctx, shader_program, prog, 8);
    if (!shader_program->data->LinkStatus) {
       free_glsl_to_tgsi_visitor(v);
       _mesa_reference_program(ctx, &shader->Program, NULL);

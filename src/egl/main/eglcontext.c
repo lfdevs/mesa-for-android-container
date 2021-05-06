@@ -334,8 +334,8 @@ _eglParseContextAttribList(_EGLContext *ctx, _EGLDisplay *disp,
          /* The KHR_no_error spec only applies against OpenGL 2.0+ and
           * OpenGL ES 2.0+
           */
-         if ((api != EGL_OPENGL_API && api != EGL_OPENGL_ES_API) ||
-             ctx->ClientMajorVersion < 2) {
+         if (((api != EGL_OPENGL_API && api != EGL_OPENGL_ES_API) ||
+             ctx->ClientMajorVersion < 2) && val == EGL_TRUE) {
             err = EGL_BAD_ATTRIBUTE;
             break;
          }

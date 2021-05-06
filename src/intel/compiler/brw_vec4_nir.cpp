@@ -283,9 +283,9 @@ static src_reg
 setup_imm_df(const vec4_builder &bld, double v)
 {
    const gen_device_info *devinfo = bld.shader->devinfo;
-   assert(devinfo->gen == 7);
+   assert(devinfo->ver == 7);
 
-   /* gen7.5 does not support DF immediates straighforward but the DIM
+   /* gfx7.5 does not support DF immediates straighforward but the DIM
     * instruction allows to set the 64-bit immediate value.
     */
    if (devinfo->is_haswell) {
@@ -295,7 +295,7 @@ setup_imm_df(const vec4_builder &bld, double v)
       return swizzle(src_reg(dst), BRW_SWIZZLE_XXXX);
    }
 
-   /* gen7 does not support DF immediates */
+   /* gfx7 does not support DF immediates */
    union {
       double d;
       struct {
@@ -460,7 +460,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    }
 
    case nir_intrinsic_store_ssbo: {
-      assert(devinfo->gen == 7);
+      assert(devinfo->ver == 7);
 
       /* brw_nir_lower_mem_access_bit_sizes takes care of this */
       assert(nir_src_bit_size(instr->src[0]) == 32);
@@ -522,7 +522,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    }
 
    case nir_intrinsic_load_ssbo: {
-      assert(devinfo->gen == 7);
+      assert(devinfo->ver == 7);
 
       /* brw_nir_lower_mem_access_bit_sizes takes care of this */
       assert(nir_dest_bit_size(instr->dest) == 32);
@@ -706,7 +706,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       const dst_reg tmp = bld.vgrf(BRW_REGISTER_TYPE_UD);
       vec4_instruction *fence =
          bld.emit(SHADER_OPCODE_MEMORY_FENCE, tmp, brw_vec8_grf(0, 0));
-      fence->sfid = GEN7_SFID_DATAPORT_DATA_CACHE;
+      fence->sfid = GFX7_SFID_DATAPORT_DATA_CACHE;
       break;
    }
 
@@ -1202,14 +1202,14 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       if (nir_src_is_const(instr->src[0].src) &&
           nir_alu_instr_src_read_mask(instr, 0) == 1 &&
           const_src_fits_in_16_bits(instr->src[0].src, op[0].type)) {
-         if (devinfo->gen < 7)
+         if (devinfo->ver < 7)
             emit(MUL(dst, op[0], op[1]));
          else
             emit(MUL(dst, op[1], op[0]));
       } else if (nir_src_is_const(instr->src[1].src) &&
                  nir_alu_instr_src_read_mask(instr, 1) == 1 &&
                  const_src_fits_in_16_bits(instr->src[1].src, op[1].type)) {
-         if (devinfo->gen < 7)
+         if (devinfo->ver < 7)
             emit(MUL(dst, op[1], op[0]));
          else
             emit(MUL(dst, op[0], op[1]));
@@ -1335,7 +1335,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
 
    case nir_op_ftrunc:
       inst = emit(RNDZ(dst, op[0]));
-      if (devinfo->gen < 6) {
+      if (devinfo->ver < 6) {
          inst->conditional_mod = BRW_CONDITIONAL_R;
          inst = emit(ADD(dst, src_reg(dst), brw_imm_f(1.0f)));
          inst->predicate = BRW_PREDICATE_NORMAL;
@@ -1367,7 +1367,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
 
    case nir_op_fround_even:
       inst = emit(RNDE(dst, op[0]));
-      if (devinfo->gen < 6) {
+      if (devinfo->ver < 6) {
          inst->conditional_mod = BRW_CONDITIONAL_R;
          inst = emit(ADD(dst, src_reg(dst), brw_imm_f(1.0f)));
          inst->predicate = BRW_PREDICATE_NORMAL;
@@ -1670,7 +1670,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       vec4_builder bld = vec4_builder(this).at_end();
       src_reg src(dst);
 
-      if (devinfo->gen < 7) {
+      if (devinfo->ver < 7) {
          emit_find_msb_using_lzd(bld, dst, op[0], true);
       } else {
          emit(FBH(retype(dst, BRW_REGISTER_TYPE_UD), op[0]));
@@ -1693,7 +1693,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
       vec4_builder bld = vec4_builder(this).at_end();
 
-      if (devinfo->gen < 7) {
+      if (devinfo->ver < 7) {
          dst_reg temp = bld.vgrf(BRW_REGISTER_TYPE_D);
 
          /* (x & -x) generates a value that consists of only the LSB of x.
@@ -1797,31 +1797,20 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       }
       break;
 
-   /* For all shift operations:
-    *
-    * Gen4 - Gen7: After application of source modifiers, the low 5-bits of
-    * src1 are used an unsigned value for the shift count.
-    *
-    * Later platforms alter this behavior, but those platforms are not
-    * supported by this code generator.
-    */
    case nir_op_ishl:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
-      assert(type_sz(op[0].type) == 4);
       try_immediate_source(instr, op, false);
       emit(SHL(dst, op[0], op[1]));
       break;
 
    case nir_op_ishr:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
-      assert(type_sz(op[0].type) == 4);
       try_immediate_source(instr, op, false);
       emit(ASR(dst, op[0], op[1]));
       break;
 
    case nir_op_ushr:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
-      assert(type_sz(op[0].type) == 4);
       try_immediate_source(instr, op, false);
       emit(SHR(dst, op[0], op[1]));
       break;
@@ -1905,7 +1894,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    /* If we need to do a boolean resolve, replace the result with -(x & 1)
     * to sign extend the low bit to 0/~0
     */
-   if (devinfo->gen <= 5 &&
+   if (devinfo->ver <= 5 &&
        (instr->instr.pass_flags & BRW_NIR_BOOLEAN_MASK) ==
        BRW_NIR_BOOLEAN_NEEDS_RESOLVE) {
       dst_reg masked = dst_reg(this, glsl_type::int_type);
@@ -1961,14 +1950,6 @@ ir_texture_opcode_for_nir_texop(nir_texop texop)
    return op;
 }
 
-static const glsl_type *
-glsl_type_for_nir_alu_type(nir_alu_type alu_type,
-                           unsigned components)
-{
-   return glsl_type::get_instance(brw_glsl_base_type_for_nir_type(alu_type),
-                                  components, 1);
-}
-
 void
 vec4_visitor::nir_emit_texture(nir_tex_instr *instr)
 {
@@ -1984,9 +1965,6 @@ vec4_visitor::nir_emit_texture(nir_tex_instr *instr)
    src_reg sample_index;
    src_reg mcs;
 
-   const glsl_type *dest_type =
-      glsl_type_for_nir_alu_type(instr->dest_type,
-                                 nir_tex_instr_dest_size(instr));
    dst_reg dest = get_nir_dest(instr->dest, instr->dest_type);
 
    /* The hardware requires a LOD for buffer textures */
@@ -2090,7 +2068,7 @@ vec4_visitor::nir_emit_texture(nir_tex_instr *instr)
    if (instr->op == nir_texop_txf_ms ||
        instr->op == nir_texop_samples_identical) {
       assert(coord_type != NULL);
-      if (devinfo->gen >= 7 &&
+      if (devinfo->ver >= 7 &&
           key_tex->compressed_multisample_layout_mask & (1 << texture)) {
          mcs = emit_mcs_fetch(coord_type, coordinate, texture_reg);
       } else {
@@ -2113,7 +2091,8 @@ vec4_visitor::nir_emit_texture(nir_tex_instr *instr)
 
    ir_texture_opcode op = ir_texture_opcode_for_nir_texop(instr->op);
 
-   emit_texture(op, dest, dest_type, coordinate, instr->coord_components,
+   emit_texture(op, dest, nir_tex_instr_dest_size(instr),
+                coordinate, instr->coord_components,
                 shadow_comparator,
                 lod, lod2, sample_index,
                 constant_offset, offset_value, mcs,

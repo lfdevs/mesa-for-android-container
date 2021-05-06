@@ -33,6 +33,8 @@
 
 #include "main/formats.h"
 #include "main/glformats.h"
+#include "main/format_unpack.h"
+#include "main/format_pack.h"
 
 /**
  * Debug/test: check that all uncompressed formats are handled in the
@@ -183,4 +185,100 @@ TEST(MesaFormatsTest, FormatMatchesFormatAndType)
                                                     GL_DEPTH_COMPONENT,
                                                     GL_UNSIGNED_SHORT, false,
                                                     NULL));
+}
+
+static uint32_t
+test_unpack_r8i(int8_t val)
+{
+   uint32_t result[4];
+   _mesa_unpack_uint_rgba_row(MESA_FORMAT_R_SINT8, 1, &val, &result);
+   return result[0];
+}
+
+static uint32_t
+test_unpack_r32ui(uint32_t val)
+{
+   uint32_t result[4];
+   _mesa_unpack_uint_rgba_row(MESA_FORMAT_R_UINT32, 1, &val, &result);
+   return result[0];
+}
+
+TEST(MesaFormatsTest, UnpackRGBAUintRow)
+{
+   EXPECT_EQ(test_unpack_r8i(0), 0);
+   EXPECT_EQ(test_unpack_r8i(1), 1);
+   EXPECT_EQ(test_unpack_r8i(0xff), 0xffffffff);
+   EXPECT_EQ(test_unpack_r32ui(0), 0);
+   EXPECT_EQ(test_unpack_r32ui(0xffffffff), 0xffffffff);
+}
+
+TEST(MesaFormatsTest, UnpackRGBAUbyteRowRGBA32F)
+{
+   float val[4] = {0, 0.5, -1, 2};
+   uint8_t result[4];
+   _mesa_unpack_ubyte_rgba_row(MESA_FORMAT_RGBA_FLOAT32, 1, &val, &result);
+   EXPECT_EQ(result[0], 0);
+   EXPECT_EQ(result[1], 0x80);
+   EXPECT_EQ(result[2], 0);
+   EXPECT_EQ(result[3], 0xff);
+}
+
+TEST(MesaFormatsTest, UnpackRGBAUbyteRowRGBA4)
+{
+   uint16_t val = (1 << 0) | (0x3f << 5) | (0x10 << 11);
+   uint8_t result[4];
+   _mesa_unpack_ubyte_rgba_row(MESA_FORMAT_R5G6B5_UNORM, 1, &val, &result);
+   EXPECT_EQ(result[0], 0x08);
+   EXPECT_EQ(result[1], 0xff);
+   EXPECT_EQ(result[2], 0x84);
+   EXPECT_EQ(result[3], 0xff);
+}
+
+static float
+test_unpack_floatz_z32f(float val)
+{
+   float result;
+   _mesa_unpack_float_z_row(MESA_FORMAT_Z_FLOAT32, 1, &val, &result);
+   return result;
+}
+
+TEST(MesaFormatsTest, UnpackFloatZRow)
+{
+   EXPECT_EQ(test_unpack_floatz_z32f(0.5), 0.5);
+   EXPECT_EQ(test_unpack_floatz_z32f(-1.0), -1.0);
+   EXPECT_EQ(test_unpack_floatz_z32f(2.0), 2.0);
+}
+
+static uint32_t
+test_unpack_uintz_z32f(float val)
+{
+   uint32_t result;
+   _mesa_unpack_uint_z_row(MESA_FORMAT_Z_FLOAT32, 1, &val, &result);
+   return result;
+}
+
+TEST(MesaFormatsTest, UnpackUintZRow)
+{
+   EXPECT_EQ(test_unpack_uintz_z32f(0.5), 0x7fffffff);
+   EXPECT_EQ(test_unpack_uintz_z32f(-1.0), 0);
+   EXPECT_EQ(test_unpack_uintz_z32f(2.0), 0xffffffff);
+}
+
+/* It's easy to have precision issues packing 32-bit floats to unorm. */
+TEST(MesaFormatsTest, PackFloatZ)
+{
+   float val = 0.571428597f;
+   uint32_t result;
+   _mesa_pack_float_z_row(MESA_FORMAT_Z_UNORM32, 1, &val, &result);
+   EXPECT_EQ(result, 0x924924ff);
+}
+
+TEST(MesaFormatsTest, PackUbyteRGBARounding)
+{
+   for (int i = 0; i <= 255; i++) {
+      uint8_t val[4] = {(uint8_t)i, 0, 0, 0};
+      uint16_t result;
+      _mesa_pack_ubyte_rgba_row(MESA_FORMAT_R5G6B5_UNORM, 1, &val, &result);
+      EXPECT_EQ(result, (i * 31 + 127) / 255);
+   }
 }

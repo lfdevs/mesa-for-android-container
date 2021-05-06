@@ -79,7 +79,7 @@ nouveau_get_configs(uint32_t chipset)
 					  ARRAY_SIZE(back_buffer_modes),
 					  msaa_samples,
 					  ARRAY_SIZE(msaa_samples),
-					  GL_TRUE, chipset < 0x10, GL_FALSE);
+					  GL_TRUE, chipset < 0x10);
 		assert(config);
 
 		configs = driConcatConfigs(configs, config);
@@ -286,7 +286,7 @@ nouveau_create_buffer(__DRIscreen *dri_screen,
 	/* Software renderbuffers. */
 	_swrast_add_soft_renderbuffers(fb, GL_FALSE, GL_FALSE, GL_FALSE,
                                        visual->accumRedBits > 0,
-                                       GL_FALSE, GL_FALSE);
+                                       GL_FALSE);
 
 	drawable->driverPrivate = fb;
 

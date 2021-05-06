@@ -40,7 +40,6 @@
 /* glibc < 2.27 defines OVERFLOW in /usr/include/math.h. */
 #undef OVERFLOW
 
-void yyerror (char *);
 int yyparse(void);
 int yylex(void);
 char *lex_text(void);

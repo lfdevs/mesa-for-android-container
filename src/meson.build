@@ -86,7 +86,7 @@ endif
 if with_gallium_panfrost or with_gallium_lima
   subdir('panfrost')
 endif
-if with_gallium_virgl
+if with_gallium_virgl or with_virtio_vk
   subdir('virtio')
 endif
 if with_any_intel

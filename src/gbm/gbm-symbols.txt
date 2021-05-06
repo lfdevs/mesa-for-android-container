@@ -4,6 +4,7 @@ gbm_bo_destroy
 gbm_bo_get_bpp
 gbm_bo_get_device
 gbm_bo_get_fd
+gbm_bo_get_fd_for_plane
 gbm_bo_get_format
 gbm_bo_get_handle
 gbm_bo_get_handle_for_plane

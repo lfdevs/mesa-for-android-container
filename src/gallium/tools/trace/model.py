@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 ##########################################################################
 # 
 # Copyright 2008 VMware, Inc.
@@ -33,12 +33,7 @@
 import sys
 import string
 import binascii
-
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
-
+from io import StringIO
 import format
 
 
@@ -177,7 +172,7 @@ class PrettyPrinter:
             self.formatter.literal('NULL')
             return
 
-        if isinstance(node.value, basestring):
+        if isinstance(node.value, str):
             self.formatter.literal('"' + node.value + '"')
             return
 

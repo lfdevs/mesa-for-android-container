@@ -30,11 +30,12 @@ using namespace brw;
 
 class saturate_propagation_test : public ::testing::Test {
    virtual void SetUp();
+   virtual void TearDown();
 
 public:
    struct brw_compiler *compiler;
    struct gen_device_info *devinfo;
-   struct gl_context *ctx;
+   void *ctx;
    struct brw_wm_prog_data *prog_data;
    struct gl_shader_program *shader_prog;
    fs_visitor *v;
@@ -44,28 +45,40 @@ class saturate_propagation_fs_visitor : public fs_visitor
 {
 public:
    saturate_propagation_fs_visitor(struct brw_compiler *compiler,
+                                   void *mem_ctx,
                                    struct brw_wm_prog_data *prog_data,
                                    nir_shader *shader)
-      : fs_visitor(compiler, NULL, NULL, NULL,
-                   &prog_data->base, shader, 16, -1) {}
+      : fs_visitor(compiler, NULL, mem_ctx, NULL,
+                   &prog_data->base, shader, 16, -1, false) {}
 };
 
 
 void saturate_propagation_test::SetUp()
 {
-   ctx = (struct gl_context *)calloc(1, sizeof(*ctx));
-   compiler = (struct brw_compiler *)calloc(1, sizeof(*compiler));
-   devinfo = (struct gen_device_info *)calloc(1, sizeof(*devinfo));
+   ctx = ralloc_context(NULL);
+   compiler = rzalloc(ctx, struct brw_compiler);
+   devinfo = rzalloc(ctx, struct gen_device_info);
    compiler->devinfo = devinfo;
 
-   prog_data = ralloc(NULL, struct brw_wm_prog_data);
+   prog_data = ralloc(ctx, struct brw_wm_prog_data);
    nir_shader *shader =
-      nir_shader_create(NULL, MESA_SHADER_FRAGMENT, NULL, NULL);
+      nir_shader_create(ctx, MESA_SHADER_FRAGMENT, NULL, NULL);
 
-   v = new saturate_propagation_fs_visitor(compiler, prog_data, shader);
+   v = new saturate_propagation_fs_visitor(compiler, ctx, prog_data, shader);
 
-   devinfo->gen = 6;
+   devinfo->ver = 6;
+   devinfo->verx10 = devinfo->ver * 10;
 }
+
+void saturate_propagation_test::TearDown()
+{
+   delete v;
+   v = NULL;
+
+   ralloc_free(ctx);
+   ctx = NULL;
+}
+
 
 static fs_inst *
 instruction(bblock_t *block, int num)

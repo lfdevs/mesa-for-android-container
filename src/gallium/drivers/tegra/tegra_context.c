@@ -25,6 +25,7 @@
 #include <stdlib.h>
 
 #include "util/u_debug.h"
+#include "util/u_draw.h"
 #include "util/u_inlines.h"
 #include "util/u_upload_mgr.h"
 
@@ -52,13 +53,7 @@ tegra_draw_vbo(struct pipe_context *pcontext,
                unsigned num_draws)
 {
    if (num_draws > 1) {
-      struct pipe_draw_info tmp_info = *pinfo;
-
-      for (unsigned i = 0; i < num_draws; i++) {
-         tegra_draw_vbo(pcontext, &tmp_info, pindirect, &draws[i], 1);
-         if (tmp_info.increment_draw_id)
-            tmp_info.drawid++;
-      }
+      util_draw_multi(pcontext, pinfo, pindirect, draws, num_draws);
       return;
    }
 
@@ -480,7 +475,7 @@ tegra_set_clip_state(struct pipe_context *pcontext,
 
 static void
 tegra_set_constant_buffer(struct pipe_context *pcontext, unsigned int shader,
-                          unsigned int index,
+                          unsigned int index, bool take_ownership,
                           const struct pipe_constant_buffer *buf)
 {
    struct tegra_context *context = to_tegra_context(pcontext);
@@ -492,7 +487,7 @@ tegra_set_constant_buffer(struct pipe_context *pcontext, unsigned int shader,
       buf = &buffer;
    }
 
-   context->gpu->set_constant_buffer(context->gpu, shader, index, buf);
+   context->gpu->set_constant_buffer(context->gpu, shader, index, take_ownership, buf);
 }
 
 static void
@@ -565,6 +560,7 @@ tegra_set_viewport_states(struct pipe_context *pcontext, unsigned start_slot,
 static void
 tegra_set_sampler_views(struct pipe_context *pcontext, unsigned shader,
                         unsigned start_slot, unsigned num_views,
+                        unsigned unbind_num_trailing_slots,
                         struct pipe_sampler_view **pviews)
 {
    struct pipe_sampler_view *views[PIPE_MAX_SHADER_SAMPLER_VIEWS];
@@ -575,7 +571,8 @@ tegra_set_sampler_views(struct pipe_context *pcontext, unsigned shader,
       views[i] = tegra_sampler_view_unwrap(pviews[i]);
 
    context->gpu->set_sampler_views(context->gpu, shader, start_slot,
-                                   num_views, views);
+                                   num_views, unbind_num_trailing_slots,
+                                   views);
 }
 
 static void
@@ -613,17 +610,19 @@ tegra_set_shader_buffers(struct pipe_context *pcontext, unsigned int shader,
 static void
 tegra_set_shader_images(struct pipe_context *pcontext, unsigned int shader,
                         unsigned start, unsigned count,
+                        unsigned unbind_num_trailing_slots,
                         const struct pipe_image_view *images)
 {
    struct tegra_context *context = to_tegra_context(pcontext);
 
    context->gpu->set_shader_images(context->gpu, shader, start, count,
-                                   images);
+                                   unbind_num_trailing_slots, images);
 }
 
 static void
 tegra_set_vertex_buffers(struct pipe_context *pcontext, unsigned start_slot,
-                         unsigned num_buffers,
+                         unsigned num_buffers, unsigned unbind_num_trailing_slots,
+                         bool take_ownership,
                          const struct pipe_vertex_buffer *buffers)
 {
    struct tegra_context *context = to_tegra_context(pcontext);
@@ -642,7 +641,8 @@ tegra_set_vertex_buffers(struct pipe_context *pcontext, unsigned start_slot,
    }
 
    context->gpu->set_vertex_buffers(context->gpu, start_slot, num_buffers,
-                                    buffers);
+                                    unbind_num_trailing_slots,
+                                    take_ownership, buffers);
 }
 
 static struct pipe_stream_output_target *

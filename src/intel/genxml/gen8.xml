@@ -959,7 +959,7 @@
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="MOCS" start="32" end="38" type="uint"/>
-    <field name="Binding Table Pool Enable" start="43" end="43" type="uint"/>
+    <field name="Binding Table Pool Enable" start="43" end="43" type="bool"/>
     <field name="Binding Table Pool Base Address" start="44" end="95" type="address"/>
     <field name="Binding Table Pool Buffer Size" start="108" end="127" type="uint">
       <value name="No Valid Data" value="0"/>

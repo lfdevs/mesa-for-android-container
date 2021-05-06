@@ -107,8 +107,8 @@ isl_lower_storage_image_format(const struct gen_device_info *devinfo,
    case ISL_FORMAT_R32G32_UINT:
    case ISL_FORMAT_R32G32_SINT:
    case ISL_FORMAT_R32G32_FLOAT:
-      return (devinfo->gen >= 9 ? format :
-              devinfo->gen >= 8 || devinfo->is_haswell ?
+      return (devinfo->ver >= 9 ? format :
+              devinfo->ver >= 8 || devinfo->is_haswell ?
               ISL_FORMAT_R16G16B16A16_UINT :
               ISL_FORMAT_R32G32_UINT);
 
@@ -124,31 +124,31 @@ isl_lower_storage_image_format(const struct gen_device_info *devinfo,
     */
    case ISL_FORMAT_R8G8B8A8_UINT:
    case ISL_FORMAT_R8G8B8A8_SINT:
-      return (devinfo->gen >= 9 ? format :
-              devinfo->gen >= 8 || devinfo->is_haswell ?
+      return (devinfo->ver >= 9 ? format :
+              devinfo->ver >= 8 || devinfo->is_haswell ?
               ISL_FORMAT_R8G8B8A8_UINT : ISL_FORMAT_R32_UINT);
 
    case ISL_FORMAT_R16G16_UINT:
    case ISL_FORMAT_R16G16_SINT:
    case ISL_FORMAT_R16G16_FLOAT:
-      return (devinfo->gen >= 9 ? format :
-              devinfo->gen >= 8 || devinfo->is_haswell ?
+      return (devinfo->ver >= 9 ? format :
+              devinfo->ver >= 8 || devinfo->is_haswell ?
               ISL_FORMAT_R16G16_UINT : ISL_FORMAT_R32_UINT);
 
    case ISL_FORMAT_R8G8_UINT:
    case ISL_FORMAT_R8G8_SINT:
-      return (devinfo->gen >= 9 ? format :
-              devinfo->gen >= 8 || devinfo->is_haswell ?
+      return (devinfo->ver >= 9 ? format :
+              devinfo->ver >= 8 || devinfo->is_haswell ?
               ISL_FORMAT_R8G8_UINT : ISL_FORMAT_R16_UINT);
 
    case ISL_FORMAT_R16_UINT:
    case ISL_FORMAT_R16_FLOAT:
    case ISL_FORMAT_R16_SINT:
-      return (devinfo->gen >= 9 ? format : ISL_FORMAT_R16_UINT);
+      return (devinfo->ver >= 9 ? format : ISL_FORMAT_R16_UINT);
 
    case ISL_FORMAT_R8_UINT:
    case ISL_FORMAT_R8_SINT:
-      return (devinfo->gen >= 9 ? format : ISL_FORMAT_R8_UINT);
+      return (devinfo->ver >= 9 ? format : ISL_FORMAT_R8_UINT);
 
    /* Neither the 2/10/10/10 nor the 11/11/10 packed formats are supported
     * by the hardware.
@@ -161,36 +161,36 @@ isl_lower_storage_image_format(const struct gen_device_info *devinfo,
    /* No normalized fixed-point formats are supported by the hardware. */
    case ISL_FORMAT_R16G16B16A16_UNORM:
    case ISL_FORMAT_R16G16B16A16_SNORM:
-      return (devinfo->gen >= 11 ? format :
-              devinfo->gen >= 8 || devinfo->is_haswell ?
+      return (devinfo->ver >= 11 ? format :
+              devinfo->ver >= 8 || devinfo->is_haswell ?
               ISL_FORMAT_R16G16B16A16_UINT :
               ISL_FORMAT_R32G32_UINT);
 
    case ISL_FORMAT_R8G8B8A8_UNORM:
    case ISL_FORMAT_R8G8B8A8_SNORM:
-      return (devinfo->gen >= 11 ? format :
-              devinfo->gen >= 8 || devinfo->is_haswell ?
+      return (devinfo->ver >= 11 ? format :
+              devinfo->ver >= 8 || devinfo->is_haswell ?
               ISL_FORMAT_R8G8B8A8_UINT : ISL_FORMAT_R32_UINT);
 
    case ISL_FORMAT_R16G16_UNORM:
    case ISL_FORMAT_R16G16_SNORM:
-      return (devinfo->gen >= 11 ? format :
-              devinfo->gen >= 8 || devinfo->is_haswell ?
+      return (devinfo->ver >= 11 ? format :
+              devinfo->ver >= 8 || devinfo->is_haswell ?
               ISL_FORMAT_R16G16_UINT : ISL_FORMAT_R32_UINT);
 
    case ISL_FORMAT_R8G8_UNORM:
    case ISL_FORMAT_R8G8_SNORM:
-      return (devinfo->gen >= 11 ? format :
-              devinfo->gen >= 8 || devinfo->is_haswell ?
+      return (devinfo->ver >= 11 ? format :
+              devinfo->ver >= 8 || devinfo->is_haswell ?
               ISL_FORMAT_R8G8_UINT : ISL_FORMAT_R16_UINT);
 
    case ISL_FORMAT_R16_UNORM:
    case ISL_FORMAT_R16_SNORM:
-      return (devinfo->gen >= 11 ? format : ISL_FORMAT_R16_UINT);
+      return (devinfo->ver >= 11 ? format : ISL_FORMAT_R16_UINT);
 
    case ISL_FORMAT_R8_UNORM:
    case ISL_FORMAT_R8_SNORM:
-      return (devinfo->gen >= 11 ? format : ISL_FORMAT_R8_UINT);
+      return (devinfo->ver >= 11 ? format : ISL_FORMAT_R8_UINT);
 
    default:
       assert(!"Unknown image format");
@@ -202,9 +202,9 @@ bool
 isl_has_matching_typed_storage_image_format(const struct gen_device_info *devinfo,
                                             enum isl_format fmt)
 {
-   if (devinfo->gen >= 9) {
+   if (devinfo->ver >= 9) {
       return true;
-   } else if (devinfo->gen >= 8 || devinfo->is_haswell) {
+   } else if (devinfo->ver >= 8 || devinfo->is_haswell) {
       return isl_format_get_layout(fmt)->bpb <= 64;
    } else {
       return isl_format_get_layout(fmt)->bpb <= 32;
@@ -253,7 +253,7 @@ isl_surf_fill_image_param(const struct isl_device *dev,
 
    const struct isl_extent3d image_align_sa =
       isl_surf_get_image_alignment_sa(surf);
-   if (ISL_DEV_GEN(dev) < 9 && surf->dim == ISL_SURF_DIM_3D) {
+   if (ISL_GFX_VER(dev) < 9 && surf->dim == ISL_SURF_DIM_3D) {
       param->stride[2] = isl_align_npot(param->size[0], image_align_sa.w);
       param->stride[3] = isl_align_npot(param->size[1], image_align_sa.h);
    } else {
@@ -307,7 +307,7 @@ isl_surf_fill_image_param(const struct isl_device *dev,
     * brw_fs_surface_builder.cpp) handles this as a sort of tiling with
     * modulus equal to the LOD.
     */
-   param->tiling[2] = (ISL_DEV_GEN(dev) < 9 && surf->dim == ISL_SURF_DIM_3D ?
+   param->tiling[2] = (ISL_GFX_VER(dev) < 9 && surf->dim == ISL_SURF_DIM_3D ?
                        view->base_level : 0);
 }
 

@@ -47,13 +47,20 @@
 
 #include "c11/threads.h"
 #include "main/macros.h"
+#include "util/bitscan.h"
 #include "util/list.h"
 #include "util/log.h"
 #include "util/macros.h"
 #include "util/u_atomic.h"
+#include "util/u_dynarray.h"
 #include "vk_alloc.h"
-#include "vk_object.h"
 #include "vk_debug_report.h"
+#include "vk_device.h"
+#include "vk_dispatch_table.h"
+#include "vk_extensions.h"
+#include "vk_instance.h"
+#include "vk_physical_device.h"
+#include "vk_shader_module.h"
 #include "wsi_common.h"
 
 #include "ir3/ir3_compiler.h"
@@ -80,7 +87,6 @@ typedef uint32_t xcb_window_t;
 #include <vulkan/vk_android_native_buffer.h>
 #include <vulkan/vk_icd.h>
 #include <vulkan/vulkan.h>
-#include <vulkan/vulkan_intel.h>
 
 #include "tu_entrypoints.h"
 
@@ -113,10 +119,6 @@ typedef uint32_t xcb_window_t;
 
 #define A6XX_TEX_CONST_DWORDS 16
 #define A6XX_TEX_SAMP_DWORDS 4
-
-#define for_each_bit(b, dword)                                               \
-   for (uint32_t __dword = (dword);                                          \
-        (b) = __builtin_ffs(__dword) - 1, __dword; __dword &= ~(1 << (b)))
 
 #define COND(bool, val) ((bool) ? (val) : 0)
 #define BIT(bit) (1u << (bit))
@@ -170,18 +172,26 @@ __tu_finishme(const char *file, int line, const char *format, ...)
       tu_finishme("stub %s", __func__);                                      \
    } while (0)
 
-void *
-tu_lookup_entrypoint_unchecked(const char *name);
-void *
-tu_lookup_entrypoint_checked(
-   const char *name,
-   uint32_t core_version,
-   const struct tu_instance_extension_table *instance,
-   const struct tu_device_extension_table *device);
+struct tu_memory_heap {
+   /* Standard bits passed on to the client */
+   VkDeviceSize      size;
+   VkMemoryHeapFlags flags;
+
+   /** Copied from ANV:
+    *
+    * Driver-internal book-keeping.
+    *
+    * Align it to 64 bits to make atomic operations faster on 32 bit platforms.
+    */
+   VkDeviceSize      used __attribute__ ((aligned (8)));
+};
+
+uint64_t
+tu_get_system_heap_size(void);
 
 struct tu_physical_device
 {
-   struct vk_object_base base;
+   struct vk_physical_device vk;
 
    struct tu_instance *instance;
 
@@ -209,7 +219,7 @@ struct tu_physical_device
     */
    struct disk_cache *disk_cache;
 
-   struct tu_device_extension_table supported_extensions;
+   struct tu_memory_heap heap;
 };
 
 enum tu_debug_flags
@@ -227,19 +237,13 @@ enum tu_debug_flags
 
 struct tu_instance
 {
-   struct vk_object_base base;
-
-   VkAllocationCallbacks alloc;
+   struct vk_instance vk;
 
    uint32_t api_version;
    int physical_device_count;
    struct tu_physical_device physical_devices[TU_MAX_DRM_DEVICES];
 
    enum tu_debug_flags debug_flags;
-
-   struct vk_debug_report_instance debug_report_callbacks;
-
-   struct tu_instance_extension_table enabled_extensions;
 };
 
 VkResult
@@ -380,8 +384,6 @@ struct tu_device
    } scratch_bos[48 - MIN_SCRATCH_BO_SIZE_LOG2];
 
    struct tu_bo global_bo;
-
-   struct tu_device_extension_table enabled_extensions;
 
    uint32_t vsc_draw_strm_pitch;
    uint32_t vsc_prim_strm_pitch;
@@ -1017,14 +1019,6 @@ struct tu_event
    struct tu_bo bo;
 };
 
-struct tu_shader_module
-{
-   struct vk_object_base base;
-
-   uint32_t code_size;
-   uint32_t code[];
-};
-
 struct tu_push_constant_range
 {
    uint32_t lo;
@@ -1068,6 +1062,17 @@ struct tu_program_descriptor_linkage
    uint32_t constlen;
 
    struct tu_push_constant_range push_consts;
+};
+
+struct tu_pipeline_executable {
+   gl_shader_stage stage;
+
+   struct ir3_info stats;
+   bool is_binning;
+
+   char *nir_from_spirv;
+   char *nir_final;
+   char *disasm;
 };
 
 struct tu_pipeline
@@ -1136,6 +1141,10 @@ struct tu_pipeline
    } compute;
 
    struct tu_lrz_pipeline lrz;
+
+   void *executables_mem_ctx;
+   /* tu_pipeline_executable */
+   struct util_dynarray executables;
 };
 
 void
@@ -1280,6 +1289,8 @@ struct tu_image
    uint32_t lrz_height;
    uint32_t lrz_pitch;
    uint32_t lrz_offset;
+
+   bool shareable;
 };
 
 static inline uint32_t
@@ -1395,7 +1406,8 @@ tu_image_view_init(struct tu_image_view *iview,
                    bool limited_z24s8);
 
 bool
-ubwc_possible(VkFormat format, VkImageType type, VkImageUsageFlags usage, bool limited_z24s8);
+ubwc_possible(VkFormat format, VkImageType type, VkImageUsageFlags usage, bool limited_z24s8,
+              VkSampleCountFlagBits samples);
 
 struct tu_buffer_view
 {
@@ -1539,7 +1551,8 @@ uint32_t
 tu_subpass_get_attachment_to_resolve(const struct tu_subpass *subpass, uint32_t index);
 
 void
-tu_update_descriptor_sets(VkDescriptorSet overrideSet,
+tu_update_descriptor_sets(const struct tu_device *device,
+                          VkDescriptorSet overrideSet,
                           uint32_t descriptorWriteCount,
                           const VkWriteDescriptorSet *pDescriptorWrites,
                           uint32_t descriptorCopyCount,
@@ -1547,6 +1560,7 @@ tu_update_descriptor_sets(VkDescriptorSet overrideSet,
 
 void
 tu_update_descriptor_set_with_template(
+   const struct tu_device *device,
    struct tu_descriptor_set *set,
    VkDescriptorUpdateTemplate descriptorUpdateTemplate,
    const void *pData);
@@ -1625,7 +1639,6 @@ TU_DEFINE_NONDISP_HANDLE_CASTS(tu_query_pool, VkQueryPool)
 TU_DEFINE_NONDISP_HANDLE_CASTS(tu_render_pass, VkRenderPass)
 TU_DEFINE_NONDISP_HANDLE_CASTS(tu_sampler, VkSampler)
 TU_DEFINE_NONDISP_HANDLE_CASTS(tu_sampler_ycbcr_conversion, VkSamplerYcbcrConversion)
-TU_DEFINE_NONDISP_HANDLE_CASTS(tu_shader_module, VkShaderModule)
 
 /* for TU_FROM_HANDLE with both VkFence and VkSemaphore: */
 #define tu_syncobj_from_handle(x) ((struct tu_syncobj*) (uintptr_t) (x))

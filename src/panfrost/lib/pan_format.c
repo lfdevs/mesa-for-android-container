@@ -95,6 +95,7 @@ panfrost_blend_format(enum pipe_format format)
 #define FLAGS_VT__ (_V | _T)
 #define FLAGS__T_Z (_T | _Z)
 
+#define V6_0000 PAN_V6_SWIZZLE(0, 0, 0, 0)
 #define V6_000R PAN_V6_SWIZZLE(0, 0, 0, R)
 #define V6_0R00 PAN_V6_SWIZZLE(0, R, 0, 0)
 #define V6_0A00 PAN_V6_SWIZZLE(0, A, 0, 0)
@@ -134,6 +135,7 @@ panfrost_blend_format(enum pipe_format format)
         }
 
 const struct panfrost_format panfrost_pipe_format_v6[PIPE_FORMAT_COUNT] = {
+        PAN_V6(NONE,                    CONSTANT,        0000, L, VTR_),
         PAN_V6(ETC1_RGB8,               ETC2_RGB8,       RGB1, L, _T__),
         PAN_V6(ETC2_RGB8,               ETC2_RGB8,       RGB1, L, _T__),
         PAN_V6(ETC2_SRGB8,              ETC2_RGB8,       RGB1, S, _T__),
@@ -385,6 +387,7 @@ const struct panfrost_format panfrost_pipe_format_v6[PIPE_FORMAT_COUNT] = {
 };
 
 const struct panfrost_format panfrost_pipe_format_v7[PIPE_FORMAT_COUNT] = {
+        PAN_V7(NONE,                    CONSTANT,        0000, L, VTR_),
         PAN_V7(ETC1_RGB8,               ETC2_RGB8,       RGB1, L, _T__),
         PAN_V7(ETC2_RGB8,               ETC2_RGB8,       RGB1, L, _T__),
         PAN_V7(ETC2_SRGB8,              ETC2_RGB8,       RGB1, S, _T__),

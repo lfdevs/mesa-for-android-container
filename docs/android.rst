@@ -2,7 +2,7 @@ Android
 =======
 
 Mesa hardware drivers can be built for Android one of two ways: built
-into the Android OS using the Android.mk build sytem on older versions
+into the Android OS using the Android.mk build system on older versions
 of Android, or out-of-tree using the Meson build system and the
 Android NDK.
 
@@ -20,8 +20,10 @@ Then, create your meson cross file to use it, something like this
 
     [binaries]
     ar = 'NDKDIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar'
-    c = ['ccache', 'NDKDIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang', '-fuse-ld=lld']
-    cpp = ['ccache', 'NDKDIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang++', '-fuse-ld=lld', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
+    c = ['ccache', 'NDKDIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang']
+    cpp = ['ccache', 'NDKDIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
+    c_ld = 'lld'
+    cpp_ld = 'lld'
     strip = 'NDKDIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-strip'
     # Android doesn't come with a pkg-config, but we need one for meson to be happy not
     # finding all the optional deps it looks for.  Use system pkg-config pointing at a
@@ -142,7 +144,7 @@ ARC++, but it should also be possible to build using the NDK as
 described above.  There are currently rough edges with this, for
 example the build will require that you have your arc-libdrm build
 available to the NDK, assuming you're building anything but the
-freedreno vulkan driver for KGSL.  You can mostly put things in place
+freedreno Vulkan driver for KGSL.  You can mostly put things in place
 with:
 
 .. code-block:: console

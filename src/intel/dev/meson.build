@@ -57,6 +57,6 @@ if with_intel_tools
     link_with : libintel_dev,
     c_args : [no_override_init_args],
     gnu_symbol_visibility : 'hidden',
-    install : false
+    install : true
   )
 endif

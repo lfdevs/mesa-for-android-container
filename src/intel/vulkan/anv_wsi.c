@@ -22,15 +22,15 @@
  */
 
 #include "anv_private.h"
+#include "anv_measure.h"
 #include "wsi_common.h"
-#include "vk_format_info.h"
 #include "vk_util.h"
 
 static PFN_vkVoidFunction
 anv_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
 {
-   ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
-   return anv_lookup_entrypoint(&physical_device->info, pName);
+   ANV_FROM_HANDLE(anv_physical_device, pdevice, physicalDevice);
+   return vk_instance_get_proc_addr_unchecked(&pdevice->instance->vk, pName);
 }
 
 static void
@@ -83,7 +83,7 @@ anv_init_wsi(struct anv_physical_device *physical_device)
    result = wsi_device_init(&physical_device->wsi_device,
                             anv_physical_device_to_handle(physical_device),
                             anv_wsi_proc_addr,
-                            &physical_device->instance->alloc,
+                            &physical_device->instance->vk.alloc,
                             physical_device->master_fd,
                             &physical_device->instance->dri_options,
                             false);
@@ -103,7 +103,7 @@ void
 anv_finish_wsi(struct anv_physical_device *physical_device)
 {
    wsi_device_finish(&physical_device->wsi_device,
-                     &physical_device->instance->alloc);
+                     &physical_device->instance->vk.alloc);
 }
 
 void anv_DestroySurfaceKHR(
@@ -117,7 +117,7 @@ void anv_DestroySurfaceKHR(
    if (!surface)
       return;
 
-   vk_free2(&instance->alloc, pAllocator, surface);
+   vk_free2(&instance->vk.alloc, pAllocator, surface);
 }
 
 VkResult anv_GetPhysicalDeviceSurfaceSupportKHR(
@@ -280,6 +280,7 @@ VkResult anv_AcquireNextImage2KHR(
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
 
+   anv_measure_acquire(device);
    return wsi_common_acquire_next_image2(&device->physical->wsi_device,
                                          _device, pAcquireInfo, pImageIndex);
 }
@@ -304,16 +305,14 @@ VkResult anv_QueuePresentKHR(
       /* Make sure all of the dependency semaphores have materialized when
        * using a threaded submission.
        */
-      ANV_MULTIALLOC(ma);
+      VK_MULTIALLOC(ma);
+      VK_MULTIALLOC_DECL(&ma, uint64_t, values,
+                              pPresentInfo->waitSemaphoreCount);
+      VK_MULTIALLOC_DECL(&ma, uint32_t, syncobjs,
+                              pPresentInfo->waitSemaphoreCount);
 
-      uint64_t *values;
-      uint32_t *syncobjs;
-
-      anv_multialloc_add(&ma, &values, pPresentInfo->waitSemaphoreCount);
-      anv_multialloc_add(&ma, &syncobjs, pPresentInfo->waitSemaphoreCount);
-
-      if (!anv_multialloc_alloc(&ma, &device->vk.alloc,
-                                VK_SYSTEM_ALLOCATION_SCOPE_COMMAND))
+      if (!vk_multialloc_alloc(&ma, &device->vk.alloc,
+                               VK_SYSTEM_ALLOCATION_SCOPE_COMMAND))
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
       uint32_t wait_count = 0;

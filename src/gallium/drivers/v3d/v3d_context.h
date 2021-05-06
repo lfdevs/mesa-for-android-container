@@ -491,6 +491,10 @@ struct v3d_context {
          */
         struct u_upload_mgr *state_uploader;
 
+        struct pipe_shader_state *sand8_blit_vs;
+        struct pipe_shader_state *sand8_blit_fs_luma;
+        struct pipe_shader_state *sand8_blit_fs_chroma;
+
         /** @{ Current pipeline state objects */
         struct pipe_scissor_state scissor;
         struct v3d_blend_state *blend;
@@ -584,9 +588,6 @@ struct v3d_blend_state {
         if (unlikely(v3d->debug.debug_message))         \
                 pipe_debug_message(&v3d->debug, PERF_INFO, __VA_ARGS__);    \
 } while (0)
-
-#define foreach_bit(b, mask)                                            \
-        for (uint32_t _m = (mask), b; _m && ({(b) = u_bit_scan(&_m); 1;});)
 
 static inline struct v3d_context *
 v3d_context(struct pipe_context *pcontext)

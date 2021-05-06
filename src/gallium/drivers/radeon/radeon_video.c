@@ -98,11 +98,11 @@ bool si_vid_resize_buffer(struct pipe_screen *screen, struct radeon_cmdbuf *cs,
    if (!si_vid_create_buffer(screen, new_buf, new_size, new_buf->usage))
       goto error;
 
-   src = ws->buffer_map(old_buf.res->buf, cs, PIPE_MAP_READ | RADEON_MAP_TEMPORARY);
+   src = ws->buffer_map(ws, old_buf.res->buf, cs, PIPE_MAP_READ | RADEON_MAP_TEMPORARY);
    if (!src)
       goto error;
 
-   dst = ws->buffer_map(new_buf->res->buf, cs, PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
+   dst = ws->buffer_map(ws, new_buf->res->buf, cs, PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
    if (!dst)
       goto error;
 
@@ -112,14 +112,14 @@ bool si_vid_resize_buffer(struct pipe_screen *screen, struct radeon_cmdbuf *cs,
       dst += bytes;
       memset(dst, 0, new_size);
    }
-   ws->buffer_unmap(new_buf->res->buf);
-   ws->buffer_unmap(old_buf.res->buf);
+   ws->buffer_unmap(ws, new_buf->res->buf);
+   ws->buffer_unmap(ws, old_buf.res->buf);
    si_vid_destroy_buffer(&old_buf);
    return true;
 
 error:
    if (src)
-      ws->buffer_unmap(old_buf.res->buf);
+      ws->buffer_unmap(ws, old_buf.res->buf);
    si_vid_destroy_buffer(new_buf);
    *new_buf = old_buf;
    return false;

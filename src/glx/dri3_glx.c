@@ -664,13 +664,11 @@ dri3_get_swap_interval(__GLXDRIdrawable *pdraw)
 }
 
 static void
-dri3_bind_tex_image(Display * dpy,
-                    GLXDrawable drawable,
+dri3_bind_tex_image(__GLXDRIdrawable *base,
                     int buffer, const int *attrib_list)
 {
    struct glx_context *gc = __glXGetCurrentContext();
    struct dri3_context *pcp = (struct dri3_context *) gc;
-   __GLXDRIdrawable *base = GetGLXDRIDrawable(dpy, drawable);
    struct dri3_drawable *pdraw = (struct dri3_drawable *) base;
    struct dri3_screen *psc;
 
@@ -679,7 +677,7 @@ dri3_bind_tex_image(Display * dpy,
 
       psc->f->invalidate(pdraw->loader_drawable.dri_drawable);
 
-      XSync(dpy, false);
+      XSync(gc->currentDpy, false);
 
       (*psc->texBuffer->setTexBuffer2) (pcp->driContext,
                                         pdraw->base.textureTarget,
@@ -689,11 +687,10 @@ dri3_bind_tex_image(Display * dpy,
 }
 
 static void
-dri3_release_tex_image(Display * dpy, GLXDrawable drawable, int buffer)
+dri3_release_tex_image(__GLXDRIdrawable *base, int buffer)
 {
    struct glx_context *gc = __glXGetCurrentContext();
    struct dri3_context *pcp = (struct dri3_context *) gc;
-   __GLXDRIdrawable *base = GetGLXDRIDrawable(dpy, drawable);
    struct dri3_drawable *pdraw = (struct dri3_drawable *) base;
    struct dri3_screen *psc;
 
@@ -714,10 +711,6 @@ static const struct glx_context_vtable dri3_context_vtable = {
    .unbind              = dri3_unbind_context,
    .wait_gl             = dri3_wait_gl,
    .wait_x              = dri3_wait_x,
-   .use_x_font          = DRI_glXUseXFont,
-   .bind_tex_image      = dri3_bind_tex_image,
-   .release_tex_image   = dri3_release_tex_image,
-   .get_proc_address    = NULL,
    .interop_query_device_info = dri3_interop_query_device_info,
    .interop_export_object = dri3_interop_export_object
 };
@@ -973,6 +966,8 @@ dri3_create_screen(int screen, struct glx_display * priv)
    psp->waitForSBC = dri3_wait_for_sbc;
    psp->setSwapInterval = dri3_set_swap_interval;
    psp->getSwapInterval = dri3_get_swap_interval;
+   psp->bindTexImage = dri3_bind_tex_image;
+   psp->releaseTexImage = dri3_release_tex_image;
 
    __glXEnableDirectExtension(&psc->base, "GLX_OML_sync_control");
    __glXEnableDirectExtension(&psc->base, "GLX_SGI_video_sync");

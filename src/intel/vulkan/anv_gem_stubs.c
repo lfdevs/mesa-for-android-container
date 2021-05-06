@@ -172,8 +172,8 @@ anv_gem_has_context_priority(int fd)
 }
 
 int
-anv_gem_gpu_get_reset_stats(struct anv_device *device,
-                            uint32_t *active, uint32_t *pending)
+anv_gem_context_get_reset_stats(int fd, int context,
+                                uint32_t *active, uint32_t *pending)
 {
    unreachable("Unused");
 }
@@ -243,6 +243,35 @@ bool
 anv_gem_supports_syncobj_wait(int fd)
 {
    return false;
+}
+
+int
+anv_i915_query(int fd, uint64_t query_id, void *buffer,
+               int32_t *buffer_len)
+{
+   unreachable("Unused");
+}
+
+int
+anv_gem_create_context_engines(struct anv_device *device,
+                               const struct drm_i915_query_engine_info *info,
+                               int num_engines,
+                               uint16_t *engine_classes)
+{
+   unreachable("Unused");
+}
+
+struct drm_i915_query_engine_info *
+anv_gem_get_engine_info(int fd)
+{
+   unreachable("Unused");
+}
+
+int
+anv_gem_count_engines(const struct drm_i915_query_engine_info *info,
+                      uint16_t engine_class)
+{
+   unreachable("Unused");
 }
 
 int

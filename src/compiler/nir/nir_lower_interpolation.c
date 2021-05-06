@@ -121,7 +121,7 @@ nir_lower_interpolation_block(nir_block *block, nir_builder *b,
          comps[i] = val;
       }
       nir_ssa_def *vec = nir_vec(b, comps, intr->num_components);
-      nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_src_for_ssa(vec));
+      nir_ssa_def_rewrite_uses(&intr->dest.ssa, vec);
 
       progress = true;
    }

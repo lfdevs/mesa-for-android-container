@@ -883,7 +883,8 @@ NVC0LegalizePostRA::visit(BasicBlock *bb)
    return true;
 }
 
-NVC0LoweringPass::NVC0LoweringPass(Program *prog) : targ(prog->getTarget())
+NVC0LoweringPass::NVC0LoweringPass(Program *prog) : targ(prog->getTarget()),
+   gpEmitAddress(NULL)
 {
    bld.setProgram(prog);
 }
@@ -1184,7 +1185,7 @@ bool
 NVC0LoweringPass::handleManualTXD(TexInstruction *i)
 {
    // Always done from the l0 perspective. This is the way that NVIDIA's
-   // driver does it, and doing it from the "current" lane's perpsective
+   // driver does it, and doing it from the "current" lane's perspective
    // doesn't seem to always work for reasons that aren't altogether clear,
    // even in frag shaders.
    //

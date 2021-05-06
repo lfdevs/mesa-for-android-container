@@ -31,11 +31,11 @@
 
 /** @file brw_curbe.c
  *
- * Push constant handling for gen4/5.
+ * Push constant handling for gfx4/5.
  *
  * Push constants are constant values (such as GLSL uniforms) that are
  * pre-loaded into a shader stage's register space at thread spawn time.  On
- * gen4 and gen5, we create a blob in memory containing all the push constants
+ * gfx4 and gfx5, we create a blob in memory containing all the push constants
  * for all the stages in order.  At CMD_CONST_BUFFER time that blob is loaded
  * into URB space as a constant URB entry (CURBE) so that it can be accessed
  * quickly at thread setup time.  Each individual fixed function unit's state
@@ -45,8 +45,8 @@
  * how many CURBEs can be loaded into the hardware at once before a pipeline
  * stall occurs at CMD_CONST_BUFFER time.
  *
- * On gen6+, constant handling becomes a much simpler set of per-unit state.
- * See gen6_upload_vec4_push_constants() in gen6_vs_state.c for that code.
+ * On gfx6+, constant handling becomes a much simpler set of per-unit state.
+ * See gfx6_upload_vec4_push_constants() in gfx6_vs_state.c for that code.
  */
 
 
@@ -58,8 +58,8 @@
 #include "program/prog_print.h"
 #include "program/prog_statevars.h"
 #include "util/bitscan.h"
-#include "intel_batchbuffer.h"
-#include "intel_buffer_objects.h"
+#include "brw_batch.h"
+#include "brw_buffer_objects.h"
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_state.h"
@@ -95,7 +95,7 @@ static void calculate_curbe_offsets( struct brw_context *brw )
    total_regs = nr_fp_regs + nr_vp_regs + nr_clip_regs;
 
    /* The CURBE allocation size is limited to 32 512-bit units (128 EU
-    * registers, or 1024 floats).  See CS_URB_STATE in the gen4 or gen5
+    * registers, or 1024 floats).  See CS_URB_STATE in the gfx4 or gfx5
     * (volume 1, part 1) PRMs.
     *
     * Note that in brw_fs.cpp we're only loading up to 16 EU registers of
@@ -112,7 +112,7 @@ static void calculate_curbe_offsets( struct brw_context *brw )
        nr_vp_regs > brw->curbe.vs_size ||
        nr_clip_regs != brw->curbe.clip_size ||
        (total_regs < brw->curbe.total_size / 4 &&
-	brw->curbe.total_size > 16)) {
+        brw->curbe.total_size > 16)) {
 
       GLuint reg = 0;
 
@@ -128,7 +128,7 @@ static void calculate_curbe_offsets( struct brw_context *brw )
       brw->curbe.total_size = reg;
 
       if (0)
-	 fprintf(stderr, "curbe wm %d+%d clip %d+%d vs %d+%d\n",
+         fprintf(stderr, "curbe wm %d+%d clip %d+%d vs %d+%d\n",
                  brw->curbe.wm_start,
                  brw->curbe.wm_size,
                  brw->curbe.clip_start,
@@ -241,10 +241,10 @@ brw_upload_constant_buffer(struct brw_context *brw)
       /* If any planes are going this way, send them all this way:
        */
       for (i = 0; i < 6; i++) {
-	 buf[offset + i * 4 + 0].f = fixed_plane[i][0];
-	 buf[offset + i * 4 + 1].f = fixed_plane[i][1];
-	 buf[offset + i * 4 + 2].f = fixed_plane[i][2];
-	 buf[offset + i * 4 + 3].f = fixed_plane[i][3];
+         buf[offset + i * 4 + 0].f = fixed_plane[i][0];
+         buf[offset + i * 4 + 1].f = fixed_plane[i][1];
+         buf[offset + i * 4 + 2].f = fixed_plane[i][2];
+         buf[offset + i * 4 + 3].f = fixed_plane[i][3];
       }
 
       /* Clip planes: _NEW_TRANSFORM plus _NEW_PROJECTION to get to
@@ -276,7 +276,7 @@ brw_upload_constant_buffer(struct brw_context *brw)
 
    if (0) {
       for (i = 0; i < sz*16; i+=4)
-	 fprintf(stderr, "curbe %d.%d: %f %f %f %f\n", i/8, i&4,
+         fprintf(stderr, "curbe %d.%d: %f %f %f %f\n", i/8, i&4,
                  buf[i+0].f, buf[i+1].f, buf[i+2].f, buf[i+3].f);
    }
 
@@ -295,7 +295,7 @@ brw_upload_constant_buffer(struct brw_context *brw)
     */
 
 emit:
-   /* BRW_NEW_URB_FENCE: From the gen4 PRM, volume 1, section 3.9.8
+   /* BRW_NEW_URB_FENCE: From the gfx4 PRM, volume 1, section 3.9.8
     * (CONSTANT_BUFFER (CURBE Load)):
     *
     *     "Modifying the CS URB allocation via URB_FENCE invalidates any
@@ -310,7 +310,7 @@ emit:
    } else {
       OUT_BATCH((CMD_CONST_BUFFER << 16) | (1 << 8) | (2 - 2));
       OUT_RELOC(brw->curbe.curbe_bo, 0,
-		(brw->curbe.total_size - 1) + brw->curbe.curbe_offset);
+                (brw->curbe.total_size - 1) + brw->curbe.curbe_offset);
    }
    ADVANCE_BATCH();
 
@@ -331,7 +331,7 @@ emit:
     *
     * BRW_NEW_FRAGMENT_PROGRAM
     */
-   if (devinfo->gen == 4 && !devinfo->is_g4x &&
+   if (devinfo->ver == 4 && !devinfo->is_g4x &&
        BITSET_TEST(fp->info.system_values_read, SYSTEM_VALUE_FRAG_COORD)) {
       BEGIN_BATCH(2);
       OUT_BATCH(_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP << 16 | (2 - 2));

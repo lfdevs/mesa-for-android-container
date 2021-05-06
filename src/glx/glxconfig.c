@@ -249,7 +249,7 @@ glx_config_create_list(unsigned count)
       (*next)->bindToMipmapTexture = GLX_DONT_CARE;
       (*next)->bindToTextureTargets = GLX_DONT_CARE;
       (*next)->yInverted = GLX_DONT_CARE;
-      (*next)->sRGBCapable = GLX_DONT_CARE;
+      (*next)->sRGBCapable = GL_FALSE;
 
       next = &((*next)->next);
    }

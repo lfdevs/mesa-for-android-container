@@ -437,6 +437,72 @@ namespace brw {
       }
 
       void
+      emit_scan_step(enum opcode opcode, brw_conditional_mod mod,
+                     const dst_reg &tmp,
+                     unsigned left_offset, unsigned left_stride,
+                     unsigned right_offset, unsigned right_stride) const
+      {
+         dst_reg left, right;
+         left = horiz_stride(horiz_offset(tmp, left_offset), left_stride);
+         right = horiz_stride(horiz_offset(tmp, right_offset), right_stride);
+         if ((tmp.type == BRW_REGISTER_TYPE_Q ||
+              tmp.type == BRW_REGISTER_TYPE_UQ) &&
+             !shader->devinfo->has_64bit_int) {
+            switch (opcode) {
+            case BRW_OPCODE_MUL:
+               /* This will get lowered by integer MUL lowering */
+               set_condmod(mod, emit(opcode, right, left, right));
+               break;
+
+            case BRW_OPCODE_SEL: {
+               /* In order for the comparisons to work out right, we need our
+                * comparisons to be strict.
+                */
+               assert(mod == BRW_CONDITIONAL_L || mod == BRW_CONDITIONAL_GE);
+               if (mod == BRW_CONDITIONAL_GE)
+                  mod = BRW_CONDITIONAL_G;
+
+               /* We treat the bottom 32 bits as unsigned regardless of
+                * whether or not the integer as a whole is signed.
+                */
+               dst_reg right_low = subscript(right, BRW_REGISTER_TYPE_UD, 0);
+               dst_reg left_low = subscript(left, BRW_REGISTER_TYPE_UD, 0);
+
+               /* The upper bits get the same sign as the 64-bit type */
+               brw_reg_type type32 = brw_reg_type_from_bit_size(32, tmp.type);
+               dst_reg right_high = subscript(right, type32, 1);
+               dst_reg left_high = subscript(left, type32, 1);
+
+               /* Build up our comparison:
+                *
+                *   l_hi < r_hi || (l_hi == r_hi && l_low < r_low)
+                */
+               CMP(null_reg_ud(), retype(left_low, BRW_REGISTER_TYPE_UD),
+                                  retype(right_low, BRW_REGISTER_TYPE_UD), mod);
+               set_predicate(BRW_PREDICATE_NORMAL,
+                             CMP(null_reg_ud(), left_high, right_high,
+                                 BRW_CONDITIONAL_EQ));
+               set_predicate_inv(BRW_PREDICATE_NORMAL, true,
+                                 CMP(null_reg_ud(), left_high, right_high, mod));
+
+               /* We could use selects here or we could use predicated MOVs
+                * because the destination and second source (if it were a SEL)
+                * are the same.
+                */
+               set_predicate(BRW_PREDICATE_NORMAL, MOV(right_low, left_low));
+               set_predicate(BRW_PREDICATE_NORMAL, MOV(right_high, left_high));
+               break;
+            }
+
+            default:
+               unreachable("Unsupported 64-bit scan op");
+            }
+         } else {
+            set_condmod(mod, emit(opcode, right, left, right));
+         }
+      }
+
+      void
       emit_scan(enum opcode opcode, const dst_reg &tmp,
                 unsigned cluster_size, brw_conditional_mod mod) const
       {
@@ -453,30 +519,23 @@ namespace brw {
             ubld.emit_scan(opcode, left, cluster_size, mod);
             ubld.emit_scan(opcode, right, cluster_size, mod);
             if (cluster_size > half_width) {
-               src_reg left_comp = component(left, half_width - 1);
-               set_condmod(mod, ubld.emit(opcode, right, left_comp, right));
+               ubld.emit_scan_step(opcode, mod, tmp,
+                                   half_width - 1, 0, half_width, 1);
             }
             return;
          }
 
          if (cluster_size > 1) {
             const fs_builder ubld = exec_all().group(dispatch_width() / 2, 0);
-            const dst_reg left = horiz_stride(tmp, 2);
-            const dst_reg right = horiz_stride(horiz_offset(tmp, 1), 2);
-            set_condmod(mod, ubld.emit(opcode, right, left, right));
+            ubld.emit_scan_step(opcode, mod, tmp, 0, 2, 1, 2);
          }
 
          if (cluster_size > 2) {
             if (type_sz(tmp.type) <= 4) {
                const fs_builder ubld =
                   exec_all().group(dispatch_width() / 4, 0);
-               src_reg left = horiz_stride(horiz_offset(tmp, 1), 4);
-
-               dst_reg right = horiz_stride(horiz_offset(tmp, 2), 4);
-               set_condmod(mod, ubld.emit(opcode, right, left, right));
-
-               right = horiz_stride(horiz_offset(tmp, 3), 4);
-               set_condmod(mod, ubld.emit(opcode, right, left, right));
+               ubld.emit_scan_step(opcode, mod, tmp, 1, 4, 2, 4);
+               ubld.emit_scan_step(opcode, mod, tmp, 1, 4, 3, 4);
             } else {
                /* For 64-bit types, we have to do things differently because
                 * the code above would land us with destination strides that
@@ -485,12 +544,8 @@ namespace brw {
                 * instructions.
                 */
                const fs_builder ubld = exec_all().group(2, 0);
-
-               for (unsigned i = 0; i < dispatch_width(); i += 4) {
-                  src_reg left = component(tmp, i + 1);
-                  dst_reg right = horiz_offset(tmp, i + 2);
-                  set_condmod(mod, ubld.emit(opcode, right, left, right));
-               }
+               for (unsigned i = 0; i < dispatch_width(); i += 4)
+                  ubld.emit_scan_step(opcode, mod, tmp, i + 1, 0, i + 2, 1);
             }
          }
 
@@ -498,24 +553,14 @@ namespace brw {
               i < MIN2(cluster_size, dispatch_width());
               i *= 2) {
             const fs_builder ubld = exec_all().group(i, 0);
-            src_reg left = component(tmp, i - 1);
-            dst_reg right = horiz_offset(tmp, i);
-            set_condmod(mod, ubld.emit(opcode, right, left, right));
+            ubld.emit_scan_step(opcode, mod, tmp, i - 1, 0, i, 1);
 
-            if (dispatch_width() > i * 2) {
-               left = component(tmp, i * 3 - 1);
-               right = horiz_offset(tmp, i * 3);
-               set_condmod(mod, ubld.emit(opcode, right, left, right));
-            }
+            if (dispatch_width() > i * 2)
+               ubld.emit_scan_step(opcode, mod, tmp, i * 3 - 1, 0, i * 3, 1);
 
             if (dispatch_width() > i * 4) {
-               left = component(tmp, i * 5 - 1);
-               right = horiz_offset(tmp, i * 5);
-               set_condmod(mod, ubld.emit(opcode, right, left, right));
-
-               left = component(tmp, i * 7 - 1);
-               right = horiz_offset(tmp, i * 7);
-               set_condmod(mod, ubld.emit(opcode, right, left, right));
+               ubld.emit_scan_step(opcode, mod, tmp, i * 5 - 1, 0, i * 5, 1);
+               ubld.emit_scan_step(opcode, mod, tmp, i * 7 - 1, 0, i * 7, 1);
             }
          }
       }
@@ -618,7 +663,7 @@ namespace brw {
           *
           * CMP null<d> src0<f> src1<f>
           *
-          * Original gen4 does type conversion to the destination type
+          * Original gfx4 does type conversion to the destination type
           * before comparison, producing garbage results for floating
           * point comparisons.
           *
@@ -643,7 +688,7 @@ namespace brw {
           *
           * CMP null<d> src0<f> src1<f>
           *
-          * Original gen4 does type conversion to the destination type
+          * Original gfx4 does type conversion to the destination type
           * before comparison, producing garbage results for floating
           * point comparisons.
           *
@@ -658,7 +703,7 @@ namespace brw {
       }
 
       /**
-       * Gen4 predicated IF.
+       * Gfx4 predicated IF.
        */
       instruction *
       IF(brw_predicate predicate) const
@@ -694,7 +739,7 @@ namespace brw {
       LRP(const dst_reg &dst, const src_reg &x, const src_reg &y,
           const src_reg &a) const
       {
-         if (shader->devinfo->gen >= 6 && shader->devinfo->gen <= 10) {
+         if (shader->devinfo->ver >= 6 && shader->devinfo->ver <= 10) {
             /* The LRP instruction actually does op1 * op0 + op2 * (1 - op0), so
              * we need to reorder the operands.
              */
@@ -799,21 +844,21 @@ namespace brw {
       src_reg
       fix_math_operand(const src_reg &src) const
       {
-         /* Can't do hstride == 0 args on gen6 math, so expand it out. We
+         /* Can't do hstride == 0 args on gfx6 math, so expand it out. We
           * might be able to do better by doing execsize = 1 math and then
           * expanding that result out, but we would need to be careful with
           * masking.
           *
-          * Gen6 hardware ignores source modifiers (negate and abs) on math
+          * Gfx6 hardware ignores source modifiers (negate and abs) on math
           * instructions, so we also move to a temp to set those up.
           *
-          * Gen7 relaxes most of the above restrictions, but still can't use IMM
+          * Gfx7 relaxes most of the above restrictions, but still can't use IMM
           * operands to math
           */
-         if ((shader->devinfo->gen == 6 &&
+         if ((shader->devinfo->ver == 6 &&
               (src.file == IMM || src.file == UNIFORM ||
                src.abs || src.negate)) ||
-             (shader->devinfo->gen == 7 && src.file == IMM)) {
+             (shader->devinfo->ver == 7 && src.file == IMM)) {
             const dst_reg tmp = vgrf(src.type);
             MOV(tmp, src);
             return tmp;

@@ -197,7 +197,7 @@ BEGIN_TEST(to_hw_instr.swap_subdword)
                                        Definition(v0_lo, v1),
                                        Operand(v0_lo, v1b), Operand(v0_lo, v1b),
                                        Operand(v0_lo, v1b), Operand(v0_lo, v1b));
-      static_cast<Pseudo_instruction*>(pseudo)->scratch_sgpr = m0;
+      pseudo->pseudo().scratch_sgpr = m0;
 
       //~gfx[67]! p_unit_test 14
       //~gfx[67]! v1b: %0:v[1][0:8] = v_mov_b32 %0:v[0][0:8]

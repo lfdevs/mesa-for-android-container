@@ -205,6 +205,7 @@ struct lp_static_sampler_state
    /* Hacks */
    unsigned force_nearest_s:1;
    unsigned force_nearest_t:1;
+   unsigned reduction_mode:2;
 };
 
 
@@ -749,6 +750,46 @@ lp_build_image_op_array_case(struct lp_build_img_op_array_switch *switch_info,
 			     struct lp_sampler_dynamic_state *dynamic_state);
 
 void lp_build_image_op_array_fini_soa(struct lp_build_img_op_array_switch *switch_info);
+
+void
+lp_build_reduce_filter(struct lp_build_context *bld,
+                       enum pipe_tex_reduction_mode mode,
+                       unsigned flags,
+                       unsigned num_chan,
+                       LLVMValueRef x,
+                       LLVMValueRef *v00,
+                       LLVMValueRef *v01,
+                       LLVMValueRef *out);
+void
+lp_build_reduce_filter_2d(struct lp_build_context *bld,
+                          enum pipe_tex_reduction_mode mode,
+                          unsigned flags,
+                          unsigned num_chan,
+                          LLVMValueRef x,
+                          LLVMValueRef y,
+                          LLVMValueRef *v00,
+                          LLVMValueRef *v01,
+                          LLVMValueRef *v10,
+                          LLVMValueRef *v11,
+                          LLVMValueRef *out);
+
+void
+lp_build_reduce_filter_3d(struct lp_build_context *bld,
+                          enum pipe_tex_reduction_mode mode,
+                          unsigned flags,
+                          unsigned num_chan,
+                          LLVMValueRef x,
+                          LLVMValueRef y,
+                          LLVMValueRef z,
+                          LLVMValueRef *v000,
+                          LLVMValueRef *v001,
+                          LLVMValueRef *v010,
+                          LLVMValueRef *v011,
+                          LLVMValueRef *v100,
+                          LLVMValueRef *v101,
+                          LLVMValueRef *v110,
+                          LLVMValueRef *v111,
+                          LLVMValueRef *out);
 #ifdef __cplusplus
 }
 #endif

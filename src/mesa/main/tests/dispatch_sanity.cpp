@@ -1978,6 +1978,18 @@ const struct function gl_compatibility_functions_possible[] = {
    { "glFogCoordhvNV", 13, -1 },
    { "glSecondaryColor3hNV", 13, -1 },
    { "glSecondaryColor3hvNV", 13, -1 },
+   { "glVertexAttrib1hNV", 13, -1 },
+   { "glVertexAttrib1hvNV", 13, -1 },
+   { "glVertexAttrib2hNV", 13, -1 },
+   { "glVertexAttrib2hvNV", 13, -1 },
+   { "glVertexAttrib3hNV", 13, -1 },
+   { "glVertexAttrib3hvNV", 13, -1 },
+   { "glVertexAttrib4hNV", 13, -1 },
+   { "glVertexAttrib4hvNV", 13, -1 },
+   { "glVertexAttribs1hvNV", 13, -1 },
+   { "glVertexAttribs2hvNV", 13, -1 },
+   { "glVertexAttribs3hvNV", 13, -1 },
+   { "glVertexAttribs4hvNV", 13, -1 },
 
    { NULL, 0, -1 }
 };
@@ -2264,6 +2276,7 @@ const struct function gles2_functions_possible[] = {
    { "glDrawArrays", 20, _gloffset_DrawArrays },
    { "glDrawBuffersNV", 20, -1 },
    { "glDrawElements", 20, _gloffset_DrawElements },
+   { "glDrawElementsBaseVertex", 20, -1 },
    { "glEGLImageTargetRenderbufferStorageOES", 20, -1 },
    { "glEGLImageTargetTexture2DOES", 20, -1 },
    { "glEnable", 20, _gloffset_Enable },
@@ -2323,6 +2336,7 @@ const struct function gles2_functions_possible[] = {
    { "glMapBufferRangeEXT", 20, -1 },
    { "glMultiDrawArraysEXT", 20, -1 },
    { "glMultiDrawElementsEXT", 20, -1 },
+   { "glMultiDrawElementsBaseVertex", 20, -1 },
    { "glPixelStorei", 20, _gloffset_PixelStorei },
    { "glPolygonOffset", 20, _gloffset_PolygonOffset },
    { "glReadBufferNV", 20, _gloffset_ReadBuffer },
@@ -2556,6 +2570,7 @@ const struct function gles3_functions_possible[] = {
    // { "glDrawBuffers", 30, -1 },
    { "glDrawElementsInstanced", 30, -1 },
    { "glDrawRangeElements", 30, -1 },
+   { "glDrawRangeElementsBaseVertex", 30, -1 },
    // We check for the aliased -EXT version in GLES 2
    // { "glEndQuery", 30, -1 },
    { "glEndTransformFeedback", 30, -1 },

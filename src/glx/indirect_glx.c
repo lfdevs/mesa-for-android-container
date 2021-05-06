@@ -229,123 +229,12 @@ indirect_wait_x(struct glx_context *gc)
    SyncHandle();
 }
 
-static void
-indirect_use_x_font(struct glx_context *gc,
-		    Font font, int first, int count, int listBase)
-{
-   xGLXUseXFontReq *req;
-   Display *dpy = gc->currentDpy;
-
-   /* Flush any pending commands out */
-   __glXFlushRenderBuffer(gc, gc->pc);
-
-   /* Send the glXUseFont request */
-   LockDisplay(dpy);
-   GetReq(GLXUseXFont, req);
-   req->reqType = gc->majorOpcode;
-   req->glxCode = X_GLXUseXFont;
-   req->contextTag = gc->currentContextTag;
-   req->font = font;
-   req->first = first;
-   req->count = count;
-   req->listBase = listBase;
-   UnlockDisplay(dpy);
-   SyncHandle();
-}
-
-static void
-indirect_bind_tex_image(Display * dpy,
-			GLXDrawable drawable,
-			int buffer, const int *attrib_list)
-{
-   xGLXVendorPrivateReq *req;
-   struct glx_context *gc = __glXGetCurrentContext();
-   CARD32 *drawable_ptr;
-   INT32 *buffer_ptr;
-   CARD32 *num_attrib_ptr;
-   CARD32 *attrib_ptr;
-   CARD8 opcode;
-   unsigned int i;
-
-   i = 0;
-   if (attrib_list) {
-      while (attrib_list[i * 2] != None)
-         i++;
-   }
-
-   opcode = __glXSetupForCommand(dpy);
-   if (!opcode)
-      return;
-
-   LockDisplay(dpy);
-   GetReqExtra(GLXVendorPrivate, 12 + 8 * i, req);
-   req->reqType = opcode;
-   req->glxCode = X_GLXVendorPrivate;
-   req->vendorCode = X_GLXvop_BindTexImageEXT;
-   req->contextTag = gc->currentContextTag;
-
-   drawable_ptr = (CARD32 *) (req + 1);
-   buffer_ptr = (INT32 *) (drawable_ptr + 1);
-   num_attrib_ptr = (CARD32 *) (buffer_ptr + 1);
-   attrib_ptr = (CARD32 *) (num_attrib_ptr + 1);
-
-   *drawable_ptr = drawable;
-   *buffer_ptr = buffer;
-   *num_attrib_ptr = (CARD32) i;
-
-   i = 0;
-   if (attrib_list) {
-      while (attrib_list[i * 2] != None) {
-         *attrib_ptr++ = (CARD32) attrib_list[i * 2 + 0];
-         *attrib_ptr++ = (CARD32) attrib_list[i * 2 + 1];
-         i++;
-      }
-   }
-
-   UnlockDisplay(dpy);
-   SyncHandle();
-}
-
-static void
-indirect_release_tex_image(Display * dpy, GLXDrawable drawable, int buffer)
-{
-   xGLXVendorPrivateReq *req;
-   struct glx_context *gc = __glXGetCurrentContext();
-   CARD32 *drawable_ptr;
-   INT32 *buffer_ptr;
-   CARD8 opcode;
-
-   opcode = __glXSetupForCommand(dpy);
-   if (!opcode)
-      return;
-
-   LockDisplay(dpy);
-   GetReqExtra(GLXVendorPrivate, sizeof(CARD32) + sizeof(INT32), req);
-   req->reqType = opcode;
-   req->glxCode = X_GLXVendorPrivate;
-   req->vendorCode = X_GLXvop_ReleaseTexImageEXT;
-   req->contextTag = gc->currentContextTag;
-
-   drawable_ptr = (CARD32 *) (req + 1);
-   buffer_ptr = (INT32 *) (drawable_ptr + 1);
-
-   *drawable_ptr = drawable;
-   *buffer_ptr = buffer;
-
-   UnlockDisplay(dpy);
-   SyncHandle();
-}
-
 static const struct glx_context_vtable indirect_context_vtable = {
    .destroy             = indirect_destroy_context,
    .bind                = indirect_bind_context,
    .unbind              = indirect_unbind_context,
    .wait_gl             = indirect_wait_gl,
    .wait_x              = indirect_wait_x,
-   .use_x_font          = indirect_use_x_font,
-   .bind_tex_image      = indirect_bind_tex_image,
-   .release_tex_image   = indirect_release_tex_image,
-   .get_proc_address    = NULL,
 };
 
 _X_HIDDEN struct glx_context *

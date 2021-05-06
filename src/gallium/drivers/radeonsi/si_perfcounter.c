@@ -723,16 +723,20 @@ static void si_pc_emit_instance(struct si_context *sctx, int se, int instance)
       value |= S_030800_INSTANCE_BROADCAST_WRITES(1);
    }
 
+   radeon_begin(cs);
    radeon_set_uconfig_reg(cs, R_030800_GRBM_GFX_INDEX, value);
+   radeon_end();
 }
 
 static void si_pc_emit_shaders(struct si_context *sctx, unsigned shaders)
 {
    struct radeon_cmdbuf *cs = &sctx->gfx_cs;
 
+   radeon_begin(cs);
    radeon_set_uconfig_reg_seq(cs, R_036780_SQ_PERFCOUNTER_CTRL, 2, false);
    radeon_emit(cs, shaders & 0x7f);
    radeon_emit(cs, 0xffffffff);
+   radeon_end();
 }
 
 static void si_pc_emit_select(struct si_context *sctx, struct si_pc_block *block, unsigned count,
@@ -748,6 +752,8 @@ static void si_pc_emit_select(struct si_context *sctx, struct si_pc_block *block
 
    if (regs->layout & SI_PC_FAKE)
       return;
+
+   radeon_begin(cs);
 
    if (layout_multi == SI_PC_MULTI_BLOCK) {
       assert(!(regs->layout & SI_PC_REG_REVERSE));
@@ -826,6 +832,7 @@ static void si_pc_emit_select(struct si_context *sctx, struct si_pc_block *block
             radeon_emit(cs, 0);
       }
    }
+   radeon_end();
 }
 
 static void si_pc_emit_start(struct si_context *sctx, struct si_resource *buffer, uint64_t va)
@@ -835,12 +842,14 @@ static void si_pc_emit_start(struct si_context *sctx, struct si_resource *buffer
    si_cp_copy_data(sctx, &sctx->gfx_cs, COPY_DATA_DST_MEM, buffer, va - buffer->gpu_address,
                    COPY_DATA_IMM, NULL, 1);
 
+   radeon_begin(cs);
    radeon_set_uconfig_reg(cs, R_036020_CP_PERFMON_CNTL,
                           S_036020_PERFMON_STATE(V_036020_CP_PERFMON_STATE_DISABLE_AND_RESET));
    radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
    radeon_emit(cs, EVENT_TYPE(V_028A90_PERFCOUNTER_START) | EVENT_INDEX(0));
    radeon_set_uconfig_reg(cs, R_036020_CP_PERFMON_CNTL,
                           S_036020_PERFMON_STATE(V_036020_CP_PERFMON_STATE_START_COUNTING));
+   radeon_end();
 }
 
 /* Note: The buffer was already added in si_pc_emit_start, so we don't have to
@@ -853,6 +862,7 @@ static void si_pc_emit_stop(struct si_context *sctx, struct si_resource *buffer,
                      EOP_DATA_SEL_VALUE_32BIT, buffer, va, 0, SI_NOT_QUERY);
    si_cp_wait_mem(sctx, cs, va, 0, 0xffffffff, WAIT_REG_MEM_EQUAL);
 
+   radeon_begin(cs);
    radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
    radeon_emit(cs, EVENT_TYPE(V_028A90_PERFCOUNTER_SAMPLE) | EVENT_INDEX(0));
    radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
@@ -860,6 +870,7 @@ static void si_pc_emit_stop(struct si_context *sctx, struct si_resource *buffer,
    radeon_set_uconfig_reg(
       cs, R_036020_CP_PERFMON_CNTL,
       S_036020_PERFMON_STATE(V_036020_CP_PERFMON_STATE_STOP_COUNTING) | S_036020_PERFMON_SAMPLE_ENABLE(1));
+   radeon_end();
 }
 
 static void si_pc_emit_read(struct si_context *sctx, struct si_pc_block *block, unsigned count,
@@ -870,6 +881,8 @@ static void si_pc_emit_read(struct si_context *sctx, struct si_pc_block *block, 
    unsigned idx;
    unsigned reg = regs->counter0_lo;
    unsigned reg_delta = 8;
+
+   radeon_begin(cs);
 
    if (!(regs->layout & SI_PC_FAKE)) {
       if (regs->layout & SI_PC_REG_REVERSE)
@@ -901,6 +914,7 @@ static void si_pc_emit_read(struct si_context *sctx, struct si_pc_block *block, 
          va += sizeof(uint64_t);
       }
    }
+   radeon_end();
 }
 
 static void si_pc_query_destroy(struct si_context *sctx, struct si_query *squery)
@@ -921,6 +935,8 @@ static void si_pc_query_destroy(struct si_context *sctx, struct si_query *squery
 
 void si_inhibit_clockgating(struct si_context *sctx, struct radeon_cmdbuf *cs, bool inhibit)
 {
+   radeon_begin(&sctx->gfx_cs);
+
    if (sctx->chip_class >= GFX10) {
       radeon_set_uconfig_reg(cs, R_037390_RLC_PERFMON_CLK_CNTL,
                              S_037390_PERFMON_CLOCK_STATE(inhibit));
@@ -928,6 +944,7 @@ void si_inhibit_clockgating(struct si_context *sctx, struct radeon_cmdbuf *cs, b
       radeon_set_uconfig_reg(cs, R_0372FC_RLC_PERFMON_CLK_CNTL,
                              S_0372FC_PERFMON_CLOCK_STATE(inhibit));
    }
+   radeon_end();
 }
 
 static void si_pc_query_resume(struct si_context *sctx, struct si_query *squery)
@@ -1058,7 +1075,7 @@ static bool si_pc_query_get_result(struct si_context *sctx, struct si_query *squ
       void *map;
 
       if (squery->b.flushed)
-         map = sctx->ws->buffer_map(qbuf->buf->buf, NULL, usage);
+         map = sctx->ws->buffer_map(sctx->ws, qbuf->buf->buf, NULL, usage);
       else
          map = si_buffer_map(sctx, qbuf->buf, usage);
 
@@ -1487,7 +1504,7 @@ void si_init_perfcounters(struct si_screen *screen)
           !strcmp(block->b->b->name, "RMI"))
          block->num_instances = screen->info.max_se;
       else if (!strcmp(block->b->b->name, "TCC"))
-         block->num_instances = screen->info.num_tcc_blocks;
+         block->num_instances = screen->info.max_tcc_blocks;
       else if (!strcmp(block->b->b->name, "IA"))
          block->num_instances = MAX2(1, screen->info.max_se / 2);
       else if (!strcmp(block->b->b->name, "TA") ||

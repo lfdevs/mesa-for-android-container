@@ -95,7 +95,7 @@ opt_shrink_vectors_alu(nir_builder *b, nir_alu_instr *instr)
                srcs[i] = nir_ssa_for_alu_src(b, instr, i);
 
             nir_ssa_def *new_vec = nir_vec(b, srcs, last_bit);
-            nir_ssa_def_rewrite_uses(def, nir_src_for_ssa(new_vec));
+            nir_ssa_def_rewrite_uses(def, new_vec);
             return true;
          }
          break;
@@ -146,6 +146,7 @@ opt_shrink_vectors_intrinsic(nir_builder *b, nir_intrinsic_instr *instr, bool sh
    case nir_intrinsic_load_ssbo:
    case nir_intrinsic_load_push_constant:
    case nir_intrinsic_load_constant:
+   case nir_intrinsic_load_shared:
    case nir_intrinsic_load_global:
    case nir_intrinsic_load_global_constant:
    case nir_intrinsic_load_kernel_input:

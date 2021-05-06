@@ -1,0 +1,26 @@
+# Exclude this test which might fail when a new extension is implemented.
+dEQP-VK.info.device_extensions
+
+# Exclude WSI related tests.
+dEQP-VK.image.swapchain_mutable.*
+dEQP-VK.wsi.*
+
+# Exclude this test which timeout most of the time.
+dEQP-VK.memory.pipeline_barrier.transfer_src_transfer_dst.1048576
+
+# Fixed by CTS 3dddaeca8 ("Fix source blit image size")
+dEQP-VK.memory.pipeline_barrier.all.1024_vertex_buffer_stride_2
+dEQP-VK.memory.pipeline_barrier.all.1024_vertex_buffer_stride_4
+dEQP-VK.memory.pipeline_barrier.all_device.1024_vertex_buffer_stride_2
+dEQP-VK.memory.pipeline_barrier.all_device.1024_vertex_buffer_stride_4
+dEQP-VK.memory.pipeline_barrier.host_read_transfer_dst.1024
+dEQP-VK.memory.pipeline_barrier.transfer_dst_image_sampled.1024
+dEQP-VK.memory.pipeline_barrier.transfer_dst_index_buffer.1024
+dEQP-VK.memory.pipeline_barrier.transfer_dst_storage_buffer.1024
+dEQP-VK.memory.pipeline_barrier.transfer_dst_storage_image.1024
+dEQP-VK.memory.pipeline_barrier.transfer_dst_storage_texel_buffer.1024
+dEQP-VK.memory.pipeline_barrier.transfer_dst_uniform_buffer.1024
+dEQP-VK.memory.pipeline_barrier.transfer_dst_uniform_texel_buffer.1024
+dEQP-VK.memory.pipeline_barrier.transfer_dst_vertex_buffer.1024_vertex_buffer_stride_2
+dEQP-VK.memory.pipeline_barrier.transfer_dst_vertex_buffer.1024_vertex_buffer_stride_4
+dEQP-VK.memory.pipeline_barrier.transfer_src_transfer_dst.1024

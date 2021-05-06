@@ -382,8 +382,7 @@ struct pipe_sampler_view *
 nvc0_create_texture_view(struct pipe_context *,
                          struct pipe_resource *,
                          const struct pipe_sampler_view *,
-                         uint32_t flags,
-                         enum pipe_texture_target);
+                         uint32_t flags);
 struct pipe_sampler_view *
 nvc0_create_sampler_view(struct pipe_context *,
                          struct pipe_resource *,

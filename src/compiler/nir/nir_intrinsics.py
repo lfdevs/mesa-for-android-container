@@ -213,6 +213,12 @@ index("nir_alu_type", "dest_type")
 # The swizzle mask for quad_swizzle_amd & masked_swizzle_amd
 index("unsigned", "swizzle_mask")
 
+# Whether the load_buffer_amd/store_buffer_amd is swizzled
+index("bool", "is_swizzled")
+
+# The SLC ("system level coherent") bit of load_buffer_amd/store_buffer_amd
+index("bool", "slc_amd")
+
 # Separate source/dest access flags for copies
 index("enum gl_access_qualifier", "dst_access")
 index("enum gl_access_qualifier", "src_access")
@@ -272,12 +278,12 @@ intrinsic("interp_deref_at_vertex", src_comp=[1, 1], dest_comp=0,
 
 # Gets the length of an unsized array at the end of a buffer
 intrinsic("deref_buffer_array_length", src_comp=[-1], dest_comp=1,
-          flags=[CAN_ELIMINATE, CAN_REORDER])
+          indices=[ACCESS], flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # Ask the driver for the size of a given SSBO. It takes the buffer index
 # as source.
 intrinsic("get_ssbo_size", src_comp=[-1], dest_comp=1, bit_sizes=[32],
-          flags=[CAN_ELIMINATE, CAN_REORDER])
+          indices=[ACCESS], flags=[CAN_ELIMINATE, CAN_REORDER])
 intrinsic("get_ubo_size", src_comp=[-1], dest_comp=1,
           flags=[CAN_ELIMINATE, CAN_REORDER])
 
@@ -539,6 +545,8 @@ image("atomic_xor",  src_comp=[4, 1, 1], dest_comp=1)
 image("atomic_exchange",  src_comp=[4, 1, 1], dest_comp=1)
 image("atomic_comp_swap", src_comp=[4, 1, 1, 1], dest_comp=1)
 image("atomic_fadd",  src_comp=[4, 1, 1], dest_comp=1)
+image("atomic_fmin",  src_comp=[4, 1, 1], dest_comp=1)
+image("atomic_fmax",  src_comp=[4, 1, 1], dest_comp=1)
 image("size",    dest_comp=0, src_comp=[1], flags=[CAN_ELIMINATE, CAN_REORDER])
 image("samples", dest_comp=1, flags=[CAN_ELIMINATE, CAN_REORDER])
 image("atomic_inc_wrap",  src_comp=[4, 1, 1], dest_comp=1)
@@ -574,41 +582,21 @@ intrinsic("vulkan_resource_reindex", src_comp=[0, 1], dest_comp=0,
 intrinsic("load_vulkan_descriptor", src_comp=[-1], dest_comp=0,
           indices=[DESC_TYPE], flags=[CAN_ELIMINATE, CAN_REORDER])
 
-# variable atomic intrinsics
+# atomic intrinsics
 #
-# All of these variable atomic memory operations read a value from memory,
-# compute a new value using one of the operations below, write the new value
-# to memory, and return the original value read.
+# All of these atomic memory operations read a value from memory, compute a new
+# value using one of the operations below, write the new value to memory, and
+# return the original value read.
 #
-# All operations take 2 sources except CompSwap that takes 3. These sources
-# represent:
+# All variable operations take 2 sources except CompSwap that takes 3. These
+# sources represent:
 #
 # 0: A deref to the memory on which to perform the atomic
 # 1: The data parameter to the atomic function (i.e. the value to add
 #    in shared_atomic_add, etc).
 # 2: For CompSwap only: the second data parameter.
-intrinsic("deref_atomic_add",  src_comp=[-1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("deref_atomic_imin", src_comp=[-1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("deref_atomic_umin", src_comp=[-1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("deref_atomic_imax", src_comp=[-1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("deref_atomic_umax", src_comp=[-1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("deref_atomic_and",  src_comp=[-1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("deref_atomic_or",   src_comp=[-1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("deref_atomic_xor",  src_comp=[-1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("deref_atomic_exchange", src_comp=[-1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("deref_atomic_comp_swap", src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("deref_atomic_fadd",  src_comp=[-1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("deref_atomic_fmin",  src_comp=[-1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("deref_atomic_fmax",  src_comp=[-1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("deref_atomic_fcomp_swap", src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
-
-# SSBO atomic intrinsics
 #
-# All of the SSBO atomic memory operations read a value from memory,
-# compute a new value using one of the operations below, write the new
-# value to memory, and return the original value read.
-#
-# All operations take 3 sources except CompSwap that takes 4. These
+# All SSBO operations take 3 sources except CompSwap that takes 4. These
 # sources represent:
 #
 # 0: The SSBO buffer index.
@@ -617,77 +605,50 @@ intrinsic("deref_atomic_fcomp_swap", src_comp=[-1, 1, 1], dest_comp=1, indices=[
 # 2: The data parameter to the atomic function (i.e. the value to add
 #    in ssbo_atomic_add, etc).
 # 3: For CompSwap only: the second data parameter.
-intrinsic("ssbo_atomic_add",  src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("ssbo_atomic_imin", src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("ssbo_atomic_umin", src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("ssbo_atomic_imax", src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("ssbo_atomic_umax", src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("ssbo_atomic_and",  src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("ssbo_atomic_or",   src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("ssbo_atomic_xor",  src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("ssbo_atomic_exchange", src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("ssbo_atomic_comp_swap", src_comp=[-1, 1, 1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("ssbo_atomic_fadd", src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("ssbo_atomic_fmin", src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("ssbo_atomic_fmax", src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
-intrinsic("ssbo_atomic_fcomp_swap", src_comp=[-1, 1, 1, 1], dest_comp=1, indices=[ACCESS])
-
-# CS shared variable atomic intrinsics
 #
-# All of the shared variable atomic memory operations read a value from
-# memory, compute a new value using one of the operations below, write the
-# new value to memory, and return the original value read.
-#
-# All operations take 2 sources except CompSwap that takes 3. These
-# sources represent:
+# All shared variable operations take 2 sources except CompSwap that takes 3.
+# These sources represent:
 #
 # 0: The offset into the shared variable storage region that the atomic
 #    operation will operate on.
 # 1: The data parameter to the atomic function (i.e. the value to add
 #    in shared_atomic_add, etc).
 # 2: For CompSwap only: the second data parameter.
-intrinsic("shared_atomic_add",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("shared_atomic_imin", src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("shared_atomic_umin", src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("shared_atomic_imax", src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("shared_atomic_umax", src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("shared_atomic_and",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("shared_atomic_or",   src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("shared_atomic_xor",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("shared_atomic_exchange", src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("shared_atomic_comp_swap", src_comp=[1, 1, 1], dest_comp=1, indices=[BASE])
-intrinsic("shared_atomic_fadd",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("shared_atomic_fmin",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("shared_atomic_fmax",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("shared_atomic_fcomp_swap", src_comp=[1, 1, 1], dest_comp=1, indices=[BASE])
-
-# Global atomic intrinsics
 #
-# All of the shared variable atomic memory operations read a value from
-# memory, compute a new value using one of the operations below, write the
-# new value to memory, and return the original value read.
-#
-# All operations take 2 sources except CompSwap that takes 3. These
+# All global operations take 2 sources except CompSwap that takes 3. These
 # sources represent:
 #
 # 0: The memory address that the atomic operation will operate on.
 # 1: The data parameter to the atomic function (i.e. the value to add
 #    in shared_atomic_add, etc).
 # 2: For CompSwap only: the second data parameter.
-intrinsic("global_atomic_add",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("global_atomic_imin", src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("global_atomic_umin", src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("global_atomic_imax", src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("global_atomic_umax", src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("global_atomic_and",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("global_atomic_or",   src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("global_atomic_xor",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("global_atomic_exchange", src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("global_atomic_comp_swap", src_comp=[1, 1, 1], dest_comp=1, indices=[BASE])
-intrinsic("global_atomic_fadd",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("global_atomic_fmin",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("global_atomic_fmax",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
-intrinsic("global_atomic_fcomp_swap", src_comp=[1, 1, 1], dest_comp=1, indices=[BASE])
+
+def memory_atomic_data1(name):
+    intrinsic("deref_atomic_" + name,  src_comp=[-1, 1], dest_comp=1, indices=[ACCESS])
+    intrinsic("ssbo_atomic_" + name,  src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
+    intrinsic("shared_atomic_" + name,  src_comp=[1, 1], dest_comp=1, indices=[BASE])
+    intrinsic("global_atomic_" + name,  src_comp=[1, 1], dest_comp=1, indices=[BASE])
+
+def memory_atomic_data2(name):
+    intrinsic("deref_atomic_" + name,  src_comp=[-1, 1, 1], dest_comp=1, indices=[ACCESS])
+    intrinsic("ssbo_atomic_" + name,  src_comp=[-1, 1, 1, 1], dest_comp=1, indices=[ACCESS])
+    intrinsic("shared_atomic_" + name,  src_comp=[1, 1, 1], dest_comp=1, indices=[BASE])
+    intrinsic("global_atomic_" + name,  src_comp=[1, 1, 1], dest_comp=1, indices=[BASE])
+
+memory_atomic_data1("add")
+memory_atomic_data1("imin")
+memory_atomic_data1("umin")
+memory_atomic_data1("imax")
+memory_atomic_data1("umax")
+memory_atomic_data1("and")
+memory_atomic_data1("or")
+memory_atomic_data1("xor")
+memory_atomic_data1("exchange")
+memory_atomic_data1("fadd")
+memory_atomic_data1("fmin")
+memory_atomic_data1("fmax")
+memory_atomic_data2("comp_swap")
+memory_atomic_data2("fcomp_swap")
 
 def system_value(name, dest_comp, indices=[], bit_sizes=[32]):
     intrinsic("load_" + name, [], dest_comp, indices,
@@ -815,8 +776,8 @@ system_value("user_data_amd", 4)
 # These set up the barycentric coordinates for a particular interpolation.
 # The first four are for the simple cases: pixel, centroid, per-sample
 # (at gl_SampleID), or pull model (1/W, 1/I, 1/J) at the pixel center. The next
-# three two handle interpolating at a specified sample location, or
-# interpolating with a vec2 offset,
+# two handle interpolating at a specified sample location, or interpolating
+# with a vec2 offset,
 #
 # The interp_mode index should be either the INTERP_MODE_SMOOTH or
 # INTERP_MODE_NOPERSPECTIVE enum values.
@@ -847,6 +808,13 @@ intrinsic("load_sample_pos_from_id", src_comp=[1], dest_comp=2,
 
 # Loads what I believe is the primitive size, for scaling ij to pixel size:
 intrinsic("load_size_ir3", dest_comp=1, flags=[CAN_ELIMINATE, CAN_REORDER])
+
+# Load texture scaling values:
+#
+# Takes a sampler # and returns 1/size values for multiplying to normalize
+# texture coordinates.  Used for lowering rect textures.
+intrinsic("load_texture_rect_scaling", src_comp=[1], dest_comp=2,
+          flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # Fragment shader input interpolation delta intrinsic.
 #
@@ -900,18 +868,18 @@ load("input", [1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE, C
 # src[] = { vertex_id, offset }.
 load("input_vertex", [1, 1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { vertex, offset }.
-load("per_vertex_input", [1, 1], [BASE, COMPONENT, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
+load("per_vertex_input", [1, 1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { barycoord, offset }.
-load("interpolated_input", [2, 1], [BASE, COMPONENT, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
+load("interpolated_input", [2, 1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
 
 # src[] = { buffer_index, offset }.
 load("ssbo", [-1, 1], [ACCESS, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
 # src[] = { buffer_index }
 load("ssbo_address", [1], [], [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { offset }.
-load("output", [1], [BASE, COMPONENT, IO_SEMANTICS], flags=[CAN_ELIMINATE])
+load("output", [1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], flags=[CAN_ELIMINATE])
 # src[] = { vertex, offset }.
-load("per_vertex_output", [1, 1], [BASE, COMPONENT, IO_SEMANTICS], [CAN_ELIMINATE])
+load("per_vertex_output", [1, 1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE])
 # src[] = { offset }.
 load("shared", [1], [BASE, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
 # src[] = { offset }.
@@ -923,6 +891,12 @@ load("constant", [1], [BASE, RANGE, ALIGN_MUL, ALIGN_OFFSET],
 load("global", [1], [ACCESS, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
 # src[] = { address }.
 load("global_constant", [1], [ACCESS, ALIGN_MUL, ALIGN_OFFSET],
+     [CAN_ELIMINATE, CAN_REORDER])
+# src[] = { base_address, offset }.
+load("global_constant_offset", [1, 1], [ACCESS, ALIGN_MUL, ALIGN_OFFSET],
+     [CAN_ELIMINATE, CAN_REORDER])
+# src[] = { base_address, offset, bound }.
+load("global_constant_bounded", [1, 1, 1], [ACCESS, ALIGN_MUL, ALIGN_OFFSET],
      [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { address }.
 load("kernel_input", [1], [BASE, RANGE, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE, CAN_REORDER])
@@ -940,7 +914,7 @@ def store(name, srcs, indices=[], flags=[]):
 # src[] = { value, offset }.
 store("output", [1], [BASE, WRITE_MASK, COMPONENT, SRC_TYPE, IO_SEMANTICS])
 # src[] = { value, vertex, offset }.
-store("per_vertex_output", [1, 1], [BASE, WRITE_MASK, COMPONENT, IO_SEMANTICS])
+store("per_vertex_output", [1, 1], [BASE, WRITE_MASK, COMPONENT, SRC_TYPE, IO_SEMANTICS])
 # src[] = { value, block_index, offset }
 store("ssbo", [-1, 1], [WRITE_MASK, ACCESS, ALIGN_MUL, ALIGN_OFFSET])
 # src[] = { value, offset }.
@@ -1101,6 +1075,9 @@ load("raw_output_pan", [1], [BASE], [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { sampler_index }
 load("sampler_lod_parameters_pan", [1], flags=[CAN_ELIMINATE, CAN_REORDER])
 
+# Loads the sample position array on Bifrost, in a packed Arm-specific format
+system_value("sample_positions_pan", 1, bit_sizes=[64])
+
 # R600 specific instrincs
 #
 # location where the tesselation data is stored in LDS
@@ -1109,11 +1086,38 @@ system_value("tcs_out_param_base_r600", 4)
 system_value("tcs_rel_patch_id_r600", 1)
 system_value("tcs_tess_factor_base_r600", 1)
 
+# the tess coords come as xy only, z has to be calculated
+system_value("tess_coord_r600", 2)
+
 # load as many components as needed giving per-component addresses
-intrinsic("load_local_shared_r600", src_comp=[0], dest_comp=0, indices = [COMPONENT], flags = [CAN_ELIMINATE, CAN_REORDER])
+intrinsic("load_local_shared_r600", src_comp=[0], dest_comp=0, indices = [], flags = [CAN_ELIMINATE])
 
 store("local_shared_r600", [1], [WRITE_MASK])
 store("tf_r600", [])
+
+# AMD GCN/RDNA specific intrinsics
+
+# src[] = { descriptor, base address, scalar offset }
+intrinsic("load_buffer_amd", src_comp=[4, 1, 1], dest_comp=0, indices=[BASE, IS_SWIZZLED, SLC_AMD, MEMORY_MODES], flags=[CAN_ELIMINATE])
+# src[] = { store value, descriptor, base address, scalar offset }
+intrinsic("store_buffer_amd", src_comp=[0, 4, 1, 1], indices=[BASE, WRITE_MASK, IS_SWIZZLED, SLC_AMD, MEMORY_MODES])
+
+# Descriptor where TCS outputs are stored for TES
+system_value("ring_tess_offchip_amd", 4)
+system_value("ring_tess_offchip_offset_amd", 1)
+# Descriptor where TCS outputs are stored for the HW tessellator
+system_value("ring_tess_factors_amd", 4)
+system_value("ring_tess_factors_offset_amd", 1)
+# Descriptor where ES outputs are stored for GS to read on GFX6-8
+system_value("ring_esgs_amd", 4)
+system_value("ring_es2gs_offset_amd", 1)
+
+# Number of patches processed by each TCS workgroup
+system_value("tcs_num_patches_amd", 1)
+# Relative tessellation patch ID within the current workgroup
+system_value("tess_rel_patch_id_amd", 1)
+# Vertex offsets used for GS per-vertex inputs
+system_value("gs_vertex_offset_amd", 1, [BASE])
 
 # V3D-specific instrinc for tile buffer color reads.
 #
@@ -1148,9 +1152,11 @@ image("store_raw_intel", src_comp=[1, 0])
 
 # Intrinsic to load a block of at least 32B of constant data from a 64-bit
 # global memory address.  The memory address must be uniform and 32B-aligned.
-# src[] = { address }.
-intrinsic("load_global_const_block_intel", src_comp=[1], dest_comp=0, bit_sizes=[32],
-          indices=[BASE], flags=[CAN_ELIMINATE, CAN_REORDER])
+# The second source is a predicate which indicates whether or not to actually
+# do the load.
+# src[] = { address, predicate }.
+intrinsic("load_global_const_block_intel", src_comp=[1, 1], dest_comp=0,
+          bit_sizes=[32], indices=[BASE], flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # Number of data items being operated on for a SIMD program.
 system_value("simd_width_intel", 1)
@@ -1158,6 +1164,11 @@ system_value("simd_width_intel", 1)
 # Load a relocatable 32-bit value
 intrinsic("load_reloc_const_intel", dest_comp=1, bit_sizes=[32],
           indices=[PARAM_IDX], flags=[CAN_ELIMINATE, CAN_REORDER])
+
+# 64-bit global address for a Vulkan descriptor set
+# src[0] = { set }
+intrinsic("load_desc_set_address_intel", dest_comp=1, bit_sizes=[64],
+          src_comp=[1], flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # OpSubgroupBlockReadINTEL and OpSubgroupBlockWriteINTEL from SPV_INTEL_subgroups.
 intrinsic("load_deref_block_intel", dest_comp=0, src_comp=[-1],

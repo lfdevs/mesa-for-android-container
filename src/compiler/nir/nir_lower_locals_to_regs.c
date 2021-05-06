@@ -206,7 +206,7 @@ lower_locals_to_regs_block(nir_block *block,
                               intrin->num_components,
                               intrin->dest.ssa.bit_size, NULL);
             nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                     nir_src_for_ssa(&mov->dest.dest.ssa));
+                                     &mov->dest.dest.ssa);
          } else {
             nir_dest_copy(&mov->dest.dest, &intrin->dest, &mov->instr);
          }

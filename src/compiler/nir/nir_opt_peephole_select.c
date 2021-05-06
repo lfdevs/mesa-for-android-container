@@ -437,7 +437,7 @@ nir_opt_peephole_select_block(nir_block *block, nir_shader *shader,
       sel->dest.write_mask = (1 << phi->dest.ssa.num_components) - 1;
 
       nir_ssa_def_rewrite_uses(&phi->dest.ssa,
-                               nir_src_for_ssa(&sel->dest.dest.ssa));
+                               &sel->dest.dest.ssa);
 
       nir_instr_insert_before(&phi->instr, &sel->instr);
       nir_instr_remove(&phi->instr);

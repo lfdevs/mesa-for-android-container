@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "util/macros.h"
+#include "util/ralloc.h"
 #include "broadcom/common/v3d_device_info.h"
 #include "broadcom/qpu/qpu_disasm.h"
 #include "broadcom/qpu/qpu_instr.h"
@@ -139,6 +140,7 @@ main(int argc, char **argv)
                         retval = 1;
                         continue;
                 }
+                ralloc_free((void *)disasm_output);
 
                 struct v3d_qpu_instr instr;
                 if (!v3d_qpu_instr_unpack(&devinfo, tests[i].inst, &instr)) {
@@ -178,6 +180,7 @@ main(int argc, char **argv)
                         const char *redisasm = v3d_qpu_disasm(&devinfo, repack);
                         printf("  Got:      \"%s\"\n", redisasm);
                         retval = 1;
+                        ralloc_free((void *)redisasm);
                 }
 
                 printf("PASS\n");

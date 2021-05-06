@@ -42,7 +42,7 @@ int main(void)
 
    pthread_mutex_init(&device.mutex, NULL);
    anv_bo_cache_init(&device.bo_cache);
-   anv_state_pool_init(&state_pool, &device, 4096, 0, 4096);
+   anv_state_pool_init(&state_pool, &device, "test", 4096, 0, 4096);
 
    /* Grab one so a zero offset is impossible */
    anv_state_pool_alloc(&state_pool, 16, 16);

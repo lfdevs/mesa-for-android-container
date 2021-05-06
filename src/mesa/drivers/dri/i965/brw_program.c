@@ -47,7 +47,7 @@
 #include "brw_context.h"
 #include "compiler/brw_nir.h"
 #include "brw_defines.h"
-#include "intel_batchbuffer.h"
+#include "brw_batch.h"
 
 #include "brw_cs.h"
 #include "brw_gs.h"
@@ -72,9 +72,9 @@ brw_nir_lower_uniforms(nir_shader *nir, bool is_scalar)
    }
 }
 
-static struct gl_program *brwNewProgram(struct gl_context *ctx,
-                                        gl_shader_stage stage,
-                                        GLuint id, bool is_arb_asm);
+static struct gl_program *brw_new_program(struct gl_context *ctx,
+                                          gl_shader_stage stage,
+                                          GLuint id, bool is_arb_asm);
 
 nir_shader *
 brw_create_nir(struct brw_context *brw,
@@ -127,10 +127,10 @@ brw_create_nir(struct brw_context *brw,
    brw_preprocess_nir(brw->screen->compiler, nir, ctx->SoftFP64);
 
    if (stage == MESA_SHADER_TESS_CTRL) {
-      /* Lower gl_PatchVerticesIn from a sys. value to a uniform on Gen8+. */
+      /* Lower gl_PatchVerticesIn from a sys. value to a uniform on Gfx8+. */
       static const gl_state_index16 tokens[STATE_LENGTH] =
-         { STATE_INTERNAL, STATE_TCS_PATCH_VERTICES_IN };
-      nir_lower_patch_vertices(nir, 0, devinfo->gen >= 8 ? tokens : NULL);
+         { STATE_TCS_PATCH_VERTICES_IN };
+      nir_lower_patch_vertices(nir, 0, devinfo->ver >= 8 ? tokens : NULL);
    }
 
    if (stage == MESA_SHADER_TESS_EVAL) {
@@ -142,13 +142,13 @@ brw_create_nir(struct brw_context *brw,
       uint32_t static_patch_vertices =
          tcs ? tcs->Program->nir->info.tess.tcs_vertices_out : 0;
       static const gl_state_index16 tokens[STATE_LENGTH] =
-         { STATE_INTERNAL, STATE_TES_PATCH_VERTICES_IN };
+         { STATE_TES_PATCH_VERTICES_IN };
       nir_lower_patch_vertices(nir, static_patch_vertices, tokens);
    }
 
    if (stage == MESA_SHADER_FRAGMENT) {
       static const struct nir_lower_wpos_ytransform_options wpos_options = {
-         .state_tokens = {STATE_INTERNAL, STATE_FB_WPOS_Y_TRANSFORM, 0, 0},
+         .state_tokens = {STATE_FB_WPOS_Y_TRANSFORM, 0, 0},
          .fs_coord_pixel_center_integer = 1,
          .fs_coord_origin_upper_left = 1,
       };
@@ -183,8 +183,8 @@ brw_nir_lower_resources(nir_shader *nir, struct gl_shader_program *shader_prog,
 {
    NIR_PASS_V(nir, brw_nir_lower_uniforms, nir->options->lower_to_scalar);
    NIR_PASS_V(prog->nir, gl_nir_lower_samplers, shader_prog);
-   prog->info.textures_used = prog->nir->info.textures_used;
-   prog->info.textures_used_by_txf = prog->nir->info.textures_used_by_txf;
+   BITSET_COPY(prog->info.textures_used, prog->nir->info.textures_used);
+   BITSET_COPY(prog->info.textures_used_by_txf, prog->nir->info.textures_used_by_txf);
 
    NIR_PASS_V(prog->nir, brw_nir_lower_image_load_store, devinfo, NULL);
 
@@ -215,14 +215,15 @@ brw_shader_gather_info(nir_shader *nir, struct gl_program *prog)
 }
 
 static unsigned
-get_new_program_id(struct intel_screen *screen)
+get_new_program_id(struct brw_screen *screen)
 {
    return p_atomic_inc_return(&screen->program_id);
 }
 
-static struct gl_program *brwNewProgram(struct gl_context *ctx,
-                                        gl_shader_stage stage,
-                                        GLuint id, bool is_arb_asm)
+static struct gl_program *
+brw_new_program(struct gl_context *ctx,
+                gl_shader_stage stage,
+                GLuint id, bool is_arb_asm)
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_program *prog = rzalloc(NULL, struct brw_program);
@@ -236,8 +237,8 @@ static struct gl_program *brwNewProgram(struct gl_context *ctx,
    return NULL;
 }
 
-static void brwDeleteProgram( struct gl_context *ctx,
-			      struct gl_program *prog )
+static void
+brw_delete_program(struct gl_context *ctx, struct gl_program *prog)
 {
    struct brw_context *brw = brw_context(ctx);
 
@@ -274,9 +275,9 @@ static void brwDeleteProgram( struct gl_context *ctx,
 
 
 static GLboolean
-brwProgramStringNotify(struct gl_context *ctx,
-		       GLenum target,
-		       struct gl_program *prog)
+brw_program_string_notify(struct gl_context *ctx,
+                          GLenum target,
+                          struct gl_program *prog)
 {
    assert(target == GL_VERTEX_PROGRAM_ARB || !prog->arb.IsPositionInvariant);
 
@@ -290,7 +291,7 @@ brwProgramStringNotify(struct gl_context *ctx,
          brw_program_const(brw->programs[MESA_SHADER_FRAGMENT]);
 
       if (newFP == curFP)
-	 brw->ctx.NewDriverState |= BRW_NEW_FRAGMENT_PROGRAM;
+         brw->ctx.NewDriverState |= BRW_NEW_FRAGMENT_PROGRAM;
       _mesa_program_fragment_position_to_sysval(&newFP->program);
       newFP->id = get_new_program_id(brw->screen);
 
@@ -309,9 +310,9 @@ brwProgramStringNotify(struct gl_context *ctx,
          brw_program_const(brw->programs[MESA_SHADER_VERTEX]);
 
       if (newVP == curVP)
-	 brw->ctx.NewDriverState |= BRW_NEW_VERTEX_PROGRAM;
+         brw->ctx.NewDriverState |= BRW_NEW_VERTEX_PROGRAM;
       if (newVP->program.arb.IsPositionInvariant) {
-	 _mesa_insert_mvp_code(ctx, &newVP->program);
+         _mesa_insert_mvp_code(ctx, &newVP->program);
       }
       newVP->id = get_new_program_id(brw->screen);
 
@@ -349,7 +350,7 @@ brw_memory_barrier(struct gl_context *ctx, GLbitfield barriers)
    struct brw_context *brw = brw_context(ctx);
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
    unsigned bits = PIPE_CONTROL_DATA_CACHE_FLUSH | PIPE_CONTROL_CS_STALL;
-   assert(devinfo->gen >= 7 && devinfo->gen <= 11);
+   assert(devinfo->ver >= 7 && devinfo->ver <= 11);
 
    if (barriers & (GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT |
                    GL_ELEMENT_ARRAY_BARRIER_BIT |
@@ -375,7 +376,7 @@ brw_memory_barrier(struct gl_context *ctx, GLbitfield barriers)
    /* Typed surface messages are handled by the render cache on IVB, so we
     * need to flush it too.
     */
-   if (devinfo->gen == 7 && !devinfo->is_haswell)
+   if (devinfo->ver == 7 && !devinfo->is_haswell)
       bits |= PIPE_CONTROL_RENDER_TARGET_FLUSH;
 
    brw_emit_pipe_control_flush(brw, bits);
@@ -388,7 +389,7 @@ brw_framebuffer_fetch_barrier(struct gl_context *ctx)
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    if (!ctx->Extensions.EXT_shader_framebuffer_fetch) {
-      if (devinfo->gen >= 6) {
+      if (devinfo->ver >= 6) {
          brw_emit_pipe_control_flush(brw,
                                      PIPE_CONTROL_RENDER_TARGET_FLUSH |
                                      PIPE_CONTROL_CS_STALL);
@@ -403,7 +404,7 @@ brw_framebuffer_fetch_barrier(struct gl_context *ctx)
 
 void
 brw_get_scratch_bo(struct brw_context *brw,
-		   struct brw_bo **scratch_bo, int size)
+                   struct brw_bo **scratch_bo, int size)
 {
    struct brw_bo *old_bo = *scratch_bo;
 
@@ -472,13 +473,13 @@ brw_alloc_stage_scratch(struct brw_context *brw,
        * For, ICL, scratch space allocation is based on the number of threads
        * in the base configuration.
        */
-      if (devinfo->gen == 11)
+      if (devinfo->ver == 11)
          subslices = 8;
-      else if (devinfo->gen >= 9 && devinfo->gen < 11)
+      else if (devinfo->ver >= 9 && devinfo->ver < 11)
          subslices = 4 * brw->screen->devinfo.num_slices;
 
       unsigned scratch_ids_per_subslice;
-      if (devinfo->gen >= 11) {
+      if (devinfo->ver >= 11) {
          /* The MEDIA_VFE_STATE docs say:
           *
           *    "Starting with this configuration, the Maximum Number of
@@ -529,13 +530,14 @@ brw_alloc_stage_scratch(struct brw_context *brw,
                    per_thread_size * thread_count, BRW_MEMZONE_SCRATCH);
 }
 
-void brwInitFragProgFuncs( struct dd_function_table *functions )
+void
+brw_init_frag_prog_functions(struct dd_function_table *functions)
 {
    assert(functions->ProgramStringNotify == _tnl_program_string);
 
-   functions->NewProgram = brwNewProgram;
-   functions->DeleteProgram = brwDeleteProgram;
-   functions->ProgramStringNotify = brwProgramStringNotify;
+   functions->NewProgram = brw_new_program;
+   functions->DeleteProgram = brw_delete_program;
+   functions->ProgramStringNotify = brw_program_string_notify;
 
    functions->LinkShader = brw_link_shader;
 
@@ -825,7 +827,7 @@ brw_setup_tex_for_precompile(const struct gen_device_info *devinfo,
                              struct brw_sampler_prog_key_data *tex,
                              const struct gl_program *prog)
 {
-   const bool has_shader_channel_select = devinfo->is_haswell || devinfo->gen >= 8;
+   const bool has_shader_channel_select = devinfo->is_haswell || devinfo->ver >= 8;
    unsigned sampler_count = util_last_bit(prog->SamplersUsed);
    for (unsigned i = 0; i < sampler_count; i++) {
       if (!has_shader_channel_select && (prog->ShadowSamplers & (1 << i))) {
@@ -883,7 +885,7 @@ brw_assign_common_binding_table_offsets(const struct gen_device_info *devinfo,
    }
 
    if (prog->info.uses_texture_gather) {
-      if (devinfo->gen >= 8) {
+      if (devinfo->ver >= 8) {
          stage_prog_data->binding_table.gather_texture_start =
             stage_prog_data->binding_table.texture_start;
       } else {

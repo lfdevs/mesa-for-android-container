@@ -1,6 +1,6 @@
---- a/src/compiler/glsl/tests/cache_test.c
-+++ b/src/compiler/glsl/tests/cache_test.c
-@@ -132,8 +132,8 @@ check_directories_created(const char *ca
+--- a/src/util/tests/cache/cache_test.c
++++ b/src/util/tests/cache/cache_test.c
+@@ -141,8 +141,8 @@ check_directories_created(const char *ca
  {
     bool sub_dirs_created = false;
  
@@ -11,7 +11,7 @@
        char *full_path = NULL;
        if (asprintf(&full_path, "%s%s", buf, ++cache_dir) != -1 ) {
           struct stat sb;
-@@ -142,6 +142,7 @@ check_directories_created(const char *ca
+@@ -151,6 +151,7 @@ check_directories_created(const char *ca
  
           free(full_path);
        }
@@ -34,7 +34,7 @@
  static void
 --- a/src/gallium/auxiliary/pipe-loader/pipe_loader.c
 +++ b/src/gallium/auxiliary/pipe-loader/pipe_loader.c
-@@ -42,6 +42,10 @@
+@@ -43,6 +43,10 @@
  #define PATH_MAX _MAX_PATH
  #endif
  

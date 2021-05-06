@@ -39,7 +39,7 @@
 #include "aub_read.h"
 #include "aub_mem.h"
 
-#include "common/gen_disasm.h"
+#include "common/intel_disasm.h"
 
 #define xtzalloc(name) ((decltype(&name)) calloc(1, sizeof(name)))
 #define xtalloc(name) ((decltype(&name)) malloc(sizeof(name)))
@@ -62,7 +62,7 @@ struct aub_file {
 
    /* Device state */
    struct gen_device_info devinfo;
-   struct gen_spec *spec;
+   struct intel_spec *spec;
 };
 
 static void
@@ -129,13 +129,13 @@ handle_info(void *user_data, int pci_id, const char *app_name)
       fprintf(stderr, "can't find device information: pci_id=0x%x\n", file->pci_id);
       exit(EXIT_FAILURE);
    }
-   file->spec = gen_spec_load(&file->devinfo);
+   file->spec = intel_spec_load(&file->devinfo);
 }
 
 static void
 handle_error(void *user_data, const void *aub_data, const char *msg)
 {
-   fprintf(stderr, "ERROR: %s\n", msg);
+   fprintf(stderr, "ERROR: %s", msg);
 }
 
 static struct aub_file *
@@ -250,10 +250,10 @@ struct edit_window {
    uint64_t address;
    uint32_t len;
 
-   struct gen_batch_decode_bo aub_bo;
+   struct intel_batch_decode_bo aub_bo;
    uint64_t aub_offset;
 
-   struct gen_batch_decode_bo gtt_bo;
+   struct intel_batch_decode_bo gtt_bo;
    uint64_t gtt_offset;
 
    struct MemoryEditor editor;
@@ -387,14 +387,14 @@ new_shader_window(struct aub_mem *mem, uint64_t address, const char *desc)
    window->base.display = display_shader_window;
    window->base.destroy = destroy_shader_window;
 
-   struct gen_batch_decode_bo shader_bo =
+   struct intel_batch_decode_bo shader_bo =
       aub_mem_get_ppgtt_bo(mem, address);
    if (shader_bo.map) {
       FILE *f = open_memstream(&window->shader, &window->shader_size);
       if (f) {
-         gen_disassemble(&context.file->devinfo,
-                         (const uint8_t *) shader_bo.map +
-                         (address - shader_bo.addr), 0, f);
+         intel_disassemble(&context.file->devinfo,
+                           (const uint8_t *) shader_bo.map +
+                           (address - shader_bo.addr), 0, f);
          fclose(f);
       }
    }
@@ -558,7 +558,7 @@ display_pml4_level(struct aub_mem *mem, uint64_t table_addr, uint64_t table_virt
    if (level == 0)
       return;
 
-   struct gen_batch_decode_bo table_bo =
+   struct intel_batch_decode_bo table_bo =
       aub_mem_get_phys_addr_data(mem, table_addr);
    const uint64_t *table = (const uint64_t *) ((const uint8_t *) table_bo.map +
                                                table_addr - table_bo.addr);
@@ -670,7 +670,7 @@ batch_edit_address(void *user_data, uint64_t address, uint32_t len)
    list_add(&edit_window->base.parent_link, &window->base.children_windows);
 }
 
-static struct gen_batch_decode_bo
+static struct intel_batch_decode_bo
 batch_get_bo(void *user_data, bool ppgtt, uint64_t address)
 {
    struct batch_window *window = (struct batch_window *) user_data;
@@ -712,7 +712,7 @@ display_batch_execlist_write(void *user_data,
 
    const uint32_t pphwsp_size = 4096;
    uint32_t pphwsp_addr = context_descriptor & 0xfffff000;
-   struct gen_batch_decode_bo pphwsp_bo =
+   struct intel_batch_decode_bo pphwsp_bo =
       aub_mem_get_ggtt_bo(&window->mem, pphwsp_addr);
    uint32_t *context_img = (uint32_t *)((uint8_t *)pphwsp_bo.map +
                                         (pphwsp_addr - pphwsp_bo.addr) +
@@ -725,7 +725,7 @@ display_batch_execlist_write(void *user_data,
 
    window->mem.pml4 = (uint64_t)context_img[49] << 32 | context_img[51];
 
-   struct gen_batch_decode_bo ring_bo =
+   struct intel_batch_decode_bo ring_bo =
       aub_mem_get_ggtt_bo(&window->mem, ring_buffer_start);
    assert(ring_bo.size > 0);
    void *commands = (uint8_t *)ring_bo.map + (ring_buffer_start - ring_bo.addr) + ring_buffer_head;
@@ -841,10 +841,10 @@ display_registers_window(struct window *win)
 
    ImGui::BeginChild(ImGui::GetID("##block"));
    hash_table_foreach(context.file->spec->registers_by_name, entry) {
-      struct gen_group *reg = (struct gen_group *) entry->data;
+      struct intel_group *reg = (struct intel_group *) entry->data;
       if (filter.PassFilter(reg->name) &&
           ImGui::CollapsingHeader(reg->name)) {
-         const struct gen_field *field = reg->fields;
+         const struct intel_field *field = reg->fields;
          while (field) {
             ImGui::Text("%s : %i -> %i\n", field->name, field->start, field->end);
             field = field->next;
@@ -896,11 +896,11 @@ display_commands_window(struct window *win)
 
    ImGui::BeginChild(ImGui::GetID("##block"));
    hash_table_foreach(context.file->spec->commands, entry) {
-      struct gen_group *cmd = (struct gen_group *) entry->data;
+      struct intel_group *cmd = (struct intel_group *) entry->data;
       if ((cmd_filter.PassFilter(cmd->name) &&
            (opcode_len == 0 || (opcode & cmd->opcode_mask) == cmd->opcode)) &&
           ImGui::CollapsingHeader(cmd->name)) {
-         const struct gen_field *field = cmd->fields;
+         const struct intel_field *field = cmd->fields;
          int32_t last_dword = -1;
          while (field) {
             if (show_dwords && field->start / 32 != last_dword) {
@@ -918,10 +918,10 @@ display_commands_window(struct window *win)
       }
    }
    hash_table_foreach(context.file->spec->structs, entry) {
-      struct gen_group *cmd = (struct gen_group *) entry->data;
+      struct intel_group *cmd = (struct intel_group *) entry->data;
       if (cmd_filter.PassFilter(cmd->name) && opcode_len == 0 &&
           ImGui::CollapsingHeader(cmd->name)) {
-         const struct gen_field *field = cmd->fields;
+         const struct intel_field *field = cmd->fields;
          int32_t last_dword = -1;
          while (field) {
             if (show_dwords && field->start / 32 != last_dword) {

@@ -689,7 +689,7 @@ TESTS = [
              gl_FragColor = vec4(b * a, 0.0, 0.0);
          }
          """,
-         r'\(expression +f16vec2 \*.*\bf16mat2\b'),
+         r'\(expression +f16vec2 \* \(var_ref b\) \(var_ref a\)'),
     Test("f32 simple struct deref",
          """
          precision mediump float;
@@ -1685,7 +1685,7 @@ TESTS = [
                     color += x;
          }
          """,
-         r'\(assign  \(x\) \(var_ref x\)  \(expression float16_t \+ \(var_ref x\) \(expression float16_t f2fmp \(var_ref incr'),
+         r'\(assign  \(x\) \(var_ref x\)  \(expression float16_t \+ \(var_ref x\) \(var_ref incr'),
     Test("i32 loop counter",
          """
          #version 310 es

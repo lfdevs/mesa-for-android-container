@@ -119,7 +119,7 @@ gm107_rcp_f64:
    iadd32i $r3 $r2 -1
    ssy #rcp_rejoin
    // We want to check whether the exponent is 0 or 0x7ff (i.e. NaN, inf,
-   // denorm, or 0). Do this by substracting 1 from the exponent, which will
+   // denorm, or 0). Do this by subtracting 1 from the exponent, which will
    // mean that it's > 0x7fd in those cases when doing unsigned comparison
    sched (st 0x0) (st 0x0) (st 0x0)
    isetp gt u32 and $p0 1 $r3 0x7fd 1

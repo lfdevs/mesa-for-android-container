@@ -110,7 +110,7 @@ struct blorp_surf
 
    /**
     * If set (bo != NULL), clear_color is ignored and the actual clear color
-    * is fetched from this address.  On gen7-8, this is all of dword 7 of
+    * is fetched from this address.  On gfx7-8, this is all of dword 7 of
     * RENDER_SURFACE_STATE and is the responsibility of the caller to ensure
     * that it contains a swizzle of RGBA and resource min LOD of 0.
     */
@@ -205,7 +205,7 @@ blorp_hiz_clear_depth_stencil(struct blorp_batch *batch,
 
 
 void
-blorp_gen8_hiz_clear_attachments(struct blorp_batch *batch,
+blorp_gfx8_hiz_clear_attachments(struct blorp_batch *batch,
                                  uint32_t num_samples,
                                  uint32_t x0, uint32_t y0,
                                  uint32_t x1, uint32_t y1,

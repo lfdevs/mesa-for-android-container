@@ -75,7 +75,7 @@ nine_upload_create_buffer_group(struct nine_buffer_upload *upload,
 {
     struct pipe_resource resource;
     struct pipe_screen *screen = upload->pipe->screen;
-    DBG("%p %p\n", upload, group);
+    DBG("Allocating %p %p\n", upload, group);
 
     memset(&resource, 0, sizeof(resource));
     resource.target = PIPE_BUFFER;
@@ -97,6 +97,9 @@ nine_upload_create_buffer_group(struct nine_buffer_upload *upload,
     group->map = pipe_buffer_map_range(upload->pipe, group->resource,
                                        0, upload->buffers_size,
                                        PIPE_MAP_WRITE |
+#ifdef PIPE_ARCH_X86
+                                       PIPE_MAP_ONCE |
+#endif
                                        PIPE_MAP_PERSISTENT |
                                        PIPE_MAP_COHERENT,
                                        &group->transfer);
@@ -107,6 +110,7 @@ nine_upload_create_buffer_group(struct nine_buffer_upload *upload,
     }
 
     group->free_offset = 0;
+    DBG("Success: %p %p\n", group->map, group->map+upload->buffers_size);
 }
 
 static void
@@ -114,6 +118,7 @@ nine_upload_destroy_buffer_group(struct nine_buffer_upload *upload,
                                  struct nine_buffer_group *group)
 {
     DBG("%p %p\n", upload, group);
+    DBG("Release: %p %p\n", group->map, group->map+upload->buffers_size);
     assert(group->refcount == 0);
 
     if (group->transfer)
@@ -226,6 +231,9 @@ nine_upload_create_buffer(struct nine_buffer_upload *upload,
         buf->map = pipe_buffer_map_range(upload->pipe, buf->resource,
                                          0, buffer_size,
                                          PIPE_MAP_WRITE |
+#ifdef PIPE_ARCH_X86
+                                         PIPE_MAP_ONCE |
+#endif
                                          PIPE_MAP_PERSISTENT |
                                          PIPE_MAP_COHERENT,
                                          &buf->transfer);
@@ -279,6 +287,7 @@ uint8_t *
 nine_upload_buffer_get_map(struct nine_subbuffer *buf)
 {
     if (buf->parent) {
+        DBG("%d\n", buf->parent->refcount);
         return buf->parent->map + buf->offset;
     }
     /* lonely buffer */

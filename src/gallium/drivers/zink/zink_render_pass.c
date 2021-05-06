@@ -34,13 +34,15 @@ create_render_pass(VkDevice dev, struct zink_render_pass_state *state)
 
    VkAttachmentReference color_refs[PIPE_MAX_COLOR_BUFS], zs_ref;
    VkAttachmentDescription attachments[PIPE_MAX_COLOR_BUFS + 1];
+   VkPipelineStageFlags dep_pipeline = 0;
+   VkAccessFlags dep_access = 0;
 
    for (int i = 0; i < state->num_cbufs; i++) {
       struct zink_rt_attrib *rt = state->rts + i;
       attachments[i].flags = 0;
       attachments[i].format = rt->format;
       attachments[i].samples = rt->samples;
-      attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+      attachments[i].loadOp = rt->clear_color ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
       attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
       attachments[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
       attachments[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -48,6 +50,10 @@ create_render_pass(VkDevice dev, struct zink_render_pass_state *state)
       attachments[i].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
       color_refs[i].attachment = i;
       color_refs[i].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+      dep_pipeline |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+      dep_access |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+      if (attachments[i].loadOp == VK_ATTACHMENT_LOAD_OP_LOAD)
+         dep_access |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
    }
 
    int num_attachments = state->num_cbufs;
@@ -56,16 +62,27 @@ create_render_pass(VkDevice dev, struct zink_render_pass_state *state)
       attachments[num_attachments].flags = 0;
       attachments[num_attachments].format = rt->format;
       attachments[num_attachments].samples = rt->samples;
-      attachments[num_attachments].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+      attachments[num_attachments].loadOp = rt->clear_color ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
       attachments[num_attachments].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-      attachments[num_attachments].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+      attachments[num_attachments].stencilLoadOp = rt->clear_stencil ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
       attachments[num_attachments].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
       attachments[num_attachments].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
       attachments[num_attachments].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+      dep_pipeline |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+      dep_pipeline |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+      if (attachments[num_attachments].loadOp == VK_ATTACHMENT_LOAD_OP_LOAD ||
+          attachments[num_attachments].stencilLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD)
+         dep_access |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+
       zs_ref.attachment = num_attachments++;
       zs_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
    }
+
+   VkSubpassDependency deps[] = {
+      [0] = {VK_SUBPASS_EXTERNAL, 0, dep_pipeline, dep_pipeline, 0, dep_access, VK_DEPENDENCY_BY_REGION_BIT},
+      [1] = {0, VK_SUBPASS_EXTERNAL, dep_pipeline, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, dep_access, 0, VK_DEPENDENCY_BY_REGION_BIT}
+   };
 
    VkSubpassDescription subpass = {};
    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -79,10 +96,14 @@ create_render_pass(VkDevice dev, struct zink_render_pass_state *state)
    rpci.pAttachments = attachments;
    rpci.subpassCount = 1;
    rpci.pSubpasses = &subpass;
+   rpci.dependencyCount = 2;
+   rpci.pDependencies = deps;
 
    VkRenderPass render_pass;
-   if (vkCreateRenderPass(dev, &rpci, NULL, &render_pass) != VK_SUCCESS)
+   if (vkCreateRenderPass(dev, &rpci, NULL, &render_pass) != VK_SUCCESS) {
+      debug_printf("vkCreateRenderPass failed\n");
       return VK_NULL_HANDLE;
+   }
 
    return render_pass;
 }
@@ -94,8 +115,6 @@ zink_create_render_pass(struct zink_screen *screen,
    struct zink_render_pass *rp = CALLOC_STRUCT(zink_render_pass);
    if (!rp)
       goto fail;
-
-   pipe_reference_init(&rp->reference, 1);
 
    rp->render_pass = create_render_pass(screen->dev, state);
    if (!rp->render_pass)
@@ -115,10 +134,4 @@ zink_destroy_render_pass(struct zink_screen *screen,
 {
    vkDestroyRenderPass(screen->dev, rp->render_pass, NULL);
    FREE(rp);
-}
-
-void
-debug_describe_zink_render_pass(char* buf, const struct zink_render_pass *ptr)
-{
-   sprintf(buf, "zink_render_pass");
 }

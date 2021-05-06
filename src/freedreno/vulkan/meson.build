@@ -19,14 +19,14 @@
 # SOFTWARE.
 
 tu_entrypoints = custom_target(
-  'tu_entrypoints.[ch]',
-  input : ['tu_entrypoints_gen.py', vk_api_xml],
+  'tu_entrypoints',
+  input : [vk_entrypoints_gen, vk_api_xml],
   output : ['tu_entrypoints.h', 'tu_entrypoints.c'],
   command : [
-    prog_python, '@INPUT0@', '--xml', '@INPUT1@', '--outdir',
-    meson.current_build_dir()
+    prog_python, '@INPUT0@', '--xml', '@INPUT1@', '--proto', '--weak',
+    '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@', '--prefix', 'tu',
   ],
-  depend_files : files('tu_extensions.py'),
+  depend_files : vk_entrypoints_gen_depend_files,
 )
 
 tu_extensions_c = custom_target(
@@ -37,6 +37,7 @@ tu_extensions_c = custom_target(
     prog_python, '@INPUT0@', '--xml', '@INPUT1@', '--out-c', '@OUTPUT0@',
     '--out-h', '@OUTPUT1@'
   ],
+  depend_files : vk_extensions_gen,
 )
 
 libtu_files = files(

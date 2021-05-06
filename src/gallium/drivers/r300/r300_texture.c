@@ -1143,7 +1143,7 @@ r300_texture_create_object(struct r300_screen *rscreen,
     tiling.u.legacy.microtile = tex->tex.microtile;
     tiling.u.legacy.macrotile = tex->tex.macrotile[0];
     tiling.u.legacy.stride = tex->tex.stride_in_bytes[0];
-    rws->buffer_set_metadata(tex->buf, &tiling, NULL);
+    rws->buffer_set_metadata(rws, tex->buf, &tiling, NULL);
 
     return tex;
 
@@ -1198,7 +1198,7 @@ struct pipe_resource *r300_texture_from_handle(struct pipe_screen *screen,
     if (!buffer)
         return NULL;
 
-    rws->buffer_get_metadata(buffer, &tiling, NULL);
+    rws->buffer_get_metadata(rws, buffer, &tiling, NULL);
 
     /* Enforce a microtiled zbuffer. */
     if (util_format_is_depth_or_stencil(base->format) &&

@@ -101,8 +101,8 @@ build_view_index(struct lower_multiview_state *state)
              * 16 nibbles, each of which is a value from 0 to 15.
              */
             uint64_t remap = 0;
-            uint32_t bit, i = 0;
-            for_each_bit(bit, state->view_mask) {
+            uint32_t i = 0;
+            u_foreach_bit(bit, state->view_mask) {
                assert(bit < 16);
                remap |= (uint64_t)bit << (i++ * 4);
             }
@@ -238,7 +238,7 @@ anv_nir_lower_multiview(nir_shader *shader,
             value = build_view_index(&state);
          }
 
-         nir_ssa_def_rewrite_uses(&load->dest.ssa, nir_src_for_ssa(value));
+         nir_ssa_def_rewrite_uses(&load->dest.ssa, value);
 
          nir_instr_remove(&load->instr);
          progress = true;
@@ -288,7 +288,7 @@ bool
 anv_check_for_primitive_replication(nir_shader **shaders,
                                     struct anv_graphics_pipeline *pipeline)
 {
-   assert(pipeline->base.device->info.gen >= 12);
+   assert(pipeline->base.device->info.ver >= 12);
 
    static int primitive_replication_max_views = -1;
    if (primitive_replication_max_views < 0) {

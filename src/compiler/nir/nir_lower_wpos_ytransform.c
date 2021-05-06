@@ -140,7 +140,7 @@ emit_wpos_adjustment(lower_wpos_ytransform_state *state,
                         nir_channel(b, wpos_temp, 3));
 
    nir_ssa_def_rewrite_uses_after(&intr->dest.ssa,
-                                  nir_src_for_ssa(wpos_temp),
+                                  wpos_temp,
                                   wpos_temp->parent_instr);
 }
 
@@ -291,7 +291,7 @@ lower_load_sample_pos(lower_wpos_ytransform_state *state,
                         nir_fmul(b, nir_channel(b, pos, 1), scale));
    nir_ssa_def *flipped_pos = nir_vec2(b, nir_channel(b, pos, 0), flipped_y);
 
-   nir_ssa_def_rewrite_uses_after(&intr->dest.ssa, nir_src_for_ssa(flipped_pos),
+   nir_ssa_def_rewrite_uses_after(&intr->dest.ssa, flipped_pos,
                                   flipped_pos->parent_instr);
 }
 

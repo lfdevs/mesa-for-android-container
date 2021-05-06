@@ -134,7 +134,9 @@ bool brw_nir_lower_mem_access_bit_sizes(nir_shader *shader,
 
 void brw_postprocess_nir(nir_shader *nir,
                          const struct brw_compiler *compiler,
-                         bool is_scalar);
+                         bool is_scalar,
+                         bool debug_enabled,
+                         bool robust_buffer_access);
 
 bool brw_nir_clamp_image_1d_2d_array_sizes(nir_shader *shader);
 
@@ -155,8 +157,6 @@ enum brw_conditional_mod brw_cmod_for_nir_comparison(nir_op op);
 uint32_t brw_aop_for_nir_intrinsic(const nir_intrinsic_instr *atomic);
 enum brw_reg_type brw_type_for_nir_type(const struct gen_device_info *devinfo,
                                         nir_alu_type type);
-
-enum glsl_base_type brw_glsl_base_type_for_nir_type(nir_alu_type type);
 
 void brw_nir_setup_glsl_uniforms(void *mem_ctx, nir_shader *shader,
                                  const struct gl_program *prog,

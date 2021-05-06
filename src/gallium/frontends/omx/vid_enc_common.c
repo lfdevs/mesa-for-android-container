@@ -459,7 +459,7 @@ OMX_ERRORTYPE enc_LoadImage_common(vid_enc_PrivateType * priv, OMX_VIDEO_PORTDEF
          image[2].shader_access = image[1].access = PIPE_IMAGE_ACCESS_WRITE;
          image[2].format = PIPE_FORMAT_R8G8_UINT;
 
-         pipe->set_shader_images(pipe, PIPE_SHADER_COMPUTE, 0, 3, image);
+         pipe->set_shader_images(pipe, PIPE_SHADER_COMPUTE, 0, 3, 0, image);
 
          /* Set the constant buffer. */
          uint32_t constants[4] = {def->nFrameHeight};
@@ -467,7 +467,7 @@ OMX_ERRORTYPE enc_LoadImage_common(vid_enc_PrivateType * priv, OMX_VIDEO_PORTDEF
 
          cb.buffer_size = sizeof(constants);
          cb.user_buffer = constants;
-         pipe->set_constant_buffer(pipe, PIPE_SHADER_COMPUTE, 0, &cb);
+         pipe->set_constant_buffer(pipe, PIPE_SHADER_COMPUTE, 0, false, &cb);
 
          /* Use the optimal block size for the linear image layout. */
          struct pipe_grid_info info = {};
@@ -496,8 +496,8 @@ OMX_ERRORTYPE enc_LoadImage_common(vid_enc_PrivateType * priv, OMX_VIDEO_PORTDEF
          pipe->memory_barrier(pipe, PIPE_BARRIER_ALL);
 
          /* Unbind. */
-         pipe->set_shader_images(pipe, PIPE_SHADER_COMPUTE, 0, 3, NULL);
-         pipe->set_constant_buffer(pipe, PIPE_SHADER_COMPUTE, 0, NULL);
+         pipe->set_shader_images(pipe, PIPE_SHADER_COMPUTE, 0, 0, 3, NULL);
+         pipe->set_constant_buffer(pipe, PIPE_SHADER_COMPUTE, 0, false, NULL);
          pipe->bind_compute_state(pipe, NULL);
       } else {
          /* Graphics path */

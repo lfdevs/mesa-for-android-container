@@ -167,11 +167,14 @@ instr_cp_postsched(struct ir3_instruction *mov)
 			removed = true;
 		}
 
-		/* the use could have been only a false-dep, only add to
-		 * the newdeps array if we've actually updated a real
-		 * src reg for the use:
+		/* the use could have been only a false-dep, only add to the newdeps
+		 * array and update the address if we've actually updated a real src
+		 * reg for the use:
 		 */
 		if (removed) {
+			if (src->flags & IR3_REG_RELATIV)
+				ir3_instr_set_address(use, mov->address);
+
 			util_dynarray_append(&newdeps, struct ir3_instruction *, use);
 
 			/* Remove the use from the src instruction: */

@@ -101,6 +101,12 @@ struct backend_instruction : public exec_node {
    bool reads_accumulator_implicitly() const;
    bool writes_accumulator_implicitly(const struct gen_device_info *devinfo) const;
 
+   /**
+    * Instructions that use indirect addressing have additional register
+    * regioning restrictions.
+    */
+   bool uses_indirect_addressing() const;
+
    void remove(bblock_t *block);
    void insert_after(bblock_t *block, backend_instruction *inst);
    void insert_before(bblock_t *block, backend_instruction *inst);
@@ -152,6 +158,7 @@ struct backend_instruction {
    uint8_t target; /**< MRT target. */
    uint8_t sfid; /**< SFID for SEND instructions */
    uint32_t desc; /**< SEND[S] message descriptor immediate */
+   uint32_t ex_desc; /**< SEND[S] extended message descriptor immediate */
    unsigned size_written; /**< Data written to the destination register in bytes. */
 
    enum opcode opcode; /* BRW_OPCODE_* or FS_OPCODE_* */

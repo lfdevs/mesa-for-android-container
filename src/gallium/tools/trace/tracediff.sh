@@ -29,7 +29,7 @@ set -e
 TRACEDUMP=${TRACEDUMP:-`dirname "$0"`/dump.py}
 
 stripdump () {
-	python $TRACEDUMP "$1" \
+	python3 $TRACEDUMP "$1" \
 	| sed \
 		-e 's@ // time .*@@' \
 		-e 's/\x1b\[[0-9]\{1,2\}\(;[0-9]\{1,2\}\)\{0,2\}m//g' \

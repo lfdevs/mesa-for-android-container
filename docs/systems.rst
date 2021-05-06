@@ -46,7 +46,6 @@ Additional driver information:
    Window System
 -  :doc:`Xlib / swrast driver <xlibdriver>` for the X Window System
    and Unix-like operating systems
--  `Microsoft Windows <README.WIN32>`__
 
 Deprecated Systems and Drivers
 ------------------------------

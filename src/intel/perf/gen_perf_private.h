@@ -76,6 +76,8 @@ gen_perf_append_query_info(struct gen_perf_config *perf, int max_counters)
    query = &perf->queries[perf->n_queries - 1];
    memset(query, 0, sizeof(*query));
 
+   query->perf = perf;
+
    if (max_counters > 0) {
       query->max_counters = max_counters;
       query->counters =

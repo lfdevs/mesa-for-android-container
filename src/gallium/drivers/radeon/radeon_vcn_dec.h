@@ -29,6 +29,7 @@
 #define _RADEON_VCN_DEC_H
 
 #include "radeon_video.h"
+#include "util/list.h"
 
 #define RDECODE_PKT_TYPE_S(x)        (((unsigned)(x)&0x3) << 30)
 #define RDECODE_PKT_TYPE_G(x)        (((x) >> 30) & 0x3)
@@ -115,6 +116,7 @@
 #define RDECODE_MESSAGE_MPEG4_ASP_VLD                       0x0000000B
 #define RDECODE_MESSAGE_HEVC                                0x0000000D
 #define RDECODE_MESSAGE_VP9                                 0x0000000E
+#define RDECODE_MESSAGE_DYNAMIC_DPB                         0x00000010
 #define RDECODE_MESSAGE_AV1                                 0x00000011
 
 #define RDECODE_FEEDBACK_PROFILING                          0x00000001
@@ -444,6 +446,40 @@ typedef struct rvcn_dec_message_drm_s {
    unsigned int	drm_cntl;
    unsigned int	drm_reserved;
 } rvcn_dec_message_drm_t;
+
+typedef struct rvcn_dec_message_dynamic_dpb_s {
+   unsigned int dpbConfigFlags;
+   unsigned int dpbLumaPitch;
+   unsigned int dpbLumaAlignedHeight;
+   unsigned int dpbLumaAlignedSize;
+   unsigned int dpbChromaPitch;
+   unsigned int dpbChromaAlignedHeight;
+   unsigned int dpbChromaAlignedSize;
+
+   unsigned char dpbArraySize;
+   unsigned char dpbCurArraySlice;
+   unsigned char dpbRefArraySlice[16];
+   unsigned char dpbReserved0[2];
+
+   unsigned int dpbCurrOffset;
+   unsigned int dpbAddrOffset[16];
+} rvcn_dec_message_dynamic_dpb_t;
+
+typedef struct rvcn_dec_message_dynamic_dpb_t2_s {
+    unsigned int dpbConfigFlags;
+    unsigned int dpbLumaPitch;
+    unsigned int dpbLumaAlignedHeight;
+    unsigned int dpbLumaAlignedSize;
+    unsigned int dpbChromaPitch;
+    unsigned int dpbChromaAlignedHeight;
+    unsigned int dpbChromaAlignedSize;
+    unsigned int dpbArraySize;
+
+    unsigned int dpbCurrLo;
+    unsigned int dpbCurrHi;
+    unsigned int dpbAddrLo[16];
+    unsigned int dpbAddrHi[16];
+} rvcn_dec_message_dynamic_dpb_t2_t;
 
 typedef struct {
    unsigned short viewOrderIndex;
@@ -1031,6 +1067,12 @@ struct jpeg_params {
    bool direct_reg;
 };
 
+struct rvcn_dec_dynamic_dpb_t2 {
+   struct list_head list;
+   uint8_t index;
+   struct rvid_buffer dpb;
+};
+
 struct radeon_decoder {
    struct pipe_video_codec base;
 
@@ -1066,6 +1108,25 @@ struct radeon_decoder {
       unsigned cntl;
    } reg;
    struct jpeg_params jpg;
+   enum {
+      DPB_MAX_RES = 0,
+      DPB_DYNAMIC_TIER_1,
+      DPB_DYNAMIC_TIER_2
+   } dpb_type;
+
+   struct {
+      enum {
+         CODEC_8_BITS = 0,
+         CODEC_10_BITS
+      } bts;
+      uint8_t index;
+      unsigned ref_size;
+      uint8_t ref_list[16];
+   } ref_codec;
+
+   struct list_head dpb_ref_list;
+   struct list_head dpb_unref_list;
+
    void (*send_cmd)(struct radeon_decoder *dec, struct pipe_video_buffer *target,
                     struct pipe_picture_desc *picture);
 };

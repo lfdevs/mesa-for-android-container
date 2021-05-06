@@ -46,7 +46,7 @@ nv10_emit_tex_gen(struct gl_context *ctx, int emit)
 	for (j = 0; j < 4; j++) {
 		if (nctx->fallback == HWTNL && (unit->TexGenEnabled & 1 << j)) {
 			struct gl_texgen *coord = get_texgen_coord(unit, j);
-			float *k = get_texgen_coeff(coord);
+			float *k = get_texgen_coeff(unit, coord->Mode, j);
 
 			if (k) {
 				BEGIN_NV04(push, NV10_3D(TEX_GEN_COEFF(i, j)), 4);

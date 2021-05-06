@@ -278,7 +278,7 @@ stw_create_context_attribs(HDC hdc, INT iLayerPlane, DHGLRC hShareContext,
    ctx->st->st_manager_private = (void *) ctx;
 
    if (ctx->st->cso_context) {
-      ctx->hud = hud_create(ctx->st->cso_context, NULL);
+      ctx->hud = hud_create(ctx->st->cso_context, ctx->st, NULL);
    }
 
    stw_lock_contexts(stw_dev);
@@ -555,7 +555,7 @@ stw_make_current(HDC hDrawDC, HDC hReadDC, DHGLRC dhglrc)
       if (old_fb && old_fb != fb) {
          stw_lock_framebuffers(stw_dev);
          stw_framebuffer_lock(old_fb);
-         stw_framebuffer_release_locked(old_fb);
+         stw_framebuffer_release_locked(old_fb, old_ctx->st);
          stw_unlock_framebuffers(stw_dev);
       }
 
@@ -584,7 +584,7 @@ fail:
          old_ctx->current_framebuffer = NULL;
          stw_lock_framebuffers(stw_dev);
          stw_framebuffer_lock(old_fb);
-         stw_framebuffer_release_locked(old_fb);
+         stw_framebuffer_release_locked(old_fb, old_ctx->st);
          stw_unlock_framebuffers(stw_dev);
       }
    }

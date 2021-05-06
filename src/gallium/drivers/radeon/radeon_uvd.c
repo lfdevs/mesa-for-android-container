@@ -144,7 +144,7 @@ static void map_msg_fb_it_buf(struct ruvd_decoder *dec)
 
    /* and map it for CPU access */
    ptr =
-      dec->ws->buffer_map(buf->res->buf, &dec->cs, PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
+      dec->ws->buffer_map(dec->ws, buf->res->buf, &dec->cs, PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
 
    /* calc buffer offsets */
    dec->msg = (struct ruvd_msg *)ptr;
@@ -168,7 +168,7 @@ static void send_msg_buf(struct ruvd_decoder *dec)
    buf = &dec->msg_fb_it_buffers[dec->cur_buffer];
 
    /* unmap the buffer */
-   dec->ws->buffer_unmap(buf->res->buf);
+   dec->ws->buffer_unmap(dec->ws, buf->res->buf);
    dec->msg = NULL;
    dec->fb = NULL;
    dec->it = NULL;
@@ -1013,7 +1013,7 @@ static void ruvd_begin_frame(struct pipe_video_codec *decoder, struct pipe_video
                                        &ruvd_destroy_associated_data);
 
    dec->bs_size = 0;
-   dec->bs_ptr = dec->ws->buffer_map(dec->bs_buffers[dec->cur_buffer].res->buf, &dec->cs,
+   dec->bs_ptr = dec->ws->buffer_map(dec->ws, dec->bs_buffers[dec->cur_buffer].res->buf, &dec->cs,
                                      PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
 }
 
@@ -1051,13 +1051,13 @@ static void ruvd_decode_bitstream(struct pipe_video_codec *decoder,
       unsigned new_size = dec->bs_size + sizes[i];
 
       if (new_size > buf->res->buf->size) {
-         dec->ws->buffer_unmap(buf->res->buf);
+         dec->ws->buffer_unmap(dec->ws, buf->res->buf);
          if (!si_vid_resize_buffer(dec->screen, &dec->cs, buf, new_size)) {
             RVID_ERR("Can't resize bitstream buffer!");
             return;
          }
 
-         dec->bs_ptr = dec->ws->buffer_map(buf->res->buf, &dec->cs,
+         dec->bs_ptr = dec->ws->buffer_map(dec->ws, buf->res->buf, &dec->cs,
                                            PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
          if (!dec->bs_ptr)
             return;
@@ -1092,7 +1092,7 @@ static void ruvd_end_frame(struct pipe_video_codec *decoder, struct pipe_video_b
 
    bs_size = align(dec->bs_size, 128);
    memset(dec->bs_ptr, 0, bs_size - dec->bs_size);
-   dec->ws->buffer_unmap(bs_buf->res->buf);
+   dec->ws->buffer_unmap(dec->ws, bs_buf->res->buf);
 
    map_msg_fb_it_buf(dec);
    dec->msg->size = sizeof(*dec->msg);
@@ -1379,7 +1379,7 @@ static unsigned texture_offset(struct radeon_surf *surface, unsigned layer,
    switch (type) {
    default:
    case RUVD_SURFACE_TYPE_LEGACY:
-      return surface->u.legacy.level[0].offset +
+      return (uint64_t)surface->u.legacy.level[0].offset_256B * 256 +
              layer * (uint64_t)surface->u.legacy.level[0].slice_size_dw * 4;
       break;
    case RUVD_SURFACE_TYPE_GFX9:

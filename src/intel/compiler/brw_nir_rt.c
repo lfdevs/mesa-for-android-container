@@ -122,7 +122,7 @@ lower_rt_io_derefs(nir_shader *shader)
                                        nir_var_function_temp,
                                        deref->var->type, 0);
                nir_ssa_def_rewrite_uses(&deref->dest.ssa,
-                                        nir_src_for_ssa(&cast->dest.ssa));
+                                        &cast->dest.ssa);
                nir_instr_remove(&deref->instr);
                progress = true;
             }
@@ -135,7 +135,7 @@ lower_rt_io_derefs(nir_shader *shader)
                                        nir_var_function_temp,
                                        deref->type, 0);
                nir_ssa_def_rewrite_uses(&deref->dest.ssa,
-                                        nir_src_for_ssa(&cast->dest.ssa));
+                                        &cast->dest.ssa);
                nir_instr_remove(&deref->instr);
                progress = true;
             }
@@ -502,7 +502,7 @@ brw_nir_create_raygen_trampoline(const struct brw_compiler *compiler,
             load_trampoline_param(&b, rt_disp_globals_addr, 1, 64);
          assert(intrin->dest.is_ssa);
          nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                  nir_src_for_ssa(global_arg_addr));
+                                  global_arg_addr);
          nir_instr_remove(instr);
       }
    }

@@ -164,7 +164,7 @@ replace_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
 	nir_builder_instr_insert(b, &new_intr->instr);
 
 	if (nir_intrinsic_infos[op].has_dest)
-		nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_src_for_ssa(&new_intr->dest.ssa));
+		nir_ssa_def_rewrite_uses(&intr->dest.ssa, &new_intr->dest.ssa);
 
 	nir_instr_remove(&intr->instr);
 
@@ -330,7 +330,7 @@ lower_block_to_explicit_input(nir_block *block, nir_builder *b, struct state *st
 			b->cursor = nir_before_instr(&intr->instr);
 
 			nir_ssa_def *iid = build_invocation_id(b, state);
-			nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_src_for_ssa(iid));
+			nir_ssa_def_rewrite_uses(&intr->dest.ssa, iid);
 			nir_instr_remove(&intr->instr);
 			break;
 		}
@@ -731,7 +731,7 @@ lower_tess_eval_block(nir_block *block, nir_builder *b, struct state *state)
 			nir_ssa_def *coord = nir_vec3(b, x, y, z);
 
 			nir_ssa_def_rewrite_uses_after(&intr->dest.ssa,
-					nir_src_for_ssa(coord),
+					coord,
 					b->cursor.instr);
 			break;
 		}

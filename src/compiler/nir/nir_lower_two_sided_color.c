@@ -191,7 +191,7 @@ nir_lower_two_sided_color_block(nir_block *block,
       nir_ssa_def *color = nir_bcsel(b, face, front, back);
 
       assert(intr->dest.is_ssa);
-      nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_src_for_ssa(color));
+      nir_ssa_def_rewrite_uses(&intr->dest.ssa, color);
    }
 
    return true;

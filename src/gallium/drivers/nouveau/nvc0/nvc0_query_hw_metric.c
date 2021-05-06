@@ -407,7 +407,9 @@ nvc0_hw_metric_get_queries(struct nvc0_screen *screen)
       return sm35_hw_metric_queries;
    case NVE4_3D_CLASS:
       return sm30_hw_metric_queries;
-   default:
+   case NVC0_3D_CLASS:
+   case NVC1_3D_CLASS:
+   case NVC8_3D_CLASS:
       if (dev->chipset == 0xc0 || dev->chipset == 0xc8)
          return sm20_hw_metric_queries;
       return sm21_hw_metric_queries;
@@ -429,7 +431,9 @@ nvc0_hw_metric_get_num_queries(struct nvc0_screen *screen)
       return ARRAY_SIZE(sm35_hw_metric_queries);
    case NVE4_3D_CLASS:
       return ARRAY_SIZE(sm30_hw_metric_queries);
-   default:
+   case NVC0_3D_CLASS:
+   case NVC1_3D_CLASS:
+   case NVC8_3D_CLASS:
       if (dev->chipset == 0xc0 || dev->chipset == 0xc8)
          return ARRAY_SIZE(sm20_hw_metric_queries);
       return ARRAY_SIZE(sm21_hw_metric_queries);

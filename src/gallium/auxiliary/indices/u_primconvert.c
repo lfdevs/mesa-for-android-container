@@ -44,6 +44,7 @@
 #include "util/u_draw.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
+#include "util/u_prim.h"
 #include "util/u_prim_restart.h"
 #include "util/u_upload_mgr.h"
 
@@ -98,7 +99,9 @@ util_primconvert_save_rasterizer_state(struct primconvert_context *pc,
 void
 util_primconvert_draw_vbo(struct primconvert_context *pc,
                           const struct pipe_draw_info *info,
-                          const struct pipe_draw_start_count *draw)
+                          const struct pipe_draw_indirect_info *indirect,
+                          const struct pipe_draw_start_count *draws,
+                          unsigned num_draws)
 {
    struct pipe_draw_info new_info;
    struct pipe_draw_start_count new_draw;
@@ -108,6 +111,31 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
    const void *src = NULL;
    void *dst;
    unsigned ib_offset;
+
+   /* indirect emulated prims is not possible, as we need to know
+    * draw start/count, so we must emulate.  Too bad, so sad, but
+    * we are already off the fast-path here.
+    */
+   if (indirect && indirect->buffer) {
+      /* num_draws is only applicable for direct draws: */
+      assert(num_draws == 1);
+      util_draw_indirect(pc->pipe, info, indirect);
+      return;
+   }
+
+   if (num_draws > 1) {
+      util_draw_multi(pc->pipe, info, indirect, draws, num_draws);
+      return;
+   }
+
+   const struct pipe_draw_start_count *draw = &draws[0];
+
+   /* Filter out degenerate primitives, u_upload_alloc() will assert
+    * on size==0 so just bail:
+    */
+   if (!info->primitive_restart &&
+       !u_trim_pipe_prim(info->mode, (unsigned*)&draw->count))
+      return;
 
    util_draw_init_info(&new_info);
    new_info.index_bounds_valid = info->index_bounds_valid;

@@ -27,17 +27,50 @@
 #define INTEL_MASK(high, low) (((1u<<((high)-(low)+1))-1)<<(low))
 
 /* GT core frequency counters */
-#define GEN7_RPSTAT1                       0xA01C
-#define  GEN7_RPSTAT1_CURR_GT_FREQ_SHIFT   7
-#define  GEN7_RPSTAT1_CURR_GT_FREQ_MASK    INTEL_MASK(13, 7)
-#define  GEN7_RPSTAT1_PREV_GT_FREQ_SHIFT   0
-#define  GEN7_RPSTAT1_PREV_GT_FREQ_MASK    INTEL_MASK(6, 0)
+#define GFX7_RPSTAT1                       0xA01C
+#define  GFX7_RPSTAT1_CURR_GT_FREQ_SHIFT   7
+#define  GFX7_RPSTAT1_CURR_GT_FREQ_MASK    INTEL_MASK(13, 7)
+#define  GFX7_RPSTAT1_PREV_GT_FREQ_SHIFT   0
+#define  GFX7_RPSTAT1_PREV_GT_FREQ_MASK    INTEL_MASK(6, 0)
 
-#define GEN9_RPSTAT0                       0xA01C
-#define  GEN9_RPSTAT0_CURR_GT_FREQ_SHIFT   23
-#define  GEN9_RPSTAT0_CURR_GT_FREQ_MASK    INTEL_MASK(31, 23)
-#define  GEN9_RPSTAT0_PREV_GT_FREQ_SHIFT   0
-#define  GEN9_RPSTAT0_PREV_GT_FREQ_MASK    INTEL_MASK(8, 0)
+#define GFX9_RPSTAT0                       0xA01C
+#define  GFX9_RPSTAT0_CURR_GT_FREQ_SHIFT   23
+#define  GFX9_RPSTAT0_CURR_GT_FREQ_MASK    INTEL_MASK(31, 23)
+#define  GFX9_RPSTAT0_PREV_GT_FREQ_SHIFT   0
+#define  GFX9_RPSTAT0_PREV_GT_FREQ_MASK    INTEL_MASK(8, 0)
+
+/* Programmable perf 64bits counters (used for GTRequestQueueFull counter on
+ * gfx7-11)
+ */
+#define PERF_CNT_1_DW0                     0x91b8
+#define PERF_CNT_2_DW0                     0x91c0
+#define PERF_CNT_VALUE_MASK                ((1ull << 44) - 1)
+
+/* Global OA perf counters */
+#define GFX7_N_OA_PERF_A32                 44
+#define GFX7_OA_PERF_A32(idx)              (0x2800 + (idx) * 4)
+
+#define GFX8_OA_PERF_TICKS                 0x2910
+#define GFX8_N_OA_PERF_A64                 32
+#define GFX8_N_OA_PERF_A32                 4
+#define GFX8_N_OA_PERF_B32                 8
+#define GFX8_N_OA_PERF_C32                 8
+#define GFX8_OA_PERF_A64_LDW(idx)          (0x2800 + (idx) * 8)
+#define GFX8_OA_PERF_A64_UDW(idx)          (0x2800 + (idx) * 8 + 4)
+#define GFX8_OA_PERF_A32(idx)              (0x2900 + (idx) * 4)
+#define GFX8_OA_PERF_B32(idx)              (0x2920 + (idx) * 4)
+#define GFX8_OA_PERF_C32(idx)              (0x2940 + (idx) * 4)
+
+#define GFX12_OAG_PERF_TICKS               0xda90
+#define GFX12_N_OAG_PERF_A64               32
+#define GFX12_N_OAG_PERF_A32               4
+#define GFX12_N_OAG_PERF_B32               8
+#define GFX12_N_OAG_PERF_C32               8
+#define GFX12_OAG_PERF_A64_LDW(idx)        (0xd980 + (idx) * 8)
+#define GFX12_OAG_PERF_A64_UDW(idx)        (0xd980 + (idx) * 8 + 4)
+#define GFX12_OAG_PERF_A32(idx)            (0xda80 + (idx) * 4)
+#define GFX12_OAG_PERF_B32(idx)            (0xda94 + (idx) * 4)
+#define GFX12_OAG_PERF_C32(idx)            (0xdab4 + (idx) * 4)
 
 /* Pipeline statistic counters */
 #define IA_VERTICES_COUNT          0x2310
@@ -54,9 +87,9 @@
 #define PS_DEPTH_COUNT             0x2350
 
 /* Stream-out counters */
-#define GEN6_SO_PRIM_STORAGE_NEEDED     0x2280
-#define GEN7_SO_PRIM_STORAGE_NEEDED(n)  (0x5240 + (n) * 8)
-#define GEN6_SO_NUM_PRIMS_WRITTEN       0x2288
-#define GEN7_SO_NUM_PRIMS_WRITTEN(n)    (0x5200 + (n) * 8)
+#define GFX6_SO_PRIM_STORAGE_NEEDED     0x2280
+#define GFX7_SO_PRIM_STORAGE_NEEDED(n)  (0x5240 + (n) * 8)
+#define GFX6_SO_NUM_PRIMS_WRITTEN       0x2288
+#define GFX7_SO_NUM_PRIMS_WRITTEN(n)    (0x5200 + (n) * 8)
 
 #endif /* GEN_PERF_REGS_H */

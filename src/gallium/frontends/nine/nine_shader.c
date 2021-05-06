@@ -822,6 +822,26 @@ tx_addr_alloc(struct shader_translator *tx, INT idx)
         tx->regs.a0 = ureg_DECL_temporary(tx->ureg);
 }
 
+static inline bool
+TEX_if_fetch4(struct shader_translator *tx, struct ureg_dst dst,
+              unsigned target, struct ureg_src src0,
+              struct ureg_src src1, INT idx)
+{
+    struct ureg_dst tmp;
+    struct ureg_src src_tg4[3] = {src0, ureg_imm1f(tx->ureg, 0.f), src1};
+
+    if (!(tx->info->fetch4 & (1 << idx)))
+        return false;
+
+    /* TODO: needs more tests, but this feature is not much used at all */
+
+    tmp = tx_scratch(tx);
+    ureg_tex_insn(tx->ureg, TGSI_OPCODE_TG4, &tmp, 1, target, TGSI_RETURN_TYPE_FLOAT,
+                  NULL, 0, src_tg4, 3);
+    ureg_MOV(tx->ureg, dst, ureg_swizzle(ureg_src(tmp), NINE_SWIZZLE4(Z, X, Y, W)));
+    return true;
+}
+
 /* NOTE: It's not very clear on which ps1.1-ps1.3 instructions
  * the projection should be applied on the texture. It doesn't
  * apply on texkill.
@@ -1075,7 +1095,7 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
         break;
     case D3DSPR_SAMPLER:
         assert(param->mod == NINED3DSPSM_NONE);
-        assert(param->swizzle == NINED3DSP_NOSWIZZLE);
+        /* assert(param->swizzle == NINED3DSP_NOSWIZZLE); Passed by wine tests */
         src = ureg_DECL_sampler(ureg, param->idx);
         break;
     case D3DSPR_CONST:
@@ -1184,7 +1204,7 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
         break;
     }
 
-    if (param->swizzle != NINED3DSP_NOSWIZZLE)
+    if (param->swizzle != NINED3DSP_NOSWIZZLE && param->file != D3DSPR_SAMPLER)
         src = ureg_swizzle(src,
                            (param->swizzle >> 0) & 0x3,
                            (param->swizzle >> 2) & 0x3,
@@ -2933,6 +2953,9 @@ DECL_SPECIAL(TEXLD)
            tx->insn.src[1].idx < ARRAY_SIZE(tx->sampler_targets));
     target = tx->sampler_targets[tx->insn.src[1].idx];
 
+    if (TEX_if_fetch4(tx, dst, target, src[0], src[1], tx->insn.src[1].idx))
+        return D3D_OK;
+
     switch (tx->insn.flags) {
     case 0:
         ureg_TEX(ureg, dst, target, src[0], src[1]);
@@ -2997,6 +3020,9 @@ DECL_SPECIAL(TEXLDD)
            tx->insn.src[1].idx < ARRAY_SIZE(tx->sampler_targets));
     target = tx->sampler_targets[tx->insn.src[1].idx];
 
+    if (TEX_if_fetch4(tx, dst, target, src[0], src[1], tx->insn.src[1].idx))
+        return D3D_OK;
+
     ureg_TXD(tx->ureg, dst, target, src[0], src[2], src[3], src[1]);
     return D3D_OK;
 }
@@ -3012,6 +3038,9 @@ DECL_SPECIAL(TEXLDL)
     assert(tx->insn.src[1].idx >= 0 &&
            tx->insn.src[1].idx < ARRAY_SIZE(tx->sampler_targets));
     target = tx->sampler_targets[tx->insn.src[1].idx];
+
+    if (TEX_if_fetch4(tx, dst, target, src[0], src[1], tx->insn.src[1].idx))
+        return D3D_OK;
 
     ureg_TXL(tx->ureg, dst, target, src[0], src[1]);
     return D3D_OK;
@@ -3620,7 +3649,8 @@ tx_ctor(struct shader_translator *tx, struct pipe_screen *screen, struct nine_sh
         tx->num_constb_allowed = NINE_MAX_CONST_B;
     }
 
-    if (info->swvp_on && tx->version.major >= 2) {
+    if (info->swvp_on) {
+        /* TODO: The values tx->version.major == 1 */
         tx->num_constf_allowed = 8192;
         tx->num_consti_allowed = 2048;
         tx->num_constb_allowed = 2048;

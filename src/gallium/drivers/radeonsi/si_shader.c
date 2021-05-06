@@ -88,34 +88,41 @@ unsigned si_shader_io_get_unique_index(unsigned semantic, bool is_varying)
    case VARYING_SLOT_POS:
       return 0;
    default:
-      /* Since some shader stages use the the highest used IO index
+      /* Since some shader stages use the highest used IO index
        * to determine the size to allocate for inputs/outputs
        * (in LDS, tess and GS rings). GENERIC should be placed right
        * after POSITION to make that size as small as possible.
        */
-      if (semantic >= VARYING_SLOT_VAR0 &&
-          semantic < VARYING_SLOT_VAR0 + SI_MAX_IO_GENERIC)
-         return 1 + (semantic - VARYING_SLOT_VAR0);
+      if (semantic >= VARYING_SLOT_VAR0 && semantic <= VARYING_SLOT_VAR31)
+         return 1 + (semantic - VARYING_SLOT_VAR0); /* 1..32 */
+
+      /* Put 16-bit GLES varyings after 32-bit varyings. They can use the same indices as
+       * legacy desktop GL varyings because they are mutually exclusive.
+       */
+      if (semantic >= VARYING_SLOT_VAR0_16BIT && semantic <= VARYING_SLOT_VAR15_16BIT)
+         return 33 + (semantic - VARYING_SLOT_VAR0_16BIT); /* 33..48 */
 
       assert(!"invalid generic index");
       return 0;
+
+   /* Legacy desktop GL varyings. */
    case VARYING_SLOT_FOGC:
-      return SI_MAX_IO_GENERIC + 1;
+      return 33;
    case VARYING_SLOT_COL0:
-      return SI_MAX_IO_GENERIC + 2;
+      return 34;
    case VARYING_SLOT_COL1:
-      return SI_MAX_IO_GENERIC + 3;
+      return 35;
    case VARYING_SLOT_BFC0:
       /* If it's a varying, COLOR and BCOLOR alias. */
       if (is_varying)
-         return SI_MAX_IO_GENERIC + 2;
+         return 34;
       else
-         return SI_MAX_IO_GENERIC + 4;
+         return 36;
    case VARYING_SLOT_BFC1:
       if (is_varying)
-         return SI_MAX_IO_GENERIC + 3;
+         return 35;
       else
-         return SI_MAX_IO_GENERIC + 5;
+         return 37;
    case VARYING_SLOT_TEX0:
    case VARYING_SLOT_TEX1:
    case VARYING_SLOT_TEX2:
@@ -124,26 +131,25 @@ unsigned si_shader_io_get_unique_index(unsigned semantic, bool is_varying)
    case VARYING_SLOT_TEX5:
    case VARYING_SLOT_TEX6:
    case VARYING_SLOT_TEX7:
-      return SI_MAX_IO_GENERIC + 6 + (semantic - VARYING_SLOT_TEX0);
-
-   /* These are rarely used between LS and HS or ES and GS. */
-   case VARYING_SLOT_CLIP_DIST0:
-      return SI_MAX_IO_GENERIC + 6 + 8;
-   case VARYING_SLOT_CLIP_DIST1:
-      return SI_MAX_IO_GENERIC + 6 + 8 + 1;
+      return 38 + (semantic - VARYING_SLOT_TEX0);
    case VARYING_SLOT_CLIP_VERTEX:
-      return SI_MAX_IO_GENERIC + 6 + 8 + 2;
+      return 46;
+
+   /* Varyings present in both GLES and desktop GL must start at 49 after 16-bit varyings. */
+   case VARYING_SLOT_CLIP_DIST0:
+      return 49;
+   case VARYING_SLOT_CLIP_DIST1:
+      return 50;
    case VARYING_SLOT_PSIZ:
-      return SI_MAX_IO_GENERIC + 6 + 8 + 3;
+      return 51;
 
    /* These can't be written by LS, HS, and ES. */
    case VARYING_SLOT_LAYER:
-      return SI_MAX_IO_GENERIC + 6 + 8 + 4;
+      return 52;
    case VARYING_SLOT_VIEWPORT:
-      return SI_MAX_IO_GENERIC + 6 + 8 + 5;
+      return 53;
    case VARYING_SLOT_PRIMITIVE_ID:
-      STATIC_ASSERT(SI_MAX_IO_GENERIC + 6 + 8 + 6 <= 63);
-      return SI_MAX_IO_GENERIC + 6 + 8 + 6;
+      return 54;
    }
 }
 
@@ -252,7 +258,7 @@ static void declare_per_stage_desc_pointers(struct si_shader_context *ctx, bool 
 
 static void declare_global_desc_pointers(struct si_shader_context *ctx)
 {
-   ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_CONST_DESC_PTR, &ctx->rw_buffers);
+   ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_CONST_DESC_PTR, &ctx->internal_bindings);
    ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_CONST_IMAGE_PTR,
               &ctx->bindless_samplers_and_images);
 }
@@ -495,7 +501,7 @@ void si_init_shader_args(struct si_shader_context *ctx, bool ngg_cull_shader)
          /* TCS return values are inputs to the TCS epilog.
           *
           * param_tcs_offchip_offset, param_tcs_factor_offset,
-          * param_tcs_offchip_layout, and param_rw_buffers
+          * param_tcs_offchip_layout, and internal_bindings
           * should be passed to the epilog.
           */
          for (i = 0; i <= 8 + GFX9_SGPR_TCS_OUT_LAYOUT; i++)
@@ -702,7 +708,7 @@ void si_init_shader_args(struct si_shader_context *ctx, bool ngg_cull_shader)
       if (shader->selector->info.uses_grid_size)
          ac_add_arg(&ctx->args, AC_ARG_SGPR, 3, AC_ARG_INT, &ctx->args.num_work_groups);
       if (shader->selector->info.uses_variable_block_size)
-         ac_add_arg(&ctx->args, AC_ARG_SGPR, 3, AC_ARG_INT, &ctx->block_size);
+         ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->block_size);
 
       unsigned cs_user_data_dwords =
          shader->selector->info.base.cs.user_data_components_amd;
@@ -738,7 +744,10 @@ void si_init_shader_args(struct si_shader_context *ctx, bool ngg_cull_shader)
          ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->args.tg_size);
 
       /* Hardware VGPRs. */
-      ac_add_arg(&ctx->args, AC_ARG_VGPR, 3, AC_ARG_INT, &ctx->args.local_invocation_ids);
+      if (!ctx->screen->info.has_graphics && ctx->screen->info.family >= CHIP_ALDEBARAN)
+         ac_add_arg(&ctx->args, AC_ARG_VGPR, 1, AC_ARG_INT, &ctx->args.local_invocation_ids);
+      else
+         ac_add_arg(&ctx->args, AC_ARG_VGPR, 3, AC_ARG_INT, &ctx->args.local_invocation_ids);
       break;
    default:
       assert(0 && "unimplemented shader");
@@ -868,18 +877,25 @@ bool si_shader_binary_upload(struct si_screen *sscreen, struct si_shader *shader
    u.get_external_symbol = si_get_external_symbol;
    u.cb_data = &scratch_va;
    u.rx_va = shader->bo->gpu_address;
-   u.rx_ptr = sscreen->ws->buffer_map(
+   u.rx_ptr = sscreen->ws->buffer_map(sscreen->ws,
       shader->bo->buf, NULL,
       PIPE_MAP_READ_WRITE | PIPE_MAP_UNSYNCHRONIZED | RADEON_MAP_TEMPORARY);
    if (!u.rx_ptr)
       return false;
 
-   bool ok = ac_rtld_upload(&u);
+   int size = ac_rtld_upload(&u);
 
-   sscreen->ws->buffer_unmap(shader->bo->buf);
+   if (sscreen->debug_flags & DBG(SQTT)) {
+      /* Remember the uploaded code */
+      shader->binary.uploaded_code_size = size;
+      shader->binary.uploaded_code = malloc(size);
+      memcpy(shader->binary.uploaded_code, u.rx_ptr, size);
+   }
+
+   sscreen->ws->buffer_unmap(sscreen->ws, shader->bo->buf);
    ac_rtld_close(&binary);
 
-   return ok;
+   return size >= 0;
 }
 
 static void si_shader_dump_disassembly(struct si_screen *screen,
@@ -1412,6 +1428,7 @@ struct nir_shader *si_get_nir_shader(struct si_shader_selector *sel,
                  nir->info.inlinable_uniform_dw_offsets);
 
       si_nir_opts(sel->screen, nir, true);
+      si_nir_late_opts(nir);
 
       /* This must be done again. */
       NIR_PASS_V(nir, nir_io_add_const_offset_to_base, nir_var_shader_in |
@@ -2142,6 +2159,10 @@ void si_shader_binary_clean(struct si_shader_binary *binary)
 
    free(binary->llvm_ir_string);
    binary->llvm_ir_string = NULL;
+
+   free(binary->uploaded_code);
+   binary->uploaded_code = NULL;
+   binary->uploaded_code_size = 0;
 }
 
 void si_shader_destroy(struct si_shader *shader)

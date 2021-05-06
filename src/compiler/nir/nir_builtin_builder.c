@@ -76,7 +76,7 @@ nir_nextafter(nir_builder *b, nir_ssa_def *x, nir_ssa_def *y)
    nir_ssa_def *conddir = nir_flt(b, x, y);
    nir_ssa_def *condzero = nir_feq(b, x, zero);
 
-   uint64_t sign_mask = 1 << (x->bit_size - 1);
+   uint64_t sign_mask = 1ull << (x->bit_size - 1);
    uint64_t min_abs = 1;
 
    if (nir_is_denorm_flush_to_zero(b->shader->info.float_controls_execution_mode, x->bit_size)) {
@@ -344,7 +344,7 @@ nir_get_texture_size(nir_builder *b, nir_tex_instr *tex)
    txs->is_new_style_shadow = tex->is_new_style_shadow;
    txs->texture_index = tex->texture_index;
    txs->sampler_index = tex->sampler_index;
-   txs->dest_type = nir_type_int;
+   txs->dest_type = nir_type_int32;
 
    unsigned idx = 0;
    for (unsigned i = 0; i < tex->num_srcs; i++) {
@@ -398,7 +398,7 @@ nir_get_texture_lod(nir_builder *b, nir_tex_instr *tex)
    tql->is_new_style_shadow = tex->is_new_style_shadow;
    tql->texture_index = tex->texture_index;
    tql->sampler_index = tex->sampler_index;
-   tql->dest_type = nir_type_float;
+   tql->dest_type = nir_type_float32;
 
    unsigned idx = 0;
    for (unsigned i = 0; i < tex->num_srcs; i++) {

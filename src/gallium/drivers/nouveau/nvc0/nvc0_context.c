@@ -28,6 +28,53 @@
 #include "nvc0/nvc0_screen.h"
 #include "nvc0/nvc0_resource.h"
 
+
+#include "xf86drm.h"
+#include "nouveau_drm.h"
+
+
+static void
+nvc0_svm_migrate(struct pipe_context *pipe, unsigned num_ptrs,
+                 const void* const* ptrs, const size_t *sizes,
+                 bool to_device, bool mem_undefined)
+{
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct nouveau_screen *screen = &nvc0->screen->base;
+   int fd = screen->drm->fd;
+   unsigned i;
+
+   for (i = 0; i < num_ptrs; i++) {
+      struct drm_nouveau_svm_bind args;
+      uint64_t cmd, prio, target;
+
+      args.va_start = (uint64_t)(uintptr_t)ptrs[i];
+      if (sizes && sizes[i]) {
+         args.va_end = (uint64_t)(uintptr_t)ptrs[i] + sizes[i];
+         args.npages = DIV_ROUND_UP(args.va_end - args.va_start, 0x1000);
+      } else {
+         args.va_end = 0;
+         args.npages = 0;
+      }
+      args.stride = 0;
+
+      args.reserved0 = 0;
+      args.reserved1 = 0;
+
+      prio = 0;
+      cmd = NOUVEAU_SVM_BIND_COMMAND__MIGRATE;
+      target = to_device ? NOUVEAU_SVM_BIND_TARGET__GPU_VRAM : 0;
+
+      args.header = cmd << NOUVEAU_SVM_BIND_COMMAND_SHIFT;
+      args.header |= prio << NOUVEAU_SVM_BIND_PRIORITY_SHIFT;
+      args.header |= target << NOUVEAU_SVM_BIND_TARGET_SHIFT;
+
+      /* This is best effort, so no garanty whatsoever */
+      drmCommandWrite(fd, DRM_NOUVEAU_SVM_BIND,
+                      &args, sizeof(args));
+   }
+}
+
+
 static void
 nvc0_flush(struct pipe_context *pipe,
            struct pipe_fence_handle **fence,
@@ -407,6 +454,8 @@ nvc0_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    pipe->clear = nvc0_clear;
    pipe->launch_grid = (nvc0->screen->base.class_3d >= NVE4_3D_CLASS) ?
       nve4_launch_grid : nvc0_launch_grid;
+
+   pipe->svm_migrate = nvc0_svm_migrate;
 
    pipe->flush = nvc0_flush;
    pipe->texture_barrier = nvc0_texture_barrier;

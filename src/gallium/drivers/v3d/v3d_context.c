@@ -298,6 +298,13 @@ v3d_context_destroy(struct pipe_context *pctx)
         pipe_surface_reference(&v3d->framebuffer.cbufs[0], NULL);
         pipe_surface_reference(&v3d->framebuffer.zsbuf, NULL);
 
+        if (v3d->sand8_blit_vs)
+                pctx->delete_vs_state(pctx, v3d->sand8_blit_vs);
+        if (v3d->sand8_blit_fs_luma)
+                pctx->delete_fs_state(pctx, v3d->sand8_blit_fs_luma);
+        if (v3d->sand8_blit_fs_chroma)
+                pctx->delete_fs_state(pctx, v3d->sand8_blit_fs_chroma);
+
         v3d_program_fini(pctx);
 
         ralloc_free(v3d);

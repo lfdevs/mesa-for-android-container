@@ -1074,6 +1074,8 @@ _mesa_is_color_format(GLenum format)
       case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
       case GL_COMPRESSED_RGB_FXT1_3DFX:
       case GL_COMPRESSED_RGBA_FXT1_3DFX:
+      case GL_SR8_EXT:
+      case GL_SRG8_EXT:
       case GL_SRGB_EXT:
       case GL_SRGB8_EXT:
       case GL_SRGB_ALPHA_EXT:
@@ -1421,6 +1423,8 @@ GLboolean
 _mesa_is_srgb_format(GLenum format)
 {
    switch (format) {
+   case GL_SR8_EXT:
+   case GL_SRG8_EXT:
    case GL_SRGB:
    case GL_SRGB8:
    case GL_SRGB_ALPHA:

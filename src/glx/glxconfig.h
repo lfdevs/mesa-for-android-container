@@ -101,20 +101,6 @@ struct glx_config {
     GLint sRGBCapable;
 };
 
-#define __GLX_MIN_CONFIG_PROPS	18
-#define __GLX_MAX_CONFIG_PROPS	500
-#define __GLX_EXT_CONFIG_PROPS	10
-
-/*
-** Since we send all non-core visual properties as token, value pairs,
-** we require 2 words across the wire. In order to maintain backwards
-** compatibility, we need to send the total number of words that the
-** VisualConfigs are sent back in so old libraries can simply "ignore"
-** the new properties.
-*/
-#define __GLX_TOTAL_CONFIG \
-   (__GLX_MIN_CONFIG_PROPS + 2 * __GLX_EXT_CONFIG_PROPS)
-
 extern GLint _gl_convert_from_x_visual_type(int visualType);
 
 extern int

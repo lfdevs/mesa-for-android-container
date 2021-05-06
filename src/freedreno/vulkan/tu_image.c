@@ -447,7 +447,8 @@ tu_image_view_init(struct tu_image_view *iview,
 }
 
 bool
-ubwc_possible(VkFormat format, VkImageType type, VkImageUsageFlags usage, bool has_z24uint_s8uint)
+ubwc_possible(VkFormat format, VkImageType type, VkImageUsageFlags usage, bool has_z24uint_s8uint,
+              VkSampleCountFlagBits samples)
 {
    /* no UBWC with compressed formats, E5B9G9R9, S8_UINT
     * (S8_UINT because separate stencil doesn't have UBWC-enable bit)
@@ -488,6 +489,9 @@ ubwc_possible(VkFormat format, VkImageType type, VkImageUsageFlags usage, bool h
    if (!has_z24uint_s8uint &&
        format == VK_FORMAT_D24_UNORM_S8_UINT &&
        (usage & (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)))
+      return false;
+
+   if (!has_z24uint_s8uint && samples > VK_SAMPLE_COUNT_1_BIT)
       return false;
 
    return true;
@@ -549,6 +553,10 @@ tu_CreateImage(VkDevice _device,
    if (!image)
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
 
+   const VkExternalMemoryImageCreateInfo *external_info =
+      vk_find_struct_const(pCreateInfo->pNext, EXTERNAL_MEMORY_IMAGE_CREATE_INFO);
+   image->shareable = external_info != NULL;
+
    image->vk_format = pCreateInfo->format;
    image->level_count = pCreateInfo->mipLevels;
    image->layer_count = pCreateInfo->arrayLayers;
@@ -583,7 +591,7 @@ tu_CreateImage(VkDevice _device,
       if (fmt_list) {
          may_be_swapped = false;
          for (uint32_t i = 0; i < fmt_list->viewFormatCount; i++) {
-            if (tu6_format_color(fmt_list->pViewFormats[i], TILE6_LINEAR).swap) {
+            if (tu6_format_texture(fmt_list->pViewFormats[i], TILE6_LINEAR).swap) {
                may_be_swapped = true;
                break;
             }
@@ -595,7 +603,7 @@ tu_CreateImage(VkDevice _device,
    }
 
    if (!ubwc_possible(image->vk_format, pCreateInfo->imageType, pCreateInfo->usage,
-                      device->physical_device->info.a6xx.has_z24uint_s8uint))
+                      device->physical_device->info.a6xx.has_z24uint_s8uint, pCreateInfo->samples))
       ubwc_enabled = false;
 
    /* expect UBWC enabled if we asked for it */

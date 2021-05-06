@@ -31,9 +31,9 @@
 
 
 
-#include "intel_batchbuffer.h"
-#include "intel_fbo.h"
-#include "intel_mipmap_tree.h"
+#include "brw_batch.h"
+#include "brw_fbo.h"
+#include "brw_mipmap_tree.h"
 
 #include "brw_context.h"
 #include "brw_state.h"
@@ -56,7 +56,7 @@ upload_pipelined_state_pointers(struct brw_context *brw)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-   if (devinfo->gen == 5) {
+   if (devinfo->ver == 5) {
       /* Need to flush before changing clip max threads for errata. */
       BEGIN_BATCH(1);
       OUT_BATCH(MI_FLUSH);
@@ -93,7 +93,7 @@ const struct brw_tracked_state brw_psp_urb_cbs = {
       .brw = BRW_NEW_BATCH |
              BRW_NEW_BLORP |
              BRW_NEW_FF_GS_PROG_DATA |
-             BRW_NEW_GEN4_UNIT_STATE |
+             BRW_NEW_GFX4_UNIT_STATE |
              BRW_NEW_STATE_BASE_ADDRESS |
              BRW_NEW_URB_FENCE,
    },
@@ -105,14 +105,14 @@ brw_depthbuffer_format(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    struct gl_framebuffer *fb = ctx->DrawBuffer;
-   struct intel_renderbuffer *drb = intel_get_renderbuffer(fb, BUFFER_DEPTH);
-   struct intel_renderbuffer *srb;
+   struct brw_renderbuffer *drb = brw_get_renderbuffer(fb, BUFFER_DEPTH);
+   struct brw_renderbuffer *srb;
 
    if (!drb &&
-       (srb = intel_get_renderbuffer(fb, BUFFER_STENCIL)) &&
+       (srb = brw_get_renderbuffer(fb, BUFFER_STENCIL)) &&
        !srb->mt->stencil_mt &&
-       (intel_rb_format(srb) == MESA_FORMAT_Z24_UNORM_S8_UINT ||
-	intel_rb_format(srb) == MESA_FORMAT_Z32_FLOAT_S8X24_UINT)) {
+       (brw_rb_format(srb) == MESA_FORMAT_Z24_UNORM_S8_UINT ||
+        brw_rb_format(srb) == MESA_FORMAT_Z32_FLOAT_S8X24_UINT)) {
       drb = srb;
    }
 
@@ -122,18 +122,18 @@ brw_depthbuffer_format(struct brw_context *brw)
    return brw_depth_format(brw, drb->mt->format);
 }
 
-static struct intel_mipmap_tree *
-get_stencil_miptree(struct intel_renderbuffer *irb)
+static struct brw_mipmap_tree *
+get_stencil_miptree(struct brw_renderbuffer *irb)
 {
    if (!irb)
       return NULL;
    if (irb->mt->stencil_mt)
       return irb->mt->stencil_mt;
-   return intel_renderbuffer_get_mt(irb);
+   return brw_renderbuffer_get_mt(irb);
 }
 
 static bool
-rebase_depth_stencil(struct brw_context *brw, struct intel_renderbuffer *irb,
+rebase_depth_stencil(struct brw_context *brw, struct brw_renderbuffer *irb,
                      bool invalidate)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
@@ -142,7 +142,7 @@ rebase_depth_stencil(struct brw_context *brw, struct intel_renderbuffer *irb,
 
    isl_get_tile_masks(irb->mt->surf.tiling, irb->mt->cpp,
                       &tile_mask_x, &tile_mask_y);
-   assert(!intel_miptree_level_has_hiz(irb->mt, irb->mt_level));
+   assert(!brw_miptree_level_has_hiz(irb->mt, irb->mt_level));
 
    uint32_t tile_x = irb->draw_x & tile_mask_x;
    uint32_t tile_y = irb->draw_y & tile_mask_y;
@@ -163,7 +163,7 @@ rebase_depth_stencil(struct brw_context *brw, struct intel_renderbuffer *irb,
       perf_debug("HW workaround: blitting depth level %d to a temporary "
                  "to fix alignment (depth tile offset %d,%d)\n",
                  irb->mt_level, tile_x, tile_y);
-      intel_renderbuffer_move_to_temp(brw, irb, invalidate);
+      brw_renderbuffer_move_to_temp(brw, irb, invalidate);
 
       /* There is now only single slice miptree. */
       brw->depthstencil.tile_x = 0;
@@ -186,7 +186,7 @@ rebase_depth_stencil(struct brw_context *brw, struct intel_renderbuffer *irb,
 
    brw->depthstencil.tile_x = tile_x;
    brw->depthstencil.tile_y = tile_y;
-   brw->depthstencil.depth_offset = intel_miptree_get_aligned_offset(
+   brw->depthstencil.depth_offset = brw_miptree_get_aligned_offset(
                                        irb->mt,
                                        irb->draw_x & ~tile_mask_x,
                                        irb->draw_y & ~tile_mask_y);
@@ -201,9 +201,9 @@ brw_workaround_depthstencil_alignment(struct brw_context *brw,
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    struct gl_framebuffer *fb = ctx->DrawBuffer;
-   struct intel_renderbuffer *depth_irb = intel_get_renderbuffer(fb, BUFFER_DEPTH);
-   struct intel_renderbuffer *stencil_irb = intel_get_renderbuffer(fb, BUFFER_STENCIL);
-   struct intel_mipmap_tree *depth_mt = NULL;
+   struct brw_renderbuffer *depth_irb = brw_get_renderbuffer(fb, BUFFER_DEPTH);
+   struct brw_renderbuffer *stencil_irb = brw_get_renderbuffer(fb, BUFFER_STENCIL);
+   struct brw_mipmap_tree *depth_mt = NULL;
    bool invalidate_depth = clear_mask & BUFFER_BIT_DEPTH;
    bool invalidate_stencil = clear_mask & BUFFER_BIT_STENCIL;
 
@@ -216,10 +216,10 @@ brw_workaround_depthstencil_alignment(struct brw_context *brw,
    brw->depthstencil.tile_y = 0;
    brw->depthstencil.depth_offset = 0;
 
-   /* Gen6+ doesn't require the workarounds, since we always program the
+   /* Gfx6+ doesn't require the workarounds, since we always program the
     * surface state at the start of the whole surface.
     */
-   if (devinfo->gen >= 6)
+   if (devinfo->ver >= 6)
       return;
 
    /* Check if depth buffer is in depth/stencil format.  If so, then it's only
@@ -237,8 +237,8 @@ brw_workaround_depthstencil_alignment(struct brw_context *brw,
          if (stencil_irb &&
              stencil_irb != depth_irb &&
              stencil_irb->mt == depth_mt) {
-            intel_miptree_reference(&stencil_irb->mt, depth_irb->mt);
-            intel_renderbuffer_set_draw_offset(stencil_irb);
+            brw_miptree_reference(&stencil_irb->mt, depth_irb->mt);
+            brw_renderbuffer_set_draw_offset(stencil_irb);
          }
       }
 
@@ -256,10 +256,10 @@ brw_workaround_depthstencil_alignment(struct brw_context *brw,
 
 static void
 brw_emit_depth_stencil_hiz(struct brw_context *brw,
-                           struct intel_renderbuffer *depth_irb,
-                           struct intel_mipmap_tree *depth_mt,
-                           struct intel_renderbuffer *stencil_irb,
-                           struct intel_mipmap_tree *stencil_mt)
+                           struct brw_renderbuffer *depth_irb,
+                           struct brw_mipmap_tree *depth_mt,
+                           struct brw_renderbuffer *stencil_irb,
+                           struct brw_mipmap_tree *stencil_mt)
 {
    uint32_t tile_x = brw->depthstencil.tile_x;
    uint32_t tile_y = brw->depthstencil.tile_y;
@@ -287,7 +287,7 @@ brw_emit_depth_stencil_hiz(struct brw_context *brw,
    }
 
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   const unsigned len = (devinfo->is_g4x || devinfo->gen == 5) ? 6 : 5;
+   const unsigned len = (devinfo->is_g4x || devinfo->ver == 5) ? 6 : 5;
 
    BEGIN_BATCH(len);
    OUT_BATCH(_3DSTATE_DEPTH_BUFFER << 16 | (len - 2));
@@ -307,12 +307,12 @@ brw_emit_depth_stencil_hiz(struct brw_context *brw,
              ((height + tile_y - 1) << 19));
    OUT_BATCH(0);
 
-   if (devinfo->is_g4x || devinfo->gen >= 5)
+   if (devinfo->is_g4x || devinfo->ver >= 5)
       OUT_BATCH(tile_x | (tile_y << 16));
    else
       assert(tile_x == 0 && tile_y == 0);
 
-   if (devinfo->gen >= 6)
+   if (devinfo->ver >= 6)
       OUT_BATCH(0);
 
    ADVANCE_BATCH();
@@ -325,17 +325,17 @@ brw_emit_depthbuffer(struct brw_context *brw)
    struct gl_context *ctx = &brw->ctx;
    struct gl_framebuffer *fb = ctx->DrawBuffer;
    /* _NEW_BUFFERS */
-   struct intel_renderbuffer *depth_irb = intel_get_renderbuffer(fb, BUFFER_DEPTH);
-   struct intel_renderbuffer *stencil_irb = intel_get_renderbuffer(fb, BUFFER_STENCIL);
-   struct intel_mipmap_tree *depth_mt = intel_renderbuffer_get_mt(depth_irb);
-   struct intel_mipmap_tree *stencil_mt = get_stencil_miptree(stencil_irb);
+   struct brw_renderbuffer *depth_irb = brw_get_renderbuffer(fb, BUFFER_DEPTH);
+   struct brw_renderbuffer *stencil_irb = brw_get_renderbuffer(fb, BUFFER_STENCIL);
+   struct brw_mipmap_tree *depth_mt = brw_renderbuffer_get_mt(depth_irb);
+   struct brw_mipmap_tree *stencil_mt = get_stencil_miptree(stencil_irb);
 
    if (depth_mt)
       brw_cache_flush_for_depth(brw, depth_mt->bo);
    if (stencil_mt)
       brw_cache_flush_for_depth(brw, stencil_mt->bo);
 
-   if (devinfo->gen < 6) {
+   if (devinfo->ver < 6) {
       brw_emit_depth_stencil_hiz(brw, depth_irb, depth_mt,
                                  stencil_irb, stencil_mt);
       return;
@@ -350,7 +350,7 @@ brw_emit_depthbuffer(struct brw_context *brw)
    brw_emit_depth_stall_flushes(brw);
 
    const unsigned ds_dwords = brw->isl_dev.ds.size / 4;
-   intel_batchbuffer_begin(brw, ds_dwords);
+   brw_batch_begin(brw, ds_dwords);
    uint32_t *ds_map = brw->batch.map_next;
    const uint32_t ds_offset = (char *)ds_map - (char *)brw->batch.batch.map;
 
@@ -383,10 +383,10 @@ brw_emit_depthbuffer(struct brw_context *brw)
       view.format = depth_mt->surf.format;
 
       info.hiz_usage = depth_mt->aux_usage;
-      if (!intel_renderbuffer_has_hiz(depth_irb)) {
+      if (!brw_renderbuffer_has_hiz(depth_irb)) {
          /* Just because a miptree has ISL_AUX_USAGE_HIZ does not mean that
           * all miplevels of that miptree are guaranteed to support HiZ.  See
-          * intel_miptree_level_enable_hiz for details.
+          * brw_miptree_level_enable_hiz for details.
           */
          info.hiz_usage = ISL_AUX_USAGE_NONE;
       }
@@ -395,7 +395,7 @@ brw_emit_depthbuffer(struct brw_context *brw)
          info.hiz_surf = &depth_mt->aux_buf->surf;
 
          uint32_t hiz_offset = 0;
-         if (devinfo->gen == 6) {
+         if (devinfo->ver == 6) {
             /* HiZ surfaces on Sandy Bridge technically don't support
              * mip-mapping.  However, we can fake it by offsetting to the
              * first slice of LOD0 in the HiZ surface.
@@ -429,7 +429,7 @@ brw_emit_depthbuffer(struct brw_context *brw)
       }
 
       uint32_t stencil_offset = 0;
-      if (devinfo->gen == 6) {
+      if (devinfo->ver == 6) {
          /* Stencil surfaces on Sandy Bridge technically don't support
           * mip-mapping.  However, we can fake it by offsetting to the
           * first slice of LOD0 in the stencil surface.
@@ -450,7 +450,7 @@ brw_emit_depthbuffer(struct brw_context *brw)
    isl_emit_depth_stencil_hiz_s(&brw->isl_dev, ds_map, &info);
 
    brw->batch.map_next += ds_dwords;
-   intel_batchbuffer_advance(brw);
+   brw_batch_advance(brw);
 
    brw->no_depth_or_stencil = !depth_mt && !stencil_mt;
 }
@@ -469,18 +469,18 @@ void
 brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   const bool is_965 = devinfo->gen == 4 && !devinfo->is_g4x;
+   const bool is_965 = devinfo->ver == 4 && !devinfo->is_g4x;
    const uint32_t _3DSTATE_PIPELINE_SELECT =
       is_965 ? CMD_PIPELINE_SELECT_965 : CMD_PIPELINE_SELECT_GM45;
 
-   if (devinfo->gen >= 8 && devinfo->gen < 10) {
+   if (devinfo->ver >= 8 && devinfo->ver < 10) {
       /* From the Broadwell PRM, Volume 2a: Instructions, PIPELINE_SELECT:
        *
        *   Software must clear the COLOR_CALC_STATE Valid field in
        *   3DSTATE_CC_STATE_POINTERS command prior to send a PIPELINE_SELECT
        *   with Pipeline Select set to GPGPU.
        *
-       * The internal hardware docs recommend the same workaround for Gen9
+       * The internal hardware docs recommend the same workaround for Gfx9
        * hardware too.
        */
       if (pipeline == BRW_COMPUTE_PIPELINE) {
@@ -493,7 +493,7 @@ brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
       }
    }
 
-   if (devinfo->gen == 9 && pipeline == BRW_RENDER_PIPELINE) {
+   if (devinfo->ver == 9 && pipeline == BRW_RENDER_PIPELINE) {
       /* We seem to have issues with geometry flickering when 3D and compute
        * are combined in the same batch and this appears to fix it.
        */
@@ -514,7 +514,7 @@ brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
       ADVANCE_BATCH();
    }
 
-   if (devinfo->gen >= 6) {
+   if (devinfo->ver >= 6) {
       /* From "BXML » GT » MI » vol1a GPU Overview » [Instruction]
        * PIPELINE_SELECT [DevBWR+]":
        *
@@ -526,7 +526,7 @@ brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
        *   MI_PIPELINE_SELECT command to change the Pipeline Select Mode.
        */
       const unsigned dc_flush =
-         devinfo->gen >= 7 ? PIPE_CONTROL_DATA_CACHE_FLUSH : 0;
+         devinfo->ver >= 7 ? PIPE_CONTROL_DATA_CACHE_FLUSH : 0;
 
       brw_emit_pipe_control_flush(brw,
                                   PIPE_CONTROL_RENDER_TARGET_FLUSH |
@@ -557,11 +557,11 @@ brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
    /* Select the pipeline */
    BEGIN_BATCH(1);
    OUT_BATCH(_3DSTATE_PIPELINE_SELECT << 16 |
-             (devinfo->gen >= 9 ? (3 << 8) : 0) |
+             (devinfo->ver >= 9 ? (3 << 8) : 0) |
              (pipeline == BRW_COMPUTE_PIPELINE ? 2 : 0));
    ADVANCE_BATCH();
 
-   if (devinfo->gen == 7 && !devinfo->is_haswell &&
+   if (devinfo->ver == 7 && !devinfo->is_haswell &&
        pipeline == BRW_RENDER_PIPELINE) {
       /* From "BXML » GT » MI » vol1a GPU Overview » [Instruction]
        * PIPELINE_SELECT [DevBWR+]":
@@ -572,7 +572,7 @@ brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
        *   operation and then a dummy DRAW after every MI_SET_CONTEXT and
        *   after any PIPELINE_SELECT that is enabling 3D mode.
        */
-      gen7_emit_cs_stall_flush(brw);
+      gfx7_emit_cs_stall_flush(brw);
 
       BEGIN_BATCH(7);
       OUT_BATCH(CMD_3D_PRIM << 16 | (7 - 2));
@@ -624,9 +624,9 @@ brw_emit_hashing_mode(struct brw_context *brw, unsigned width,
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-   if (devinfo->gen == 9) {
+   if (devinfo->ver == 9) {
       const uint32_t slice_hashing[] = {
-         /* Because all Gen9 platforms with more than one slice require
+         /* Because all Gfx9 platforms with more than one slice require
           * three-way subslice hashing, a single "normal" 16x16 slice hashing
           * block is guaranteed to suffer from substantial imbalance, with one
           * subslice receiving twice as much work as the other two in the
@@ -634,7 +634,7 @@ brw_emit_hashing_mode(struct brw_context *brw, unsigned width,
           *
           * The performance impact of that would be particularly severe when
           * three-way hashing is also in use for slice balancing (which is the
-          * case for all Gen9 GT4 platforms), because one of the slices
+          * case for all Gfx9 GT4 platforms), because one of the slices
           * receives one every three 16x16 blocks in either direction, which
           * is roughly the periodicity of the underlying subslice imbalance
           * pattern ("roughly" because in reality the hardware's
@@ -646,9 +646,9 @@ brw_emit_hashing_mode(struct brw_context *brw, unsigned width,
           * single slice hashing block is minimal, largely eliminating this
           * effect.
           */
-         GEN9_SLICE_HASHING_32x32,
+         GFX9_SLICE_HASHING_32x32,
          /* Finest slice hashing mode available. */
-         GEN9_SLICE_HASHING_NORMAL
+         GFX9_SLICE_HASHING_NORMAL
       };
       const uint32_t subslice_hashing[] = {
          /* The 16x16 subslice hashing mode is used on non-LLC platforms to
@@ -658,10 +658,10 @@ brw_emit_hashing_mode(struct brw_context *brw, unsigned width,
           * cost of greater subslice imbalance for primitives of dimensions
           * approximately intermediate between 16x4 and 16x16.
           */
-         (devinfo->has_llc ? GEN9_SUBSLICE_HASHING_16x4 :
-                             GEN9_SUBSLICE_HASHING_16x16),
+         (devinfo->has_llc ? GFX9_SUBSLICE_HASHING_16x4 :
+                             GFX9_SUBSLICE_HASHING_16x16),
          /* Finest subslice hashing mode available. */
-         GEN9_SUBSLICE_HASHING_8x4
+         GFX9_SUBSLICE_HASHING_8x4
       };
       /* Dimensions of the smallest hashing block of a given hashing mode.  If
        * the rendering area is smaller than this there can't possibly be any
@@ -677,14 +677,14 @@ brw_emit_hashing_mode(struct brw_context *brw, unsigned width,
       if (width > min_size[idx][0] || height > min_size[idx][1]) {
          const uint32_t gt_mode =
             (devinfo->num_slices == 1 ? 0 :
-             GEN9_SLICE_HASHING_MASK_BITS | slice_hashing[idx]) |
-            GEN9_SUBSLICE_HASHING_MASK_BITS | subslice_hashing[idx];
+             GFX9_SLICE_HASHING_MASK_BITS | slice_hashing[idx]) |
+            GFX9_SUBSLICE_HASHING_MASK_BITS | subslice_hashing[idx];
 
          brw_emit_pipe_control_flush(brw,
                                      PIPE_CONTROL_STALL_AT_SCOREBOARD |
                                      PIPE_CONTROL_CS_STALL);
 
-         brw_load_register_imm32(brw, GEN7_GT_MODE, gt_mode);
+         brw_load_register_imm32(brw, GFX7_GT_MODE, gt_mode);
 
          brw->current_hash_scale = scale;
       }
@@ -698,12 +698,12 @@ void
 brw_upload_invariant_state(struct brw_context *brw)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   const bool is_965 = devinfo->gen == 4 && !devinfo->is_g4x;
+   const bool is_965 = devinfo->ver == 4 && !devinfo->is_g4x;
 
    brw_emit_select_pipeline(brw, BRW_RENDER_PIPELINE);
    brw->last_pipeline = BRW_RENDER_PIPELINE;
 
-   if (devinfo->gen >= 8) {
+   if (devinfo->ver >= 8) {
       BEGIN_BATCH(3);
       OUT_BATCH(CMD_STATE_SIP << 16 | (3 - 2));
       OUT_BATCH(0);
@@ -716,7 +716,7 @@ brw_upload_invariant_state(struct brw_context *brw)
       ADVANCE_BATCH();
    }
 
-   /* Original Gen4 doesn't have 3DSTATE_AA_LINE_PARAMETERS. */
+   /* Original Gfx4 doesn't have 3DSTATE_AA_LINE_PARAMETERS. */
    if (!is_965) {
       BEGIN_BATCH(3);
       OUT_BATCH(_3DSTATE_AA_LINE_PARAMETERS << 16 | (3 - 2));
@@ -731,7 +731,7 @@ brw_upload_invariant_state(struct brw_context *brw)
  * Define the base addresses which some state is referenced from.
  *
  * This allows us to avoid having to emit relocations for the objects,
- * and is actually required for binding table pointers on gen6.
+ * and is actually required for binding table pointers on gfx6.
  *
  * Surface state base address covers binding table pointers and
  * surface state objects, but not the surfaces that the surface state
@@ -754,9 +754,9 @@ brw_upload_state_base_address(struct brw_context *brw)
     * maybe this isn't required for us in particular.
     */
 
-   if (devinfo->gen >= 6) {
+   if (devinfo->ver >= 6) {
       const unsigned dc_flush =
-         devinfo->gen >= 7 ? PIPE_CONTROL_DATA_CACHE_FLUSH : 0;
+         devinfo->ver >= 7 ? PIPE_CONTROL_DATA_CACHE_FLUSH : 0;
 
       /* Emit a render target cache flush.
        *
@@ -785,15 +785,15 @@ brw_upload_state_base_address(struct brw_context *brw)
                                 dc_flush);
    }
 
-   if (devinfo->gen >= 8) {
+   if (devinfo->ver >= 8) {
       /* STATE_BASE_ADDRESS has issues with 48-bit address spaces.  If the
        * address + size as seen by STATE_BASE_ADDRESS overflows 48 bits,
        * the GPU appears to treat all accesses to the buffer as being out
        * of bounds and returns zero.  To work around this, we pin all SBAs
        * to the bottom 4GB.
        */
-      uint32_t mocs_wb = devinfo->gen >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
-      int pkt_len = devinfo->gen >= 10 ? 22 : (devinfo->gen >= 9 ? 19 : 16);
+      uint32_t mocs_wb = devinfo->ver >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
+      int pkt_len = devinfo->ver >= 10 ? 22 : (devinfo->ver >= 9 ? 19 : 16);
 
       BEGIN_BATCH(pkt_len);
       OUT_BATCH(CMD_STATE_BASE_ADDRESS << 16 | (pkt_len - 2));
@@ -818,19 +818,19 @@ brw_upload_state_base_address(struct brw_context *brw)
       OUT_BATCH(0xfffff001);
       /* Instruction access upper bound */
       OUT_BATCH(ALIGN(brw->cache.bo->size, 4096) | 1);
-      if (devinfo->gen >= 9) {
+      if (devinfo->ver >= 9) {
          OUT_BATCH(1);
          OUT_BATCH(0);
          OUT_BATCH(0);
       }
-      if (devinfo->gen >= 10) {
+      if (devinfo->ver >= 10) {
          OUT_BATCH(1);
          OUT_BATCH(0);
          OUT_BATCH(0);
       }
       ADVANCE_BATCH();
-   } else if (devinfo->gen >= 6) {
-      uint8_t mocs = devinfo->gen == 7 ? GEN7_MOCS_L3 : 0;
+   } else if (devinfo->ver >= 6) {
+      uint8_t mocs = devinfo->ver == 7 ? GFX7_MOCS_L3 : 0;
 
        BEGIN_BATCH(10);
        OUT_BATCH(CMD_STATE_BASE_ADDRESS << 16 | (10 - 2));
@@ -838,20 +838,20 @@ brw_upload_state_base_address(struct brw_context *brw)
                  mocs << 4 | /* Stateless Data Port Access Memory Object Control State */
                  1); /* General State Base Address Modify Enable */
        /* Surface state base address:
-	* BINDING_TABLE_STATE
-	* SURFACE_STATE
-	*/
+        * BINDING_TABLE_STATE
+        * SURFACE_STATE
+        */
        OUT_RELOC(brw->batch.state.bo, 0, 1);
         /* Dynamic state base address:
-	 * SAMPLER_STATE
-	 * SAMPLER_BORDER_COLOR_STATE
-	 * CLIP, SF, WM/CC viewport state
-	 * COLOR_CALC_STATE
-	 * DEPTH_STENCIL_STATE
-	 * BLEND_STATE
-	 * Push constants (when INSTPM: CONSTANT_BUFFER Address Offset
-	 * Disable is clear, which we rely on)
-	 */
+         * SAMPLER_STATE
+         * SAMPLER_BORDER_COLOR_STATE
+         * CLIP, SF, WM/CC viewport state
+         * COLOR_CALC_STATE
+         * DEPTH_STENCIL_STATE
+         * BLEND_STATE
+         * Push constants (when INSTPM: CONSTANT_BUFFER Address Offset
+         * Disable is clear, which we rely on)
+         */
        OUT_RELOC(brw->batch.state.bo, 0, 1);
 
        OUT_BATCH(1); /* Indirect object base address: MEDIA_OBJECT data */
@@ -861,15 +861,15 @@ brw_upload_state_base_address(struct brw_context *brw)
 
        OUT_BATCH(1); /* General state upper bound */
        /* Dynamic state upper bound.  Although the documentation says that
-	* programming it to zero will cause it to be ignored, that is a lie.
-	* If this isn't programmed to a real bound, the sampler border color
-	* pointer is rejected, causing border color to mysteriously fail.
-	*/
+        * programming it to zero will cause it to be ignored, that is a lie.
+        * If this isn't programmed to a real bound, the sampler border color
+        * pointer is rejected, causing border color to mysteriously fail.
+        */
        OUT_BATCH(0xfffff001);
        OUT_BATCH(1); /* Indirect object upper bound */
        OUT_BATCH(1); /* Instruction access upper bound */
        ADVANCE_BATCH();
-   } else if (devinfo->gen == 5) {
+   } else if (devinfo->ver == 5) {
        BEGIN_BATCH(8);
        OUT_BATCH(CMD_STATE_BASE_ADDRESS << 16 | (8 - 2));
        OUT_BATCH(1); /* General state base address */
@@ -891,7 +891,7 @@ brw_upload_state_base_address(struct brw_context *brw)
        ADVANCE_BATCH();
    }
 
-   if (devinfo->gen >= 6) {
+   if (devinfo->ver >= 6) {
       brw_emit_pipe_control_flush(brw,
                                   PIPE_CONTROL_INSTRUCTION_INVALIDATE |
                                   PIPE_CONTROL_STATE_CACHE_INVALIDATE |

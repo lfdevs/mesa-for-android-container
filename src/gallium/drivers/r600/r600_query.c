@@ -526,7 +526,7 @@ static bool r600_query_hw_prepare_buffer(struct r600_common_screen *rscreen,
 					 struct r600_resource *buffer)
 {
 	/* Callers ensure that the buffer is currently unused by the GPU. */
-	uint32_t *results = rscreen->ws->buffer_map(buffer->buf, NULL,
+	uint32_t *results = rscreen->ws->buffer_map(rscreen->ws, buffer->buf, NULL,
 						   PIPE_MAP_WRITE |
 						   PIPE_MAP_UNSYNCHRONIZED);
 	if (!results)
@@ -1021,7 +1021,7 @@ void r600_query_hw_reset_buffers(struct r600_common_context *rctx,
 
 	/* Obtain a new buffer if the current one can't be mapped without a stall. */
 	if (r600_rings_is_buffer_referenced(rctx, query->buffer.buf->buf, RADEON_USAGE_READWRITE) ||
-	    !rctx->ws->buffer_wait(query->buffer.buf->buf, 0, RADEON_USAGE_READWRITE)) {
+	    !rctx->ws->buffer_wait(rctx->ws, query->buffer.buf->buf, 0, RADEON_USAGE_READWRITE)) {
 		r600_resource_reference(&query->buffer.buf, NULL);
 		query->buffer.buf = r600_new_query_buffer(rctx->screen, query);
 	} else {
@@ -1343,7 +1343,7 @@ bool r600_query_hw_get_result(struct r600_common_context *rctx,
 		void *map;
 
 		if (rquery->b.flushed)
-			map = rctx->ws->buffer_map(qbuf->buf->buf, NULL, usage);
+			map = rctx->ws->buffer_map(rctx->ws, qbuf->buf->buf, NULL, usage);
 		else
 			map = r600_buffer_map_sync_with_rings(rctx, qbuf->buf, usage);
 
@@ -1591,10 +1591,7 @@ static void r600_restore_qbo_state(struct r600_common_context *rctx,
 				   struct r600_qbo_state *st)
 {
 	rctx->b.bind_compute_state(&rctx->b, st->saved_compute);
-
-	rctx->b.set_constant_buffer(&rctx->b, PIPE_SHADER_COMPUTE, 0, &st->saved_const0);
-	pipe_resource_reference(&st->saved_const0.buffer, NULL);
-
+	rctx->b.set_constant_buffer(&rctx->b, PIPE_SHADER_COMPUTE, 0, true, &st->saved_const0);
 	rctx->b.set_shader_buffers(&rctx->b, PIPE_SHADER_COMPUTE, 0, 3, st->saved_ssbo, ~0);
 	for (unsigned i = 0; i < 3; ++i)
 		pipe_resource_reference(&st->saved_ssbo[i].buffer, NULL);
@@ -1727,7 +1724,7 @@ static void r600_query_hw_get_result_resource(struct r600_common_context *rctx,
 		} else
 			consts.buffer_offset = 0;
 
-		rctx->b.set_constant_buffer(&rctx->b, PIPE_SHADER_COMPUTE, 0, &constant_buffer);
+		rctx->b.set_constant_buffer(&rctx->b, PIPE_SHADER_COMPUTE, 0, false, &constant_buffer);
 
 		rctx->b.set_shader_buffers(&rctx->b, PIPE_SHADER_COMPUTE, 0, 3, ssbo, ~0);
 

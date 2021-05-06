@@ -42,7 +42,7 @@ int main(void)
 
    pthread_mutex_init(&device.mutex, NULL);
    anv_bo_cache_init(&device.bo_cache);
-   anv_block_pool_init(&pool, &device, 4096, initial_size);
+   anv_block_pool_init(&pool, &device, "test", 4096, initial_size);
    ASSERT(pool.size == initial_size);
 
    uint32_t padding;

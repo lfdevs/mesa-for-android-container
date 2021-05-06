@@ -70,8 +70,8 @@ Definitions
   the value of s0.
 
   For example, the logical array length of a 3D surface is always 1, even on
-  Gen9 where the surface's memory layout is that of an array surface
-  (ISL_DIM_LAYOUT_GEN4_2D).
+  Gfx9 where the surface's memory layout is that of an array surface
+  (ISL_DIM_LAYOUT_GFX4_2D).
 
 - Physical Surface Samples (sa):
 

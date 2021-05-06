@@ -78,10 +78,10 @@ pandecode_add_name(struct pandecode_mapped_memory *mem, uint64_t gpu_va, const c
         if (!name) {
                 /* If we don't have a name, assign one */
 
-                snprintf(mem->name, ARRAY_SIZE(mem->name) - 1,
+                snprintf(mem->name, sizeof(mem->name) - 1,
                          "memory_%" PRIx64, gpu_va);
         } else {
-                assert((strlen(name) + 1) < ARRAY_SIZE(mem->name));
+                assert((strlen(name) + 1) < sizeof(mem->name));
                 memcpy(mem->name, name, strlen(name) + 1);
         }
 }
@@ -212,7 +212,7 @@ pandecode_next_frame(void)
 void
 pandecode_close(void)
 {
-        _mesa_hash_table_u64_destroy(mmap_table, NULL);
+        _mesa_hash_table_u64_destroy(mmap_table);
         util_dynarray_fini(&ro_mappings);
         pandecode_dump_file_close();
 }

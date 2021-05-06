@@ -102,7 +102,7 @@ applegl_wait_x(struct glx_context *gc)
    apple_glx_waitx(dpy, gc->driContext);
 }
 
-static void *
+void *
 applegl_get_proc_address(const char *symbol)
 {
    return dlsym(apple_cgl_get_dl_handle(), symbol);
@@ -114,10 +114,6 @@ static const struct glx_context_vtable applegl_context_vtable = {
    .unbind              = applegl_unbind_context,
    .wait_gl             = applegl_wait_gl,
    .wait_x              = applegl_wait_x,
-   .use_x_font          = DRI_glXUseXFont,
-   .bind_tex_image      = NULL,
-   .release_tex_image   = NULL,
-   .get_proc_address    = applegl_get_proc_address,
 };
 
 struct glx_context *

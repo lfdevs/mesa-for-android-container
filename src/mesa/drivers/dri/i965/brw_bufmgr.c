@@ -45,9 +45,9 @@
 #include <stdbool.h>
 
 #include "errno.h"
-#include "common/gen_clflush.h"
+#include "common/intel_clflush.h"
 #include "dev/gen_debug.h"
-#include "common/gen_gem.h"
+#include "common/intel_gem.h"
 #include "dev/gen_device_info.h"
 #include "libdrm_macros.h"
 #include "main/macros.h"
@@ -317,7 +317,7 @@ bucket_vma_alloc(struct brw_bufmgr *bufmgr,
          return 0ull;
 
       uint64_t addr = vma_alloc(bufmgr, memzone, node_size, node_size);
-      node->start_address = gen_48b_address(addr);
+      node->start_address = intel_48b_address(addr);
       node->bitmap = ~1ull;
       return node->start_address;
    }
@@ -434,7 +434,7 @@ vma_alloc(struct brw_bufmgr *bufmgr,
    assert((addr >> 48ull) == 0);
    assert((addr % alignment) == 0);
 
-   return gen_canonical_address(addr);
+   return intel_canonical_address(addr);
 }
 
 /**
@@ -448,7 +448,7 @@ vma_free(struct brw_bufmgr *bufmgr,
    assert(brw_using_softpin(bufmgr));
 
    /* Un-canonicalize the address. */
-   address = gen_48b_address(address);
+   address = intel_48b_address(address);
 
    if (address == 0ull)
       return;
@@ -794,7 +794,6 @@ brw_bo_gem_create_from_name(struct brw_bufmgr *bufmgr,
     */
    bo = hash_find_bo(bufmgr->handle_table, open_arg.handle);
    if (bo) {
-      assert(list_is_empty(&bo->exports));
       brw_bo_reference(bo);
       goto out;
    }
@@ -922,7 +921,7 @@ bo_unreference_final(struct brw_bo *bo, time_t time)
 
    list_for_each_entry_safe(struct bo_export, export, &bo->exports, link) {
       struct drm_gem_close close = { .handle = export->gem_handle };
-      gen_ioctl(export->drm_fd, DRM_IOCTL_GEM_CLOSE, &close);
+      intel_ioctl(export->drm_fd, DRM_IOCTL_GEM_CLOSE, &close);
 
       list_del(&export->link);
       free(export);
@@ -1318,7 +1317,7 @@ void
 brw_bo_wait_rendering(struct brw_bo *bo)
 {
    /* We require a kernel recent enough for WAIT_IOCTL support.
-    * See intel_init_bufmgr()
+    * See brw_init_bufmgr()
     */
    brw_bo_wait(bo, -1);
 }
@@ -1485,7 +1484,6 @@ brw_bo_gem_create_from_prime_internal(struct brw_bufmgr *bufmgr, int prime_fd,
     */
    bo = hash_find_bo(bufmgr->handle_table, handle);
    if (bo) {
-      assert(list_is_empty(&bo->exports));
       brw_bo_reference(bo);
       goto out;
    }
@@ -1883,7 +1881,7 @@ brw_bufmgr_create(struct gen_device_info *devinfo, int fd, bool bo_reuse)
    /* The STATE_BASE_ADDRESS size field can only hold 1 page shy of 4GB */
    const uint64_t _4GB_minus_1 = _4GB - PAGE_SIZE;
 
-   if (devinfo->gen >= 8 && gtt_size > _4GB) {
+   if (devinfo->ver >= 8 && gtt_size > _4GB) {
       bufmgr->initial_kflags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
 
       /* Allocate VMA in userspace if we have softpin and full PPGTT. */
@@ -1899,14 +1897,14 @@ brw_bufmgr_create(struct gen_device_info *devinfo, int fd, bool bo_reuse)
           */
          util_vma_heap_init(&bufmgr->vma_allocator[BRW_MEMZONE_OTHER],
                             1 * _4GB, gtt_size - 2 * _4GB);
-      } else if (devinfo->gen >= 10) {
+      } else if (devinfo->ver >= 10) {
          /* Softpin landed in 4.5, but GVT used an aliasing PPGTT until
           * kernel commit 6b3816d69628becb7ff35978aa0751798b4a940a in
-          * 4.14.  Gen10+ GVT hasn't landed yet, so it's not actually a
+          * 4.14.  Gfx10+ GVT hasn't landed yet, so it's not actually a
           * problem - but extending this requirement back to earlier gens
           * might actually mean requiring 4.14.
           */
-         fprintf(stderr, "i965 requires softpin (Kernel 4.5) on Gen10+.");
+         fprintf(stderr, "i965 requires softpin (Kernel 4.5) on Gfx10+.");
          close(bufmgr->fd);
          free(bufmgr);
          return NULL;

@@ -190,18 +190,18 @@ def name(intype, outtype, inpv, outpv, pr, prim):
 def preamble(intype, outtype, inpv, outpv, pr, prim):
     print('static void ' + name( intype, outtype, inpv, outpv, pr, prim ) + '(')
     if intype != GENERATE:
-        print('    const void * _in,')
+        print('    const void * restrict _in,')
     print('    unsigned start,')
     if intype != GENERATE:
         print('    unsigned in_nr,')
     print('    unsigned out_nr,')
     if intype != GENERATE:
         print('    unsigned restart_index,')
-    print('    void *_out )')
+    print('    void * restrict _out )')
     print('{')
     if intype != GENERATE:
-        print('  const ' + intype + '*in = (const ' + intype + '*)_in;')
-    print('  ' + outtype + ' *out = (' + outtype + '*)_out;')
+        print('  const ' + intype + '* restrict in = (const ' + intype + '* restrict)_in;')
+    print('  ' + outtype + ' * restrict out = (' + outtype + '* restrict)_out;')
     print('  unsigned i, j;')
     print('  (void)j;')
 

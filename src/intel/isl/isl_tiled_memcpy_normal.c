@@ -41,8 +41,8 @@ _isl_memcpy_linear_to_tiled(uint32_t xt1, uint32_t xt2,
                             enum isl_tiling tiling,
                             isl_memcpy_type copy_type)
 {
-   intel_linear_to_tiled(xt1, xt2, yt1, yt2, dst, src, dst_pitch, src_pitch,
-                         has_swizzling, tiling, copy_type);
+   linear_to_tiled(xt1, xt2, yt1, yt2, dst, src, dst_pitch, src_pitch,
+                   has_swizzling, tiling, copy_type);
 }
 
 void
@@ -54,6 +54,6 @@ _isl_memcpy_tiled_to_linear(uint32_t xt1, uint32_t xt2,
                             enum isl_tiling tiling,
                             isl_memcpy_type copy_type)
 {
-   intel_tiled_to_linear(xt1, xt2, yt1, yt2, dst, src, dst_pitch, src_pitch,
-                         has_swizzling, tiling, copy_type);
+   tiled_to_linear(xt1, xt2, yt1, yt2, dst, src, dst_pitch, src_pitch,
+                   has_swizzling, tiling, copy_type);
 }

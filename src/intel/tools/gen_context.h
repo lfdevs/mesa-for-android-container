@@ -21,22 +21,22 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef GEN_CONTEXT_H
-#define GEN_CONTEXT_H
+#ifndef INTEL_CONTEXT_H
+#define INTEL_CONTEXT_H
 
 #include <stdint.h>
 
 #define RING_SIZE         (1 * 4096)
 #define PPHWSP_SIZE         (1 * 4096)
 
-#define GEN11_LR_CONTEXT_RENDER_SIZE    (14 * 4096)
-#define GEN10_LR_CONTEXT_RENDER_SIZE    (19 * 4096)
-#define GEN9_LR_CONTEXT_RENDER_SIZE     (22 * 4096)
-#define GEN8_LR_CONTEXT_RENDER_SIZE     (20 * 4096)
-#define GEN8_LR_CONTEXT_OTHER_SIZE      (2 * 4096)
+#define GFX11_LR_CONTEXT_RENDER_SIZE    (14 * 4096)
+#define GFX10_LR_CONTEXT_RENDER_SIZE    (19 * 4096)
+#define GFX9_LR_CONTEXT_RENDER_SIZE     (22 * 4096)
+#define GFX8_LR_CONTEXT_RENDER_SIZE     (20 * 4096)
+#define GFX8_LR_CONTEXT_OTHER_SIZE      (2 * 4096)
 
-#define CONTEXT_RENDER_SIZE GEN9_LR_CONTEXT_RENDER_SIZE /* largest size */
-#define CONTEXT_OTHER_SIZE GEN8_LR_CONTEXT_OTHER_SIZE
+#define CONTEXT_RENDER_SIZE GFX9_LR_CONTEXT_RENDER_SIZE /* largest size */
+#define CONTEXT_OTHER_SIZE GFX8_LR_CONTEXT_OTHER_SIZE
 
 #define MI_LOAD_REGISTER_IMM_n(n) ((0x22 << 23) | (2 * (n) - 1))
 #define MI_LRI_FORCE_POSTED       (1<<12)
@@ -70,10 +70,10 @@
 #define MEMORY_MAP_SIZE (64 /* MiB */ * 1024 * 1024)
 
 #define PTE_SIZE 4
-#define GEN8_PTE_SIZE 8
+#define GFX8_PTE_SIZE 8
 
 #define NUM_PT_ENTRIES (ALIGN(MEMORY_MAP_SIZE, 4096) / 4096)
-#define PT_SIZE ALIGN(NUM_PT_ENTRIES * GEN8_PTE_SIZE, 4096)
+#define PT_SIZE ALIGN(NUM_PT_ENTRIES * GFX8_PTE_SIZE, 4096)
 
 #define CONTEXT_FLAGS (0x339)   /* Normal Priority | L3-LLC Coherency |
                                  * PPGTT Enabled |
@@ -98,7 +98,7 @@ struct gen_context_parameters {
 
 typedef void (*gen_context_init_t)(const struct gen_context_parameters *, uint32_t *, uint32_t *);
 
-#include "gen8_context.h"
-#include "gen10_context.h"
+#include "gfx8_context.h"
+#include "gfx10_context.h"
 
-#endif /* GEN_CONTEXT_H */
+#endif /* INTEL_CONTEXT_H */

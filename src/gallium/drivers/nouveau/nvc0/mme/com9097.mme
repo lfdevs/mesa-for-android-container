@@ -592,7 +592,7 @@ crs_loop:
  * SCRATCH[4] = current counter [low]
  * SCRATCH[5] = current counter [high]
  *
- * arg     = number of parameters to muliply together, ideally 6
+ * arg     = number of parameters to multiply together, ideally 6
  * parm[0] = num_groups_x
  * parm[1] = num_groups_y
  * parm[2] = num_groups_z

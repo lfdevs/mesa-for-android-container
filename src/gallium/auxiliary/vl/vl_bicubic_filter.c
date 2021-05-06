@@ -450,18 +450,18 @@ vl_bicubic_filter_render(struct vl_bicubic_filter *filter,
    filter->pipe->clear_render_target(filter->pipe, dst, &clear_color,
                                      0, 0, dst->width, dst->height, false);
    filter->pipe->set_constant_buffer(filter->pipe, PIPE_SHADER_FRAGMENT,
-                                     0, &cb);
+                                     0, false, &cb);
    filter->pipe->bind_rasterizer_state(filter->pipe, filter->rs_state);
    filter->pipe->bind_blend_state(filter->pipe, filter->blend);
    filter->pipe->bind_sampler_states(filter->pipe, PIPE_SHADER_FRAGMENT,
                                      0, 1, &filter->sampler);
    filter->pipe->set_sampler_views(filter->pipe, PIPE_SHADER_FRAGMENT,
-                                   0, 1, &src);
+                                   0, 1, 0, &src);
    filter->pipe->bind_vs_state(filter->pipe, filter->vs);
    filter->pipe->bind_fs_state(filter->pipe, filter->fs);
    filter->pipe->set_framebuffer_state(filter->pipe, &fb_state);
    filter->pipe->set_viewport_states(filter->pipe, 0, 1, &viewport);
-   filter->pipe->set_vertex_buffers(filter->pipe, 0, 1, &filter->quad);
+   filter->pipe->set_vertex_buffers(filter->pipe, 0, 1, 0, false, &filter->quad);
    filter->pipe->bind_vertex_elements_state(filter->pipe, filter->ves);
 
    util_draw_arrays(filter->pipe, PIPE_PRIM_QUADS, 0, 4);

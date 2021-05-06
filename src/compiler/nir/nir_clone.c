@@ -411,6 +411,7 @@ clone_tex(clone_state *state, const nir_tex_instr *tex)
    }
    ntex->coord_components = tex->coord_components;
    ntex->is_array = tex->is_array;
+   ntex->array_is_lowered_cube = tex->array_is_lowered_cube;
    ntex->is_shadow = tex->is_shadow;
    ntex->is_new_style_shadow = tex->is_new_style_shadow;
    ntex->is_sparse = tex->is_sparse;
@@ -772,7 +773,6 @@ nir_shader_clone(void *mem_ctx, const nir_shader *s)
    ns->num_inputs = s->num_inputs;
    ns->num_uniforms = s->num_uniforms;
    ns->num_outputs = s->num_outputs;
-   ns->shared_size = s->shared_size;
    ns->scratch_size = s->scratch_size;
 
    ns->constant_data_size = s->constant_data_size;

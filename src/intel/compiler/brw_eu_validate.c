@@ -106,7 +106,7 @@ inst_is_send(const struct gen_device_info *devinfo, const brw_inst *inst)
 static bool
 inst_is_split_send(const struct gen_device_info *devinfo, const brw_inst *inst)
 {
-   if (devinfo->gen >= 12) {
+   if (devinfo->ver >= 12) {
       return inst_is_send(devinfo, inst);
    } else {
       switch (brw_inst_opcode(devinfo, inst)) {
@@ -134,7 +134,7 @@ signed_type(unsigned type)
 static enum brw_reg_type
 inst_dst_type(const struct gen_device_info *devinfo, const brw_inst *inst)
 {
-   return (devinfo->gen < 12 || !inst_is_send(devinfo, inst)) ?
+   return (devinfo->ver < 12 || !inst_is_send(devinfo, inst)) ?
       brw_inst_dst_type(devinfo, inst) : BRW_REGISTER_TYPE_D;
 }
 
@@ -223,7 +223,7 @@ num_sources_from_inst(const struct gen_device_info *devinfo,
 
    if (brw_inst_opcode(devinfo, inst) == BRW_OPCODE_MATH) {
       math_function = brw_inst_math_function(devinfo, inst);
-   } else if (devinfo->gen < 6 &&
+   } else if (devinfo->ver < 6 &&
               brw_inst_opcode(devinfo, inst) == BRW_OPCODE_SEND) {
       if (brw_inst_sfid(devinfo, inst) == BRW_SFID_MATH) {
          /* src1 must be a descriptor (including the information to determine
@@ -254,8 +254,8 @@ num_sources_from_inst(const struct gen_device_info *devinfo,
    case BRW_MATH_FUNCTION_SIN:
    case BRW_MATH_FUNCTION_COS:
    case BRW_MATH_FUNCTION_SINCOS:
-   case GEN8_MATH_FUNCTION_INVM:
-   case GEN8_MATH_FUNCTION_RSQRTM:
+   case GFX8_MATH_FUNCTION_INVM:
+   case GFX8_MATH_FUNCTION_RSQRTM:
       return 1;
    case BRW_MATH_FUNCTION_FDIV:
    case BRW_MATH_FUNCTION_POW:
@@ -292,12 +292,12 @@ invalid_values(const struct gen_device_info *devinfo, const brw_inst *inst)
 
    if (num_sources == 3) {
       /* Nothing to test:
-       *    No 3-src instructions on Gen4-5
-       *    No reg file bits on Gen6-10 (align16)
-       *    No invalid encodings on Gen10-12 (align1)
+       *    No 3-src instructions on Gfx4-5
+       *    No reg file bits on Gfx6-10 (align16)
+       *    No invalid encodings on Gfx10-12 (align1)
        */
    } else {
-      if (devinfo->gen > 6) {
+      if (devinfo->ver > 6) {
          ERROR_IF(brw_inst_dst_reg_file(devinfo, inst) == MRF ||
                   (num_sources > 0 &&
                    brw_inst_src0_reg_file(devinfo, inst) == MRF) ||
@@ -312,7 +312,7 @@ invalid_values(const struct gen_device_info *devinfo, const brw_inst *inst)
 
    if (num_sources == 3) {
       if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
-         if (devinfo->gen >= 10) {
+         if (devinfo->ver >= 10) {
             ERROR_IF(brw_inst_3src_a1_dst_type (devinfo, inst) == INVALID_REG_TYPE ||
                      brw_inst_3src_a1_src0_type(devinfo, inst) == INVALID_REG_TYPE ||
                      brw_inst_3src_a1_src1_type(devinfo, inst) == INVALID_REG_TYPE ||
@@ -372,7 +372,7 @@ alignment_supported(const struct gen_device_info *devinfo,
 {
    struct string error_msg = { .str = NULL, .len = 0 };
 
-   ERROR_IF(devinfo->gen >= 11 && brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_16,
+   ERROR_IF(devinfo->ver >= 11 && brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_16,
             "Align16 not supported");
 
    return error_msg;
@@ -442,7 +442,7 @@ send_restrictions(const struct gen_device_info *devinfo,
       ERROR_IF(brw_inst_src0_address_mode(devinfo, inst) != BRW_ADDRESS_DIRECT,
                "send must use direct addressing");
 
-      if (devinfo->gen >= 7) {
+      if (devinfo->ver >= 7) {
          ERROR_IF(brw_inst_send_src0_reg_file(devinfo, inst) != BRW_GENERAL_REGISTER_FILE,
                   "send from non-GRF");
          ERROR_IF(brw_inst_eot(devinfo, inst) &&
@@ -450,7 +450,7 @@ send_restrictions(const struct gen_device_info *devinfo,
                   "send with EOT must use g112-g127");
       }
 
-      if (devinfo->gen >= 8) {
+      if (devinfo->ver >= 8) {
          ERROR_IF(!dst_is_null(devinfo, inst) &&
                   (brw_inst_dst_da_reg_nr(devinfo, inst) +
                    brw_inst_rlen(devinfo, inst) > 127) &&
@@ -553,7 +553,7 @@ execution_type(const struct gen_device_info *devinfo, const brw_inst *inst)
    /* Mixed operand types where one is float is float on Gen < 6
     * (and not allowed on later platforms)
     */
-   if (devinfo->gen < 6 &&
+   if (devinfo->ver < 6 &&
        (src0_exec_type == BRW_REGISTER_TYPE_F ||
         src1_exec_type == BRW_REGISTER_TYPE_F))
       return BRW_REGISTER_TYPE_F;
@@ -629,7 +629,7 @@ is_half_float_conversion(const struct gen_device_info *devinfo,
 static bool
 is_mixed_float(const struct gen_device_info *devinfo, const brw_inst *inst)
 {
-   if (devinfo->gen < 8)
+   if (devinfo->ver < 8)
       return false;
 
    if (inst_is_send(devinfo, inst))
@@ -699,7 +699,7 @@ general_restrictions_based_on_operand_types(const struct gen_device_info *devinf
    if (inst_is_send(devinfo, inst))
       return error_msg;
 
-   if (devinfo->gen >= 11) {
+   if (devinfo->ver >= 11) {
       if (num_sources == 3) {
          ERROR_IF(brw_reg_type_to_size(brw_inst_3src_a1_src1_type(devinfo, inst)) == 1 ||
                   brw_reg_type_to_size(brw_inst_3src_a1_src2_type(devinfo, inst)) == 1,
@@ -759,7 +759,7 @@ general_restrictions_based_on_operand_types(const struct gen_device_info *devinf
     * 32-bit elements, so they are doubled. For evaluating the validity of an
     * instruction, we halve them.
     */
-   if (devinfo->gen == 7 && !devinfo->is_haswell &&
+   if (devinfo->ver == 7 && !devinfo->is_haswell &&
        exec_type_size == 8 && dst_type_size == 4)
       dst_type_size = 8;
 
@@ -859,7 +859,7 @@ general_restrictions_based_on_operand_types(const struct gen_device_info *devinf
             ERROR_IF(subreg % 4 != 0,
                      "Conversions between integer and half-float must be "
                      "aligned to a DWord on the destination");
-         } else if ((devinfo->is_cherryview || devinfo->gen >= 9) &&
+         } else if ((devinfo->is_cherryview || devinfo->ver >= 9) &&
                     dst_type == BRW_REGISTER_TYPE_HF) {
             unsigned subreg = brw_inst_dst_da1_subreg_nr(devinfo, inst);
             ERROR_IF(dst_stride != 2 &&
@@ -878,7 +878,7 @@ general_restrictions_based_on_operand_types(const struct gen_device_info *devinf
     */
    bool validate_dst_size_and_exec_size_ratio =
       !is_mixed_float(devinfo, inst) ||
-      !(devinfo->is_cherryview || devinfo->gen >= 9);
+      !(devinfo->is_cherryview || devinfo->ver >= 9);
 
    if (validate_dst_size_and_exec_size_ratio &&
        exec_type_size > dst_type_size) {
@@ -897,7 +897,7 @@ general_restrictions_based_on_operand_types(const struct gen_device_info *devinf
           *    Implementation Restriction: The relaxed alignment rule for byte
           *    destination (#10.5) is not supported.
           */
-         if ((devinfo->gen > 4 || devinfo->is_g4x) && dst_type_is_byte) {
+         if ((devinfo->ver > 4 || devinfo->is_g4x) && dst_type_is_byte) {
             ERROR_IF(subreg % exec_type_size != 0 &&
                      subreg % exec_type_size != 1,
                      "Destination subreg must be aligned to the size of the "
@@ -943,7 +943,7 @@ general_restrictions_on_region_parameters(const struct gen_device_info *devinfo,
                   "Destination Horizontal Stride must be 1");
 
       if (num_sources >= 1) {
-         if (devinfo->is_haswell || devinfo->gen >= 8) {
+         if (devinfo->is_haswell || devinfo->ver >= 8) {
             ERROR_IF(brw_inst_src0_reg_file(devinfo, inst) != BRW_IMMEDIATE_VALUE &&
                      brw_inst_src0_vstride(devinfo, inst) != BRW_VERTICAL_STRIDE_0 &&
                      brw_inst_src0_vstride(devinfo, inst) != BRW_VERTICAL_STRIDE_2 &&
@@ -958,7 +958,7 @@ general_restrictions_on_region_parameters(const struct gen_device_info *devinfo,
       }
 
       if (num_sources == 2) {
-         if (devinfo->is_haswell || devinfo->gen >= 8) {
+         if (devinfo->is_haswell || devinfo->ver >= 8) {
             ERROR_IF(brw_inst_src1_reg_file(devinfo, inst) != BRW_IMMEDIATE_VALUE &&
                      brw_inst_src1_vstride(devinfo, inst) != BRW_VERTICAL_STRIDE_0 &&
                      brw_inst_src1_vstride(devinfo, inst) != BRW_VERTICAL_STRIDE_2 &&
@@ -1002,7 +1002,7 @@ general_restrictions_on_region_parameters(const struct gen_device_info *devinfo,
        * 32-bit elements, so they are doubled. For evaluating the validity of an
        * instruction, we halve them.
        */
-      if (devinfo->gen == 7 && !devinfo->is_haswell &&
+      if (devinfo->ver == 7 && !devinfo->is_haswell &&
           element_size == 8)
          element_size = 4;
 
@@ -1444,7 +1444,7 @@ region_alignment_rules(const struct gen_device_info *devinfo,
     * 32-bit elements, so they are doubled. For evaluating the validity of an
     * instruction, we halve them.
     */
-   if (devinfo->gen == 7 && !devinfo->is_haswell &&
+   if (devinfo->ver == 7 && !devinfo->is_haswell &&
        element_size == 8)
       element_size = 4;
 
@@ -1471,7 +1471,7 @@ region_alignment_rules(const struct gen_device_info *devinfo,
     *       3. The destination elements are evenly split between the two OWords
     *          of a register.
     */
-   if (devinfo->gen <= 8) {
+   if (devinfo->ver <= 8) {
       if (dst_regs == 1 && (src0_regs == 2 || src1_regs == 2)) {
          unsigned upper_oword_writes = 0, lower_oword_writes = 0;
 
@@ -1515,7 +1515,7 @@ region_alignment_rules(const struct gen_device_info *devinfo,
     * It is not known whether this restriction applies to KBL other Gens after
     * SKL.
     */
-   if (devinfo->gen <= 8 ||
+   if (devinfo->ver <= 8 ||
        brw_inst_opcode(devinfo, inst) == BRW_OPCODE_MATH) {
 
       /* Nothing explicitly states that on Gen < 8 elements must be evenly
@@ -1571,7 +1571,7 @@ region_alignment_rules(const struct gen_device_info *devinfo,
     * It is impossible to violate rule (1) without violating (2) or (3), so we
     * do not attempt to validate it.
     */
-   if (devinfo->gen <= 7 && dst_regs == 2) {
+   if (devinfo->ver <= 7 && dst_regs == 2) {
       for (unsigned i = 0; i < num_sources; i++) {
 #define DO_SRC(n)                                                             \
          if (src ## n ## _regs <= 1)                                          \
@@ -1628,7 +1628,7 @@ region_alignment_rules(const struct gen_device_info *devinfo,
     * destination must be an integer DWord, the hardware allows at least a
     * float destination type as well. We emit such instructions from
     *
-    *    fs_visitor::emit_interpolation_setup_gen6
+    *    fs_visitor::emit_interpolation_setup_gfx6
     *    fs_visitor::emit_fragcoord_interpolation
     *
     * and have for years with no ill effects.
@@ -1636,7 +1636,7 @@ region_alignment_rules(const struct gen_device_info *devinfo,
     * Additionally the simulator source code indicates that the real condition
     * is that the size of the destination type is 4 bytes.
     */
-   if (devinfo->gen <= 7 && dst_regs == 2) {
+   if (devinfo->ver <= 7 && dst_regs == 2) {
       enum brw_reg_type dst_type = inst_dst_type(devinfo, inst);
       bool dst_is_packed_dword =
          is_packed(exec_size * stride, exec_size, stride) &&
@@ -1760,7 +1760,7 @@ special_requirements_for_handling_double_precision_data_types(
    unsigned dst_address_mode = brw_inst_dst_address_mode(devinfo, inst);
 
    bool is_integer_dword_multiply =
-      devinfo->gen >= 8 &&
+      devinfo->ver >= 8 &&
       brw_inst_opcode(devinfo, inst) == BRW_OPCODE_MUL &&
       (brw_inst_src0_type(devinfo, inst) == BRW_REGISTER_TYPE_D ||
        brw_inst_src0_type(devinfo, inst) == BRW_REGISTER_TYPE_UD) &&
@@ -1873,9 +1873,9 @@ special_requirements_for_handling_double_precision_data_types(
     *    If Align16 is required for an operation with QW destination and non-QW
     *    source datatypes, the execution size cannot exceed 2.
     *
-    * We assume that the restriction applies to all Gen8+ parts.
+    * We assume that the restriction applies to all Gfx8+ parts.
     */
-   if (devinfo->gen >= 8) {
+   if (devinfo->ver >= 8) {
       enum brw_reg_type src0_type = brw_inst_src0_type(devinfo, inst);
       enum brw_reg_type src1_type =
          num_sources > 1 ? brw_inst_src1_type(devinfo, inst) : src0_type;
@@ -1912,12 +1912,12 @@ instruction_restrictions(const struct gen_device_info *devinfo,
 {
    struct string error_msg = { .str = NULL, .len = 0 };
 
-   /* From GEN:BUG:1604601757:
+   /* From Wa_1604601757:
     *
     * "When multiplying a DW and any lower precision integer, source modifier
     *  is not supported."
     */
-   if (devinfo->gen >= 12 &&
+   if (devinfo->ver >= 12 &&
        brw_inst_opcode(devinfo, inst) == BRW_OPCODE_MUL) {
       enum brw_reg_type exec_type = execution_type(devinfo, inst);
       const bool src0_valid = type_sz(brw_inst_src0_type(devinfo, inst)) == 4 ||
@@ -1933,6 +1933,44 @@ instruction_restrictions(const struct gen_device_info *devinfo,
                type_sz(exec_type) == 4 && !(src0_valid && src1_valid),
                "When multiplying a DW and any lower precision integer, source "
                "modifier is not supported.");
+   }
+
+   if (brw_inst_opcode(devinfo, inst) == BRW_OPCODE_CMP ||
+       brw_inst_opcode(devinfo, inst) == BRW_OPCODE_CMPN) {
+      if (devinfo->ver <= 7) {
+         /* Page 166 of the Ivy Bridge PRM Volume 4 part 3 (Execution Unit
+          * ISA) says:
+          *
+          *    Accumulator cannot be destination, implicit or explicit. The
+          *    destination must be a general register or the null register.
+          *
+          * Page 77 of the Haswell PRM Volume 2b contains the same text.  The
+          * 965G PRMs contain similar text.
+          *
+          * Page 864 (page 880 of the PDF) of the Broadwell PRM Volume 7 says:
+          *
+          *    For the cmp and cmpn instructions, remove the accumulator
+          *    restrictions.
+          */
+         ERROR_IF(brw_inst_dst_reg_file(devinfo, inst) == BRW_ARCHITECTURE_REGISTER_FILE &&
+                  brw_inst_dst_da_reg_nr(devinfo, inst) != BRW_ARF_NULL,
+                  "Accumulator cannot be destination, implicit or explicit.");
+      }
+
+      /* Page 166 of the Ivy Bridge PRM Volume 4 part 3 (Execution Unit ISA)
+       * says:
+       *
+       *    If the destination is the null register, the {Switch} instruction
+       *    option must be used.
+       *
+       * Page 77 of the Haswell PRM Volume 2b contains the same text.
+       */
+      if (devinfo->ver == 7) {
+         ERROR_IF(dst_is_null(devinfo, inst) &&
+                  brw_inst_thread_control(devinfo, inst) != BRW_THREAD_SWITCH,
+                  "If the destination is the null register, the {Switch} "
+                  "instruction option must be used.");
+      }
    }
 
    return error_msg;

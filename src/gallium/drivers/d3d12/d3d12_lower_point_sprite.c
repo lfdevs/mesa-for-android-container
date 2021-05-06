@@ -231,8 +231,7 @@ d3d12_lower_point_sprite(nir_shader *shader,
                          unsigned point_coord_enable,
                          uint64_t next_inputs_read)
 {
-   const gl_state_index16 tokens[4] = { STATE_INTERNAL,
-                                        STATE_INTERNAL_DRIVER,
+   const gl_state_index16 tokens[4] = { STATE_INTERNAL_DRIVER,
                                         D3D12_STATE_VAR_PT_SPRITE };
    struct lower_state state;
    bool progress = false;

@@ -31,6 +31,7 @@
 #include "drm-uapi/panfrost_drm.h"
 
 #include "pan_bo.h"
+#include "pan_device.h"
 #include "pan_util.h"
 #include "wrap.h"
 
@@ -363,7 +364,7 @@ panfrost_bo_create(struct panfrost_device *dev, size_t size,
         assert(size > 0);
 
         /* To maximize BO cache usage, don't allocate tiny BOs */
-        size = MAX2(size, 4096);
+        size = ALIGN_POT(size, 4096);
 
         /* GROWABLE BOs cannot be mmapped */
         if (flags & PAN_BO_GROWABLE)

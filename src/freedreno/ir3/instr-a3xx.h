@@ -81,9 +81,25 @@ typedef enum {
 	OPC_PREDF           = _OPC(0, 30),   /* predicated false */
 	OPC_PREDE           = _OPC(0, 31),   /* predicated end */
 
+	/* Logical opcodes for different branch instruction variations: */
+	OPC_BR              = _OPC(0, 40),
+	OPC_BRAO            = _OPC(0, 41),
+	OPC_BRAA            = _OPC(0, 42),
+	OPC_BRAC            = _OPC(0, 43),
+	OPC_BANY            = _OPC(0, 44),
+	OPC_BALL            = _OPC(0, 45),
+	OPC_BRAX            = _OPC(0, 46),
+
 	/* category 1: */
 	OPC_MOV             = _OPC(1, 0),
 	OPC_MOVMSK          = _OPC(1, 3),
+
+	/* Logical opcodes for different variants of mov: */
+	OPC_MOV_IMMED       = _OPC(1, 40),
+	OPC_MOV_CONST       = _OPC(1, 41),
+	OPC_MOV_GPR         = _OPC(1, 42),
+	OPC_MOV_RELGPR      = _OPC(1, 43),
+	OPC_MOV_RELCONST    = _OPC(1, 44),
 
 	/* category 2: */
 	OPC_ADD_F           = _OPC(2, 0),
@@ -244,6 +260,24 @@ typedef enum {
 	OPC_GETSPID         = _OPC(6, 36), /* SP ID */
 	OPC_GETWID          = _OPC(6, 37), /* wavefront ID */
 
+	/* Logical opcodes for things that differ in a6xx+ */
+	OPC_STC             = _OPC(6, 40),
+	OPC_RESINFO_B       = _OPC(6, 41),
+	OPC_LDIB_B          = _OPC(6, 42),
+	OPC_STIB_B          = _OPC(6, 43),
+
+	/* Logical opcodes for different atomic instruction variations: */
+	OPC_ATOMIC_B_ADD      = _OPC(6, 44),
+	OPC_ATOMIC_B_SUB      = _OPC(6, 45),
+	OPC_ATOMIC_B_XCHG     = _OPC(6, 46),
+	OPC_ATOMIC_B_INC      = _OPC(6, 47),
+	OPC_ATOMIC_B_DEC      = _OPC(6, 48),
+	OPC_ATOMIC_B_CMPXCHG  = _OPC(6, 49),
+	OPC_ATOMIC_B_MIN      = _OPC(6, 50),
+	OPC_ATOMIC_B_MAX      = _OPC(6, 51),
+	OPC_ATOMIC_B_AND      = _OPC(6, 52),
+	OPC_ATOMIC_B_OR       = _OPC(6, 53),
+	OPC_ATOMIC_B_XOR      = _OPC(6, 54),
 
 	/* category 7: */
 	OPC_BAR             = _OPC(7, 0),
@@ -1003,6 +1037,28 @@ static inline bool instr_sat(instr_t *instr)
 	case 3:  return instr->cat3.sat;
 	case 4:  return instr->cat4.sat;
 	default: return false;
+	}
+}
+
+static inline bool is_sat_compatible(opc_t opc)
+{
+	/* On a6xx saturation doesn't work on cat4 */
+	if (opc_cat(opc) != 2 && opc_cat(opc) != 3)
+		return false;
+
+	switch (opc) {
+	/* On a3xx and a6xx saturation doesn't work on bary.f */
+	case OPC_BARY_F:
+	/* On a6xx saturation doesn't work on sel.* */
+	case OPC_SEL_B16:
+	case OPC_SEL_B32:
+	case OPC_SEL_S16:
+	case OPC_SEL_S32:
+	case OPC_SEL_F16:
+	case OPC_SEL_F32:
+		return false;
+	default:
+		return true;
 	}
 }
 

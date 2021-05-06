@@ -369,19 +369,19 @@ vc4_yuv_blit(struct pipe_context *pctx, const struct pipe_blit_info *info)
                 .user_buffer = &stride,
                 .buffer_size = sizeof(stride),
         };
-        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 0, &cb_uniforms);
+        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 0, false, &cb_uniforms);
         struct pipe_constant_buffer cb_src = {
                 .buffer = info->src.resource,
                 .buffer_offset = src->slices[info->src.level].offset,
                 .buffer_size = (src->bo->size -
                                 src->slices[info->src.level].offset),
         };
-        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 1, &cb_src);
+        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 1, false, &cb_src);
 
         /* Unbind the textures, to make sure we don't try to recurse into the
          * shadow blit.
          */
-        pctx->set_sampler_views(pctx, PIPE_SHADER_FRAGMENT, 0, 0, NULL);
+        pctx->set_sampler_views(pctx, PIPE_SHADER_FRAGMENT, 0, 0, 0, NULL);
         pctx->bind_sampler_states(pctx, PIPE_SHADER_FRAGMENT, 0, 0, NULL);
 
         util_blitter_custom_shader(vc4->blitter, dst_surf,
@@ -392,7 +392,7 @@ vc4_yuv_blit(struct pipe_context *pctx, const struct pipe_blit_info *info)
         util_blitter_restore_constant_buffer_state(vc4->blitter);
         /* Restore cb1 (util_blitter doesn't handle this one). */
         struct pipe_constant_buffer cb_disabled = { 0 };
-        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 1, &cb_disabled);
+        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 1, false, &cb_disabled);
 
         pipe_surface_reference(&dst_surf, NULL);
 

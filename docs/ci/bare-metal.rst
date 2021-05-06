@@ -71,8 +71,8 @@ call "servo"::
 Setup
 -----
 
-Each board will be registered in fd.o GitLab.  You'll want something
-like this to register a fastboot board:
+Each board will be registered in freedesktop.org GitLab.  You'll want
+something like this to register a fastboot board:
 
 .. code-block:: console
 
@@ -91,8 +91,8 @@ like this to register a fastboot board:
 For a servo board, you'll need to also volume mount the board's NFS
 root dir at /nfs and TFTP kernel directory at /tftp.
 
-The registration token has to come from a fd.o GitLab admin going to
-https://gitlab.freedesktop.org/admin/runners
+The registration token has to come from a freedesktop.org GitLab admin
+going to https://gitlab.freedesktop.org/admin/runners
 
 The name scheme for Google's lab is google-freedreno-boardname-n, and
 our tag is something like google-freedreno-db410c.  The tag is what
@@ -128,3 +128,43 @@ that gets used to start a nginx server.
 
 Once you've updated your runners' configs, restart with ``sudo service
 gitlab-runner restart``
+
+Caching downloads
+-----------------
+
+To improve the runtime for downloading traces during traces job runs, you will
+want a pass-through HTTP cache.  On your runner box, install nginx:
+
+.. code-block:: console
+
+  sudo apt install nginx libnginx-mod-http-lua
+
+Add the server setup files:
+
+.. literalinclude: fdo-cache:
+   :name: /etc/nginx/sites-available/fdo-cache
+
+.. literalinclude: uri-caching.conf:
+   :name: /etc/nginx/sites-available/snippets/uri-caching.conf
+
+Edit the listener addresses in fdo-cache to suit the ethernet interface that
+your devices are on.
+
+Enable the site and restart nginx:
+
+.. code-block:: console
+
+  sudo ln -s /etc/nginx/sites-available/fdo-cache /etc/nginx/sites-enabled/fdo-cache
+  sudo service nginx restart
+
+  # First download will hit the internet
+  wget http://localhost/cache/?uri=https://minio-packet.freedesktop.org/mesa-tracie-public/itoral-gl-terrain-demo/demo.trace
+  # Second download should be cached.
+  wget http://localhost/cache/?uri=https://minio-packet.freedesktop.org/mesa-tracie-public/itoral-gl-terrain-demo/demo.trace
+
+Now, set ``download-url`` in your ``traces-*.yml`` entry to something like
+``http://10.42.0.1:8888/cache/?uri=https://minio-packet.freedesktop.org/mesa-tracie-public``
+and you should have cached downloads for traces.  Add it to
+``FDO_HTTP_CACHE_URI=`` in your ``config.toml`` runner environment lines and you
+can use it for cached artifact downloads instead of going all the way to
+freedesktop.org on each job.

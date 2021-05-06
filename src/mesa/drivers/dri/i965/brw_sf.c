@@ -36,7 +36,7 @@
 #include "main/fbobject.h"
 #include "main/state.h"
 
-#include "intel_batchbuffer.h"
+#include "brw_batch.h"
 
 #include "brw_defines.h"
 #include "brw_context.h"
@@ -46,8 +46,8 @@
 
 #include "util/ralloc.h"
 
-static void compile_sf_prog( struct brw_context *brw,
-			     struct brw_sf_prog_key *key )
+static void
+compile_sf_prog(struct brw_context *brw, struct brw_sf_prog_key *key)
 {
    const unsigned *program;
    void *mem_ctx;
@@ -60,10 +60,10 @@ static void compile_sf_prog( struct brw_context *brw,
                             &brw->vue_map_geom_out, &program_size);
 
    brw_upload_cache(&brw->cache, BRW_CACHE_SF_PROG,
-		    key, sizeof(*key),
-		    program, program_size,
-		    &prog_data, sizeof(prog_data),
-		    &brw->sf.prog_offset, &brw->sf.prog_data);
+                    key, sizeof(*key),
+                    program, program_size,
+                    &prog_data, sizeof(prog_data),
+                    &brw->sf.prog_offset, &brw->sf.prog_data);
    ralloc_free(mem_ctx);
 }
 
@@ -108,9 +108,9 @@ brw_upload_sf_prog(struct brw_context *brw)
        * program.
        */
       if (key.attrs & BITFIELD64_BIT(VARYING_SLOT_EDGE))
-	 key.primitive = BRW_SF_PRIM_UNFILLED_TRIS;
+         key.primitive = BRW_SF_PRIM_UNFILLED_TRIS;
       else
-	 key.primitive = BRW_SF_PRIM_TRIANGLES;
+         key.primitive = BRW_SF_PRIM_TRIANGLES;
       break;
    case GL_LINES:
       key.primitive = BRW_SF_PRIM_LINES;

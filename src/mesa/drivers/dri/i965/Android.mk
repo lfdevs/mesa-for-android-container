@@ -40,201 +40,201 @@ I965_PERGEN_STATIC_LIBRARIES := \
 	libmesa_nir
 
 I965_PERGEN_LIBS := \
-	libmesa_i965_gen4 \
-	libmesa_i965_gen45 \
-	libmesa_i965_gen5 \
-	libmesa_i965_gen6 \
-	libmesa_i965_gen7 \
-	libmesa_i965_gen75 \
-	libmesa_i965_gen8 \
-	libmesa_i965_gen9 \
-	libmesa_i965_gen11
+	libmesa_i965_gfx4 \
+	libmesa_i965_gfx45 \
+	libmesa_i965_gfx5 \
+	libmesa_i965_gfx6 \
+	libmesa_i965_gfx7 \
+	libmesa_i965_gfx75 \
+	libmesa_i965_gfx8 \
+	libmesa_i965_gfx9 \
+	libmesa_i965_gfx11
 
 # ---------------------------------------
-# Build libmesa_i965_gen4
+# Build libmesa_i965_gfx4
 # ---------------------------------------
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE := libmesa_i965_gen4
+LOCAL_MODULE := libmesa_i965_gfx4
 
 LOCAL_C_INCLUDES := $(I965_PERGEN_COMMON_INCLUDES)
 
-LOCAL_SRC_FILES := $(i965_gen4_FILES)
+LOCAL_SRC_FILES := $(i965_gfx4_FILES)
 
 LOCAL_SHARED_LIBRARIES := $(I965_PERGEN_SHARED_LIBRARIES)
 
 LOCAL_STATIC_LIBRARIES := $(I965_PERGEN_STATIC_LIBRARIES)
 
-LOCAL_CFLAGS := -DGEN_VERSIONx10=40
+LOCAL_CFLAGS := -DGFX_VERx10=40
 
 include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 # ---------------------------------------
-# Build libmesa_i965_gen45
+# Build libmesa_i965_gfx45
 # ---------------------------------------
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE := libmesa_i965_gen45
+LOCAL_MODULE := libmesa_i965_gfx45
 
 LOCAL_C_INCLUDES := $(I965_PERGEN_COMMON_INCLUDES)
 
-LOCAL_SRC_FILES := $(i965_gen45_FILES)
+LOCAL_SRC_FILES := $(i965_gfx45_FILES)
 
 LOCAL_SHARED_LIBRARIES := $(I965_PERGEN_SHARED_LIBRARIES)
 
 LOCAL_STATIC_LIBRARIES := $(I965_PERGEN_STATIC_LIBRARIES)
 
-LOCAL_CFLAGS := -DGEN_VERSIONx10=45
+LOCAL_CFLAGS := -DGFX_VERx10=45
 
 include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 # ---------------------------------------
-# Build libmesa_i965_gen5
+# Build libmesa_i965_gfx5
 # ---------------------------------------
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE := libmesa_i965_gen5
+LOCAL_MODULE := libmesa_i965_gfx5
 
 LOCAL_C_INCLUDES := $(I965_PERGEN_COMMON_INCLUDES)
 
-LOCAL_SRC_FILES := $(i965_gen5_FILES)
+LOCAL_SRC_FILES := $(i965_gfx5_FILES)
 
 LOCAL_SHARED_LIBRARIES := $(I965_PERGEN_SHARED_LIBRARIES)
 
 LOCAL_STATIC_LIBRARIES := $(I965_PERGEN_STATIC_LIBRARIES)
 
-LOCAL_CFLAGS := -DGEN_VERSIONx10=50
+LOCAL_CFLAGS := -DGFX_VERx10=50
 
 include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 # ---------------------------------------
-# Build libmesa_i965_gen6
+# Build libmesa_i965_gfx6
 # ---------------------------------------
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE := libmesa_i965_gen6
+LOCAL_MODULE := libmesa_i965_gfx6
 
 LOCAL_C_INCLUDES := $(I965_PERGEN_COMMON_INCLUDES)
 
-LOCAL_SRC_FILES := $(i965_gen6_FILES)
+LOCAL_SRC_FILES := $(i965_gfx6_FILES)
 
 LOCAL_SHARED_LIBRARIES := $(I965_PERGEN_SHARED_LIBRARIES)
 
 LOCAL_STATIC_LIBRARIES := $(I965_PERGEN_STATIC_LIBRARIES)
 
-LOCAL_CFLAGS := -DGEN_VERSIONx10=60
+LOCAL_CFLAGS := -DGFX_VERx10=60
 
 include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 # ---------------------------------------
-# Build libmesa_i965_gen7
+# Build libmesa_i965_gfx7
 # ---------------------------------------
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE := libmesa_i965_gen7
+LOCAL_MODULE := libmesa_i965_gfx7
 
 LOCAL_C_INCLUDES := $(I965_PERGEN_COMMON_INCLUDES)
 
-LOCAL_SRC_FILES := $(i965_gen7_FILES)
+LOCAL_SRC_FILES := $(i965_gfx7_FILES)
 
 LOCAL_SHARED_LIBRARIES := $(I965_PERGEN_SHARED_LIBRARIES)
 
 LOCAL_STATIC_LIBRARIES := $(I965_PERGEN_STATIC_LIBRARIES)
 
-LOCAL_CFLAGS := -DGEN_VERSIONx10=70
+LOCAL_CFLAGS := -DGFX_VERx10=70
 
 include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 # ---------------------------------------
-# Build libmesa_i965_gen75
+# Build libmesa_i965_gfx75
 # ---------------------------------------
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE := libmesa_i965_gen75
+LOCAL_MODULE := libmesa_i965_gfx75
 
 LOCAL_C_INCLUDES := $(I965_PERGEN_COMMON_INCLUDES)
 
-LOCAL_SRC_FILES := $(i965_gen75_FILES)
+LOCAL_SRC_FILES := $(i965_gfx75_FILES)
 
 LOCAL_SHARED_LIBRARIES := $(I965_PERGEN_SHARED_LIBRARIES)
 
 LOCAL_STATIC_LIBRARIES := $(I965_PERGEN_STATIC_LIBRARIES)
 
-LOCAL_CFLAGS := -DGEN_VERSIONx10=75
+LOCAL_CFLAGS := -DGFX_VERx10=75
 
 include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 # ---------------------------------------
-# Build libmesa_i965_gen8
+# Build libmesa_i965_gfx8
 # ---------------------------------------
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE := libmesa_i965_gen8
+LOCAL_MODULE := libmesa_i965_gfx8
 
 LOCAL_C_INCLUDES := $(I965_PERGEN_COMMON_INCLUDES)
 
-LOCAL_SRC_FILES := $(i965_gen8_FILES)
+LOCAL_SRC_FILES := $(i965_gfx8_FILES)
 
 LOCAL_SHARED_LIBRARIES := $(I965_PERGEN_SHARED_LIBRARIES)
 
 LOCAL_STATIC_LIBRARIES := $(I965_PERGEN_STATIC_LIBRARIES)
 
-LOCAL_CFLAGS := -DGEN_VERSIONx10=80
+LOCAL_CFLAGS := -DGFX_VERx10=80
 
 include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 # ---------------------------------------
-# Build libmesa_i965_gen9
+# Build libmesa_i965_gfx9
 # ---------------------------------------
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE := libmesa_i965_gen9
+LOCAL_MODULE := libmesa_i965_gfx9
 
 LOCAL_C_INCLUDES := $(I965_PERGEN_COMMON_INCLUDES)
 
-LOCAL_SRC_FILES := $(i965_gen9_FILES)
+LOCAL_SRC_FILES := $(i965_gfx9_FILES)
 
 LOCAL_SHARED_LIBRARIES := $(I965_PERGEN_SHARED_LIBRARIES)
 
 LOCAL_STATIC_LIBRARIES := $(I965_PERGEN_STATIC_LIBRARIES)
 
-LOCAL_CFLAGS := -DGEN_VERSIONx10=90
+LOCAL_CFLAGS := -DGFX_VERx10=90
 
 include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 # ---------------------------------------
-# Build libmesa_i965_gen11
+# Build libmesa_i965_gfx11
 # ---------------------------------------
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE := libmesa_i965_gen11
+LOCAL_MODULE := libmesa_i965_gfx11
 
 LOCAL_C_INCLUDES := $(I965_PERGEN_COMMON_INCLUDES)
 
-LOCAL_SRC_FILES := $(i965_gen11_FILES)
+LOCAL_SRC_FILES := $(i965_gfx11_FILES)
 
 LOCAL_SHARED_LIBRARIES := $(I965_PERGEN_SHARED_LIBRARIES)
 
 LOCAL_STATIC_LIBRARIES := $(I965_PERGEN_STATIC_LIBRARIES)
 
-LOCAL_CFLAGS := -DGEN_VERSIONx10=110
+LOCAL_CFLAGS := -DGFX_VERx10=110
 
 include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)

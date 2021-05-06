@@ -36,8 +36,8 @@
 #include "brw_context.h"
 #include "brw_state.h"
 
-#include "intel_batchbuffer.h"
-#include "intel_buffer_objects.h"
+#include "brw_batch.h"
+#include "brw_buffer_objects.h"
 
 static const GLuint double_types_float[5] = {
    0,
@@ -232,7 +232,7 @@ double_types(int size, GLboolean doubles)
     * Also included on BDW PRM, Volume 7, page 470, table "Source Element
     * Formats Supported in VF Unit"
     *
-    * Previous PRMs don't include those references, so for gen7 we can't use
+    * Previous PRMs don't include those references, so for gfx7 we can't use
     * PASSTHRU formats directly. But in any case, we prefer to return passthru
     * even in that case, because that reflects what we want to achieve, even
     * if we would need to workaround on gen < 8.
@@ -254,7 +254,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
    int size = glformat->Size;
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const bool is_ivybridge_or_older =
-      devinfo->gen <= 7 && !devinfo->is_baytrail && !devinfo->is_haswell;
+      devinfo->ver <= 7 && !devinfo->is_baytrail && !devinfo->is_haswell;
 
    if (INTEL_DEBUG & DEBUG_VERTS)
       fprintf(stderr, "type %s size %d normalized %d\n",
@@ -296,7 +296,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
       case GL_FLOAT: return float_types[size];
       case GL_HALF_FLOAT:
       case GL_HALF_FLOAT_OES:
-         if (devinfo->gen < 6 && size == 3)
+         if (devinfo->ver < 6 && size == 3)
             return half_float_types[4];
          else
             return half_float_types[size];
@@ -315,7 +315,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
             return ubyte_types_norm[size];
          }
       case GL_FIXED:
-         if (devinfo->gen >= 8 || devinfo->is_haswell)
+         if (devinfo->ver >= 8 || devinfo->is_haswell)
             return fixed_point_types[size];
 
          /* This produces GL_FIXED inputs as values between INT32_MIN and
@@ -329,7 +329,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
        */
       case GL_INT_2_10_10_10_REV:
          assert(size == 4);
-         if (devinfo->gen >= 8 || devinfo->is_haswell) {
+         if (devinfo->ver >= 8 || devinfo->is_haswell) {
             return glformat->Format == GL_BGRA
                ? ISL_FORMAT_B10G10R10A2_SNORM
                : ISL_FORMAT_R10G10B10A2_SNORM;
@@ -337,7 +337,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
          return ISL_FORMAT_R10G10B10A2_UINT;
       case GL_UNSIGNED_INT_2_10_10_10_REV:
          assert(size == 4);
-         if (devinfo->gen >= 8 || devinfo->is_haswell) {
+         if (devinfo->ver >= 8 || devinfo->is_haswell) {
             return glformat->Format == GL_BGRA
                ? ISL_FORMAT_B10G10R10A2_UNORM
                : ISL_FORMAT_R10G10B10A2_UNORM;
@@ -354,7 +354,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
        */
       if (glformat->Type == GL_INT_2_10_10_10_REV) {
          assert(size == 4);
-         if (devinfo->gen >= 8 || devinfo->is_haswell) {
+         if (devinfo->ver >= 8 || devinfo->is_haswell) {
             return glformat->Format == GL_BGRA
                ? ISL_FORMAT_B10G10R10A2_SSCALED
                : ISL_FORMAT_R10G10B10A2_SSCALED;
@@ -362,7 +362,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
          return ISL_FORMAT_R10G10B10A2_UINT;
       } else if (glformat->Type == GL_UNSIGNED_INT_2_10_10_10_REV) {
          assert(size == 4);
-         if (devinfo->gen >= 8 || devinfo->is_haswell) {
+         if (devinfo->ver >= 8 || devinfo->is_haswell) {
             return glformat->Format == GL_BGRA
                ? ISL_FORMAT_B10G10R10A2_USCALED
                : ISL_FORMAT_R10G10B10A2_USCALED;
@@ -375,7 +375,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
       case GL_FLOAT: return float_types[size];
       case GL_HALF_FLOAT:
       case GL_HALF_FLOAT_OES:
-         if (devinfo->gen < 6 && size == 3)
+         if (devinfo->ver < 6 && size == 3)
             return half_float_types[4];
          else
             return half_float_types[size];
@@ -386,7 +386,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
       case GL_UNSIGNED_SHORT: return ushort_types_scale[size];
       case GL_UNSIGNED_BYTE: return ubyte_types_scale[size];
       case GL_FIXED:
-         if (devinfo->gen >= 8 || devinfo->is_haswell)
+         if (devinfo->ver >= 8 || devinfo->is_haswell)
             return fixed_point_types[size];
 
          /* This produces GL_FIXED inputs as values between INT32_MIN and
@@ -401,9 +401,9 @@ brw_get_vertex_surface_type(struct brw_context *brw,
 static void
 copy_array_to_vbo_array(struct brw_context *brw,
                         const uint8_t *const ptr, const int src_stride,
-			int min, int max,
-			struct brw_vertex_buffer *buffer,
-			GLuint dst_stride)
+                        int min, int max,
+                        struct brw_vertex_buffer *buffer,
+                        GLuint dst_stride)
 {
    const unsigned char *src = ptr + min * src_stride;
    int count = max - min + 1;
@@ -454,12 +454,12 @@ brw_prepare_vertices(struct brw_context *brw)
 
    /* _NEW_POLYGON
     *
-    * On gen6+, edge flags don't end up in the VUE (either in or out of the
+    * On gfx6+, edge flags don't end up in the VUE (either in or out of the
     * VS).  Instead, they're uploaded as the last vertex element, and the data
     * is passed sideband through the fixed function units.  So, we need to
     * prepare the vertex buffer for it, but it's not present in inputs_read.
     */
-   if (devinfo->gen >= 6 && (ctx->Polygon.FrontMode != GL_FILL ||
+   if (devinfo->ver >= 6 && (ctx->Polygon.FrontMode != GL_FILL ||
                            ctx->Polygon.BackMode != GL_FILL)) {
       vs_inputs |= VERT_BIT_EDGEFLAG;
    }
@@ -525,8 +525,8 @@ brw_prepare_vertices(struct brw_context *brw)
       }
       assert(vertex_range_start <= vertex_range_end);
 
-      struct intel_buffer_object *intel_buffer =
-         intel_buffer_object(glbinding->BufferObj);
+      struct brw_buffer_object *intel_buffer =
+         brw_buffer_object(glbinding->BufferObj);
       struct brw_vertex_buffer *buffer = &brw->vb.buffers[j];
 
       const uint32_t offset = _mesa_draw_binding_offset(glbinding);
@@ -577,8 +577,8 @@ brw_prepare_vertices(struct brw_context *brw)
       buffer->stride = stride;
       buffer->step_rate = glbinding->InstanceDivisor;
 
-      buffer->bo = intel_bufferobj_buffer(brw, intel_buffer, offset + start,
-                                          range, false);
+      buffer->bo = brw_bufferobj_buffer(brw, intel_buffer, offset + start,
+                                        range, false);
       brw_bo_reference(buffer->bo);
 
       j++;
@@ -757,8 +757,8 @@ brw_upload_indices(struct brw_context *brw)
       offset = (GLuint) (unsigned long) index_buffer->ptr;
 
       struct brw_bo *bo =
-         intel_bufferobj_buffer(brw, intel_buffer_object(bufferobj),
-                                offset, ib_size, false);
+         brw_bufferobj_buffer(brw, brw_buffer_object(bufferobj),
+                              offset, ib_size, false);
       if (bo != brw->ib.bo) {
          brw_bo_unreference(brw->ib.bo);
          brw->ib.bo = bo;

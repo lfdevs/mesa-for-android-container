@@ -47,6 +47,11 @@ ir3_parse_asm(struct ir3_compiler *c, struct ir3_kernel_info *info, FILE *in)
 
 	info->numwg = INVALID_REG;
 
+	/* Provide a default local_size in case the shader doesn't set it, so that
+	 * we don't crash at least.
+	 */
+	v->local_size[0] = v->local_size[1] = v->local_size[2] = 1;
+
 	v->ir = ir3_parse(v, info, in);
 	if (!v->ir)
 		goto error;

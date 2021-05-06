@@ -898,8 +898,8 @@ static void radeon_uvd_enc_encode_params_hevc(struct radeon_uvd_encoder *enc)
    RADEON_ENC_CS(enc->enc_pic.enc_params.allowed_max_bitstream_size);
 
    if (sscreen->info.chip_class < GFX9) {
-      RADEON_ENC_READ(enc->handle, RADEON_DOMAIN_VRAM, enc->luma->u.legacy.level[0].offset);
-      RADEON_ENC_READ(enc->handle, RADEON_DOMAIN_VRAM, enc->chroma->u.legacy.level[0].offset);
+      RADEON_ENC_READ(enc->handle, RADEON_DOMAIN_VRAM, (uint64_t)enc->luma->u.legacy.level[0].offset_256B * 256);
+      RADEON_ENC_READ(enc->handle, RADEON_DOMAIN_VRAM, (uint64_t)enc->chroma->u.legacy.level[0].offset_256B * 256);
    } else {
       RADEON_ENC_READ(enc->handle, RADEON_DOMAIN_VRAM, enc->luma->u.gfx9.surf_offset);
       RADEON_ENC_READ(enc->handle, RADEON_DOMAIN_VRAM, enc->chroma->u.gfx9.surf_offset);

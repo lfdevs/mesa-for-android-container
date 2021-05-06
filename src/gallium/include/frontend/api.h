@@ -123,7 +123,6 @@ enum st_attachment_type {
    ST_ATTACHMENT_BACK_RIGHT,
    ST_ATTACHMENT_DEPTH_STENCIL,
    ST_ATTACHMENT_ACCUM,
-   ST_ATTACHMENT_SAMPLE,
 
    ST_ATTACHMENT_COUNT,
    ST_ATTACHMENT_INVALID = -1
@@ -136,7 +135,6 @@ enum st_attachment_type {
 #define ST_ATTACHMENT_BACK_RIGHT_MASK     (1 << ST_ATTACHMENT_BACK_RIGHT)
 #define ST_ATTACHMENT_DEPTH_STENCIL_MASK  (1 << ST_ATTACHMENT_DEPTH_STENCIL)
 #define ST_ATTACHMENT_ACCUM_MASK          (1 << ST_ATTACHMENT_ACCUM)
-#define ST_ATTACHMENT_SAMPLE_MASK         (1 << ST_ATTACHMENT_SAMPLE)
 
 /**
  * Flush flags.
@@ -145,6 +143,15 @@ enum st_attachment_type {
 #define ST_FLUSH_END_OF_FRAME             (1 << 1)
 #define ST_FLUSH_WAIT                     (1 << 2)
 #define ST_FLUSH_FENCE_FD                 (1 << 3)
+
+/**
+ * State invalidation flags to notify frontends that states have been changed
+ * behind their back.
+ */
+#define ST_INVALIDATE_FS_SAMPLER_VIEWS    (1 << 0)
+#define ST_INVALIDATE_FS_CONSTBUF0        (1 << 1)
+#define ST_INVALIDATE_VS_CONSTBUF0        (1 << 2)
+#define ST_INVALIDATE_VERTEX_BUFFERS      (1 << 3)
 
 /**
  * Value to st_manager->get_param function.
@@ -187,8 +194,6 @@ struct st_egl_image
  */
 struct st_visual
 {
-   bool no_config;
-
    /**
     * Available buffers.  Bitfield of ST_ATTACHMENT_*_MASK bits.
     */
@@ -233,8 +238,10 @@ struct st_config_options
    bool allow_glsl_cross_stage_interpolation_mismatch;
    bool allow_draw_out_of_order;
    bool allow_incorrect_primitive_id;
+   bool ignore_map_unsynchronized;
    bool force_integer_tex_nearest;
    bool force_gl_names_reuse;
+   bool transcode_etc;
    char *force_gl_vendor;
    unsigned char config_options_sha1[20];
 };
@@ -430,6 +437,12 @@ struct st_context_iface
     * Called from the main thread.
     */
    void (*thread_finish)(struct st_context_iface *stctxi);
+
+   /**
+    * Invalidate states to notify the frontend that states have been changed
+    * behind its back.
+    */
+   void (*invalidate_state)(struct st_context_iface *stctxi, unsigned flags);
 };
 
 

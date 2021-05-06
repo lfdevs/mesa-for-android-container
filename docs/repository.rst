@@ -150,7 +150,8 @@ Developer Git Tips
       git add <files to commit>
       git commit
 
-   to get your changes ready to push back into the fd.o repository.
+   to get your changes ready to push back into the freedesktop.org
+   repository.
 
    It is possible (and likely) that someone has changed master since you
    did your last pull. Even if your changes do not conflict with their

@@ -125,6 +125,7 @@ struct v3d_resource {
         struct renderonly_scanout *scanout;
         struct v3d_resource_slice slices[V3D_MAX_MIP_LEVELS];
         uint32_t cube_map_stride;
+        uint32_t sand_col128_stride;
         uint32_t size;
         int cpp;
         bool tiled;

@@ -123,7 +123,7 @@ i965_disasm_init(uint16_t pci_id)
 static bool
 i965_postprocess_labels()
 {
-   if (p->devinfo->gen < 6) {
+   if (p->devinfo->ver < 6) {
       return true;
    }
 
@@ -150,10 +150,10 @@ i965_postprocess_labels()
                case BRW_OPCODE_ELSE:
                case BRW_OPCODE_ENDIF:
                case BRW_OPCODE_WHILE:
-                  if (p->devinfo->gen >= 7) {
+                  if (p->devinfo->ver >= 7) {
                      brw_inst_set_jip(p->devinfo, inst, relative_offset);
-                  } else if (p->devinfo->gen == 6) {
-                     brw_inst_set_gen6_jump_count(p->devinfo, inst, relative_offset);
+                  } else if (p->devinfo->ver == 6) {
+                     brw_inst_set_gfx6_jump_count(p->devinfo, inst, relative_offset);
                   }
                   break;
                case BRW_OPCODE_BREAK:
@@ -169,11 +169,11 @@ i965_postprocess_labels()
                switch (opcode) {
                case BRW_OPCODE_IF:
                case BRW_OPCODE_ELSE:
-                  if (p->devinfo->gen > 7) {
+                  if (p->devinfo->ver > 7) {
                      brw_inst_set_uip(p->devinfo, inst, relative_offset);
-                  } else if (p->devinfo->gen == 7) {
+                  } else if (p->devinfo->ver == 7) {
                      brw_inst_set_uip(p->devinfo, inst, relative_offset);
-                  } else if (p->devinfo->gen == 6) {
+                  } else if (p->devinfo->ver == 6) {
                      // Nothing
                   }
                   break;

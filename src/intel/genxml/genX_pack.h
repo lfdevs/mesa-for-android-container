@@ -24,31 +24,31 @@
 #ifndef GENX_PACK_H
 #define GENX_PACK_H
 
-#ifndef GEN_VERSIONx10
-#  error "The GEN_VERSIONx10 macro must be defined"
+#ifndef GFX_VERx10
+#  error "The GFX_VERx10 macro must be defined"
 #endif
 
-#if (GEN_VERSIONx10 == 40)
+#if (GFX_VERx10 == 40)
 #  include "genxml/gen4_pack.h"
-#elif (GEN_VERSIONx10 == 45)
+#elif (GFX_VERx10 == 45)
 #  include "genxml/gen45_pack.h"
-#elif (GEN_VERSIONx10 == 50)
+#elif (GFX_VERx10 == 50)
 #  include "genxml/gen5_pack.h"
-#elif (GEN_VERSIONx10 == 60)
+#elif (GFX_VERx10 == 60)
 #  include "genxml/gen6_pack.h"
-#elif (GEN_VERSIONx10 == 70)
+#elif (GFX_VERx10 == 70)
 #  include "genxml/gen7_pack.h"
-#elif (GEN_VERSIONx10 == 75)
+#elif (GFX_VERx10 == 75)
 #  include "genxml/gen75_pack.h"
-#elif (GEN_VERSIONx10 == 80)
+#elif (GFX_VERx10 == 80)
 #  include "genxml/gen8_pack.h"
-#elif (GEN_VERSIONx10 == 90)
+#elif (GFX_VERx10 == 90)
 #  include "genxml/gen9_pack.h"
-#elif (GEN_VERSIONx10 == 110)
+#elif (GFX_VERx10 == 110)
 #  include "genxml/gen11_pack.h"
-#elif (GEN_VERSIONx10 == 120)
+#elif (GFX_VERx10 == 120)
 #  include "genxml/gen12_pack.h"
-#elif (GEN_VERSIONx10 == 125)
+#elif (GFX_VERx10 == 125)
 #  include "genxml/gen125_pack.h"
 #else
 #  error "Need to add a pack header include for this gen"

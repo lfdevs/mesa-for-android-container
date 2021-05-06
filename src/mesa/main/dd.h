@@ -36,6 +36,14 @@
 #include "menums.h"
 #include "compiler/shader_enums.h"
 
+/* Windows winnt.h defines MemoryBarrier as a macro on some platforms,
+ * including as a function-like macro in some cases. That either causes
+ * the table entry below to have a weird name, or fail to compile.
+ */
+#ifdef MemoryBarrier
+#undef MemoryBarrier
+#endif
+
 struct gl_bitmap_atlas;
 struct gl_buffer_object;
 struct gl_context;
@@ -943,7 +951,7 @@ struct dd_function_table {
                          struct gl_perf_query_object *obj);
    bool (*IsPerfQueryReady)(struct gl_context *ctx,
                             struct gl_perf_query_object *obj);
-   void (*GetPerfQueryData)(struct gl_context *ctx,
+   bool (*GetPerfQueryData)(struct gl_context *ctx,
                             struct gl_perf_query_object *obj,
                             GLsizei dataSize,
                             GLuint *data,
@@ -1589,6 +1597,18 @@ typedef struct {
    void (GLAPIENTRYP MultiTexCoord3hvNV)( GLenum, const GLhalfNV * );
    void (GLAPIENTRYP MultiTexCoord4hNV)( GLenum, GLhalfNV, GLhalfNV, GLhalfNV, GLhalfNV );
    void (GLAPIENTRYP MultiTexCoord4hvNV)( GLenum, const GLhalfNV * );
+   void (GLAPIENTRYP VertexAttrib1hNV)( GLuint index, GLhalfNV x );
+   void (GLAPIENTRYP VertexAttrib1hvNV)( GLuint index, const GLhalfNV *v );
+   void (GLAPIENTRYP VertexAttrib2hNV)( GLuint index, GLhalfNV x, GLhalfNV y );
+   void (GLAPIENTRYP VertexAttrib2hvNV)( GLuint index, const GLhalfNV *v );
+   void (GLAPIENTRYP VertexAttrib3hNV)( GLuint index, GLhalfNV x, GLhalfNV y, GLhalfNV z );
+   void (GLAPIENTRYP VertexAttrib3hvNV)( GLuint index, const GLhalfNV *v );
+   void (GLAPIENTRYP VertexAttrib4hNV)( GLuint index, GLhalfNV x, GLhalfNV y, GLhalfNV z, GLhalfNV w );
+   void (GLAPIENTRYP VertexAttrib4hvNV)( GLuint index, const GLhalfNV *v );
+   void (GLAPIENTRYP VertexAttribs1hvNV)(GLuint index, GLsizei n, const GLhalfNV *v);
+   void (GLAPIENTRYP VertexAttribs2hvNV)(GLuint index, GLsizei n, const GLhalfNV *v);
+   void (GLAPIENTRYP VertexAttribs3hvNV)(GLuint index, GLsizei n, const GLhalfNV *v);
+   void (GLAPIENTRYP VertexAttribs4hvNV)(GLuint index, GLsizei n, const GLhalfNV *v);
    void (GLAPIENTRYP FogCoordhNV)( GLhalfNV );
    void (GLAPIENTRYP FogCoordhvNV)( const GLhalfNV * );
    void (GLAPIENTRYP SecondaryColor3hNV)( GLhalfNV, GLhalfNV, GLhalfNV );

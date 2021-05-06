@@ -23,20 +23,23 @@
 
 #include <assert.h>
 
-#include "intel_batchbuffer.h"
-#include "intel_mipmap_tree.h"
-#include "intel_fbo.h"
+#include "brw_batch.h"
+#include "brw_mipmap_tree.h"
+#include "brw_fbo.h"
 
 #include "brw_context.h"
 #include "brw_state.h"
 
 #include "blorp/blorp_genX_exec.h"
 
-#if GEN_GEN <= 5
-#include "gen4_blorp_exec.h"
+#if GFX_VER <= 5
+#include "gfx4_blorp_exec.h"
 #endif
 
 #include "brw_blorp.h"
+
+static void blorp_measure_start(struct blorp_batch *batch,
+                                const struct blorp_params *params) { }
 
 static void *
 blorp_emit_dwords(struct blorp_batch *batch, unsigned n)
@@ -44,10 +47,10 @@ blorp_emit_dwords(struct blorp_batch *batch, unsigned n)
    assert(batch->blorp->driver_ctx == batch->driver_batch);
    struct brw_context *brw = batch->driver_batch;
 
-   intel_batchbuffer_begin(brw, n);
+   brw_batch_begin(brw, n);
    uint32_t *map = brw->batch.map_next;
    brw->batch.map_next += n;
-   intel_batchbuffer_advance(brw);
+   brw_batch_advance(brw);
    return map;
 }
 
@@ -59,7 +62,7 @@ blorp_emit_reloc(struct blorp_batch *batch,
    struct brw_context *brw = batch->driver_batch;
    uint32_t offset;
 
-   if (GEN_GEN < 6 && brw_ptr_in_state_buffer(&brw->batch, location)) {
+   if (GFX_VER < 6 && brw_ptr_in_state_buffer(&brw->batch, location)) {
       offset = (char *)location - (char *)brw->batch.state.map;
       return brw_state_reloc(&brw->batch, offset,
                              address.buffer, address.offset + delta,
@@ -87,7 +90,7 @@ blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
                       address.reloc_flags);
 
    void *reloc_ptr = (void *)brw->batch.state.map + ss_offset;
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    *(uint64_t *)reloc_ptr = reloc_val;
 #else
    *(uint32_t *)reloc_ptr = reloc_val;
@@ -102,7 +105,7 @@ blorp_get_surface_address(UNUSED struct blorp_batch *blorp_batch,
    return 0ull;
 }
 
-#if GEN_GEN >= 7 && GEN_GEN < 10
+#if GFX_VER >= 7 && GFX_VER < 10
 static struct blorp_address
 blorp_get_surface_base_address(struct blorp_batch *batch)
 {
@@ -183,17 +186,17 @@ blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
        */
       .reloc_flags = RELOC_32BIT,
 
-#if GEN_GEN == 11
+#if GFX_VER == 11
       .mocs = ICL_MOCS_WB,
-#elif GEN_GEN == 10
+#elif GFX_VER == 10
       .mocs = CNL_MOCS_WB,
-#elif GEN_GEN == 9
+#elif GFX_VER == 9
       .mocs = SKL_MOCS_WB,
-#elif GEN_GEN == 8
+#elif GFX_VER == 8
       .mocs = BDW_MOCS_WB,
-#elif GEN_GEN == 7
-      .mocs = GEN7_MOCS_L3,
-#elif GEN_GEN > 6
+#elif GFX_VER == 7
+      .mocs = GFX7_MOCS_L3,
+#elif GFX_VER > 6
 #error "Missing MOCS setting!"
 #endif
    };
@@ -210,7 +213,7 @@ blorp_vf_invalidate_for_vb_48b_transitions(UNUSED struct blorp_batch *batch,
                                            UNUSED uint32_t *sizes,
                                            UNUSED unsigned num_vbs)
 {
-#if GEN_GEN >= 8 && GEN_GEN < 11
+#if GFX_VER >= 8 && GFX_VER < 11
    struct brw_context *brw = batch->driver_batch;
    bool need_invalidate = false;
 
@@ -252,8 +255,8 @@ blorp_flush_range(UNUSED struct blorp_batch *batch, UNUSED void *start,
     */
 }
 
-#if GEN_GEN >= 7
-static const struct gen_l3_config *
+#if GFX_VER >= 7
+static const struct intel_l3_config *
 blorp_get_l3_config(struct blorp_batch *batch)
 {
    assert(batch->blorp->driver_ctx == batch->driver_batch);
@@ -261,7 +264,7 @@ blorp_get_l3_config(struct blorp_batch *batch)
 
    return brw->l3.config;
 }
-#else /* GEN_GEN < 7 */
+#else /* GFX_VER < 7 */
 static void
 blorp_emit_urb_config(struct blorp_batch *batch,
                       unsigned vs_entry_size,
@@ -270,8 +273,8 @@ blorp_emit_urb_config(struct blorp_batch *batch,
    assert(batch->blorp->driver_ctx == batch->driver_batch);
    struct brw_context *brw = batch->driver_batch;
 
-#if GEN_GEN == 6
-   gen6_upload_urb(brw, vs_entry_size, false, 0);
+#if GFX_VER == 6
+   gfx6_upload_urb(brw, vs_entry_size, false, 0);
 #else
    /* We calculate it now and emit later. */
    brw_calculate_urb_fence(brw, 0, vs_entry_size, sf_entry_size);
@@ -288,7 +291,7 @@ genX(blorp_exec)(struct blorp_batch *batch,
    struct gl_context *ctx = &brw->ctx;
    bool check_aperture_failed_once = false;
 
-#if GEN_GEN >= 11
+#if GFX_VER >= 11
    /* The PIPE_CONTROL command description says:
     *
     * "Whenever a Binding Table Index (BTI) used by a Render Taget Message
@@ -325,29 +328,29 @@ genX(blorp_exec)(struct blorp_batch *batch,
    brw_emit_l3_state(brw);
 
 retry:
-   intel_batchbuffer_require_space(brw, 1400);
+   brw_batch_require_space(brw, 1400);
    brw_require_statebuffer_space(brw, 600);
-   intel_batchbuffer_save_state(brw);
-   check_aperture_failed_once |= intel_batchbuffer_saved_state_is_empty(brw);
+   brw_batch_save_state(brw);
+   check_aperture_failed_once |= brw_batch_saved_state_is_empty(brw);
    brw->batch.no_wrap = true;
 
-#if GEN_GEN == 6
+#if GFX_VER == 6
    /* Emit workaround flushes when we switch from drawing to blorping. */
    brw_emit_post_sync_nonzero_flush(brw);
 #endif
 
    brw_upload_state_base_address(brw);
 
-#if GEN_GEN >= 8
-   gen7_l3_state.emit(brw);
+#if GFX_VER >= 8
+   gfx7_l3_state.emit(brw);
 #endif
 
-#if GEN_GEN >= 6
+#if GFX_VER >= 6
    brw_emit_depth_stall_flushes(brw);
 #endif
 
-#if GEN_GEN == 8
-   gen8_write_pma_stall_bits(brw, 0);
+#if GFX_VER == 8
+   gfx8_write_pma_stall_bits(brw, 0);
 #endif
 
    const unsigned scale = params->fast_clear_op ? UINT_MAX : 1;
@@ -372,18 +375,18 @@ retry:
    if (!brw_batch_has_aperture_space(brw, 0)) {
       if (!check_aperture_failed_once) {
          check_aperture_failed_once = true;
-         intel_batchbuffer_reset_to_saved(brw);
-         intel_batchbuffer_flush(brw);
+         brw_batch_reset_to_saved(brw);
+         brw_batch_flush(brw);
          goto retry;
       } else {
-         int ret = intel_batchbuffer_flush(brw);
+         int ret = brw_batch_flush(brw);
          WARN_ONCE(ret == -ENOSPC,
                    "i965: blorp emit exceeded available aperture space\n");
       }
    }
 
    if (unlikely(brw->always_flush_batch))
-      intel_batchbuffer_flush(brw);
+      brw_batch_flush(brw);
 
    /* We've smashed all state compared to what the normal 3D pipeline
     * rendering tracks for GL.

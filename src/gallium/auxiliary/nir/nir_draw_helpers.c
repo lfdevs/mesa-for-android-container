@@ -80,7 +80,7 @@ nir_lower_pstipple_block(nir_block *block,
    tex->op = nir_texop_tex;
    tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
    tex->coord_components = 2;
-   tex->dest_type = nir_type_float;
+   tex->dest_type = nir_type_float32;
    tex->texture_index = state->stip_tex->data.binding;
    tex->sampler_index = state->stip_tex->data.binding;
    tex->src[0].src_type = nir_tex_src_coord;
@@ -134,7 +134,7 @@ nir_lower_pstipple_fs(struct nir_shader *shader,
    tex_var->data.explicit_binding = true;
    tex_var->data.how_declared = nir_var_hidden;
 
-   shader->info.textures_used |= (1 << binding);
+   BITSET_SET(shader->info.textures_used, binding);
    state.stip_tex = tex_var;
 
    nir_foreach_function(function, shader) {

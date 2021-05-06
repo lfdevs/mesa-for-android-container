@@ -61,7 +61,7 @@ static void set_vertices(void)
                                               sizeof(vertices),
                                               vertices);
 
-   info.ctx->set_vertex_buffers(info.ctx, 0, 1, &vbuf);
+   info.ctx->set_vertex_buffers(info.ctx, 0, 1, 0, false, &vbuf);
 }
 
 static void set_vertex_shader(void)
@@ -147,7 +147,7 @@ init_tex(const unsigned swizzle[4])
    if (sv == NULL)
       exit(5);
 
-   info.ctx->set_sampler_views(info.ctx, PIPE_SHADER_FRAGMENT, 0, 1, &sv);
+   info.ctx->set_sampler_views(info.ctx, PIPE_SHADER_FRAGMENT, 0, 1, 0, &sv);
 
    sampler = graw_util_create_simple_sampler(&info,
                                              PIPE_TEX_WRAP_REPEAT,

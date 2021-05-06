@@ -99,7 +99,6 @@ attachment_to_buffer_index(enum st_attachment_type statt)
    case ST_ATTACHMENT_ACCUM:
       index = BUFFER_ACCUM;
       break;
-   case ST_ATTACHMENT_SAMPLE:
    default:
       index = BUFFER_COUNT;
       break;
@@ -424,7 +423,6 @@ st_visual_to_context_mode(const struct st_visual *visual,
    }
 
    if (visual->samples > 1) {
-      mode->sampleBuffers = 1;
       mode->samples = visual->samples;
    }
 }
@@ -666,7 +664,7 @@ st_context_flush(struct st_context_iface *stctxi, unsigned flags,
     * it means that glBitmap was called first and then glBegin.
     */
    st_flush_bitmap_cache(st);
-   FLUSH_VERTICES(st->ctx, 0);
+   FLUSH_VERTICES(st->ctx, 0, 0);
 
    /* Notify the caller that we're ready to flush */
    if (before_flush_cb)
@@ -834,6 +832,23 @@ st_thread_finish(struct st_context_iface *stctxi)
 
 
 static void
+st_context_invalidate_state(struct st_context_iface *stctxi,
+                            unsigned flags)
+{
+   struct st_context *st = (struct st_context *) stctxi;
+
+   if (flags & ST_INVALIDATE_FS_SAMPLER_VIEWS)
+      st->dirty |= ST_NEW_FS_SAMPLER_VIEWS;
+   if (flags & ST_INVALIDATE_FS_CONSTBUF0)
+      st->dirty |= ST_NEW_FS_CONSTANTS;
+   if (flags & ST_INVALIDATE_VS_CONSTBUF0)
+      st->dirty |= ST_NEW_VS_CONSTANTS;
+   if (flags & ST_INVALIDATE_VERTEX_BUFFERS)
+      st->dirty |= ST_NEW_VERTEX_ARRAYS;
+}
+
+
+static void
 st_manager_destroy(struct st_manager *smapi)
 {
    struct st_manager_private *smPriv = smapi->st_manager_private;
@@ -856,8 +871,7 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
    struct st_context *shared_ctx = (struct st_context *) shared_stctxi;
    struct st_context *st;
    struct pipe_context *pipe;
-   struct gl_config* mode_ptr;
-   struct gl_config mode;
+   struct gl_config mode, *mode_ptr = &mode;
    gl_api api;
    bool no_error = false;
    unsigned ctx_flags = PIPE_CONTEXT_PREFER_THREADED;
@@ -921,12 +935,8 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
    }
 
    st_visual_to_context_mode(&attribs->visual, &mode);
-
-   if (attribs->visual.no_config)
+   if (attribs->visual.color_format == PIPE_FORMAT_NONE)
       mode_ptr = NULL;
-   else
-      mode_ptr = &mode;
-
    st = st_create_context(api, pipe, mode_ptr, shared_ctx,
                           &attribs->options, no_error);
    if (!st) {
@@ -985,6 +995,7 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
    st->iface.share = st_context_share;
    st->iface.start_thread = st_start_thread;
    st->iface.thread_finish = st_thread_finish;
+   st->iface.invalidate_state = st_context_invalidate_state;
    st->iface.st_context_private = (void *) smapi;
    st->iface.cso_context = st->cso_context;
    st->iface.pipe = st->pipe;
@@ -1077,6 +1088,10 @@ st_api_make_current(struct st_api *stapi, struct st_context_iface *stctxi,
          if (stdraw)
             st_framebuffer_reference(&stread, stdraw);
       }
+
+      /* If framebuffers were asked for, we'd better have allocated them */
+      if ((stdrawi && !stdraw) || (streadi && !stread))
+         return false;
 
       if (stdraw && stread) {
          st_framebuffer_validate(stdraw, st);

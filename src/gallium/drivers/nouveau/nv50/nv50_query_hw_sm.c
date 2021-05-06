@@ -58,8 +58,8 @@ static const uint64_t nv50_read_hw_sm_counters_code[] =
     * mov $r2 $pm2
     * mov $r3 $pm3
     * mov $r4 $physid
-    * ld $r5 b32 s[0x10]
-    * ld $r6 b32 s[0x14]
+    * ld $r5 b32 s[0x14]
+    * ld $r6 b32 s[0x18]
     * and b32 $r4 $r4 0x000f0000
     * shr u32 $r4 $r4 0x10
     * mul $r4 u24 $r4 0x14
@@ -81,8 +81,8 @@ static const uint64_t nv50_read_hw_sm_counters_code[] =
    0x6001878000000009ULL,
    0x6001c7800000000dULL,
    0x6000078000000011ULL,
-   0x4400c78010000815ULL,
-   0x4400c78010000a19ULL,
+   0x4400c78010000a15ULL,
+   0x4400c78010000c19ULL,
    0x0000f003d0000811ULL,
    0xe410078030100811ULL,
    0x0000000340540811ULL,

@@ -30,6 +30,7 @@
 #include "main/framebuffer.h"
 #include "main/extensions.h"
 #include "main/macros.h"
+#include "main/state.h"
 #include "main/version.h"
 #include "main/vtxfmt.h"
 #include "intel_chipset.h"
@@ -256,6 +257,7 @@ i915CreateContext(int api,
       ctx->Const.Program[MESA_SHADER_FRAGMENT].MediumInt;
 
    ctx->FragmentProgram._MaintainTexEnvProgram = true;
+   _mesa_reset_vertex_processing_mode(ctx);
 
    /* FINISHME: Are there other options that should be enabled for software
     * FINISHME: vertex shaders?

@@ -26,7 +26,7 @@
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
 
-#include "common/gen_l3_config.h"
+#include "common/intel_l3_config.h"
 
 /**
  * This file implements some lightweight memcpy/memset operations on the GPU
@@ -73,12 +73,12 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
    }
 
    if (!cmd_buffer->state.current_l3_config) {
-      const struct gen_l3_config *cfg =
-         gen_get_default_l3_config(&cmd_buffer->device->info);
+      const struct intel_l3_config *cfg =
+         intel_get_default_l3_config(&cmd_buffer->device->info);
       genX(cmd_buffer_config_l3)(cmd_buffer, cfg);
    }
 
-   genX(cmd_buffer_set_binding_for_gen8_vb_flush)(cmd_buffer, 32, src, size);
+   genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(cmd_buffer, 32, src, size);
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 
    genX(flush_pipeline_select_3d)(cmd_buffer);
@@ -92,7 +92,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
          .BufferStartingAddress = src,
          .BufferPitch = bs,
          .MOCS = anv_mocs(cmd_buffer->device, src.bo, 0),
-#if (GEN_GEN >= 8)
+#if (GFX_VER >= 8)
          .BufferSize = size,
 #else
          .EndAddress = anv_address_add(src, size - 1),
@@ -112,14 +112,14 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
          .Component3Control = (bs >= 16) ? VFCOMP_STORE_SRC : VFCOMP_STORE_0,
       });
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_INSTANCING), vfi) {
       vfi.InstancingEnable = false;
       vfi.VertexElementIndex = 0;
    }
 #endif
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_SGVS), sgvs);
 #endif
 
@@ -135,12 +135,12 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       sbe.VertexURBEntryReadOffset = 1;
       sbe.NumberofSFOutputAttributes = 1;
       sbe.VertexURBEntryReadLength = 1;
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
       sbe.ForceVertexURBEntryReadLength = true;
       sbe.ForceVertexURBEntryReadOffset = true;
 #endif
 
-#if GEN_GEN >= 9
+#if GFX_VER >= 9
       for (unsigned i = 0; i < 32; i++)
          sbe.AttributeActiveComponentFormat[i] = ACF_XYZW;
 #endif
@@ -157,7 +157,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
                         VK_SHADER_STAGE_VERTEX_BIT, entry_size, NULL);
 
    anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_SO_BUFFER), sob) {
-#if GEN_GEN < 12
+#if GFX_VER < 12
       sob.SOBufferIndex = 0;
 #else
       sob._3DCommandOpcode = 0;
@@ -166,7 +166,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       sob.MOCS = anv_mocs(cmd_buffer->device, dst.bo, 0),
       sob.SurfaceBaseAddress = dst;
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
       sob.SOBufferEnable = true;
       sob.SurfaceSize = size / 4 - 1;
 #else
@@ -174,7 +174,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       sob.SurfaceEndAddress = anv_address_add(dst, size);
 #endif
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
       /* As SOL writes out data, it updates the SO_WRITE_OFFSET registers with
        * the end position of the stream.  We need to reset this value to 0 at
        * the beginning of the run or else SOL will start at the offset from
@@ -185,7 +185,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
 #endif
    }
 
-#if GEN_GEN <= 7
+#if GFX_VER <= 7
    /* The hardware can do this for us on BDW+ (see above) */
    anv_batch_emit(&cmd_buffer->batch, GENX(MI_LOAD_REGISTER_IMM), load) {
       load.RegisterOffset = GENX(SO_WRITE_OFFSET0_num);
@@ -210,14 +210,14 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       so.RenderingDisable = true;
       so.Stream0VertexReadOffset = 0;
       so.Stream0VertexReadLength = DIV_ROUND_UP(32, 64);
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
       so.Buffer0SurfacePitch = bs;
 #else
       so.SOBufferEnable0 = true;
 #endif
    }
 
-#if GEN_GEN >= 8
+#if GFX_VER >= 8
    anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_TOPOLOGY), topo) {
       topo.PrimitiveTopologyType = _3DPRIM_POINTLIST;
    }
@@ -227,7 +227,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       vf.StatisticsEnable = false;
    }
 
-#if GEN_GEN >= 12
+#if GFX_VER >= 12
    /* Disable Primitive Replication. */
    anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_PRIMITIVE_REPLICATION), pr);
 #endif
@@ -242,7 +242,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       prim.BaseVertexLocation       = 0;
    }
 
-   genX(cmd_buffer_update_dirty_vbs_for_gen8_vb_flush)(cmd_buffer, SEQUENTIAL,
+   genX(cmd_buffer_update_dirty_vbs_for_gfx8_vb_flush)(cmd_buffer, SEQUENTIAL,
                                                        1ull << 32);
 
    cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_PIPELINE;

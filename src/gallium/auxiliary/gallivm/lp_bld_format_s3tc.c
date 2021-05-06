@@ -642,8 +642,8 @@ s3tc_dxt1_full_to_rgba_aos(struct gallivm_state *gallivm,
        * XXX with sse2 and 16x8 vectors, should use pavgb even when n == 1.
        * Much cheaper (but we don't care that much if n == 1).
        */
-      if ((util_cpu_caps.has_sse2 && n == 4) ||
-          (util_cpu_caps.has_avx2 && n == 8)) {
+      if ((util_get_cpu_caps()->has_sse2 && n == 4) ||
+          (util_get_cpu_caps()->has_avx2 && n == 8)) {
          color2_2 = lp_build_pavgb(&bld8, colors0, colors1);
          color2_2 = LLVMBuildBitCast(builder, color2_2, bld32.vec_type, "");
       }
@@ -1350,7 +1350,7 @@ s3tc_decode_block_dxt1(struct gallivm_state *gallivm,
    if (is_dxt1_variant) {
       LLVMValueRef color23_2, color2_2;
 
-      if (util_cpu_caps.has_sse2) {
+      if (util_get_cpu_caps()->has_sse2) {
          LLVMValueRef intrargs[2];
          intrargs[0] = LLVMBuildBitCast(builder, color01, bld8.vec_type, "");
          /* same interleave as for lerp23 - correct result in 2nd element */
@@ -1389,7 +1389,7 @@ s3tc_decode_block_dxt1(struct gallivm_state *gallivm,
       color23 = lp_build_select(&bld32, sel_mask, color23, color23_2);
    }
 
-   if (util_cpu_caps.has_ssse3) {
+   if (util_get_cpu_caps()->has_ssse3) {
       /*
        * Use pshufb as mini-lut. (Only doable with intrinsics as the
        * final shuffles are non-constant. pshufb is awesome!)
@@ -1689,7 +1689,7 @@ s3tc_decode_block_dxt5(struct gallivm_state *gallivm,
    type16.sign = FALSE;
    sel_mask = LLVMBuildBitCast(builder, sel_mask, bld8.vec_type, "");
 
-   if (!util_cpu_caps.has_ssse3) {
+   if (!util_get_cpu_caps()->has_ssse3) {
       LLVMValueRef acodeg, mask1, acode0, acode1;
 
       /* extraction of the 3 bit values into something more useful is HARD */

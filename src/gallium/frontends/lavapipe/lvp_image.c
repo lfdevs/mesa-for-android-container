@@ -73,6 +73,12 @@ lvp_image_create(VkDevice _device,
       if (pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
          template.bind |= PIPE_BIND_DEPTH_STENCIL;
 
+      if (pCreateInfo->usage & VK_IMAGE_USAGE_SAMPLED_BIT)
+         template.bind |= PIPE_BIND_SAMPLER_VIEW;
+
+      if (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT)
+         template.bind |= PIPE_BIND_SHADER_IMAGE;
+
       template.format = vk_format_to_pipe(pCreateInfo->format);
       template.width0 = pCreateInfo->extent.width;
       template.height0 = pCreateInfo->extent.height;
@@ -92,12 +98,65 @@ lvp_image_create(VkDevice _device,
    return VK_SUCCESS;
 }
 
-VkResult
+struct lvp_image *
+lvp_swapchain_get_image(VkSwapchainKHR swapchain,
+                        uint32_t index)
+{
+   uint32_t n_images = index + 1;
+   VkImage *images = malloc(sizeof(*images) * n_images);
+   VkResult result = wsi_common_get_images(swapchain, &n_images, images);
+
+   if (result != VK_SUCCESS && result != VK_INCOMPLETE) {
+      free(images);
+      return NULL;
+   }
+
+   LVP_FROM_HANDLE(lvp_image, image, images[index]);
+   free(images);
+
+   return image;
+}
+
+static VkResult
+lvp_image_from_swapchain(VkDevice device,
+                         const VkImageCreateInfo *pCreateInfo,
+                         const VkImageSwapchainCreateInfoKHR *swapchain_info,
+                         const VkAllocationCallbacks *pAllocator,
+                         VkImage *pImage)
+{
+   struct lvp_image *swapchain_image = lvp_swapchain_get_image(swapchain_info->swapchain, 0);
+   assert(swapchain_image);
+
+   assert(swapchain_image->type == pCreateInfo->imageType);
+
+   VkImageCreateInfo local_create_info;
+   local_create_info = *pCreateInfo;
+   local_create_info.pNext = NULL;
+   /* The following parameters are implictly selected by the wsi code. */
+   local_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+   local_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+   local_create_info.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+   assert(!(local_create_info.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
+   return lvp_image_create(device,
+      &(struct lvp_image_create_info) {
+         .vk_info = &local_create_info,
+      },
+      pAllocator,
+      pImage);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
 lvp_CreateImage(VkDevice device,
                 const VkImageCreateInfo *pCreateInfo,
                 const VkAllocationCallbacks *pAllocator,
                 VkImage *pImage)
 {
+   const VkImageSwapchainCreateInfoKHR *swapchain_info =
+      vk_find_struct_const(pCreateInfo->pNext, IMAGE_SWAPCHAIN_CREATE_INFO_KHR);
+   if (swapchain_info && swapchain_info->swapchain != VK_NULL_HANDLE)
+      return lvp_image_from_swapchain(device, pCreateInfo, swapchain_info,
+                                      pAllocator, pImage);
    return lvp_image_create(device,
       &(struct lvp_image_create_info) {
          .vk_info = pCreateInfo,
@@ -107,7 +166,7 @@ lvp_CreateImage(VkDevice device,
       pImage);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 lvp_DestroyImage(VkDevice _device, VkImage _image,
                  const VkAllocationCallbacks *pAllocator)
 {
@@ -121,7 +180,7 @@ lvp_DestroyImage(VkDevice _device, VkImage _image,
    vk_free2(&device->vk.alloc, pAllocator, image);
 }
 
-VkResult
+VKAPI_ATTR VkResult VKAPI_CALL
 lvp_CreateImageView(VkDevice _device,
                     const VkImageViewCreateInfo *pCreateInfo,
                     const VkAllocationCallbacks *pAllocator,
@@ -150,7 +209,7 @@ lvp_CreateImageView(VkDevice _device,
    return VK_SUCCESS;
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 lvp_DestroyImageView(VkDevice _device, VkImageView _iview,
                      const VkAllocationCallbacks *pAllocator)
 {
@@ -165,7 +224,7 @@ lvp_DestroyImageView(VkDevice _device, VkImageView _iview,
    vk_free2(&device->vk.alloc, pAllocator, iview);
 }
 
-void lvp_GetImageSubresourceLayout(
+VKAPI_ATTR void VKAPI_CALL lvp_GetImageSubresourceLayout(
     VkDevice                                    _device,
     VkImage                                     _image,
     const VkImageSubresource*                   pSubresource,
@@ -227,7 +286,7 @@ void lvp_GetImageSubresourceLayout(
    }
 }
 
-VkResult lvp_CreateBuffer(
+VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateBuffer(
     VkDevice                                    _device,
     const VkBufferCreateInfo*                   pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -266,6 +325,12 @@ VkResult lvp_CreateBuffer(
       template.height0 = 1;
       template.depth0 = 1;
       template.array_size = 1;
+      if (buffer->usage & VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT)
+         template.bind |= PIPE_BIND_SAMPLER_VIEW;
+      if (buffer->usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
+         template.bind |= PIPE_BIND_SHADER_BUFFER;
+      if (buffer->usage & VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT)
+         template.bind |= PIPE_BIND_SHADER_IMAGE;
       template.flags = PIPE_RESOURCE_FLAG_DONT_OVER_ALLOCATE;
       buffer->bo = device->pscreen->resource_create_unbacked(device->pscreen,
                                                              &template,
@@ -280,7 +345,7 @@ VkResult lvp_CreateBuffer(
    return VK_SUCCESS;
 }
 
-void lvp_DestroyBuffer(
+VKAPI_ATTR void VKAPI_CALL lvp_DestroyBuffer(
     VkDevice                                    _device,
     VkBuffer                                    _buffer,
     const VkAllocationCallbacks*                pAllocator)
@@ -296,7 +361,30 @@ void lvp_DestroyBuffer(
    vk_free2(&device->vk.alloc, pAllocator, buffer);
 }
 
-VkResult
+VKAPI_ATTR VkDeviceAddress VKAPI_CALL lvp_GetBufferDeviceAddress(
+   VkDevice                                    device,
+   const VkBufferDeviceAddressInfoKHR*         pInfo)
+{
+   LVP_FROM_HANDLE(lvp_buffer, buffer, pInfo->buffer);
+
+   return (VkDeviceAddress)(uintptr_t)buffer->pmem;
+}
+
+VKAPI_ATTR uint64_t VKAPI_CALL lvp_GetBufferOpaqueCaptureAddress(
+    VkDevice                                    device,
+    const VkBufferDeviceAddressInfoKHR*         pInfo)
+{
+   return 0;
+}
+
+VKAPI_ATTR uint64_t VKAPI_CALL lvp_GetDeviceMemoryOpaqueCaptureAddress(
+    VkDevice                                    device,
+    const VkDeviceMemoryOpaqueCaptureAddressInfoKHR* pInfo)
+{
+   return 0;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
 lvp_CreateBufferView(VkDevice _device,
                      const VkBufferViewCreateInfo *pCreateInfo,
                      const VkAllocationCallbacks *pAllocator,
@@ -322,7 +410,7 @@ lvp_CreateBufferView(VkDevice _device,
    return VK_SUCCESS;
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 lvp_DestroyBufferView(VkDevice _device, VkBufferView bufferView,
                       const VkAllocationCallbacks *pAllocator)
 {

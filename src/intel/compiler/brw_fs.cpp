@@ -252,8 +252,8 @@ fs_inst::is_control_source(unsigned arg) const
 {
    switch (opcode) {
    case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
-   case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD_GEN7:
-   case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN4:
+   case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD_GFX7:
+   case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GFX4:
       return arg == 0;
 
    case SHADER_OPCODE_BROADCAST:
@@ -317,7 +317,7 @@ fs_inst::is_payload(unsigned arg) const
    case SHADER_OPCODE_BARRIER:
       return arg == 0;
 
-   case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD_GEN7:
+   case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD_GFX7:
       return arg == 1;
 
    case SHADER_OPCODE_SEND:
@@ -411,7 +411,7 @@ fs_inst::has_source_and_destination_hazard() const
        *
        * Now our destination for the first instruction overwrote the
        * second instruction's src0, and we get garbage for those 8
-       * pixels.  There's a similar issue for the pre-gen6
+       * pixels.  There's a similar issue for the pre-gfx6
        * pixel_x/pixel_y, which are registers of 16-bit values and thus
        * would get stomped by the first decode as well.
        */
@@ -433,18 +433,18 @@ fs_inst::has_source_and_destination_hazard() const
 bool
 fs_inst::can_do_source_mods(const struct gen_device_info *devinfo) const
 {
-   if (devinfo->gen == 6 && is_math())
+   if (devinfo->ver == 6 && is_math())
       return false;
 
    if (is_send_from_grf())
       return false;
 
-   /* From GEN:BUG:1604601757:
+   /* From Wa_1604601757:
     *
     * "When multiplying a DW and any lower precision integer, source modifier
     *  is not supported."
     */
-   if (devinfo->gen >= 12 && (opcode == BRW_OPCODE_MUL ||
+   if (devinfo->ver >= 12 && (opcode == BRW_OPCODE_MUL ||
                               opcode == BRW_OPCODE_MAD)) {
       const brw_reg_type exec_type = get_exec_type(this);
       const unsigned min_type_sz = opcode == BRW_OPCODE_MAD ?
@@ -572,7 +572,7 @@ fs_reg::component_size(unsigned width) const
 fs_reg
 fs_visitor::get_timestamp(const fs_builder &bld)
 {
-   assert(devinfo->gen >= 7);
+   assert(devinfo->ver >= 7);
 
    fs_reg ts = fs_reg(retype(brw_vec4_reg(BRW_ARCHITECTURE_REGISTER_FILE,
                                           BRW_ARF_TIMESTAMP,
@@ -682,7 +682,7 @@ fs_visitor::vfail(const char *format, va_list va)
 
    this->fail_msg = msg;
 
-   if (debug_enabled) {
+   if (unlikely(debug_enabled)) {
       fprintf(stderr, "%s",  msg);
    }
 }
@@ -859,6 +859,7 @@ fs_inst::components_read(unsigned i) const
       return i == 1 ? src[2].ud : 1;
 
    case SHADER_OPCODE_A64_UNTYPED_ATOMIC_LOGICAL:
+   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_INT16_LOGICAL:
    case SHADER_OPCODE_A64_UNTYPED_ATOMIC_INT64_LOGICAL:
       assert(src[2].file == IMM);
       if (i == 1) {
@@ -878,7 +879,8 @@ fs_inst::components_read(unsigned i) const
          return 1;
       }
 
-   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT_LOGICAL:
+   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT16_LOGICAL:
+   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT32_LOGICAL:
       assert(src[2].file == IMM);
       if (i == 1) {
          /* Data source */
@@ -986,7 +988,7 @@ fs_inst::size_read(int arg) const
          return 1;
       break;
 
-   case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD_GEN7:
+   case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD_GFX7:
       /* The payload is actually stored in src1 */
       if (arg == 1)
          return mlen * REG_SIZE;
@@ -1095,9 +1097,9 @@ fs_inst::flags_read(const gen_device_info *devinfo) const
    if (predicate == BRW_PREDICATE_ALIGN1_ANYV ||
        predicate == BRW_PREDICATE_ALIGN1_ALLV) {
       /* The vertical predication modes combine corresponding bits from
-       * f0.0 and f1.0 on Gen7+, and f0.0 and f0.1 on older hardware.
+       * f0.0 and f1.0 on Gfx7+, and f0.0 and f0.1 on older hardware.
        */
-      const unsigned shift = devinfo->gen >= 7 ? 4 : 2;
+      const unsigned shift = devinfo->ver >= 7 ? 4 : 2;
       return flag_mask(this, 1) << shift | flag_mask(this, 1);
    } else if (predicate) {
       return flag_mask(this, predicate_width(predicate));
@@ -1172,11 +1174,11 @@ fs_inst::implied_mrf_writes() const
    case FS_OPCODE_REP_FB_WRITE:
       return src[0].file == BAD_FILE ? 0 : 2;
    case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
-   case SHADER_OPCODE_GEN4_SCRATCH_READ:
+   case SHADER_OPCODE_GFX4_SCRATCH_READ:
       return 1;
-   case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN4:
+   case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GFX4:
       return mlen;
-   case SHADER_OPCODE_GEN4_SCRATCH_WRITE:
+   case SHADER_OPCODE_GFX4_SCRATCH_WRITE:
       return mlen;
    default:
       unreachable("not reached");
@@ -1238,7 +1240,7 @@ fs_visitor::emit_fragcoord_interpolation(fs_reg wpos)
    wpos = offset(wpos, bld, 1);
 
    /* gl_FragCoord.z */
-   if (devinfo->gen >= 6) {
+   if (devinfo->ver >= 6) {
       bld.MOV(wpos, fetch_payload_reg(bld, payload.source_depth_reg));
    } else {
       bld.emit(FS_OPCODE_LINTERP, wpos,
@@ -1296,13 +1298,13 @@ fs_visitor::emit_frontfacing_interpolation()
 {
    fs_reg *reg = new(this->mem_ctx) fs_reg(vgrf(glsl_type::bool_type));
 
-   if (devinfo->gen >= 12) {
+   if (devinfo->ver >= 12) {
       fs_reg g1 = fs_reg(retype(brw_vec1_grf(1, 1), BRW_REGISTER_TYPE_W));
 
       fs_reg tmp = bld.vgrf(BRW_REGISTER_TYPE_W);
       bld.ASR(tmp, g1, brw_imm_d(15));
       bld.NOT(*reg, tmp);
-   } else if (devinfo->gen >= 6) {
+   } else if (devinfo->ver >= 6) {
       /* Bit 15 of g0.0 is 0 if the polygon is front facing. We want to create
        * a boolean result from this (~0/true or 0/false).
        *
@@ -1364,7 +1366,7 @@ fs_visitor::compute_sample_position(fs_reg dst, fs_reg int_sample_pos)
 fs_reg *
 fs_visitor::emit_samplepos_setup()
 {
-   assert(devinfo->gen >= 6);
+   assert(devinfo->ver >= 6);
 
    const fs_builder abld = bld.annotate("compute sample position");
    fs_reg *reg = new(this->mem_ctx) fs_reg(vgrf(glsl_type::vec2_type));
@@ -1401,7 +1403,7 @@ fs_visitor::emit_sampleid_setup()
 {
    assert(stage == MESA_SHADER_FRAGMENT);
    brw_wm_prog_key *key = (brw_wm_prog_key*) this->key;
-   assert(devinfo->gen >= 6);
+   assert(devinfo->ver >= 6);
 
    const fs_builder abld = bld.annotate("compute sample id");
    fs_reg *reg = new(this->mem_ctx) fs_reg(vgrf(glsl_type::uint_type));
@@ -1412,7 +1414,7 @@ fs_visitor::emit_sampleid_setup()
        *  rasterization is disabled, gl_SampleID will always be zero."
        */
       abld.MOV(*reg, brw_imm_d(0));
-   } else if (devinfo->gen >= 8) {
+   } else if (devinfo->ver >= 8) {
       /* Sample ID comes in as 4-bit numbers in g1.0:
        *
        *    15:12 Slot 3 SampleID (only used in SIMD16)
@@ -1438,7 +1440,7 @@ fs_visitor::emit_sampleid_setup()
        *    shr(16) tmp<1>W g1.0<1,8,0>B 0x44440000:V
        *    and(16) dst<1>D tmp<8,8,1>W  0xf:W
        *
-       * TODO: These payload bits exist on Gen7 too, but they appear to always
+       * TODO: These payload bits exist on Gfx7 too, but they appear to always
        *       be zero, so this code fails to work.  We should find out why.
        */
       const fs_reg tmp = abld.vgrf(BRW_REGISTER_TYPE_UW);
@@ -1488,10 +1490,10 @@ fs_visitor::emit_sampleid_setup()
        * can assume 4x MSAA.  Disallow it on IVB+
        *
        * FINISHME: One day, we could come up with a way to do this that
-       * actually works on gen7.
+       * actually works on gfx7.
        */
-      if (devinfo->gen >= 7)
-         limit_dispatch_width(16, "gl_SampleId is unsupported in SIMD32 on gen7");
+      if (devinfo->ver >= 7)
+         limit_dispatch_width(16, "gl_SampleId is unsupported in SIMD32 on gfx7");
       abld.exec_all().group(8, 0).MOV(t2, brw_imm_v(0x32103210));
 
       /* This special instruction takes care of setting vstride=1,
@@ -1508,7 +1510,7 @@ fs_visitor::emit_samplemaskin_setup()
 {
    assert(stage == MESA_SHADER_FRAGMENT);
    struct brw_wm_prog_data *wm_prog_data = brw_wm_prog_data(this->prog_data);
-   assert(devinfo->gen >= 6);
+   assert(devinfo->ver >= 6);
 
    fs_reg *reg = new(this->mem_ctx) fs_reg(vgrf(glsl_type::int_type));
 
@@ -1621,6 +1623,76 @@ fs_visitor::assign_curb_setup()
 
    uint64_t used = 0;
 
+   if (stage == MESA_SHADER_COMPUTE && devinfo->verx10 >= 125) {
+      fs_builder ubld = bld.exec_all().group(8, 0).at(
+         cfg->first_block(), cfg->first_block()->start());
+
+      /* The base address for our push data is passed in as R0.0[31:6].  We
+       * have to mask off the bottom 6 bits.
+       */
+      fs_reg base_addr = ubld.vgrf(BRW_REGISTER_TYPE_UD);
+      ubld.group(1, 0).AND(base_addr,
+                           retype(brw_vec1_grf(0, 0), BRW_REGISTER_TYPE_UD),
+                           brw_imm_ud(INTEL_MASK(31, 6)));
+
+      fs_reg header0 = ubld.vgrf(BRW_REGISTER_TYPE_UD);
+      ubld.MOV(header0, brw_imm_ud(0));
+      ubld.group(1, 0).SHR(component(header0, 2), base_addr, brw_imm_ud(4));
+
+      /* On Gfx12-HP we load constants at the start of the program using A32
+       * stateless messages.
+       */
+      for (unsigned i = 0; i < uniform_push_length;) {
+         /* Limit ourselves to HW limit of 8 Owords (8 * 16bytes = 128 bytes
+          * or 4 registers).
+          */
+         unsigned num_regs = MIN2(uniform_push_length - i, 4);
+         assert(num_regs > 0);
+         num_regs = 1 << util_logbase2(num_regs);
+
+         fs_reg header;
+         if (i == 0) {
+            header = header0;
+         } else {
+            header = ubld.vgrf(BRW_REGISTER_TYPE_UD);
+            ubld.MOV(header, brw_imm_ud(0));
+            ubld.group(1, 0).ADD(component(header, 2),
+                                 component(header0, 2),
+                                 brw_imm_ud(i * 2));
+         }
+
+         fs_reg srcs[4] = {
+            brw_imm_ud(0), /* desc */
+            brw_imm_ud(0), /* ex_desc */
+            header, /* payload */
+            fs_reg(), /* payload2 */
+         };
+
+         fs_reg dest = retype(brw_vec8_grf(payload.num_regs + i, 0),
+                              BRW_REGISTER_TYPE_UD);
+
+         /* This instruction has to be run SIMD16 if we're filling more than a
+          * single register.
+          */
+         unsigned send_width = MIN2(16, num_regs * 8);
+
+         fs_inst *send = ubld.group(send_width, 0).emit(SHADER_OPCODE_SEND,
+                                                        dest, srcs, 4);
+         send->sfid = GFX7_SFID_DATAPORT_DATA_CACHE;
+         send->desc = brw_dp_desc(devinfo, GFX8_BTI_STATELESS_NON_COHERENT,
+                                  GFX7_DATAPORT_DC_OWORD_BLOCK_READ,
+                                  BRW_DATAPORT_OWORD_BLOCK_OWORDS(num_regs * 2));
+         send->header_size = 1;
+         send->mlen = 1;
+         send->size_written = num_regs * REG_SIZE;
+         send->send_is_volatile = true;
+
+         i += num_regs;
+      }
+
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
+   }
+
    /* Map the offsets in the UNIFORM file to fixed HW regs. */
    foreach_block_and_inst(block, fs_inst, inst, cfg) {
       for (unsigned int i = 0; i < inst->sources; i++) {
@@ -1732,7 +1804,7 @@ calculate_urb_setup(const struct gen_device_info *devinfo,
 
    int urb_next = 0;
    /* Figure out where each of the incoming setup attributes lands. */
-   if (devinfo->gen >= 6) {
+   if (devinfo->ver >= 6) {
       if (util_bitcount64(nir->info.inputs_read &
                             BRW_FS_VARYING_INPUT_MASK) <= 16) {
          /* The SF/SBE pipeline stage can do arbitrary rearrangement of the
@@ -2195,9 +2267,13 @@ fs_visitor::compact_virtual_grfs()
 }
 
 static int
-get_subgroup_id_param_index(const brw_stage_prog_data *prog_data)
+get_subgroup_id_param_index(const gen_device_info *devinfo,
+                            const brw_stage_prog_data *prog_data)
 {
    if (prog_data->nr_params == 0)
+      return -1;
+
+   if (devinfo->verx10 >= 125)
       return -1;
 
    /* The local thread id is always the last parameter in the list */
@@ -2371,7 +2447,8 @@ fs_visitor::assign_constant_locations()
          }
       }
 
-      int subgroup_id_index = get_subgroup_id_param_index(stage_prog_data);
+      int subgroup_id_index = get_subgroup_id_param_index(devinfo,
+                                                          stage_prog_data);
 
       /* Only allow 16 registers (128 uniform components) as push constants.
        *
@@ -2642,17 +2719,10 @@ fs_visitor::opt_algebraic()
             assert(!inst->src[0].negate);
             const brw::fs_builder ibld(this, block, inst);
 
-            if (inst->src[0].file == IMM) {
-               ibld.MOV(subscript(inst->dst, BRW_REGISTER_TYPE_UD, 1),
-                        brw_imm_ud(inst->src[0].u64 >> 32));
-               ibld.MOV(subscript(inst->dst, BRW_REGISTER_TYPE_UD, 0),
-                        brw_imm_ud(inst->src[0].u64));
-            } else {
-               ibld.MOV(subscript(inst->dst, BRW_REGISTER_TYPE_UD, 1),
-                        subscript(inst->src[0], BRW_REGISTER_TYPE_UD, 1));
-               ibld.MOV(subscript(inst->dst, BRW_REGISTER_TYPE_UD, 0),
-                        subscript(inst->src[0], BRW_REGISTER_TYPE_UD, 0));
-            }
+            ibld.MOV(subscript(inst->dst, BRW_REGISTER_TYPE_UD, 1),
+                     subscript(inst->src[0], BRW_REGISTER_TYPE_UD, 1));
+            ibld.MOV(subscript(inst->dst, BRW_REGISTER_TYPE_UD, 0),
+                     subscript(inst->src[0], BRW_REGISTER_TYPE_UD, 0));
 
             inst->remove(block);
             progress = true;
@@ -2738,7 +2808,7 @@ fs_visitor::opt_algebraic()
       case BRW_OPCODE_OR:
          if (inst->src[0].equals(inst->src[1]) ||
              inst->src[1].is_zero()) {
-            /* On Gen8+, the OR instruction can have a source modifier that
+            /* On Gfx8+, the OR instruction can have a source modifier that
              * performs logical not on the operand.  Cases of 'OR r0, ~r1, 0'
              * or 'OR r0, ~r1, ~r1' should become a NOT instead of a MOV.
              */
@@ -2917,10 +2987,10 @@ fs_visitor::opt_algebraic()
 bool
 fs_visitor::opt_zero_samples()
 {
-   /* Gen4 infers the texturing opcode based on the message length so we can't
+   /* Gfx4 infers the texturing opcode based on the message length so we can't
     * change it.
     */
-   if (devinfo->gen < 5)
+   if (devinfo->ver < 5)
       return false;
 
    bool progress = false;
@@ -3095,7 +3165,7 @@ fs_visitor::compute_to_mrf()
    int next_ip = 0;
 
    /* No MRFs on Gen >= 7. */
-   if (devinfo->gen >= 7)
+   if (devinfo->ver >= 7)
       return false;
 
    const fs_live_variables &live = live_analysis.require();
@@ -3153,8 +3223,8 @@ fs_visitor::compute_to_mrf()
 	    if (scan_inst->mlen)
 	       break;
 
-	    if (devinfo->gen == 6) {
-	       /* gen6 math instructions must have the destination be
+	    if (devinfo->ver == 6) {
+	       /* gfx6 math instructions must have the destination be
 		* GRF, so no compute-to-MRF for them.
 		*/
 	       if (scan_inst->is_math()) {
@@ -3404,7 +3474,7 @@ fs_visitor::emit_repclear_shader()
 bool
 fs_visitor::remove_duplicate_mrf_writes()
 {
-   fs_inst *last_mrf_move[BRW_MAX_MRF(devinfo->gen)];
+   fs_inst *last_mrf_move[BRW_MAX_MRF(devinfo->ver)];
    bool progress = false;
 
    /* Need to update the MRF tracking for compressed instructions. */
@@ -3559,12 +3629,12 @@ clear_deps_for_inst_src(fs_inst *inst, bool *deps, int first_grf, int grf_len)
  *      same time that both consider ‘r3’ as the target of their final writes.
  */
 void
-fs_visitor::insert_gen4_pre_send_dependency_workarounds(bblock_t *block,
+fs_visitor::insert_gfx4_pre_send_dependency_workarounds(bblock_t *block,
                                                         fs_inst *inst)
 {
    int write_len = regs_written(inst);
    int first_write_grf = inst->dst.nr;
-   bool needs_dep[BRW_MAX_MRF(devinfo->gen)];
+   bool needs_dep[BRW_MAX_MRF(devinfo->ver)];
    assert(write_len < (int)sizeof(needs_dep) - 1);
 
    memset(needs_dep, false, sizeof(needs_dep));
@@ -3631,11 +3701,11 @@ fs_visitor::insert_gen4_pre_send_dependency_workarounds(bblock_t *block,
  *      instruction with a different destination register.
  */
 void
-fs_visitor::insert_gen4_post_send_dependency_workarounds(bblock_t *block, fs_inst *inst)
+fs_visitor::insert_gfx4_post_send_dependency_workarounds(bblock_t *block, fs_inst *inst)
 {
    int write_len = regs_written(inst);
    unsigned first_write_grf = inst->dst.nr;
-   bool needs_dep[BRW_MAX_MRF(devinfo->gen)];
+   bool needs_dep[BRW_MAX_MRF(devinfo->ver)];
    assert(write_len < (int)sizeof(needs_dep) - 1);
 
    memset(needs_dep, false, sizeof(needs_dep));
@@ -3681,17 +3751,17 @@ fs_visitor::insert_gen4_post_send_dependency_workarounds(bblock_t *block, fs_ins
 }
 
 void
-fs_visitor::insert_gen4_send_dependency_workarounds()
+fs_visitor::insert_gfx4_send_dependency_workarounds()
 {
-   if (devinfo->gen != 4 || devinfo->is_g4x)
+   if (devinfo->ver != 4 || devinfo->is_g4x)
       return;
 
    bool progress = false;
 
    foreach_block_and_inst(block, fs_inst, inst, cfg) {
       if (inst->mlen != 0 && inst->dst.file == VGRF) {
-         insert_gen4_pre_send_dependency_workarounds(block, inst);
-         insert_gen4_post_send_dependency_workarounds(block, inst);
+         insert_gfx4_pre_send_dependency_workarounds(block, inst);
+         insert_gfx4_post_send_dependency_workarounds(block, inst);
          progress = true;
       }
    }
@@ -3723,7 +3793,7 @@ fs_visitor::lower_uniform_pull_constant_loads()
       if (inst->opcode != FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD)
          continue;
 
-      if (devinfo->gen >= 7) {
+      if (devinfo->ver >= 7) {
          const fs_builder ubld = fs_builder(this, block, inst).exec_all();
          const fs_reg payload = ubld.group(8, 0).vgrf(BRW_REGISTER_TYPE_UD);
 
@@ -3732,7 +3802,7 @@ fs_visitor::lower_uniform_pull_constant_loads()
          ubld.group(1, 0).MOV(component(payload, 2),
                               brw_imm_ud(inst->src[1].ud / 16));
 
-         inst->opcode = FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD_GEN7;
+         inst->opcode = FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD_GFX7;
          inst->src[1] = payload;
          inst->header_size = 1;
          inst->mlen = 1;
@@ -3744,7 +3814,7 @@ fs_visitor::lower_uniform_pull_constant_loads()
           * else does except for register spill/unspill, which generates and
           * uses its MRF within a single IR instruction.
           */
-         inst->base_mrf = FIRST_PULL_LOAD_MRF(devinfo->gen) + 1;
+         inst->base_mrf = FIRST_PULL_LOAD_MRF(devinfo->ver) + 1;
          inst->mlen = 1;
       }
    }
@@ -3876,7 +3946,7 @@ fs_visitor::lower_mul_dword_inst(fs_inst *inst, bblock_t *block)
        * If multiplying by an immediate value that fits in 16-bits, do a
        * single MUL instruction with that value in the proper location.
        */
-      if (devinfo->gen < 7) {
+      if (devinfo->ver < 7) {
          fs_reg imm(VGRF, alloc.allocate(dispatch_width / 8), inst->dst.type);
          ibld.MOV(imm, inst->src[1]);
          ibld.MUL(inst->dst, imm, inst->src[0]);
@@ -3886,7 +3956,7 @@ fs_visitor::lower_mul_dword_inst(fs_inst *inst, bblock_t *block)
                      : brw_imm_w(inst->src[1].d));
       }
    } else {
-      /* Gen < 8 (and some Gen8+ low-power parts like Cherryview) cannot
+      /* Gen < 8 (and some Gfx8+ low-power parts like Cherryview) cannot
        * do 32-bit integer multiplication in one instruction, but instead
        * must do a sequence (which actually calculates a 64-bit result):
        *
@@ -3956,8 +4026,8 @@ fs_visitor::lower_mul_dword_inst(fs_inst *inst, bblock_t *block)
       high.stride = inst->dst.stride;
       high.offset = inst->dst.offset % REG_SIZE;
 
-      if (devinfo->gen >= 7) {
-         /* From GEN:BUG:1604601757:
+      if (devinfo->ver >= 7) {
+         /* From Wa_1604601757:
           *
           * "When multiplying a DW and any lower precision integer, source modifier
           *  is not supported."
@@ -3967,7 +4037,7 @@ fs_visitor::lower_mul_dword_inst(fs_inst *inst, bblock_t *block)
           * pass would spawn another dword multiply.  Instead, lower the
           * modifier first.
           */
-         const bool source_mods_unsupported = (devinfo->gen >= 12);
+         const bool source_mods_unsupported = (devinfo->ver >= 12);
 
          if (inst->src[1].abs || (inst->src[1].negate &&
                                   source_mods_unsupported))
@@ -4056,7 +4126,14 @@ fs_visitor::lower_mul_qword_inst(fs_inst *inst, bblock_t *block)
    ibld.ADD(subscript(bd, BRW_REGISTER_TYPE_UD, 1),
             subscript(bd, BRW_REGISTER_TYPE_UD, 1), ad);
 
-   ibld.MOV(inst->dst, bd);
+   if (devinfo->has_64bit_int) {
+      ibld.MOV(inst->dst, bd);
+   } else {
+      ibld.MOV(subscript(inst->dst, BRW_REGISTER_TYPE_UD, 0),
+               subscript(bd, BRW_REGISTER_TYPE_UD, 0));
+      ibld.MOV(subscript(inst->dst, BRW_REGISTER_TYPE_UD, 1),
+               subscript(bd, BRW_REGISTER_TYPE_UD, 1));
+   }
 }
 
 void
@@ -4073,7 +4150,7 @@ fs_visitor::lower_mulh_inst(fs_inst *inst, bblock_t *block)
     *      mul (8) acc0:d r2.0<8;8,1>:d r3.0<16;8,2>:uw
     *      mach (8) r5.0<1>:d r2.0<8;8,1>:d r3.0<8;8,1>:d"
     */
-   if (devinfo->gen >= 8 && (inst->src[1].negate || inst->src[1].abs))
+   if (devinfo->ver >= 8 && (inst->src[1].negate || inst->src[1].abs))
       lower_src_modifiers(this, block, inst, 1);
 
    /* Should have been lowered to 8-wide. */
@@ -4082,12 +4159,12 @@ fs_visitor::lower_mulh_inst(fs_inst *inst, bblock_t *block)
    fs_inst *mul = ibld.MUL(acc, inst->src[0], inst->src[1]);
    fs_inst *mach = ibld.MACH(inst->dst, inst->src[0], inst->src[1]);
 
-   if (devinfo->gen >= 8) {
-      /* Until Gen8, integer multiplies read 32-bits from one source,
+   if (devinfo->ver >= 8) {
+      /* Until Gfx8, integer multiplies read 32-bits from one source,
        * and 16-bits from the other, and relying on the MACH instruction
        * to generate the high bits of the result.
        *
-       * On Gen8, the multiply instruction does a full 32x32-bit
+       * On Gfx8, the multiply instruction does a full 32x32-bit
        * multiply, but in order to do a 64-bit multiply we can simulate
        * the previous behavior and then use a MACH instruction.
        */
@@ -4099,19 +4176,19 @@ fs_visitor::lower_mulh_inst(fs_inst *inst, bblock_t *block)
       if (mul->src[1].file == IMM) {
          mul->src[1] = brw_imm_uw(mul->src[1].ud);
       }
-   } else if (devinfo->gen == 7 && !devinfo->is_haswell &&
+   } else if (devinfo->ver == 7 && !devinfo->is_haswell &&
               inst->group > 0) {
       /* Among other things the quarter control bits influence which
        * accumulator register is used by the hardware for instructions
        * that access the accumulator implicitly (e.g. MACH).  A
        * second-half instruction would normally map to acc1, which
-       * doesn't exist on Gen7 and up (the hardware does emulate it for
+       * doesn't exist on Gfx7 and up (the hardware does emulate it for
        * floating-point instructions *only* by taking advantage of the
        * extra precision of acc0 not normally used for floating point
        * arithmetic).
        *
        * HSW and up are careful enough not to try to access an
-       * accumulator register that doesn't exist, but on earlier Gen7
+       * accumulator register that doesn't exist, but on earlier Gfx7
        * hardware we need to make sure that the quarter control bits are
        * zero to avoid non-deterministic behaviour and emit an extra MOV
        * to get the result masked correctly according to the current
@@ -4134,7 +4211,7 @@ fs_visitor::lower_integer_multiplication()
          /* If the instruction is already in a form that does not need lowering,
           * return early.
           */
-         if (devinfo->gen >= 7) {
+         if (devinfo->ver >= 7) {
             if (type_sz(inst->src[1].type) < 4 && type_sz(inst->src[0].type) <= 4)
                continue;
          } else {
@@ -4176,7 +4253,7 @@ fs_visitor::lower_integer_multiplication()
 bool
 fs_visitor::lower_minmax()
 {
-   assert(devinfo->gen < 6);
+   assert(devinfo->ver < 6);
 
    bool progress = false;
 
@@ -4187,7 +4264,7 @@ fs_visitor::lower_minmax()
           inst->predicate == BRW_PREDICATE_NONE) {
          /* If src1 is an immediate value that is not NaN, then it can't be
           * NaN.  In that case, emit CMP because it is much better for cmod
-          * propagation.  Likewise if src1 is not float.  Gen4 and Gen5 don't
+          * propagation.  Likewise if src1 is not float.  Gfx4 and Gfx5 don't
           * support HF or DF, so it is not necessary to check for those.
           */
          if (inst->src[1].type != BRW_REGISTER_TYPE_F ||
@@ -4317,7 +4394,7 @@ sample_mask_reg(const fs_builder &bld)
       assert(bld.dispatch_width() <= 16);
       return brw_flag_subreg(sample_mask_flag_subreg(v) + bld.group() / 16);
    } else {
-      assert(v->devinfo->gen >= 6 && bld.dispatch_width() <= 16);
+      assert(v->devinfo->ver >= 6 && bld.dispatch_width() <= 16);
       return retype(brw_vec1_grf((bld.group() >= 16 ? 2 : 1), 7),
                     BRW_REGISTER_TYPE_UW);
    }
@@ -4401,14 +4478,14 @@ lower_fb_write_logical_send(const fs_builder &bld, fs_inst *inst,
    int header_size = 2, payload_header_size;
    unsigned length = 0;
 
-   if (devinfo->gen < 6) {
-      /* TODO: Support SIMD32 on gen4-5 */
+   if (devinfo->ver < 6) {
+      /* TODO: Support SIMD32 on gfx4-5 */
       assert(bld.group() < 16);
 
-      /* For gen4-5, we always have a header consisting of g0 and g1.  We have
+      /* For gfx4-5, we always have a header consisting of g0 and g1.  We have
        * an implied MOV from g0,g1 to the start of the message.  The MOV from
        * g0 is handled by the hardware and the MOV from g1 is provided by the
-       * generator.  This is required because, on gen4-5, the generator may
+       * generator.  This is required because, on gfx4-5, the generator may
        * generate two write messages with different message lengths in order
        * to handle AA data properly.
        *
@@ -4425,9 +4502,9 @@ lower_fb_write_logical_send(const fs_builder &bld, fs_inst *inst,
 
       assert(length == 0);
       length = 2;
-   } else if ((devinfo->gen <= 7 && !devinfo->is_haswell &&
+   } else if ((devinfo->ver <= 7 && !devinfo->is_haswell &&
                prog_data->uses_kill) ||
-              (devinfo->gen < 11 &&
+              (devinfo->ver < 11 &&
                (color1.file != BAD_FILE || key->nr_color_regions > 1))) {
       /* From the Sandy Bridge PRM, volume 4, page 198:
        *
@@ -4452,8 +4529,8 @@ lower_fb_write_logical_send(const fs_builder &bld, fs_inst *inst,
          };
          ubld.LOAD_PAYLOAD(header, header_sources, 2, 0);
 
-         /* Gen12 will require additional fix-ups if we ever hit this path. */
-         assert(devinfo->gen < 12);
+         /* Gfx12 will require additional fix-ups if we ever hit this path. */
+         assert(devinfo->ver < 12);
       }
 
       uint32_t g00_bits = 0;
@@ -4557,11 +4634,11 @@ lower_fb_write_logical_send(const fs_builder &bld, fs_inst *inst,
    }
 
    if (src_stencil.file != BAD_FILE) {
-      assert(devinfo->gen >= 9);
+      assert(devinfo->ver >= 9);
       assert(bld.dispatch_width() == 8);
 
-      /* XXX: src_stencil is only available on gen9+. dst_depth is never
-       * available on gen9+. As such it's impossible to have both enabled at the
+      /* XXX: src_stencil is only available on gfx9+. dst_depth is never
+       * available on gfx9+. As such it's impossible to have both enabled at the
        * same time and therefore length cannot overrun the array.
        */
       assert(length < 15);
@@ -4574,7 +4651,7 @@ lower_fb_write_logical_send(const fs_builder &bld, fs_inst *inst,
    }
 
    fs_inst *load;
-   if (devinfo->gen >= 7) {
+   if (devinfo->ver >= 7) {
       /* Send from the GRF */
       fs_reg payload = fs_reg(VGRF, -1, BRW_REGISTER_TYPE_F);
       load = bld.LOAD_PAYLOAD(payload, sources, length, payload_header_size);
@@ -4582,15 +4659,15 @@ lower_fb_write_logical_send(const fs_builder &bld, fs_inst *inst,
       load->dst = payload;
 
       uint32_t msg_ctl = brw_fb_write_msg_control(inst, prog_data);
-      uint32_t ex_desc = 0;
 
       inst->desc =
          (inst->group / 16) << 11 | /* rt slot group */
          brw_dp_write_desc(devinfo, inst->target, msg_ctl,
-                           GEN6_DATAPORT_WRITE_MESSAGE_RENDER_TARGET_WRITE,
+                           GFX6_DATAPORT_WRITE_MESSAGE_RENDER_TARGET_WRITE,
                            inst->last_rt, false);
 
-      if (devinfo->gen >= 11) {
+      uint32_t ex_desc = 0;
+      if (devinfo->ver >= 11) {
          /* Set the "Render Target Index" and "Src0 Alpha Present" fields
           * in the extended message descriptor, in lieu of using a header.
           */
@@ -4599,12 +4676,13 @@ lower_fb_write_logical_send(const fs_builder &bld, fs_inst *inst,
          if (key->nr_color_regions == 0)
             ex_desc |= 1 << 20; /* Null Render Target */
       }
+      inst->ex_desc = ex_desc;
 
       inst->opcode = SHADER_OPCODE_SEND;
       inst->resize_sources(3);
-      inst->sfid = GEN6_SFID_DATAPORT_RENDER_CACHE;
-      inst->src[0] = brw_imm_ud(inst->desc);
-      inst->src[1] = brw_imm_ud(ex_desc);
+      inst->sfid = GFX6_SFID_DATAPORT_RENDER_CACHE;
+      inst->src[0] = brw_imm_ud(0);
+      inst->src[1] = brw_imm_ud(0);
       inst->src[2] = payload;
       inst->mlen = regs_written(load);
       inst->ex_mlen = 0;
@@ -4619,10 +4697,10 @@ lower_fb_write_logical_send(const fs_builder &bld, fs_inst *inst,
       /* On pre-SNB, we have to interlace the color values.  LOAD_PAYLOAD
        * will do this for us if we just give it a COMPR4 destination.
        */
-      if (devinfo->gen < 6 && bld.dispatch_width() == 16)
+      if (devinfo->ver < 6 && bld.dispatch_width() == 16)
          load->dst.nr |= BRW_MRF_COMPR4;
 
-      if (devinfo->gen < 6) {
+      if (devinfo->ver < 6) {
          /* Set up src[0] for the implied MOV from grf0-1 */
          inst->resize_sources(1);
          inst->src[0] = brw_vec8_grf(0, 0);
@@ -4655,8 +4733,8 @@ lower_fb_read_logical_send(const fs_builder &bld, fs_inst *inst)
       };
       ubld.LOAD_PAYLOAD(header, header_sources, ARRAY_SIZE(header_sources), 0);
 
-      if (devinfo->gen >= 12) {
-         /* On Gen12 the Viewport and Render Target Array Index fields (AKA
+      if (devinfo->ver >= 12) {
+         /* On Gfx12 the Viewport and Render Target Array Index fields (AKA
           * Poly 0 Info) are provided in r1.1 instead of r0.0, and the render
           * target message header format was updated accordingly -- However
           * the updated format only works for the lower 16 channels in a
@@ -4677,7 +4755,7 @@ lower_fb_read_logical_send(const fs_builder &bld, fs_inst *inst)
 }
 
 static void
-lower_sampler_logical_send_gen4(const fs_builder &bld, fs_inst *inst, opcode op,
+lower_sampler_logical_send_gfx4(const fs_builder &bld, fs_inst *inst, opcode op,
                                 const fs_reg &coordinate,
                                 const fs_reg &shadow_c,
                                 const fs_reg &lod, const fs_reg &lod2,
@@ -4784,7 +4862,7 @@ lower_sampler_logical_send_gen4(const fs_builder &bld, fs_inst *inst, opcode op,
 }
 
 static void
-lower_sampler_logical_send_gen5(const fs_builder &bld, fs_inst *inst, opcode op,
+lower_sampler_logical_send_gfx5(const fs_builder &bld, fs_inst *inst, opcode op,
                                 const fs_reg &coordinate,
                                 const fs_reg &shadow_c,
                                 const fs_reg &lod, const fs_reg &lod2,
@@ -4883,7 +4961,7 @@ lower_sampler_logical_send_gen5(const fs_builder &bld, fs_inst *inst, opcode op,
 static bool
 is_high_sampler(const struct gen_device_info *devinfo, const fs_reg &sampler)
 {
-   if (devinfo->gen < 8 && !devinfo->is_haswell)
+   if (devinfo->ver < 8 && !devinfo->is_haswell)
       return false;
 
    return sampler.file != IMM || sampler.ud >= 16;
@@ -4893,64 +4971,64 @@ static unsigned
 sampler_msg_type(const gen_device_info *devinfo,
                  opcode opcode, bool shadow_compare)
 {
-   assert(devinfo->gen >= 5);
+   assert(devinfo->ver >= 5);
    switch (opcode) {
    case SHADER_OPCODE_TEX:
-      return shadow_compare ? GEN5_SAMPLER_MESSAGE_SAMPLE_COMPARE :
-                              GEN5_SAMPLER_MESSAGE_SAMPLE;
+      return shadow_compare ? GFX5_SAMPLER_MESSAGE_SAMPLE_COMPARE :
+                              GFX5_SAMPLER_MESSAGE_SAMPLE;
    case FS_OPCODE_TXB:
-      return shadow_compare ? GEN5_SAMPLER_MESSAGE_SAMPLE_BIAS_COMPARE :
-                              GEN5_SAMPLER_MESSAGE_SAMPLE_BIAS;
+      return shadow_compare ? GFX5_SAMPLER_MESSAGE_SAMPLE_BIAS_COMPARE :
+                              GFX5_SAMPLER_MESSAGE_SAMPLE_BIAS;
    case SHADER_OPCODE_TXL:
-      return shadow_compare ? GEN5_SAMPLER_MESSAGE_SAMPLE_LOD_COMPARE :
-                              GEN5_SAMPLER_MESSAGE_SAMPLE_LOD;
+      return shadow_compare ? GFX5_SAMPLER_MESSAGE_SAMPLE_LOD_COMPARE :
+                              GFX5_SAMPLER_MESSAGE_SAMPLE_LOD;
    case SHADER_OPCODE_TXL_LZ:
-      return shadow_compare ? GEN9_SAMPLER_MESSAGE_SAMPLE_C_LZ :
-                              GEN9_SAMPLER_MESSAGE_SAMPLE_LZ;
+      return shadow_compare ? GFX9_SAMPLER_MESSAGE_SAMPLE_C_LZ :
+                              GFX9_SAMPLER_MESSAGE_SAMPLE_LZ;
    case SHADER_OPCODE_TXS:
    case SHADER_OPCODE_IMAGE_SIZE_LOGICAL:
-      return GEN5_SAMPLER_MESSAGE_SAMPLE_RESINFO;
+      return GFX5_SAMPLER_MESSAGE_SAMPLE_RESINFO;
    case SHADER_OPCODE_TXD:
-      assert(!shadow_compare || devinfo->gen >= 8 || devinfo->is_haswell);
+      assert(!shadow_compare || devinfo->ver >= 8 || devinfo->is_haswell);
       return shadow_compare ? HSW_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE :
-                              GEN5_SAMPLER_MESSAGE_SAMPLE_DERIVS;
+                              GFX5_SAMPLER_MESSAGE_SAMPLE_DERIVS;
    case SHADER_OPCODE_TXF:
-      return GEN5_SAMPLER_MESSAGE_SAMPLE_LD;
+      return GFX5_SAMPLER_MESSAGE_SAMPLE_LD;
    case SHADER_OPCODE_TXF_LZ:
-      assert(devinfo->gen >= 9);
-      return GEN9_SAMPLER_MESSAGE_SAMPLE_LD_LZ;
+      assert(devinfo->ver >= 9);
+      return GFX9_SAMPLER_MESSAGE_SAMPLE_LD_LZ;
    case SHADER_OPCODE_TXF_CMS_W:
-      assert(devinfo->gen >= 9);
-      return GEN9_SAMPLER_MESSAGE_SAMPLE_LD2DMS_W;
+      assert(devinfo->ver >= 9);
+      return GFX9_SAMPLER_MESSAGE_SAMPLE_LD2DMS_W;
    case SHADER_OPCODE_TXF_CMS:
-      return devinfo->gen >= 7 ? GEN7_SAMPLER_MESSAGE_SAMPLE_LD2DMS :
-                                 GEN5_SAMPLER_MESSAGE_SAMPLE_LD;
+      return devinfo->ver >= 7 ? GFX7_SAMPLER_MESSAGE_SAMPLE_LD2DMS :
+                                 GFX5_SAMPLER_MESSAGE_SAMPLE_LD;
    case SHADER_OPCODE_TXF_UMS:
-      assert(devinfo->gen >= 7);
-      return GEN7_SAMPLER_MESSAGE_SAMPLE_LD2DSS;
+      assert(devinfo->ver >= 7);
+      return GFX7_SAMPLER_MESSAGE_SAMPLE_LD2DSS;
    case SHADER_OPCODE_TXF_MCS:
-      assert(devinfo->gen >= 7);
-      return GEN7_SAMPLER_MESSAGE_SAMPLE_LD_MCS;
+      assert(devinfo->ver >= 7);
+      return GFX7_SAMPLER_MESSAGE_SAMPLE_LD_MCS;
    case SHADER_OPCODE_LOD:
-      return GEN5_SAMPLER_MESSAGE_LOD;
+      return GFX5_SAMPLER_MESSAGE_LOD;
    case SHADER_OPCODE_TG4:
-      assert(devinfo->gen >= 7);
-      return shadow_compare ? GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_C :
-                              GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4;
+      assert(devinfo->ver >= 7);
+      return shadow_compare ? GFX7_SAMPLER_MESSAGE_SAMPLE_GATHER4_C :
+                              GFX7_SAMPLER_MESSAGE_SAMPLE_GATHER4;
       break;
    case SHADER_OPCODE_TG4_OFFSET:
-      assert(devinfo->gen >= 7);
-      return shadow_compare ? GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_C :
-                              GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO;
+      assert(devinfo->ver >= 7);
+      return shadow_compare ? GFX7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_C :
+                              GFX7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO;
    case SHADER_OPCODE_SAMPLEINFO:
-      return GEN6_SAMPLER_MESSAGE_SAMPLE_SAMPLEINFO;
+      return GFX6_SAMPLER_MESSAGE_SAMPLE_SAMPLEINFO;
    default:
       unreachable("not reached");
    }
 }
 
 static void
-lower_sampler_logical_send_gen7(const fs_builder &bld, fs_inst *inst, opcode op,
+lower_sampler_logical_send_gfx7(const fs_builder &bld, fs_inst *inst, opcode op,
                                 const fs_reg &coordinate,
                                 const fs_reg &shadow_c,
                                 fs_reg lod, const fs_reg &lod2,
@@ -5038,10 +5116,10 @@ lower_sampler_logical_send_gen7(const fs_builder &bld, fs_inst *inst, opcode op,
          fs_reg sampler_state_ptr =
             retype(brw_vec1_grf(0, 3), BRW_REGISTER_TYPE_UD);
 
-         /* Gen11+ sampler message headers include bits in 4:0 which conflict
+         /* Gfx11+ sampler message headers include bits in 4:0 which conflict
           * with the ones included in g0.3 bits 4:0.  Mask them out.
           */
-         if (devinfo->gen >= 11) {
+         if (devinfo->ver >= 11) {
             sampler_state_ptr = ubld1.vgrf(BRW_REGISTER_TYPE_UD);
             ubld1.AND(sampler_state_ptr,
                       retype(brw_vec1_grf(0, 3), BRW_REGISTER_TYPE_UD),
@@ -5060,8 +5138,8 @@ lower_sampler_logical_send_gen7(const fs_builder &bld, fs_inst *inst, opcode op,
             ubld1.SHL(tmp, tmp, brw_imm_ud(4));
             ubld1.ADD(component(header, 3), sampler_state_ptr, tmp);
          }
-      } else if (devinfo->gen >= 11) {
-         /* Gen11+ sampler message headers include bits in 4:0 which conflict
+      } else if (devinfo->ver >= 11) {
+         /* Gfx11+ sampler message headers include bits in 4:0 which conflict
           * with the ones included in g0.3 bits 4:0.  Mask them out.
           */
          ubld1.AND(component(header, 3),
@@ -5081,7 +5159,7 @@ lower_sampler_logical_send_gen7(const fs_builder &bld, fs_inst *inst, opcode op,
    switch (op) {
    case FS_OPCODE_TXB:
    case SHADER_OPCODE_TXL:
-      if (devinfo->gen >= 9 && op == SHADER_OPCODE_TXL && lod.is_zero()) {
+      if (devinfo->ver >= 9 && op == SHADER_OPCODE_TXL && lod.is_zero()) {
          op = SHADER_OPCODE_TXL_LZ;
          break;
       }
@@ -5120,11 +5198,11 @@ lower_sampler_logical_send_gen7(const fs_builder &bld, fs_inst *inst, opcode op,
       break;
    case SHADER_OPCODE_TXF:
       /* Unfortunately, the parameters for LD are intermixed: u, lod, v, r.
-       * On Gen9 they are u, v, lod, r
+       * On Gfx9 they are u, v, lod, r
        */
       bld.MOV(retype(sources[length++], BRW_REGISTER_TYPE_D), coordinate);
 
-      if (devinfo->gen >= 9) {
+      if (devinfo->ver >= 9) {
          if (coord_components >= 2) {
             bld.MOV(retype(sources[length], BRW_REGISTER_TYPE_D),
                     offset(coordinate, bld, 1));
@@ -5134,14 +5212,14 @@ lower_sampler_logical_send_gen7(const fs_builder &bld, fs_inst *inst, opcode op,
          length++;
       }
 
-      if (devinfo->gen >= 9 && lod.is_zero()) {
+      if (devinfo->ver >= 9 && lod.is_zero()) {
          op = SHADER_OPCODE_TXF_LZ;
       } else {
          bld.MOV(retype(sources[length], BRW_REGISTER_TYPE_D), lod);
          length++;
       }
 
-      for (unsigned i = devinfo->gen >= 9 ? 2 : 1; i < coord_components; i++)
+      for (unsigned i = devinfo->ver >= 9 ? 2 : 1; i < coord_components; i++)
          bld.MOV(retype(sources[length++], BRW_REGISTER_TYPE_D),
                  offset(coordinate, bld, i));
 
@@ -5164,7 +5242,7 @@ lower_sampler_logical_send_gen7(const fs_builder &bld, fs_inst *inst, opcode op,
          bld.MOV(retype(sources[length], BRW_REGISTER_TYPE_UD), mcs);
          length++;
 
-         /* On Gen9+ we'll use ld2dms_w instead which has two registers for
+         /* On Gfx9+ we'll use ld2dms_w instead which has two registers for
           * the MCS data.
           */
          if (op == SHADER_OPCODE_TXF_CMS_W) {
@@ -5261,18 +5339,18 @@ lower_sampler_logical_send_gen7(const fs_builder &bld, fs_inst *inst, opcode op,
                                     sampler.file == IMM ? sampler.ud % 16 : 0,
                                     msg_type,
                                     simd_mode,
-                                    0 /* return_format unused on gen7+ */);
+                                    0 /* return_format unused on gfx7+ */);
       inst->src[0] = brw_imm_ud(0);
       inst->src[1] = brw_imm_ud(0); /* ex_desc */
    } else if (surface_handle.file != BAD_FILE) {
       /* Bindless surface */
-      assert(devinfo->gen >= 9);
+      assert(devinfo->ver >= 9);
       inst->desc = brw_sampler_desc(devinfo,
-                                    GEN9_BTI_BINDLESS,
+                                    GFX9_BTI_BINDLESS,
                                     sampler.file == IMM ? sampler.ud % 16 : 0,
                                     msg_type,
                                     simd_mode,
-                                    0 /* return_format unused on gen7+ */);
+                                    0 /* return_format unused on gfx7+ */);
 
       /* For bindless samplers, the entire address is included in the message
        * header so we can leave the portion in the message descriptor 0.
@@ -5297,7 +5375,7 @@ lower_sampler_logical_send_gen7(const fs_builder &bld, fs_inst *inst, opcode op,
                                     0, /* sampler */
                                     msg_type,
                                     simd_mode,
-                                    0 /* return_format unused on gen7+ */);
+                                    0 /* return_format unused on gfx7+ */);
       const fs_builder ubld = bld.group(1, 0).exec_all();
       fs_reg desc = ubld.vgrf(BRW_REGISTER_TYPE_UD);
       if (surface.equals(sampler)) {
@@ -5359,21 +5437,21 @@ lower_sampler_logical_send(const fs_builder &bld, fs_inst *inst, opcode op)
    assert(inst->src[TEX_LOGICAL_SRC_GRAD_COMPONENTS].file == IMM);
    const unsigned grad_components = inst->src[TEX_LOGICAL_SRC_GRAD_COMPONENTS].ud;
 
-   if (devinfo->gen >= 7) {
-      lower_sampler_logical_send_gen7(bld, inst, op, coordinate,
+   if (devinfo->ver >= 7) {
+      lower_sampler_logical_send_gfx7(bld, inst, op, coordinate,
                                       shadow_c, lod, lod2, min_lod,
                                       sample_index,
                                       mcs, surface, sampler,
                                       surface_handle, sampler_handle,
                                       tg4_offset,
                                       coord_components, grad_components);
-   } else if (devinfo->gen >= 5) {
-      lower_sampler_logical_send_gen5(bld, inst, op, coordinate,
+   } else if (devinfo->ver >= 5) {
+      lower_sampler_logical_send_gfx5(bld, inst, op, coordinate,
                                       shadow_c, lod, lod2, sample_index,
                                       surface, sampler,
                                       coord_components, grad_components);
    } else {
-      lower_sampler_logical_send_gen4(bld, inst, op, coordinate,
+      lower_sampler_logical_send_gfx4(bld, inst, op, coordinate,
                                       shadow_c, lod, lod2,
                                       surface, sampler,
                                       coord_components, grad_components);
@@ -5423,7 +5501,7 @@ static void
 setup_surface_descriptors(const fs_builder &bld, fs_inst *inst, uint32_t desc,
                           const fs_reg &surface, const fs_reg &surface_handle)
 {
-   const gen_device_info *devinfo = bld.shader->devinfo;
+   const ASSERTED gen_device_info *devinfo = bld.shader->devinfo;
 
    /* We must have exactly one of surface and surface_handle */
    assert((surface.file == BAD_FILE) != (surface_handle.file == BAD_FILE));
@@ -5434,8 +5512,8 @@ setup_surface_descriptors(const fs_builder &bld, fs_inst *inst, uint32_t desc,
       inst->src[1] = brw_imm_ud(0); /* ex_desc */
    } else if (surface_handle.file != BAD_FILE) {
       /* Bindless surface */
-      assert(devinfo->gen >= 9);
-      inst->desc = desc | GEN9_BTI_BINDLESS;
+      assert(devinfo->ver >= 9);
+      inst->desc = desc | GFX9_BTI_BINDLESS;
       inst->src[0] = brw_imm_ud(0);
 
       /* We assume that the driver provided the handle in the top 20 bits so
@@ -5485,7 +5563,7 @@ lower_surface_logical_send(const fs_builder &bld, fs_inst *inst)
 
    const bool is_stateless =
       surface.file == IMM && (surface.ud == BRW_BTI_STATELESS ||
-                              surface.ud == GEN8_BTI_STATELESS_NON_COHERENT);
+                              surface.ud == GFX8_BTI_STATELESS_NON_COHERENT);
 
    const bool has_side_effects = inst->has_side_effects();
 
@@ -5499,13 +5577,13 @@ lower_surface_logical_send(const fs_builder &bld, fs_inst *inst)
     *
     * Earlier generations have a similar wording.  Because of this restriction
     * we don't attempt to implement sample masks via predication for such
-    * messages prior to Gen9, since we have to provide a header anyway.  On
-    * Gen11+ the header has been removed so we can only use predication.
+    * messages prior to Gfx9, since we have to provide a header anyway.  On
+    * Gfx11+ the header has been removed so we can only use predication.
     *
     * For all stateless A32 messages, we also need a header
     */
    fs_reg header;
-   if ((devinfo->gen < 9 && is_typed_access) || is_stateless) {
+   if ((devinfo->ver < 9 && is_typed_access) || is_stateless) {
       fs_builder ubld = bld.exec_all().group(8, 0);
       header = ubld.vgrf(BRW_REGISTER_TYPE_UD);
       if (is_stateless) {
@@ -5521,9 +5599,9 @@ lower_surface_logical_send(const fs_builder &bld, fs_inst *inst)
 
    fs_reg payload, payload2;
    unsigned mlen, ex_mlen = 0;
-   if (devinfo->gen >= 9 &&
+   if (devinfo->ver >= 9 &&
        (src.file == BAD_FILE || header.file == BAD_FILE)) {
-      /* We have split sends on gen9 and above */
+      /* We have split sends on gfx9 and above */
       if (header.file == BAD_FILE) {
          payload = bld.move_to_vgrf(addr, addr_sz);
          payload2 = bld.move_to_vgrf(src, src_sz);
@@ -5571,13 +5649,13 @@ lower_surface_logical_send(const fs_builder &bld, fs_inst *inst)
    case SHADER_OPCODE_BYTE_SCATTERED_WRITE_LOGICAL:
    case SHADER_OPCODE_BYTE_SCATTERED_READ_LOGICAL:
       /* Byte scattered opcodes go through the normal data cache */
-      sfid = GEN7_SFID_DATAPORT_DATA_CACHE;
+      sfid = GFX7_SFID_DATAPORT_DATA_CACHE;
       break;
 
    case SHADER_OPCODE_DWORD_SCATTERED_READ_LOGICAL:
    case SHADER_OPCODE_DWORD_SCATTERED_WRITE_LOGICAL:
-      sfid =  devinfo->gen >= 7 ? GEN7_SFID_DATAPORT_DATA_CACHE :
-              devinfo->gen >= 6 ? GEN6_SFID_DATAPORT_RENDER_CACHE :
+      sfid =  devinfo->ver >= 7 ? GFX7_SFID_DATAPORT_DATA_CACHE :
+              devinfo->ver >= 6 ? GFX6_SFID_DATAPORT_RENDER_CACHE :
                                   BRW_DATAPORT_READ_TARGET_RENDER_CACHE;
       break;
 
@@ -5588,9 +5666,9 @@ lower_surface_logical_send(const fs_builder &bld, fs_inst *inst)
       /* Untyped Surface messages go through the data cache but the SFID value
        * changed on Haswell.
        */
-      sfid = (devinfo->gen >= 8 || devinfo->is_haswell ?
+      sfid = (devinfo->ver >= 8 || devinfo->is_haswell ?
               HSW_SFID_DATAPORT_DATA_CACHE_1 :
-              GEN7_SFID_DATAPORT_DATA_CACHE);
+              GFX7_SFID_DATAPORT_DATA_CACHE);
       break;
 
    case SHADER_OPCODE_TYPED_SURFACE_READ_LOGICAL:
@@ -5599,9 +5677,9 @@ lower_surface_logical_send(const fs_builder &bld, fs_inst *inst)
       /* Typed surface messages go through the render cache on IVB and the
        * data cache on HSW+.
        */
-      sfid = (devinfo->gen >= 8 || devinfo->is_haswell ?
+      sfid = (devinfo->ver >= 8 || devinfo->is_haswell ?
               HSW_SFID_DATAPORT_DATA_CACHE_1 :
-              GEN6_SFID_DATAPORT_RENDER_CACHE);
+              GFX6_SFID_DATAPORT_RENDER_CACHE);
       break;
 
    default:
@@ -5703,7 +5781,7 @@ static void
 lower_surface_block_logical_send(const fs_builder &bld, fs_inst *inst)
 {
    const gen_device_info *devinfo = bld.shader->devinfo;
-   assert(devinfo->gen >= 9);
+   assert(devinfo->ver >= 9);
 
    /* Get the logical send arguments. */
    const fs_reg &addr = inst->src[SURFACE_LOGICAL_SRC_ADDRESS];
@@ -5717,7 +5795,7 @@ lower_surface_block_logical_send(const fs_builder &bld, fs_inst *inst)
 
    const bool is_stateless =
       surface.file == IMM && (surface.ud == BRW_BTI_STATELESS ||
-                              surface.ud == GEN8_BTI_STATELESS_NON_COHERENT);
+                              surface.ud == GFX8_BTI_STATELESS_NON_COHERENT);
 
    const bool has_side_effects = inst->has_side_effects();
 
@@ -5756,7 +5834,7 @@ lower_surface_block_logical_send(const fs_builder &bld, fs_inst *inst)
    inst->send_has_side_effects = has_side_effects;
    inst->send_is_volatile = !has_side_effects;
 
-   inst->sfid = GEN7_SFID_DATAPORT_DATA_CACHE;
+   inst->sfid = GFX7_SFID_DATAPORT_DATA_CACHE;
 
    const uint32_t desc = brw_dp_oword_block_rw_desc(devinfo, align_16B,
                                                     arg.ud, write);
@@ -5808,7 +5886,7 @@ lower_a64_logical_send(const fs_builder &bld, fs_inst *inst)
    if (inst->opcode == SHADER_OPCODE_A64_OWORD_BLOCK_READ_LOGICAL ||
        inst->opcode == SHADER_OPCODE_A64_OWORD_BLOCK_WRITE_LOGICAL ||
        inst->opcode == SHADER_OPCODE_A64_UNALIGNED_OWORD_BLOCK_READ_LOGICAL) {
-      assert(devinfo->gen >= 9);
+      assert(devinfo->ver >= 9);
 
       /* OWORD messages only take a scalar address in a header */
       mlen = 1;
@@ -5820,7 +5898,7 @@ lower_a64_logical_send(const fs_builder &bld, fs_inst *inst)
          payload2 = retype(bld.move_to_vgrf(src, src_comps),
                            BRW_REGISTER_TYPE_UD);
       }
-   } else if (devinfo->gen >= 9) {
+   } else if (devinfo->ver >= 9) {
       /* On Skylake and above, we have SENDS */
       mlen = 2 * (inst->exec_size / 8);
       ex_mlen = src_comps * type_sz(src.type) * inst->exec_size / REG_SIZE;
@@ -5896,15 +5974,28 @@ lower_a64_logical_send(const fs_builder &bld, fs_inst *inst)
                                             !inst->dst.is_null());
       break;
 
+   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_INT16_LOGICAL:
+      desc = brw_dp_a64_untyped_atomic_desc(devinfo, inst->exec_size, 16,
+                                            arg,   /* atomic_op */
+                                            !inst->dst.is_null());
+      break;
+
    case SHADER_OPCODE_A64_UNTYPED_ATOMIC_INT64_LOGICAL:
       desc = brw_dp_a64_untyped_atomic_desc(devinfo, inst->exec_size, 64,
                                             arg,   /* atomic_op */
                                             !inst->dst.is_null());
       break;
 
-
-   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT_LOGICAL:
+   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT16_LOGICAL:
       desc = brw_dp_a64_untyped_atomic_float_desc(devinfo, inst->exec_size,
+                                                  16, /* bit_size */
+                                                  arg,   /* atomic_op */
+                                                  !inst->dst.is_null());
+      break;
+
+   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT32_LOGICAL:
+      desc = brw_dp_a64_untyped_atomic_float_desc(devinfo, inst->exec_size,
+                                                  32, /* bit_size */
                                                   arg,   /* atomic_op */
                                                   !inst->dst.is_null());
       break;
@@ -5937,7 +6028,7 @@ lower_varying_pull_constant_logical_send(const fs_builder &bld, fs_inst *inst)
    const gen_device_info *devinfo = bld.shader->devinfo;
    const brw_compiler *compiler = bld.shader->compiler;
 
-   if (devinfo->gen >= 7) {
+   if (devinfo->ver >= 7) {
       fs_reg index = inst->src[0];
       /* We are switching the instruction from an ALU-like instruction to a
        * send-from-grf instruction.  Since sends can't handle strides or
@@ -5973,17 +6064,17 @@ lower_varying_pull_constant_logical_send(const fs_builder &bld, fs_inst *inst)
 
          inst->sfid = BRW_SFID_SAMPLER;
          inst->desc |= brw_sampler_desc(devinfo, 0, 0,
-                                        GEN5_SAMPLER_MESSAGE_SAMPLE_LD,
+                                        GFX5_SAMPLER_MESSAGE_SAMPLE_LD,
                                         simd_mode, 0);
       } else if (alignment >= 4) {
-         inst->sfid = (devinfo->gen >= 8 || devinfo->is_haswell ?
+         inst->sfid = (devinfo->ver >= 8 || devinfo->is_haswell ?
                        HSW_SFID_DATAPORT_DATA_CACHE_1 :
-                       GEN7_SFID_DATAPORT_DATA_CACHE);
+                       GFX7_SFID_DATAPORT_DATA_CACHE);
          inst->desc |= brw_dp_untyped_surface_rw_desc(devinfo, inst->exec_size,
                                                       4, /* num_channels */
                                                       false   /* write */);
       } else {
-         inst->sfid = GEN7_SFID_DATAPORT_DATA_CACHE;
+         inst->sfid = GFX7_SFID_DATAPORT_DATA_CACHE;
          inst->desc |= brw_dp_byte_scattered_rw_desc(devinfo, inst->exec_size,
                                                      32,     /* bit_size */
                                                      false   /* write */);
@@ -6010,12 +6101,12 @@ lower_varying_pull_constant_logical_send(const fs_builder &bld, fs_inst *inst)
          }
       }
    } else {
-      const fs_reg payload(MRF, FIRST_PULL_LOAD_MRF(devinfo->gen),
+      const fs_reg payload(MRF, FIRST_PULL_LOAD_MRF(devinfo->ver),
                            BRW_REGISTER_TYPE_UD);
 
       bld.MOV(byte_offset(payload, REG_SIZE), inst->src[1]);
 
-      inst->opcode = FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN4;
+      inst->opcode = FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GFX4;
       inst->resize_sources(1);
       inst->base_mrf = payload.nr;
       inst->header_size = 1;
@@ -6026,7 +6117,7 @@ lower_varying_pull_constant_logical_send(const fs_builder &bld, fs_inst *inst)
 static void
 lower_math_logical_send(const fs_builder &bld, fs_inst *inst)
 {
-   assert(bld.shader->devinfo->gen < 6);
+   assert(bld.shader->devinfo->ver < 6);
 
    inst->base_mrf = 2;
    inst->mlen = inst->sources * inst->exec_size / 8;
@@ -6281,8 +6372,10 @@ fs_visitor::lower_logical_sends()
       case SHADER_OPCODE_A64_BYTE_SCATTERED_WRITE_LOGICAL:
       case SHADER_OPCODE_A64_BYTE_SCATTERED_READ_LOGICAL:
       case SHADER_OPCODE_A64_UNTYPED_ATOMIC_LOGICAL:
+      case SHADER_OPCODE_A64_UNTYPED_ATOMIC_INT16_LOGICAL:
       case SHADER_OPCODE_A64_UNTYPED_ATOMIC_INT64_LOGICAL:
-      case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT_LOGICAL:
+      case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT16_LOGICAL:
+      case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT32_LOGICAL:
          lower_a64_logical_send(ibld, inst);
          break;
 
@@ -6301,13 +6394,13 @@ fs_visitor::lower_logical_sends()
       case SHADER_OPCODE_INT_QUOTIENT:
       case SHADER_OPCODE_INT_REMAINDER:
          /* The math opcodes are overloaded for the send-like and
-          * expression-like instructions which seems kind of icky.  Gen6+ has
+          * expression-like instructions which seems kind of icky.  Gfx6+ has
           * a native (but rather quirky) MATH instruction so we don't need to
-          * do anything here.  On Gen4-5 we'll have to lower the Gen6-like
+          * do anything here.  On Gfx4-5 we'll have to lower the Gfx6-like
           * logical instructions (which we can easily recognize because they
           * have mlen = 0) into send-like virtual instructions.
           */
-         if (devinfo->gen < 6 && inst->mlen == 0) {
+         if (devinfo->ver < 6 && inst->mlen == 0) {
             lower_math_logical_send(ibld, inst);
             break;
 
@@ -6341,7 +6434,7 @@ static bool
 is_mixed_float_with_fp32_dst(const fs_inst *inst)
 {
    /* This opcode sometimes uses :W type on the source even if the operand is
-    * a :HF, because in gen7 there is no support for :HF, and thus it uses :W.
+    * a :HF, because in gfx7 there is no support for :HF, and thus it uses :W.
     */
    if (inst->opcode == BRW_OPCODE_F16TO32)
       return true;
@@ -6361,7 +6454,7 @@ static bool
 is_mixed_float_with_packed_fp16_dst(const fs_inst *inst)
 {
    /* This opcode sometimes uses :W type on the destination even if the
-    * destination is a :HF, because in gen7 there is no support for :HF, and
+    * destination is a :HF, because in gfx7 there is no support for :HF, and
     * thus it uses :W.
     */
    if (inst->opcode == BRW_OPCODE_F32TO16 &&
@@ -6430,12 +6523,12 @@ get_fpu_lowered_simd_width(const struct gen_device_info *devinfo,
     *      integer DWord, the source register is not incremented but the
     *      source sub register is incremented."
     *
-    * The hardware specs from Gen4 to Gen7.5 mention similar regioning
+    * The hardware specs from Gfx4 to Gfx7.5 mention similar regioning
     * restrictions.  The code below intentionally doesn't check whether the
     * destination type is integer because empirically the hardware doesn't
     * seem to care what the actual type is as long as it's dword-aligned.
     */
-   if (devinfo->gen < 8) {
+   if (devinfo->ver < 8) {
       for (unsigned i = 0; i < inst->sources; i++) {
          /* IVB implements DF scalars as <0;2,1> regions. */
          const bool is_scalar_exception = is_uniform(inst->src[i]) &&
@@ -6459,7 +6552,7 @@ get_fpu_lowered_simd_width(const struct gen_device_info *devinfo,
       }
    }
 
-   if (devinfo->gen < 6) {
+   if (devinfo->ver < 6) {
       /* From the G45 PRM, Volume 4 Page 361:
        *
        *    "Operand Alignment Rule: With the exceptions listed below, a
@@ -6484,10 +6577,10 @@ get_fpu_lowered_simd_width(const struct gen_device_info *devinfo,
     *   execution mask channels are required, split the instruction into two
     *   SIMD16 instructions."
     *
-    * There is similar text in the HSW PRMs.  Gen4-6 don't even implement
+    * There is similar text in the HSW PRMs.  Gfx4-6 don't even implement
     * 32-wide control flow support in hardware and will behave similarly.
     */
-   if (devinfo->gen < 8 && !inst->force_writemask_all)
+   if (devinfo->ver < 8 && !inst->force_writemask_all)
       max_width = MIN2(max_width, 16);
 
    /* From the IVB PRMs (applies to HSW too):
@@ -6496,7 +6589,7 @@ get_fpu_lowered_simd_width(const struct gen_device_info *devinfo,
     * From the BDW PRMs (applies to later hardware too):
     *  "Ternary instruction with condition modifiers must not use SIMD32."
     */
-   if (inst->conditional_mod && (devinfo->gen < 8 || inst->is_3src(devinfo)))
+   if (inst->conditional_mod && (devinfo->ver < 8 || inst->is_3src(devinfo)))
       max_width = MIN2(max_width, 16);
 
    /* From the IVB PRMs (applies to other devices that don't have the
@@ -6507,7 +6600,7 @@ get_fpu_lowered_simd_width(const struct gen_device_info *devinfo,
    if (inst->is_3src(devinfo) && !devinfo->supports_simd16_3src)
       max_width = MIN2(max_width, inst->exec_size / reg_count);
 
-   /* Pre-Gen8 EUs are hardwired to use the QtrCtrl+1 (where QtrCtrl is
+   /* Pre-Gfx8 EUs are hardwired to use the QtrCtrl+1 (where QtrCtrl is
     * the 8-bit quarter of the execution mask signals specified in the
     * instruction control fields) for the second compressed half of any
     * single-precision instruction (for double-precision instructions
@@ -6519,7 +6612,7 @@ get_fpu_lowered_simd_width(const struct gen_device_info *devinfo,
     * In this situation we calculate the maximum size of the split
     * instructions so they only ever write to a single register.
     */
-   if (devinfo->gen < 8 && inst->size_written > REG_SIZE &&
+   if (devinfo->ver < 8 && inst->size_written > REG_SIZE &&
        !inst->force_writemask_all) {
       const unsigned channels_per_grf = inst->exec_size /
          DIV_ROUND_UP(inst->size_written, REG_SIZE);
@@ -6537,7 +6630,7 @@ get_fpu_lowered_simd_width(const struct gen_device_info *devinfo,
        * the compressed instruction which will be just wrong under
        * non-uniform control flow.
        */
-      if (devinfo->gen == 7 && !devinfo->is_haswell &&
+      if (devinfo->ver == 7 && !devinfo->is_haswell &&
           (exec_type_size == 8 || type_sz(inst->dst.type) == 8))
          max_width = MIN2(max_width, 4);
    }
@@ -6610,16 +6703,16 @@ get_sampler_lowered_simd_width(const struct gen_device_info *devinfo,
     * pre-ILK we need to pad to at most three components.
     */
    const unsigned req_coord_components =
-      (devinfo->gen >= 7 ||
+      (devinfo->ver >= 7 ||
        !inst->components_read(TEX_LOGICAL_SRC_COORDINATE)) ? 0 :
-      (devinfo->gen >= 5 && inst->opcode != SHADER_OPCODE_TXF_LOGICAL &&
+      (devinfo->ver >= 5 && inst->opcode != SHADER_OPCODE_TXF_LOGICAL &&
                             inst->opcode != SHADER_OPCODE_TXF_CMS_LOGICAL) ? 4 :
       3;
 
-   /* On Gen9+ the LOD argument is for free if we're able to use the LZ
+   /* On Gfx9+ the LOD argument is for free if we're able to use the LZ
     * variant of the TXL or TXF message.
     */
-   const bool implicit_lod = devinfo->gen >= 9 &&
+   const bool implicit_lod = devinfo->ver >= 9 &&
                              (inst->opcode == SHADER_OPCODE_TXL ||
                               inst->opcode == SHADER_OPCODE_TXF) &&
                              inst->src[TEX_LOGICAL_SRC_LOD].is_zero();
@@ -6707,7 +6800,7 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
        * coissuing would affect CMP instructions not otherwise affected by
        * the errata.
        */
-      const unsigned max_width = (devinfo->gen == 7 && !devinfo->is_haswell &&
+      const unsigned max_width = (devinfo->ver == 7 && !devinfo->is_haswell &&
                                   !inst->dst.is_null() ? 8 : ~0);
       return MIN2(max_width, get_fpu_lowered_simd_width(devinfo, inst));
    }
@@ -6731,10 +6824,10 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
    case SHADER_OPCODE_LOG2:
    case SHADER_OPCODE_SIN:
    case SHADER_OPCODE_COS: {
-      /* Unary extended math instructions are limited to SIMD8 on Gen4 and
-       * Gen6. Extended Math Function is limited to SIMD8 with half-float.
+      /* Unary extended math instructions are limited to SIMD8 on Gfx4 and
+       * Gfx6. Extended Math Function is limited to SIMD8 with half-float.
        */
-      if (devinfo->gen == 6 || (devinfo->gen == 4 && !devinfo->is_g4x))
+      if (devinfo->ver == 6 || (devinfo->ver == 4 && !devinfo->is_g4x))
          return MIN2(8, inst->exec_size);
       if (inst->dst.type == BRW_REGISTER_TYPE_HF)
          return MIN2(8, inst->exec_size);
@@ -6742,10 +6835,10 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
    }
 
    case SHADER_OPCODE_POW: {
-      /* SIMD16 is only allowed on Gen7+. Extended Math Function is limited
+      /* SIMD16 is only allowed on Gfx7+. Extended Math Function is limited
        * to SIMD8 with half-float
        */
-      if (devinfo->gen < 7)
+      if (devinfo->ver < 7)
          return MIN2(8, inst->exec_size);
       if (inst->dst.type == BRW_REGISTER_TYPE_HF)
          return MIN2(8, inst->exec_size);
@@ -6777,7 +6870,7 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
        * shorter return payload would be to use the SIMD8 sampler message that
        * takes (header, u, v, r) as parameters instead of (header, u).
        */
-      return (devinfo->gen == 4 ? 16 : MIN2(16, inst->exec_size));
+      return (devinfo->ver == 4 ? 16 : MIN2(16, inst->exec_size));
 
    case FS_OPCODE_DDX_COARSE:
    case FS_OPCODE_DDX_FINE:
@@ -6796,7 +6889,7 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
        * In this context, "DW operations" means "operations acting on 32-bit
        * values", so it includes operations on floats.
        *
-       * Gen4 has a similar restriction.  From the i965 PRM, section 11.5.3
+       * Gfx4 has a similar restriction.  From the i965 PRM, section 11.5.3
        * (Instruction Compression -> Rules and Restrictions):
        *
        *  "A compressed instruction must be in Align1 access mode. Align16
@@ -6807,22 +6900,22 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
        * Empirically, compressed align16 instructions using odd register
        * numbers don't appear to work on Sandybridge either.
        */
-      return (devinfo->gen == 4 || devinfo->gen == 6 ||
-              (devinfo->gen == 7 && !devinfo->is_haswell) ?
+      return (devinfo->ver == 4 || devinfo->ver == 6 ||
+              (devinfo->ver == 7 && !devinfo->is_haswell) ?
               MIN2(8, inst->exec_size) : MIN2(16, inst->exec_size));
 
    case SHADER_OPCODE_MULH:
       /* MULH is lowered to the MUL/MACH sequence using the accumulator, which
-       * is 8-wide on Gen7+.
+       * is 8-wide on Gfx7+.
        */
-      return (devinfo->gen >= 7 ? 8 :
+      return (devinfo->ver >= 7 ? 8 :
               get_fpu_lowered_simd_width(devinfo, inst));
 
    case FS_OPCODE_FB_WRITE_LOGICAL:
-      /* Gen6 doesn't support SIMD16 depth writes but we cannot handle them
+      /* Gfx6 doesn't support SIMD16 depth writes but we cannot handle them
        * here.
        */
-      assert(devinfo->gen != 6 ||
+      assert(devinfo->ver != 6 ||
              inst->src[FB_WRITE_LOGICAL_SRC_SRC_DEPTH].file == BAD_FILE ||
              inst->exec_size == 8);
       /* Dual-source FB writes are unsupported in SIMD16 mode. */
@@ -6852,17 +6945,17 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
       /* Only one execution size is representable pre-ILK depending on whether
        * the shadow reference argument is present.
        */
-      if (devinfo->gen == 4)
+      if (devinfo->ver == 4)
          return inst->src[TEX_LOGICAL_SRC_SHADOW_C].file == BAD_FILE ? 16 : 8;
       else
          return get_sampler_lowered_simd_width(devinfo, inst);
 
    case SHADER_OPCODE_TXF_LOGICAL:
    case SHADER_OPCODE_TXS_LOGICAL:
-      /* Gen4 doesn't have SIMD8 variants for the RESINFO and LD-with-LOD
+      /* Gfx4 doesn't have SIMD8 variants for the RESINFO and LD-with-LOD
        * messages.  Use SIMD16 instead.
        */
-      if (devinfo->gen == 4)
+      if (devinfo->ver == 4)
          return 16;
       else
          return get_sampler_lowered_simd_width(devinfo, inst);
@@ -6886,7 +6979,7 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
    case SHADER_OPCODE_A64_UNTYPED_READ_LOGICAL:
    case SHADER_OPCODE_A64_BYTE_SCATTERED_WRITE_LOGICAL:
    case SHADER_OPCODE_A64_BYTE_SCATTERED_READ_LOGICAL:
-      return devinfo->gen <= 8 ? 8 : MIN2(16, inst->exec_size);
+      return devinfo->ver <= 8 ? 8 : MIN2(16, inst->exec_size);
 
    case SHADER_OPCODE_A64_OWORD_BLOCK_READ_LOGICAL:
    case SHADER_OPCODE_A64_UNALIGNED_OWORD_BLOCK_READ_LOGICAL:
@@ -6895,8 +6988,10 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
       return inst->exec_size;
 
    case SHADER_OPCODE_A64_UNTYPED_ATOMIC_LOGICAL:
+   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_INT16_LOGICAL:
    case SHADER_OPCODE_A64_UNTYPED_ATOMIC_INT64_LOGICAL:
-   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT_LOGICAL:
+   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT16_LOGICAL:
+   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT32_LOGICAL:
       return 8;
 
    case SHADER_OPCODE_URB_READ_SIMD8:
@@ -6911,7 +7006,7 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
       const unsigned swiz = inst->src[1].ud;
       return (is_uniform(inst->src[0]) ?
                  get_fpu_lowered_simd_width(devinfo, inst) :
-              devinfo->gen < 11 && type_sz(inst->src[0].type) == 4 ? 8 :
+              devinfo->ver < 11 && type_sz(inst->src[0].type) == 4 ? 8 :
               swiz == BRW_SWIZZLE_XYXY || swiz == BRW_SWIZZLE_ZWZW ? 4 :
               get_fpu_lowered_simd_width(devinfo, inst));
    }
@@ -6925,9 +7020,9 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
        * the EU decompression logic not handling VxH indirect addressing
        * correctly.
        */
-      const unsigned max_size = (devinfo->gen >= 8 ? 2 : 1) * REG_SIZE;
+      const unsigned max_size = (devinfo->ver >= 8 ? 2 : 1) * REG_SIZE;
       /* Prior to Broadwell, we only have 8 address subregisters. */
-      return MIN3(devinfo->gen >= 8 ? 16 : 8,
+      return MIN3(devinfo->ver >= 8 ? 16 : 8,
                   max_size / (inst->dst.stride * type_sz(inst->dst.type)),
                   inst->exec_size);
    }
@@ -7231,7 +7326,7 @@ fs_visitor::lower_simd_width()
 
 /**
  * Transform barycentric vectors into the interleaved form expected by the PLN
- * instruction and returned by the Gen7+ PI shared function.
+ * instruction and returned by the Gfx7+ PI shared function.
  *
  * For channels 0-15 in SIMD16 mode they are expected to be laid out as
  * follows in the register file:
@@ -7248,7 +7343,7 @@ fs_visitor::lower_simd_width()
 bool
 fs_visitor::lower_barycentrics()
 {
-   const bool has_interleaved_layout = devinfo->has_pln || devinfo->gen >= 7;
+   const bool has_interleaved_layout = devinfo->has_pln || devinfo->ver >= 7;
    bool progress = false;
 
    if (stage != MESA_SHADER_FRAGMENT || !has_interleaved_layout)
@@ -7373,7 +7468,7 @@ fs_visitor::dump_instruction(const backend_instruction *be_inst, FILE *file) con
    if (inst->conditional_mod) {
       fprintf(file, "%s", conditional_modifier[inst->conditional_mod]);
       if (!inst->predicate &&
-          (devinfo->gen < 5 || (inst->opcode != BRW_OPCODE_SEL &&
+          (devinfo->ver < 5 || (inst->opcode != BRW_OPCODE_SEL &&
                                 inst->opcode != BRW_OPCODE_CSEL &&
                                 inst->opcode != BRW_OPCODE_IF &&
                                 inst->opcode != BRW_OPCODE_WHILE))) {
@@ -7577,13 +7672,13 @@ fs_visitor::dump_instruction(const backend_instruction *be_inst, FILE *file) con
 }
 
 void
-fs_visitor::setup_fs_payload_gen6()
+fs_visitor::setup_fs_payload_gfx6()
 {
    assert(stage == MESA_SHADER_FRAGMENT);
    struct brw_wm_prog_data *prog_data = brw_wm_prog_data(this->prog_data);
    const unsigned payload_width = MIN2(16, dispatch_width);
    assert(dispatch_width % payload_width == 0);
-   assert(devinfo->gen >= 6);
+   assert(devinfo->ver >= 6);
 
    /* R0: PS thread payload header. */
    payload.num_regs++;
@@ -7614,7 +7709,7 @@ fs_visitor::setup_fs_payload_gen6()
          payload.num_regs += payload_width / 8;
       }
 
-      /* R29-30: interpolated W set if GEN6_WM_USES_SOURCE_W. */
+      /* R29-30: interpolated W set if GFX6_WM_USES_SOURCE_W. */
       if (prog_data->uses_src_w) {
          payload.source_w_reg[j] = payload.num_regs;
          payload.num_regs += payload_width / 8;
@@ -7628,7 +7723,7 @@ fs_visitor::setup_fs_payload_gen6()
 
       /* R32-33: MSAA input coverage mask */
       if (prog_data->uses_sample_mask) {
-         assert(devinfo->gen >= 7);
+         assert(devinfo->ver >= 7);
          payload.sample_mask_in_reg[j] = payload.num_regs;
          payload.num_regs += payload_width / 8;
       }
@@ -7692,7 +7787,7 @@ fs_visitor::setup_gs_payload()
 void
 fs_visitor::setup_cs_payload()
 {
-   assert(devinfo->gen >= 7);
+   assert(devinfo->ver >= 7);
    /* TODO: Fill out uses_btd_stack_ids automatically */
    payload.num_regs = 1 + brw_cs_prog_data(prog_data)->uses_btd_stack_ids;
 }
@@ -7866,10 +7961,16 @@ fs_visitor::optimize()
    }
 
    OPT(opt_combine_constants);
-   OPT(lower_integer_multiplication);
+   if (OPT(lower_integer_multiplication)) {
+      /* If lower_integer_multiplication made progress, it may have produced
+       * some 32x32-bit MULs in the process of lowering 64-bit MULs.  Run it
+       * one more time to clean those up if they exist.
+       */
+      OPT(lower_integer_multiplication);
+   }
    OPT(lower_sub_sat);
 
-   if (devinfo->gen <= 5 && OPT(lower_minmax)) {
+   if (devinfo->ver <= 5 && OPT(lower_minmax)) {
       OPT(opt_cmod_propagation);
       OPT(opt_cse);
       OPT(opt_copy_propagation);
@@ -7978,7 +8079,7 @@ find_halt_control_flow_region_start(const fs_visitor *v)
 }
 
 /**
- * Work around the Gen12 hardware bug filed as GEN:BUG:1407528679.  EU fusion
+ * Work around the Gfx12 hardware bug filed as Wa_1407528679.  EU fusion
  * can cause a BB to be executed with all channels disabled, which will lead
  * to the execution of any NoMask instructions in it, even though any
  * execution-masked instructions will be correctly shot down.  This may break
@@ -7992,7 +8093,7 @@ find_halt_control_flow_region_start(const fs_visitor *v)
 bool
 fs_visitor::fixup_nomask_control_flow()
 {
-   if (devinfo->gen != 12)
+   if (devinfo->ver != 12)
       return false;
 
    const brw_predicate pred = dispatch_width > 16 ? BRW_PREDICATE_ALIGN1_ANY32H :
@@ -8178,7 +8279,7 @@ fs_visitor::allocate_registers(bool allow_spilling)
     * it inserts dead code that happens to have side effects, and it does
     * so based on the actual physical registers in use.
     */
-   insert_gen4_send_dependency_workarounds();
+   insert_gfx4_send_dependency_workarounds();
 
    if (failed)
       return;
@@ -8200,7 +8301,7 @@ fs_visitor::allocate_registers(bool allow_spilling)
              * and platform.
              */
             prog_data->total_scratch = MAX2(prog_data->total_scratch, 2048);
-         } else if (devinfo->gen <= 7) {
+         } else if (devinfo->ver <= 7) {
             /* According to the MEDIA_VFE_STATE's "Per Thread Scratch Space"
              * field documentation, platforms prior to Haswell measure scratch
              * size linearly with a range of [1kB, 12kB] and 1kB granularity.
@@ -8266,9 +8367,9 @@ fs_visitor::set_tcs_invocation_id()
    struct brw_vue_prog_data *vue_prog_data = &tcs_prog_data->base;
 
    const unsigned instance_id_mask =
-      devinfo->gen >= 11 ? INTEL_MASK(22, 16) : INTEL_MASK(23, 17);
+      devinfo->ver >= 11 ? INTEL_MASK(22, 16) : INTEL_MASK(23, 17);
    const unsigned instance_id_shift =
-      devinfo->gen >= 11 ? 16 : 17;
+      devinfo->ver >= 11 ? 16 : 17;
 
    /* Get instance number from g0.2 bits 22:16 or 23:17 */
    fs_reg t = bld.vgrf(BRW_REGISTER_TYPE_UD);
@@ -8476,7 +8577,7 @@ fs_visitor::run_gs()
  * overhead.
  */
 static void
-gen9_ps_header_only_workaround(struct brw_wm_prog_data *wm_prog_data)
+gfx9_ps_header_only_workaround(struct brw_wm_prog_data *wm_prog_data)
 {
    if (wm_prog_data->num_varying_inputs)
       return;
@@ -8498,10 +8599,10 @@ fs_visitor::run_fs(bool allow_spilling, bool do_rep_send)
 
    assert(stage == MESA_SHADER_FRAGMENT);
 
-   if (devinfo->gen >= 6)
-      setup_fs_payload_gen6();
+   if (devinfo->ver >= 6)
+      setup_fs_payload_gfx6();
    else
-      setup_fs_payload_gen4();
+      setup_fs_payload_gfx4();
 
    if (0) {
       emit_dummy_fs();
@@ -8515,10 +8616,10 @@ fs_visitor::run_fs(bool allow_spilling, bool do_rep_send)
       if (nir->info.inputs_read > 0 ||
           BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD) ||
           (nir->info.outputs_read > 0 && !wm_key->coherent_fb_fetch)) {
-         if (devinfo->gen < 6)
-            emit_interpolation_setup_gen4();
+         if (devinfo->ver < 6)
+            emit_interpolation_setup_gfx4();
          else
-            emit_interpolation_setup_gen6();
+            emit_interpolation_setup_gfx6();
       }
 
       /* We handle discards by keeping track of the still-live pixels in f0.1.
@@ -8528,7 +8629,7 @@ fs_visitor::run_fs(bool allow_spilling, bool do_rep_send)
          const unsigned lower_width = MIN2(dispatch_width, 16);
          for (unsigned i = 0; i < dispatch_width / lower_width; i++) {
             const fs_reg dispatch_mask =
-               devinfo->gen >= 6 ? brw_vec1_grf((i ? 2 : 1), 7) :
+               devinfo->ver >= 6 ? brw_vec1_grf((i ? 2 : 1), 7) :
                brw_vec1_grf(0, 0);
             bld.exec_all().group(1, 0)
                .MOV(sample_mask_reg(bld.group(lower_width, i)),
@@ -8558,8 +8659,8 @@ fs_visitor::run_fs(bool allow_spilling, bool do_rep_send)
 
       assign_curb_setup();
 
-      if (devinfo->gen >= 9)
-         gen9_ps_header_only_workaround(wm_prog_data);
+      if (devinfo->ver >= 9)
+         gfx9_ps_header_only_workaround(wm_prog_data);
 
       assign_urb_setup();
 
@@ -8874,7 +8975,7 @@ brw_nir_demote_sample_qualifiers(nir_shader *nir)
                nir_load_barycentric(&b, nir_intrinsic_load_barycentric_centroid,
                                     nir_intrinsic_interp_mode(intrin));
             nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                     nir_src_for_ssa(centroid));
+                                     centroid);
             nir_instr_remove(instr);
             progress = true;
          }
@@ -8915,7 +9016,7 @@ brw_nir_populate_wm_prog_data(const nir_shader *shader,
        shader->info.fs.uses_sample_qualifier ||
        shader->info.outputs_read);
 
-   if (devinfo->gen >= 6) {
+   if (devinfo->ver >= 6) {
       prog_data->uses_sample_mask =
          BITSET_TEST(shader->info.system_values_read, SYSTEM_VALUE_SAMPLE_MASK_IN);
 
@@ -8946,7 +9047,7 @@ brw_nir_populate_wm_prog_data(const nir_shader *shader,
 }
 
 /**
- * Pre-gen6, the register file of the EUs was shared between threads,
+ * Pre-gfx6, the register file of the EUs was shared between threads,
  * and each thread used some subset allocated on a 16-register block
  * granularity.  The unit states wanted these block counts.
  */
@@ -8957,34 +9058,34 @@ brw_register_blocks(int reg_count)
 }
 
 const unsigned *
-brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
+brw_compile_fs(const struct brw_compiler *compiler,
                void *mem_ctx,
-               const struct brw_wm_prog_key *key,
-               struct brw_wm_prog_data *prog_data,
-               nir_shader *nir,
-               int shader_time_index8, int shader_time_index16,
-               int shader_time_index32, bool allow_spilling,
-               bool use_rep_send, struct brw_vue_map *vue_map,
-               struct brw_compile_stats *stats,
-               char **error_str)
+               struct brw_compile_fs_params *params)
 {
+   struct nir_shader *nir = params->nir;
+   const struct brw_wm_prog_key *key = params->key;
+   struct brw_wm_prog_data *prog_data = params->prog_data;
+   bool allow_spilling = params->allow_spilling;
+   const bool debug_enabled =
+      INTEL_DEBUG & (params->debug_flag ? params->debug_flag : DEBUG_WM);
+
    prog_data->base.stage = MESA_SHADER_FRAGMENT;
 
    const struct gen_device_info *devinfo = compiler->devinfo;
-   const unsigned max_subgroup_size = compiler->devinfo->gen >= 6 ? 32 : 16;
+   const unsigned max_subgroup_size = compiler->devinfo->ver >= 6 ? 32 : 16;
 
    brw_nir_apply_key(nir, compiler, &key->base, max_subgroup_size, true);
    brw_nir_lower_fs_inputs(nir, devinfo, key);
    brw_nir_lower_fs_outputs(nir);
 
-   if (devinfo->gen < 6)
-      brw_setup_vue_interpolation(vue_map, nir, prog_data);
+   if (devinfo->ver < 6)
+      brw_setup_vue_interpolation(params->vue_map, nir, prog_data);
 
    /* From the SKL PRM, Volume 7, "Alpha Coverage":
     *  "If Pixel Shader outputs oMask, AlphaToCoverage is disabled in
     *   hardware, regardless of the state setting for this feature."
     */
-   if (devinfo->gen > 6 && key->alpha_to_coverage) {
+   if (devinfo->ver > 6 && key->alpha_to_coverage) {
       /* Run constant fold optimization in order to get the correct source
        * offset to determine render target 0 store instruction in
        * emit_alpha_to_coverage pass.
@@ -8996,7 +9097,8 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
    if (!key->multisample_fbo)
       NIR_PASS_V(nir, brw_nir_demote_sample_qualifiers);
    NIR_PASS_V(nir, brw_nir_move_interpolation_to_top);
-   brw_postprocess_nir(nir, compiler, true);
+   brw_postprocess_nir(nir, compiler, true, debug_enabled,
+                       key->base.robust_buffer_access);
 
    brw_nir_populate_wm_prog_data(nir, compiler->devinfo, key, prog_data);
 
@@ -9005,12 +9107,12 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
    float throughput = 0;
    bool has_spilled = false;
 
-   v8 = new fs_visitor(compiler, log_data, mem_ctx, &key->base,
-                       &prog_data->base, nir, 8, shader_time_index8);
+   v8 = new fs_visitor(compiler, params->log_data, mem_ctx, &key->base,
+                       &prog_data->base, nir, 8,
+                       params->shader_time ? params->shader_time_index8 : -1,
+                       debug_enabled);
    if (!v8->run_fs(allow_spilling, false /* do_rep_send */)) {
-      if (error_str)
-         *error_str = ralloc_strdup(mem_ctx, v8->fail_msg);
-
+      params->error_str = ralloc_strdup(mem_ctx, v8->fail_msg);
       delete v8;
       return NULL;
    } else if (!(INTEL_DEBUG & DEBUG_NO8)) {
@@ -9023,25 +9125,27 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
       allow_spilling = false;
    }
 
-   /* Limit dispatch width to simd8 with dual source blending on gen8.
+   /* Limit dispatch width to simd8 with dual source blending on gfx8.
     * See: https://gitlab.freedesktop.org/mesa/mesa/-/issues/1917
     */
-   if (devinfo->gen == 8 && prog_data->dual_src_blend &&
+   if (devinfo->ver == 8 && prog_data->dual_src_blend &&
        !(INTEL_DEBUG & DEBUG_NO8)) {
-      assert(!use_rep_send);
-      v8->limit_dispatch_width(8, "gen8 workaround: "
+      assert(!params->use_rep_send);
+      v8->limit_dispatch_width(8, "gfx8 workaround: "
                                "using SIMD8 when dual src blending.\n");
    }
 
    if (!has_spilled &&
        v8->max_dispatch_width >= 16 &&
-       (!(INTEL_DEBUG & DEBUG_NO16) || use_rep_send)) {
+       (!(INTEL_DEBUG & DEBUG_NO16) || params->use_rep_send)) {
       /* Try a SIMD16 compile */
-      v16 = new fs_visitor(compiler, log_data, mem_ctx, &key->base,
-                           &prog_data->base, nir, 16, shader_time_index16);
+      v16 = new fs_visitor(compiler, params->log_data, mem_ctx, &key->base,
+                           &prog_data->base, nir, 16,
+                           params->shader_time ? params->shader_time_index16 : -1,
+                           debug_enabled);
       v16->import_uniforms(v8);
-      if (!v16->run_fs(allow_spilling, use_rep_send)) {
-         compiler->shader_perf_log(log_data,
+      if (!v16->run_fs(allow_spilling, params->use_rep_send)) {
+         compiler->shader_perf_log(params->log_data,
                                    "SIMD16 shader failed to compile: %s",
                                    v16->fail_msg);
       } else {
@@ -9059,22 +9163,24 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
 
    /* Currently, the compiler only supports SIMD32 on SNB+ */
    if (!has_spilled &&
-       v8->max_dispatch_width >= 32 && !use_rep_send &&
-       devinfo->gen >= 6 && !simd16_failed &&
+       v8->max_dispatch_width >= 32 && !params->use_rep_send &&
+       devinfo->ver >= 6 && !simd16_failed &&
        !(INTEL_DEBUG & DEBUG_NO32)) {
       /* Try a SIMD32 compile */
-      v32 = new fs_visitor(compiler, log_data, mem_ctx, &key->base,
-                           &prog_data->base, nir, 32, shader_time_index32);
+      v32 = new fs_visitor(compiler, params->log_data, mem_ctx, &key->base,
+                           &prog_data->base, nir, 32,
+                           params->shader_time ? params->shader_time_index32 : -1,
+                           debug_enabled);
       v32->import_uniforms(v8);
       if (!v32->run_fs(allow_spilling, false)) {
-         compiler->shader_perf_log(log_data,
+         compiler->shader_perf_log(params->log_data,
                                    "SIMD32 shader failed to compile: %s",
                                    v32->fail_msg);
       } else {
          const performance &perf = v32->performance_analysis.require();
 
          if (!(INTEL_DEBUG & DEBUG_DO32) && throughput >= perf.throughput) {
-            compiler->shader_perf_log(log_data, "SIMD32 shader inefficient\n");
+            compiler->shader_perf_log(params->log_data, "SIMD32 shader inefficient\n");
          } else {
             simd32_cfg = v32->cfg;
             prog_data->dispatch_grf_start_reg_32 = v32->payload.num_regs;
@@ -9085,7 +9191,7 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
    }
 
    /* When the caller requests a repclear shader, they want SIMD16-only */
-   if (use_rep_send)
+   if (params->use_rep_send)
       simd8_cfg = NULL;
 
    /* Prior to Iron Lake, the PS had a single shader offset with a jump table
@@ -9093,7 +9199,7 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
     * Instead, we just give them exactly one shader and we pick the widest one
     * available.
     */
-   if (compiler->devinfo->gen < 5) {
+   if (compiler->devinfo->ver < 5) {
       if (simd32_cfg || simd16_cfg)
          simd8_cfg = NULL;
       if (simd32_cfg)
@@ -9101,11 +9207,11 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
    }
 
    /* If computed depth is enabled SNB only allows SIMD8. */
-   if (compiler->devinfo->gen == 6 &&
+   if (compiler->devinfo->ver == 6 &&
        prog_data->computed_depth_mode != BRW_PSCDEPTH_OFF)
       assert(simd16_cfg == NULL && simd32_cfg == NULL);
 
-   if (compiler->devinfo->gen <= 5 && !simd8_cfg) {
+   if (compiler->devinfo->ver <= 5 && !simd8_cfg) {
       /* Iron lake and earlier only have one Dispatch GRF start field.  Make
        * the data available in the base prog data struct for convenience.
        */
@@ -9125,7 +9231,7 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
        * generations, the only configurations supporting persample dispatch
        * are those in which only one dispatch width is enabled.
        *
-       * The Gen12 hardware spec has a similar dispatch grouping table, but
+       * The Gfx12 hardware spec has a similar dispatch grouping table, but
        * the following conflicting restriction applies (from the page on
        * "Structure_3DSTATE_PS_BODY"), so we need to keep the SIMD16 shader:
        *
@@ -9134,19 +9240,21 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
        */
       if (simd32_cfg || simd16_cfg)
          simd8_cfg = NULL;
-      if (simd32_cfg && devinfo->gen < 12)
+      if (simd32_cfg && devinfo->ver < 12)
          simd16_cfg = NULL;
    }
 
-   fs_generator g(compiler, log_data, mem_ctx, &prog_data->base,
+   fs_generator g(compiler, params->log_data, mem_ctx, &prog_data->base,
                   v8->runtime_check_aads_emit, MESA_SHADER_FRAGMENT);
 
-   if (INTEL_DEBUG & DEBUG_WM) {
+   if (unlikely(debug_enabled)) {
       g.enable_debug(ralloc_asprintf(mem_ctx, "%s fragment shader %s",
                                      nir->info.label ?
                                         nir->info.label : "unnamed",
                                      nir->info.name));
    }
+
+   struct brw_compile_stats *stats = params->stats;
 
    if (simd8_cfg) {
       prog_data->dispatch_8 = true;
@@ -9221,8 +9329,8 @@ cs_fill_push_const_info(const struct gen_device_info *devinfo,
                         struct brw_cs_prog_data *cs_prog_data)
 {
    const struct brw_stage_prog_data *prog_data = &cs_prog_data->base;
-   int subgroup_id_index = get_subgroup_id_param_index(prog_data);
-   bool cross_thread_supported = devinfo->gen > 7 || devinfo->is_haswell;
+   int subgroup_id_index = get_subgroup_id_param_index(devinfo, prog_data);
+   bool cross_thread_supported = devinfo->ver > 7 || devinfo->is_haswell;
 
    /* The thread ID should be stored in the last param dword */
    assert(subgroup_id_index == -1 ||
@@ -9308,7 +9416,8 @@ compile_cs_to_nir(const struct brw_compiler *compiler,
                   void *mem_ctx,
                   const struct brw_cs_prog_key *key,
                   const nir_shader *src_shader,
-                  unsigned dispatch_width)
+                  unsigned dispatch_width,
+                  bool debug_enabled)
 {
    nir_shader *shader = nir_shader_clone(mem_ctx, src_shader);
    brw_nir_apply_key(shader, compiler, &key->base, dispatch_width, true);
@@ -9319,23 +9428,26 @@ compile_cs_to_nir(const struct brw_compiler *compiler,
    NIR_PASS_V(shader, nir_opt_constant_folding);
    NIR_PASS_V(shader, nir_opt_dce);
 
-   brw_postprocess_nir(shader, compiler, true);
+   brw_postprocess_nir(shader, compiler, true, debug_enabled,
+                       key->base.robust_buffer_access);
 
    return shader;
 }
 
 const unsigned *
-brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
+brw_compile_cs(const struct brw_compiler *compiler,
                void *mem_ctx,
-               const struct brw_cs_prog_key *key,
-               struct brw_cs_prog_data *prog_data,
-               const nir_shader *nir,
-               int shader_time_index,
-               struct brw_compile_stats *stats,
-               char **error_str)
+               struct brw_compile_cs_params *params)
 {
+   const nir_shader *nir = params->nir;
+   const struct brw_cs_prog_key *key = params->key;
+   struct brw_cs_prog_data *prog_data = params->prog_data;
+   int shader_time_index = params->shader_time ? params->shader_time_index : -1;
+
+   const bool debug_enabled = INTEL_DEBUG & DEBUG_CS;
+
    prog_data->base.stage = MESA_SHADER_COMPUTE;
-   prog_data->base.total_shared = nir->info.cs.shared_size;
+   prog_data->base.total_shared = nir->info.shared_size;
 
    /* Generate code for all the possible SIMD variants. */
    bool generate_all;
@@ -9375,10 +9487,8 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
              required_dispatch_width == 32);
       if (required_dispatch_width < min_dispatch_width ||
           required_dispatch_width > max_dispatch_width) {
-         if (error_str) {
-            *error_str = ralloc_strdup(mem_ctx,
-                                       "Cannot satisfy explicit subgroup size");
-         }
+         params->error_str = ralloc_strdup(mem_ctx,
+                                           "Cannot satisfy explicit subgroup size");
          return NULL;
       }
       min_dispatch_width = max_dispatch_width = required_dispatch_width;
@@ -9392,13 +9502,12 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
    if (!(INTEL_DEBUG & DEBUG_NO8) &&
        min_dispatch_width <= 8 && max_dispatch_width >= 8) {
       nir_shader *nir8 = compile_cs_to_nir(compiler, mem_ctx, key,
-                                           nir, 8);
-      v8 = new fs_visitor(compiler, log_data, mem_ctx, &key->base,
+                                           nir, 8, debug_enabled);
+      v8 = new fs_visitor(compiler, params->log_data, mem_ctx, &key->base,
                           &prog_data->base,
-                          nir8, 8, shader_time_index);
+                          nir8, 8, shader_time_index, debug_enabled);
       if (!v8->run_cs(true /* allow_spilling */)) {
-         if (error_str)
-            *error_str = ralloc_strdup(mem_ctx, v8->fail_msg);
+         params->error_str = ralloc_strdup(mem_ctx, v8->fail_msg);
          delete v8;
          return NULL;
       }
@@ -9418,25 +9527,23 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
        min_dispatch_width <= 16 && max_dispatch_width >= 16) {
       /* Try a SIMD16 compile */
       nir_shader *nir16 = compile_cs_to_nir(compiler, mem_ctx, key,
-                                            nir, 16);
-      v16 = new fs_visitor(compiler, log_data, mem_ctx, &key->base,
+                                            nir, 16, debug_enabled);
+      v16 = new fs_visitor(compiler, params->log_data, mem_ctx, &key->base,
                            &prog_data->base,
-                           nir16, 16, shader_time_index);
+                           nir16, 16, shader_time_index, debug_enabled);
       if (v8)
          v16->import_uniforms(v8);
 
       const bool allow_spilling = generate_all || v == NULL;
       if (!v16->run_cs(allow_spilling)) {
-         compiler->shader_perf_log(log_data,
+         compiler->shader_perf_log(params->log_data,
                                    "SIMD16 shader failed to compile: %s",
                                    v16->fail_msg);
          if (!v) {
             assert(v8 == NULL);
-            if (error_str) {
-               *error_str = ralloc_asprintf(
-                  mem_ctx, "Not enough threads for SIMD8 and "
-                  "couldn't generate SIMD16: %s", v16->fail_msg);
-            }
+            params->error_str = ralloc_asprintf(
+               mem_ctx, "Not enough threads for SIMD8 and "
+               "couldn't generate SIMD16: %s", v16->fail_msg);
             delete v16;
             return NULL;
          }
@@ -9466,10 +9573,10 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
        min_dispatch_width <= 32 && max_dispatch_width >= 32) {
       /* Try a SIMD32 compile */
       nir_shader *nir32 = compile_cs_to_nir(compiler, mem_ctx, key,
-                                            nir, 32);
-      v32 = new fs_visitor(compiler, log_data, mem_ctx, &key->base,
+                                            nir, 32, debug_enabled);
+      v32 = new fs_visitor(compiler, params->log_data, mem_ctx, &key->base,
                            &prog_data->base,
-                           nir32, 32, shader_time_index);
+                           nir32, 32, shader_time_index, debug_enabled);
       if (v8)
          v32->import_uniforms(v8);
       else if (v16)
@@ -9477,17 +9584,15 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
 
       const bool allow_spilling = generate_all || v == NULL;
       if (!v32->run_cs(allow_spilling)) {
-         compiler->shader_perf_log(log_data,
+         compiler->shader_perf_log(params->log_data,
                                    "SIMD32 shader failed to compile: %s",
                                    v32->fail_msg);
          if (!v) {
             assert(v8 == NULL);
             assert(v16 == NULL);
-            if (error_str) {
-               *error_str = ralloc_asprintf(
-                  mem_ctx, "Not enough threads for SIMD16 and "
-                  "couldn't generate SIMD32: %s", v32->fail_msg);
-            }
+            params->error_str = ralloc_asprintf(
+               mem_ctx, "Not enough threads for SIMD16 and "
+               "couldn't generate SIMD32: %s", v32->fail_msg);
             delete v32;
             return NULL;
          }
@@ -9501,11 +9606,9 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
    }
 
    if (unlikely(!v) && (INTEL_DEBUG & (DEBUG_NO8 | DEBUG_NO16 | DEBUG_NO32))) {
-      if (error_str) {
-         *error_str =
-            ralloc_strdup(mem_ctx,
-                          "Cannot satisfy INTEL_DEBUG flags SIMD restrictions");
-      }
+      params->error_str =
+         ralloc_strdup(mem_ctx,
+                       "Cannot satisfy INTEL_DEBUG flags SIMD restrictions");
       return NULL;
    }
 
@@ -9513,9 +9616,9 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
 
    const unsigned *ret = NULL;
 
-   fs_generator g(compiler, log_data, mem_ctx, &prog_data->base,
+   fs_generator g(compiler, params->log_data, mem_ctx, &prog_data->base,
                   v->runtime_check_aads_emit, MESA_SHADER_COMPUTE);
-   if (INTEL_DEBUG & DEBUG_CS) {
+   if (unlikely(debug_enabled)) {
       char *name = ralloc_asprintf(mem_ctx, "%s compute shader %s",
                                    nir->info.label ?
                                    nir->info.label : "unnamed",
@@ -9523,6 +9626,7 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
       g.enable_debug(name);
    }
 
+   struct brw_compile_stats *stats = params->stats;
    if (generate_all) {
       if (prog_data->prog_mask & (1 << 0)) {
          assert(v8);
@@ -9611,12 +9715,15 @@ brw_compile_bs(const struct brw_compiler *compiler, void *log_data,
                struct brw_compile_stats *stats,
                char **error_str)
 {
+   const bool debug_enabled = INTEL_DEBUG & DEBUG_RT;
+
    prog_data->base.stage = shader->info.stage;
    prog_data->stack_size = shader->scratch_size;
 
    const unsigned max_dispatch_width = 16;
    brw_nir_apply_key(shader, compiler, &key->base, max_dispatch_width, true);
-   brw_postprocess_nir(shader, compiler, true);
+   brw_postprocess_nir(shader, compiler, true, debug_enabled,
+                       key->base.robust_buffer_access);
 
    fs_visitor *v = NULL, *v8 = NULL, *v16 = NULL;
    bool has_spilled = false;
@@ -9624,7 +9731,7 @@ brw_compile_bs(const struct brw_compiler *compiler, void *log_data,
    if (likely(!(INTEL_DEBUG & DEBUG_NO8))) {
       v8 = new fs_visitor(compiler, log_data, mem_ctx, &key->base,
                           &prog_data->base, shader,
-                          8, -1 /* shader time */);
+                          8, -1 /* shader time */, debug_enabled);
       const bool allow_spilling = true;
       if (!v8->run_bs(allow_spilling)) {
          if (error_str)
@@ -9642,7 +9749,7 @@ brw_compile_bs(const struct brw_compiler *compiler, void *log_data,
    if (!has_spilled && likely(!(INTEL_DEBUG & DEBUG_NO16))) {
       v16 = new fs_visitor(compiler, log_data, mem_ctx, &key->base,
                            &prog_data->base, shader,
-                           16, -1 /* shader time */);
+                           16, -1 /* shader time */, debug_enabled);
       const bool allow_spilling = (v == NULL);
       if (!v16->run_bs(allow_spilling)) {
          compiler->shader_perf_log(log_data,
@@ -9679,7 +9786,7 @@ brw_compile_bs(const struct brw_compiler *compiler, void *log_data,
 
    fs_generator g(compiler, log_data, mem_ctx, &prog_data->base,
                   v->runtime_check_aads_emit, shader->info.stage);
-   if (INTEL_DEBUG & DEBUG_RT) {
+   if (unlikely(debug_enabled)) {
       char *name = ralloc_asprintf(mem_ctx, "%s %s shader %s",
                                    shader->info.label ?
                                       shader->info.label : "unnamed",

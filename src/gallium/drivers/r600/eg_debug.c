@@ -332,7 +332,7 @@ static void eg_dump_last_ib(struct r600_context *rctx, FILE *f)
 		 * waited for the context, so this buffer should be idle.
 		 * If the GPU is hung, there is no point in waiting for it.
 		 */
-		uint32_t *map = rctx->b.ws->buffer_map(rctx->last_trace_buf->buf,
+		uint32_t *map = rctx->b.ws->buffer_map(rctx->b.ws, rctx->last_trace_buf->buf,
 						       NULL,
 						       PIPE_MAP_UNSYNCHRONIZED |
 						       PIPE_MAP_READ);

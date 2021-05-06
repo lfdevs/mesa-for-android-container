@@ -242,9 +242,9 @@ get_fast_clear_rect(const struct isl_device *dev,
       /* The line alignment requirement for Y-tiled is halved at SKL and again
        * at TGL.
        */
-      if (dev->info->gen >= 12)
+      if (dev->info->ver >= 12)
          y_align *= 8;
-      else if (dev->info->gen >= 9)
+      else if (dev->info->ver >= 9)
          y_align *= 16;
       else
          y_align *= 32;
@@ -363,6 +363,12 @@ blorp_fast_clear(struct blorp_batch *batch,
                                start_layer, format, true);
    params.num_samples = params.dst.surf.samples;
 
+   assert(params.num_samples != 0);
+   if (params.num_samples == 1)
+      params.snapshot_type = INTEL_SNAPSHOT_CCS_COLOR_CLEAR;
+   else
+      params.snapshot_type = INTEL_SNAPSHOT_MCS_COLOR_CLEAR;
+
    /* If a swizzle was provided, we need to swizzle the clear color so that
     * the hardware color format conversion will work properly.
     */
@@ -383,6 +389,7 @@ blorp_clear(struct blorp_batch *batch,
 {
    struct blorp_params params;
    blorp_params_init(&params);
+   params.snapshot_type = INTEL_SNAPSHOT_SLOW_COLOR_CLEAR;
 
    /* Manually apply the clear destination swizzle.  This way swizzled clears
     * will work for swizzles which we can't normally use for rendering and it
@@ -428,8 +435,8 @@ blorp_clear(struct blorp_batch *batch,
    if (surf->surf->tiling == ISL_TILING_LINEAR)
       use_simd16_replicated_data = false;
 
-   /* Replicated clears don't work yet before gen6 */
-   if (batch->blorp->isl_dev->info->gen < 6)
+   /* Replicated clears don't work yet before gfx6 */
+   if (batch->blorp->isl_dev->info->ver < 6)
       use_simd16_replicated_data = false;
 
    /* Constant color writes ignore everyting in blend and color calculator
@@ -471,9 +478,9 @@ blorp_clear(struct blorp_batch *batch,
       }
 
       /* The MinLOD and MinimumArrayElement don't work properly for cube maps.
-       * Convert them to a single slice on gen4.
+       * Convert them to a single slice on gfx4.
        */
-      if (batch->blorp->isl_dev->info->gen == 4 &&
+      if (batch->blorp->isl_dev->info->ver == 4 &&
           (params.dst.surf.usage & ISL_SURF_USAGE_CUBE_BIT)) {
          blorp_surf_convert_to_single_slice(batch->blorp->isl_dev, &params.dst);
       }
@@ -491,7 +498,7 @@ blorp_clear(struct blorp_batch *batch,
       }
 
       if (params.dst.tile_x_sa || params.dst.tile_y_sa) {
-         /* Either we're on gen4 where there is no multisampling or the
+         /* Either we're on gfx4 where there is no multisampling or the
           * surface is compressed which also implies no multisampling.
           * Therefore, sa == px and we don't need to do a conversion.
           */
@@ -597,6 +604,7 @@ blorp_clear_stencil_as_rgba(struct blorp_batch *batch,
 
    struct blorp_params params;
    blorp_params_init(&params);
+   params.snapshot_type = INTEL_SNAPSHOT_SLOW_DEPTH_CLEAR;
 
    if (!blorp_params_get_clear_kernel(batch, &params, true, false))
       return false;
@@ -612,7 +620,7 @@ blorp_clear_stencil_as_rgba(struct blorp_batch *batch,
     * We have to use RGBA16_UINT on SNB.
     */
    enum isl_format wide_format;
-   if (ISL_DEV_GEN(batch->blorp->isl_dev) <= 6) {
+   if (ISL_GFX_VER(batch->blorp->isl_dev) <= 6) {
       wide_format = ISL_FORMAT_R16G16B16A16_UINT;
 
       /* For RGBA16_UINT, we need to mask the stencil value otherwise, we risk
@@ -675,13 +683,14 @@ blorp_clear_depth_stencil(struct blorp_batch *batch,
 
    struct blorp_params params;
    blorp_params_init(&params);
+   params.snapshot_type = INTEL_SNAPSHOT_SLOW_DEPTH_CLEAR;
 
    params.x0 = x0;
    params.y0 = y0;
    params.x1 = x1;
    params.y1 = y1;
 
-   if (ISL_DEV_GEN(batch->blorp->isl_dev) == 6) {
+   if (ISL_GFX_VER(batch->blorp->isl_dev) == 6) {
       /* For some reason, Sandy Bridge gets occlusion queries wrong if we
        * don't have a shader.  In particular, it records samples even though
        * we disable statistics in 3DSTATE_WM.  Give it the usual clear shader
@@ -753,10 +762,10 @@ blorp_can_hiz_clear_depth(const struct gen_device_info *devinfo,
                           uint32_t level, uint32_t layer,
                           uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1)
 {
-   /* This function currently doesn't support any gen prior to gen8 */
-   assert(devinfo->gen >= 8);
+   /* This function currently doesn't support any gen prior to gfx8 */
+   assert(devinfo->ver >= 8);
 
-   if (devinfo->gen == 8 && surf->format == ISL_FORMAT_R16_UNORM) {
+   if (devinfo->ver == 8 && surf->format == ISL_FORMAT_R16_UNORM) {
       /* Apply the D16 alignment restrictions. On BDW, HiZ has an 8x4 sample
        * block with the following property: as the number of samples increases,
        * the number of pixels representable by this block decreases by a factor
@@ -799,7 +808,7 @@ blorp_can_hiz_clear_depth(const struct gen_device_info *devinfo,
       /* We have to set the WM_HZ_OP::FullSurfaceDepthandStencilClear bit
        * whenever we clear an uninitialized HIZ buffer (as some drivers
        * currently do). However, this bit seems liable to clear 16x8 pixels in
-       * the ZCS on Gen12 - greater than the slice alignments for depth
+       * the ZCS on Gfx12 - greater than the slice alignments for depth
        * buffers.
        */
       assert(surf->image_alignment_el.w % 16 != 0 ||
@@ -809,7 +818,7 @@ blorp_can_hiz_clear_depth(const struct gen_device_info *devinfo,
        * amd_vertex_shader_layer-layered-depth-texture-render piglit test.
        *
        * From the Compressed Depth Buffers section of the Bspec, under the
-       * Gen12 texture performant and ZCS columns:
+       * Gfx12 texture performant and ZCS columns:
        *
        *    Update with clear at either 16x8 or 8x4 granularity, based on
        *    fs_clr or otherwise.
@@ -819,7 +828,7 @@ blorp_can_hiz_clear_depth(const struct gen_device_info *devinfo,
        * when an initializing clear could hit another miplevel.
        *
        * NOTE: Because the CCS compresses the depth buffer and not a version
-       * of it that has been rearranged with different alignments (like Gen8+
+       * of it that has been rearranged with different alignments (like Gfx8+
        * HIZ), we have to make sure that the x0 and y0 are at least 16x8
        * aligned in the context of the entire surface.
        */
@@ -884,9 +893,10 @@ blorp_hiz_clear_depth_stencil(struct blorp_batch *batch,
 {
    struct blorp_params params;
    blorp_params_init(&params);
+   params.snapshot_type = INTEL_SNAPSHOT_HIZ_CLEAR;
 
-   /* This requires WM_HZ_OP which only exists on gen8+ */
-   assert(ISL_DEV_GEN(batch->blorp->isl_dev) >= 8);
+   /* This requires WM_HZ_OP which only exists on gfx8+ */
+   assert(ISL_GFX_VER(batch->blorp->isl_dev) >= 8);
 
    params.hiz_op = ISL_AUX_OP_FAST_CLEAR;
    /* From BSpec: 3DSTATE_WM_HZ_OP_BODY >> Full Surface Depth and Stencil Clear
@@ -938,7 +948,7 @@ blorp_hiz_clear_depth_stencil(struct blorp_batch *batch,
  * tagged as cleared so the depth clear value is not actually needed.
  */
 void
-blorp_gen8_hiz_clear_attachments(struct blorp_batch *batch,
+blorp_gfx8_hiz_clear_attachments(struct blorp_batch *batch,
                                  uint32_t num_samples,
                                  uint32_t x0, uint32_t y0,
                                  uint32_t x1, uint32_t y1,
@@ -949,6 +959,7 @@ blorp_gen8_hiz_clear_attachments(struct blorp_batch *batch,
 
    struct blorp_params params;
    blorp_params_init(&params);
+   params.snapshot_type = INTEL_SNAPSHOT_HIZ_CLEAR;
    params.num_layers = 1;
    params.hiz_op = ISL_AUX_OP_FAST_CLEAR;
    params.x0 = x0;
@@ -1002,6 +1013,7 @@ blorp_clear_attachments(struct blorp_batch *batch,
 
    if (clear_color) {
       params.dst.enabled = true;
+      params.snapshot_type = INTEL_SNAPSHOT_SLOW_COLOR_CLEAR;
 
       memcpy(&params.wm_inputs.clear_color, color_value.f32, sizeof(float) * 4);
 
@@ -1015,6 +1027,7 @@ blorp_clear_attachments(struct blorp_batch *batch,
 
    if (clear_depth) {
       params.depth.enabled = true;
+      params.snapshot_type = INTEL_SNAPSHOT_SLOW_DEPTH_CLEAR;
 
       params.z = depth_value;
       params.depth_format = isl_format_get_depth_format(depth_format, false);
@@ -1022,6 +1035,7 @@ blorp_clear_attachments(struct blorp_batch *batch,
 
    if (stencil_mask) {
       params.stencil.enabled = true;
+      params.snapshot_type = INTEL_SNAPSHOT_SLOW_DEPTH_CLEAR;
 
       params.stencil_mask = stencil_mask;
       params.stencil_ref = stencil_value;
@@ -1045,6 +1059,19 @@ blorp_ccs_resolve(struct blorp_batch *batch,
    struct blorp_params params;
 
    blorp_params_init(&params);
+   switch(resolve_op) {
+   case ISL_AUX_OP_AMBIGUATE:
+      params.snapshot_type = INTEL_SNAPSHOT_CCS_AMBIGUATE;
+      break;
+   case ISL_AUX_OP_FULL_RESOLVE:
+      params.snapshot_type = INTEL_SNAPSHOT_CCS_RESOLVE;
+      break;
+   case ISL_AUX_OP_PARTIAL_RESOLVE:
+      params.snapshot_type = INTEL_SNAPSHOT_CCS_PARTIAL_RESOLVE;
+      break;
+   default:
+      assert(false);
+   }
    brw_blorp_surface_info_init(batch->blorp, &params.dst, surf,
                                level, start_layer, format, true);
 
@@ -1062,13 +1089,13 @@ blorp_ccs_resolve(struct blorp_batch *batch,
    assert(aux_fmtl->txc == ISL_TXC_CCS);
 
    unsigned x_scaledown, y_scaledown;
-   if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 12) {
+   if (ISL_GFX_VER(batch->blorp->isl_dev) >= 12) {
       x_scaledown = aux_fmtl->bw * 8;
       y_scaledown = aux_fmtl->bh * 4;
-   } else if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 9) {
+   } else if (ISL_GFX_VER(batch->blorp->isl_dev) >= 9) {
       x_scaledown = aux_fmtl->bw * 8;
       y_scaledown = aux_fmtl->bh * 8;
-   } else if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 8) {
+   } else if (ISL_GFX_VER(batch->blorp->isl_dev) >= 8) {
       x_scaledown = aux_fmtl->bw * 8;
       y_scaledown = aux_fmtl->bh * 16;
    } else {
@@ -1081,11 +1108,11 @@ blorp_ccs_resolve(struct blorp_batch *batch,
    params.x1 = ALIGN(params.x1, x_scaledown) / x_scaledown;
    params.y1 = ALIGN(params.y1, y_scaledown) / y_scaledown;
 
-   if (batch->blorp->isl_dev->info->gen >= 10) {
+   if (batch->blorp->isl_dev->info->ver >= 10) {
       assert(resolve_op == ISL_AUX_OP_FULL_RESOLVE ||
              resolve_op == ISL_AUX_OP_PARTIAL_RESOLVE ||
              resolve_op == ISL_AUX_OP_AMBIGUATE);
-   } else if (batch->blorp->isl_dev->info->gen >= 9) {
+   } else if (batch->blorp->isl_dev->info->ver >= 9) {
       assert(resolve_op == ISL_AUX_OP_FULL_RESOLVE ||
              resolve_op == ISL_AUX_OP_PARTIAL_RESOLVE);
    } else {
@@ -1165,8 +1192,8 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_batch *batch,
    nir_discard_if(&b, nir_inot(&b, is_clear));
 
    nir_ssa_def *clear_color = nir_load_var(&b, v_color);
-   if (blorp_key.indirect_clear_color && blorp->isl_dev->info->gen <= 8) {
-      /* Gen7-8 clear colors are stored as single 0/1 bits */
+   if (blorp_key.indirect_clear_color && blorp->isl_dev->info->ver <= 8) {
+      /* Gfx7-8 clear colors are stored as single 0/1 bits */
       clear_color = nir_vec4(&b, blorp_nir_bit(&b, clear_color, 31),
                                  blorp_nir_bit(&b, clear_color, 30),
                                  blorp_nir_bit(&b, clear_color, 29),
@@ -1207,8 +1234,9 @@ blorp_mcs_partial_resolve(struct blorp_batch *batch,
 {
    struct blorp_params params;
    blorp_params_init(&params);
+   params.snapshot_type = INTEL_SNAPSHOT_MCS_PARTIAL_RESOLVE;
 
-   assert(batch->blorp->isl_dev->info->gen >= 7);
+   assert(batch->blorp->isl_dev->info->ver >= 7);
 
    params.x0 = 0;
    params.y0 = 0;
@@ -1244,16 +1272,17 @@ blorp_ccs_ambiguate(struct blorp_batch *batch,
                     struct blorp_surf *surf,
                     uint32_t level, uint32_t layer)
 {
-   if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 10) {
-      /* On gen10 and above, we have a hardware resolve op for this */
+   if (ISL_GFX_VER(batch->blorp->isl_dev) >= 10) {
+      /* On gfx10 and above, we have a hardware resolve op for this */
       return blorp_ccs_resolve(batch, surf, level, layer, 1,
                                surf->surf->format, ISL_AUX_OP_AMBIGUATE);
    }
 
    struct blorp_params params;
    blorp_params_init(&params);
+   params.snapshot_type = INTEL_SNAPSHOT_CCS_AMBIGUATE;
 
-   assert(ISL_DEV_GEN(batch->blorp->isl_dev) >= 7);
+   assert(ISL_GFX_VER(batch->blorp->isl_dev) >= 7);
 
    const struct isl_format_layout *aux_fmtl =
       isl_format_get_layout(surf->aux_surf->format);
@@ -1303,7 +1332,7 @@ blorp_ccs_ambiguate(struct blorp_batch *batch,
     * clear in units of Y-tiled cache lines.
     */
    uint32_t x_offset_cl, y_offset_cl, width_cl, height_cl;
-   if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 8) {
+   if (ISL_GFX_VER(batch->blorp->isl_dev) >= 8) {
       /* From the Sky Lake PRM Vol. 12 in the section on planes:
        *
        *    "The Color Control Surface (CCS) contains the compression status
@@ -1337,7 +1366,7 @@ blorp_ccs_ambiguate(struct blorp_batch *batch,
       width_cl = DIV_ROUND_UP(width_el, x_el_per_cl);
       height_cl = DIV_ROUND_UP(height_el, y_el_per_cl);
    } else {
-      /* On gen7, the CCS tiling is not so nice.  However, there we are
+      /* On gfx7, the CCS tiling is not so nice.  However, there we are
        * guaranteed that we only have a single level and slice so we don't
        * have to worry about it and can just align to a whole tile.
        */

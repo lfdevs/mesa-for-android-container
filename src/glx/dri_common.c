@@ -138,32 +138,10 @@ static const struct
       __ATTRIB(__DRI_ATTRIB_DOUBLE_BUFFER, doubleBufferMode),
       __ATTRIB(__DRI_ATTRIB_STEREO, stereoMode),
       __ATTRIB(__DRI_ATTRIB_AUX_BUFFERS, numAuxBuffers),
-#if 0
-      __ATTRIB(__DRI_ATTRIB_TRANSPARENT_TYPE, transparentPixel),
-      __ATTRIB(__DRI_ATTRIB_TRANSPARENT_INDEX_VALUE, transparentIndex),
-      __ATTRIB(__DRI_ATTRIB_TRANSPARENT_RED_VALUE, transparentRed),
-      __ATTRIB(__DRI_ATTRIB_TRANSPARENT_GREEN_VALUE, transparentGreen),
-      __ATTRIB(__DRI_ATTRIB_TRANSPARENT_BLUE_VALUE, transparentBlue),
-      __ATTRIB(__DRI_ATTRIB_TRANSPARENT_ALPHA_VALUE, transparentAlpha),
-      __ATTRIB(__DRI_ATTRIB_RED_MASK, redMask),
-      __ATTRIB(__DRI_ATTRIB_GREEN_MASK, greenMask),
-      __ATTRIB(__DRI_ATTRIB_BLUE_MASK, blueMask),
-      __ATTRIB(__DRI_ATTRIB_ALPHA_MASK, alphaMask),
-      __ATTRIB(__DRI_ATTRIB_RED_SHIFT, redShift),
-      __ATTRIB(__DRI_ATTRIB_GREEN_SHIFT, greenShift),
-      __ATTRIB(__DRI_ATTRIB_BLUE_SHIFT, blueShift),
-      __ATTRIB(__DRI_ATTRIB_ALPHA_SHIFT, alphaShift),
-#endif
-      __ATTRIB(__DRI_ATTRIB_MAX_PBUFFER_WIDTH, maxPbufferWidth),
-      __ATTRIB(__DRI_ATTRIB_MAX_PBUFFER_HEIGHT, maxPbufferHeight),
-      __ATTRIB(__DRI_ATTRIB_MAX_PBUFFER_PIXELS, maxPbufferPixels),
-      __ATTRIB(__DRI_ATTRIB_OPTIMAL_PBUFFER_WIDTH, optimalPbufferWidth),
-      __ATTRIB(__DRI_ATTRIB_OPTIMAL_PBUFFER_HEIGHT, optimalPbufferHeight),
       __ATTRIB(__DRI_ATTRIB_SWAP_METHOD, swapMethod),
       __ATTRIB(__DRI_ATTRIB_BIND_TO_TEXTURE_RGB, bindToTextureRgb),
       __ATTRIB(__DRI_ATTRIB_BIND_TO_TEXTURE_RGBA, bindToTextureRgba),
-      __ATTRIB(__DRI_ATTRIB_BIND_TO_MIPMAP_TEXTURE,
-                     bindToMipmapTexture),
+      __ATTRIB(__DRI_ATTRIB_BIND_TO_MIPMAP_TEXTURE, bindToMipmapTexture),
       __ATTRIB(__DRI_ATTRIB_YINVERTED, yInverted),
       __ATTRIB(__DRI_ATTRIB_FRAMEBUFFER_SRGB_CAPABLE, sRGBCapable)
 };
@@ -210,17 +188,6 @@ driConfigEqual(const __DRIcoreExtension *core,
             return GL_FALSE;
          break;
 
-      case __DRI_ATTRIB_CONFIG_CAVEAT:
-         if (value & __DRI_ATTRIB_NON_CONFORMANT_CONFIG)
-            glxValue = GLX_NON_CONFORMANT_CONFIG;
-         else if (value & __DRI_ATTRIB_SLOW_BIT)
-            glxValue = GLX_SLOW_CONFIG;
-         else
-            glxValue = GLX_NONE;
-         if (glxValue != config->visualRating)
-            return GL_FALSE;
-         break;
-
       case __DRI_ATTRIB_BIND_TO_TEXTURE_TARGETS:
          glxValue = 0;
          if (value & __DRI_ATTRIB_TEXTURE_1D_BIT)
@@ -245,6 +212,54 @@ driConfigEqual(const __DRIcoreExtension *core,
          if (!scalarEqual(config, attrib, glxValue))
             return GL_FALSE;
 
+         break;
+
+      /* Nerf some attributes we can safely ignore if the server claims to
+       * support them but the driver does not.
+       */
+      case __DRI_ATTRIB_CONFIG_CAVEAT:
+         if (value & __DRI_ATTRIB_NON_CONFORMANT_CONFIG)
+            glxValue = GLX_NON_CONFORMANT_CONFIG;
+         else if (value & __DRI_ATTRIB_SLOW_BIT)
+            glxValue = GLX_SLOW_CONFIG;
+         else
+            glxValue = GLX_NONE;
+         if (glxValue != config->visualRating) {
+            if (config->visualRating == GLX_NONE) {
+               static int warned;
+               if (!warned) {
+                  dri_message(_LOADER_DEBUG,
+                              "Not downgrading visual rating\n");
+                  warned = 1;
+               }
+            } else {
+               return GL_FALSE;
+            }
+         }
+         break;
+
+      case __DRI_ATTRIB_AUX_BUFFERS:
+         if (!scalarEqual(config, attrib, value)) {
+            static int warned;
+            if (!warned) {
+               dri_message(_LOADER_DEBUG,
+                           "Disabling server's aux buffer support\n");
+               warned = 1;
+            }
+            config->numAuxBuffers = 0;
+         }
+         break;
+
+      case __DRI_ATTRIB_BIND_TO_MIPMAP_TEXTURE:
+         if (!scalarEqual(config, attrib, value)) {
+            static int warned;
+            if (!warned) {
+               dri_message(_LOADER_DEBUG,
+                           "Disabling server's tfp mipmap support\n");
+               warned = 1;
+            }
+            config->bindToMipmapTexture = 0;
+         }
          break;
 
       default:

@@ -30,7 +30,7 @@
  * instructions.
  *
  * Unfortunately there is close to no information about bank conflicts in the
- * hardware spec, but experimentally on Gen7-Gen9 ternary instructions seem to
+ * hardware spec, but experimentally on Gfx7-Gfx9 ternary instructions seem to
  * incur an average bank conflict penalty of one cycle per SIMD8 op whenever
  * the second and third source are stored in the same GRF bank (\sa bank_of()
  * for the exact bank layout) which cannot be fetched during the same cycle by
@@ -549,7 +549,7 @@ namespace {
        * Register allocation ensures that, so don't move 127 around to avoid
        * breaking that property.
        */
-      if (v->devinfo->gen >= 8)
+      if (v->devinfo->ver >= 8)
          constrained[p.atom_of_reg(127)] = true;
 
       foreach_block_and_inst(block, fs_inst, inst, v->cfg) {
@@ -568,21 +568,21 @@ namespace {
          }
 
          /* Preserve the original allocation of VGRFs used by the barycentric
-          * source of the LINTERP instruction on Gen6, since pair-aligned
+          * source of the LINTERP instruction on Gfx6, since pair-aligned
           * barycentrics allow the PLN instruction to be used.
           */
-         if (v->devinfo->has_pln && v->devinfo->gen <= 6 &&
+         if (v->devinfo->has_pln && v->devinfo->ver <= 6 &&
              inst->opcode == FS_OPCODE_LINTERP)
             constrained[p.atom_of_reg(reg_of(inst->src[0]))] = true;
 
-         /* The location of the Gen7 MRF hack registers is hard-coded in the
+         /* The location of the Gfx7 MRF hack registers is hard-coded in the
           * rest of the compiler back-end.  Don't attempt to move them around.
           */
-         if (v->devinfo->gen >= 7) {
+         if (v->devinfo->ver >= 7) {
             assert(inst->dst.file != MRF);
 
             for (unsigned i = 0; i < inst->implied_mrf_writes(); i++) {
-               const unsigned reg = GEN7_MRF_HACK_START + inst->base_mrf + i;
+               const unsigned reg = GFX7_MRF_HACK_START + inst->base_mrf + i;
                constrained[p.atom_of_reg(reg)] = true;
             }
          }
@@ -599,7 +599,7 @@ namespace {
    bool
    is_conflict_optimized_out(const gen_device_info *devinfo, const fs_inst *inst)
    {
-      return devinfo->gen >= 9 &&
+      return devinfo->ver >= 9 &&
          ((is_grf(inst->src[0]) && (reg_of(inst->src[0]) == reg_of(inst->src[1]) ||
                                     reg_of(inst->src[0]) == reg_of(inst->src[2]))) ||
           reg_of(inst->src[1]) == reg_of(inst->src[2]));
@@ -620,9 +620,9 @@ namespace {
     * assignment of r.  \sa delta_conflicts() for a vectorized implementation
     * of the expression above.
     *
-    * FINISHME: Teach this about the Gen10+ bank conflict rules, which are
+    * FINISHME: Teach this about the Gfx10+ bank conflict rules, which are
     *           somewhat more relaxed than on previous generations.  In the
-    *           meantime optimizing based on Gen9 weights is likely to be more
+    *           meantime optimizing based on Gfx9 weights is likely to be more
     *           helpful than not optimizing at all.
     */
    weight_vector_type *
@@ -911,7 +911,7 @@ fs_visitor::opt_bank_conflicts()
    assert(grf_used || !"Must be called after register allocation");
 
    /* No ternary instructions -- No bank conflicts. */
-   if (devinfo->gen < 6)
+   if (devinfo->ver < 6)
       return false;
 
    const partitioning p = shader_reg_partitioning(this);

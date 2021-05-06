@@ -47,9 +47,9 @@
 #include <brw_bufmgr.h>
 
 #include "dev/gen_debug.h"
-#include "common/gen_decoder.h"
-#include "intel_screen.h"
-#include "intel_tex_obj.h"
+#include "common/intel_decoder.h"
+#include "brw_screen.h"
+#include "brw_tex_obj.h"
 #include "perf/gen_perf.h"
 #include "perf/gen_perf_query.h"
 
@@ -90,7 +90,7 @@ extern "C" {
  * R0 - GRF register 0.  Typically holds control information used when
  * sending messages to other threads.
  *
- * EU or GEN4 EU: The name of the programmable subsystem of the
+ * EU or GFX4 EU: The name of the programmable subsystem of the
  * i965 hardware.  Threads are executed by the EU, the registers
  * described above are part of the EU architecture.
  *
@@ -171,9 +171,9 @@ enum brw_cache_id {
    BRW_MAX_CACHE
 };
 
-enum gen9_astc5x5_wa_tex_type {
-   GEN9_ASTC5X5_WA_TEX_TYPE_ASTC5x5 = 1 << 0,
-   GEN9_ASTC5X5_WA_TEX_TYPE_AUX     = 1 << 1,
+enum gfx9_astc5x5_wa_tex_type {
+   GFX9_ASTC5X5_WA_TEX_TYPE_ASTC5x5 = 1 << 0,
+   GFX9_ASTC5X5_WA_TEX_TYPE_AUX     = 1 << 1,
 };
 
 enum brw_state_id {
@@ -211,7 +211,7 @@ enum brw_state_id {
    BRW_STATE_PUSH_CONSTANT_ALLOCATION,
    BRW_STATE_NUM_SAMPLES,
    BRW_STATE_TEXTURE_BUFFER,
-   BRW_STATE_GEN4_UNIT_STATE,
+   BRW_STATE_GFX4_UNIT_STATE,
    BRW_STATE_CC_VP,
    BRW_STATE_SF_VP,
    BRW_STATE_CLIP_VP,
@@ -303,7 +303,7 @@ enum brw_state_id {
 #define BRW_NEW_PUSH_CONSTANT_ALLOCATION (1ull << BRW_STATE_PUSH_CONSTANT_ALLOCATION)
 #define BRW_NEW_NUM_SAMPLES             (1ull << BRW_STATE_NUM_SAMPLES)
 #define BRW_NEW_TEXTURE_BUFFER          (1ull << BRW_STATE_TEXTURE_BUFFER)
-#define BRW_NEW_GEN4_UNIT_STATE         (1ull << BRW_STATE_GEN4_UNIT_STATE)
+#define BRW_NEW_GFX4_UNIT_STATE         (1ull << BRW_STATE_GFX4_UNIT_STATE)
 #define BRW_NEW_CC_VP                   (1ull << BRW_STATE_CC_VP)
 #define BRW_NEW_SF_VP                   (1ull << BRW_STATE_SF_VP)
 #define BRW_NEW_CLIP_VP                 (1ull << BRW_STATE_CLIP_VP)
@@ -342,7 +342,7 @@ struct brw_ff_gs_prog_data {
    GLuint total_grf;
 
    /**
-    * Gen6 transform feedback: Amount by which the streaming vertex buffer
+    * Gfx6 transform feedback: Amount by which the streaming vertex buffer
     * indices should be incremented each time the GS is invoked.
     */
    unsigned svbi_postincrement_value;
@@ -484,7 +484,7 @@ struct brw_growing_bo {
    enum brw_memory_zone memzone;
 };
 
-struct intel_batchbuffer {
+struct brw_batch {
    /** Current batchbuffer being queued up. */
    struct brw_growing_bo batch;
    /** Current statebuffer being queued up. */
@@ -528,7 +528,7 @@ struct intel_batchbuffer {
    /** Map from batch offset to brw_state_batch data (with DEBUG_BATCH) */
    struct hash_table_u64 *state_batch_sizes;
 
-   struct gen_batch_decode_ctx decoder;
+   struct intel_batch_decode_ctx decoder;
 };
 
 #define BRW_MAX_XFB_STREAMS 4
@@ -640,7 +640,7 @@ struct brw_stage_state
    /** Offset in the program cache to the program */
    uint32_t prog_offset;
 
-   /** Offset in the batchbuffer to Gen4-5 pipelined state (VS/WM/GS_STATE). */
+   /** Offset in the batchbuffer to Gfx4-5 pipelined state (VS/WM/GS_STATE). */
    uint32_t state_offset;
 
    struct brw_bo *push_const_bo; /* NULL if using the batchbuffer */
@@ -682,7 +682,7 @@ enum brw_predicate_state {
 
 struct shader_times;
 
-struct gen_l3_config;
+struct intel_l3_config;
 struct gen_perf;
 
 struct brw_uploader {
@@ -707,7 +707,7 @@ struct brw_context
        *
        * This asks the GPU to write a report of the current OA counter values
        * into @bo at the given offset and containing the given @report_id
-       * which we can cross-reference when parsing the report (gen7+ only).
+       * which we can cross-reference when parsing the report (gfx7+ only).
        */
       void (*emit_mi_report_perf_count)(struct brw_context *brw,
                                         struct brw_bo *bo,
@@ -725,7 +725,7 @@ struct brw_context
    uint32_t hw_ctx;
 
    /**
-    * BO for post-sync nonzero writes for gen6 workaround.
+    * BO for post-sync nonzero writes for gfx6 workaround.
     *
     * This buffer also contains a marker + description of the driver. This
     * buffer is added to all execbufs syscalls so that we can identify the
@@ -761,7 +761,7 @@ struct brw_context
     */
    uint32_t reset_count;
 
-   struct intel_batchbuffer batch;
+   struct brw_batch batch;
 
    struct brw_uploader upload;
 
@@ -1012,12 +1012,12 @@ struct brw_context
    /* BRW_NEW_URB_ALLOCATIONS:
     */
    struct {
-      GLuint vsize;		/* vertex size plus header in urb registers */
-      GLuint gsize;	        /* GS output size in urb registers */
-      GLuint hsize;             /* Tessellation control output size in urb registers */
-      GLuint dsize;             /* Tessellation evaluation output size in urb registers */
-      GLuint csize;		/* constant buffer size in urb registers */
-      GLuint sfsize;		/* setup data size in urb registers */
+      GLuint vsize;  /* vertex size plus header in urb registers */
+      GLuint gsize;  /* GS output size in urb registers */
+      GLuint hsize;  /* Tessellation control output size in urb registers */
+      GLuint dsize;  /* Tessellation evaluation output size in urb registers */
+      GLuint csize;  /* constant buffer size in urb registers */
+      GLuint sfsize; /* setup data size in urb registers */
 
       bool constrained;
 
@@ -1109,7 +1109,7 @@ struct brw_context
       struct brw_ff_gs_prog_data *prog_data;
 
       bool prog_active;
-      /** Offset in the program cache to the CLIP program pre-gen6 */
+      /** Offset in the program cache to the CLIP program pre-gfx6 */
       uint32_t prog_offset;
       uint32_t state_offset;
 
@@ -1125,13 +1125,13 @@ struct brw_context
    struct {
       struct brw_clip_prog_data *prog_data;
 
-      /** Offset in the program cache to the CLIP program pre-gen6 */
+      /** Offset in the program cache to the CLIP program pre-gfx6 */
       uint32_t prog_offset;
 
-      /* Offset in the batch to the CLIP state on pre-gen6. */
+      /* Offset in the batch to the CLIP state on pre-gfx6. */
       uint32_t state_offset;
 
-      /* As of gen6, this is the offset in the batch to the CLIP VP,
+      /* As of gfx6, this is the offset in the batch to the CLIP VP,
        * instead of vp_bo.
        */
       uint32_t vp_offset;
@@ -1148,7 +1148,7 @@ struct brw_context
    struct {
       struct brw_sf_prog_data *prog_data;
 
-      /** Offset in the program cache to the CLIP program pre-gen6 */
+      /** Offset in the program cache to the CLIP program pre-gfx6 */
       uint32_t prog_offset;
       uint32_t state_offset;
       uint32_t vp_offset;
@@ -1159,7 +1159,7 @@ struct brw_context
 
       /**
        * Buffer object used in place of multisampled null render targets on
-       * Gen6.  See brw_emit_null_surface_state().
+       * Gfx6.  See brw_emit_null_surface_state().
        */
       struct brw_bo *multisampled_null_render_target_bo;
 
@@ -1221,7 +1221,7 @@ struct brw_context
    int baseinstance;
 
    struct {
-      const struct gen_l3_config *config;
+      const struct intel_l3_config *config;
    } l3;
 
    struct {
@@ -1243,18 +1243,18 @@ struct brw_context
     */
    enum isl_aux_usage draw_aux_usage[MAX_DRAW_BUFFERS];
 
-   enum gen9_astc5x5_wa_tex_type gen9_astc5x5_wa_tex_mask;
+   enum gfx9_astc5x5_wa_tex_type gfx9_astc5x5_wa_tex_mask;
 
    /** Last rendering scale argument provided to brw_emit_hashing_mode(). */
    unsigned current_hash_scale;
 
    __DRIcontext *driContext;
-   struct intel_screen *screen;
+   struct brw_screen *screen;
    void *mem_ctx;
 };
 
 /* brw_clear.c */
-extern void intelInitClearFuncs(struct dd_function_table *functions);
+extern void brw_init_clear_functions(struct dd_function_table *functions);
 
 /*======================================================================
  * brw_context.c
@@ -1262,33 +1262,33 @@ extern void intelInitClearFuncs(struct dd_function_table *functions);
 extern const char *const brw_vendor_string;
 
 extern const char *
-brw_get_renderer_string(const struct intel_screen *screen);
+brw_get_renderer_string(const struct brw_screen *screen);
 
 enum {
    DRI_CONF_BO_REUSE_DISABLED,
    DRI_CONF_BO_REUSE_ALL
 };
 
-void intel_update_renderbuffers(__DRIcontext *context,
+void brw_update_renderbuffers(__DRIcontext *context,
                                 __DRIdrawable *drawable);
-void intel_prepare_render(struct brw_context *brw);
+void brw_prepare_render(struct brw_context *brw);
 
-void gen9_apply_single_tex_astc5x5_wa(struct brw_context *brw,
+void gfx9_apply_single_tex_astc5x5_wa(struct brw_context *brw,
                                       mesa_format format,
                                       enum isl_aux_usage aux_usage);
 
 void brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering,
                                 bool *draw_aux_buffer_disabled);
 
-void intel_resolve_for_dri2_flush(struct brw_context *brw,
+void brw_resolve_for_dri2_flush(struct brw_context *brw,
                                   __DRIdrawable *drawable);
 
-GLboolean brwCreateContext(gl_api api,
-                           const struct gl_config *mesaVis,
-                           __DRIcontext *driContextPriv,
-                           const struct __DriverContextConfig *ctx_config,
-                           unsigned *error,
-                           void *sharedContextPrivate);
+GLboolean brw_create_context(gl_api api,
+                             const struct gl_config *mesaVis,
+                             __DRIcontext *driContextPriv,
+                             const struct __DriverContextConfig *ctx_config,
+                             unsigned *error,
+                             void *sharedContextPrivate);
 
 /*======================================================================
  * brw_misc_state.c
@@ -1305,7 +1305,7 @@ void brw_init_object_purgeable_functions(struct dd_function_table *functions);
  * brw_queryobj.c
  */
 void brw_init_common_queryobj_functions(struct dd_function_table *functions);
-void gen4_init_queryobj_functions(struct dd_function_table *functions);
+void gfx4_init_queryobj_functions(struct dd_function_table *functions);
 void brw_emit_query_begin(struct brw_context *brw);
 void brw_emit_query_end(struct brw_context *brw);
 void brw_query_counter(struct gl_context *ctx, struct gl_query_object *q);
@@ -1313,8 +1313,8 @@ bool brw_is_query_pipelined(struct brw_query_object *query);
 uint64_t brw_raw_timestamp_delta(struct brw_context *brw,
                                  uint64_t time0, uint64_t time1);
 
-/** gen6_queryobj.c */
-void gen6_init_queryobj_functions(struct dd_function_table *functions);
+/** gfx6_queryobj.c */
+void gfx6_init_queryobj_functions(struct dd_function_table *functions);
 void brw_write_timestamp(struct brw_context *brw, struct brw_bo *bo, int idx);
 void brw_write_depth_count(struct brw_context *brw, struct brw_bo *bo, int idx);
 
@@ -1328,7 +1328,7 @@ void hsw_init_queryobj_functions(struct dd_function_table *functions);
 void brw_init_conditional_render_functions(struct dd_function_table *functions);
 bool brw_check_conditional_render(struct brw_context *brw);
 
-/** intel_batchbuffer.c */
+/** brw_batch.c */
 void brw_load_register_mem(struct brw_context *brw,
                            uint32_t reg,
                            struct brw_bo *bo,
@@ -1363,10 +1363,10 @@ void brw_validate_textures( struct brw_context *brw );
 /*======================================================================
  * brw_program.c
  */
-void brwInitFragProgFuncs( struct dd_function_table *functions );
+void brw_init_frag_prog_functions(struct dd_function_table *functions);
 
 void brw_get_scratch_bo(struct brw_context *brw,
-			struct brw_bo **scratch_bo, int size);
+                        struct brw_bo **scratch_bo, int size);
 void brw_alloc_stage_scratch(struct brw_context *brw,
                              struct brw_stage_state *stage_state,
                              unsigned per_thread_size);
@@ -1424,7 +1424,7 @@ void brw_upload_image_surfaces(struct brw_context *brw,
                                struct brw_stage_prog_data *prog_data);
 
 /* brw_surface_formats.c */
-void intel_screen_init_surface_formats(struct intel_screen *screen);
+void brw_screen_init_surface_formats(struct brw_screen *screen);
 void brw_init_surface_formats(struct brw_context *brw);
 bool brw_render_target_supported(struct brw_context *brw,
                                  struct gl_renderbuffer *rb);
@@ -1434,17 +1434,17 @@ uint32_t brw_depth_format(struct brw_context *brw, mesa_format format);
 void brw_init_performance_queries(struct brw_context *brw);
 
 /* intel_extensions.c */
-extern void intelInitExtensions(struct gl_context *ctx);
+extern void brw_init_extensions(struct gl_context *ctx);
 
 /* intel_state.c */
-extern int intel_translate_shadow_compare_func(GLenum func);
-extern int intel_translate_compare_func(GLenum func);
-extern int intel_translate_stencil_op(GLenum op);
+extern int brw_translate_shadow_compare_func(GLenum func);
+extern int brw_translate_compare_func(GLenum func);
+extern int brw_translate_stencil_op(GLenum op);
 
 /* brw_sync.c */
 void brw_init_syncobj_functions(struct dd_function_table *functions);
 
-/* gen6_sol.c */
+/* gfx6_sol.c */
 struct gl_transform_feedback_object *
 brw_new_transform_feedback(struct gl_context *ctx, GLuint name);
 void
@@ -1452,7 +1452,7 @@ brw_delete_transform_feedback(struct gl_context *ctx,
                               struct gl_transform_feedback_object *obj);
 void
 brw_begin_transform_feedback(struct gl_context *ctx, GLenum mode,
-			     struct gl_transform_feedback_object *obj);
+                             struct gl_transform_feedback_object *obj);
 void
 brw_end_transform_feedback(struct gl_context *ctx,
                            struct gl_transform_feedback_object *obj);
@@ -1470,18 +1470,18 @@ brw_get_transform_feedback_vertex_count(struct gl_context *ctx,
                                         struct gl_transform_feedback_object *obj,
                                         GLuint stream);
 
-/* gen7_sol_state.c */
+/* gfx7_sol_state.c */
 void
-gen7_begin_transform_feedback(struct gl_context *ctx, GLenum mode,
+gfx7_begin_transform_feedback(struct gl_context *ctx, GLenum mode,
                               struct gl_transform_feedback_object *obj);
 void
-gen7_end_transform_feedback(struct gl_context *ctx,
-			    struct gl_transform_feedback_object *obj);
+gfx7_end_transform_feedback(struct gl_context *ctx,
+                            struct gl_transform_feedback_object *obj);
 void
-gen7_pause_transform_feedback(struct gl_context *ctx,
+gfx7_pause_transform_feedback(struct gl_context *ctx,
                               struct gl_transform_feedback_object *obj);
 void
-gen7_resume_transform_feedback(struct gl_context *ctx,
+gfx7_resume_transform_feedback(struct gl_context *ctx,
                                struct gl_transform_feedback_object *obj);
 
 /* hsw_sol.c */
@@ -1521,28 +1521,28 @@ void brw_generate_mipmap(struct gl_context *ctx, GLenum target,
                          struct gl_texture_object *tex_obj);
 
 void
-gen6_get_sample_position(struct gl_context *ctx,
+gfx6_get_sample_position(struct gl_context *ctx,
                          struct gl_framebuffer *fb,
                          GLuint index,
                          GLfloat *result);
 
-/* gen8_multisample_state.c */
-void gen8_emit_3dstate_sample_pattern(struct brw_context *brw);
+/* gfx8_multisample_state.c */
+void gfx8_emit_3dstate_sample_pattern(struct brw_context *brw);
 
-/* gen7_l3_state.c */
+/* gfx7_l3_state.c */
 void brw_emit_l3_state(struct brw_context *brw);
 
-/* gen7_urb.c */
+/* gfx7_urb.c */
 void
-gen7_emit_push_constant_state(struct brw_context *brw, unsigned vs_size,
+gfx7_emit_push_constant_state(struct brw_context *brw, unsigned vs_size,
                               unsigned hs_size, unsigned ds_size,
                               unsigned gs_size, unsigned fs_size);
 
 void
-gen6_upload_urb(struct brw_context *brw, unsigned vs_size,
+gfx6_upload_urb(struct brw_context *brw, unsigned vs_size,
                 bool gs_present, unsigned gs_size);
 void
-gen7_upload_urb(struct brw_context *brw, unsigned vs_size,
+gfx7_upload_urb(struct brw_context *brw, unsigned vs_size,
                 bool gs_present, bool tess_present);
 
 /* brw_reset.c */
@@ -1622,14 +1622,14 @@ brw_emit_depthbuffer(struct brw_context *brw);
 uint32_t get_hw_prim_for_gl_prim(int mode);
 
 void
-gen6_upload_push_constants(struct brw_context *brw,
+gfx6_upload_push_constants(struct brw_context *brw,
                            const struct gl_program *prog,
                            const struct brw_stage_prog_data *prog_data,
                            struct brw_stage_state *stage_state);
 
 bool
-gen9_use_linear_1d_layout(const struct brw_context *brw,
-                          const struct intel_mipmap_tree *mt);
+gfx9_use_linear_1d_layout(const struct brw_context *brw,
+                          const struct brw_mipmap_tree *mt);
 
 /* brw_queryformat.c */
 void brw_query_internal_format(struct gl_context *ctx, GLenum target,

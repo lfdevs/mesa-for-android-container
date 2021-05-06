@@ -56,8 +56,8 @@ pack_header = """%(license)s
 #define __gen_validate_value(x)
 #endif
 
-#ifndef __gen_field_functions
-#define __gen_field_functions
+#ifndef __intel_field_functions
+#define __intel_field_functions
 
 #ifdef NDEBUG
 #define NDEBUG_UNUSED __attribute__((unused))
@@ -65,7 +65,7 @@ pack_header = """%(license)s
 #define NDEBUG_UNUSED
 #endif
 
-union __gen_value {
+union __intel_value {
    float f;
    uint32_t dw;
 };
@@ -128,7 +128,7 @@ __gen_offset(uint64_t v, NDEBUG_UNUSED uint32_t start, NDEBUG_UNUSED uint32_t en
 static inline __attribute__((always_inline)) uint64_t
 __gen_address(__gen_user_data *data, void *location,
               __gen_address_type address, uint32_t delta,
-              NDEBUG_UNUSED uint32_t start, uint32_t end)
+              __attribute__((unused)) uint32_t start, uint32_t end)
 {
    uint64_t addr_u64 = __gen_combine_address(data, location, address, delta);
    if (end == 31) {
@@ -145,7 +145,7 @@ static inline __attribute__((always_inline)) uint32_t
 __gen_float(float v)
 {
    __gen_validate_value(v);
-   return ((union __gen_value) { .f = (v) }).dw;
+   return ((union __intel_value) { .f = (v) }).dw;
 }
 
 static inline __attribute__((always_inline)) uint64_t
@@ -516,8 +516,8 @@ class Parser(object):
 
     def gen_prefix(self, name):
         if name[0] == "_":
-            return 'GEN%s%s' % (self.gen, name)
-        return 'GEN%s_%s' % (self.gen, name)
+            return 'GFX%s%s' % (self.gen, name)
+        return 'GFX%s_%s' % (self.gen, name)
 
     def gen_guard(self):
         return self.gen_prefix("PACK_H")

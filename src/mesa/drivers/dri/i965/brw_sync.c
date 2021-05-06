@@ -43,7 +43,7 @@
 #include "util/os_file.h"
 
 #include "brw_context.h"
-#include "intel_batchbuffer.h"
+#include "brw_batch.h"
 
 struct brw_fence {
    struct brw_context *brw;
@@ -138,7 +138,7 @@ brw_fence_insert_locked(struct brw_context *brw, struct brw_fence *fence)
     * compositor may read the incomplete framebuffer instead.
     */
    if (driDrawable)
-      intel_resolve_for_dri2_flush(brw, driDrawable);
+      brw_resolve_for_dri2_flush(brw, driDrawable);
    brw_emit_mi_flush(brw);
 
    switch (fence->type) {
@@ -149,7 +149,7 @@ brw_fence_insert_locked(struct brw_context *brw, struct brw_fence *fence)
       fence->batch_bo = brw->batch.batch.bo;
       brw_bo_reference(fence->batch_bo);
 
-      if (intel_batchbuffer_flush(brw) < 0) {
+      if (brw_batch_flush(brw) < 0) {
          brw_bo_unreference(fence->batch_bo);
          fence->batch_bo = NULL;
          return false;
@@ -162,19 +162,19 @@ brw_fence_insert_locked(struct brw_context *brw, struct brw_fence *fence)
          /* Create an out-fence that signals after all pending commands
           * complete.
           */
-         if (intel_batchbuffer_flush_fence(brw, -1, &fence->sync_fd) < 0)
+         if (brw_batch_flush_fence(brw, -1, &fence->sync_fd) < 0)
             return false;
          assert(fence->sync_fd != -1);
       } else {
          /* Wait on the in-fence before executing any subsequently submitted
           * commands.
           */
-         if (intel_batchbuffer_flush(brw) < 0)
+         if (brw_batch_flush(brw) < 0)
             return false;
 
          /* Emit a dummy batch just for the fence. */
          brw_emit_mi_flush(brw);
-         if (intel_batchbuffer_flush_fence(brw, fence->sync_fd, NULL) < 0)
+         if (brw_batch_flush_fence(brw, fence->sync_fd, NULL) < 0)
             return false;
       }
       break;
@@ -204,7 +204,7 @@ brw_fence_has_completed_locked(struct brw_fence *fence)
    switch (fence->type) {
    case BRW_FENCE_TYPE_BO_WAIT:
       if (!fence->batch_bo) {
-         /* There may be no batch if intel_batchbuffer_flush() failed. */
+         /* There may be no batch if brw_batch_flush() failed. */
          return false;
       }
 
@@ -255,7 +255,7 @@ brw_fence_client_wait_locked(struct brw_context *brw, struct brw_fence *fence,
    switch (fence->type) {
    case BRW_FENCE_TYPE_BO_WAIT:
       if (!fence->batch_bo) {
-         /* There may be no batch if intel_batchbuffer_flush() failed. */
+         /* There may be no batch if brw_batch_flush() failed. */
          return false;
       }
 
@@ -474,7 +474,7 @@ brw_dri_server_wait_sync(__DRIcontext *ctx, void *_fence, unsigned flags)
 static unsigned
 brw_dri_get_capabilities(__DRIscreen *dri_screen)
 {
-   struct intel_screen *screen = dri_screen->driverPrivate;
+   struct brw_screen *screen = dri_screen->driverPrivate;
    unsigned caps = 0;
 
    if (screen->has_exec_fence)
@@ -536,7 +536,7 @@ brw_dri_get_fence_fd(__DRIscreen *dri_screen, void *_fence)
    return fd;
 }
 
-const __DRI2fenceExtension intelFenceExtension = {
+const __DRI2fenceExtension brwFenceExtension = {
    .base = { __DRI2_FENCE, 2 },
 
    .create_fence = brw_dri_create_fence,

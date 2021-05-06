@@ -25,7 +25,7 @@
 #define BRW_BLORP_H
 
 #include "blorp/blorp.h"
-#include "intel_mipmap_tree.h"
+#include "brw_mipmap_tree.h"
 #include "program/prog_instruction.h"
 
 #ifdef __cplusplus
@@ -36,10 +36,10 @@ void brw_blorp_init(struct brw_context *brw);
 
 void
 brw_blorp_blit_miptrees(struct brw_context *brw,
-                        struct intel_mipmap_tree *src_mt,
+                        struct brw_mipmap_tree *src_mt,
                         unsigned src_level, unsigned src_layer,
                         mesa_format src_format, int src_swizzle,
-                        struct intel_mipmap_tree *dst_mt,
+                        struct brw_mipmap_tree *dst_mt,
                         unsigned dst_level, unsigned dst_layer,
                         mesa_format dst_format,
                         float src_x0, float src_y0,
@@ -51,9 +51,9 @@ brw_blorp_blit_miptrees(struct brw_context *brw,
 
 void
 brw_blorp_copy_miptrees(struct brw_context *brw,
-                        struct intel_mipmap_tree *src_mt,
+                        struct brw_mipmap_tree *src_mt,
                         unsigned src_level, unsigned src_logical_layer,
-                        struct intel_mipmap_tree *dst_mt,
+                        struct brw_mipmap_tree *dst_mt,
                         unsigned dst_level, unsigned dst_logical_layer,
                         unsigned src_x, unsigned src_y,
                         unsigned dst_x, unsigned dst_y,
@@ -69,7 +69,7 @@ brw_blorp_copy_buffers(struct brw_context *brw,
 
 bool
 brw_blorp_upload_miptree(struct brw_context *brw,
-                         struct intel_mipmap_tree *dst_mt,
+                         struct brw_mipmap_tree *dst_mt,
                          mesa_format dst_format,
                          uint32_t level, uint32_t x, uint32_t y, uint32_t z,
                          uint32_t width, uint32_t height, uint32_t depth,
@@ -79,7 +79,7 @@ brw_blorp_upload_miptree(struct brw_context *brw,
 
 bool
 brw_blorp_download_miptree(struct brw_context *brw,
-                           struct intel_mipmap_tree *src_mt,
+                           struct brw_mipmap_tree *src_mt,
                            mesa_format src_format, uint32_t src_swizzle,
                            uint32_t level, uint32_t x, uint32_t y, uint32_t z,
                            uint32_t width, uint32_t height, uint32_t depth,
@@ -97,37 +97,37 @@ brw_blorp_clear_depth_stencil(struct brw_context *brw,
 
 void
 brw_blorp_resolve_color(struct brw_context *brw,
-                        struct intel_mipmap_tree *mt,
+                        struct brw_mipmap_tree *mt,
                         unsigned level, unsigned layer,
                         enum isl_aux_op resolve_op);
 
 void
 brw_blorp_mcs_partial_resolve(struct brw_context *brw,
-                              struct intel_mipmap_tree *mt,
+                              struct brw_mipmap_tree *mt,
                               uint32_t start_layer, uint32_t num_layers);
 
 void
-intel_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
-               unsigned int level, unsigned int start_layer,
-               unsigned int num_layers, enum isl_aux_op op);
+brw_hiz_exec(struct brw_context *brw, struct brw_mipmap_tree *mt,
+             unsigned int level, unsigned int start_layer,
+             unsigned int num_layers, enum isl_aux_op op);
 
-void gen4_blorp_exec(struct blorp_batch *batch,
+void gfx4_blorp_exec(struct blorp_batch *batch,
                      const struct blorp_params *params);
-void gen45_blorp_exec(struct blorp_batch *batch,
+void gfx45_blorp_exec(struct blorp_batch *batch,
                       const struct blorp_params *params);
-void gen5_blorp_exec(struct blorp_batch *batch,
+void gfx5_blorp_exec(struct blorp_batch *batch,
                      const struct blorp_params *params);
-void gen6_blorp_exec(struct blorp_batch *batch,
+void gfx6_blorp_exec(struct blorp_batch *batch,
                      const struct blorp_params *params);
-void gen7_blorp_exec(struct blorp_batch *batch,
+void gfx7_blorp_exec(struct blorp_batch *batch,
                      const struct blorp_params *params);
-void gen75_blorp_exec(struct blorp_batch *batch,
+void gfx75_blorp_exec(struct blorp_batch *batch,
                       const struct blorp_params *params);
-void gen8_blorp_exec(struct blorp_batch *batch,
+void gfx8_blorp_exec(struct blorp_batch *batch,
                      const struct blorp_params *params);
-void gen9_blorp_exec(struct blorp_batch *batch,
+void gfx9_blorp_exec(struct blorp_batch *batch,
                      const struct blorp_params *params);
-void gen11_blorp_exec(struct blorp_batch *batch,
+void gfx11_blorp_exec(struct blorp_batch *batch,
                       const struct blorp_params *params);
 
 #ifdef __cplusplus

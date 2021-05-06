@@ -1,0 +1,32 @@
+traces-db:
+  download-url: "https://minio-packet.freedesktop.org/mesa-tracie-public/"
+
+traces:
+  - path: glmark2/desktop-blur-radius=5:effect=blur:passes=1:separable=true:windows=4.rdc
+    expectations:
+      - device: gl-virgl
+        checksum: 8867f3a41f180626d0d4b7661ff5c0f4
+  - path: glmark2/jellyfish.rdc
+    expectations:
+      - device: gl-virgl
+        checksum: ebaa1e2d04d7dfe5a91499510722c46e
+  - path: glxgears/glxgears-2.trace
+    expectations:
+      - device: gl-virgl
+        checksum: f8eba0fec6e3e0af9cb09844bc73bdc8
+  - path: gputest/furmark.trace
+    expectations:
+      - device: gl-virgl
+        checksum: 87ffd45be95f2d55f82325c86ce32f20
+  - path: gputest/pixmark-piano.trace
+    expectations:
+      - device: gl-virgl
+        checksum: 8293e59b818715ddf1c23e9f60b17851
+  - path: gputest/triangle.trace
+    expectations:
+      - device: gl-virgl
+        checksum: 848436d1a2448bdc76fd6220382d8606
+  - path: humus/Portals.trace
+    expectations:
+      - device: gl-virgl
+        checksum: 6d78eed6749f01cc5625dec0ad129c66

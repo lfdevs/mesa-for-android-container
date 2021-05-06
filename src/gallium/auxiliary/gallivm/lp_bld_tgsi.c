@@ -377,11 +377,11 @@ lp_build_emit_fetch_src(
    if (reg->Register.Absolute) {
       switch (stype) {
       case TGSI_TYPE_FLOAT:
-      case TGSI_TYPE_DOUBLE:
       case TGSI_TYPE_UNTYPED:
           /* modifiers on movs assume data is float */
          res = lp_build_abs(&bld_base->base, res);
          break;
+      case TGSI_TYPE_DOUBLE:
       case TGSI_TYPE_UNSIGNED:
       case TGSI_TYPE_SIGNED:
       case TGSI_TYPE_UNSIGNED64:

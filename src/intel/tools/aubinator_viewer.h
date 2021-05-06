@@ -3,8 +3,8 @@
 
 #include "imgui/imgui.h"
 
-#include "common/gen_decoder.h"
-#include "common/gen_disasm.h"
+#include "common/intel_decoder.h"
+#include "common/intel_disasm.h"
 
 struct aub_viewer_cfg {
    ImColor clear_color;
@@ -58,7 +58,7 @@ struct aub_decode_urb_stage_state {
 };
 
 struct aub_viewer_decode_ctx {
-   struct gen_batch_decode_bo (*get_bo)(void *user_data, bool ppgtt, uint64_t address);
+   struct intel_batch_decode_bo (*get_bo)(void *user_data, bool ppgtt, uint64_t address);
    unsigned (*get_state_size)(void *user_data,
                               uint32_t offset_from_dynamic_state_base_addr);
 
@@ -69,7 +69,7 @@ struct aub_viewer_decode_ctx {
    void *user_data;
 
    const struct gen_device_info *devinfo;
-   struct gen_spec *spec;
+   struct intel_spec *spec;
    enum drm_i915_gem_engine_class engine;
 
    struct aub_viewer_cfg *cfg;
@@ -90,8 +90,8 @@ void aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
                                 struct aub_viewer_cfg *cfg,
                                 struct aub_viewer_decode_cfg *decode_cfg,
                                 const struct gen_device_info *devinfo,
-                                struct gen_spec *spec,
-                                struct gen_batch_decode_bo (*get_bo)(void *, bool, uint64_t),
+                                struct intel_spec *spec,
+                                struct intel_batch_decode_bo (*get_bo)(void *, bool, uint64_t),
                                 unsigned (*get_state_size)(void *, uint32_t),
                                 void *user_data);
 

@@ -224,7 +224,7 @@ RegisterSet::release(DataFile f, int32_t reg, unsigned int size)
 class RegAlloc
 {
 public:
-   RegAlloc(Program *program) : prog(program), sequence(0) { }
+   RegAlloc(Program *program) : prog(program), func(NULL), sequence(0) { }
 
    bool exec();
    bool execFunc();
@@ -251,6 +251,7 @@ private:
 
    class InsertConstraintsPass : public Pass {
    public:
+      InsertConstraintsPass() : targ(NULL) { }
       bool exec(Function *func);
    private:
       virtual bool visit(BasicBlock *);
@@ -2573,6 +2574,13 @@ RegAlloc::InsertConstraintsPass::visit(BasicBlock *bb)
           i->op == OP_MERGE ||
           i->op == OP_SPLIT) {
          constrList.push_back(i);
+      } else
+      if (i->op == OP_ATOM && i->subOp == NV50_IR_SUBOP_ATOM_CAS &&
+          targ->getChipset() < 0xc0) {
+         // Like a hazard, but for a def.
+         Instruction *nop = new_Instruction(func, OP_NOP, i->dType);
+         nop->setSrc(0, i->getDef(0));
+         i->bb->insertAfter(i, nop);
       }
    }
    return true;

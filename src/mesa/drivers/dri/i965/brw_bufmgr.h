@@ -31,8 +31,8 @@
  * Public definitions of Intel-specific bufmgr functions.
  */
 
-#ifndef INTEL_BUFMGR_H
-#define INTEL_BUFMGR_H
+#ifndef BRW_BUFMGR_H
+#define BRW_BUFMGR_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -402,4 +402,4 @@ bool brw_using_softpin(struct brw_bufmgr *bufmgr);
 #if defined(__cplusplus)
 }
 #endif
-#endif /* INTEL_BUFMGR_H */
+#endif /* BRW_BUFMGR_H */

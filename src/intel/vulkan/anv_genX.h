@@ -46,19 +46,21 @@ extern const uint32_t genX(vk_to_gen_compare_op)[];
 
 extern const uint32_t genX(vk_to_gen_stencil_op)[];
 
+void genX(init_physical_device_state)(struct anv_physical_device *device);
+
 VkResult genX(init_device_state)(struct anv_device *device);
 
 void genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer);
 
 void genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer);
 
-void genX(cmd_buffer_emit_gen7_depth_flush)(struct anv_cmd_buffer *cmd_buffer);
+void genX(cmd_buffer_emit_gfx7_depth_flush)(struct anv_cmd_buffer *cmd_buffer);
 
-void genX(cmd_buffer_set_binding_for_gen8_vb_flush)(struct anv_cmd_buffer *cmd_buffer,
+void genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(struct anv_cmd_buffer *cmd_buffer,
                                                     int vb_index,
                                                     struct anv_address vb_address,
                                                     uint32_t vb_size);
-void genX(cmd_buffer_update_dirty_vbs_for_gen8_vb_flush)(struct anv_cmd_buffer *cmd_buffer,
+void genX(cmd_buffer_update_dirty_vbs_for_gfx8_vb_flush)(struct anv_cmd_buffer *cmd_buffer,
                                                          uint32_t access_type,
                                                          uint64_t vb_used);
 
@@ -69,8 +71,12 @@ void genX(cmd_buffer_emit_hashing_mode)(struct anv_cmd_buffer *cmd_buffer,
 void genX(flush_pipeline_select_3d)(struct anv_cmd_buffer *cmd_buffer);
 void genX(flush_pipeline_select_gpgpu)(struct anv_cmd_buffer *cmd_buffer);
 
+void genX(emit_l3_config)(struct anv_batch *batch,
+                          const struct anv_device *device,
+                          const struct intel_l3_config *cfg);
+
 void genX(cmd_buffer_config_l3)(struct anv_cmd_buffer *cmd_buffer,
-                                const struct gen_l3_config *cfg);
+                                const struct intel_l3_config *cfg);
 
 void genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer);
 void genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer);
@@ -92,10 +98,16 @@ void genX(cmd_emit_conditional_render_predicate)(struct anv_cmd_buffer *cmd_buff
 
 void
 genX(emit_urb_setup)(struct anv_device *device, struct anv_batch *batch,
-                     const struct gen_l3_config *l3_config,
+                     const struct intel_l3_config *l3_config,
                      VkShaderStageFlags active_stages,
                      const unsigned entry_size[4],
-                     enum gen_urb_deref_block_size *deref_block_size);
+                     enum intel_urb_deref_block_size *deref_block_size);
+
+void genX(emit_multisample)(struct anv_batch *batch, uint32_t samples,
+                            const VkSampleLocationEXT *locations);
+
+void genX(emit_sample_pattern)(struct anv_batch *batch, uint32_t samples,
+                               const VkSampleLocationEXT *locations);
 
 void genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
                                 struct anv_address dst, struct anv_address src,
@@ -103,3 +115,7 @@ void genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
 
 void genX(blorp_exec)(struct blorp_batch *batch,
                       const struct blorp_params *params);
+
+void genX(cmd_emit_timestamp)(struct anv_batch *batch,
+                              struct anv_bo *bo,
+                              uint32_t offset);

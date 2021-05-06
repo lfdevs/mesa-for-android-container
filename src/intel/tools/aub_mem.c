@@ -21,6 +21,7 @@
  * IN THE SOFTWARE.
  */
 
+#include <errno.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -31,7 +32,7 @@
 
 struct bo_map {
    struct list_head link;
-   struct gen_batch_decode_bo bo;
+   struct intel_batch_decode_bo bo;
    bool unmap_after_use;
    bool ppgtt;
 };
@@ -51,7 +52,7 @@ struct phys_mem {
 };
 
 static void
-add_gtt_bo_map(struct aub_mem *mem, struct gen_batch_decode_bo bo, bool ppgtt, bool unmap_after_use)
+add_gtt_bo_map(struct aub_mem *mem, struct intel_batch_decode_bo bo, bool ppgtt, bool unmap_after_use)
 {
    struct bo_map *m = calloc(1, sizeof(*m));
 
@@ -136,6 +137,23 @@ cmp_phys_mem(const struct rb_node *node, const void *addr)
    return cmp_uint64(mem->phys_addr, *(uint64_t *)addr);
 }
 
+static void
+check_mmap_result(const void *res)
+{
+   if (res != MAP_FAILED)
+      return;
+
+   if (errno == ENOMEM) {
+      fprintf(stderr,
+            "Not enough memory available or maximum number of mappings reached. "
+            "Consider increasing sysctl vm.max_map_count.\n");
+   } else {
+      perror("mmap");
+   }
+
+   abort();
+}
+
 static struct phys_mem *
 ensure_phys_mem(struct aub_mem *mem, uint64_t phys_addr)
 {
@@ -151,7 +169,7 @@ ensure_phys_mem(struct aub_mem *mem, uint64_t phys_addr)
 
       new_mem->data = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED,
                            mem->mem_fd, new_mem->fd_offset);
-      assert(new_mem->data != MAP_FAILED);
+      check_mmap_result(new_mem->data);
 
       rb_tree_insert_at(&mem->mem, node, &new_mem->node, cmp < 0);
       node = &new_mem->node;
@@ -178,7 +196,7 @@ aub_mem_local_write(void *_mem, uint64_t address,
                     const void *data, uint32_t size)
 {
    struct aub_mem *mem = _mem;
-   struct gen_batch_decode_bo bo = {
+   struct intel_batch_decode_bo bo = {
       .map = data,
       .addr = address,
       .size = size,
@@ -239,11 +257,11 @@ aub_mem_ggtt_write(void *_mem, uint64_t virt_address,
    }
 }
 
-struct gen_batch_decode_bo
+struct intel_batch_decode_bo
 aub_mem_get_ggtt_bo(void *_mem, uint64_t address)
 {
    struct aub_mem *mem = _mem;
-   struct gen_batch_decode_bo bo = {0};
+   struct intel_batch_decode_bo bo = {0};
 
    list_for_each_entry(struct bo_map, i, &mem->maps, link)
       if (!i->ppgtt && i->bo.addr <= address && i->bo.addr + i->bo.size > address)
@@ -268,7 +286,7 @@ aub_mem_get_ggtt_bo(void *_mem, uint64_t address)
    bo.addr = MIN2(address, start->virt_addr);
    bo.size = last->virt_addr - bo.addr + 4096;
    bo.map = mmap(NULL, bo.size, PROT_READ, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-   assert(bo.map != MAP_FAILED);
+   check_mmap_result(bo.map);
 
    for (struct ggtt_entry *i = start;
         i;
@@ -280,10 +298,9 @@ aub_mem_get_ggtt_bo(void *_mem, uint64_t address)
          continue;
 
       uint32_t map_offset = i->virt_addr - address;
-      ASSERTED void *res =
-            mmap((uint8_t *)bo.map + map_offset, 4096, PROT_READ,
+      void *res = mmap((uint8_t *)bo.map + map_offset, 4096, PROT_READ,
                   MAP_SHARED | MAP_FIXED, mem->mem_fd, phys_mem->fd_offset);
-      assert(res != MAP_FAILED);
+      check_mmap_result(res);
    }
 
    add_gtt_bo_map(mem, bo, false, true);
@@ -316,11 +333,11 @@ ppgtt_mapped(struct aub_mem *mem, uint64_t pml4, uint64_t address)
    return ppgtt_walk(mem, pml4, address) != NULL;
 }
 
-struct gen_batch_decode_bo
+struct intel_batch_decode_bo
 aub_mem_get_ppgtt_bo(void *_mem, uint64_t address)
 {
    struct aub_mem *mem = _mem;
-   struct gen_batch_decode_bo bo = {0};
+   struct intel_batch_decode_bo bo = {0};
 
    list_for_each_entry(struct bo_map, i, &mem->maps, link)
       if (i->ppgtt && i->bo.addr <= address && i->bo.addr + i->bo.size > address)
@@ -346,10 +363,9 @@ aub_mem_get_ppgtt_bo(void *_mem, uint64_t address)
    for (uint64_t page = address; page < end; page += 4096) {
       struct phys_mem *phys_mem = ppgtt_walk(mem, mem->pml4, page);
 
-      ASSERTED void *res =
-            mmap((uint8_t *)bo.map + (page - bo.addr), 4096, PROT_READ,
+      void *res = mmap((uint8_t *)bo.map + (page - bo.addr), 4096, PROT_READ,
                   MAP_SHARED | MAP_FIXED, mem->mem_fd, phys_mem->fd_offset);
-      assert(res != MAP_FAILED);
+      check_mmap_result(res);
    }
 
    add_gtt_bo_map(mem, bo, true, true);
@@ -391,29 +407,29 @@ aub_mem_fini(struct aub_mem *mem)
    mem->mem_fd = -1;
 }
 
-struct gen_batch_decode_bo
+struct intel_batch_decode_bo
 aub_mem_get_phys_addr_data(struct aub_mem *mem, uint64_t phys_addr)
 {
    struct phys_mem *page = search_phys_mem(mem, phys_addr);
    return page ?
-      (struct gen_batch_decode_bo) { .map = page->data, .addr = page->phys_addr, .size = 4096 } :
-      (struct gen_batch_decode_bo) {};
+      (struct intel_batch_decode_bo) { .map = page->data, .addr = page->phys_addr, .size = 4096 } :
+      (struct intel_batch_decode_bo) {};
 }
 
-struct gen_batch_decode_bo
+struct intel_batch_decode_bo
 aub_mem_get_ppgtt_addr_data(struct aub_mem *mem, uint64_t virt_addr)
 {
    struct phys_mem *page = ppgtt_walk(mem, mem->pml4, virt_addr);
    return page ?
-      (struct gen_batch_decode_bo) { .map = page->data, .addr = virt_addr & ~((1ULL << 12) - 1), .size = 4096 } :
-      (struct gen_batch_decode_bo) {};
+      (struct intel_batch_decode_bo) { .map = page->data, .addr = virt_addr & ~((1ULL << 12) - 1), .size = 4096 } :
+      (struct intel_batch_decode_bo) {};
 }
 
-struct gen_batch_decode_bo
+struct intel_batch_decode_bo
 aub_mem_get_ppgtt_addr_aub_data(struct aub_mem *mem, uint64_t virt_addr)
 {
    struct phys_mem *page = ppgtt_walk(mem, mem->pml4, virt_addr);
    return page ?
-      (struct gen_batch_decode_bo) { .map = page->aub_data, .addr = virt_addr & ~((1ULL << 12) - 1), .size = 4096 } :
-      (struct gen_batch_decode_bo) {};
+      (struct intel_batch_decode_bo) { .map = page->aub_data, .addr = virt_addr & ~((1ULL << 12) - 1), .size = 4096 } :
+      (struct intel_batch_decode_bo) {};
 }

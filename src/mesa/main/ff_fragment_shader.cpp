@@ -179,9 +179,8 @@ static GLbitfield filter_fp_input_mask( GLbitfield fp_inputs,
       /* Fixed function vertex logic */
       GLbitfield possible_inputs = 0;
 
-      /* _NEW_VARYING_VP_INPUTS */
-      GLbitfield varying_inputs = ctx->varying_vp_inputs;
-      /* We only update ctx->varying_vp_inputs when in VP_MODE_FF _VPMode */
+      GLbitfield varying_inputs = ctx->VertexProgram._VaryingInputs;
+      /* We only update ctx->VertexProgram._VaryingInputs when in VP_MODE_FF _VPMode */
       assert(VP_MODE_FF == ctx->VertexProgram._VPMode);
 
       /* These get generated in the setup routine regardless of the
@@ -193,7 +192,6 @@ static GLbitfield filter_fp_input_mask( GLbitfield fp_inputs,
          possible_inputs = VARYING_BITS_TEX_ANY;
       }
       else {
-         /* _NEW_TEXTURE_STATE */
          const GLbitfield possible_tex_inputs =
                ctx->Texture._TexGenEnabled |
                ctx->Texture._TexMatEnabled |
@@ -205,7 +203,6 @@ static GLbitfield filter_fp_input_mask( GLbitfield fp_inputs,
       /* First look at what values may be computed by the generated
        * vertex program:
        */
-      /* _NEW_LIGHT */
       if (ctx->Light.Enabled) {
          possible_inputs |= VARYING_BIT_COL0;
 
@@ -267,7 +264,7 @@ static GLuint make_state_key( struct gl_context *ctx,  struct state_key *key )
 
    memset(key, 0, sizeof(*key));
 
-   /* _NEW_TEXTURE_OBJECT */
+   /* _NEW_TEXTURE_OBJECT | _NEW_TEXTURE_STATE */
    mask = ctx->Texture._EnabledCoordUnits;
    int i = -1;
    while (mask) {
@@ -305,7 +302,7 @@ static GLuint make_state_key( struct gl_context *ctx,  struct state_key *key )
 
    key->nr_enabled_units = i + 1;
 
-   /* _NEW_LIGHT | _NEW_FOG */
+   /* _NEW_FOG */
    if (texenv_doing_secondary_color(ctx)) {
       key->separate_specular = 1;
       inputs_referenced |= VARYING_BIT_COL1;
@@ -356,14 +353,13 @@ static ir_rvalue *
 get_current_attrib(texenv_fragment_program *p, GLuint attrib)
 {
    ir_variable *current;
-   ir_rvalue *val;
+   char name[128];
 
-   current = p->shader->symbols->get_variable("gl_CurrentAttribFragMESA");
+   snprintf(name, sizeof(name), "gl_CurrentAttribFrag%uMESA", attrib);
+
+   current = p->shader->symbols->get_variable(name);
    assert(current);
-   current->data.max_array_access = MAX2(current->data.max_array_access, (int)attrib);
-   val = new(p->mem_ctx) ir_dereference_variable(current);
-   ir_rvalue *index = new(p->mem_ctx) ir_constant(attrib);
-   return new(p->mem_ctx) ir_dereference_array(val, index);
+   return new(p->mem_ctx) ir_dereference_variable(current);
 }
 
 static ir_rvalue *

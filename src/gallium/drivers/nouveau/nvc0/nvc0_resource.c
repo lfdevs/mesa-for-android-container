@@ -9,13 +9,11 @@ static struct pipe_resource *
 nvc0_resource_create(struct pipe_screen *screen,
                      const struct pipe_resource *templ)
 {
-   const uint64_t modifier = DRM_FORMAT_MOD_INVALID;
-
    switch (templ->target) {
    case PIPE_BUFFER:
       return nouveau_buffer_create(screen, templ);
    default:
-      return nvc0_miptree_create(screen, templ, &modifier, 1);
+      return nvc0_miptree_create(screen, templ, NULL, 0);
    }
 }
 
@@ -32,42 +30,43 @@ nvc0_resource_create_with_modifiers(struct pipe_screen *screen,
    }
 }
 
-static const uint64_t nvc0_supported_modifiers[] = {
-   DRM_FORMAT_MOD_LINEAR,
-   DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_ONE_GOB,
-   DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_TWO_GOB,
-   DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_FOUR_GOB,
-   DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_EIGHT_GOB,
-   DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_SIXTEEN_GOB,
-   DRM_FORMAT_MOD_NVIDIA_16BX2_BLOCK_THIRTYTWO_GOB,
-};
-
 static void
 nvc0_query_dmabuf_modifiers(struct pipe_screen *screen,
                             enum pipe_format format, int max,
                             uint64_t *modifiers, unsigned int *external_only,
                             int *count)
 {
+   const int s = nouveau_screen(screen)->tegra_sector_layout ? 0 : 1;
+   const uint32_t uc_kind =
+      nvc0_choose_tiled_storage_type(screen, format, 0, false);
+   const uint32_t num_uc = uc_kind ? 6 : 0; /* max block height = 32 GOBs */
+   const int num_supported = num_uc + 1; /* LINEAR is always supported */
+   const uint32_t kind_gen = nvc0_get_kind_generation(screen);
    int i, num = 0;
 
-   if (max > ARRAY_SIZE(nvc0_supported_modifiers))
-      max = ARRAY_SIZE(nvc0_supported_modifiers);
+   if (max > num_supported)
+      max = num_supported;
 
    if (!max) {
-      max = ARRAY_SIZE(nvc0_supported_modifiers);
+      max = num_supported;
       external_only = NULL;
       modifiers = NULL;
    }
 
-   for (i = 0; i < max; i++) {
-      if (modifiers)
-         modifiers[num] = nvc0_supported_modifiers[i];
+#define NVC0_ADD_MOD(m) do { \
+   if (modifiers) modifiers[num] = m; \
+   if (external_only) external_only[num] = 0; \
+   num++; \
+} while (0)
 
-      if (external_only)
-         external_only[num] = 0;
+   for (i = 0; i < max && i < num_uc; i++)
+      NVC0_ADD_MOD(DRM_FORMAT_MOD_NVIDIA_BLOCK_LINEAR_2D(0, s, kind_gen,
+                                                         uc_kind, 5 - i));
 
-      num++;
-   }
+   if (i < max)
+      NVC0_ADD_MOD(DRM_FORMAT_MOD_LINEAR);
+
+#undef NVC0_ADD_MOD
 
    *count = num;
 }
@@ -77,10 +76,22 @@ nvc0_is_dmabuf_modifier_supported(struct pipe_screen *screen,
                                   uint64_t modifier, enum pipe_format format,
                                   bool *external_only)
 {
+   const int s = nouveau_screen(screen)->tegra_sector_layout ? 0 : 1;
+   const uint32_t uc_kind =
+      nvc0_choose_tiled_storage_type(screen, format, 0, false);
+   const uint32_t num_uc = uc_kind ? 6 : 0; /* max block height = 32 GOBs */
+   const uint32_t kind_gen = nvc0_get_kind_generation(screen);
    int i;
 
-   for (i = 0; i < ARRAY_SIZE(nvc0_supported_modifiers); i++) {
-      if (nvc0_supported_modifiers[i] == modifier) {
+   if (modifier == DRM_FORMAT_MOD_LINEAR) {
+      if (external_only)
+         *external_only = false;
+
+      return true;
+   }
+
+   for (i = 0; i < num_uc; i++) {
+      if (DRM_FORMAT_MOD_NVIDIA_BLOCK_LINEAR_2D(0, s, kind_gen, uc_kind, i) == modifier) {
          if (external_only)
             *external_only = false;
 

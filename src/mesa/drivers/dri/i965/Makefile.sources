@@ -62,103 +62,103 @@ i965_FILES = \
 	brw_wm.c \
 	brw_wm.h \
 	brw_wm_surface_state.c \
-	gen4_blorp_exec.h \
-	gen6_clip_state.c \
-	gen6_constant_state.c \
-	gen6_multisample_state.c \
-	gen6_queryobj.c \
-	gen6_sampler_state.c \
-	gen6_sol.c \
-	gen6_urb.c \
-	gen7_l3_state.c \
-	gen7_sol_state.c \
-	gen7_urb.c \
-	gen8_depth_state.c \
-	gen8_multisample_state.c \
+	gfx4_blorp_exec.h \
+	gfx6_clip_state.c \
+	gfx6_constant_state.c \
+	gfx6_multisample_state.c \
+	gfx6_queryobj.c \
+	gfx6_sampler_state.c \
+	gfx6_sol.c \
+	gfx6_urb.c \
+	gfx7_l3_state.c \
+	gfx7_sol_state.c \
+	gfx7_urb.c \
+	gfx8_depth_state.c \
+	gfx8_multisample_state.c \
 	hsw_queryobj.c \
 	hsw_sol.c \
-	intel_batchbuffer.c \
-	intel_batchbuffer.h \
-	intel_blit.c \
-	intel_blit.h \
-	intel_buffer_objects.c \
-	intel_buffer_objects.h \
-	intel_buffers.c \
-	intel_buffers.h \
-	intel_copy_image.c \
-	intel_extensions.c \
-	intel_fbo.c \
-	intel_fbo.h \
-	intel_image.h \
-	intel_mipmap_tree.c \
-	intel_mipmap_tree.h \
-	intel_pixel_bitmap.c \
-	intel_pixel.c \
-	intel_pixel_copy.c \
-	intel_pixel_draw.c \
-	intel_pixel.h \
-	intel_pixel_read.c \
-	intel_screen.c \
-	intel_screen.h \
-	intel_state.c \
-	intel_tex.c \
-	intel_tex_copy.c \
-	intel_tex.h \
-	intel_tex_image.c \
-	intel_tex_obj.h \
-	intel_tex_validate.c \
-	intel_upload.c \
+	brw_batch.c \
+	brw_batch.h \
+	brw_blit.c \
+	brw_blit.h \
+	brw_buffer_objects.c \
+	brw_buffer_objects.h \
+	brw_buffers.c \
+	brw_buffers.h \
+	brw_copy_image.c \
+	brw_extensions.c \
+	brw_fbo.c \
+	brw_fbo.h \
+	brw_image.h \
+	brw_mipmap_tree.c \
+	brw_mipmap_tree.h \
+	brw_pixel_bitmap.c \
+	brw_pixel.c \
+	brw_pixel_copy.c \
+	brw_pixel_draw.c \
+	brw_pixel.h \
+	brw_pixel_read.c \
+	brw_screen.c \
+	brw_screen.h \
+	brw_state.c \
+	brw_tex.c \
+	brw_tex_copy.c \
+	brw_tex.h \
+	brw_tex_image.c \
+	brw_tex_obj.h \
+	brw_tex_validate.c \
+	brw_upload.c \
 	libdrm_macros.h
 
-i965_gen4_FILES = \
+i965_gfx4_FILES = \
 	genX_blorp_exec.c \
 	genX_boilerplate.h \
 	genX_pipe_control.c \
 	genX_state_upload.c
 
-i965_gen45_FILES = \
+i965_gfx45_FILES = \
 	genX_blorp_exec.c \
 	genX_boilerplate.h \
 	genX_pipe_control.c \
 	genX_state_upload.c
 
-i965_gen5_FILES = \
+i965_gfx5_FILES = \
 	genX_blorp_exec.c \
 	genX_boilerplate.h \
 	genX_pipe_control.c \
 	genX_state_upload.c
 
-i965_gen6_FILES = \
+i965_gfx6_FILES = \
 	genX_blorp_exec.c \
 	genX_boilerplate.h \
 	genX_pipe_control.c \
 	genX_state_upload.c
 
-i965_gen7_FILES = \
+i965_gfx7_FILES = \
 	genX_blorp_exec.c \
 	genX_boilerplate.h \
 	genX_pipe_control.c \
 	genX_state_upload.c
 
-i965_gen75_FILES = \
+i965_gfx75_FILES = \
 	genX_blorp_exec.c \
 	genX_boilerplate.h \
 	genX_pipe_control.c \
 	genX_state_upload.c
 
-i965_gen8_FILES = \
+i965_gfx8_FILES = \
 	genX_blorp_exec.c \
 	genX_boilerplate.h \
 	genX_pipe_control.c \
 	genX_state_upload.c
 
-i965_gen9_FILES = \
+i965_gfx9_FILES = \
 	genX_blorp_exec.c \
 	genX_boilerplate.h \
 	genX_pipe_control.c \
 	genX_state_upload.c
 
-i965_gen11_FILES = \
+i965_gfx11_FILES = \
 	genX_blorp_exec.c \
 	genX_boilerplate.h \
 	genX_pipe_control.c \

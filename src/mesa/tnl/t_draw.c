@@ -557,7 +557,7 @@ update_vao_inputs(struct gl_context *ctx,
    const struct gl_vertex_array_object *vao = ctx->Array._DrawVAO;
 
    /* Make sure we process only arrays enabled in the VAO */
-   assert((enable & ~_mesa_get_vao_vp_inputs(vao)) == 0);
+   assert((enable & ~vao->_EnabledWithMapMode) == 0);
 
    /* Fill in the client arrays from the VAO */
    const struct gl_vertex_buffer_binding *bindings = &vao->BufferBinding[0];

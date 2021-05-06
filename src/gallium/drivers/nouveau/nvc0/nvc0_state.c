@@ -569,6 +569,7 @@ nvc0_stage_set_sampler_views(struct nvc0_context *nvc0, int s,
 static void
 nvc0_set_sampler_views(struct pipe_context *pipe, enum pipe_shader_type shader,
                        unsigned start, unsigned nr,
+                       unsigned unbind_num_trailing_slots,
                        struct pipe_sampler_view **views)
 {
    const unsigned s = nvc0_shader_stage(shader);
@@ -774,6 +775,7 @@ nvc0_cp_state_bind(struct pipe_context *pipe, void *hwcso)
 static void
 nvc0_set_constant_buffer(struct pipe_context *pipe,
                          enum pipe_shader_type shader, uint index,
+                         bool take_ownership,
                          const struct pipe_constant_buffer *cb)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
@@ -802,7 +804,13 @@ nvc0_set_constant_buffer(struct pipe_context *pipe,
 
    if (nvc0->constbuf[s][i].u.buf)
       nv04_resource(nvc0->constbuf[s][i].u.buf)->cb_bindings[s] &= ~(1 << i);
-   pipe_resource_reference(&nvc0->constbuf[s][i].u.buf, res);
+
+   if (take_ownership) {
+      pipe_resource_reference(&nvc0->constbuf[s][i].u.buf, NULL);
+      nvc0->constbuf[s][i].u.buf = res;
+   } else {
+      pipe_resource_reference(&nvc0->constbuf[s][i].u.buf, res);
+   }
 
    nvc0->constbuf[s][i].user = (cb && cb->user_buffer) ? true : false;
    if (nvc0->constbuf[s][i].user) {
@@ -989,6 +997,8 @@ nvc0_set_tess_state(struct pipe_context *pipe,
 static void
 nvc0_set_vertex_buffers(struct pipe_context *pipe,
                         unsigned start_slot, unsigned count,
+                        unsigned unbind_num_trailing_slots,
+                        bool take_ownership,
                         const struct pipe_vertex_buffer *vb)
 {
     struct nvc0_context *nvc0 = nvc0_context(pipe);
@@ -998,12 +1008,20 @@ nvc0_set_vertex_buffers(struct pipe_context *pipe,
     nvc0->dirty_3d |= NVC0_NEW_3D_ARRAYS;
 
     util_set_vertex_buffers_count(nvc0->vtxbuf, &nvc0->num_vtxbufs, vb,
-                                  start_slot, count);
+                                  start_slot, count,
+                                  unbind_num_trailing_slots,
+                                  take_ownership);
+
+    unsigned clear_mask = ~u_bit_consecutive(start_slot + count, unbind_num_trailing_slots);
+    nvc0->vbo_user &= clear_mask;
+    nvc0->constant_vbos &= clear_mask;
+    nvc0->vtxbufs_coherent &= clear_mask;
 
     if (!vb) {
-       nvc0->vbo_user &= ~(((1ull << count) - 1) << start_slot);
-       nvc0->constant_vbos &= ~(((1ull << count) - 1) << start_slot);
-       nvc0->vtxbufs_coherent &= ~(((1ull << count) - 1) << start_slot);
+       clear_mask = ~u_bit_consecutive(start_slot, count);
+       nvc0->vbo_user &= clear_mask;
+       nvc0->constant_vbos &= clear_mask;
+       nvc0->vtxbufs_coherent &= clear_mask;
        return;
     }
 
@@ -1274,9 +1292,14 @@ static void
 nvc0_set_shader_images(struct pipe_context *pipe,
                        enum pipe_shader_type shader,
                        unsigned start, unsigned nr,
+                       unsigned unbind_num_trailing_slots,
                        const struct pipe_image_view *images)
 {
    const unsigned s = nvc0_shader_stage(shader);
+
+   nvc0_bind_images_range(nvc0_context(pipe), s, start + nr,
+                          unbind_num_trailing_slots, NULL);
+
    if (!nvc0_bind_images_range(nvc0_context(pipe), s, start, nr, images))
       return;
 

@@ -40,7 +40,7 @@
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_state.h"
-#include "intel_batchbuffer.h"
+#include "brw_batch.h"
 
 /* As best we know currently, the Gen HW timestamps are 36bits across
  * all platforms, which we need to account for when calculating a
@@ -78,7 +78,7 @@ brw_write_timestamp(struct brw_context *brw, struct brw_bo *query_bo, int idx)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-   if (devinfo->gen == 6) {
+   if (devinfo->ver == 6) {
       /* Emit Sandybridge workaround flush: */
       brw_emit_pipe_control_flush(brw,
                                   PIPE_CONTROL_CS_STALL |
@@ -87,7 +87,7 @@ brw_write_timestamp(struct brw_context *brw, struct brw_bo *query_bo, int idx)
 
    uint32_t flags = PIPE_CONTROL_WRITE_TIMESTAMP;
 
-   if (devinfo->gen == 9 && devinfo->gt == 4)
+   if (devinfo->ver == 9 && devinfo->gt == 4)
       flags |= PIPE_CONTROL_CS_STALL;
 
    brw_emit_pipe_control_write(brw, flags,
@@ -103,10 +103,10 @@ brw_write_depth_count(struct brw_context *brw, struct brw_bo *query_bo, int idx)
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
    uint32_t flags = PIPE_CONTROL_WRITE_DEPTH_COUNT | PIPE_CONTROL_DEPTH_STALL;
 
-   if (devinfo->gen == 9 && devinfo->gt == 4)
+   if (devinfo->ver == 9 && devinfo->gt == 4)
       flags |= PIPE_CONTROL_CS_STALL;
 
-   if (devinfo->gen >= 10) {
+   if (devinfo->ver >= 10) {
       /* "Driver must program PIPE_CONTROL with only Depth Stall Enable bit set
        * prior to programming a PIPE_CONTROL with Write PS Depth Count Post sync
        * operation."
@@ -123,7 +123,7 @@ brw_write_depth_count(struct brw_context *brw, struct brw_bo *query_bo, int idx)
  */
 static void
 brw_queryobj_get_results(struct gl_context *ctx,
-			 struct brw_query_object *query)
+                         struct brw_query_object *query)
 {
    struct brw_context *brw = brw_context(ctx);
    UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
@@ -131,7 +131,7 @@ brw_queryobj_get_results(struct gl_context *ctx,
    int i;
    uint64_t *results;
 
-   assert(devinfo->gen < 6);
+   assert(devinfo->ver < 6);
 
    if (query->bo == NULL)
       return;
@@ -141,7 +141,7 @@ brw_queryobj_get_results(struct gl_context *ctx,
     * when mapped.
     */
    if (brw_batch_references(&brw->batch, query->bo))
-      intel_batchbuffer_flush(brw);
+      brw_batch_flush(brw);
 
    if (unlikely(brw->perf_debug)) {
       if (brw_bo_busy(query->bo)) {
@@ -181,7 +181,7 @@ brw_queryobj_get_results(struct gl_context *ctx,
        * this function was already called to accumulate the results so far.
        */
       for (i = 0; i < query->last_index; i++) {
-	 query->Base.Result += results[i * 2 + 1] - results[i * 2];
+         query->Base.Result += results[i * 2 + 1] - results[i * 2];
       }
       break;
 
@@ -191,7 +191,7 @@ brw_queryobj_get_results(struct gl_context *ctx,
        * differ, then some fragments passed the depth test.
        */
       for (i = 0; i < query->last_index; i++) {
-	 if (results[i * 2 + 1] != results[i * 2]) {
+         if (results[i * 2 + 1] != results[i * 2]) {
             query->Base.Result = GL_TRUE;
             break;
          }
@@ -243,7 +243,7 @@ brw_delete_query(struct gl_context *ctx, struct gl_query_object *q)
 }
 
 /**
- * Gen4-5 driver hook for glBeginQuery().
+ * Gfx4-5 driver hook for glBeginQuery().
  *
  * Initializes driver structures and emits any GPU commands required to begin
  * recording data for the query.
@@ -255,7 +255,7 @@ brw_begin_query(struct gl_context *ctx, struct gl_query_object *q)
    struct brw_query_object *query = (struct brw_query_object *)q;
    UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-   assert(devinfo->gen < 6);
+   assert(devinfo->ver < 6);
 
    switch (query->Base.Target) {
    case GL_TIME_ELAPSED_EXT:
@@ -300,7 +300,7 @@ brw_begin_query(struct gl_context *ctx, struct gl_query_object *q)
 
       brw->query.obj = query;
 
-      /* Depth statistics on Gen4 require strange workarounds, so we try to
+      /* Depth statistics on Gfx4 require strange workarounds, so we try to
        * avoid them when necessary.  They're required for occlusion queries,
        * so turn them on now.
        */
@@ -314,7 +314,7 @@ brw_begin_query(struct gl_context *ctx, struct gl_query_object *q)
 }
 
 /**
- * Gen4-5 driver hook for glEndQuery().
+ * Gfx4-5 driver hook for glEndQuery().
  *
  * Emits GPU commands to record a final query value, ending any data capturing.
  * However, the final result isn't necessarily available until the GPU processes
@@ -328,7 +328,7 @@ brw_end_query(struct gl_context *ctx, struct gl_query_object *q)
    struct brw_query_object *query = (struct brw_query_object *)q;
    UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-   assert(devinfo->gen < 6);
+   assert(devinfo->ver < 6);
 
    switch (query->Base.Target) {
    case GL_TIME_ELAPSED_EXT:
@@ -345,12 +345,11 @@ brw_end_query(struct gl_context *ctx, struct gl_query_object *q)
        * case, we emit the query_begin and query_end state to the
        * hardware. This is to guarantee that waiting on the result of this
        * empty state will cause all previous queries to complete at all, as
-       * required by the specification:
+       * required by the OpenGL 4.3 (Core Profile) spec, section 4.2.1:
        *
-       * 	It must always be true that if any query object
-       *	returns a result available of TRUE, all queries of the
-       *	same type issued prior to that query must also return
-       *	TRUE. [Open GL 4.3 (Core Profile) Section 4.2.1]
+       *    "It must always be true that if any query object returns
+       *     a result available of TRUE, all queries of the same type
+       *     issued prior to that query must also return TRUE."
        */
       if (!query->bo) {
          brw_emit_query_begin(brw);
@@ -372,7 +371,7 @@ brw_end_query(struct gl_context *ctx, struct gl_query_object *q)
 }
 
 /**
- * The Gen4-5 WaitQuery() driver hook.
+ * The Gfx4-5 WaitQuery() driver hook.
  *
  * Wait for a query result to become available and return it.  This is the
  * backing for glGetQueryObjectiv() with the GL_QUERY_RESULT pname.
@@ -383,14 +382,14 @@ static void brw_wait_query(struct gl_context *ctx, struct gl_query_object *q)
    UNUSED const struct gen_device_info *devinfo =
       &brw_context(ctx)->screen->devinfo;
 
-   assert(devinfo->gen < 6);
+   assert(devinfo->ver < 6);
 
    brw_queryobj_get_results(ctx, query);
    query->Base.Ready = true;
 }
 
 /**
- * The Gen4-5 CheckQuery() driver hook.
+ * The Gfx4-5 CheckQuery() driver hook.
  *
  * Checks whether a query result is ready yet.  If not, flushes.
  * This is the backing for glGetQueryObjectiv()'s QUERY_RESULT_AVAILABLE pname.
@@ -401,7 +400,7 @@ static void brw_check_query(struct gl_context *ctx, struct gl_query_object *q)
    struct brw_query_object *query = (struct brw_query_object *)q;
    UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-   assert(devinfo->gen < 6);
+   assert(devinfo->ver < 6);
 
    /* From the GL_ARB_occlusion_query spec:
     *
@@ -411,7 +410,7 @@ static void brw_check_query(struct gl_context *ctx, struct gl_query_object *q)
     *      the async query will return true in finite time.
     */
    if (query->bo && brw_batch_references(&brw->batch, query->bo))
-      intel_batchbuffer_flush(brw);
+      brw_batch_flush(brw);
 
    if (query->bo == NULL || !brw_bo_busy(query->bo)) {
       brw_queryobj_get_results(ctx, query);
@@ -431,7 +430,7 @@ ensure_bo_has_space(struct gl_context *ctx, struct brw_query_object *query)
    struct brw_context *brw = brw_context(ctx);
    UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-   assert(devinfo->gen < 6);
+   assert(devinfo->ver < 6);
 
    if (!query->bo || query->last_index * 2 + 1 >= 4096 / sizeof(uint64_t)) {
 
@@ -611,8 +610,8 @@ void brw_init_common_queryobj_functions(struct dd_function_table *functions)
    functions->GetTimestamp = brw_get_timestamp;
 }
 
-/* Initialize Gen4/5-specific query object functions. */
-void gen4_init_queryobj_functions(struct dd_function_table *functions)
+/* Initialize Gfx4/5-specific query object functions. */
+void gfx4_init_queryobj_functions(struct dd_function_table *functions)
 {
    functions->BeginQuery = brw_begin_query;
    functions->EndQuery = brw_end_query;

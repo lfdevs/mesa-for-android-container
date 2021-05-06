@@ -80,7 +80,7 @@ nv30_validate_fb(struct nv30_context *nv30)
 
    /* hardware rounds down render target offset to 64 bytes, but surfaces
     * with a size of 2x2 pixel (16bpp) or 1x1 pixel (32bpp) have an
-    * unaligned start aaddress.  For these two important square formats
+    * unaligned start address.  For these two important square formats
     * we can hack around this limitation by adjusting the viewport origin
     */
    if (nv30->state.rt_enable) {

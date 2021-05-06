@@ -25,7 +25,7 @@
 #include "main/teximage.h"
 #include "brw_blorp.h"
 #include "brw_context.h"
-#include "intel_tex.h"
+#include "brw_tex.h"
 #include "drivers/common/meta.h"
 
 #define FILE_DEBUG_FLAG DEBUG_BLORP
@@ -40,12 +40,12 @@ brw_generate_mipmap(struct gl_context *ctx, GLenum target,
 {
    struct brw_context *brw = brw_context(ctx);
    struct gen_device_info *devinfo = &brw->screen->devinfo;
-   struct intel_texture_object *intel_obj = intel_texture_object(tex_obj);
+   struct brw_texture_object *intel_obj = brw_texture_object(tex_obj);
    const unsigned base_level = tex_obj->Attrib.BaseLevel;
    unsigned last_level, first_layer, last_layer;
 
-   /* Blorp doesn't handle combined depth/stencil surfaces on Gen4-5 yet. */
-   if (devinfo->gen <= 5 &&
+   /* Blorp doesn't handle combined depth/stencil surfaces on Gfx4-5 yet. */
+   if (devinfo->ver <= 5 &&
        (tex_obj->Image[0][base_level]->_BaseFormat == GL_DEPTH_COMPONENT ||
         tex_obj->Image[0][base_level]->_BaseFormat == GL_DEPTH_STENCIL)) {
       _mesa_meta_GenerateMipmap(ctx, target, tex_obj);
@@ -74,10 +74,10 @@ brw_generate_mipmap(struct gl_context *ctx, GLenum target,
        *
        * After this, we'll have all mipmap levels in one resource.
        */
-      intel_finalize_mipmap_tree(brw, tex_obj);
+      brw_finalize_mipmap_tree(brw, tex_obj);
    }
 
-   struct intel_mipmap_tree *mt = intel_obj->mt;
+   struct brw_mipmap_tree *mt = intel_obj->mt;
    if (!mt) {
       _mesa_error(ctx, GL_OUT_OF_MEMORY, "mipmap generation");
       return;

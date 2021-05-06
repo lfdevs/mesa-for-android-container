@@ -100,13 +100,14 @@ public:
               const nir_shader *shader,
               unsigned dispatch_width,
               int shader_time_index,
-              const struct brw_vue_map *input_vue_map = NULL);
+              bool debug_enabled);
    fs_visitor(const struct brw_compiler *compiler, void *log_data,
               void *mem_ctx,
               struct brw_gs_compile *gs_compile,
               struct brw_gs_prog_data *prog_data,
               const nir_shader *shader,
-              int shader_time_index);
+              int shader_time_index,
+              bool debug_enabled);
    void init();
    ~fs_visitor();
 
@@ -130,8 +131,8 @@ public:
    bool run_bs(bool allow_spilling);
    void optimize();
    void allocate_registers(bool allow_spilling);
-   void setup_fs_payload_gen4();
-   void setup_fs_payload_gen6();
+   void setup_fs_payload_gfx4();
+   void setup_fs_payload_gfx6();
    void setup_vs_payload();
    void setup_gs_payload();
    void setup_cs_payload();
@@ -178,10 +179,10 @@ public:
    bool remove_extra_rounding_modes();
 
    void schedule_instructions(instruction_scheduler_mode mode);
-   void insert_gen4_send_dependency_workarounds();
-   void insert_gen4_pre_send_dependency_workarounds(bblock_t *block,
+   void insert_gfx4_send_dependency_workarounds();
+   void insert_gfx4_pre_send_dependency_workarounds(bblock_t *block,
                                                     fs_inst *inst);
-   void insert_gen4_post_send_dependency_workarounds(bblock_t *block,
+   void insert_gfx4_post_send_dependency_workarounds(bblock_t *block,
                                                      fs_inst *inst);
    void vfail(const char *msg, va_list args);
    void fail(const char *msg, ...);
@@ -206,13 +207,13 @@ public:
    fs_reg *emit_samplepos_setup();
    fs_reg *emit_sampleid_setup();
    fs_reg *emit_samplemaskin_setup();
-   void emit_interpolation_setup_gen4();
-   void emit_interpolation_setup_gen6();
+   void emit_interpolation_setup_gfx4();
+   void emit_interpolation_setup_gfx6();
    void compute_sample_position(fs_reg dst, fs_reg int_sample_pos);
    fs_reg emit_mcs_fetch(const fs_reg &coordinate, unsigned components,
                          const fs_reg &texture,
                          const fs_reg &texture_handle);
-   void emit_gen6_gather_wa(uint8_t wa, fs_reg dst);
+   void emit_gfx6_gather_wa(uint8_t wa, fs_reg dst);
    fs_reg resolve_source_modifiers(const fs_reg &src);
    void emit_fsign(const class brw::fs_builder &, const nir_alu_instr *instr,
                    fs_reg result, fs_reg *op, unsigned fsign_src);
@@ -344,8 +345,6 @@ public:
 
    struct brw_stage_prog_data *prog_data;
 
-   const struct brw_vue_map *input_vue_map;
-
    brw_analysis<brw::fs_live_variables, backend_shader> live_analysis;
    brw_analysis<brw::register_pressure, fs_visitor> regpressure_analysis;
    brw_analysis<brw::performance, fs_visitor> performance_analysis;
@@ -377,7 +376,7 @@ public:
    fs_reg outputs[VARYING_SLOT_MAX];
    fs_reg dual_src_output;
    int first_non_payload_grf;
-   /** Either BRW_MAX_GRF or GEN7_MRF_HACK_START */
+   /** Either BRW_MAX_GRF or GFX7_MRF_HACK_START */
    unsigned max_grf;
 
    fs_reg *nir_locals;
@@ -445,7 +444,7 @@ private:
 
 /**
  * Return the flag register used in fragment shaders to keep track of live
- * samples.  On Gen7+ we use f1.0-f1.1 to allow discard jumps in SIMD32
+ * samples.  On Gfx7+ we use f1.0-f1.1 to allow discard jumps in SIMD32
  * dispatch mode, while earlier generations are constrained to f0.1, which
  * limits the dispatch width to SIMD16 for fragment shaders that use discard.
  */
@@ -453,7 +452,7 @@ static inline unsigned
 sample_mask_flag_subreg(const fs_visitor *shader)
 {
    assert(shader->stage == MESA_SHADER_FRAGMENT);
-   return shader->devinfo->gen >= 7 ? 2 : 1;
+   return shader->devinfo->ver >= 7 ? 2 : 1;
 }
 
 /**
@@ -511,16 +510,16 @@ private:
                      struct brw_reg dst, struct brw_reg src);
    void generate_scratch_write(fs_inst *inst, struct brw_reg src);
    void generate_scratch_read(fs_inst *inst, struct brw_reg dst);
-   void generate_scratch_read_gen7(fs_inst *inst, struct brw_reg dst);
+   void generate_scratch_read_gfx7(fs_inst *inst, struct brw_reg dst);
    void generate_scratch_header(fs_inst *inst, struct brw_reg dst);
    void generate_uniform_pull_constant_load(fs_inst *inst, struct brw_reg dst,
                                             struct brw_reg index,
                                             struct brw_reg offset);
-   void generate_uniform_pull_constant_load_gen7(fs_inst *inst,
+   void generate_uniform_pull_constant_load_gfx7(fs_inst *inst,
                                                  struct brw_reg dst,
                                                  struct brw_reg surf_index,
                                                  struct brw_reg payload);
-   void generate_varying_pull_constant_load_gen4(fs_inst *inst,
+   void generate_varying_pull_constant_load_gfx4(fs_inst *inst,
                                                  struct brw_reg dst,
                                                  struct brw_reg index);
    void generate_mov_dispatch_to_flags(fs_inst *inst);

@@ -31,7 +31,7 @@
  *
  * You can do pseudo-runtime checks in your function such as
  *
- * if (GEN_GEN > 8 || GEN_IS_HASWELL) {
+ * if (GFX_VERx10 == 75) {
  *    // Do something
  * }
  *
@@ -41,7 +41,7 @@
  * For places where you really do have a compile-time conflict, you can
  * use preprocessor logic:
  *
- * #if (GEN_GEN > 8 || GEN_IS_HASWELL)
+ * #if (GFX_VERx10 == 75)
  *    // Do something
  * #endif
  *
@@ -52,49 +52,46 @@
 /* Base macro defined on the command line.  If we don't have this, we can't
  * do anything.
  */
-#ifndef GEN_VERSIONx10
-#  error "The GEN_VERSIONx10 macro must be defined"
+#ifndef GFX_VERx10
+#  error "The GFX_VERx10 macro must be defined"
 #endif
 
-#define GEN_GEN ((GEN_VERSIONx10) / 10)
-#define GEN_IS_HASWELL ((GEN_VERSIONx10) == 75)
-#define GEN_IS_G4X ((GEN_VERSIONx10) == 45)
-#define GEN_IS_GEN12HP ((GEN_VERSIONx10) == 125)
+#define GFX_VER ((GFX_VERx10) / 10)
 
 /* Prefixing macros */
-#if (GEN_VERSIONx10 == 40)
-#  define GENX(X) GEN4_##X
-#  define genX(x) gen4_##x
-#elif (GEN_VERSIONx10 == 45)
-#  define GENX(X) GEN45_##X
-#  define genX(x) gen45_##x
-#elif (GEN_VERSIONx10 == 50)
-#  define GENX(X) GEN5_##X
-#  define genX(x) gen5_##x
-#elif (GEN_VERSIONx10 == 60)
-#  define GENX(X) GEN6_##X
-#  define genX(x) gen6_##x
-#elif (GEN_VERSIONx10 == 70)
-#  define GENX(X) GEN7_##X
-#  define genX(x) gen7_##x
-#elif (GEN_VERSIONx10 == 75)
-#  define GENX(X) GEN75_##X
-#  define genX(x) gen75_##x
-#elif (GEN_VERSIONx10 == 80)
-#  define GENX(X) GEN8_##X
-#  define genX(x) gen8_##x
-#elif (GEN_VERSIONx10 == 90)
-#  define GENX(X) GEN9_##X
-#  define genX(x) gen9_##x
-#elif (GEN_VERSIONx10 == 110)
-#  define GENX(X) GEN11_##X
-#  define genX(x) gen11_##x
-#elif (GEN_VERSIONx10 == 120)
-#  define GENX(X) GEN12_##X
-#  define genX(x) gen12_##x
-#elif (GEN_VERSIONx10 == 125)
-#  define GENX(X) GEN125_##X
-#  define genX(x) gen125_##x
+#if (GFX_VERx10 == 40)
+#  define GENX(X) GFX4_##X
+#  define genX(x) gfx4_##x
+#elif (GFX_VERx10 == 45)
+#  define GENX(X) GFX45_##X
+#  define genX(x) gfx45_##x
+#elif (GFX_VERx10 == 50)
+#  define GENX(X) GFX5_##X
+#  define genX(x) gfx5_##x
+#elif (GFX_VERx10 == 60)
+#  define GENX(X) GFX6_##X
+#  define genX(x) gfx6_##x
+#elif (GFX_VERx10 == 70)
+#  define GENX(X) GFX7_##X
+#  define genX(x) gfx7_##x
+#elif (GFX_VERx10 == 75)
+#  define GENX(X) GFX75_##X
+#  define genX(x) gfx75_##x
+#elif (GFX_VERx10 == 80)
+#  define GENX(X) GFX8_##X
+#  define genX(x) gfx8_##x
+#elif (GFX_VERx10 == 90)
+#  define GENX(X) GFX9_##X
+#  define genX(x) gfx9_##x
+#elif (GFX_VERx10 == 110)
+#  define GENX(X) GFX11_##X
+#  define genX(x) gfx11_##x
+#elif (GFX_VERx10 == 120)
+#  define GENX(X) GFX12_##X
+#  define genX(x) gfx12_##x
+#elif (GFX_VERx10 == 125)
+#  define GENX(X) GFX125_##X
+#  define genX(x) gfx125_##x
 #else
 #  error "Need to add prefixing macros for this gen"
 #endif

@@ -338,6 +338,9 @@ reg_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr,
 		struct ir3_register *src_reg = src->regs[1];
 		unsigned new_flags = reg->flags;
 
+		if (src_reg->flags & IR3_REG_ARRAY)
+			return false;
+
 		combine_flags(&new_flags, src);
 
 		if (!ir3_valid_flags(instr, n, new_flags)) {
@@ -408,16 +411,6 @@ reg_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr,
 
 			if (src_reg->flags & IR3_REG_RELATIV)
 				ir3_instr_set_address(instr, reg->instr->address);
-
-			return true;
-		}
-
-		if ((src_reg->flags & IR3_REG_RELATIV) &&
-				!conflicts(instr->address, reg->instr->address)) {
-			src_reg = ir3_reg_clone(instr->block->shader, src_reg);
-			src_reg->flags = new_flags;
-			instr->regs[n+1] = src_reg;
-			ir3_instr_set_address(instr, reg->instr->address);
 
 			return true;
 		}

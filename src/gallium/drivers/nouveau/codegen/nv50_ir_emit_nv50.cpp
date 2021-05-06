@@ -644,6 +644,9 @@ CodeEmitterNV50::emitLOAD(const Instruction *i)
             code[1] |= 0x04000000;
 
          emitLoadStoreSizeCS(i->sType);
+
+         if (i->subOp == NV50_IR_SUBOP_LOAD_LOCKED)
+            code[1] |= 0x00800000;
       } else {
          assert(offset <= (int32_t)(0x1f * typeSizeof(i->sType)));
          code[0] = 0x10000001;
@@ -714,6 +717,8 @@ CodeEmitterNV50::emitSTORE(const Instruction *i)
    case FILE_MEMORY_SHARED:
       code[0] = 0x00000001;
       code[1] = 0xe0000000;
+      if (i->subOp == NV50_IR_SUBOP_STORE_UNLOCKED)
+         code[1] |= 0x00800000;
       switch (typeSizeof(i->dType)) {
       case 1:
          code[0] |= offset << 9;
@@ -779,12 +784,15 @@ CodeEmitterNV50::emitMOV(const Instruction *i)
       emitFlagsWr(i);
    } else
    if (sf == FILE_IMMEDIATE) {
-      code[0] = 0x10008001;
+      code[0] = 0x10000001;
       code[1] = 0x00000003;
       emitForm_IMM(i);
+
+      code[0] |= (typeSizeof(i->dType) == 2) ? 0 : 0x00008000;
    } else {
       if (i->encSize == 4) {
-         code[0] = 0x10008000;
+         code[0] = 0x10000000;
+         code[0] |= (typeSizeof(i->dType) == 2) ? 0 : 0x00008000;
          defId(i->def(0), 2);
       } else {
          code[0] = 0x10000001;
@@ -1080,17 +1088,18 @@ CodeEmitterNV50::emitUADD(const Instruction *i)
    const int neg0 = i->src(0).mod.neg();
    const int neg1 = i->src(1).mod.neg() ^ ((i->op == OP_SUB) ? 1 : 0);
 
-   code[0] = 0x20008000;
+   code[0] = 0x20000000;
 
    if (i->src(1).getFile() == FILE_IMMEDIATE) {
+      code[0] |= (typeSizeof(i->dType) == 2) ? 0 : 0x00008000;
       code[1] = 0;
       emitForm_IMM(i);
    } else
    if (i->encSize == 8) {
-      code[0] = 0x20000000;
       code[1] = (typeSizeof(i->dType) == 2) ? 0 : 0x04000000;
       emitForm_ADD(i);
    } else {
+      code[0] |= (typeSizeof(i->dType) == 2) ? 0 : 0x00008000;
       emitForm_MUL(i);
    }
    assert(!(neg0 && neg1));
@@ -1405,6 +1414,9 @@ CodeEmitterNV50::emitCVT(const Instruction *i)
       case TYPE_U32: code[1] = 0x44004000; break;
       case TYPE_F16: code[1] = 0xc4000000; break;
       case TYPE_U16: code[1] = 0x44000000; break;
+      case TYPE_S16: code[1] = 0x44010000; break;
+      case TYPE_S8:  code[1] = 0x44018000; break;
+      case TYPE_U8:  code[1] = 0x44008000; break;
       default:
          assert(0);
          break;
@@ -1442,10 +1454,73 @@ CodeEmitterNV50::emitCVT(const Instruction *i)
          break;
       }
       break;
+   case TYPE_F16:
+      switch (i->sType) {
+      case TYPE_F16: code[1] = 0xc0000000; break;
+      case TYPE_F32: code[1] = 0xc0004000; break;
+      default:
+         assert(0);
+         break;
+      }
+      break;
    case TYPE_S16:
+      switch (i->sType) {
+      case TYPE_F32: code[1] = 0x88004000; break;
+      case TYPE_S32: code[1] = 0x08014000; break;
+      case TYPE_U32: code[1] = 0x08004000; break;
+      case TYPE_F16: code[1] = 0x88000000; break;
+      case TYPE_S16: code[1] = 0x08010000; break;
+      case TYPE_U16: code[1] = 0x08000000; break;
+      case TYPE_S8:  code[1] = 0x08018000; break;
+      case TYPE_U8:  code[1] = 0x08008000; break;
+      default:
+         assert(0);
+         break;
+      }
+      break;
    case TYPE_U16:
+      switch (i->sType) {
+      case TYPE_F32: code[1] = 0x80004000; break;
+      case TYPE_S32: code[1] = 0x00014000; break;
+      case TYPE_U32: code[1] = 0x00004000; break;
+      case TYPE_F16: code[1] = 0x80000000; break;
+      case TYPE_S16: code[1] = 0x00010000; break;
+      case TYPE_U16: code[1] = 0x00000000; break;
+      case TYPE_S8:  code[1] = 0x00018000; break;
+      case TYPE_U8:  code[1] = 0x00008000; break;
+      default:
+         assert(0);
+         break;
+      }
+      break;
    case TYPE_S8:
+      switch (i->sType) {
+      case TYPE_S32: code[1] = 0x08094000; break;
+      case TYPE_U32: code[1] = 0x08084000; break;
+      case TYPE_F16: code[1] = 0x88080000; break;
+      case TYPE_S16: code[1] = 0x08090000; break;
+      case TYPE_U16: code[1] = 0x08080000; break;
+      case TYPE_S8:  code[1] = 0x08098000; break;
+      case TYPE_U8:  code[1] = 0x08088000; break;
+      default:
+         assert(0);
+         break;
+      }
+      break;
    case TYPE_U8:
+      switch (i->sType) {
+      case TYPE_S32: code[1] = 0x00094000; break;
+      case TYPE_U32: code[1] = 0x00084000; break;
+      case TYPE_F16: code[1] = 0x80080000; break;
+      case TYPE_S16: code[1] = 0x00090000; break;
+      case TYPE_U16: code[1] = 0x00080000; break;
+      case TYPE_S8:  code[1] = 0x00098000; break;
+      case TYPE_U8:  code[1] = 0x00088000; break;
+      default:
+         assert(0);
+         break;
+      }
+      break;
    default:
       assert(0);
       break;
@@ -1545,13 +1620,15 @@ CodeEmitterNV50::emitLogicOp(const Instruction *i)
       emitForm_IMM(i);
    } else {
       switch (i->op) {
-      case OP_AND: code[1] = 0x04000000; break;
-      case OP_OR:  code[1] = 0x04004000; break;
-      case OP_XOR: code[1] = 0x04008000; break;
+      case OP_AND: code[1] = 0x00000000; break;
+      case OP_OR:  code[1] = 0x00004000; break;
+      case OP_XOR: code[1] = 0x00008000; break;
       default:
          assert(0);
          break;
       }
+      if (typeSizeof(i->dType) == 4)
+         code[1] |= 0x04000000;
       if (i->src(0).mod & Modifier(NV50_IR_MOD_NOT))
          code[1] |= 1 << 16;
       if (i->src(1).mod & Modifier(NV50_IR_MOD_NOT))
@@ -1582,7 +1659,9 @@ CodeEmitterNV50::emitShift(const Instruction *i)
       emitARL(i, i->getSrc(1)->reg.data.u32 & 0x3f);
    } else {
       code[0] = 0x30000001;
-      code[1] = (i->op == OP_SHR) ? 0xe4000000 : 0xc4000000;
+      code[1] = (i->op == OP_SHR) ? 0xe0000000 : 0xc0000000;
+      if (typeSizeof(i->dType) == 4)
+         code[1] |= 0x04000000;
       if (i->op == OP_SHR && isSignedType(i->sType))
           code[1] |= 1 << 27;
 
@@ -1824,19 +1903,28 @@ CodeEmitterNV50::emitATOM(const Instruction *i)
       return;
    }
    code[0] = 0xd0000001;
-   code[1] = 0xe0c00000 | (subOp << 2);
+   code[1] = 0xc0c00000 | (subOp << 2);
    if (isSignedType(i->dType))
       code[1] |= 1 << 21;
 
    // args
    emitFlagsRd(i);
-   setDst(i, 0);
-   setSrc(i, 1, 1);
+   if (i->subOp == NV50_IR_SUBOP_ATOM_EXCH ||
+       i->subOp == NV50_IR_SUBOP_ATOM_CAS ||
+       i->defExists(0)) {
+      code[1] |= 0x20000000;
+      setDst(i, 0);
+      setSrc(i, 1, 1);
+      // g[] pointer
+      code[0] |= i->getSrc(0)->reg.fileIndex << 23;
+   } else {
+      srcId(i->src(1), 2);
+      // g[] pointer
+      code[0] |= i->getSrc(0)->reg.fileIndex << 16;
+   }
    if (i->subOp == NV50_IR_SUBOP_ATOM_CAS)
       setSrc(i, 2, 2);
 
-   // g[] pointer
-   code[0] |= i->getSrc(0)->reg.fileIndex << 23;
    srcId(i->getIndirect(0, 0), 9);
 }
 

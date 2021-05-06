@@ -110,7 +110,7 @@ lp_build_half_to_float(struct gallivm_state *gallivm,
    LLVMTypeRef int_vec_type = lp_build_vec_type(gallivm, i32_type);
    LLVMValueRef h;
 
-   if (util_cpu_caps.has_f16c &&
+   if (util_get_cpu_caps()->has_f16c &&
        (src_length == 4 || src_length == 8)) {
       if (LLVM_VERSION_MAJOR < 11) {
          const char *intrinsic = NULL;
@@ -176,7 +176,7 @@ lp_build_float_to_half(struct gallivm_state *gallivm,
     * useless.
     */
 
-   if (util_cpu_caps.has_f16c &&
+   if (util_get_cpu_caps()->has_f16c &&
        (length == 4 || length == 8)) {
       struct lp_type i168_type = lp_type_int_vec(16, 16 * 8);
       unsigned mode = 3; /* same as LP_BUILD_ROUND_TRUNCATE */
@@ -498,7 +498,7 @@ int lp_build_conv_auto(struct gallivm_state *gallivm,
 
       /* Special case 4x4x32 --> 1x16x8 */
       if (src_type.length == 4 &&
-            (util_cpu_caps.has_sse2 || util_cpu_caps.has_altivec))
+            (util_get_cpu_caps()->has_sse2 || util_get_cpu_caps()->has_altivec))
       {
          num_dsts = (num_srcs + 3) / 4;
          dst_type->length = num_srcs * 4 >= 16 ? 16 : num_srcs * 4;
@@ -509,7 +509,7 @@ int lp_build_conv_auto(struct gallivm_state *gallivm,
 
       /* Special case 2x8x32 --> 1x16x8 */
       if (src_type.length == 8 &&
-          util_cpu_caps.has_avx)
+          util_get_cpu_caps()->has_avx)
       {
          num_dsts = (num_srcs + 1) / 2;
          dst_type->length = num_srcs * 8 >= 16 ? 16 : num_srcs * 8;
@@ -606,7 +606,7 @@ lp_build_conv(struct gallivm_state *gallivm,
        ((dst_type.length == 16 && 4 * num_dsts == num_srcs) ||
         (num_dsts == 1 && dst_type.length * num_srcs == 16 && num_srcs != 3)) &&
 
-       (util_cpu_caps.has_sse2 || util_cpu_caps.has_altivec))
+       (util_get_cpu_caps()->has_sse2 || util_get_cpu_caps()->has_altivec))
    {
       struct lp_build_context bld;
       struct lp_type int16_type, int32_type;
@@ -719,7 +719,7 @@ lp_build_conv(struct gallivm_state *gallivm,
       ((dst_type.length == 16 && 2 * num_dsts == num_srcs) ||
        (num_dsts == 1 && dst_type.length * num_srcs == 8)) &&
 
-      util_cpu_caps.has_avx) {
+      util_get_cpu_caps()->has_avx) {
 
       struct lp_build_context bld;
       struct lp_type int16_type, int32_type;

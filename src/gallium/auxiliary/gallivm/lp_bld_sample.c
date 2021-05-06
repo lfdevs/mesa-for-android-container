@@ -193,7 +193,7 @@ lp_sampler_static_sampler_state(struct lp_static_sampler_state *state,
    state->mag_img_filter    = sampler->mag_img_filter;
    state->min_mip_filter    = sampler->min_mip_filter;
    state->seamless_cube_map = sampler->seamless_cube_map;
-
+   state->reduction_mode    = sampler->reduction_mode;
    if (sampler->max_lod > 0.0f) {
       state->max_lod_pos = 1;
    }
@@ -1152,7 +1152,7 @@ lp_build_minify(struct lp_build_context *bld,
       LLVMValueRef size;
       assert(bld->type.sign);
       if (lod_scalar ||
-         (util_cpu_caps.has_avx2 || !util_cpu_caps.has_sse)) {
+         (util_get_cpu_caps()->has_avx2 || !util_get_cpu_caps()->has_sse)) {
          size = LLVMBuildLShr(builder, base_size, level, "minify");
          size = lp_build_max(bld, size, bld->one);
       }
@@ -2113,4 +2113,198 @@ lp_build_sample_offset(struct lp_build_context *bld,
    }
 
    *out_offset = offset;
+}
+
+static LLVMValueRef
+lp_build_sample_min(struct lp_build_context *bld,
+                    LLVMValueRef x,
+                    LLVMValueRef v0,
+                    LLVMValueRef v1)
+{
+   /* if the incoming LERP weight is 0 then the min/max
+    * should ignore that value. */
+   LLVMValueRef mask = lp_build_compare(bld->gallivm,
+                                        bld->type,
+                                        PIPE_FUNC_NOTEQUAL,
+                                        x, bld->zero);
+   LLVMValueRef min = lp_build_min(bld, v0, v1);
+
+   return lp_build_select(bld, mask, min, v0);
+}
+
+static LLVMValueRef
+lp_build_sample_max(struct lp_build_context *bld,
+                    LLVMValueRef x,
+                    LLVMValueRef v0,
+                    LLVMValueRef v1)
+{
+   /* if the incoming LERP weight is 0 then the min/max
+    * should ignore that value. */
+   LLVMValueRef mask = lp_build_compare(bld->gallivm,
+                                        bld->type,
+                                        PIPE_FUNC_NOTEQUAL,
+                                        x, bld->zero);
+   LLVMValueRef max = lp_build_max(bld, v0, v1);
+
+   return lp_build_select(bld, mask, max, v0);
+}
+
+static LLVMValueRef
+lp_build_sample_min_2d(struct lp_build_context *bld,
+                       LLVMValueRef x,
+                       LLVMValueRef y,
+                       LLVMValueRef a,
+                       LLVMValueRef b,
+                       LLVMValueRef c,
+                       LLVMValueRef d)
+{
+   LLVMValueRef v0 = lp_build_sample_min(bld, x, a, b);
+   LLVMValueRef v1 = lp_build_sample_min(bld, x, c, d);
+   return lp_build_sample_min(bld, y, v0, v1);
+}
+
+static LLVMValueRef
+lp_build_sample_max_2d(struct lp_build_context *bld,
+                       LLVMValueRef x,
+                       LLVMValueRef y,
+                       LLVMValueRef a,
+                       LLVMValueRef b,
+                       LLVMValueRef c,
+                       LLVMValueRef d)
+{
+   LLVMValueRef v0 = lp_build_sample_max(bld, x, a, b);
+   LLVMValueRef v1 = lp_build_sample_max(bld, x, c, d);
+   return lp_build_sample_max(bld, y, v0, v1);
+}
+
+static LLVMValueRef
+lp_build_sample_min_3d(struct lp_build_context *bld,
+                LLVMValueRef x,
+                LLVMValueRef y,
+                LLVMValueRef z,
+                LLVMValueRef a, LLVMValueRef b,
+                LLVMValueRef c, LLVMValueRef d,
+                LLVMValueRef e, LLVMValueRef f,
+                LLVMValueRef g, LLVMValueRef h)
+{
+   LLVMValueRef v0 = lp_build_sample_min_2d(bld, x, y, a, b, c, d);
+   LLVMValueRef v1 = lp_build_sample_min_2d(bld, x, y, e, f, g, h);
+   return lp_build_sample_min(bld, z, v0, v1);
+}
+
+static LLVMValueRef
+lp_build_sample_max_3d(struct lp_build_context *bld,
+                       LLVMValueRef x,
+                       LLVMValueRef y,
+                       LLVMValueRef z,
+                       LLVMValueRef a, LLVMValueRef b,
+                       LLVMValueRef c, LLVMValueRef d,
+                       LLVMValueRef e, LLVMValueRef f,
+                       LLVMValueRef g, LLVMValueRef h)
+{
+   LLVMValueRef v0 = lp_build_sample_max_2d(bld, x, y, a, b, c, d);
+   LLVMValueRef v1 = lp_build_sample_max_2d(bld, x, y, e, f, g, h);
+   return lp_build_sample_max(bld, z, v0, v1);
+}
+
+void
+lp_build_reduce_filter(struct lp_build_context *bld,
+                       enum pipe_tex_reduction_mode mode,
+                       unsigned flags,
+                       unsigned num_chan,
+                       LLVMValueRef x,
+                       LLVMValueRef *v00,
+                       LLVMValueRef *v01,
+                       LLVMValueRef *out)
+{
+   unsigned chan;
+   switch (mode) {
+   case PIPE_TEX_REDUCTION_MIN:
+      for (chan = 0; chan < num_chan; chan++)
+         out[chan] = lp_build_sample_min(bld, x, v00[chan], v01[chan]);
+      break;
+   case PIPE_TEX_REDUCTION_MAX:
+      for (chan = 0; chan < num_chan; chan++)
+         out[chan] = lp_build_sample_max(bld, x, v00[chan], v01[chan]);
+      break;
+   case PIPE_TEX_REDUCTION_WEIGHTED_AVERAGE:
+   default:
+      for (chan = 0; chan < num_chan; chan++)
+         out[chan] = lp_build_lerp(bld, x, v00[chan], v01[chan], flags);
+      break;
+   }
+}
+
+void
+lp_build_reduce_filter_2d(struct lp_build_context *bld,
+                          enum pipe_tex_reduction_mode mode,
+                          unsigned flags,
+                          unsigned num_chan,
+                          LLVMValueRef x,
+                          LLVMValueRef y,
+                          LLVMValueRef *v00,
+                          LLVMValueRef *v01,
+                          LLVMValueRef *v10,
+                          LLVMValueRef *v11,
+                          LLVMValueRef *out)
+{
+   unsigned chan;
+   switch (mode) {
+   case PIPE_TEX_REDUCTION_MIN:
+      for (chan = 0; chan < num_chan; chan++)
+         out[chan] = lp_build_sample_min_2d(bld, x, y, v00[chan], v01[chan], v10[chan], v11[chan]);
+      break;
+   case PIPE_TEX_REDUCTION_MAX:
+      for (chan = 0; chan < num_chan; chan++)
+         out[chan] = lp_build_sample_max_2d(bld, x, y, v00[chan], v01[chan], v10[chan], v11[chan]);
+      break;
+   case PIPE_TEX_REDUCTION_WEIGHTED_AVERAGE:
+   default:
+      for (chan = 0; chan < num_chan; chan++)
+         out[chan] = lp_build_lerp_2d(bld, x, y, v00[chan], v01[chan], v10[chan], v11[chan], flags);
+      break;
+   }
+}
+
+void
+lp_build_reduce_filter_3d(struct lp_build_context *bld,
+                          enum pipe_tex_reduction_mode mode,
+                          unsigned flags,
+                          unsigned num_chan,
+                          LLVMValueRef x,
+                          LLVMValueRef y,
+                          LLVMValueRef z,
+                          LLVMValueRef *v000,
+                          LLVMValueRef *v001,
+                          LLVMValueRef *v010,
+                          LLVMValueRef *v011,
+                          LLVMValueRef *v100,
+                          LLVMValueRef *v101,
+                          LLVMValueRef *v110,
+                          LLVMValueRef *v111,
+                          LLVMValueRef *out)
+{
+   unsigned chan;
+   switch (mode) {
+   case PIPE_TEX_REDUCTION_MIN:
+      for (chan = 0; chan < num_chan; chan++)
+         out[chan] = lp_build_sample_min_3d(bld, x, y, z,
+                                     v000[chan], v001[chan], v010[chan], v011[chan],
+                                     v100[chan], v101[chan], v110[chan], v111[chan]);
+      break;
+   case PIPE_TEX_REDUCTION_MAX:
+      for (chan = 0; chan < num_chan; chan++)
+         out[chan] = lp_build_sample_max_3d(bld, x, y, z,
+                                     v000[chan], v001[chan], v010[chan], v011[chan],
+                                     v100[chan], v101[chan], v110[chan], v111[chan]);
+      break;
+   case PIPE_TEX_REDUCTION_WEIGHTED_AVERAGE:
+   default:
+      for (chan = 0; chan < num_chan; chan++)
+         out[chan] = lp_build_lerp_3d(bld, x, y, z,
+                                      v000[chan], v001[chan], v010[chan], v011[chan],
+                                      v100[chan], v101[chan], v110[chan], v111[chan],
+                                      flags);
+      break;
+   }
 }

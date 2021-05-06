@@ -8,25 +8,28 @@ BLORP_FILES = \
 	blorp/blorp_priv.h
 
 COMMON_FILES = \
-	common/gen_aux_map.c \
-	common/gen_aux_map.h \
-	common/gen_buffer_alloc.h \
-	common/gen_clflush.h \
-	common/gen_batch_decoder.c \
-	common/gen_decoder.c \
-	common/gen_decoder.h \
-	common/gen_disasm.c \
-	common/gen_disasm.h \
-	common/gen_defines.h \
-	common/gen_gem.c \
-	common/gen_gem.h \
-	common/gen_guardband.h \
-	common/gen_l3_config.c \
-	common/gen_l3_config.h \
-	common/gen_urb_config.c \
-	common/gen_sample_positions.h \
-	common/gen_uuid.c \
-	common/gen_uuid.h
+	common/intel_aux_map.c \
+	common/intel_aux_map.h \
+	common/intel_buffer_alloc.h \
+	common/intel_clflush.h \
+	common/intel_batch_decoder.c \
+	common/intel_decoder.c \
+	common/intel_decoder.h \
+	common/intel_disasm.c \
+	common/intel_disasm.h \
+	common/intel_defines.h \
+	common/intel_gem.c \
+	common/intel_gem.h \
+	common/intel_guardband.h \
+	common/intel_l3_config.c \
+	common/intel_l3_config.h \
+	common/intel_urb_config.c \
+	common/intel_sample_positions.c \
+	common/intel_sample_positions.h \
+	common/intel_uuid.c \
+	common/intel_uuid.h \
+	common/intel_measure.c \
+	common/intel_measure.h
 
 COMPILER_FILES = \
 	compiler/brw_cfg.cpp \
@@ -138,8 +141,8 @@ COMPILER_FILES = \
 	compiler/brw_vec4_vs.h \
 	compiler/brw_vue_map.c \
 	compiler/brw_wm_iz.cpp \
-	compiler/gen6_gs_visitor.cpp \
-	compiler/gen6_gs_visitor.h
+	compiler/gfx6_gs_visitor.cpp \
+	compiler/gfx6_gs_visitor.h
 
 COMPILER_GENERATED_FILES = \
 	compiler/brw_nir_trig_workarounds.c
@@ -191,55 +194,55 @@ ISL_FILES = \
 	isl/isl_priv.h \
 	isl/isl_storage_image.c
 
-ISL_GEN4_FILES = \
-	isl/isl_gen4.c \
-	isl/isl_gen4.h \
+ISL_GFX4_FILES = \
+	isl/isl_gfx4.c \
+	isl/isl_gfx4.h \
 	isl/isl_emit_depth_stencil.c \
 	isl/isl_surface_state.c
 
-ISL_GEN5_FILES = \
+ISL_GFX5_FILES = \
 	isl/isl_emit_depth_stencil.c \
 	isl/isl_surface_state.c
 
-ISL_GEN6_FILES = \
-	isl/isl_gen6.c \
-	isl/isl_gen6.h \
+ISL_GFX6_FILES = \
+	isl/isl_gfx6.c \
+	isl/isl_gfx6.h \
 	isl/isl_emit_depth_stencil.c \
 	isl/isl_surface_state.c
 
-ISL_GEN7_FILES = \
-	isl/isl_gen7.c \
-	isl/isl_gen7.h \
+ISL_GFX7_FILES = \
+	isl/isl_gfx7.c \
+	isl/isl_gfx7.h \
 	isl/isl_emit_depth_stencil.c \
 	isl/isl_surface_state.c
 
-ISL_GEN75_FILES = \
+ISL_GFX75_FILES = \
 	isl/isl_emit_depth_stencil.c \
 	isl/isl_surface_state.c
 
-ISL_GEN8_FILES = \
-	isl/isl_gen8.c \
-	isl/isl_gen8.h \
+ISL_GFX8_FILES = \
+	isl/isl_gfx8.c \
+	isl/isl_gfx8.h \
 	isl/isl_emit_depth_stencil.c \
 	isl/isl_surface_state.c
 
-ISL_GEN9_FILES = \
-	isl/isl_gen9.c \
-	isl/isl_gen9.h \
+ISL_GFX9_FILES = \
+	isl/isl_gfx9.c \
+	isl/isl_gfx9.h \
 	isl/isl_emit_depth_stencil.c \
 	isl/isl_surface_state.c
 
-ISL_GEN11_FILES = \
+ISL_GFX11_FILES = \
 	isl/isl_emit_depth_stencil.c \
 	isl/isl_surface_state.c
 
-ISL_GEN12_FILES = \
-	isl/isl_gen12.c \
-	isl/isl_gen12.h \
+ISL_GFX12_FILES = \
+	isl/isl_gfx12.c \
+	isl/isl_gfx12.h \
 	isl/isl_emit_depth_stencil.c \
 	isl/isl_surface_state.c
 
-ISL_GEN125_FILES = \
+ISL_GFX125_FILES = \
 	isl/isl_emit_depth_stencil.c \
 	isl/isl_surface_state.c
 
@@ -263,16 +266,17 @@ VULKAN_FILES := \
 	vulkan/anv_cmd_buffer.c \
 	vulkan/anv_descriptor_set.c \
 	vulkan/anv_device.c \
-	vulkan/anv_dump.c \
 	vulkan/anv_formats.c \
 	vulkan/anv_genX.h \
 	vulkan/anv_image.c \
-	vulkan/anv_intel.c \
+	vulkan/anv_measure.c \
+	vulkan/anv_measure.h \
 	vulkan/anv_nir.h \
 	vulkan/anv_nir_add_base_work_group_id.c \
 	vulkan/anv_nir_apply_pipeline_layout.c \
 	vulkan/anv_nir_compute_push_layout.c \
 	vulkan/anv_nir_lower_multiview.c \
+	vulkan/anv_nir_lower_ubo_loads.c \
 	vulkan/anv_nir_lower_ycbcr_textures.c \
 	vulkan/anv_pass.c \
 	vulkan/anv_perf.c \
@@ -281,8 +285,7 @@ VULKAN_FILES := \
 	vulkan/anv_private.h \
 	vulkan/anv_queue.c \
 	vulkan/anv_util.c \
-	vulkan/anv_wsi.c \
-	vulkan/vk_format_info.h
+	vulkan/anv_wsi.c
 
 VULKAN_NON_ANDROID_FILES := \
 	vulkan/anv_android_stubs.c
@@ -307,9 +310,7 @@ VULKAN_GEM_STUB_FILES := \
 
 VULKAN_GENERATED_FILES := \
 	vulkan/anv_entrypoints.c \
-	vulkan/anv_entrypoints.h \
-	vulkan/anv_extensions.c \
-	vulkan/anv_extensions.h
+	vulkan/anv_entrypoints.h
 
 VULKAN_GENX_FILES := \
 	vulkan/genX_blorp_exec.c \
@@ -319,32 +320,32 @@ VULKAN_GENX_FILES := \
 	vulkan/genX_query.c \
 	vulkan/genX_state.c
 
-VULKAN_GEN7_FILES := \
-	vulkan/gen7_cmd_buffer.c \
+VULKAN_GFX7_FILES := \
+	vulkan/gfx7_cmd_buffer.c \
 	$(VULKAN_GENX_FILES)
 
-VULKAN_GEN75_FILES := \
-	vulkan/gen7_cmd_buffer.c \
+VULKAN_GFX75_FILES := \
+	vulkan/gfx7_cmd_buffer.c \
 	$(VULKAN_GENX_FILES)
 
-VULKAN_GEN8_FILES := \
-	vulkan/gen8_cmd_buffer.c \
+VULKAN_GFX8_FILES := \
+	vulkan/gfx8_cmd_buffer.c \
 	$(VULKAN_GENX_FILES)
 
-VULKAN_GEN9_FILES := \
-	vulkan/gen8_cmd_buffer.c \
+VULKAN_GFX9_FILES := \
+	vulkan/gfx8_cmd_buffer.c \
 	$(VULKAN_GENX_FILES)
 
-VULKAN_GEN11_FILES := \
-	vulkan/gen8_cmd_buffer.c \
+VULKAN_GFX11_FILES := \
+	vulkan/gfx8_cmd_buffer.c \
 	$(VULKAN_GENX_FILES)
 
-VULKAN_GEN12_FILES := \
-	vulkan/gen8_cmd_buffer.c \
+VULKAN_GFX12_FILES := \
+	vulkan/gfx8_cmd_buffer.c \
 	$(VULKAN_GENX_FILES)
 
-VULKAN_GEN125_FILES := \
-	vulkan/gen8_cmd_buffer.c \
+VULKAN_GFX125_FILES := \
+	vulkan/gfx8_cmd_buffer.c \
 	$(VULKAN_GENX_FILES)
 
 GEN_PERF_XML_FILES = \
@@ -361,8 +362,12 @@ GEN_PERF_XML_FILES = \
 	perf/oa-cflgt2.xml \
 	perf/oa-cflgt3.xml \
 	perf/oa-icl.xml \
-	perf/oa-lkf.xml \
-	perf/oa-tgl.xml
+	perf/oa-ehl.xml \
+	perf/oa-tglgt1.xml \
+	perf/oa-tglgt2.xml \
+	perf/oa-rkl.xml \
+	perf/oa-dg1.xml \
+	perf/oa-adl.xml
 
 GEN_PERF_FILES = \
 	perf/gen_perf.c \

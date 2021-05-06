@@ -58,7 +58,7 @@ split_conversion(nir_builder *b, nir_alu_instr *alu, nir_op op1, nir_op op2)
    nir_ssa_def *src = nir_ssa_for_alu_src(b, alu, 0);
    nir_ssa_def *tmp = nir_build_alu(b, op1, src, NULL, NULL, NULL);
    nir_ssa_def *res = nir_build_alu(b, op2, tmp, NULL, NULL, NULL);
-   nir_ssa_def_rewrite_uses(&alu->dest.dest.ssa, nir_src_for_ssa(res));
+   nir_ssa_def_rewrite_uses(&alu->dest.dest.ssa, res);
    nir_instr_remove(&alu->instr);
 }
 

@@ -23,7 +23,7 @@
  */
 #include "helpers.h"
 #include "vulkan/vk_format.h"
-#include "llvm/ac_llvm_util.h"
+#include "common/amd_family.h"
 #include <stdio.h>
 #include <sstream>
 #include <llvm-c/Target.h>
@@ -42,7 +42,6 @@ radv_shader_info info;
 std::unique_ptr<Program> program;
 Builder bld(NULL);
 Temp inputs[16];
-Temp exec_input;
 
 static VkInstance instance_cache[CHIP_LAST] = {VK_NULL_HANDLE};
 static VkDevice device_cache[CHIP_LAST] = {VK_NULL_HANDLE};
@@ -79,7 +78,9 @@ void create_program(enum chip_class chip_class, Stage stage, unsigned wave_size,
    info.wave_size = wave_size;
 
    program.reset(new Program);
-   aco::init_program(program.get(), stage, &info, chip_class, family, &config);
+   aco::init_program(program.get(), stage, &info, chip_class, family, false, &config);
+   program->workgroup_size = UINT_MAX;
+   calc_min_waves(program.get());
 
    program->debug.func = nullptr;
    program->debug.private_data = nullptr;
@@ -108,14 +109,12 @@ bool setup_cs(const char *input_spec, enum chip_class chip_class,
 
    if (input_spec) {
       unsigned num_inputs = DIV_ROUND_UP(strlen(input_spec), 3u);
-      aco_ptr<Instruction> startpgm{create_instruction<Pseudo_instruction>(aco_opcode::p_startpgm, Format::PSEUDO, 0, num_inputs + 1)};
+      aco_ptr<Instruction> startpgm{create_instruction<Pseudo_instruction>(aco_opcode::p_startpgm, Format::PSEUDO, 0, num_inputs)};
       for (unsigned i = 0; i < num_inputs; i++) {
          RegClass cls(input_spec[i * 3] == 'v' ? RegType::vgpr : RegType::sgpr, input_spec[i * 3 + 1] - '0');
          inputs[i] = bld.tmp(cls);
          startpgm->definitions[i] = Definition(inputs[i]);
       }
-      exec_input = bld.tmp(program->lane_mask);
-      startpgm->definitions[num_inputs] = bld.exec(Definition(exec_input));
       bld.insert(std::move(startpgm));
    }
 
@@ -191,6 +190,13 @@ void finish_to_hw_instr_test()
    aco_print_program(program.get(), output);
 }
 
+void finish_insert_nops_test()
+{
+   finish_program(program.get());
+   aco::insert_NOPs(program.get());
+   aco_print_program(program.get(), output);
+}
+
 void finish_assembler_test()
 {
    finish_program(program.get());
@@ -255,7 +261,7 @@ VkDevice get_vk_device(enum radeon_family family)
    if (device_cache[family])
       return device_cache[family];
 
-   setenv("RADV_FORCE_FAMILY", ac_get_llvm_processor_name(family), 1);
+   setenv("RADV_FORCE_FAMILY", ac_get_family_name(family), 1);
 
    VkApplicationInfo app_info = {};
    app_info.pApplicationName = "aco_tests";

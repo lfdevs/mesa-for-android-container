@@ -375,7 +375,7 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
    prog->gp.has_viewport = 0;
 
    if (prog->type == PIPE_SHADER_COMPUTE)
-      info->prop.cp.inputOffset = 0x10;
+      info->prop.cp.inputOffset = 0x14;
 
    info_out.driverPriv = prog;
 

@@ -28,6 +28,7 @@
 #include "nir.h"
 #include "compiler/shader_enums.h"
 #include "util/half_float.h"
+#include "util/memstream.h"
 #include "vulkan/vulkan_core.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -984,9 +985,11 @@ print_intrinsic_instr(nir_intrinsic_instr *instr, print_state *state)
                }
                fprintf(fp, ")");
             }
-            if (state->shader->info.stage == MESA_SHADER_FRAGMENT &&
-                nir_intrinsic_io_semantics(instr).medium_precision) {
+            if (nir_intrinsic_io_semantics(instr).medium_precision) {
                fprintf(fp, " mediump");
+            }
+            if (nir_intrinsic_io_semantics(instr).high_16bits) {
+               fprintf(fp, " high_16bits");
             }
          }
          break;
@@ -1409,15 +1412,6 @@ print_instr(const nir_instr *instr, print_state *state, unsigned tabs)
    }
 }
 
-static int
-compare_block_index(const void *p1, const void *p2)
-{
-   const nir_block *block1 = *((const nir_block **) p1);
-   const nir_block *block2 = *((const nir_block **) p2);
-
-   return (int) block1->index - (int) block2->index;
-}
-
 static void print_cf_node(nir_cf_node *node, print_state *state,
                           unsigned tabs);
 
@@ -1429,18 +1423,7 @@ print_block(nir_block *block, print_state *state, unsigned tabs)
    print_tabs(tabs, fp);
    fprintf(fp, "block block_%u:\n", block->index);
 
-   /* sort the predecessors by index so we consistently print the same thing */
-
-   nir_block **preds =
-      malloc(block->predecessors->entries * sizeof(nir_block *));
-
-   unsigned i = 0;
-   set_foreach(block->predecessors, entry) {
-      preds[i++] = (nir_block *) entry->key;
-   }
-
-   qsort(preds, block->predecessors->entries, sizeof(nir_block *),
-         compare_block_index);
+   nir_block **preds = nir_block_get_predecessors_sorted(block, NULL);
 
    print_tabs(tabs, fp);
    fprintf(fp, "/* preds: ");
@@ -1449,7 +1432,7 @@ print_block(nir_block *block, print_state *state, unsigned tabs)
    }
    fprintf(fp, "*/\n");
 
-   free(preds);
+   ralloc_free(preds);
 
    nir_foreach_instr(instr, block) {
       print_instr(instr, state, tabs);
@@ -1628,7 +1611,7 @@ nir_print_shader_annotated(nir_shader *shader, FILE *fp,
               shader->info.cs.local_size[1],
               shader->info.cs.local_size[2],
               shader->info.cs.local_size_variable ? " (variable)" : "");
-      fprintf(fp, "shared-size: %u\n", shader->info.cs.shared_size);
+      fprintf(fp, "shared-size: %u\n", shader->info.shared_size);
    }
 
    fprintf(fp, "inputs: %u\n", shader->num_inputs);
@@ -1636,7 +1619,7 @@ nir_print_shader_annotated(nir_shader *shader, FILE *fp,
    fprintf(fp, "uniforms: %u\n", shader->num_uniforms);
    if (shader->info.num_ubos)
       fprintf(fp, "ubos: %u\n", shader->info.num_ubos);
-   fprintf(fp, "shared: %u\n", shader->shared_size);
+   fprintf(fp, "shared: %u\n", shader->info.shared_size);
    if (shader->scratch_size)
       fprintf(fp, "scratch: %u\n", shader->scratch_size);
    if (shader->constant_data_size)
@@ -1667,6 +1650,27 @@ nir_print_shader(nir_shader *shader, FILE *fp)
 {
    nir_print_shader_annotated(shader, fp, NULL);
    fflush(fp);
+}
+
+char *
+nir_shader_as_str(nir_shader *nir, void *mem_ctx)
+{
+   char *stream_data = NULL;
+   size_t stream_size = 0;
+   struct u_memstream mem;
+   if (u_memstream_open(&mem, &stream_data, &stream_size)) {
+      FILE *const stream = u_memstream_get(&mem);
+      nir_print_shader(nir, stream);
+      u_memstream_close(&mem);
+   }
+
+   char *str = ralloc_size(mem_ctx, stream_size + 1);
+   memcpy(str, stream_data, stream_size);
+   str[stream_size] = '\0';
+
+   free(stream_data);
+
+   return str;
 }
 
 void

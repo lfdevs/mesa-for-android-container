@@ -3,6 +3,7 @@
 #define __NVC0_RESOURCE_H__
 
 #include "nv50/nv50_resource.h"
+#include "nouveau_screen.h"
 
 #define NVC0_RESOURCE_FLAG_VIDEO (NOUVEAU_RESOURCE_FLAG_DRV_PRIV << 0)
 
@@ -24,6 +25,14 @@
 
 #define NVC0_TILE_SIZE(m) ((64 * 8) << (((m) + ((m) >> 4) + ((m) >> 8)) & 0xf))
 
+static inline uint32_t
+nvc0_get_kind_generation(struct pipe_screen *pscreen)
+{
+   if (nouveau_screen(pscreen)->device->chipset >= 0x160)
+      return 2;
+   else
+      return 0;
+}
 
 void
 nvc0_init_resource_functions(struct pipe_context *pcontext);
@@ -33,6 +42,12 @@ nvc0_screen_init_resource_functions(struct pipe_screen *pscreen);
 
 /* Internal functions:
  */
+uint32_t
+nvc0_choose_tiled_storage_type(struct pipe_screen *pscreen,
+                               enum pipe_format format,
+                               unsigned ms,
+                               bool compressed);
+
 struct pipe_resource *
 nvc0_miptree_create(struct pipe_screen *pscreen,
                     const struct pipe_resource *tmp,

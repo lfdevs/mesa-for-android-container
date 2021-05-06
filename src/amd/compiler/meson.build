@@ -78,6 +78,7 @@ libaco_files = files(
   'aco_opt_value_numbering.cpp',
   'aco_print_asm.cpp',
   'aco_print_ir.cpp',
+  'aco_reindex_ssa.cpp',
   'aco_scheduler.cpp',
   'aco_spill.cpp',
   'aco_ssa_elimination.cpp',
@@ -99,7 +100,7 @@ _libaco = static_library(
   ],
   dependencies : [
     dep_llvm, dep_thread, dep_elf, dep_libdrm_amdgpu, dep_valgrind,
-    idep_nir_headers, idep_amdgfxregs_h,
+    idep_nir_headers, idep_amdgfxregs_h, idep_vulkan_util_headers,
   ],
   gnu_symbol_visibility : 'hidden',
   build_by_default : true,

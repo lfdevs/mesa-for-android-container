@@ -481,7 +481,7 @@ nir_lower_io_to_vector_impl(nir_function_impl *impl, nir_variable_mode modes)
             nir_ssa_def *new_vec = nir_channels(&b, &intrin->dest.ssa,
                                                 vec4_comp_mask >> new_frac);
             nir_ssa_def_rewrite_uses_after(&intrin->dest.ssa,
-                                           nir_src_for_ssa(new_vec),
+                                           new_vec,
                                            new_vec->parent_instr);
 
             progress = true;
@@ -622,7 +622,7 @@ nir_vectorize_tess_levels_impl(nir_function_impl *impl)
             b.cursor = nir_after_instr(instr);
             nir_ssa_def *val = &intrin->dest.ssa;
             nir_ssa_def *comp = nir_channel(&b, val, index);
-            nir_ssa_def_rewrite_uses_after(val, nir_src_for_ssa(comp), comp->parent_instr);
+            nir_ssa_def_rewrite_uses_after(val, comp, comp->parent_instr);
          }
 
          progress = true;

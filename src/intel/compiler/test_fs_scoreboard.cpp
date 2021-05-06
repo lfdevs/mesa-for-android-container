@@ -30,11 +30,12 @@ using namespace brw;
 
 class scoreboard_test : public ::testing::Test {
    virtual void SetUp();
+   virtual void TearDown();
 
 public:
    struct brw_compiler *compiler;
    struct gen_device_info *devinfo;
-   struct gl_context *ctx;
+   void *ctx;
    struct brw_wm_prog_data *prog_data;
    struct gl_shader_program *shader_prog;
    fs_visitor *v;
@@ -42,18 +43,28 @@ public:
 
 void scoreboard_test::SetUp()
 {
-   ctx = (struct gl_context *)calloc(1, sizeof(*ctx));
-   compiler = (struct brw_compiler *)calloc(1, sizeof(*compiler));
-   devinfo = (struct gen_device_info *)calloc(1, sizeof(*devinfo));
+   ctx = ralloc_context(NULL);
+   compiler = rzalloc(ctx, struct brw_compiler);
+   devinfo = rzalloc(ctx, struct gen_device_info);
    compiler->devinfo = devinfo;
 
-   prog_data = ralloc(NULL, struct brw_wm_prog_data);
+   prog_data = ralloc(ctx, struct brw_wm_prog_data);
    nir_shader *shader =
-      nir_shader_create(NULL, MESA_SHADER_FRAGMENT, NULL, NULL);
+      nir_shader_create(ctx, MESA_SHADER_FRAGMENT, NULL, NULL);
 
-   v = new fs_visitor(compiler, NULL, NULL, NULL, &prog_data->base, shader, 8, -1);
+   v = new fs_visitor(compiler, NULL, ctx, NULL, &prog_data->base, shader, 8, -1, false);
 
-   devinfo->gen = 12;
+   devinfo->ver = 12;
+   devinfo->verx10 = devinfo->ver * 10;
+}
+
+void scoreboard_test::TearDown()
+{
+   delete v;
+   v = NULL;
+
+   ralloc_free(ctx);
+   ctx = NULL;
 }
 
 static fs_inst *

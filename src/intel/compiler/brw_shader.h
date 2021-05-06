@@ -47,7 +47,8 @@ protected:
                   void *log_data,
                   void *mem_ctx,
                   const nir_shader *shader,
-                  struct brw_stage_prog_data *stage_prog_data);
+                  struct brw_stage_prog_data *stage_prog_data,
+                  bool debug_enabled);
 
 public:
    virtual ~backend_shader();

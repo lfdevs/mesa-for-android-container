@@ -711,8 +711,8 @@
     <field name="Height" start="80" end="93" type="uint"/>
     <field name="Surface Pitch" start="96" end="113" type="uint"/>
     <field name="Tile Address Mapping Mode" start="116" end="116" type="uint">
-      <value name="Gen9" value="0"/>
-      <value name="Gen10+" value="1"/>
+      <value name="Gfx9" value="0"/>
+      <value name="Gfx10+" value="1"/>
     </field>
     <field name="Depth" start="117" end="127" type="uint"/>
     <field name="Multisample Position Palette Index" start="128" end="130" type="uint"/>
@@ -1425,7 +1425,7 @@
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="MOCS" start="32" end="38" type="uint"/>
-    <field name="Binding Table Pool Enable" start="43" end="43" type="uint"/>
+    <field name="Binding Table Pool Enable" start="43" end="43" type="bool"/>
     <field name="Binding Table Pool Base Address" start="44" end="95" type="address"/>
     <field name="Binding Table Pool Buffer Size" start="108" end="127" type="uint">
       <value name="No Valid Data" value="0"/>
@@ -6889,6 +6889,14 @@
     <field name="NP Early Z Fails Disable Mask" start="29" end="29" type="bool"/>
     <field name="Blend Optimization Fix Disable Mask" start="30" end="30" type="bool"/>
     <field name="Color Compression Disable Mask" start="31" end="31" type="bool"/>
+  </register>
+
+  <register name="GT_MODE" length="1" num="0x7008">
+     <field name="Binding Table Alignment" start="10" end="10" type="uint">
+       <value name="BTP_15_5" value="0"/>
+       <value name="BTP_18_8" value="1"/>
+     </field>
+     <field name="Binding Table Alignment Mask" start="26" end="26" type="bool"/>
   </register>
 
   <register name="CACHE_MODE_SS" length="1" num="0x0e420">

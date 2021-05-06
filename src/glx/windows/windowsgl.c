@@ -389,15 +389,3 @@ windows_extensions(char **gl_extensions, char **wgl_extensions)
    *gl_extensions = result.gl_extensions;
    *wgl_extensions = result.wgl_extensions;
 }
-
-void windows_setTexBuffer(windowsContext *context, int textureTarget,
-                         int textureFormat, windowsDrawable *drawable)
-{
-   // not yet implemented
-}
-
-void windows_releaseTexBuffer(windowsContext *context, int textureTarget,
-                             windowsDrawable *drawable)
-{
-   // not yet implemented
-}

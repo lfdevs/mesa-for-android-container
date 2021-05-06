@@ -3768,30 +3768,37 @@
   </register>
 
   <register name="L3CNTLREG2" length="1" num="0xb020">
-    <field name="SLM Enable" start="0" end="0" type="uint"/>
+    <field name="SLM Enable" start="0" end="0" type="bool"/>
     <field name="URB Allocation" start="1" end="6" type="uint"/>
-    <field name="URB Low Bandwidth" start="7" end="7" type="uint"/>
+    <field name="URB Low Bandwidth" start="7" end="7" type="bool"/>
     <field name="ALL Allocation" start="8" end="13" type="uint"/>
     <field name="RO Allocation" start="14" end="19" type="uint"/>
-    <field name="RO Low Bandwidth" start="20" end="20" type="uint"/>
+    <field name="RO Low Bandwidth" start="20" end="20" type="bool"/>
     <field name="DC Allocation" start="21" end="26" type="uint"/>
-    <field name="DC Low Bandwidth" start="27" end="27" type="uint"/>
+    <field name="DC Low Bandwidth" start="27" end="27" type="bool"/>
   </register>
 
   <register name="L3CNTLREG3" length="1" num="0xb024">
     <field name="IS Allocation" start="1" end="6" type="uint"/>
-    <field name="IS Low Bandwidth" start="7" end="7" type="uint"/>
+    <field name="IS Low Bandwidth" start="7" end="7" type="bool"/>
     <field name="C Allocation" start="8" end="13" type="uint"/>
-    <field name="C Low Bandwidth" start="14" end="14" type="uint"/>
+    <field name="C Low Bandwidth" start="14" end="14" type="bool"/>
     <field name="T Allocation" start="15" end="20" type="uint"/>
-    <field name="T Low Bandwidth" start="21" end="21" type="uint"/>
+    <field name="T Low Bandwidth" start="21" end="21" type="bool"/>
   </register>
 
   <register name="L3SQCREG1" length="1" num="0xb010">
-    <field name="Convert DC_UC" start="24" end="24" type="uint"/>
-    <field name="Convert IS_UC" start="25" end="25" type="uint"/>
-    <field name="Convert C_UC" start="26" end="26" type="uint"/>
-    <field name="Convert T_UC" start="27" end="27" type="uint"/>
+    <field name="L3SQ General Priority Credit Initialization" start="20" end="23" type="uint">
+      <value name="SQGPCI_DEFAULT" value="0x7"/>
+      <value name="BYT_SQGPCI_DEFAULT" value="0xd"/>
+    </field>
+    <field name="L3SQ High Priority Credit Initialization" start="16" end="19" type="uint">
+      <value name="SQHPCI_DEFAULT" value="0x3"/>
+    </field>
+    <field name="Convert DC_UC" start="24" end="24" type="bool"/>
+    <field name="Convert IS_UC" start="25" end="25" type="bool"/>
+    <field name="Convert C_UC" start="26" end="26" type="bool"/>
+    <field name="Convert T_UC" start="27" end="27" type="bool"/>
   </register>
 
   <register name="PS_INVOCATION_COUNT" length="2" num="0x2348">

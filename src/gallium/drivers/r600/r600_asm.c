@@ -686,7 +686,7 @@ static int replace_gpr_with_pv_ps(struct r600_bytecode *bc,
 	return 0;
 }
 
-void r600_bytecode_special_constants(uint32_t value, unsigned *sel, unsigned *neg, unsigned abs)
+void r600_bytecode_special_constants(uint32_t value, unsigned *sel)
 {
 	switch(value) {
 	case 0:
@@ -703,14 +703,6 @@ void r600_bytecode_special_constants(uint32_t value, unsigned *sel, unsigned *ne
 		break;
 	case 0x3F000000: /* 0.5f */
 		*sel = V_SQ_ALU_SRC_0_5;
-		break;
-	case 0xBF800000: /* -1.0f */
-		*sel = V_SQ_ALU_SRC_1;
-		*neg ^= !abs;
-		break;
-	case 0xBF000000: /* -0.5f */
-		*sel = V_SQ_ALU_SRC_0_5;
-		*neg ^= !abs;
 		break;
 	default:
 		*sel = V_SQ_ALU_SRC_LITERAL;
@@ -1261,7 +1253,7 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 		}
 		if (nalu->src[i].sel == V_SQ_ALU_SRC_LITERAL)
 			r600_bytecode_special_constants(nalu->src[i].value,
-				&nalu->src[i].sel, &nalu->src[i].neg, nalu->src[i].abs);
+				&nalu->src[i].sel);
 	}
 	if (nalu->dst.sel >= bc->ngpr) {
 		bc->ngpr = nalu->dst.sel + 1;
@@ -2640,7 +2632,8 @@ void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
 	uint32_t *bytecode;
 	int i, j, r, fs_size;
 	struct r600_fetch_shader *shader;
-	unsigned no_sb = rctx->screen->b.debug_flags & DBG_NO_SB;
+	unsigned no_sb = rctx->screen->b.debug_flags & DBG_NO_SB ||
+                         (rctx->screen->b.debug_flags & DBG_NIR);
 	unsigned sb_disasm = !no_sb || (rctx->screen->b.debug_flags & DBG_SB_DISASM);
 
 	assert(count < 32);
@@ -2786,7 +2779,7 @@ void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
 	} else {
 		memcpy(bytecode, bc.bytecode, fs_size);
 	}
-	rctx->b.ws->buffer_unmap(shader->buffer->buf);
+	rctx->b.ws->buffer_unmap(rctx->b.ws, shader->buffer->buf);
 
 	r600_bytecode_clear(&bc);
 	return shader;

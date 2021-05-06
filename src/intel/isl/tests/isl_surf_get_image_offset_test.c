@@ -101,7 +101,7 @@ t_assert_phys_level0_sa(const struct isl_surf *surf, uint32_t width,
 }
 
 static void
-t_assert_gen4_3d_layer(const struct isl_surf *surf,
+t_assert_gfx4_3d_layer(const struct isl_surf *surf,
                        uint32_t level,
                        uint32_t aligned_width,
                        uint32_t aligned_height,
@@ -261,15 +261,15 @@ test_bdw_3d_r8g8b8a8_unorm_256x256x256_levels09_tiley0(void)
 
    uint32_t base_y = 0;
 
-   t_assert_gen4_3d_layer(&surf, 0, 256, 256, 256,   1, 256, &base_y);
-   t_assert_gen4_3d_layer(&surf, 1, 128, 128, 128,   2,  64, &base_y);
-   t_assert_gen4_3d_layer(&surf, 2,  64,  64,  64,   4,  16, &base_y);
-   t_assert_gen4_3d_layer(&surf, 3,  32,  32,  32,   8,   4, &base_y);
-   t_assert_gen4_3d_layer(&surf, 4,  16,  16,  16,  16,   1, &base_y);
-   t_assert_gen4_3d_layer(&surf, 5,   8,   8,   8,  32,   1, &base_y);
-   t_assert_gen4_3d_layer(&surf, 6,   4,   4,   4,  64,   1, &base_y);
-   t_assert_gen4_3d_layer(&surf, 7,   4,   4,   2, 128,   1, &base_y);
-   t_assert_gen4_3d_layer(&surf, 8,   4,   4,   1, 256,   1, &base_y);
+   t_assert_gfx4_3d_layer(&surf, 0, 256, 256, 256,   1, 256, &base_y);
+   t_assert_gfx4_3d_layer(&surf, 1, 128, 128, 128,   2,  64, &base_y);
+   t_assert_gfx4_3d_layer(&surf, 2,  64,  64,  64,   4,  16, &base_y);
+   t_assert_gfx4_3d_layer(&surf, 3,  32,  32,  32,   8,   4, &base_y);
+   t_assert_gfx4_3d_layer(&surf, 4,  16,  16,  16,  16,   1, &base_y);
+   t_assert_gfx4_3d_layer(&surf, 5,   8,   8,   8,  32,   1, &base_y);
+   t_assert_gfx4_3d_layer(&surf, 6,   4,   4,   4,  64,   1, &base_y);
+   t_assert_gfx4_3d_layer(&surf, 7,   4,   4,   2, 128,   1, &base_y);
+   t_assert_gfx4_3d_layer(&surf, 8,   4,   4,   1, 256,   1, &base_y);
 }
 
 int main(void)

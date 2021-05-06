@@ -77,9 +77,6 @@ struct ir3_postsched_node {
 #define foreach_sched_node(__n, __list) \
 	list_for_each_entry(struct ir3_postsched_node, __n, __list, dag.link)
 
-#define foreach_bit(b, mask) \
-	for (uint32_t _m = ({debug_assert((mask) >= 1); (mask);}); _m && ({(b) = u_bit_scan(&_m); 1;});)
-
 static void
 schedule(struct ir3_postsched_ctx *ctx, struct ir3_instruction *instr)
 {
@@ -383,7 +380,11 @@ add_reg_dep(struct ir3_postsched_deps_state *state,
 		unsigned num, bool write)
 {
 	if (state->merged) {
-		if (reg->flags & IR3_REG_HALF) {
+		/* Make sure that special registers like a0.x that are written as
+		 * half-registers don't alias random full registers by pretending that
+		 * they're full registers:
+		 */
+		if ((reg->flags & IR3_REG_HALF) && num < regid(48, 0)) {
 			/* single conflict in half-reg space: */
 			add_single_reg_dep(state, node, num, write);
 		} else {
@@ -402,8 +403,6 @@ static void
 calculate_deps(struct ir3_postsched_deps_state *state,
 		struct ir3_postsched_node *node)
 {
-	int b;
-
 	/* Add dependencies on instructions that previously (or next,
 	 * in the reverse direction) wrote any of our src registers:
 	 */
@@ -418,7 +417,8 @@ calculate_deps(struct ir3_postsched_deps_state *state,
 				add_reg_dep(state, node, reg, arr->reg + i, false);
 			}
 		} else {
-			foreach_bit (b, reg->wrmask) {
+			assert(reg->wrmask >= 1);
+			u_foreach_bit (b, reg->wrmask) {
 				add_reg_dep(state, node, reg, reg->num + b, false);
 
 				struct ir3_postsched_node *dep = dep_reg(state, reg->num + b);
@@ -450,7 +450,8 @@ calculate_deps(struct ir3_postsched_deps_state *state,
 			add_reg_dep(state, node, reg, arr->reg + i, true);
 		}
 	} else {
-		foreach_bit (b, reg->wrmask) {
+		assert(reg->wrmask >= 1);
+		u_foreach_bit (b, reg->wrmask) {
 			add_reg_dep(state, node, reg, reg->num + b, true);
 		}
 	}
@@ -530,6 +531,13 @@ sched_dag_init(struct ir3_postsched_ctx *ctx)
 	struct util_dynarray kills;
 	util_dynarray_init(&kills, ctx->mem_ctx);
 
+	/* The last bary.f with the (ei) flag must be scheduled before any kills,
+	 * or the hw gets angry. Keep track of inputs here so we can add the
+	 * false dep on the kill instruction.
+	 */
+	struct util_dynarray inputs;
+	util_dynarray_init(&inputs, ctx->mem_ctx);
+
 	/*
 	 * Normal srcs won't be in SSA at this point, those are dealt with in
 	 * calculate_forward_deps() and calculate_reverse_deps().  But we still
@@ -556,7 +564,14 @@ sched_dag_init(struct ir3_postsched_ctx *ctx)
 			dag_add_edge(&sn->dag, &n->dag, NULL);
 		}
 
-		if (is_kill(instr)) {
+		if (is_input(instr)) {
+			util_dynarray_append(&inputs, struct ir3_instruction *, instr);
+		} else if (is_kill(instr)) {
+			util_dynarray_foreach(&inputs, struct ir3_instruction *, instrp) {
+				struct ir3_instruction *input = *instrp;
+				struct ir3_postsched_node *in = input->data;
+				dag_add_edge(&in->dag, &n->dag, NULL);
+			}
 			util_dynarray_append(&kills, struct ir3_instruction *, instr);
 		} else if (is_tex(instr) || is_mem(instr)) {
 			util_dynarray_foreach(&kills, struct ir3_instruction *, instrp) {

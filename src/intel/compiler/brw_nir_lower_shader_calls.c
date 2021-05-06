@@ -847,7 +847,7 @@ rewrite_phis_to_pred(nir_block *block, nir_block *pred)
          if (phi_src->pred == pred) {
             found = true;
             assert(phi_src->src.is_ssa);
-            nir_ssa_def_rewrite_uses(&phi->dest.ssa, phi_src->src);
+            nir_ssa_def_rewrite_uses(&phi->dest.ssa, phi_src->src.ssa);
             break;
          }
       }

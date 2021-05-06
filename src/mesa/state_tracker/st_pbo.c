@@ -194,6 +194,7 @@ st_pbo_draw(struct st_context *st, const struct st_pbo_addresses *addr,
             unsigned surface_width, unsigned surface_height)
 {
    struct cso_context *cso = st->cso_context;
+   struct pipe_context *pipe = st->pipe;
 
    /* Setup vertex and geometry shaders */
    if (!st->pbo.vs) {
@@ -255,6 +256,7 @@ st_pbo_draw(struct st_context *st, const struct st_pbo_addresses *addr,
       cso_set_vertex_elements(cso, &velem);
 
       cso_set_vertex_buffers(cso, 0, 1, &vbo);
+      st->last_num_vbuffers = MAX2(st->last_num_vbuffers, 1);
 
       pipe_resource_reference(&vbo.buffer.resource, NULL);
    }
@@ -268,7 +270,7 @@ st_pbo_draw(struct st_context *st, const struct st_pbo_addresses *addr,
       cb.buffer_offset = 0;
       cb.buffer_size = sizeof(addr->constants);
 
-      cso_set_constant_buffer(cso, PIPE_SHADER_FRAGMENT, 0, &cb);
+      pipe->set_constant_buffer(pipe, PIPE_SHADER_FRAGMENT, 0, false, &cb);
 
       pipe_resource_reference(&cb.buffer, NULL);
    }
@@ -510,7 +512,7 @@ create_fs(struct st_context *st, bool download,
    tex->sampler_dim = glsl_get_sampler_dim(tex_var->type);
    tex->coord_components =
       glsl_get_sampler_coordinate_components(tex_var->type);
-   tex->dest_type = nir_type_float;
+   tex->dest_type = nir_type_float32;
    tex->src[0].src_type = nir_tex_src_texture_deref;
    tex->src[0].src = nir_src_for_ssa(&tex_deref->dest.ssa);
    tex->src[1].src_type = nir_tex_src_sampler_deref;

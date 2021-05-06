@@ -206,24 +206,27 @@ nvc0_screen_get_driver_query_group_info(struct pipe_screen *pscreen,
 {
    struct nvc0_screen *screen = nvc0_screen(pscreen);
    int count = 0;
-
-#ifdef NOUVEAU_ENABLE_DRIVER_STATISTICS
-   count++;
-#endif
+   int map[3] = {};
 
    if (screen->base.drm->version >= 0x01000101) {
       if (screen->compute) {
          if (screen->base.class_3d <= GM200_3D_CLASS) {
-            count += 2;
+            map[count++] = NVC0_HW_SM_QUERY_GROUP;
+            map[count++] = NVC0_HW_METRIC_QUERY_GROUP;
          }
       }
    }
 
+#ifdef NOUVEAU_ENABLE_DRIVER_STATISTICS
+   map[count++] = NVC0_SW_QUERY_DRV_STAT_GROUP;
+#endif
+
    if (!info)
       return count;
 
-   if (id == NVC0_HW_SM_QUERY_GROUP) {
-      if (screen->compute) {
+   switch (map[id]) {
+   case NVC0_HW_SM_QUERY_GROUP:
+      if (screen->compute && screen->base.class_3d <= GM200_3D_CLASS) {
          info->name = "MP counters";
 
          /* Expose the maximum number of hardware counters available, although
@@ -234,25 +237,23 @@ nvc0_screen_get_driver_query_group_info(struct pipe_screen *pscreen,
          info->num_queries = nvc0_hw_sm_get_num_queries(screen);
          return 1;
       }
-   } else
-   if (id == NVC0_HW_METRIC_QUERY_GROUP) {
-      if (screen->compute) {
-          if (screen->base.class_3d <= GM200_3D_CLASS) {
-            info->name = "Performance metrics";
-            info->max_active_queries = 4; /* A metric uses at least 2 queries */
-            info->num_queries = nvc0_hw_metric_get_num_queries(screen);
-            return 1;
-         }
+      break;
+   case NVC0_HW_METRIC_QUERY_GROUP:
+      if (screen->compute && screen->base.class_3d <= GM200_3D_CLASS) {
+         info->name = "Performance metrics";
+         info->max_active_queries = 4; /* A metric uses at least 2 queries */
+         info->num_queries = nvc0_hw_metric_get_num_queries(screen);
+         return 1;
       }
-   }
+      break;
 #ifdef NOUVEAU_ENABLE_DRIVER_STATISTICS
-   else if (id == NVC0_SW_QUERY_DRV_STAT_GROUP) {
+   case NVC0_SW_QUERY_DRV_STAT_GROUP:
       info->name = "Driver statistics";
       info->max_active_queries = NVC0_SW_QUERY_DRV_STAT_COUNT;
       info->num_queries = NVC0_SW_QUERY_DRV_STAT_COUNT;
       return 1;
-   }
 #endif
+   }
 
    /* user asked for info about non-existing query group */
    info->name = "this_is_not_the_query_group_you_are_looking_for";

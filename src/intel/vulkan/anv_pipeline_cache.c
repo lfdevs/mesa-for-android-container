@@ -42,31 +42,27 @@ anv_shader_bin_create(struct anv_device *device,
                       const nir_xfb_info *xfb_info_in,
                       const struct anv_pipeline_bind_map *bind_map)
 {
-   struct anv_shader_bin *shader;
-   struct anv_shader_bin_key *key;
-   struct brw_stage_prog_data *prog_data;
-   struct brw_shader_reloc *prog_data_relocs;
-   uint32_t *prog_data_param;
-   nir_xfb_info *xfb_info;
-   struct anv_pipeline_binding *surface_to_descriptor, *sampler_to_descriptor;
+   VK_MULTIALLOC(ma);
+   VK_MULTIALLOC_DECL(&ma, struct anv_shader_bin, shader, 1);
+   VK_MULTIALLOC_DECL_SIZE(&ma, struct anv_shader_bin_key, key,
+                                sizeof(*key) + key_size);
+   VK_MULTIALLOC_DECL_SIZE(&ma, struct brw_stage_prog_data, prog_data,
+                                prog_data_size);
+   VK_MULTIALLOC_DECL(&ma, struct brw_shader_reloc, prog_data_relocs,
+                           prog_data_in->num_relocs);
+   VK_MULTIALLOC_DECL(&ma, uint32_t, prog_data_param, prog_data_in->nr_params);
 
-   ANV_MULTIALLOC(ma);
-   anv_multialloc_add(&ma, &shader, 1);
-   anv_multialloc_add_size(&ma, &key, sizeof(*key) + key_size);
-   anv_multialloc_add_size(&ma, &prog_data, prog_data_size);
-   anv_multialloc_add(&ma, &prog_data_relocs, prog_data_in->num_relocs);
-   anv_multialloc_add(&ma, &prog_data_param, prog_data_in->nr_params);
-   if (xfb_info_in) {
-      uint32_t xfb_info_size = nir_xfb_info_size(xfb_info_in->output_count);
-      anv_multialloc_add_size(&ma, &xfb_info, xfb_info_size);
-   }
-   anv_multialloc_add(&ma, &surface_to_descriptor,
+   VK_MULTIALLOC_DECL_SIZE(&ma, nir_xfb_info, xfb_info,
+                                xfb_info_in == NULL ? 0 :
+                                nir_xfb_info_size(xfb_info_in->output_count));
+
+   VK_MULTIALLOC_DECL(&ma, struct anv_pipeline_binding, surface_to_descriptor,
                            bind_map->surface_count);
-   anv_multialloc_add(&ma, &sampler_to_descriptor,
+   VK_MULTIALLOC_DECL(&ma, struct anv_pipeline_binding, sampler_to_descriptor,
                            bind_map->sampler_count);
 
-   if (!anv_multialloc_alloc(&ma, &device->vk.alloc,
-                             VK_SYSTEM_ALLOCATION_SCOPE_DEVICE))
+   if (!vk_multialloc_alloc(&ma, &device->vk.alloc,
+                            VK_SYSTEM_ALLOCATION_SCOPE_DEVICE))
       return NULL;
 
    shader->ref_cnt = 1;

@@ -732,12 +732,12 @@ vectorize_loads(nir_builder *b, struct vectorize_ctx *ctx,
 
    /* update uses */
    if (first == low) {
-      nir_ssa_def_rewrite_uses_after(&low->intrin->dest.ssa, nir_src_for_ssa(low_def),
+      nir_ssa_def_rewrite_uses_after(&low->intrin->dest.ssa, low_def,
                                      high_def->parent_instr);
-      nir_ssa_def_rewrite_uses(&high->intrin->dest.ssa, nir_src_for_ssa(high_def));
+      nir_ssa_def_rewrite_uses(&high->intrin->dest.ssa, high_def);
    } else {
-      nir_ssa_def_rewrite_uses(&low->intrin->dest.ssa, nir_src_for_ssa(low_def));
-      nir_ssa_def_rewrite_uses_after(&high->intrin->dest.ssa, nir_src_for_ssa(high_def),
+      nir_ssa_def_rewrite_uses(&low->intrin->dest.ssa, low_def);
+      nir_ssa_def_rewrite_uses_after(&high->intrin->dest.ssa, high_def,
                                      high_def->parent_instr);
    }
 
@@ -773,10 +773,7 @@ vectorize_loads(nir_builder *b, struct vectorize_ctx *ctx,
                             nir_src_for_ssa(&first->deref->dest.ssa));
    }
 
-   /* update base/align */
-   if (first != low && nir_intrinsic_has_base(first->intrin))
-      nir_intrinsic_set_base(first->intrin, nir_intrinsic_base(low->intrin));
-
+   /* update align */
    if (nir_intrinsic_has_range_base(first->intrin)) {
       uint32_t low_base = nir_intrinsic_range_base(low->intrin);
       uint32_t high_base = nir_intrinsic_range_base(high->intrin);

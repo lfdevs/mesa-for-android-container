@@ -654,7 +654,7 @@ remove_out_of_bounds_induction_use(nir_shader *shader, nir_loop *loop,
                      nir_ssa_undef(&b, intrin->dest.ssa.num_components,
                                    intrin->dest.ssa.bit_size);
                   nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                           nir_src_for_ssa(undef));
+                                           undef);
                } else {
                   nir_instr_remove(instr);
                   continue;
@@ -757,11 +757,13 @@ is_indirect_load(nir_instr *instr)
       nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
 
       if ((intrin->intrinsic == nir_intrinsic_load_ubo ||
-           intrin->intrinsic == nir_intrinsic_load_ssbo ||
-           intrin->intrinsic == nir_intrinsic_load_global) &&
+           intrin->intrinsic == nir_intrinsic_load_ssbo) &&
           !nir_src_is_const(intrin->src[1])) {
          return true;
       }
+
+      if (intrin->intrinsic == nir_intrinsic_load_global)
+         return true;
 
       if (intrin->intrinsic == nir_intrinsic_load_deref ||
           intrin->intrinsic == nir_intrinsic_store_deref) {

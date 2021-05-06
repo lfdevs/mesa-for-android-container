@@ -91,9 +91,6 @@ d3d12_lower_primitive_id(nir_shader *shader);
 void
 d3d12_lower_triangle_strip(nir_shader *shader);
 
-void
-d3d12_fixup_clipdist_writes(nir_shader *shader);
-
 #ifdef __cplusplus
 }
 #endif

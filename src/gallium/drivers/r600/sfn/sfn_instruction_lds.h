@@ -8,11 +8,15 @@ namespace r600 {
 class LDSReadInstruction : public Instruction {
 public:
    LDSReadInstruction(std::vector<PValue>& value, std::vector<PValue>& address);
-   void replace_values(const ValueSet& candiates, PValue new_value) override;
+   void replace_values(const ValueSet& candidates, PValue new_value) override;
 
    unsigned num_values() const { return m_dest_value.size();}
    const Value& address(unsigned i) const { return *m_address[i];}
    const Value& dest(unsigned i) const { return *m_dest_value[i];}
+
+   bool accept(InstructionVisitor& visitor) override {return visitor.visit(*this);}
+   bool accept(ConstInstructionVisitor& visitor) const override {return visitor.visit(*this);}
+
 private:
    void do_print(std::ostream& os) const override;
    bool is_equal_to(const Instruction& lhs) const override;
@@ -31,6 +35,9 @@ public:
    const Value& src0() const { return *m_src0_value;}
    const PValue& src1() const { return m_src1_value;}
    unsigned op() const {return m_opcode;}
+
+   bool accept(InstructionVisitor& visitor) override {return visitor.visit(*this);}
+   bool accept(ConstInstructionVisitor& visitor) const override {return visitor.visit(*this);}
 
 private:
    void do_print(std::ostream& os) const override;
@@ -54,7 +61,10 @@ public:
    unsigned num_components() const { return m_value1 ? 2 : 1;}
    unsigned idx_offset() const {return m_idx_offset;};
 
-   void replace_values(const ValueSet& candiates, PValue new_value) override;
+   void replace_values(const ValueSet& candidates, PValue new_value) override;
+
+   bool accept(InstructionVisitor& visitor) override {return visitor.visit(*this);}
+   bool accept(ConstInstructionVisitor& visitor) const override {return visitor.visit(*this);}
 
 private:
    void do_print(std::ostream& os) const override;

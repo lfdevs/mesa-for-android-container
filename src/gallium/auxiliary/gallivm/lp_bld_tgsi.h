@@ -171,6 +171,7 @@ struct lp_bld_tgsi_system_values {
    LLVMValueRef vertex_id_nobase;
    LLVMValueRef prim_id;
    LLVMValueRef basevertex;
+   LLVMValueRef firstvertex;
    LLVMValueRef invocation_id;
    LLVMValueRef draw_id;
    LLVMValueRef thread_id;
@@ -186,6 +187,9 @@ struct lp_bld_tgsi_system_values {
    LLVMValueRef sample_id;
    LLVMValueRef sample_pos;
    LLVMValueRef sample_mask_in;
+   LLVMValueRef view_index;
+   LLVMValueRef subgroup_id;
+   LLVMValueRef num_subgroups;
 };
 
 

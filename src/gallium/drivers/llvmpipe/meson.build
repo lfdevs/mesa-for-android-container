@@ -114,7 +114,7 @@ driver_swrast = declare_dependency(
   dependencies : [driver_swrast, dep_llvm, idep_mesautil],
 )
 
-if with_tests and with_gallium_softpipe and with_llvm
+if with_tests and with_gallium_softpipe and draw_with_llvm
   foreach t : ['lp_test_format', 'lp_test_arit', 'lp_test_blend',
                'lp_test_conv', 'lp_test_printf']
     test(
@@ -128,7 +128,7 @@ if with_tests and with_gallium_softpipe and with_llvm
       ),
       suite : ['llvmpipe'],
       should_fail : meson.get_cross_property('xfail', '').contains(t),
-      timeout: 180,
+      timeout: 240,
     )
   endforeach
 endif

@@ -52,7 +52,7 @@ Building for Android via the legacy ``Android.mk`` system is not officially
 supported but reportedly works. Your mileage may vary.
 
 For general information on building Mesa, read :doc:`the install documentation
-<install>`.
+<../install>`.
 
 Chat
 ----

@@ -58,7 +58,7 @@ anv_nir_add_base_work_group_id(nir_shader *shader)
                                            load_base);
 
             nir_ssa_def_rewrite_uses_after(&load_id->dest.ssa,
-                                           nir_src_for_ssa(id),
+                                           id,
                                            id->parent_instr);
             progress = true;
          }

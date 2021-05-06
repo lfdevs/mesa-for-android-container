@@ -24,6 +24,7 @@
  *
  */
 
+#include "util/format/u_format.h"
 #include "nv50/nv50_context.h"
 #include "nv50/nv50_compute.xml.h"
 
@@ -152,7 +153,281 @@ nv50_screen_compute_setup(struct nv50_screen *screen,
    BEGIN_NV04(push, NV50_CP(LOCAL_SIZE_LOG), 1);
    PUSH_DATA (push, util_logbase2((screen->max_tls_space / ONE_TEMP_SIZE) * 2));
 
+   BEGIN_NV04(push, NV50_CP(CB_DEF_ADDRESS_HIGH), 3);
+   PUSH_DATAh(push, screen->uniforms->offset + (3 << 16));
+   PUSH_DATA (push, screen->uniforms->offset + (3 << 16));
+   PUSH_DATA (push, (NV50_CB_PCP << 16) | 0x0000);
+
+   BEGIN_NV04(push, NV50_CP(QUERY_ADDRESS_HIGH), 2);
+   PUSH_DATAh(push, screen->fence.bo->offset + 16);
+   PUSH_DATA (push, screen->fence.bo->offset + 16);
+
    return 0;
+}
+
+static void
+nv50_compute_validate_samplers(struct nv50_context *nv50)
+{
+   bool need_flush = nv50_validate_tsc(nv50, NV50_SHADER_STAGE_COMPUTE);
+   if (need_flush) {
+      BEGIN_NV04(nv50->base.pushbuf, NV50_CP(TSC_FLUSH), 1);
+      PUSH_DATA (nv50->base.pushbuf, 0);
+   }
+
+   /* Invalidate all 3D samplers because they are aliased. */
+   nv50->dirty_3d |= NV50_NEW_3D_SAMPLERS;
+}
+
+static void
+nv50_compute_validate_textures(struct nv50_context *nv50)
+{
+   bool need_flush = nv50_validate_tic(nv50, NV50_SHADER_STAGE_COMPUTE);
+   if (need_flush) {
+      BEGIN_NV04(nv50->base.pushbuf, NV50_CP(TIC_FLUSH), 1);
+      PUSH_DATA (nv50->base.pushbuf, 0);
+   }
+
+   /* Invalidate all 3D textures because they are aliased. */
+   nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_3D_TEXTURES);
+   nv50->dirty_3d |= NV50_NEW_3D_TEXTURES;
+}
+
+static inline void
+nv50_compute_invalidate_constbufs(struct nv50_context *nv50)
+{
+   int s;
+
+   /* Invalidate all 3D constbufs because they are aliased with COMPUTE. */
+   for (s = 0; s < NV50_MAX_3D_SHADER_STAGES; s++) {
+      nv50->constbuf_dirty[s] |= nv50->constbuf_valid[s];
+      nv50->state.uniform_buffer_bound[s] = false;
+   }
+   nv50->dirty_3d |= NV50_NEW_3D_CONSTBUF;
+}
+
+static void
+nv50_compute_validate_constbufs(struct nv50_context *nv50)
+{
+   struct nouveau_pushbuf *push = nv50->base.pushbuf;
+   const int s = NV50_SHADER_STAGE_COMPUTE;
+
+   while (nv50->constbuf_dirty[s]) {
+      int i = ffs(nv50->constbuf_dirty[s]) - 1;
+      nv50->constbuf_dirty[s] &= ~(1 << i);
+
+      if (nv50->constbuf[s][i].user) {
+         const unsigned b = NV50_CB_PVP + s;
+         unsigned start = 0;
+         unsigned words = nv50->constbuf[s][0].size / 4;
+         if (i) {
+            NOUVEAU_ERR("user constbufs only supported in slot 0\n");
+            continue;
+         }
+         if (!nv50->state.uniform_buffer_bound[s]) {
+            nv50->state.uniform_buffer_bound[s] = true;
+            BEGIN_NV04(push, NV50_CP(SET_PROGRAM_CB), 1);
+            PUSH_DATA (push, (b << 12) | (i << 8) | 1);
+         }
+         while (words) {
+            unsigned nr = MIN2(words, NV04_PFIFO_MAX_PACKET_LEN);
+
+            PUSH_SPACE(push, nr + 3);
+            BEGIN_NV04(push, NV50_CP(CB_ADDR), 1);
+            PUSH_DATA (push, (start << 8) | b);
+            BEGIN_NI04(push, NV50_CP(CB_DATA(0)), nr);
+            PUSH_DATAp(push, &nv50->constbuf[s][0].u.data[start * 4], nr);
+
+            start += nr;
+            words -= nr;
+         }
+      } else {
+         struct nv04_resource *res =
+            nv04_resource(nv50->constbuf[s][i].u.buf);
+         if (res) {
+            /* TODO: allocate persistent bindings */
+            const unsigned b = s * 16 + i;
+
+            assert(nouveau_resource_mapped_by_gpu(&res->base));
+
+            BEGIN_NV04(push, NV50_CP(CB_DEF_ADDRESS_HIGH), 3);
+            PUSH_DATAh(push, res->address + nv50->constbuf[s][i].offset);
+            PUSH_DATA (push, res->address + nv50->constbuf[s][i].offset);
+            PUSH_DATA (push, (b << 16) |
+                       (nv50->constbuf[s][i].size & 0xffff));
+            BEGIN_NV04(push, NV50_CP(SET_PROGRAM_CB), 1);
+            PUSH_DATA (push, (b << 12) | (i << 8) | 1);
+
+            BCTX_REFN(nv50->bufctx_cp, CP_CB(i), res, RD);
+
+            nv50->cb_dirty = 1; /* Force cache flush for UBO. */
+            res->cb_bindings[s] |= 1 << i;
+         } else {
+            BEGIN_NV04(push, NV50_CP(SET_PROGRAM_CB), 1);
+            PUSH_DATA (push, (i << 8) | 0);
+         }
+         if (i == 0)
+            nv50->state.uniform_buffer_bound[s] = false;
+      }
+   }
+
+   // TODO: Check if having orthogonal slots means the two don't trample over
+   // each other.
+   nv50_compute_invalidate_constbufs(nv50);
+}
+
+static void
+nv50_compute_validate_buffers(struct nv50_context *nv50)
+{
+   struct nouveau_pushbuf *push = nv50->base.pushbuf;
+   int i;
+
+   for (i = 0; i < 7; i++) {
+      BEGIN_NV04(push, NV50_CP(GLOBAL(i)), 5);
+      if (nv50->buffers[i].buffer) {
+         struct nv04_resource *res =
+            nv04_resource(nv50->buffers[i].buffer);
+         PUSH_DATAh(push, res->address + nv50->buffers[i].buffer_offset);
+         PUSH_DATA (push, res->address + nv50->buffers[i].buffer_offset);
+         PUSH_DATA (push, 0); /* pitch? */
+         PUSH_DATA (push, ALIGN(nv50->buffers[i].buffer_size, 256) - 1);
+         PUSH_DATA (push, NV50_COMPUTE_GLOBAL_MODE_LINEAR);
+         BCTX_REFN(nv50->bufctx_cp, CP_BUF, res, RDWR);
+         util_range_add(&res->base, &res->valid_buffer_range,
+                        nv50->buffers[i].buffer_offset,
+                        nv50->buffers[i].buffer_offset +
+                        nv50->buffers[i].buffer_size);
+      } else {
+         PUSH_DATA (push, 0);
+         PUSH_DATA (push, 0);
+         PUSH_DATA (push, 0);
+         PUSH_DATA (push, 0);
+         PUSH_DATA (push, 0);
+      }
+   }
+}
+
+static void
+nv50_get_surface_dims(const struct pipe_image_view *view,
+                      int *width, int *height, int *depth)
+{
+   struct nv04_resource *res = nv04_resource(view->resource);
+   int level;
+
+   *width = *height = *depth = 1;
+   if (res->base.target == PIPE_BUFFER) {
+      *width = view->u.buf.size / util_format_get_blocksize(view->format);
+      return;
+   }
+
+   level = view->u.tex.level;
+   *width = u_minify(view->resource->width0, level);
+   *height = u_minify(view->resource->height0, level);
+   *depth = u_minify(view->resource->depth0, level);
+
+   switch (res->base.target) {
+   case PIPE_TEXTURE_1D_ARRAY:
+   case PIPE_TEXTURE_2D_ARRAY:
+   case PIPE_TEXTURE_CUBE:
+   case PIPE_TEXTURE_CUBE_ARRAY:
+      *depth = view->u.tex.last_layer - view->u.tex.first_layer + 1;
+      break;
+   case PIPE_TEXTURE_1D:
+   case PIPE_TEXTURE_2D:
+   case PIPE_TEXTURE_RECT:
+   case PIPE_TEXTURE_3D:
+      break;
+   default:
+      assert(!"unexpected texture target");
+      break;
+   }
+}
+
+static void
+nv50_mark_image_range_valid(const struct pipe_image_view *view)
+{
+   struct nv04_resource *res = (struct nv04_resource *)view->resource;
+
+   assert(view->resource->target == PIPE_BUFFER);
+
+   util_range_add(&res->base, &res->valid_buffer_range,
+                  view->u.buf.offset,
+                  view->u.buf.offset + view->u.buf.size);
+}
+
+static void
+nv50_compute_validate_surfaces(struct nv50_context *nv50)
+{
+   struct nouveau_pushbuf *push = nv50->base.pushbuf;
+   int i;
+
+   for (i = 0; i < 8; i++) {
+      struct pipe_image_view *view = &nv50->images[i];
+      int width, height, depth;
+      uint64_t address = 0;
+
+      BEGIN_NV04(push, NV50_CP(GLOBAL(7 + i)), 5);
+      if (view->resource) {
+         struct nv04_resource *res = nv04_resource(view->resource);
+
+         /* get surface dimensions based on the target. */
+         nv50_get_surface_dims(view, &width, &height, &depth);
+
+         address = res->address;
+         if (res->base.target == PIPE_BUFFER) {
+            address += view->u.buf.offset;
+            assert(!(address & 0xff));
+
+            if (view->access & PIPE_IMAGE_ACCESS_WRITE)
+               nv50_mark_image_range_valid(view);
+
+            PUSH_DATAh(push, address);
+            PUSH_DATA (push, address);
+            PUSH_DATA (push, 0); /* pitch? */
+            PUSH_DATA (push, ALIGN(view->u.buf.size, 0x100) - 1);
+            PUSH_DATA (push, NV50_COMPUTE_GLOBAL_MODE_LINEAR);
+         } else {
+            struct nv50_miptree *mt = nv50_miptree(view->resource);
+            struct nv50_miptree_level *lvl = &mt->level[view->u.tex.level];
+            const unsigned z = view->u.tex.first_layer;
+
+            if (mt->layout_3d) {
+               address += nv50_mt_zslice_offset(mt, view->u.tex.level, z);
+               if (depth >= 1) {
+                  pipe_debug_message(&nv50->base.debug, CONFORMANCE,
+                                     "3D images are not supported!");
+                  debug_printf("3D images are not supported!\n");
+               }
+            } else {
+               address += mt->layer_stride * z;
+            }
+            address += lvl->offset;
+
+            PUSH_DATAh(push, address);
+            PUSH_DATA (push, address);
+            if (nouveau_bo_memtype(res->bo)) {
+               unsigned h = height << mt->ms_y;
+               unsigned nby = util_format_get_nblocksy(view->format, h);
+               unsigned tsy = NV50_TILE_SIZE_Y(lvl->tile_mode) * depth;
+
+               PUSH_DATA (push, lvl->pitch * tsy);
+               PUSH_DATA (push, (align(nby, tsy) - 1) << 16 | (lvl->pitch - 1));
+               PUSH_DATA (push, (lvl->tile_mode & 0xff) << 4); /* mask out z-tiling */
+            } else {
+               PUSH_DATA (push, lvl->pitch);
+               PUSH_DATA (push, align(lvl->pitch * height, 0x100) - 1);
+               PUSH_DATA (push, NV50_COMPUTE_GLOBAL_MODE_LINEAR);
+            }
+         }
+
+         BCTX_REFN(nv50->bufctx_cp, CP_SUF, res, RDWR);
+      } else {
+         PUSH_DATA (push, 0);
+         PUSH_DATA (push, 0);
+         PUSH_DATA (push, 0);
+         PUSH_DATA (push, 0);
+         PUSH_DATA (push, 0);
+      }
+   }
 }
 
 static void
@@ -173,6 +448,11 @@ nv50_compute_validate_globals(struct nv50_context *nv50)
 static struct nv50_state_validate
 validate_list_cp[] = {
    { nv50_compprog_validate,              NV50_NEW_CP_PROGRAM     },
+   { nv50_compute_validate_constbufs,     NV50_NEW_CP_CONSTBUF    },
+   { nv50_compute_validate_buffers,       NV50_NEW_CP_BUFFERS     },
+   { nv50_compute_validate_surfaces,      NV50_NEW_CP_SURFACES    },
+   { nv50_compute_validate_textures,      NV50_NEW_CP_TEXTURES    },
+   { nv50_compute_validate_samplers,      NV50_NEW_CP_SAMPLERS    },
    { nv50_compute_validate_globals,       NV50_NEW_CP_GLOBALS     },
 };
 
@@ -199,7 +479,7 @@ nv50_compute_upload_input(struct nv50_context *nv50, const uint32_t *input)
    unsigned size = align(nv50->compprog->parm_size, 0x4);
 
    BEGIN_NV04(push, NV50_CP(USER_PARAM_COUNT), 1);
-   PUSH_DATA (push, (size / 4) << 8);
+   PUSH_DATA (push, (1 + (size / 4)) << 8);
 
    if (size) {
       struct nouveau_mm_allocation *mm;
@@ -216,7 +496,9 @@ nv50_compute_upload_input(struct nv50_context *nv50, const uint32_t *input)
       nouveau_pushbuf_bufctx(push, nv50->bufctx);
       nouveau_pushbuf_validate(push);
 
-      BEGIN_NV04(push, NV50_CP(USER_PARAM(0)), size / 4);
+      nouveau_pushbuf_space(push, 0, 0, 1);
+
+      BEGIN_NV04(push, NV50_CP(USER_PARAM(1)), size / 4);
       nouveau_pushbuf_data(push, bo, offset, size);
 
       nouveau_fence_work(screen->base.fence.current, nouveau_mm_free_work, mm);
@@ -246,7 +528,7 @@ nv50_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
    PUSH_DATA (push, cp->code_base);
 
    BEGIN_NV04(push, NV50_CP(SHARED_SIZE), 1);
-   PUSH_DATA (push, align(cp->cp.smem_size + cp->parm_size + 0x10, 0x40));
+   PUSH_DATA (push, align(cp->cp.smem_size + cp->parm_size + 0x14, 0x40));
    BEGIN_NV04(push, NV50_CP(CP_REG_ALLOC_TEMP), 1);
    PUSH_DATA (push, cp->max_gpr);
 
@@ -263,9 +545,15 @@ nv50_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
    BEGIN_NV04(push, NV50_CP(GRIDID), 1);
    PUSH_DATA (push, 1);
 
-   /* kernel launching */
-   BEGIN_NV04(push, NV50_CP(LAUNCH), 1);
-   PUSH_DATA (push, 0);
+   for (int i = 0; i < info->grid[2]; i++) {
+      BEGIN_NV04(push, NV50_CP(USER_PARAM(0)), 1);
+      PUSH_DATA (push, info->grid[2] | i << 16);
+
+      /* kernel launching */
+      BEGIN_NV04(push, NV50_CP(LAUNCH), 1);
+      PUSH_DATA (push, 0);
+   }
+
    BEGIN_NV04(push, SUBC_CP(NV50_GRAPH_SERIALIZE), 1);
    PUSH_DATA (push, 0);
 

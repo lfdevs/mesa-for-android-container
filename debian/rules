@@ -13,7 +13,7 @@ DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
 DEB_HOST_ARCH_CPU  ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
 
 # for finding the correct llvm-config when meson doesn't know about it yet
-export PATH:=/usr/lib/llvm-11/bin/:$(PATH)
+export PATH:=/usr/lib/llvm-12/bin/:$(PATH)
 
 ifeq (,$(filter $(DEB_HOST_ARCH), armhf sh3 sh4))
 buildflags = \
@@ -92,7 +92,7 @@ else
 	endif
 
 	# WSL supports only amd64 and arm64
-	ifneq (,$(filter amd64 arm64,$(DEB_HOST_ARCH_CPU)))
+	ifneq (,$(filter amd64 arm64,$(DEB_HOST_ARCH)))
 		GALLIUM_DRIVERS += d3d12
 	endif
   endif
@@ -224,7 +224,6 @@ override_dh_install:
   # Remove vulkan headers only where they get installed in tmp
   # We ship those headers via src:vulkan / libvulkan-dev
   ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 x32))
-	rm debian/tmp/usr/include/vulkan/vulkan_intel.h
 	rmdir debian/tmp/usr/include/vulkan
   endif
 

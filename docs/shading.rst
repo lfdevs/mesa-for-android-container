@@ -37,8 +37,7 @@ Experimenting with Shader Replacements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Shaders can be dumped and replaced on runtime for debugging purposes.
-This feature is not currently supported by SCons build. This is
-controlled via following environment variables:
+This is controlled via following environment variables:
 
 -  **MESA_SHADER_DUMP_PATH** - path where shader sources are dumped
 -  **MESA_SHADER_READ_PATH** - path where replacement shaders are read

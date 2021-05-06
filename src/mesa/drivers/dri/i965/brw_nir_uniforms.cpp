@@ -387,7 +387,7 @@ brw_nir_lower_gl_images(nir_shader *shader,
             nir_builder_instr_insert(&b, &load->instr);
 
             nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                     nir_src_for_ssa(&load->dest.ssa));
+                                     &load->dest.ssa);
             break;
          }
 
@@ -449,7 +449,7 @@ brw_nir_lower_legacy_clipping(nir_shader *nir, int nr_userclip_plane_consts,
          nir_builder_instr_insert(&b, &load->instr);
 
          nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                  nir_src_for_ssa(&load->dest.ssa));
+                                  &load->dest.ssa);
          nir_instr_remove(instr);
       }
    }

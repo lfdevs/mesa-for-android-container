@@ -322,7 +322,7 @@ lp_build_interleave2(struct gallivm_state *gallivm,
 {
    LLVMValueRef shuffle;
 
-   if (type.length == 2 && type.width == 128 && util_cpu_caps.has_avx) {
+   if (type.length == 2 && type.width == 128 && util_get_cpu_caps()->has_avx) {
       /*
        * XXX: This is a workaround for llvm code generation deficiency. Strangely
        * enough, while this needs vinsertf128/vextractf128 instructions (hence
@@ -484,7 +484,7 @@ lp_build_unpack2_native(struct gallivm_state *gallivm,
 
    /* Interleave bits */
 #if UTIL_ARCH_LITTLE_ENDIAN
-   if (src_type.length * src_type.width == 256 && util_cpu_caps.has_avx2) {
+   if (src_type.length * src_type.width == 256 && util_get_cpu_caps()->has_avx2) {
       *dst_lo = lp_build_interleave2_half(gallivm, src_type, src, msb, 0);
       *dst_hi = lp_build_interleave2_half(gallivm, src_type, src, msb, 1);
    } else {
@@ -585,22 +585,22 @@ lp_build_pack2(struct gallivm_state *gallivm,
    assert(src_type.length * 2 == dst_type.length);
 
    /* Check for special cases first */
-   if ((util_cpu_caps.has_sse2 || util_cpu_caps.has_altivec) &&
+   if ((util_get_cpu_caps()->has_sse2 || util_get_cpu_caps()->has_altivec) &&
         src_type.width * src_type.length >= 128) {
       const char *intrinsic = NULL;
       boolean swap_intrinsic_operands = FALSE;
 
       switch(src_type.width) {
       case 32:
-         if (util_cpu_caps.has_sse2) {
+         if (util_get_cpu_caps()->has_sse2) {
            if (dst_type.sign) {
               intrinsic = "llvm.x86.sse2.packssdw.128";
            } else {
-              if (util_cpu_caps.has_sse4_1) {
+              if (util_get_cpu_caps()->has_sse4_1) {
                  intrinsic = "llvm.x86.sse41.packusdw";
               }
            }
-         } else if (util_cpu_caps.has_altivec) {
+         } else if (util_get_cpu_caps()->has_altivec) {
             if (dst_type.sign) {
                intrinsic = "llvm.ppc.altivec.vpkswss";
             } else {
@@ -613,18 +613,18 @@ lp_build_pack2(struct gallivm_state *gallivm,
          break;
       case 16:
          if (dst_type.sign) {
-            if (util_cpu_caps.has_sse2) {
+            if (util_get_cpu_caps()->has_sse2) {
                intrinsic = "llvm.x86.sse2.packsswb.128";
-            } else if (util_cpu_caps.has_altivec) {
+            } else if (util_get_cpu_caps()->has_altivec) {
                intrinsic = "llvm.ppc.altivec.vpkshss";
 #if UTIL_ARCH_LITTLE_ENDIAN
                swap_intrinsic_operands = TRUE;
 #endif
             }
          } else {
-            if (util_cpu_caps.has_sse2) {
+            if (util_get_cpu_caps()->has_sse2) {
                intrinsic = "llvm.x86.sse2.packuswb.128";
-            } else if (util_cpu_caps.has_altivec) {
+            } else if (util_get_cpu_caps()->has_altivec) {
                intrinsic = "llvm.ppc.altivec.vpkshus";
 #if UTIL_ARCH_LITTLE_ENDIAN
                swap_intrinsic_operands = TRUE;
@@ -740,7 +740,7 @@ lp_build_pack2_native(struct gallivm_state *gallivm,
 
    /* At this point only have special case for avx2 */
    if (src_type.length * src_type.width == 256 &&
-       util_cpu_caps.has_avx2) {
+       util_get_cpu_caps()->has_avx2) {
       switch(src_type.width) {
       case 32:
          if (dst_type.sign) {
@@ -793,7 +793,7 @@ lp_build_packs2(struct gallivm_state *gallivm,
 
    /* All X86 SSE non-interleaved pack instructions take signed inputs and
     * saturate them, so no need to clamp for those cases. */
-   if(util_cpu_caps.has_sse2 &&
+   if(util_get_cpu_caps()->has_sse2 &&
       src_type.width * src_type.length >= 128 &&
       src_type.sign &&
       (src_type.width == 32 || src_type.width == 16))

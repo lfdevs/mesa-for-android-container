@@ -346,12 +346,19 @@ try_copy_propagate(const struct gen_device_info *devinfo,
 
    bool has_source_modifiers = value.negate || value.abs;
 
-   /* gen6 math and gen7+ SENDs from GRFs ignore source modifiers on
+   /* gfx6 math and gfx7+ SENDs from GRFs ignore source modifiers on
     * instructions.
     */
-   if ((has_source_modifiers || value.file == UNIFORM ||
-        value.swizzle != BRW_SWIZZLE_XYZW) && !inst->can_do_source_mods(devinfo))
+   if (has_source_modifiers && !inst->can_do_source_mods(devinfo))
       return false;
+
+   /* Reject cases that would violate register regioning restrictions. */
+   if ((value.file == UNIFORM || value.swizzle != BRW_SWIZZLE_XYZW) &&
+       ((devinfo->ver == 6 && inst->is_math()) ||
+        inst->is_send_from_grf() ||
+        inst->uses_indirect_addressing())) {
+      return false;
+   }
 
    if (has_source_modifiers &&
        value.type != inst->src[arg].type &&
@@ -359,7 +366,7 @@ try_copy_propagate(const struct gen_device_info *devinfo,
       return false;
 
    if (has_source_modifiers &&
-       (inst->opcode == SHADER_OPCODE_GEN4_SCRATCH_WRITE ||
+       (inst->opcode == SHADER_OPCODE_GFX4_SCRATCH_WRITE ||
         inst->opcode == VEC4_OPCODE_PICK_HIGH_32BIT))
       return false;
 

@@ -140,7 +140,7 @@ namespace {
        * used to pack components Y and W of a vector at offset 16B of a SIMD
        * register. The problem doesn't occur if the stride of the source is 0.
        */
-      if (devinfo->gen == 8 &&
+      if (devinfo->ver == 8 &&
           inst->opcode == BRW_OPCODE_MAD &&
           inst->src[i].type == BRW_REGISTER_TYPE_HF &&
           reg_offset(inst->src[i]) % REG_SIZE > 0 &&
@@ -215,7 +215,7 @@ namespace {
           * integer at codegen time due to hardware limitations of 64-bit
           * types.
           */
-         return ((devinfo->gen == 7 && !devinfo->is_haswell) ||
+         return ((devinfo->ver == 7 && !devinfo->is_haswell) ||
                  devinfo->is_cherryview || gen_device_info_is_9lp(devinfo)) &&
                 type_sz(inst->src[0].type) > 4 &&
                 inst->dst.type != inst->src[0].type;

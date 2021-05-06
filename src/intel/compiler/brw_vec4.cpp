@@ -151,7 +151,7 @@ vec4_instruction::is_send_from_grf() const
 {
    switch (opcode) {
    case SHADER_OPCODE_SHADER_TIME_ADD:
-   case VS_OPCODE_PULL_CONSTANT_LOAD_GEN7:
+   case VS_OPCODE_PULL_CONSTANT_LOAD_GFX7:
    case VEC4_OPCODE_UNTYPED_ATOMIC:
    case VEC4_OPCODE_UNTYPED_SURFACE_READ:
    case VEC4_OPCODE_UNTYPED_SURFACE_WRITE:
@@ -215,7 +215,7 @@ vec4_instruction::size_read(unsigned arg) const
       if (arg == 0)
          return mlen * REG_SIZE;
       break;
-   case VS_OPCODE_PULL_CONSTANT_LOAD_GEN7:
+   case VS_OPCODE_PULL_CONSTANT_LOAD_GFX7:
       if (arg == 1)
          return mlen * REG_SIZE;
       break;
@@ -238,7 +238,7 @@ vec4_instruction::size_read(unsigned arg) const
 bool
 vec4_instruction::can_do_source_mods(const struct gen_device_info *devinfo)
 {
-   if (devinfo->gen == 6 && is_math())
+   if (devinfo->ver == 6 && is_math())
       return false;
 
    if (is_send_from_grf())
@@ -274,7 +274,7 @@ bool
 vec4_instruction::can_do_writemask(const struct gen_device_info *devinfo)
 {
    switch (opcode) {
-   case SHADER_OPCODE_GEN4_SCRATCH_READ:
+   case SHADER_OPCODE_GFX4_SCRATCH_READ:
    case VEC4_OPCODE_DOUBLE_TO_F32:
    case VEC4_OPCODE_DOUBLE_TO_D32:
    case VEC4_OPCODE_DOUBLE_TO_U32:
@@ -284,7 +284,7 @@ vec4_instruction::can_do_writemask(const struct gen_device_info *devinfo)
    case VEC4_OPCODE_SET_LOW_32BIT:
    case VEC4_OPCODE_SET_HIGH_32BIT:
    case VS_OPCODE_PULL_CONSTANT_LOAD:
-   case VS_OPCODE_PULL_CONSTANT_LOAD_GEN7:
+   case VS_OPCODE_PULL_CONSTANT_LOAD_GFX7:
    case TCS_OPCODE_SET_INPUT_URB_OFFSETS:
    case TCS_OPCODE_SET_OUTPUT_URB_OFFSETS:
    case TES_OPCODE_CREATE_INPUT_READ_HEADER:
@@ -293,10 +293,10 @@ vec4_instruction::can_do_writemask(const struct gen_device_info *devinfo)
    case SHADER_OPCODE_MOV_INDIRECT:
       return false;
    default:
-      /* The MATH instruction on Gen6 only executes in align1 mode, which does
+      /* The MATH instruction on Gfx6 only executes in align1 mode, which does
        * not support writemasking.
        */
-      if (devinfo->gen == 6 && is_math())
+      if (devinfo->ver == 6 && is_math())
          return false;
 
       if (is_tex())
@@ -349,9 +349,9 @@ vec4_instruction::implied_mrf_writes() const
       return 1;
    case VS_OPCODE_PULL_CONSTANT_LOAD:
       return 2;
-   case SHADER_OPCODE_GEN4_SCRATCH_READ:
+   case SHADER_OPCODE_GFX4_SCRATCH_READ:
       return 2;
-   case SHADER_OPCODE_GEN4_SCRATCH_WRITE:
+   case SHADER_OPCODE_GFX4_SCRATCH_WRITE:
       return 3;
    case GS_OPCODE_URB_WRITE:
    case GS_OPCODE_URB_WRITE_ALLOCATE:
@@ -920,7 +920,7 @@ vec4_visitor::move_push_constants_to_pull_constants()
    int pull_constant_loc[this->uniforms];
 
    /* Only allow 32 registers (256 uniform components) as push constants,
-    * which is the limit on gen6.
+    * which is the limit on gfx6.
     *
     * If changing this value, note the limitation about total_regs in
     * brw_curbe.c.
@@ -1008,7 +1008,7 @@ vec4_visitor::is_dep_ctrl_unsafe(const vec4_instruction *inst)
 
 #define IS_64BIT(reg) (reg.file != BAD_FILE && type_sz(reg.type) == 8)
 
-   if (devinfo->gen >= 7) {
+   if (devinfo->ver >= 7) {
       if (IS_64BIT(inst->dst) || IS_64BIT(inst->src[0]) ||
           IS_64BIT(inst->src[1]) || IS_64BIT(inst->src[2]))
       return true;
@@ -1129,10 +1129,10 @@ vec4_instruction::can_reswizzle(const struct gen_device_info *devinfo,
                                 int swizzle,
                                 int swizzle_mask)
 {
-   /* Gen6 MATH instructions can not execute in align16 mode, so swizzles
+   /* Gfx6 MATH instructions can not execute in align16 mode, so swizzles
     * are not allowed.
     */
-   if (devinfo->gen == 6 && is_math() && swizzle != BRW_SWIZZLE_XYZW)
+   if (devinfo->ver == 6 && is_math() && swizzle != BRW_SWIZZLE_XYZW)
       return false;
 
    /* If we write to the flag register changing the swizzle would change
@@ -1303,8 +1303,8 @@ vec4_visitor::opt_register_coalesce()
                if (scan_inst->mlen)
                   break;
 
-               if (devinfo->gen == 6) {
-                  /* gen6 math instructions must have the destination be
+               if (devinfo->ver == 6) {
+                  /* gfx6 math instructions must have the destination be
                    * VGRF, so no compute-to-MRF for them.
                    */
                   if (scan_inst->is_math()) {
@@ -1608,7 +1608,7 @@ vec4_visitor::dump_instruction(const backend_instruction *be_inst, FILE *file) c
    if (inst->conditional_mod) {
       fprintf(file, "%s", conditional_modifier[inst->conditional_mod]);
       if (!inst->predicate &&
-          (devinfo->gen < 5 || (inst->opcode != BRW_OPCODE_SEL &&
+          (devinfo->ver < 5 || (inst->opcode != BRW_OPCODE_SEL &&
                                 inst->opcode != BRW_OPCODE_CSEL &&
                                 inst->opcode != BRW_OPCODE_IF &&
                                 inst->opcode != BRW_OPCODE_WHILE))) {
@@ -1812,10 +1812,10 @@ vec4_visitor::setup_uniforms(int reg)
 {
    prog_data->base.dispatch_grf_start_reg = reg;
 
-   /* The pre-gen6 VS requires that some push constants get loaded no
+   /* The pre-gfx6 VS requires that some push constants get loaded no
     * matter what, or the GPU would hang.
     */
-   if (devinfo->gen < 6 && this->uniforms == 0) {
+   if (devinfo->ver < 6 && this->uniforms == 0) {
       brw_stage_prog_data_add_params(stage_prog_data, 4);
       for (unsigned int i = 0; i < 4; i++) {
 	 unsigned int slot = this->uniforms * 4 + i;
@@ -1860,7 +1860,7 @@ vec4_vs_visitor::setup_payload(void)
 bool
 vec4_visitor::lower_minmax()
 {
-   assert(devinfo->gen < 6);
+   assert(devinfo->ver < 6);
 
    bool progress = false;
 
@@ -1871,7 +1871,7 @@ vec4_visitor::lower_minmax()
           inst->predicate == BRW_PREDICATE_NONE) {
          /* If src1 is an immediate value that is not NaN, then it can't be
           * NaN.  In that case, emit CMP because it is much better for cmod
-          * propagation.  Likewise if src1 is not float.  Gen4 and Gen5 don't
+          * propagation.  Likewise if src1 is not float.  Gfx4 and Gfx5 don't
           * support HF or DF, so it is not necessary to check for those.
           */
          if (inst->src[1].type != BRW_REGISTER_TYPE_F ||
@@ -1898,7 +1898,7 @@ vec4_visitor::lower_minmax()
 src_reg
 vec4_visitor::get_timestamp()
 {
-   assert(devinfo->gen == 7);
+   assert(devinfo->ver == 7);
 
    src_reg ts = src_reg(brw_reg(BRW_ARCHITECTURE_REGISTER_FILE,
                                 BRW_ARF_TIMESTAMP,
@@ -2127,7 +2127,7 @@ vec4_visitor::convert_to_hw_regs()
 
       case MRF:
          reg = byte_offset(brw_message_reg(dst.nr), dst.offset);
-         assert((reg.nr & ~BRW_MRF_COMPR4) < BRW_MAX_MRF(devinfo->gen));
+         assert((reg.nr & ~BRW_MRF_COMPR4) < BRW_MAX_MRF(devinfo->ver));
          reg.type = dst.type;
          reg.writemask = dst.writemask;
          break;
@@ -2179,8 +2179,8 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
 {
    /* Do not split some instructions that require special handling */
    switch (inst->opcode) {
-   case SHADER_OPCODE_GEN4_SCRATCH_READ:
-   case SHADER_OPCODE_GEN4_SCRATCH_WRITE:
+   case SHADER_OPCODE_GFX4_SCRATCH_READ:
+   case SHADER_OPCODE_GFX4_SCRATCH_WRITE:
       return inst->exec_size;
    default:
       break;
@@ -2189,10 +2189,10 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
    unsigned lowered_width = MIN2(16, inst->exec_size);
 
    /* We need to split some cases of double-precision instructions that write
-    * 2 registers. We only need to care about this in gen7 because that is the
+    * 2 registers. We only need to care about this in gfx7 because that is the
     * only hardware that implements fp64 in Align16.
     */
-   if (devinfo->gen == 7 && inst->size_written > REG_SIZE) {
+   if (devinfo->ver == 7 && inst->size_written > REG_SIZE) {
       /* Align16 8-wide double-precision SEL does not work well. Verified
        * empirically.
        */
@@ -2212,7 +2212,7 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
             lowered_width = MIN2(lowered_width, 4);
 
          /* Interleaved attribute setups use a vertical stride of 0, which
-          * makes them hit the associated instruction decompression bug in gen7.
+          * makes them hit the associated instruction decompression bug in gfx7.
           * Split them to prevent this.
           */
          if (inst->src[i].file == ATTR &&
@@ -2224,10 +2224,10 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
    /* IvyBridge can manage a maximum of 4 DFs per SIMD4x2 instruction, since
     * it doesn't support compression in Align16 mode, no matter if it has
     * force_writemask_all enabled or disabled (the latter is affected by the
-    * compressed instruction bug in gen7, which is another reason to enforce
+    * compressed instruction bug in gfx7, which is another reason to enforce
     * this limit).
     */
-   if (devinfo->gen == 7 && !devinfo->is_haswell &&
+   if (devinfo->ver == 7 && !devinfo->is_haswell &&
        (get_exec_type_size(inst) == 8 || type_sz(inst->dst.type) == 8))
       lowered_width = MIN2(lowered_width, 4);
 
@@ -2380,11 +2380,11 @@ scalarize_predicate(brw_predicate predicate, unsigned writemask)
    }
 }
 
-/* Gen7 has a hardware decompression bug that we can exploit to represent
+/* Gfx7 has a hardware decompression bug that we can exploit to represent
  * handful of additional swizzles natively.
  */
 static bool
-is_gen7_supported_64bit_swizzle(vec4_instruction *inst, unsigned arg)
+is_gfx7_supported_64bit_swizzle(vec4_instruction *inst, unsigned arg)
 {
    switch (inst->src[arg].swizzle) {
    case BRW_SWIZZLE_XXXX:
@@ -2438,7 +2438,7 @@ vec4_visitor::is_supported_64bit_region(vec4_instruction *inst, unsigned arg)
    case BRW_SWIZZLE_YXWZ:
       return true;
    default:
-      return devinfo->gen == 7 && is_gen7_supported_64bit_swizzle(inst, arg);
+      return devinfo->ver == 7 && is_gfx7_supported_64bit_swizzle(inst, arg);
    }
 }
 
@@ -2599,7 +2599,7 @@ vec4_visitor::apply_logical_swizzle(struct brw_reg *hw_reg,
    hw_reg->width = BRW_WIDTH_2;
 
    if (is_supported_64bit_region(inst, arg) &&
-       !is_gen7_supported_64bit_swizzle(inst, arg)) {
+       !is_gfx7_supported_64bit_swizzle(inst, arg)) {
       /* Supported 64-bit swizzles are those such that their first two
        * components, when expanded to 32-bit swizzles, match the semantics
        * of the original 64-bit swizzle with 2-wide row regioning.
@@ -2614,9 +2614,9 @@ vec4_visitor::apply_logical_swizzle(struct brw_reg *hw_reg,
        * 1. An unsupported swizzle, which should be single-value thanks to the
        *    scalarization pass.
        *
-       * 2. A gen7 supported swizzle. These can be single-value or double-value
+       * 2. A gfx7 supported swizzle. These can be single-value or double-value
        *    swizzles. If the latter, they are never cross-dvec2 channels. For
-       *    these we always need to activate the gen7 vstride=0 exploit.
+       *    these we always need to activate the gfx7 vstride=0 exploit.
        */
       unsigned swizzle0 = BRW_GET_SWZ(reg.swizzle, 0);
       unsigned swizzle1 = BRW_GET_SWZ(reg.swizzle, 1);
@@ -2631,19 +2631,19 @@ vec4_visitor::apply_logical_swizzle(struct brw_reg *hw_reg,
          swizzle1 -= 2;
       }
 
-      /* All gen7-specific supported swizzles require the vstride=0 exploit */
-      if (devinfo->gen == 7 && is_gen7_supported_64bit_swizzle(inst, arg))
+      /* All gfx7-specific supported swizzles require the vstride=0 exploit */
+      if (devinfo->ver == 7 && is_gfx7_supported_64bit_swizzle(inst, arg))
          hw_reg->vstride = BRW_VERTICAL_STRIDE_0;
 
       /* Any 64-bit source with an offset at 16B is intended to address the
        * second half of a register and needs a vertical stride of 0 so we:
        *
        * 1. Don't violate register region restrictions.
-       * 2. Activate the gen7 instruction decompresion bug exploit when
+       * 2. Activate the gfx7 instruction decompresion bug exploit when
        *    execsize > 4
        */
       if (hw_reg->subnr % REG_SIZE == 16) {
-         assert(devinfo->gen == 7);
+         assert(devinfo->ver == 7);
          hw_reg->vstride = BRW_VERTICAL_STRIDE_0;
       }
 
@@ -2743,7 +2743,7 @@ vec4_visitor::run()
       OPT(dead_code_eliminate);
    }
 
-   if (devinfo->gen <= 5 && OPT(lower_minmax)) {
+   if (devinfo->ver <= 5 && OPT(lower_minmax)) {
       OPT(opt_cmod_propagation);
       OPT(opt_cse);
       OPT(opt_copy_propagation);
@@ -2829,21 +2829,17 @@ vec4_visitor::run()
 
 extern "C" {
 
-/**
- * Compile a vertex shader.
- *
- * Returns the final assembly and the program's size.
- */
 const unsigned *
-brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
+brw_compile_vs(const struct brw_compiler *compiler,
                void *mem_ctx,
-               const struct brw_vs_prog_key *key,
-               struct brw_vs_prog_data *prog_data,
-               nir_shader *nir,
-               int shader_time_index,
-               struct brw_compile_stats *stats,
-               char **error_str)
+               struct brw_compile_vs_params *params)
 {
+   struct nir_shader *nir = params->nir;
+   const struct brw_vs_prog_key *key = params->key;
+   struct brw_vs_prog_data *prog_data = params->prog_data;
+   const bool debug_enabled =
+      INTEL_DEBUG & (params->debug_flag ? params->debug_flag : DEBUG_VS);
+
    prog_data->base.base.stage = MESA_SHADER_VERTEX;
 
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_VERTEX];
@@ -2871,7 +2867,8 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
 
    brw_nir_lower_vs_inputs(nir, key->gl_attrib_wa_flags);
    brw_nir_lower_vue_outputs(nir);
-   brw_postprocess_nir(nir, compiler, is_scalar);
+   brw_postprocess_nir(nir, compiler, is_scalar, debug_enabled,
+                       key->base.robust_buffer_access);
 
    prog_data->base.clip_distance_mask =
       ((1 << nir->info.clip_distance_array_size) - 1);
@@ -2935,36 +2932,35 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
    const unsigned vue_entries =
       MAX2(nr_attribute_slots, (unsigned)prog_data->base.vue_map.num_slots);
 
-   if (compiler->devinfo->gen == 6) {
+   if (compiler->devinfo->ver == 6) {
       prog_data->base.urb_entry_size = DIV_ROUND_UP(vue_entries, 8);
    } else {
       prog_data->base.urb_entry_size = DIV_ROUND_UP(vue_entries, 4);
    }
 
-   if (INTEL_DEBUG & DEBUG_VS) {
+   if (unlikely(debug_enabled)) {
       fprintf(stderr, "VS Output ");
-      brw_print_vue_map(stderr, &prog_data->base.vue_map);
+      brw_print_vue_map(stderr, &prog_data->base.vue_map, MESA_SHADER_VERTEX);
    }
 
    if (is_scalar) {
       prog_data->base.dispatch_mode = DISPATCH_MODE_SIMD8;
 
-      fs_visitor v(compiler, log_data, mem_ctx, &key->base,
-                   &prog_data->base.base,
-                   nir, 8, shader_time_index);
+      fs_visitor v(compiler, params->log_data, mem_ctx, &key->base,
+                   &prog_data->base.base, nir, 8,
+                   params->shader_time ? params->shader_time_index : -1,
+                   debug_enabled);
       if (!v.run_vs()) {
-         if (error_str)
-            *error_str = ralloc_strdup(mem_ctx, v.fail_msg);
-
+         params->error_str = ralloc_strdup(mem_ctx, v.fail_msg);
          return NULL;
       }
 
       prog_data->base.base.dispatch_grf_start_reg = v.payload.num_regs;
 
-      fs_generator g(compiler, log_data, mem_ctx,
+      fs_generator g(compiler, params->log_data, mem_ctx,
                      &prog_data->base.base, v.runtime_check_aads_emit,
                      MESA_SHADER_VERTEX);
-      if (INTEL_DEBUG & DEBUG_VS) {
+      if (unlikely(debug_enabled)) {
          const char *debug_name =
             ralloc_asprintf(mem_ctx, "%s vertex shader %s",
                             nir->info.label ? nir->info.label :
@@ -2974,7 +2970,7 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
          g.enable_debug(debug_name);
       }
       g.generate_code(v.cfg, 8, v.shader_stats,
-                      v.performance_analysis.require(), stats);
+                      v.performance_analysis.require(), params->stats);
       g.add_const_data(nir->constant_data, nir->constant_data_size);
       assembly = g.get_assembly();
    }
@@ -2982,20 +2978,20 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
    if (!assembly) {
       prog_data->base.dispatch_mode = DISPATCH_MODE_4X2_DUAL_OBJECT;
 
-      vec4_vs_visitor v(compiler, log_data, key, prog_data,
-                        nir, mem_ctx, shader_time_index);
+      vec4_vs_visitor v(compiler, params->log_data, key, prog_data,
+                        nir, mem_ctx,
+                        params->shader_time ? params->shader_time_index : -1,
+                        debug_enabled);
       if (!v.run()) {
-         if (error_str)
-            *error_str = ralloc_strdup(mem_ctx, v.fail_msg);
-
+         params->error_str = ralloc_strdup(mem_ctx, v.fail_msg);
          return NULL;
       }
 
-      assembly = brw_vec4_generate_assembly(compiler, log_data, mem_ctx,
+      assembly = brw_vec4_generate_assembly(compiler, params->log_data, mem_ctx,
                                             nir, &prog_data->base,
                                             v.cfg,
                                             v.performance_analysis.require(),
-                                            stats);
+                                            params->stats, debug_enabled);
    }
 
    return assembly;

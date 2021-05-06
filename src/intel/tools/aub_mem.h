@@ -31,7 +31,7 @@
 #include "util/rb_tree.h"
 
 #include "dev/gen_device_info.h"
-#include "common/gen_decoder.h"
+#include "common/intel_decoder.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -62,13 +62,13 @@ void aub_mem_ggtt_entry_write(void *mem, uint64_t virt_address,
 void aub_mem_local_write(void *mem, uint64_t virt_address,
                          const void *data, uint32_t size);
 
-struct gen_batch_decode_bo aub_mem_get_ggtt_bo(void *mem, uint64_t address);
-struct gen_batch_decode_bo aub_mem_get_ppgtt_bo(void *mem, uint64_t address);
+struct intel_batch_decode_bo aub_mem_get_ggtt_bo(void *mem, uint64_t address);
+struct intel_batch_decode_bo aub_mem_get_ppgtt_bo(void *mem, uint64_t address);
 
-struct gen_batch_decode_bo aub_mem_get_phys_addr_data(struct aub_mem *mem, uint64_t phys_addr);
-struct gen_batch_decode_bo aub_mem_get_ppgtt_addr_data(struct aub_mem *mem, uint64_t virt_addr);
+struct intel_batch_decode_bo aub_mem_get_phys_addr_data(struct aub_mem *mem, uint64_t phys_addr);
+struct intel_batch_decode_bo aub_mem_get_ppgtt_addr_data(struct aub_mem *mem, uint64_t virt_addr);
 
-struct gen_batch_decode_bo aub_mem_get_ppgtt_addr_aub_data(struct aub_mem *mem, uint64_t virt_addr);
+struct intel_batch_decode_bo aub_mem_get_ppgtt_addr_aub_data(struct aub_mem *mem, uint64_t virt_addr);
 
 
 #ifdef __cplusplus

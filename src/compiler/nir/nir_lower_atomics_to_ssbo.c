@@ -146,9 +146,9 @@ lower_instr(nir_intrinsic_instr *instr, unsigned ssbo_offset, nir_builder *b)
    if (instr->intrinsic == nir_intrinsic_atomic_counter_pre_dec) {
       b->cursor = nir_after_instr(&new_instr->instr);
       nir_ssa_def *result = nir_iadd(b, &new_instr->dest.ssa, temp);
-      nir_ssa_def_rewrite_uses(&instr->dest.ssa, nir_src_for_ssa(result));
+      nir_ssa_def_rewrite_uses(&instr->dest.ssa, result);
    } else {
-      nir_ssa_def_rewrite_uses(&instr->dest.ssa, nir_src_for_ssa(&new_instr->dest.ssa));
+      nir_ssa_def_rewrite_uses(&instr->dest.ssa, &new_instr->dest.ssa);
    }
 
    return true;

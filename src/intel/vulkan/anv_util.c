@@ -49,9 +49,9 @@ anv_loge_v(const char *format, va_list va)
    mesa_loge_v(format, va);
 }
 
-void anv_printflike(6, 7)
-__anv_perf_warn(struct anv_device *device, const void *object,
-                VkDebugReportObjectTypeEXT type,
+void
+__anv_perf_warn(struct anv_device *device,
+                const struct vk_object_base *object,
                 const char *file, int line, const char *format, ...)
 {
    va_list ap;
@@ -64,21 +64,16 @@ __anv_perf_warn(struct anv_device *device, const void *object,
 
    snprintf(report, sizeof(report), "%s: %s", file, buffer);
 
-   vk_debug_report(&device->physical->instance->debug_report_callbacks,
+   vk_debug_report(&device->physical->instance->vk,
                    VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
-                   type,
-                   (uint64_t) (uintptr_t) object,
-                   line,
-                   0,
-                   "anv",
-                   report);
+                   object, line, 0, "anv", report);
 
    mesa_logw("%s:%d: PERF: %s", file, line, buffer);
 }
 
 VkResult
-__vk_errorv(struct anv_instance *instance, const void *object,
-            VkDebugReportObjectTypeEXT type, VkResult error,
+__vk_errorv(struct anv_instance *instance,
+            const struct vk_object_base *object, VkResult error,
             const char *file, int line, const char *format, va_list ap)
 {
    char buffer[256];
@@ -96,14 +91,8 @@ __vk_errorv(struct anv_instance *instance, const void *object,
    }
 
    if (instance) {
-      vk_debug_report(&instance->debug_report_callbacks,
-                      VK_DEBUG_REPORT_ERROR_BIT_EXT,
-                      type,
-                      (uint64_t) (uintptr_t) object,
-                      line,
-                      0,
-                      "anv",
-                      report);
+      vk_debug_report(&instance->vk, VK_DEBUG_REPORT_ERROR_BIT_EXT,
+                      object, line, 0, "anv", report);
    }
 
    mesa_loge("%s", report);
@@ -112,14 +101,14 @@ __vk_errorv(struct anv_instance *instance, const void *object,
 }
 
 VkResult
-__vk_errorf(struct anv_instance *instance, const void *object,
-            VkDebugReportObjectTypeEXT type, VkResult error,
+__vk_errorf(struct anv_instance *instance,
+            const struct vk_object_base *object, VkResult error,
             const char *file, int line, const char *format, ...)
 {
    va_list ap;
 
    va_start(ap, format);
-   __vk_errorv(instance, object, type, error, file, line, format, ap);
+   __vk_errorv(instance, object, error, file, line, format, ap);
    va_end(ap);
 
    return error;

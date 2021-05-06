@@ -44,7 +44,8 @@ public:
                    struct brw_tes_prog_data *prog_data,
                    const nir_shader *nir,
                    void *mem_ctx,
-                   int shader_time_index);
+                   int shader_time_index,
+                   bool debug_enabled);
 
 protected:
    virtual void nir_emit_intrinsic(nir_intrinsic_instr *instr);

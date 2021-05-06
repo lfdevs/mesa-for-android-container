@@ -90,7 +90,7 @@
 DEBUG_GET_ONCE_BOOL_OPTION(dump_cpu, "GALLIUM_DUMP_CPU", false)
 
 
-struct util_cpu_caps util_cpu_caps;
+struct util_cpu_caps_t util_cpu_caps;
 
 #if defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
 static int has_cpuid(void);
@@ -435,8 +435,9 @@ static void
 get_cpu_topology(void)
 {
    /* Default. This is OK if L3 is not present or there is only one. */
-   util_cpu_caps.cores_per_L3 = util_cpu_caps.nr_cpus;
    util_cpu_caps.num_L3_caches = 1;
+
+   memset(util_cpu_caps.cpu_to_L3, 0xff, sizeof(util_cpu_caps.cpu_to_L3));
 
 #if defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
    /* AMD Zen */
@@ -561,7 +562,7 @@ util_cpu_detect_once(void)
    {
       SYSTEM_INFO system_info;
       GetSystemInfo(&system_info);
-      util_cpu_caps.nr_cpus = system_info.dwNumberOfProcessors;
+      util_cpu_caps.nr_cpus = MAX2(1, system_info.dwNumberOfProcessors);
    }
 #elif defined(PIPE_OS_UNIX) && defined(_SC_NPROCESSORS_ONLN)
    util_cpu_caps.nr_cpus = sysconf(_SC_NPROCESSORS_ONLN);

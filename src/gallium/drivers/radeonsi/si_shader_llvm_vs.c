@@ -95,6 +95,9 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
       return;
    }
 
+   unsigned bit_size = info->input_fp16_lo_hi_valid[input_index] & 0x1 ? 16 : 32;
+   LLVMTypeRef int_type = bit_size == 16 ? ctx->ac.i16 : ctx->ac.i32;
+   LLVMTypeRef float_type = bit_size == 16 ? ctx->ac.f16 : ctx->ac.f32;
    unsigned num_vbos_in_user_sgprs = ctx->shader->selector->num_vbos_in_user_sgprs;
    union si_vs_fix_fetch fix_fetch;
    LLVMValueRef vb_desc;
@@ -129,6 +132,19 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
       for (unsigned i = 0; i < 4; ++i)
          out[i] =
             LLVMBuildExtractElement(ctx->ac.builder, tmp, LLVMConstInt(ctx->ac.i32, i, false), "");
+
+      if (bit_size == 16) {
+         if (fix_fetch.u.format == AC_FETCH_FORMAT_UINT ||
+             fix_fetch.u.format == AC_FETCH_FORMAT_SINT) {
+            for (unsigned i = 0; i < 4; i++)
+               out[i] = LLVMBuildTrunc(ctx->ac.builder, out[i], ctx->ac.i16, "");
+         } else {
+            for (unsigned i = 0; i < 4; i++) {
+               out[i] = ac_to_float(&ctx->ac, out[i]);
+               out[i] = LLVMBuildFPTrunc(ctx->ac.builder, out[i], ctx->ac.f16, "");
+            }
+         }
+      }
       return;
    }
 
@@ -158,7 +174,8 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
    for (unsigned i = 0; i < num_fetches; ++i) {
       LLVMValueRef voffset = LLVMConstInt(ctx->ac.i32, fetch_stride * i, 0);
       fetches[i] = ac_build_buffer_load_format(&ctx->ac, vb_desc, vertex_index, voffset,
-                                               channels_per_fetch, 0, true, false, false);
+                                               channels_per_fetch, 0, true,
+                                               bit_size == 16, false);
    }
 
    if (num_fetches == 1 && channels_per_fetch > 1) {
@@ -172,27 +189,28 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
    }
 
    for (unsigned i = num_fetches; i < 4; ++i)
-      fetches[i] = LLVMGetUndef(ctx->ac.f32);
+      fetches[i] = LLVMGetUndef(float_type);
 
    if (fix_fetch.u.log_size <= 1 && fix_fetch.u.num_channels_m1 == 2 && required_channels == 4) {
       if (fix_fetch.u.format == AC_FETCH_FORMAT_UINT || fix_fetch.u.format == AC_FETCH_FORMAT_SINT)
-         fetches[3] = ctx->ac.i32_1;
+         fetches[3] = LLVMConstInt(int_type, 1, 0);
       else
-         fetches[3] = ctx->ac.f32_1;
+         fetches[3] = LLVMConstReal(float_type, 1);
    } else if (fix_fetch.u.log_size == 3 &&
               (fix_fetch.u.format == AC_FETCH_FORMAT_SNORM ||
                fix_fetch.u.format == AC_FETCH_FORMAT_SSCALED ||
                fix_fetch.u.format == AC_FETCH_FORMAT_SINT) &&
               required_channels == 4) {
+
       /* For 2_10_10_10, the hardware returns an unsigned value;
        * convert it to a signed one.
        */
       LLVMValueRef tmp = fetches[3];
-      LLVMValueRef c30 = LLVMConstInt(ctx->ac.i32, 30, 0);
+      LLVMValueRef c30 = LLVMConstInt(int_type, 30, 0);
 
       /* First, recover the sign-extended signed integer value. */
       if (fix_fetch.u.format == AC_FETCH_FORMAT_SSCALED)
-         tmp = LLVMBuildFPToUI(ctx->ac.builder, tmp, ctx->ac.i32, "");
+         tmp = LLVMBuildFPToUI(ctx->ac.builder, tmp, int_type, "");
       else
          tmp = ac_to_integer(&ctx->ac, tmp);
 
@@ -204,18 +222,18 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
        */
       tmp = LLVMBuildShl(
          ctx->ac.builder, tmp,
-         fix_fetch.u.format == AC_FETCH_FORMAT_SNORM ? LLVMConstInt(ctx->ac.i32, 7, 0) : c30, "");
+         fix_fetch.u.format == AC_FETCH_FORMAT_SNORM ? LLVMConstInt(int_type, 7, 0) : c30, "");
       tmp = LLVMBuildAShr(ctx->ac.builder, tmp, c30, "");
 
       /* Convert back to the right type. */
       if (fix_fetch.u.format == AC_FETCH_FORMAT_SNORM) {
          LLVMValueRef clamp;
-         LLVMValueRef neg_one = LLVMConstReal(ctx->ac.f32, -1.0);
-         tmp = LLVMBuildSIToFP(ctx->ac.builder, tmp, ctx->ac.f32, "");
+         LLVMValueRef neg_one = LLVMConstReal(float_type, -1.0);
+         tmp = LLVMBuildSIToFP(ctx->ac.builder, tmp, float_type, "");
          clamp = LLVMBuildFCmp(ctx->ac.builder, LLVMRealULT, tmp, neg_one, "");
          tmp = LLVMBuildSelect(ctx->ac.builder, clamp, neg_one, tmp, "");
       } else if (fix_fetch.u.format == AC_FETCH_FORMAT_SSCALED) {
-         tmp = LLVMBuildSIToFP(ctx->ac.builder, tmp, ctx->ac.f32, "");
+         tmp = LLVMBuildSIToFP(ctx->ac.builder, tmp, float_type, "");
       }
 
       fetches[3] = tmp;
@@ -234,10 +252,8 @@ void si_llvm_load_vs_inputs(struct si_shader_context *ctx, struct nir_shader *ni
 
       load_input_vs(ctx, i, values);
 
-      for (unsigned chan = 0; chan < 4; chan++) {
-         ctx->inputs[i * 4 + chan] =
-            LLVMBuildBitCast(ctx->ac.builder, values[chan], ctx->ac.i32, "");
-      }
+      for (unsigned chan = 0; chan < 4; chan++)
+         ctx->inputs[i * 4 + chan] = ac_to_integer(&ctx->ac, values[chan]);
    }
 }
 
@@ -328,7 +344,7 @@ void si_llvm_emit_streamout(struct si_shader_context *ctx, struct si_shader_outp
        * enabled buffer. */
       LLVMValueRef so_write_offset[4] = {};
       LLVMValueRef so_buffers[4];
-      LLVMValueRef buf_ptr = ac_get_arg(&ctx->ac, ctx->rw_buffers);
+      LLVMValueRef buf_ptr = ac_get_arg(&ctx->ac, ctx->internal_bindings);
 
       for (i = 0; i < 4; i++) {
          if (!so->stride[i])
@@ -369,7 +385,7 @@ static void si_llvm_emit_clipvertex(struct si_shader_context *ctx, struct ac_exp
    unsigned chan;
    unsigned const_chan;
    LLVMValueRef base_elt;
-   LLVMValueRef ptr = ac_get_arg(&ctx->ac, ctx->rw_buffers);
+   LLVMValueRef ptr = ac_get_arg(&ctx->ac, ctx->internal_bindings);
    LLVMValueRef constbuf_index = LLVMConstInt(ctx->ac.i32, SI_VS_CONST_CLIP_PLANES, 0);
    LLVMValueRef const_resource = ac_build_load_to_sgpr(&ctx->ac, ptr, constbuf_index);
    unsigned clipdist_mask = ctx->shader->selector->clipdist_mask &
@@ -460,7 +476,7 @@ static void si_build_param_exports(struct si_shader_context *ctx,
             continue;
       }
 
-      if (semantic < VARYING_SLOT_VAR0 + SI_MAX_IO_GENERIC &&
+      if ((semantic <= VARYING_SLOT_VAR31 || semantic >= VARYING_SLOT_VAR0_16BIT) &&
           shader->key.opt.kill_outputs &
              (1ull << si_shader_io_get_unique_index(semantic, true)))
          continue;
@@ -1009,7 +1025,7 @@ void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part
    LLVMValueRef instance_divisor_constbuf = NULL;
 
    if (key->vs_prolog.states.instance_divisor_is_fetched) {
-      LLVMValueRef list = si_prolog_get_rw_buffers(ctx);
+      LLVMValueRef list = si_prolog_get_internal_bindings(ctx);
       LLVMValueRef buf_index = LLVMConstInt(ctx->ac.i32, SI_VS_CONST_INSTANCE_DIVISORS, 0);
       instance_divisor_constbuf = ac_build_load_to_sgpr(&ctx->ac, list, buf_index);
    }

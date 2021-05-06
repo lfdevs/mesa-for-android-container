@@ -583,9 +583,31 @@ _GLX_PUBLIC void
 glXUseXFont(Font font, int first, int count, int listBase)
 {
    struct glx_context *gc = __glXGetCurrentContext();
+   xGLXUseXFontReq *req;
+   Display *dpy = gc->currentDpy;
 
-   if (gc->vtable->use_x_font)
-      gc->vtable->use_x_font(gc, font, first, count, listBase);
+#ifdef GLX_DIRECT_RENDERING
+   if (gc->isDirect) {
+      DRI_glXUseXFont(gc, font, first, count, listBase);
+      return;
+   }
+#endif
+
+   /* Flush any pending commands out */
+   __glXFlushRenderBuffer(gc, gc->pc);
+
+   /* Send the glXUseFont request */
+   LockDisplay(dpy);
+   GetReq(GLXUseXFont, req);
+   req->reqType = gc->majorOpcode;
+   req->glxCode = X_GLXUseXFont;
+   req->contextTag = gc->currentContextTag;
+   req->font = font;
+   req->first = first;
+   req->count = count;
+   req->listBase = listBase;
+   UnlockDisplay(dpy);
+   SyncHandle();
 }
 
 /************************************************************************/
@@ -1710,6 +1732,9 @@ glXGetVisualFromFBConfig(Display * dpy, GLXFBConfig fbconfig)
    struct glx_config *config = (struct glx_config *) fbconfig;
    int count;
 
+   if (!config)
+      return NULL;
+
    /*
     ** Get a list of all visuals, return if list is empty
     */
@@ -1888,6 +1913,9 @@ glXGetVideoSyncSGI(unsigned int *count)
    if (!gc->isDirect)
       return GLX_BAD_CONTEXT;
 
+   if (!gc->currentDrawable)
+      return GLX_BAD_CONTEXT;
+
    psc = GetGLXScreenConfigs(gc->currentDpy, gc->screen);
    pdraw = GetGLXDRIDrawable(gc->currentDpy, gc->currentDrawable);
 
@@ -1924,6 +1952,9 @@ glXWaitVideoSyncSGI(int divisor, int remainder, unsigned int *count)
 
 #ifdef GLX_DIRECT_RENDERING
    if (!gc->isDirect)
+      return GLX_BAD_CONTEXT;
+
+   if (!gc->currentDrawable)
       return GLX_BAD_CONTEXT;
 
    psc = GetGLXScreenConfigs( gc->currentDpy, gc->screen);
@@ -2408,23 +2439,103 @@ _X_HIDDEN void
 glXBindTexImageEXT(Display *dpy, GLXDrawable drawable, int buffer,
                    const int *attrib_list)
 {
+   xGLXVendorPrivateReq *req;
    struct glx_context *gc = __glXGetCurrentContext();
+   CARD32 *drawable_ptr;
+   INT32 *buffer_ptr;
+   CARD32 *num_attrib_ptr;
+   CARD32 *attrib_ptr;
+   CARD8 opcode;
+   unsigned int i = 0;
 
-   if (gc->vtable->bind_tex_image == NULL)
+#ifdef GLX_DIRECT_RENDERING
+   __GLXDRIdrawable *pdraw = GetGLXDRIDrawable(dpy, drawable);
+   if (pdraw != NULL) {
+      struct glx_screen *psc = pdraw->psc;
+      if (psc->driScreen->bindTexImage != NULL)
+         (*psc->driScreen->bindTexImage) (pdraw, buffer, attrib_list);
+
+      return;
+   }
+#endif
+
+   if (attrib_list) {
+      while (attrib_list[i * 2] != None)
+         i++;
+   }
+
+   opcode = __glXSetupForCommand(dpy);
+   if (!opcode)
       return;
 
-   gc->vtable->bind_tex_image(dpy, drawable, buffer, attrib_list);
+   LockDisplay(dpy);
+   GetReqExtra(GLXVendorPrivate, 12 + 8 * i, req);
+   req->reqType = opcode;
+   req->glxCode = X_GLXVendorPrivate;
+   req->vendorCode = X_GLXvop_BindTexImageEXT;
+   req->contextTag = gc->currentContextTag;
+
+   drawable_ptr = (CARD32 *) (req + 1);
+   buffer_ptr = (INT32 *) (drawable_ptr + 1);
+   num_attrib_ptr = (CARD32 *) (buffer_ptr + 1);
+   attrib_ptr = (CARD32 *) (num_attrib_ptr + 1);
+
+   *drawable_ptr = drawable;
+   *buffer_ptr = buffer;
+   *num_attrib_ptr = (CARD32) i;
+
+   i = 0;
+   if (attrib_list) {
+      while (attrib_list[i * 2] != None) {
+         *attrib_ptr++ = (CARD32) attrib_list[i * 2 + 0];
+         *attrib_ptr++ = (CARD32) attrib_list[i * 2 + 1];
+         i++;
+      }
+   }
+
+   UnlockDisplay(dpy);
+   SyncHandle();
 }
 
 _X_HIDDEN void
 glXReleaseTexImageEXT(Display * dpy, GLXDrawable drawable, int buffer)
 {
+   xGLXVendorPrivateReq *req;
    struct glx_context *gc = __glXGetCurrentContext();
+   CARD32 *drawable_ptr;
+   INT32 *buffer_ptr;
+   CARD8 opcode;
 
-   if (gc->vtable->release_tex_image == NULL)
+#ifdef GLX_DIRECT_RENDERING
+   __GLXDRIdrawable *pdraw = GetGLXDRIDrawable(dpy, drawable);
+   if (pdraw != NULL) {
+      struct glx_screen *psc = pdraw->psc;
+      if (psc->driScreen->releaseTexImage != NULL)
+         (*psc->driScreen->releaseTexImage) (pdraw, buffer);
+
+      return;
+   }
+#endif
+
+   opcode = __glXSetupForCommand(dpy);
+   if (!opcode)
       return;
 
-   gc->vtable->release_tex_image(dpy, drawable, buffer);
+   LockDisplay(dpy);
+   GetReqExtra(GLXVendorPrivate, sizeof(CARD32) + sizeof(INT32), req);
+   req->reqType = opcode;
+   req->glxCode = X_GLXVendorPrivate;
+   req->vendorCode = X_GLXvop_ReleaseTexImageEXT;
+   req->contextTag = gc->currentContextTag;
+
+   drawable_ptr = (CARD32 *) (req + 1);
+   buffer_ptr = (INT32 *) (drawable_ptr + 1);
+
+   *drawable_ptr = drawable;
+   *buffer_ptr = buffer;
+
+   UnlockDisplay(dpy);
+   SyncHandle();
 }
 
 /*@}*/
@@ -2620,12 +2731,10 @@ _GLX_PUBLIC void (*glXGetProcAddressARB(const GLubyte * procName)) (void)
 #endif
       if (!f)
          f = (gl_function) _glapi_get_proc_address((const char *) procName);
-      if (!f) {
-         struct glx_context *gc = __glXGetCurrentContext();
-      
-         if (gc != NULL && gc->vtable->get_proc_address != NULL)
-            f = gc->vtable->get_proc_address((const char *) procName);
-      }
+#ifdef GLX_USE_APPLEGL
+      if (!f)
+         f = applegl_get_proc_address((const char *) procName);
+#endif
    }
    return f;
 }

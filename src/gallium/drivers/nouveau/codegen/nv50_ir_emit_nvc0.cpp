@@ -3022,7 +3022,8 @@ CodeEmitterNVC0::getMinEncodingSize(const Instruction *i) const
 class SchedDataCalculator : public Pass
 {
 public:
-   SchedDataCalculator(const Target *targ) : targ(targ) { }
+   SchedDataCalculator(const Target *targ) : score(NULL), prevData(0),
+      prevOp(OP_NOP), targ(targ) { }
 
 private:
    struct RegScores

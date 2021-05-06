@@ -455,6 +455,9 @@ CreateDrawable(Display *dpy, struct glx_config *config,
    CARD8 opcode;
    GLXDrawable xid;
 
+   if (!config)
+      return None;
+
    i = 0;
    if (attrib_list) {
       while (attrib_list[i * 2] != None)

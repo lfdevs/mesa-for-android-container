@@ -138,6 +138,12 @@ lp_build_const_float(struct gallivm_state *gallivm, float x)
    return LLVMConstReal(LLVMFloatTypeInContext(gallivm->context), x);
 }
 
+static inline LLVMValueRef
+lp_build_const_double(struct gallivm_state *gallivm, float x)
+{
+   return LLVMConstReal(LLVMDoubleTypeInContext(gallivm->context), x);
+}
+
 
 /** Return constant-valued pointer to int */
 static inline LLVMValueRef

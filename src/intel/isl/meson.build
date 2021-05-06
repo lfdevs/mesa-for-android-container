@@ -23,46 +23,46 @@ isl_gen_files = files(
   'isl_surface_state.c',
 )
 
-isl_gen4_files = files(
-  'isl_gen4.c',
-  'isl_gen4.h',
+isl_gfx4_files = files(
+  'isl_gfx4.c',
+  'isl_gfx4.h',
 )
 
-isl_gen6_files = files(
-  'isl_gen6.c',
-  'isl_gen6.h',
+isl_gfx6_files = files(
+  'isl_gfx6.c',
+  'isl_gfx6.h',
 )
 
-isl_gen7_files = files(
-  'isl_gen7.c',
-  'isl_gen7.h',
+isl_gfx7_files = files(
+  'isl_gfx7.c',
+  'isl_gfx7.h',
 )
 
-isl_gen8_files = files(
-  'isl_gen8.c',
-  'isl_gen8.h',
+isl_gfx8_files = files(
+  'isl_gfx8.c',
+  'isl_gfx8.h',
 )
 
-isl_gen9_files = files(
-  'isl_gen9.c',
-  'isl_gen9.h',
+isl_gfx9_files = files(
+  'isl_gfx9.c',
+  'isl_gfx9.h',
 )
 
-isl_gen12_files = files(
-  'isl_gen12.c',
-  'isl_gen12.h',
+isl_gfx12_files = files(
+  'isl_gfx12.c',
+  'isl_gfx12.h',
 )
 
-isl_gen125_files = files(
-  'isl_gen12.c',
-  'isl_gen12.h',
+isl_gfx125_files = files(
+  'isl_gfx12.c',
+  'isl_gfx12.h',
 )
 
 isl_gen_libs = []
-foreach g : [['40', isl_gen4_files], ['50', []], ['60', isl_gen6_files],
-             ['70', isl_gen7_files], ['75', []], ['80', isl_gen8_files],
-             ['90', isl_gen9_files], ['110', []], ['120', isl_gen12_files],
-             ['125', isl_gen12_files]]
+foreach g : [['40', isl_gfx4_files], ['50', []], ['60', isl_gfx6_files],
+             ['70', isl_gfx7_files], ['75', []], ['80', isl_gfx8_files],
+             ['90', isl_gfx9_files], ['110', []], ['120', isl_gfx12_files],
+             ['125', isl_gfx12_files]]
   _gen = g[0]
   isl_gen_libs += static_library(
     'isl_gen@0@'.format(_gen),
@@ -71,7 +71,7 @@ foreach g : [['40', isl_gen4_files], ['50', []], ['60', isl_gen6_files],
     dependencies : idep_mesautil,
     c_args : [
       no_override_init_args,
-      '-DGEN_VERSIONx10=@0@'.format(_gen)
+      '-DGFX_VERx10=@0@'.format(_gen)
     ],
     gnu_symbol_visibility : 'hidden',
   )

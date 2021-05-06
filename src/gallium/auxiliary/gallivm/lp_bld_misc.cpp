@@ -400,22 +400,22 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
     * http://llvm.org/PR19429
     * http://llvm.org/PR16721
     */
-   MAttrs.push_back(util_cpu_caps.has_sse    ? "+sse"    : "-sse"   );
-   MAttrs.push_back(util_cpu_caps.has_sse2   ? "+sse2"   : "-sse2"  );
-   MAttrs.push_back(util_cpu_caps.has_sse3   ? "+sse3"   : "-sse3"  );
-   MAttrs.push_back(util_cpu_caps.has_ssse3  ? "+ssse3"  : "-ssse3" );
-   MAttrs.push_back(util_cpu_caps.has_sse4_1 ? "+sse4.1" : "-sse4.1");
-   MAttrs.push_back(util_cpu_caps.has_sse4_2 ? "+sse4.2" : "-sse4.2");
+   MAttrs.push_back(util_get_cpu_caps()->has_sse    ? "+sse"    : "-sse"   );
+   MAttrs.push_back(util_get_cpu_caps()->has_sse2   ? "+sse2"   : "-sse2"  );
+   MAttrs.push_back(util_get_cpu_caps()->has_sse3   ? "+sse3"   : "-sse3"  );
+   MAttrs.push_back(util_get_cpu_caps()->has_ssse3  ? "+ssse3"  : "-ssse3" );
+   MAttrs.push_back(util_get_cpu_caps()->has_sse4_1 ? "+sse4.1" : "-sse4.1");
+   MAttrs.push_back(util_get_cpu_caps()->has_sse4_2 ? "+sse4.2" : "-sse4.2");
    /*
     * AVX feature is not automatically detected from CPUID by the X86 target
     * yet, because the old (yet default) JIT engine is not capable of
     * emitting the opcodes. On newer llvm versions it is and at least some
     * versions (tested with 3.3) will emit avx opcodes without this anyway.
     */
-   MAttrs.push_back(util_cpu_caps.has_avx  ? "+avx"  : "-avx");
-   MAttrs.push_back(util_cpu_caps.has_f16c ? "+f16c" : "-f16c");
-   MAttrs.push_back(util_cpu_caps.has_fma  ? "+fma"  : "-fma");
-   MAttrs.push_back(util_cpu_caps.has_avx2 ? "+avx2" : "-avx2");
+   MAttrs.push_back(util_get_cpu_caps()->has_avx  ? "+avx"  : "-avx");
+   MAttrs.push_back(util_get_cpu_caps()->has_f16c ? "+f16c" : "-f16c");
+   MAttrs.push_back(util_get_cpu_caps()->has_fma  ? "+fma"  : "-fma");
+   MAttrs.push_back(util_get_cpu_caps()->has_avx2 ? "+avx2" : "-avx2");
    /* disable avx512 and all subvariants */
    MAttrs.push_back("-avx512cd");
    MAttrs.push_back("-avx512er");
@@ -426,7 +426,7 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    MAttrs.push_back("-avx512vl");
 #endif
 #if defined(PIPE_ARCH_ARM)
-   if (!util_cpu_caps.has_neon) {
+   if (!util_get_cpu_caps()->has_neon) {
       MAttrs.push_back("-neon");
       MAttrs.push_back("-crypto");
       MAttrs.push_back("-vfp2");
@@ -434,7 +434,7 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
 #endif
 
 #if defined(PIPE_ARCH_PPC)
-   MAttrs.push_back(util_cpu_caps.has_altivec ? "+altivec" : "-altivec");
+   MAttrs.push_back(util_get_cpu_caps()->has_altivec ? "+altivec" : "-altivec");
 #if (LLVM_VERSION_MAJOR < 4)
    /*
     * Make sure VSX instructions are disabled
@@ -444,7 +444,7 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
     * https://llvm.org/bugs/show_bug.cgi?id=33531 (fixed in 4.0)
     * https://llvm.org/bugs/show_bug.cgi?id=34647 (llc performance on certain unusual shader IR; intro'd in 4.0, pending as of 5.0)
     */
-   if (util_cpu_caps.has_altivec) {
+   if (util_get_cpu_caps()->has_altivec) {
       MAttrs.push_back("-vsx");
    }
 #else
@@ -458,8 +458,8 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
     * Make sure VSX instructions are ENABLED (if supported), unless
     * VSX instructions are explicitly enabled/disabled via GALLIVM_VSX=1 or 0.
     */
-   if (util_cpu_caps.has_altivec) {
-      MAttrs.push_back(util_cpu_caps.has_vsx ? "+vsx" : "-vsx");
+   if (util_get_cpu_caps()->has_altivec) {
+      MAttrs.push_back(util_get_cpu_caps()->has_vsx ? "+vsx" : "-vsx");
    }
 #endif
 #endif

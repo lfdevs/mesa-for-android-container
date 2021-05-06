@@ -293,6 +293,7 @@ etna_vertex_set_sampler_views(struct etna_context *ctx, unsigned nr,
 static void
 etna_set_sampler_views(struct pipe_context *pctx, enum pipe_shader_type shader,
                        unsigned start_slot, unsigned num_views,
+                       unsigned unbind_num_trailing_slots,
                        struct pipe_sampler_view **views)
 {
    struct etna_context *ctx = etna_context(pctx);

@@ -110,7 +110,7 @@ nir_deref_instr_remove_if_unused(nir_deref_instr *instr)
    for (nir_deref_instr *d = instr; d; d = nir_deref_instr_parent(d)) {
       /* If anyone is using this deref, leave it alone */
       assert(d->dest.is_ssa);
-      if (!list_is_empty(&d->dest.ssa.uses))
+      if (!nir_ssa_def_is_unused(&d->dest.ssa))
          break;
 
       nir_instr_remove(&d->instr);
@@ -491,6 +491,18 @@ nir_compare_deref_paths(nir_deref_path *a_path,
          if (deref_path_contains_coherent_decoration(a_path) &&
              deref_path_contains_coherent_decoration(b_path))
             return nir_derefs_may_alias_bit;
+
+         /* Per SPV_KHR_workgroup_memory_explicit_layout and GL_EXT_shared_memory_block,
+          * shared blocks alias each other.
+          */
+         if (a_path->path[0]->modes & nir_var_mem_shared &&
+             b_path->path[0]->modes & nir_var_mem_shared &&
+             (glsl_type_is_interface(a_path->path[0]->var->type) ||
+              glsl_type_is_interface(b_path->path[0]->var->type))) {
+            assert(glsl_type_is_interface(a_path->path[0]->var->type) &&
+                   glsl_type_is_interface(b_path->path[0]->var->type));
+            return nir_derefs_may_alias_bit;
+         }
 
          /* If we can chase the deref all the way back to the variable and
           * they're not the same variable and at least one is not declared
@@ -1009,7 +1021,7 @@ opt_remove_sampler_cast(nir_deref_instr *cast)
 
    /* We're a cast from a more detailed sampler type to a bare sampler */
    nir_ssa_def_rewrite_uses(&cast->dest.ssa,
-                            nir_src_for_ssa(&parent->dest.ssa));
+                            &parent->dest.ssa);
    nir_instr_remove(&cast->instr);
 
    /* Recursively crawl the deref tree and clean up types */
@@ -1047,7 +1059,7 @@ opt_replace_struct_wrapper_cast(nir_builder *b, nir_deref_instr *cast)
       return false;
 
    nir_deref_instr *replace = nir_build_deref_struct(b, parent, 0);
-   nir_ssa_def_rewrite_uses(&cast->dest.ssa, nir_src_for_ssa(&replace->dest.ssa));
+   nir_ssa_def_rewrite_uses(&cast->dest.ssa, &replace->dest.ssa);
    nir_deref_instr_remove_if_unused(cast);
    return true;
 }
@@ -1111,7 +1123,8 @@ opt_deref_ptr_as_array(nir_builder *b, nir_deref_instr *deref)
    if (nir_src_is_const(deref->arr.index) &&
        nir_src_as_int(deref->arr.index) == 0) {
       /* If it's a ptr_as_array deref with an index of 0, it does nothing
-       * and we can just replace its uses with its parent.
+       * and we can just replace its uses with its parent, unless it has
+       * alignment information.
        *
        * The source of a ptr_as_array deref always has a deref_type of
        * nir_deref_type_array or nir_deref_type_cast.  If it's a cast, it
@@ -1120,10 +1133,11 @@ opt_deref_ptr_as_array(nir_builder *b, nir_deref_instr *deref)
        * opt_deref_cast() above.
        */
       if (parent->deref_type == nir_deref_type_cast &&
+          parent->cast.align_mul == 0 &&
           is_trivial_deref_cast(parent))
          parent = nir_deref_instr_parent(parent);
       nir_ssa_def_rewrite_uses(&deref->dest.ssa,
-                               nir_src_for_ssa(&parent->dest.ssa));
+                               &parent->dest.ssa);
       nir_instr_remove(&deref->instr);
       return true;
    }
@@ -1239,7 +1253,7 @@ opt_load_vec_deref(nir_builder *b, nir_intrinsic_instr *load)
          data = nir_bitcast_vector(b, &load->dest.ssa, old_bit_size);
       data = resize_vector(b, data, old_num_comps);
 
-      nir_ssa_def_rewrite_uses_after(&load->dest.ssa, nir_src_for_ssa(data),
+      nir_ssa_def_rewrite_uses_after(&load->dest.ssa, data,
                                      data->parent_instr);
       return true;
    }
@@ -1308,7 +1322,7 @@ opt_known_deref_mode_is(nir_builder *b, nir_intrinsic_instr *intrin)
    if (deref_is == NULL)
       return false;
 
-   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, nir_src_for_ssa(deref_is));
+   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, deref_is);
    nir_instr_remove(&intrin->instr);
    return true;
 }

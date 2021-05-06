@@ -75,10 +75,11 @@ create_clipdist_vars(nir_shader *shader, nir_variable **io_vars,
                      bool use_clipdist_array)
 {
    if (use_clipdist_array) {
+      shader->info.clip_distance_array_size = util_last_bit(ucp_enables);
       io_vars[0] =
          create_clipdist_var(shader, output,
                              VARYING_SLOT_CLIP_DIST0,
-                             util_last_bit(ucp_enables));
+                             shader->info.clip_distance_array_size);
    } else {
       if (ucp_enables & 0x0f)
          io_vars[0] =

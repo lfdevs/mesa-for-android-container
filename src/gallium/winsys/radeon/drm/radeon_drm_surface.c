@@ -67,7 +67,7 @@ static void surf_level_winsys_to_drm(struct radeon_surface_level *level_drm,
                                      const struct legacy_surf_level *level_ws,
                                      unsigned bpe)
 {
-   level_drm->offset = level_ws->offset;
+   level_drm->offset = (uint64_t)level_ws->offset_256B * 256;
    level_drm->slice_size = (uint64_t)level_ws->slice_size_dw * 4;
    level_drm->nblk_x = level_ws->nblk_x;
    level_drm->nblk_y = level_ws->nblk_y;
@@ -79,7 +79,7 @@ static void surf_level_drm_to_winsys(struct legacy_surf_level *level_ws,
                                      const struct radeon_surface_level *level_drm,
                                      unsigned bpe)
 {
-   level_ws->offset = level_drm->offset;
+   level_ws->offset_256B = level_drm->offset / 256;
    level_ws->slice_size_dw = level_drm->slice_size / 4;
    level_ws->nblk_x = level_drm->nblk_x;
    level_ws->nblk_y = level_drm->nblk_y;
@@ -146,7 +146,7 @@ static void surf_winsys_to_drm(struct radeon_surface *surf_drm,
    }
 
    surf_drm->bo_size = surf_ws->surf_size;
-   surf_drm->bo_alignment = surf_ws->surf_alignment;
+   surf_drm->bo_alignment = 1 << surf_ws->surf_alignment_log2;
 
    surf_drm->bankw = surf_ws->u.legacy.bankw;
    surf_drm->bankh = surf_ws->u.legacy.bankh;
@@ -165,9 +165,9 @@ static void surf_winsys_to_drm(struct radeon_surface *surf_drm,
 
       for (i = 0; i <= surf_drm->last_level; i++) {
          surf_level_winsys_to_drm(&surf_drm->stencil_level[i],
-                                  &surf_ws->u.legacy.stencil_level[i],
+                                  &surf_ws->u.legacy.zs.stencil_level[i],
                                   surf_drm->nsamples);
-         surf_drm->stencil_tiling_index[i] = surf_ws->u.legacy.stencil_tiling_index[i];
+         surf_drm->stencil_tiling_index[i] = surf_ws->u.legacy.zs.stencil_tiling_index[i];
       }
    }
 }
@@ -188,7 +188,7 @@ static void surf_drm_to_winsys(struct radeon_drm_winsys *ws,
    surf_ws->flags = surf_drm->flags;
 
    surf_ws->surf_size = surf_drm->bo_size;
-   surf_ws->surf_alignment = surf_drm->bo_alignment;
+   surf_ws->surf_alignment_log2 = util_logbase2(surf_drm->bo_alignment);
 
    surf_ws->u.legacy.bankw = surf_drm->bankw;
    surf_ws->u.legacy.bankh = surf_drm->bankh;
@@ -207,10 +207,10 @@ static void surf_drm_to_winsys(struct radeon_drm_winsys *ws,
       surf_ws->u.legacy.stencil_tile_split = surf_drm->stencil_tile_split;
 
       for (i = 0; i <= surf_drm->last_level; i++) {
-         surf_level_drm_to_winsys(&surf_ws->u.legacy.stencil_level[i],
+         surf_level_drm_to_winsys(&surf_ws->u.legacy.zs.stencil_level[i],
                                   &surf_drm->stencil_level[i],
                                   surf_drm->nsamples);
-         surf_ws->u.legacy.stencil_tiling_index[i] = surf_drm->stencil_tiling_index[i];
+         surf_ws->u.legacy.zs.stencil_tiling_index[i] = surf_drm->stencil_tiling_index[i];
       }
    }
 
@@ -264,9 +264,9 @@ static void si_compute_cmask(const struct radeon_info *info,
    /* Each element of CMASK is a nibble. */
    unsigned slice_bytes = slice_elements / 2;
 
-   surf->u.legacy.cmask_slice_tile_max = (width * height) / (128*128);
-   if (surf->u.legacy.cmask_slice_tile_max)
-      surf->u.legacy.cmask_slice_tile_max -= 1;
+   surf->u.legacy.color.cmask_slice_tile_max = (width * height) / (128*128);
+   if (surf->u.legacy.color.cmask_slice_tile_max)
+      surf->u.legacy.color.cmask_slice_tile_max -= 1;
 
    unsigned num_layers;
    if (config->is_3d)
@@ -276,7 +276,7 @@ static void si_compute_cmask(const struct radeon_info *info,
    else
       num_layers = config->info.array_size;
 
-   surf->cmask_alignment = MAX2(256, base_align);
+   surf->cmask_alignment_log2 = util_logbase2(MAX2(256, base_align));
    surf->cmask_size = align(slice_bytes, base_align) * num_layers;
 }
 
@@ -287,7 +287,7 @@ static void si_compute_htile(const struct radeon_info *info,
    unsigned slice_elements, slice_bytes, pipe_interleave_bytes, base_align;
    unsigned num_pipes = info->num_tile_pipes;
 
-   surf->htile_size = 0;
+   surf->meta_size = 0;
 
    if (!(surf->flags & RADEON_SURF_Z_OR_SBUFFER) ||
        surf->flags & RADEON_SURF_NO_HTILE)
@@ -342,8 +342,8 @@ static void si_compute_htile(const struct radeon_info *info,
    pipe_interleave_bytes = info->pipe_interleave_bytes;
    base_align = num_pipes * pipe_interleave_bytes;
 
-   surf->htile_alignment = base_align;
-   surf->htile_size = num_layers * align(slice_bytes, base_align);
+   surf->meta_alignment_log2 = util_logbase2(base_align);
+   surf->meta_size = num_layers * align(slice_bytes, base_align);
 }
 
 static int radeon_winsys_surface_init(struct radeon_winsys *rws,
@@ -404,17 +404,17 @@ static int radeon_winsys_surface_init(struct radeon_winsys *rws,
       assert(fmask.u.legacy.level[0].mode == RADEON_SURF_MODE_2D);
 
       surf_ws->fmask_size = fmask.surf_size;
-      surf_ws->fmask_alignment = MAX2(256, fmask.surf_alignment);
+      surf_ws->fmask_alignment_log2 = util_logbase2(MAX2(256, 1 << fmask.surf_alignment_log2));
       surf_ws->fmask_tile_swizzle = fmask.tile_swizzle;
 
-      surf_ws->u.legacy.fmask.slice_tile_max =
+      surf_ws->u.legacy.color.fmask.slice_tile_max =
             (fmask.u.legacy.level[0].nblk_x * fmask.u.legacy.level[0].nblk_y) / 64;
-      if (surf_ws->u.legacy.fmask.slice_tile_max)
-         surf_ws->u.legacy.fmask.slice_tile_max -= 1;
+      if (surf_ws->u.legacy.color.fmask.slice_tile_max)
+         surf_ws->u.legacy.color.fmask.slice_tile_max -= 1;
 
-      surf_ws->u.legacy.fmask.tiling_index = fmask.u.legacy.tiling_index[0];
-      surf_ws->u.legacy.fmask.bankh = fmask.u.legacy.bankh;
-      surf_ws->u.legacy.fmask.pitch_in_pixels = fmask.u.legacy.level[0].nblk_x;
+      surf_ws->u.legacy.color.fmask.tiling_index = fmask.u.legacy.tiling_index[0];
+      surf_ws->u.legacy.color.fmask.bankh = fmask.u.legacy.bankh;
+      surf_ws->u.legacy.color.fmask.pitch_in_pixels = fmask.u.legacy.level[0].nblk_x;
    }
 
    if (ws->gen == DRV_SI &&
@@ -438,20 +438,20 @@ static int radeon_winsys_surface_init(struct radeon_winsys *rws,
       /* Determine the memory layout of multiple allocations in one buffer. */
       surf_ws->total_size = surf_ws->surf_size;
 
-      if (surf_ws->htile_size) {
-         surf_ws->htile_offset = align64(surf_ws->total_size, surf_ws->htile_alignment);
-         surf_ws->total_size = surf_ws->htile_offset + surf_ws->htile_size;
+      if (surf_ws->meta_size) {
+         surf_ws->meta_offset = align64(surf_ws->total_size, 1 << surf_ws->meta_alignment_log2);
+         surf_ws->total_size = surf_ws->meta_offset + surf_ws->meta_size;
       }
 
       if (surf_ws->fmask_size) {
          assert(tex->nr_samples >= 2);
-         surf_ws->fmask_offset = align64(surf_ws->total_size, surf_ws->fmask_alignment);
+         surf_ws->fmask_offset = align64(surf_ws->total_size, 1 << surf_ws->fmask_alignment_log2);
          surf_ws->total_size = surf_ws->fmask_offset + surf_ws->fmask_size;
       }
 
       /* Single-sample CMASK is in a separate buffer. */
       if (surf_ws->cmask_size && tex->nr_samples >= 2) {
-         surf_ws->cmask_offset = align64(surf_ws->total_size, surf_ws->cmask_alignment);
+         surf_ws->cmask_offset = align64(surf_ws->total_size, 1 << surf_ws->cmask_alignment_log2);
          surf_ws->total_size = surf_ws->cmask_offset + surf_ws->cmask_size;
       }
    }

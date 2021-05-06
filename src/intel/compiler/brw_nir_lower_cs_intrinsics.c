@@ -61,7 +61,7 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
             intrinsic->dest.ssa.bit_size = 32;
             sysval = nir_u2u64(b, &intrinsic->dest.ssa);
             nir_ssa_def_rewrite_uses_after(&intrinsic->dest.ssa,
-                                           nir_src_for_ssa(sysval),
+                                           sysval,
                                            sysval->parent_instr);
          }
          continue;
@@ -187,7 +187,7 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
       if (intrinsic->dest.ssa.bit_size == 64)
          sysval = nir_u2u64(b, sysval);
 
-      nir_ssa_def_rewrite_uses(&intrinsic->dest.ssa, nir_src_for_ssa(sysval));
+      nir_ssa_def_rewrite_uses(&intrinsic->dest.ssa, sysval);
       nir_instr_remove(&intrinsic->instr);
 
       state->progress = true;

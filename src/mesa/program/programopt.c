@@ -248,7 +248,7 @@ _mesa_append_fog_code(struct gl_context *ctx, struct gl_program *fprog,
                       GLenum fog_mode, GLboolean saturate)
 {
    static const gl_state_index16 fogPStateOpt[STATE_LENGTH]
-      = { STATE_INTERNAL, STATE_FOG_PARAMS_OPTIMIZED, 0, 0 };
+      = { STATE_FOG_PARAMS_OPTIMIZED, 0, 0 };
    static const gl_state_index16 fogColorState[STATE_LENGTH]
       = { STATE_FOG_COLOR, 0, 0, 0 };
    struct prog_instruction *newInst, *inst;

@@ -463,7 +463,7 @@ vl_deint_filter_render(struct vl_deint_filter *filter,
 
    /* set up pipe state */
    filter->pipe->bind_rasterizer_state(filter->pipe, filter->rs_state);
-   filter->pipe->set_vertex_buffers(filter->pipe, 0, 1, &filter->quad);
+   filter->pipe->set_vertex_buffers(filter->pipe, 0, 1, 0, false, &filter->quad);
    filter->pipe->bind_vertex_elements_state(filter->pipe, filter->ves);
    filter->pipe->bind_vs_state(filter->pipe, filter->vs);
    filter->pipe->bind_sampler_states(filter->pipe, PIPE_SHADER_FRAGMENT,
@@ -501,7 +501,7 @@ vl_deint_filter_render(struct vl_deint_filter *filter,
       sampler_views[1] = prev_sv[k];
       sampler_views[2] = cur_sv[k];
       sampler_views[3] = next_sv[k];
-      filter->pipe->set_sampler_views(filter->pipe, PIPE_SHADER_FRAGMENT, 0, 4, sampler_views);
+      filter->pipe->set_sampler_views(filter->pipe, PIPE_SHADER_FRAGMENT, 0, 4, 0, sampler_views);
 
       /* blit current field */
       fb_state.cbufs[0] = blit_surf;

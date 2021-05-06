@@ -25,37 +25,40 @@
 #include "dev/gen_device_info.h"
 
 enum gen {
-   GEN4    = (1 << 0),
-   GEN45   = (1 << 1),
-   GEN5    = (1 << 2),
-   GEN6    = (1 << 3),
-   GEN7    = (1 << 4),
-   GEN75   = (1 << 5),
-   GEN8    = (1 << 6),
-   GEN9    = (1 << 7),
-   GEN10   = (1 << 8),
-   GEN11   = (1 << 9),
-   GEN12   = (1 << 10),
-   GEN125  = (1 << 11),
-   GEN_ALL = ~0
+   GFX4    = (1 << 0),
+   GFX45   = (1 << 1),
+   GFX5    = (1 << 2),
+   GFX6    = (1 << 3),
+   GFX7    = (1 << 4),
+   GFX75   = (1 << 5),
+   GFX8    = (1 << 6),
+   GFX9    = (1 << 7),
+   GFX10   = (1 << 8),
+   GFX11   = (1 << 9),
+   GFX12   = (1 << 10),
+   GFX125  = (1 << 11),
+   GFX_ALL = ~0
 };
 
-#define GEN_LT(gen) ((gen) - 1)
-#define GEN_GE(gen) (~GEN_LT(gen))
-#define GEN_LE(gen) (GEN_LT(gen) | (gen))
+#define GFX_LT(gen) ((gen) - 1)
+#define GFX_GE(gen) (~GFX_LT(gen))
+#define GFX_LE(gen) (GFX_LT(gen) | (gen))
 
 static enum gen
 gen_from_devinfo(const struct gen_device_info *devinfo)
 {
-   switch (devinfo->gen) {
-   case 4: return devinfo->is_g4x ? GEN45 : GEN4;
-   case 5: return GEN5;
-   case 6: return GEN6;
-   case 7: return devinfo->is_haswell ? GEN75 : GEN7;
-   case 8: return GEN8;
-   case 9: return GEN9;
-   case 11: return GEN11;
-   case 12: return gen_device_info_is_12hp(devinfo) ? GEN125 : GEN12;
+   switch (devinfo->verx10) {
+   case 40: return GFX4;
+   case 45: return GFX45;
+   case 50: return GFX5;
+   case 60: return GFX6;
+   case 70: return GFX7;
+   case 75: return GFX75;
+   case 80: return GFX8;
+   case 90: return GFX9;
+   case 110: return GFX11;
+   case 120: return GFX12;
+   case 125: return GFX125;
    default:
       unreachable("not reached");
    }

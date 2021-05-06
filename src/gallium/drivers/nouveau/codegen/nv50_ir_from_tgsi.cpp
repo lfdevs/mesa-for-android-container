@@ -1180,6 +1180,7 @@ void Source::scanProperty(const struct tgsi_full_property *prop)
    case TGSI_PROPERTY_FS_COORD_PIXEL_CENTER:
    case TGSI_PROPERTY_FS_DEPTH_LAYOUT:
    case TGSI_PROPERTY_GS_INPUT_PRIM:
+   case TGSI_PROPERTY_FS_BLEND_EQUATION_ADVANCED:
       // we don't care
       break;
    case TGSI_PROPERTY_VS_PROHIBIT_UCPS:
@@ -1691,7 +1692,7 @@ private:
 
    class BindArgumentsPass : public Pass {
    public:
-      BindArgumentsPass(Converter &conv) : conv(conv) { }
+      BindArgumentsPass(Converter &conv) : conv(conv), sub(NULL) { }
 
    private:
       Converter &conv;
@@ -3120,7 +3121,7 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
 
    Value *dst0[4], *rDst0[4];
    Value *src0, *src1, *src2, *src3;
-   Value *val0, *val1;
+   Value *val0 = NULL, *val1 = NULL;
    int c;
 
    tgsi = tgsi::Instruction(insn);
@@ -3414,6 +3415,8 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
    case TGSI_OPCODE_READ_INVOC:
       if (tgsi.getOpcode() == TGSI_OPCODE_READ_INVOC)
          src1 = fetchSrc(1, 0);
+      else
+         src1 = val0;
       FOR_EACH_DST_ENABLED_CHANNEL(0, c, tgsi) {
          geni = mkOp3(op, dstTy, dst0[c], fetchSrc(0, c), src1, mkImm(0x1f));
          geni->subOp = NV50_IR_SUBOP_SHFL_IDX;

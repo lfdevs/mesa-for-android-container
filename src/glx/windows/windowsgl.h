@@ -44,9 +44,4 @@ void windows_copy_subbuffer(windowsDrawable *windowsDrawable, int x, int y, int 
 int windows_check_renderer(void);
 void windows_extensions(char **gl_extensions, char **wgl_extensions);
 
-void windows_setTexBuffer(windowsContext *context, int textureTarget,
-                         int textureFormat, windowsDrawable *drawable);
-void windows_releaseTexBuffer(windowsContext *context, int textureTarget,
-                             windowsDrawable *drawable);
-
 #endif /* windowsgl_h */

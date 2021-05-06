@@ -535,8 +535,7 @@ nv50_cb_push(struct nouveau_context *nv,
    /* Go through all the constbuf binding points of this buffer and try to
     * find one which contains the region to be updated.
     */
-   /* XXX compute? */
-   for (s = 0; s < 3 && !cb; s++) {
+   for (s = 0; s < NV50_MAX_SHADER_STAGES && !cb; s++) {
       uint16_t bindings = res->cb_bindings[s];
       while (bindings) {
          int i = ffs(bindings) - 1;

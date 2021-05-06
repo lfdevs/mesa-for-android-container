@@ -1,3 +1,20 @@
+mesa (21.1.0-1) experimental; urgency=medium
+
+  * New upstream release.
+  * Build with llvm-12.
+  * path_max.diff: Refreshed.
+  * rules: vulkan_intel.h is gone.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 06 May 2021 16:05:12 +0300
+
+mesa (21.0.3-1) experimental; urgency=medium
+
+  * New upstream release.
+  * rules: Limit d3d12 by DEB_HOST_ARCH, not DEB_HOST_ARCH_CPU. (Closes:
+    #986660)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 22 Apr 2021 10:01:11 +0300
+
 mesa (21.0.2-1) experimental; urgency=medium
 
   * New upstream release.

@@ -388,6 +388,12 @@ handle_no_contraction(struct vtn_builder *b, struct vtn_value *val, int member,
    b->nb.exact = true;
 }
 
+void
+vtn_handle_no_contraction(struct vtn_builder *b, struct vtn_value *val)
+{
+   vtn_foreach_decoration(b, val, handle_no_contraction, NULL);
+}
+
 nir_rounding_mode
 vtn_rounding_mode_to_nir(struct vtn_builder *b, SpvFPRoundingMode mode)
 {
@@ -463,7 +469,7 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
    struct vtn_value *dest_val = vtn_untyped_value(b, w[2]);
    const struct glsl_type *dest_type = vtn_get_type(b, w[1])->type;
 
-   vtn_foreach_decoration(b, dest_val, handle_no_contraction, NULL);
+   vtn_handle_no_contraction(b, dest_val);
 
    /* Collect the various SSA sources */
    const unsigned num_inputs = count - 3;

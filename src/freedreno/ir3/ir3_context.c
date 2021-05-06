@@ -465,9 +465,8 @@ create_addr0(struct ir3_block *block, struct ir3_instruction *src, int align)
 static struct ir3_instruction *
 create_addr1(struct ir3_block *block, unsigned const_val)
 {
-
-	struct ir3_instruction *immed = create_immed_typed(block, const_val, TYPE_S16);
-	struct ir3_instruction *instr = ir3_MOV(block, immed, TYPE_S16);
+	struct ir3_instruction *immed = create_immed_typed(block, const_val, TYPE_U16);
+	struct ir3_instruction *instr = ir3_MOV(block, immed, TYPE_U16);
 	instr->regs[0]->num = regid(REG_A0, 1);
 	instr->regs[0]->flags &= ~IR3_REG_SSA;
 	return instr;

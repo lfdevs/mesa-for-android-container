@@ -107,10 +107,11 @@ dri2_drawable_get_buffers(struct dri_drawable *drawable,
    boolean with_format;
    __DRIbuffer *buffers;
    int num_buffers;
-   unsigned attachments[10];
+   unsigned attachments[__DRI_BUFFER_COUNT];
    unsigned num_attachments, i;
 
    assert(loader);
+   assert(*count <= __DRI_BUFFER_COUNT);
    with_format = dri_with_format(drawable->sPriv);
 
    num_attachments = 0;
@@ -409,6 +410,8 @@ dri2_allocate_textures(struct dri_context *ctx,
    __DRIbuffer *buffers = NULL;
    struct winsys_handle whandle;
    unsigned num_buffers = statts_count;
+
+   assert(num_buffers <= __DRI_BUFFER_COUNT);
 
    /* First get the buffers from the loader */
    if (image) {
@@ -732,8 +735,8 @@ static const struct dri2_format_mapping r8_g8b8_mapping = {
    __DRI_IMAGE_COMPONENTS_Y_UV,
    PIPE_FORMAT_R8_G8B8_420_UNORM,
    2,
-   { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
-     { 1, 1, 1, __DRI_IMAGE_FORMAT_GR88, 2 } }
+   { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8 },
+     { 1, 1, 1, __DRI_IMAGE_FORMAT_GR88 } }
 };
 
 static __DRIimage *
@@ -1925,10 +1928,10 @@ dri2_interop_export_object(__DRIcontext *_ctx,
          }
 
          out->internal_format = obj->Image[0][0]->InternalFormat;
-         out->view_minlevel = obj->MinLevel;
-         out->view_numlevels = obj->NumLevels;
-         out->view_minlayer = obj->MinLayer;
-         out->view_numlayers = obj->NumLayers;
+         out->view_minlevel = obj->Attrib.MinLevel;
+         out->view_numlevels = obj->Attrib.NumLevels;
+         out->view_minlayer = obj->Attrib.MinLayer;
+         out->view_numlayers = obj->Attrib.NumLayers;
       }
    }
 

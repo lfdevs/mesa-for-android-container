@@ -209,14 +209,13 @@ tu6_emit_zs(struct tu_cmd_buffer *cmd,
    tu_cs_emit_regs(cs,
                    A6XX_GRAS_SU_DEPTH_BUFFER_INFO(.depth_format = fmt));
 
-   tu_cs_emit_pkt4(cs, REG_A6XX_RB_DEPTH_FLAG_BUFFER_BASE_LO, 3);
+   tu_cs_emit_pkt4(cs, REG_A6XX_RB_DEPTH_FLAG_BUFFER_BASE, 3);
    tu_cs_image_flag_ref(cs, iview, 0);
 
    tu_cs_emit_regs(cs, A6XX_GRAS_LRZ_BUFFER_BASE(.bo = iview->image->bo,
                                                  .bo_offset = iview->image->bo_offset + iview->image->lrz_offset),
                    A6XX_GRAS_LRZ_BUFFER_PITCH(.pitch = iview->image->lrz_pitch),
-                   A6XX_GRAS_LRZ_FAST_CLEAR_BUFFER_BASE_LO(0),
-                   A6XX_GRAS_LRZ_FAST_CLEAR_BUFFER_BASE_HI(0));
+                   A6XX_GRAS_LRZ_FAST_CLEAR_BUFFER_BASE());
 
    if (attachment->format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
        attachment->format == VK_FORMAT_S8_UINT) {
@@ -258,7 +257,7 @@ tu6_emit_mrt(struct tu_cmd_buffer *cmd,
       tu_cs_emit_regs(cs,
                       A6XX_SP_FS_MRT_REG(i, .dword = iview->SP_FS_MRT_REG));
 
-      tu_cs_emit_pkt4(cs, REG_A6XX_RB_MRT_FLAG_BUFFER_ADDR_LO(i), 3);
+      tu_cs_emit_pkt4(cs, REG_A6XX_RB_MRT_FLAG_BUFFER_ADDR(i), 3);
       tu_cs_image_flag_ref(cs, iview, 0);
    }
 
@@ -744,11 +743,11 @@ tu6_init_hw(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
                    A6XX_RB_CCU_CNTL(.offset = phys_dev->info.a6xx.ccu_offset_bypass));
    cmd->state.ccu_state = TU_CMD_CCU_SYSMEM;
    tu_cs_emit_write_reg(cs, REG_A6XX_RB_UNKNOWN_8E04, 0x00100000);
-   tu_cs_emit_write_reg(cs, REG_A6XX_SP_UNKNOWN_AE04, 0x8);
+   tu_cs_emit_write_reg(cs, REG_A6XX_SP_FLOAT_CNTL, 0);
    tu_cs_emit_write_reg(cs, REG_A6XX_SP_UNKNOWN_AE00, 0);
-   tu_cs_emit_write_reg(cs, REG_A6XX_SP_UNKNOWN_AE0F, 0x3f);
-   tu_cs_emit_write_reg(cs, REG_A6XX_SP_UNKNOWN_B605, 0x44);
-   tu_cs_emit_write_reg(cs, REG_A6XX_SP_UNKNOWN_B600, 0x100000);
+   tu_cs_emit_write_reg(cs, REG_A6XX_SP_PERFCTR_ENABLE, 0x3f);
+   tu_cs_emit_write_reg(cs, REG_A6XX_TPL1_UNKNOWN_B605, 0x44);
+   tu_cs_emit_write_reg(cs, REG_A6XX_TPL1_UNKNOWN_B600, 0x100000);
    tu_cs_emit_write_reg(cs, REG_A6XX_HLSQ_UNKNOWN_BE00, 0x80);
    tu_cs_emit_write_reg(cs, REG_A6XX_HLSQ_UNKNOWN_BE01, 0);
 
@@ -803,7 +802,8 @@ tu6_init_hw(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
 
    tu_cs_emit_write_reg(cs, REG_A6XX_PC_MODE_CNTL, 0x0000001f);
 
-   tu_cs_emit_regs(cs, A6XX_RB_ALPHA_CONTROL());
+   tu_cs_emit_regs(cs, A6XX_RB_ALPHA_CONTROL()); /* always disable alpha test */
+   tu_cs_emit_regs(cs, A6XX_RB_DITHER_CNTL()); /* always disable dithering */
 
    tu_disable_draw_states(cmd, cs);
 
@@ -1103,8 +1103,7 @@ tu_emit_input_attachments(struct tu_cmd_buffer *cmd,
                   CP_LOAD_STATE6_0_NUM_UNIT(subpass->input_count * 2));
    tu_cs_emit_qw(&cs, texture.iova);
 
-   tu_cs_emit_pkt4(&cs, REG_A6XX_SP_FS_TEX_CONST_LO, 2);
-   tu_cs_emit_qw(&cs, texture.iova);
+   tu_cs_emit_regs(&cs, A6XX_SP_FS_TEX_CONST(.qword = texture.iova));
 
    tu_cs_emit_regs(&cs, A6XX_SP_FS_TEX_COUNT(subpass->input_count * 2));
 
@@ -1431,6 +1430,7 @@ tu_AllocateCommandBuffers(VkDevice _device,
 
          result = tu_reset_cmd_buffer(cmd_buffer);
          cmd_buffer->level = pAllocateInfo->level;
+         vk_object_base_reset(&cmd_buffer->base);
 
          pCommandBuffers[i] = tu_cmd_buffer_to_handle(cmd_buffer);
       } else {
@@ -1603,8 +1603,7 @@ tu_CmdBindVertexBuffers2EXT(VkCommandBuffer commandBuffer,
 
    for (uint32_t i = 0; i < MAX_VBS; i++) {
       tu_cs_emit_regs(&cs,
-                      A6XX_VFD_FETCH_BASE_LO(i, cmd->state.vb[i].base),
-                      A6XX_VFD_FETCH_BASE_HI(i, cmd->state.vb[i].base >> 32),
+                      A6XX_VFD_FETCH_BASE(i, .qword = cmd->state.vb[i].base),
                       A6XX_VFD_FETCH_SIZE(i, cmd->state.vb[i].size));
    }
 
@@ -1807,13 +1806,13 @@ void tu_CmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer,
 
    /* preserve previous content if the layout is the same: */
    if (set->layout == layout)
-      memcpy(set_mem.map, set->mapped_ptr, MIN2(set->size, layout->size));
+      memcpy(set_mem.map, set->mapped_ptr, layout->size);
 
    set->layout = layout;
    set->mapped_ptr = set_mem.map;
    set->va = set_mem.iova;
 
-   tu_update_descriptor_sets(tu_descriptor_set_to_handle(set),
+   tu_update_descriptor_sets(cmd->device, tu_descriptor_set_to_handle(set),
                              descriptorWriteCount, pDescriptorWrites, 0, NULL);
 
    tu_CmdBindDescriptorSets(commandBuffer, pipelineBindPoint, _layout, _set,
@@ -1846,13 +1845,13 @@ void tu_CmdPushDescriptorSetWithTemplateKHR(
 
    /* preserve previous content if the layout is the same: */
    if (set->layout == layout)
-      memcpy(set_mem.map, set->mapped_ptr, MIN2(set->size, layout->size));
+      memcpy(set_mem.map, set->mapped_ptr, layout->size);
 
    set->layout = layout;
    set->mapped_ptr = set_mem.map;
    set->va = set_mem.iova;
 
-   tu_update_descriptor_set_with_template(set, descriptorUpdateTemplate, pData);
+   tu_update_descriptor_set_with_template(cmd->device, set, descriptorUpdateTemplate, pData);
 
    tu_CmdBindDescriptorSets(commandBuffer, templ->bind_point, _layout, _set,
                             1, (VkDescriptorSet[]) { tu_descriptor_set_to_handle(set) },
@@ -2110,7 +2109,6 @@ tu_CmdBindPipeline(VkCommandBuffer commandBuffer,
    if (!(cmd->state.dirty & TU_CMD_DIRTY_DRAW_STATE)) {
       struct tu_cs *cs = &cmd->draw_cs;
       uint32_t mask = ~pipeline->dynamic_state_mask & BITFIELD_MASK(TU_DYNAMIC_STATE_COUNT);
-      uint32_t i;
 
       tu_cs_emit_pkt7(cs, CP_SET_DRAW_STATE, 3 * (6 + util_bitcount(mask)));
       tu_cs_emit_draw_state(cs, TU_DRAW_STATE_PROGRAM, pipeline->program.state);
@@ -2120,7 +2118,7 @@ tu_CmdBindPipeline(VkCommandBuffer commandBuffer,
       tu_cs_emit_draw_state(cs, TU_DRAW_STATE_RAST, pipeline->rast_state);
       tu_cs_emit_draw_state(cs, TU_DRAW_STATE_BLEND, pipeline->blend_state);
 
-      for_each_bit(i, mask)
+      u_foreach_bit(i, mask)
          tu_cs_emit_draw_state(cs, TU_DRAW_STATE_DYNAMIC + i, pipeline->dynamic_state[i]);
    }
 
@@ -2966,7 +2964,8 @@ tu_CmdBeginRenderPass2(VkCommandBuffer commandBuffer,
 
    tu6_emit_zs(cmd, cmd->state.subpass, &cmd->draw_cs);
    tu6_emit_mrt(cmd, cmd->state.subpass, &cmd->draw_cs);
-   tu6_emit_msaa(&cmd->draw_cs, cmd->state.subpass->samples);
+   if (cmd->state.subpass->samples)
+      tu6_emit_msaa(&cmd->draw_cs, cmd->state.subpass->samples);
    tu6_emit_render_cntl(cmd, cmd->state.subpass, &cmd->draw_cs, false);
 
    tu_set_input_attachments(cmd, cmd->state.subpass);
@@ -3031,7 +3030,8 @@ tu_CmdNextSubpass2(VkCommandBuffer commandBuffer,
    /* emit mrt/zs/msaa/ubwc state for the subpass that is starting */
    tu6_emit_zs(cmd, cmd->state.subpass, cs);
    tu6_emit_mrt(cmd, cmd->state.subpass, cs);
-   tu6_emit_msaa(cs, cmd->state.subpass->samples);
+   if (cmd->state.subpass->samples)
+      tu6_emit_msaa(cs, cmd->state.subpass->samples);
    tu6_emit_render_cntl(cmd, cmd->state.subpass, cs, false);
 
    tu_set_input_attachments(cmd, cmd->state.subpass);
@@ -3182,10 +3182,18 @@ tu6_emit_tess_consts(struct tu_cmd_buffer *cmd,
    if (result != VK_SUCCESS)
       return result;
 
+   const struct tu_program_descriptor_linkage *hs_link =
+      &pipeline->program.link[MESA_SHADER_TESS_CTRL];
+   bool hs_uses_bo = pipeline->tess.hs_bo_regid < hs_link->constlen;
+
+   const struct tu_program_descriptor_linkage *ds_link =
+      &pipeline->program.link[MESA_SHADER_TESS_EVAL];
+   bool ds_uses_bo = pipeline->tess.ds_bo_regid < ds_link->constlen;
+
    uint64_t tess_factor_size = get_tess_factor_bo_size(pipeline, draw_count);
    uint64_t tess_param_size = get_tess_param_bo_size(pipeline, draw_count);
    uint64_t tess_bo_size =  tess_factor_size + tess_param_size;
-   if (tess_bo_size > 0) {
+   if ((hs_uses_bo || ds_uses_bo) && tess_bo_size > 0) {
       struct tu_bo *tess_bo;
       result = tu_get_scratch_bo(cmd->device, tess_bo_size, &tess_bo);
       if (result != VK_SUCCESS)
@@ -3194,27 +3202,31 @@ tu6_emit_tess_consts(struct tu_cmd_buffer *cmd,
       uint64_t tess_factor_iova = tess_bo->iova;
       uint64_t tess_param_iova = tess_factor_iova + tess_factor_size;
 
-      tu_cs_emit_pkt7(&cs, CP_LOAD_STATE6_GEOM, 3 + 4);
-      tu_cs_emit(&cs, CP_LOAD_STATE6_0_DST_OFF(pipeline->tess.hs_bo_regid) |
-            CP_LOAD_STATE6_0_STATE_TYPE(ST6_CONSTANTS) |
-            CP_LOAD_STATE6_0_STATE_SRC(SS6_DIRECT) |
-            CP_LOAD_STATE6_0_STATE_BLOCK(SB6_HS_SHADER) |
-            CP_LOAD_STATE6_0_NUM_UNIT(1));
-      tu_cs_emit(&cs, CP_LOAD_STATE6_1_EXT_SRC_ADDR(0));
-      tu_cs_emit(&cs, CP_LOAD_STATE6_2_EXT_SRC_ADDR_HI(0));
-      tu_cs_emit_qw(&cs, tess_param_iova);
-      tu_cs_emit_qw(&cs, tess_factor_iova);
+      if (hs_uses_bo) {
+         tu_cs_emit_pkt7(&cs, CP_LOAD_STATE6_GEOM, 3 + 4);
+         tu_cs_emit(&cs, CP_LOAD_STATE6_0_DST_OFF(pipeline->tess.hs_bo_regid) |
+               CP_LOAD_STATE6_0_STATE_TYPE(ST6_CONSTANTS) |
+               CP_LOAD_STATE6_0_STATE_SRC(SS6_DIRECT) |
+               CP_LOAD_STATE6_0_STATE_BLOCK(SB6_HS_SHADER) |
+               CP_LOAD_STATE6_0_NUM_UNIT(1));
+         tu_cs_emit(&cs, CP_LOAD_STATE6_1_EXT_SRC_ADDR(0));
+         tu_cs_emit(&cs, CP_LOAD_STATE6_2_EXT_SRC_ADDR_HI(0));
+         tu_cs_emit_qw(&cs, tess_param_iova);
+         tu_cs_emit_qw(&cs, tess_factor_iova);
+      }
 
-      tu_cs_emit_pkt7(&cs, CP_LOAD_STATE6_GEOM, 3 + 4);
-      tu_cs_emit(&cs, CP_LOAD_STATE6_0_DST_OFF(pipeline->tess.ds_bo_regid) |
-            CP_LOAD_STATE6_0_STATE_TYPE(ST6_CONSTANTS) |
-            CP_LOAD_STATE6_0_STATE_SRC(SS6_DIRECT) |
-            CP_LOAD_STATE6_0_STATE_BLOCK(SB6_DS_SHADER) |
-            CP_LOAD_STATE6_0_NUM_UNIT(1));
-      tu_cs_emit(&cs, CP_LOAD_STATE6_1_EXT_SRC_ADDR(0));
-      tu_cs_emit(&cs, CP_LOAD_STATE6_2_EXT_SRC_ADDR_HI(0));
-      tu_cs_emit_qw(&cs, tess_param_iova);
-      tu_cs_emit_qw(&cs, tess_factor_iova);
+      if (ds_uses_bo) {
+         tu_cs_emit_pkt7(&cs, CP_LOAD_STATE6_GEOM, 3 + 4);
+         tu_cs_emit(&cs, CP_LOAD_STATE6_0_DST_OFF(pipeline->tess.ds_bo_regid) |
+               CP_LOAD_STATE6_0_STATE_TYPE(ST6_CONSTANTS) |
+               CP_LOAD_STATE6_0_STATE_SRC(SS6_DIRECT) |
+               CP_LOAD_STATE6_0_STATE_BLOCK(SB6_DS_SHADER) |
+               CP_LOAD_STATE6_0_NUM_UNIT(1));
+         tu_cs_emit(&cs, CP_LOAD_STATE6_1_EXT_SRC_ADDR(0));
+         tu_cs_emit(&cs, CP_LOAD_STATE6_2_EXT_SRC_ADDR_HI(0));
+         tu_cs_emit_qw(&cs, tess_param_iova);
+         tu_cs_emit_qw(&cs, tess_factor_iova);
+      }
 
       *factor_iova = tess_factor_iova;
    }
@@ -3342,8 +3354,7 @@ tu6_draw_common(struct tu_cmd_buffer *cmd,
        */
       tu_cs_emit_wfi(cs);
 
-      tu_cs_emit_pkt4(cs, REG_A6XX_PC_TESSFACTOR_ADDR_LO, 2);
-      tu_cs_emit_qw(cs, tess_factor_iova);
+      tu_cs_emit_regs(cs, A6XX_PC_TESSFACTOR_ADDR(.qword = tess_factor_iova));
 
       tu_cs_emit_pkt7(cs, CP_SET_SUBDRAW_SIZE, 1);
       tu_cs_emit(cs, draw_count);
@@ -3799,15 +3810,19 @@ tu_emit_compute_driver_params(struct tu_cmd_buffer *cmd,
    if (link->constlen <= offset)
       return;
 
+   uint32_t num_consts = MIN2(const_state->num_driver_params,
+                              (link->constlen - offset) * 4);
+
    if (!info->indirect) {
-      uint32_t driver_params[4] = {
+      uint32_t driver_params[8] = {
          [IR3_DP_NUM_WORK_GROUPS_X] = info->blocks[0],
          [IR3_DP_NUM_WORK_GROUPS_Y] = info->blocks[1],
          [IR3_DP_NUM_WORK_GROUPS_Z] = info->blocks[2],
+         [IR3_DP_BASE_GROUP_X] = info->offsets[0],
+         [IR3_DP_BASE_GROUP_Y] = info->offsets[1],
+         [IR3_DP_BASE_GROUP_Z] = info->offsets[2],
       };
 
-      uint32_t num_consts = MIN2(const_state->num_driver_params,
-                                 (link->constlen - offset) * 4);
       assert(num_consts <= ARRAY_SIZE(driver_params));
 
       /* push constants */
@@ -3854,6 +3869,21 @@ tu_emit_compute_driver_params(struct tu_cmd_buffer *cmd,
                   CP_LOAD_STATE6_0_STATE_BLOCK(tu6_stage2shadersb(type)) |
                   CP_LOAD_STATE6_0_NUM_UNIT(1));
       tu_cs_emit_qw(cs, global_iova(cmd, cs_indirect_xyz[0]));
+   }
+
+   /* Zeroing of IR3_DP_BASE_GROUP_X/Y/Z for indirect dispatch */
+   if (info->indirect && num_consts > IR3_DP_BASE_GROUP_X) {
+      assert(num_consts == align(IR3_DP_BASE_GROUP_Z, 4));
+
+      tu_cs_emit_pkt7(cs, tu6_stage2opcode(type), 7);
+      tu_cs_emit(cs, CP_LOAD_STATE6_0_DST_OFF(offset + (IR3_DP_BASE_GROUP_X / 4)) |
+                 CP_LOAD_STATE6_0_STATE_TYPE(ST6_CONSTANTS) |
+                 CP_LOAD_STATE6_0_STATE_SRC(SS6_DIRECT) |
+                 CP_LOAD_STATE6_0_STATE_BLOCK(tu6_stage2shadersb(type)) |
+                 CP_LOAD_STATE6_0_NUM_UNIT(1));
+      tu_cs_emit_qw(cs, 0);
+      for (uint32_t i = 0; i < 4; i++)
+         tu_cs_emit(cs, 0);
    }
 }
 

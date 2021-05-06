@@ -980,20 +980,15 @@ dri2InvalidateBuffers(Display *dpy, XID drawable)
 }
 
 static void
-dri2_bind_tex_image(Display * dpy,
-		    GLXDrawable drawable,
+dri2_bind_tex_image(__GLXDRIdrawable *base,
 		    int buffer, const int *attrib_list)
 {
    struct glx_context *gc = __glXGetCurrentContext();
    struct dri2_context *pcp = (struct dri2_context *) gc;
-   __GLXDRIdrawable *base = GetGLXDRIDrawable(dpy, drawable);
-   struct glx_display *dpyPriv = __glXInitialize(dpy);
+   struct glx_display *dpyPriv = __glXInitialize(gc->currentDpy);
    struct dri2_drawable *pdraw = (struct dri2_drawable *) base;
    struct dri2_display *pdp;
    struct dri2_screen *psc;
-
-   if (dpyPriv == NULL)
-       return;
 
    pdp = (struct dri2_display *) dpyPriv->dri2Display;
 
@@ -1020,16 +1015,14 @@ dri2_bind_tex_image(Display * dpy,
 }
 
 static void
-dri2_release_tex_image(Display * dpy, GLXDrawable drawable, int buffer)
+dri2_release_tex_image(__GLXDRIdrawable *base, int buffer)
 {
    struct glx_context *gc = __glXGetCurrentContext();
    struct dri2_context *pcp = (struct dri2_context *) gc;
-   __GLXDRIdrawable *base = GetGLXDRIDrawable(dpy, drawable);
-   struct glx_display *dpyPriv = __glXInitialize(dpy);
    struct dri2_drawable *pdraw = (struct dri2_drawable *) base;
    struct dri2_screen *psc;
 
-   if (dpyPriv != NULL && pdraw != NULL) {
+   if (pdraw != NULL) {
       psc = (struct dri2_screen *) base->psc;
 
       if (psc->texBuffer->base.version >= 3 &&
@@ -1047,10 +1040,6 @@ static const struct glx_context_vtable dri2_context_vtable = {
    .unbind              = dri2_unbind_context,
    .wait_gl             = dri2_wait_gl,
    .wait_x              = dri2_wait_x,
-   .use_x_font          = DRI_glXUseXFont,
-   .bind_tex_image      = dri2_bind_tex_image,
-   .release_tex_image   = dri2_release_tex_image,
-   .get_proc_address    = NULL,
    .interop_query_device_info = dri2_interop_query_device_info,
    .interop_export_object = dri2_interop_export_object
 };
@@ -1299,6 +1288,8 @@ dri2CreateScreen(int screen, struct glx_display * priv)
    psp->setSwapInterval = NULL;
    psp->getSwapInterval = NULL;
    psp->getBufferAge = NULL;
+   psp->bindTexImage = dri2_bind_tex_image;
+   psp->releaseTexImage = dri2_release_tex_image;
 
    if (pdp->driMinor >= 2) {
       psp->getDrawableMSC = dri2DrawableGetMSC;

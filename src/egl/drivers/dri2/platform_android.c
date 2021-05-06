@@ -255,16 +255,16 @@ droid_create_image_from_prime_fds_yuv(_EGLDisplay *disp,
     * the single-fd case cannot happen.  So handle eithe single
     * fd or fd-per-plane case:
     */
+   int num_planes = (ycbcr.chroma_step == 2) ? 2 : 3;
    if (num_fds == 1) {
       fds[2] = fds[1] = fds[0];
    } else {
-      int expected_planes = (ycbcr.chroma_step == 2) ? 2 : 3;
-      assert(num_fds == expected_planes);
+      assert(num_fds == num_planes);
    }
 
    return dri2_dpy->image->createImageFromDmaBufs(dri2_dpy->dri_screen,
       buf->width, buf->height, fourcc,
-      fds, num_fds, pitches, offsets,
+      fds, num_planes, pitches, offsets,
       EGL_ITU_REC601_EXT,
       EGL_YUV_NARROW_RANGE_EXT,
       EGL_YUV_CHROMA_SITING_0_EXT,

@@ -481,11 +481,65 @@ static VkResult device_select_EnumeratePhysicalDevices(VkInstance instance,
 }
 
 static VkResult device_select_EnumeratePhysicalDeviceGroups(VkInstance instance,
-							    uint32_t* pPhysicalDeviceGroupCount,
-							    VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroups)
+                                                            uint32_t* pPhysicalDeviceGroupCount,
+                                                            VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroups)
 {
    struct instance_info *info = device_select_layer_get_instance(instance);
-   VkResult result = info->EnumeratePhysicalDeviceGroups(instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroups);
+   uint32_t physical_device_group_count = 0;
+   uint32_t selected_physical_device_group_count = 0;
+   VkResult result = info->EnumeratePhysicalDeviceGroups(instance, &physical_device_group_count, NULL);
+   VK_OUTARRAY_MAKE(out, pPhysicalDeviceGroups, pPhysicalDeviceGroupCount);
+
+   if (result != VK_SUCCESS)
+      return result;
+
+   VkPhysicalDeviceGroupProperties *physical_device_groups = (VkPhysicalDeviceGroupProperties*)calloc(sizeof(VkPhysicalDeviceGroupProperties), physical_device_group_count);
+   VkPhysicalDeviceGroupProperties *selected_physical_device_groups = (VkPhysicalDeviceGroupProperties*)calloc(sizeof(VkPhysicalDeviceGroupProperties), physical_device_group_count);
+
+   if (!physical_device_groups || !selected_physical_device_groups) {
+      result = VK_ERROR_OUT_OF_HOST_MEMORY;
+      goto out;
+   }
+
+   result = info->EnumeratePhysicalDeviceGroups(instance, &physical_device_group_count, physical_device_groups);
+   if (result != VK_SUCCESS)
+      goto out;
+
+   /* just sort groups with CPU devices to the end? - assume nobody will mix these */
+   int num_gpu_groups = 0;
+   int num_cpu_groups = 0;
+   selected_physical_device_group_count = physical_device_group_count;
+   for (unsigned i = 0; i < physical_device_group_count; i++) {
+      bool group_has_cpu_device = false;
+      for (unsigned j = 0; j < physical_device_groups[i].physicalDeviceCount; j++) {
+         VkPhysicalDevice physical_device = physical_device_groups[i].physicalDevices[j];
+         VkPhysicalDeviceProperties2KHR properties = (VkPhysicalDeviceProperties2KHR){
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR
+         };
+         info->GetPhysicalDeviceProperties(physical_device, &properties.properties);
+         group_has_cpu_device = properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU;
+      }
+
+      if (group_has_cpu_device) {
+         selected_physical_device_groups[physical_device_group_count - num_cpu_groups - 1] = physical_device_groups[i];
+         num_cpu_groups++;
+      } else {
+         selected_physical_device_groups[num_gpu_groups] = physical_device_groups[i];
+         num_gpu_groups++;
+      }
+   }
+
+   assert(result == VK_SUCCESS);
+
+   for (unsigned i = 0; i < selected_physical_device_group_count; i++) {
+      vk_outarray_append(&out, ent) {
+         *ent = selected_physical_device_groups[i];
+      }
+   }
+   result = vk_outarray_status(&out);
+out:
+   free(physical_device_groups);
+   free(selected_physical_device_groups);
    return result;
 }
 

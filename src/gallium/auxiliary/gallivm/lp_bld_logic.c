@@ -196,7 +196,7 @@ lp_build_compare(struct gallivm_state *gallivm,
 
    if (!type.floating && !type.sign &&
        type.width * type.length == 128 &&
-       util_cpu_caps.has_sse2 &&
+       util_get_cpu_caps()->has_sse2 &&
        (func == PIPE_FUNC_LESS ||
         func == PIPE_FUNC_LEQUAL ||
         func == PIPE_FUNC_GREATER ||
@@ -348,11 +348,11 @@ lp_build_select(struct lp_build_context *bld,
 
       res = LLVMBuildSelect(builder, mask, a, b, "");
    }
-   else if (((util_cpu_caps.has_sse4_1 &&
+   else if (((util_get_cpu_caps()->has_sse4_1 &&
               type.width * type.length == 128) ||
-             (util_cpu_caps.has_avx &&
+             (util_get_cpu_caps()->has_avx &&
               type.width * type.length == 256 && type.width >= 32) ||
-             (util_cpu_caps.has_avx2 &&
+             (util_get_cpu_caps()->has_avx2 &&
               type.width * type.length == 256)) &&
             !LLVMIsConstant(a) &&
             !LLVMIsConstant(b) &&
@@ -379,7 +379,7 @@ lp_build_select(struct lp_build_context *bld,
             intrinsic = "llvm.x86.avx.blendv.ps.256";
             arg_type = LLVMVectorType(LLVMFloatTypeInContext(lc), 8);
          } else {
-            assert(util_cpu_caps.has_avx2);
+            assert(util_get_cpu_caps()->has_avx2);
             intrinsic = "llvm.x86.avx2.pblendvb";
             arg_type = LLVMVectorType(LLVMInt8TypeInContext(lc), 32);
          }

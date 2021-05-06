@@ -28,15 +28,15 @@
 #include "genxml/gen_macros.h"
 
 #include "brw_context.h"
-#include "intel_batchbuffer.h"
+#include "brw_batch.h"
 
 UNUSED static void *
 emit_dwords(struct brw_context *brw, unsigned n)
 {
-   intel_batchbuffer_begin(brw, n);
+   brw_batch_begin(brw, n);
    uint32_t *map = brw->batch.map_next;
    brw->batch.map_next += n;
-   intel_batchbuffer_advance(brw);
+   brw_batch_advance(brw);
    return map;
 }
 
@@ -53,13 +53,13 @@ static uint64_t
 __gen_combine_address(struct brw_context *brw, void *location,
                       struct brw_address address, uint32_t delta)
 {
-   struct intel_batchbuffer *batch = &brw->batch;
+   struct brw_batch *batch = &brw->batch;
    uint32_t offset;
 
    if (address.bo == NULL) {
       return address.offset + delta;
    } else {
-      if (GEN_GEN < 6 && brw_ptr_in_state_buffer(batch, location)) {
+      if (GFX_VER < 6 && brw_ptr_in_state_buffer(batch, location)) {
          offset = (char *) location - (char *) brw->batch.state.map;
          return brw_state_reloc(batch, offset, address.bo,
                                 address.offset + delta,

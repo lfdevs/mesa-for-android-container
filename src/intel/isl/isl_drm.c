@@ -49,7 +49,7 @@ isl_tiling_to_i915_tiling(enum isl_tiling tiling)
    case ISL_TILING_W:
    case ISL_TILING_Yf:
    case ISL_TILING_Ys:
-   case ISL_TILING_GEN12_CCS:
+   case ISL_TILING_GFX12_CCS:
       return I915_TILING_NONE;
    }
 
@@ -102,7 +102,7 @@ isl_drm_modifier_info_list[] = {
       .modifier = I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS,
       .name = "I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS",
       .tiling = ISL_TILING_Y0,
-      .aux_usage = ISL_AUX_USAGE_GEN12_CCS_E,
+      .aux_usage = ISL_AUX_USAGE_GFX12_CCS_E,
       .supports_clear_color = false,
    },
    {
@@ -111,6 +111,13 @@ isl_drm_modifier_info_list[] = {
       .tiling = ISL_TILING_Y0,
       .aux_usage = ISL_AUX_USAGE_MC,
       .supports_clear_color = false,
+   },
+   {
+      .modifier = I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC,
+      .name = "I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC",
+      .tiling = ISL_TILING_Y0,
+      .aux_usage = ISL_AUX_USAGE_GFX12_CCS_E,
+      .supports_clear_color = true,
    },
    {
       .modifier = DRM_FORMAT_MOD_INVALID,
@@ -132,7 +139,7 @@ uint32_t
 isl_drm_modifier_get_score(const struct gen_device_info *devinfo,
                            uint64_t modifier)
 {
-   /* FINISHME: Add gen12 modifiers */
+   /* FINISHME: Add gfx12 modifiers */
    switch (modifier) {
    default:
       return 0;
@@ -143,8 +150,8 @@ isl_drm_modifier_get_score(const struct gen_device_info *devinfo,
    case I915_FORMAT_MOD_Y_TILED:
       return 3;
    case I915_FORMAT_MOD_Y_TILED_CCS:
-      /* Gen12's CCS layout differs from Gen9-11. */
-      if (devinfo->gen >= 12)
+      /* Gfx12's CCS layout differs from Gfx9-11. */
+      if (devinfo->ver >= 12)
          return 0;
 
       if (INTEL_DEBUG & DEBUG_NO_RBC)

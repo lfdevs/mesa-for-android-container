@@ -28,7 +28,32 @@
 #define __PAN_ENCODER_H
 
 #include <stdbool.h>
+#include "pan_bo.h"
 #include "midgard_pack.h"
+
+/* Indices for named (non-XFB) varyings that are present. These are packed
+ * tightly so they correspond to a bitfield present (P) indexed by (1 <<
+ * PAN_VARY_*). This has the nice property that you can lookup the buffer index
+ * of a given special field given a shift S by:
+ *
+ *      idx = popcount(P & ((1 << S) - 1))
+ *
+ * That is... look at all of the varyings that come earlier and count them, the
+ * count is the new index since plus one. Likewise, the total number of special
+ * buffers required is simply popcount(P)
+ */
+
+enum pan_special_varying {
+        PAN_VARY_GENERAL = 0,
+        PAN_VARY_POSITION = 1,
+        PAN_VARY_PSIZ = 2,
+        PAN_VARY_PNTCOORD = 3,
+        PAN_VARY_FACE = 4,
+        PAN_VARY_FRAGCOORD = 5,
+
+        /* Keep last */
+        PAN_VARY_MAX,
+};
 
 /* Invocation packing */
 
@@ -44,6 +69,13 @@ panfrost_pack_work_groups_compute(
         bool quirk_graphics);
 
 /* Tiler structure size computation */
+
+struct panfrost_device;
+
+unsigned
+panfrost_tiler_get_polygon_list_size(const struct panfrost_device *dev,
+                                     unsigned fb_width, unsigned fb_height,
+                                     bool has_draws);
 
 unsigned
 panfrost_tiler_header_size(unsigned width, unsigned height, unsigned mask, bool hierarchy);

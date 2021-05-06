@@ -39,11 +39,19 @@
 
 #define MAX_PUSH_CONSTANTS_SIZE 128
 
-#define MAX_DYNAMIC_UNIFORM_BUFFERS 16
-#define MAX_DYNAMIC_STORAGE_BUFFERS 8
-#define MAX_DYNAMIC_BUFFERS                                                  \
-   (MAX_DYNAMIC_UNIFORM_BUFFERS + MAX_DYNAMIC_STORAGE_BUFFERS)
+#define MAX_SAMPLED_IMAGES 16
+#define MAX_STORAGE_IMAGES 4
+#define MAX_INPUT_ATTACHMENTS 4
 
+#define MAX_UNIFORM_BUFFERS 12
+#define MAX_STORAGE_BUFFERS 4
+
+#define MAX_DYNAMIC_UNIFORM_BUFFERS 8
+#define MAX_DYNAMIC_STORAGE_BUFFERS 4
+#define MAX_DYNAMIC_BUFFERS (MAX_DYNAMIC_UNIFORM_BUFFERS + \
+                             MAX_DYNAMIC_STORAGE_BUFFERS)
+
+#define MAX_RENDER_TARGETS 4
 
 /* These are tunable parameters in the HW design, but all the V3D
  * implementations agree.

@@ -37,7 +37,7 @@ struct gen_perf_query_result;
  * Data format expected by MDAPI.
  */
 
-struct gen7_mdapi_metrics {
+struct gfx7_mdapi_metrics {
    uint64_t TotalTime;
 
    uint64_t ACounters[45];
@@ -55,7 +55,7 @@ struct gen7_mdapi_metrics {
 #define GTDI_QUERY_BDW_METRICS_OA_COUNT         36
 #define GTDI_QUERY_BDW_METRICS_OA_40b_COUNT     32
 #define GTDI_QUERY_BDW_METRICS_NOA_COUNT        16
-struct gen8_mdapi_metrics {
+struct gfx8_mdapi_metrics {
    uint64_t TotalTime;
    uint64_t GPUTicks;
    uint64_t OaCntr[GTDI_QUERY_BDW_METRICS_OA_COUNT];
@@ -81,7 +81,7 @@ struct gen8_mdapi_metrics {
 
 #define GTDI_MAX_READ_REGS 16
 
-struct gen9_mdapi_metrics {
+struct gfx9_mdapi_metrics {
    uint64_t TotalTime;
    uint64_t GPUTicks;
    uint64_t OaCntr[GTDI_QUERY_BDW_METRICS_OA_COUNT];
@@ -110,7 +110,7 @@ struct gen9_mdapi_metrics {
 };
 
 /* Add new definition */
-#define gen11_mdapi_metrics gen9_mdapi_metrics
+#define gfx11_mdapi_metrics gfx9_mdapi_metrics
 
 struct mdapi_pipeline_metrics {
    uint64_t IAVertices;
@@ -124,66 +124,31 @@ struct mdapi_pipeline_metrics {
    uint64_t HSInvocations;
    uint64_t DSInvocations;
    uint64_t CSInvocations;
-   uint64_t Reserved1; /* Gen10+ */
+   uint64_t Reserved1; /* Gfx10+ */
 };
 
 int gen_perf_query_result_write_mdapi(void *data, uint32_t data_size,
                                       const struct gen_device_info *devinfo,
-                                      const struct gen_perf_query_result *result,
-                                      uint64_t freq_start, uint64_t freq_end);
-
-static inline void gen_perf_query_mdapi_write_perfcntr(void *data, uint32_t data_size,
-                                                       const struct gen_device_info *devinfo,
-                                                       const uint64_t *begin_perf_cntrs,
-                                                       const uint64_t *end_perf_cntrs)
-{
-   /* Only bits 0:43 of the 64bit registers contains the value. */
-   const uint64_t mask = (1ull << 44) - 1;
-
-   switch (devinfo->gen) {
-   case 8: {
-      if (data_size < sizeof(struct gen8_mdapi_metrics))
-         return;
-      struct gen8_mdapi_metrics *mdapi_data = data;
-      mdapi_data->PerfCounter1 =
-         (end_perf_cntrs[0] & mask) - (begin_perf_cntrs[0] & mask);
-      mdapi_data->PerfCounter2 =
-         (end_perf_cntrs[1] & mask) - (begin_perf_cntrs[1] & mask);
-      break;
-   }
-   case 9:
-   case 11: {
-      if (data_size < sizeof(struct gen9_mdapi_metrics))
-         return;
-      struct gen9_mdapi_metrics *mdapi_data = data;
-      mdapi_data->PerfCounter1 =
-         (end_perf_cntrs[0] & mask) - (begin_perf_cntrs[0] & mask);
-      mdapi_data->PerfCounter2 =
-         (end_perf_cntrs[1] & mask) - (begin_perf_cntrs[1] & mask);
-      break;
-   }
-   default:
-      break;
-   }
-}
+                                      const struct gen_perf_query_info *query,
+                                      const struct gen_perf_query_result *result);
 
 static inline void gen_perf_query_mdapi_write_marker(void *data, uint32_t data_size,
                                                      const struct gen_device_info *devinfo,
                                                      uint64_t value)
 {
-   switch (devinfo->gen) {
+   switch (devinfo->ver) {
    case 8: {
-      if (data_size < sizeof(struct gen8_mdapi_metrics))
+      if (data_size < sizeof(struct gfx8_mdapi_metrics))
          return;
-      struct gen8_mdapi_metrics *mdapi_data = data;
+      struct gfx8_mdapi_metrics *mdapi_data = data;
       mdapi_data->MarkerUser = value;
       break;
    }
    case 9:
    case 11: {
-      if (data_size < sizeof(struct gen9_mdapi_metrics))
+      if (data_size < sizeof(struct gfx9_mdapi_metrics))
          return;
-      struct gen9_mdapi_metrics *mdapi_data = data;
+      struct gfx9_mdapi_metrics *mdapi_data = data;
       mdapi_data->MarkerUser = value;
       break;
    }

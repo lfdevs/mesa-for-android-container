@@ -361,7 +361,7 @@ nvc0_tcp_gen_header(struct nvc0_program *tcp, struct nv50_ir_prog_info_out *info
    if (info->target >= NVISA_GM107_CHIPSET) {
       /* On GM107+, the number of output patch components has moved in the TCP
        * header, but it seems like blob still also uses the old position.
-       * Also, the high 8-bits are located inbetween the min/max parallel
+       * Also, the high 8-bits are located in between the min/max parallel
        * field and has to be set after updating the outputs. */
       tcp->hdr[3] = (opcs & 0x0f) << 28;
       tcp->hdr[4] |= (opcs & 0xf0) << 16;

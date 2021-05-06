@@ -586,7 +586,7 @@ nvc0_push_vbo(struct nvc0_context *nvc0, const struct pipe_draw_info *info,
       /* NOTE: I hope we won't ever need that last index (~0).
        * If we do, we have to disable primitive restart here always and
        * use END,BEGIN to restart. (XXX: would that affect PrimitiveID ?)
-       * We could also deactive PRIM_RESTART_WITH_DRAW_ARRAYS temporarily,
+       * We could also deactivate PRIM_RESTART_WITH_DRAW_ARRAYS temporarily,
        * and add manual restart to disp_vertices_seq.
        */
       BEGIN_NVC0(ctx.push, NVC0_3D(PRIM_RESTART_ENABLE), 2);

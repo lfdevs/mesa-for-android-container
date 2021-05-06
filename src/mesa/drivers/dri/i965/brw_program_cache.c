@@ -46,7 +46,7 @@
 
 #include "main/streaming-load-memcpy.h"
 #include "x86/common_x86_asm.h"
-#include "intel_batchbuffer.h"
+#include "brw_batch.h"
 #include "brw_state.h"
 #include "brw_wm.h"
 #include "brw_gs.h"
@@ -232,7 +232,7 @@ brw_cache_new_bo(struct brw_cache *cache, uint32_t new_size)
    cache->map = map;
 
    /* Since we have a new BO in place, we need to signal the units
-    * that depend on it (state base address on gen5+, or unit state before).
+    * that depend on it (state base address on gfx5+, or unit state before).
     */
    brw->ctx.NewDriverState |= BRW_NEW_PROGRAM_CACHE;
    brw->batch.state_base_address_emitted = false;
@@ -436,7 +436,7 @@ brw_clear_cache(struct brw_context *brw, struct brw_cache *cache)
    brw->wm.base.prog_data = NULL;
    brw->cs.base.prog_data = NULL;
 
-   intel_batchbuffer_flush(brw);
+   brw_batch_flush(brw);
 }
 
 void

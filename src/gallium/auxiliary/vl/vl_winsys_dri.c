@@ -186,7 +186,7 @@ vl_dri2_screen_texture_from_drawable(struct vl_screen *vscreen, void *drawable)
    struct pipe_resource templ, *tex;
 
    xcb_dri2_get_buffers_reply_t *reply;
-   xcb_dri2_dri2_buffer_t *buffers, *back_left;
+   xcb_dri2_dri2_buffer_t *buffers, *back_left = NULL;
 
    unsigned depth = ((xcb_screen_t *)(vscreen->xcb_screen))->root_depth;
    unsigned i;
@@ -217,7 +217,7 @@ vl_dri2_screen_texture_from_drawable(struct vl_screen *vscreen, void *drawable)
       }
    }
 
-   if (i == reply->count) {
+   if (i == reply->count || !back_left) {
       free(reply);
       return NULL;
    }

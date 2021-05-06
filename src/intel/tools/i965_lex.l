@@ -136,7 +136,7 @@ cos 		{ yylval.integer = BRW_MATH_FUNCTION_COS; return COS; }
 exp 		{ yylval.integer = BRW_MATH_FUNCTION_EXP; return EXP; }
 fdiv 		{ yylval.integer = BRW_MATH_FUNCTION_FDIV; return FDIV; }
 inv 		{ yylval.integer = BRW_MATH_FUNCTION_INV; return INV; }
-invm 		{ yylval.integer = GEN8_MATH_FUNCTION_INVM; return INVM; }
+invm 		{ yylval.integer = GFX8_MATH_FUNCTION_INVM; return INVM; }
 intdiv        	{
 		   yylval.integer = BRW_MATH_FUNCTION_INT_DIV_QUOTIENT;
 		   return INTDIV;
@@ -153,7 +153,7 @@ intmod      	{
 log 		{ yylval.integer = BRW_MATH_FUNCTION_LOG; return LOG; }
 pow 		{ yylval.integer = BRW_MATH_FUNCTION_POW; return POW; }
 rsq 		{ yylval.integer = BRW_MATH_FUNCTION_RSQ; return RSQ; }
-rsqrtm       	{ yylval.integer = GEN8_MATH_FUNCTION_RSQRTM; return RSQRTM; }
+rsqrtm       	{ yylval.integer = GFX8_MATH_FUNCTION_RSQRTM; return RSQRTM; }
 sin 		{ yylval.integer = BRW_MATH_FUNCTION_SIN; return SIN; }
 sqrt 		{ yylval.integer = BRW_MATH_FUNCTION_SQRT; return SQRT; }
 sincos       	{ yylval.integer = BRW_MATH_FUNCTION_SINCOS; return SINCOS; }

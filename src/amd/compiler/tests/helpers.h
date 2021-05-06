@@ -64,7 +64,6 @@ extern ac_shader_config config;
 extern radv_shader_info info;
 extern std::unique_ptr<aco::Program> program;
 extern aco::Builder bld;
-extern aco::Temp exec_input;
 extern aco::Temp inputs[16];
 
 namespace aco {
@@ -82,6 +81,7 @@ void finish_validator_test();
 void finish_opt_test();
 void finish_ra_test(aco::ra_test_policy);
 void finish_to_hw_instr_test();
+void finish_insert_nops_test();
 void finish_assembler_test();
 
 void writeout(unsigned i, aco::Temp tmp=aco::Temp(0, aco::s1));

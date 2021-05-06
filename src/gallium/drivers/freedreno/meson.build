@@ -19,6 +19,8 @@
 # SOFTWARE.
 
 files_libfreedreno = files(
+  'freedreno_autotune.c',
+  'freedreno_autotune.h',
   'freedreno_batch.c',
   'freedreno_batch.h',
   'freedreno_batch_cache.c',

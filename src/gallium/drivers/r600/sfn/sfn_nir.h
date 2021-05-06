@@ -43,15 +43,15 @@ public:
 	bool run(nir_shader *shader);
 
 private:
-	bool run(nir_instr *instr);
+	static bool filter_instr(const nir_instr *instr, const void *data);
+        static nir_ssa_def *lower_instr(nir_builder *b, nir_instr *instr,  void *data);
+
+        void set_builder(nir_builder *_b) { b = _b;}
 
 	virtual bool filter(const nir_instr *instr) const = 0;
 	virtual nir_ssa_def *lower(nir_instr *instr) = 0;
 protected:
 	nir_builder *b;
-
-        static nir_ssa_def *progress_keep;
-        static nir_ssa_def *progress_replace;
 };
 
 bool r600_nir_lower_pack_unpack_2x16(nir_shader *shader);
@@ -120,8 +120,6 @@ private:
 
 }
 
-#endif
-
 static inline nir_ssa_def *
 r600_imm_ivec3(nir_builder *build, int x, int y, int z)
 {
@@ -136,6 +134,11 @@ r600_imm_ivec3(nir_builder *build, int x, int y, int z)
 
 bool r600_lower_tess_io(nir_shader *shader, enum pipe_prim_type prim_type);
 bool r600_append_tcs_TF_emission(nir_shader *shader, enum pipe_prim_type prim_type);
+bool r600_lower_tess_coord(nir_shader *sh, enum pipe_prim_type prim_type);
+
+#else
+#include "gallium/drivers/r600/r600_shader.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -148,6 +151,7 @@ int r600_shader_from_nir(struct r600_context *rctx,
                          struct r600_pipe_shader *pipeshader,
                          union r600_shader_key *key);
 
+bool r600_lower_alu(nir_shader *sh);
 
 #ifdef __cplusplus
 }

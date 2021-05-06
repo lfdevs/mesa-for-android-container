@@ -23,7 +23,7 @@
 
 /** @file brw_fs_scoreboard.cpp
  *
- * Gen12+ hardware lacks the register scoreboard logic that used to guarantee
+ * Gfx12+ hardware lacks the register scoreboard logic that used to guarantee
  * data coherency between register reads and writes in previous generations.
  * This lowering pass runs after register allocation in order to make up for
  * it.
@@ -335,7 +335,7 @@ namespace {
        * Whether the dependency could be run with execution masking disabled,
        * which might lead to the unwanted execution of the generating
        * instruction in cases where a BB is executed with all channels
-       * disabled due to hardware bug GEN:BUG:1407528679.
+       * disabled due to hardware bug Wa_1407528679.
        */
       bool exec_all;
 
@@ -585,7 +585,7 @@ namespace {
                                reg_offset(r) / REG_SIZE);
 
          return (r.file == VGRF || r.file == FIXED_GRF ? &grf_deps[reg] :
-                 r.file == MRF ? &grf_deps[GEN7_MRF_HACK_START + reg] :
+                 r.file == MRF ? &grf_deps[GFX7_MRF_HACK_START + reg] :
                  r.file == ARF && reg >= BRW_ARF_ADDRESS &&
                                   reg < BRW_ARF_ACCUMULATOR ? &addr_dep :
                  r.file == ARF && reg >= BRW_ARF_ACCUMULATOR &&
@@ -791,7 +791,7 @@ namespace {
     * instruction \p inst.
     */
    void
-   update_inst_scoreboard(const ordered_address *jps,
+   update_inst_scoreboard(const fs_visitor *shader, const ordered_address *jps,
                           const fs_inst *inst, unsigned ip, scoreboard &sb)
    {
       const bool exec_all = inst->force_writemask_all;
@@ -844,7 +844,7 @@ namespace {
       unsigned ip = 0;
 
       foreach_block_and_inst(block, fs_inst, inst, shader->cfg)
-         update_inst_scoreboard(jps, inst, ip++, sbs[block->num]);
+         update_inst_scoreboard(shader, jps, inst, ip++, sbs[block->num]);
 
       return sbs;
    }
@@ -944,7 +944,7 @@ namespace {
             }
          }
 
-         update_inst_scoreboard(jps, inst, ip, sb);
+         update_inst_scoreboard(shader, jps, inst, ip, sb);
          ip++;
       }
 
@@ -1024,7 +1024,7 @@ namespace {
                    * possible, except in cases where the current instruction
                    * isn't marked NoMask but the dependency is, since that
                    * might lead to data coherency issues due to
-                   * GEN:BUG:1407528679.
+                   * Wa_1407528679.
                    */
                   swsb.sbid = dep.id;
                   swsb.mode = dep.unordered;
@@ -1051,7 +1051,7 @@ namespace {
                /* If the current instruction is not marked NoMask but an
                 * ordered dependency is, perform the synchronization as a
                 * separate NoMask SYNC instruction in order to avoid data
-                * coherency issues due to GEN:BUG:1407528679.  The similar
+                * coherency issues due to Wa_1407528679.  The similar
                 * scenario with unordered dependencies should have been
                 * handled above.
                 */
@@ -1075,7 +1075,7 @@ namespace {
 bool
 fs_visitor::lower_scoreboard()
 {
-   if (devinfo->gen >= 12) {
+   if (devinfo->ver >= 12) {
       const ordered_address *jps = ordered_inst_addresses(this);
       const dependency_list *deps0 = gather_inst_dependencies(this, jps);
       const dependency_list *deps1 = allocate_inst_dependencies(this, deps0);

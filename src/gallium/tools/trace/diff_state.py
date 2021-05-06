@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 ##########################################################################
 #
 # Copyright 2011 Jose Fonseca
@@ -26,7 +26,7 @@
 
 
 import json
-import optparse
+import argparse
 import re
 import difflib
 import sys
@@ -79,8 +79,7 @@ class Dumper(Visitor):
     def visitObject(self, node):
         self.enter_object()
 
-        members = node.keys()
-        members.sort()
+        members = sorted(node)
         for i in range(len(members)):
             name = members[i]
             value = node[name]
@@ -147,10 +146,8 @@ class Comparer(Visitor):
             return False
         if len(a) != len(b) and not self.ignore_added:
             return False
-        ak = a.keys()
-        bk = b.keys()
-        ak.sort()
-        bk.sort()
+        ak = sorted(a)
+        bk = sorted(b)
         if ak != bk and not self.ignore_added:
             return False
         for k in ak:
@@ -174,11 +171,11 @@ class Comparer(Visitor):
         return True
 
     def visitValue(self, a, b):
-        if isinstance(a, float) or isinstance(b, float):
+        if isinstance(a, float) and isinstance(b, float):
             if a == 0:
                 return abs(b) < self.tolerance
             else:
-                return abs((b - a)/a) < self.tolerance
+                return abs((b - a) / a) < self.tolerance
         else:
             return a == b
 
@@ -247,7 +244,7 @@ class Differ(Visitor):
             self.replace(a, b)
 
     def replace(self, a, b):
-        if isinstance(a, basestring) and isinstance(b, basestring):
+        if isinstance(a, str) and isinstance(b, str):
             if '\n' in a or '\n' in b:
                 a = a.splitlines()
                 b = b.splitlines()
@@ -276,7 +273,7 @@ class Differ(Visitor):
         self.dumper.visit(b)
 
     def isMultilineString(self, value):
-        return isinstance(value, basestring) and '\n' in value
+        return isinstance(value, str) and '\n' in value
     
     def replaceMultilineString(self, a, b):
         self.dumper.visit(a)
@@ -330,20 +327,21 @@ def load(stream, strip_images = True, strip_comments = True):
 
 
 def main():
-    optparser = optparse.OptionParser(
-        usage="\n\t%prog [options] <ref_json> <src_json>")
-    optparser.add_option(
-        '--keep-images',
+    optparser = argparse.ArgumentParser(
+        description="Diff JSON format state dump files")
+    optparser.add_argument("-k", "--keep-images",
         action="store_false", dest="strip_images", default=True,
         help="compare images")
 
-    (options, args) = optparser.parse_args(sys.argv[1:])
+    optparser.add_argument("ref_json", action="store",
+        type=str, help="reference state file")
+    optparser.add_argument("src_json", action="store",
+        type=str, help="source state file")
 
-    if len(args) != 2:
-        optparser.error('incorrect number of arguments')
+    args = optparser.parse_args()
 
-    a = load(open(sys.argv[1], 'rt'), options.strip_images)
-    b = load(open(sys.argv[2], 'rt'), options.strip_images)
+    a = load(open(args.ref_json, 'rt'), args.strip_images)
+    b = load(open(args.src_json, 'rt'), args.strip_images)
 
     if False:
         dumper = Dumper()

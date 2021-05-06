@@ -144,7 +144,7 @@ lower_mem_load_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
    }
 
    nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                            nir_src_for_ssa(result));
+                            result);
    nir_instr_remove(&intrin->instr);
 
    return true;

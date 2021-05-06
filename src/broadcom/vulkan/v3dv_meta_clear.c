@@ -231,23 +231,24 @@ create_pipeline(struct v3dv_device *device,
                 const VkPipelineLayout layout,
                 VkPipeline *pipeline)
 {
-   struct v3dv_shader_module vs_m;
-   struct v3dv_shader_module fs_m;
+   struct vk_shader_module vs_m;
+   struct vk_shader_module fs_m;
 
-   v3dv_shader_module_internal_init(&vs_m, vs_nir);
-   v3dv_shader_module_internal_init(&fs_m, fs_nir);
+   v3dv_shader_module_internal_init(device, &vs_m, vs_nir);
+   if (fs_nir)
+      v3dv_shader_module_internal_init(device, &fs_m, fs_nir);
 
    VkPipelineShaderStageCreateInfo stages[2] = {
       {
          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
          .stage = VK_SHADER_STAGE_VERTEX_BIT,
-         .module = v3dv_shader_module_to_handle(&vs_m),
+         .module = vk_shader_module_to_handle(&vs_m),
          .pName = "main",
       },
       {
          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
          .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-         .module = v3dv_shader_module_to_handle(&fs_m),
+         .module = fs_nir ? vk_shader_module_to_handle(&fs_m) : VK_NULL_HANDLE,
          .pName = "main",
       },
    };

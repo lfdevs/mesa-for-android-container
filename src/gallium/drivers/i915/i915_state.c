@@ -676,6 +676,7 @@ static void i915_delete_vs_state(struct pipe_context *pipe, void *shader)
 
 static void i915_set_constant_buffer(struct pipe_context *pipe,
                                      enum pipe_shader_type shader, uint index,
+                                     bool take_ownership,
                                      const struct pipe_constant_buffer *cb)
 {
    struct i915_context *i915 = i915_context(pipe);
@@ -718,7 +719,12 @@ static void i915_set_constant_buffer(struct pipe_context *pipe,
       diff = i915->current.num_user_constants[shader] != 0;
    }
 
-   pipe_resource_reference(&i915->constants[shader], buf);
+   if (take_ownership) {
+      pipe_resource_reference(&i915->constants[shader], NULL);
+      i915->constants[shader] = buf;
+   } else {
+      pipe_resource_reference(&i915->constants[shader], buf);
+   }
    i915->current.num_user_constants[shader] = new_num;
 
    if (diff)
@@ -740,7 +746,7 @@ static void i915_set_fragment_sampler_views(struct pipe_context *pipe,
    assert(num <= PIPE_MAX_SAMPLERS);
 
    /* Check for no-op */
-   if (num == i915->num_fragment_sampler_views &&
+   if (views && num == i915->num_fragment_sampler_views &&
        !memcmp(i915->fragment_sampler_views, views, num * sizeof(struct pipe_sampler_view *)))
       return;
 
@@ -767,7 +773,7 @@ i915_set_vertex_sampler_views(struct pipe_context *pipe,
    assert(num <= ARRAY_SIZE(i915->vertex_sampler_views));
 
    /* Check for no-op */
-   if (num == i915->num_vertex_sampler_views &&
+   if (views && num == i915->num_vertex_sampler_views &&
        !memcmp(i915->vertex_sampler_views, views, num * sizeof(struct pipe_sampler_view *))) {
       return;
    }
@@ -789,7 +795,7 @@ i915_set_vertex_sampler_views(struct pipe_context *pipe,
 
 static void
 i915_set_sampler_views(struct pipe_context *pipe, enum pipe_shader_type shader,
-                       unsigned start, unsigned num,
+                       unsigned start, unsigned num, unsigned unbind_num_trailing_slots,
                        struct pipe_sampler_view **views)
 {
    assert(start == 0);
@@ -1001,6 +1007,8 @@ static void i915_delete_rasterizer_state(struct pipe_context *pipe,
 
 static void i915_set_vertex_buffers(struct pipe_context *pipe,
                                     unsigned start_slot, unsigned count,
+                                    unsigned unbind_num_trailing_slots,
+                                    bool take_ownership,
                                     const struct pipe_vertex_buffer *buffers)
 {
    struct i915_context *i915 = i915_context(pipe);
@@ -1008,10 +1016,13 @@ static void i915_set_vertex_buffers(struct pipe_context *pipe,
 
    util_set_vertex_buffers_count(i915->vertex_buffers,
                                  &i915->nr_vertex_buffers,
-                                 buffers, start_slot, count);
+                                 buffers, start_slot, count,
+                                 unbind_num_trailing_slots,
+                                 take_ownership);
 
    /* pass-through to draw module */
-   draw_set_vertex_buffers(draw, start_slot, count, buffers);
+   draw_set_vertex_buffers(draw, start_slot, count,
+                           unbind_num_trailing_slots, buffers);
 }
 
 static void *

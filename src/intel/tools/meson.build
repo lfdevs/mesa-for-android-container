@@ -113,7 +113,7 @@ configure_file(
 libintel_dump_gpu = shared_library(
   'intel_dump_gpu',
   files(
-    'gen_context.h', 'gen8_context.h', 'gen10_context.h', 'intel_aub.h',
+    'gen_context.h', 'gfx8_context.h', 'gfx10_context.h', 'intel_aub.h',
     'aub_write.h', 'aub_write.c', 'intel_dump_gpu.c',
   ),
   dependencies : [dep_dl, idep_mesautil],
@@ -161,14 +161,24 @@ if with_tools.contains('intel-ui')
   )
 endif
 
+bison_command = []
+if yacc_is_bison
+  bison_command = [
+    prog_bison, '@INPUT@', '--defines=@OUTPUT1@',
+    '--output=@OUTPUT0@'
+  ]
+else
+  bison_command = [
+    prog_bison, '-H', '@OUTPUT1@',
+    '-o', '@OUTPUT0@', '@INPUT@'
+  ]
+endif
+
 i965_gram_tab = custom_target(
   'i965_gram.tab.[ch]',
   input : 'i965_gram.y',
   output : ['i965_gram.tab.c', 'i965_gram.tab.h'],
-  command : [
-    prog_bison, '@INPUT@', '--defines=@OUTPUT1@',
-    '--output=@OUTPUT0@'
-  ]
+  command : bison_command
 )
 
 i965_lex_yy_c = custom_target(
@@ -190,15 +200,15 @@ i965_asm = executable(
 )
 
 asm_testcases = [
-  ['brw', 'gen4'],
-  ['g4x', 'gen4.5'],
-  ['ilk', 'gen5'],
-  ['snb', 'gen6'],
-  ['ivb', 'gen7'],
-  ['hsw', 'gen7.5'],
-  ['bdw', 'gen8'],
-  ['skl', 'gen9'],
-  ['icl', 'gen11'],
+  ['brw', 'gfx4'],
+  ['g4x', 'gfx4.5'],
+  ['ilk', 'gfx5'],
+  ['snb', 'gfx6'],
+  ['ivb', 'gfx7'],
+  ['hsw', 'gfx7.5'],
+  ['bdw', 'gfx8'],
+  ['skl', 'gfx9'],
+  ['icl', 'gfx11'],
 ]
 
 test_runner = find_program('tests/run-test.py')
@@ -207,7 +217,7 @@ foreach testcase : asm_testcases
   _gen_num = testcase[1]
   _gen_folder = join_paths(meson.current_source_dir(), 'tests', _gen_num)
   test(
-    'i965_asm : ' + _gen_num, test_runner,
+    'i965_asm_' + _gen_num, test_runner,
     args : [
       '--i965_asm', i965_asm,
       '--gen_name', _gen_name,

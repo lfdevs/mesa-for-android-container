@@ -80,7 +80,7 @@ static bool gfx10_alloc_query_buffer(struct si_context *sctx)
       qbuf = list_first_entry(&sctx->shader_query_buffers, struct gfx10_sh_query_buffer, list);
       if (!qbuf->refcount &&
           !si_cs_is_buffer_referenced(sctx, qbuf->buf->buf, RADEON_USAGE_READWRITE) &&
-          sctx->ws->buffer_wait(qbuf->buf->buf, 0, RADEON_USAGE_READWRITE)) {
+          sctx->ws->buffer_wait(sctx->ws, qbuf->buf->buf, 0, RADEON_USAGE_READWRITE)) {
          /* Can immediately re-use the oldest buffer */
          list_del(&qbuf->list);
       } else {
@@ -108,7 +108,7 @@ static bool gfx10_alloc_query_buffer(struct si_context *sctx)
     * We need to set the high bit of all the primitive counters for
     * compatibility with the SET_PREDICATION packet.
     */
-   uint64_t *results = sctx->ws->buffer_map(qbuf->buf->buf, NULL,
+   uint64_t *results = sctx->ws->buffer_map(sctx->ws, qbuf->buf->buf, NULL,
                                             PIPE_MAP_WRITE | PIPE_MAP_UNSYNCHRONIZED);
    assert(results);
 
@@ -128,7 +128,7 @@ success:;
    sbuf.buffer = &qbuf->buf->b.b;
    sbuf.buffer_offset = qbuf->head;
    sbuf.buffer_size = sizeof(struct gfx10_sh_query_buffer_mem);
-   si_set_rw_shader_buffer(sctx, GFX10_GS_QUERY_BUF, &sbuf);
+   si_set_internal_shader_buffer(sctx, GFX10_GS_QUERY_BUF, &sbuf);
    sctx->current_vs_state |= S_VS_STATE_STREAMOUT_QUERY_ENABLED(1);
 
    si_mark_atom_dirty(sctx, &sctx->atoms.s.shader_query);
@@ -184,7 +184,7 @@ static bool gfx10_sh_query_end(struct si_context *sctx, struct si_query *rquery)
    sctx->num_active_shader_queries--;
 
    if (sctx->num_active_shader_queries <= 0 || !si_is_atom_dirty(sctx, &sctx->atoms.s.shader_query)) {
-      si_set_rw_shader_buffer(sctx, GFX10_GS_QUERY_BUF, NULL);
+      si_set_internal_shader_buffer(sctx, GFX10_GS_QUERY_BUF, NULL);
       sctx->current_vs_state &= C_VS_STATE_STREAMOUT_QUERY_ENABLED;
 
       /* If a query_begin is followed by a query_end without a draw
@@ -247,7 +247,7 @@ static bool gfx10_sh_query_get_result(struct si_context *sctx, struct si_query *
       void *map;
 
       if (rquery->b.flushed)
-         map = sctx->ws->buffer_map(qbuf->buf->buf, NULL, usage);
+         map = sctx->ws->buffer_map(sctx->ws, qbuf->buf->buf, NULL, usage);
       else
          map = si_buffer_map(sctx, qbuf->buf, usage);
 
@@ -355,8 +355,6 @@ static void gfx10_sh_query_get_result_resource(struct si_context *sctx, struct s
 
    ssbo[2] = ssbo[1];
 
-   sctx->b.bind_compute_state(&sctx->b, sctx->sh_query_result_shader);
-
    grid.block[0] = 1;
    grid.block[1] = 1;
    grid.block[2] = 1;
@@ -388,8 +386,7 @@ static void gfx10_sh_query_get_result_resource(struct si_context *sctx, struct s
          ssbo[2].buffer_size = 8;
       }
 
-      sctx->b.set_constant_buffer(&sctx->b, PIPE_SHADER_COMPUTE, 0, &constant_buffer);
-      sctx->b.set_shader_buffers(&sctx->b, PIPE_SHADER_COMPUTE, 0, 3, ssbo, 0x6);
+      sctx->b.set_constant_buffer(&sctx->b, PIPE_SHADER_COMPUTE, 0, false, &constant_buffer);
 
       if (wait) {
          uint64_t va;
@@ -405,9 +402,9 @@ static void gfx10_sh_query_get_result_resource(struct si_context *sctx, struct s
          si_cp_wait_mem(sctx, &sctx->gfx_cs, va, 0x00000001, 0x00000001, 0);
       }
 
-      void *saved_cs = sctx->cs_shader_state.program;
-      si_launch_grid_internal((struct si_context *)&sctx->b, &grid, saved_cs,
-                              SI_CS_WAIT_FOR_IDLE | SI_CS_PARTIAL_FLUSH_DISABLE);
+      si_launch_grid_internal_ssbos(sctx, &grid, sctx->sh_query_result_shader,
+                                    SI_OP_SYNC_PS_BEFORE | SI_OP_SYNC_AFTER, SI_COHERENCY_SHADER,
+                                    3, ssbo, 0x6);
 
       if (qbuf == query->last)
          break;

@@ -27,6 +27,7 @@
 #include "d3d12_screen.h"
 #include "d3d12_nir_passes.h"
 #include "nir_to_dxil.h"
+#include "dxil_nir.h"
 
 #include "pipe/p_state.h"
 
@@ -146,7 +147,7 @@ compile_nir(struct d3d12_context *ctx, struct d3d12_shader_selector *sel,
 
    uint32_t num_ubos_before_lower_to_ubo = nir->info.num_ubos;
    uint32_t num_uniforms_before_lower_to_ubo = nir->num_uniforms;
-   NIR_PASS_V(nir, nir_lower_uniforms_to_ubo, 16);
+   NIR_PASS_V(nir, nir_lower_uniforms_to_ubo, false, false);
    shader->has_default_ubo0 = num_uniforms_before_lower_to_ubo > 0 &&
                               nir->info.num_ubos > num_ubos_before_lower_to_ubo;
 
@@ -160,7 +161,6 @@ compile_nir(struct d3d12_context *ctx, struct d3d12_shader_selector *sel,
    NIR_PASS_V(nir, d3d12_lower_load_first_vertex);
    NIR_PASS_V(nir, d3d12_lower_state_vars, shader);
    NIR_PASS_V(nir, d3d12_lower_bool_input);
-   NIR_PASS_V(nir, d3d12_fixup_clipdist_writes);
 
    struct nir_to_dxil_options opts = {};
    opts.interpolate_at_vertex = screen->have_load_at_vertex;
@@ -1046,6 +1046,7 @@ d3d12_create_shader(struct d3d12_context *ctx,
                           VARYING_BIT_PRIMITIVE_ID;
 
    d3d12_fix_io_uint_type(nir, in_mask, out_mask);
+   NIR_PASS_V(nir, dxil_nir_split_clip_cull_distance);
 
    if (nir->info.stage != MESA_SHADER_VERTEX)
       nir->info.inputs_read =

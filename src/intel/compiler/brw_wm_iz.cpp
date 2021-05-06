@@ -119,7 +119,7 @@ static const struct {
  * \param line_aa  BRW_WM_AA_NEVER, BRW_WM_AA_ALWAYS or BRW_WM_AA_SOMETIMES
  * \param lookup  bitmask of BRW_WM_IZ_* flags
  */
-void fs_visitor::setup_fs_payload_gen4()
+void fs_visitor::setup_fs_payload_gfx4()
 {
    assert(stage == MESA_SHADER_FRAGMENT);
    assert(dispatch_width <= 16);

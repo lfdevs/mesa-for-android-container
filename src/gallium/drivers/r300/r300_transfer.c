@@ -120,7 +120,7 @@ r300_texture_transfer_map(struct pipe_context *ctx,
         referenced_hw = TRUE;
     } else {
         referenced_hw =
-            !r300->rws->buffer_wait(tex->buf, 0, RADEON_USAGE_READWRITE);
+            !r300->rws->buffer_wait(r300->rws, tex->buf, 0, RADEON_USAGE_READWRITE);
     }
 
     trans = CALLOC_STRUCT(r300_transfer);
@@ -218,7 +218,7 @@ r300_texture_transfer_map(struct pipe_context *ctx,
     if (trans->linear_texture) {
         /* The detiled texture is of the same size as the region being mapped
          * (no offset needed). */
-        map = r300->rws->buffer_map(trans->linear_texture->buf,
+        map = r300->rws->buffer_map(r300->rws, trans->linear_texture->buf,
                                     &r300->cs, usage);
         if (!map) {
             pipe_resource_reference(
@@ -230,7 +230,7 @@ r300_texture_transfer_map(struct pipe_context *ctx,
         return map;
     } else {
         /* Tiling is disabled. */
-        map = r300->rws->buffer_map(tex->buf, &r300->cs, usage);
+        map = r300->rws->buffer_map(r300->rws, tex->buf, &r300->cs, usage);
         if (!map) {
             FREE(trans);
             return NULL;

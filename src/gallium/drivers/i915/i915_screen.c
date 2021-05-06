@@ -164,6 +164,7 @@ i915_get_shader_param(struct pipe_screen *screen,
       case PIPE_SHADER_CAP_INT64_ATOMICS:
       case PIPE_SHADER_CAP_FP16:
       case PIPE_SHADER_CAP_FP16_DERIVATIVES:
+      case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
       case PIPE_SHADER_CAP_INT16:
       case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
          return 0;
@@ -224,6 +225,12 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
 
    case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
    case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
+      return 0;
+
+   case PIPE_CAP_SHAREABLE_SHADERS:
+      /* Can't expose shareable shaders because the draw shaders reference the
+       * draw module's state, which is per-context.
+       */
       return 0;
 
    case PIPE_CAP_MAX_GS_INVOCATIONS:

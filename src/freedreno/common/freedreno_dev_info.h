@@ -28,6 +28,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Freedreno hardware description and quirks
  */
@@ -66,6 +70,10 @@ struct freedreno_dev_info {
 };
 
 void freedreno_dev_info_init(struct freedreno_dev_info *info, uint32_t gpu_id);
+
+#ifdef __cplusplus
+} /* end of extern "C" */
+#endif
 
 #endif /* FREEDRENO_DEVICE_INFO_H */
 

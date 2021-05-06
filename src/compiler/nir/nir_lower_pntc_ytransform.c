@@ -79,7 +79,7 @@ lower_load_pointcoord(lower_pntc_ytransform_state *state,
                                         nir_channel(b, pntc, 0),
                                         nir_fadd(b, offset, scaled));
 
-   nir_ssa_def_rewrite_uses_after(&intr->dest.ssa, nir_src_for_ssa(flipped_pntc),
+   nir_ssa_def_rewrite_uses_after(&intr->dest.ssa, flipped_pntc,
                                   flipped_pntc->parent_instr);
 }
 

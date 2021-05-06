@@ -42,7 +42,7 @@
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_state.h"
-#include "intel_batchbuffer.h"
+#include "brw_batch.h"
 
 /**
  * Upload a shader stage's binding table as indirect state.
@@ -60,7 +60,7 @@ brw_upload_binding_table(struct brw_context *brw,
 
    if (prog_data->binding_table.size_bytes == 0) {
       /* There are no surfaces; skip making the binding table altogether. */
-      if (stage_state->bind_bo_offset == 0 && devinfo->gen < 9)
+      if (stage_state->bind_bo_offset == 0 && devinfo->ver < 9)
          return;
 
       stage_state->bind_bo_offset = 0;
@@ -84,7 +84,7 @@ brw_upload_binding_table(struct brw_context *brw,
 
    brw->ctx.NewDriverState |= BRW_NEW_BINDING_TABLE_POINTERS;
 
-   if (devinfo->gen >= 7) {
+   if (devinfo->ver >= 7) {
       BEGIN_BATCH(2);
       OUT_BATCH(packet_name << 16 | (2 - 2));
       /* Align SurfaceStateOffset[16:6] format to [15:5] PS Binding Table field
@@ -240,13 +240,13 @@ const struct brw_tracked_state brw_gs_binding_table = {
  */
 
 /**
- * (Gen4-5) Upload the binding table pointers for all shader stages.
+ * (Gfx4-5) Upload the binding table pointers for all shader stages.
  *
  * The binding table pointers are relative to the surface state base address,
  * which points at the batchbuffer containing the streamed batch state.
  */
 static void
-gen4_upload_binding_table_pointers(struct brw_context *brw)
+gfx4_upload_binding_table_pointers(struct brw_context *brw)
 {
    BEGIN_BATCH(6);
    OUT_BATCH(_3DSTATE_BINDING_TABLE_POINTERS << 16 | (6 - 2));
@@ -266,7 +266,7 @@ const struct brw_tracked_state brw_binding_table_pointers = {
              BRW_NEW_BINDING_TABLE_POINTERS |
              BRW_NEW_STATE_BASE_ADDRESS,
    },
-   .emit = gen4_upload_binding_table_pointers,
+   .emit = gfx4_upload_binding_table_pointers,
 };
 
 /**
@@ -276,13 +276,13 @@ const struct brw_tracked_state brw_binding_table_pointers = {
  * which points at the batchbuffer containing the streamed batch state.
  */
 static void
-gen6_upload_binding_table_pointers(struct brw_context *brw)
+gfx6_upload_binding_table_pointers(struct brw_context *brw)
 {
    BEGIN_BATCH(4);
    OUT_BATCH(_3DSTATE_BINDING_TABLE_POINTERS << 16 |
-             GEN6_BINDING_TABLE_MODIFY_VS |
-             GEN6_BINDING_TABLE_MODIFY_GS |
-             GEN6_BINDING_TABLE_MODIFY_PS |
+             GFX6_BINDING_TABLE_MODIFY_VS |
+             GFX6_BINDING_TABLE_MODIFY_GS |
+             GFX6_BINDING_TABLE_MODIFY_PS |
              (4 - 2));
    OUT_BATCH(brw->vs.base.bind_bo_offset); /* vs */
    if (brw->ff_gs.prog_active)
@@ -293,7 +293,7 @@ gen6_upload_binding_table_pointers(struct brw_context *brw)
    ADVANCE_BATCH();
 }
 
-const struct brw_tracked_state gen6_binding_table_pointers = {
+const struct brw_tracked_state gfx6_binding_table_pointers = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_BATCH |
@@ -301,7 +301,7 @@ const struct brw_tracked_state gen6_binding_table_pointers = {
              BRW_NEW_BINDING_TABLE_POINTERS |
              BRW_NEW_STATE_BASE_ADDRESS,
    },
-   .emit = gen6_upload_binding_table_pointers,
+   .emit = gfx6_upload_binding_table_pointers,
 };
 
 /** @} */

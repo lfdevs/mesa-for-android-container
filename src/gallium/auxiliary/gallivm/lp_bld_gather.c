@@ -488,7 +488,7 @@ lp_build_gather(struct gallivm_state *gallivm,
        * 32bit/64bit fetches you're doing it wrong (this is gather, not
        * conversion) and it would be awkward for floats.
        */
-   } else if (util_cpu_caps.has_avx2 && !need_expansion &&
+   } else if (util_get_cpu_caps()->has_avx2 && !need_expansion &&
               src_width == 32 && (length == 4 || length == 8)) {
       return lp_build_gather_avx2(gallivm, length, src_width, dst_type,
                                   base_ptr, offsets);
@@ -500,7 +500,7 @@ lp_build_gather(struct gallivm_state *gallivm,
     * (In general, should be more of a win if the fetch is 256bit wide -
     * this is true for the 32bit case above too.)
     */
-   } else if (0 && util_cpu_caps.has_avx2 && !need_expansion &&
+   } else if (0 && util_get_cpu_caps()->has_avx2 && !need_expansion &&
               src_width == 64 && (length == 2 || length == 4)) {
       return lp_build_gather_avx2(gallivm, length, src_width, dst_type,
                                   base_ptr, offsets);

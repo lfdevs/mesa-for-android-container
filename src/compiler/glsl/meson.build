@@ -20,14 +20,24 @@
 
 subdir('glcpp')
 
+bison_command = []
+if yacc_is_bison
+  bison_command = [
+    prog_bison, '-o', '@OUTPUT0@', '-p', '_mesa_glsl_', '--defines=@OUTPUT1@',
+    '@INPUT@',
+  ]
+else
+  bison_command = [
+    prog_bison, '-o', '@OUTPUT0@', '-p', '_mesa_glsl_', '-H', '@OUTPUT1@',
+    '@INPUT@',
+  ]
+endif
+
 glsl_parser = custom_target(
   'glsl_parser',
   input : 'glsl_parser.yy',
   output : ['glsl_parser.cpp', 'glsl_parser.h'],
-  command : [
-    prog_bison, '-o', '@OUTPUT0@', '-p', '_mesa_glsl_', '--defines=@OUTPUT1@',
-    '@INPUT@',
-  ],
+  command : bison_command
 )
 
 glsl_lexer_cpp = custom_target(

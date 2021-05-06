@@ -99,7 +99,7 @@ etna_screen_destroy(struct pipe_screen *pscreen)
       etna_gpu_del(screen->gpu);
 
    if (screen->ro)
-      FREE(screen->ro);
+      screen->ro->destroy(screen->ro);
 
    if (screen->dev)
       etna_device_del(screen->dev);
@@ -155,7 +155,6 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
    case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
    case PIPE_CAP_STRING_MARKER:
-   case PIPE_CAP_SHAREABLE_SHADERS:
       return 1;
    case PIPE_CAP_NATIVE_FENCE_FD:
       return screen->drm_version >= ETNA_DRM_VERSION_FENCE_FD;
@@ -181,10 +180,17 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
       return VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
 
+   case PIPE_CAP_ALPHA_TEST:
+      if (DBG_ENABLED(ETNA_DBG_NIR))
+         return !VIV_FEATURE(screen, chipMinorFeatures7, PE_NO_ALPHA_TEST);
+      else
+         return 1;
+
    /* Unsupported features. */
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
    case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
    case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
+   case PIPE_CAP_TEXRECT:
       return 0;
 
    /* Stream output. */
@@ -355,6 +361,7 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_INT64_ATOMICS:
    case PIPE_SHADER_CAP_FP16:
    case PIPE_SHADER_CAP_FP16_DERIVATIVES:
+   case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
    case PIPE_SHADER_CAP_INT16:
    case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
       return 0;
@@ -675,6 +682,24 @@ etna_determine_uniform_limits(struct etna_screen *screen)
    }
 }
 
+static void
+etna_determine_sampler_limits(struct etna_screen *screen)
+{
+   /* vertex and fragment samplers live in one address space */
+   if (screen->specs.halti >= 1) {
+      screen->specs.vertex_sampler_offset = 16;
+      screen->specs.fragment_sampler_count = 16;
+      screen->specs.vertex_sampler_count = 16;
+   } else {
+      screen->specs.vertex_sampler_offset = 8;
+      screen->specs.fragment_sampler_count = 8;
+      screen->specs.vertex_sampler_count = 4;
+   }
+
+   if (screen->model == 0x400)
+      screen->specs.vertex_sampler_count = 0;
+}
+
 static bool
 etna_get_specs(struct etna_screen *screen)
 {
@@ -770,15 +795,6 @@ etna_get_specs(struct etna_screen *screen)
       VIV_FEATURE(screen, chipMinorFeatures0, 2BITPERTILE) ? 0x55555555 :
                                                              0x11111111;
 
-
-   /* vertex and fragment samplers live in one address space */
-   screen->specs.vertex_sampler_offset = 8;
-   screen->specs.fragment_sampler_count = 8;
-   screen->specs.vertex_sampler_count = 4;
-
-   if (screen->model == 0x400)
-      screen->specs.vertex_sampler_count = 0;
-
    screen->specs.vs_need_z_div =
       screen->model < 0x1000 && screen->model != 0x880;
    screen->specs.has_sin_cos_sqrt =
@@ -843,6 +859,7 @@ etna_get_specs(struct etna_screen *screen)
    }
 
    etna_determine_uniform_limits(screen);
+   etna_determine_sampler_limits(screen);
 
    if (screen->specs.halti >= 5) {
       screen->specs.has_unified_uniforms = true;
@@ -939,7 +956,7 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
    pscreen = &screen->base;
    screen->dev = dev;
    screen->gpu = gpu;
-   screen->ro = renderonly_dup(ro);
+   screen->ro = ro;
    screen->refcnt = 1;
 
    if (!screen->ro) {
@@ -1023,6 +1040,12 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
    }
    screen->features[7] = val;
 
+   if (etna_gpu_get_param(screen->gpu, ETNA_GPU_FEATURES_8, &val)) {
+      DBG("could not get ETNA_GPU_FEATURES_8");
+      goto fail;
+   }
+   screen->features[8] = val;
+
    if (!etna_get_specs(screen))
       goto fail;
 
@@ -1050,6 +1073,7 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
       .lower_fceil = !screen->specs.has_sign_floor_ceil,
       .lower_fsqrt = !screen->specs.has_sin_cos_sqrt,
       .lower_sincos = !screen->specs.has_sin_cos_sqrt,
+      .lower_uniforms_to_ubo = screen->specs.halti >= 2,
    };
 
    /* apply debug options that disable individual features */

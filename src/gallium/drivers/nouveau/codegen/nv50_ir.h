@@ -121,7 +121,7 @@ enum operation
    OP_FINAL, // finish emitting primitives
    OP_TEX,
    OP_TXB, // texture bias
-   OP_TXL, // texure lod
+   OP_TXL, // texture lod
    OP_TXF, // texel fetch
    OP_TXQ, // texture size query
    OP_TXD, // texture derivatives

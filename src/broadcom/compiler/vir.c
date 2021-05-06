@@ -84,6 +84,17 @@ vir_has_side_effects(struct v3d_compile *c, struct qinst *inst)
                 return true;
         }
 
+        /* ldunifa works like ldunif: it reads an element and advances the
+         * pointer, so each read has a side effect (we don't care for ldunif
+         * because we reconstruct the uniform stream buffer after compiling
+         * with the surviving uniforms), so allowing DCE to remove
+         * one would break follow-up loads. We could fix this by emiting a
+         * unifa for each ldunifa, but each unifa requires 3 delay slots
+         * before a ldunifa, so that would be quite expensive.
+         */
+        if (inst->qpu.sig.ldunifa || inst->qpu.sig.ldunifarf)
+                return true;
+
         return false;
 }
 
@@ -130,10 +141,10 @@ vir_is_mul(struct qinst *inst)
 }
 
 bool
-vir_is_tex(struct qinst *inst)
+vir_is_tex(const struct v3d_device_info *devinfo, struct qinst *inst)
 {
         if (inst->dst.file == QFILE_MAGIC)
-                return v3d_qpu_magic_waddr_is_tmu(inst->dst.index);
+                return v3d_qpu_magic_waddr_is_tmu(devinfo, inst->dst.index);
 
         if (inst->qpu.type == V3D_QPU_INSTR_TYPE_ALU &&
             inst->qpu.alu.add.op == V3D_QPU_A_TMUWT) {
@@ -232,8 +243,9 @@ vir_set_cond(struct qinst *inst, enum v3d_qpu_cond cond)
 }
 
 void
-vir_set_pf(struct qinst *inst, enum v3d_qpu_pf pf)
+vir_set_pf(struct v3d_compile *c, struct qinst *inst, enum v3d_qpu_pf pf)
 {
+        c->flags_temp = -1;
         if (vir_is_add(inst)) {
                 inst->qpu.flags.apf = pf;
         } else {
@@ -243,8 +255,9 @@ vir_set_pf(struct qinst *inst, enum v3d_qpu_pf pf)
 }
 
 void
-vir_set_uf(struct qinst *inst, enum v3d_qpu_uf uf)
+vir_set_uf(struct v3d_compile *c, struct qinst *inst, enum v3d_qpu_uf uf)
 {
+        c->flags_temp = -1;
         if (vir_is_add(inst)) {
                 inst->qpu.flags.auf = uf;
         } else {
@@ -512,6 +525,9 @@ vir_compile_init(const struct v3d_compiler *compiler,
                                       void *debug_output_data),
                  void *debug_output_data,
                  int program_id, int variant_id,
+                 uint32_t min_threads_for_reg_alloc,
+                 bool disable_constant_ubo_load_sorting,
+                 bool disable_tmu_pipelining,
                  bool fallback_scheduler)
 {
         struct v3d_compile *c = rzalloc(NULL, struct v3d_compile);
@@ -525,7 +541,10 @@ vir_compile_init(const struct v3d_compiler *compiler,
         c->debug_output = debug_output;
         c->debug_output_data = debug_output_data;
         c->compilation_result = V3D_COMPILATION_SUCCEEDED;
+        c->min_threads_for_reg_alloc = min_threads_for_reg_alloc;
         c->fallback_scheduler = fallback_scheduler;
+        c->disable_tmu_pipelining = disable_tmu_pipelining;
+        c->disable_constant_ubo_load_sorting = disable_constant_ubo_load_sorting;
 
         s = nir_shader_clone(c, s);
         c->s = s;
@@ -538,6 +557,9 @@ vir_compile_init(const struct v3d_compiler *compiler,
 
         c->def_ht = _mesa_hash_table_create(c, _mesa_hash_pointer,
                                             _mesa_key_pointer_equal);
+
+        c->tmu.outstanding_regs = _mesa_pointer_set_create(c);
+        c->flags_temp = -1;
 
         return c;
 }
@@ -568,13 +590,6 @@ v3d_lower_nir(struct v3d_compile *c)
         for (int i = 0; i < c->key->num_tex_used; i++) {
                 for (int j = 0; j < 4; j++)
                         tex_options.swizzles[i][j] = c->key->tex[i].swizzle[j];
-
-                if (c->key->tex[i].clamp_s)
-                        tex_options.saturate_s |= 1 << i;
-                if (c->key->tex[i].clamp_t)
-                        tex_options.saturate_t |= 1 << i;
-                if (c->key->tex[i].clamp_r)
-                        tex_options.saturate_r |= 1 << i;
         }
 
         assert(c->key->num_samplers_used <= ARRAY_SIZE(c->key->sampler));
@@ -638,6 +653,14 @@ v3d_vs_set_prog_data(struct v3d_compile *c,
         for (int i = 0; i < ARRAY_SIZE(prog_data->vattr_sizes); i++) {
                 prog_data->vattr_sizes[i] = c->vattr_sizes[i];
                 prog_data->vpm_input_size += c->vattr_sizes[i];
+        }
+
+        memset(prog_data->driver_location_map, -1,
+               sizeof(prog_data->driver_location_map));
+
+        nir_foreach_shader_in_variable(var, c->s) {
+                prog_data->driver_location_map[var->data.location] =
+                        var->data.driver_location;
         }
 
         prog_data->uses_vid = BITSET_TEST(c->s->info.system_values_read,
@@ -774,7 +797,11 @@ static void
 v3d_cs_set_prog_data(struct v3d_compile *c,
                      struct v3d_compute_prog_data *prog_data)
 {
-        prog_data->shared_size = c->s->info.cs.shared_size;
+        prog_data->shared_size = c->s->info.shared_size;
+
+        prog_data->local_size[0] = c->s->info.cs.local_size[0];
+        prog_data->local_size[1] = c->s->info.cs.local_size[1];
+        prog_data->local_size[2] = c->s->info.cs.local_size[2];
 }
 
 static void
@@ -956,9 +983,6 @@ v3d_nir_lower_gs_late(struct v3d_compile *c)
 static void
 v3d_nir_lower_vs_late(struct v3d_compile *c)
 {
-        if (c->vs_key->clamp_color)
-                NIR_PASS_V(c->s, nir_lower_clamp_color_outputs);
-
         if (c->key->ucp_enables) {
                 NIR_PASS_V(c->s, nir_lower_clip_vs, c->key->ucp_enables,
                            false, false, NULL);
@@ -973,12 +997,6 @@ v3d_nir_lower_vs_late(struct v3d_compile *c)
 static void
 v3d_nir_lower_fs_late(struct v3d_compile *c)
 {
-        if (c->fs_key->light_twoside)
-                NIR_PASS_V(c->s, nir_lower_two_sided_color, true);
-
-        if (c->fs_key->clamp_color)
-                NIR_PASS_V(c->s, nir_lower_clamp_color_outputs);
-
         /* In OpenGL the fragment shader can't read gl_ClipDistance[], but
          * Vulkan allows it, in which case the SPIR-V compiler will declare
          * VARING_SLOT_CLIP_DIST0 as compact array variable. Pass true as
@@ -989,9 +1007,6 @@ v3d_nir_lower_fs_late(struct v3d_compile *c)
         if (c->key->ucp_enables)
                 NIR_PASS_V(c->s, nir_lower_clip_fs, c->key->ucp_enables, true);
 
-        /* Note: FS input scalarizing must happen after
-         * nir_lower_two_sided_color, which only handles a vec4 at a time.
-         */
         NIR_PASS_V(c->s, nir_lower_io_to_scalar, nir_var_shader_in);
 }
 
@@ -1073,6 +1088,263 @@ v3d_intrinsic_dependency_cb(nir_intrinsic_instr *intr,
         return false;
 }
 
+static bool
+should_split_wrmask(const nir_instr *instr, const void *data)
+{
+        nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+        switch (intr->intrinsic) {
+        case nir_intrinsic_store_ssbo:
+        case nir_intrinsic_store_shared:
+        case nir_intrinsic_store_global:
+        case nir_intrinsic_store_scratch:
+                return true;
+        default:
+                return false;
+        }
+}
+
+static nir_intrinsic_instr *
+nir_instr_as_constant_ubo_load(nir_instr *inst)
+{
+        if (inst->type != nir_instr_type_intrinsic)
+                return NULL;
+
+        nir_intrinsic_instr *intr = nir_instr_as_intrinsic(inst);
+        if (intr->intrinsic != nir_intrinsic_load_ubo)
+                return NULL;
+
+        assert(nir_src_is_const(intr->src[0]));
+        if (!nir_src_is_const(intr->src[1]))
+                return NULL;
+
+        return intr;
+}
+
+static bool
+v3d_nir_sort_constant_ubo_load(nir_block *block, nir_intrinsic_instr *ref)
+{
+        bool progress = false;
+
+        nir_instr *ref_inst = &ref->instr;
+        uint32_t ref_offset = nir_src_as_uint(ref->src[1]);
+        uint32_t ref_index = nir_src_as_uint(ref->src[0]);
+
+        /* Go through all instructions after ref searching for constant UBO
+         * loads for the same UBO index.
+         */
+        bool seq_break = false;
+        nir_instr *inst = &ref->instr;
+        nir_instr *next_inst = NULL;
+        while (true) {
+                inst = next_inst ? next_inst : nir_instr_next(inst);
+                if (!inst)
+                        break;
+
+                next_inst = NULL;
+
+                if (inst->type != nir_instr_type_intrinsic)
+                        continue;
+
+                nir_intrinsic_instr *intr = nir_instr_as_intrinsic(inst);
+                if (intr->intrinsic != nir_intrinsic_load_ubo)
+                        continue;
+
+                /* We only produce unifa sequences for non-divergent loads */
+                if (nir_src_is_divergent(intr->src[1]))
+                        continue;
+
+                /* If there are any UBO loads that are not constant or that
+                 * use a different UBO index in between the reference load and
+                 * any other constant load for the same index, they would break
+                 * the unifa sequence. We will flag that so we can then move
+                 * all constant UBO loads for the reference index before these
+                 * and not just the ones that are not ordered to avoid breaking
+                 * the sequence and reduce unifa writes.
+                 */
+                if (!nir_src_is_const(intr->src[1])) {
+                        seq_break = true;
+                        continue;
+                }
+                uint32_t offset = nir_src_as_uint(intr->src[1]);
+
+                assert(nir_src_is_const(intr->src[0]));
+                uint32_t index = nir_src_as_uint(intr->src[0]);
+                if (index != ref_index) {
+                       seq_break = true;
+                       continue;
+                }
+
+                /* Only move loads with an offset that is close enough to the
+                 * reference offset, since otherwise we would not be able to
+                 * skip the unifa write for them. See ntq_emit_load_ubo_unifa.
+                 */
+                if (abs(ref_offset - offset) > MAX_UNIFA_SKIP_DISTANCE)
+                        continue;
+
+                /* We will move this load if its offset is smaller than ref's
+                 * (in which case we will move it before ref) or if the offset
+                 * is larger than ref's but there are sequence breakers in
+                 * in between (in which case we will move it after ref and
+                 * before the sequence breakers).
+                 */
+                if (!seq_break && offset >= ref_offset)
+                        continue;
+
+                /* Find where exactly we want to move this load:
+                 *
+                 * If we are moving it before ref, we want to check any other
+                 * UBO loads we placed before ref and make sure we insert this
+                 * one properly ordered with them. Likewise, if we are moving
+                 * it after ref.
+                 */
+                nir_instr *pos = ref_inst;
+                nir_instr *tmp = pos;
+                do {
+                        if (offset < ref_offset)
+                                tmp = nir_instr_prev(tmp);
+                        else
+                                tmp = nir_instr_next(tmp);
+
+                        if (!tmp || tmp == inst)
+                                break;
+
+                        /* Ignore non-unifa UBO loads */
+                        if (tmp->type != nir_instr_type_intrinsic)
+                                continue;
+
+                        nir_intrinsic_instr *tmp_intr =
+                                nir_instr_as_intrinsic(tmp);
+                        if (tmp_intr->intrinsic != nir_intrinsic_load_ubo)
+                                continue;
+
+                        if (nir_src_is_divergent(tmp_intr->src[1]))
+                                continue;
+
+                        /* Stop if we find a unifa UBO load that breaks the
+                         * sequence.
+                         */
+                        if (!nir_src_is_const(tmp_intr->src[1]))
+                                break;
+
+                        if (nir_src_as_uint(tmp_intr->src[0]) != index)
+                                break;
+
+                        uint32_t tmp_offset = nir_src_as_uint(tmp_intr->src[1]);
+                        if (offset < ref_offset) {
+                                if (tmp_offset < offset ||
+                                    tmp_offset >= ref_offset) {
+                                        break;
+                                } else {
+                                        pos = tmp;
+                                }
+                        } else {
+                                if (tmp_offset > offset ||
+                                    tmp_offset <= ref_offset) {
+                                        break;
+                                } else {
+                                        pos = tmp;
+                                }
+                        }
+                } while (true);
+
+                /* We can't move the UBO load before the instruction that
+                 * defines its constant offset. If that instruction is placed
+                 * in between the new location (pos) and the current location
+                 * of this load, we will have to move that instruction too.
+                 *
+                 * We don't care about the UBO index definition because that
+                 * is optimized to be reused by all UBO loads for the same
+                 * index and therefore is certain to be defined before the
+                 * first UBO load that uses it.
+                 */
+                nir_instr *offset_inst = NULL;
+                tmp = inst;
+                while ((tmp = nir_instr_prev(tmp)) != NULL) {
+                        if (pos == tmp) {
+                                /* We reached the target location without
+                                 * finding the instruction that defines the
+                                 * offset, so that instruction must be before
+                                 * the new position and we don't have to fix it.
+                                 */
+                                break;
+                        }
+                        if (intr->src[1].ssa->parent_instr == tmp) {
+                                offset_inst = tmp;
+                                break;
+                        }
+                }
+
+                if (offset_inst) {
+                        exec_node_remove(&offset_inst->node);
+                        exec_node_insert_node_before(&pos->node,
+                                                     &offset_inst->node);
+                }
+
+                /* Since we are moving the instruction before its current
+                 * location, grab its successor before the move so that
+                 * we can continue the next iteration of the main loop from
+                 * that instruction.
+                 */
+                next_inst = nir_instr_next(inst);
+
+                /* Move this load to the selected location */
+                exec_node_remove(&inst->node);
+                if (offset < ref_offset)
+                        exec_node_insert_node_before(&pos->node, &inst->node);
+                else
+                        exec_node_insert_after(&pos->node, &inst->node);
+
+                progress = true;
+        }
+
+        return progress;
+}
+
+static bool
+v3d_nir_sort_constant_ubo_loads_block(struct v3d_compile *c,
+                                      nir_block *block)
+{
+        bool progress = false;
+        bool local_progress;
+        do {
+                local_progress = false;
+                nir_foreach_instr_safe(inst, block) {
+                        nir_intrinsic_instr *intr =
+                                nir_instr_as_constant_ubo_load(inst);
+                        if (intr) {
+                                local_progress |=
+                                        v3d_nir_sort_constant_ubo_load(block, intr);
+                        }
+                }
+                progress |= local_progress;
+        } while (local_progress);
+
+        return progress;
+}
+
+/**
+ * Sorts constant UBO loads in each block by offset to maximize chances of
+ * skipping unifa writes when converting to VIR. This can increase register
+ * pressure.
+ */
+static bool
+v3d_nir_sort_constant_ubo_loads(nir_shader *s, struct v3d_compile *c)
+{
+        bool progress = false;
+        nir_foreach_function(function, s) {
+                if (function->impl) {
+                        nir_foreach_block(block, function->impl) {
+                                progress |=
+                                        v3d_nir_sort_constant_ubo_loads_block(c, block);
+                        }
+                        nir_metadata_preserve(function->impl,
+                                              nir_metadata_block_index |
+                                              nir_metadata_dominance);
+                }
+        }
+        return progress;
+}
+
 static void
 v3d_attempt_compile(struct v3d_compile *c)
 {
@@ -1125,7 +1397,11 @@ v3d_attempt_compile(struct v3d_compile *c)
         NIR_PASS_V(c->s, v3d_nir_lower_io, c);
         NIR_PASS_V(c->s, v3d_nir_lower_txf_ms, c);
         NIR_PASS_V(c->s, v3d_nir_lower_image_load_store);
-        NIR_PASS_V(c->s, nir_lower_idiv, nir_lower_idiv_fast);
+        nir_lower_idiv_options idiv_options = {
+                .imprecise_32bit_lowering = true,
+                .allow_fp16 = true,
+        };
+        NIR_PASS_V(c->s, nir_lower_idiv, &idiv_options);
 
         if (c->key->robust_buffer_access) {
            /* v3d_nir_lower_robust_buffer_access assumes constant buffer
@@ -1137,6 +1413,8 @@ v3d_attempt_compile(struct v3d_compile *c)
            NIR_PASS_V(c->s, nir_copy_prop);
            NIR_PASS_V(c->s, v3d_nir_lower_robust_buffer_access, c);
         }
+
+        NIR_PASS_V(c->s, nir_lower_wrmasks, should_split_wrmask, c->s);
 
         v3d_optimize_nir(c->s);
 
@@ -1156,6 +1434,8 @@ v3d_attempt_compile(struct v3d_compile *c)
         }
 
         NIR_PASS_V(c->s, nir_lower_bool_to_int32);
+        nir_convert_to_lcssa(c->s, true, true);
+        NIR_PASS_V(c->s, nir_divergence_analysis);
         NIR_PASS_V(c->s, nir_convert_from_ssa, true);
 
         struct nir_schedule_options schedule_options = {
@@ -1178,6 +1458,9 @@ v3d_attempt_compile(struct v3d_compile *c)
                 .intrinsic_cb_data = c,
         };
         NIR_PASS_V(c->s, nir_schedule, &schedule_options);
+
+        if (!c->disable_constant_ubo_load_sorting)
+                NIR_PASS_V(c->s, v3d_nir_sort_constant_ubo_loads, c);
 
         v3d_nir_to_vir(c);
 }
@@ -1202,13 +1485,13 @@ v3d_prog_data_size(gl_shader_stage stage)
 int v3d_shaderdb_dump(struct v3d_compile *c,
 		      char **shaderdb_str)
 {
-        if (c == NULL)
+        if (c == NULL || c->compilation_result != V3D_COMPILATION_SUCCEEDED)
                 return -1;
 
         return asprintf(shaderdb_str,
                         "%s shader: %d inst, %d threads, %d loops, "
                         "%d uniforms, %d max-temps, %d:%d spills:fills, "
-                        "%d sfu-stalls, %d inst-and-stalls",
+                        "%d sfu-stalls, %d inst-and-stalls, %d nops",
                         vir_get_stage_name(c),
                         c->qpu_inst_count,
                         c->threads,
@@ -1218,7 +1501,8 @@ int v3d_shaderdb_dump(struct v3d_compile *c,
                         c->spills,
                         c->fills,
                         c->qpu_inst_stalled_count,
-                        c->qpu_inst_count + c->qpu_inst_stalled_count);
+                        c->qpu_inst_count + c->qpu_inst_stalled_count,
+                        c->nop_count);
 }
 
 uint64_t *v3d_compile(const struct v3d_compiler *compiler,
@@ -1233,22 +1517,52 @@ uint64_t *v3d_compile(const struct v3d_compiler *compiler,
 {
         struct v3d_compile *c;
 
-        for (int i = 0; true; i++) {
+        /* This is a list of incremental changes to the compilation strategy
+         * that will be used to try to compile the shader successfully. The
+         * default strategy is to enable all optimizations which will have
+         * the highest register pressure but is expected to produce most
+         * optimal code. Following strategies incrementally disable specific
+         * optimizations that are known to contribute to register pressure
+         * in order to be able to compile the shader successfully while meeting
+         * thread count requirements.
+         *
+         * V3D 4.1+ has a min thread count of 2, but we can use 1 here to also
+         * cover previous hardware as well (meaning that we are not limiting
+         * register allocation to any particular thread count). This is fine
+         * because v3d_nir_to_vir will cap this to the actual minimum.
+         */
+        struct v3d_compiler_strategy {
+                const char *name;
+                uint32_t min_threads_for_reg_alloc;
+        } static const strategies[] = {
+                { "default",                  4 },
+                { "disable UBO load sorting", 1 },
+                { "disable TMU pipelining",   1 },
+                { "fallback scheduler",       1 }
+        };
+
+        for (int i = 0; i < ARRAY_SIZE(strategies); i++) {
                 c = vir_compile_init(compiler, key, s,
                                      debug_output, debug_output_data,
                                      program_id, variant_id,
-                                     i > 0 /* fallback_scheduler */);
+                                     strategies[i].min_threads_for_reg_alloc,
+                                     i > 0, /* Disable UBO load sorting */
+                                     i > 1, /* Disable TMU pipelining */
+                                     i > 2  /* Fallback_scheduler */);
 
                 v3d_attempt_compile(c);
 
-                if (i > 0 ||
+                if (i >= ARRAY_SIZE(strategies) - 1 ||
                     c->compilation_result !=
-                    V3D_COMPILATION_FAILED_REGISTER_ALLOCATION)
+                    V3D_COMPILATION_FAILED_REGISTER_ALLOCATION) {
                         break;
+                }
 
+                /* Fallback strategy */
                 char *debug_msg;
                 int ret = asprintf(&debug_msg,
-                                   "Using fallback scheduler for %s",
+                                   "Falling back to strategy '%s' for %s",
+                                   strategies[i + 1].name,
                                    vir_get_stage_name(c));
 
                 if (ret >= 0) {
@@ -1260,6 +1574,28 @@ uint64_t *v3d_compile(const struct v3d_compiler *compiler,
                 }
 
                 vir_compile_destroy(c);
+        }
+
+        if (unlikely(V3D_DEBUG & V3D_DEBUG_PERF) &&
+            c->compilation_result !=
+            V3D_COMPILATION_FAILED_REGISTER_ALLOCATION &&
+            c->spills > 0) {
+                char *debug_msg;
+                int ret = asprintf(&debug_msg,
+                                   "Compiled %s with %d spills and %d fills",
+                                   vir_get_stage_name(c),
+                                   c->spills, c->fills);
+                fprintf(stderr, "%s\n", debug_msg);
+
+                if (ret >= 0) {
+                        c->debug_output(debug_msg, c->debug_output_data);
+                        free(debug_msg);
+                }
+        }
+
+        if (c->compilation_result != V3D_COMPILATION_SUCCEEDED) {
+                fprintf(stderr, "Failed to compile %s with any strategy.\n",
+                        vir_get_stage_name(c));
         }
 
         struct v3d_prog_data *prog_data;
@@ -1368,14 +1704,68 @@ vir_get_uniform_index(struct v3d_compile *c,
         return uniform;
 }
 
+/* Looks back into the current block to find the ldunif that wrote the uniform
+ * at the requested index. If it finds it, it returns true and writes the
+ * destination register of the ldunif instruction to 'unif'.
+ *
+ * This can impact register pressure and end up leading to worse code, so we
+ * limit the number of instructions we are willing to look back through to
+ * strike a good balance.
+ */
+static bool
+try_opt_ldunif(struct v3d_compile *c, uint32_t index, struct qreg *unif)
+{
+        uint32_t count = 20;
+        struct qinst *prev_inst = NULL;
+        list_for_each_entry_from_rev(struct qinst, inst, c->cursor.link->prev,
+                                     &c->cur_block->instructions, link) {
+                if ((inst->qpu.sig.ldunif || inst->qpu.sig.ldunifrf) &&
+                    inst->uniform == index) {
+                        prev_inst = inst;
+                        break;
+                }
+
+                if (--count == 0)
+                        break;
+        }
+
+        if (!prev_inst)
+                return false;
+
+
+        list_for_each_entry_from(struct qinst, inst, prev_inst->link.next,
+                                 &c->cur_block->instructions, link) {
+                if (inst->dst.file == prev_inst->dst.file &&
+                    inst->dst.index == prev_inst->dst.index) {
+                        return false;
+                }
+        }
+
+        *unif = prev_inst->dst;
+        return true;
+}
+
 struct qreg
 vir_uniform(struct v3d_compile *c,
             enum quniform_contents contents,
             uint32_t data)
 {
+        const int num_uniforms = c->num_uniforms;
+        const int index = vir_get_uniform_index(c, contents, data);
+
+        /* If this is not the first time we see this uniform try to reuse the
+         * result of the last ldunif that loaded it.
+         */
+        const bool is_new_uniform = num_uniforms != c->num_uniforms;
+        if (!is_new_uniform && !c->disable_ldunif_opt) {
+                struct qreg ldunif_dst;
+                if (try_opt_ldunif(c, index, &ldunif_dst))
+                        return ldunif_dst;
+        }
+
         struct qinst *inst = vir_NOP(c);
         inst->qpu.sig.ldunif = true;
-        inst->uniform = vir_get_uniform_index(c, contents, data);
+        inst->uniform = index;
         inst->dst = vir_get_temp(c);
         c->defs[inst->dst.index] = inst;
         return inst->dst;
@@ -1408,6 +1798,7 @@ vir_optimize(struct v3d_compile *c)
                 OPTPASS(vir_opt_redundant_flags);
                 OPTPASS(vir_opt_dead_code);
                 OPTPASS(vir_opt_small_immediates);
+                OPTPASS(vir_opt_constant_alu);
 
                 if (!progress)
                         break;

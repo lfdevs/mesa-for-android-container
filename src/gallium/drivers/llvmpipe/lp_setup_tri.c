@@ -395,6 +395,7 @@ do_triangle_ccw(struct lp_setup_context *setup,
    tri->inputs.opaque = setup->fs.current.variant->opaque;
    tri->inputs.layer = layer;
    tri->inputs.viewport_index = viewport_index;
+   tri->inputs.view_index = setup->view_index;
 
    if (0)
       lp_dump_setup_coef(&setup->setup.variant->key,

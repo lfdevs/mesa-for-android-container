@@ -66,11 +66,12 @@ pan_unpacked_type_for_format(const struct util_format_description *desc)
                 unreachable("Void format not renderable");
 
         bool large = (desc->channel[c].size > 16);
+        bool large_norm = (desc->channel[c].size > 8);
         bool bit8 = (desc->channel[c].size == 8);
         assert(desc->channel[c].size <= 32);
 
         if (desc->channel[c].normalized)
-                return large ? nir_type_float32 : nir_type_float16;
+                return large_norm ? nir_type_float32 : nir_type_float16;
 
         switch (desc->channel[c].type) {
         case UTIL_FORMAT_TYPE_UNSIGNED:
@@ -706,8 +707,7 @@ pan_lower_fb_load(nir_shader *shader,
         unpacked = nir_convert_to_bit_size(b, unpacked, src_type, bits);
         unpacked = pan_extend(b, unpacked, nir_dest_num_components(intr->dest));
 
-        nir_src rewritten = nir_src_for_ssa(unpacked);
-        nir_ssa_def_rewrite_uses_after(&intr->dest.ssa, rewritten, &intr->instr);
+        nir_ssa_def_rewrite_uses_after(&intr->dest.ssa, unpacked, &intr->instr);
 }
 
 bool

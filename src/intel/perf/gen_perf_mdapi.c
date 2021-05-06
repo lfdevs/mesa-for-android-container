@@ -34,12 +34,12 @@
 int
 gen_perf_query_result_write_mdapi(void *data, uint32_t data_size,
                                   const struct gen_device_info *devinfo,
-                                  const struct gen_perf_query_result *result,
-                                  uint64_t freq_start, uint64_t freq_end)
+                                  const struct gen_perf_query_info *query,
+                                  const struct gen_perf_query_result *result)
 {
-   switch (devinfo->gen) {
+   switch (devinfo->ver) {
    case 7: {
-      struct gen7_mdapi_metrics *mdapi_data = (struct gen7_mdapi_metrics *) data;
+      struct gfx7_mdapi_metrics *mdapi_data = (struct gfx7_mdapi_metrics *) data;
 
       if (data_size < sizeof(*mdapi_data))
          return 0;
@@ -54,16 +54,19 @@ gen_perf_query_result_write_mdapi(void *data, uint32_t data_size,
             result->accumulator[1 + ARRAY_SIZE(mdapi_data->ACounters) + i];
       }
 
+      mdapi_data->PerfCounter1 = result->accumulator[query->perfcnt_offset + 0];
+      mdapi_data->PerfCounter2 = result->accumulator[query->perfcnt_offset + 1];
+
       mdapi_data->ReportsCount = result->reports_accumulated;
       mdapi_data->TotalTime =
          gen_device_info_timebase_scale(devinfo, result->accumulator[0]);
-      mdapi_data->CoreFrequency = freq_end;
-      mdapi_data->CoreFrequencyChanged = freq_end != freq_start;
+      mdapi_data->CoreFrequency = result->gt_frequency[1];
+      mdapi_data->CoreFrequencyChanged = result->gt_frequency[1] != result->gt_frequency[0];
       mdapi_data->SplitOccured = result->query_disjoint;
       return sizeof(*mdapi_data);
    }
    case 8: {
-      struct gen8_mdapi_metrics *mdapi_data = (struct gen8_mdapi_metrics *) data;
+      struct gfx8_mdapi_metrics *mdapi_data = (struct gfx8_mdapi_metrics *) data;
 
       if (data_size < sizeof(*mdapi_data))
          return 0;
@@ -75,6 +78,9 @@ gen_perf_query_result_write_mdapi(void *data, uint32_t data_size,
             result->accumulator[2 + ARRAY_SIZE(mdapi_data->OaCntr) + i];
       }
 
+      mdapi_data->PerfCounter1 = result->accumulator[query->perfcnt_offset + 0];
+      mdapi_data->PerfCounter2 = result->accumulator[query->perfcnt_offset + 1];
+
       mdapi_data->ReportId = result->hw_id;
       mdapi_data->ReportsCount = result->reports_accumulated;
       mdapi_data->TotalTime =
@@ -82,8 +88,8 @@ gen_perf_query_result_write_mdapi(void *data, uint32_t data_size,
       mdapi_data->BeginTimestamp =
          gen_device_info_timebase_scale(devinfo, result->begin_timestamp);
       mdapi_data->GPUTicks = result->accumulator[1];
-      mdapi_data->CoreFrequency = freq_end;
-      mdapi_data->CoreFrequencyChanged = freq_end != freq_start;
+      mdapi_data->CoreFrequency = result->gt_frequency[1];
+      mdapi_data->CoreFrequencyChanged = result->gt_frequency[1] != result->gt_frequency[0];
       mdapi_data->SliceFrequency =
          (result->slice_frequency[0] + result->slice_frequency[1]) / 2ULL;
       mdapi_data->UnsliceFrequency =
@@ -94,7 +100,7 @@ gen_perf_query_result_write_mdapi(void *data, uint32_t data_size,
    case 9:
    case 11:
    case 12:{
-      struct gen9_mdapi_metrics *mdapi_data = (struct gen9_mdapi_metrics *) data;
+      struct gfx9_mdapi_metrics *mdapi_data = (struct gfx9_mdapi_metrics *) data;
 
       if (data_size < sizeof(*mdapi_data))
          return 0;
@@ -106,6 +112,9 @@ gen_perf_query_result_write_mdapi(void *data, uint32_t data_size,
             result->accumulator[2 + ARRAY_SIZE(mdapi_data->OaCntr) + i];
       }
 
+      mdapi_data->PerfCounter1 = result->accumulator[query->perfcnt_offset + 0];
+      mdapi_data->PerfCounter2 = result->accumulator[query->perfcnt_offset + 1];
+
       mdapi_data->ReportId = result->hw_id;
       mdapi_data->ReportsCount = result->reports_accumulated;
       mdapi_data->TotalTime =
@@ -113,8 +122,8 @@ gen_perf_query_result_write_mdapi(void *data, uint32_t data_size,
       mdapi_data->BeginTimestamp =
          gen_device_info_timebase_scale(devinfo, result->begin_timestamp);
       mdapi_data->GPUTicks = result->accumulator[1];
-      mdapi_data->CoreFrequency = freq_end;
-      mdapi_data->CoreFrequencyChanged = freq_end != freq_start;
+      mdapi_data->CoreFrequency = result->gt_frequency[1];
+      mdapi_data->CoreFrequencyChanged = result->gt_frequency[1] != result->gt_frequency[0];
       mdapi_data->SliceFrequency =
          (result->slice_frequency[0] + result->slice_frequency[1]) / 2ULL;
       mdapi_data->UnsliceFrequency =
@@ -131,7 +140,7 @@ void
 gen_perf_register_mdapi_statistic_query(struct gen_perf_config *perf_cfg,
                                         const struct gen_device_info *devinfo)
 {
-   if (!(devinfo->gen >= 7 && devinfo->gen <= 12))
+   if (!(devinfo->ver >= 7 && devinfo->ver <= 12))
       return;
 
    struct gen_perf_query_info *query =
@@ -155,7 +164,7 @@ gen_perf_register_mdapi_statistic_query(struct gen_perf_config *perf_cfg,
                                      "N primitives entering clipping");
    gen_perf_query_add_basic_stat_reg(query, CL_PRIMITIVES_COUNT,
                                      "N primitives leaving clipping");
-   if (devinfo->is_haswell || devinfo->gen == 8) {
+   if (devinfo->is_haswell || devinfo->ver == 8) {
       gen_perf_query_add_stat_reg(query, PS_INVOCATION_COUNT, 1, 4,
                                   "N fragment shader invocations",
                                   "N fragment shader invocations");
@@ -167,12 +176,12 @@ gen_perf_register_mdapi_statistic_query(struct gen_perf_config *perf_cfg,
                                      "N TCS shader invocations");
    gen_perf_query_add_basic_stat_reg(query, DS_INVOCATION_COUNT,
                                      "N TES shader invocations");
-   if (devinfo->gen >= 7) {
+   if (devinfo->ver >= 7) {
       gen_perf_query_add_basic_stat_reg(query, CS_INVOCATION_COUNT,
                                         "N compute shader invocations");
    }
 
-   if (devinfo->gen >= 10) {
+   if (devinfo->ver >= 10) {
       /* Reuse existing CS invocation register until we can expose this new
        * one.
        */
@@ -228,15 +237,15 @@ gen_perf_register_mdapi_oa_query(struct gen_perf_config *perf,
    /* MDAPI requires different structures for pretty much every generation
     * (right now we have definitions for gen 7 to 12).
     */
-   if (!(devinfo->gen >= 7 && devinfo->gen <= 12))
+   if (!(devinfo->ver >= 7 && devinfo->ver <= 12))
       return;
 
-   switch (devinfo->gen) {
+   switch (devinfo->ver) {
    case 7: {
       query = gen_perf_append_query_info(perf, 1 + 45 + 16 + 7);
       query->oa_format = I915_OA_FORMAT_A45_B8_C8;
 
-      struct gen7_mdapi_metrics metric_data;
+      struct gfx7_mdapi_metrics metric_data;
       query->data_size = sizeof(metric_data);
 
       MDAPI_QUERY_ADD_COUNTER(query, metric_data, TotalTime, UINT64);
@@ -261,7 +270,7 @@ gen_perf_register_mdapi_oa_query(struct gen_perf_config *perf,
       query = gen_perf_append_query_info(perf, 2 + 36 + 16 + 16);
       query->oa_format = I915_OA_FORMAT_A32u40_A4u32_B8_C8;
 
-      struct gen8_mdapi_metrics metric_data;
+      struct gfx8_mdapi_metrics metric_data;
       query->data_size = sizeof(metric_data);
 
       MDAPI_QUERY_ADD_COUNTER(query, metric_data, TotalTime, UINT64);
@@ -298,7 +307,7 @@ gen_perf_register_mdapi_oa_query(struct gen_perf_config *perf,
       query = gen_perf_append_query_info(perf, 2 + 36 + 16 + 16 + 16 + 2);
       query->oa_format = I915_OA_FORMAT_A32u40_A4u32_B8_C8;
 
-      struct gen9_mdapi_metrics metric_data;
+      struct gfx9_mdapi_metrics metric_data;
       query->data_size = sizeof(metric_data);
 
       MDAPI_QUERY_ADD_COUNTER(query, metric_data, TotalTime, UINT64);
@@ -354,5 +363,6 @@ gen_perf_register_mdapi_oa_query(struct gen_perf_config *perf,
       query->a_offset = copy_query->a_offset;
       query->b_offset = copy_query->b_offset;
       query->c_offset = copy_query->c_offset;
+      query->perfcnt_offset = copy_query->perfcnt_offset;
    }
 }

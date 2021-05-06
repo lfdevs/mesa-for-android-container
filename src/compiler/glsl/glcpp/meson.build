@@ -18,14 +18,24 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+bison_command = []
+if yacc_is_bison
+  bison_command = [
+    prog_bison, '-o', '@OUTPUT0@', '-p', 'glcpp_parser_',
+    '--defines=@OUTPUT1@', '@INPUT@',
+  ]
+else
+  bison_command = [
+    prog_bison, '-o', '@OUTPUT0@', '-p', 'glcpp_parser_',
+    '-H', '@OUTPUT1@', '@INPUT@',
+  ]
+endif
+
 glcpp_parse = custom_target(
   'glcpp-parse.[ch]',
   input : 'glcpp-parse.y',
   output : ['glcpp-parse.c', 'glcpp-parse.h'],
-  command : [
-    prog_bison, '-o', '@OUTPUT0@', '-p', 'glcpp_parser_',
-    '--defines=@OUTPUT1@', '@INPUT@',
-  ],
+  command : bison_command
 )
 
 glcpp_lex = custom_target(
@@ -81,10 +91,7 @@ glcpp = executable(
 
 # FIXME: these fail on windows due to whitespace differences
 if with_any_opengl and with_tests and host_machine.system() != 'windows'
-  modes = ['unix', 'oldmac', 'bizarro']
-  if dep_valgrind.found()
-    modes += ['valgrind']
-  endif
+  modes = ['unix', 'windows', 'oldmac', 'bizarro']
 
   foreach m : modes
     test(
@@ -99,4 +106,18 @@ if with_any_opengl and with_tests and host_machine.system() != 'windows'
       timeout: 60,
     )
   endforeach
+
+  if dep_valgrind.found()
+    test(
+      'glcpp test (valgrind)',
+      prog_python,
+      args : [
+        join_paths(meson.current_source_dir(), 'tests/glcpp_test.py'),
+        glcpp, join_paths(meson.current_source_dir(), 'tests'),
+        '--valgrind',
+      ],
+      suite : ['compiler', 'glcpp'],
+      timeout: 240,
+    )
+  endif
 endif

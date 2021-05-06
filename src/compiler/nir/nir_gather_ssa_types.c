@@ -72,8 +72,7 @@ static void
 copy_types(nir_src src, nir_dest *dest, BITSET_WORD *float_types,
            BITSET_WORD *int_types, bool *progress)
 {
-   bool src_is_sink = nir_src_is_const(src) ||
-                      src.ssa->parent_instr->type == nir_instr_type_ssa_undef;
+   bool src_is_sink = nir_src_is_const(src) || nir_src_is_undef(src);
    copy_type(src.ssa->index, dest->ssa.index, src_is_sink, float_types, progress);
    copy_type(src.ssa->index, dest->ssa.index, src_is_sink, int_types, progress);
 }

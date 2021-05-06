@@ -382,7 +382,7 @@ passed as --option=foo to ``meson``, but -Doption=foo to
 For those coming from autotools be aware of the following:
 
 ``--buildtype/-Dbuildtype``
-   This option will set the compiler debug/optimisation levels to aid
+   This option will set the compiler debug/optimization levels to aid
    debugging the Mesa libraries.
 
    Note that in Meson this defaults to ``debugoptimized``, and not

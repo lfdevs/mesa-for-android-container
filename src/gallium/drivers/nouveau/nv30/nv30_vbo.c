@@ -24,6 +24,7 @@
  */
 
 #include "util/format/u_format.h"
+#include "util/u_draw.h"
 #include "util/u_inlines.h"
 #include "util/u_prim.h"
 #include "translate/translate.h"
@@ -550,13 +551,7 @@ nv30_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
               unsigned num_draws)
 {
    if (num_draws > 1) {
-      struct pipe_draw_info tmp_info = *info;
-
-      for (unsigned i = 0; i < num_draws; i++) {
-         nv30_draw_vbo(pipe, &tmp_info, indirect, &draws[i], 1);
-         if (tmp_info.increment_draw_id)
-            tmp_info.drawid++;
-      }
+      util_draw_multi(pipe, info, indirect, draws, num_draws);
       return;
    }
 

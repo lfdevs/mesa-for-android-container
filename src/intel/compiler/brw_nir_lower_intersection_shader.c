@@ -96,13 +96,13 @@ lower_any_hit_for_intersection(nir_shader *any_hit)
 
             case nir_intrinsic_load_ray_t_max:
                nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                        nir_src_for_ssa(hit_t));
+                                        hit_t);
                nir_instr_remove(&intrin->instr);
                break;
 
             case nir_intrinsic_load_ray_hit_kind:
                nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                        nir_src_for_ssa(hit_kind));
+                                        hit_kind);
                nir_instr_remove(&intrin->instr);
                break;
 
@@ -231,7 +231,7 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
 
                nir_ssa_def *accepted = nir_load_var(b, commit_tmp);
                nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                                        nir_src_for_ssa(accepted));
+                                        accepted);
                break;
             }
 

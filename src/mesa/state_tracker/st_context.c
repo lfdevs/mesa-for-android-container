@@ -33,6 +33,7 @@
 #include "main/glthread.h"
 #include "main/samplerobj.h"
 #include "main/shaderobj.h"
+#include "main/state.h"
 #include "main/version.h"
 #include "main/vtxfmt.h"
 #include "main/hash.h"
@@ -222,17 +223,20 @@ st_invalidate_state(struct gl_context *ctx)
          st->dirty |= ST_NEW_FS_STATE;
    }
 
-   if (new_state & (_NEW_LIGHT |
+   if (new_state & (_NEW_LIGHT_STATE |
                     _NEW_POINT))
       st->dirty |= ST_NEW_RASTERIZER;
 
-   if ((new_state & _NEW_LIGHT) &&
+   if ((new_state & _NEW_LIGHT_STATE) &&
        (st->lower_flatshade || st->lower_two_sided_color))
       st->dirty |= ST_NEW_FS_STATE;
 
    if (new_state & _NEW_PROJECTION &&
        st_user_clip_planes_enabled(ctx))
       st->dirty |= ST_NEW_CLIP_STATE;
+
+   if (new_state & _NEW_POINT && st->lower_texcoord_replace)
+      st->dirty |= ST_NEW_FS_STATE;
 
    if (new_state & _NEW_PIXEL)
       st->dirty |= ST_NEW_PIXEL_TRANSFER;
@@ -251,7 +255,7 @@ st_invalidate_state(struct gl_context *ctx)
    }
 
    /* Update the vertex shader if ctx->Light._ClampVertexColor was changed. */
-   if (st->clamp_vert_color_in_shader && (new_state & _NEW_LIGHT)) {
+   if (st->clamp_vert_color_in_shader && (new_state & _NEW_LIGHT_STATE)) {
       st->dirty |= ST_NEW_VS_STATE;
       if (st->ctx->API == API_OPENGL_COMPAT && ctx->Version >= 32) {
          st->dirty |= ST_NEW_GS_STATE | ST_NEW_TES_STATE;
@@ -570,6 +574,12 @@ st_init_driver_flags(struct st_context *st)
    f->NewNvConservativeRasterization = ST_NEW_RASTERIZER;
    f->NewNvConservativeRasterizationParams = ST_NEW_RASTERIZER;
    f->NewIntelConservativeRasterization = ST_NEW_RASTERIZER;
+
+   if (st->emulate_gl_clamp)
+      f->NewSamplersWithClamp = ST_NEW_SAMPLERS |
+                                ST_NEW_VS_STATE | ST_NEW_TCS_STATE |
+                                ST_NEW_TES_STATE | ST_NEW_GS_STATE |
+                                ST_NEW_FS_STATE | ST_NEW_CS_STATE;
 }
 
 
@@ -646,6 +656,7 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
     */
    ctx->FragmentProgram._MaintainTexEnvProgram = GL_TRUE;
    ctx->VertexProgram._MaintainTnlProgram = GL_TRUE;
+   _mesa_reset_vertex_processing_mode(ctx);
 
    if (no_error)
       ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_NO_ERROR_BIT_KHR;
@@ -666,6 +677,10 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    st->has_etc2 = screen->is_format_supported(screen, PIPE_FORMAT_ETC2_RGB8,
                                               PIPE_TEXTURE_2D, 0, 0,
                                               PIPE_BIND_SAMPLER_VIEW);
+   st->transcode_etc = options->transcode_etc &&
+                       screen->is_format_supported(screen, PIPE_FORMAT_DXT1_SRGBA,
+                                                   PIPE_TEXTURE_2D, 0, 0,
+                                                   PIPE_BIND_SAMPLER_VIEW);
    st->has_astc_2d_ldr =
       screen->is_format_supported(screen, PIPE_FORMAT_ASTC_4x4_SRGB,
                                   PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_SAMPLER_VIEW);
@@ -685,6 +700,8 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
       !!(screen->get_param(screen, PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK) &
          (PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50 |
           PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_R600));
+   st->emulate_gl_clamp =
+      !screen->get_param(screen, PIPE_CAP_GL_CLAMP);
    st->texture_buffer_sampler =
       screen->get_param(screen, PIPE_CAP_TEXTURE_BUFFER_SAMPLER);
    st->has_time_elapsed =
@@ -713,6 +730,10 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
       screen->get_param(screen, PIPE_CAP_PREFER_REAL_BUFFER_IN_CONSTBUF0);
    st->has_conditional_render =
       screen->get_param(screen, PIPE_CAP_CONDITIONAL_RENDER);
+   st->lower_texcoord_replace =
+      !screen->get_param(screen, PIPE_CAP_POINT_SPRITE);
+   st->lower_rect_tex =
+      !screen->get_param(screen, PIPE_CAP_TEXRECT);
    st->allow_st_finalize_nir_twice = screen->finalize_nir != NULL;
 
    st->has_hw_atomics =
@@ -803,7 +824,8 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
          !st->clamp_frag_color_in_shader &&
          !st->clamp_frag_depth_in_shader &&
          !st->force_persample_in_shader &&
-         !st->lower_two_sided_color;
+         !st->lower_two_sided_color &&
+         !st->lower_texcoord_replace;
 
    st->shader_has_one_variant[MESA_SHADER_TESS_CTRL] = st->has_shareable_shaders;
    st->shader_has_one_variant[MESA_SHADER_TESS_EVAL] =
@@ -821,7 +843,9 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
          !st->lower_ucp;
    st->shader_has_one_variant[MESA_SHADER_COMPUTE] = st->has_shareable_shaders;
 
-   if (util_cpu_caps.cores_per_L3 == util_cpu_caps.nr_cpus ||
+   util_cpu_detect();
+
+   if (util_get_cpu_caps()->num_L3_caches == 1 ||
        !st->pipe->set_context_param)
       st->pin_thread_counter = ST_L3_PINNING_DISABLED;
 

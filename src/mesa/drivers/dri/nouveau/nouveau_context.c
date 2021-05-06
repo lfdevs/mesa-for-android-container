@@ -238,7 +238,7 @@ nouveau_update_renderbuffers(__DRIcontext *dri_ctx, __DRIdrawable *draw)
 	__DRIscreen *screen = dri_ctx->driScreenPriv;
 	struct gl_framebuffer *fb = draw->driverPrivate;
 	struct nouveau_framebuffer *nfb = to_nouveau_framebuffer(fb);
-	unsigned int attachments[10];
+	unsigned int attachments[__DRI_BUFFER_COUNT];
 	__DRIbuffer *buffers = NULL;
 	int i = 0, count, ret;
 

@@ -275,13 +275,13 @@ static LLVMValueRef buffer_load(struct si_shader_context *ctx, LLVMTypeRef type,
    LLVMTypeRef vec_type = LLVMVectorType(type, 4);
 
    if (swizzle == ~0) {
-      value = ac_build_buffer_load(&ctx->ac, buffer, 4, NULL, base, offset, 0, ac_glc,
+      value = ac_build_buffer_load(&ctx->ac, buffer, 4, NULL, base, offset, 0, type, ac_glc,
                                    can_speculate, false);
 
       return LLVMBuildBitCast(ctx->ac.builder, value, vec_type, "");
    }
 
-   value = ac_build_buffer_load(&ctx->ac, buffer, 4, NULL, base, offset, 0, ac_glc,
+   value = ac_build_buffer_load(&ctx->ac, buffer, 4, NULL, base, offset, 0, type, ac_glc,
                                 can_speculate, false);
 
    value = LLVMBuildBitCast(ctx->ac.builder, value, vec_type, "");
@@ -593,7 +593,7 @@ static LLVMValueRef load_tess_level_default(struct si_shader_context *ctx, unsig
    int i, offset;
 
    slot = LLVMConstInt(ctx->ac.i32, SI_HS_CONST_DEFAULT_TESS_LEVELS, 0);
-   buf = ac_get_arg(&ctx->ac, ctx->rw_buffers);
+   buf = ac_get_arg(&ctx->ac, ctx->internal_bindings);
    buf = ac_build_load_to_sgpr(&ctx->ac, buf, slot);
    offset = sysval == SYSTEM_VALUE_TESS_LEVEL_INNER_DEFAULT ? 4 : 0;
 
@@ -934,7 +934,7 @@ static void si_set_ls_return_value_for_tcs(struct si_shader_context *ctx)
    ret = si_insert_input_ret(ctx, ret, ctx->args.tcs_factor_offset, 4);
    ret = si_insert_input_ret(ctx, ret, ctx->args.scratch_offset, 5);
 
-   ret = si_insert_input_ptr(ctx, ret, ctx->rw_buffers, 8 + SI_SGPR_RW_BUFFERS);
+   ret = si_insert_input_ptr(ctx, ret, ctx->internal_bindings, 8 + SI_SGPR_INTERNAL_BINDINGS);
    ret = si_insert_input_ptr(ctx, ret, ctx->bindless_samplers_and_images,
                              8 + SI_SGPR_BINDLESS_SAMPLERS_AND_IMAGES);
 

@@ -355,6 +355,10 @@ dri2_initialize_device(_EGLDisplay *disp)
    }
 
    dri2_setup_screen(disp);
+#ifdef HAVE_WAYLAND_PLATFORM
+   dri2_dpy->device_name = loader_get_device_name_for_fd(dri2_dpy->fd);
+#endif
+   dri2_set_WL_bind_wayland_display(disp);
 
    if (!dri2_add_pbuffer_configs_for_visuals(disp)) {
       err = "DRI2: failed to add configs";

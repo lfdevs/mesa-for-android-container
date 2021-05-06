@@ -89,7 +89,7 @@ def pack_modifier(mod, width, default, opts, body, pack_exprs):
     # Swizzles need to be packed "specially"
     SWIZZLE_BUCKETS = [
             set(['h00', 'h0']),
-            set(['h01', 'none', 'b0123']), # Identity
+            set(['h01', 'none', 'b0123', 'w0']), # Identity
             set(['h10']),
             set(['h11', 'h1']),
             set(['b0000', 'b00', 'b0']),

@@ -61,13 +61,13 @@ struct gen_device_info;
 /**
  * First GRF used for the MRF hack.
  *
- * On gen7, MRFs are no longer used, and contiguous GRFs are used instead.  We
+ * On gfx7, MRFs are no longer used, and contiguous GRFs are used instead.  We
  * haven't converted our compiler to be aware of this, so it asks for MRFs and
  * brw_eu_emit.c quietly converts them to be accesses of the top GRFs.  The
  * register allocators have to be careful of this to avoid corrupting the "MRF"s
  * with actual GRF allocations.
  */
-#define GEN7_MRF_HACK_START 112
+#define GFX7_MRF_HACK_START 112
 
 /** Number of message register file registers */
 #define BRW_MAX_MRF(gen) (gen == 6 ? 24 : 16)
@@ -418,7 +418,7 @@ brw_reg(enum brw_reg_file file,
    else if (file == BRW_ARCHITECTURE_REGISTER_FILE)
       assert(nr <= BRW_ARF_TIMESTAMP);
    /* Asserting on the MRF register number requires to know the hardware gen
-    * (gen6 has 24 MRF registers), which we don't know here, so we assert
+    * (gfx6 has 24 MRF registers), which we don't know here, so we assert
     * for that in the generators and in brw_eu_emit.c
     */
 
@@ -917,8 +917,8 @@ brw_flag_subreg(unsigned subreg)
 }
 
 /**
- * Return the mask register present in Gen4-5, or the related register present
- * in Gen7.5 and later hardware referred to as "channel enable" register in
+ * Return the mask register present in Gfx4-5, or the related register present
+ * in Gfx7.5 and later hardware referred to as "channel enable" register in
  * the documentation.
  */
 static inline struct brw_reg
@@ -1022,11 +1022,17 @@ spread(struct brw_reg reg, unsigned s)
 static inline struct brw_reg
 subscript(struct brw_reg reg, enum brw_reg_type type, unsigned i)
 {
-   if (reg.file == IMM)
-      return reg;
-
    unsigned scale = type_sz(reg.type) / type_sz(type);
    assert(scale >= 1 && i < scale);
+
+   if (reg.file == IMM) {
+      unsigned bit_size = type_sz(type) * 8;
+      reg.u64 >>= i * bit_size;
+      reg.u64 &= BITFIELD64_MASK(bit_size);
+      if (bit_size <= 16)
+         reg.u64 |= reg.u64 << 16;
+      return retype(reg, type);
+   }
 
    return suboffset(retype(spread(reg, scale), type), i);
 }

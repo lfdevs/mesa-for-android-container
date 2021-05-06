@@ -48,7 +48,8 @@ FragmentShaderFromNir::FragmentShaderFromNir(const nir_shader& nir,
    m_front_face_loaded(false),
    m_depth_exports(0),
    m_apply_sample_mask(key.ps.apply_sample_id_mask),
-   m_dual_source_blend(key.ps.dual_source_blend)
+   m_dual_source_blend(key.ps.dual_source_blend),
+   m_pos_input(nullptr)
 {
    for (auto&  i: m_interpolator) {
       i.enabled = false;
@@ -57,18 +58,6 @@ FragmentShaderFromNir::FragmentShaderFromNir(const nir_shader& nir,
 
    sh_info().rat_base = key.ps.nr_cbufs;
    sh_info().atomic_base = key.ps.first_atomic_counter;
-}
-
-bool FragmentShaderFromNir::do_process_inputs(nir_variable *input)
-{
-   /*  inputs have been lowered */
-   return true;
-}
-
-bool FragmentShaderFromNir::do_emit_load_deref(const nir_variable *in_var, nir_intrinsic_instr* instr)
-{
-   assert(0 && "all input derefs should have benn lowered");
-   return false;
 }
 
 unsigned barycentric_ij_index(nir_intrinsic_instr *instr)
@@ -122,6 +111,11 @@ bool FragmentShaderFromNir::process_load_input(nir_intrinsic_instr *instr,
 
    if (location == VARYING_SLOT_POS) {
       m_sv_values.set(es_pos);
+      m_pos_input = new ShaderInputVarying(name, sid, nir_intrinsic_base(instr) + index->u32,
+                                               nir_intrinsic_component(instr),
+                                               nir_dest_num_components(instr->dest),
+                                               TGSI_INTERPOLATE_LINEAR, TGSI_INTERPOLATE_LOC_CENTER);
+      m_shaderio.add_input(m_pos_input);
       return true;
    }
 
@@ -190,11 +184,22 @@ bool FragmentShaderFromNir::process_load_input(nir_intrinsic_instr *instr,
 
    switch (name) {
    case TGSI_SEMANTIC_COLOR: {
-      m_shaderio.add_input(new ShaderInputColor(name, sid,
-                                                nir_intrinsic_base(instr) + index->u32,
-                                                nir_intrinsic_component(instr),
-                                                nir_dest_num_components(instr->dest),
-                                                tgsi_interpolate, tgsi_loc));
+      auto input = m_shaderio.find_varying(name, sid);
+      if (!input) {
+         m_shaderio.add_input(new ShaderInputColor(name, sid,
+                                                   nir_intrinsic_base(instr) + index->u32,
+                                                   nir_intrinsic_component(instr),
+                                                   nir_dest_num_components(instr->dest),
+                                                   tgsi_interpolate, tgsi_loc));
+      }  else {
+         if (uses_interpol_at_centroid)
+            input->set_uses_interpolate_at_centroid();
+
+         auto varying = static_cast<ShaderInputVarying&>(*input);
+         varying.update_mask(nir_dest_num_components(instr->dest),
+                             nir_intrinsic_component(instr));
+      }
+
       m_need_back_color = m_two_sided_color;
       return true;
    }
@@ -209,14 +214,20 @@ bool FragmentShaderFromNir::process_load_input(nir_intrinsic_instr *instr,
    case TGSI_SEMANTIC_PCOORD:
    case TGSI_SEMANTIC_VIEWPORT_INDEX:
    case TGSI_SEMANTIC_CLIPDIST: {
-      auto varying = m_shaderio.find_varying(name, sid, nir_intrinsic_component(instr));
-      if (!varying) {
+      auto input = m_shaderio.find_varying(name, sid);
+      if (!input) {
          m_shaderio.add_input(new ShaderInputVarying(name, sid, nir_intrinsic_base(instr) + index->u32,
                                                      nir_intrinsic_component(instr),
                                                      nir_dest_num_components(instr->dest),
                                                      tgsi_interpolate, tgsi_loc));
-      } else if (uses_interpol_at_centroid)
-         varying->set_uses_interpolate_at_centroid();
+      } else {
+         if (uses_interpol_at_centroid)
+            input->set_uses_interpolate_at_centroid();
+
+         auto varying = static_cast<ShaderInputVarying&>(*input);
+         varying.update_mask(nir_dest_num_components(instr->dest),
+                             nir_intrinsic_component(instr));
+      }
 
       return true;
    }
@@ -247,12 +258,16 @@ bool FragmentShaderFromNir::scan_sysvalue_access(nir_instr *instr)
          break;
       case nir_intrinsic_load_helper_invocation:
          m_sv_values.set(es_helper_invocation);
+         sh_info().uses_helper_invocation = true;
          break;
       case nir_intrinsic_load_input:
          return process_load_input(ii, false);
       case nir_intrinsic_load_interpolated_input: {
          return process_load_input(ii, true);
       }
+      case nir_intrinsic_store_output:
+         return process_store_output(ii);
+
       default:
          ;
       }
@@ -308,7 +323,8 @@ bool FragmentShaderFromNir::do_allocate_reserved_registers()
 
    if (m_sv_values.test(es_pos)) {
       m_frag_pos_index = m_reserved_registers++;
-      m_shaderio.add_input(new ShaderInputSystemValue(TGSI_SEMANTIC_POSITION, m_frag_pos_index));
+      assert(m_pos_input);
+      m_pos_input->set_gpr(m_frag_pos_index);
    }
 
    // handle system values
@@ -394,81 +410,66 @@ void FragmentShaderFromNir::emit_shader_start()
       m_helper_invocation = get_temp_register();
       auto dummy = PValue(new GPRValue(m_helper_invocation->sel(), 7));
       emit_instruction(new AluInstruction(op1_mov, m_helper_invocation, literal(-1), {alu_write, alu_last_instr}));
-      GPRVector dst({m_helper_invocation, dummy, dummy, dummy});
+      GPRVector dst({dummy, dummy, dummy, dummy});
+      std::array<int,4> swz = {7,7,7,7};
+      dst.set_reg_i(m_helper_invocation->chan(), m_helper_invocation);
+      swz[m_helper_invocation->chan()] = 4;
 
       auto vtx = new FetchInstruction(dst, m_helper_invocation,
                                       R600_BUFFER_INFO_CONST_BUFFER, bim_none);
       vtx->set_flag(vtx_vpm);
       vtx->set_flag(vtx_use_tc);
-      vtx->set_dest_swizzle({4,7,7,7});
+      vtx->set_dest_swizzle(swz);
       emit_instruction(vtx);
    }
 }
 
-bool FragmentShaderFromNir::do_emit_store_deref(const nir_variable *out_var, nir_intrinsic_instr* instr)
+bool FragmentShaderFromNir::process_store_output(nir_intrinsic_instr *instr)
 {
-   if (out_var->data.location == FRAG_RESULT_COLOR)
-      return emit_export_pixel(out_var, instr, m_dual_source_blend ? 1 : m_max_color_exports);
 
-   if ((out_var->data.location >= FRAG_RESULT_DATA0 &&
-        out_var->data.location <= FRAG_RESULT_DATA7) ||
-       out_var->data.location == FRAG_RESULT_DEPTH ||
-       out_var->data.location == FRAG_RESULT_STENCIL ||
-       out_var->data.location == FRAG_RESULT_SAMPLE_MASK)
-      return emit_export_pixel(out_var, instr, 1);
+   auto semantic = nir_intrinsic_io_semantics(instr);
+   unsigned driver_loc = nir_intrinsic_base(instr);
 
-   sfn_log << SfnLog::err << "r600-NIR: Unimplemented store_deref for " <<
-              out_var->data.location << "(" << out_var->data.driver_location << ")\n";
-   return false;
-}
+   if (sh_info().noutput <= driver_loc)
+      sh_info().noutput = driver_loc + 1;
 
-bool FragmentShaderFromNir::do_process_outputs(nir_variable *output)
-{
-   sfn_log << SfnLog::io << "Parse output variable "
-           << output->name << "  @" << output->data.location
-           << "@dl:" << output->data.driver_location
-           << " dual source idx: " << output->data.index
-           << "\n";
-
-   ++sh_info().noutput;
-   r600_shader_io& io = sh_info().output[output->data.driver_location];
-   tgsi_get_gl_frag_result_semantic(static_cast<gl_frag_result>( output->data.location),
+   r600_shader_io& io = sh_info().output[driver_loc];
+   tgsi_get_gl_frag_result_semantic(static_cast<gl_frag_result>(semantic.location),
                                     &io.name, &io.sid);
 
-   /* Check whether this code has become obsolete by the IO vectorization */
-   unsigned num_components = 4;
-   unsigned vector_elements = glsl_get_vector_elements(glsl_without_array(output->type));
-   if (vector_elements)
-           num_components = vector_elements;
-   unsigned component = output->data.location_frac;
+   unsigned component = nir_intrinsic_component(instr);
+   io.write_mask |= nir_intrinsic_write_mask(instr) << component;
 
-   for (unsigned j = component; j < num_components + component; j++)
-      io.write_mask |= 1 << j;
-
-   int loc = output->data.location;
-   if (loc == FRAG_RESULT_COLOR &&
-       (m_nir.info.outputs_written & (1ull << loc)) &&
-       !m_dual_source_blend) {
-           sh_info().fs_write_all = true;
+   if (semantic.location == FRAG_RESULT_COLOR && !m_dual_source_blend) {
+      sh_info().fs_write_all = true;
    }
 
-   if (output->data.location == FRAG_RESULT_COLOR ||
-       (output->data.location >= FRAG_RESULT_DATA0 &&
-        output->data.location <= FRAG_RESULT_DATA7))  {
+   if (semantic.location == FRAG_RESULT_COLOR ||
+       (semantic.location >= FRAG_RESULT_DATA0 &&
+        semantic.location <= FRAG_RESULT_DATA7))  {
       ++m_max_counted_color_exports;
+
+      /* Hack: force dual source output handling if one color output has a
+       * dual_source_blend_index > 0 */
+      if (semantic.location == FRAG_RESULT_COLOR &&
+          semantic.dual_source_blend_index > 0)
+         m_dual_source_blend = true;
 
       if (m_max_counted_color_exports > 1)
          sh_info().fs_write_all = false;
       return true;
    }
-   if (output->data.location == FRAG_RESULT_DEPTH ||
-       output->data.location == FRAG_RESULT_STENCIL ||
-       output->data.location == FRAG_RESULT_SAMPLE_MASK) {
+
+   if (semantic.location == FRAG_RESULT_DEPTH ||
+       semantic.location == FRAG_RESULT_STENCIL ||
+       semantic.location == FRAG_RESULT_SAMPLE_MASK) {
       io.write_mask = 15;
       return true;
    }
 
    return false;
+
+
 }
 
 bool FragmentShaderFromNir::emit_load_sample_mask_in(nir_intrinsic_instr* instr)
@@ -515,9 +516,31 @@ bool FragmentShaderFromNir::emit_intrinsic_instruction_override(nir_intrinsic_in
    case nir_intrinsic_load_interpolated_input: {
       return emit_load_interpolated_input(instr);
    }
+   case nir_intrinsic_store_output:
+      return emit_store_output(instr);
+
    default:
       return false;
    }
+}
+
+bool FragmentShaderFromNir::emit_store_output(nir_intrinsic_instr* instr)
+{
+   auto location = nir_intrinsic_io_semantics(instr).location;
+
+   if (location == FRAG_RESULT_COLOR)
+      return emit_export_pixel(instr, m_dual_source_blend ? 1 : m_max_color_exports);
+
+   if ((location >= FRAG_RESULT_DATA0 &&
+        location <= FRAG_RESULT_DATA7) ||
+       location == FRAG_RESULT_DEPTH ||
+       location == FRAG_RESULT_STENCIL ||
+       location == FRAG_RESULT_SAMPLE_MASK)
+      return emit_export_pixel(instr, 1);
+
+   sfn_log << SfnLog::err << "r600-NIR: Unimplemented store_output for " << location << ")\n";
+   return false;
+
 }
 
 bool FragmentShaderFromNir::emit_load_interpolated_input(nir_intrinsic_instr* instr)
@@ -555,9 +578,8 @@ bool FragmentShaderFromNir::emit_load_interpolated_input(nir_intrinsic_instr* in
       auto & color_input  = static_cast<ShaderInputColor&> (io);
       auto& bgio = m_shaderio.input(color_input.back_color_input_index());
 
-      bgio.set_gpr(allocate_temp_register());
-
-      GPRVector bgcol(bgio.gpr(), {0,1,2,3});
+      GPRVector bgcol = get_temp_vec4();
+      bgio.set_gpr(bgcol.sel());
       load_interpolated(bgcol, bgio, ip, nir_dest_num_components(instr->dest), 0);
 
       load_front_face();
@@ -709,9 +731,8 @@ bool FragmentShaderFromNir::emit_load_input(nir_intrinsic_instr* instr)
       auto & color_input  = static_cast<ShaderInputColor&> (io);
       auto& bgio = m_shaderio.input(color_input.back_color_input_index());
 
-      bgio.set_gpr(allocate_temp_register());
-
-      GPRVector bgcol(bgio.gpr(), {0,1,2,3});
+      GPRVector bgcol = get_temp_vec4();
+      bgio.set_gpr(bgcol.sel());
       load_interpolated(bgcol, bgio, ip, num_components, 0);
 
       load_front_face();
@@ -726,7 +747,6 @@ bool FragmentShaderFromNir::emit_load_input(nir_intrinsic_instr* instr)
    }
 
    if (nir_intrinsic_component(instr) != 0) {
-      std::cerr << "move in right pos \n";
       for (unsigned i = 0; i < nir_dest_num_components(instr->dest); ++i) {
          ir = new AluInstruction(op1_mov, from_nir(instr->dest, i), dst[i + nir_intrinsic_component(instr)], {alu_write});
          emit_instruction(ir);
@@ -888,6 +908,77 @@ bool FragmentShaderFromNir::load_interpolated_two_comp_for_one(GPRVector &dest,
 }
 
 
+bool FragmentShaderFromNir::emit_export_pixel(nir_intrinsic_instr* instr, int outputs)
+{
+   std::array<uint32_t,4> swizzle;
+   unsigned writemask = nir_intrinsic_write_mask(instr);
+   auto semantics = nir_intrinsic_io_semantics(instr);
+   unsigned driver_location = nir_intrinsic_base(instr);
+
+   switch (semantics.location) {
+   case FRAG_RESULT_DEPTH:
+      writemask = 1;
+      swizzle = {0,7,7,7};
+      break;
+   case FRAG_RESULT_STENCIL:
+      writemask = 2;
+      swizzle = {7,0,7,7};
+      break;
+   case FRAG_RESULT_SAMPLE_MASK:
+      writemask = 4;
+      swizzle = {7,7,0,7};
+      break;
+   default:
+      for (int i = 0; i < 4; ++i) {
+         swizzle[i] = (i < instr->num_components) ? i : 7;
+      }
+   }
+
+   auto value = vec_from_nir_with_fetch_constant(instr->src[0], writemask, swizzle);
+
+   set_output(driver_location, value.sel());
+
+   if (semantics.location == FRAG_RESULT_COLOR ||
+       (semantics.location >= FRAG_RESULT_DATA0 &&
+        semantics.location <= FRAG_RESULT_DATA7)) {
+      for (int k = 0 ; k < outputs; ++k) {
+
+         unsigned location = (m_dual_source_blend && (semantics.location == FRAG_RESULT_COLOR)
+                             ? semantics.dual_source_blend_index : driver_location) + k - m_depth_exports;
+
+         sfn_log << SfnLog::io << "Pixel output at loc:" << location << "\n";
+
+         if (location >= m_max_color_exports) {
+            sfn_log << SfnLog::io << "Pixel output loc:" << location
+                    << " dl:" << driver_location
+                    << " skipped  because  we have only "   << m_max_color_exports << " CBs\n";
+            continue;
+         }
+
+         m_last_pixel_export = new ExportInstruction(location, value, ExportInstruction::et_pixel);
+
+         if (sh_info().ps_export_highest < location)
+            sh_info().ps_export_highest = location;
+
+         sh_info().nr_ps_color_exports++;
+
+         unsigned mask = (0xfu << (location * 4));
+         sh_info().ps_color_export_mask |= mask;
+
+         emit_export_instruction(m_last_pixel_export);
+      };
+   } else if (semantics.location == FRAG_RESULT_DEPTH ||
+              semantics.location == FRAG_RESULT_STENCIL ||
+              semantics.location == FRAG_RESULT_SAMPLE_MASK) {
+      m_depth_exports++;
+      emit_export_instruction(new ExportInstruction(61, value, ExportInstruction::et_pixel));
+   } else {
+      return false;
+   }
+   return true;
+}
+
+
 bool FragmentShaderFromNir::emit_export_pixel(const nir_variable *out_var, nir_intrinsic_instr* instr, int outputs)
 {
    std::array<uint32_t,4> swizzle;
@@ -920,7 +1011,8 @@ bool FragmentShaderFromNir::emit_export_pixel(const nir_variable *out_var, nir_i
         out_var->data.location <= FRAG_RESULT_DATA7)) {
       for (int k = 0 ; k < outputs; ++k) {
 
-         unsigned location = (m_dual_source_blend ? out_var->data.index : out_var->data.driver_location) + k - m_depth_exports;
+         unsigned location = (m_dual_source_blend && (out_var->data.location == FRAG_RESULT_COLOR)
+                             ? out_var->data.index : out_var->data.driver_location) + k - m_depth_exports;
 
          sfn_log << SfnLog::io << "Pixel output " << out_var->name << " at loc:" << location << "\n";
 
@@ -961,9 +1053,10 @@ void FragmentShaderFromNir::do_finalize()
 
    sfn_log << SfnLog::io << "Have " << sh_info().ninput << " inputs\n";
    for (size_t i = 0; i < sh_info().ninput; ++i) {
-      int ij_idx = (m_shaderio.input(i).ij_index() < 6 &&
-                    m_shaderio.input(i).ij_index() >= 0) ? m_shaderio.input(i).ij_index() : 0;
-      m_shaderio.input(i).set_ioinfo(sh_info().input[i], m_interpolator[ij_idx].ij_index);
+      ShaderInput& input = m_shaderio.input(i);
+      int ij_idx = (input.ij_index() < 6 &&
+                    input.ij_index() >= 0) ? input.ij_index() : 0;
+      input.set_ioinfo(sh_info().input[i], m_interpolator[ij_idx].ij_index);
    }
 
    sh_info().two_side = m_shaderio.two_sided();

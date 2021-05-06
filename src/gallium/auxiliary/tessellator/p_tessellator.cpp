@@ -49,21 +49,21 @@ namespace pipe_tessellator_wrap
                 enum pipe_tess_spacing ts_spacing,
                 bool tes_vertex_order_cw, bool tes_point_mode)
       {
-         static D3D11_TESSELLATOR_PARTITIONING CVT_TS_D3D_PARTITIONING[] = {
-                                                                            D3D11_TESSELLATOR_PARTITIONING_FRACTIONAL_ODD,  // PIPE_TESS_SPACING_ODD
-                                                                            D3D11_TESSELLATOR_PARTITIONING_FRACTIONAL_EVEN, // PIPE_TESS_SPACING_EVEN
-                                                                            D3D11_TESSELLATOR_PARTITIONING_INTEGER,         // PIPE_TESS_SPACING_EQUAL
+         static PIPE_TESSELLATOR_PARTITIONING CVT_TS_D3D_PARTITIONING[] = {
+                                                                            PIPE_TESSELLATOR_PARTITIONING_FRACTIONAL_ODD,  // PIPE_TESS_SPACING_ODD
+                                                                            PIPE_TESSELLATOR_PARTITIONING_FRACTIONAL_EVEN, // PIPE_TESS_SPACING_EVEN
+                                                                            PIPE_TESSELLATOR_PARTITIONING_INTEGER,         // PIPE_TESS_SPACING_EQUAL
          };
 
-         D3D11_TESSELLATOR_OUTPUT_PRIMITIVE out_prim;
+         PIPE_TESSELLATOR_OUTPUT_PRIMITIVE out_prim;
          if (tes_point_mode)
-            out_prim = D3D11_TESSELLATOR_OUTPUT_POINT;
+            out_prim = PIPE_TESSELLATOR_OUTPUT_POINT;
          else if (tes_prim_mode == PIPE_PRIM_LINES)
-            out_prim = D3D11_TESSELLATOR_OUTPUT_LINE;
+            out_prim = PIPE_TESSELLATOR_OUTPUT_LINE;
          else if (tes_vertex_order_cw)
-            out_prim = D3D11_TESSELLATOR_OUTPUT_TRIANGLE_CW;
+            out_prim = PIPE_TESSELLATOR_OUTPUT_TRIANGLE_CW;
          else
-            out_prim = D3D11_TESSELLATOR_OUTPUT_TRIANGLE_CCW;
+            out_prim = PIPE_TESSELLATOR_OUTPUT_TRIANGLE_CCW;
 
          SUPER::Init(CVT_TS_D3D_PARTITIONING[ts_spacing],
                      out_prim);

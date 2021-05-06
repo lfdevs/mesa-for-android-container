@@ -118,6 +118,15 @@
       .value = { ._string = #def },                             \
    },
 
+#define DRI_CONF_OPT_S_NODEF(_name, _desc) {                    \
+      .desc = _desc,                                            \
+      .info = {                                                 \
+         .name = #_name,                                        \
+         .type = DRI_STRING,                                    \
+      },                                                        \
+      .value = { ._string = "" },                               \
+   },
+
 /**
  * \brief Debugging options
  */
@@ -207,8 +216,8 @@
    DRI_CONF_OPT_B(allow_incorrect_primitive_id, def, \
                   "Allows drawing display list using merged draws (might cause invalid gl_PrimitiveID values).")
 
-#define DRI_CONF_FORCE_GL_VENDOR(def) \
-   DRI_CONF_OPT_S(force_gl_vendor, def, "Override GPU vendor string.")
+#define DRI_CONF_FORCE_GL_VENDOR() \
+   DRI_CONF_OPT_S_NODEF(force_gl_vendor, "Override GPU vendor string.")
 
 #define DRI_CONF_FORCE_COMPAT_PROFILE(def) \
    DRI_CONF_OPT_B(force_compat_profile, def, \
@@ -221,17 +230,24 @@
 #define DRI_CONF_FORCE_GL_NAMES_REUSE(def) \
    DRI_CONF_OPT_B(force_gl_names_reuse, def, "Force GL names reuse")
 
-#define DRI_CONF_GLX_EXTENSION_OVERRIDE(def) \
-   DRI_CONF_OPT_S(glx_extension_override, def, \
+#define DRI_CONF_TRANSCODE_ETC(def) \
+   DRI_CONF_OPT_B(transcode_etc, def, "Transcode ETC formats to DXTC if unsupported")
+
+#define DRI_CONF_GLX_EXTENSION_OVERRIDE() \
+   DRI_CONF_OPT_S_NODEF(glx_extension_override, \
                   "Allow enabling/disabling a list of GLX extensions")
 
-#define DRI_CONF_INDIRECT_GL_EXTENSION_OVERRIDE(def) \
-   DRI_CONF_OPT_S(indirect_gl_extension_override, def, \
+#define DRI_CONF_INDIRECT_GL_EXTENSION_OVERRIDE() \
+   DRI_CONF_OPT_S_NODEF(indirect_gl_extension_override, \
                   "Allow enabling/disabling a list of indirect-GL extensions")
 
 #define DRI_CONF_DISABLE_PROTECTED_CONTENT_CHECK(def) \
    DRI_CONF_OPT_B(disable_protected_content_check, def, \
                   "Don't reject image import if protected_content attribute doesn't match")
+
+#define DRI_CONF_IGNORE_MAP_UNSYNCHRONIZED(def) \
+   DRI_CONF_OPT_B(ignore_map_unsynchronized, def, \
+                  "Ignore GL_MAP_UNSYNCHRONIZED_BIT, workaround for games that use it incorrectly")
 
 /**
  * \brief Image quality-related options
@@ -354,11 +370,11 @@
  */
 #define DRI_CONF_SECTION_INITIALIZATION DRI_CONF_SECTION("Initialization")
 
-#define DRI_CONF_DEVICE_ID_PATH_TAG(def) \
-   DRI_CONF_OPT_S(device_id, def, "Define the graphic device to use if possible")
+#define DRI_CONF_DEVICE_ID_PATH_TAG() \
+   DRI_CONF_OPT_S_NODEF(device_id, "Define the graphic device to use if possible")
 
-#define DRI_CONF_DRI_DRIVER(def) \
-   DRI_CONF_OPT_S(dri_driver, def, "Override the DRI driver to load")
+#define DRI_CONF_DRI_DRIVER() \
+   DRI_CONF_OPT_S_NODEF(dri_driver, "Override the DRI driver to load")
 
 /**
  * \brief Gallium-Nine specific configuration options
@@ -384,10 +400,10 @@
 
 #define DRI_CONF_NINE_TEARFREEDISCARD(def) \
    DRI_CONF_OPT_B(tearfree_discard, def, \
-                  "Whether to make d3d's presentation mode DISCARD (games usually use that mode) Tear Free. If rendering above screen refresh, some frames will get skipped. false by default.")
+                  "Whether to make d3d's presentation mode DISCARD (games usually use that mode) Tear Free. If rendering above screen refresh, some frames will get skipped. true by default.")
 
 #define DRI_CONF_NINE_CSMT(def) \
-   DRI_CONF_OPT_I(csmt_int, def, 0, 0, \
+   DRI_CONF_OPT_I(csmt_force, def, 0, 0, \
                   "If set to 1, force gallium nine CSMT. If set to 0, disable it. By default (-1) CSMT is enabled on known thread-safe drivers.")
 
 #define DRI_CONF_NINE_DYNAMICTEXTUREWORKAROUND(def) \
@@ -397,6 +413,14 @@
 #define DRI_CONF_NINE_SHADERINLINECONSTANTS(def) \
    DRI_CONF_OPT_B(shader_inline_constants, def, \
                   "If set to true, recompile shaders with integer or boolean constants when the values are known. Can cause stutter, but can increase slightly performance.")
+
+#define DRI_CONF_NINE_SHMEM_LIMIT() \
+   DRI_CONF_OPT_I(texture_memory_limit, 128, 0, 0, \
+                  "In MB the limit of virtual memory used for textures until shmem files are unmapped (default 128MB, 32bits only). If negative disables shmem. Set to a low amount to reduce virtual memory usage, but can incur a small perf hit if too low.")
+
+#define DRI_CONF_NINE_FORCESWRENDERINGONCPU(def) \
+   DRI_CONF_OPT_B(force_sw_rendering_on_cpu, def, \
+                  "If set to false, emulates software rendering on the requested device, else uses a software renderer.")
 
 /**
  * \brief radeonsi specific configuration options

@@ -65,7 +65,6 @@ supported_buffer_bitmask(const struct gl_context *ctx,
    }
    else {
       /* A window system framebuffer */
-      GLint i;
       mask = BUFFER_BIT_FRONT_LEFT; /* always have this */
       if (fb->Visual.stereoMode) {
          mask |= BUFFER_BIT_FRONT_RIGHT;
@@ -75,10 +74,6 @@ supported_buffer_bitmask(const struct gl_context *ctx,
       }
       else if (fb->Visual.doubleBufferMode) {
          mask |= BUFFER_BIT_BACK_LEFT;
-      }
-
-      for (i = 0; i < fb->Visual.numAuxBuffers; i++) {
-         mask |= (BUFFER_BIT_AUX0 << i);
       }
    }
 
@@ -161,7 +156,6 @@ draw_buffer_enum_to_bitmask(const struct gl_context *ctx, GLenum buffer)
       case GL_FRONT_LEFT:
          return BUFFER_BIT_FRONT_LEFT;
       case GL_AUX0:
-         return BUFFER_BIT_AUX0;
       case GL_AUX1:
       case GL_AUX2:
       case GL_AUX3:
@@ -220,10 +214,9 @@ read_buffer_enum_to_index(const struct gl_context *ctx, GLenum buffer)
          return BUFFER_FRONT_LEFT;
       case GL_FRONT_LEFT:
          return BUFFER_FRONT_LEFT;
-      case GL_AUX0:
-         return BUFFER_AUX0;
       case GL_FRONT_AND_BACK:
          return BUFFER_FRONT_LEFT;
+      case GL_AUX0:
       case GL_AUX1:
       case GL_AUX2:
       case GL_AUX3:
@@ -288,7 +281,7 @@ draw_buffer(struct gl_context *ctx, struct gl_framebuffer *fb,
 {
    GLbitfield destMask;
 
-   FLUSH_VERTICES(ctx, 0);
+   FLUSH_VERTICES(ctx, 0, GL_COLOR_BUFFER_BIT);
 
    if (MESA_VERBOSE & VERBOSE_API) {
       _mesa_debug(ctx, "%s %s\n", caller, _mesa_enum_to_string(buffer));
@@ -435,7 +428,7 @@ draw_buffers(struct gl_context *ctx, struct gl_framebuffer *fb, GLsizei n,
    GLbitfield usedBufferMask, supportedMask;
    GLbitfield destMask[MAX_DRAW_BUFFERS];
 
-   FLUSH_VERTICES(ctx, 0);
+   FLUSH_VERTICES(ctx, 0, GL_COLOR_BUFFER_BIT);
 
    if (!no_error) {
       /* Turns out n==0 is a valid input that should not produce an error.
@@ -733,7 +726,7 @@ _mesa_NamedFramebufferDrawBuffers(GLuint framebuffer, GLsizei n,
 static void
 updated_drawbuffers(struct gl_context *ctx, struct gl_framebuffer *fb)
 {
-   FLUSH_VERTICES(ctx, _NEW_BUFFERS);
+   FLUSH_VERTICES(ctx, _NEW_BUFFERS, GL_COLOR_BUFFER_BIT);
 
    if (ctx->API == API_OPENGL_COMPAT && !ctx->Extensions.ARB_ES2_compatibility) {
       /* Flag the FBO as requiring validation. */
@@ -900,7 +893,7 @@ read_buffer(struct gl_context *ctx, struct gl_framebuffer *fb,
 {
    gl_buffer_index srcBuffer;
 
-   FLUSH_VERTICES(ctx, 0);
+   FLUSH_VERTICES(ctx, 0, GL_PIXEL_MODE_BIT);
 
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "%s %s\n", caller, _mesa_enum_to_string(buffer));

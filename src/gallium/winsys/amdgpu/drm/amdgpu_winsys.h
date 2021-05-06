@@ -39,6 +39,19 @@ struct amdgpu_cs;
 
 #define NUM_SLAB_ALLOCATORS 3
 
+struct amdgpu_screen_winsys {
+   struct radeon_winsys base;
+   struct amdgpu_winsys *aws;
+   int fd;
+   struct pipe_reference reference;
+   struct amdgpu_screen_winsys *next;
+
+   /* Maps a BO to its KMS handle valid for this DRM file descriptor
+    * Protected by amdgpu_winsys::sws_list_lock
+    */
+   struct hash_table *kms_handles;
+};
+
 struct amdgpu_winsys {
    struct pipe_reference reference;
 
@@ -66,6 +79,8 @@ struct amdgpu_winsys {
    uint64_t allocated_gtt;
    uint64_t mapped_vram;
    uint64_t mapped_gtt;
+   uint64_t slab_wasted_vram;
+   uint64_t slab_wasted_gtt;
    uint64_t buffer_wait_time; /* time spent in buffer_wait in ns */
    uint64_t num_gfx_IBs;
    uint64_t num_sdma_IBs;
@@ -104,19 +119,11 @@ struct amdgpu_winsys {
     * and re-imported buffers. */
    struct hash_table *bo_export_table;
    simple_mtx_t bo_export_table_lock;
-};
 
-struct amdgpu_screen_winsys {
-   struct radeon_winsys base;
-   struct amdgpu_winsys *aws;
-   int fd;
-   struct pipe_reference reference;
-   struct amdgpu_screen_winsys *next;
-
-   /* Maps a BO to its KMS handle valid for this DRM file descriptor
-    * Protected by amdgpu_winsys::sws_list_lock
+   /* Since most winsys functions require struct radeon_winsys *, dummy_ws.base is used
+    * for invoking them because sws_list can be NULL.
     */
-   struct hash_table *kms_handles;
+   struct amdgpu_screen_winsys dummy_ws;
 };
 
 static inline struct amdgpu_screen_winsys *

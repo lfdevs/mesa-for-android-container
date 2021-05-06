@@ -23,9 +23,7 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 include $(LOCAL_PATH)/Makefile.sources
 
-ANV_ENTRYPOINTS_GEN_SCRIPT := $(LOCAL_PATH)/vulkan/anv_entrypoints_gen.py
-ANV_EXTENSIONS_GEN_SCRIPT := $(LOCAL_PATH)/vulkan/anv_extensions_gen.py
-ANV_EXTENSIONS_SCRIPT := $(LOCAL_PATH)/vulkan/anv_extensions.py
+VK_ENTRYPOINTS_GEN_SCRIPT := $(MESA_TOP)/src/vulkan/util/vk_entrypoints_gen.py
 VULKAN_API_XML := $(MESA_TOP)/src/vulkan/registry/vk.xml
 
 VULKAN_COMMON_INCLUDES := \
@@ -53,6 +51,7 @@ VULKAN_COMMON_HEADER_LIBRARIES := \
 endif
 
 ANV_STATIC_LIBRARIES := \
+	libmesa_vulkan_util \
 	libmesa_vulkan_common \
 	libmesa_genxml \
 	libmesa_nir
@@ -64,15 +63,15 @@ ANV_SHARED_LIBRARIES += libnativewindow
 endif
 
 #
-# libanv for gen7
+# libanv for gfx7
 #
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := libmesa_anv_gen7
+LOCAL_MODULE := libmesa_anv_gfx7
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 
-LOCAL_SRC_FILES := $(VULKAN_GEN7_FILES)
-LOCAL_CFLAGS := -DGEN_VERSIONx10=70
+LOCAL_SRC_FILES := $(VULKAN_GFX7_FILES)
+LOCAL_CFLAGS := -DGFX_VERx10=70
 
 LOCAL_C_INCLUDES := $(VULKAN_COMMON_INCLUDES)
 
@@ -85,15 +84,15 @@ include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 #
-# libanv for gen75
+# libanv for gfx75
 #
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := libmesa_anv_gen75
+LOCAL_MODULE := libmesa_anv_gfx75
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 
-LOCAL_SRC_FILES := $(VULKAN_GEN75_FILES)
-LOCAL_CFLAGS := -DGEN_VERSIONx10=75
+LOCAL_SRC_FILES := $(VULKAN_GFX75_FILES)
+LOCAL_CFLAGS := -DGFX_VERx10=75
 
 LOCAL_C_INCLUDES := $(VULKAN_COMMON_INCLUDES)
 
@@ -106,15 +105,15 @@ include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 #
-# libanv for gen8
+# libanv for gfx8
 #
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := libmesa_anv_gen8
+LOCAL_MODULE := libmesa_anv_gfx8
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 
-LOCAL_SRC_FILES := $(VULKAN_GEN8_FILES)
-LOCAL_CFLAGS := -DGEN_VERSIONx10=80
+LOCAL_SRC_FILES := $(VULKAN_GFX8_FILES)
+LOCAL_CFLAGS := -DGFX_VERx10=80
 
 LOCAL_C_INCLUDES := $(VULKAN_COMMON_INCLUDES)
 
@@ -127,15 +126,15 @@ include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 #
-# libanv for gen9
+# libanv for gfx9
 #
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := libmesa_anv_gen9
+LOCAL_MODULE := libmesa_anv_gfx9
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 
-LOCAL_SRC_FILES := $(VULKAN_GEN9_FILES)
-LOCAL_CFLAGS := -DGEN_VERSIONx10=90
+LOCAL_SRC_FILES := $(VULKAN_GFX9_FILES)
+LOCAL_CFLAGS := -DGFX_VERx10=90
 
 LOCAL_C_INCLUDES := $(VULKAN_COMMON_INCLUDES)
 
@@ -148,15 +147,15 @@ include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 #
-# libanv for gen11
+# libanv for gfx11
 #
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := libmesa_anv_gen11
+LOCAL_MODULE := libmesa_anv_gfx11
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 
-LOCAL_SRC_FILES := $(VULKAN_GEN11_FILES)
-LOCAL_CFLAGS := -DGEN_VERSIONx10=110
+LOCAL_SRC_FILES := $(VULKAN_GFX11_FILES)
+LOCAL_CFLAGS := -DGFX_VERx10=110
 
 LOCAL_C_INCLUDES := $(VULKAN_COMMON_INCLUDES)
 
@@ -169,15 +168,15 @@ include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 #
-# libanv for gen12
+# libanv for gfx12
 #
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := libmesa_anv_gen12
+LOCAL_MODULE := libmesa_anv_gfx12
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 
-LOCAL_SRC_FILES := $(VULKAN_GEN12_FILES)
-LOCAL_CFLAGS := -DGEN_VERSIONx10=120
+LOCAL_SRC_FILES := $(VULKAN_GFX12_FILES)
+LOCAL_CFLAGS := -DGFX_VERx10=120
 
 LOCAL_C_INCLUDES := $(VULKAN_COMMON_INCLUDES)
 
@@ -190,15 +189,15 @@ include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 #
-# libanv for gen125
+# libanv for gfx125
 #
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := libmesa_anv_gen125
+LOCAL_MODULE := libmesa_anv_gfx125
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 
-LOCAL_SRC_FILES := $(VULKAN_GEN125_FILES)
-LOCAL_CFLAGS := -DGEN_VERSIONx10=125
+LOCAL_SRC_FILES := $(VULKAN_GFX125_FILES)
+LOCAL_CFLAGS := -DGFX_VERx10=125
 
 LOCAL_C_INCLUDES := $(VULKAN_COMMON_INCLUDES)
 
@@ -236,38 +235,24 @@ LOCAL_STATIC_LIBRARIES := \
 	libmesa_vulkan_util \
 	libmesa_util
 
-# The rule generates both C and H files, but due to some strange
-# reason generating the files once leads to link-time issues.
-# Work around create them here as well - we're safe from race
-# conditions since they are stored in another location.
-
 LOCAL_GENERATED_SOURCES := $(addprefix $(intermediates)/,$(VULKAN_GENERATED_FILES))
 
-$(intermediates)/vulkan/anv_entrypoints.c: $(ANV_ENTRYPOINTS_GEN_SCRIPT) \
-					   $(ANV_EXTENSIONS_SCRIPT) \
+ANV_VK_ENTRYPOINTS_GEN_ARGS= \
+	--proto --weak --prefix anv \
+	--device-prefix gfx7 --device-prefix gfx75 \
+	--device-prefix gfx8 --device-prefix gfx9 \
+	--device-prefix gfx11 --device-prefix gfx12 \
+	--device-prefix gfx125
+
+$(intermediates)/vulkan/anv_entrypoints.c: $(VK_ENTRYPOINTS_GEN_SCRIPT) \
 					   $(VULKAN_API_XML)
 	@mkdir -p $(dir $@)
-	$(MESA_PYTHON2) $(ANV_ENTRYPOINTS_GEN_SCRIPT) \
+	$(MESA_PYTHON2) $(VK_ENTRYPOINTS_GEN_SCRIPT) \
 		--xml $(VULKAN_API_XML) \
-		--outdir $(dir $@)
+		$(ANV_VK_ENTRYPOINTS_GEN_ARGS) \
+		--out-c $@ --out-h $(dir $@)/anv_entrypoints.h
 
 $(intermediates)/vulkan/anv_entrypoints.h: $(intermediates)/vulkan/anv_entrypoints.c
-
-$(intermediates)/vulkan/anv_extensions.c: $(ANV_EXTENSIONS_GEN_SCRIPT) \
-					  $(ANV_EXTENSIONS_SCRIPT) \
-					  $(VULKAN_API_XML)
-	@mkdir -p $(dir $@)
-	$(MESA_PYTHON2) $(ANV_EXTENSIONS_GEN_SCRIPT) \
-		--xml $(VULKAN_API_XML) \
-		--out-c $@
-
-$(intermediates)/vulkan/anv_extensions.h: $(ANV_EXTENSIONS_GEN_SCRIPT) \
-					   $(ANV_EXTENSIONS_SCRIPT) \
-					   $(VULKAN_API_XML)
-	@mkdir -p $(dir $@)
-	$(MESA_PYTHON2) $(ANV_EXTENSIONS_GEN_SCRIPT) \
-		--xml $(VULKAN_API_XML) \
-		--out-h $@
 
 LOCAL_SHARED_LIBRARIES := $(ANV_SHARED_LIBRARIES)
 LOCAL_HEADER_LIBRARIES += $(VULKAN_COMMON_HEADER_LIBRARIES)
@@ -308,13 +293,13 @@ LOCAL_WHOLE_STATIC_LIBRARIES := \
 	libmesa_intel_perf \
 	libmesa_vulkan_common \
 	libmesa_vulkan_util \
-	libmesa_anv_gen7 \
-	libmesa_anv_gen75 \
-	libmesa_anv_gen8 \
-	libmesa_anv_gen9 \
-	libmesa_anv_gen11 \
-	libmesa_anv_gen12 \
-	libmesa_anv_gen125 \
+	libmesa_anv_gfx7 \
+	libmesa_anv_gfx75 \
+	libmesa_anv_gfx8 \
+	libmesa_anv_gfx9 \
+	libmesa_anv_gfx11 \
+	libmesa_anv_gfx12 \
+	libmesa_anv_gfx125 \
 	libmesa_intel_compiler
 
 LOCAL_SHARED_LIBRARIES := $(ANV_SHARED_LIBRARIES) libz libsync liblog libcutils

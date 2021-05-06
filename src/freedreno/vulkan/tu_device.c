@@ -35,7 +35,6 @@
 #include <sys/sysinfo.h>
 #include <unistd.h>
 
-#include "compiler/glsl_types.h"
 #include "util/debug.h"
 #include "util/disk_cache.h"
 #include "util/u_atomic.h"
@@ -87,12 +86,12 @@ tu_physical_device_init(struct tu_physical_device *device,
    default:
       result = vk_startup_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
                                  "device %s is unsupported", device->name);
-      goto fail;
+      goto fail_fds;
    }
    if (tu_device_get_cache_uuid(device->gpu_id, device->cache_uuid)) {
       result = vk_startup_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
                                  "cannot generate UUID");
-      goto fail;
+      goto fail_fds;
    }
 
    /* The gpu id is already embedded in the uuid so we just pass "tu"
@@ -108,19 +107,32 @@ tu_physical_device_init(struct tu_physical_device *device,
    fd_get_driver_uuid(device->driver_uuid);
    fd_get_device_uuid(device->device_uuid, device->gpu_id);
 
-   tu_physical_device_get_supported_extensions(device, &device->supported_extensions);
+   struct vk_device_extension_table supported_extensions;
+   tu_physical_device_get_supported_extensions(device, &supported_extensions);
+
+   struct vk_physical_device_dispatch_table dispatch_table;
+   vk_physical_device_dispatch_table_from_entrypoints(
+      &dispatch_table, &tu_physical_device_entrypoints, true);
+
+   result = vk_physical_device_init(&device->vk, &instance->vk,
+                                    &supported_extensions,
+                                    &dispatch_table);
+   if (result != VK_SUCCESS)
+      goto fail_fds;
 
 #if TU_HAS_SURFACE
    result = tu_wsi_init(device);
    if (result != VK_SUCCESS) {
       vk_startup_errorf(instance, result, "WSI init failure");
-      goto fail;
+      goto fail_vk_pd_init;
    }
 #endif
 
    return VK_SUCCESS;
 
-fail:
+fail_vk_pd_init:
+   vk_physical_device_finish(&device->vk);
+fail_fds:
    close(device->local_fd);
    if (device->master_fd != -1)
       close(device->master_fd);
@@ -139,7 +151,7 @@ tu_physical_device_finish(struct tu_physical_device *device)
    if (device->master_fd != -1)
       close(device->master_fd);
 
-   vk_object_base_finish(&device->base);
+   vk_physical_device_finish(&device->vk);
 }
 
 static VKAPI_ATTR void *
@@ -194,16 +206,6 @@ tu_get_debug_option_name(int id)
    return tu_debug_options[id].string;
 }
 
-static int
-tu_get_instance_extension_index(const char *name)
-{
-   for (unsigned i = 0; i < TU_INSTANCE_EXTENSION_COUNT; ++i) {
-      if (strcmp(name, tu_instance_extensions[i].extensionName) == 0)
-         return i;
-   }
-   return -1;
-}
-
 VkResult
 tu_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                   const VkAllocationCallbacks *pAllocator,
@@ -214,28 +216,28 @@ tu_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO);
 
-   uint32_t client_version;
-   if (pCreateInfo->pApplicationInfo &&
-       pCreateInfo->pApplicationInfo->apiVersion != 0) {
-      client_version = pCreateInfo->pApplicationInfo->apiVersion;
-   } else {
-      tu_EnumerateInstanceVersion(&client_version);
-   }
+   if (pAllocator == NULL)
+      pAllocator = &default_alloc;
 
-   instance = vk_zalloc2(&default_alloc, pAllocator, sizeof(*instance), 8,
-                         VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+   instance = vk_zalloc(pAllocator, sizeof(*instance), 8,
+                        VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
 
    if (!instance)
       return vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   vk_object_base_init(NULL, &instance->base, VK_OBJECT_TYPE_INSTANCE);
+   struct vk_instance_dispatch_table dispatch_table;
+   vk_instance_dispatch_table_from_entrypoints(
+      &dispatch_table, &tu_instance_entrypoints, true);
 
-   if (pAllocator)
-      instance->alloc = *pAllocator;
-   else
-      instance->alloc = default_alloc;
+   result = vk_instance_init(&instance->vk,
+                             &tu_instance_extensions_supported,
+                             &dispatch_table,
+                             pCreateInfo, pAllocator);
+   if (result != VK_SUCCESS) {
+      vk_free(pAllocator, instance);
+      return vk_error(NULL, result);
+   }
 
-   instance->api_version = client_version;
    instance->physical_device_count = -1;
 
    instance->debug_flags =
@@ -251,29 +253,6 @@ tu_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
 
    if (instance->debug_flags & TU_DEBUG_STARTUP)
       mesa_logi("Created an instance");
-
-   for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; i++) {
-      const char *ext_name = pCreateInfo->ppEnabledExtensionNames[i];
-      int index = tu_get_instance_extension_index(ext_name);
-
-      if (index < 0 || !tu_instance_extensions_supported.extensions[index]) {
-         vk_object_base_finish(&instance->base);
-         vk_free2(&default_alloc, pAllocator, instance);
-         return vk_startup_errorf(instance, VK_ERROR_EXTENSION_NOT_PRESENT,
-                                  "Missing %s", ext_name);
-      }
-
-      instance->enabled_extensions.extensions[index] = true;
-   }
-
-   result = vk_debug_report_instance_init(&instance->debug_report_callbacks);
-   if (result != VK_SUCCESS) {
-      vk_object_base_finish(&instance->base);
-      vk_free2(&default_alloc, pAllocator, instance);
-      return vk_startup_errorf(instance, result, "debug_report setup failure");
-   }
-
-   glsl_type_singleton_init_or_ref();
 
    VG(VALGRIND_CREATE_MEMPOOL(instance, 0, false));
 
@@ -297,12 +276,8 @@ tu_DestroyInstance(VkInstance _instance,
 
    VG(VALGRIND_DESTROY_MEMPOOL(instance));
 
-   glsl_type_singleton_decref();
-
-   vk_debug_report_instance_destroy(&instance->debug_report_callbacks);
-
-   vk_object_base_finish(&instance->base);
-   vk_free(&instance->alloc, instance);
+   vk_instance_finish(&instance->vk);
+   vk_free(&instance->vk.alloc, instance);
 }
 
 VkResult
@@ -365,6 +340,8 @@ void
 tu_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
                               VkPhysicalDeviceFeatures2 *pFeatures)
 {
+   TU_FROM_HANDLE(tu_physical_device, pdevice, physicalDevice);
+
    pFeatures->features = (VkPhysicalDeviceFeatures) {
       .robustBufferAccess = true,
       .fullDrawIndexUint32 = true,
@@ -409,8 +386,8 @@ tu_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
       .shaderInt64 = false,
       .shaderInt16 = false,
       .sparseBinding = false,
-      .variableMultisampleRate = false,
-      .inheritedQueries = false,
+      .variableMultisampleRate = true,
+      .inheritedQueries = true,
    };
 
    vk_foreach_struct(ext, pFeatures->pNext)
@@ -418,7 +395,7 @@ tu_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
       switch (ext->sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES: {
          VkPhysicalDeviceVulkan11Features *features = (void *) ext;
-         features->storageBuffer16BitAccess            = false;
+         features->storageBuffer16BitAccess            = pdevice->gpu_id >= 650;
          features->uniformAndStorageBuffer16BitAccess  = false;
          features->storagePushConstant16               = false;
          features->storageInputOutput16                = false;
@@ -441,33 +418,33 @@ tu_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
          features->storagePushConstant8                = false;
          features->shaderBufferInt64Atomics            = false;
          features->shaderSharedInt64Atomics            = false;
-         features->shaderFloat16                       = false;
+         features->shaderFloat16                       = true;
          features->shaderInt8                          = false;
 
-         features->descriptorIndexing                                 = false;
+         features->descriptorIndexing                                 = true;
          features->shaderInputAttachmentArrayDynamicIndexing          = false;
-         features->shaderUniformTexelBufferArrayDynamicIndexing       = false;
-         features->shaderStorageTexelBufferArrayDynamicIndexing       = false;
-         features->shaderUniformBufferArrayNonUniformIndexing         = false;
-         features->shaderSampledImageArrayNonUniformIndexing          = false;
-         features->shaderStorageBufferArrayNonUniformIndexing         = false;
-         features->shaderStorageImageArrayNonUniformIndexing          = false;
+         features->shaderUniformTexelBufferArrayDynamicIndexing       = true;
+         features->shaderStorageTexelBufferArrayDynamicIndexing       = true;
+         features->shaderUniformBufferArrayNonUniformIndexing         = true;
+         features->shaderSampledImageArrayNonUniformIndexing          = true;
+         features->shaderStorageBufferArrayNonUniformIndexing         = true;
+         features->shaderStorageImageArrayNonUniformIndexing          = true;
          features->shaderInputAttachmentArrayNonUniformIndexing       = false;
-         features->shaderUniformTexelBufferArrayNonUniformIndexing    = false;
-         features->shaderStorageTexelBufferArrayNonUniformIndexing    = false;
+         features->shaderUniformTexelBufferArrayNonUniformIndexing    = true;
+         features->shaderStorageTexelBufferArrayNonUniformIndexing    = true;
          features->descriptorBindingUniformBufferUpdateAfterBind      = false;
-         features->descriptorBindingSampledImageUpdateAfterBind       = false;
-         features->descriptorBindingStorageImageUpdateAfterBind       = false;
-         features->descriptorBindingStorageBufferUpdateAfterBind      = false;
-         features->descriptorBindingUniformTexelBufferUpdateAfterBind = false;
-         features->descriptorBindingStorageTexelBufferUpdateAfterBind = false;
-         features->descriptorBindingUpdateUnusedWhilePending          = false;
-         features->descriptorBindingPartiallyBound                    = false;
-         features->descriptorBindingVariableDescriptorCount           = false;
-         features->runtimeDescriptorArray                             = false;
+         features->descriptorBindingSampledImageUpdateAfterBind       = true;
+         features->descriptorBindingStorageImageUpdateAfterBind       = true;
+         features->descriptorBindingStorageBufferUpdateAfterBind      = true;
+         features->descriptorBindingUniformTexelBufferUpdateAfterBind = true;
+         features->descriptorBindingStorageTexelBufferUpdateAfterBind = true;
+         features->descriptorBindingUpdateUnusedWhilePending          = true;
+         features->descriptorBindingPartiallyBound                    = true;
+         features->descriptorBindingVariableDescriptorCount           = true;
+         features->runtimeDescriptorArray                             = true;
 
          features->samplerFilterMinmax                 = true;
-         features->scalarBlockLayout                   = false;
+         features->scalarBlockLayout                   = true;
          features->imagelessFramebuffer                = false;
          features->uniformBufferStandardLayout         = false;
          features->shaderSubgroupExtendedTypes         = false;
@@ -514,7 +491,7 @@ tu_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES: {
          VkPhysicalDevice16BitStorageFeatures *features =
             (VkPhysicalDevice16BitStorageFeatures *) ext;
-         features->storageBuffer16BitAccess = false;
+         features->storageBuffer16BitAccess = pdevice->gpu_id >= 650;
          features->uniformAndStorageBuffer16BitAccess = false;
          features->storagePushConstant16 = false;
          features->storageInputOutput16 = false;
@@ -530,25 +507,25 @@ tu_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
          VkPhysicalDeviceDescriptorIndexingFeaturesEXT *features =
             (VkPhysicalDeviceDescriptorIndexingFeaturesEXT *) ext;
          features->shaderInputAttachmentArrayDynamicIndexing = false;
-         features->shaderUniformTexelBufferArrayDynamicIndexing = false;
-         features->shaderStorageTexelBufferArrayDynamicIndexing = false;
-         features->shaderUniformBufferArrayNonUniformIndexing = false;
-         features->shaderSampledImageArrayNonUniformIndexing = false;
-         features->shaderStorageBufferArrayNonUniformIndexing = false;
-         features->shaderStorageImageArrayNonUniformIndexing = false;
+         features->shaderUniformTexelBufferArrayDynamicIndexing = true;
+         features->shaderStorageTexelBufferArrayDynamicIndexing = true;
+         features->shaderUniformBufferArrayNonUniformIndexing = true;
+         features->shaderSampledImageArrayNonUniformIndexing = true;
+         features->shaderStorageBufferArrayNonUniformIndexing = true;
+         features->shaderStorageImageArrayNonUniformIndexing = true;
          features->shaderInputAttachmentArrayNonUniformIndexing = false;
-         features->shaderUniformTexelBufferArrayNonUniformIndexing = false;
-         features->shaderStorageTexelBufferArrayNonUniformIndexing = false;
+         features->shaderUniformTexelBufferArrayNonUniformIndexing = true;
+         features->shaderStorageTexelBufferArrayNonUniformIndexing = true;
          features->descriptorBindingUniformBufferUpdateAfterBind = false;
-         features->descriptorBindingSampledImageUpdateAfterBind = false;
-         features->descriptorBindingStorageImageUpdateAfterBind = false;
-         features->descriptorBindingStorageBufferUpdateAfterBind = false;
-         features->descriptorBindingUniformTexelBufferUpdateAfterBind = false;
-         features->descriptorBindingStorageTexelBufferUpdateAfterBind = false;
-         features->descriptorBindingUpdateUnusedWhilePending = false;
-         features->descriptorBindingPartiallyBound = false;
-         features->descriptorBindingVariableDescriptorCount = false;
-         features->runtimeDescriptorArray = false;
+         features->descriptorBindingSampledImageUpdateAfterBind = true;
+         features->descriptorBindingStorageImageUpdateAfterBind = true;
+         features->descriptorBindingStorageBufferUpdateAfterBind = true;
+         features->descriptorBindingUniformTexelBufferUpdateAfterBind = true;
+         features->descriptorBindingStorageTexelBufferUpdateAfterBind = true;
+         features->descriptorBindingUpdateUnusedWhilePending = true;
+         features->descriptorBindingPartiallyBound = true;
+         features->descriptorBindingVariableDescriptorCount = true;
+         features->runtimeDescriptorArray = true;
          break;
       }
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT: {
@@ -620,6 +597,24 @@ tu_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
          feature->performanceCounterMultipleQueryPools = false;
          break;
       }
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR: {
+         VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR *features =
+            (VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR *)ext;
+         features->pipelineExecutableInfo = true;
+         break;
+      }
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES: {
+         VkPhysicalDeviceShaderFloat16Int8Features *features =
+            (VkPhysicalDeviceShaderFloat16Int8Features *) ext;
+         features->shaderFloat16 = true;
+         features->shaderInt8 = false;
+         break;
+      }
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES_EXT: {
+         VkPhysicalDeviceScalarBlockLayoutFeaturesEXT *features = (void *)ext;
+         features->scalarBlockLayout = true;
+         break;
+      }
 
       default:
          break;
@@ -656,7 +651,7 @@ tu_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
       .maxMemoryAllocationCount = UINT32_MAX,
       .maxSamplerAllocationCount = 64 * 1024,
       .bufferImageGranularity = 64,          /* A cache line */
-      .sparseAddressSpaceSize = 0xffffffffu, /* buffer max size */
+      .sparseAddressSpaceSize = 0,
       .maxBoundDescriptorSets = MAX_SETS,
       .maxPerStageDescriptorSamplers = max_descriptor_set_size,
       .maxPerStageDescriptorUniformBuffers = max_descriptor_set_size,
@@ -826,7 +821,7 @@ tu_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
          VkPhysicalDeviceSampleLocationsPropertiesEXT *properties =
             (VkPhysicalDeviceSampleLocationsPropertiesEXT *)ext;
          properties->sampleLocationSampleCounts = 0;
-         if (pdevice->supported_extensions.EXT_sample_locations) {
+         if (pdevice->vk.supported_extensions.EXT_sample_locations) {
             properties->sampleLocationSampleCounts =
                VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT;
          }
@@ -880,6 +875,57 @@ tu_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
          properties->allowCommandBufferQueryCopies = false;
          break;
       }
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES_EXT: {
+         VkPhysicalDeviceDescriptorIndexingPropertiesEXT *props =
+            (VkPhysicalDeviceDescriptorIndexingPropertiesEXT *)ext;
+         props->shaderUniformBufferArrayNonUniformIndexingNative = true;
+         props->shaderSampledImageArrayNonUniformIndexingNative = true;
+         props->shaderStorageBufferArrayNonUniformIndexingNative = true;
+         props->shaderStorageImageArrayNonUniformIndexingNative = true;
+         props->shaderInputAttachmentArrayNonUniformIndexingNative = false;
+         props->robustBufferAccessUpdateAfterBind = false;
+         props->quadDivergentImplicitLod = false;
+
+         props->maxUpdateAfterBindDescriptorsInAllPools = max_descriptor_set_size;
+         props->maxPerStageDescriptorUpdateAfterBindSamplers = max_descriptor_set_size;
+         props->maxPerStageDescriptorUpdateAfterBindUniformBuffers = max_descriptor_set_size;
+         props->maxPerStageDescriptorUpdateAfterBindStorageBuffers = max_descriptor_set_size;
+         props->maxPerStageDescriptorUpdateAfterBindSampledImages = max_descriptor_set_size;
+         props->maxPerStageDescriptorUpdateAfterBindStorageImages = max_descriptor_set_size;
+         props->maxPerStageDescriptorUpdateAfterBindInputAttachments = max_descriptor_set_size;
+         props->maxPerStageUpdateAfterBindResources = max_descriptor_set_size;
+         props->maxDescriptorSetUpdateAfterBindSamplers = max_descriptor_set_size;
+         props->maxDescriptorSetUpdateAfterBindUniformBuffers = max_descriptor_set_size;
+         props->maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = MAX_DYNAMIC_BUFFERS / 2;
+         props->maxDescriptorSetUpdateAfterBindStorageBuffers = max_descriptor_set_size;
+         props->maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = MAX_DYNAMIC_BUFFERS / 2;
+         props->maxDescriptorSetUpdateAfterBindSampledImages = max_descriptor_set_size;
+         props->maxDescriptorSetUpdateAfterBindStorageImages = max_descriptor_set_size;
+         props->maxDescriptorSetUpdateAfterBindInputAttachments = max_descriptor_set_size;
+         break;
+      }
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES: {
+         VkPhysicalDeviceFloatControlsProperties *properties =
+            (VkPhysicalDeviceFloatControlsProperties *) ext;
+         properties->denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL;
+         properties->roundingModeIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL;
+         properties->shaderSignedZeroInfNanPreserveFloat16 = true;
+         properties->shaderSignedZeroInfNanPreserveFloat32 = true;
+         properties->shaderSignedZeroInfNanPreserveFloat64 = false;
+         properties->shaderDenormPreserveFloat16 = false;
+         properties->shaderDenormPreserveFloat32 = false;
+         properties->shaderDenormPreserveFloat64 = false;
+         properties->shaderDenormFlushToZeroFloat16 = true;
+         properties->shaderDenormFlushToZeroFloat32 = true;
+         properties->shaderDenormFlushToZeroFloat64 = false;
+         properties->shaderRoundingModeRTEFloat16 = true;
+         properties->shaderRoundingModeRTEFloat32 = true;
+         properties->shaderRoundingModeRTEFloat64 = false;
+         properties->shaderRoundingModeRTZFloat16 = false;
+         properties->shaderRoundingModeRTZFloat32 = false;
+         properties->shaderRoundingModeRTZFloat64 = false;
+         break;
+      }
       default:
          break;
       }
@@ -908,7 +954,7 @@ tu_GetPhysicalDeviceQueueFamilyProperties2(
    }
 }
 
-static uint64_t
+uint64_t
 tu_get_system_heap_size()
 {
    struct sysinfo info;
@@ -928,15 +974,34 @@ tu_get_system_heap_size()
    return available_ram;
 }
 
+static VkDeviceSize
+tu_get_budget_memory(struct tu_physical_device *physical_device)
+{
+   uint64_t heap_size = physical_device->heap.size;
+   uint64_t heap_used = physical_device->heap.used;
+   uint64_t sys_available;
+   ASSERTED bool has_available_memory =
+      os_get_available_system_memory(&sys_available);
+   assert(has_available_memory);
+
+   /*
+    * Let's not incite the app to starve the system: report at most 90% of
+    * available system memory.
+    */
+   uint64_t heap_available = sys_available * 9 / 10;
+   return MIN2(heap_size, heap_used + heap_available);
+}
+
 void
 tu_GetPhysicalDeviceMemoryProperties2(VkPhysicalDevice pdev,
                                       VkPhysicalDeviceMemoryProperties2 *props2)
 {
-   VkPhysicalDeviceMemoryProperties *props = &props2->memoryProperties;
+   TU_FROM_HANDLE(tu_physical_device, physical_device, pdev);
 
+   VkPhysicalDeviceMemoryProperties *props = &props2->memoryProperties;
    props->memoryHeapCount = 1;
-   props->memoryHeaps[0].size = tu_get_system_heap_size();
-   props->memoryHeaps[0].flags = VK_MEMORY_HEAP_DEVICE_LOCAL_BIT;
+   props->memoryHeaps[0].size = physical_device->heap.size;
+   props->memoryHeaps[0].flags = physical_device->heap.flags;
 
    props->memoryTypeCount = 1;
    props->memoryTypes[0].propertyFlags =
@@ -944,6 +1009,29 @@ tu_GetPhysicalDeviceMemoryProperties2(VkPhysicalDevice pdev,
       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
    props->memoryTypes[0].heapIndex = 0;
+
+   vk_foreach_struct(ext, props2->pNext)
+   {
+      switch (ext->sType) {
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT: {
+         VkPhysicalDeviceMemoryBudgetPropertiesEXT *memory_budget_props =
+            (VkPhysicalDeviceMemoryBudgetPropertiesEXT *) ext;
+         memory_budget_props->heapUsage[0] = physical_device->heap.used;
+         memory_budget_props->heapBudget[0] = tu_get_budget_memory(physical_device);
+
+         /* The heapBudget and heapUsage values must be zero for array elements
+          * greater than or equal to VkPhysicalDeviceMemoryProperties::memoryHeapCount
+          */
+         for (unsigned i = 1; i < VK_MAX_MEMORY_HEAPS; i++) {
+            memory_budget_props->heapBudget[i] = 0u;
+            memory_budget_props->heapUsage[i] = 0u;
+         }
+         break;
+      }
+      default:
+         break;
+      }
+   }
 }
 
 static VkResult
@@ -979,16 +1067,6 @@ tu_queue_finish(struct tu_queue *queue)
    tu_drm_submitqueue_close(queue->device, queue->msm_queue_id);
 }
 
-static int
-tu_get_device_extension_index(const char *name)
-{
-   for (unsigned i = 0; i < TU_DEVICE_EXTENSION_COUNT; ++i) {
-      if (strcmp(name, tu_device_extensions[i].extensionName) == 0)
-         return i;
-   }
-   return -1;
-}
-
 VkResult
 tu_CreateDevice(VkPhysicalDevice physicalDevice,
                 const VkDeviceCreateInfo *pCreateInfo,
@@ -1003,9 +1081,11 @@ tu_CreateDevice(VkPhysicalDevice physicalDevice,
 
    /* Check enabled features */
    if (pCreateInfo->pEnabledFeatures) {
-      VkPhysicalDeviceFeatures supported_features;
-      tu_GetPhysicalDeviceFeatures(physicalDevice, &supported_features);
-      VkBool32 *supported_feature = (VkBool32 *) &supported_features;
+      VkPhysicalDeviceFeatures2 supported_features = {
+         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+      };
+      tu_GetPhysicalDeviceFeatures2(physicalDevice, &supported_features);
+      VkBool32 *supported_feature = (VkBool32 *) &supported_features.features;
       VkBool32 *enabled_feature = (VkBool32 *) pCreateInfo->pEnabledFeatures;
       unsigned num_features =
          sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32);
@@ -1035,13 +1115,22 @@ tu_CreateDevice(VkPhysicalDevice physicalDevice,
       }
    }
 
-   device = vk_zalloc2(&physical_device->instance->alloc, pAllocator,
+   device = vk_zalloc2(&physical_device->instance->vk.alloc, pAllocator,
                        sizeof(*device), 8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
    if (!device)
       return vk_startup_errorf(physical_device->instance, VK_ERROR_OUT_OF_HOST_MEMORY, "OOM");
 
-   vk_device_init(&device->vk, pCreateInfo,
-         &physical_device->instance->alloc, pAllocator);
+   struct vk_device_dispatch_table dispatch_table;
+   vk_device_dispatch_table_from_entrypoints(
+      &dispatch_table, &tu_device_entrypoints, true);
+
+   result = vk_device_init(&device->vk, &physical_device->vk,
+                           &dispatch_table, pCreateInfo, pAllocator);
+   if (result != VK_SUCCESS) {
+      vk_free(&device->vk.alloc, device);
+      return vk_startup_errorf(physical_device->instance, result,
+                               "vk_device_init failed");
+   }
 
    device->instance = physical_device->instance;
    device->physical_device = physical_device;
@@ -1049,20 +1138,6 @@ tu_CreateDevice(VkPhysicalDevice physicalDevice,
    device->_lost = false;
 
    mtx_init(&device->bo_mutex, mtx_plain);
-
-   for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; i++) {
-      const char *ext_name = pCreateInfo->ppEnabledExtensionNames[i];
-      int index = tu_get_device_extension_index(ext_name);
-      if (index < 0 ||
-          !physical_device->supported_extensions.extensions[index]) {
-         vk_free(&device->vk.alloc, device);
-         return vk_startup_errorf(physical_device->instance,
-                                  VK_ERROR_EXTENSION_NOT_PRESENT,
-                                  "Missing device extension '%s'", ext_name);
-      }
-
-      device->enabled_extensions.extensions[index] = true;
-   }
 
    for (unsigned i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
       const VkDeviceQueueCreateInfo *queue_create =
@@ -1224,6 +1299,7 @@ fail_queues:
          vk_free(&device->vk.alloc, device->queues[i]);
    }
 
+   vk_device_finish(&device->vk);
    vk_free(&device->vk.alloc, device);
    return result;
 }
@@ -1261,6 +1337,7 @@ tu_DestroyDevice(VkDevice _device, const VkAllocationCallbacks *pAllocator)
 
    vk_free(&device->vk.alloc, device->bo_list);
    vk_free(&device->vk.alloc, device->bo_idx);
+   vk_device_finish(&device->vk);
    vk_free(&device->vk.alloc, device);
 }
 
@@ -1338,15 +1415,6 @@ tu_EnumerateInstanceLayerProperties(uint32_t *pPropertyCount,
    return VK_SUCCESS;
 }
 
-VkResult
-tu_EnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
-                                  uint32_t *pPropertyCount,
-                                  VkLayerProperties *pProperties)
-{
-   *pPropertyCount = 0;
-   return VK_SUCCESS;
-}
-
 void
 tu_GetDeviceQueue2(VkDevice _device,
                    const VkDeviceQueueInfo2 *pQueueInfo,
@@ -1419,52 +1487,20 @@ tu_EnumerateInstanceExtensionProperties(const char *pLayerName,
                                         uint32_t *pPropertyCount,
                                         VkExtensionProperties *pProperties)
 {
-   VK_OUTARRAY_MAKE(out, pProperties, pPropertyCount);
-
-   /* We spport no lyaers */
    if (pLayerName)
       return vk_error(NULL, VK_ERROR_LAYER_NOT_PRESENT);
 
-   for (int i = 0; i < TU_INSTANCE_EXTENSION_COUNT; i++) {
-      if (tu_instance_extensions_supported.extensions[i]) {
-         vk_outarray_append(&out, prop) { *prop = tu_instance_extensions[i]; }
-      }
-   }
-
-   return vk_outarray_status(&out);
-}
-
-VkResult
-tu_EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice,
-                                      const char *pLayerName,
-                                      uint32_t *pPropertyCount,
-                                      VkExtensionProperties *pProperties)
-{
-   /* We spport no lyaers */
-   TU_FROM_HANDLE(tu_physical_device, device, physicalDevice);
-   VK_OUTARRAY_MAKE(out, pProperties, pPropertyCount);
-
-   /* We spport no lyaers */
-   if (pLayerName)
-      return vk_error(NULL, VK_ERROR_LAYER_NOT_PRESENT);
-
-   for (int i = 0; i < TU_DEVICE_EXTENSION_COUNT; i++) {
-      if (device->supported_extensions.extensions[i]) {
-         vk_outarray_append(&out, prop) { *prop = tu_device_extensions[i]; }
-      }
-   }
-
-   return vk_outarray_status(&out);
+   return vk_enumerate_instance_extension_properties(
+      &tu_instance_extensions_supported, pPropertyCount, pProperties);
 }
 
 PFN_vkVoidFunction
 tu_GetInstanceProcAddr(VkInstance _instance, const char *pName)
 {
    TU_FROM_HANDLE(tu_instance, instance, _instance);
-
-   return tu_lookup_entrypoint_checked(
-      pName, instance ? instance->api_version : 0,
-      instance ? &instance->enabled_extensions : NULL, NULL);
+   return vk_instance_get_proc_addr(&instance->vk,
+                                    &tu_instance_entrypoints,
+                                    pName);
 }
 
 /* The loader wants us to expose a second GetInstanceProcAddr function
@@ -1479,16 +1515,6 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 vk_icdGetInstanceProcAddr(VkInstance instance, const char *pName)
 {
    return tu_GetInstanceProcAddr(instance, pName);
-}
-
-PFN_vkVoidFunction
-tu_GetDeviceProcAddr(VkDevice _device, const char *pName)
-{
-   TU_FROM_HANDLE(tu_device, device, _device);
-
-   return tu_lookup_entrypoint_checked(pName, device->instance->api_version,
-                                       &device->instance->enabled_extensions,
-                                       &device->enabled_extensions);
 }
 
 VkResult
@@ -1508,6 +1534,11 @@ tu_AllocateMemory(VkDevice _device,
       *pMem = VK_NULL_HANDLE;
       return VK_SUCCESS;
    }
+
+   struct tu_memory_heap *mem_heap = &device->physical_device->heap;
+   uint64_t mem_heap_used = p_atomic_read(&mem_heap->used);
+   if (mem_heap_used > mem_heap->size)
+      return vk_error(device->instance, VK_ERROR_OUT_OF_DEVICE_MEMORY);
 
    mem = vk_object_alloc(&device->vk, pAllocator, sizeof(*mem),
                          VK_OBJECT_TYPE_DEVICE_MEMORY);
@@ -1541,6 +1572,17 @@ tu_AllocateMemory(VkDevice _device,
          tu_bo_init_new(device, &mem->bo, pAllocateInfo->allocationSize, false);
    }
 
+
+   if (result == VK_SUCCESS) {
+      mem_heap_used = p_atomic_add_return(&mem_heap->used, mem->bo.size);
+      if (mem_heap_used > mem_heap->size) {
+         p_atomic_add(&mem_heap->used, -mem->bo.size);
+         tu_bo_finish(device, &mem->bo);
+         result = vk_errorf(device->instance, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                            "Out of heap memory");
+      }
+   }
+
    if (result != VK_SUCCESS) {
       vk_object_free(&device->vk, pAllocator, mem);
       return result;
@@ -1562,6 +1604,7 @@ tu_FreeMemory(VkDevice _device,
    if (mem == NULL)
       return;
 
+   p_atomic_add(&device->physical_device->heap.used, -mem->bo.size);
    tu_bo_finish(device, &mem->bo);
    vk_object_free(&device->vk, pAllocator, mem);
 }
@@ -1626,8 +1669,22 @@ tu_GetBufferMemoryRequirements2(
    pMemoryRequirements->memoryRequirements = (VkMemoryRequirements) {
       .memoryTypeBits = 1,
       .alignment = 64,
-      .size = align64(buffer->size, 64),
+      .size = MAX2(align64(buffer->size, 64), buffer->size),
    };
+
+   vk_foreach_struct(ext, pMemoryRequirements->pNext) {
+      switch (ext->sType) {
+      case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
+         VkMemoryDedicatedRequirements *req =
+            (VkMemoryDedicatedRequirements *) ext;
+         req->requiresDedicatedAllocation = false;
+         req->prefersDedicatedAllocation = req->requiresDedicatedAllocation;
+         break;
+      }
+      default:
+         break;
+      }
+   }
 }
 
 void
@@ -1642,6 +1699,20 @@ tu_GetImageMemoryRequirements2(VkDevice device,
       .alignment = image->layout[0].base_align,
       .size = image->total_size
    };
+
+   vk_foreach_struct(ext, pMemoryRequirements->pNext) {
+      switch (ext->sType) {
+      case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
+         VkMemoryDedicatedRequirements *req =
+            (VkMemoryDedicatedRequirements *) ext;
+         req->requiresDedicatedAllocation = image->shareable;
+         req->prefersDedicatedAllocation = req->requiresDedicatedAllocation;
+         break;
+      }
+      default:
+         break;
+      }
+   }
 }
 
 void
@@ -2084,44 +2155,6 @@ tu_GetPhysicalDeviceExternalFenceProperties(
    pExternalFenceProperties->externalFenceFeatures = 0;
 }
 
-VkResult
-tu_CreateDebugReportCallbackEXT(
-   VkInstance _instance,
-   const VkDebugReportCallbackCreateInfoEXT *pCreateInfo,
-   const VkAllocationCallbacks *pAllocator,
-   VkDebugReportCallbackEXT *pCallback)
-{
-   TU_FROM_HANDLE(tu_instance, instance, _instance);
-   return vk_create_debug_report_callback(&instance->debug_report_callbacks,
-                                          pCreateInfo, pAllocator,
-                                          &instance->alloc, pCallback);
-}
-
-void
-tu_DestroyDebugReportCallbackEXT(VkInstance _instance,
-                                 VkDebugReportCallbackEXT _callback,
-                                 const VkAllocationCallbacks *pAllocator)
-{
-   TU_FROM_HANDLE(tu_instance, instance, _instance);
-   vk_destroy_debug_report_callback(&instance->debug_report_callbacks,
-                                    _callback, pAllocator, &instance->alloc);
-}
-
-void
-tu_DebugReportMessageEXT(VkInstance _instance,
-                         VkDebugReportFlagsEXT flags,
-                         VkDebugReportObjectTypeEXT objectType,
-                         uint64_t object,
-                         size_t location,
-                         int32_t messageCode,
-                         const char *pLayerPrefix,
-                         const char *pMessage)
-{
-   TU_FROM_HANDLE(tu_instance, instance, _instance);
-   vk_debug_report(&instance->debug_report_callbacks, flags, objectType,
-                   object, location, messageCode, pLayerPrefix, pMessage);
-}
-
 void
 tu_GetDeviceGroupPeerMemoryFeatures(
    VkDevice device,
@@ -2145,61 +2178,8 @@ void tu_GetPhysicalDeviceMultisamplePropertiesEXT(
 {
    TU_FROM_HANDLE(tu_physical_device, pdevice, physicalDevice);
 
-   if (samples <= VK_SAMPLE_COUNT_4_BIT && pdevice->supported_extensions.EXT_sample_locations)
+   if (samples <= VK_SAMPLE_COUNT_4_BIT && pdevice->vk.supported_extensions.EXT_sample_locations)
       pMultisampleProperties->maxSampleLocationGridSize = (VkExtent2D){ 1, 1 };
    else
       pMultisampleProperties->maxSampleLocationGridSize = (VkExtent2D){ 0, 0 };
-}
-
-
-VkResult
-tu_CreatePrivateDataSlotEXT(VkDevice _device,
-                            const VkPrivateDataSlotCreateInfoEXT* pCreateInfo,
-                            const VkAllocationCallbacks* pAllocator,
-                            VkPrivateDataSlotEXT* pPrivateDataSlot)
-{
-   TU_FROM_HANDLE(tu_device, device, _device);
-   return vk_private_data_slot_create(&device->vk,
-                                      pCreateInfo,
-                                      pAllocator,
-                                      pPrivateDataSlot);
-}
-
-void
-tu_DestroyPrivateDataSlotEXT(VkDevice _device,
-                             VkPrivateDataSlotEXT privateDataSlot,
-                             const VkAllocationCallbacks* pAllocator)
-{
-   TU_FROM_HANDLE(tu_device, device, _device);
-   vk_private_data_slot_destroy(&device->vk, privateDataSlot, pAllocator);
-}
-
-VkResult
-tu_SetPrivateDataEXT(VkDevice _device,
-                     VkObjectType objectType,
-                     uint64_t objectHandle,
-                     VkPrivateDataSlotEXT privateDataSlot,
-                     uint64_t data)
-{
-   TU_FROM_HANDLE(tu_device, device, _device);
-   return vk_object_base_set_private_data(&device->vk,
-                                          objectType,
-                                          objectHandle,
-                                          privateDataSlot,
-                                          data);
-}
-
-void
-tu_GetPrivateDataEXT(VkDevice _device,
-                     VkObjectType objectType,
-                     uint64_t objectHandle,
-                     VkPrivateDataSlotEXT privateDataSlot,
-                     uint64_t* pData)
-{
-   TU_FROM_HANDLE(tu_device, device, _device);
-   vk_object_base_get_private_data(&device->vk,
-                                   objectType,
-                                   objectHandle,
-                                   privateDataSlot,
-                                   pData);
 }

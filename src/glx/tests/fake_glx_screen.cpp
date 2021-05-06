@@ -44,8 +44,6 @@ const struct glx_context_vtable fake_glx_context::vt = {
    NULL,
    NULL,
    NULL,
-   NULL,
-   NULL,
 };
 
 int fake_glx_context::contexts_allocated = 0;

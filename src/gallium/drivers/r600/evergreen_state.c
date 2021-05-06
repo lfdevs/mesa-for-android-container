@@ -756,7 +756,7 @@ static int evergreen_fill_tex_resource_words(struct r600_context *rctx,
 		case PIPE_FORMAT_X32_S8X24_UINT:
 			params->pipe_format = PIPE_FORMAT_S8_UINT;
 			tile_split = tmp->surface.u.legacy.stencil_tile_split;
-			surflevel = tmp->surface.u.legacy.stencil_level;
+			surflevel = tmp->surface.u.legacy.zs.stencil_level;
 			break;
 		default:;
 		}
@@ -847,7 +847,7 @@ static int evergreen_fill_tex_resource_words(struct r600_context *rctx,
 	tex_resource_words[1] = (S_030004_TEX_HEIGHT(height - 1) |
 				       S_030004_TEX_DEPTH(depth - 1) |
 				       S_030004_ARRAY_MODE(array_mode));
-	tex_resource_words[2] = (surflevel[base_level].offset + va) >> 8;
+	tex_resource_words[2] = ((uint64_t)surflevel[base_level].offset_256B * 256 + va) >> 8;
 
 	*skip_mip_address_reloc = false;
 	/* TEX_RESOURCE_WORD3.MIP_ADDRESS */
@@ -861,9 +861,9 @@ static int evergreen_fill_tex_resource_words(struct r600_context *rctx,
 			tex_resource_words[3] = (tmp->fmask.offset + va) >> 8;
 		}
 	} else if (last_level && texture->nr_samples <= 1) {
-		tex_resource_words[3] = (surflevel[1].offset + va) >> 8;
+		tex_resource_words[3] = ((uint64_t)surflevel[1].offset_256B * 256 + va) >> 8;
 	} else {
-		tex_resource_words[3] = (surflevel[base_level].offset + va) >> 8;
+		tex_resource_words[3] = ((uint64_t)surflevel[base_level].offset_256B * 256 + va) >> 8;
 	}
 
 	last_layer = params->last_layer;
@@ -1124,7 +1124,7 @@ static void evergreen_set_color_surface_common(struct r600_context *rctx,
 	bool blend_clamp = 0, blend_bypass = 0, do_endian_swap = FALSE;
 	int i;
 
-	color->offset = rtex->surface.u.legacy.level[level].offset;
+	color->offset = (uint64_t)rtex->surface.u.legacy.level[level].offset_256B * 256;
 	color->view = S_028C6C_SLICE_START(first_layer) |
 			S_028C6C_SLICE_MAX(last_layer);
 
@@ -1252,7 +1252,7 @@ static void evergreen_set_color_surface_common(struct r600_context *rctx,
 		color->info |= S_028C70_COMPRESSION(1);
 	}
 
-	/* EXPORT_NORM is an optimzation that can be enabled for better
+	/* EXPORT_NORM is an optimization that can be enabled for better
 	 * performance in certain cases.
 	 * EXPORT_NORM can be enabled if:
 	 * - 11-bit or smaller UNORM/SNORM/SRGB
@@ -1282,7 +1282,7 @@ static void evergreen_set_color_surface_common(struct r600_context *rctx,
 }
 
 /**
- * This function intializes the CB* register values for RATs.  It is meant
+ * This function initializes the CB* register values for RATs.  It is meant
  * to be used for 1D aligned buffers that do not have an associated
  * radeon_surf.
  */
@@ -1361,7 +1361,7 @@ static void evergreen_init_depth_surface(struct r600_context *rctx,
 	assert(format != ~0);
 
 	offset = rtex->resource.gpu_address;
-	offset += rtex->surface.u.legacy.level[level].offset;
+	offset += (uint64_t)rtex->surface.u.legacy.level[level].offset_256B * 256;
 
 	switch (rtex->surface.u.legacy.level[level].mode) {
 	case RADEON_SURF_MODE_2D:
@@ -1411,7 +1411,7 @@ static void evergreen_init_depth_surface(struct r600_context *rctx,
 
 		stile_split = eg_tile_split(stile_split);
 
-		stencil_offset = rtex->surface.u.legacy.stencil_level[level].offset;
+		stencil_offset = (uint64_t)rtex->surface.u.legacy.zs.stencil_level[level].offset_256B * 256;
 		stencil_offset += rtex->resource.gpu_address;
 
 		surf->db_stencil_base = stencil_offset >> 8;
@@ -3813,8 +3813,8 @@ static void evergreen_dma_copy_tile(struct r600_context *rctx,
 		x = src_x;
 		y = src_y;
 		z = src_z;
-		base = rsrc->surface.u.legacy.level[src_level].offset;
-		addr = rdst->surface.u.legacy.level[dst_level].offset;
+		base = (uint64_t)rsrc->surface.u.legacy.level[src_level].offset_256B * 256;
+		addr = (uint64_t)rdst->surface.u.legacy.level[dst_level].offset_256B * 256;
 		addr += (uint64_t)rdst->surface.u.legacy.level[dst_level].slice_size_dw * 4 * dst_z;
 		addr += dst_y * pitch + dst_x * bpp;
 		bank_h = eg_bank_wh(rsrc->surface.u.legacy.bankh);
@@ -3838,8 +3838,8 @@ static void evergreen_dma_copy_tile(struct r600_context *rctx,
 		x = dst_x;
 		y = dst_y;
 		z = dst_z;
-		base = rdst->surface.u.legacy.level[dst_level].offset;
-		addr = rsrc->surface.u.legacy.level[src_level].offset;
+		base = (uint64_t)rdst->surface.u.legacy.level[dst_level].offset_256B * 256;
+		addr = (uint64_t)rsrc->surface.u.legacy.level[src_level].offset_256B * 256;
 		addr += (uint64_t)rsrc->surface.u.legacy.level[src_level].slice_size_dw * 4 * src_z;
 		addr += src_y * pitch + src_x * bpp;
 		bank_h = eg_bank_wh(rdst->surface.u.legacy.bankh);
@@ -3961,10 +3961,10 @@ static void evergreen_dma_copy(struct pipe_context *ctx,
 		 *   dst_x/y == 0
 		 *   dst_pitch == src_pitch
 		 */
-		src_offset= rsrc->surface.u.legacy.level[src_level].offset;
+		src_offset= (uint64_t)rsrc->surface.u.legacy.level[src_level].offset_256B * 256;
 		src_offset += (uint64_t)rsrc->surface.u.legacy.level[src_level].slice_size_dw * 4 * src_box->z;
 		src_offset += src_y * src_pitch + src_x * bpp;
-		dst_offset = rdst->surface.u.legacy.level[dst_level].offset;
+		dst_offset = (uint64_t)rdst->surface.u.legacy.level[dst_level].offset_256B * 256;
 		dst_offset += (uint64_t)rdst->surface.u.legacy.level[dst_level].slice_size_dw * 4 * dst_z;
 		dst_offset += dst_y * dst_pitch + dst_x * bpp;
 		evergreen_dma_copy_buffer(rctx, dst, src, dst_offset, src_offset,
@@ -4150,7 +4150,7 @@ static void evergreen_set_shader_buffers(struct pipe_context *ctx,
 
 static void evergreen_set_shader_images(struct pipe_context *ctx,
 					enum pipe_shader_type shader, unsigned start_slot,
-					unsigned count,
+					unsigned count, unsigned unbind_num_trailing_slots,
 					const struct pipe_image_view *images)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
@@ -4164,7 +4164,9 @@ static void evergreen_set_shader_images(struct pipe_context *ctx,
 	unsigned old_mask;
 	struct r600_image_state *istate = NULL;
 	int idx;
-	if (shader != PIPE_SHADER_FRAGMENT && shader != PIPE_SHADER_COMPUTE && count == 0)
+	if (shader != PIPE_SHADER_FRAGMENT && shader != PIPE_SHADER_COMPUTE)
+		return;
+	if (!count && !unbind_num_trailing_slots)
 		return;
 
 	if (shader == PIPE_SHADER_FRAGMENT)
@@ -4305,6 +4307,16 @@ static void evergreen_set_shader_images(struct pipe_context *ctx,
 							     rview->resource_words);
 		}
 		istate->enabled_mask |= (1 << i);
+	}
+
+	for (i = start_slot + count, idx = 0;
+	     i < start_slot + count + unbind_num_trailing_slots; i++, idx++) {
+		rview = &istate->views[i];
+
+		pipe_resource_reference((struct pipe_resource **)&rview->base.resource, NULL);
+		istate->enabled_mask &= ~(1 << i);
+		istate->compressed_colortex_mask &= ~(1 << i);
+		istate->compressed_depthtex_mask &= ~(1 << i);
 	}
 
 	istate->atom.num_dw = util_bitcount(istate->enabled_mask) * 46;
@@ -4525,11 +4537,11 @@ void evergreen_setup_tess_constants(struct r600_context *rctx, const struct pipe
 	if (!rctx->tes_shader) {
 		rctx->lds_alloc = 0;
 		rctx->b.b.set_constant_buffer(&rctx->b.b, PIPE_SHADER_VERTEX,
-					      R600_LDS_INFO_CONST_BUFFER, NULL);
+					      R600_LDS_INFO_CONST_BUFFER, false, NULL);
 		rctx->b.b.set_constant_buffer(&rctx->b.b, PIPE_SHADER_TESS_CTRL,
-					      R600_LDS_INFO_CONST_BUFFER, NULL);
+					      R600_LDS_INFO_CONST_BUFFER, false, NULL);
 		rctx->b.b.set_constant_buffer(&rctx->b.b, PIPE_SHADER_TESS_EVAL,
-					      R600_LDS_INFO_CONST_BUFFER, NULL);
+					      R600_LDS_INFO_CONST_BUFFER, false, NULL);
 		return;
 	}
 
@@ -4589,12 +4601,11 @@ void evergreen_setup_tess_constants(struct r600_context *rctx, const struct pipe
 	constbuf.buffer_size = 8 * 4;
 
 	rctx->b.b.set_constant_buffer(&rctx->b.b, PIPE_SHADER_VERTEX,
-				      R600_LDS_INFO_CONST_BUFFER, &constbuf);
+				      R600_LDS_INFO_CONST_BUFFER, false, &constbuf);
 	rctx->b.b.set_constant_buffer(&rctx->b.b, PIPE_SHADER_TESS_CTRL,
-				      R600_LDS_INFO_CONST_BUFFER, &constbuf);
+				      R600_LDS_INFO_CONST_BUFFER, false, &constbuf);
 	rctx->b.b.set_constant_buffer(&rctx->b.b, PIPE_SHADER_TESS_EVAL,
-				      R600_LDS_INFO_CONST_BUFFER, &constbuf);
-	pipe_resource_reference(&constbuf.buffer, NULL);
+				      R600_LDS_INFO_CONST_BUFFER, true, &constbuf);
 }
 
 uint32_t evergreen_get_ls_hs_config(struct r600_context *rctx,

@@ -31,11 +31,24 @@
 
 #include "ac_sqtt.h"
 #include "ac_gpu_info.h"
+#ifdef _WIN32
+#define AMDGPU_VRAM_TYPE_UNKNOWN 0
+#define AMDGPU_VRAM_TYPE_GDDR1 1
+#define AMDGPU_VRAM_TYPE_DDR2  2
+#define AMDGPU_VRAM_TYPE_GDDR3 3
+#define AMDGPU_VRAM_TYPE_GDDR4 4
+#define AMDGPU_VRAM_TYPE_GDDR5 5
+#define AMDGPU_VRAM_TYPE_HBM   6
+#define AMDGPU_VRAM_TYPE_DDR3  7
+#define AMDGPU_VRAM_TYPE_DDR4  8
+#define AMDGPU_VRAM_TYPE_GDDR6 9
+#define AMDGPU_VRAM_TYPE_DDR5  10
+#else
 #include "drm-uapi/amdgpu_drm.h"
+#endif
 
 #include <stdbool.h>
 #include <string.h>
-#include <unistd.h>
 
 #define SQTT_FILE_MAGIC_NUMBER  0x50303042
 #define SQTT_FILE_VERSION_MAJOR 1
@@ -54,7 +67,7 @@ enum sqtt_version
    SQTT_VERSION_2_1 = 0x4, /* GFX7 */
    SQTT_VERSION_2_2 = 0x5, /* GFX8 */
    SQTT_VERSION_2_3 = 0x6, /* GFX9 */
-   SQTT_VERSION_2_4 = 0x7  /* GFX10 */
+   SQTT_VERSION_2_4 = 0x7  /* GFX10+ */
 };
 
 /**
@@ -173,7 +186,10 @@ static_assert(sizeof(struct sqtt_file_chunk_cpu_info) == 112,
 
 static void ac_sqtt_fill_cpu_info(struct sqtt_file_chunk_cpu_info *chunk)
 {
+   uint32_t cpu_clock_speed_total = 0;
    uint64_t system_ram_size = 0;
+   char line[1024];
+   FILE *f;
 
    chunk->header.chunk_id.type = SQTT_FILE_CHUNK_TYPE_CPU_INFO;
    chunk->header.chunk_id.index = 0;
@@ -183,17 +199,72 @@ static void ac_sqtt_fill_cpu_info(struct sqtt_file_chunk_cpu_info *chunk)
 
    chunk->cpu_timestamp_freq = 1000000000; /* tick set to 1ns */
 
-   /* TODO: fill with real info. */
-
    strncpy((char *)chunk->vendor_id, "Unknown", sizeof(chunk->vendor_id));
    strncpy((char *)chunk->processor_brand, "Unknown", sizeof(chunk->processor_brand));
    chunk->clock_speed = 0;
    chunk->num_logical_cores = 0;
    chunk->num_physical_cores = 0;
-
    chunk->system_ram_size = 0;
    if (os_get_total_physical_memory(&system_ram_size))
       chunk->system_ram_size = system_ram_size / (1024 * 1024);
+
+   /* Parse cpuinfo to get more detailled information. */
+   f = fopen("/proc/cpuinfo", "r");
+   if (!f)
+      return;
+
+   while (fgets(line, sizeof(line), f)) {
+      char *str;
+
+      /* Parse vendor name. */
+      str = strstr(line, "vendor_id");
+      if (str) {
+         char *ptr = (char *)chunk->vendor_id;
+         char *v = strtok(str, ":");
+         v = strtok(NULL, ":");
+         strncpy(ptr, v + 1, sizeof(chunk->vendor_id) - 1);
+         ptr[sizeof(chunk->vendor_id) - 1] = '\0';
+      }
+
+      /* Parse processor name. */
+      str = strstr(line, "model name");
+      if (str) {
+         char *ptr = (char *)chunk->processor_brand;
+         char *v = strtok(str, ":");
+         v = strtok(NULL, ":");
+         strncpy(ptr, v + 1, sizeof(chunk->processor_brand) - 1);
+         ptr[sizeof(chunk->processor_brand) - 1] = '\0';
+      }
+
+      /* Parse the current CPU clock speed for each cores. */
+      str = strstr(line, "cpu MHz");
+      if (str) {
+         uint32_t v = 0;
+         if (sscanf(str, "cpu MHz : %d", &v) == 1)
+            cpu_clock_speed_total += v;
+      }
+
+      /* Parse the number of logical cores. */
+      str = strstr(line, "siblings");
+      if (str) {
+         uint32_t v = 0;
+         if (sscanf(str, "siblings : %d", &v) == 1)
+            chunk->num_logical_cores = v;
+      }
+
+      /* Parse the number of physical cores. */
+      str = strstr(line, "cpu cores");
+      if (str) {
+         uint32_t v = 0;
+         if (sscanf(str, "cpu cores : %d", &v) == 1)
+            chunk->num_physical_cores = v;
+      }
+   }
+
+   if (chunk->num_logical_cores)
+      chunk->clock_speed = cpu_clock_speed_total / chunk->num_logical_cores;
+
+   fclose(f);
 }
 
 /**
@@ -222,6 +293,7 @@ enum sqtt_gfxip_level
    SQTT_GFXIP_LEVEL_GFXIP_8_1 = 0x4,
    SQTT_GFXIP_LEVEL_GFXIP_9 = 0x5,
    SQTT_GFXIP_LEVEL_GFXIP_10_1 = 0x7,
+   SQTT_GFXIP_LEVEL_GFXIP_10_3 = 0x9,
 };
 
 enum sqtt_memory_type
@@ -238,6 +310,8 @@ enum sqtt_memory_type
    SQTT_MEMORY_TYPE_HBM = 0x20,
    SQTT_MEMORY_TYPE_HBM2 = 0x21,
    SQTT_MEMORY_TYPE_HBM3 = 0x22,
+   SQTT_MEMORY_TYPE_LPDDR4 = 0x30,
+   SQTT_MEMORY_TYPE_LPDDR5 = 0x31,
 };
 
 struct sqtt_file_chunk_asic_info {
@@ -304,6 +378,8 @@ static enum sqtt_gfxip_level ac_chip_class_to_sqtt_gfxip_level(enum chip_class c
       return SQTT_GFXIP_LEVEL_GFXIP_9;
    case GFX10:
       return SQTT_GFXIP_LEVEL_GFXIP_10_1;
+   case GFX10_3:
+      return SQTT_GFXIP_LEVEL_GFXIP_10_3;
    default:
       unreachable("Invalid chip class");
    }
@@ -326,6 +402,31 @@ static enum sqtt_memory_type ac_vram_type_to_sqtt_memory_type(uint32_t vram_type
       return SQTT_MEMORY_TYPE_HBM;
    case AMDGPU_VRAM_TYPE_GDDR6:
       return SQTT_MEMORY_TYPE_GDDR6;
+   case AMDGPU_VRAM_TYPE_DDR5:
+      return SQTT_MEMORY_TYPE_LPDDR5;
+   case AMDGPU_VRAM_TYPE_GDDR1:
+   case AMDGPU_VRAM_TYPE_GDDR3:
+   case AMDGPU_VRAM_TYPE_GDDR4:
+   default:
+      unreachable("Invalid vram type");
+   }
+}
+
+static uint32_t ac_memory_ops_per_clock(uint32_t vram_type)
+{
+   switch (vram_type) {
+   case AMDGPU_VRAM_TYPE_UNKNOWN:
+      return 0;
+   case AMDGPU_VRAM_TYPE_DDR2:
+   case AMDGPU_VRAM_TYPE_DDR3:
+   case AMDGPU_VRAM_TYPE_DDR4:
+   case AMDGPU_VRAM_TYPE_HBM:
+      return 2;
+   case AMDGPU_VRAM_TYPE_DDR5:
+   case AMDGPU_VRAM_TYPE_GDDR5:
+      return 4;
+   case AMDGPU_VRAM_TYPE_GDDR6:
+      return 16;
    case AMDGPU_VRAM_TYPE_GDDR1:
    case AMDGPU_VRAM_TYPE_GDDR3:
    case AMDGPU_VRAM_TYPE_GDDR4:
@@ -390,20 +491,26 @@ static void ac_fill_sqtt_asic_info(struct radeon_info *rad_info,
    chunk->l2_cache_size = rad_info->l2_cache_size;
    chunk->l1_cache_size = rad_info->l1_cache_size;
    chunk->lds_size = rad_info->lds_size_per_workgroup;
+   if (rad_info->chip_class >= GFX10) {
+      /* RGP expects the LDS size in CU mode. */
+      chunk->lds_size /= 2;
+   }
 
    strncpy(chunk->gpu_name, rad_info->name, SQTT_GPU_NAME_MAX_SIZE - 1);
 
    chunk->alu_per_clock = 0.0;
    chunk->texture_per_clock = 0.0;
-   chunk->prims_per_clock = 0.0;
+   chunk->prims_per_clock = rad_info->max_se;
+   if (rad_info->chip_class == GFX10)
+      chunk->prims_per_clock *= 2;
    chunk->pixels_per_clock = 0.0;
 
    chunk->gpu_timestamp_frequency = rad_info->clock_crystal_freq * 1000;
    chunk->max_shader_core_clock = rad_info->max_shader_clock * 1000000;
    chunk->max_memory_clock = rad_info->max_memory_clock * 1000000;
-   chunk->memory_ops_per_clock = 0;
+   chunk->memory_ops_per_clock = ac_memory_ops_per_clock(rad_info->vram_type);
    chunk->memory_chip_type = ac_vram_type_to_sqtt_memory_type(rad_info->vram_type);
-   chunk->lds_granularity = rad_info->lds_granularity;
+   chunk->lds_granularity = rad_info->lds_encode_granularity;
 
    for (unsigned se = 0; se < 4; se++) {
       for (unsigned sa = 0; sa < 2; sa++) {
@@ -499,6 +606,100 @@ static void ac_sqtt_fill_api_info(struct sqtt_file_chunk_api_info *chunk)
    chunk->instruction_trace_mode = SQTT_INSTRUCTION_TRACE_DISABLED;
 }
 
+struct sqtt_code_object_database_record {
+   uint32_t size;
+};
+
+struct sqtt_file_chunk_code_object_database {
+   struct sqtt_file_chunk_header header;
+   uint32_t offset;
+   uint32_t flags;
+   uint32_t size;
+   uint32_t record_count;
+};
+
+static void
+ac_sqtt_fill_code_object(struct rgp_code_object *rgp_code_object,
+                         struct sqtt_file_chunk_code_object_database *chunk,
+                         size_t file_offset, uint32_t chunk_size)
+{
+   chunk->header.chunk_id.type = SQTT_FILE_CHUNK_TYPE_CODE_OBJECT_DATABASE;
+   chunk->header.chunk_id.index = 0;
+   chunk->header.major_version = 0;
+   chunk->header.minor_version = 0;
+   chunk->header.size_in_bytes = chunk_size;
+   chunk->offset = file_offset;
+   chunk->flags = 0;
+   chunk->size = chunk_size;
+   chunk->record_count = rgp_code_object->record_count;
+}
+
+struct sqtt_code_object_loader_events_record {
+   uint32_t loader_event_type;
+   uint32_t reserved;
+   uint64_t base_address;
+   uint64_t code_object_hash[2];
+   uint64_t time_stamp;
+};
+
+struct sqtt_file_chunk_code_object_loader_events {
+   struct sqtt_file_chunk_header header;
+   uint32_t offset;
+   uint32_t flags;
+   uint32_t record_size;
+   uint32_t record_count;
+};
+
+static void
+ac_sqtt_fill_loader_events(struct rgp_loader_events *rgp_loader_events,
+                           struct sqtt_file_chunk_code_object_loader_events *chunk,
+                           size_t file_offset)
+{
+   chunk->header.chunk_id.type =
+                               SQTT_FILE_CHUNK_TYPE_CODE_OBJECT_LOADER_EVENTS;
+   chunk->header.chunk_id.index = 0;
+   chunk->header.major_version = 1;
+   chunk->header.minor_version = 0;
+   chunk->header.size_in_bytes = (rgp_loader_events->record_count *
+                                 sizeof(struct sqtt_code_object_loader_events_record)) +
+                                 sizeof(*chunk);
+   chunk->offset = file_offset;
+   chunk->flags = 0;
+   chunk->record_size = sizeof(struct sqtt_code_object_loader_events_record);
+   chunk->record_count = rgp_loader_events->record_count;
+}
+struct sqtt_pso_correlation_record {
+   uint64_t api_pso_hash;
+   uint64_t pipeline_hash[2];
+   char api_level_obj_name[64];
+};
+
+struct sqtt_file_chunk_pso_correlation {
+   struct sqtt_file_chunk_header header;
+   uint32_t offset;
+   uint32_t flags;
+   uint32_t record_size;
+   uint32_t record_count;
+};
+
+static void
+ac_sqtt_fill_pso_correlation(struct rgp_pso_correlation *rgp_pso_correlation,
+                             struct sqtt_file_chunk_pso_correlation *chunk,
+                             size_t file_offset)
+{
+   chunk->header.chunk_id.type = SQTT_FILE_CHUNK_TYPE_PSO_CORRELATION;
+   chunk->header.chunk_id.index = 0;
+   chunk->header.major_version = 0;
+   chunk->header.minor_version = 0;
+   chunk->header.size_in_bytes = (rgp_pso_correlation->record_count *
+                                 sizeof(struct sqtt_pso_correlation_record)) +
+                                 sizeof(*chunk);
+   chunk->offset = file_offset;
+   chunk->flags = 0;
+   chunk->record_size = sizeof(struct sqtt_pso_correlation_record);
+   chunk->record_count = rgp_pso_correlation->record_count;
+}
+
 /**
  * SQTT desc info.
  */
@@ -533,6 +734,8 @@ static enum sqtt_version ac_chip_class_to_sqtt_version(enum chip_class chip_clas
    case GFX9:
       return SQTT_VERSION_2_3;
    case GFX10:
+      return SQTT_VERSION_2_4;
+   case GFX10_3:
       return SQTT_VERSION_2_4;
    default:
       unreachable("Invalid chip class");
@@ -582,14 +785,55 @@ static void ac_sqtt_fill_sqtt_data(struct sqtt_file_chunk_sqtt_data *chunk, int3
    chunk->size = size;
 }
 
+/* Below values are from from llvm project
+ * llvm/include/llvm/BinaryFormat/ELF.h
+ */
+enum elf_gfxip_level
+{
+   EF_AMDGPU_MACH_AMDGCN_GFX600 = 0x020,
+   EF_AMDGPU_MACH_AMDGCN_GFX700 = 0x022,
+   EF_AMDGPU_MACH_AMDGCN_GFX801 = 0x028,
+   EF_AMDGPU_MACH_AMDGCN_GFX900 = 0x02c,
+   EF_AMDGPU_MACH_AMDGCN_GFX1010 = 0x033,
+   EF_AMDGPU_MACH_AMDGCN_GFX1030 = 0x036,
+};
+
+static enum elf_gfxip_level ac_chip_class_to_elf_gfxip_level(enum chip_class chip_class)
+{
+   switch (chip_class) {
+   case GFX6:
+      return EF_AMDGPU_MACH_AMDGCN_GFX600;
+   case GFX7:
+      return EF_AMDGPU_MACH_AMDGCN_GFX700;
+   case GFX8:
+      return EF_AMDGPU_MACH_AMDGCN_GFX801;
+   case GFX9:
+      return EF_AMDGPU_MACH_AMDGCN_GFX900;
+   case GFX10:
+      return EF_AMDGPU_MACH_AMDGCN_GFX1010;
+   case GFX10_3:
+      return EF_AMDGPU_MACH_AMDGCN_GFX1030;
+   default:
+      unreachable("Invalid chip class");
+   }
+}
+
 static void ac_sqtt_dump_data(struct radeon_info *rad_info,
-                              const struct ac_thread_trace *thread_trace, FILE *output)
+                              const struct ac_thread_trace *thread_trace,
+                              struct ac_thread_trace_data *thread_trace_data,
+                              FILE *output)
 {
    struct sqtt_file_chunk_asic_info asic_info = {0};
    struct sqtt_file_chunk_cpu_info cpu_info = {0};
    struct sqtt_file_chunk_api_info api_info = {0};
    struct sqtt_file_header header = {0};
    size_t file_offset = 0;
+   struct rgp_code_object *rgp_code_object =
+                                          &thread_trace_data->rgp_code_object;
+   struct rgp_loader_events *rgp_loader_events =
+                                        &thread_trace_data->rgp_loader_events;
+   struct rgp_pso_correlation *rgp_pso_correlation =
+                                      &thread_trace_data->rgp_pso_correlation;
 
    /* SQTT header file. */
    ac_sqtt_fill_header(&header);
@@ -610,6 +854,73 @@ static void ac_sqtt_dump_data(struct radeon_info *rad_info,
    ac_sqtt_fill_api_info(&api_info);
    file_offset += sizeof(api_info);
    fwrite(&api_info, sizeof(api_info), 1, output);
+
+    /* SQTT code object database chunk. */
+   if (rgp_code_object->record_count) {
+      size_t file_code_object_offset = file_offset;
+      struct sqtt_file_chunk_code_object_database code_object;
+      struct sqtt_code_object_database_record code_object_record;
+      uint32_t elf_size_calc = 0;
+      uint32_t flags = ac_chip_class_to_elf_gfxip_level(rad_info->chip_class);
+
+      fseek(output, sizeof(struct sqtt_file_chunk_code_object_database), SEEK_CUR);
+      file_offset += sizeof(struct sqtt_file_chunk_code_object_database);
+      list_for_each_entry_safe(struct rgp_code_object_record, record,
+                               &rgp_code_object->record, list) {
+         fseek(output, sizeof(struct sqtt_code_object_database_record), SEEK_CUR);
+         ac_rgp_file_write_elf_object(output, file_offset +
+                                      sizeof(struct sqtt_code_object_database_record),
+                                      record, &elf_size_calc, flags);
+         code_object_record.size = elf_size_calc;
+         fseek(output, file_offset, SEEK_SET);
+         fwrite(&code_object_record, sizeof(struct sqtt_code_object_database_record),
+                1, output);
+         file_offset += (sizeof(struct sqtt_code_object_database_record) +
+                         elf_size_calc);
+         fseek(output, file_offset, SEEK_SET);
+      }
+      ac_sqtt_fill_code_object(rgp_code_object, &code_object,
+                               file_code_object_offset,
+                               file_offset - file_code_object_offset);
+      fseek(output, file_code_object_offset, SEEK_SET);
+      fwrite(&code_object, sizeof(struct sqtt_file_chunk_code_object_database), 1, output);
+      fseek(output, file_offset, SEEK_SET);
+   }
+
+   /* SQTT code object loader events chunk. */
+   if (rgp_loader_events->record_count) {
+      struct sqtt_file_chunk_code_object_loader_events loader_events;
+
+      ac_sqtt_fill_loader_events(rgp_loader_events, &loader_events,
+                                 file_offset);
+      fwrite(&loader_events, sizeof(struct sqtt_file_chunk_code_object_loader_events),
+             1, output);
+      file_offset += sizeof(struct sqtt_file_chunk_code_object_loader_events);
+      list_for_each_entry_safe(struct rgp_loader_events_record, record,
+                               &rgp_loader_events->record, list) {
+         fwrite(record, sizeof(struct sqtt_code_object_loader_events_record), 1, output);
+      }
+      file_offset += (rgp_loader_events->record_count *
+                      sizeof(struct sqtt_code_object_loader_events_record));
+   }
+
+   /* SQTT pso correlation chunk. */
+   if (rgp_pso_correlation->record_count) {
+      struct sqtt_file_chunk_pso_correlation pso_correlation;
+
+      ac_sqtt_fill_pso_correlation(rgp_pso_correlation,
+                                   &pso_correlation, file_offset);
+      fwrite(&pso_correlation, sizeof(struct sqtt_file_chunk_pso_correlation), 1,
+             output);
+      file_offset += sizeof(struct sqtt_file_chunk_pso_correlation);
+      list_for_each_entry_safe(struct rgp_pso_correlation_record, record,
+                               &rgp_pso_correlation->record, list) {
+         fwrite(record, sizeof(struct sqtt_pso_correlation_record),
+                1, output);
+      }
+      file_offset += (rgp_pso_correlation->record_count *
+                      sizeof(struct sqtt_pso_correlation_record));
+   }
 
    if (thread_trace) {
       for (unsigned i = 0; i < thread_trace->num_traces; i++) {
@@ -636,7 +947,9 @@ static void ac_sqtt_dump_data(struct radeon_info *rad_info,
    }
 }
 
-int ac_dump_thread_trace(struct radeon_info *info, const struct ac_thread_trace *thread_trace)
+int ac_dump_thread_trace(struct radeon_info *info,
+                         const struct ac_thread_trace *thread_trace,
+                         struct ac_thread_trace_data *thread_trace_data)
 {
    char filename[2048];
    struct tm now;
@@ -646,15 +959,15 @@ int ac_dump_thread_trace(struct radeon_info *info, const struct ac_thread_trace 
    t = time(NULL);
    now = *localtime(&t);
 
-   snprintf(filename, sizeof(filename), "/tmp/%s_%04d.%02d.%02d_%02d.%02d.rgp",
+   snprintf(filename, sizeof(filename), "/tmp/%s_%04d.%02d.%02d_%02d.%02d.%02d.rgp",
             util_get_process_name(), 1900 + now.tm_year, now.tm_mon + 1, now.tm_mday, now.tm_hour,
-            now.tm_min);
+            now.tm_min, now.tm_sec);
 
    f = fopen(filename, "w+");
    if (!f)
       return -1;
 
-   ac_sqtt_dump_data(info, thread_trace, f);
+   ac_sqtt_dump_data(info, thread_trace, thread_trace_data, f);
 
    fprintf(stderr, "Thread trace capture saved to '%s'\n", filename);
 

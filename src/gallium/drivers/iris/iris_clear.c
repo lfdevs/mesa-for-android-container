@@ -54,7 +54,7 @@ iris_is_color_fast_clear_compatible(struct iris_context *ice,
          continue;
       }
 
-      if (devinfo->gen < 9 &&
+      if (devinfo->ver < 9 &&
           color.f32[i] != 0.0f && color.f32[i] != 1.0f) {
          return false;
       }
@@ -134,7 +134,7 @@ can_fast_clear_color(struct iris_context *ice,
     * to avoid stomping on other LODs.
     */
    if (level > 0 && util_format_get_blocksizebits(p_res->format) == 8 &&
-       res->aux.usage == ISL_AUX_USAGE_GEN12_CCS_E && p_res->width0 % 64) {
+       res->aux.usage == ISL_AUX_USAGE_GFX12_CCS_E && p_res->width0 % 64) {
       return false;
    }
 
@@ -281,7 +281,7 @@ fast_clear_color(struct iris_context *ice,
    if (!color_changed && box->depth == 1 && aux_state == ISL_AUX_STATE_CLEAR)
       return;
 
-   /* Ivybrigde PRM Vol 2, Part 1, "11.7 MCS Buffer for Render Target(s)":
+   /* Ivybridge PRM Vol 2, Part 1, "11.7 MCS Buffer for Render Target(s)":
     *
     *    "Any transition from any value in {Clear, Render, Resolve} to a
     *    different value in {Clear, Render, Resolve} requires end of pipe
@@ -354,7 +354,7 @@ clear_color(struct iris_context *ice,
    }
 
    if (p_res->target == PIPE_BUFFER)
-      util_range_add(&res->base, &res->valid_buffer_range, box->x, box->x + box->width);
+      util_range_add(&res->base.b, &res->valid_buffer_range, box->x, box->x + box->width);
 
    iris_batch_maybe_flush(batch, 1500);
 
@@ -368,10 +368,10 @@ clear_color(struct iris_context *ice,
 
    bool color_write_disable[4] = { false, false, false, false };
    enum isl_aux_usage aux_usage =
-      iris_resource_render_aux_usage(ice, res, format, false);
+      iris_resource_render_aux_usage(ice, res, level, format, false);
 
-   iris_resource_prepare_render(ice, batch, res, level,
-                                box->z, box->depth, aux_usage);
+   iris_resource_prepare_render(ice, res, level, box->z, box->depth,
+                                aux_usage);
    iris_emit_buffer_barrier_for(batch, res->bo, IRIS_DOMAIN_RENDER_WRITE);
 
    struct blorp_surf surf;
@@ -435,7 +435,7 @@ can_fast_clear_depth(struct iris_context *ice,
       return false;
    }
 
-   if (!(res->aux.has_hiz & (1 << level)))
+   if (!iris_resource_level_has_hiz(res, level))
       return false;
 
    if (!blorp_can_hiz_clear_depth(devinfo, &res->surf, res->aux.usage,
@@ -464,9 +464,6 @@ fast_clear_depth(struct iris_context *ice,
     */
    if (res->aux.clear_color.f32[0] != depth) {
       for (unsigned res_level = 0; res_level < res->surf.levels; res_level++) {
-         if (!(res->aux.has_hiz & (1 << res_level)))
-            continue;
-
          const unsigned level_layers =
             iris_get_num_logical_layers(res, res_level);
          for (unsigned layer = 0; layer < level_layers; layer++) {
@@ -573,11 +570,14 @@ clear_depth_stencil(struct iris_context *ice,
    }
 
    if (clear_depth && z_res) {
-      iris_resource_prepare_depth(ice, batch, z_res, level, box->z, box->depth);
+      const enum isl_aux_usage aux_usage =
+         iris_resource_render_aux_usage(ice, z_res, level, z_res->surf.format,
+                                        false);
+      iris_resource_prepare_render(ice, z_res, level, box->z, box->depth,
+                                   aux_usage);
       iris_emit_buffer_barrier_for(batch, z_res->bo, IRIS_DOMAIN_DEPTH_WRITE);
-      iris_blorp_surf_for_resource(&batch->screen->isl_dev,
-                                   &z_surf, &z_res->base, z_res->aux.usage,
-                                   level, true);
+      iris_blorp_surf_for_resource(&batch->screen->isl_dev, &z_surf,
+                                   &z_res->base.b, aux_usage, level, true);
    }
 
    uint8_t stencil_mask = clear_stencil && stencil_res ? 0xff : 0;
@@ -587,7 +587,7 @@ clear_depth_stencil(struct iris_context *ice,
       iris_emit_buffer_barrier_for(batch, stencil_res->bo,
                                    IRIS_DOMAIN_DEPTH_WRITE);
       iris_blorp_surf_for_resource(&batch->screen->isl_dev,
-                                   &stencil_surf, &stencil_res->base,
+                                   &stencil_surf, &stencil_res->base.b,
                                    stencil_res->aux.usage, level, true);
    }
 
@@ -611,8 +611,8 @@ clear_depth_stencil(struct iris_context *ice,
                                     "cache history: post slow ZS clear");
 
    if (clear_depth && z_res) {
-      iris_resource_finish_depth(ice, z_res, level,
-                                 box->z, box->depth, true);
+      iris_resource_finish_render(ice, z_res, level, box->z, box->depth,
+                                  z_surf.aux_usage);
    }
 
    if (stencil_mask) {

@@ -86,6 +86,7 @@ struct lp_build_nir_context
    void (*atomic_global)(struct lp_build_nir_context *bld_base,
                          nir_intrinsic_op op,
                          unsigned addr_bit_size,
+                         unsigned val_bit_size,
                          LLVMValueRef addr,
                          LLVMValueRef val, LLVMValueRef val2,
                          LLVMValueRef *result);
@@ -100,6 +101,7 @@ struct lp_build_nir_context
 
    void (*atomic_mem)(struct lp_build_nir_context *bld_base,
                       nir_intrinsic_op op,
+                      unsigned bit_size,
                       LLVMValueRef index, LLVMValueRef offset,
                       LLVMValueRef val, LLVMValueRef val2,
                       LLVMValueRef *result);
@@ -183,6 +185,12 @@ struct lp_build_nir_context
    void (*end_primitive)(struct lp_build_nir_context *bld_base, uint32_t stream_id);
 
    void (*vote)(struct lp_build_nir_context *bld_base, LLVMValueRef src, nir_intrinsic_instr *instr, LLVMValueRef dst[4]);
+   void (*elect)(struct lp_build_nir_context *bld_base, LLVMValueRef dst[4]);
+   void (*reduce)(struct lp_build_nir_context *bld_base, LLVMValueRef src, nir_intrinsic_instr *instr, LLVMValueRef dst[4]);
+   void (*ballot)(struct lp_build_nir_context *bld_base, LLVMValueRef src, nir_intrinsic_instr *instr, LLVMValueRef dst[4]);
+   void (*read_invocation)(struct lp_build_nir_context *bld_base,
+                           LLVMValueRef src, unsigned bit_size, LLVMValueRef invoc,
+                           LLVMValueRef dst[4]);
    void (*helper_invocation)(struct lp_build_nir_context *bld_base, LLVMValueRef *dst);
 
    void (*interp_at)(struct lp_build_nir_context *bld_base,
@@ -270,6 +278,17 @@ lp_nir_array_build_gather_values(LLVMBuilderRef builder,
    return arr;
 }
 
+static inline struct lp_build_context *get_flt_bld(struct lp_build_nir_context *bld_base,
+                                                   unsigned op_bit_size)
+{
+   switch (op_bit_size) {
+   case 64:
+      return &bld_base->dbl_bld;
+   default:
+   case 32:
+      return &bld_base->base;
+   }
+}
 
 static inline struct lp_build_context *get_int_bld(struct lp_build_nir_context *bld_base,
                                                    bool is_unsigned,

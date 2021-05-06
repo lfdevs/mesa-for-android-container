@@ -30,6 +30,7 @@
 #include "util/u_inlines.h"
 
 #include "util/format/u_format.h"
+#include "util/u_draw.h"
 #include "util/u_memory.h"
 #include "util/u_upload_mgr.h"
 #include "util/u_prim.h"
@@ -373,7 +374,7 @@ static void r300_draw_arrays_immediate(struct r300_context *r300,
 
         /* Map the buffer. */
         if (!map[vbi]) {
-            map[vbi] = (uint32_t*)r300->rws->buffer_map(
+            map[vbi] = (uint32_t*)r300->rws->buffer_map(r300->rws,
                 r300_resource(vbuf->buffer.resource)->buf,
                 &r300->cs, PIPE_MAP_READ | PIPE_MAP_UNSYNCHRONIZED);
             map[vbi] += (vbuf->buffer_offset / 4) + stride[i] * draw->start;
@@ -610,7 +611,7 @@ static void r300_draw_elements(struct r300_context *r300,
     /* Fallback for misaligned ushort indices. */
     if (indexSize == 2 && (start & 1) && indexBuffer) {
         /* If we got here, then orgIndexBuffer == indexBuffer. */
-        uint16_t *ptr = r300->rws->buffer_map(r300_resource(orgIndexBuffer)->buf,
+        uint16_t *ptr = r300->rws->buffer_map(r300->rws, r300_resource(orgIndexBuffer)->buf,
                                               &r300->cs,
                                               PIPE_MAP_READ |
                                               PIPE_MAP_UNSYNCHRONIZED);
@@ -791,16 +792,10 @@ static void r300_draw_vbo(struct pipe_context* pipe,
                           const struct pipe_draw_start_count *draws,
                           unsigned num_draws)
 {
-    if (num_draws > 1) {
-       struct pipe_draw_info tmp_info = *dinfo;
-
-       for (unsigned i = 0; i < num_draws; i++) {
-          r300_draw_vbo(pipe, &tmp_info, indirect, &draws[i], 1);
-          if (tmp_info.increment_draw_id)
-             tmp_info.drawid++;
-       }
-       return;
-    }
+   if (num_draws > 1) {
+      util_draw_multi(pipe, dinfo, indirect, draws, num_draws);
+      return;
+   }
 
     struct r300_context* r300 = r300_context(pipe);
     struct pipe_draw_info info = *dinfo;
@@ -864,16 +859,10 @@ static void r300_swtcl_draw_vbo(struct pipe_context* pipe,
                                 const struct pipe_draw_start_count *draws,
                                 unsigned num_draws)
 {
-    if (num_draws > 1) {
-       struct pipe_draw_info tmp_info = *info;
-
-       for (unsigned i = 0; i < num_draws; i++) {
-          r300_swtcl_draw_vbo(pipe, &tmp_info, indirect, &draws[i], 1);
-          if (tmp_info.increment_draw_id)
-             tmp_info.drawid++;
-       }
-       return;
-    }
+   if (num_draws > 1) {
+      util_draw_multi(pipe, info, indirect, draws, num_draws);
+      return;
+   }
 
     struct r300_context* r300 = r300_context(pipe);
     struct pipe_draw_start_count draw = draws[0];
@@ -957,7 +946,7 @@ static boolean r300_render_allocate_vertices(struct vbuf_render* render,
             return FALSE;
         }
         r300->draw_vbo_offset = 0;
-        r300render->vbo_ptr = rws->buffer_map(r300->vbo, &r300->cs,
+        r300render->vbo_ptr = rws->buffer_map(rws, r300->vbo, &r300->cs,
                                               PIPE_MAP_WRITE);
     }
 

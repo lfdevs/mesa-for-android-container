@@ -276,6 +276,8 @@ LoadPropagation::visit(BasicBlock *bb)
 
          if (!ld || ld->fixed || (ld->op != OP_LOAD && ld->op != OP_MOV))
             continue;
+         if (ld->op == OP_LOAD && ld->subOp == NV50_IR_SUBOP_LOAD_LOCKED)
+            continue;
          if (!targ->insnCanLoad(i, s, ld))
             continue;
 
@@ -2167,7 +2169,7 @@ AlgebraicOpt::handleCVT_EXTBF(Instruction *cvt)
    Instruction *insn = cvt->getSrc(0)->getInsn();
    ImmediateValue imm;
    Value *arg = NULL;
-   unsigned width, offset;
+   unsigned width, offset = 0;
    if ((cvt->sType != TYPE_U32 && cvt->sType != TYPE_S32) || !insn)
       return;
    if (insn->op == OP_EXTBF && insn->src(1).getImmediate(imm)) {
@@ -2199,7 +2201,7 @@ AlgebraicOpt::handleCVT_EXTBF(Instruction *cvt)
 
       arg = insn->getSrc(!s);
       Instruction *shift = arg->getInsn();
-      offset = 0;
+
       if (shift && shift->op == OP_SHR &&
           shift->sType == cvt->sType &&
           shift->src(1).getImmediate(imm) &&
@@ -3928,7 +3930,10 @@ DeadCodeElim::visit(BasicBlock *bb)
          if (i->op == OP_ATOM ||
              i->op == OP_SUREDP ||
              i->op == OP_SUREDB) {
-            i->setDef(0, NULL);
+            const Target *targ = prog->getTarget();
+            if (targ->getChipset() >= NVISA_GF100_CHIPSET ||
+                i->subOp != NV50_IR_SUBOP_ATOM_CAS)
+               i->setDef(0, NULL);
             if (i->op == OP_ATOM && i->subOp == NV50_IR_SUBOP_ATOM_EXCH) {
                i->cache = CACHE_CV;
                i->op = OP_STORE;

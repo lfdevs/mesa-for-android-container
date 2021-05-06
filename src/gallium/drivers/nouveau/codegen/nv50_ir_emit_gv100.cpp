@@ -2053,7 +2053,7 @@ CodeEmitterGV100::prepareEmission(Program *prog)
 }
 
 CodeEmitterGV100::CodeEmitterGV100(TargetGV100 *target)
-   : CodeEmitter(target), targ(target)
+   : CodeEmitter(target), prog(NULL), targ(target), insn(NULL)
 {
    code = NULL;
    codeSize = codeSizeLimit = 0;

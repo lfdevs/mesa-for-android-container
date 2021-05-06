@@ -21,6 +21,7 @@
  * IN THE SOFTWARE.
  */
 
+#include "vk_descriptors.h"
 #include "vk_util.h"
 
 #include "v3dv_private.h"
@@ -359,6 +360,8 @@ v3dv_CreatePipelineLayout(VkDevice _device,
          dynamic_offset_count += set_layout->binding[b].array_size *
             set_layout->binding[b].dynamic_offset_count;
       }
+
+      layout->shader_stages |= set_layout->shader_stages;
    }
 
    layout->push_constant_size = 0;
@@ -409,6 +412,7 @@ v3dv_CreateDescriptorPool(VkDevice _device,
    uint32_t bo_size = 0;
    uint32_t descriptor_count = 0;
 
+   assert(pCreateInfo->poolSizeCount > 0);
    for (unsigned i = 0; i < pCreateInfo->poolSizeCount; ++i) {
       /* Verify supported descriptor type */
       switch(pCreateInfo->pPoolSizes[i].type) {
@@ -429,6 +433,7 @@ v3dv_CreateDescriptorPool(VkDevice _device,
          break;
       }
 
+      assert(pCreateInfo->pPoolSizes[i].descriptorCount > 0);
       descriptor_count += pCreateInfo->pPoolSizes[i].descriptorCount;
       bo_size += descriptor_bo_size(pCreateInfo->pPoolSizes[i].type) *
          pCreateInfo->pPoolSizes[i].descriptorCount;
@@ -553,40 +558,6 @@ v3dv_ResetDescriptorPool(VkDevice _device,
    return VK_SUCCESS;
 }
 
-static int
-binding_compare(const void *av, const void *bv)
-{
-   const VkDescriptorSetLayoutBinding *a =
-      (const VkDescriptorSetLayoutBinding *) av;
-   const VkDescriptorSetLayoutBinding *b =
-      (const VkDescriptorSetLayoutBinding *) bv;
-
-   return (a->binding < b->binding) ? -1 : (a->binding > b->binding) ? 1 : 0;
-}
-
-static VkDescriptorSetLayoutBinding *
-create_sorted_bindings(const VkDescriptorSetLayoutBinding *bindings,
-                       unsigned count,
-                       struct v3dv_device *device,
-                       const VkAllocationCallbacks *pAllocator)
-{
-   VkDescriptorSetLayoutBinding *sorted_bindings =
-      vk_alloc2(&device->vk.alloc, pAllocator,
-                count * sizeof(VkDescriptorSetLayoutBinding),
-                8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-
-   if (!sorted_bindings)
-      return NULL;
-
-   memcpy(sorted_bindings, bindings,
-          count * sizeof(VkDescriptorSetLayoutBinding));
-
-   qsort(sorted_bindings, count, sizeof(VkDescriptorSetLayoutBinding),
-         binding_compare);
-
-   return sorted_bindings;
-}
-
 VkResult
 v3dv_CreateDescriptorSetLayout(VkDevice _device,
                                const VkDescriptorSetLayoutCreateInfo *pCreateInfo,
@@ -598,10 +569,10 @@ v3dv_CreateDescriptorSetLayout(VkDevice _device,
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO);
 
-   int32_t max_binding = pCreateInfo->bindingCount > 0 ? 0 : -1;
+   uint32_t num_bindings = 0;
    uint32_t immutable_sampler_count = 0;
    for (uint32_t j = 0; j < pCreateInfo->bindingCount; j++) {
-      max_binding = MAX2(max_binding, pCreateInfo->pBindings[j].binding);
+      num_bindings = MAX2(num_bindings, pCreateInfo->pBindings[j].binding + 1);
 
       /* From the Vulkan 1.1.97 spec for VkDescriptorSetLayoutBinding:
        *
@@ -623,7 +594,7 @@ v3dv_CreateDescriptorSetLayout(VkDevice _device,
    }
 
    uint32_t samplers_offset = sizeof(struct v3dv_descriptor_set_layout) +
-      (max_binding + 1) * sizeof(set_layout->binding[0]);
+      num_bindings * sizeof(set_layout->binding[0]);
    uint32_t size = samplers_offset +
       immutable_sampler_count * sizeof(struct v3dv_sampler);
 
@@ -634,24 +605,22 @@ v3dv_CreateDescriptorSetLayout(VkDevice _device,
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    /* We just allocate all the immutable samplers at the end of the struct */
-   struct v3dv_sampler *samplers = (void*) &set_layout->binding[max_binding + 1];
+   struct v3dv_sampler *samplers = (void*) &set_layout->binding[num_bindings];
+
+   assert(pCreateInfo->bindingCount == 0 || num_bindings > 0);
 
    VkDescriptorSetLayoutBinding *bindings = NULL;
-   if (pCreateInfo->bindingCount > 0) {
-      assert(max_binding >= 0);
-      bindings = create_sorted_bindings(pCreateInfo->pBindings,
-                                        pCreateInfo->bindingCount,
-                                        device, pAllocator);
-      if (!bindings) {
-         vk_object_free(&device->vk, pAllocator, set_layout);
-         return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
-      }
+   VkResult result = vk_create_sorted_bindings(pCreateInfo->pBindings,
+                                               pCreateInfo->bindingCount, &bindings);
+   if (result != VK_SUCCESS) {
+      vk_object_free(&device->vk, pAllocator, set_layout);
+      return vk_error(device->instance, result);
    }
 
    memset(set_layout->binding, 0,
           size - sizeof(struct v3dv_descriptor_set_layout));
 
-   set_layout->binding_count = max_binding + 1;
+   set_layout->binding_count = num_bindings;
    set_layout->flags = pCreateInfo->flags;
    set_layout->shader_stages = 0;
    set_layout->bo_size = 0;
@@ -707,10 +676,6 @@ v3dv_CreateDescriptorSetLayout(VkDevice _device,
       dynamic_offset_count += binding->descriptorCount *
          set_layout->binding[binding_number].dynamic_offset_count;
 
-      /* FIXME: right now we don't use shader_stages. We could explore if we
-       * could use it to add another filter to upload or allocate the
-       * descriptor data.
-       */
       set_layout->shader_stages |= binding->stageFlags;
 
       set_layout->binding[binding_number].descriptor_offset = set_layout->bo_size;
@@ -719,8 +684,7 @@ v3dv_CreateDescriptorSetLayout(VkDevice _device,
          binding->descriptorCount;
    }
 
-   if (bindings)
-      vk_free2(&device->vk.alloc, pAllocator, bindings);
+   free(bindings);
 
    set_layout->descriptor_count = descriptor_count;
    set_layout->dynamic_offset_count = dynamic_offset_count;
@@ -829,7 +793,6 @@ descriptor_set_create(struct v3dv_device *device,
                  sizeof(pool->entries[0]) * (pool->entry_count - index));
       } else {
          assert(pool->host_memory_base);
-         vk_object_free(&device->vk, NULL, set);
          return out_of_pool_memory(device, pool);
       }
 

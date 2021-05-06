@@ -6,7 +6,7 @@ Missing features:
  - Splitting larger-than-max blits (Jordan)
  - Bit-for-bit copies (Jason)
  - Depth and Stencil clears
- - Gen4-5 support
+ - Gfx4-5 support
 
 Performance:
 

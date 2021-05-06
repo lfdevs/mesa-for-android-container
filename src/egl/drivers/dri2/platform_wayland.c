@@ -1524,7 +1524,8 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
    if (roundtrip(dri2_dpy) < 0 || dri2_dpy->fd == -1)
       goto cleanup;
 
-   if (roundtrip(dri2_dpy) < 0 || !dri2_dpy->authenticated)
+   if (!dri2_dpy->authenticated &&
+       (roundtrip(dri2_dpy) < 0 || !dri2_dpy->authenticated))
       goto cleanup;
 
    dri2_dpy->fd = loader_get_user_preferred_fd(dri2_dpy->fd,

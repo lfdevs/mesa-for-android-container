@@ -163,7 +163,8 @@ vir_print_reg(struct v3d_compile *c, const struct qinst *inst,
                 break;
 
         case QFILE_MAGIC:
-                fprintf(stderr, "%s", v3d_qpu_magic_waddr_name(reg.index));
+                fprintf(stderr, "%s",
+                        v3d_qpu_magic_waddr_name(c->devinfo, reg.index));
                 break;
 
         case QFILE_SMALL_IMM: {
@@ -173,8 +174,8 @@ vir_print_reg(struct v3d_compile *c, const struct qinst *inst,
                                                    &unpacked);
                 assert(ok); (void) ok;
 
-                if ((int)inst->qpu.raddr_b >= -16 &&
-                    (int)inst->qpu.raddr_b <= 15)
+                int8_t *p = (int8_t *)&inst->qpu.raddr_b;
+                if (*p >= -16 && *p <= 15)
                         fprintf(stderr, "%d", unpacked);
                 else
                         fprintf(stderr, "%f", uif(unpacked));
@@ -202,7 +203,8 @@ vir_dump_sig_addr(const struct v3d_device_info *devinfo,
         if (!instr->sig_magic)
                 fprintf(stderr, ".rf%d", instr->sig_addr);
         else {
-                const char *name = v3d_qpu_magic_waddr_name(instr->sig_addr);
+                const char *name =
+                         v3d_qpu_magic_waddr_name(devinfo, instr->sig_addr);
                 if (name)
                         fprintf(stderr, ".%s", name);
                 else

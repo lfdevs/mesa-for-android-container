@@ -263,20 +263,20 @@ static void
 micro_dmax(union tgsi_double_channel *dst,
            const union tgsi_double_channel *src)
 {
-   dst->d[0] = src[0].d[0] > src[1].d[0] ? src[0].d[0] : src[1].d[0];
-   dst->d[1] = src[0].d[1] > src[1].d[1] ? src[0].d[1] : src[1].d[1];
-   dst->d[2] = src[0].d[2] > src[1].d[2] ? src[0].d[2] : src[1].d[2];
-   dst->d[3] = src[0].d[3] > src[1].d[3] ? src[0].d[3] : src[1].d[3];
+   dst->d[0] = src[0].d[0] > src[1].d[0] || isnan(src[1].d[0]) ? src[0].d[0] : src[1].d[0];
+   dst->d[1] = src[0].d[1] > src[1].d[1] || isnan(src[1].d[1]) ? src[0].d[1] : src[1].d[1];
+   dst->d[2] = src[0].d[2] > src[1].d[2] || isnan(src[1].d[2]) ? src[0].d[2] : src[1].d[2];
+   dst->d[3] = src[0].d[3] > src[1].d[3] || isnan(src[1].d[3]) ? src[0].d[3] : src[1].d[3];
 }
 
 static void
 micro_dmin(union tgsi_double_channel *dst,
            const union tgsi_double_channel *src)
 {
-   dst->d[0] = src[0].d[0] < src[1].d[0] ? src[0].d[0] : src[1].d[0];
-   dst->d[1] = src[0].d[1] < src[1].d[1] ? src[0].d[1] : src[1].d[1];
-   dst->d[2] = src[0].d[2] < src[1].d[2] ? src[0].d[2] : src[1].d[2];
-   dst->d[3] = src[0].d[3] < src[1].d[3] ? src[0].d[3] : src[1].d[3];
+   dst->d[0] = src[0].d[0] < src[1].d[0] || isnan(src[1].d[0]) ? src[0].d[0] : src[1].d[0];
+   dst->d[1] = src[0].d[1] < src[1].d[1] || isnan(src[1].d[1]) ? src[0].d[1] : src[1].d[1];
+   dst->d[2] = src[0].d[2] < src[1].d[2] || isnan(src[1].d[2]) ? src[0].d[2] : src[1].d[2];
+   dst->d[3] = src[0].d[3] < src[1].d[3] || isnan(src[1].d[3]) ? src[0].d[3] : src[1].d[3];
 }
 
 static void
@@ -1357,10 +1357,10 @@ micro_max(union tgsi_exec_channel *dst,
           const union tgsi_exec_channel *src0,
           const union tgsi_exec_channel *src1)
 {
-   dst->f[0] = src0->f[0] > src1->f[0] ? src0->f[0] : src1->f[0];
-   dst->f[1] = src0->f[1] > src1->f[1] ? src0->f[1] : src1->f[1];
-   dst->f[2] = src0->f[2] > src1->f[2] ? src0->f[2] : src1->f[2];
-   dst->f[3] = src0->f[3] > src1->f[3] ? src0->f[3] : src1->f[3];
+   dst->f[0] = src0->f[0] > src1->f[0] || isnan(src1->f[0]) ? src0->f[0] : src1->f[0];
+   dst->f[1] = src0->f[1] > src1->f[1] || isnan(src1->f[1]) ? src0->f[1] : src1->f[1];
+   dst->f[2] = src0->f[2] > src1->f[2] || isnan(src1->f[2]) ? src0->f[2] : src1->f[2];
+   dst->f[3] = src0->f[3] > src1->f[3] || isnan(src1->f[3]) ? src0->f[3] : src1->f[3];
 }
 
 static void
@@ -1368,10 +1368,10 @@ micro_min(union tgsi_exec_channel *dst,
           const union tgsi_exec_channel *src0,
           const union tgsi_exec_channel *src1)
 {
-   dst->f[0] = src0->f[0] < src1->f[0] ? src0->f[0] : src1->f[0];
-   dst->f[1] = src0->f[1] < src1->f[1] ? src0->f[1] : src1->f[1];
-   dst->f[2] = src0->f[2] < src1->f[2] ? src0->f[2] : src1->f[2];
-   dst->f[3] = src0->f[3] < src1->f[3] ? src0->f[3] : src1->f[3];
+   dst->f[0] = src0->f[0] < src1->f[0] || isnan(src1->f[0]) ? src0->f[0] : src1->f[0];
+   dst->f[1] = src0->f[1] < src1->f[1] || isnan(src1->f[1]) ? src0->f[1] : src1->f[1];
+   dst->f[2] = src0->f[2] < src1->f[2] || isnan(src1->f[2]) ? src0->f[2] : src1->f[2];
+   dst->f[3] = src0->f[3] < src1->f[3] || isnan(src1->f[3]) ? src0->f[3] : src1->f[3];
 }
 
 static void
@@ -1461,7 +1461,7 @@ fetch_src_file_channel(const struct tgsi_exec_machine *mach,
             const uint constbuf = index2D->i[i];
             const int pos = index->i[i] * 4 + swizzle;
             /* const buffer bounds check */
-            if (pos < 0 || pos >= (int) mach->ConstsSize[constbuf]) {
+            if (pos < 0 || pos >= (int) mach->ConstsSize[constbuf] / 4) {
                if (0) {
                   /* Debug: print warning */
                   static int count = 0;
@@ -1713,11 +1713,8 @@ fetch_source(const struct tgsi_exec_machine *mach,
    fetch_source_d(mach, chan, reg, chan_index);
 
    if (reg->Register.Absolute) {
-      if (src_datatype == TGSI_EXEC_DATA_FLOAT) {
-         micro_abs(chan, chan);
-      } else {
-         micro_iabs(chan, chan);
-      }
+      assert(src_datatype == TGSI_EXEC_DATA_FLOAT);
+      micro_abs(chan, chan);
    }
 
    if (reg->Register.Negate) {
@@ -1941,7 +1938,7 @@ store_dest(struct tgsi_exec_machine *mach,
    else {
       for (i = 0; i < TGSI_QUAD_SIZE; i++)
          if (execmask & (1 << i)) {
-            if (chan->f[i] < 0.0f)
+            if (chan->f[i] < 0.0f || isnan(chan->f[i]))
                dst->f[i] = 0.0f;
             else if (chan->f[i] > 1.0f)
                dst->f[i] = 1.0f;
@@ -3597,12 +3594,8 @@ fetch_double_channel(struct tgsi_exec_machine *mach,
       chan->u[i][0] = src[0].u[i];
       chan->u[i][1] = src[1].u[i];
    }
-   if (reg->Register.Absolute) {
-      micro_dabs(chan, chan);
-   }
-   if (reg->Register.Negate) {
-      micro_dneg(chan, chan);
-   }
+   assert(!reg->Register.Absolute);
+   assert(!reg->Register.Negate);
 }
 
 static void
@@ -3628,7 +3621,7 @@ store_double_channel(struct tgsi_exec_machine *mach,
    else {
       for (i = 0; i < TGSI_QUAD_SIZE; i++)
          if (execmask & (1 << i)) {
-            if (chan->d[i] < 0.0)
+            if (chan->d[i] < 0.0 || isnan(chan->d[i]))
                temp.d[i] = 0.0;
             else if (chan->d[i] > 1.0)
                temp.d[i] = 1.0;
@@ -5496,21 +5489,14 @@ exec_instruction(
       assert(mach->CondStackTop < TGSI_EXEC_MAX_COND_NESTING);
       mach->CondStack[mach->CondStackTop++] = mach->CondMask;
       FETCH( &r[0], 0, TGSI_CHAN_X );
-      /* update CondMask */
-      if( ! r[0].f[0] ) {
-         mach->CondMask &= ~0x1;
-      }
-      if( ! r[0].f[1] ) {
-         mach->CondMask &= ~0x2;
-      }
-      if( ! r[0].f[2] ) {
-         mach->CondMask &= ~0x4;
-      }
-      if( ! r[0].f[3] ) {
-         mach->CondMask &= ~0x8;
+      for (int i = 0; i < TGSI_QUAD_SIZE; i++) {
+         if (!r[0].f[i])
+            mach->CondMask &= ~(1 << i);
       }
       UPDATE_EXEC_MASK(mach);
-      /* Todo: If CondMask==0, jump to ELSE */
+      /* If no channels are taking the then branch, jump to ELSE. */
+      if (!mach->CondMask)
+         *pc = inst->Label.Label;
       break;
 
    case TGSI_OPCODE_UIF:
@@ -5518,21 +5504,14 @@ exec_instruction(
       assert(mach->CondStackTop < TGSI_EXEC_MAX_COND_NESTING);
       mach->CondStack[mach->CondStackTop++] = mach->CondMask;
       IFETCH( &r[0], 0, TGSI_CHAN_X );
-      /* update CondMask */
-      if( ! r[0].u[0] ) {
-         mach->CondMask &= ~0x1;
-      }
-      if( ! r[0].u[1] ) {
-         mach->CondMask &= ~0x2;
-      }
-      if( ! r[0].u[2] ) {
-         mach->CondMask &= ~0x4;
-      }
-      if( ! r[0].u[3] ) {
-         mach->CondMask &= ~0x8;
+      for (int i = 0; i < TGSI_QUAD_SIZE; i++) {
+         if (!r[0].u[i])
+            mach->CondMask &= ~(1 << i);
       }
       UPDATE_EXEC_MASK(mach);
-      /* Todo: If CondMask==0, jump to ELSE */
+      /* If no channels are taking the then branch, jump to ELSE. */
+      if (!mach->CondMask)
+         *pc = inst->Label.Label;
       break;
 
    case TGSI_OPCODE_ELSE:
@@ -5543,7 +5522,10 @@ exec_instruction(
          prevMask = mach->CondStack[mach->CondStackTop - 1];
          mach->CondMask = ~mach->CondMask & prevMask;
          UPDATE_EXEC_MASK(mach);
-         /* Todo: If CondMask==0, jump to ENDIF */
+
+         /* If no channels are taking ELSE, jump to ENDIF */
+         if (!mach->CondMask)
+            *pc = inst->Label.Label;
       }
       break;
 

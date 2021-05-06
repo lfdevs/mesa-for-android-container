@@ -44,7 +44,7 @@ nv84_copy_firmware(const char *path, void *dest, ssize_t len)
    close(fd);
 
    if (r != len) {
-      fprintf(stderr, "reading firwmare file %s failed: %m\n", path);
+      fprintf(stderr, "reading firmware file %s failed: %m\n", path);
       return 1;
    }
 

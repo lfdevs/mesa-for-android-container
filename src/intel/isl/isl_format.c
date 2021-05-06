@@ -69,9 +69,9 @@ struct surface_format_info {
  *
  * Y*: 45
  * Y+: 45 (g45/gm45)
- * Y~: 50 (gen5)
- * Y^: 60 (gen6)
- * Y#: 70 (gen7)
+ * Y~: 50 (gfx5)
+ * Y^: 60 (gfx6)
+ * Y#: 70 (gfx7)
  *
  * The abbreviations in the header below are:
  * smpl  - Sampling Engine
@@ -83,7 +83,7 @@ struct surface_format_info {
  * VB    - Input Vertex Buffer
  * SO    - Steamed Output Vertex Buffers (transform feedback)
  * color - Color Processing
- * ccs_e - Lossless Compression Support (gen9+ only)
+ * ccs_e - Lossless Compression Support (gfx9+ only)
  * sf    - Surface Format
  *
  * See page 88 of the Sandybridge PRM VOL4_Part1 PDF.
@@ -297,7 +297,7 @@ static const struct surface_format_info format_info[] = {
    SF(  x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   PLANAR_420_8)
    /* The format enum for R8G8B8_UNORM_SRGB first shows up in the HSW PRM but
     * empirical testing indicates that it doesn't actually sRGB decode and
-    * acts identical to R8G8B8_UNORM.  It does work on gen8+.
+    * acts identical to R8G8B8_UNORM.  It does work on gfx8+.
     */
    SF( 80,  80,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   R8G8B8_UNORM_SRGB)
    SF( 80,  80,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   ETC1_RGB8)
@@ -675,7 +675,7 @@ isl_format_for_pipe_format(enum pipe_format pf)
 static unsigned
 format_gen(const struct gen_device_info *devinfo)
 {
-   return devinfo->gen * 10 + (devinfo->is_g4x || devinfo->is_haswell) * 5;
+   return devinfo->ver * 10 + (devinfo->is_g4x || devinfo->is_haswell) * 5;
 }
 
 static bool
@@ -835,7 +835,7 @@ isl_format_supports_ccs_d(const struct gen_device_info *devinfo,
    /* Clear-only compression was first added on Ivy Bridge and was last
     * implemented on Ice lake (see BSpec: 43862).
     */
-   if (devinfo->gen < 7 || devinfo->gen > 11)
+   if (devinfo->ver < 7 || devinfo->ver > 11)
       return false;
 
    if (!isl_format_supports_rendering(devinfo, format))
@@ -897,8 +897,8 @@ isl_format_supports_multisampling(const struct gen_device_info *devinfo,
       /* On SKL+, HiZ is always single-sampled even when the primary surface
        * is multisampled.  See also isl_surf_get_hiz_surf().
        */
-      return devinfo->gen <= 8;
-   } else if (devinfo->gen < 7 && isl_format_get_layout(format)->bpb > 64) {
+      return devinfo->ver <= 8;
+   } else if (devinfo->ver < 7 && isl_format_get_layout(format)->bpb > 64) {
       return false;
    } else if (isl_format_is_compressed(format)) {
       return false;
@@ -928,7 +928,7 @@ isl_formats_are_ccs_e_compatible(const struct gen_device_info *devinfo,
        !isl_format_supports_ccs_e(devinfo, format2))
       return false;
 
-   /* Gen12 added CCS_E support for A8_UNORM, A8_UNORM and R8_UNORM share the
+   /* Gfx12 added CCS_E support for A8_UNORM, A8_UNORM and R8_UNORM share the
     * same aux map format encoding so they are definitely compatible.
     */
    if (format1 == ISL_FORMAT_A8_UNORM)
@@ -1318,7 +1318,7 @@ unpack_channel(union isl_color_value *value,
 void
 isl_color_value_unpack(union isl_color_value *value,
                        enum isl_format format,
-                       const uint32_t data_in[4])
+                       const uint32_t *data_in)
 {
    const struct isl_format_layout *fmtl = isl_format_get_layout(format);
    assert(fmtl->colorspace == ISL_COLORSPACE_LINEAR ||

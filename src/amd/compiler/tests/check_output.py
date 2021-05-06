@@ -41,7 +41,7 @@ def insert_code(code):
     insert_queue.append(CodeCheck(code))
 
 def insert_pattern(pattern):
-    insert_queue.append(PatternCheck(pattern))
+    insert_queue.append(PatternCheck(pattern, False, '(code pattern)'))
 
 def vector_gpr(prefix, name, size, align):
     insert_code(f'{name} = {name}0')

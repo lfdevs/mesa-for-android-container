@@ -27,7 +27,7 @@
 #include <string.h>
 #include <stdarg.h>
 
-#include "common/gen_gem.h"
+#include "common/intel_gem.h"
 #include "util/macros.h"
 
 #include "aub_read.h"
@@ -56,8 +56,6 @@
 #define SUBOPCODE_MEM_POLL  0x05
 #define SUBOPCODE_MEM_WRITE 0x06
 #define SUBOPCODE_VERSION   0x0e
-
-#define MAKE_GEN(major, minor) (((major) << 8) | (minor))
 
 static void
 parse_error(struct aub_read *read, const uint32_t *p, const char *fmt, ...)
@@ -139,8 +137,8 @@ handle_trace_block(struct aub_read *read, const uint32_t *p)
    int header_length = p[0] & 0xffff;
    enum drm_i915_gem_engine_class engine = I915_ENGINE_CLASS_RENDER;
    const void *data = p + header_length + 2;
-   uint64_t address = gen_48b_address((read->devinfo.gen >= 8 ? ((uint64_t) p[5] << 32) : 0) |
-                                      ((uint64_t) p[3]));
+   uint64_t address = intel_48b_address((read->devinfo.ver >= 8 ? ((uint64_t) p[5] << 32) : 0) |
+                                        ((uint64_t) p[3]));
    uint32_t size = p[4];
 
    switch (operation) {
@@ -262,7 +260,7 @@ static void
 handle_memtrace_mem_write(struct aub_read *read, const uint32_t *p)
 {
    const void *data = p + 5;
-   uint64_t addr = gen_48b_address(*(uint64_t*)&p[1]);
+   uint64_t addr = intel_48b_address(*(uint64_t*)&p[1]);
    uint32_t size = p[4];
    uint32_t address_space = p[3] >> 28;
 
@@ -316,7 +314,13 @@ aub_read_command(struct aub_read *read, const void *data, uint32_t data_len)
       next += p[4] / 4;
    }
 
-   assert(next <= end);
+   if (next > end) {
+      parse_error(read, data,
+            "input ends unexpectedly (command length: %d, remaining bytes: %d)\n",
+            (uintptr_t)next - (uintptr_t)data,
+            (uintptr_t)end  - (uintptr_t)data);
+      return -1;
+   }
 
    switch (h & 0xffff0000) {
    case MAKE_HEADER(TYPE_AUB, OPCODE_AUB, SUBOPCODE_HEADER):
