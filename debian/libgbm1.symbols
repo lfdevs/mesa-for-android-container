@@ -6,6 +6,7 @@ libgbm.so.1 libgbm1 #MINVER#
  gbm_bo_get_bpp@Base 17.3.0~rc1
  gbm_bo_get_device@Base 8.1~0
  gbm_bo_get_fd@Base 10.2~0
+ gbm_bo_get_fd_for_plane@Base 21.1.0
  gbm_bo_get_format@Base 8.1~0
  gbm_bo_get_handle@Base 7.11~1
  gbm_bo_get_handle_for_plane@Base 17.1.0~rc2

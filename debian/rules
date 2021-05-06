@@ -121,8 +121,7 @@ else
   # build vulkan layers where Vulkan loader is available
   ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el riscv64 s390x sparc64 x32))
 	GALLIUM_DRIVERS += zink
-	confflags_VULKAN += -Dvulkan-device-select-layer=true
-	confflags_VULKAN += -Dvulkan-overlay-layer=true
+	confflags_VULKAN += -Dvulkan-layers="device-select, overlay"
   endif
 
   ifeq (,$(filter pkg.mesa.nolibva,$(DEB_BUILD_PROFILES)))
@@ -220,12 +219,6 @@ override_dh_install:
 	install -m755 -d debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/
 	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/dri/*_dri.so \
 	   debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/
-
-  # Remove vulkan headers only where they get installed in tmp
-  # We ship those headers via src:vulkan / libvulkan-dev
-  ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 x32))
-	rmdir debian/tmp/usr/include/vulkan
-  endif
 
   ifneq ($(DEB_HOST_ARCH_OS), hurd)
 	# Copy the hardlinked vdpau drivers correctly.

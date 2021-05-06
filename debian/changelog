@@ -1,3 +1,17 @@
+mesa (21.1.0-3) experimental; urgency=medium
+
+  * rules: Drop the rule to clean up vulkan headers, not needed anymore.
+  * rules: Update vulkan layer option selection.
+  * libgbm1.symbols: Updated.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 06 May 2021 20:25:50 +0300
+
+mesa (21.1.0-2) experimental; urgency=medium
+
+  * control: Bump libdrm-dev build-dep.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 06 May 2021 16:46:12 +0300
+
 mesa (21.1.0-1) experimental; urgency=medium
 
   * New upstream release.
