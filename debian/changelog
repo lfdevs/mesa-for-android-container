@@ -1,3 +1,9 @@
+mesa (21.1.0-4) experimental; urgency=medium
+
+  * fix-ftbfs.diff: Fix build on armel/armhf/mipsel.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 17 May 2021 10:38:04 +0300
+
 mesa (21.1.0-3) experimental; urgency=medium
 
   * rules: Drop the rule to clean up vulkan headers, not needed anymore.
