@@ -253,6 +253,8 @@ bool validate_ir(Program* program)
                uint32_t scalar_mask = instr->isVOP3() || instr->isVOP3P() ? 0x7 : 0x5;
                if (instr->isSDWA())
                   scalar_mask = program->chip_class >= GFX9 ? 0x7 : 0x4;
+               else if (instr->isDPP())
+                  scalar_mask = 0x0;
 
                if (instr->isVOPC() ||
                    instr->opcode == aco_opcode::v_readfirstlane_b32 ||

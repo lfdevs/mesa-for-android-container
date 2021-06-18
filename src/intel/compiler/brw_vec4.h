@@ -320,6 +320,7 @@ public:
 
    vec4_instruction *shuffle_64bit_data(dst_reg dst, src_reg src,
                                         bool for_write,
+                                        bool for_scratch = false,
                                         bblock_t *block = NULL,
                                         vec4_instruction *ref = NULL);
 

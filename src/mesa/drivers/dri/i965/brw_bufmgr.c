@@ -1581,7 +1581,7 @@ brw_bo_gem_export_to_prime(struct brw_bo *bo, int *prime_fd)
    brw_bo_make_external(bo);
 
    if (drmPrimeHandleToFD(bufmgr->fd, bo->gem_handle,
-                          DRM_CLOEXEC, prime_fd) != 0)
+                          DRM_CLOEXEC | DRM_RDWR, prime_fd) != 0)
       return -errno;
 
    bo->reusable = false;

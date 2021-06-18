@@ -59,6 +59,37 @@ struct gallivm_state;
  */
 #define DRAW_MAX_FETCH_IDX 0xffffffff
 
+/**
+ * Maximum number of extra shader outputs.  These are allocated by:
+ * - draw_pipe_aaline.c (1)
+ * - draw_pipe_aapoint.c (1)
+ * - draw_pipe_unfilled.c (1)
+ * - draw_pipe_wide_point.c (up to 32)
+ * - draw_prim_assembler.c (1)
+ */
+#define DRAW_MAX_EXTRA_SHADER_OUTPUTS 32
+
+/**
+ * Despite some efforts to determine the number of extra shader outputs ahead
+ * of time, the matter of fact is that this number will vary as primitives
+ * flow through the draw pipeline.  In particular, aaline/aapoint stages
+ * only allocate their extra shader outputs on the first line/point.
+ *
+ * Consequently dup_vert() ends up copying vertices larger than those
+ * allocated.
+ *
+ * Ideally we'd keep track of incoming/outgoing vertex sizes (and strides)
+ * throughout the draw pipeline, but unfortunately we recompute these all over
+ * the place, so preemptively expanding the vertex stride/size does not work
+ * as mismatches ensue.
+ *
+ * As stopgap to prevent buffer read overflows, we allocate an extra bit of
+ * padding at the end of temporary vertex buffers, allowing dup_vert() to copy
+ * more vertex attributes than allocated.
+ */
+#define DRAW_EXTRA_VERTICES_PADDING \
+   (DRAW_MAX_EXTRA_SHADER_OUTPUTS * sizeof(float[4]))
+
 struct pipe_context;
 struct draw_vertex_shader;
 struct draw_context;
@@ -361,9 +392,9 @@ struct draw_context
     */
    struct {
       uint num;
-      uint semantic_name[10];
-      uint semantic_index[10];
-      uint slot[10];
+      uint semantic_name[DRAW_MAX_EXTRA_SHADER_OUTPUTS];
+      uint semantic_index[DRAW_MAX_EXTRA_SHADER_OUTPUTS];
+      uint slot[DRAW_MAX_EXTRA_SHADER_OUTPUTS];
    } extra_shader_outputs;
 
    unsigned instance_id;

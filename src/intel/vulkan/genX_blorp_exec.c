@@ -243,6 +243,22 @@ genX(blorp_exec)(struct blorp_batch *batch,
       ANV_PIPE_STALL_AT_SCOREBOARD_BIT;
 #endif
 
+#if GFX_VERx10 == 120
+   if (!(batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL)) {
+      /* Wa_14010455700
+       *
+       * ISL will change some CHICKEN registers depending on the depth surface
+       * format, along with emitting the depth and stencil packets. In that
+       * case, we want to do a depth flush and stall, so the pipeline is not
+       * using these settings while we change the registers.
+       */
+      cmd_buffer->state.pending_pipe_bits |=
+         ANV_PIPE_DEPTH_CACHE_FLUSH_BIT |
+         ANV_PIPE_DEPTH_STALL_BIT |
+         ANV_PIPE_END_OF_PIPE_SYNC_BIT;
+   }
+#endif
+
 #if GFX_VER == 7
    /* The MI_LOAD/STORE_REGISTER_MEM commands which BLORP uses to implement
     * indirect fast-clear colors can cause GPU hangs if we don't stall first.

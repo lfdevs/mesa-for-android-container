@@ -2740,6 +2740,33 @@ is_allowed_invariant(ir_variable *var, struct _mesa_glsl_parse_state *state)
    return false;
 }
 
+static void
+validate_component_layout_for_type(struct _mesa_glsl_parse_state *state,
+                                   YYLTYPE *loc, const glsl_type *type,
+                                   unsigned qual_component)
+{
+   type = type->without_array();
+   unsigned components = type->component_slots();
+
+   if (type->is_matrix() || type->is_struct()) {
+       _mesa_glsl_error(loc, state, "component layout qualifier "
+                        "cannot be applied to a matrix, a structure, "
+                        "a block, or an array containing any of these.");
+   } else if (components > 4 && type->is_64bit()) {
+      _mesa_glsl_error(loc, state, "component layout qualifier "
+                       "cannot be applied to dvec%u.",
+                        components / 2);
+   } else if (qual_component != 0 && (qual_component + components - 1) > 3) {
+      _mesa_glsl_error(loc, state, "component overflow (%u > 3)",
+                       (qual_component + components - 1));
+   } else if (qual_component == 1 && type->is_64bit()) {
+      /* We don't bother checking for 3 as it should be caught by the
+       * overflow check above.
+       */
+      _mesa_glsl_error(loc, state, "doubles cannot begin at component 1 or 3");
+   }
+}
+
 /**
  * Matrix layout qualifiers are only allowed on certain types
  */
@@ -3712,32 +3739,10 @@ apply_layout_qualifier_to_variable(const struct ast_type_qualifier *qual,
          unsigned qual_component;
          if (process_qualifier_constant(state, loc, "component",
                                         qual->component, &qual_component)) {
-            const glsl_type *type = var->type->without_array();
-            unsigned components = type->component_slots();
-
-            if (type->is_matrix() || type->is_struct()) {
-               _mesa_glsl_error(loc, state, "component layout qualifier "
-                                "cannot be applied to a matrix, a structure, "
-                                "a block, or an array containing any of "
-                                "these.");
-            } else if (components > 4 && type->is_64bit()) {
-               _mesa_glsl_error(loc, state, "component layout qualifier "
-                                "cannot be applied to dvec%u.",
-                                components / 2);
-            } else if (qual_component != 0 &&
-                (qual_component + components - 1) > 3) {
-               _mesa_glsl_error(loc, state, "component overflow (%u > 3)",
-                                (qual_component + components - 1));
-            } else if (qual_component == 1 && type->is_64bit()) {
-               /* We don't bother checking for 3 as it should be caught by the
-                * overflow check above.
-                */
-               _mesa_glsl_error(loc, state, "doubles cannot begin at "
-                                "component 1 or 3");
-            } else {
-               var->data.explicit_component = true;
-               var->data.location_frac = qual_component;
-            }
+            validate_component_layout_for_type(state, loc, var->type,
+                                               qual_component);
+            var->data.explicit_component = true;
+            var->data.location_frac = qual_component;
          }
       }
    } else if (qual->flags.q.explicit_index) {
@@ -7557,6 +7562,18 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
             } else {
                fields[i].location = -1;
             }
+         }
+
+         if (qual->flags.q.explicit_component) {
+            unsigned qual_component;
+            if (process_qualifier_constant(state, &loc, "component",
+                                           qual->component, &qual_component)) {
+               validate_component_layout_for_type(state, &loc, fields[i].type,
+                                                  qual_component);
+               fields[i].component = qual_component;
+            }
+         } else {
+            fields[i].component = -1;
          }
 
          /* Offset can only be used with std430 and std140 layouts an initial

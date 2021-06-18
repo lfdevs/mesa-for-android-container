@@ -168,6 +168,11 @@ struct iris_resource {
     * be DRM_FORMAT_MOD_INVALID.
     */
    const struct isl_drm_modifier_info *mod_info;
+
+   /**
+    * The screen the resource was originally created with, stored for refcounting.
+    */
+   struct pipe_screen *orig_screen;
 };
 
 /**
@@ -493,6 +498,9 @@ bool iris_resource_level_has_hiz(const struct iris_resource *res,
 
 bool iris_sample_with_depth_aux(const struct gen_device_info *devinfo,
                                 const struct iris_resource *res);
+
+bool iris_can_sample_mcs_with_clear(const struct gen_device_info *devinfo,
+                                    const struct iris_resource *res);
 
 bool iris_has_color_unresolved(const struct iris_resource *res,
                                unsigned start_level, unsigned num_levels,

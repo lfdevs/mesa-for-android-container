@@ -768,7 +768,7 @@ vc4_dump_surface_non_msaa(struct pipe_surface *psurf)
         uint32_t height = psurf->height;
         uint32_t chunk_w = width / 79;
         uint32_t chunk_h = height / 40;
-        uint32_t found_colors[10];
+        uint32_t found_colors[10] = { 0 };
         uint32_t num_found_colors = 0;
 
         if (rsc->vc4_format != VC4_TEXTURE_TYPE_RGBA32R) {

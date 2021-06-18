@@ -286,8 +286,10 @@ ms3_tiling_bits(enum i915_winsys_buffer_tile tiling)
          switch (tiling) {
          case I915_TILE_Y:
             tiling_bits |= MS3_TILE_WALK_Y;
+            FALLTHROUGH;
          case I915_TILE_X:
             tiling_bits |= MS3_TILED_SURFACE;
+            FALLTHROUGH;
          case I915_TILE_NONE:
             break;
          }

@@ -1103,7 +1103,6 @@ struct lvp_cmd_buffer_entry {
 
 VkResult lvp_execute_cmds(struct lvp_device *device,
                           struct lvp_queue *queue,
-                          struct lvp_fence *fence,
                           struct lvp_cmd_buffer *cmd_buffer);
 
 struct lvp_image *lvp_swapchain_get_image(VkSwapchainKHR swapchain,

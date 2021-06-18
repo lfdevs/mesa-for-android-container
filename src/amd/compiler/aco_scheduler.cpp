@@ -74,7 +74,7 @@ struct MoveState {
    /* for moving instructions after the first use of the current instruction upwards */
    void upwards_init(int source_idx, bool improved_rar);
    bool upwards_check_deps();
-   void upwards_set_insert_idx(int before);
+   void upwards_update_insert_idx();
    MoveResult upwards_move();
    void upwards_skip();
 
@@ -115,7 +115,6 @@ void move_element(T begin_it, size_t idx, size_t before) {
 void MoveState::downwards_advance_helper()
 {
    source_idx--;
-   total_demand.update(register_demand[source_idx]);
 }
 
 void MoveState::downwards_init(int current_idx, bool improved_rar_, bool may_form_clauses)
@@ -126,7 +125,8 @@ void MoveState::downwards_init(int current_idx, bool improved_rar_, bool may_for
    insert_idx = current_idx + 1;
    insert_idx_clause = current_idx;
 
-   total_demand = total_demand_clause = register_demand[current_idx];
+   total_demand = register_demand[current_idx];
+   total_demand_clause = {};
 
    std::fill(depends_on.begin(), depends_on.end(), false);
    if (improved_rar) {
@@ -194,11 +194,22 @@ MoveResult MoveState::downwards_move(bool clause)
    for (int i = source_idx; i < dest_insert_idx - 1; i++)
       register_demand[i] -= candidate_diff;
    register_demand[dest_insert_idx - 1] = new_demand;
-   total_demand_clause -= candidate_diff;
    insert_idx_clause--;
+   total_demand_clause -= candidate_diff;
+   if (source_idx == insert_idx_clause) {
+      total_demand_clause = RegisterDemand{};
+   }
    if (!clause) {
       total_demand -= candidate_diff;
       insert_idx--;
+   } else {
+      /* The local demand of clause instructions did not change. But if
+       * previously total_demand_clause was greater than or equal to
+       * total_demand, the global maximum may have changed still */
+      total_demand = total_demand_clause;
+      for (int i = insert_idx_clause; i < insert_idx; ++i) {
+         total_demand.update(register_demand[i]);
+      }
    }
 
    downwards_advance_helper();
@@ -219,6 +230,7 @@ void MoveState::downwards_skip()
       }
    }
    total_demand_clause.update(register_demand[source_idx]);
+   total_demand.update(register_demand[source_idx]);
 
    downwards_advance_helper();
 }
@@ -249,10 +261,10 @@ bool MoveState::upwards_check_deps()
    return true;
 }
 
-void MoveState::upwards_set_insert_idx(int before)
+void MoveState::upwards_update_insert_idx()
 {
-   insert_idx = before;
-   total_demand = register_demand[before - 1];
+   insert_idx = source_idx;
+   total_demand = register_demand[insert_idx];
 }
 
 MoveResult MoveState::upwards_move()
@@ -623,7 +635,7 @@ void schedule_SMEM(sched_ctx& ctx, Block* block,
 
       if (is_dependency) {
          if (!found_dependency) {
-            ctx.mv.upwards_set_insert_idx(candidate_idx);
+            ctx.mv.upwards_update_insert_idx();
             init_hazard_query(&hq);
             found_dependency = true;
          }
@@ -766,7 +778,7 @@ void schedule_VMEM(sched_ctx& ctx, Block* block,
       is_dependency |= !found_dependency && !ctx.mv.upwards_check_deps();
       if (is_dependency) {
          if (!found_dependency) {
-            ctx.mv.upwards_set_insert_idx(candidate_idx);
+            ctx.mv.upwards_update_insert_idx();
             init_hazard_query(&indep_hq);
             found_dependency = true;
          }

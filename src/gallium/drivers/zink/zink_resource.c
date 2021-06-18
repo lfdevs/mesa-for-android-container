@@ -883,7 +883,6 @@ buffer_transfer_map(struct zink_context *ctx, struct zink_resource *res, unsigne
                      (struct pipe_resource **)&trans->staging_res, (void **)&ptr);
          res = zink_resource(trans->staging_res);
          trans->offset = offset;
-         res->obj->map = ptr;
       } else {
          /* At this point, the buffer is always idle (we checked it above). */
          usage |= PIPE_MAP_UNSYNCHRONIZED;

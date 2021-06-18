@@ -1184,7 +1184,8 @@ _mi_resolve_address_token(struct mi_builder *b,
 {
    __gen_address_type addr = __gen_get_batch_address(b->user_data,
                                                     batch_location);
-   uint64_t addr_addr_u64 = __gen_combine_address(b->user_data, NULL, addr, 0);
+   uint64_t addr_addr_u64 = __gen_combine_address(b->user_data, batch_location,
+                                                  addr, 0);
    *(token.ptrs[0]) = addr_addr_u64;
    *(token.ptrs[1]) = addr_addr_u64 + 4;
 }

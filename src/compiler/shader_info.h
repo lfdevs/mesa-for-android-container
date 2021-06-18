@@ -248,6 +248,12 @@ typedef struct shader_info {
    bool uses_control_barrier : 1;
    bool uses_memory_barrier : 1;
 
+   /**
+    * Shared memory types have explicit layout set.  Used for
+    * SPV_KHR_workgroup_storage_explicit_layout.
+    */
+   bool shared_memory_explicit_layout:1;
+
    union {
       struct {
          /* Which inputs are doubles */
@@ -404,12 +410,6 @@ typedef struct shader_info {
           * Uses subgroup intrinsics which can communicate across a quad.
           */
          bool uses_wide_subgroup_intrinsics;
-
-         /**
-          * Shared memory types have explicit layout set.  Used for
-          * SPV_KHR_workgroup_storage_explicit_layout.
-          */
-         bool shared_memory_explicit_layout;
       } cs;
 
       /* Applies to both TCS and TES. */

@@ -865,6 +865,9 @@ radv_handle_per_app_options(struct radv_instance *instance, const VkApplicationI
    instance->disable_shrink_image_store =
       driQueryOptionb(&instance->dri_options, "radv_disable_shrink_image_store");
 
+   instance->absolute_depth_bias =
+      driQueryOptionb(&instance->dri_options, "radv_absolute_depth_bias");
+
    if (driQueryOptionb(&instance->dri_options, "radv_no_dynamic_bounds"))
       instance->debug_flags |= RADV_DEBUG_NO_DYNAMIC_BOUNDS;
 }
@@ -875,7 +878,7 @@ static const driOptionDescription radv_dri_options[] = {
       DRI_CONF_VK_X11_ENSURE_MIN_IMAGE_COUNT(false) DRI_CONF_RADV_REPORT_LLVM9_VERSION_STRING(false)
          DRI_CONF_RADV_ENABLE_MRT_OUTPUT_NAN_FIXUP(false)
             DRI_CONF_RADV_DISABLE_SHRINK_IMAGE_STORE(false) DRI_CONF_RADV_NO_DYNAMIC_BOUNDS(false)
-               DRI_CONF_RADV_OVERRIDE_UNIFORM_OFFSET_ALIGNMENT(0) DRI_CONF_SECTION_END
+               DRI_CONF_RADV_ABSOLUTE_DEPTH_BIAS(false) DRI_CONF_RADV_OVERRIDE_UNIFORM_OFFSET_ALIGNMENT(0) DRI_CONF_SECTION_END
 
                   DRI_CONF_SECTION_DEBUG DRI_CONF_OVERRIDE_VRAM_SIZE()
                      DRI_CONF_VK_WSI_FORCE_BGRA8_UNORM_FIRST(false) DRI_CONF_SECTION_END};
@@ -6579,6 +6582,14 @@ radv_calc_decompress_on_z_planes(struct radv_device *device, struct radv_image_v
       if (iview->vk_format == VK_FORMAT_D16_UNORM && iview->image->info.samples > 1)
          max_zplanes = 2;
 
+      /* Workaround for a DB hang when ITERATE_256 is set to 1. Only affects 4X MSAA D/S images. */
+      if (device->physical_device->rad_info.has_two_planes_iterate256_bug &&
+          radv_image_get_iterate256(device, iview->image) &&
+          !radv_image_tile_stencil_disabled(device, iview->image) &&
+          iview->image->info.samples == 4) {
+         max_zplanes = 1;
+      }
+
       max_zplanes = max_zplanes + 1;
    } else {
       if (iview->vk_format == VK_FORMAT_D16_UNORM) {
@@ -6609,32 +6620,31 @@ radv_initialise_ds_surface(struct radv_device *device, struct radv_ds_buffer_inf
    unsigned level = iview->base_mip;
    unsigned format, stencil_format;
    uint64_t va, s_offs, z_offs;
-   bool stencil_only = false;
+   bool stencil_only = iview->image->vk_format == VK_FORMAT_S8_UINT;
    const struct radv_image_plane *plane = &iview->image->planes[0];
    const struct radeon_surf *surf = &plane->surface;
 
    assert(vk_format_get_plane_count(iview->image->vk_format) == 1);
 
    memset(ds, 0, sizeof(*ds));
-   switch (iview->image->vk_format) {
-   case VK_FORMAT_D24_UNORM_S8_UINT:
-   case VK_FORMAT_X8_D24_UNORM_PACK32:
-      ds->pa_su_poly_offset_db_fmt_cntl = S_028B78_POLY_OFFSET_NEG_NUM_DB_BITS(-24);
-      break;
-   case VK_FORMAT_D16_UNORM:
-   case VK_FORMAT_D16_UNORM_S8_UINT:
-      ds->pa_su_poly_offset_db_fmt_cntl = S_028B78_POLY_OFFSET_NEG_NUM_DB_BITS(-16);
-      break;
-   case VK_FORMAT_D32_SFLOAT:
-   case VK_FORMAT_D32_SFLOAT_S8_UINT:
-      ds->pa_su_poly_offset_db_fmt_cntl =
-         S_028B78_POLY_OFFSET_NEG_NUM_DB_BITS(-23) | S_028B78_POLY_OFFSET_DB_IS_FLOAT_FMT(1);
-      break;
-   case VK_FORMAT_S8_UINT:
-      stencil_only = true;
-      break;
-   default:
-      break;
+   if (!device->instance->absolute_depth_bias) {
+      switch (iview->image->vk_format) {
+      case VK_FORMAT_D24_UNORM_S8_UINT:
+      case VK_FORMAT_X8_D24_UNORM_PACK32:
+         ds->pa_su_poly_offset_db_fmt_cntl = S_028B78_POLY_OFFSET_NEG_NUM_DB_BITS(-24);
+         break;
+      case VK_FORMAT_D16_UNORM:
+      case VK_FORMAT_D16_UNORM_S8_UINT:
+         ds->pa_su_poly_offset_db_fmt_cntl = S_028B78_POLY_OFFSET_NEG_NUM_DB_BITS(-16);
+         break;
+      case VK_FORMAT_D32_SFLOAT:
+      case VK_FORMAT_D32_SFLOAT_S8_UINT:
+         ds->pa_su_poly_offset_db_fmt_cntl =
+            S_028B78_POLY_OFFSET_NEG_NUM_DB_BITS(-23) | S_028B78_POLY_OFFSET_DB_IS_FLOAT_FMT(1);
+         break;
+      default:
+         break;
+      }
    }
 
    format = radv_translate_dbformat(iview->image->vk_format);
@@ -6682,8 +6692,12 @@ radv_initialise_ds_surface(struct radv_device *device, struct radv_ds_buffer_inf
             ds->db_z_info |= S_028038_DECOMPRESS_ON_N_ZPLANES(max_zplanes);
 
             if (device->physical_device->rad_info.chip_class >= GFX10) {
+               bool iterate256 = radv_image_get_iterate256(device, iview->image);
+
                ds->db_z_info |= S_028040_ITERATE_FLUSH(1);
                ds->db_stencil_info |= S_028044_ITERATE_FLUSH(1);
+               ds->db_z_info |= S_028040_ITERATE_256(iterate256);
+               ds->db_stencil_info |= S_028044_ITERATE_256(iterate256);
             } else {
                ds->db_z_info |= S_028038_ITERATE_FLUSH(1);
                ds->db_stencil_info |= S_02803C_ITERATE_FLUSH(1);

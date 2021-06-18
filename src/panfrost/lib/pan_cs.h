@@ -135,6 +135,10 @@ bool
 pan_fbd_has_zs_crc_ext(const struct panfrost_device *dev,
                        const struct pan_fb_info *fb);
 
+int
+pan_select_crc_rt(const struct panfrost_device *dev,
+                  const struct pan_fb_info *fb);
+
 unsigned
 pan_emit_fbd(const struct panfrost_device *dev,
              const struct pan_fb_info *fb,

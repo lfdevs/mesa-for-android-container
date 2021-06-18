@@ -6093,11 +6093,11 @@ spirv_to_nir(const uint32_t *words, size_t word_count,
    nir_foreach_variable_with_modes(var, b->shader, nir_var_mem_shared) {
       if (glsl_type_is_interface(var->type)) {
          assert(b->options->caps.workgroup_memory_explicit_layout);
-         b->shader->info.cs.shared_memory_explicit_layout = true;
+         b->shader->info.shared_memory_explicit_layout = true;
          break;
       }
    }
-   if (b->shader->info.cs.shared_memory_explicit_layout) {
+   if (b->shader->info.shared_memory_explicit_layout) {
       unsigned size = 0;
       nir_foreach_variable_with_modes(var, b->shader, nir_var_mem_shared) {
          assert(glsl_type_is_interface(var->type));

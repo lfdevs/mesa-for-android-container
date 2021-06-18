@@ -329,6 +329,7 @@ struct radv_instance {
    bool enable_mrt_output_nan_fixup;
    bool disable_tc_compat_htile_in_general;
    bool disable_shrink_image_store;
+   bool absolute_depth_bias;
 };
 
 VkResult radv_init_wsi(struct radv_physical_device *physical_device);
@@ -1704,7 +1705,7 @@ struct radv_pipeline {
          bool uses_drawid;
          bool uses_baseinstance;
          bool can_use_guardband;
-         uint32_t needed_dynamic_state;
+         uint64_t needed_dynamic_state;
          bool disable_out_of_order_rast_for_occlusion;
          unsigned tess_patch_control_points;
          unsigned pa_su_sc_mode_cntl;
@@ -2074,6 +2075,17 @@ radv_get_htile_initial_value(const struct radv_device *device, const struct radv
    }
 
    return initial_value;
+}
+
+static inline bool
+radv_image_get_iterate256(struct radv_device *device, struct radv_image *image)
+{
+   /* ITERATE_256 is required for depth or stencil MSAA images that are TC-compatible HTILE. */
+   return device->physical_device->rad_info.chip_class >= GFX10 &&
+          (image->usage & (VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                           VK_IMAGE_USAGE_TRANSFER_DST_BIT)) &&
+          radv_image_is_tc_compat_htile(image) &&
+          image->info.samples > 1;
 }
 
 unsigned radv_image_queue_family_mask(const struct radv_image *image, uint32_t family,

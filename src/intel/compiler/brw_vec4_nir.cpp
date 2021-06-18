@@ -2138,12 +2138,15 @@ vec4_visitor::nir_emit_undef(nir_ssa_undef_instr *instr)
  */
 vec4_instruction *
 vec4_visitor::shuffle_64bit_data(dst_reg dst, src_reg src, bool for_write,
+                                 bool for_scratch,
                                  bblock_t *block, vec4_instruction *ref)
 {
    assert(type_sz(src.type) == 8);
    assert(type_sz(dst.type) == 8);
    assert(!regions_overlap(dst, 2 * REG_SIZE, src, 2 * REG_SIZE));
    assert(!ref == !block);
+
+   opcode mov_op = for_scratch ? VEC4_OPCODE_MOV_FOR_SCRATCH : BRW_OPCODE_MOV;
 
    const vec4_builder bld = !ref ? vec4_builder(this).at_end() :
                                    vec4_builder(this).at(block, ref->next);
@@ -2156,22 +2159,22 @@ vec4_visitor::shuffle_64bit_data(dst_reg dst, src_reg src, bool for_write,
    }
 
    /* dst+0.XY = src+0.XY */
-   bld.group(4, 0).MOV(writemask(dst, WRITEMASK_XY), src);
+   bld.group(4, 0).emit(mov_op, writemask(dst, WRITEMASK_XY), src);
 
    /* dst+0.ZW = src+1.XY */
    bld.group(4, for_write ? 1 : 0)
-             .MOV(writemask(dst, WRITEMASK_ZW),
+            .emit(mov_op, writemask(dst, WRITEMASK_ZW),
                   swizzle(byte_offset(src, REG_SIZE), BRW_SWIZZLE_XYXY));
 
    /* dst+1.XY = src+0.ZW */
    bld.group(4, for_write ? 0 : 1)
-            .MOV(writemask(byte_offset(dst, REG_SIZE), WRITEMASK_XY),
-                 swizzle(src, BRW_SWIZZLE_ZWZW));
+            .emit(mov_op, writemask(byte_offset(dst, REG_SIZE), WRITEMASK_XY),
+                  swizzle(src, BRW_SWIZZLE_ZWZW));
 
    /* dst+1.ZW = src+1.ZW */
    return bld.group(4, 1)
-             .MOV(writemask(byte_offset(dst, REG_SIZE), WRITEMASK_ZW),
-                 byte_offset(src, REG_SIZE));
+            .emit(mov_op, writemask(byte_offset(dst, REG_SIZE), WRITEMASK_ZW),
+                  byte_offset(src, REG_SIZE));
 }
 
 }

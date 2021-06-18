@@ -808,7 +808,7 @@ v3d_resource_create_with_modifiers(struct pipe_screen *pscreen,
 
                 if (!rsc->scanout) {
                         fprintf(stderr, "Failed to create scanout resource\n");
-                        return NULL;
+                        goto fail;
                 }
                 assert(handle.type == WINSYS_HANDLE_TYPE_FD);
                 rsc->bo = v3d_bo_open_dmabuf(screen, handle.handle);

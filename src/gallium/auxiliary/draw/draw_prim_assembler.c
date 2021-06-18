@@ -268,7 +268,7 @@ draw_prim_assembler_run(struct draw_context *draw,
    output_verts->vertex_size = input_verts->vertex_size;
    output_verts->stride = input_verts->stride;
    output_verts->verts = (struct vertex_header*)MALLOC(
-      input_verts->vertex_size * max_verts);
+      input_verts->vertex_size * max_verts + DRAW_EXTRA_VERTICES_PADDING);
    output_verts->count = 0;
 
 

@@ -891,7 +891,7 @@ trace_context_set_inlinable_constants(struct pipe_context *_pipe, enum pipe_shad
    trace_dump_arg(ptr, pipe);
    trace_dump_arg(uint, shader);
    trace_dump_arg(uint, num_values);
-   trace_dump_array(uint, values, num_values);
+   trace_dump_arg_array(uint, values, num_values);
 
    pipe->set_inlinable_constants(pipe, shader, num_values, values);
 

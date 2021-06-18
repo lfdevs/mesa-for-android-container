@@ -392,7 +392,7 @@ struct ir3_instruction {
 	 *                            shared  image  atomic  SSBO  everything
 	 *   barrier()/            -   R/W     R/W    R/W     R/W       X
 	 *     groupMemoryBarrier()
-	 *   memoryBarrier()       -           R/W    R/W
+	 *     memoryBarrier()
 	 *     (but only images declared coherent?)
 	 *   memoryBarrierAtomic() -                  R/W
 	 *   memoryBarrierBuffer() -                          R/W

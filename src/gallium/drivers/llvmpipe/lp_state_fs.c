@@ -3291,7 +3291,7 @@ generate_fragment(struct llvmpipe_context *lp,
                                 LLVMBuildGEP(builder, stride_ptr, &index, 1, ""),
                                 "");
 
-         if (key->multisample)
+         if (key->cbuf_nr_samples[cbuf] > 1)
             sample_stride = LLVMBuildLoad(builder,
                                           LLVMBuildGEP(builder, color_sample_stride_ptr,
                                                        &index, 1, ""), "");
@@ -3301,7 +3301,7 @@ generate_fragment(struct llvmpipe_context *lp,
             unsigned out_idx = key->min_samples == 1 ? 0 : s;
             LLVMValueRef out_ptr = color_ptr;;
 
-            if (key->multisample) {
+            if (sample_stride) {
                LLVMValueRef sample_offset = LLVMBuildMul(builder, sample_stride, lp_build_const_int32(gallivm, s), "");
                out_ptr = LLVMBuildGEP(builder, out_ptr, &sample_offset, 1, "");
             }

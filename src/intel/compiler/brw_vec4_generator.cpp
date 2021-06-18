@@ -1538,6 +1538,7 @@ generate_code(struct brw_codegen *p,
       switch (inst->opcode) {
       case VEC4_OPCODE_UNPACK_UNIFORM:
       case BRW_OPCODE_MOV:
+      case VEC4_OPCODE_MOV_FOR_SCRATCH:
          brw_MOV(p, dst, src[0]);
          break;
       case BRW_OPCODE_ADD:

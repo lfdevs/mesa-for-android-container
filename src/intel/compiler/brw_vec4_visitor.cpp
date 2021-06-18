@@ -1400,7 +1400,7 @@ vec4_visitor::emit_scratch_read(bblock_t *block, vec4_instruction *inst,
       vec4_instruction *last_read =
          SCRATCH_READ(byte_offset(shuffled_float, REG_SIZE), index);
       emit_before(block, inst, last_read);
-      shuffle_64bit_data(temp, src_reg(shuffled), false, block, last_read);
+      shuffle_64bit_data(temp, src_reg(shuffled), false, true, block, last_read);
    }
 }
 
@@ -1445,7 +1445,7 @@ vec4_visitor::emit_scratch_write(bblock_t *block, vec4_instruction *inst,
    } else {
       dst_reg shuffled = dst_reg(this, alloc_type);
       vec4_instruction *last =
-         shuffle_64bit_data(shuffled, temp, true, block, inst);
+         shuffle_64bit_data(shuffled, temp, true, true, block, inst);
       src_reg shuffled_float = src_reg(retype(shuffled, BRW_REGISTER_TYPE_F));
 
       uint8_t mask = 0;
@@ -1652,7 +1652,7 @@ vec4_visitor::emit_pull_constant_load(bblock_t *block, vec4_instruction *inst,
 
    if (is_64bit) {
       temp = retype(temp, BRW_REGISTER_TYPE_DF);
-      shuffle_64bit_data(orig_temp, src_reg(temp), false, block, inst);
+      shuffle_64bit_data(orig_temp, src_reg(temp), false, false, block, inst);
    }
 }
 

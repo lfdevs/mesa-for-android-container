@@ -274,6 +274,22 @@ iris_blorp_exec(struct blorp_batch *blorp_batch,
                                 PIPE_CONTROL_STALL_AT_SCOREBOARD);
 #endif
 
+#if GFX_VERx10 == 120
+   if (!(blorp_batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL)) {
+      /* Wa_14010455700
+       *
+       * ISL will change some CHICKEN registers depending on the depth surface
+       * format, along with emitting the depth and stencil packets. In that
+       * case, we want to do a depth flush and stall, so the pipeline is not
+       * using these settings while we change the registers.
+       */
+      iris_emit_end_of_pipe_sync(batch,
+                                 "Workaround: Stop pipeline for 14010455700",
+                                 PIPE_CONTROL_DEPTH_STALL |
+                                 PIPE_CONTROL_DEPTH_CACHE_FLUSH);
+   }
+#endif
+
    /* Flush the render cache in cases where the same surface is reinterpreted
     * with a different format, which blorp does for stencil and depth data
     * among other things.  Invalidation of sampler caches and flushing of any

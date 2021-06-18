@@ -146,10 +146,13 @@ static unsigned mask_for_unswizzled(int num_components)
    {
       case 4:
          mask |= TGSI_WRITEMASK_W;
+         FALLTHROUGH;
       case 3:
          mask |= TGSI_WRITEMASK_Z;
+         FALLTHROUGH;
       case 2:
          mask |= TGSI_WRITEMASK_Y;
+         FALLTHROUGH;
       case 1:
          mask |= TGSI_WRITEMASK_X;
    }
@@ -340,12 +343,15 @@ static void liveness_analysis(struct i915_optimize_context *ctx,
          case 3:
             src_reg = &current->FullInstruction.Src[2];
             liveness_mark_read(ctx, src_reg, i);
+            FALLTHROUGH;
          case 2:
             src_reg = &current->FullInstruction.Src[1];
             liveness_mark_read(ctx, src_reg, i);
+            FALLTHROUGH;
          case 1:
             src_reg = &current->FullInstruction.Src[0];
             liveness_mark_read(ctx, src_reg, i);
+            FALLTHROUGH;
          case 0:
             break;
          default:

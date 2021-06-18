@@ -1241,7 +1241,8 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
       /* DFSM is not supported on GFX 10.3 and not beneficial on Navi1x. */
    } else if (sscreen->info.chip_class == GFX9) {
       sscreen->dpbb_allowed = !sscreen->info.has_dedicated_vram;
-      sscreen->dfsm_allowed = !sscreen->info.has_dedicated_vram;
+      /* DFSM reduces the Raven2 draw prim rate by ~43%. Disable it. */
+      sscreen->dfsm_allowed = false;
    }
 
    /* Process DPBB enable flags. */

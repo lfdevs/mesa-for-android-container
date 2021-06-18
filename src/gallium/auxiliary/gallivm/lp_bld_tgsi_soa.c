@@ -305,7 +305,7 @@ static void lp_exec_default(struct lp_exec_mask *mask,
    LLVMBuilderRef builder = mask->bld->gallivm->builder;
    struct function_ctx *ctx = func_ctx(mask);
 
-   int default_exec_pc;
+   int default_exec_pc = 0;
    boolean default_is_last;
 
    if (ctx->switch_stack_size > LP_MAX_TGSI_NESTING) {

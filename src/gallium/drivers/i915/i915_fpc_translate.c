@@ -253,6 +253,18 @@ src_vector(struct i915_fp_compile *p,
 		 source->Register.SwizzleZ,
 		 source->Register.SwizzleW);
 
+   /* No HW abs flag, so we have to max with the negation. */
+   if (source->Register.Absolute) {
+      uint tmp = i915_get_utemp(p);
+      i915_emit_arith(p,
+                      A0_MAX,
+                      tmp, A0_DEST_CHANNEL_ALL, 0,
+                      src,
+                      negate(src, 1, 1, 1, 1),
+                      0);
+      src = tmp;
+   }
+
    /* There's both negate-all-components and per-component negation.
     * Try to handle both here.
     */
@@ -260,15 +272,6 @@ src_vector(struct i915_fp_compile *p,
       int n = source->Register.Negate;
       src = negate(src, n, n, n, n);
    }
-
-   /* no abs() */
-#if 0
-   /* XXX assertions disabled to allow arbfplight.c to run */
-   /* XXX enable these assertions, or fix things */
-   assert(!source->Register.Absolute);
-#endif
-   if (source->Register.Absolute)
-      debug_printf("Unhandled absolute value\n");
 
    return src;
 }

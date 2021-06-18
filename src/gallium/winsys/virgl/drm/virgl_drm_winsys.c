@@ -1043,8 +1043,7 @@ static void virgl_fence_reference(struct virgl_winsys *vws,
       if (vws->supports_fences) {
          close(dfence->fd);
       } else {
-         struct virgl_drm_winsys *vdws = virgl_drm_winsys(vws);
-         virgl_hw_res_destroy(vdws, dfence->hw_res);
+         virgl_drm_resource_reference(vws, &dfence->hw_res, NULL);
       }
       FREE(dfence);
    }

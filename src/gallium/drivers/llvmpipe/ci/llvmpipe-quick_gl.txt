@@ -512,36 +512,8 @@ spec/arb_sample_shading/interpolate-at-sample-position 8: skip
 spec/arb_sample_shading/samplemask 0 all: skip
 spec/arb_sample_shading/samplemask 16: skip
 spec/arb_sample_shading/samplemask 16 all: skip
-spec/arb_sample_shading/samplemask 2 all/0.250000 mask_in_one: fail
-spec/arb_sample_shading/samplemask 2 all/0.500000 mask_in_one: fail
-spec/arb_sample_shading/samplemask 2 all/1.000000 mask_in_one: fail
-spec/arb_sample_shading/samplemask 2 all/noms fix: fail
-spec/arb_sample_shading/samplemask 2 all/noms mask_in_one: fail
-spec/arb_sample_shading/samplemask 2 all/noms partition: fail
-spec/arb_sample_shading/samplemask 2 all/sample mask_in_one: fail
-spec/arb_sample_shading/samplemask 2/0.250000 mask_in_one: fail
-spec/arb_sample_shading/samplemask 2/0.500000 mask_in_one: fail
-spec/arb_sample_shading/samplemask 2/1.000000 mask_in_one: fail
-spec/arb_sample_shading/samplemask 2/noms fix: fail
-spec/arb_sample_shading/samplemask 2/noms mask_in_one: fail
-spec/arb_sample_shading/samplemask 2/noms partition: fail
-spec/arb_sample_shading/samplemask 2/sample mask_in_one: fail
 spec/arb_sample_shading/samplemask 32: skip
 spec/arb_sample_shading/samplemask 32 all: skip
-spec/arb_sample_shading/samplemask 4 all/0.250000 mask_in_one: fail
-spec/arb_sample_shading/samplemask 4 all/0.500000 mask_in_one: fail
-spec/arb_sample_shading/samplemask 4 all/1.000000 mask_in_one: fail
-spec/arb_sample_shading/samplemask 4 all/noms fix: fail
-spec/arb_sample_shading/samplemask 4 all/noms mask_in_one: fail
-spec/arb_sample_shading/samplemask 4 all/noms partition: fail
-spec/arb_sample_shading/samplemask 4 all/sample mask_in_one: fail
-spec/arb_sample_shading/samplemask 4/0.250000 mask_in_one: fail
-spec/arb_sample_shading/samplemask 4/0.500000 mask_in_one: fail
-spec/arb_sample_shading/samplemask 4/1.000000 mask_in_one: fail
-spec/arb_sample_shading/samplemask 4/noms fix: fail
-spec/arb_sample_shading/samplemask 4/noms mask_in_one: fail
-spec/arb_sample_shading/samplemask 4/noms partition: fail
-spec/arb_sample_shading/samplemask 4/sample mask_in_one: fail
 spec/arb_sample_shading/samplemask 6: skip
 spec/arb_sample_shading/samplemask 6 all: skip
 spec/arb_sample_shading/samplemask 8: skip
@@ -718,9 +690,7 @@ spec/arb_sparse_buffer/minmax: skip
 spec/arb_tessellation_shader/arb_tessellation_shader-immediate-mode-draw-patches: skip
 spec/arb_texture_buffer_object/negative-unsupported: skip
 spec/arb_texture_cube_map/copyteximage cube samples=16: skip
-spec/arb_texture_cube_map/copyteximage cube samples=2: fail
 spec/arb_texture_cube_map/copyteximage cube samples=32: skip
-spec/arb_texture_cube_map/copyteximage cube samples=4: fail
 spec/arb_texture_cube_map/copyteximage cube samples=6: skip
 spec/arb_texture_cube_map/copyteximage cube samples=8: skip
 spec/arb_texture_float/multisample-formats 16 gl_arb_texture_float: skip
@@ -814,9 +784,7 @@ spec/arb_texture_multisample/texelfetch/8-vs-sampler2dmsarray: skip
 spec/arb_texture_multisample/texelfetch/8-vs-usampler2dms: skip
 spec/arb_texture_multisample/texelfetch/8-vs-usampler2dmsarray: skip
 spec/arb_texture_rectangle/copyteximage rect samples=16: skip
-spec/arb_texture_rectangle/copyteximage rect samples=2: fail
 spec/arb_texture_rectangle/copyteximage rect samples=32: skip
-spec/arb_texture_rectangle/copyteximage rect samples=4: fail
 spec/arb_texture_rectangle/copyteximage rect samples=6: skip
 spec/arb_texture_rectangle/copyteximage rect samples=8: skip
 spec/arb_texture_rg/multisample-formats 16 gl_arb_texture_rg: skip
@@ -1099,15 +1067,11 @@ spec/ext_framebuffer_multisample/alpha-to-one-dual-src-blend 32: skip
 spec/ext_framebuffer_multisample/alpha-to-one-dual-src-blend 6: skip
 spec/ext_framebuffer_multisample/alpha-to-one-dual-src-blend 8: skip
 spec/ext_framebuffer_multisample/alpha-to-one-msaa-disabled 16: skip
-spec/ext_framebuffer_multisample/alpha-to-one-msaa-disabled 2: fail
 spec/ext_framebuffer_multisample/alpha-to-one-msaa-disabled 32: skip
-spec/ext_framebuffer_multisample/alpha-to-one-msaa-disabled 4: fail
 spec/ext_framebuffer_multisample/alpha-to-one-msaa-disabled 6: skip
 spec/ext_framebuffer_multisample/alpha-to-one-msaa-disabled 8: skip
 spec/ext_framebuffer_multisample/bitmap 16: skip
-spec/ext_framebuffer_multisample/bitmap 2: fail
 spec/ext_framebuffer_multisample/bitmap 32: skip
-spec/ext_framebuffer_multisample/bitmap 4: fail
 spec/ext_framebuffer_multisample/bitmap 6: skip
 spec/ext_framebuffer_multisample/bitmap 8: skip
 spec/ext_framebuffer_multisample/blit-flipped 16 x: skip
@@ -1163,7 +1127,6 @@ spec/ext_framebuffer_multisample/draw-buffers-alpha-to-one 16: skip
 spec/ext_framebuffer_multisample/draw-buffers-alpha-to-one 32: skip
 spec/ext_framebuffer_multisample/draw-buffers-alpha-to-one 6: skip
 spec/ext_framebuffer_multisample/draw-buffers-alpha-to-one 8: skip
-spec/ext_framebuffer_multisample/enable-flag: fail
 spec/ext_framebuffer_multisample/formats 16: skip
 spec/ext_framebuffer_multisample/formats 32: skip
 spec/ext_framebuffer_multisample/formats 6: skip
@@ -1183,11 +1146,7 @@ spec/ext_framebuffer_multisample/interpolation 16 centroid-edges: skip
 spec/ext_framebuffer_multisample/interpolation 16 non-centroid-deriv: skip
 spec/ext_framebuffer_multisample/interpolation 16 non-centroid-deriv-disabled: skip
 spec/ext_framebuffer_multisample/interpolation 16 non-centroid-disabled: skip
-spec/ext_framebuffer_multisample/interpolation 2 centroid-deriv-disabled: fail
-spec/ext_framebuffer_multisample/interpolation 2 centroid-disabled: fail
 spec/ext_framebuffer_multisample/interpolation 2 centroid-edges: fail
-spec/ext_framebuffer_multisample/interpolation 2 non-centroid-deriv-disabled: fail
-spec/ext_framebuffer_multisample/interpolation 2 non-centroid-disabled: fail
 spec/ext_framebuffer_multisample/interpolation 32 centroid-deriv: skip
 spec/ext_framebuffer_multisample/interpolation 32 centroid-deriv-disabled: skip
 spec/ext_framebuffer_multisample/interpolation 32 centroid-disabled: skip
@@ -1195,11 +1154,7 @@ spec/ext_framebuffer_multisample/interpolation 32 centroid-edges: skip
 spec/ext_framebuffer_multisample/interpolation 32 non-centroid-deriv: skip
 spec/ext_framebuffer_multisample/interpolation 32 non-centroid-deriv-disabled: skip
 spec/ext_framebuffer_multisample/interpolation 32 non-centroid-disabled: skip
-spec/ext_framebuffer_multisample/interpolation 4 centroid-deriv-disabled: fail
-spec/ext_framebuffer_multisample/interpolation 4 centroid-disabled: fail
 spec/ext_framebuffer_multisample/interpolation 4 centroid-edges: fail
-spec/ext_framebuffer_multisample/interpolation 4 non-centroid-deriv-disabled: fail
-spec/ext_framebuffer_multisample/interpolation 4 non-centroid-disabled: fail
 spec/ext_framebuffer_multisample/interpolation 6 centroid-deriv: skip
 spec/ext_framebuffer_multisample/interpolation 6 centroid-deriv-disabled: skip
 spec/ext_framebuffer_multisample/interpolation 6 centroid-disabled: skip
@@ -1432,15 +1387,11 @@ spec/ext_shader_samples_identical/ext_shader_samples_identical-simple-fs 4: skip
 spec/ext_shader_samples_identical/ext_shader_samples_identical-simple-fs 6: skip
 spec/ext_shader_samples_identical/ext_shader_samples_identical-simple-fs 8: skip
 spec/ext_texture_array/copyteximage 1d_array samples=16: skip
-spec/ext_texture_array/copyteximage 1d_array samples=2: fail
 spec/ext_texture_array/copyteximage 1d_array samples=32: skip
-spec/ext_texture_array/copyteximage 1d_array samples=4: fail
 spec/ext_texture_array/copyteximage 1d_array samples=6: skip
 spec/ext_texture_array/copyteximage 1d_array samples=8: skip
 spec/ext_texture_array/copyteximage 2d_array samples=16: skip
-spec/ext_texture_array/copyteximage 2d_array samples=2: fail
 spec/ext_texture_array/copyteximage 2d_array samples=32: skip
-spec/ext_texture_array/copyteximage 2d_array samples=4: fail
 spec/ext_texture_array/copyteximage 2d_array samples=6: skip
 spec/ext_texture_array/copyteximage 2d_array samples=8: skip
 spec/ext_texture_integer/fbo-integer: fail

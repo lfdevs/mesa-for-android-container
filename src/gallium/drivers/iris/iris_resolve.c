@@ -894,6 +894,24 @@ iris_image_view_aux_usage(struct iris_context *ice,
    return ISL_AUX_USAGE_NONE;
 }
 
+bool
+iris_can_sample_mcs_with_clear(const struct gen_device_info *devinfo,
+                               const struct iris_resource *res)
+{
+   assert(isl_aux_usage_has_mcs(res->aux.usage));
+
+   /* On TGL, the sampler has an issue with some 8 and 16bpp MSAA fast clears.
+    * See HSD 1707282275, wa_14013111325. Due to the use of
+    * format-reinterpretation, a simplified workaround is implemented.
+    */
+   if (devinfo->ver >= 12 &&
+       isl_format_get_layout(res->surf.format)->bpb <= 16) {
+      return false;
+   }
+
+   return true;
+}
+
 static bool
 isl_formats_are_fast_clear_compatible(enum isl_format a, enum isl_format b)
 {
@@ -918,6 +936,9 @@ iris_resource_prepare_texture(struct iris_context *ice,
                               uint32_t start_level, uint32_t num_levels,
                               uint32_t start_layer, uint32_t num_layers)
 {
+   const struct iris_screen *screen = (void *) ice->ctx.screen;
+   const struct gen_device_info *devinfo = &screen->devinfo;
+
    enum isl_aux_usage aux_usage =
       iris_resource_texture_aux_usage(ice, res, view_format);
 
@@ -929,6 +950,11 @@ iris_resource_prepare_texture(struct iris_context *ice,
     */
    if (!isl_formats_are_fast_clear_compatible(res->surf.format, view_format))
       clear_supported = false;
+
+   if (isl_aux_usage_has_mcs(aux_usage) &&
+       !iris_can_sample_mcs_with_clear(devinfo, res)) {
+      clear_supported = false;
+   }
 
    iris_resource_prepare_access(ice, res, start_level, num_levels,
                                 start_layer, num_layers,

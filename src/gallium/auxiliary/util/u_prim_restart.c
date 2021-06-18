@@ -148,7 +148,7 @@ util_translate_prim_restart_ib(struct pipe_context *context,
       goto error;
 
    util_translate_prim_restart_data(src_index_size, src_map, dst_map,
-                                    draw->count, info->restart_index);
+                                    count, info->restart_index);
 
    if (src_transfer)
       pipe_buffer_unmap(context, src_transfer);

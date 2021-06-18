@@ -80,7 +80,7 @@ lower_fragcolor_instr(nir_intrinsic_instr *instr, nir_builder *b, unsigned max_d
                                                    glsl_vec4_type(),
                                                    name);
       out_color->data.location = FRAG_RESULT_DATA0 + i;
-      out_color->data.driver_location = i;
+      out_color->data.driver_location = b->shader->num_outputs++;
       out_color->data.index = out->data.index;
       nir_store_var(b, out_color, frag_color, writemask);
    }

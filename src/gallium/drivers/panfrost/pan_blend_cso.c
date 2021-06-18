@@ -154,9 +154,9 @@ panfrost_get_blend_for_context(struct panfrost_context *ctx, unsigned rti, struc
         /* First, we'll try fixed function, matching equation and constant */
         if (pan_blend_can_fixed_function(dev, &pan_blend, rti)) {
                 struct panfrost_blend_final final = {
-                        .load_dest = pan_blend_reads_dest(&pan_blend, rti),
+                        .load_dest = pan_blend_reads_dest(pan_blend.rts[rti].equation),
                         .equation.constant = pan_blend_get_constant(dev, &pan_blend, rti),
-                        .opaque = pan_blend_is_opaque(&pan_blend, rti),
+                        .opaque = pan_blend_is_opaque(pan_blend.rts[rti].equation),
                         .no_colour = pan_blend.rts[rti].equation.color_mask == 0,
                 };
 
@@ -191,7 +191,8 @@ panfrost_get_blend_for_context(struct panfrost_context *ctx, unsigned rti, struc
                         .first_tag = shader->first_tag,
                         .gpu = (*bo)->ptr.gpu + *shader_offset,
                 },
-                .load_dest = pan_blend_reads_dest(&pan_blend, rti),
+                .load_dest = pan_blend.logicop_enable ||
+                        pan_blend_reads_dest(pan_blend.rts[rti].equation),
         };
 
         *shader_offset += shader->binary.size;

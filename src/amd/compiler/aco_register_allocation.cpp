@@ -152,11 +152,11 @@ struct PhysRegInterval {
    }
 
    bool contains(PhysReg reg) const {
-       return lo() <= reg && reg < hi();
+      return lo() <= reg && reg < hi();
    }
 
    bool contains(const PhysRegInterval& needle) const {
-       return needle.lo() >= lo() && needle.hi() <= hi();
+      return needle.lo() >= lo() && needle.hi() <= hi();
    }
 
    PhysRegIterator begin() const {
@@ -255,6 +255,7 @@ public:
    /* Returns true if any of the bytes in the given range are allocated or blocked */
    bool test(PhysReg start, unsigned num_bytes) {
       for (PhysReg i = start; i.reg_b < start.reg_b + num_bytes; i = PhysReg(i + 1)) {
+         assert(i <= 511);
          if (regs[i] & 0x0FFFFFFF)
             return true;
          if (regs[i] == 0xF0000000) {
@@ -1187,6 +1188,10 @@ bool get_reg_specified(ra_ctx& ctx,
                        aco_ptr<Instruction>& instr,
                        PhysReg reg)
 {
+   /* catch out-of-range registers */
+   if (reg >= PhysReg{512})
+      return false;
+
    std::pair<unsigned, unsigned> sdw_def_info;
    if (rc.is_subdword())
       sdw_def_info = get_subdword_definition_info(ctx.program, instr, rc);
@@ -1197,7 +1202,7 @@ bool get_reg_specified(ra_ctx& ctx,
       return false;
 
    if (rc.type() == RegType::sgpr && reg % get_stride(rc) != 0)
-         return false;
+      return false;
 
    PhysRegInterval reg_win = { reg, rc.size() };
    PhysRegInterval bounds = get_reg_bounds(ctx.program, rc.type());
@@ -2265,6 +2270,8 @@ void register_allocation(Program *program, std::vector<IDSet>& live_out_per_bloc
 
          assert(!is_phi(instr));
 
+         bool temp_in_scc = register_file[scc];
+
          /* handle operands */
          for (unsigned i = 0; i < instr->operands.size(); ++i) {
             auto& operand = instr->operands[i];
@@ -2479,7 +2486,6 @@ void register_allocation(Program *program, std::vector<IDSet>& live_out_per_bloc
          if (!parallelcopy.empty()) {
             aco_ptr<Pseudo_instruction> pc;
             pc.reset(create_instruction<Pseudo_instruction>(aco_opcode::p_parallelcopy, Format::PSEUDO, parallelcopy.size(), parallelcopy.size()));
-            bool temp_in_scc = register_file[scc];
             bool sgpr_operands_alias_defs = false;
             uint64_t sgpr_operands[4] = {0, 0, 0, 0};
             for (unsigned i = 0; i < parallelcopy.size(); i++) {

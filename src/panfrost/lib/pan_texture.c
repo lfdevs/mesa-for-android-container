@@ -415,11 +415,29 @@ panfrost_new_texture(const struct panfrost_device *dev,
                      void *out, const struct panfrost_ptr *payload)
 {
         const struct pan_image_layout *layout = &iview->image->layout;
-        unsigned swizzle = panfrost_translate_swizzle_4(iview->swizzle);
         enum pipe_format format = iview->format;
+        unsigned swizzle;
 
         if (drm_is_afbc(layout->modifier))
                 format = panfrost_afbc_format_fixup(dev, format);
+
+        if (dev->arch == 7 && util_format_is_depth_or_stencil(format)) {
+                /* v7 doesn't have an _RRRR component order, combine the
+                 * user swizzle with a .XXXX swizzle to emulate that.
+                 */
+                static const unsigned char replicate_x[4] = {
+                        PIPE_SWIZZLE_X, PIPE_SWIZZLE_X,
+                        PIPE_SWIZZLE_X, PIPE_SWIZZLE_X,
+                };
+                unsigned char patched_swizzle[4];
+
+                util_format_compose_swizzles(replicate_x,
+                                             iview->swizzle,
+                                             patched_swizzle);
+                swizzle = panfrost_translate_swizzle_4(patched_swizzle);
+        } else {
+                swizzle = panfrost_translate_swizzle_4(iview->swizzle);
+        }
 
         bool manual_stride =
                 panfrost_needs_explicit_stride(dev, iview);
@@ -625,20 +643,15 @@ pan_image_layout_init(const struct panfrost_device *dev,
                 /* Compute the would-be stride */
                 unsigned stride = bytes_per_pixel * effective_width;
 
-                /* On Bifrost, pixel lines have to be aligned on 64 bytes otherwise
-                 * we end up with DATA_INVALID faults. That doesn't seem to be
-                 * mandatory on Midgard, but we keep the alignment for performance.
-                 */
-                if (linear)
-                        stride = ALIGN_POT(stride, 64);
-
                 if (explicit_layout) {
                         /* Make sure the explicit stride is valid */
-                        if (explicit_layout->line_stride < stride ||
-                            (explicit_layout->line_stride & 63))
+                        if (explicit_layout->line_stride < stride)
                                 return false;
 
                         stride = explicit_layout->line_stride;
+                } else if (linear) {
+                        /* Keep lines alignment on 64 byte for performance */
+                        stride = ALIGN_POT(stride, 64);
                 }
 
                 slice->line_stride = stride;

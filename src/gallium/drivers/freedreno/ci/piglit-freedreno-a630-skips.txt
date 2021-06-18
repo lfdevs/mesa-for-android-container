@@ -1,5 +1,6 @@
 # Can wedge the GPU
 vs-output-array-vec2-index-wr-before-gs
+gs-input-array-vec4-index-rd
 
 # These take most of a minute to run
 spec@!opengl 3.0@clearbuffer-depth-cs-probe

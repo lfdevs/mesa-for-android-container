@@ -589,7 +589,8 @@ int draw_geometry_shader_run(struct draw_geometry_shader *shader,
       output_verts[i].stride = output_verts[i].vertex_size;
       output_verts[i].verts =
          (struct vertex_header *)MALLOC(output_verts[i].vertex_size *
-                                        total_verts_per_buffer * shader->num_invocations);
+                                        total_verts_per_buffer * shader->num_invocations +
+                                        DRAW_EXTRA_VERTICES_PADDING);
       debug_assert(output_verts[i].verts);
    }
 

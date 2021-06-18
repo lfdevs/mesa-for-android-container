@@ -468,6 +468,7 @@ vec4_visitor::evaluate_spill_costs(float *spill_costs, bool *no_spill)
 
       case SHADER_OPCODE_GFX4_SCRATCH_READ:
       case SHADER_OPCODE_GFX4_SCRATCH_WRITE:
+      case VEC4_OPCODE_MOV_FOR_SCRATCH:
          for (int i = 0; i < 3; i++) {
             if (inst->src[i].file == VGRF)
                no_spill[inst->src[i].nr] = true;

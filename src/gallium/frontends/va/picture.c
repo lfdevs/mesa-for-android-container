@@ -698,7 +698,7 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       }
    }
 
-   if ((surf->templat.bind & PIPE_BIND_PROTECTED) != context->desc.base.protected_playback) {
+   if ((bool)(surf->templat.bind & PIPE_BIND_PROTECTED) != context->desc.base.protected_playback) {
       if (context->desc.base.protected_playback) {
          surf->templat.bind |= PIPE_BIND_PROTECTED;
       }

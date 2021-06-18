@@ -1713,20 +1713,31 @@ void spill(Program* program, live& live_vars)
    lower_to_cssa(program, live_vars);
 
    /* calculate target register demand */
-   RegisterDemand register_target = program->max_reg_demand;
-   uint16_t sgpr_limit = get_addr_sgpr_from_waves(program, program->min_waves);
-   uint16_t vgpr_limit = get_addr_vgpr_from_waves(program, program->min_waves);
-   if (register_target.sgpr > sgpr_limit)
-      register_target.vgpr += (register_target.sgpr - sgpr_limit + program->wave_size - 1 + 32) / program->wave_size;
-   register_target.sgpr = sgpr_limit;
+   const RegisterDemand demand = program->max_reg_demand; /* current max */
+   const uint16_t sgpr_limit = get_addr_sgpr_from_waves(program, program->min_waves);
+   const uint16_t vgpr_limit = get_addr_vgpr_from_waves(program, program->min_waves);
+   uint16_t extra_vgprs = 0;
+   uint16_t extra_sgprs = 0;
 
-   if (register_target.vgpr > vgpr_limit)
-      register_target.sgpr = sgpr_limit - 5;
-   int spills_to_vgpr = (program->max_reg_demand.sgpr - register_target.sgpr + program->wave_size - 1 + 32) / program->wave_size;
-   register_target.vgpr = vgpr_limit - spills_to_vgpr;
+   /* calculate extra VGPRs required for spilling SGPRs */
+   if (demand.sgpr > sgpr_limit) {
+      unsigned sgpr_spills = demand.sgpr - sgpr_limit;
+      extra_vgprs = DIV_ROUND_UP(sgpr_spills, program->wave_size) + 1;
+   }
+   /* add extra SGPRs required for spilling VGPRs */
+   if (demand.vgpr + extra_vgprs > vgpr_limit) {
+      extra_sgprs = 5; /* scratch_resource (s4) + scratch_offset (s1) */
+      if (demand.sgpr + extra_sgprs > sgpr_limit) {
+         /* re-calculate in case something has changed */
+         unsigned sgpr_spills = demand.sgpr + extra_sgprs - sgpr_limit;
+         extra_vgprs = DIV_ROUND_UP(sgpr_spills, program->wave_size) + 1;
+      }
+   }
+   /* the spiller has to target the following register demand */
+   const RegisterDemand target(vgpr_limit - extra_vgprs, sgpr_limit - extra_sgprs);
 
    /* initialize ctx */
-   spill_ctx ctx(register_target, program, live_vars.register_demand);
+   spill_ctx ctx(target, program, live_vars.register_demand);
    compute_global_next_uses(ctx);
    get_rematerialize_info(ctx);
 
@@ -1735,7 +1746,7 @@ void spill(Program* program, live& live_vars)
       spill_block(ctx, i);
 
    /* assign spill slots and DCE rematerialized code */
-   assign_spill_slots(ctx, spills_to_vgpr);
+   assign_spill_slots(ctx, extra_vgprs);
 
    /* update live variable information */
    live_vars = live_var_analysis(program);

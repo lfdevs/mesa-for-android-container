@@ -1971,6 +1971,11 @@ isl_surf_supports_ccs(const struct isl_device *dev,
    if (ISL_GFX_VER(dev) <= 6)
       return false;
 
+   /* Wa_22011186057: Disable compression on ADL-P A0 */
+   if (dev->info->is_alderlake && dev->info->gt == 2 &&
+       dev->info->revision == 0)
+      return false;
+
    if (surf->usage & ISL_SURF_USAGE_DISABLE_AUX_BIT)
       return false;
 
@@ -2116,6 +2121,11 @@ isl_surf_get_ccs_surf(const struct isl_device *dev,
       return false;
 
    if (ISL_GFX_VER(dev) >= 12) {
+      /* With depth surfaces, HIZ is required for CCS. */
+      if (surf->usage & ISL_SURF_USAGE_DEPTH_BIT &&
+          aux_surf->tiling != ISL_TILING_HIZ)
+         return false;
+
       enum isl_format ccs_format;
       switch (isl_format_get_layout(surf->format)->bpb) {
       case 8:     ccs_format = ISL_FORMAT_GFX12_CCS_8BPP_Y0;    break;

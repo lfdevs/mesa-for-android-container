@@ -125,7 +125,10 @@ idep_vulkan_util_headers = declare_dependency(
   include_directories : include_directories('.')
 )
 
-if with_platform_windows
+# This is likely a bug in the Meson VS backend, as MSVC with ninja works fine.
+# See this discussion here:
+# https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/10506 
+if get_option('backend').startswith('vs')
   idep_vulkan_util = declare_dependency(
     link_with : libvulkan_util,
     dependencies : idep_vulkan_util_headers

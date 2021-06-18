@@ -129,8 +129,6 @@ dEQP-VK.image.subresource_layout.3d.all_levels.r16g16b16a16_snorm,Fail
 dEQP-VK.image.subresource_layout.3d.all_levels.r8_snorm,Fail
 dEQP-VK.image.subresource_layout.3d.all_levels.r8g8b8a8_snorm,Fail
 dEQP-VK.info.device_mandatory_features,Fail
-dEQP-VK.memory_model.message_passing.core11.u32.coherent.fence_fence.atomicwrite.device.payload_local.image.guard_nonlocal.workgroup.comp,Fail
-dEQP-VK.memory_model.message_passing.core11.u32.coherent.fence_fence.atomicwrite.device.payload_nonlocal.workgroup.guard_local.image.comp,Fail
 dEQP-VK.pipeline.extended_dynamic_state.after_pipelines.depth_compare_always_greater,Fail
 dEQP-VK.pipeline.extended_dynamic_state.after_pipelines.depth_compare_greater,Fail
 dEQP-VK.pipeline.extended_dynamic_state.after_pipelines.depth_compare_greater_equal_greater,Fail

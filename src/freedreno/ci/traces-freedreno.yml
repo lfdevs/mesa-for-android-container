@@ -436,7 +436,7 @@ traces:
       - device: freedreno-a306
         checksum: 9227cc8d4e6445f2323438340f2a5d9b
       - device: freedreno-a530
-        checksum: 76fbd196f69594c927dc994b4492dd50
+        checksum: d0d655d81fabeb4087bf7c4837301f2a
       - device: freedreno-a630
         checksum: d70eb1f72d5d50e6cb617520234f20fb
   - path: neverball/neverball.trace

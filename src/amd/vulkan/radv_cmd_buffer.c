@@ -1416,7 +1416,7 @@ radv_emit_line_stipple(struct radv_cmd_buffer *cmd_buffer)
 }
 
 static void
-radv_emit_culling(struct radv_cmd_buffer *cmd_buffer, uint32_t states)
+radv_emit_culling(struct radv_cmd_buffer *cmd_buffer, uint64_t states)
 {
    unsigned pa_su_sc_mode_cntl = cmd_buffer->state.pipeline->graphics.pa_su_sc_mode_cntl;
    struct radv_dynamic_state *d = &cmd_buffer->state.dynamic;
@@ -1451,7 +1451,7 @@ radv_emit_primitive_topology(struct radv_cmd_buffer *cmd_buffer)
 }
 
 static void
-radv_emit_depth_control(struct radv_cmd_buffer *cmd_buffer, uint32_t states)
+radv_emit_depth_control(struct radv_cmd_buffer *cmd_buffer, uint64_t states)
 {
    unsigned db_depth_control = cmd_buffer->state.pipeline->graphics.db_depth_control;
    struct radv_dynamic_state *d = &cmd_buffer->state.dynamic;
@@ -2509,7 +2509,7 @@ radv_set_db_count_control(struct radv_cmd_buffer *cmd_buffer)
 static void
 radv_cmd_buffer_flush_dynamic_state(struct radv_cmd_buffer *cmd_buffer)
 {
-   uint32_t states =
+   uint64_t states =
       cmd_buffer->state.dirty & cmd_buffer->state.emitted_pipeline->graphics.needed_dynamic_state;
 
    if (states & (RADV_CMD_DIRTY_DYNAMIC_VIEWPORT))

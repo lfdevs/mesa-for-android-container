@@ -645,9 +645,12 @@ anv_get_image_format_features(const struct gen_device_info *devinfo,
 
    if (flags) {
       flags |= VK_FORMAT_FEATURE_BLIT_SRC_BIT |
-               VK_FORMAT_FEATURE_BLIT_DST_BIT |
                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
                VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+
+      /* Blit destination requires rendering support. */
+      if (isl_format_supports_rendering(devinfo, plane_format.isl_format))
+         flags |= VK_FORMAT_FEATURE_BLIT_DST_BIT;
    }
 
    /* XXX: We handle 3-channel formats by switching them out for RGBX or

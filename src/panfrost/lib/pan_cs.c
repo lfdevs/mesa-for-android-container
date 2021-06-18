@@ -124,6 +124,26 @@ translate_s_format(enum pipe_format in)
         }
 }
 
+static enum mali_msaa
+mali_sampling_mode(const struct pan_image_view *view)
+{
+        if (view->image->layout.nr_samples > 1) {
+                assert(view->nr_samples == view->image->layout.nr_samples);
+                assert(view->image->layout.slices[0].surface_stride != 0);
+                return MALI_MSAA_LAYERED;
+        }
+
+        if (view->nr_samples > view->image->layout.nr_samples) {
+                assert(view->image->layout.nr_samples == 1);
+                return MALI_MSAA_AVERAGE;
+        }
+
+        assert(view->nr_samples == view->image->layout.nr_samples);
+        assert(view->nr_samples == 1);
+
+        return MALI_MSAA_SINGLE;
+}
+
 static void
 pan_prepare_s(const struct panfrost_device *dev,
               const struct pan_fb_info *fb,
@@ -135,12 +155,11 @@ pan_prepare_s(const struct panfrost_device *dev,
                 return;
 
         unsigned level = s->first_level;
-        unsigned nr_samples = s->image->layout.nr_samples;
 
         if (dev->arch < 7)
-                ext->s_msaa = nr_samples > 1 ? MALI_MSAA_LAYERED : MALI_MSAA_SINGLE;
+                ext->s_msaa = mali_sampling_mode(s);
         else
-                ext->s_msaa_v7 = nr_samples > 1 ? MALI_MSAA_LAYERED : MALI_MSAA_SINGLE;
+                ext->s_msaa_v7 = mali_sampling_mode(s);
 
         struct pan_surface surf;
         pan_iview_get_surface(s, 0, 0, 0, &surf);
@@ -150,7 +169,7 @@ pan_prepare_s(const struct panfrost_device *dev,
         ext->s_writeback_base = surf.data;
         ext->s_writeback_row_stride = s->image->layout.slices[level].row_stride;
         ext->s_writeback_surface_stride =
-                (nr_samples > 1) ?
+                (s->image->layout.nr_samples > 1) ?
                 s->image->layout.slices[level].surface_stride : 0;
 
         if (dev->arch >= 7)
@@ -172,12 +191,11 @@ pan_prepare_zs(const struct panfrost_device *dev,
                 return;
 
         unsigned level = zs->first_level;
-        unsigned nr_samples = zs->image->layout.nr_samples;
 
         if (dev->arch < 7)
-                ext->zs_msaa = nr_samples > 1 ? MALI_MSAA_LAYERED : MALI_MSAA_SINGLE;
+                ext->zs_msaa = mali_sampling_mode(zs);
         else
-                ext->zs_msaa_v7 = nr_samples > 1 ? MALI_MSAA_LAYERED : MALI_MSAA_SINGLE;
+                ext->zs_msaa_v7 = mali_sampling_mode(zs);
 
         struct pan_surface surf;
         pan_iview_get_surface(zs, 0, 0, 0, &surf);
@@ -207,7 +225,7 @@ pan_prepare_zs(const struct panfrost_device *dev,
                 ext->zs_writeback_row_stride =
                         zs->image->layout.slices[level].row_stride;
                 ext->zs_writeback_surface_stride =
-                        (nr_samples > 1) ?
+                        (zs->image->layout.nr_samples > 1) ?
                         zs->image->layout.slices[level].surface_stride : 0;
         }
 
@@ -265,7 +283,7 @@ pan_internal_cbuf_size(const struct pan_fb_info *fb,
                         continue;
 
                 total_size += pan_bytes_per_pixel_tib(rt->format) *
-                              rt->image->layout.nr_samples * (*tile_size);
+                              rt->nr_samples * (*tile_size);
         }
 
         /* We have a 4KB budget, let's reduce the tile size until it fits. */
@@ -294,7 +312,7 @@ pan_sample_pattern(unsigned samples)
         }
 }
 
-static int
+int
 pan_select_crc_rt(const struct panfrost_device *dev, const struct pan_fb_info *fb)
 {
         if (dev->arch < 7) {
@@ -453,16 +471,11 @@ pan_prepare_rt(const struct panfrost_device *dev,
 
         /* Only set layer_stride for layered MSAA rendering  */
 
-        unsigned nr_samples = rt->image->layout.nr_samples;
         unsigned layer_stride =
-                (nr_samples > 1) ? rt->image->layout.slices[level].surface_stride : 0;
+                (rt->image->layout.nr_samples > 1) ?
+                        rt->image->layout.slices[level].surface_stride : 0;
 
-        if (layer_stride)
-                cfg->writeback_msaa = MALI_MSAA_LAYERED;
-        else if (rt->image->layout.nr_samples > 1)
-                cfg->writeback_msaa = MALI_MSAA_AVERAGE;
-        else
-                cfg->writeback_msaa = MALI_MSAA_SINGLE;
+        cfg->writeback_msaa = mali_sampling_mode(rt);
 
         pan_rt_init_format(dev, rt, cfg);
 
@@ -864,8 +877,7 @@ pan_emit_sfbd(const struct panfrost_device *dev,
                 cfg.sample_count = fb->nr_samples;
 
                 /* XXX: different behaviour from MFBD and probably wrong... */
-                cfg.msaa = (fb->nr_samples > 1) ?
-                           MALI_MSAA_MULTIPLE : MALI_MSAA_SINGLE;
+                cfg.msaa = mali_sampling_mode(fb->rts[0].view);
         }
         pan_emit_sfbd_tiler(dev, fb, tiler_ctx, fbd);
         pan_section_pack(fbd, SINGLE_TARGET_FRAMEBUFFER, PADDING_2, padding);

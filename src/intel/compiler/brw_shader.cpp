@@ -421,6 +421,8 @@ brw_instruction_name(const struct gen_device_info *devinfo, enum opcode op)
       return "set_low_32bit";
    case VEC4_OPCODE_SET_HIGH_32BIT:
       return "set_high_32bit";
+   case VEC4_OPCODE_MOV_FOR_SCRATCH:
+      return "mov_for_scratch";
 
    case FS_OPCODE_DDX_COARSE:
       return "ddx_coarse";

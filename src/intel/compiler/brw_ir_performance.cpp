@@ -379,6 +379,7 @@ namespace {
       case BRW_OPCODE_ADD:
       case BRW_OPCODE_MUL:
       case SHADER_OPCODE_MOV_RELOC_IMM:
+      case VEC4_OPCODE_MOV_FOR_SCRATCH:
          if (devinfo->ver >= 11) {
             return calculate_desc(info, unit_fpu, 0, 2, 0, 0, 2,
                                   0, 10, 6, 14, 0, 0);

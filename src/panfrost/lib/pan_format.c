@@ -99,6 +99,7 @@ panfrost_blend_format(enum pipe_format format)
 #define V6_000R PAN_V6_SWIZZLE(0, 0, 0, R)
 #define V6_0R00 PAN_V6_SWIZZLE(0, R, 0, 0)
 #define V6_0A00 PAN_V6_SWIZZLE(0, A, 0, 0)
+#define V6_AAAA PAN_V6_SWIZZLE(A, A, A, A)
 #define V6_A001 PAN_V6_SWIZZLE(A, 0, 0, 1)
 #define V6_ABG1 PAN_V6_SWIZZLE(A, B, G, 1)
 #define V6_ABGR PAN_V6_SWIZZLE(A, B, G, R)
@@ -241,14 +242,14 @@ const struct panfrost_format panfrost_pipe_format_v6[PIPE_FORMAT_COUNT] = {
         PAN_V6(R32G32B32_SSCALED,       RGB32I,          RGB1, L, V___),
         PAN_V6(R32G32B32A32_SSCALED,    RGBA32I,         RGBA, L, V___),
         PAN_V6(R3G3B2_UNORM,            RGB332_UNORM,    RGB1, L, VT__),
-        PAN_V6(Z16_UNORM,               R16_UNORM,       R000, L, _T_Z),
-        PAN_V6(Z24_UNORM_S8_UINT,       Z24X8_UNORM,     R000, L, _T_Z),
-        PAN_V6(Z24X8_UNORM,             Z24X8_UNORM,     R000, L, _T_Z),
-        PAN_V6(Z32_FLOAT,               R32F,            R000, L, _T_Z),
-        PAN_V6(Z32_FLOAT_S8X24_UINT,    R32F,            R000, L, _T_Z),
-        PAN_V6(X32_S8X24_UINT,          R32UI,           0R00, L, _T__),
-        PAN_V6(X24S8_UINT,              RGBA8UI,         0A00, L, _T_Z),
-        PAN_V6(S8_UINT,                 R8UI,            0R00, L, _T__),
+        PAN_V6(Z16_UNORM,               R16_UNORM,       RRRR, L, _T_Z),
+        PAN_V6(Z24_UNORM_S8_UINT,       Z24X8_UNORM,     RRRR, L, _T_Z),
+        PAN_V6(Z24X8_UNORM,             Z24X8_UNORM,     RRRR, L, _T_Z),
+        PAN_V6(Z32_FLOAT,               R32F,            RRRR, L, _T_Z),
+        PAN_V6(Z32_FLOAT_S8X24_UINT,    R32F,            RRRR, L, _T_Z),
+        PAN_V6(X32_S8X24_UINT,          R32UI,           RRRR, L, _T__),
+        PAN_V6(X24S8_UINT,              RGBA8UI,         AAAA, L, _T_Z),
+        PAN_V6(S8_UINT,                 R8UI,            RRRR, L, _T__),
         PAN_V6(R32_FIXED,               R32_FIXED,       R001, L, V___),
         PAN_V6(R32G32_FIXED,            RG32_FIXED,      RG01, L, V___),
         PAN_V6(R32G32B32_FIXED,         RGB32_FIXED,     RGB1, L, V___),
@@ -498,9 +499,9 @@ const struct panfrost_format panfrost_pipe_format_v7[PIPE_FORMAT_COUNT] = {
         PAN_V7(Z24X8_UNORM,             Z24X8_UNORM,     RGBA, L, _T_Z),
         PAN_V7(Z32_FLOAT,               R32F,            RGBA, L, _T_Z),
         PAN_V7(Z32_FLOAT_S8X24_UINT,    R32F,            RGBA, L, _T_Z),
-        PAN_V7(X32_S8X24_UINT,          S8X24,           RGBA, L, _T__),
-        PAN_V7(X24S8_UINT,              TILEBUFFER_NATIVE /* XXX: Deduplicate enum */, RGBA, L, _T_Z),
-        PAN_V7(S8_UINT,                 S8,              RGBA, L, _T__),
+        PAN_V7(X32_S8X24_UINT,          S8X24,           GRBA, L, _T__),
+        PAN_V7(X24S8_UINT,              TILEBUFFER_NATIVE /* XXX: Deduplicate enum */, GRBA, L, _T_Z),
+        PAN_V7(S8_UINT,                 S8,              GRBA, L, _T__),
         PAN_V7(R32_FIXED,               R32_FIXED,       RGB1, L, V___),
         PAN_V7(R32G32_FIXED,            RG32_FIXED,      RGB1, L, V___),
         PAN_V7(R32G32B32_FIXED,         RGB32_FIXED,     RGB1, L, V___),

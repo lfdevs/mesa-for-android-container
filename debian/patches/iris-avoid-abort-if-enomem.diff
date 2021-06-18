@@ -1,0 +1,32 @@
+commit f9d8d9acbb6a620684fb4dac4affe25816587d92
+Author: Kai-Heng Feng <kai.heng.feng@canonical.com>
+Date:   Fri Jun 4 12:13:04 2021 +0800
+
+    iris: Avoid abort() if kernel can't allocate memory
+    
+    When the system doesn't have enough memory, GNOME Shell may be crashed
+    by iris:
+    gnome-shell[1161]: iris: Failed to submit batchbuffer: Cannot allocate memory
+    gnome-shell[1161]: GNOME Shell crashed with signal 6
+    
+    So don't abort() when kernel can't allocate memory to avoid crashing the
+    entire desktop.
+    
+    Acked-by: Kenneth Graunke <kenneth@whitecape.org>
+    Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/11178>
+
+diff --git a/src/gallium/drivers/iris/iris_batch.c b/src/gallium/drivers/iris/iris_batch.c
+index 0e4c414e53a..6e0dbac26f3 100644
+--- a/src/gallium/drivers/iris/iris_batch.c
++++ b/src/gallium/drivers/iris/iris_batch.c
+@@ -756,8 +756,9 @@ _iris_batch_flush(struct iris_batch *batch, const char *file, int line)
+     * with a new logical context, and inform iris_context that all state
+     * has been lost and needs to be re-initialized.  If this succeeds,
+     * dubiously claim success...
++    * Also handle ENOMEM here.
+     */
+-   if (ret == -EIO && replace_hw_ctx(batch)) {
++   if ((ret == -EIO || ret == -ENOMEM) && replace_hw_ctx(batch)) {
+       if (batch->reset->reset) {
+          /* Tell gallium frontends the device is lost and it was our fault. */
+          batch->reset->reset(batch->reset->data, PIPE_GUILTY_CONTEXT_RESET);

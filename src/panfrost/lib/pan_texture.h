@@ -133,6 +133,10 @@ struct pan_image_view {
         unsigned char swizzle[4];
         const struct pan_image *image;
 
+        /* If EXT_multisampled_render_to_texture is used, this may be
+         * greater than image->layout.nr_samples. */
+        unsigned nr_samples;
+
         /* Only valid if dim == 1D, needed to implement buffer views */
         struct {
                 unsigned offset;

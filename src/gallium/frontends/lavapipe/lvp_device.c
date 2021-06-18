@@ -1079,9 +1079,18 @@ static int queue_thread(void *data)
       mtx_unlock(&queue->m);
       //execute
       for (unsigned i = 0; i < task->cmd_buffer_count; i++) {
-         lvp_execute_cmds(queue->device, queue, task->fence, task->cmd_buffers[i]);
+         lvp_execute_cmds(queue->device, queue, task->cmd_buffers[i]);
       }
-      if (!task->cmd_buffer_count && task->fence)
+
+      if (task->cmd_buffer_count) {
+         struct pipe_fence_handle *handle = NULL;
+         queue->ctx->flush(queue->ctx, task->fence ? &handle : NULL, 0);
+         if (task->fence) {
+            mtx_lock(&queue->device->fence_lock);
+            task->fence->handle = handle;
+            mtx_unlock(&queue->device->fence_lock);
+         }
+      } else if (task->fence)
          task->fence->signaled = true;
       p_atomic_dec(&queue->count);
       mtx_lock(&queue->m);

@@ -96,7 +96,7 @@ struct pan_blend_shader {
 };
 
 bool
-pan_blend_reads_dest(const struct pan_blend_state *state, unsigned rt);
+pan_blend_reads_dest(const struct pan_blend_equation eq);
 
 bool
 pan_blend_can_fixed_function(const struct panfrost_device *dev,
@@ -104,8 +104,7 @@ pan_blend_can_fixed_function(const struct panfrost_device *dev,
                              unsigned rt);
 
 bool
-pan_blend_is_opaque(const struct pan_blend_state *state,
-                    unsigned rt);
+pan_blend_is_opaque(const struct pan_blend_equation eq);
 
 unsigned
 pan_blend_constant_mask(const struct pan_blend_state *state,

@@ -1457,6 +1457,7 @@ vn_renderer_create_virtgpu(struct vn_instance *instance,
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
    gpu->instance = instance;
+   gpu->fd = -1;
 
    VkResult result = virtgpu_init(gpu);
    if (result != VK_SUCCESS) {

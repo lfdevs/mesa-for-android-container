@@ -595,7 +595,8 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
    llvm_vert_info.stride = fpme->vertex_size;
    llvm_vert_info.verts = (struct vertex_header *)
       MALLOC(fpme->vertex_size *
-             align(fetch_info->count, lp_native_vector_width / 32));
+             align(fetch_info->count, lp_native_vector_width / 32) +
+             DRAW_EXTRA_VERTICES_PADDING);
    if (!llvm_vert_info.verts) {
       assert(0);
       return;

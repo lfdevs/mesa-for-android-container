@@ -3299,6 +3299,7 @@ radv_create_shaders(struct radv_pipeline *pipeline, struct radv_device *device,
          }
 
          if (nir_opt_load_store_vectorize(nir[i], &vectorize_opts)) {
+            NIR_PASS_V(nir[i], nir_copy_prop);
             lower_to_scalar = true;
 
             /* Gather info again, to update whether 8/16-bit are used. */

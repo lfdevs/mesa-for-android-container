@@ -856,6 +856,10 @@ bool
 isl_format_supports_ccs_e(const struct gen_device_info *devinfo,
                           enum isl_format format)
 {
+   /* Wa_22011186057: Disable compression on ADL-P A0 */
+   if (devinfo->is_alderlake && devinfo->gt == 2 && devinfo->revision == 0)
+      return false;
+
    if (!format_info_exists(format))
       return false;
 

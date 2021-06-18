@@ -1421,10 +1421,10 @@ static void emit_tex(struct lp_build_nir_context *bld_base,
                                  LLVMGetUndef(bld_base->base.vec_type),
                                  LLVMGetUndef(bld_base->base.vec_type),
                                  LLVMGetUndef(bld_base->base.vec_type) };
-      LLVMValueRef texel[4], orig_offset;
+      LLVMValueRef texel[4], orig_offset, orig_lod;
       unsigned i;
       orig_texel_ptr = params->texel;
-
+      orig_lod = params->lod;
       for (i = 0; i < 5; i++) {
          coords[i] = params->coords[i];
       }
@@ -1443,6 +1443,8 @@ static void emit_tex(struct lp_build_nir_context *bld_base,
                                                                 idx, "");
          params->type = lp_elem_type(bld_base->base.type);
 
+         if (orig_lod)
+            params->lod = LLVMBuildExtractElement(gallivm->builder, orig_lod, idx, "");
          params->texel = texel;
          bld->sampler->emit_tex_sample(bld->sampler,
                                        gallivm,

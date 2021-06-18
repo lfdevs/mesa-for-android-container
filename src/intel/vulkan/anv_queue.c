@@ -764,7 +764,7 @@ anv_queue_submit_add_timeline_signal(struct anv_queue_submit* submit,
 }
 
 static struct anv_queue_submit *
-anv_queue_submit_alloc(struct anv_device *device, int perf_query_pass)
+anv_queue_submit_alloc(struct anv_device *device)
 {
    const VkAllocationCallbacks *alloc = &device->vk.alloc;
    VkSystemAllocationScope alloc_scope = VK_SYSTEM_ALLOCATION_SCOPE_DEVICE;
@@ -777,7 +777,7 @@ anv_queue_submit_alloc(struct anv_device *device, int perf_query_pass)
    submit->alloc_scope = alloc_scope;
    submit->in_fence = -1;
    submit->out_fence = -1;
-   submit->perf_query_pass = perf_query_pass;
+   submit->perf_query_pass = -1;
 
    return submit;
 }
@@ -790,7 +790,7 @@ anv_queue_submit_simple_batch(struct anv_queue *queue,
       return VK_SUCCESS;
 
    struct anv_device *device = queue->device;
-   struct anv_queue_submit *submit = anv_queue_submit_alloc(device, -1);
+   struct anv_queue_submit *submit = anv_queue_submit_alloc(device);
    if (!submit)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
@@ -1203,7 +1203,8 @@ anv_post_queue_fence_update(struct anv_device *device, struct anv_fence *fence)
 
 static VkResult
 anv_queue_submit_add_cmd_buffer(struct anv_queue_submit *submit,
-                                struct anv_cmd_buffer *cmd_buffer)
+                                struct anv_cmd_buffer *cmd_buffer,
+                                int perf_pass)
 {
    if (submit->cmd_buffer_count >= submit->cmd_buffer_array_length) {
       uint32_t new_len = MAX2(submit->cmd_buffer_array_length * 2, 4);
@@ -1220,13 +1221,15 @@ anv_queue_submit_add_cmd_buffer(struct anv_queue_submit *submit,
 
    submit->cmd_buffers[submit->cmd_buffer_count++] = cmd_buffer;
    submit->perf_query_pool = cmd_buffer->perf_query_pool;
+   submit->perf_query_pass = perf_pass;
 
    return VK_SUCCESS;
 }
 
 static bool
 anv_queue_submit_can_add_cmd_buffer(const struct anv_queue_submit *submit,
-                                    const struct anv_cmd_buffer *cmd_buffer)
+                                    const struct anv_cmd_buffer *cmd_buffer,
+                                    int perf_pass)
 {
    /* If first command buffer, no problem. */
    if (submit->cmd_buffer_count == 0)
@@ -1242,6 +1245,12 @@ anv_queue_submit_can_add_cmd_buffer(const struct anv_queue_submit *submit,
    if (cmd_buffer->perf_query_pool &&
        submit->perf_query_pool &&
        submit->perf_query_pool != cmd_buffer->perf_query_pool)
+      return false;
+
+   /* A change of perf pass also prevents batching things up.
+    */
+   if (submit->perf_query_pass != -1 &&
+       submit->perf_query_pass != perf_pass)
       return false;
 
    return true;
@@ -1282,14 +1291,13 @@ anv_queue_submit_can_add_submit(const struct anv_queue_submit *submit,
 
 static VkResult
 anv_queue_submit_post_and_alloc_new(struct anv_queue *queue,
-                                    struct anv_queue_submit **submit,
-                                    int perf_pass)
+                                    struct anv_queue_submit **submit)
 {
    VkResult result = anv_queue_submit_post(queue, submit, false);
    if (result != VK_SUCCESS)
       return result;
 
-   *submit = anv_queue_submit_alloc(queue->device, perf_pass);
+   *submit = anv_queue_submit_alloc(queue->device);
    if (!*submit)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
    return VK_SUCCESS;
@@ -1319,7 +1327,7 @@ VkResult anv_QueueSubmit(
    if (result != VK_SUCCESS)
       return result;
 
-   struct anv_queue_submit *submit = anv_queue_submit_alloc(device, 0);
+   struct anv_queue_submit *submit = anv_queue_submit_alloc(device);
    if (!submit)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
@@ -1349,7 +1357,7 @@ VkResult anv_QueueSubmit(
                                            pSubmits[i].waitSemaphoreCount,
                                            pSubmits[i].signalSemaphoreCount,
                                            perf_pass)) {
-         result = anv_queue_submit_post_and_alloc_new(queue, &submit, perf_pass);
+         result = anv_queue_submit_post_and_alloc_new(queue, &submit);
          if (result != VK_SUCCESS)
             goto out;
       }
@@ -1374,13 +1382,13 @@ VkResult anv_QueueSubmit(
          /* If we can't add an additional command buffer to the existing
           * anv_queue_submit, post it and create a new one.
           */
-         if (!anv_queue_submit_can_add_cmd_buffer(submit, cmd_buffer)) {
-            result = anv_queue_submit_post_and_alloc_new(queue, &submit, perf_pass);
+         if (!anv_queue_submit_can_add_cmd_buffer(submit, cmd_buffer, perf_pass)) {
+            result = anv_queue_submit_post_and_alloc_new(queue, &submit);
             if (result != VK_SUCCESS)
                goto out;
          }
 
-         result = anv_queue_submit_add_cmd_buffer(submit, cmd_buffer);
+         result = anv_queue_submit_add_cmd_buffer(submit, cmd_buffer, perf_pass);
          if (result != VK_SUCCESS)
             goto out;
       }

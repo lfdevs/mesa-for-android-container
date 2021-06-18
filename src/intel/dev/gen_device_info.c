@@ -920,7 +920,8 @@ static const struct gen_device_info gen_device_info_ehl_2x4 = {
       [MESA_SHADER_VERTEX]    = 3576,               \
       [MESA_SHADER_TESS_CTRL] = 1548,               \
       [MESA_SHADER_TESS_EVAL] = 3576,               \
-      [MESA_SHADER_GEOMETRY]  = 1548,               \
+      /* Wa_14013840143 */                          \
+      [MESA_SHADER_GEOMETRY]  = 1536,               \
    }
 
 #define GFX12_HW_INFO                               \
@@ -985,6 +986,11 @@ static const struct gen_device_info gen_device_info_adl_gt05 = {
 
 static const struct gen_device_info gen_device_info_adl_gt1 = {
    GFX12_GT_FEATURES(1),
+   .is_alderlake = true,
+};
+
+static const struct gen_device_info gen_device_info_adl_gt2 = {
+   GFX12_GT_FEATURES(2),
    .is_alderlake = true,
 };
 

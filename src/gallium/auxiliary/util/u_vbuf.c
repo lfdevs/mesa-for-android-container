@@ -437,8 +437,11 @@ u_vbuf_translate_buffers(struct u_vbuf *mgr, struct translate_key *key,
          unsigned size = vb->stride ? num_vertices * vb->stride
                                     : sizeof(double)*4;
 
-         if (!vb->buffer.resource)
+         if (!vb->buffer.resource) {
+            static uint64_t dummy_buf[4] = { 0 };
+            tr->set_buffer(tr, i, dummy_buf, 0, 0);
             continue;
+        }
 
          if (offset + size > vb->buffer.resource->width0) {
             /* Don't try to map past end of buffer.  This often happens when
@@ -1595,7 +1598,8 @@ void u_vbuf_draw_vbo(struct u_vbuf *mgr, const struct pipe_draw_info *info,
    */
 
    u_upload_unmap(pipe->stream_uploader);
-   u_vbuf_set_driver_vertex_buffers(mgr);
+   if (mgr->dirty_real_vb_mask)
+      u_vbuf_set_driver_vertex_buffers(mgr);
 
    pipe->draw_vbo(pipe, &new_info, indirect, &new_draw, 1);
 

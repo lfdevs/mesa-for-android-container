@@ -2161,6 +2161,7 @@ anv_layout_to_aux_state(const struct gen_device_info * const devinfo,
       vk_image_layout_to_usage_flags(layout, aspect) & image_aspect_usage;
 
    bool aux_supported = true;
+   bool clear_supported = isl_aux_usage_has_fast_clears(aux_usage);
 
    if ((usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) && !read_only) {
       /* This image could be used as both an input attachment and a render
@@ -2172,24 +2173,31 @@ anv_layout_to_aux_state(const struct gen_device_info * const devinfo,
        *
        * TODO: Should we be disabling this in more cases?
        */
-      if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT)
+      if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
          aux_supported = false;
+         clear_supported = false;
+      }
    }
 
-   if (usage & VK_IMAGE_USAGE_STORAGE_BIT)
+   if (usage & VK_IMAGE_USAGE_STORAGE_BIT) {
       aux_supported = false;
+      clear_supported = false;
+   }
 
    if (usage & (VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                 VK_IMAGE_USAGE_SAMPLED_BIT |
                 VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) {
       switch (aux_usage) {
       case ISL_AUX_USAGE_HIZ:
-         if (!anv_can_sample_with_hiz(devinfo, image))
+         if (!anv_can_sample_with_hiz(devinfo, image)) {
             aux_supported = false;
+            clear_supported = false;
+         }
          break;
 
       case ISL_AUX_USAGE_HIZ_CCS:
          aux_supported = false;
+         clear_supported = false;
          break;
 
       case ISL_AUX_USAGE_HIZ_CCS_WT:
@@ -2197,10 +2205,15 @@ anv_layout_to_aux_state(const struct gen_device_info * const devinfo,
 
       case ISL_AUX_USAGE_CCS_D:
          aux_supported = false;
+         clear_supported = false;
+         break;
+
+      case ISL_AUX_USAGE_MCS:
+         if (!anv_can_sample_mcs_with_clear(devinfo, image))
+            clear_supported = false;
          break;
 
       case ISL_AUX_USAGE_CCS_E:
-      case ISL_AUX_USAGE_MCS:
       case ISL_AUX_USAGE_STC_CCS:
          break;
 
@@ -2214,6 +2227,7 @@ anv_layout_to_aux_state(const struct gen_device_info * const devinfo,
    case ISL_AUX_USAGE_HIZ_CCS:
    case ISL_AUX_USAGE_HIZ_CCS_WT:
       if (aux_supported) {
+         assert(clear_supported);
          return ISL_AUX_STATE_COMPRESSED_CLEAR;
       } else if (read_only) {
          return ISL_AUX_STATE_RESOLVED;
@@ -2225,21 +2239,31 @@ anv_layout_to_aux_state(const struct gen_device_info * const devinfo,
       /* We only support clear in exactly one state */
       if (layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
          assert(aux_supported);
+         assert(clear_supported);
          return ISL_AUX_STATE_PARTIAL_CLEAR;
       } else {
          return ISL_AUX_STATE_PASS_THROUGH;
       }
 
    case ISL_AUX_USAGE_CCS_E:
-   case ISL_AUX_USAGE_MCS:
       if (aux_supported) {
+         assert(clear_supported);
          return ISL_AUX_STATE_COMPRESSED_CLEAR;
       } else {
          return ISL_AUX_STATE_PASS_THROUGH;
       }
 
+   case ISL_AUX_USAGE_MCS:
+      assert(aux_supported);
+      if (clear_supported) {
+         return ISL_AUX_STATE_COMPRESSED_CLEAR;
+      } else {
+         return ISL_AUX_STATE_COMPRESSED_NO_CLEAR;
+      }
+
    case ISL_AUX_USAGE_STC_CCS:
       assert(aux_supported);
+      assert(!clear_supported);
       return ISL_AUX_STATE_COMPRESSED_NO_CLEAR;
 
    default:

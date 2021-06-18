@@ -901,8 +901,13 @@ setup_stateobj(struct fd_ringbuffer *ring, struct fd_context *ctx,
       OUT_PKT4(ring, REG_A6XX_PC_MULTIVIEW_CNTL, 1);
       OUT_RING(ring, 0);
 
+      uint32_t prim_size = prev->output_size;
+      if (prim_size > 64)
+         prim_size = 64;
+      else if (prim_size == 64)
+         prim_size = 63;
       OUT_PKT4(ring, REG_A6XX_SP_GS_PRIM_SIZE, 1);
-      OUT_RING(ring, prev->output_size);
+      OUT_RING(ring, prim_size);
    } else {
       OUT_PKT4(ring, REG_A6XX_PC_PRIMITIVE_CNTL_6, 1);
       OUT_RING(ring, 0);

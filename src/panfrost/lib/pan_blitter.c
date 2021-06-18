@@ -277,7 +277,7 @@ pan_blitter_emit_rsd(const struct panfrost_device *dev,
         for (unsigned i = 0; i < rt_count; i++) {
                 if (rts[i]) {
                         tex_count++;
-                        if (rts[i]->image->layout.nr_samples > 1)
+                        if (rts[i]->nr_samples > 1)
                                 ms = true;
                 }
         }
@@ -970,11 +970,30 @@ pan_preload_emit_bifrost_pre_frame_dcd(struct pan_pool *desc_pool,
                                        mali_ptr coords, mali_ptr rsd,
                                        mali_ptr tsd)
 {
+        struct panfrost_device *dev = desc_pool->dev;
+
         unsigned dcd_idx = zs ? 0 : 1;
         pan_preload_fb_bifrost_alloc_pre_post_dcds(desc_pool, fb);
         assert(fb->bifrost.pre_post.dcds.cpu);
         void *dcd = fb->bifrost.pre_post.dcds.cpu +
                     (dcd_idx * (MALI_DRAW_LENGTH + MALI_DRAW_PADDING_LENGTH));
+
+        int crc_rt = pan_select_crc_rt(dev, fb);
+
+        bool always_write = false;
+
+        /* If CRC data is currently invalid and this batch will make it valid,
+         * write even clean tiles to make sure CRC data is updated. */
+        if (crc_rt >= 0) {
+                unsigned level = fb->rts[crc_rt].view->first_level;
+                bool valid = fb->rts[crc_rt].state->slices[level].crc_valid;
+                bool full = !fb->extent.minx && !fb->extent.miny &&
+                        fb->extent.maxx == (fb->width - 1) &&
+                        fb->extent.maxy == (fb->height - 1);
+
+                if (full && !valid)
+                        always_write = true;
+        }
 
         pan_preload_emit_dcd(desc_pool, fb, zs, coords, tsd, rsd, dcd);
         if (zs) {
@@ -1005,6 +1024,7 @@ pan_preload_emit_bifrost_pre_frame_dcd(struct pan_pool *desc_pool,
                         MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
         } else {
                 fb->bifrost.pre_post.modes[dcd_idx] =
+                        always_write ? MALI_PRE_POST_FRAME_SHADER_MODE_ALWAYS :
                         MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
         }
 }

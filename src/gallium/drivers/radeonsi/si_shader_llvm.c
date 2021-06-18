@@ -945,6 +945,10 @@ bool si_llvm_translate_nir(struct si_shader_context *ctx, struct si_shader *shad
        */
       if ((ctx->stage == MESA_SHADER_VERTEX || ctx->stage == MESA_SHADER_TESS_EVAL) &&
           shader->key.as_ngg && !shader->key.as_es && !shader->key.opt.ngg_culling) {
+         /* GFX10 requires a barrier before gs_alloc_req due to a hw bug. */
+         if (ctx->screen->info.chip_class == GFX10)
+            ac_build_s_barrier(&ctx->ac);
+
          gfx10_ngg_build_sendmsg_gs_alloc_req(ctx);
 
          /* Build the primitive export at the beginning

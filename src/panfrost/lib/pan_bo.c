@@ -201,9 +201,11 @@ panfrost_bo_cache_fetch(struct panfrost_device *dev,
                 if (entry->size < size || entry->flags != flags)
                         continue;
 
+                /* If the oldest BO in the cache is busy, likely so is
+                 * everything newer, so bail. */
                 if (!panfrost_bo_wait(entry, dontwait ? 0 : INT64_MAX,
                                       PAN_BO_ACCESS_RW))
-                        continue;
+                        break;
 
                 struct drm_panfrost_madvise madv = {
                         .handle = entry->gem_handle,

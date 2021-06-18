@@ -545,7 +545,6 @@ spec@glsl-1.50@execution@primitive-id-no-gs-quads,Fail
 spec@glsl-1.50@execution@variable-indexing@gs-input-array-float-index-rd,Fail
 spec@glsl-1.50@execution@variable-indexing@gs-input-array-vec2-index-rd,Fail
 spec@glsl-1.50@execution@variable-indexing@gs-input-array-vec3-index-rd,Crash
-spec@glsl-1.50@execution@variable-indexing@gs-input-array-vec4-index-rd,Fail
 spec@glsl-1.50@execution@variable-indexing@gs-output-array-vec3-index-wr,Fail
 spec@glsl-1.50@execution@variable-indexing@gs-output-array-vec4-index-wr,Crash
 spec@glsl-1.50@execution@variable-indexing@vs-output-array-vec3-index-wr-before-gs,Fail

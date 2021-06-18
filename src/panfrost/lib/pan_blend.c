@@ -277,23 +277,21 @@ to_panfrost_function(enum blend_func blend_func,
 }
 
 bool
-pan_blend_is_opaque(const struct pan_blend_state *state, unsigned rt)
+pan_blend_is_opaque(const struct pan_blend_equation equation)
 {
-        const struct pan_blend_equation *equation = &state->rts[rt].equation;
-
-        return equation->rgb_src_factor == BLEND_FACTOR_ZERO &&
-               equation->rgb_invert_src_factor &&
-               equation->rgb_dst_factor == BLEND_FACTOR_ZERO &&
-               !equation->rgb_invert_dst_factor &&
-               (equation->rgb_func == BLEND_FUNC_ADD ||
-                equation->rgb_func == BLEND_FUNC_SUBTRACT) &&
-               equation->alpha_src_factor == BLEND_FACTOR_ZERO &&
-               equation->alpha_invert_src_factor &&
-               equation->alpha_dst_factor == BLEND_FACTOR_ZERO &&
-               !equation->alpha_invert_dst_factor &&
-               (equation->alpha_func == BLEND_FUNC_ADD ||
-                equation->alpha_func == BLEND_FUNC_SUBTRACT) &&
-               equation->color_mask == 0xf;
+        return equation.rgb_src_factor == BLEND_FACTOR_ZERO &&
+               equation.rgb_invert_src_factor &&
+               equation.rgb_dst_factor == BLEND_FACTOR_ZERO &&
+               !equation.rgb_invert_dst_factor &&
+               (equation.rgb_func == BLEND_FUNC_ADD ||
+                equation.rgb_func == BLEND_FUNC_SUBTRACT) &&
+               equation.alpha_src_factor == BLEND_FACTOR_ZERO &&
+               equation.alpha_invert_src_factor &&
+               equation.alpha_dst_factor == BLEND_FACTOR_ZERO &&
+               !equation.alpha_invert_dst_factor &&
+               (equation.alpha_func == BLEND_FUNC_ADD ||
+                equation.alpha_func == BLEND_FUNC_SUBTRACT) &&
+               equation.color_mask == 0xf;
 }
 
 static bool
@@ -304,25 +302,20 @@ is_dest_factor(enum blend_factor factor, bool alpha)
              (factor == BLEND_FACTOR_SRC_ALPHA_SATURATE && !alpha);
 }
 
+/* Determines if a blend equation reads back the destination. This can occur by
+ * explicitly referencing the destination in the blend equation, or by using a
+ * partial writemask. */
+
 bool
-pan_blend_reads_dest(const struct pan_blend_state *state, unsigned rt)
+pan_blend_reads_dest(const struct pan_blend_equation equation)
 {
-        const struct pan_blend_rt_state *rt_state = &state->rts[rt];
-
-        if (state->logicop_enable ||
-            (rt_state->equation.color_mask &&
-             rt_state->equation.color_mask != 0xF))
-                return true;
-
-        if (is_dest_factor(rt_state->equation.rgb_src_factor, false) ||
-            is_dest_factor(rt_state->equation.alpha_src_factor, true) ||
-            rt_state->equation.rgb_dst_factor != BLEND_FACTOR_ZERO ||
-            rt_state->equation.rgb_invert_dst_factor ||
-            rt_state->equation.alpha_dst_factor != BLEND_FACTOR_ZERO ||
-            rt_state->equation.alpha_invert_dst_factor)
-                return true;
-
-        return false;
+        return (equation.color_mask && equation.color_mask != 0xF) ||
+                is_dest_factor(equation.rgb_src_factor, false) ||
+                is_dest_factor(equation.alpha_src_factor, true) ||
+                equation.rgb_dst_factor != BLEND_FACTOR_ZERO ||
+                equation.rgb_invert_dst_factor ||
+                equation.alpha_dst_factor != BLEND_FACTOR_ZERO ||
+                equation.alpha_invert_dst_factor;
 }
 
 /* Create the descriptor for a fixed blend mode given the corresponding Gallium

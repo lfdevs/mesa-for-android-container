@@ -124,7 +124,7 @@ lvp_image_from_swapchain(VkDevice device,
                          const VkAllocationCallbacks *pAllocator,
                          VkImage *pImage)
 {
-   struct lvp_image *swapchain_image = lvp_swapchain_get_image(swapchain_info->swapchain, 0);
+   ASSERTED struct lvp_image *swapchain_image = lvp_swapchain_get_image(swapchain_info->swapchain, 0);
    assert(swapchain_image);
 
    assert(swapchain_image->type == pCreateInfo->imageType);
