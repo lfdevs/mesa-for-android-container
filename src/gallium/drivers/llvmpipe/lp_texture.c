@@ -53,6 +53,10 @@
 
 #include "frontend/sw_winsys.h"
 
+#ifndef _WIN32
+#include "drm-uapi/drm_fourcc.h"
+#endif
+
 
 #ifdef DEBUG
 static struct llvmpipe_resource resource_list;
@@ -917,6 +921,7 @@ llvmpipe_resource_get_param(struct pipe_screen *screen,
                             uint64_t *value)
 {
    struct llvmpipe_resource *lpr = llvmpipe_resource(resource);
+   struct winsys_handle whandle;
 
    switch (param) {
    case PIPE_RESOURCE_PARAM_NPLANES:
@@ -931,10 +936,29 @@ llvmpipe_resource_get_param(struct pipe_screen *screen,
    case PIPE_RESOURCE_PARAM_LAYER_STRIDE:
       *value = lpr->img_stride[level];
       return true;
+#ifndef _WIN32
    case PIPE_RESOURCE_PARAM_MODIFIER:
+      *value = DRM_FORMAT_MOD_INVALID;
+      return true;
+#endif
    case PIPE_RESOURCE_PARAM_HANDLE_TYPE_SHARED:
    case PIPE_RESOURCE_PARAM_HANDLE_TYPE_KMS:
    case PIPE_RESOURCE_PARAM_HANDLE_TYPE_FD:
+      if (!lpr->dt)
+         return false;
+
+      memset(&whandle, 0, sizeof(whandle));
+      if (param == PIPE_RESOURCE_PARAM_HANDLE_TYPE_SHARED)
+         whandle.type = WINSYS_HANDLE_TYPE_SHARED;
+      else if (param == PIPE_RESOURCE_PARAM_HANDLE_TYPE_KMS)
+         whandle.type = WINSYS_HANDLE_TYPE_KMS;
+      else if (param == PIPE_RESOURCE_PARAM_HANDLE_TYPE_FD)
+         whandle.type = WINSYS_HANDLE_TYPE_FD;
+
+      if (!llvmpipe_resource_get_handle(screen, context, resource, &whandle, handle_usage))
+         return false;
+      *value = whandle.handle;
+      return true;
    default:
       break;
    }

@@ -1926,20 +1926,7 @@ copy_non_dynamic_state(struct anv_graphics_pipeline *pipeline,
 
    if (states & ANV_CMD_DIRTY_DYNAMIC_PRIMITIVE_TOPOLOGY) {
       assert(pCreateInfo->pInputAssemblyState);
-      bool has_tess = false;
-      for (uint32_t i = 0; i < pCreateInfo->stageCount; i++) {
-         const VkPipelineShaderStageCreateInfo *sinfo = &pCreateInfo->pStages[i];
-         gl_shader_stage stage = vk_to_mesa_shader_stage(sinfo->stage);
-         if (stage == MESA_SHADER_TESS_CTRL || stage == MESA_SHADER_TESS_EVAL)
-            has_tess = true;
-      }
-       if (has_tess) {
-          const VkPipelineTessellationStateCreateInfo *tess_info =
-             pCreateInfo->pTessellationState;
-          dynamic->primitive_topology = _3DPRIM_PATCHLIST(tess_info->patchControlPoints);
-       } else {
-         dynamic->primitive_topology = pCreateInfo->pInputAssemblyState->topology;
-       }
+      dynamic->primitive_topology = pCreateInfo->pInputAssemblyState->topology;
    }
 
    /* Section 9.2 of the Vulkan 1.0.15 spec says:

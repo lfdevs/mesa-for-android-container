@@ -441,7 +441,19 @@ u_vbuf_translate_buffers(struct u_vbuf *mgr, struct translate_key *key,
             static uint64_t dummy_buf[4] = { 0 };
             tr->set_buffer(tr, i, dummy_buf, 0, 0);
             continue;
-        }
+         }
+
+         if (vb->stride) {
+            /* the stride cannot be used to calculate the map size of the buffer,
+             * as it only determines the bytes between elements, not the size of elements
+             * themselves, meaning that if stride < element_size, the mapped size will
+             * be too small and conversion will overrun the map buffer
+             *
+             * instead, add the size of the largest possible attribute to ensure the map is large enough
+             */
+            unsigned last_offset = offset + size - vb->stride;
+            size = MAX2(size, last_offset + sizeof(double)*4);
+         }
 
          if (offset + size > vb->buffer.resource->width0) {
             /* Don't try to map past end of buffer.  This often happens when

@@ -226,23 +226,16 @@ create_bci(struct zink_screen *screen, const struct pipe_resource *templ, unsign
                VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
-   VkFormatProperties props = screen->format_props[templ->format];
-
    bci.usage |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
                 VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
                 VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT |
                 VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT;
-   if (props.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT)
-      bci.usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-   if (props.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT)
-      bci.usage |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
 
-   if (bind & PIPE_BIND_SHADER_IMAGE) {
-      assert(props.bufferFeatures & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT);
+   if (bind & PIPE_BIND_SHADER_IMAGE)
       bci.usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
-   }
    return bci;
 }
 
@@ -913,7 +906,7 @@ buffer_transfer_map(struct zink_context *ctx, struct zink_resource *res, unsigne
       // This is a known limitation of MoltenVK.
       // See https://github.com/KhronosGroup/MoltenVK/blob/master/Docs/MoltenVK_Runtime_UserGuide.md#known-moltenvk-limitations
 
-       || screen->have_moltenvk
+       || screen->instance_info.have_MVK_moltenvk
 #endif
       ) {
       VkDeviceSize size = box->width;

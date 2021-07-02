@@ -137,7 +137,7 @@ BEGIN_TEST(isel.gs.no_verts)
 END_TEST
 
 BEGIN_TEST(isel.sparse.clause)
-   for (unsigned i = GFX10; i <= GFX10; i++) {
+   for (unsigned i = GFX10_3; i <= GFX10_3; i++) {
       if (!set_variant((chip_class)i))
          continue;
 

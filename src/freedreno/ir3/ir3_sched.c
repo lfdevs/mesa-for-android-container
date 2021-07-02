@@ -194,6 +194,12 @@ is_outstanding_tex_or_prefetch(struct ir3_instruction *instr, struct ir3_sched_c
 	if (!is_tex_or_prefetch(instr))
 		return false;
 
+	/* The sched node is only valid within the same block, we cannot
+	 * really say anything about src's from other blocks
+	 */
+	if (instr->block != ctx->block)
+		return true;
+
 	struct ir3_sched_node *n = instr->data;
 	return n->tex_index >= ctx->first_outstanding_tex_index;
 }
@@ -203,6 +209,12 @@ is_outstanding_sfu(struct ir3_instruction *instr, struct ir3_sched_ctx *ctx)
 {
 	if (!is_sfu(instr))
 		return false;
+
+	/* The sched node is only valid within the same block, we cannot
+	 * really say anything about src's from other blocks
+	 */
+	if (instr->block != ctx->block)
+		return true;
 
 	struct ir3_sched_node *n = instr->data;
 	return n->sfu_index >= ctx->first_outstanding_sfu_index;

@@ -1192,6 +1192,16 @@ static void si_emit_draw_packets(struct si_context *sctx, const struct pipe_draw
             return;
          }
 
+         if (GFX_VERSION == GFX10) {
+            /* GFX10 has a bug that consecutive draw packets with NOT_EOP must not have
+             * count == 0 in the last draw (which doesn't set NOT_EOP).
+             *
+             * So remove all trailing draws with count == 0.
+             */
+            while (num_draws > 1 && !draws[num_draws - 1].count)
+               num_draws--;
+         }
+
          for (unsigned i = 0; i < num_draws; i++) {
             uint64_t va = index_va + draws[i].start * index_size;
 
@@ -1745,8 +1755,10 @@ static void si_draw_vbo(struct pipe_context *ctx,
    /* GFX6-GFX7 treat instance_count==0 as instance_count==1. There is
     * no workaround for indirect draws, but we can at least skip
     * direct draws.
+    * 'instance_count == 0' seems to be problematic on Renoir chips (#4866),
+    * so simplify the condition and drop these draws for all <= GFX9 chips.
     */
-   if (GFX_VERSION <= GFX7 && unlikely(!indirect && !instance_count))
+   if (GFX_VERSION <= GFX9 && unlikely(!indirect && !instance_count))
       return;
 
    struct si_shader_selector *vs = sctx->shader.vs.cso;

@@ -173,15 +173,17 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
          encoding |= instr->definitions.size() ? instr->definitions[0].physReg() << 15 : 0;
          encoding |= instr->operands.size() ? (instr->operands[0].physReg() >> 1) << 9 : 0;
          if (instr->operands.size() >= 2) {
-            if (!instr->operands[1].isConstant() || instr->operands[1].constantValue() >= 1024) {
+            if (!instr->operands[1].isConstant()) {
                encoding |= instr->operands[1].physReg().reg();
+            } else if (instr->operands[1].constantValue() >= 1024) {
+               encoding |= 255; /* SQ_SRC_LITERAL */
             } else {
                encoding |= instr->operands[1].constantValue() >> 2;
                encoding |= 1 << 8;
             }
          }
          out.push_back(encoding);
-         /* SMRD instructions can take a literal on GFX6 & GFX7 */
+         /* SMRD instructions can take a literal on GFX7 */
          if (instr->operands.size() >= 2 && instr->operands[1].isConstant() && instr->operands[1].constantValue() >= 1024)
             out.push_back(instr->operands[1].constantValue() >> 2);
          return;

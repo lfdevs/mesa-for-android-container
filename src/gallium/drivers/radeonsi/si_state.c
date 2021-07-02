@@ -1013,6 +1013,8 @@ static void si_bind_rs_state(struct pipe_context *ctx, void *state)
    if (old_rs->multisample_enable != rs->multisample_enable) {
       si_mark_atom_dirty(sctx, &sctx->atoms.s.db_render_state);
 
+      si_mark_atom_dirty(sctx, &sctx->atoms.s.msaa_config);
+
       /* Update the small primitive filter workaround if necessary. */
       if (sctx->screen->info.has_msaa_sample_loc_bug && sctx->framebuffer.nr_samples > 1)
          si_mark_atom_dirty(sctx, &sctx->atoms.s.msaa_sample_locs);

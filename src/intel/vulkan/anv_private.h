@@ -2880,7 +2880,8 @@ struct anv_cmd_pool {
    VkCommandPoolCreateFlags                     flags;
 };
 
-#define ANV_CMD_BUFFER_BATCH_SIZE 8192
+#define ANV_MIN_CMD_BUFFER_BATCH_SIZE 8192
+#define ANV_MAX_CMD_BUFFER_BATCH_SIZE (16 * 1024 * 1024)
 
 enum anv_cmd_buffer_exec_mode {
    ANV_CMD_BUFFER_EXEC_MODE_PRIMARY,
@@ -2969,6 +2970,12 @@ struct anv_cmd_buffer {
     * used.
     */
    uint32_t                                      perf_reloc_idx;
+
+   /**
+    * Sum of all the anv_batch_bo sizes allocated for this command buffer.
+    * Used to increase allocation size for long command buffers.
+    */
+   uint32_t                                     total_batch_size;
 };
 
 /* Determine whether we can chain a given cmd_buffer to another one. We need

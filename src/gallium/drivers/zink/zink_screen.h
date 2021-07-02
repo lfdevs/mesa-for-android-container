@@ -139,11 +139,7 @@ struct zink_screen {
 #if defined(MVK_VERSION)
    PFN_vkGetMoltenVKConfigurationMVK vk_GetMoltenVKConfigurationMVK;
    PFN_vkSetMoltenVKConfigurationMVK vk_SetMoltenVKConfigurationMVK;
-
-   PFN_vkGetPhysicalDeviceMetalFeaturesMVK vk_GetPhysicalDeviceMetalFeaturesMVK;
    PFN_vkGetVersionStringsMVK vk_GetVersionStringsMVK;
-   PFN_vkUseIOSurfaceMVK vk_UseIOSurfaceMVK;
-   PFN_vkGetIOSurfaceMVK vk_GetIOSurfaceMVK;
 #endif
 
    struct {

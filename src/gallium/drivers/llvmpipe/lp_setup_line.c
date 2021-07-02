@@ -671,7 +671,7 @@ try_setup_line( struct lp_setup_context *setup,
          plane[i].c++;
       }
       else if (plane[i].dcdx == 0) {
-         if (pixel_offset == 0) {
+         if (setup->bottom_edge_rule == 0) {
             /* correct for top-left fill convention:
              */
             if (plane[i].dcdy > 0) plane[i].c++;

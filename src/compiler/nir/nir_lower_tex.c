@@ -1091,10 +1091,14 @@ nir_lower_txs_lod(nir_builder *b, nir_tex_instr *tex)
    nir_instr_rewrite_src(&tex->instr, &tex->src[lod_idx].src,
                          nir_src_for_ssa(nir_imm_int(b, 0)));
 
-   /* TXS(LOD) = max(TXS(0) >> LOD, 1) */
+   /* TXS(LOD) = max(TXS(0) >> LOD, 1)
+    * But we do min(TXS(0), TXS(LOD)) to catch the case of a null surface,
+    * which should return 0, not 1.
+    */
    b->cursor = nir_after_instr(&tex->instr);
-   nir_ssa_def *minified = nir_imax(b, nir_ushr(b, &tex->dest.ssa, lod),
-                                    nir_imm_int(b, 1));
+   nir_ssa_def *minified = nir_imin(b, &tex->dest.ssa,
+                                    nir_imax(b, nir_ushr(b, &tex->dest.ssa, lod),
+                                             nir_imm_int(b, 1)));
 
    /* Make sure the component encoding the array size (if any) is not
     * minified.

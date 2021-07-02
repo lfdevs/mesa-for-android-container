@@ -2637,11 +2637,3 @@ dEQP-VK.glsl.texture_gather.offsets.min_required_offset.2d_array.rgba8ui.base_le
 dEQP-VK.glsl.texture_gather.offsets.min_required_offset.2d_array.rgba8ui.base_level.sparse_level_2_amd_bias,Fail
 dEQP-VK.glsl.texture_gather.offsets.min_required_offset.2d_array.rgba8ui.base_level.sparse_level_2_amd_lod,Fail
 
-# Oland specific issues, might need further investigation
-dEQP-VK.renderpass.suballocation.subpass_dependencies.late_fragment_tests.render_size_128_128.subpass_count_2.d32_sfloat_s8_uint,Fail
-dEQP-VK.renderpass.suballocation.subpass_dependencies.late_fragment_tests.render_size_128_128.subpass_count_3.d32_sfloat_s8_uint,Fail
-dEQP-VK.renderpass.suballocation.subpass_dependencies.late_fragment_tests.render_size_128_128.subpass_count_5.d32_sfloat_s8_uint,Fail
-dEQP-VK.renderpass2.suballocation.subpass_dependencies.late_fragment_tests.render_size_128_128.subpass_count_2.d32_sfloat_s8_uint,Fail
-dEQP-VK.renderpass2.suballocation.subpass_dependencies.late_fragment_tests.render_size_128_128.subpass_count_3.d32_sfloat_s8_uint,Fail
-dEQP-VK.renderpass2.suballocation.subpass_dependencies.late_fragment_tests.render_size_128_128.subpass_count_5.d32_sfloat_s8_uint,Fail
-

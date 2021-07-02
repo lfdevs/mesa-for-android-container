@@ -19,7 +19,7 @@ Build system
 -  `Meson <https://mesonbuild.com>`__ is required when building on \*nix
    platforms and on Windows.
 -  Android Build system when building as native Android component. Meson
-   is used when when building ARC.
+   is used when building ARC.
 
 Compiler
 ^^^^^^^^

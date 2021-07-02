@@ -3204,6 +3204,12 @@ midgard_compile_shader_nir(nir_shader *nir,
                 fflush(stdout);
         }
 
+        /* A shader ending on a 16MB boundary causes INSTR_INVALID_PC faults,
+         * workaround by adding some padding to the end of the shader. (The
+         * kernel makes sure shader BOs can't cross 16MB boundaries.) */
+        if (binary->size)
+                memset(util_dynarray_grow(binary, uint8_t, 16), 0, 16);
+
         if ((midgard_debug & MIDGARD_DBG_SHADERDB || inputs->shaderdb) &&
             !nir->info.internal) {
                 unsigned nr_bundles = 0, nr_ins = 0;

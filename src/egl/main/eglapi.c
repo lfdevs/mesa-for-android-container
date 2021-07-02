@@ -2144,7 +2144,7 @@ eglDupNativeFenceFDANDROID(EGLDisplay dpy, EGLSync sync)
 {
    _EGLDisplay *disp = _eglLockDisplay(dpy);
    _EGLSync *s = _eglLookupSync(sync, disp);
-   EGLBoolean ret;
+   EGLint ret;
 
    _EGL_FUNC_START(disp, EGL_OBJECT_SYNC_KHR, s, EGL_FALSE);
 
@@ -2159,7 +2159,7 @@ eglDupNativeFenceFDANDROID(EGLDisplay dpy, EGLSync sync)
    assert(disp->Extensions.ANDROID_native_fence_sync);
    ret = disp->Driver->DupNativeFenceFDANDROID(disp, s);
 
-   RETURN_EGL_EVAL(disp, ret);
+   RETURN_EGL_SUCCESS(disp, ret);
 }
 
 static EGLBoolean EGLAPIENTRY

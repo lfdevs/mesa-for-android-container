@@ -1396,7 +1396,7 @@ radv_image_create_layout(struct radv_device *device, struct radv_image_create_in
          offset = mod_info->pPlaneLayouts[plane].offset;
          stride = mod_info->pPlaneLayouts[plane].rowPitch / image->planes[plane].surface.bpe;
       } else {
-         offset = align(image->size, 1 << image->planes[plane].surface.alignment_log2);
+         offset = align64(image->size, 1 << image->planes[plane].surface.alignment_log2);
          stride = 0; /* 0 means no override */
       }
 
@@ -1983,9 +1983,12 @@ bool
 radv_layout_dcc_compressed(const struct radv_device *device, const struct radv_image *image,
                            VkImageLayout layout, bool in_render_loop, unsigned queue_mask)
 {
+   if (image->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT && queue_mask & (1u << RADV_QUEUE_FOREIGN))
+      return true;
+
    /* If the image is read-only, we can always just keep it compressed */
    if (!(image->usage & RADV_IMAGE_USAGE_WRITE_BITS) && radv_image_has_dcc(image))
-      return false;
+      return true;
 
    /* Don't compress compute transfer dst when image stores are not supported. */
    if ((layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL || layout == VK_IMAGE_LAYOUT_GENERAL) &&

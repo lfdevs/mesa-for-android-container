@@ -3644,7 +3644,7 @@ Temp lds_load_callback(Builder& bld, const LoadEmitInfo &info,
 
    const_offset /= const_offset_unit;
 
-   RegClass rc = RegClass(RegType::vgpr, DIV_ROUND_UP(size, 4));
+   RegClass rc = RegClass::get(RegType::vgpr, size);
    Temp val = rc == info.dst.regClass() && dst_hint.id() ? dst_hint : bld.tmp(rc);
    Instruction *instr;
    if (read2)
@@ -3652,9 +3652,6 @@ Temp lds_load_callback(Builder& bld, const LoadEmitInfo &info,
    else
       instr = bld.ds(op, Definition(val), offset, m, const_offset);
    instr->ds().sync = info.sync;
-
-   if (size < 4)
-      val = bld.pseudo(aco_opcode::p_extract_vector, bld.def(RegClass::get(RegType::vgpr, size)), val, Operand(0u));
 
    return val;
 }
@@ -5049,6 +5046,13 @@ void load_buffer(isel_context *ctx, unsigned num_components, unsigned component_
    bool use_smem = dst.type() != RegType::vgpr && (!glc || ctx->options->chip_class >= GFX8) && allow_smem;
    if (use_smem)
       offset = bld.as_uniform(offset);
+   else {
+      /* GFX6-7 are affected by a hw bug that prevents address clamping to
+       * work correctly when the SGPR offset is used.
+       */
+      if (offset.type() == RegType::sgpr && ctx->options->chip_class < GFX8)
+         offset = as_vgpr(ctx, offset);
+   }
 
    LoadEmitInfo info = {Operand(offset), dst, num_components, component_size, rsrc};
    info.glc = glc;
@@ -5555,7 +5559,11 @@ static MIMG_instruction *emit_mimg(Builder& bld, aco_opcode op,
                                    unsigned wqm_mask=0,
                                    Operand vdata=Operand(v1))
 {
-   if (bld.program->chip_class < GFX10) {
+   /* Limit NSA instructions to 3 dwords on GFX10 to avoid stability issues. */
+   unsigned max_nsa_size = bld.program->chip_class >= GFX10_3 ? 13 : 5;
+   bool use_nsa = bld.program->chip_class >= GFX10 && coords.size() <= max_nsa_size;
+
+   if (!use_nsa) {
       Temp coord = coords[0];
       if (coords.size() > 1) {
          coord = bld.tmp(RegType::vgpr, coords.size());
@@ -6225,6 +6233,12 @@ void visit_store_ssbo(isel_context *ctx, nir_intrinsic_instr *instr)
    unsigned offsets[32];
    split_buffer_store(ctx, instr, false, RegType::vgpr,
                       data, writemask, 16, &write_count, write_datas, offsets);
+
+   /* GFX6-7 are affected by a hw bug that prevents address clamping to work
+    * correctly when the SGPR offset is used.
+    */
+   if (offset.type() == RegType::sgpr && ctx->options->chip_class < GFX8)
+      offset = as_vgpr(ctx, offset);
 
    for (unsigned i = 0; i < write_count; i++) {
       aco_opcode op = get_buffer_store_op(write_datas[i].bytes());
@@ -11173,7 +11187,9 @@ void ngg_emit_sendmsg_gs_alloc_req(isel_context *ctx, Temp vtx_cnt = Temp(), Tem
    bld.sopp(aco_opcode::s_sendmsg, bld.m0(tmp), -1, sendmsg_gs_alloc_req);
 
    if (prm_cnt_0.id()) {
-      /* Navi 1x workaround: export a zero-area triangle when GS has no output. */
+      /* Navi 1x workaround: export a triangle with NaN coordinates when GS has no output.
+       * It can't have all-zero positions because that would render an undesired pixel with conservative rasterization.
+       */
       Temp first_lane = bld.sop1(Builder::s_ff1_i32, bld.def(s1), Operand(exec, bld.lm));
       Temp cond = bld.sop2(Builder::s_lshl, bld.def(bld.lm), bld.def(s1, scc),
                            Operand(1u, ctx->program->wave_size == 64), first_lane);
@@ -11184,11 +11200,15 @@ void ngg_emit_sendmsg_gs_alloc_req(isel_context *ctx, Temp vtx_cnt = Temp(), Tem
       bld.reset(ctx->block);
       ctx->block->kind |= block_kind_export_end;
 
+      /* Use zero: means that it's a triangle whose every vertex index is 0. */
       Temp zero = bld.copy(bld.def(v1), Operand(0u));
+      /* Use NaN for the coordinates, so that the rasterizer allways culls it.  */
+      Temp nan_coord = bld.copy(bld.def(v1), Operand(-1u));
+
       bld.exp(aco_opcode::exp, zero, Operand(v1), Operand(v1), Operand(v1),
         1 /* enabled mask */, V_008DFC_SQ_EXP_PRIM /* dest */,
         false /* compressed */, true /* done */, false /* valid mask */);
-      bld.exp(aco_opcode::exp, zero, zero, zero, zero,
+      bld.exp(aco_opcode::exp, nan_coord, nan_coord, nan_coord, nan_coord,
         0xf /* enabled mask */, V_008DFC_SQ_EXP_POS /* dest */,
         false /* compressed */, true /* done */, true /* valid mask */);
 
@@ -11814,6 +11834,13 @@ void select_program(Program *program,
          /* NGG GS waves need to wait for each other after the GS half is done. */
          Builder bld(ctx.program, ctx.block);
          create_workgroup_barrier(bld);
+      }
+
+      if (program->chip_class == GFX10 &&
+          program->stage.hw == HWStage::NGG &&
+          program->stage.num_sw_stages() == 1) {
+         /* Workaround for Navi 1x HW bug to ensure all NGG waves launch before s_sendmsg(GS_ALLOC_REQ). */
+         Builder(ctx.program, ctx.block).sopp(aco_opcode::s_barrier, -1u, 0u);
       }
 
       if (check_merged_wave_info) {

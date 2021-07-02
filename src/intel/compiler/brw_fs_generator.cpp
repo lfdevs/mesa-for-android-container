@@ -1917,6 +1917,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
       struct brw_reg src[4], dst;
       unsigned int last_insn_offset = p->next_insn_offset;
       bool multiple_instructions_emitted = false;
+      tgl_swsb swsb = inst->sched;
 
       /* From the Broadwell PRM, Volume 7, "3D-Media-GPGPU", in the
        * "Register Region Restrictions" section: for BDW, SKL:
@@ -1951,8 +1952,10 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          brw_set_default_exec_size(p, BRW_EXECUTE_16);
          brw_set_default_mask_control(p, BRW_MASK_DISABLE);
          brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
+         brw_set_default_swsb(p, tgl_swsb_src_dep(swsb));
          brw_MOV(p, brw_acc_reg(8), brw_imm_f(0.0f));
          last_insn_offset = p->next_insn_offset;
+         swsb = tgl_swsb_dst_dep(swsb, 1);
       }
 
       if (!is_accum_used && !inst->eot) {
@@ -2010,7 +2013,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
       brw_set_default_saturate(p, inst->saturate);
       brw_set_default_mask_control(p, inst->force_writemask_all);
       brw_set_default_acc_write_control(p, inst->writes_accumulator);
-      brw_set_default_swsb(p, inst->sched);
+      brw_set_default_swsb(p, swsb);
 
       unsigned exec_size = inst->exec_size;
       if (devinfo->ver == 7 && !devinfo->is_haswell &&
@@ -2426,8 +2429,8 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
       }
 
       case FS_OPCODE_SCHEDULING_FENCE:
-         if (inst->sources == 0 && inst->sched.regdist == 0 &&
-                                   inst->sched.mode == TGL_SBID_NULL) {
+         if (inst->sources == 0 && swsb.regdist == 0 &&
+                                   swsb.mode == TGL_SBID_NULL) {
             if (unlikely(debug_flag))
                disasm_info->use_tail = true;
             break;

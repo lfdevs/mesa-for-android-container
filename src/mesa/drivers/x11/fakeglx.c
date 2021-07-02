@@ -287,8 +287,6 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
    for (i=0; i<NumVisuals; i++) {
       XMesaVisual v = VisualTable[i];
       if (v->display == dpy
-          && v->mesa_visual.level == level
-          && v->mesa_visual.numAuxBuffers == numAuxBuffers
           && v->ximage_flag == ximageFlag
           && v->mesa_visual.doubleBufferMode == dbFlag
           && v->mesa_visual.stereoMode == stereoFlag
@@ -320,10 +318,6 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
       /* add xmvis to the list */
       VisualTable[NumVisuals] = xmvis;
       NumVisuals++;
-      /* XXX minor hack, because XMesaCreateVisual doesn't support an
-       * aux buffers parameter.
-       */
-      xmvis->mesa_visual.numAuxBuffers = numAuxBuffers;
    }
    return xmvis;
 }
@@ -1545,7 +1539,7 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
 	 *value = xmvis->visinfo->depth;
 	 return 0;
       case GLX_LEVEL:
-	 *value = xmvis->mesa_visual.level;
+	 *value = 0;
 	 return 0;
       case GLX_RGBA:
          if (fbconfig)
@@ -1559,7 +1553,7 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
 	 *value = (int) xmvis->mesa_visual.stereoMode;
 	 return 0;
       case GLX_AUX_BUFFERS:
-	 *value = xmvis->mesa_visual.numAuxBuffers;
+	 *value = 0;
 	 return 0;
       case GLX_RED_SIZE:
          *value = xmvis->mesa_visual.redBits;
@@ -1606,18 +1600,7 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
          }
          return 0;
       case GLX_TRANSPARENT_TYPE_EXT:
-         if (xmvis->mesa_visual.level==0) {
-            /* normal planes */
-            *value = GLX_NONE_EXT;
-         }
-         else if (xmvis->mesa_visual.level>0) {
-            /* overlay */
-            *value = GLX_TRANSPARENT_RGB_EXT;
-         }
-         else if (xmvis->mesa_visual.level<0) {
-            /* underlay */
-            *value = GLX_NONE_EXT;
-         }
+         *value = GLX_NONE_EXT;
          return 0;
       case GLX_TRANSPARENT_INDEX_VALUE_EXT:
          {
@@ -1645,11 +1628,7 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
        * GLX_EXT_visual_info extension
        */
       case GLX_VISUAL_CAVEAT_EXT:
-         /* test for zero, just in case */
-         if (xmvis->mesa_visual.visualRating > 0)
-            *value = xmvis->mesa_visual.visualRating;
-         else
-            *value = GLX_NONE_EXT;
+         *value = GLX_NONE_EXT;
          return 0;
 
       /*

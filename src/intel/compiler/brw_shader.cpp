@@ -1088,7 +1088,8 @@ backend_instruction::writes_accumulator_implicitly(const struct gen_device_info 
            ((opcode >= BRW_OPCODE_ADD && opcode < BRW_OPCODE_NOP) ||
             (opcode >= FS_OPCODE_DDX_COARSE && opcode <= FS_OPCODE_LINTERP))) ||
           (opcode == FS_OPCODE_LINTERP &&
-           (!devinfo->has_pln || devinfo->ver <= 6));
+           (!devinfo->has_pln || devinfo->ver <= 6)) ||
+          (eot && devinfo->ver >= 12); /* See Wa_14010017096. */
 }
 
 bool

@@ -2154,7 +2154,7 @@ vec4_visitor::shuffle_64bit_data(dst_reg dst, src_reg src, bool for_write,
    /* Resolve swizzle in src */
    if (src.swizzle != BRW_SWIZZLE_XYZW) {
       dst_reg data = dst_reg(this, glsl_type::dvec4_type);
-      bld.MOV(data, src);
+      bld.emit(mov_op, data, src);
       src = src_reg(data);
    }
 

@@ -818,6 +818,17 @@ llvmpipe_get_timestamp(struct pipe_screen *_screen)
    return os_time_get_nano();
 }
 
+static void update_cache_sha1_cpu(struct mesa_sha1 *ctx)
+{
+   const struct util_cpu_caps_t *cpu_caps = util_get_cpu_caps();
+   /*
+    * Don't need the cpu cache affinity stuff. The rest
+    * is contained in first 5 dwords.
+    */
+   STATIC_ASSERT(offsetof(struct util_cpu_caps_t, num_L3_caches) == 5 * sizeof(uint32_t));
+   _mesa_sha1_update(ctx, cpu_caps, 5 * sizeof(uint32_t));
+}
+
 static void lp_disk_cache_create(struct llvmpipe_screen *screen)
 {
    struct mesa_sha1 ctx;
@@ -831,6 +842,7 @@ static void lp_disk_cache_create(struct llvmpipe_screen *screen)
       return;
 
    _mesa_sha1_update(&ctx, &gallivm_perf, sizeof(gallivm_perf));
+   update_cache_sha1_cpu(&ctx);
    _mesa_sha1_final(&ctx, sha1);
    disk_cache_format_hex_id(cache_id, sha1, 20 * 2);
 

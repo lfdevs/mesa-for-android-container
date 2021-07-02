@@ -355,8 +355,7 @@ private:
 /* helper function for debugging */
 UNUSED void print_regs(ra_ctx& ctx, bool vgprs, RegisterFile& reg_file)
 {
-   unsigned max = vgprs ? ctx.program->max_reg_demand.vgpr : ctx.program->max_reg_demand.sgpr;
-   PhysRegInterval regs { vgprs ? PhysReg{256} : PhysReg{0}, max };
+   PhysRegInterval regs = get_reg_bounds(ctx.program, vgprs ? RegType::vgpr : RegType::sgpr);
    char reg_char = vgprs ? 'v' : 's';
 
    /* print markers */
@@ -387,7 +386,7 @@ UNUSED void print_regs(ra_ctx& ctx, bool vgprs, RegisterFile& reg_file)
    }
    printf("\n");
 
-   printf("%u/%u used, %u/%u free\n", max - free_regs, max, free_regs, max);
+   printf("%u/%u used, %u/%u free\n", regs.size - free_regs, regs.size, free_regs, regs.size);
 
    /* print assignments */
    prev = 0;

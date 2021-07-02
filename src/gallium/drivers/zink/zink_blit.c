@@ -8,6 +8,17 @@
 #include "util/u_surface.h"
 #include "util/format/u_format.h"
 
+static void
+apply_dst_clears(struct zink_context *ctx, const struct pipe_blit_info *info, bool discard_only)
+{
+   if (info->scissor_enable) {
+      struct u_rect rect = { info->scissor.minx, info->scissor.maxx,
+                             info->scissor.miny, info->scissor.maxy };
+      zink_fb_clears_apply_or_discard(ctx, info->dst.resource, rect, discard_only);
+   } else
+      zink_fb_clears_apply_or_discard(ctx, info->dst.resource, zink_rect_from_box(&info->dst.box), discard_only);
+}
+
 static bool
 blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info)
 {
@@ -38,7 +49,7 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info)
       util_range_add(info->dst.resource, &dst->valid_buffer_range,
                      info->dst.box.x, info->dst.box.x + info->dst.box.width);
 
-   zink_fb_clears_apply_or_discard(ctx, info->dst.resource, zink_rect_from_box(&info->dst.box), false);
+   apply_dst_clears(ctx, info, false);
    zink_fb_clears_apply_region(ctx, info->src.resource, zink_rect_from_box(&info->src.box));
    struct zink_batch *batch = zink_batch_no_rp(ctx);
 
@@ -137,7 +148,7 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info)
           VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
       return false;
 
-   zink_fb_clears_apply_or_discard(ctx, info->dst.resource, zink_rect_from_box(&info->dst.box), false);
+   apply_dst_clears(ctx, info, false);
    zink_fb_clears_apply_region(ctx, info->src.resource, zink_rect_from_box(&info->src.box));
    struct zink_batch *batch = zink_batch_no_rp(ctx);
    zink_batch_reference_resource_rw(batch, src, false);
@@ -270,7 +281,10 @@ zink_blit(struct pipe_context *pctx,
       return;
    }
 
-   zink_fb_clears_apply_or_discard(ctx, info->dst.resource, zink_rect_from_box(&info->dst.box), true);
+   /* this is discard_only because we're about to start a renderpass that will
+    * flush all pending clears anyway
+    */
+   apply_dst_clears(ctx, info, true);
 
    if (info->dst.resource->target == PIPE_BUFFER)
       util_range_add(info->dst.resource, &dst->valid_buffer_range,
@@ -330,12 +344,12 @@ zink_blit_region_fills(struct u_rect region, unsigned width, unsigned height)
       /* is this even a thing? */
       return false;
 
-    u_rect_find_intersection(&region, &intersect);
-    if (intersect.x0 != 0 || intersect.y0 != 0 ||
-        intersect.x1 != width || intersect.y1 != height)
-       return false;
+   u_rect_find_intersection(&region, &intersect);
+   if (intersect.x0 != 0 || intersect.y0 != 0 ||
+       intersect.x1 != width || intersect.y1 != height)
+      return false;
 
-   return false;
+   return true;
 }
 
 bool

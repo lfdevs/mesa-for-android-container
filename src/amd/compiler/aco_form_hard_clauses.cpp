@@ -76,16 +76,16 @@ void form_hard_clauses(Program *program)
          unsigned resource = 0;
          clause_type type = clause_other;
          if (instr->isVMEM() && !instr->operands.empty()) {
-            resource = instr->operands[0].tempId();
-            type = clause_vmem;
+            if (program->chip_class == GFX10 && instr->isMIMG() && get_mimg_nsa_dwords(instr.get()) > 0)
+               type = clause_other;
+            else
+               type = clause_vmem;
          } else if (instr->isScratch() || instr->isGlobal()) {
             type = clause_vmem;
          } else if (instr->isFlat()) {
             type = clause_flat;
          } else if (instr->isSMEM() && !instr->operands.empty()) {
             type = clause_smem;
-            if (instr->operands[0].bytes() == 16)
-               resource = instr->operands[0].tempId();
          }
 
          if (type != current_type || resource != current_resource || num_instrs == 64) {

@@ -1061,8 +1061,6 @@ zink_flush_frontbuffer(struct pipe_screen *pscreen,
       winsys->displaytarget_unmap(winsys, res->dt);
    }
 
-   winsys->displaytarget_unmap(winsys, res->dt);
-
    assert(res->dt);
    if (res->dt)
       winsys->displaytarget_display(winsys, res->dt, winsys_drawable_handle, sub_box);
@@ -1263,11 +1261,7 @@ zink_internal_setup_moltenvk(struct zink_screen *screen)
 
    GET_PROC_ADDR_INSTANCE(GetMoltenVKConfigurationMVK);
    GET_PROC_ADDR_INSTANCE(SetMoltenVKConfigurationMVK);
-
-   GET_PROC_ADDR_INSTANCE(GetPhysicalDeviceMetalFeaturesMVK);
    GET_PROC_ADDR_INSTANCE(GetVersionStringsMVK);
-   GET_PROC_ADDR_INSTANCE(UseIOSurfaceMVK);
-   GET_PROC_ADDR_INSTANCE(GetIOSurfaceMVK);
 
    if (screen->vk_GetVersionStringsMVK) {
       char molten_version[64] = {0};

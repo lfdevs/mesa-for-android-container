@@ -1043,9 +1043,7 @@ static bool si_buffer_resources_check_encrypted(struct si_context *sctx,
    while (mask) {
       int i = u_bit_scan64(&mask);
 
-      /* only check for reads */
-      if ((buffers->writable_mask & (1llu << i)) == 0 &&
-          (si_resource(buffers->buffers[i])->flags & RADEON_FLAG_ENCRYPTED))
+      if (si_resource(buffers->buffers[i])->flags & RADEON_FLAG_ENCRYPTED)
          return true;
    }
 

@@ -324,16 +324,8 @@ radv_get_depth_pipeline(struct radv_cmd_buffer *cmd_buffer, struct radv_image *i
    struct radv_meta_state *state = &cmd_buffer->device->meta_state;
    uint32_t samples = image->info.samples;
    uint32_t samples_log2 = ffs(samples) - 1;
-   enum radv_depth_decompress decompress;
+   enum radv_depth_decompress decompress = DECOMPRESS_DEPTH_STENCIL;
    VkPipeline *pipeline;
-
-   if (subresourceRange->aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT) {
-      decompress = DECOMPRESS_DEPTH;
-   } else if (subresourceRange->aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT) {
-      decompress = DECOMPRESS_STENCIL;
-   } else {
-      decompress = DECOMPRESS_DEPTH_STENCIL;
-   }
 
    if (!state->depth_decomp[samples_log2].decompress_pipeline[decompress]) {
       VkResult ret;

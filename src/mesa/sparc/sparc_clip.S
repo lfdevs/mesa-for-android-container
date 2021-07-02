@@ -12,11 +12,6 @@
 #include "math/m_vector_asm.h"
 #endif
 
-#define VEC_SIZE_1   	1
-#define VEC_SIZE_2   	3
-#define VEC_SIZE_3   	7
-#define VEC_SIZE_4   	15
-
         .register %g2, #scratch
         .register %g3, #scratch
 

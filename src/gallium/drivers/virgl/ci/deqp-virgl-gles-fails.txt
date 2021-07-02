@@ -5,8 +5,6 @@ dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_center,Fail
 dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_corner,Fail
 dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_neg_x_neg_y_pos_z,Fail
 dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_neg_x_neg_y_neg_z,Fail
-dEQP-GLES2.functional.draw.random.10,Fail
-dEQP-GLES2.functional.draw.random.42,Fail
 dEQP-GLES2.functional.fbo.render.color_clear.rbo_rgba4,Fail
 dEQP-GLES2.functional.fbo.render.color_clear.rbo_rgba4_depth_component16,Fail
 dEQP-GLES2.functional.fbo.render.color_clear.rbo_rgba4_stencil_index8,Fail
@@ -37,16 +35,6 @@ dEQP-GLES3.functional.clipping.point.wide_point_clip_viewport_center,Fail
 dEQP-GLES3.functional.clipping.point.wide_point_clip_viewport_corner,Fail
 dEQP-GLES3.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_neg_x_neg_y_pos_z,Fail
 dEQP-GLES3.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_neg_x_neg_y_neg_z,Fail
-dEQP-GLES3.functional.draw.random.105,Fail
-dEQP-GLES3.functional.draw.random.114,Fail
-dEQP-GLES3.functional.draw.random.135,Fail
-dEQP-GLES3.functional.draw.random.144,Fail
-dEQP-GLES3.functional.draw.random.155,Fail
-dEQP-GLES3.functional.draw.random.174,Fail
-dEQP-GLES3.functional.draw.random.206,Fail
-dEQP-GLES3.functional.draw.random.31,Fail
-dEQP-GLES3.functional.draw.random.43,Fail
-dEQP-GLES3.functional.draw.random.84,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag_reverse_dst_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag_reverse_src_dst_x,Fail
@@ -86,7 +74,6 @@ dEQP-GLES3.functional.rasterization.interpolation.projected.lines_wide,Fail
 dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.8,Fail
 dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.4,Fail
 dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.9,Fail
-dEQP-GLES31.functional.draw_indirect.random.20,Fail
 KHR-GL30.transform_feedback.api_errors_test,Fail
 KHR-GL30.transform_feedback.capture_vertex_interleaved_test,Fail
 KHR-GL30.transform_feedback.capture_vertex_separate_test,Fail

@@ -1416,6 +1416,10 @@ schedule_block(compiler_context *ctx, midgard_block *block)
                 else
                         break;
 
+                for (unsigned i = 0; i < bundle.instruction_count; ++i)
+                        bundle.instructions[i]->bundle_id =
+                                ctx->quadword_count + block->quadword_count;
+
                 util_dynarray_append(&bundles, midgard_bundle, bundle);
                 block->quadword_count += midgard_tag_props[bundle.tag].size;
         }

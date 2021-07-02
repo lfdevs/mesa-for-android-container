@@ -90,6 +90,8 @@
 
 using namespace ir_builder;
 
+static mtx_t builtins_lock = _MTX_INITIALIZER_NP;
+
 /**
  * Availability predicates:
  *  @{
@@ -1296,7 +1298,15 @@ builtin_builder::builtin_builder()
 
 builtin_builder::~builtin_builder()
 {
+   mtx_lock(&builtins_lock);
+
    ralloc_free(mem_ctx);
+   mem_ctx = NULL;
+
+   ralloc_free(shader);
+   shader = NULL;
+
+   mtx_unlock(&builtins_lock);
 }
 
 ir_function_signature *
@@ -7753,7 +7763,6 @@ builtin_builder::_helper_invocation()
 
 /* The singleton instance of builtin_builder. */
 static builtin_builder builtins;
-static mtx_t builtins_lock = _MTX_INITIALIZER_NP;
 static uint32_t builtin_users = 0;
 
 /**

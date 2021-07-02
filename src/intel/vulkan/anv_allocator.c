@@ -1670,7 +1670,9 @@ anv_device_alloc_bo(struct anv_device *device,
       new_bo.map = anv_gem_mmap(device, new_bo.gem_handle, 0, size, 0);
       if (new_bo.map == MAP_FAILED) {
          anv_gem_close(device, new_bo.gem_handle);
-         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+         return vk_errorf(device, &device->vk.base,
+                          VK_ERROR_OUT_OF_HOST_MEMORY,
+                          "mmap failed: %m");
       }
    }
 

@@ -842,6 +842,19 @@ mir_spill_register(
         /* Allocate TLS slot (maybe) */
         unsigned spill_slot = !is_special ? (*spill_count)++ : 0;
 
+        /* For special reads, figure out how many bytes we need */
+        unsigned read_bytemask = 0;
+
+        /* If multiple instructions write to this destination, we'll have to
+         * fill from TLS before writing */
+        unsigned write_count = 0;
+
+        mir_foreach_instr_global_safe(ctx, ins) {
+                read_bytemask |= mir_bytemask_of_read_components(ins, spill_node);
+                if (ins->dest == spill_node)
+                        ++write_count;
+        }
+
         /* For TLS, replace all stores to the spilled node. For
          * special reads, just keep as-is; the class will be demoted
          * implicitly. For special writes, spill to a work register */
@@ -855,8 +868,6 @@ mir_spill_register(
                 mir_foreach_instr_in_block_safe(block, ins) {
                         if (ins->dest != spill_node) continue;
 
-                        midgard_instruction st;
-
                         /* Note: it's important to match the mask of the spill
                          * with the mask of the instruction whose destination
                          * we're spilling, or otherwise we'll read invalid
@@ -864,32 +875,64 @@ mir_spill_register(
                          */
 
                         if (is_special_w) {
-                                st = v_mov(spill_node, spill_slot);
+                                midgard_instruction st = v_mov(spill_node, spill_slot);
                                 st.no_spill |= (1 << spill_class);
                                 st.mask = ins->mask;
                                 st.dest_type = st.src_types[1] = ins->dest_type;
+
+                                /* Hint: don't rewrite this node */
+                                st.hint = true;
+
+                                mir_insert_instruction_after_scheduled(ctx, block, ins, st);
                         } else {
-                                ins->dest = spill_index++;
+                                unsigned dest = spill_index++;
+
+                                if (write_count > 1 && mir_bytemask(ins) != 0xF) {
+                                        midgard_instruction read =
+                                                v_load_store_scratch(dest, spill_slot, false, 0xF);
+                                        mir_insert_instruction_before_scheduled(ctx, block, ins, read);
+                                }
+
+                                ins->dest = dest;
                                 ins->no_spill |= (1 << spill_class);
-                                st = v_load_store_scratch(ins->dest, spill_slot, true, ins->mask);
+
+                                bool move = false;
+
+                                /* In the same bundle, reads of the destination
+                                 * of the spilt instruction need to be direct */
+                                midgard_instruction *it = ins;
+                                while ((it = list_first_entry(&it->link, midgard_instruction, link))
+                                       && (it->bundle_id == ins->bundle_id)) {
+
+                                        if (!mir_has_arg(it, spill_node)) continue;
+
+                                        mir_rewrite_index_src_single(it, spill_node, dest);
+
+                                        /* The spilt instruction will write to
+                                         * a work register for `it` to read but
+                                         * the spill needs an LD/ST register */
+                                        move = true;
+                                }
+
+                                if (move)
+                                        dest = spill_index++;
+
+                                midgard_instruction st =
+                                        v_load_store_scratch(dest, spill_slot, true, ins->mask);
+                                mir_insert_instruction_after_scheduled(ctx, block, ins, st);
+
+                                if (move) {
+                                        midgard_instruction mv = v_mov(ins->dest, dest);
+                                        mv.no_spill |= (1 << spill_class);
+
+                                        mir_insert_instruction_after_scheduled(ctx, block, ins, mv);
+                                }
                         }
-
-                        /* Hint: don't rewrite this node */
-                        st.hint = true;
-
-                        mir_insert_instruction_after_scheduled(ctx, block, ins, st);
 
                         if (!is_special)
                                 ctx->spills++;
                 }
                 }
-        }
-
-        /* For special reads, figure out how many bytes we need */
-        unsigned read_bytemask = 0;
-
-        mir_foreach_instr_global_safe(ctx, ins) {
-                read_bytemask |= mir_bytemask_of_read_components(ins, spill_node);
         }
 
         /* Insert a load from TLS before the first consecutive

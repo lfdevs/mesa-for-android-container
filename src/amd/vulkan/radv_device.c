@@ -5427,14 +5427,27 @@ radv_GetDeviceMemoryCommitment(VkDevice device, VkDeviceMemory memory,
 }
 
 VkResult
-radv_BindBufferMemory2(VkDevice device, uint32_t bindInfoCount,
+radv_BindBufferMemory2(VkDevice _device, uint32_t bindInfoCount,
                        const VkBindBufferMemoryInfo *pBindInfos)
 {
+   RADV_FROM_HANDLE(radv_device, device, _device);
+
    for (uint32_t i = 0; i < bindInfoCount; ++i) {
       RADV_FROM_HANDLE(radv_device_memory, mem, pBindInfos[i].memory);
       RADV_FROM_HANDLE(radv_buffer, buffer, pBindInfos[i].buffer);
 
       if (mem) {
+         if (mem->alloc_size) {
+            VkMemoryRequirements req;
+
+            radv_GetBufferMemoryRequirements(_device, pBindInfos[i].buffer, &req);
+
+            if (pBindInfos[i].memoryOffset + req.size > mem->alloc_size) {
+               return vk_errorf(device->instance, VK_ERROR_UNKNOWN,
+                                "Device memory object too small for the buffer.\n");
+            }
+         }
+
          buffer->bo = mem->bo;
          buffer->offset = pBindInfos[i].memoryOffset;
       } else {
@@ -5457,14 +5470,27 @@ radv_BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory,
 }
 
 VkResult
-radv_BindImageMemory2(VkDevice device, uint32_t bindInfoCount,
+radv_BindImageMemory2(VkDevice _device, uint32_t bindInfoCount,
                       const VkBindImageMemoryInfo *pBindInfos)
 {
+   RADV_FROM_HANDLE(radv_device, device, _device);
+
    for (uint32_t i = 0; i < bindInfoCount; ++i) {
       RADV_FROM_HANDLE(radv_device_memory, mem, pBindInfos[i].memory);
       RADV_FROM_HANDLE(radv_image, image, pBindInfos[i].image);
 
       if (mem) {
+         if (mem->alloc_size) {
+            VkMemoryRequirements req;
+
+            radv_GetImageMemoryRequirements(_device, pBindInfos[i].image, &req);
+
+            if (pBindInfos[i].memoryOffset + req.size > mem->alloc_size) {
+               return vk_errorf(device->instance, VK_ERROR_UNKNOWN,
+                                "Device memory object too small for the image.\n");
+            }
+         }
+
          image->bo = mem->bo;
          image->offset = pBindInfos[i].memoryOffset;
       } else {

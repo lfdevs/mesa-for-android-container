@@ -40,6 +40,11 @@
 
 enum { VIRTUAL_BUFFER_HASH_TABLE_SIZE = 1024 };
 
+struct radv_amdgpu_ib {
+   struct radeon_winsys_bo *bo;
+   unsigned cdw;
+};
+
 struct radv_amdgpu_cs {
    struct radeon_cmdbuf base;
    struct radv_amdgpu_winsys *ws;
@@ -52,7 +57,7 @@ struct radv_amdgpu_cs {
    unsigned num_buffers;
    struct drm_amdgpu_bo_list_entry *handles;
 
-   struct radeon_winsys_bo **old_ib_buffers;
+   struct radv_amdgpu_ib *old_ib_buffers;
    unsigned num_old_ib_buffers;
    unsigned max_num_old_ib_buffers;
    unsigned *ib_size_ptr;
@@ -154,7 +159,7 @@ radv_amdgpu_cs_destroy(struct radeon_cmdbuf *rcs)
       free(cs->base.buf);
 
    for (unsigned i = 0; i < cs->num_old_ib_buffers; ++i)
-      cs->ws->base.buffer_destroy(&cs->ws->base, cs->old_ib_buffers[i]);
+      cs->ws->base.buffer_destroy(&cs->ws->base, cs->old_ib_buffers[i].bo);
 
    for (unsigned i = 0; i < cs->num_old_cs_buffers; ++i) {
       free(cs->old_cs_buffers[i].buf);
@@ -311,8 +316,8 @@ radv_amdgpu_cs_grow(struct radeon_cmdbuf *_cs, size_t min_size)
 
    if (cs->num_old_ib_buffers == cs->max_num_old_ib_buffers) {
       unsigned max_num_old_ib_buffers = MAX2(1, cs->max_num_old_ib_buffers * 2);
-      struct radeon_winsys_bo **old_ib_buffers =
-         realloc(cs->old_ib_buffers, max_num_old_ib_buffers * sizeof(void *));
+      struct radv_amdgpu_ib *old_ib_buffers =
+         realloc(cs->old_ib_buffers, max_num_old_ib_buffers * sizeof(*old_ib_buffers));
       if (!old_ib_buffers) {
          cs->status = VK_ERROR_OUT_OF_HOST_MEMORY;
          return;
@@ -321,7 +326,8 @@ radv_amdgpu_cs_grow(struct radeon_cmdbuf *_cs, size_t min_size)
       cs->old_ib_buffers = old_ib_buffers;
    }
 
-   cs->old_ib_buffers[cs->num_old_ib_buffers++] = cs->ib_buffer;
+   cs->old_ib_buffers[cs->num_old_ib_buffers].bo = cs->ib_buffer;
+   cs->old_ib_buffers[cs->num_old_ib_buffers++].cdw = cs->base.cdw;
 
    cs->ib_buffer =
       cs->ws->base.buffer_create(&cs->ws->base, ib_size, 0, radv_amdgpu_cs_domain(&cs->ws->base),
@@ -332,7 +338,7 @@ radv_amdgpu_cs_grow(struct radeon_cmdbuf *_cs, size_t min_size)
    if (!cs->ib_buffer) {
       cs->base.cdw = 0;
       cs->status = VK_ERROR_OUT_OF_DEVICE_MEMORY;
-      cs->ib_buffer = cs->old_ib_buffers[--cs->num_old_ib_buffers];
+      cs->ib_buffer = cs->old_ib_buffers[--cs->num_old_ib_buffers].bo;
    }
 
    cs->ib_mapped = cs->ws->base.buffer_map(cs->ib_buffer);
@@ -342,7 +348,7 @@ radv_amdgpu_cs_grow(struct radeon_cmdbuf *_cs, size_t min_size)
 
       /* VK_ERROR_MEMORY_MAP_FAILED is not valid for vkEndCommandBuffer. */
       cs->status = VK_ERROR_OUT_OF_DEVICE_MEMORY;
-      cs->ib_buffer = cs->old_ib_buffers[--cs->num_old_ib_buffers];
+      cs->ib_buffer = cs->old_ib_buffers[--cs->num_old_ib_buffers].bo;
    }
 
    cs->ws->base.cs_add_buffer(&cs->base, cs->ib_buffer);
@@ -401,7 +407,7 @@ radv_amdgpu_cs_reset(struct radeon_cmdbuf *_cs)
       cs->ws->base.cs_add_buffer(&cs->base, cs->ib_buffer);
 
       for (unsigned i = 0; i < cs->num_old_ib_buffers; ++i)
-         cs->ws->base.buffer_destroy(&cs->ws->base, cs->old_ib_buffers[i]);
+         cs->ws->base.buffer_destroy(&cs->ws->base, cs->old_ib_buffers[i].bo);
 
       cs->num_old_ib_buffers = 0;
       cs->ib.ib_mc_address = radv_amdgpu_winsys_bo(cs->ib_buffer)->base.va;
@@ -539,10 +545,13 @@ radv_amdgpu_cs_add_buffer(struct radeon_cmdbuf *_cs, struct radeon_winsys_bo *_b
 }
 
 static void
-radv_amdgpu_cs_execute_secondary(struct radeon_cmdbuf *_parent, struct radeon_cmdbuf *_child)
+radv_amdgpu_cs_execute_secondary(struct radeon_cmdbuf *_parent, struct radeon_cmdbuf *_child,
+                                 bool allow_ib2)
 {
    struct radv_amdgpu_cs *parent = radv_amdgpu_cs(_parent);
    struct radv_amdgpu_cs *child = radv_amdgpu_cs(_child);
+   struct radv_amdgpu_winsys *ws = parent->ws;
+   bool use_ib2 = ws->use_ib_bos && allow_ib2;
 
    if (parent->status != VK_SUCCESS || child->status != VK_SUCCESS)
       return;
@@ -556,7 +565,7 @@ radv_amdgpu_cs_execute_secondary(struct radeon_cmdbuf *_parent, struct radeon_cm
       radv_amdgpu_cs_add_buffer(&parent->base, child->virtual_buffers[i]);
    }
 
-   if (parent->ws->use_ib_bos) {
+   if (use_ib2) {
       if (parent->base.cdw + 4 > parent->base.max_dw)
          radv_amdgpu_cs_grow(&parent->base, 4);
 
@@ -565,57 +574,78 @@ radv_amdgpu_cs_execute_secondary(struct radeon_cmdbuf *_parent, struct radeon_cm
       radeon_emit(&parent->base, child->ib.ib_mc_address >> 32);
       radeon_emit(&parent->base, child->ib.size);
    } else {
-      /* When the secondary command buffer is huge we have to copy the list of CS buffers to the
-       * parent to submit multiple IBs.
-       */
-      if (child->num_old_cs_buffers > 0) {
-         unsigned num_cs_buffers;
-         uint32_t *new_buf;
+      if (parent->ws->use_ib_bos) {
+         /* Copy and chain old IB buffers from the child to the parent IB. */
+         for (unsigned i = 0; i < child->num_old_ib_buffers; i++) {
+            struct radv_amdgpu_ib *ib = &child->old_ib_buffers[i];
+            uint8_t *mapped;
 
-         /* Compute the total number of CS buffers needed. */
-         num_cs_buffers = parent->num_old_cs_buffers + child->num_old_cs_buffers + 1;
+            if (parent->base.cdw + ib->cdw > parent->base.max_dw)
+               radv_amdgpu_cs_grow(&parent->base, ib->cdw);
 
-         struct radeon_cmdbuf *old_cs_buffers =
-            realloc(parent->old_cs_buffers, num_cs_buffers * sizeof(*parent->old_cs_buffers));
-         if (!old_cs_buffers) {
-            parent->status = VK_ERROR_OUT_OF_HOST_MEMORY;
-            parent->base.cdw = 0;
-            return;
+            mapped = ws->base.buffer_map(ib->bo);
+            if (!mapped) {
+               parent->status = VK_ERROR_OUT_OF_HOST_MEMORY;
+               return;
+            }
+
+            /* Copy the IB data without the original chain link. */
+            memcpy(parent->base.buf + parent->base.cdw, mapped, 4 * ib->cdw);
+            parent->base.cdw += ib->cdw;
          }
-         parent->old_cs_buffers = old_cs_buffers;
+      } else {
+         /* When the secondary command buffer is huge we have to copy the list of CS buffers to the
+          * parent to submit multiple IBs.
+          */
+         if (child->num_old_cs_buffers > 0) {
+            unsigned num_cs_buffers;
+            uint32_t *new_buf;
 
-         /* Copy the parent CS to its list of CS buffers, so submission ordering is maintained. */
-         new_buf = malloc(parent->base.max_dw * 4);
-         if (!new_buf) {
-            parent->status = VK_ERROR_OUT_OF_HOST_MEMORY;
-            parent->base.cdw = 0;
-            return;
-         }
-         memcpy(new_buf, parent->base.buf, parent->base.max_dw * 4);
+            /* Compute the total number of CS buffers needed. */
+            num_cs_buffers = parent->num_old_cs_buffers + child->num_old_cs_buffers + 1;
 
-         parent->old_cs_buffers[parent->num_old_cs_buffers].cdw = parent->base.cdw;
-         parent->old_cs_buffers[parent->num_old_cs_buffers].max_dw = parent->base.max_dw;
-         parent->old_cs_buffers[parent->num_old_cs_buffers].buf = new_buf;
-         parent->num_old_cs_buffers++;
+            struct radeon_cmdbuf *old_cs_buffers =
+               realloc(parent->old_cs_buffers, num_cs_buffers * sizeof(*parent->old_cs_buffers));
+            if (!old_cs_buffers) {
+               parent->status = VK_ERROR_OUT_OF_HOST_MEMORY;
+               parent->base.cdw = 0;
+               return;
+            }
+            parent->old_cs_buffers = old_cs_buffers;
 
-         /* Then, copy all child CS buffers to the parent list. */
-         for (unsigned i = 0; i < child->num_old_cs_buffers; i++) {
-            new_buf = malloc(child->old_cs_buffers[i].max_dw * 4);
+            /* Copy the parent CS to its list of CS buffers, so submission ordering is maintained. */
+            new_buf = malloc(parent->base.max_dw * 4);
             if (!new_buf) {
                parent->status = VK_ERROR_OUT_OF_HOST_MEMORY;
                parent->base.cdw = 0;
                return;
             }
-            memcpy(new_buf, child->old_cs_buffers[i].buf, child->old_cs_buffers[i].max_dw * 4);
+            memcpy(new_buf, parent->base.buf, parent->base.max_dw * 4);
 
-            parent->old_cs_buffers[parent->num_old_cs_buffers].cdw = child->old_cs_buffers[i].cdw;
-            parent->old_cs_buffers[parent->num_old_cs_buffers].max_dw = child->old_cs_buffers[i].max_dw;
+            parent->old_cs_buffers[parent->num_old_cs_buffers].cdw = parent->base.cdw;
+            parent->old_cs_buffers[parent->num_old_cs_buffers].max_dw = parent->base.max_dw;
             parent->old_cs_buffers[parent->num_old_cs_buffers].buf = new_buf;
             parent->num_old_cs_buffers++;
-         }
 
-         /* Reset the parent CS before copying the child CS into it. */
-         parent->base.cdw = 0;
+            /* Then, copy all child CS buffers to the parent list. */
+            for (unsigned i = 0; i < child->num_old_cs_buffers; i++) {
+               new_buf = malloc(child->old_cs_buffers[i].max_dw * 4);
+               if (!new_buf) {
+                  parent->status = VK_ERROR_OUT_OF_HOST_MEMORY;
+                  parent->base.cdw = 0;
+                  return;
+               }
+               memcpy(new_buf, child->old_cs_buffers[i].buf, child->old_cs_buffers[i].max_dw * 4);
+
+               parent->old_cs_buffers[parent->num_old_cs_buffers].cdw = child->old_cs_buffers[i].cdw;
+               parent->old_cs_buffers[parent->num_old_cs_buffers].max_dw = child->old_cs_buffers[i].max_dw;
+               parent->old_cs_buffers[parent->num_old_cs_buffers].buf = new_buf;
+               parent->num_old_cs_buffers++;
+            }
+
+            /* Reset the parent CS before copying the child CS into it. */
+            parent->base.cdw = 0;
+         }
       }
 
       if (parent->base.cdw + child->base.cdw > parent->base.max_dw)
@@ -1150,7 +1180,7 @@ radv_amdgpu_winsys_get_cpu_addr(void *_cs, uint64_t addr)
       struct radv_amdgpu_winsys_bo *bo;
 
       bo = (struct radv_amdgpu_winsys_bo *)(i == cs->num_old_ib_buffers ? cs->ib_buffer
-                                                                        : cs->old_ib_buffers[i]);
+                                                                        : cs->old_ib_buffers[i].bo);
       if (addr >= bo->base.va && addr - bo->base.va < bo->size) {
          if (amdgpu_bo_cpu_map(bo->bo, &ret) == 0)
             return (char *)ret + (addr - bo->base.va);

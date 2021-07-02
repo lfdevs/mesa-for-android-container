@@ -195,7 +195,7 @@ panfrost_scoreboard_initialize_tiler(struct pan_pool *pool,
                 mali_ptr polygon_list)
 {
         /* Check if we even need tiling */
-        if (pan_is_bifrost(pool->dev) || !scoreboard->tiler_dep)
+        if (pan_is_bifrost(pool->dev) || !scoreboard->first_tiler)
                 return;
 
         /* Okay, we do. Let's generate it. We'll need the job's polygon list

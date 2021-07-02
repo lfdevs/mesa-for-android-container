@@ -341,8 +341,7 @@ create_xmesa_buffer(XMesaDrawable d, BufferType type,
                                   vis->mesa_visual.depthBits > 0,
                                   vis->mesa_visual.stencilBits > 0,
                                   vis->mesa_visual.accumRedBits > 0,
-                                  GL_FALSE,  /* software alpha buffer */
-                                  vis->mesa_visual.numAuxBuffers > 0 );
+                                  GL_FALSE  /* software alpha buffer */ );
 
    /* GLX_EXT_texture_from_pixmap */
    b->TextureTarget = 0;
@@ -597,7 +596,6 @@ initialize_visual_and_buffer(XMesaVisual v, XMesaBuffer b,
       printf("X/Mesa visual = %p\n", (void *) v);
       printf("X/Mesa dithered pf = %u\n", v->dithered_pf);
       printf("X/Mesa undithered pf = %u\n", v->undithered_pf);
-      printf("X/Mesa level = %d\n", v->mesa_visual.level);
       printf("X/Mesa depth = %d\n", GET_VISUAL_DEPTH(v));
       printf("X/Mesa bits per pixel = %d\n", v->BitsPerPixel);
    }
@@ -818,8 +816,6 @@ XMesaVisual XMesaCreateVisual( XMesaDisplay *display,
    v->visualType = xmesa_convert_from_x_visual_type(visinfo->c_class);
 #endif
 
-   v->mesa_visual.visualRating = visualCaveat;
-
    if (alpha_flag)
       v->mesa_visual.alphaBits = 8;
 
@@ -857,8 +853,6 @@ XMesaVisual XMesaCreateVisual( XMesaDisplay *display,
                            accum_blue_size, accum_alpha_size,
                            0);
 
-   /* XXX minor hack */
-   v->mesa_visual.level = level;
    return v;
 }
 
@@ -1626,7 +1620,6 @@ xbuffer_to_renderbuffer(int buffer)
    case GLX_BACK_RIGHT_EXT:
       return BUFFER_BACK_RIGHT;
    case GLX_AUX0_EXT:
-      return BUFFER_AUX0;
    case GLX_AUX1_EXT:
    case GLX_AUX2_EXT:
    case GLX_AUX3_EXT:

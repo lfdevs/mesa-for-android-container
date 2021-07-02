@@ -637,7 +637,7 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
                                       ANV_CMD_DIRTY_DYNAMIC_PRIMITIVE_TOPOLOGY)) {
       uint32_t topology;
       if (anv_pipeline_has_stage(pipeline, MESA_SHADER_TESS_EVAL))
-         topology = d->primitive_topology;
+         topology = pipeline->topology;
       else
          topology = genX(vk_to_gen_primitive_type)[d->primitive_topology];
 

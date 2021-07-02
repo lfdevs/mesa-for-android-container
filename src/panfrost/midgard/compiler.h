@@ -183,6 +183,8 @@ typedef struct midgard_instruction {
 
                 midgard_branch branch;
         };
+
+        unsigned bundle_id;
 } midgard_instruction;
 
 typedef struct midgard_block {

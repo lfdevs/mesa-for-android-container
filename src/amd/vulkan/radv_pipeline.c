@@ -4191,27 +4191,29 @@ radv_pipeline_generate_raster_state(struct radeon_cmdbuf *ctx_cs,
 
    radeon_set_context_reg(ctx_cs, R_028BDC_PA_SC_LINE_CNTL, S_028BDC_DX10_DIAMOND_TEST_ENA(1));
 
-   /* Conservative rasterization. */
-   if (mode != VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT) {
-      pa_sc_conservative_rast = S_028C4C_PREZ_AA_MASK_ENABLE(1) | S_028C4C_POSTZ_AA_MASK_ENABLE(1) |
-                                S_028C4C_CENTROID_SAMPLE_OVERRIDE(1);
+   if (pipeline->device->physical_device->rad_info.chip_class >= GFX9) {
+      /* Conservative rasterization. */
+      if (mode != VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT) {
+         pa_sc_conservative_rast = S_028C4C_PREZ_AA_MASK_ENABLE(1) | S_028C4C_POSTZ_AA_MASK_ENABLE(1) |
+                                   S_028C4C_CENTROID_SAMPLE_OVERRIDE(1);
 
-      if (mode == VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT) {
-         pa_sc_conservative_rast |=
-            S_028C4C_OVER_RAST_ENABLE(1) | S_028C4C_OVER_RAST_SAMPLE_SELECT(0) |
-            S_028C4C_UNDER_RAST_ENABLE(0) | S_028C4C_UNDER_RAST_SAMPLE_SELECT(1) |
-            S_028C4C_PBB_UNCERTAINTY_REGION_ENABLE(1);
-      } else {
-         assert(mode == VK_CONSERVATIVE_RASTERIZATION_MODE_UNDERESTIMATE_EXT);
-         pa_sc_conservative_rast |=
-            S_028C4C_OVER_RAST_ENABLE(0) | S_028C4C_OVER_RAST_SAMPLE_SELECT(1) |
-            S_028C4C_UNDER_RAST_ENABLE(1) | S_028C4C_UNDER_RAST_SAMPLE_SELECT(0) |
-            S_028C4C_PBB_UNCERTAINTY_REGION_ENABLE(0);
+         if (mode == VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT) {
+            pa_sc_conservative_rast |=
+               S_028C4C_OVER_RAST_ENABLE(1) | S_028C4C_OVER_RAST_SAMPLE_SELECT(0) |
+               S_028C4C_UNDER_RAST_ENABLE(0) | S_028C4C_UNDER_RAST_SAMPLE_SELECT(1) |
+               S_028C4C_PBB_UNCERTAINTY_REGION_ENABLE(1);
+         } else {
+            assert(mode == VK_CONSERVATIVE_RASTERIZATION_MODE_UNDERESTIMATE_EXT);
+            pa_sc_conservative_rast |=
+               S_028C4C_OVER_RAST_ENABLE(0) | S_028C4C_OVER_RAST_SAMPLE_SELECT(1) |
+               S_028C4C_UNDER_RAST_ENABLE(1) | S_028C4C_UNDER_RAST_SAMPLE_SELECT(0) |
+               S_028C4C_PBB_UNCERTAINTY_REGION_ENABLE(0);
+         }
       }
-   }
 
-   radeon_set_context_reg(ctx_cs, R_028C4C_PA_SC_CONSERVATIVE_RASTERIZATION_CNTL,
-                          pa_sc_conservative_rast);
+      radeon_set_context_reg(ctx_cs, R_028C4C_PA_SC_CONSERVATIVE_RASTERIZATION_CNTL,
+                             pa_sc_conservative_rast);
+   }
 }
 
 static void

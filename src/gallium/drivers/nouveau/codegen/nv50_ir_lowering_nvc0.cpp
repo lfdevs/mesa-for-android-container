@@ -2328,15 +2328,15 @@ NVC0LoweringPass::insertOOBSurfaceOpResult(TexInstruction *su)
    bld.setPosition(su, true);
 
    for (unsigned i = 0; su->defExists(i); ++i) {
-      ValueDef &def = su->def(i);
+      Value *def = su->getDef(i);
+      Value *newDef = bld.getSSA();
+      su->setDef(i, newDef);
 
       Instruction *mov = bld.mkMov(bld.getSSA(), bld.loadImm(NULL, 0));
       assert(su->cc == CC_NOT_P);
       mov->setPredicate(CC_P, su->getPredicate());
-      Instruction *uni = bld.mkOp2(OP_UNION, TYPE_U32, bld.getSSA(), NULL, mov->getDef(0));
-
-      def.replace(uni->getDef(0), false);
-      uni->setSrc(0, def.get());
+      Instruction *uni = bld.mkOp2(OP_UNION, TYPE_U32, bld.getSSA(), newDef, mov->getDef(0));
+      bld.mkMov(def, uni->getDef(0));
    }
 }
 
@@ -2613,10 +2613,12 @@ NVC0LoweringPass::processSurfaceCoordsGM107(TexInstruction *su, Instruction *ret
       for (unsigned i = 0; su->defExists(i); ++i) {
          assert(i < 4);
 
-         ValueDef &def = su->def(i);
+         Value *def = su->getDef(i);
+         Value *newDef = bld.getSSA();
          ValueDef &def2 = su2d->def(i);
          Instruction *mov = NULL;
 
+         su->setDef(i, newDef);
          if (pred) {
             mov = bld.mkMov(bld.getSSA(), bld.loadImm(NULL, 0));
             mov->setPredicate(CC_P, pred->getDef(0));
@@ -2624,11 +2626,10 @@ NVC0LoweringPass::processSurfaceCoordsGM107(TexInstruction *su, Instruction *ret
 
          Instruction *uni = ret[i] = bld.mkOp2(OP_UNION, TYPE_U32,
                                       bld.getSSA(),
-                                      NULL, def2.get());
-         def.replace(uni->getDef(0), false);
-         uni->setSrc(0, def.get());
+                                      newDef, def2.get());
          if (mov)
             uni->setSrc(2, mov->getDef(0));
+         bld.mkMov(def, uni->getDef(0));
       }
    } else if (pred) {
       // Create a UNION so that RA assigns the same registers
@@ -2636,16 +2637,17 @@ NVC0LoweringPass::processSurfaceCoordsGM107(TexInstruction *su, Instruction *ret
       for (unsigned i = 0; su->defExists(i); ++i) {
          assert(i < 4);
 
-         ValueDef &def = su->def(i);
+         Value *def = su->getDef(i);
+         Value *newDef = bld.getSSA();
+         su->setDef(i, newDef);
 
          Instruction *mov = bld.mkMov(bld.getSSA(), bld.loadImm(NULL, 0));
          mov->setPredicate(CC_P, pred->getDef(0));
 
          Instruction *uni = ret[i] = bld.mkOp2(OP_UNION, TYPE_U32,
                                       bld.getSSA(),
-                                      NULL, mov->getDef(0));
-         def.replace(uni->getDef(0), false);
-         uni->setSrc(0, def.get());
+                                      newDef, mov->getDef(0));
+         bld.mkMov(def, uni->getDef(0));
       }
    }
 

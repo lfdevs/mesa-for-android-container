@@ -666,22 +666,18 @@ static void amdgpu_bo_slab_destroy(struct radeon_winsys *rws, struct pb_buffer *
 {
    struct amdgpu_winsys *ws = amdgpu_winsys(rws);
    struct amdgpu_winsys_bo *bo = amdgpu_winsys_bo(_buf);
+   struct pb_slabs *slabs;
 
    assert(!bo->bo);
 
-   if (bo->base.usage & RADEON_FLAG_ENCRYPTED)
-      pb_slab_free(get_slabs(ws,
-                             bo->base.size,
-                             RADEON_FLAG_ENCRYPTED), &bo->u.slab.entry);
-   else
-      pb_slab_free(get_slabs(ws,
-                             bo->base.size,
-                             0), &bo->u.slab.entry);
+   slabs = get_slabs(ws, bo->base.size, bo->base.usage & RADEON_FLAG_ENCRYPTED);
 
    if (bo->base.placement & RADEON_DOMAIN_VRAM)
       ws->slab_wasted_vram -= get_slab_wasted_size(ws, bo);
    else
       ws->slab_wasted_gtt -= get_slab_wasted_size(ws, bo);
+
+   pb_slab_free(slabs, &bo->u.slab.entry);
 }
 
 static const struct pb_vtbl amdgpu_winsys_bo_slab_vtbl = {

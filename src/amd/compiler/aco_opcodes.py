@@ -1687,3 +1687,8 @@ for ver in ['gfx9', 'gfx10']:
             sys.exit(1)
         else:
             op_to_name[key] = op.name
+
+# These instructions write the entire 32-bit VGPR, but it's not clear in Opcode's constructor that
+# it should be 32, since it works accidentally.
+assert(opcodes['ds_read_u8'].definition_size == 32)
+assert(opcodes['ds_read_u16'].definition_size == 32)

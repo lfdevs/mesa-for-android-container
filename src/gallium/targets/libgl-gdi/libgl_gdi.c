@@ -41,6 +41,7 @@
 #include "stw_winsys.h"
 #include "stw_device.h"
 #include "gdi/gdi_sw_winsys.h"
+#include "pipe/p_screen.h"
 #include "pipe/p_context.h"
 
 #ifdef GALLIUM_SOFTPIPE

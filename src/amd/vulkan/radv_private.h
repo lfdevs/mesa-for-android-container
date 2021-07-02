@@ -1385,6 +1385,9 @@ struct radv_cmd_state {
    enum rgp_flush_bits sqtt_flush_bits;
 
    uint8_t cb_mip[MAX_RTS];
+
+   /* Whether DRAW_{INDEX}_INDIRECT_MULTI is emitted. */
+   bool uses_draw_indirect_multi;
 };
 
 struct radv_cmd_pool {

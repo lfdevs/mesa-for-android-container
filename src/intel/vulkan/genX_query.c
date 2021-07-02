@@ -1448,7 +1448,7 @@ void genX(CmdCopyQueryPoolResults)(
 
       case VK_QUERY_TYPE_TIMESTAMP:
          result = mi_mem64(anv_address_add(query_addr, 8));
-         gpu_write_query_result(&b, dest_addr, flags, 0, result);
+         gpu_write_query_result(&b, dest_addr, flags, idx++, result);
          break;
 
 #if GFX_VER >= 8

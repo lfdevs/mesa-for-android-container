@@ -83,18 +83,16 @@ struct keybox {
 };
 
 static struct keybox *
-make_keybox(void *mem_ctx,
-            gl_shader_stage stage,
-            const void *key,
-            uint32_t key_size)
+make_keybox(void *mem_ctx, gl_shader_stage stage, const void *key, uint32_t key_size, void *base, uint32_t base_size)
 {
    struct keybox *keybox =
-      ralloc_size(mem_ctx, sizeof(struct keybox) + key_size);
+      ralloc_size(mem_ctx, sizeof(struct keybox) + key_size + base_size);
 
    keybox->stage = stage;
-   keybox->size = key_size;
+   keybox->size = key_size + base_size;
    memcpy(keybox->data, key, key_size);
-
+   if (base_size)
+      memcpy(&keybox->data[key_size], base, base_size);
    return keybox;
 }
 
@@ -282,7 +280,7 @@ get_shader_module_for_stage(struct zink_context *ctx, struct zink_shader *zs, st
    struct zink_shader_module *zm;
    struct keybox *keybox;
    uint32_t hash;
-   bool needs_base_size = false;
+   unsigned base_size = 0;
 
    shader_key_vtbl[stage](ctx, zs, ctx->gfx_stages, &key);
 
@@ -292,11 +290,9 @@ get_shader_module_for_stage(struct zink_context *ctx, struct zink_shader *zs, st
       memcpy(key.base.inlined_uniform_values,
              ctx->inlinable_uniforms[pstage],
              zs->nir->info.num_inlinable_uniforms * 4);
-      needs_base_size = true;
+      base_size = zs->nir->info.num_inlinable_uniforms * sizeof(uint32_t);
    }
-   if (needs_base_size)
-      key.size += sizeof(struct zink_shader_key_base);
-   keybox = make_keybox(prog->shader_cache, stage, &key, key.size);
+   keybox = make_keybox(prog->shader_cache, stage, &key, key.size, &key.base, base_size);
    hash = keybox_hash(keybox);
    struct hash_entry *entry = _mesa_hash_table_search_pre_hashed(prog->shader_cache->shader_cache,
                                                                  hash, keybox);

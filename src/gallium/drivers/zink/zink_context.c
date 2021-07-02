@@ -240,7 +240,7 @@ wrap_needs_border_color(unsigned wrap)
 }
 
 static VkBorderColor
-get_border_color(const union pipe_color_union *color, bool is_integer)
+get_border_color(const union pipe_color_union *color, bool is_integer, bool need_custom)
 {
    if (is_integer) {
       if (color->ui[0] == 0 && color->ui[1] == 0 && color->ui[2] == 0 && color->ui[3] == 0)
@@ -249,7 +249,7 @@ get_border_color(const union pipe_color_union *color, bool is_integer)
          return VK_BORDER_COLOR_INT_OPAQUE_BLACK;
       if (color->ui[0] == 1 && color->ui[1] == 1 && color->ui[2] == 1 && color->ui[3] == 1)
          return VK_BORDER_COLOR_INT_OPAQUE_WHITE;
-      return VK_BORDER_COLOR_INT_CUSTOM_EXT;
+      return need_custom ? VK_BORDER_COLOR_INT_CUSTOM_EXT : VK_BORDER_COLOR_INT_TRANSPARENT_BLACK;
    }
 
    if (color->f[0] == 0 && color->f[1] == 0 && color->f[2] == 0 && color->f[3] == 0)
@@ -258,7 +258,7 @@ get_border_color(const union pipe_color_union *color, bool is_integer)
       return VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
    if (color->f[0] == 1 && color->f[1] == 1 && color->f[2] == 1 && color->f[3] == 1)
       return VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-   return VK_BORDER_COLOR_FLOAT_CUSTOM_EXT;
+   return need_custom ? VK_BORDER_COLOR_FLOAT_CUSTOM_EXT : VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
 }
 
 static void *
@@ -302,7 +302,7 @@ zink_create_sampler_state(struct pipe_context *pctx,
 
    bool is_integer = state->border_color_is_integer;
 
-   sci.borderColor = get_border_color(&state->border_color, is_integer);
+   sci.borderColor = get_border_color(&state->border_color, is_integer, need_custom);
    if (sci.borderColor > VK_BORDER_COLOR_INT_OPAQUE_WHITE && need_custom) {
       if (screen->info.have_EXT_custom_border_color &&
           screen->info.border_color_feats.customBorderColorWithoutFormat) {
