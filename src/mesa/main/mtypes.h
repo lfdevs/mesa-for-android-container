@@ -3943,6 +3943,12 @@ struct gl_constants
    GLboolean ForceGLSLAbsSqrt;
 
    /**
+    * Forces the GLSL compiler to ignore writes to readonly vars rather than
+    * throwing an error.
+    */
+   GLboolean GLSLIgnoreWriteToReadonlyVar;
+
+   /**
     * Types of variable to default initialized to zero. Supported values are:
     *   - 0: no zero initialization
     *   - 1: all shader variables and gl_FragColor are initialiazed to 0

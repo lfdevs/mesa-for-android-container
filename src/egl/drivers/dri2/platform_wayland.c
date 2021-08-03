@@ -310,6 +310,16 @@ dri2_wl_create_window_surface(_EGLDisplay *disp, _EGLConfig *conf,
    int visual_idx;
    const __DRIconfig *config;
 
+   if (!window) {
+      _eglError(EGL_BAD_NATIVE_WINDOW, "dri2_create_surface");
+      return NULL;
+   }
+
+   if (window->driver_private) {
+      _eglError(EGL_BAD_ALLOC, "dri2_create_surface");
+      return NULL;
+   }
+
    dri2_surf = calloc(1, sizeof *dri2_surf);
    if (!dri2_surf) {
       _eglError(EGL_BAD_ALLOC, "dri2_create_surface");
@@ -667,8 +677,9 @@ update_buffers(struct dri2_egl_surface *dri2_surf)
    struct dri2_egl_display *dri2_dpy =
       dri2_egl_display(dri2_surf->base.Resource.Display);
 
-   if (dri2_surf->base.Width != dri2_surf->wl_win->width ||
-       dri2_surf->base.Height != dri2_surf->wl_win->height) {
+   if (dri2_surf->wl_win &&
+       (dri2_surf->base.Width != dri2_surf->wl_win->width ||
+        dri2_surf->base.Height != dri2_surf->wl_win->height)) {
 
       dri2_surf->base.Width  = dri2_surf->wl_win->width;
       dri2_surf->base.Height = dri2_surf->wl_win->height;
@@ -676,8 +687,9 @@ update_buffers(struct dri2_egl_surface *dri2_surf)
       dri2_surf->dy = dri2_surf->wl_win->dy;
    }
 
-   if (dri2_surf->base.Width != dri2_surf->wl_win->attached_width ||
-       dri2_surf->base.Height != dri2_surf->wl_win->attached_height) {
+   if (dri2_surf->wl_win &&
+       (dri2_surf->base.Width != dri2_surf->wl_win->attached_width ||
+        dri2_surf->base.Height != dri2_surf->wl_win->attached_height)) {
       dri2_wl_release_buffers(dri2_surf);
    }
 
@@ -1056,6 +1068,9 @@ dri2_wl_swap_buffers_with_damage(_EGLDisplay *disp,
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
+
+   if (!dri2_surf->wl_win)
+      return _eglError(EGL_BAD_NATIVE_WINDOW, "dri2_swap_buffers");
 
    while (dri2_surf->throttle_callback != NULL)
       if (wl_display_dispatch_queue(dri2_dpy->wl_dpy,
@@ -1700,8 +1715,9 @@ swrast_update_buffers(struct dri2_egl_surface *dri2_surf)
    if (dri2_surf->back)
       return 0;
 
-   if (dri2_surf->base.Width != dri2_surf->wl_win->width ||
-       dri2_surf->base.Height != dri2_surf->wl_win->height) {
+   if (dri2_surf->wl_win &&
+       (dri2_surf->base.Width != dri2_surf->wl_win->width ||
+        dri2_surf->base.Height != dri2_surf->wl_win->height)) {
 
       dri2_wl_release_buffers(dri2_surf);
 
@@ -1946,6 +1962,9 @@ dri2_wl_swrast_swap_buffers(_EGLDisplay *disp, _EGLSurface *draw)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
+
+   if (!dri2_surf->wl_win)
+      return _eglError(EGL_BAD_NATIVE_WINDOW, "dri2_swap_buffers");
 
    dri2_dpy->core->swapBuffers(dri2_surf->dri_drawable);
    return EGL_TRUE;

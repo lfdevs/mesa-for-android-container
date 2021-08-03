@@ -72,7 +72,7 @@ lower_rt_intrinsics_impl(nir_function_impl *impl,
                               stage == MESA_SHADER_CLOSEST_HIT);
       brw_nir_rt_load_mem_ray(b, &object_ray_in,
                               BRW_RT_BVH_LEVEL_OBJECT);
-      /* Fall through */
+      FALLTHROUGH;
 
    case MESA_SHADER_MISS:
       brw_nir_rt_load_mem_ray(b, &world_ray_in,

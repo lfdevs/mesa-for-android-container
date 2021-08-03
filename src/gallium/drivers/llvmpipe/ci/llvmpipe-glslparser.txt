@@ -704,10 +704,6 @@ spec/arb_shader_stencil_export/preprocessor/disabled-undefined-core.geom: skip
 spec/arb_shader_stencil_export/preprocessor/disabled-undefined-core.tesc: skip
 spec/arb_shader_stencil_export/preprocessor/disabled-undefined-core.tese: skip
 spec/arb_shader_stencil_export/preprocessor/disabled-undefined-core.vert: skip
-spec/arb_shader_storage_buffer_object/compiler/atomiccompswap-implicit-conversion.vert: crash
-spec/arb_shader_storage_buffer_object/compiler/atomicmin-array-element-implicit-conversion.vert: crash
-spec/arb_shader_storage_buffer_object/compiler/atomicmin-implicit-conversion.vert: crash
-spec/arb_shader_storage_buffer_object/compiler/atomicmin-swizzle-implicit-conversion.vert: crash
 spec/arb_shader_storage_buffer_object/preprocessor/disabled-defined-compat.frag: skip
 spec/arb_shader_storage_buffer_object/preprocessor/disabled-defined-compat.vert: skip
 spec/arb_shader_storage_buffer_object/preprocessor/disabled-defined-core.comp: skip

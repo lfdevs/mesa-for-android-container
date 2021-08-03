@@ -672,9 +672,9 @@ genX(emit_vertices)(struct brw_context *brw)
             upload_format_size(upload_format) : glformat->Size;
 
          switch (size) {
-            case 0: comp0 = VFCOMP_STORE_0; /* fallthrough */
-            case 1: comp1 = VFCOMP_STORE_0; /* fallthrough */
-            case 2: comp2 = VFCOMP_STORE_0; /* fallthrough */
+            case 0: comp0 = VFCOMP_STORE_0; FALLTHROUGH;
+            case 1: comp1 = VFCOMP_STORE_0; FALLTHROUGH;
+            case 2: comp2 = VFCOMP_STORE_0; FALLTHROUGH;
             case 3:
                if (GFX_VER >= 8 && glformat->Doubles) {
                   comp3 = VFCOMP_STORE_0;

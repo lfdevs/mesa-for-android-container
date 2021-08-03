@@ -256,8 +256,3 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles ldr,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
-spec@nv_primitive_restart@primitive-restart-disable_vbo,Fail
-spec@nv_primitive_restart@primitive-restart-vbo_combined_vertex_and_index,Fail
-spec@nv_primitive_restart@primitive-restart-vbo_index_only,Fail
-spec@nv_primitive_restart@primitive-restart-vbo_separate_vertex_and_index,Fail
-spec@nv_primitive_restart@primitive-restart-vbo_vertex_only,Fail

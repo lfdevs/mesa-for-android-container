@@ -699,7 +699,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
 
    case nir_intrinsic_scoped_barrier:
       assert(nir_intrinsic_execution_scope(instr) == NIR_SCOPE_NONE);
-      /* Fall through. */
+      FALLTHROUGH;
    case nir_intrinsic_memory_barrier: {
       const vec4_builder bld =
          vec4_builder(this).at_end().annotate(current_annotation, base_ir);
@@ -1173,7 +1173,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
 
    case nir_op_iadd:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
-      /* fall through */
+      FALLTHROUGH;
    case nir_op_fadd:
       try_immediate_source(instr, op, true);
       inst = emit(ADD(dst, op[0], op[1]));
@@ -1402,7 +1402,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    case nir_op_imin:
    case nir_op_umin:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
-      /* fall through */
+      FALLTHROUGH;
    case nir_op_fmin:
       try_immediate_source(instr, op, true);
       inst = emit_minmax(BRW_CONDITIONAL_L, dst, op[0], op[1]);
@@ -1411,7 +1411,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    case nir_op_imax:
    case nir_op_umax:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
-      /* fall through */
+      FALLTHROUGH;
    case nir_op_fmax:
       try_immediate_source(instr, op, true);
       inst = emit_minmax(BRW_CONDITIONAL_GE, dst, op[0], op[1]);
@@ -1432,7 +1432,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    case nir_op_ieq32:
    case nir_op_ine32:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
-      /* Fallthrough */
+      FALLTHROUGH;
    case nir_op_flt32:
    case nir_op_fge32:
    case nir_op_feq32:
@@ -1467,7 +1467,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    case nir_op_b32all_iequal3:
    case nir_op_b32all_iequal4:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
-      /* Fallthrough */
+      FALLTHROUGH;
    case nir_op_b32all_fequal2:
    case nir_op_b32all_fequal3:
    case nir_op_b32all_fequal4: {
@@ -1486,7 +1486,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
    case nir_op_b32any_inequal3:
    case nir_op_b32any_inequal4:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
-      /* Fallthrough */
+      FALLTHROUGH;
    case nir_op_b32any_fnequal2:
    case nir_op_b32any_fnequal3:
    case nir_op_b32any_fnequal4: {
@@ -1919,7 +1919,7 @@ vec4_visitor::nir_emit_jump(nir_jump_instr *instr)
       break;
 
    case nir_jump_return:
-      /* fall through */
+      FALLTHROUGH;
    default:
       unreachable("unknown jump");
    }

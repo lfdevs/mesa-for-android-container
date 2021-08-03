@@ -104,6 +104,8 @@ brw_finalize_mipmap_tree(struct brw_context *brw,
    assert(!tObj->Immutable || brw->screen->devinfo.ver < 6);
 
    firstImage = brw_texture_image(tObj->Image[0][tObj->Attrib.BaseLevel]);
+   if (!firstImage)
+      return;
 
    /* Check tree can hold all active levels.  Check tree matches
     * target, imageFormat, etc.
@@ -131,13 +133,13 @@ brw_finalize_mipmap_tree(struct brw_context *brw,
           break;
       case GL_TEXTURE_3D:
           depth = depth << level;
-          /* Fall through */
+          FALLTHROUGH;
       case GL_TEXTURE_2D:
       case GL_TEXTURE_2D_ARRAY:
       case GL_TEXTURE_CUBE_MAP:
       case GL_TEXTURE_CUBE_MAP_ARRAY:
           height = height << level;
-          /* Fall through */
+          FALLTHROUGH;
       case GL_TEXTURE_1D:
       case GL_TEXTURE_1D_ARRAY:
           width = width << level;

@@ -237,7 +237,7 @@ src_vector(struct i915_fp_compile *p,
    case TGSI_FILE_IMMEDIATE:
       assert(index < p->num_immediates);
       index = p->immediates_map[index];
-      /* fall-through */
+      FALLTHROUGH;
    case TGSI_FILE_CONSTANT:
       src = UREG(REG_TYPE_CONST, index);
       break;
@@ -341,17 +341,17 @@ translate_tex_src_target(struct i915_fp_compile *p, uint tex)
 {
    switch (tex) {
    case TGSI_TEXTURE_SHADOW1D:
-      /* fall-through */
+      FALLTHROUGH;
    case TGSI_TEXTURE_1D:
       return D0_SAMPLE_TYPE_2D;
 
    case TGSI_TEXTURE_SHADOW2D:
-      /* fall-through */
+      FALLTHROUGH;
    case TGSI_TEXTURE_2D:
       return D0_SAMPLE_TYPE_2D;
 
    case TGSI_TEXTURE_SHADOWRECT:
-      /* fall-through */
+      FALLTHROUGH;
    case TGSI_TEXTURE_RECT:
       return D0_SAMPLE_TYPE_2D;
 

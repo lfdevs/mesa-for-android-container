@@ -2668,8 +2668,10 @@ iris_create_surface(struct pipe_context *ctx,
        *
        * Return NULL to force gallium frontends to take fallback paths.
        */
-      if (view->array_len > 1 || GFX_VER == 8)
+      if (view->array_len > 1 || GFX_VER == 8) {
+         free(surf);
          return NULL;
+      }
 
       const bool is_3d = res->surf.dim == ISL_SURF_DIM_3D;
       isl_surf_get_image_surf(&screen->isl_dev, &res->surf,
@@ -3581,9 +3583,9 @@ iris_create_vertex_elements(struct pipe_context *ctx,
                            VFCOMP_STORE_SRC, VFCOMP_STORE_SRC };
 
       switch (isl_format_get_num_channels(fmt.fmt)) {
-      case 0: comp[0] = VFCOMP_STORE_0; /* fallthrough */
-      case 1: comp[1] = VFCOMP_STORE_0; /* fallthrough */
-      case 2: comp[2] = VFCOMP_STORE_0; /* fallthrough */
+      case 0: comp[0] = VFCOMP_STORE_0; FALLTHROUGH;
+      case 1: comp[1] = VFCOMP_STORE_0; FALLTHROUGH;
+      case 2: comp[2] = VFCOMP_STORE_0; FALLTHROUGH;
       case 3:
          comp[3] = isl_format_has_int_channel(fmt.fmt) ? VFCOMP_STORE_1_INT
                                                        : VFCOMP_STORE_1_FP;
@@ -6903,7 +6905,8 @@ iris_upload_gpgpu_walker(struct iris_context *ice,
    const unsigned threads = DIV_ROUND_UP(group_size, simd_size);
 
 
-   if (stage_dirty & IRIS_STAGE_DIRTY_CS) {
+   if ((stage_dirty & IRIS_STAGE_DIRTY_CS) ||
+       cs_prog_data->local_size[0] == 0 /* Variable local group size */) {
       /* The MEDIA_VFE_STATE documentation for Gfx8+ says:
        *
        *   "A stalling PIPE_CONTROL is required before MEDIA_VFE_STATE unless

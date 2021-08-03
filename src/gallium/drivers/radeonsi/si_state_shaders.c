@@ -1216,8 +1216,6 @@ static void gfx10_shader_ngg(struct si_screen *sscreen, struct si_shader *shader
     */
    if (sscreen->info.family == CHIP_NAVI14 || !sscreen->info.use_late_alloc)
       late_alloc_wave64 = 0;
-   else if (num_cu_per_sh <= 6)
-      late_alloc_wave64 = num_cu_per_sh - 2; /* All CUs enabled */
    else if (shader->key.opt.ngg_culling)
       late_alloc_wave64 = num_cu_per_sh * 10;
    else

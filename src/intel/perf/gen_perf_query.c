@@ -36,6 +36,7 @@
 
 #include "drm-uapi/i915_drm.h"
 
+#include "util/compiler.h"
 #include "util/u_math.h"
 
 #define FILE_DEBUG_FLAG DEBUG_PERFMON
@@ -1055,8 +1056,7 @@ read_oa_samples_for_query(struct gen_perf_context *perf_ctx,
    /* Read the reports until the end timestamp. */
    switch (read_oa_samples_until(perf_ctx, start[1], end[1])) {
    case OA_READ_STATUS_ERROR:
-      /* Fallthrough and let accumulate_oa_reports() deal with the
-       * error. */
+      FALLTHROUGH; /* Let accumulate_oa_reports() deal with the error. */
    case OA_READ_STATUS_FINISHED:
       return true;
    case OA_READ_STATUS_UNFINISHED:

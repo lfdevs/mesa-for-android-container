@@ -405,15 +405,15 @@ void radeonEmitArrays( struct gl_context *ctx, GLuint inputs )
       switch (VB->AttribPtr[_TNL_ATTRIB_POS]->size) {
       case 1:
 	    _mesa_vector4f_clean_elem(&rmesa->tcl.ObjClean, VB->Count, 1);
-	    /* fallthrough */
+	    FALLTHROUGH;
       case 2:
 	    _mesa_vector4f_clean_elem(&rmesa->tcl.ObjClean, VB->Count, 2);
-	    /* fallthrough */
+	    FALLTHROUGH;
       case 3:
 	 if (setup_tab[i].vertex_format & RADEON_CP_VC_FRMT_W0) {
 	    _mesa_vector4f_clean_elem(&rmesa->tcl.ObjClean, VB->Count, 3);
 	 }
-	 /* fallthrough */
+	 FALLTHROUGH;
       case 4:
       default:
 	 break;

@@ -221,9 +221,9 @@ CodeEmitterGK110::emitRoundMode(RoundMode rnd, const int pos, const int rintPos)
    uint8_t n;
 
    switch (rnd) {
-   case ROUND_MI: rint = true; /* fall through */ case ROUND_M: n = 1; break;
-   case ROUND_PI: rint = true; /* fall through */ case ROUND_P: n = 2; break;
-   case ROUND_ZI: rint = true; /* fall through */ case ROUND_Z: n = 3; break;
+   case ROUND_MI: rint = true; FALLTHROUGH; case ROUND_M: n = 1; break;
+   case ROUND_PI: rint = true; FALLTHROUGH; case ROUND_P: n = 2; break;
+   case ROUND_ZI: rint = true; FALLTHROUGH; case ROUND_Z: n = 3; break;
    default:
       rint = rnd == ROUND_NI;
       n = 0;

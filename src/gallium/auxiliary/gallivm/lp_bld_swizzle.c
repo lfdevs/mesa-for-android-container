@@ -33,6 +33,7 @@
  */
 
 #include <inttypes.h>  /* for PRIx64 macro */
+#include "util/compiler.h"
 #include "util/u_debug.h"
 
 #include "lp_bld_type.h"
@@ -407,7 +408,7 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
             switch (swizzles[i]) {
             default:
                assert(0);
-               /* fall through */
+               FALLTHROUGH;
             case PIPE_SWIZZLE_X:
             case PIPE_SWIZZLE_Y:
             case PIPE_SWIZZLE_Z:

@@ -688,7 +688,7 @@ tu_CreateImage(VkDevice _device,
       switch (layout->nr_samples) {
       case 4:
          width *= 2;
-         /* fallthru */
+         FALLTHROUGH;
       case 2:
          height *= 2;
          break;

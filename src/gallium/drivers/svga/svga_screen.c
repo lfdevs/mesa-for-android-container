@@ -159,7 +159,7 @@ svga_get_paramf(struct pipe_screen *screen, enum pipe_capf param)
       return svgascreen->maxLineWidthAA;
 
    case PIPE_CAPF_MAX_POINT_WIDTH:
-      /* fall-through */
+      FALLTHROUGH;
    case PIPE_CAPF_MAX_POINT_WIDTH_AA:
       return svgascreen->maxPointSize;
 
@@ -170,9 +170,9 @@ svga_get_paramf(struct pipe_screen *screen, enum pipe_capf param)
       return 15.0;
 
    case PIPE_CAPF_MIN_CONSERVATIVE_RASTER_DILATE:
-      /* fall-through */
+      FALLTHROUGH;
    case PIPE_CAPF_MAX_CONSERVATIVE_RASTER_DILATE:
-      /* fall-through */
+      FALLTHROUGH;
    case PIPE_CAPF_CONSERVATIVE_RASTER_DILATE_GRANULARITY:
       return 0.0f;
 

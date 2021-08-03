@@ -245,7 +245,7 @@ to_panfrost_function(enum blend_func blend_func,
                         break;
                 case BLEND_FUNC_REVERSE_SUBTRACT:
                         function->negate_b = true;
-                        /* fall-through */
+                        FALLTHROUGH;
                 case BLEND_FUNC_SUBTRACT:
                         function->b = MALI_BLEND_OPERAND_B_SRC_MINUS_DEST;
                         break;

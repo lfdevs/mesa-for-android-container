@@ -263,7 +263,7 @@ brw_populate_sampler_prog_key_data(struct gl_context *ctx,
                   }
                }
             }
-            /* fallthrough */
+            FALLTHROUGH;
             case GL_RG32F:
                /* The channel select for green doesn't work - we have to
                 * request blue.  Haswell can use SCS for this, but Ivybridge

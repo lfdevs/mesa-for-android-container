@@ -1034,7 +1034,7 @@ iris_resource_render_aux_usage(struct iris_context *ice,
                                            render_format)) {
          return res->aux.usage;
       }
-      /* fallthrough */
+      FALLTHROUGH;
 
    default:
       return ISL_AUX_USAGE_NONE;

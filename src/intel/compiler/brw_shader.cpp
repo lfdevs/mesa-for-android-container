@@ -873,7 +873,7 @@ backend_instruction::is_commutative() const
           conditional_mod == BRW_CONDITIONAL_L) {
          return true;
       }
-      /* fallthrough */
+      FALLTHROUGH;
    default:
       return false;
    }

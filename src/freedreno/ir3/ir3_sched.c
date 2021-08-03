@@ -92,6 +92,8 @@ struct ir3_sched_ctx {
 	struct ir3_instruction *addr1;     /* current a1.x user, if any */
 	struct ir3_instruction *pred;      /* current p0.x user, if any */
 
+	struct ir3_instruction *split;     /* most-recently-split a0/a1/p0 producer */
+
 	int remaining_kills;
 	int remaining_tex;
 
@@ -335,6 +337,13 @@ check_instr(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
 		struct ir3_instruction *instr)
 {
 	debug_assert(!is_scheduled(instr));
+
+	if (instr == ctx->split) {
+		/* Don't schedule instructions created by splitting a a0.x/a1.x/p0.x
+		 * write until another "normal" instruction has been scheduled.
+		 */
+		return false;
+	}
 
 	if (ctx->remaining_kills && (is_tex(instr) || is_mem(instr))) {
 		/* avoid texture/memory access if we have unscheduled kills
@@ -1127,6 +1136,11 @@ sched_block(struct ir3_sched_ctx *ctx, struct ir3_block *block)
 			}
 
 			schedule(ctx, instr);
+
+			/* Since we've scheduled a "real" instruction, we can now
+			 * schedule any split instruction created by the scheduler again.
+			 */
+			ctx->split = NULL;
 		} else {
 			struct ir3_instruction *new_instr = NULL;
 			struct ir3 *ir = block->shader;
@@ -1157,6 +1171,11 @@ sched_block(struct ir3_sched_ctx *ctx, struct ir3_block *block)
 				list_delinit(&new_instr->node);
 				list_addtail(&new_instr->node, &ctx->unscheduled_list);
 			}
+
+			/* If we produced a new instruction, do not schedule it next to
+			 * guarantee progress.
+			 */
+			ctx->split = new_instr;
 		}
 	}
 

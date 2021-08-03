@@ -383,7 +383,7 @@ wsi_create_native_image(const struct wsi_swapchain *chain,
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
       .pNext = &memory_dedicated_info,
       .allocationSize = reqs.size,
-      .memoryTypeIndex = select_memory_type(wsi, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+      .memoryTypeIndex = select_memory_type(wsi, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
                                             reqs.memoryTypeBits),
    };
    result = wsi->AllocateMemory(chain->device, &memory_info,
@@ -534,7 +534,7 @@ wsi_win32_queue_present(struct wsi_swapchain *drv_chain,
    char *dptr = image->ppvBits;
    result = chain->base.wsi->MapMemory(chain->base.device,
                                        image->base.memory,
-                                       0, 0, 0, (void**)&ptr);
+                                       0, image->base.sizes[0], 0, (void**)&ptr);
 
    for (unsigned h = 0; h < chain->extent.height; h++) {
       memcpy(dptr, ptr, chain->extent.width * 4);

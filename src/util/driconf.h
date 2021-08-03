@@ -204,6 +204,10 @@
    DRI_CONF_OPT_B(glsl_correct_derivatives_after_discard, def, \
                   "Implicit and explicit derivatives after a discard behave as if the discard didn't happen")
 
+#define DRI_CONF_GLSL_IGNORE_WRITE_TO_READONLY_VAR(def) \
+   DRI_CONF_OPT_B(glsl_ignore_write_to_readonly_var, def, \
+                  "Forces the GLSL compiler to ignore writes to readonly vars rather than throwing an error")
+
 #define DRI_CONF_ALLOW_GLSL_CROSS_STAGE_INTERPOLATION_MISMATCH(def) \
    DRI_CONF_OPT_B(allow_glsl_cross_stage_interpolation_mismatch, def,   \
                   "Allow interpolation qualifier mismatch across shader stages")
@@ -485,5 +489,9 @@
 #define DRI_CONF_RADV_OVERRIDE_UNIFORM_OFFSET_ALIGNMENT(def) \
    DRI_CONF_OPT_I(radv_override_uniform_offset_alignment, def, 0, 128, \
                   "Override the minUniformBufferOffsetAlignment exposed to the application. (0 = default)")
+
+#define DRI_CONF_RADV_DISABLE_DCC(def) \
+   DRI_CONF_OPT_B(radv_disable_dcc, def, \
+                  "Disable DCC for color images")
 
 #endif

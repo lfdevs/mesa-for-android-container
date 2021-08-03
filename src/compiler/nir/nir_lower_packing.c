@@ -162,5 +162,5 @@ nir_lower_pack(nir_shader *shader)
          progress |= lower_pack_impl(function->impl);
    }
 
-   return false;
+   return progress;
 }

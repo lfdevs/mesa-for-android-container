@@ -2066,7 +2066,7 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
                case HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP:
                case HSW_DATAPORT_DC_PORT1_ATOMIC_COUNTER_OP:
                   format(file, "SIMD%d,", (msg_ctrl & (1 << 4)) ? 8 : 16);
-                  /* fallthrough */
+                  FALLTHROUGH;
                case HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP_SIMD4X2:
                case HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP_SIMD4X2:
                case HSW_DATAPORT_DC_PORT1_ATOMIC_COUNTER_OP_SIMD4X2:

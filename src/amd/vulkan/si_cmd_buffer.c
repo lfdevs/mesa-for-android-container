@@ -337,8 +337,6 @@ si_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
           */
          if (!physical_device->rad_info.use_late_alloc) {
             late_alloc_wave64 = 0;
-         } else if (num_cu_per_sh <= 6) {
-            late_alloc_wave64 = num_cu_per_sh - 2;
          } else {
             late_alloc_wave64 = (num_cu_per_sh - 2) * 4;
 

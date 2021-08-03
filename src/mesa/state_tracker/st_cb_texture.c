@@ -2751,7 +2751,8 @@ st_finalize_texture(struct gl_context *ctx,
 
    firstImage = st_texture_image_const(stObj->base.Image[cubeMapFace]
                                        [stObj->base.Attrib.BaseLevel]);
-   assert(firstImage);
+   if (!firstImage)
+      return false;
 
    /* If both firstImage and stObj point to a texture which can contain
     * all active images, favour firstImage.  Note that because of the

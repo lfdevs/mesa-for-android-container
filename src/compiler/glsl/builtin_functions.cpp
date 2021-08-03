@@ -7340,6 +7340,8 @@ builtin_builder::_atomic_op2(const char *intrinsic,
    ir_variable *data = in_var(type, "atomic_data");
    MAKE_SIG(type, avail, 2, atomic, data);
 
+   atomic->data.implicit_conversion_prohibited = true;
+
    ir_variable *retval = body.make_temp(type, "atomic_retval");
    body.emit(call(shader->symbols->get_function(intrinsic), retval,
                   sig->parameters));
@@ -7356,6 +7358,8 @@ builtin_builder::_atomic_op3(const char *intrinsic,
    ir_variable *data1 = in_var(type, "atomic_data1");
    ir_variable *data2 = in_var(type, "atomic_data2");
    MAKE_SIG(type, avail, 3, atomic, data1, data2);
+
+   atomic->data.implicit_conversion_prohibited = true;
 
    ir_variable *retval = body.make_temp(type, "atomic_retval");
    body.emit(call(shader->symbols->get_function(intrinsic), retval,

@@ -137,7 +137,7 @@ should_double_threadsize(struct ir3_shader_variant *v,
 				return false;
 		}
 	}
-	/* fallthrough */
+	FALLTHROUGH;
 	case MESA_SHADER_FRAGMENT: {
 		/* Check that doubling the threadsize wouldn't exceed the regfile size */
 		return regs_count * 2 <= compiler->reg_size_vec4;

@@ -338,7 +338,7 @@ static void radeonFogfv( struct gl_context *ctx, GLenum pname, const GLfloat *pa
       default:
 	 return;
       }
-   /* fallthrough */
+   FALLTHROUGH;
    case GL_FOG_DENSITY:
    case GL_FOG_START:
    case GL_FOG_END:

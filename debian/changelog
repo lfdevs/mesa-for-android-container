@@ -1,3 +1,10 @@
+mesa (21.1.6-1) experimental; urgency=medium
+
+  * New upstream release.
+  * fix-ftbfs.diff: Dropped, fixed upstream.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 03 Aug 2021 13:10:20 +0300
+
 mesa (21.1.4-1) experimental; urgency=medium
 
   * New upstream release.

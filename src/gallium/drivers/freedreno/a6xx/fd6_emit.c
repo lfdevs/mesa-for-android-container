@@ -1378,9 +1378,11 @@ static void
 fd6_framebuffer_barrier(struct fd_context *ctx) assert_dt
 {
    struct fd6_context *fd6_ctx = fd6_context(ctx);
-   struct fd_batch *batch = ctx->batch;
+   struct fd_batch *batch = fd_context_batch_locked(ctx);
    struct fd_ringbuffer *ring = batch->draw;
    unsigned seqno;
+
+   fd_batch_needs_flush(batch);
 
    seqno = fd6_event_write(batch, ring, RB_DONE_TS, true);
 
@@ -1403,6 +1405,9 @@ fd6_framebuffer_barrier(struct fd_context *ctx) assert_dt
    OUT_RING(ring, CP_WAIT_MEM_GTE_0_RESERVED(0));
    OUT_RELOC(ring, control_ptr(fd6_ctx, seqno));
    OUT_RING(ring, CP_WAIT_MEM_GTE_3_REF(seqno));
+
+   fd_batch_unlock_submit(batch);
+   fd_batch_reference(&batch, NULL);
 }
 
 void

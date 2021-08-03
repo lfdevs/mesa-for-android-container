@@ -632,7 +632,7 @@ static void handle_graphics_pipeline(struct lvp_cmd_buffer_entry *cmd,
          unsigned location = vi->pVertexAttributeDescriptions[i].location;
          state->ve[location].src_offset = vi->pVertexAttributeDescriptions[i].offset;
          state->ve[location].vertex_buffer_index = vi->pVertexAttributeDescriptions[i].binding;
-         state->ve[location].src_format = vk_format_to_pipe(vi->pVertexAttributeDescriptions[i].format);
+         state->ve[location].src_format = lvp_vk_format_to_pipe_format(vi->pVertexAttributeDescriptions[i].format);
 
          switch (vi->pVertexBindingDescriptions[vi->pVertexAttributeDescriptions[i].binding].inputRate) {
          case VK_VERTEX_INPUT_RATE_VERTEX:
@@ -853,11 +853,11 @@ static void fill_sampler_view_stage(struct rendering_state *state,
 
    enum pipe_format pformat;
    if (iv->subresourceRange.aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT)
-      pformat = vk_format_to_pipe(iv->format);
+      pformat = lvp_vk_format_to_pipe_format(iv->format);
    else if (iv->subresourceRange.aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT)
-      pformat = util_format_stencil_only(vk_format_to_pipe(iv->format));
+      pformat = util_format_stencil_only(lvp_vk_format_to_pipe_format(iv->format));
    else
-      pformat = vk_format_to_pipe(iv->format);
+      pformat = lvp_vk_format_to_pipe_format(iv->format);
    u_sampler_view_default_template(&templ,
                                    iv->image->bo,
                                    pformat);
@@ -955,11 +955,11 @@ static void fill_image_view_stage(struct rendering_state *state,
    idx += dyn_info->stage[stage].image_count;
    state->iv[p_stage][idx].resource = iv->image->bo;
    if (iv->subresourceRange.aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT)
-      state->iv[p_stage][idx].format = vk_format_to_pipe(iv->format);
+      state->iv[p_stage][idx].format = lvp_vk_format_to_pipe_format(iv->format);
    else if (iv->subresourceRange.aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT)
-      state->iv[p_stage][idx].format = util_format_stencil_only(vk_format_to_pipe(iv->format));
+      state->iv[p_stage][idx].format = util_format_stencil_only(lvp_vk_format_to_pipe_format(iv->format));
    else
-      state->iv[p_stage][idx].format = vk_format_to_pipe(iv->format);
+      state->iv[p_stage][idx].format = lvp_vk_format_to_pipe_format(iv->format);
 
    if (iv->view_type == VK_IMAGE_VIEW_TYPE_3D) {
       state->iv[p_stage][idx].u.tex.first_layer = 0;
@@ -1212,7 +1212,7 @@ static struct pipe_surface *create_img_surface(struct rendering_state *state,
                                                int base_layer, int layer_count)
 {
    return create_img_surface_bo(state, &imgv->subresourceRange, imgv->image->bo,
-                                vk_format_to_pipe(format), width, height, base_layer, layer_count, 0);
+                                lvp_vk_format_to_pipe_format(format), width, height, base_layer, layer_count, 0);
 }
 
 static void add_img_view_surface(struct rendering_state *state,

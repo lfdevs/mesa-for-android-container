@@ -127,7 +127,7 @@ convert_query_type(unsigned query_type, bool *precise)
    switch (query_type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
       *precise = true;
-      /* fallthrough */
+      FALLTHROUGH;
    case PIPE_QUERY_OCCLUSION_PREDICATE:
    case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       return VK_QUERY_TYPE_OCCLUSION;

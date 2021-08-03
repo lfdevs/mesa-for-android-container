@@ -304,7 +304,7 @@ create_ici(struct zink_screen *screen, const struct pipe_resource *templ, unsign
    case PIPE_TEXTURE_CUBE:
    case PIPE_TEXTURE_CUBE_ARRAY:
       ici.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-      /* fall-through */
+      FALLTHROUGH;
    case PIPE_TEXTURE_2D:
    case PIPE_TEXTURE_2D_ARRAY:
    case PIPE_TEXTURE_RECT:

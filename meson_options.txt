@@ -28,6 +28,16 @@ option(
   description : 'window systems to support. If this is set to `auto`, all platforms applicable will be enabled.'
 )
 option(
+  'egl-native-platform',
+  type : 'combo',
+  value : 'auto',
+  choices : [
+    'auto', 'x11', 'wayland', 'haiku', 'android', 'windows',
+    'surfaceless', 'drm',
+  ],
+  description : 'the window system EGL assumes for EGL_DEFAULT_DISPLAY',
+)
+option(
   'android-stub',
   type : 'boolean',
   value : false,

@@ -980,7 +980,7 @@ _mesa_SamplerParameteri(GLuint sampler, GLenum pname, GLint param)
       res = set_sampler_reduction_mode(ctx, sampObj, param);
       break;
    case GL_TEXTURE_BORDER_COLOR:
-      /* fall-through */
+      FALLTHROUGH;
    default:
       res = INVALID_PNAME;
    }
@@ -1066,7 +1066,7 @@ _mesa_SamplerParameterf(GLuint sampler, GLenum pname, GLfloat param)
       res = set_sampler_reduction_mode(ctx, sampObj, (GLenum) param);
       break;
    case GL_TEXTURE_BORDER_COLOR:
-      /* fall-through */
+      FALLTHROUGH;
    default:
       res = INVALID_PNAME;
    }

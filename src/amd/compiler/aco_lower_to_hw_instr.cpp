@@ -701,7 +701,7 @@ void emit_reduction(lower_context *ctx, aco_opcode op, ReduceOp reduce_op, unsig
             bld.writelane(Definition(PhysReg{tmp+i}, v1), identity[i], Operand(0u), Operand(PhysReg{tmp+i}, v1));
          }
       }
-      /* fall through */
+      FALLTHROUGH;
    case aco_opcode::p_inclusive_scan:
       assert(cluster_size == ctx->program->wave_size);
       if (ctx->program->chip_class <= GFX7) {

@@ -1242,7 +1242,7 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
             ureg_ADD(ureg, tmp, ureg_imm1f(ureg, 1.0f), ureg_negate(src));
             src = ureg_src(tmp);
         }
-        /* fall through */
+        FALLTHROUGH;
     case NINED3DSPSM_COMP:
         tmp = tx_scratch(tx);
         ureg_ADD(ureg, tmp, ureg_imm1f(ureg, 1.0f), ureg_negate(src));

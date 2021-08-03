@@ -220,7 +220,7 @@ nv20_emit_tex_obj(struct gl_context *ctx, int emit)
 	switch (ti->_BaseFormat) {
 	case GL_LUMINANCE:
 		a = 0xff;
-		/* fallthrough */
+		FALLTHROUGH;
 	case GL_LUMINANCE_ALPHA:
 		g = b = r;
 		break;

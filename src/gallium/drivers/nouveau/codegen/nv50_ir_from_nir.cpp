@@ -1292,7 +1292,7 @@ Converter::parseNIR()
       info->prop.cp.numThreads[0] = nir->info.cs.local_size[0];
       info->prop.cp.numThreads[1] = nir->info.cs.local_size[1];
       info->prop.cp.numThreads[2] = nir->info.cs.local_size[2];
-      info_out->bin.smemSize += nir->info.shared_size;
+      info_out->bin.smemSize = std::max(info_out->bin.smemSize, nir->info.shared_size);
       break;
    case Program::TYPE_FRAGMENT:
       info_out->prop.fp.earlyFragTests = nir->info.fs.early_fragment_tests;
@@ -2222,7 +2222,7 @@ Converter::visit(nir_intrinsic_instr *insn)
          break;
       case nir_intrinsic_bindless_image_samples:
          mask = 0x8;
-         /* fallthrough */
+         FALLTHROUGH;
       case nir_intrinsic_image_samples:
          ty = TYPE_U32;
          bindless = op == nir_intrinsic_bindless_image_samples;

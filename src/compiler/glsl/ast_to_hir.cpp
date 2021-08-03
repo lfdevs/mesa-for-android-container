@@ -941,6 +941,7 @@ do_assignment(exec_list *instructions, struct _mesa_glsl_parse_state *state,
    if (lhs_var)
       lhs_var->data.assigned = true;
 
+   bool omit_assignment = false;
    if (!error_emitted) {
       if (non_lvalue_description != NULL) {
          _mesa_glsl_error(&lhs_loc, state,
@@ -957,10 +958,15 @@ do_assignment(exec_list *instructions, struct _mesa_glsl_parse_state *state,
           * no such distinction, that is why this check here is limited to
           * buffer variables alone.
           */
-         _mesa_glsl_error(&lhs_loc, state,
-                          "assignment to read-only variable '%s'",
-                          lhs_var->name);
-         error_emitted = true;
+
+         if (state->ignore_write_to_readonly_var)
+            omit_assignment = true;
+         else {
+            _mesa_glsl_error(&lhs_loc, state,
+                             "assignment to read-only variable '%s'",
+                             lhs_var->name);
+            error_emitted = true;
+         }
       } else if (lhs->type->is_array() &&
                  !state->check_version(state->allow_glsl_120_subset_in_110 ? 110 : 120,
                                        300, &lhs_loc,
@@ -1016,6 +1022,11 @@ do_assignment(exec_list *instructions, struct _mesa_glsl_parse_state *state,
       }
    } else {
      error_emitted = true;
+   }
+
+   if (omit_assignment) {
+      *out_rvalue = needs_rvalue ? ir_rvalue::error_value(ctx) : NULL;
+      return error_emitted;
    }
 
    /* Most callers of do_assignment (assign, add_assign, pre_inc/dec,
@@ -2448,7 +2459,7 @@ get_type_name_for_precision_qualifier(const glsl_type *type)
    case GLSL_TYPE_ATOMIC_UINT:
       return "atomic_uint";
    case GLSL_TYPE_IMAGE:
-   /* fallthrough */
+   FALLTHROUGH;
    case GLSL_TYPE_SAMPLER: {
       const unsigned type_idx =
          type->sampler_array + 2 * type->sampler_shadow;
@@ -4188,7 +4199,7 @@ apply_type_qualifier_to_variable(const struct ast_type_qualifier *qual,
       case GLSL_TYPE_IMAGE:
          if (state->has_bindless())
             break;
-         /* fallthrough */
+         FALLTHROUGH;
       default:
          _mesa_glsl_error(loc, state, "illegal type for a varying variable");
          break;

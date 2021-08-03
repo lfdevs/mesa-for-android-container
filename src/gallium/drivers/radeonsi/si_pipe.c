@@ -842,14 +842,16 @@ static void si_destroy_screen(struct pipe_screen *pscreen)
 
    simple_mtx_destroy(&sscreen->aux_context_lock);
 
-   struct u_log_context *aux_log = ((struct si_context *)sscreen->aux_context)->log;
-   if (aux_log) {
-      sscreen->aux_context->set_log_context(sscreen->aux_context, NULL);
-      u_log_context_destroy(aux_log);
-      FREE(aux_log);
-   }
+   if (sscreen->aux_context) {
+       struct u_log_context *aux_log = ((struct si_context *)sscreen->aux_context)->log;
+       if (aux_log) {
+          sscreen->aux_context->set_log_context(sscreen->aux_context, NULL);
+          u_log_context_destroy(aux_log);
+          FREE(aux_log);
+       }
 
-   sscreen->aux_context->destroy(sscreen->aux_context);
+       sscreen->aux_context->destroy(sscreen->aux_context);
+   }
 
    util_queue_destroy(&sscreen->shader_compiler_queue);
    util_queue_destroy(&sscreen->shader_compiler_queue_low_priority);

@@ -1360,7 +1360,7 @@ bool Source::scanDeclaration(const struct tgsi_full_declaration *decl)
             break;
          case TGSI_SEMANTIC_PATCH:
             info_out->numPatchConstants = MAX2(info_out->numPatchConstants, si + 1);
-            /* fallthrough */
+            FALLTHROUGH;
          case TGSI_SEMANTIC_TESSOUTER:
          case TGSI_SEMANTIC_TESSINNER:
             info_out->out[i].patch = 1;
@@ -2066,7 +2066,7 @@ Converter::fetchSrc(tgsi::Instruction::SrcRegister src, int c, Value *ptr)
          arrayid = code->tempArrayId[idx];
       adjustTempIndex(arrayid, idx, idx2d);
    }
-      /* fallthrough */
+      FALLTHROUGH;
    default:
       return getArrayForFile(src.getFile(), idx2d)->load(
          sub.cur->values, idx, swz, shiftAddress(ptr));
@@ -3335,7 +3335,7 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
       break;
    case TGSI_OPCODE_UCMP:
       srcTy = TYPE_U32;
-      /* fallthrough */
+      FALLTHROUGH;
    case TGSI_OPCODE_CMP:
       FOR_EACH_DST_ENABLED_CHANNEL(0, c, tgsi) {
          src0 = fetchSrc(0, c);
@@ -3411,7 +3411,7 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
       mkOp1(OP_BREV, TYPE_U32, val0, val0);
       mkOp1(OP_BFIND, TYPE_U32, val0, val0)->subOp = NV50_IR_SUBOP_BFIND_SAMT;
       src1 = val0;
-      /* fallthrough */
+      FALLTHROUGH;
    case TGSI_OPCODE_READ_INVOC:
       if (tgsi.getOpcode() == TGSI_OPCODE_READ_INVOC)
          src1 = fetchSrc(1, 0);
@@ -3542,7 +3542,7 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
       /* handle user clip planes for each emitted vertex */
       if (info_out->io.genUserClip > 0)
          handleUserClipPlanes();
-      /* fallthrough */
+      FALLTHROUGH;
    case TGSI_OPCODE_ENDPRIM:
    {
       // get vertex stream (must be immediate)

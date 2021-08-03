@@ -130,7 +130,7 @@ create_plane_tex_instr_implicit(struct ycbcr_state *state, uint32_t plane)
                nir_src_for_ssa(implicit_downsampled_coords(state, old_tex->src[i].src.ssa));
             break;
          }
-      /* fall through */
+      FALLTHROUGH;
       default:
          nir_src_copy(&tex->src[i].src, &old_tex->src[i].src, tex);
          break;

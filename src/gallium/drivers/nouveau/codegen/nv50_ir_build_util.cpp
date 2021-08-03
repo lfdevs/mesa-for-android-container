@@ -590,7 +590,7 @@ BuildUtil::split64BitOpPostRA(Function *fn, Instruction *i,
          hTy = TYPE_U32;
          break;
       }
-      /* fallthrough */
+      FALLTHROUGH;
    default:
       return NULL;
    }

@@ -439,7 +439,7 @@ ImmediateValue::applyLog2()
    case TYPE_S16:
    case TYPE_S32:
       assert(!this->isNegative());
-      // fall through
+      FALLTHROUGH;
    case TYPE_U8:
    case TYPE_U16:
    case TYPE_U32:
@@ -447,7 +447,7 @@ ImmediateValue::applyLog2()
       break;
    case TYPE_S64:
       assert(!this->isNegative());
-      // fall through
+      FALLTHROUGH;
    case TYPE_U64:
       reg.data.u64 = util_logbase2_64(reg.data.u64);
       break;

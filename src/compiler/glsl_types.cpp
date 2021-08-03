@@ -2851,7 +2851,7 @@ glsl_type::count_dword_slots(bool is_bindless) const
    case GLSL_TYPE_SAMPLER:
       if (!is_bindless)
          return 0;
-      /* FALLTHROUGH */
+      FALLTHROUGH;
    case GLSL_TYPE_DOUBLE:
    case GLSL_TYPE_UINT64:
    case GLSL_TYPE_INT64:

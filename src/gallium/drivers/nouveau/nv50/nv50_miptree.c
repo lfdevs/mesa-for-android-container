@@ -99,7 +99,7 @@ nv50_mt_choose_storage_type(struct nv50_miptree *mt, bool compressed)
    default:
       /* Most color formats don't work with compression. */
       compressed = false;
-      /* fallthrough */
+      FALLTHROUGH;
    case PIPE_FORMAT_R8G8B8A8_UNORM:
    case PIPE_FORMAT_R8G8B8A8_SRGB:
    case PIPE_FORMAT_R8G8B8X8_UNORM:

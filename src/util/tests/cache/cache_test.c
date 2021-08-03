@@ -174,15 +174,16 @@ does_cache_contain(struct disk_cache *cache, const cache_key key)
 static bool
 cache_exists(struct disk_cache *cache)
 {
-   uint8_t dummy_key[20];
+   uint8_t key[20];
    char data[] = "some test data";
 
    if (!cache)
       return NULL;
 
-   disk_cache_put(cache, dummy_key, data, sizeof(data), NULL);
+   disk_cache_compute_key(cache, data, sizeof(data), key);
+   disk_cache_put(cache, key, data, sizeof(data), NULL);
    disk_cache_wait_for_idle(cache);
-   void *result = disk_cache_get(cache, dummy_key, NULL);
+   void *result = disk_cache_get(cache, key, NULL);
 
    free(result);
    return result != NULL;

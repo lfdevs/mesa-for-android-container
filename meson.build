@@ -345,12 +345,6 @@ with_platform_wayland = _platforms.contains('wayland')
 with_platform_haiku = _platforms.contains('haiku')
 with_platform_windows = _platforms.contains('windows')
 
-if _platforms.length() != 0
-  egl_native_platform = _platforms[0]
-else
-  egl_native_platform = 'surfaceless'
-endif
-
 with_glx = get_option('glx')
 if with_glx == 'auto'
   if with_platform_android
@@ -443,6 +437,26 @@ elif _egl == 'enabled'
   with_egl = true
 else
   with_egl = false
+endif
+
+if with_egl
+  _platforms += 'surfaceless'
+  if with_gbm and not with_platform_android
+    _platforms += 'drm'
+  endif
+endif
+
+egl_native_platform = get_option('egl-native-platform')
+if egl_native_platform.contains('auto')
+  if _platforms.length() != 0
+    egl_native_platform = _platforms[0]
+  else
+    egl_native_platform = 'surfaceless'
+  endif
+endif
+
+if with_egl and not _platforms.contains(egl_native_platform)
+  error('-Degl-native-platform does not specify an enabled platform')
 endif
 
 # Android uses emutls for versions <= P/28. For USE_ELF_TLS we need ELF TLS.

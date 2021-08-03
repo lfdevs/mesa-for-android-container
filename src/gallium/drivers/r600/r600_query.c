@@ -837,7 +837,7 @@ static void r600_query_hw_do_emit_stop(struct r600_common_context *ctx,
 		break;
 	case PIPE_QUERY_TIME_ELAPSED:
 		va += 8;
-		/* fall through */
+		FALLTHROUGH;
 	case PIPE_QUERY_TIMESTAMP:
 		r600_gfx_write_event_eop(ctx, EVENT_TYPE_BOTTOM_OF_PIPE_TS,
 					 0, EOP_DATA_SEL_TIMESTAMP, NULL, va,
@@ -1125,7 +1125,7 @@ static void r600_get_hw_query_params(struct r600_common_context *rctx,
 	case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
 		params->pair_count = R600_MAX_STREAMS;
 		params->pair_stride = 32;
-		/* fallthrough */
+		FALLTHROUGH;
 	case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
 		params->start_offset = 0;
 		params->end_offset = 16;

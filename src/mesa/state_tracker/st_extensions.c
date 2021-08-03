@@ -1187,6 +1187,8 @@ void st_init_extensions(struct pipe_screen *screen,
 
    consts->AllowGLSLCrossStageInterpolationMismatch = options->allow_glsl_cross_stage_interpolation_mismatch;
 
+   consts->GLSLIgnoreWriteToReadonlyVar = options->glsl_ignore_write_to_readonly_var;
+
    consts->PrimitiveRestartFixedIndex =
       screen->get_param(screen, PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX);
 

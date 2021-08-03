@@ -1049,7 +1049,7 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
          break;
       op[0].type = BRW_REGISTER_TYPE_D;
       op[0].negate = !op[0].negate;
-      /* fallthrough */
+      FALLTHROUGH;
    case nir_op_i2f64:
    case nir_op_i2i64:
    case nir_op_u2f64:
@@ -1174,7 +1174,7 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
          bld.emit(SHADER_OPCODE_RND_MODE, bld.null_reg_ud(),
                   brw_imm_d(rnd));
       }
-      /* fallthrough */
+      FALLTHROUGH;
    case nir_op_iadd:
       inst = bld.ADD(result, op[0], op[1]);
       break;
@@ -1624,7 +1624,7 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
 
    case nir_op_unpack_half_2x16_split_x_flush_to_zero:
       assert(FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP16 & execution_mode);
-      /* Fall-through */
+      FALLTHROUGH;
    case nir_op_unpack_half_2x16_split_x:
       inst = bld.emit(BRW_OPCODE_F16TO32, result,
                       subscript(op[0], BRW_REGISTER_TYPE_UW, 0));
@@ -1632,7 +1632,7 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
 
    case nir_op_unpack_half_2x16_split_y_flush_to_zero:
       assert(FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP16 & execution_mode);
-      /* Fall-through */
+      FALLTHROUGH;
    case nir_op_unpack_half_2x16_split_y:
       inst = bld.emit(BRW_OPCODE_F16TO32, result,
                       subscript(op[0], BRW_REGISTER_TYPE_UW, 1));
@@ -4255,7 +4255,7 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
 
    case nir_intrinsic_scoped_barrier:
       assert(nir_intrinsic_execution_scope(instr) == NIR_SCOPE_NONE);
-      /* Fall through. */
+      FALLTHROUGH;
    case nir_intrinsic_group_memory_barrier:
    case nir_intrinsic_memory_barrier_shared:
    case nir_intrinsic_memory_barrier_buffer:

@@ -571,7 +571,7 @@ static int r600_get_shader_param(struct pipe_screen* pscreen,
 	case PIPE_SHADER_COMPUTE:
 		if (rscreen->b.family >= CHIP_CEDAR)
 			break;
-		/* fallthrough */
+		FALLTHROUGH;
 	default:
 		return 0;
 	}

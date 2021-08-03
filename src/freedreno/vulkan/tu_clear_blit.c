@@ -956,13 +956,13 @@ copy_format(VkFormat format, VkImageAspectFlags aspect_mask, bool copy_buffer)
    case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
       if (aspect_mask == VK_IMAGE_ASPECT_PLANE_1_BIT)
          return VK_FORMAT_R8G8_UNORM;
-      /* fallthrough */
+      FALLTHROUGH;
    case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
       return VK_FORMAT_R8_UNORM;
    case VK_FORMAT_D24_UNORM_S8_UINT:
       if (aspect_mask == VK_IMAGE_ASPECT_STENCIL_BIT && copy_buffer)
          return VK_FORMAT_R8_UNORM;
-      /* fallthrough */
+      FALLTHROUGH;
    default:
       return format;
    case VK_FORMAT_E5B9G9R9_UFLOAT_PACK32:

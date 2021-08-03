@@ -778,7 +778,7 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
          /* FINISHME: Promote non-float constants and remove this. */
          if (devinfo->ver < 8)
             break;
-         /* fallthrough */
+         FALLTHROUGH;
       case SHADER_OPCODE_POW:
          /* Allow constant propagation into src1 (except on Gen 6 which
           * doesn't support scalar source math), and let constant combining
@@ -786,7 +786,7 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
           */
          if (devinfo->ver == 6)
             break;
-         /* fallthrough */
+         FALLTHROUGH;
       case BRW_OPCODE_BFI1:
       case BRW_OPCODE_ASR:
       case BRW_OPCODE_SHL:

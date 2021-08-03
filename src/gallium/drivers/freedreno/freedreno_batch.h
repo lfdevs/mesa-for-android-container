@@ -34,6 +34,7 @@
 #include "util/u_trace.h"
 
 #include "freedreno_context.h"
+#include "freedreno_fence.h"
 #include "freedreno_util.h"
 
 #ifdef DEBUG
@@ -358,6 +359,17 @@ fd_batch_lock_submit(struct fd_batch *batch)
    if (!ret)
       fd_batch_unlock_submit(batch);
    return ret;
+}
+
+/**
+ * Mark the batch as having something worth flushing (rendering, blit, query,
+ * etc)
+ */
+static inline void
+fd_batch_needs_flush(struct fd_batch *batch)
+{
+   batch->needs_flush = true;
+   fd_fence_ref(&batch->ctx->last_fence, NULL);
 }
 
 /* Since we reorder batches and can pause/resume queries (notably for disabling

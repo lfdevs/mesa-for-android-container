@@ -116,7 +116,7 @@ void r600_init_resource_fields(struct r600_common_screen *rscreen,
 	switch (res->b.b.usage) {
 	case PIPE_USAGE_STREAM:
 		res->flags = RADEON_FLAG_GTT_WC;
-		/* fall through */
+		FALLTHROUGH;
 	case PIPE_USAGE_STAGING:
 		/* Transfers are likely to occur more often with these
 		 * resources. */
@@ -131,7 +131,7 @@ void r600_init_resource_fields(struct r600_common_screen *rscreen,
 			res->flags |= RADEON_FLAG_GTT_WC;
 			break;
 		}
-		/* fall through */
+		FALLTHROUGH;
 	case PIPE_USAGE_DEFAULT:
 	case PIPE_USAGE_IMMUTABLE:
 	default:

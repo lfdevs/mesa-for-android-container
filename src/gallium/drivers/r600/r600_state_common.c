@@ -2822,7 +2822,7 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 		case PIPE_FORMAT_RGTC1_SNORM:
 		case PIPE_FORMAT_LATC1_SNORM:
 			word4 |= sign_bit[0];
-			/* fallthrough */
+			FALLTHROUGH;
 		case PIPE_FORMAT_RGTC1_UNORM:
 		case PIPE_FORMAT_LATC1_UNORM:
 			result = FMT_BC4;
@@ -2830,7 +2830,7 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 		case PIPE_FORMAT_RGTC2_SNORM:
 		case PIPE_FORMAT_LATC2_SNORM:
 			word4 |= sign_bit[0] | sign_bit[1];
-			/* fallthrough */
+			FALLTHROUGH;
 		case PIPE_FORMAT_RGTC2_UNORM:
 		case PIPE_FORMAT_LATC2_UNORM:
 			result = FMT_BC5;
@@ -2876,7 +2876,7 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 				goto out_word4;
 			case PIPE_FORMAT_BPTC_RGB_FLOAT:
 				word4 |= sign_bit[0] | sign_bit[1] | sign_bit[2];
-				/* fall through */
+				FALLTHROUGH;
 			case PIPE_FORMAT_BPTC_RGB_UFLOAT:
 				result = FMT_BC6;
 				goto out_word4;

@@ -1200,7 +1200,7 @@ static bool
 interstage_cross_validate_uniform_blocks(struct gl_shader_program *prog,
                                          bool validate_ssbo)
 {
-   int *InterfaceBlockStageIndex[MESA_SHADER_STAGES];
+   int *ifc_blk_stage_idx[MESA_SHADER_STAGES];
    struct gl_uniform_block *blks = NULL;
    unsigned *num_blks = validate_ssbo ? &prog->data->NumShaderStorageBlocks :
       &prog->data->NumUniformBlocks;
@@ -1221,9 +1221,10 @@ interstage_cross_validate_uniform_blocks(struct gl_shader_program *prog,
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
       struct gl_linked_shader *sh = prog->_LinkedShaders[i];
 
-      InterfaceBlockStageIndex[i] = new int[max_num_buffer_blocks];
+      ifc_blk_stage_idx[i] =
+         (int *) malloc(sizeof(int) * max_num_buffer_blocks);
       for (unsigned int j = 0; j < max_num_buffer_blocks; j++)
-         InterfaceBlockStageIndex[i][j] = -1;
+         ifc_blk_stage_idx[i][j] = -1;
 
       if (sh == NULL)
          continue;
@@ -1247,7 +1248,7 @@ interstage_cross_validate_uniform_blocks(struct gl_shader_program *prog,
                          "definitions\n", sh_blks[j]->Name);
 
             for (unsigned k = 0; k <= i; k++) {
-               delete[] InterfaceBlockStageIndex[k];
+               free(ifc_blk_stage_idx[k]);
             }
 
             /* Reset the block count. This will help avoid various segfaults
@@ -1258,7 +1259,7 @@ interstage_cross_validate_uniform_blocks(struct gl_shader_program *prog,
             return false;
          }
 
-         InterfaceBlockStageIndex[i][index] = j;
+         ifc_blk_stage_idx[i][index] = j;
       }
    }
 
@@ -1267,7 +1268,7 @@ interstage_cross_validate_uniform_blocks(struct gl_shader_program *prog,
     */
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
       for (unsigned j = 0; j < *num_blks; j++) {
-         int stage_index = InterfaceBlockStageIndex[i][j];
+         int stage_index = ifc_blk_stage_idx[i][j];
 
          if (stage_index != -1) {
             struct gl_linked_shader *sh = prog->_LinkedShaders[i];
@@ -1283,7 +1284,7 @@ interstage_cross_validate_uniform_blocks(struct gl_shader_program *prog,
    }
 
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
-      delete[] InterfaceBlockStageIndex[i];
+      free(ifc_blk_stage_idx[i]);
    }
 
    if (validate_ssbo)
@@ -3864,7 +3865,7 @@ add_shader_variable(const struct gl_context *ctx,
          }
          return true;
       }
-      /* fallthrough */
+      FALLTHROUGH;
    }
 
    default: {

@@ -3456,6 +3456,10 @@ ntq_emit_instr(struct v3d_compile *c, nir_instr *instr)
                 break;
 
         case nir_instr_type_jump:
+                /* Always flush TMU before jumping to another block, for the
+                 * same reasons as in ntq_emit_block.
+                 */
+                ntq_flush_tmu(c);
                 if (vir_in_nonuniform_control_flow(c))
                         ntq_emit_jump(c, nir_instr_as_jump(instr));
                 else

@@ -1898,14 +1898,14 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
          emit_asm(ir, TGSI_OPCODE_I2F, result_dst, op[0]);
          break;
       }
-      /* fallthrough to next case otherwise */
+      FALLTHROUGH;
    case ir_unop_b2f:
       if (native_integers) {
          emit_asm(ir, TGSI_OPCODE_AND, result_dst, op[0],
                   st_src_reg_for_float(1.0));
          break;
       }
-      /* fallthrough to next case otherwise */
+      FALLTHROUGH;
    case ir_unop_i2u:
    case ir_unop_u2i:
    case ir_unop_i642u64:
@@ -2016,13 +2016,13 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
          emit_asm(ir, TGSI_OPCODE_NOT, result_dst, op[0]);
          break;
       }
-      /* fallthrough */
+      FALLTHROUGH;
    case ir_unop_u2f:
       if (native_integers) {
          emit_asm(ir, TGSI_OPCODE_U2F, result_dst, op[0]);
          break;
       }
-      /* fallthrough */
+      FALLTHROUGH;
    case ir_binop_lshift:
    case ir_binop_rshift:
       if (native_integers) {
@@ -2044,19 +2044,19 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
          emit_asm(ir, opcode, result_dst, op[0], count);
          break;
       }
-      /* fallthrough */
+      FALLTHROUGH;
    case ir_binop_bit_and:
       if (native_integers) {
          emit_asm(ir, TGSI_OPCODE_AND, result_dst, op[0], op[1]);
          break;
       }
-      /* fallthrough */
+      FALLTHROUGH;
    case ir_binop_bit_xor:
       if (native_integers) {
          emit_asm(ir, TGSI_OPCODE_XOR, result_dst, op[0], op[1]);
          break;
       }
-      /* fallthrough */
+      FALLTHROUGH;
    case ir_binop_bit_or:
       if (native_integers) {
          emit_asm(ir, TGSI_OPCODE_OR, result_dst, op[0], op[1]);
@@ -3965,9 +3965,9 @@ glsl_to_tgsi_visitor::visit_image_intrinsic(ir_call *ir)
       coord.swizzle = SWIZZLE_XXXX;
       switch (type->coordinate_components()) {
       case 4: assert(!"unexpected coord count");
-      /* fallthrough */
+      FALLTHROUGH;
       case 3: coord.swizzle |= SWIZZLE_Z << 6;
-      /* fallthrough */
+      FALLTHROUGH;
       case 2: coord.swizzle |= SWIZZLE_Y << 3;
       }
 
@@ -5473,7 +5473,7 @@ glsl_to_tgsi_visitor::eliminate_dead_code(void)
       case TGSI_OPCODE_IF:
       case TGSI_OPCODE_UIF:
          ++level;
-         /* fallthrough to default case to mark the condition as read */
+         FALLTHROUGH; /* to mark the condition as read */
       default:
          /* Continuing the block, clear any channels from the write array that
           * are read by this instruction.
@@ -5981,9 +5981,9 @@ dst_register(struct st_translate *t, gl_register_file file, unsigned index,
             find_inout_array(t->output_decls,
                              t->num_output_decls, array_id);
          unsigned mesa_index = decl->mesa_index;
-         int slot = t->outputMapping[mesa_index];
+         ubyte slot = t->outputMapping[mesa_index];
 
-         assert(slot != -1 && t->outputs[slot].File == TGSI_FILE_OUTPUT);
+         assert(slot != 0xff && t->outputs[slot].File == TGSI_FILE_OUTPUT);
 
          struct ureg_dst dst = t->outputs[slot];
          dst.ArrayID = array_id;
@@ -6116,9 +6116,9 @@ translate_src(struct st_translate *t, const st_src_reg *src_reg)
                                                     t->num_input_decls,
                                                     src_reg->array_id);
          unsigned mesa_index = decl->mesa_index;
-         int slot = t->inputMapping[mesa_index];
+         ubyte slot = t->inputMapping[mesa_index];
 
-         assert(slot != -1 && t->inputs[slot].File == TGSI_FILE_INPUT);
+         assert(slot != 0xff && t->inputs[slot].File == TGSI_FILE_INPUT);
 
          src = t->inputs[slot];
          src.ArrayID = src_reg->array_id;

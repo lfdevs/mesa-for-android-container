@@ -313,9 +313,8 @@ osmesa_choose_format(GLenum format, GLenum type)
          return PIPE_FORMAT_NONE;
       return PIPE_FORMAT_B5G6R5_UNORM;
    default:
-      ; /* fall-through */
+      return PIPE_FORMAT_NONE;
    }
-   return PIPE_FORMAT_NONE;
 }
 
 
@@ -890,7 +889,7 @@ OSMesaGetIntegerv(GLint pname, GLint *value)
       *value = osmesa->y_up;
       return;
    case OSMESA_MAX_WIDTH:
-      /* fall-through */
+      FALLTHROUGH;
    case OSMESA_MAX_HEIGHT:
       {
          struct pipe_screen *screen = get_st_manager()->screen;

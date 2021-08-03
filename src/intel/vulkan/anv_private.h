@@ -3551,7 +3551,7 @@ anv_image_aspect_to_plane(VkImageAspectFlags image_aspects,
    case VK_IMAGE_ASPECT_STENCIL_BIT:
       if ((image_aspects & VK_IMAGE_ASPECT_DEPTH_BIT) == 0)
          return 0;
-      /* Fall-through */
+      FALLTHROUGH;
    case VK_IMAGE_ASPECT_PLANE_1_BIT:
       return 1;
    case VK_IMAGE_ASPECT_PLANE_2_BIT:

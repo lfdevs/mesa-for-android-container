@@ -124,7 +124,7 @@ bool ShaderFromNirProcessor::scan_instruction(nir_instr *instr)
       case nir_intrinsic_image_atomic_comp_swap:
       case nir_intrinsic_ssbo_atomic_comp_swap:
          m_sel.info.writes_memory = 1;
-         /* fallthrough */
+         FALLTHROUGH;
       case nir_intrinsic_image_load:
          m_ssbo_instr.set_require_rat_return_address();
          break;

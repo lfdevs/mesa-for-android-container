@@ -6882,8 +6882,10 @@ void visit_shared_atomic(isel_context *ctx, nir_intrinsic_instr *instr)
    ds.reset(create_instruction<DS_instruction>(op, Format::DS, num_operands, return_previous ? 1 : 0));
    ds->operands[0] = Operand(address);
    ds->operands[1] = Operand(data);
-   if (num_operands == 4)
-      ds->operands[2] = Operand(get_ssa_temp(ctx, instr->src[2].ssa));
+   if (num_operands == 4) {
+      Temp data2 = as_vgpr(ctx, get_ssa_temp(ctx, instr->src[2].ssa));
+      ds->operands[2] = Operand(data2);
+   }
    ds->operands[num_operands - 1] = m;
    ds->offset0 = offset;
    if (return_previous)

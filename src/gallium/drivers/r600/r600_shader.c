@@ -524,11 +524,11 @@ static int tgsi_is_supported(struct r600_shader_ctx *ctx)
 				    ctx->type == PIPE_SHADER_TESS_CTRL ||
 				    ctx->type == PIPE_SHADER_TESS_EVAL)
 					break;
-				/* fallthrough */
+				FALLTHROUGH;
 			case TGSI_FILE_OUTPUT:
 				if (ctx->type == PIPE_SHADER_TESS_CTRL)
 					break;
-				/* fallthrough */
+				FALLTHROUGH;
 			default:
 				R600_ERR("unsupported src %d (file %d, dimension %d)\n", j,
 					 i->Src[j].Register.File,
@@ -8188,7 +8188,7 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 				r = r600_bytecode_add_alu(ctx->bc, &alu);
 				if (r)
 					return r;
-				/* fall through */
+				FALLTHROUGH;
 
 			case TGSI_TEXTURE_2D:
 			case TGSI_TEXTURE_SHADOW2D:
@@ -8209,7 +8209,7 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 				r = r600_bytecode_add_alu(ctx->bc, &alu);
 				if (r)
 					return r;
-				/* fall through */
+				FALLTHROUGH;
 
 			case TGSI_TEXTURE_1D:
 			case TGSI_TEXTURE_SHADOW1D:
@@ -8233,7 +8233,7 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 			switch (inst->Texture.Texture) {
 			case TGSI_TEXTURE_3D:
 				offset_z = ctx->literals[4 * inst->TexOffsets[0].Index + inst->TexOffsets[0].SwizzleZ] << 1;
-				/* fallthrough */
+				FALLTHROUGH;
 			case TGSI_TEXTURE_2D:
 			case TGSI_TEXTURE_SHADOW2D:
 			case TGSI_TEXTURE_RECT:
@@ -8241,7 +8241,7 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 			case TGSI_TEXTURE_2D_ARRAY:
 			case TGSI_TEXTURE_SHADOW2D_ARRAY:
 				offset_y = ctx->literals[4 * inst->TexOffsets[0].Index + inst->TexOffsets[0].SwizzleY] << 1;
-				/* fallthrough */
+				FALLTHROUGH;
 			case TGSI_TEXTURE_1D:
 			case TGSI_TEXTURE_SHADOW1D:
 			case TGSI_TEXTURE_1D_ARRAY:
@@ -10444,7 +10444,7 @@ static inline int callstack_update_max_depth(struct r600_shader_ctx *ctx,
 		 * elements */
 		elements += 2;
 
-		/* fallthrough */
+		FALLTHROUGH;
 		/* FIXME: do the two elements added above cover the cases for the
 		 * r8xx+ below? */
 

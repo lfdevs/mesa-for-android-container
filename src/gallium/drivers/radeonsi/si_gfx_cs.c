@@ -576,7 +576,9 @@ void si_emit_surface_sync(struct si_context *sctx, struct radeon_cmdbuf *cs, uns
 
    assert(sctx->chip_class <= GFX9);
 
-   cp_coher_cntl |= 1u << 31; /* don't sync PFP, i.e. execute the sync in ME */
+   /* This seems problematic with GFX7 (see #4764) */
+   if (sctx->chip_class != GFX7)
+      cp_coher_cntl |= 1u << 31; /* don't sync PFP, i.e. execute the sync in ME */
 
    radeon_begin(cs);
 

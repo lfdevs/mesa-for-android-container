@@ -86,6 +86,8 @@ dri_fill_st_options(struct dri_screen *screen)
       driQueryOptionb(optionCache, "allow_glsl_builtin_variable_redeclaration");
    options->allow_higher_compat_version =
       driQueryOptionb(optionCache, "allow_higher_compat_version");
+   options->glsl_ignore_write_to_readonly_var =
+      driQueryOptionb(optionCache, "glsl_ignore_write_to_readonly_var");
    options->glsl_zero_init = driQueryOptionb(optionCache, "glsl_zero_init");
    options->force_integer_tex_nearest =
       driQueryOptionb(optionCache, "force_integer_tex_nearest");

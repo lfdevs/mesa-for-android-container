@@ -340,7 +340,8 @@ foz_prepare(struct foz_db *foz_db, char *cache_path)
 void
 foz_destroy(struct foz_db *foz_db)
 {
-   fclose(foz_db->db_idx);
+   if (foz_db->db_idx)
+      fclose(foz_db->db_idx);
    for (unsigned i = 0; i < FOZ_MAX_DBS; i++) {
       if (foz_db->file[i])
          fclose(foz_db->file[i]);

@@ -1869,7 +1869,7 @@ anv_wait_for_fences(struct anv_device *device,
          switch (impl->type) {
          case ANV_FENCE_TYPE_BO:
             assert(!device->physical->has_syncobj_wait);
-            /* fall-through */
+            FALLTHROUGH;
          case ANV_FENCE_TYPE_WSI_BO:
             result = anv_wait_for_bo_fences(device, 1, &pFences[i],
                                             true, abs_timeout);

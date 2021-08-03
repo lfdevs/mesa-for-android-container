@@ -1504,7 +1504,7 @@ brw_nir_create_passthrough_tcs(void *mem_ctx, const struct brw_compiler *compile
 {
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_TESS_CTRL,
                                                   options, "passthrough TCS");
-   ralloc_adopt(mem_ctx, b.shader);
+   ralloc_steal(mem_ctx, b.shader);
    nir_shader *nir = b.shader;
    nir_variable *var;
    nir_ssa_def *load;

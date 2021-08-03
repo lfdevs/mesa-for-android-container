@@ -53,7 +53,7 @@ get_sample(struct fd_batch *batch, struct fd_ringbuffer *ring,
          ctx->hw_sample_providers[idx]->get_sample(batch, ring);
       fd_hw_sample_reference(ctx, &batch->sample_cache[idx], new_samp);
       util_dynarray_append(&batch->samples, struct fd_hw_sample *, new_samp);
-      batch->needs_flush = true;
+      fd_batch_needs_flush(batch);
    }
 
    fd_hw_sample_reference(ctx, &samp, batch->sample_cache[idx]);

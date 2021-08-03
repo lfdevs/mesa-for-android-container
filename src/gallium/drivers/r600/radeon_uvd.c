@@ -1051,7 +1051,7 @@ struct pipe_video_codec *ruvd_create_decoder(struct pipe_context *context,
 		if (templ->entrypoint > PIPE_VIDEO_ENTRYPOINT_BITSTREAM || info.family < CHIP_PALM)
 			return vl_create_mpeg12_decoder(context, templ);
 
-		/* fall through */
+		FALLTHROUGH;
 	case PIPE_VIDEO_FORMAT_MPEG4:
 		width = align(width, VL_MACROBLOCK_WIDTH);
 		height = align(height, VL_MACROBLOCK_HEIGHT);

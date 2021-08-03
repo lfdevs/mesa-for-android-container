@@ -83,14 +83,14 @@ brw_miptree_create_for_teximage(struct brw_context *brw,
    case GL_TEXTURE_3D:
       depth = old_mt ? get_base_dim(old_depth, depth, level) :
                        depth << level;
-      /* Fall through */
+      FALLTHROUGH;
    case GL_TEXTURE_2D:
    case GL_TEXTURE_2D_ARRAY:
    case GL_TEXTURE_CUBE_MAP:
    case GL_TEXTURE_CUBE_MAP_ARRAY:
       height = old_mt ? get_base_dim(old_height, height, level) :
                         height << level;
-      /* Fall through */
+      FALLTHROUGH;
    case GL_TEXTURE_1D:
    case GL_TEXTURE_1D_ARRAY:
       width = old_mt ? get_base_dim(old_width, width, level) :

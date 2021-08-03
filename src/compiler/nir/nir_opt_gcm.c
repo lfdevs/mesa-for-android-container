@@ -604,6 +604,11 @@ opt_gcm_impl(nir_function_impl *impl, bool value_number)
    nir_metadata_require(impl, nir_metadata_block_index |
                               nir_metadata_dominance);
 
+   /* A previous pass may have left pass_flags dirty, so clear it all out. */
+   nir_foreach_block(block, impl)
+      nir_foreach_instr(instr, block)
+         instr->pass_flags = 0;
+
    struct gcm_state state;
 
    state.impl = impl;

@@ -144,7 +144,7 @@ vc4_nir_get_swizzled_channel(nir_builder *b, nir_ssa_def **srcs, int swiz)
         default:
         case PIPE_SWIZZLE_NONE:
                 fprintf(stderr, "warning: unknown swizzle\n");
-                /* FALLTHROUGH */
+                FALLTHROUGH;
         case PIPE_SWIZZLE_0:
                 return nir_imm_float(b, 0.0);
         case PIPE_SWIZZLE_1:

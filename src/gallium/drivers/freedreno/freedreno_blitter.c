@@ -80,8 +80,6 @@ static void
 fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond,
                       bool discard) assert_dt
 {
-   fd_fence_ref(&ctx->last_fence, NULL);
-
    util_blitter_save_vertex_buffer_slot(ctx->blitter, ctx->vtx.vertexbuf.vb);
    util_blitter_save_vertex_elements(ctx->blitter, ctx->vtx.vtx);
    util_blitter_save_vertex_shader(ctx->blitter, ctx->prog.vs);

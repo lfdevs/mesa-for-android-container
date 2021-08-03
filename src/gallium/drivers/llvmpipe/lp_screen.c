@@ -132,6 +132,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return PIPE_MAX_COLOR_BUFS;
    case PIPE_CAP_OCCLUSION_QUERY:
    case PIPE_CAP_QUERY_TIMESTAMP:
+   case PIPE_CAP_QUERY_TIME_ELAPSED:
       return 1;
    case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
       return 1;

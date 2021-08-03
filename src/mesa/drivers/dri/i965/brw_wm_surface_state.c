@@ -424,7 +424,7 @@ brw_get_texture_swizzle(const struct gl_context *ctx,
          swizzles[3] = SWIZZLE_ONE;
          break;
       }
-      /* fallthrough */
+      FALLTHROUGH;
    case GL_RG:
    case GL_RGB:
       if (_mesa_get_format_bits(img->TexFormat, GL_ALPHA_BITS) > 0 ||

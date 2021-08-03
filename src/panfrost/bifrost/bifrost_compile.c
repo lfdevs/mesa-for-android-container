@@ -1618,7 +1618,7 @@ bi_emit_alu(bi_builder *b, nir_alu_instr *instr)
 
         case nir_op_fsub:
                 s1 = bi_neg(s1);
-                /* fallthrough */
+                FALLTHROUGH;
         case nir_op_fadd:
                 bi_fadd_to(b, sz, dst, s0, s1, BI_ROUND_NONE);
                 break;

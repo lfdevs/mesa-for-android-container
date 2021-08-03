@@ -822,7 +822,7 @@ namespace brw {
                 src.width != BRW_WIDTH_8 ||
                 src.hstride != BRW_HORIZONTAL_STRIDE_1)
                break;
-            /* fallthrough */
+            FALLTHROUGH;
          case ATTR:
          case VGRF:
          case UNIFORM:

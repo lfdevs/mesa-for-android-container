@@ -139,6 +139,17 @@ llvmpipe_get_query_result(struct pipe_context *pipe,
          }
       }
       break;
+   case PIPE_QUERY_TIME_ELAPSED: {
+      uint64_t start = (uint64_t)-1, end = 0;
+      for (i = 0; i < num_threads; i++) {
+         if (pq->start[i] && pq->start[i] < start)
+            start = pq->start[i];
+         if (pq->end[i] && pq->end[i] > end)
+            end = pq->end[i];
+      }
+      *result = end - start;
+      break;
+   }
    case PIPE_QUERY_TIMESTAMP_DISJOINT: {
       struct pipe_query_data_timestamp_disjoint *td =
          (struct pipe_query_data_timestamp_disjoint *)vresult;
@@ -260,6 +271,17 @@ llvmpipe_get_query_result_resource(struct pipe_context *pipe,
             }
          }
          break;
+      case PIPE_QUERY_TIME_ELAPSED: {
+         uint64_t start = (uint64_t)-1, end = 0;
+         for (i = 0; i < num_threads; i++) {
+            if (pq->start[i] && pq->start[i] < start)
+               start = pq->start[i];
+            if (pq->end[i] && pq->end[i] > end)
+               end = pq->end[i];
+         }
+         value = end - start;
+         break;
+      }
       case PIPE_QUERY_SO_STATISTICS:
          value = pq->num_primitives_written[0];
          value2 = pq->num_primitives_generated[0];

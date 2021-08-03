@@ -466,7 +466,7 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
    case PIPE_QUERY_TIME_ELAPSED:
    case PIPE_QUERY_TIMESTAMP:
       qoffset = 8;
-      /* fallthrough */
+      FALLTHROUGH;
    default:
       assert(index == 0);
       stride = 1;

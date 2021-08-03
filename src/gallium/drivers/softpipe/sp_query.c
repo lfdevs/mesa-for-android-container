@@ -160,7 +160,7 @@ softpipe_end_query(struct pipe_context *pipe, struct pipe_query *q)
       break;
    case PIPE_QUERY_TIMESTAMP:
       sq->start = 0;
-      /* fall through */
+      FALLTHROUGH;
    case PIPE_QUERY_TIME_ELAPSED:
       sq->end = os_time_get_nano();
       break;

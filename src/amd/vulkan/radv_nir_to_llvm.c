@@ -1087,7 +1087,7 @@ radv_emit_stream_output(struct radv_shader_context *ctx, LLVMValueRef const *so_
    case 2: /* as v2i32 */
    case 3: /* as v4i32 (aligned to 4) */
       out[3] = LLVMGetUndef(ctx->ac.i32);
-      /* fall through */
+      FALLTHROUGH;
    case 4: /* as v4i32 */
       vdata = ac_build_gather_values(&ctx->ac, out,
                                      !ac_has_vec3_support(ctx->ac.chip_class, false)

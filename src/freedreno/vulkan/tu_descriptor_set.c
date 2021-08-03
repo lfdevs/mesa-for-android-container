@@ -988,7 +988,7 @@ tu_CreateDescriptorUpdateTemplate(
             immutable_samplers =
                tu_immutable_samplers(set_layout, binding_layout) + entry->dstArrayElement;
          }
-         /* fallthrough */
+         FALLTHROUGH;
       default:
          dst_offset = binding_layout->offset / 4;
          dst_offset += (binding_layout->size * entry->dstArrayElement) / 4;

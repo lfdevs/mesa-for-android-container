@@ -492,7 +492,7 @@ static GLboolean r200UpdateTextureEnv( struct gl_context *ctx, int unit, int slo
 	  * 1.3) does.
 	  */
 	 RGBshift = 0;
-	 /* FALLTHROUGH */
+	 FALLTHROUGH;
 
       case GL_DOT3_RGB:
       case GL_DOT3_RGBA:

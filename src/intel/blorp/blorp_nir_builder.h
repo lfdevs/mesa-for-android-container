@@ -30,7 +30,7 @@ blorp_nir_init_shader(nir_builder *b,
                       const char *name)
 {
    *b = nir_builder_init_simple_shader(stage, NULL, "%s", name ? name : "");
-   ralloc_adopt(mem_ctx, b->shader);
+   ralloc_steal(mem_ctx, b->shader);
    if (stage == MESA_SHADER_FRAGMENT)
       b->shader->info.fs.origin_upper_left = true;
 }

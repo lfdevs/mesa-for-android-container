@@ -274,7 +274,7 @@ uint32_t r300_translate_texformat(enum pipe_format format,
             case PIPE_FORMAT_RGTC1_SNORM:
             case PIPE_FORMAT_LATC1_SNORM:
                 result |= sign_bit[0];
-                /* fallthrough */
+                FALLTHROUGH;
             case PIPE_FORMAT_LATC1_UNORM:
             case PIPE_FORMAT_RGTC1_UNORM:
                 return R500_TX_FORMAT_ATI1N | result;
@@ -282,7 +282,7 @@ uint32_t r300_translate_texformat(enum pipe_format format,
             case PIPE_FORMAT_RGTC2_SNORM:
             case PIPE_FORMAT_LATC2_SNORM:
                 result |= sign_bit[1] | sign_bit[0];
-                /* fallthrough */
+                FALLTHROUGH;
             case PIPE_FORMAT_RGTC2_UNORM:
             case PIPE_FORMAT_LATC2_UNORM:
                 return R400_TX_FORMAT_ATI2N | result;

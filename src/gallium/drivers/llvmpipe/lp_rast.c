@@ -528,6 +528,9 @@ lp_rast_begin_query(struct lp_rasterizer_task *task,
    case PIPE_QUERY_PIPELINE_STATISTICS:
       pq->start[task->thread_index] = task->thread_data.ps_invocations;
       break;
+   case PIPE_QUERY_TIME_ELAPSED:
+      pq->start[task->thread_index] = os_time_get_nano();
+      break;
    default:
       assert(0);
       break;
@@ -555,6 +558,7 @@ lp_rast_end_query(struct lp_rasterizer_task *task,
       pq->start[task->thread_index] = 0;
       break;
    case PIPE_QUERY_TIMESTAMP:
+   case PIPE_QUERY_TIME_ELAPSED:
       pq->end[task->thread_index] = os_time_get_nano();
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS:

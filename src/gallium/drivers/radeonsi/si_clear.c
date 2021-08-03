@@ -548,7 +548,7 @@ static void si_fast_clear(struct si_context *sctx, unsigned *buffers,
    struct si_clear_info info[8 * 2 + 1]; /* MRTs * (CMASK + DCC) + ZS */
    unsigned num_clears = 0;
    unsigned clear_types = 0;
-   bool fb_too_small = fb->width * fb->height * fb->layers <= 512 * 512;
+   unsigned num_pixels = fb->width * fb->height;
 
    /* This function is broken in BE, so just disable this path for now */
 #if UTIL_ARCH_BIG_ENDIAN
@@ -602,6 +602,7 @@ static void si_fast_clear(struct si_context *sctx, unsigned *buffers,
        *
        * This helps on both dGPUs and APUs, even small APUs like Mullins.
        */
+      bool fb_too_small = num_pixels * num_layers <= 512 * 512;
       bool too_small = tex->buffer.b.b.nr_samples <= 1 && fb_too_small;
       bool eliminate_needed = false;
       bool fmask_decompress_needed = false;
@@ -791,6 +792,7 @@ static void si_fast_clear(struct si_context *sctx, unsigned *buffers,
       unsigned level = zsbuf->u.tex.level;
       bool update_db_depth_clear = false;
       bool update_db_stencil_clear = false;
+      bool fb_too_small = num_pixels * zs_num_layers <= 512 * 512;
 
       /* Transition from TC-incompatible to TC-compatible HTILE if requested. */
       if (zstex->enable_tc_compatible_htile_next_clear) {

@@ -312,7 +312,7 @@ static uint8_t get_wa_flags(const struct gl_vertex_format *glformat)
 
    case GL_INT_2_10_10_10_REV:
       wa_flags |= BRW_ATTRIB_WA_SIGN;
-      /* fallthrough */
+      FALLTHROUGH;
 
    case GL_UNSIGNED_INT_2_10_10_10_REV:
       if (glformat->Format == GL_BGRA)

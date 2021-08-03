@@ -174,7 +174,7 @@ tu6_emit_load_state(struct tu_pipeline *pipeline, bool compute)
             base = MAX_SETS;
             offset = (layout->set[i].dynamic_offset_start +
                       binding->dynamic_offset_offset) * A6XX_TEX_CONST_DWORDS;
-            /* fallthrough */
+            FALLTHROUGH;
          case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
          case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
          case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
@@ -206,7 +206,7 @@ tu6_emit_load_state(struct tu_pipeline *pipeline, bool compute)
             base = MAX_SETS;
             offset = (layout->set[i].dynamic_offset_start +
                       binding->dynamic_offset_offset) * A6XX_TEX_CONST_DWORDS;
-            /* fallthrough */
+            FALLTHROUGH;
          case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
             tu_foreach_stage(stage, stages) {
                emit_load_state(&cs, tu6_stage2opcode(stage), ST6_UBO,

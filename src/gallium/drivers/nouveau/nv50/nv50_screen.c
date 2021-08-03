@@ -400,7 +400,7 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
          debug_printf("%s: unhandled cap %d\n", __func__, param);
          debug_cap_printed[param] = true;
       }
-      /* fallthrough */
+      FALLTHROUGH;
    /* caps where we want the default value */
    case PIPE_CAP_DMABUF:
    case PIPE_CAP_ESSL_FEATURE_LEVEL:

@@ -367,7 +367,7 @@ r600_lower_tess_io_impl(nir_builder *b, nir_instr *instr, enum pipe_prim_type pr
    case nir_intrinsic_load_tess_level_inner:
       tf_inner_address_offset = 4;
       ncomps_correct = 2;
-      /* fallthrough */
+      FALLTHROUGH;
    case nir_intrinsic_load_tess_level_outer: {
       auto ncomps = outer_tf_components(prim_type);
       if (!ncomps)

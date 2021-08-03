@@ -2301,7 +2301,7 @@ vtn_mem_semantics_to_nir_mem_semantics(struct vtn_builder *b,
       break;
 
    case SpvMemorySemanticsSequentiallyConsistentMask:
-      /* Fall through.  Treated as AcquireRelease in Vulkan. */
+      FALLTHROUGH; /* Treated as AcquireRelease in Vulkan. */
    case SpvMemorySemanticsAcquireReleaseMask:
       nir_semantics = NIR_MEMORY_ACQUIRE | NIR_MEMORY_RELEASE;
       break;

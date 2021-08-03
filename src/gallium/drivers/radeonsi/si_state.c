@@ -2189,7 +2189,7 @@ static bool si_is_format_supported(struct pipe_screen *screen, enum pipe_format 
       /* Chips with 1 RB don't increment occlusion queries at 16x MSAA sample rate,
        * so don't expose 16 samples there.
        */
-      const unsigned max_eqaa_samples = sscreen->info.max_render_backends == 1 ? 8 : 16;
+      const unsigned max_eqaa_samples = util_bitcount(sscreen->info.enabled_rb_mask) <= 1 ? 8 : 16;
       const unsigned max_samples = 8;
 
       /* MSAA support without framebuffer attachments. */
@@ -5251,8 +5251,6 @@ void si_init_cs_preamble_state(struct si_context *sctx, bool uses_reg_shadowing)
           */
          if (!sscreen->info.use_late_alloc) {
             late_alloc_wave64 = 0;
-         } else if (num_cu_per_sh <= 6) {
-            late_alloc_wave64 = num_cu_per_sh - 2;
          } else {
             late_alloc_wave64 = (num_cu_per_sh - 2) * 4;
 

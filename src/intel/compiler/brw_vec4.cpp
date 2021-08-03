@@ -2066,7 +2066,7 @@ vec4_visitor::convert_to_hw_regs()
                reg = src.as_brw_reg();
                break;
             }
-            /* fallthrough */
+            FALLTHROUGH;
          case ARF:
          case IMM:
             continue;

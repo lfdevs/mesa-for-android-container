@@ -54,6 +54,7 @@ typedef uint32_t xcb_window_t;
 #include "vk_physical_device.h"
 #include "vk_shader_module.h"
 #include "vk_util.h"
+#include "vk_format.h"
 
 #include "wsi_common.h"
 
@@ -1107,31 +1108,39 @@ VkResult lvp_execute_cmds(struct lvp_device *device,
 
 struct lvp_image *lvp_swapchain_get_image(VkSwapchainKHR swapchain,
 					  uint32_t index);
-enum pipe_format vk_format_to_pipe(VkFormat format);
 
-static inline VkImageAspectFlags
-vk_format_aspects(VkFormat format)
+static inline enum pipe_format
+lvp_vk_format_to_pipe_format(VkFormat format)
 {
-   switch (format) {
-   case VK_FORMAT_UNDEFINED:
-      return 0;
+   /* Some formats cause problems with CTS right now.*/
+   if (format == VK_FORMAT_R4G4B4A4_UNORM_PACK16 ||
+       format == VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT || /* VK_EXT_4444_formats */
+       format == VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT || /* VK_EXT_4444_formats */
+       format == VK_FORMAT_R5G5B5A1_UNORM_PACK16 ||
+       format == VK_FORMAT_R8_SRGB ||
+       format == VK_FORMAT_R8G8_SRGB ||
+       format == VK_FORMAT_R64G64B64A64_SFLOAT ||
+       format == VK_FORMAT_R64_SFLOAT ||
+       format == VK_FORMAT_R64G64_SFLOAT ||
+       format == VK_FORMAT_R64G64B64_SFLOAT ||
+       format == VK_FORMAT_A2R10G10B10_SINT_PACK32 ||
+       format == VK_FORMAT_A2B10G10R10_SINT_PACK32 ||
+       format == VK_FORMAT_G8B8G8R8_422_UNORM ||
+       format == VK_FORMAT_B8G8R8G8_422_UNORM ||
+       format == VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM ||
+       format == VK_FORMAT_G8_B8R8_2PLANE_420_UNORM ||
+       format == VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM ||
+       format == VK_FORMAT_G8_B8R8_2PLANE_422_UNORM ||
+       format == VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM ||
+       format == VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM ||
+       format == VK_FORMAT_G16_B16R16_2PLANE_420_UNORM ||
+       format == VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM ||
+       format == VK_FORMAT_G16_B16R16_2PLANE_422_UNORM ||
+       format == VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM ||
+       format == VK_FORMAT_D16_UNORM_S8_UINT)
+      return PIPE_FORMAT_NONE;
 
-   case VK_FORMAT_S8_UINT:
-      return VK_IMAGE_ASPECT_STENCIL_BIT;
-
-   case VK_FORMAT_D16_UNORM_S8_UINT:
-   case VK_FORMAT_D24_UNORM_S8_UINT:
-   case VK_FORMAT_D32_SFLOAT_S8_UINT:
-      return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-
-   case VK_FORMAT_D16_UNORM:
-   case VK_FORMAT_X8_D24_UNORM_PACK32:
-   case VK_FORMAT_D32_SFLOAT:
-      return VK_IMAGE_ASPECT_DEPTH_BIT;
-
-   default:
-      return VK_IMAGE_ASPECT_COLOR_BIT;
-   }
+   return vk_format_to_pipe_format(format);
 }
 
 #ifdef __cplusplus

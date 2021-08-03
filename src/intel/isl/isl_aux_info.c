@@ -142,7 +142,7 @@ isl_aux_prepare_access(enum isl_aux_state initial_state,
    case ISL_AUX_STATE_COMPRESSED_CLEAR:
       if (!info[usage].compressed)
          return ISL_AUX_OP_FULL_RESOLVE;
-      /* Fall-through */
+      FALLTHROUGH;
    case ISL_AUX_STATE_CLEAR:
    case ISL_AUX_STATE_PARTIAL_CLEAR:
       return fast_clear_supported ?

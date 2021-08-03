@@ -660,13 +660,13 @@ xmesa_color_to_pixel(struct gl_context *ctx,
       case PF_8A8R8G8B:
          return PACK_8A8R8G8B( r, g, b, a );
       case PF_8R8G8B:
-         /* fall through */
+         FALLTHROUGH;
       case PF_8R8G8B24:
          return PACK_8R8G8B( r, g, b );
       case PF_5R6G5B:
          return PACK_5R6G5B( r, g, b );
       case PF_Dither_True:
-         /* fall through */
+         FALLTHROUGH;
       case PF_Dither_5R6G5B:
          {
             unsigned long p;
@@ -1576,7 +1576,7 @@ unsigned long XMesaDitherColor( XMesaContext xmesa, GLint x, GLint y,
       case PF_5R6G5B:
          return PACK_5R6G5B( r, g, b );
       case PF_Dither_5R6G5B:
-         /* fall through */
+         FALLTHROUGH;
       case PF_Dither_True:
          {
             unsigned long p;

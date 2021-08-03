@@ -1810,7 +1810,7 @@ isl_surf_get_hiz_surf(const struct isl_device *dev,
          assert(ISL_GFX_VER(dev) == 5);
          unreachable("This should work, but is untested");
       }
-      /* Fall through */
+      FALLTHROUGH;
    case ISL_FORMAT_R16_UNORM:
    case ISL_FORMAT_R32_FLOAT:
       break;
@@ -1819,7 +1819,7 @@ isl_surf_get_hiz_surf(const struct isl_device *dev,
          assert(isl_surf_usage_is_depth_and_stencil(surf->usage));
          unreachable("This should work, but is untested");
       }
-      /* Fall through */
+      FALLTHROUGH;
    default:
       return false;
    }

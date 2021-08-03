@@ -166,7 +166,7 @@ static void r200UpdateFSArith( struct gl_context *ctx )
 	       case GL_SUB_ATI:
 		  /* negate C */
 		  SET_INST(opnum, optype) |= R200_TXC_NEG_ARG_C;
-		  /* fallthrough */
+		  FALLTHROUGH;
 	       case GL_ADD_ATI:
 		  r200SetFragShaderArg(afs_cmd, opnum, optype,
 					inst->SrcReg[optype][0], 1, &tfactor);
@@ -185,7 +185,7 @@ static void r200UpdateFSArith( struct gl_context *ctx )
 	       case GL_MAD_ATI:
 		  r200SetFragShaderArg(afs_cmd, opnum, optype,
 					inst->SrcReg[optype][2], 2, &tfactor);
-		  /* fallthrough */
+		  FALLTHROUGH;
 	       case GL_MUL_ATI:
 		  r200SetFragShaderArg(afs_cmd, opnum, optype,
 					inst->SrcReg[optype][0], 0, &tfactor);

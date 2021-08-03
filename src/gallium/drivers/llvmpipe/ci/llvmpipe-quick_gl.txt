@@ -474,12 +474,6 @@ spec/arb_internalformat_query/misc. api error checks: skip
 spec/arb_pipeline_statistics_query/arb_pipeline_statistics_query-frag: fail
 spec/arb_post_depth_coverage/arb_post_depth_coverage-multisampling: fail
 spec/arb_program_interface_query/arb_program_interface_query-getprogramresourceindex/'vs_input2[1][0]' on gl_program_input: fail
-spec/arb_query_buffer_object/qbo/query-gl_time_elapsed-async_cpu_read_before-gl_int: fail
-spec/arb_query_buffer_object/qbo/query-gl_time_elapsed-async_cpu_read_before-gl_unsigned_int: fail
-spec/arb_query_buffer_object/qbo/query-gl_time_elapsed-async_cpu_read_before-gl_unsigned_int64_arb: fail
-spec/arb_query_buffer_object/qbo/query-gl_time_elapsed-sync_cpu_read_after_cache_test-gl_int: fail
-spec/arb_query_buffer_object/qbo/query-gl_time_elapsed-sync_cpu_read_after_cache_test-gl_unsigned_int: fail
-spec/arb_query_buffer_object/qbo/query-gl_time_elapsed-sync_cpu_read_after_cache_test-gl_unsigned_int64_arb: fail
 spec/arb_sample_locations/test: skip
 spec/arb_sample_shading/builtin-gl-num-samples 16: skip
 spec/arb_sample_shading/builtin-gl-num-samples 32: skip

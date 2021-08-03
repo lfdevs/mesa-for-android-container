@@ -259,8 +259,15 @@ create_cov(struct ir3_context *ctx, struct ir3_instruction *src,
 	struct ir3_instruction *cov =
 		ir3_COV(ctx->block, src, src_type, dst_type);
 
-	if (op == nir_op_f2f16 || op == nir_op_f2f16_rtne)
+	if (op == nir_op_f2f16_rtne) {
 		cov->regs[0]->flags |= IR3_REG_EVEN;
+	} else if (op == nir_op_f2f16) {
+		unsigned execution_mode = ctx->s->info.float_controls_execution_mode;
+		nir_rounding_mode rounding_mode =
+			nir_get_rounding_mode_from_float_controls(execution_mode, nir_type_float16);
+		if (rounding_mode == nir_rounding_mode_rtne)
+			cov->regs[0]->flags |= IR3_REG_EVEN;
+	}
 
 	return cov;
 }
@@ -1872,7 +1879,7 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 		break;
 	case nir_intrinsic_load_sample_id:
 		ctx->so->per_samp = true;
-		/* fall-thru */
+		FALLTHROUGH;
 	case nir_intrinsic_load_sample_id_no_per_sample:
 		if (!ctx->samp_id) {
 			ctx->samp_id = create_sysval_input(ctx, SYSTEM_VALUE_SAMPLE_ID, 0x1);
@@ -2326,7 +2333,7 @@ emit_tex(struct ir3_context *ctx, nir_tex_instr *tex)
 			ctx->so->num_sampler_prefetch++;
 			break;
 		}
-		/* fallthru */
+		FALLTHROUGH;
 	case nir_texop_tex:      opc = has_lod ? OPC_SAML : OPC_SAM; break;
 	case nir_texop_txb:      opc = OPC_SAMB;     break;
 	case nir_texop_txl:      opc = OPC_SAML;     break;
@@ -3257,7 +3264,7 @@ setup_output(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 		case VARYING_SLOT_PRIMITIVE_ID:
 		case VARYING_SLOT_GS_VERTEX_FLAGS_IR3:
 			debug_assert(ctx->so->type == MESA_SHADER_GEOMETRY);
-			/* fall through */
+			FALLTHROUGH;
 		case VARYING_SLOT_COL0:
 		case VARYING_SLOT_COL1:
 		case VARYING_SLOT_BFC0:

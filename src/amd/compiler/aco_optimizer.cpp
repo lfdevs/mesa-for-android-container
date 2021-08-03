@@ -192,7 +192,8 @@ struct ssa_info {
       add_label(label_literal);
       val = constant;
 
-      if (chip >= GFX8 && !op16.isLiteral())
+      /* check that no upper bits are lost in case of packed 16bit constants */
+      if (chip >= GFX8 && !op16.isLiteral() && op16.constantValue64() == constant)
          add_label(label_constant_16bit);
 
       if (!op32.isLiteral())
@@ -3437,6 +3438,11 @@ void select_instruction(opt_ctx &ctx, aco_ptr<Instruction>& instr)
          /* FMA can only take literals on GFX10+ */
          if ((instr->opcode == aco_opcode::v_fma_f32 || instr->opcode == aco_opcode::v_fma_f16) &&
              ctx.program->chip_class < GFX10)
+            return;
+         /* There are no v_fmaak_legacy_f16/v_fmamk_legacy_f16 and on chips where VOP3 can take
+          * literals (GFX10+), these instructions don't exist.
+          */
+         if (instr->opcode == aco_opcode::v_fma_legacy_f16)
             return;
 
          bool sgpr_used = false;

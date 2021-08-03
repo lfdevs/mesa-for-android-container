@@ -592,7 +592,7 @@ ConstantFolding::expr(Instruction *i,
             res.data.s32 = ((int64_t)a->data.s32 * b->data.s32) >> 32;
             break;
          }
-         /* fallthrough */
+         FALLTHROUGH;
       case TYPE_U32:
          if (i->subOp == NV50_IR_SUBOP_MUL_HIGH) {
             res.data.u32 = ((uint64_t)a->data.u32 * b->data.u32) >> 32;
@@ -834,7 +834,7 @@ ConstantFolding::expr(Instruction *i,
             res.data.s32 = ((int64_t)a->data.s32 * b->data.s32 >> 32) + c->data.s32;
             break;
          }
-         /* fallthrough */
+         FALLTHROUGH;
       case TYPE_U32:
          if (i->subOp == NV50_IR_SUBOP_MUL_HIGH) {
             res.data.u32 = ((uint64_t)a->data.u32 * b->data.u32 >> 32) + c->data.u32;
@@ -1193,7 +1193,7 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
       if (imm0.isInteger(0) && s == 0 && typeSizeof(i->dType) == 8 &&
           !isFloatType(i->dType))
          break;
-      /* fallthrough */
+      FALLTHROUGH;
    case OP_ADD:
       if (i->usesFlags())
          break;

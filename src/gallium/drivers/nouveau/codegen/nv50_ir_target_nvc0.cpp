@@ -54,7 +54,7 @@ TargetNVC0::getBuiltinCode(const uint32_t **code, uint32_t *size) const
          *size = sizeof(gk104_builtin_code);
          break;
       }
-      /* fall-through for GK20A */
+      FALLTHROUGH; /* for GK20A */
    case 0xf0:
    case 0x100:
       *code = (const uint32_t *)&gk110_builtin_code[0];
@@ -76,7 +76,7 @@ TargetNVC0::getBuiltinOffset(int builtin) const
    case 0xe0:
       if (chipset < NVISA_GK20A_CHIPSET)
          return gk104_builtin_offsets[builtin];
-      /* fall-through for GK20A */
+      FALLTHROUGH; /* for GK20A */
    case 0xf0:
    case 0x100:
       return gk110_builtin_offsets[builtin];
@@ -579,7 +579,7 @@ int TargetNVC0::getLatency(const Instruction *i) const
       case OP_LOAD:
          if (i->src(0).getFile() == FILE_MEMORY_CONST)
             return 9;
-         // fall through
+         FALLTHROUGH;
       case OP_VFETCH:
          return 24;
       default:

@@ -240,7 +240,7 @@ nv50_hw_end_query(struct nv50_context *nv50, struct nv50_query *q)
       break;
    case PIPE_QUERY_TIMESTAMP:
       hq->sequence++;
-      /* fall through */
+      FALLTHROUGH;
    case PIPE_QUERY_TIME_ELAPSED:
       nv50_hw_query_get(push, q, 0, 0x00005002);
       break;

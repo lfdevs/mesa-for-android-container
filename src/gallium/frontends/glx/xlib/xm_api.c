@@ -981,7 +981,7 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
          attribs.profile = ST_PROFILE_OPENGL_CORE;
          break;
       }
-      /* fall-through */
+      FALLTHROUGH;
    case GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB:
       /*
        * The spec also says:

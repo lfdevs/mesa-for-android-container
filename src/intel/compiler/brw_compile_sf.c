@@ -167,9 +167,9 @@ static void do_twoside_color( struct brw_sf_compile *c )
    brw_IF(p, BRW_EXECUTE_4);
    {
       switch (c->nr_verts) {
-      case 3: copy_bfc(c, c->vert[2]); /* fallthrough */
-      case 2: copy_bfc(c, c->vert[1]); /* fallthrough */
-      case 1: copy_bfc(c, c->vert[0]); /* fallthrough */
+      case 3: copy_bfc(c, c->vert[2]); FALLTHROUGH;
+      case 2: copy_bfc(c, c->vert[1]); FALLTHROUGH;
+      case 1: copy_bfc(c, c->vert[0]);
       }
    }
    brw_ENDIF(p);
