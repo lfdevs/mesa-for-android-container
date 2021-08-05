@@ -104,65 +104,27 @@ brw_vec4_alloc_reg_set(struct brw_compiler *compiler)
    for (int i = 0; i < class_count; i++)
       class_sizes[i] = i + 1;
 
-   /* Compute the total number of registers across all classes. */
-   int ra_reg_count = 0;
-   for (int i = 0; i < class_count; i++) {
-      ra_reg_count += base_reg_count - (class_sizes[i] - 1);
-   }
 
-   ralloc_free(compiler->vec4_reg_set.ra_reg_to_grf);
-   compiler->vec4_reg_set.ra_reg_to_grf = ralloc_array(compiler, uint8_t, ra_reg_count);
    ralloc_free(compiler->vec4_reg_set.regs);
-   compiler->vec4_reg_set.regs = ra_alloc_reg_set(compiler, ra_reg_count, false);
+   compiler->vec4_reg_set.regs = ra_alloc_reg_set(compiler, base_reg_count, false);
    if (compiler->devinfo->ver >= 6)
       ra_set_allocate_round_robin(compiler->vec4_reg_set.regs);
    ralloc_free(compiler->vec4_reg_set.classes);
-   compiler->vec4_reg_set.classes = ralloc_array(compiler, int, class_count);
+   compiler->vec4_reg_set.classes = ralloc_array(compiler, struct ra_class *, class_count);
 
    /* Now, add the registers to their classes, and add the conflicts
     * between them and the base GRF registers (and also each other).
     */
-   int reg = 0;
-   unsigned *q_values[MAX_VGRF_SIZE];
    for (int i = 0; i < class_count; i++) {
       int class_reg_count = base_reg_count - (class_sizes[i] - 1);
-      compiler->vec4_reg_set.classes[i] = ra_alloc_reg_class(compiler->vec4_reg_set.regs);
+      compiler->vec4_reg_set.classes[i] =
+         ra_alloc_contig_reg_class(compiler->vec4_reg_set.regs, class_sizes[i]);
 
-      q_values[i] = new unsigned[MAX_VGRF_SIZE];
-
-      for (int j = 0; j < class_reg_count; j++) {
-	 ra_class_add_reg(compiler->vec4_reg_set.regs, compiler->vec4_reg_set.classes[i], reg);
-
-	 compiler->vec4_reg_set.ra_reg_to_grf[reg] = j;
-
-	 for (int base_reg = j;
-	      base_reg < j + class_sizes[i];
-	      base_reg++) {
-	    ra_add_reg_conflict(compiler->vec4_reg_set.regs, base_reg, reg);
-	 }
-
-	 reg++;
-      }
-
-      for (int j = 0; j < class_count; j++) {
-         /* Calculate the q values manually because the algorithm used by
-          * ra_set_finalize() to do it has higher complexity affecting the
-          * start-up time of some applications.  q(i, j) is just the maximum
-          * number of registers from class i a register from class j can
-          * conflict with.
-          */
-         q_values[i][j] = class_sizes[i] + class_sizes[j] - 1;
-      }
+      for (int j = 0; j < class_reg_count; j++)
+         ra_class_add_reg(compiler->vec4_reg_set.classes[i], j);
    }
-   assert(reg == ra_reg_count);
 
-   for (int reg = 0; reg < base_reg_count; reg++)
-      ra_make_reg_conflicts_transitive(compiler->vec4_reg_set.regs, reg);
-
-   ra_set_finalize(compiler->vec4_reg_set.regs, q_values);
-
-   for (int i = 0; i < MAX_VGRF_SIZE; i++)
-      delete[] q_values[i];
+   ra_set_finalize(compiler->vec4_reg_set.regs, NULL);
 }
 
 void
@@ -258,9 +220,7 @@ vec4_visitor::reg_allocate()
     */
    prog_data->total_grf = payload_reg_count;
    for (unsigned i = 0; i < alloc.count; i++) {
-      int reg = ra_get_node_reg(g, i);
-
-      hw_reg_mapping[i] = compiler->vec4_reg_set.ra_reg_to_grf[reg];
+      hw_reg_mapping[i] = ra_get_node_reg(g, i);
       prog_data->total_grf = MAX2(prog_data->total_grf,
 				  hw_reg_mapping[i] + alloc.sizes[i]);
    }

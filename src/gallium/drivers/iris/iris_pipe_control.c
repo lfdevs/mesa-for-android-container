@@ -292,6 +292,7 @@ iris_flush_all_caches(struct iris_batch *batch)
                                 PIPE_CONTROL_DATA_CACHE_FLUSH |
                                 PIPE_CONTROL_DEPTH_CACHE_FLUSH |
                                 PIPE_CONTROL_RENDER_TARGET_FLUSH |
+                                PIPE_CONTROL_TILE_CACHE_FLUSH |
                                 PIPE_CONTROL_VF_CACHE_INVALIDATE |
                                 PIPE_CONTROL_INSTRUCTION_INVALIDATE |
                                 PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |

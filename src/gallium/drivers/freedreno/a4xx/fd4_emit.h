@@ -45,8 +45,9 @@ struct fd4_emit {
    const struct fd_vertex_state *vtx;
    const struct fd4_program_state *prog;
    const struct pipe_draw_info *info;
+	unsigned drawid_offset;
    const struct pipe_draw_indirect_info *indirect;
-   const struct pipe_draw_start_count *draw;
+	const struct pipe_draw_start_count_bias *draw;
    bool binning_pass;
    struct ir3_cache_key key;
    enum fd_dirty_3d_state dirty;

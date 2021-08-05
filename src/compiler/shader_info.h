@@ -91,6 +91,7 @@ struct spirv_supported_capabilities {
    bool subgroup_basic;
    bool subgroup_quad;
    bool subgroup_shuffle;
+   bool subgroup_uniform_control_flow;
    bool subgroup_vote;
    bool tessellation;
    bool transform_feedback;
@@ -198,6 +199,11 @@ typedef struct shader_info {
     */
    unsigned shared_size;
 
+   /**
+    * Local workgroup size used by compute/task/mesh shaders.
+    */
+   uint16_t workgroup_size[3];
+
    uint16_t inlinable_uniform_dw_offsets[MAX_INLINABLE_UNIFORMS];
    uint8_t num_inlinable_uniforms:4;
 
@@ -253,6 +259,16 @@ typedef struct shader_info {
     * SPV_KHR_workgroup_storage_explicit_layout.
     */
    bool shared_memory_explicit_layout:1;
+
+   /**
+    * Used for VK_KHR_zero_initialize_workgroup_memory.
+    */
+   bool zero_initialize_shared_memory:1;
+
+   /**
+    * Used for ARB_compute_variable_group_size.
+    */
+   bool workgroup_size_variable:1;
 
    union {
       struct {
@@ -384,10 +400,8 @@ typedef struct shader_info {
       } fs;
 
       struct {
-         uint16_t local_size[3];
-         uint16_t local_size_hint[3];
+         uint16_t workgroup_size_hint[3];
 
-         bool local_size_variable:1;
          uint8_t user_data_components_amd:3;
 
          /*
@@ -395,8 +409,6 @@ typedef struct shader_info {
           * shader.  From NV_compute_shader_derivatives.
           */
          enum gl_derivative_group derivative_group:2;
-
-         bool zero_initialize_shared_memory;
 
          /**
           * pointer size is:

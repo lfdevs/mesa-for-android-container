@@ -35,7 +35,7 @@ def main():
     compress = zlib.compressobj()
 
     print("static const struct {")
-    print("   uint32_t gen_10;")
+    print("   uint32_t ver_10;")
     print("   uint32_t offset;")
     print("   uint32_t length;")
     print("} genxml_files_table[] = {")

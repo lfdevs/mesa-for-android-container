@@ -96,8 +96,22 @@ __bitset_prefix_sum(const BITSET_WORD *x, unsigned b, unsigned n)
    return prefix;
 }
 
+/* Count set bits in the bitset (compute the size/cardinality of the bitset).
+ * This is a special case of prefix sum, but this convenience method is more
+ * natural when applicable.
+ */
+
+static inline unsigned
+__bitset_count(const BITSET_WORD *x, unsigned n)
+{
+   return __bitset_prefix_sum(x, ~0, n);
+}
+
 #define BITSET_PREFIX_SUM(x, b) \
    __bitset_prefix_sum(x, b, ARRAY_SIZE(x))
+
+#define BITSET_COUNT(x) \
+   __bitset_count(x, ARRAY_SIZE(x))
 
 /* Get first bit set in a bitset.
  */

@@ -39,7 +39,7 @@ brw_generate_mipmap(struct gl_context *ctx, GLenum target,
                     struct gl_texture_object *tex_obj)
 {
    struct brw_context *brw = brw_context(ctx);
-   struct gen_device_info *devinfo = &brw->screen->devinfo;
+   struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct brw_texture_object *intel_obj = brw_texture_object(tex_obj);
    const unsigned base_level = tex_obj->Attrib.BaseLevel;
    unsigned last_level, first_layer, last_layer;

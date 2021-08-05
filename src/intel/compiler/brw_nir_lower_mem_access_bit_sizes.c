@@ -65,8 +65,7 @@ dup_mem_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
    if (info->has_dest) {
       assert(intrin->dest.is_ssa);
       nir_ssa_dest_init(&dup->instr, &dup->dest,
-                        num_components, bit_size,
-                        intrin->dest.ssa.name);
+                        num_components, bit_size, NULL);
    } else {
       nir_intrinsic_set_write_mask(dup, (1 << num_components) - 1);
    }
@@ -78,7 +77,7 @@ dup_mem_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
 
 static bool
 lower_mem_load_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
-                        const struct gen_device_info *devinfo)
+                        const struct intel_device_info *devinfo)
 {
    const bool needs_scalar =
       intrin->intrinsic == nir_intrinsic_load_scratch;
@@ -152,7 +151,7 @@ lower_mem_load_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
 
 static bool
 lower_mem_store_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
-                         const struct gen_device_info *devinfo)
+                         const struct intel_device_info *devinfo)
 {
    const bool needs_scalar =
       intrin->intrinsic == nir_intrinsic_store_scratch;
@@ -239,7 +238,7 @@ lower_mem_store_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
 
 static bool
 lower_mem_access_bit_sizes_impl(nir_function_impl *impl,
-                                const struct gen_device_info *devinfo)
+                                const struct intel_device_info *devinfo)
 {
    bool progress = false;
 
@@ -312,7 +311,7 @@ lower_mem_access_bit_sizes_impl(nir_function_impl *impl,
  */
 bool
 brw_nir_lower_mem_access_bit_sizes(nir_shader *shader,
-                                   const struct gen_device_info *devinfo)
+                                   const struct intel_device_info *devinfo)
 {
    bool progress = false;
 

@@ -34,7 +34,7 @@ i915_drm_buffer_create(struct i915_winsys *iws,
       return NULL;
 
    buf->magic = 0xDEAD1337;
-   buf->flinked = FALSE;
+   buf->flinked = false;
    buf->flink = 0;
 
    buf->bo = drm_intel_bo_alloc(idws->gem_manager,
@@ -66,7 +66,7 @@ i915_drm_buffer_create_tiled(struct i915_winsys *iws,
       return NULL;
 
    buf->magic = 0xDEAD1337;
-   buf->flinked = FALSE;
+   buf->flinked = false;
    buf->flink = 0;
 
    buf->bo = drm_intel_bo_alloc_tiled(idws->gem_manager,
@@ -117,7 +117,7 @@ i915_drm_buffer_from_handle(struct i915_winsys *iws,
        buf->bo = drm_intel_bo_gem_create_from_prime(idws->gem_manager, fd, height * whandle->stride);
    }
 
-   buf->flinked = TRUE;
+   buf->flinked = true;
    buf->flink = whandle->handle;
 
    if (!buf->bo)
@@ -135,7 +135,7 @@ err:
    return NULL;
 }
 
-static boolean
+static bool
 i915_drm_buffer_get_handle(struct i915_winsys *iws,
                             struct i915_winsys_buffer *buffer,
                             struct winsys_handle *whandle,
@@ -146,8 +146,8 @@ i915_drm_buffer_get_handle(struct i915_winsys *iws,
    if (whandle->type == WINSYS_HANDLE_TYPE_SHARED) {
       if (!buf->flinked) {
          if (drm_intel_bo_flink(buf->bo, &buf->flink))
-            return FALSE;
-         buf->flinked = TRUE;
+            return false;
+         buf->flinked = true;
       }
 
       whandle->handle = buf->flink;
@@ -157,21 +157,21 @@ i915_drm_buffer_get_handle(struct i915_winsys *iws,
       int fd;
 
       if (drm_intel_bo_gem_export_to_prime(buf->bo, &fd))
-         return FALSE;
+         return false;
       whandle->handle = fd;
    } else {
       assert(!"unknown usage");
-      return FALSE;
+      return false;
    }
 
    whandle->stride = stride;
-   return TRUE;
+   return true;
 }
 
 static void *
 i915_drm_buffer_map(struct i915_winsys *iws,
                      struct i915_winsys_buffer *buffer,
-                     boolean write)
+                     bool write)
 {
    struct i915_drm_buffer *buf = i915_drm_buffer(buffer);
    drm_intel_bo *bo = intel_bo(buffer);
@@ -233,13 +233,13 @@ i915_drm_buffer_destroy(struct i915_winsys *iws,
    FREE(buffer);
 }
 
-static boolean
+static bool
 i915_drm_buffer_is_busy(struct i915_winsys *iws,
                         struct i915_winsys_buffer *buffer)
 {
    struct i915_drm_buffer* i915_buffer = i915_drm_buffer(buffer);
    if (!i915_buffer)
-      return FALSE;
+      return false;
    return drm_intel_bo_busy(i915_buffer->bo);
 }
 

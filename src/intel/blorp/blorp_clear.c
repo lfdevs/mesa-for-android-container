@@ -37,7 +37,7 @@
 #pragma pack(push, 1)
 struct brw_blorp_const_color_prog_key
 {
-   enum blorp_shader_type shader_type; /* Must be BLORP_SHADER_TYPE_CLEAR */
+   struct brw_blorp_base_key base;
    bool use_simd16_replicated_data;
    bool clear_rgb_as_red;
 };
@@ -52,7 +52,7 @@ blorp_params_get_clear_kernel(struct blorp_batch *batch,
    struct blorp_context *blorp = batch->blorp;
 
    const struct brw_blorp_const_color_prog_key blorp_key = {
-      .shader_type = BLORP_SHADER_TYPE_CLEAR,
+      .base = BRW_BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_CLEAR),
       .use_simd16_replicated_data = use_replicated_data,
       .clear_rgb_as_red = clear_rgb_as_red,
    };
@@ -65,7 +65,7 @@ blorp_params_get_clear_kernel(struct blorp_batch *batch,
 
    nir_builder b;
    blorp_nir_init_shader(&b, mem_ctx, MESA_SHADER_FRAGMENT,
-                         blorp_shader_type_to_name(blorp_key.shader_type));
+                         blorp_shader_type_to_name(blorp_key.base.shader_type));
 
    nir_variable *v_color =
       BLORP_CREATE_NIR_INPUT(b.shader, clear_color, glsl_vec4_type());
@@ -113,7 +113,7 @@ blorp_params_get_clear_kernel(struct blorp_batch *batch,
 
 #pragma pack(push, 1)
 struct layer_offset_vs_key {
-   enum blorp_shader_type shader_type;
+   struct brw_blorp_base_key base;
    unsigned num_inputs;
 };
 #pragma pack(pop)
@@ -131,7 +131,7 @@ blorp_params_get_layer_offset_vs(struct blorp_batch *batch,
 {
    struct blorp_context *blorp = batch->blorp;
    struct layer_offset_vs_key blorp_key = {
-      .shader_type = BLORP_SHADER_TYPE_LAYER_OFFSET_VS,
+      .base = BRW_BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_LAYER_OFFSET_VS),
    };
 
    if (params->wm_prog_data)
@@ -145,7 +145,7 @@ blorp_params_get_layer_offset_vs(struct blorp_batch *batch,
 
    nir_builder b;
    blorp_nir_init_shader(&b, mem_ctx, MESA_SHADER_VERTEX,
-                         blorp_shader_type_to_name(blorp_key.shader_type));
+                         blorp_shader_type_to_name(blorp_key.base.shader_type));
 
    const struct glsl_type *uvec4_type = glsl_vector_type(GLSL_TYPE_UINT, 4);
 
@@ -756,7 +756,7 @@ blorp_clear_depth_stencil(struct blorp_batch *batch,
 }
 
 bool
-blorp_can_hiz_clear_depth(const struct gen_device_info *devinfo,
+blorp_can_hiz_clear_depth(const struct intel_device_info *devinfo,
                           const struct isl_surf *surf,
                           enum isl_aux_usage aux_usage,
                           uint32_t level, uint32_t layer,
@@ -832,11 +832,12 @@ blorp_can_hiz_clear_depth(const struct gen_device_info *devinfo,
        * HIZ), we have to make sure that the x0 and y0 are at least 16x8
        * aligned in the context of the entire surface.
        */
-      uint32_t slice_x0, slice_y0;
+      uint32_t slice_x0, slice_y0, slice_z0, slice_a0;
       isl_surf_get_image_offset_el(surf, level,
                                    surf->dim == ISL_SURF_DIM_3D ? 0 : layer,
                                    surf->dim == ISL_SURF_DIM_3D ? layer: 0,
-                                   &slice_x0, &slice_y0);
+                                   &slice_x0, &slice_y0, &slice_z0, &slice_a0);
+      assert(slice_z0 == 0 && slice_a0 == 0);
       const bool max_x1_y1 =
          x1 == minify(surf->logical_level0_px.width, level) &&
          y1 == minify(surf->logical_level0_px.height, level);
@@ -1144,7 +1145,7 @@ blorp_nir_bit(nir_builder *b, nir_ssa_def *src, unsigned bit)
 #pragma pack(push, 1)
 struct blorp_mcs_partial_resolve_key
 {
-   enum blorp_shader_type shader_type;
+   struct brw_blorp_base_key base;
    bool indirect_clear_color;
    bool int_format;
    uint32_t num_samples;
@@ -1157,7 +1158,7 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_batch *batch,
 {
    struct blorp_context *blorp = batch->blorp;
    const struct blorp_mcs_partial_resolve_key blorp_key = {
-      .shader_type = BLORP_SHADER_TYPE_MCS_PARTIAL_RESOLVE,
+      .base = BRW_BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_MCS_PARTIAL_RESOLVE),
       .indirect_clear_color = params->dst.clear_color_addr.buffer != NULL,
       .int_format = isl_format_has_int_channel(params->dst.view.format),
       .num_samples = params->num_samples,
@@ -1171,7 +1172,7 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_batch *batch,
 
    nir_builder b;
    blorp_nir_init_shader(&b, mem_ctx, MESA_SHADER_FRAGMENT,
-                         blorp_shader_type_to_name(blorp_key.shader_type));
+                         blorp_shader_type_to_name(blorp_key.base.shader_type));
 
    nir_variable *v_color =
       BLORP_CREATE_NIR_INPUT(b.shader, clear_color, glsl_vec4_type());
@@ -1309,12 +1310,8 @@ blorp_ccs_ambiguate(struct blorp_batch *batch,
    }
 
    uint32_t offset_B, x_offset_el, y_offset_el;
-   isl_surf_get_image_offset_el(surf->aux_surf, level, layer, z,
-                                &x_offset_el, &y_offset_el);
-   isl_tiling_get_intratile_offset_el(surf->aux_surf->tiling, aux_fmtl->bpb,
-                                      surf->aux_surf->row_pitch_B,
-                                      x_offset_el, y_offset_el,
-                                      &offset_B, &x_offset_el, &y_offset_el);
+   isl_surf_get_image_offset_B_tile_el(surf->aux_surf, level, layer, z,
+                                       &offset_B, &x_offset_el, &y_offset_el);
    params.dst.addr.offset += offset_B;
 
    const uint32_t width_px =

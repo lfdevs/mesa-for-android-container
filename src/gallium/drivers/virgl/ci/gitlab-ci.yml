@@ -3,7 +3,6 @@
     - .test-gl
     - .virgl-rules
   variables:
-    LIBGL_ALWAYS_SOFTWARE: "true"
     GALLIUM_DRIVER: "virpipe"
 
 virgl-gles2-on-gl:
@@ -16,6 +15,7 @@ virgl-gles2-on-gl:
     LP_NUM_THREADS: 0
     DEQP_OPTIONS: "--deqp-log-images=disable"
     DEQP_EXPECTED_RENDERER: virgl
+    LIBGL_ALWAYS_SOFTWARE: "true"
   extends:
     - .deqp-test
     - .virgl-test
@@ -30,7 +30,6 @@ virgl-gles31-on-gl:
   parallel: 2
   variables:
     DEQP_VER: gles31
-    MESA_EXTENSION_OVERRIDE: "-GL_OES_tessellation_shader"
   extends: virgl-gles3-on-gl
 
 virgl-gl30-on-gl:
@@ -83,4 +82,11 @@ virgl-traces:
     PIGLIT_RESULTS: "virgl-replay"
     MESA_GLES_VERSION_OVERRIDE: "3.1"
     MESA_GLSL_VERSION_OVERRIDE: "310"
+    GALLIUM_DRIVER: "virgl"
+    CROSVM_TEST_SCRIPT: "/install/piglit/run.sh"
+    CROSVM_GALLIUM_DRIVER: "llvmpipe"
+  tags:
+    - kvm
+  script:
+    - install/crosvm-runner.sh
 

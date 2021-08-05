@@ -113,7 +113,7 @@ dri2_drm_config_is_compatible(struct dri2_egl_display *dri2_dpy,
 
    for (i = 0; i < dri2_dpy->gbm_dri->num_visuals; i++) {
       visual = &dri2_dpy->gbm_dri->visual_table[i];
-      if (visual->gbm_format == surface->format)
+      if (visual->gbm_format == surface->v0.format)
          break;
    }
 
@@ -173,8 +173,8 @@ dri2_drm_create_window_surface(_EGLDisplay *disp, _EGLConfig *conf,
 
    surf = gbm_dri_surface(surface);
    dri2_surf->gbm_surf = surf;
-   dri2_surf->base.Width =  surf->base.width;
-   dri2_surf->base.Height = surf->base.height;
+   dri2_surf->base.Width =  surf->base.v0.width;
+   dri2_surf->base.Height = surf->base.v0.height;
    surf->dri_private = dri2_surf;
 
    if (!dri2_create_drawable(dri2_dpy, config, dri2_surf, dri2_surf->gbm_surf))
@@ -244,21 +244,21 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
    if (dri2_surf->back == NULL)
       return -1;
    if (dri2_surf->back->bo == NULL) {
-      if (surf->base.modifiers)
+      if (surf->base.v0.modifiers)
          dri2_surf->back->bo = gbm_bo_create_with_modifiers(&dri2_dpy->gbm_dri->base,
-                                                            surf->base.width,
-                                                            surf->base.height,
-                                                            surf->base.format,
-                                                            surf->base.modifiers,
-                                                            surf->base.count);
+                                                            surf->base.v0.width,
+                                                            surf->base.v0.height,
+                                                            surf->base.v0.format,
+                                                            surf->base.v0.modifiers,
+                                                            surf->base.v0.count);
       else {
-         unsigned flags = surf->base.flags;
+         unsigned flags = surf->base.v0.flags;
          if (dri2_surf->base.ProtectedContent)
             flags |= GBM_BO_USE_PROTECTED;
          dri2_surf->back->bo = gbm_bo_create(&dri2_dpy->gbm_dri->base,
-                                             surf->base.width,
-                                             surf->base.height,
-                                             surf->base.format,
+                                             surf->base.v0.width,
+                                             surf->base.v0.height,
+                                             surf->base.v0.format,
                                              flags);
       }
 
@@ -283,8 +283,10 @@ get_swrast_front_bo(struct dri2_egl_surface *dri2_surf)
 
    if (dri2_surf->current->bo == NULL)
       dri2_surf->current->bo = gbm_bo_create(&dri2_dpy->gbm_dri->base,
-                                             surf->base.width, surf->base.height,
-                                             surf->base.format, surf->base.flags);
+                                             surf->base.v0.width,
+                                             surf->base.v0.height,
+                                             surf->base.v0.format,
+                                             surf->base.v0.flags);
    if (dri2_surf->current->bo == NULL)
       return -1;
 
@@ -545,7 +547,7 @@ swrast_put_image2(__DRIdrawable *driDrawable,
    if (gbm_dri_bo_map_dumb(bo) == NULL)
       return;
 
-   internal_stride = bo->base.stride;
+   internal_stride = bo->base.v0.stride;
 
    dst = bo->map + x_bytes + (y * internal_stride);
    src = data;
@@ -587,7 +589,7 @@ swrast_get_image(__DRIdrawable *driDrawable,
    x_bytes = x * (bpp >> 3);
    width_bytes = width * (bpp >> 3);
 
-   internal_stride = bo->base.stride;
+   internal_stride = bo->base.v0.stride;
    stride = width_bytes;
 
    if (gbm_dri_bo_map_dumb(bo) == NULL)
@@ -759,9 +761,9 @@ dri2_initialize_drm(_EGLDisplay *disp)
    dri2_dpy->gbm_dri->swrast_put_image2 = swrast_put_image2;
    dri2_dpy->gbm_dri->swrast_get_image = swrast_get_image;
 
-   dri2_dpy->gbm_dri->base.surface_lock_front_buffer = lock_front_buffer;
-   dri2_dpy->gbm_dri->base.surface_release_buffer = release_buffer;
-   dri2_dpy->gbm_dri->base.surface_has_free_buffers = has_free_buffers;
+   dri2_dpy->gbm_dri->base.v0.surface_lock_front_buffer = lock_front_buffer;
+   dri2_dpy->gbm_dri->base.v0.surface_release_buffer = release_buffer;
+   dri2_dpy->gbm_dri->base.v0.surface_has_free_buffers = has_free_buffers;
 
    if (!dri2_setup_extensions(disp)) {
       err = "DRI2: failed to find required DRI extensions";

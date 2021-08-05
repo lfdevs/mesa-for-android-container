@@ -31,6 +31,10 @@
 #include "util/u_math.h"
 #include "util/macros.h"
 
+
+const VkAllocationCallbacks *
+vk_default_allocator(void);
+
 static inline void *
 vk_alloc(const VkAllocationCallbacks *alloc,
          size_t size, size_t align,

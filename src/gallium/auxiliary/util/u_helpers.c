@@ -151,7 +151,7 @@ void util_set_shader_buffers_mask(struct pipe_shader_buffer *dst,
 bool
 util_upload_index_buffer(struct pipe_context *pipe,
                          const struct pipe_draw_info *info,
-                         const struct pipe_draw_start_count *draw,
+                         const struct pipe_draw_start_count_bias *draw,
                          struct pipe_resource **out_buffer,
                          unsigned *out_offset, unsigned alignment)
 {
@@ -216,6 +216,33 @@ util_end_pipestat_query(struct pipe_context *ctx, struct pipe_query *q,
            stats.hs_invocations,
            stats.ds_invocations,
            stats.cs_invocations);
+}
+
+/* This is a helper for profiling. Don't remove. */
+struct pipe_query *
+util_begin_time_query(struct pipe_context *ctx)
+{
+   struct pipe_query *q =
+      ctx->create_query(ctx, PIPE_QUERY_TIME_ELAPSED, 0);
+   if (!q)
+      return NULL;
+
+   ctx->begin_query(ctx, q);
+   return q;
+}
+
+/* This is a helper for profiling. Don't remove. */
+void
+util_end_time_query(struct pipe_context *ctx, struct pipe_query *q, FILE *f,
+                    const char *name)
+{
+   union pipe_query_result result;
+
+   ctx->end_query(ctx, q);
+   ctx->get_query_result(ctx, q, true, &result);
+   ctx->destroy_query(ctx, q);
+
+   fprintf(f, "Time elapsed: %s - %"PRIu64".%u us\n", name, result.u64 / 1000, (unsigned)(result.u64 % 1000) / 100);
 }
 
 /* This is a helper for hardware bring-up. Don't remove. */
@@ -346,4 +373,42 @@ util_throttle_memory_usage(struct pipe_context *pipe,
    }
 
    t->ring[t->flush_index].mem_usage += memory_size;
+}
+
+bool
+util_lower_clearsize_to_dword(const void *clearValue, int *clearValueSize, uint32_t *clamped)
+{
+   /* Reduce a large clear value size if possible. */
+   if (*clearValueSize > 4) {
+      bool clear_dword_duplicated = true;
+      const uint32_t *clear_value = clearValue;
+
+      /* See if we can lower large fills to dword fills. */
+      for (unsigned i = 1; i < *clearValueSize / 4; i++) {
+         if (clear_value[0] != clear_value[i]) {
+            clear_dword_duplicated = false;
+            break;
+         }
+      }
+      if (clear_dword_duplicated) {
+         *clamped = *clear_value;
+         *clearValueSize = 4;
+      }
+      return clear_dword_duplicated;
+   }
+
+   /* Expand a small clear value size. */
+   if (*clearValueSize <= 2) {
+      if (*clearValueSize == 1) {
+         *clamped = *(uint8_t *)clearValue;
+         *clamped |=
+            (*clamped << 8) | (*clamped << 16) | (*clamped << 24);
+      } else {
+         *clamped = *(uint16_t *)clearValue;
+         *clamped |= *clamped << 16;
+      }
+      *clearValueSize = 4;
+      return true;
+   }
+   return false;
 }

@@ -38,10 +38,19 @@
 #define VK_STRUCTURE_TYPE_WSI_SURFACE_SUPPORTED_COUNTERS_MESA (VkStructureType)1000001005
 #define VK_STRUCTURE_TYPE_WSI_MEMORY_SIGNAL_SUBMIT_INFO_MESA (VkStructureType)1000001006
 
+/* This is always chained to VkImageCreateInfo when a wsi image is created.
+ * It indicates that the image can be transitioned to/from
+ * VK_IMAGE_LAYOUT_PRESENT_SRC_KHR.
+ */
 struct wsi_image_create_info {
     VkStructureType sType;
     const void *pNext;
     bool scanout;
+
+    /* If set, the buffer is the prime blit destination and the image is the
+     * source.
+     */
+    VkBuffer prime_blit_buffer;
 };
 
 struct wsi_memory_allocate_info {
@@ -149,6 +158,12 @@ struct wsi_device {
    void (*set_memory_ownership)(VkDevice device,
                                 VkDeviceMemory memory,
                                 VkBool32 ownership);
+
+   /*
+    * If this is set, the WSI device will call it to let the driver backend
+    * decide if it can present images directly on the given device fd.
+    */
+   bool (*can_present_on_device)(VkPhysicalDevice pdevice, int fd);
 
 #define WSI_CB(cb) PFN_vk##cb cb
    WSI_CB(AllocateMemory);

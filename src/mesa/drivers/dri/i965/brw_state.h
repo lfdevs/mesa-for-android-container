@@ -415,7 +415,7 @@ void gfx11_init_atoms(struct brw_context *brw);
 /* TC=LLC/eLLC, LeCC=PTE, LRUM=3, L3CC=WB */
 #define ICL_MOCS_PTE (1 << 1)
 
-uint32_t brw_get_bo_mocs(const struct gen_device_info *devinfo,
+uint32_t brw_get_bo_mocs(const struct intel_device_info *devinfo,
                          struct brw_bo *bo);
 
 #ifdef __cplusplus

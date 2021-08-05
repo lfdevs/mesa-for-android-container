@@ -101,6 +101,9 @@ void ac_choose_spi_color_formats(unsigned format, unsigned swap, unsigned ntype,
                                  bool is_depth, bool use_rbplus,
                                  struct ac_spi_color_formats *formats);
 
+void ac_compute_late_alloc(const struct radeon_info *info, bool ngg, bool ngg_culling,
+                           bool uses_scratch, unsigned *late_alloc_wave64, unsigned *cu_mask);
+
 #ifdef __cplusplus
 }
 #endif

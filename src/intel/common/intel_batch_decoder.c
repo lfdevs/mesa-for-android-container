@@ -30,7 +30,7 @@
 
 void
 intel_batch_decode_ctx_init(struct intel_batch_decode_ctx *ctx,
-                            const struct gen_device_info *devinfo,
+                            const struct intel_device_info *devinfo,
                             FILE *fp, enum intel_batch_decode_flags flags,
                             const char *xml_path,
                             struct intel_batch_decode_bo (*get_bo)(void *,
@@ -65,7 +65,7 @@ intel_batch_decode_ctx_finish(struct intel_batch_decode_ctx *ctx)
 
 #define CSI "\e["
 #define RED_COLOR    CSI "31m"
-#define BLUE_HEADER  CSI "0;44m"
+#define BLUE_HEADER  CSI "0;44m" CSI "1;37m"
 #define GREEN_HEADER CSI "1;42m"
 #define NORMAL       CSI "0m"
 
@@ -611,10 +611,10 @@ decode_single_ksp(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
 }
 
 static void
-decode_ps_kernels(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
+decode_ps_kern(struct intel_batch_decode_ctx *ctx,
+               struct intel_group *inst, const uint32_t *p)
 {
-   struct intel_group *inst = intel_ctx_find_instruction(ctx, p);
-
+   bool single_ksp = ctx->devinfo.ver == 4;
    uint64_t ksp[3] = {0, 0, 0};
    bool enabled[3] = {false, false, false};
 
@@ -633,6 +633,9 @@ decode_ps_kernels(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
          enabled[2] = strcmp(iter.value, "true") == 0;
       }
    }
+
+   if (single_ksp)
+      ksp[1] = ksp[2] = ksp[0];
 
    /* Reorder KSPs to be [8, 16, 32] instead of the hardware order. */
    if (enabled[0] + enabled[1] + enabled[2] == 1) {
@@ -658,6 +661,14 @@ decode_ps_kernels(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
 
    if (enabled[0] || enabled[1] || enabled[2])
       fprintf(ctx->fp, "\n");
+}
+
+static void
+decode_ps_kernels(struct intel_batch_decode_ctx *ctx,
+                  const uint32_t *p)
+{
+   struct intel_group *inst = intel_ctx_find_instruction(ctx, p);
+   decode_ps_kern(ctx, inst, p);
 }
 
 static void
@@ -751,7 +762,7 @@ decode_3dstate_constant(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
 }
 
 static void
-decode_gfx6_3dstate_binding_table_pointers(struct intel_batch_decode_ctx *ctx,
+decode_gfx4_3dstate_binding_table_pointers(struct intel_batch_decode_ctx *ctx,
                                            const uint32_t *p)
 {
    fprintf(ctx->fp, "VS Binding Table:\n");
@@ -760,8 +771,17 @@ decode_gfx6_3dstate_binding_table_pointers(struct intel_batch_decode_ctx *ctx,
    fprintf(ctx->fp, "GS Binding Table:\n");
    dump_binding_table(ctx, p[2], -1);
 
-   fprintf(ctx->fp, "PS Binding Table:\n");
-   dump_binding_table(ctx, p[3], -1);
+   if (ctx->devinfo.ver < 6) {
+      fprintf(ctx->fp, "CLIP Binding Table:\n");
+      dump_binding_table(ctx, p[3], -1);
+      fprintf(ctx->fp, "SF Binding Table:\n");
+      dump_binding_table(ctx, p[4], -1);
+      fprintf(ctx->fp, "PS Binding Table:\n");
+      dump_binding_table(ctx, p[5], -1);
+   } else {
+      fprintf(ctx->fp, "PS Binding Table:\n");
+      dump_binding_table(ctx, p[3], -1);
+   }
 }
 
 static void
@@ -809,7 +829,7 @@ decode_dynamic_state_pointers(struct intel_batch_decode_ctx *ctx,
    struct intel_field_iterator iter;
    intel_field_iterator_init(&iter, inst, p, 0, false);
    while (intel_field_iterator_next(&iter)) {
-      if (str_ends_with(iter.name, "Pointer")) {
+      if (str_ends_with(iter.name, "Pointer") || !strncmp(iter.name, "Pointer", 7)) {
          state_offset = iter.raw_value;
          break;
       }
@@ -881,6 +901,13 @@ decode_3dstate_cc_state_pointers(struct intel_batch_decode_ctx *ctx,
 }
 
 static void
+decode_3dstate_ds_state_pointers(struct intel_batch_decode_ctx *ctx,
+                                 const uint32_t *p)
+{
+   decode_dynamic_state_pointers(ctx, "DEPTH_STENCIL_STATE", p, 1);
+}
+
+static void
 decode_3dstate_scissor_state_pointers(struct intel_batch_decode_ctx *ctx,
                                       const uint32_t *p)
 {
@@ -899,6 +926,8 @@ handle_gt_mode(struct intel_batch_decode_ctx *ctx,
                uint32_t reg_addr, uint32_t val)
 {
    struct intel_group *reg = intel_spec_find_register(ctx->spec, reg_addr);
+
+   assert(intel_group_get_length(reg, &val) == 1);
 
    struct intel_field_iterator iter;
    intel_field_iterator_init(&iter, reg, &val, 0, false);
@@ -970,6 +999,26 @@ decode_vs_state(struct intel_batch_decode_ctx *ctx, uint32_t offset)
    ctx_print_group(ctx, strct, offset, bind_bo.map);
 }
 
+static void
+decode_gs_state(struct intel_batch_decode_ctx *ctx, uint32_t offset)
+{
+   struct intel_group *strct =
+      intel_spec_find_struct(ctx->spec, "GS_STATE");
+   if (strct == NULL) {
+      fprintf(ctx->fp, "did not find GS_STATE info\n");
+      return;
+   }
+
+   struct intel_batch_decode_bo bind_bo =
+      ctx_get_bo(ctx, true, offset);
+
+   if (bind_bo.map == NULL) {
+      fprintf(ctx->fp, " gs state unavailable\n");
+      return;
+   }
+
+   ctx_print_group(ctx, strct, offset, bind_bo.map);
+}
 
 static void
 decode_clip_state(struct intel_batch_decode_ctx *ctx, uint32_t offset)
@@ -1063,6 +1112,8 @@ decode_wm_state(struct intel_batch_decode_ctx *ctx, uint32_t offset)
    }
 
    ctx_print_group(ctx, strct, offset, bind_bo.map);
+
+   decode_ps_kern(ctx, strct, bind_bo.map);
 }
 
 static void
@@ -1105,6 +1156,10 @@ decode_pipelined_pointers(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
 {
    fprintf(ctx->fp, "VS State Table:\n");
    decode_vs_state(ctx, p[1]);
+   if (p[2] & 1) {
+      fprintf(ctx->fp, "GS State Table:\n");
+      decode_gs_state(ctx, p[2] & ~1);
+   }
    fprintf(ctx->fp, "Clip State Table:\n");
    decode_clip_state(ctx, p[3] & ~1);
    fprintf(ctx->fp, "SF State Table:\n");
@@ -1113,6 +1168,12 @@ decode_pipelined_pointers(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
    decode_wm_state(ctx, p[5]);
    fprintf(ctx->fp, "CC State Table:\n");
    decode_cc_state(ctx, p[6]);
+}
+
+static void
+decode_cps_pointers(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
+{
+   decode_dynamic_state_pointers(ctx, "CPS_STATE", p, 1);
 }
 
 struct custom_decoder {
@@ -1138,7 +1199,7 @@ struct custom_decoder {
    { "3DSTATE_CONSTANT_DS", decode_3dstate_constant },
    { "3DSTATE_CONSTANT_ALL", decode_3dstate_constant_all },
 
-   { "3DSTATE_BINDING_TABLE_POINTERS", decode_gfx6_3dstate_binding_table_pointers },
+   { "3DSTATE_BINDING_TABLE_POINTERS", decode_gfx4_3dstate_binding_table_pointers },
    { "3DSTATE_BINDING_TABLE_POINTERS_VS", decode_3dstate_binding_table_pointers },
    { "3DSTATE_BINDING_TABLE_POINTERS_HS", decode_3dstate_binding_table_pointers },
    { "3DSTATE_BINDING_TABLE_POINTERS_DS", decode_3dstate_binding_table_pointers },
@@ -1156,10 +1217,12 @@ struct custom_decoder {
    { "3DSTATE_VIEWPORT_STATE_POINTERS_SF_CLIP", decode_3dstate_viewport_state_pointers_sf_clip },
    { "3DSTATE_BLEND_STATE_POINTERS", decode_3dstate_blend_state_pointers },
    { "3DSTATE_CC_STATE_POINTERS", decode_3dstate_cc_state_pointers },
+   { "3DSTATE_DEPTH_STENCIL_STATE_POINTERS", decode_3dstate_ds_state_pointers },
    { "3DSTATE_SCISSOR_STATE_POINTERS", decode_3dstate_scissor_state_pointers },
    { "3DSTATE_SLICE_TABLE_STATE_POINTERS", decode_3dstate_slice_table_state_pointers },
    { "MI_LOAD_REGISTER_IMM", decode_load_register_imm },
-   { "3DSTATE_PIPELINED_POINTERS", decode_pipelined_pointers }
+   { "3DSTATE_PIPELINED_POINTERS", decode_pipelined_pointers },
+   { "3DSTATE_CPS_POINTERS", decode_cps_pointers },
 };
 
 void

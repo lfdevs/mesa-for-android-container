@@ -158,13 +158,17 @@ GV100LegalizeSSA::handlePREEX2(Instruction *i)
 bool
 GV100LegalizeSSA::handleQUADON(Instruction *i)
 {
-   handleSHFL(i); // Inserts OP_WARPSYNC
+   bld.mkBMov(i->getDef(0), bld.mkTSVal(TS_MACTIVE));
+   Instruction *b = bld.mkBMov(bld.mkTSVal(TS_PQUAD_MACTIVE), i->getDef(0));
+   b->fixed = 1;
    return true;
 }
 
 bool
 GV100LegalizeSSA::handleQUADPOP(Instruction *i)
 {
+   Instruction *b = bld.mkBMov(bld.mkTSVal(TS_MACTIVE), i->getSrc(0));
+   b->fixed = 1;
    return true;
 }
 

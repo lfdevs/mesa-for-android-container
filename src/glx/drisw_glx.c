@@ -748,6 +748,7 @@ driswBindExtensions(struct drisw_screen *psc, const __DRIextension **extensions)
    if (psc->swrast->base.version >= 3) {
       __glXEnableDirectExtension(&psc->base, "GLX_ARB_create_context");
       __glXEnableDirectExtension(&psc->base, "GLX_ARB_create_context_profile");
+      __glXEnableDirectExtension(&psc->base, "GLX_EXT_no_config_context");
 
       /* DRISW version >= 2 implies support for OpenGL ES.
        */
@@ -783,6 +784,10 @@ driswBindExtensions(struct drisw_screen *psc, const __DRIextension **extensions)
 	  __glXEnableDirectExtension(&psc->base,
 				     "GLX_ARB_context_flush_control");
       }
+
+      if (strcmp(extensions[i]->name, __DRI2_NO_ERROR) == 0)
+         __glXEnableDirectExtension(&psc->base,
+                                    "GLX_ARB_create_context_no_error");
    }
 }
 

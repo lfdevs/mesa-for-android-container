@@ -161,7 +161,10 @@ nv50_create_texture_view(struct pipe_context *pipe,
       tic[2] |= G80_TIC_2_TEXTURE_TYPE_ONE_D;
       break;
    case PIPE_TEXTURE_2D:
-      tic[2] |= G80_TIC_2_TEXTURE_TYPE_TWO_D;
+      if (mt->ms_x)
+         tic[2] |= G80_TIC_2_TEXTURE_TYPE_TWO_D_NO_MIPMAP;
+      else
+         tic[2] |= G80_TIC_2_TEXTURE_TYPE_TWO_D;
       break;
    case PIPE_TEXTURE_RECT:
       tic[2] |= G80_TIC_2_TEXTURE_TYPE_TWO_D_NO_MIPMAP;

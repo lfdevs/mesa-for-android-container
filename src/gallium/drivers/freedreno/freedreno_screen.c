@@ -45,6 +45,7 @@
 #include <sys/sysinfo.h>
 
 #include "freedreno_fence.h"
+#include "freedreno_perfetto.h"
 #include "freedreno_query.h"
 #include "freedreno_resource.h"
 #include "freedreno_screen.h"
@@ -106,9 +107,7 @@ bool fd_binning_enabled = true;
 static const char *
 fd_screen_get_name(struct pipe_screen *pscreen)
 {
-   static char buffer[128];
-   snprintf(buffer, sizeof(buffer), "FD%03d", fd_screen(pscreen)->device_id);
-   return buffer;
+   return fd_dev_name(fd_screen(pscreen)->gpu_id);
 }
 
 static const char *
@@ -147,8 +146,10 @@ fd_screen_destroy(struct pipe_screen *pscreen)
    if (screen->pipe)
       fd_pipe_del(screen->pipe);
 
-   if (screen->dev)
+   if (screen->dev) {
+      fd_device_purge(screen->dev);
       fd_device_del(screen->dev);
+   }
 
    if (screen->ro)
       screen->ro->destroy(screen->ro);
@@ -160,12 +161,12 @@ fd_screen_destroy(struct pipe_screen *pscreen)
 
    simple_mtx_destroy(&screen->lock);
 
+   util_idalloc_mt_fini(&screen->buffer_ids);
+
    u_transfer_helper_destroy(pscreen->transfer_helper);
 
    if (screen->compiler)
       ir3_screen_fini(pscreen);
-
-   ralloc_free(screen->live_batches);
 
    free(screen->perfcntr_queries);
    free(screen);
@@ -203,6 +204,9 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_GLSL_TESS_LEVELS_AS_INPUTS:
    case PIPE_CAP_NIR_COMPACT_ARRAYS:
       return 1;
+
+   case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
+      return is_a6xx(screen);
 
    case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
@@ -313,7 +317,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return is_a4xx(screen);
 
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
-      return is_a2xx(screen) ? 64 : 32;
+      return 64;
 
    case PIPE_CAP_GLSL_FEATURE_LEVEL:
    case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
@@ -613,15 +617,6 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen,
       return 1;
    case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
    case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
-      /* Technically this should be the same as for TEMP/CONST, since
-       * everything is just normal registers.  This is just temporary
-       * hack until load_input/store_output handle arrays in a similar
-       * way as load_var/store_var..
-       *
-       * For tessellation stages, inputs are loaded using ldlw or ldg, both
-       * of which support indirection.
-       */
-      return shader == PIPE_SHADER_TESS_CTRL || shader == PIPE_SHADER_TESS_EVAL;
    case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
    case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
       /* a2xx compiler doesn't handle indirect: */
@@ -644,9 +639,9 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_INT64_ATOMICS:
    case PIPE_SHADER_CAP_FP16_DERIVATIVES:
    case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
-   case PIPE_SHADER_CAP_INT16:
    case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
       return 0;
+   case PIPE_SHADER_CAP_INT16:
    case PIPE_SHADER_CAP_FP16:
       return (
          (is_a5xx(screen) || is_a6xx(screen)) &&
@@ -808,15 +803,19 @@ fd_screen_bo_get_handle(struct pipe_screen *pscreen, struct fd_bo *bo,
                         struct renderonly_scanout *scanout, unsigned stride,
                         struct winsys_handle *whandle)
 {
+   struct fd_screen *screen = fd_screen(pscreen);
+
    whandle->stride = stride;
 
    if (whandle->type == WINSYS_HANDLE_TYPE_SHARED) {
       return fd_bo_get_name(bo, &whandle->handle) == 0;
    } else if (whandle->type == WINSYS_HANDLE_TYPE_KMS) {
-      if (renderonly_get_handle(scanout, whandle))
+      if (screen->ro) {
+         return renderonly_get_handle(scanout, whandle);
+      } else {
+         whandle->handle = fd_bo_handle(bo);
          return true;
-      whandle->handle = fd_bo_handle(bo);
-      return true;
+      }
    } else if (whandle->type == WINSYS_HANDLE_TYPE_FD) {
       whandle->handle = fd_bo_dmabuf(bo);
       return true;
@@ -938,6 +937,10 @@ fd_screen_create(struct fd_device *dev, struct renderonly *ro)
    if (!screen)
       return NULL;
 
+#ifdef HAVE_PERFETTO
+   fd_perfetto_init();
+#endif
+
    pscreen = &screen->base;
 
    screen->dev = dev;
@@ -1019,6 +1022,12 @@ fd_screen_create(struct fd_device *dev, struct renderonly *ro)
    DBG(" Chip-id:         0x%08x", screen->chip_id);
    DBG(" GMEM size:       0x%08x", screen->gmemsize_bytes);
 
+   const struct fd_dev_info *info = fd_dev_info(screen->gpu_id);
+   if (!info) {
+      mesa_loge("unsupported GPU: a%03d", screen->gpu_id);
+      goto fail;
+   }
+
    /* explicitly checking for GPU revisions that are known to work.  This
     * may be overly conservative for a3xx, where spoofing the gpu_id with
     * the blob driver seems to generate identical cmdstream dumps.  But
@@ -1030,33 +1039,20 @@ fd_screen_create(struct fd_device *dev, struct renderonly *ro)
     * of the cases below and see what happens.  And if it works, please
     * send a patch ;-)
     */
-   switch (screen->gpu_id) {
-   case 200:
-   case 201:
-   case 205:
-   case 220:
+   switch (screen->gpu_id / 100) {
+   case 2:
       fd2_screen_init(pscreen);
       break;
-   case 305:
-   case 307:
-   case 320:
-   case 330:
+   case 3:
       fd3_screen_init(pscreen);
       break;
-   case 405:
-   case 420:
-   case 430:
+   case 4:
       fd4_screen_init(pscreen);
       break;
-   case 510:
-   case 530:
-   case 540:
+   case 5:
       fd5_screen_init(pscreen);
       break;
-   case 618:
-   case 630:
-   case 640:
-   case 650:
+   case 6:
       fd6_screen_init(pscreen);
       break;
    default:
@@ -1064,7 +1060,13 @@ fd_screen_create(struct fd_device *dev, struct renderonly *ro)
       goto fail;
    }
 
-   freedreno_dev_info_init(&screen->info, screen->gpu_id);
+   screen->info = info;
+
+   if (is_a6xx(screen)) {
+      screen->ccu_offset_bypass = screen->info->num_ccu * A6XX_CCU_DEPTH_SIZE;
+      screen->ccu_offset_gmem = (screen->gmemsize_bytes -
+         screen->info->num_ccu * A6XX_CCU_GMEM_COLOR_SIZE);
+   }
 
    if (FD_DBG(PERFC)) {
       screen->perfcntr_groups =
@@ -1078,12 +1080,11 @@ fd_screen_create(struct fd_device *dev, struct renderonly *ro)
    if (fd_device_version(dev) >= FD_VERSION_UNLIMITED_CMDS)
       screen->reorder = !FD_DBG(INORDER);
 
-   if (BATCH_DEBUG)
-      screen->live_batches = _mesa_pointer_set_create(NULL);
-
    fd_bc_init(&screen->batch_cache);
 
    list_inithead(&screen->context_list);
+
+   util_idalloc_mt_init_tc(&screen->buffer_ids);
 
    (void)simple_mtx_init(&screen->lock, mtx_plain);
 

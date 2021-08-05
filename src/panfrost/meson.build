@@ -32,6 +32,7 @@ subdir('util')
 subdir('midgard')
 subdir('bifrost')
 subdir('lib')
+subdir('perf')
 
 files_bifrost = files(
   'bifrost/cmdline.c',
@@ -65,3 +66,11 @@ bifrost_compiler = executable(
   ],
   build_by_default : with_tools.contains('panfrost')
 )
+
+if with_panfrost_vk
+  subdir('vulkan')
+endif
+
+if with_perfetto and (with_datasources.contains('panfrost') or with_datasources.contains('auto'))
+  subdir('ds')
+endif

@@ -302,10 +302,10 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
    }
 
    /* convert border color from float to ubyte */
-   CLAMPED_FLOAT_TO_UBYTE(border[0], sampler->Attrib.BorderColor.f[0]);
-   CLAMPED_FLOAT_TO_UBYTE(border[1], sampler->Attrib.BorderColor.f[1]);
-   CLAMPED_FLOAT_TO_UBYTE(border[2], sampler->Attrib.BorderColor.f[2]);
-   CLAMPED_FLOAT_TO_UBYTE(border[3], sampler->Attrib.BorderColor.f[3]);
+   CLAMPED_FLOAT_TO_UBYTE(border[0], sampler->Attrib.state.border_color.f[0]);
+   CLAMPED_FLOAT_TO_UBYTE(border[1], sampler->Attrib.state.border_color.f[1]);
+   CLAMPED_FLOAT_TO_UBYTE(border[2], sampler->Attrib.state.border_color.f[2]);
+   CLAMPED_FLOAT_TO_UBYTE(border[3], sampler->Attrib.state.border_color.f[3]);
 
    state[I830_TEXREG_TM0S4] = PACK_COLOR_8888(border[3],
 					      border[0],

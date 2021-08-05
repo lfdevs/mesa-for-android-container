@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "util/os_file.h"
+#include "util/sparse_array.h"
 #include "util/u_process.h"
 #define VIRGL_RENDERER_UNSTABLE_APIS
 #include "virtio-gpu/virglrenderer_hw.h"
@@ -28,21 +29,20 @@
 
 struct vtest;
 
+struct vtest_shmem {
+   struct vn_renderer_shmem base;
+};
+
 struct vtest_bo {
    struct vn_renderer_bo base;
-   struct vtest *vtest;
 
    uint32_t blob_flags;
-   VkDeviceSize size;
    /* might be closed after mmap */
    int res_fd;
-
-   void *res_ptr;
 };
 
 struct vtest_sync {
    struct vn_renderer_sync base;
-   struct vtest *vtest;
 };
 
 struct vtest {
@@ -61,6 +61,9 @@ struct vtest {
       uint32_t version;
       struct virgl_renderer_capset_venus data;
    } capset;
+
+   struct util_sparse_array shmem_array;
+   struct util_sparse_array bo_array;
 };
 
 static int
@@ -571,10 +574,12 @@ vtest_vcmd_submit_cmd2(struct vtest *vtest,
 }
 
 static VkResult
-vtest_sync_write(struct vn_renderer_sync *_sync, uint64_t val)
+vtest_sync_write(struct vn_renderer *renderer,
+                 struct vn_renderer_sync *_sync,
+                 uint64_t val)
 {
+   struct vtest *vtest = (struct vtest *)renderer;
    struct vtest_sync *sync = (struct vtest_sync *)_sync;
-   struct vtest *vtest = sync->vtest;
 
    mtx_lock(&vtest->sock_mutex);
    vtest_vcmd_sync_write(vtest, sync->base.sync_id, val);
@@ -584,10 +589,12 @@ vtest_sync_write(struct vn_renderer_sync *_sync, uint64_t val)
 }
 
 static VkResult
-vtest_sync_read(struct vn_renderer_sync *_sync, uint64_t *val)
+vtest_sync_read(struct vn_renderer *renderer,
+                struct vn_renderer_sync *_sync,
+                uint64_t *val)
 {
+   struct vtest *vtest = (struct vtest *)renderer;
    struct vtest_sync *sync = (struct vtest_sync *)_sync;
-   struct vtest *vtest = sync->vtest;
 
    mtx_lock(&vtest->sock_mutex);
    *val = vtest_vcmd_sync_read(vtest, sync->base.sync_id);
@@ -597,76 +604,51 @@ vtest_sync_read(struct vn_renderer_sync *_sync, uint64_t *val)
 }
 
 static VkResult
-vtest_sync_reset(struct vn_renderer_sync *sync, uint64_t initial_val)
+vtest_sync_reset(struct vn_renderer *renderer,
+                 struct vn_renderer_sync *sync,
+                 uint64_t initial_val)
 {
    /* same as write */
-   return vtest_sync_write(sync, initial_val);
+   return vtest_sync_write(renderer, sync, initial_val);
 }
 
 static void
-vtest_sync_release(struct vn_renderer_sync *_sync)
+vtest_sync_destroy(struct vn_renderer *renderer,
+                   struct vn_renderer_sync *_sync)
 {
+   struct vtest *vtest = (struct vtest *)renderer;
    struct vtest_sync *sync = (struct vtest_sync *)_sync;
-   struct vtest *vtest = sync->vtest;
 
    mtx_lock(&vtest->sock_mutex);
    vtest_vcmd_sync_unref(vtest, sync->base.sync_id);
    mtx_unlock(&vtest->sock_mutex);
 
-   sync->base.sync_id = 0;
-}
-
-static VkResult
-vtest_sync_init(struct vn_renderer_sync *_sync,
-                uint64_t initial_val,
-                uint32_t flags)
-{
-   struct vtest_sync *sync = (struct vtest_sync *)_sync;
-   struct vtest *vtest = sync->vtest;
-
-   mtx_lock(&vtest->sock_mutex);
-   sync->base.sync_id = vtest_vcmd_sync_create(vtest, initial_val);
-   mtx_unlock(&vtest->sock_mutex);
-
-   return VK_SUCCESS;
-}
-
-static void
-vtest_sync_destroy(struct vn_renderer_sync *_sync)
-{
-   struct vtest_sync *sync = (struct vtest_sync *)_sync;
-
-   if (sync->base.sync_id)
-      vtest_sync_release(&sync->base);
-
    free(sync);
 }
 
-static struct vn_renderer_sync *
-vtest_sync_create(struct vn_renderer *renderer)
+static VkResult
+vtest_sync_create(struct vn_renderer *renderer,
+                  uint64_t initial_val,
+                  uint32_t flags,
+                  struct vn_renderer_sync **out_sync)
 {
    struct vtest *vtest = (struct vtest *)renderer;
 
    struct vtest_sync *sync = calloc(1, sizeof(*sync));
    if (!sync)
-      return NULL;
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-   sync->vtest = vtest;
+   mtx_lock(&vtest->sock_mutex);
+   sync->base.sync_id = vtest_vcmd_sync_create(vtest, initial_val);
+   mtx_unlock(&vtest->sock_mutex);
 
-   sync->base.ops.destroy = vtest_sync_destroy;
-   sync->base.ops.init = vtest_sync_init;
-   sync->base.ops.init_syncobj = NULL;
-   sync->base.ops.release = vtest_sync_release;
-   sync->base.ops.export_syncobj = NULL;
-   sync->base.ops.reset = vtest_sync_reset;
-   sync->base.ops.read = vtest_sync_read;
-   sync->base.ops.write = vtest_sync_write;
-
-   return &sync->base;
+   *out_sync = &sync->base;
+   return VK_SUCCESS;
 }
 
 static void
-vtest_bo_invalidate(struct vn_renderer_bo *bo,
+vtest_bo_invalidate(struct vn_renderer *renderer,
+                    struct vn_renderer_bo *bo,
                     VkDeviceSize offset,
                     VkDeviceSize size)
 {
@@ -674,7 +656,8 @@ vtest_bo_invalidate(struct vn_renderer_bo *bo,
 }
 
 static void
-vtest_bo_flush(struct vn_renderer_bo *bo,
+vtest_bo_flush(struct vn_renderer *renderer,
+               struct vn_renderer_bo *bo,
                VkDeviceSize offset,
                VkDeviceSize size)
 {
@@ -682,28 +665,27 @@ vtest_bo_flush(struct vn_renderer_bo *bo,
 }
 
 static void *
-vtest_bo_map(struct vn_renderer_bo *_bo)
+vtest_bo_map(struct vn_renderer *renderer, struct vn_renderer_bo *_bo)
 {
+   struct vtest *vtest = (struct vtest *)renderer;
    struct vtest_bo *bo = (struct vtest_bo *)_bo;
-   struct vtest *vtest = bo->vtest;
    const bool mappable = bo->blob_flags & VCMD_BLOB_FLAG_MAPPABLE;
    const bool shareable = bo->blob_flags & VCMD_BLOB_FLAG_SHAREABLE;
 
    /* not thread-safe but is fine */
-   if (!bo->res_ptr && mappable) {
-      /* We wrongly assume that mmap(dmabuf) and vkMapMemory(VkDeviceMemory)
+   if (!bo->base.mmap_ptr && mappable) {
+      /* We wrongly assume that mmap(dma_buf) and vkMapMemory(VkDeviceMemory)
        * are equivalent when the blob type is VCMD_BLOB_TYPE_HOST3D.  While we
        * check for VCMD_PARAM_HOST_COHERENT_DMABUF_BLOB, we know vtest can
        * lie.
        */
-      void *ptr = mmap(NULL, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
-                       bo->res_fd, 0);
+      void *ptr = mmap(NULL, bo->base.mmap_size, PROT_READ | PROT_WRITE,
+                       MAP_SHARED, bo->res_fd, 0);
       if (ptr == MAP_FAILED) {
-         vn_log(vtest->instance,
-                "failed to mmap %d of size %" PRIu64 " rw: %s", bo->res_fd,
-                bo->size, strerror(errno));
+         vn_log(vtest->instance, "failed to mmap %d of size %zu rw: %s",
+                bo->res_fd, bo->base.mmap_size, strerror(errno));
       } else {
-         bo->res_ptr = ptr;
+         bo->base.mmap_ptr = ptr;
          /* we don't need the fd anymore */
          if (!shareable) {
             close(bo->res_fd);
@@ -712,16 +694,34 @@ vtest_bo_map(struct vn_renderer_bo *_bo)
       }
    }
 
-   return bo->res_ptr;
+   return bo->base.mmap_ptr;
 }
 
 static int
-vtest_bo_export_dmabuf(struct vn_renderer_bo *_bo)
+vtest_bo_export_dma_buf(struct vn_renderer *renderer,
+                        struct vn_renderer_bo *_bo)
 {
    const struct vtest_bo *bo = (struct vtest_bo *)_bo;
-   /* this suffices because vtest_bo_init_cpu does not set the bit */
    const bool shareable = bo->blob_flags & VCMD_BLOB_FLAG_SHAREABLE;
    return shareable ? os_dupfd_cloexec(bo->res_fd) : -1;
+}
+
+static bool
+vtest_bo_destroy(struct vn_renderer *renderer, struct vn_renderer_bo *_bo)
+{
+   struct vtest *vtest = (struct vtest *)renderer;
+   struct vtest_bo *bo = (struct vtest_bo *)_bo;
+
+   if (bo->base.mmap_ptr)
+      munmap(bo->base.mmap_ptr, bo->base.mmap_size);
+   if (bo->res_fd >= 0)
+      close(bo->res_fd);
+
+   mtx_lock(&vtest->sock_mutex);
+   vtest_vcmd_resource_unref(vtest, bo->base.res_id);
+   mtx_unlock(&vtest->sock_mutex);
+
+   return true;
 }
 
 static uint32_t
@@ -740,86 +740,88 @@ vtest_bo_blob_flags(VkMemoryPropertyFlags flags,
 }
 
 static VkResult
-vtest_bo_init_gpu(struct vn_renderer_bo *_bo,
-                  VkDeviceSize size,
-                  vn_object_id mem_id,
-                  VkMemoryPropertyFlags flags,
-                  VkExternalMemoryHandleTypeFlags external_handles)
+vtest_bo_create_from_device_memory(
+   struct vn_renderer *renderer,
+   VkDeviceSize size,
+   vn_object_id mem_id,
+   VkMemoryPropertyFlags flags,
+   VkExternalMemoryHandleTypeFlags external_handles,
+   struct vn_renderer_bo **out_bo)
 {
-   struct vtest_bo *bo = (struct vtest_bo *)_bo;
-   struct vtest *vtest = bo->vtest;
-
-   bo->blob_flags = vtest_bo_blob_flags(flags, external_handles);
-   bo->size = size;
+   struct vtest *vtest = (struct vtest *)renderer;
+   const uint32_t blob_flags = vtest_bo_blob_flags(flags, external_handles);
 
    mtx_lock(&vtest->sock_mutex);
-   bo->base.res_id = vtest_vcmd_resource_create_blob(
-      vtest, VCMD_BLOB_TYPE_HOST3D, bo->blob_flags, bo->size, mem_id,
-      &bo->res_fd);
+   int res_fd;
+   uint32_t res_id = vtest_vcmd_resource_create_blob(
+      vtest, VCMD_BLOB_TYPE_HOST3D, blob_flags, size, mem_id, &res_fd);
+   assert(res_id > 0 && res_fd >= 0);
    mtx_unlock(&vtest->sock_mutex);
 
-   return VK_SUCCESS;
-}
+   struct vtest_bo *bo = util_sparse_array_get(&vtest->bo_array, res_id);
+   *bo = (struct vtest_bo){
+      .base = {
+         .refcount = 1,
+         .res_id = res_id,
+         .mmap_size = size,
+      },
+      .res_fd = res_fd,
+      .blob_flags = blob_flags,
+   };
 
-static VkResult
-vtest_bo_init_cpu(struct vn_renderer_bo *_bo, VkDeviceSize size)
-{
-   struct vtest_bo *bo = (struct vtest_bo *)_bo;
-   struct vtest *vtest = bo->vtest;
-
-   bo->blob_flags = VCMD_BLOB_FLAG_MAPPABLE;
-   bo->size = size;
-
-   mtx_lock(&vtest->sock_mutex);
-   bo->base.res_id = vtest_vcmd_resource_create_blob(
-      vtest, VCMD_BLOB_TYPE_GUEST, bo->blob_flags, bo->size, 0, &bo->res_fd);
-   mtx_unlock(&vtest->sock_mutex);
+   *out_bo = &bo->base;
 
    return VK_SUCCESS;
 }
 
 static void
-vtest_bo_destroy(struct vn_renderer_bo *_bo)
+vtest_shmem_destroy(struct vn_renderer *renderer,
+                    struct vn_renderer_shmem *_shmem)
 {
-   struct vtest_bo *bo = (struct vtest_bo *)_bo;
-   struct vtest *vtest = bo->vtest;
+   struct vtest *vtest = (struct vtest *)renderer;
+   struct vtest_shmem *shmem = (struct vtest_shmem *)_shmem;
 
-   if (bo->base.res_id) {
-      if (bo->res_ptr)
-         munmap(bo->res_ptr, bo->size);
-      if (bo->res_fd >= 0)
-         close(bo->res_fd);
+   munmap(shmem->base.mmap_ptr, shmem->base.mmap_size);
 
-      mtx_lock(&vtest->sock_mutex);
-      vtest_vcmd_resource_unref(vtest, bo->base.res_id);
-      mtx_unlock(&vtest->sock_mutex);
-   }
-
-   free(bo);
+   mtx_lock(&vtest->sock_mutex);
+   vtest_vcmd_resource_unref(vtest, shmem->base.res_id);
+   mtx_unlock(&vtest->sock_mutex);
 }
 
-static struct vn_renderer_bo *
-vtest_bo_create(struct vn_renderer *renderer)
+static struct vn_renderer_shmem *
+vtest_shmem_create(struct vn_renderer *renderer, size_t size)
 {
    struct vtest *vtest = (struct vtest *)renderer;
 
-   struct vtest_bo *bo = calloc(1, sizeof(*bo));
-   if (!bo)
+   mtx_lock(&vtest->sock_mutex);
+   int res_fd;
+   uint32_t res_id = vtest_vcmd_resource_create_blob(
+      vtest, VCMD_BLOB_TYPE_GUEST, VCMD_BLOB_FLAG_MAPPABLE, size, 0, &res_fd);
+   assert(res_id > 0 && res_fd >= 0);
+   mtx_unlock(&vtest->sock_mutex);
+
+   void *ptr =
+      mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, res_fd, 0);
+   close(res_fd);
+   if (ptr == MAP_FAILED) {
+      mtx_lock(&vtest->sock_mutex);
+      vtest_vcmd_resource_unref(vtest, res_id);
+      mtx_unlock(&vtest->sock_mutex);
       return NULL;
+   }
 
-   bo->vtest = vtest;
-   bo->res_fd = -1;
+   struct vtest_shmem *shmem =
+      util_sparse_array_get(&vtest->shmem_array, res_id);
+   *shmem = (struct vtest_shmem){
+      .base = {
+         .refcount = 1,
+         .res_id = res_id,
+         .mmap_size = size,
+         .mmap_ptr = ptr,
+      },
+   };
 
-   bo->base.ops.destroy = vtest_bo_destroy;
-   bo->base.ops.init_cpu = vtest_bo_init_cpu;
-   bo->base.ops.init_gpu = vtest_bo_init_gpu;
-   bo->base.ops.init_dmabuf = NULL;
-   bo->base.ops.export_dmabuf = vtest_bo_export_dmabuf;
-   bo->base.ops.map = vtest_bo_map;
-   bo->base.ops.flush = vtest_bo_flush;
-   bo->base.ops.invalidate = vtest_bo_invalidate;
-
-   return &bo->base;
+   return &shmem->base;
 }
 
 static VkResult
@@ -906,10 +908,10 @@ vtest_get_info(struct vn_renderer *renderer, struct vn_renderer_info *info)
    info->pci.vendor_id = VTEST_PCI_VENDOR_ID;
    info->pci.device_id = VTEST_PCI_DEVICE_ID;
 
-   info->has_dmabuf_import = false;
+   info->has_dma_buf_import = false;
    info->has_cache_management = false;
-   info->has_timeline_sync = true;
    info->has_external_sync = false;
+   info->has_implicit_fencing = false;
 
    info->max_sync_queue_count = vtest->max_sync_queue_count;
 
@@ -934,6 +936,8 @@ vtest_destroy(struct vn_renderer *renderer,
    }
 
    mtx_destroy(&vtest->sock_mutex);
+   util_sparse_array_finish(&vtest->shmem_array);
+   util_sparse_array_finish(&vtest->bo_array);
 
    vk_free(alloc, vtest);
 }
@@ -989,6 +993,10 @@ vtest_init_protocol_version(struct vtest *vtest)
 static VkResult
 vtest_init(struct vtest *vtest)
 {
+   util_sparse_array_init(&vtest->shmem_array, sizeof(struct vtest_shmem),
+                          1024);
+   util_sparse_array_init(&vtest->bo_array, sizeof(struct vtest_bo), 1024);
+
    mtx_init(&vtest->sock_mutex, mtx_plain);
    vtest->sock_fd =
       vtest_connect_socket(vtest->instance, VTEST_DEFAULT_SOCKET_NAME);
@@ -1014,8 +1022,26 @@ vtest_init(struct vtest *vtest)
    vtest->base.ops.get_info = vtest_get_info;
    vtest->base.ops.submit = vtest_submit;
    vtest->base.ops.wait = vtest_wait;
-   vtest->base.ops.bo_create = vtest_bo_create;
-   vtest->base.ops.sync_create = vtest_sync_create;
+
+   vtest->base.shmem_ops.create = vtest_shmem_create;
+   vtest->base.shmem_ops.destroy = vtest_shmem_destroy;
+
+   vtest->base.bo_ops.create_from_device_memory =
+      vtest_bo_create_from_device_memory;
+   vtest->base.bo_ops.create_from_dma_buf = NULL;
+   vtest->base.bo_ops.destroy = vtest_bo_destroy;
+   vtest->base.bo_ops.export_dma_buf = vtest_bo_export_dma_buf;
+   vtest->base.bo_ops.map = vtest_bo_map;
+   vtest->base.bo_ops.flush = vtest_bo_flush;
+   vtest->base.bo_ops.invalidate = vtest_bo_invalidate;
+
+   vtest->base.sync_ops.create = vtest_sync_create;
+   vtest->base.sync_ops.create_from_syncobj = NULL;
+   vtest->base.sync_ops.destroy = vtest_sync_destroy;
+   vtest->base.sync_ops.export_syncobj = NULL;
+   vtest->base.sync_ops.reset = vtest_sync_reset;
+   vtest->base.sync_ops.read = vtest_sync_read;
+   vtest->base.sync_ops.write = vtest_sync_write;
 
    return VK_SUCCESS;
 }

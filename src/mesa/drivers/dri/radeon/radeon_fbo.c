@@ -534,7 +534,7 @@ radeon_alloc_renderbuffer_storage(struct gl_context * ctx, struct gl_renderbuffe
   rb->_BaseFormat = _mesa_base_fbo_format(ctx, internalFormat);
 
   if (ctx->Driver.Flush)
-	  ctx->Driver.Flush(ctx); /* +r6/r7 */
+	  ctx->Driver.Flush(ctx, 0); /* +r6/r7 */
 
   if (rrb->bo)
     radeon_bo_unref(rrb->bo);
@@ -578,7 +578,7 @@ radeon_image_target_renderbuffer_storage(struct gl_context *ctx,
    rrb = radeon_renderbuffer(rb);
 
    if (ctx->Driver.Flush)
-      ctx->Driver.Flush(ctx); /* +r6/r7 */
+      ctx->Driver.Flush(ctx, 0); /* +r6/r7 */
 
    if (rrb->bo)
       radeon_bo_unref(rrb->bo);
@@ -720,7 +720,7 @@ radeon_framebuffer_renderbuffer(struct gl_context * ctx,
 {
 
 	if (ctx->Driver.Flush)
-		ctx->Driver.Flush(ctx); /* +r6/r7 */
+		ctx->Driver.Flush(ctx, 0); /* +r6/r7 */
 
 	radeon_print(RADEON_TEXTURE, RADEON_TRACE,
 		"%s(%p, fb %p, rb %p) \n",
@@ -829,7 +829,7 @@ radeon_finish_render_texture(struct gl_context *ctx, struct gl_renderbuffer *rb)
 	radeon_image->used_as_render_target = GL_FALSE;
 
     if (ctx->Driver.Flush)
-        ctx->Driver.Flush(ctx); /* +r6/r7 */
+        ctx->Driver.Flush(ctx, 0); /* +r6/r7 */
 }
 static void
 radeon_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)

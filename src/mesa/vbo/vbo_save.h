@@ -53,30 +53,38 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
  * compiled using the fallback opcode mechanism provided by dlist.c.
  */
 struct vbo_save_vertex_list {
+   /* Data used in vbo_save_playback_vertex_list */
    struct gl_vertex_array_object *VAO[VP_MODE_MAX];
 
-   /* Copy of the final vertex from node->vertex_store->bufferobj.
-    * Keep this in regular (non-VBO) memory to avoid repeated
-    * map/unmap of the VBO when updating GL current data.
-    */
-   fi_type *current_data;
-
-   GLuint vertex_count;         /**< number of vertices in this list */
-   GLuint wrap_count;		/* number of copied vertices at start */
-
-   struct _mesa_prim *prims;
-   GLuint prim_count;
-   GLuint min_index, max_index;
-
    struct {
-      struct _mesa_index_buffer ib;
       struct pipe_draw_info info;
       unsigned char *mode;
-      struct pipe_draw_start_count *start_count;
+      union {
+         struct pipe_draw_start_count_bias *start_counts;
+         struct pipe_draw_start_count_bias start_count;
+      };
       unsigned num_draws;
    } merged;
 
-   struct vbo_save_primitive_store *prim_store;
+   /* Cold: used during construction or to handle egde-cases */
+   struct {
+      struct _mesa_index_buffer ib;
+
+      /* Copy of the final vertex from node->vertex_store->bufferobj.
+       * Keep this in regular (non-VBO) memory to avoid repeated
+       * map/unmap of the VBO when updating GL current data.
+       */
+      fi_type *current_data;
+
+      GLuint vertex_count;         /**< number of vertices in this list */
+      GLuint wrap_count;		/* number of copied vertices at start */
+
+      struct _mesa_prim *prims;
+      GLuint prim_count;
+      GLuint min_index, max_index;
+
+      struct vbo_save_primitive_store *prim_store;
+   } *cold;
 };
 
 
@@ -96,8 +104,8 @@ _vbo_save_get_stride(const struct vbo_save_vertex_list *node)
 static inline GLuint
 _vbo_save_get_min_index(const struct vbo_save_vertex_list *node)
 {
-   assert(node->prim_count > 0);
-   return node->min_index;
+   assert(node->cold->prim_count > 0);
+   return node->cold->min_index;
 }
 
 
@@ -107,8 +115,8 @@ _vbo_save_get_min_index(const struct vbo_save_vertex_list *node)
 static inline GLuint
 _vbo_save_get_max_index(const struct vbo_save_vertex_list *node)
 {
-   assert(node->prim_count > 0);
-   return node->max_index;
+   assert(node->cold->prim_count > 0);
+   return node->cold->max_index;
 }
 
 
@@ -118,9 +126,9 @@ _vbo_save_get_max_index(const struct vbo_save_vertex_list *node)
 static inline GLuint
 _vbo_save_get_vertex_count(const struct vbo_save_vertex_list *node)
 {
-   assert(node->prim_count > 0);
-   const struct _mesa_prim *first_prim = &node->prims[0];
-   const struct _mesa_prim *last_prim = &node->prims[node->prim_count - 1];
+   assert(node->cold->prim_count > 0);
+   const struct _mesa_prim *first_prim = &node->cold->prims[0];
+   const struct _mesa_prim *last_prim = &node->cold->prims[node->cold->prim_count - 1];
    return last_prim->start - first_prim->start + last_prim->count;
 }
 
@@ -167,7 +175,10 @@ void _vbo_loopback_vertex_list(struct gl_context *ctx,
 /* Callbacks:
  */
 void
-vbo_save_playback_vertex_list(struct gl_context *ctx, void *data);
+vbo_save_playback_vertex_list(struct gl_context *ctx, void *data, bool copy_to_current);
+
+void
+vbo_save_playback_vertex_list_loopback(struct gl_context *ctx, void *data);
 
 void
 vbo_save_api_init(struct vbo_save_context *save);

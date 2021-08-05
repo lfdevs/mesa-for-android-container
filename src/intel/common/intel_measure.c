@@ -37,7 +37,7 @@
 #define __STDC_FORMAT_MACROS 1
 #include <inttypes.h>
 
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 #include "util/debug.h"
 #include "util/macros.h"
 #include "util/u_debug.h"
@@ -563,7 +563,7 @@ buffered_event_count(struct intel_measure_device *device)
 static void
 print_combined_results(struct intel_measure_device *measure_device,
                        int result_count,
-                       struct gen_device_info *info)
+                       struct intel_device_info *info)
 {
    if (result_count == 0)
       return;
@@ -601,8 +601,8 @@ print_combined_results(struct intel_measure_device *measure_device,
            begin->event_name, begin->count,
            begin->vs, begin->tcs, begin->tes, begin->gs, begin->fs, begin->cs,
            begin->framebuffer,
-           gen_device_info_timebase_scale(info, start_result->idle_duration),
-           gen_device_info_timebase_scale(info, duration_ts));
+           intel_device_info_timebase_scale(info, start_result->idle_duration),
+           intel_device_info_timebase_scale(info, duration_ts));
 }
 
 /**
@@ -610,7 +610,7 @@ print_combined_results(struct intel_measure_device *measure_device,
  */
 static void
 intel_measure_print(struct intel_measure_device *device,
-                    struct gen_device_info *info)
+                    struct intel_device_info *info)
 {
    while (true) {
       const int events_to_combine = buffered_event_count(device);
@@ -626,7 +626,7 @@ intel_measure_print(struct intel_measure_device *device,
  */
 void
 intel_measure_gather(struct intel_measure_device *measure_device,
-                     struct gen_device_info *info)
+                     struct intel_device_info *info)
 {
    pthread_mutex_lock(&measure_device->mutex);
 

@@ -555,7 +555,6 @@ struct vtn_variable {
    bool explicit_binding;
    unsigned offset;
    unsigned input_attachment_index;
-   bool patch;
 
    nir_variable *var;
 

@@ -193,7 +193,6 @@ struct draw_context
       boolean rebind_parameters;
 
       struct {
-         struct draw_pt_middle_end *fetch_emit;
          struct draw_pt_middle_end *fetch_shade_emit;
          struct draw_pt_middle_end *general;
          struct draw_pt_middle_end *llvm;
@@ -283,8 +282,6 @@ struct draw_context
    boolean clip_user;
    boolean guard_band_xy;
    boolean guard_band_points_xy;
-
-   boolean force_passthrough; /**< never clip or shade */
 
    boolean dump_vs;
 

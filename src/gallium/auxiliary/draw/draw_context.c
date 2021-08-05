@@ -583,14 +583,6 @@ draw_enable_point_sprites(struct draw_context *draw, boolean enable)
 }
 
 
-void
-draw_set_force_passthrough( struct draw_context *draw, boolean enable )
-{
-   draw_do_flush( draw, DRAW_FLUSH_STATE_CHANGE );
-   draw->force_passthrough = enable;
-}
-
-
 
 /**
  * Allocate an extra vertex/geometry shader vertex attribute, if it doesn't

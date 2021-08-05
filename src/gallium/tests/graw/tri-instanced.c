@@ -192,7 +192,7 @@ static void draw( void )
 {
    union pipe_color_union clear_color = { {1,0,1,1} };
    struct pipe_draw_info info;
-   struct pipe_draw_start_count draw;
+   struct pipe_draw_start_count_bias draw;
 
    ctx->clear(ctx, PIPE_CLEAR_COLOR, NULL, &clear_color, 0, 0);
 
@@ -202,6 +202,7 @@ static void draw( void )
    info.mode = PIPE_PRIM_TRIANGLES;
    draw.start = 0;
    draw.count = 3;
+   draw.index_bias = 0;
    /* draw NUM_INST triangles */
    info.instance_count = NUM_INST;
 
@@ -215,7 +216,7 @@ static void draw( void )
                                       indices);
    }
 
-   ctx->draw_vbo(ctx, &info, NULL, &draw, 1);
+   ctx->draw_vbo(ctx, &info, 0, NULL, &draw, 1);
 
    pipe_resource_reference(&info.index.resource, NULL);
 

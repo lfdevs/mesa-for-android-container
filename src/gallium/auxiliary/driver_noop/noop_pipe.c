@@ -381,9 +381,11 @@ static struct pipe_context *noop_create_context(struct pipe_screen *screen,
    ctx->end_query = noop_end_query;
    ctx->get_query_result = noop_get_query_result;
    ctx->set_active_query_state = noop_set_active_query_state;
-   ctx->transfer_map = noop_transfer_map;
+   ctx->buffer_map = noop_transfer_map;
+   ctx->texture_map = noop_transfer_map;
    ctx->transfer_flush_region = noop_transfer_flush_region;
-   ctx->transfer_unmap = noop_transfer_unmap;
+   ctx->buffer_unmap = noop_transfer_unmap;
+   ctx->texture_unmap = noop_transfer_unmap;
    ctx->buffer_subdata = noop_buffer_subdata;
    ctx->texture_subdata = noop_texture_subdata;
    ctx->invalidate_resource = noop_invalidate_resource;

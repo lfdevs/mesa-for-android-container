@@ -57,6 +57,7 @@ enum virgl_object_type {
    VIRGL_OBJECT_SURFACE,
    VIRGL_OBJECT_QUERY,
    VIRGL_OBJECT_STREAMOUT_TARGET,
+   VIRGL_OBJECT_MSAA_SURFACE,
    VIRGL_MAX_OBJECTS,
 };
 
@@ -344,6 +345,10 @@ enum virgl_context_cmd {
 #define VIRGL_OBJ_SURFACE_BUFFER_LAST_ELEMENT 5
 #define VIRGL_OBJ_SURFACE_TEXTURE_LEVEL 4
 #define VIRGL_OBJ_SURFACE_TEXTURE_LAYERS 5
+
+/* create surface with implicit MSAA support (for EXT_multisample_render_to_texture) */
+#define VIRGL_OBJ_MSAA_SURFACE_SIZE (VIRGL_OBJ_SURFACE_SIZE + 1)
+#define VIRGL_OBJ_SURFACE_SAMPLE_COUNT 6
 
 /* create streamout target */
 #define VIRGL_OBJ_STREAMOUT_SIZE 4

@@ -30,7 +30,7 @@
 #include "util/list.h"
 #include "util/rb_tree.h"
 
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 #include "common/intel_decoder.h"
 
 #ifdef __cplusplus

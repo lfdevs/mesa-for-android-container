@@ -83,6 +83,9 @@ typedef struct {
         bool abs : 1;
         bool neg : 1;
 
+        /* For a source, the swizzle. For a destination, acts a bit like a
+         * write mask. Identity for the full 32-bit, H00 for only caring about
+         * the lower half, other values unused. */
         enum bi_swizzle swizzle : 4;
         uint32_t offset : 2;
         bool reg : 1;
@@ -204,6 +207,13 @@ bi_neg(bi_index idx)
         return idx;
 }
 
+/* Additive identity in IEEE 754 arithmetic */
+static inline bi_index
+bi_negzero()
+{
+        return bi_neg(bi_zero());
+}
+
 /* Replaces an index, preserving any modifiers */
 
 static inline bi_index
@@ -228,6 +238,15 @@ static inline bi_index
 bi_imm_u16(uint16_t imm)
 {
         return bi_half(bi_imm_u32(imm), false);
+}
+
+static inline bi_index
+bi_imm_uintN(uint32_t imm, unsigned sz)
+{
+        assert(sz == 8 || sz == 16 || sz == 32);
+        return (sz == 8) ? bi_imm_u8(imm) :
+                (sz == 16) ? bi_imm_u16(imm) :
+                bi_imm_u32(imm);
 }
 
 static inline bi_index
@@ -308,6 +327,7 @@ typedef struct {
                 enum bi_clamp clamp;
                 bool saturate;
                 bool not_result;
+                unsigned dest_mod;
         };
 
         /* Immediates. All seen alone in an instruction, except for varying/texture
@@ -345,11 +365,6 @@ typedef struct {
                 bool format; /* LEA_TEX */
 
                 struct {
-                        bool skip; /* VAR_TEX, TEXS, TEXC */
-                        bool lod_mode; /* TEXS */
-                };
-
-                struct {
                         enum bi_special special; /* FADD_RSCALE, FMA_RSCALE */
                         enum bi_round round; /* FMA, converts, FADD, _RSCALE, etc */
                 };
@@ -371,10 +386,15 @@ typedef struct {
                 };
 
                 struct {
-                        enum bi_sample sample; /* LD_VAR */
-                        enum bi_update update; /* LD_VAR */
+                        enum bi_sample sample; /* VAR_TEX, LD_VAR */
+                        enum bi_update update; /* VAR_TEX, LD_VAR */
                         enum bi_varying_name varying_name; /* LD_VAR_SPECIAL */
+                        bool skip; /* VAR_TEX, TEXS, TEXC */
+                        bool lod_mode; /* VAR_TEX, TEXS, implicitly for TEXC */
                 };
+
+                /* Maximum size, for hashing */
+                unsigned flags[5];
 
                 struct {
                         enum bi_subgroup subgroup; /* WMASK, CLPER */
@@ -497,6 +517,9 @@ typedef struct {
         /* Unique in a clause */
         enum bifrost_message_type message_type;
         bi_instr *message;
+
+        /* Discard helper threads */
+        bool td;
 } bi_clause;
 
 typedef struct bi_block {
@@ -505,6 +528,12 @@ typedef struct bi_block {
         /* If true, uses clauses; if false, uses instructions */
         bool scheduled;
         struct list_head clauses; /* list of bi_clause */
+
+        /* Post-RA liveness */
+        uint64_t reg_live_in, reg_live_out;
+
+        /* Flags available for pass-internal use */
+        uint8_t pass_flags;
 } bi_block;
 
 typedef struct {
@@ -530,6 +559,9 @@ typedef struct {
 
        /* Analysis results */
        bool has_liveness;
+
+       /* Mask of UBOs that need to be uploaded */
+       uint32_t ubo_mask;
 
        /* Stats for shader-db */
        unsigned instruction_count;
@@ -685,14 +717,22 @@ bi_node_to_index(unsigned node, unsigned node_count)
         bi_foreach_block(ctx, v_block) \
                 bi_foreach_instr_in_block((bi_block *) v_block, v)
 
+#define bi_foreach_instr_global_rev(ctx, v) \
+        bi_foreach_block_rev(ctx, v_block) \
+                bi_foreach_instr_in_block_rev((bi_block *) v_block, v)
+
 #define bi_foreach_instr_global_safe(ctx, v) \
         bi_foreach_block(ctx, v_block) \
                 bi_foreach_instr_in_block_safe((bi_block *) v_block, v)
 
+#define bi_foreach_instr_global_rev_safe(ctx, v) \
+        bi_foreach_block_rev(ctx, v_block) \
+                bi_foreach_instr_in_block_rev_safe((bi_block *) v_block, v)
+
 #define bi_foreach_instr_in_tuple(tuple, v) \
-        for (bi_instr *v = tuple->fma ?: tuple->add; \
+        for (bi_instr *v = (tuple)->fma ?: (tuple)->add; \
                         v != NULL; \
-                        v = (v == tuple->add) ? NULL : tuple->add)
+                        v = (v == (tuple)->add) ? NULL : (tuple)->add)
 
 /* Based on set_foreach, expanded with automatic type casts */
 
@@ -737,6 +777,8 @@ pan_next_block(pan_block *block)
 
 bool bi_has_arg(bi_instr *ins, bi_index arg);
 unsigned bi_count_read_registers(bi_instr *ins, unsigned src);
+unsigned bi_count_write_registers(bi_instr *ins, unsigned dest);
+bool bi_is_regfmt_16(enum bi_register_format fmt);
 unsigned bi_writemask(bi_instr *ins, unsigned dest);
 bi_clause * bi_next_clause(bi_context *ctx, pan_block *block, bi_clause *clause);
 bool bi_side_effects(enum bi_opcode op);
@@ -750,10 +792,18 @@ void bi_print_shader(bi_context *ctx, FILE *fp);
 
 /* BIR passes */
 
+void bi_analyze_helper_terminate(bi_context *ctx);
+void bi_analyze_helper_requirements(bi_context *ctx);
 void bi_opt_copy_prop(bi_context *ctx);
-void bi_opt_dead_code_eliminate(bi_context *ctx, bool soft);
+void bi_opt_cse(bi_context *ctx);
+void bi_opt_mod_prop_forward(bi_context *ctx);
+void bi_opt_mod_prop_backward(bi_context *ctx);
+void bi_opt_dead_code_eliminate(bi_context *ctx);
+void bi_opt_dce_post_ra(bi_context *ctx);
 void bi_opt_push_ubo(bi_context *ctx);
+void bi_opt_constant_fold(bi_context *ctx);
 void bi_lower_swizzle(bi_context *ctx);
+void bi_lower_fau(bi_context *ctx);
 void bi_schedule(bi_context *ctx);
 void bi_assign_scoreboard(bi_context *ctx);
 void bi_register_allocate(bi_context *ctx);
@@ -763,19 +813,14 @@ int bi_test_scheduler(void);
 int bi_test_packing(void);
 int bi_test_packing_formats(void);
 
-bi_clause *
-bi_singleton(void *memctx, bi_instr *ins,
-                bi_block *block,
-                unsigned scoreboard_id,
-                unsigned dependencies,
-                uint64_t combined_constant,
-                bool osrb);
-
 /* Liveness */
 
 void bi_compute_liveness(bi_context *ctx);
 void bi_liveness_ins_update(uint16_t *live, bi_instr *ins, unsigned max);
 void bi_invalidate_liveness(bi_context *ctx);
+
+void bi_postra_liveness(bi_context *ctx);
+uint64_t bi_postra_liveness_ins(uint64_t live, bi_instr *ins);
 
 /* Layout */
 
@@ -873,13 +918,17 @@ bi_after_instr(bi_instr *instr)
  * in which case there must exist a nonempty penultimate tuple */
 
 ATTRIBUTE_RETURNS_NONNULL static inline bi_instr *
-bi_first_instr_in_clause(bi_clause *clause)
+bi_first_instr_in_tuple(bi_tuple *tuple)
 {
-        bi_tuple tuple = clause->tuples[0];
-        bi_instr *instr = tuple.fma ?: tuple.add;
-
+        bi_instr *instr = tuple->fma ?: tuple->add;
         assert(instr != NULL);
         return instr;
+}
+
+ATTRIBUTE_RETURNS_NONNULL static inline bi_instr *
+bi_first_instr_in_clause(bi_clause *clause)
+{
+        return bi_first_instr_in_tuple(&clause->tuples[0]);
 }
 
 ATTRIBUTE_RETURNS_NONNULL static inline bi_instr *
@@ -917,6 +966,12 @@ static inline bi_cursor
 bi_before_clause(bi_clause *clause)
 {
     return bi_before_instr(bi_first_instr_in_clause(clause));
+}
+
+static inline bi_cursor
+bi_before_tuple(bi_tuple *tuple)
+{
+    return bi_before_instr(bi_first_instr_in_tuple(tuple));
 }
 
 static inline bi_cursor
@@ -967,5 +1022,16 @@ bi_builder_insert(bi_cursor *cursor, bi_instr *I)
 
     unreachable("Invalid cursor option");
 }
+
+static inline unsigned
+bi_word_node(bi_index idx)
+{
+        assert(idx.type == BI_INDEX_NORMAL && !idx.reg);
+        return (idx.value << 2) | idx.offset;
+}
+
+/* NIR passes */
+
+bool bi_lower_divergent_indirects(nir_shader *shader, unsigned lanes);
 
 #endif

@@ -1,34 +1,220 @@
-.iris-traces:amd64:
+.iris-test:
   extends:
-    - .lava-piglit-traces:amd64
+    - .lava-test:amd64
     - .iris-rules
   variables:
-    ENV_VARS: "EGL_PLATFORM=surfaceless PIGLIT_PROFILES=replay PIGLIT_HTML_SUMMARY=0 PIGLIT_JUNIT_RESULTS=1"
+    DTB: ""
+    DRIVER_NAME: iris
+    BOOT_METHOD: depthcharge
+    KERNEL_IMAGE_TYPE: ""
+    FLAKES_CHANNEL: "#intel-ci"
+    HWCI_FREQ_MAX: "true"
 
-iris-apl-traces:amd64:
+.iris-apl-test:
   extends:
-    - .iris-traces:amd64
-    - .test-manual
+    - .iris-test
   variables:
     DEVICE_TYPE: asus-C523NA-A20057-coral
-    DTB: ""
-    GPU_VERSION: intel-apl
-    DRIVER_NAME: iris
-    BOOT_METHOD: depthcharge
-    KERNEL_IMAGE_TYPE: ""
+    GPU_VERSION: iris-apl
+    DEQP_EXPECTED_RENDERER: APL
   tags:
-    - mesa-ci-aarch64-lava-collabora
+    - mesa-ci-x86-64-lava-asus-C523NA-A20057-coral
 
-iris-glk-traces:amd64:
+.iris-glk-test:
   extends:
-    - .iris-traces:amd64
-    - .test-manual
+    - .iris-test
+    - .test-manual-mr
   variables:
     DEVICE_TYPE: hp-x360-12b-n4000-octopus
-    DTB: ""
-    GPU_VERSION: intel-glk
-    DRIVER_NAME: iris
-    BOOT_METHOD: depthcharge
-    KERNEL_IMAGE_TYPE: ""
+    GPU_VERSION: iris-glk
+    DEQP_EXPECTED_RENDERER: GLK
   tags:
-    - mesa-ci-aarch64-lava-collabora
+    - mesa-ci-x86-64-lava-hp-x360-12b-n4000-octopus
+
+.iris-amly-test:
+  extends:
+    - .iris-test
+  variables:
+    DEVICE_TYPE: asus-C433TA-AJ0005-rammus
+    GPU_VERSION: iris-amly
+    DEQP_EXPECTED_RENDERER: AML
+  tags:
+    - mesa-ci-x86-64-lava-asus-C433TA-AJ0005-rammus
+
+.iris-kbl-test:
+  extends:
+    - .iris-test
+  variables:
+    DEVICE_TYPE: hp-x360-14-G1-sona
+    GPU_VERSION: iris-kbl
+    DEQP_EXPECTED_RENDERER: KBL
+  tags:
+    - mesa-ci-x86-64-lava-hp-x360-14-G1-sona
+
+iris-apl-gles2:
+  extends:
+    - .iris-apl-test
+  variables:
+    DEQP_VER: gles2
+
+iris-apl-gles3:
+  extends:
+    - .iris-apl-test
+  variables:
+    DEQP_VER: gles3
+    DEQP_EXPECTED_RENDERER: APL
+    DEQP_FRACTION: 4
+
+iris-apl-gles31:
+  extends:
+    - .iris-apl-test
+  variables:
+    DEQP_VER: gles31
+    DEQP_EXPECTED_RENDERER: APL
+    DEQP_FRACTION: 6
+
+# this appears to silently kill the board sometimes.  Leave it as a manual job for debugging.
+iris-apl-gl:
+  extends:
+    - .iris-apl-test
+    - .test-manual-mr
+  variables:
+    DEQP_VER: gl46
+
+iris-apl-egl:
+  extends:
+    - .iris-apl-test
+  variables:
+    PIGLIT_NO_WINDOW: 0
+    HWCI_START_XORG: 1
+    DEQP_VER: egl
+
+iris-glk-gles2:
+  extends:
+    - .iris-glk-test
+  variables:
+    DEQP_VER: gles2
+
+iris-glk-gles3:
+  extends:
+    - .iris-glk-test
+  variables:
+    DEQP_VER: gles3
+    DEQP_EXPECTED_RENDERER: GLK
+    DEQP_FRACTION: 8
+
+iris-glk-gles31:
+  extends:
+    - .iris-glk-test
+  variables:
+    DEQP_VER: gles31
+    DEQP_EXPECTED_RENDERER: GLK
+    DEQP_FRACTION: 8
+
+# this appears to be just unusably slow, timed out at an hour.  Needs debugging,
+# so leave it as a manual job.
+iris-glk-gl:
+  extends:
+    - .iris-glk-test
+    - .test-manual-mr
+  variables:
+    DEQP_VER: gl46
+
+iris-glk-egl:
+  extends:
+    - .iris-glk-test
+  variables:
+    PIGLIT_NO_WINDOW: 0
+    HWCI_START_XORG: 1
+    DEQP_VER: egl
+
+.iris-amly-gles2:
+  extends:
+    - .iris-amly-test
+  variables:
+    DEQP_VER: gles2
+
+.iris-amly-gles3:
+  extends:
+    - .iris-amly-test
+    - .test-manual-mr
+  variables:
+    DEQP_VER: gles3
+    DEQP_EXPECTED_RENDERER: AML
+    DEQP_FRACTION: 2
+
+.iris-amly-gles31:
+  extends:
+    - .iris-amly-test
+    - .test-manual-mr
+  variables:
+    DEQP_VER: gles31
+    DEQP_EXPECTED_RENDERER: AML
+    DEQP_FRACTION: 2
+
+.iris-amly-gl:
+  extends:
+    - .iris-amly-test
+  variables:
+    DEQP_VER: gl46
+
+.iris-amly-egl:
+  extends:
+    - .iris-amly-test
+  variables:
+    PIGLIT_NO_WINDOW: 0
+    HWCI_START_XORG: 1
+    DEQP_VER: egl
+
+.iris-amly-piglit:
+  extends:
+    - .iris-amly-test
+    - .lava-piglit
+  parallel: 3
+  variables:
+    HWCI_START_XORG: 1
+    PIGLIT_NO_WINDOW: 0
+    PIGLIT_PLATFORM: mixed_glx_egl
+    PIGLIT_PROFILES: gpu
+    PIGLIT_JUNIT_RESULTS: 1
+
+.iris-traces:
+  extends:
+    - .lava-traces-base
+  variables:
+    EGL_PLATFORM: surfaceless
+    PIGLIT_PROFILES: replay
+    PIGLIT_JUNIT_RESULTS: 1
+    PIGLIT_REPLAY_DEVICE_NAME: "gl-${GPU_VERSION}"
+    PIGLIT_RESULTS: "${GPU_VERSION}-${PIGLIT_PROFILES}"
+    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-iris.yml"
+    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
+
+iris-apl-traces:
+  variables:
+    GPU_VERSION: intel-apl
+  extends:
+    - .iris-apl-test
+    - .iris-traces
+
+iris-glk-traces:
+  variables:
+    GPU_VERSION: intel-glk
+  extends:
+    - .iris-glk-test
+    - .iris-traces
+
+.iris-amly-traces:
+  variables:
+    GPU_VERSION: intel-amly
+  extends:
+    - .iris-amly-test
+    - .iris-traces
+
+iris-kbl-traces:
+  variables:
+    GPU_VERSION: intel-kbl
+  extends:
+    - .iris-kbl-test
+    - .iris-traces
+    - .test-manual-mr

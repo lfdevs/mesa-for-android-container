@@ -36,7 +36,7 @@ struct pan_compute_dim {
 
 struct pan_fb_color_attachment {
         const struct pan_image_view *view;
-        struct pan_image_state *state;
+        bool *crc_valid;
         bool clear;
         bool preload;
         bool discard;
@@ -47,10 +47,6 @@ struct pan_fb_zs_attachment {
         struct {
                 const struct pan_image_view *zs, *s;
         } view;
-
-        struct {
-                struct pan_image_state *zs, *s;
-        } state;
 
         struct {
                 bool z, s;

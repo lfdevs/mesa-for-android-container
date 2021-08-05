@@ -72,7 +72,7 @@ static const uint32_t pte_mocs[] = {
 };
 
 uint32_t
-brw_get_bo_mocs(const struct gen_device_info *devinfo, struct brw_bo *bo)
+brw_get_bo_mocs(const struct intel_device_info *devinfo, struct brw_bo *bo)
 {
    return (bo && bo->external ? pte_mocs : wb_mocs)[devinfo->ver];
 }
@@ -85,7 +85,7 @@ get_isl_surf(struct brw_context *brw, struct brw_mipmap_tree *mt,
 {
    *surf = mt->surf;
 
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const enum isl_dim_layout dim_layout =
       get_isl_dim_layout(devinfo, mt->surf.tiling, target);
 
@@ -141,7 +141,7 @@ brw_emit_surface_state(struct brw_context *brw,
                        uint32_t *surf_offset, int surf_index,
                        unsigned reloc_flags)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    uint32_t tile_x = mt->level[0].level_x;
    uint32_t tile_y = mt->level[0].level_y;
    uint32_t offset = mt->offset;
@@ -469,7 +469,7 @@ static void brw_update_texture_surface(struct gl_context *ctx,
                            uint32_t plane)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct gl_texture_object *obj = ctx->Texture.Unit[unit]._Current;
 
    if (obj->Target == GL_TEXTURE_BUFFER) {
@@ -603,7 +603,7 @@ static void brw_update_texture_surface(struct gl_context *ctx,
       /* On Ivy Bridge and earlier, we handle texture swizzle with shader
        * code.  The actual surface swizzle should be identity.
        */
-      if (devinfo->ver <= 7 && !devinfo->is_haswell)
+      if (devinfo->verx10 <= 70)
          view.swizzle = ISL_SWIZZLE_IDENTITY;
 
       if (obj->Target == GL_TEXTURE_CUBE_MAP ||
@@ -630,7 +630,7 @@ brw_emit_buffer_surface_state(struct brw_context *brw,
                               unsigned pitch,
                               unsigned reloc_flags)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    uint32_t *dw = brw_state_batch(brw,
                                   brw->isl_dev.ss.size,
                                   brw->isl_dev.ss.align,
@@ -838,7 +838,7 @@ emit_null_surface_state(struct brw_context *brw,
                         const struct gl_framebuffer *fb,
                         uint32_t *out_offset)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    uint32_t *surf = brw_state_batch(brw,
                                     brw->isl_dev.ss.size,
                                     brw->isl_dev.ss.align,
@@ -851,7 +851,7 @@ emit_null_surface_state(struct brw_context *brw,
 
    if (devinfo->ver != 6 || samples <= 1) {
       isl_null_fill_state(&brw->isl_dev, surf,
-                          isl_extent3d(width, height, 1));
+                          .size = isl_extent3d(width, height, 1));
       return;
    }
 
@@ -906,7 +906,7 @@ gfx4_update_renderbuffer_surface(struct brw_context *brw,
                                  unsigned unit,
                                  uint32_t surf_index)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    struct brw_renderbuffer *irb = brw_renderbuffer(rb);
    struct brw_mipmap_tree *mt = irb->mt;
@@ -1002,7 +1002,7 @@ gfx4_update_renderbuffer_surface(struct brw_context *brw,
 static void
 update_renderbuffer_surfaces(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const struct gl_context *ctx = &brw->ctx;
 
    /* _NEW_BUFFERS | _NEW_COLOR */
@@ -1220,7 +1220,7 @@ update_stage_texture_surfaces(struct brw_context *brw,
 static void
 brw_update_texture_surfaces(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    /* BRW_NEW_VERTEX_PROGRAM */
    struct gl_program *vs = brw->programs[MESA_SHADER_VERTEX];
@@ -1288,7 +1288,7 @@ const struct brw_tracked_state brw_texture_surfaces = {
 static void
 brw_update_cs_texture_surfaces(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    /* BRW_NEW_COMPUTE_PROGRAM */
    struct gl_program *cs = brw->programs[MESA_SHADER_COMPUTE];
@@ -1469,7 +1469,7 @@ const struct brw_tracked_state brw_cs_image_surfaces = {
 static uint32_t
 get_image_format(struct brw_context *brw, mesa_format format, GLenum access)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    enum isl_format hw_format = brw_isl_format_for_mesa_format(format);
    if (access == GL_WRITE_ONLY || access == GL_NONE) {
       return hw_format;

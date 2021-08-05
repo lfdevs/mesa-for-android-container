@@ -1,3 +1,11 @@
+mesa (21.2.0-1) experimental; urgency=medium
+
+  * New upstream release. (LP: #1937988)
+  * iris-avoid-abort-if-enomem.diff: Dropped, upstream.
+  * control: Bump libdrm-dev build-dependency to 2.4.107.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 05 Aug 2021 09:48:22 +0300
+
 mesa (21.1.6-1) experimental; urgency=medium
 
   * New upstream release.

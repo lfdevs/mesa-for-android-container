@@ -116,6 +116,7 @@ nine_convert_rasterizer_state(struct NineDevice9 *device,
  /* rast.line_stipple_pattern = 0; */
     rast.sprite_coord_enable = rs[D3DRS_POINTSPRITEENABLE] ? 0xff : 0x00;
     rast.line_width = 1.0f;
+    rast.line_rectangular = 0;
     if (rs[NINED3DRS_VSPOINTSIZE]) {
         rast.point_size = 1.0f;
     } else {

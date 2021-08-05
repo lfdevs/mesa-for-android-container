@@ -46,12 +46,12 @@
 
 #include <brw_bufmgr.h>
 
-#include "dev/gen_debug.h"
+#include "dev/intel_debug.h"
 #include "common/intel_decoder.h"
 #include "brw_screen.h"
 #include "brw_tex_obj.h"
-#include "perf/gen_perf.h"
-#include "perf/gen_perf_query.h"
+#include "perf/intel_perf.h"
+#include "perf/intel_perf_query.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -336,18 +336,6 @@ struct brw_program {
    bool compiled_once;
 };
 
-
-struct brw_ff_gs_prog_data {
-   GLuint urb_read_length;
-   GLuint total_grf;
-
-   /**
-    * Gfx6 transform feedback: Amount by which the streaming vertex buffer
-    * indices should be incremented each time the GS is invoked.
-    */
-   unsigned svbi_postincrement_value;
-};
-
 /** Number of texture sampler units */
 #define BRW_MAX_TEX_UNIT 32
 
@@ -504,6 +492,7 @@ struct brw_batch {
    bool needs_sol_reset;
    bool state_base_address_emitted;
    bool no_wrap;
+   bool contains_fence_signal;
 
    struct brw_reloc_list batch_relocs;
    struct brw_reloc_list state_relocs;
@@ -529,6 +518,9 @@ struct brw_batch {
    struct hash_table_u64 *state_batch_sizes;
 
    struct intel_batch_decode_ctx decoder;
+
+   /** A list of drm_i915_exec_fences to have execbuf signal or wait on */
+   struct util_dynarray exec_fences;
 };
 
 #define BRW_MAX_XFB_STREAMS 4
@@ -683,7 +675,7 @@ enum brw_predicate_state {
 struct shader_times;
 
 struct intel_l3_config;
-struct gen_perf;
+struct intel_perf;
 
 struct brw_uploader {
    struct brw_bufmgr *bufmgr;
@@ -833,6 +825,8 @@ struct brw_context
    bool has_hiz;
    bool has_separate_stencil;
    bool has_swizzling;
+
+   bool can_push_ubos;
 
    /** Derived stencil states. */
    bool stencil_enabled;
@@ -1038,7 +1032,7 @@ struct brw_context
       GLuint cs_start;
       /**
        * URB size in the current configuration.  The units this is expressed
-       * in are somewhat inconsistent, see gen_device_info::urb::size.
+       * in are somewhat inconsistent, see intel_device_info::urb::size.
        *
        * FINISHME: Represent the URB size consistently in KB on all platforms.
        */
@@ -1187,7 +1181,7 @@ struct brw_context
       bool supported;
    } predicate;
 
-   struct gen_perf_context *perf_ctx;
+   struct intel_perf_context *perf_ctx;
 
    int num_atoms[BRW_NUM_PIPELINES];
    const struct brw_tracked_state render_atoms[76];

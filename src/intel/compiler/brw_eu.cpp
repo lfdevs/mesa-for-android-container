@@ -35,8 +35,8 @@
 #include "brw_eu_defines.h"
 #include "brw_eu.h"
 #include "brw_shader.h"
-#include "brw_gen_enum.h"
-#include "dev/gen_debug.h"
+#include "brw_gfx_ver_enum.h"
+#include "dev/intel_debug.h"
 
 #include "util/ralloc.h"
 
@@ -216,7 +216,7 @@ brw_set_default_compression_control(struct brw_codegen *p,
  * the currently selected channel enable group untouched.
  */
 void
-brw_inst_set_compression(const struct gen_device_info *devinfo,
+brw_inst_set_compression(const struct intel_device_info *devinfo,
                          brw_inst *inst, bool on)
 {
    if (devinfo->ver >= 6) {
@@ -248,7 +248,7 @@ brw_set_default_compression(struct brw_codegen *p, bool on)
  * [group, group + exec_size) to the instruction passed as argument.
  */
 void
-brw_inst_set_group(const struct gen_device_info *devinfo,
+brw_inst_set_group(const struct intel_device_info *devinfo,
                    brw_inst *inst, unsigned group)
 {
    if (devinfo->ver >= 7) {
@@ -317,7 +317,7 @@ void brw_pop_insn_state( struct brw_codegen *p )
 /***********************************************************************
  */
 void
-brw_init_codegen(const struct gen_device_info *devinfo,
+brw_init_codegen(const struct intel_device_info *devinfo,
                  struct brw_codegen *p, void *mem_ctx)
 {
    memset(p, 0, sizeof(*p));
@@ -465,7 +465,7 @@ brw_create_label(struct brw_label **labels, int offset, void *mem_ctx)
 }
 
 const struct brw_label *
-brw_label_assembly(const struct gen_device_info *devinfo,
+brw_label_assembly(const struct intel_device_info *devinfo,
                    const void *assembly, int start, int end, void *mem_ctx)
 {
    struct brw_label *root_label = NULL;
@@ -512,7 +512,7 @@ brw_label_assembly(const struct gen_device_info *devinfo,
 }
 
 void
-brw_disassemble_with_labels(const struct gen_device_info *devinfo,
+brw_disassemble_with_labels(const struct intel_device_info *devinfo,
                             const void *assembly, int start, int end, FILE *out)
 {
    void *mem_ctx = ralloc_context(NULL);
@@ -525,7 +525,7 @@ brw_disassemble_with_labels(const struct gen_device_info *devinfo,
 }
 
 void
-brw_disassemble(const struct gen_device_info *devinfo,
+brw_disassemble(const struct intel_device_info *devinfo,
                 const void *assembly, int start, int end,
                 const struct brw_label *root_label, FILE *out)
 {
@@ -590,7 +590,7 @@ brw_disassemble(const struct gen_device_info *devinfo,
 }
 
 static const struct opcode_desc opcode_descs[] = {
-   /* IR,                 HW,  name,      nsrc, ndst, gens */
+   /* IR,                 HW,  name,      nsrc, ndst, gfx_vers */
    { BRW_OPCODE_ILLEGAL,  0,   "illegal", 0,    0,    GFX_ALL },
    { BRW_OPCODE_SYNC,     1,   "sync",    1,    0,    GFX_GE(GFX12) },
    { BRW_OPCODE_MOV,      1,   "mov",     1,    1,    GFX_LT(GFX12) },
@@ -704,25 +704,25 @@ static const struct opcode_desc opcode_descs[] = {
  * matching entry.
  *
  * This is implemented by using an index data structure (storage for which is
- * provided by the caller as \p index_gen and \p index_descs) in order to
+ * provided by the caller as \p index_ver and \p index_descs) in order to
  * provide efficient constant-time look-up.
  */
 static const opcode_desc *
-lookup_opcode_desc(gen *index_gen,
+lookup_opcode_desc(gfx_ver *index_ver,
                    const opcode_desc **index_descs,
                    unsigned index_size,
                    unsigned opcode_desc::*key,
-                   const gen_device_info *devinfo,
+                   const intel_device_info *devinfo,
                    unsigned k)
 {
-   if (*index_gen != gen_from_devinfo(devinfo)) {
-      *index_gen = gen_from_devinfo(devinfo);
+   if (*index_ver != gfx_ver_from_devinfo(devinfo)) {
+      *index_ver = gfx_ver_from_devinfo(devinfo);
 
       for (unsigned l = 0; l < index_size; l++)
          index_descs[l] = NULL;
 
       for (unsigned i = 0; i < ARRAY_SIZE(opcode_descs); i++) {
-         if (opcode_descs[i].gens & *index_gen) {
+         if (opcode_descs[i].gfx_vers & *index_ver) {
             const unsigned l = opcode_descs[i].*key;
             assert(l < index_size && !index_descs[l]);
             index_descs[l] = &opcode_descs[i];
@@ -741,11 +741,11 @@ lookup_opcode_desc(gen *index_gen,
  * generation, or NULL if the opcode is not supported by the device.
  */
 const struct opcode_desc *
-brw_opcode_desc(const struct gen_device_info *devinfo, enum opcode opcode)
+brw_opcode_desc(const struct intel_device_info *devinfo, enum opcode opcode)
 {
-   static __thread gen index_gen = {};
+   static __thread gfx_ver index_ver = {};
    static __thread const opcode_desc *index_descs[NUM_BRW_OPCODES];
-   return lookup_opcode_desc(&index_gen, index_descs, ARRAY_SIZE(index_descs),
+   return lookup_opcode_desc(&index_ver, index_descs, ARRAY_SIZE(index_descs),
                              &opcode_desc::ir, devinfo, opcode);
 }
 
@@ -754,10 +754,10 @@ brw_opcode_desc(const struct gen_device_info *devinfo, enum opcode opcode)
  * generation, or NULL if the opcode is not supported by the device.
  */
 const struct opcode_desc *
-brw_opcode_desc_from_hw(const struct gen_device_info *devinfo, unsigned hw)
+brw_opcode_desc_from_hw(const struct intel_device_info *devinfo, unsigned hw)
 {
-   static __thread gen index_gen = {};
+   static __thread gfx_ver index_ver = {};
    static __thread const opcode_desc *index_descs[128];
-   return lookup_opcode_desc(&index_gen, index_descs, ARRAY_SIZE(index_descs),
+   return lookup_opcode_desc(&index_ver, index_descs, ARRAY_SIZE(index_descs),
                              &opcode_desc::hw, devinfo, hw);
 }

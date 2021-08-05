@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
-<metrics version="1599482526" merge_md5="">
-  <set name="Render Metrics Basic Gen8LP"
+<metrics version="1619078710" merge_md5="">
+  <set name="Render Metrics Basic set"
        chipset="CHV"
        symbol_name="RenderBasic"
        underscore_name="render_basic"
@@ -785,7 +785,7 @@
     </register_config>
   </set>
 
-  <set name="Compute Metrics Basic Gen8LP"
+  <set name="Compute Metrics Basic set"
        chipset="CHV"
        symbol_name="ComputeBasic"
        underscore_name="compute_basic"
@@ -9549,7 +9549,7 @@
     </register_config>
   </set>
 
-  <set name="MDAPI testing set Gen8LP"
+  <set name="MDAPI testing set"
        chipset="CHV"
        symbol_name="TestOa"
        underscore_name="test_oa"

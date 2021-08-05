@@ -58,6 +58,14 @@ brw_batch_reset(struct brw_context *brw);
 static void
 brw_new_batch(struct brw_context *brw);
 
+static unsigned
+num_fences(struct brw_batch *batch)
+{
+   return util_dynarray_num_elements(&batch->exec_fences,
+                                     struct drm_i915_gem_exec_fence);
+}
+
+
 static void
 dump_validation_list(struct brw_batch *batch)
 {
@@ -128,7 +136,7 @@ brw_batch_init(struct brw_context *brw)
 {
    struct brw_screen *screen = brw->screen;
    struct brw_batch *batch = &brw->batch;
-   const struct gen_device_info *devinfo = &screen->devinfo;
+   const struct intel_device_info *devinfo = &screen->devinfo;
 
    if (INTEL_DEBUG & DEBUG_BATCH) {
       /* The shadow doesn't get relocs written so state decode fails. */
@@ -147,6 +155,7 @@ brw_batch_init(struct brw_context *brw)
       malloc(batch->exec_array_size * sizeof(batch->exec_bos[0]));
    batch->validation_list =
       malloc(batch->exec_array_size * sizeof(batch->validation_list[0]));
+   batch->contains_fence_signal = false;
 
    if (INTEL_DEBUG & DEBUG_BATCH) {
       batch->state_batch_sizes =
@@ -284,6 +293,9 @@ brw_batch_reset(struct brw_context *brw)
    struct brw_bo *identifier_bo = brw->workaround_bo;
    if (identifier_bo)
       add_exec_bo(batch, identifier_bo);
+
+   if (batch->contains_fence_signal)
+      batch->contains_fence_signal = false;
 }
 
 static void
@@ -604,7 +616,7 @@ brw_new_batch(struct brw_context *brw)
 static void
 brw_finish_batch(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    brw->batch.no_wrap = true;
 
@@ -727,6 +739,14 @@ execbuffer(int fd,
       *out_fence = -1;
       execbuf.flags |= I915_EXEC_FENCE_OUT;
    }
+
+   if (num_fences(batch)) {
+      execbuf.flags |= I915_EXEC_FENCE_ARRAY;
+      execbuf.num_cliprects = num_fences(batch);
+      execbuf.cliprects_ptr =
+         (uintptr_t)util_dynarray_begin(&batch->exec_fences);
+   }
+
 
    int ret = drmIoctl(fd, cmd, &execbuf);
    if (ret != 0)
@@ -862,7 +882,7 @@ _brw_batch_flush_fence(struct brw_context *brw,
 {
    int ret;
 
-   if (USED_BATCH(brw->batch) == 0)
+   if (USED_BATCH(brw->batch) == 0 && !brw->batch.contains_fence_signal)
       return 0;
 
    /* Check that we didn't just wrap our batchbuffer at a bad time. */
@@ -1095,7 +1115,7 @@ load_sized_register_mem(struct brw_context *brw,
                         uint32_t offset,
                         int size)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    int i;
 
    /* MI_LOAD_REGISTER_MEM only exists on Gfx7+. */
@@ -1145,7 +1165,7 @@ void
 brw_store_register_mem32(struct brw_context *brw,
                          struct brw_bo *bo, uint32_t reg, uint32_t offset)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    assert(devinfo->ver >= 6);
 
@@ -1171,7 +1191,7 @@ void
 brw_store_register_mem64(struct brw_context *brw,
                          struct brw_bo *bo, uint32_t reg, uint32_t offset)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    assert(devinfo->ver >= 6);
 
@@ -1237,7 +1257,7 @@ brw_load_register_imm64(struct brw_context *brw, uint32_t reg, uint64_t imm)
 void
 brw_load_register_reg(struct brw_context *brw, uint32_t dest, uint32_t src)
 {
-   assert(brw->screen->devinfo.ver >= 8 || brw->screen->devinfo.is_haswell);
+   assert(brw->screen->devinfo.verx10 >= 75);
 
    BEGIN_BATCH(3);
    OUT_BATCH(MI_LOAD_REGISTER_REG | (3 - 2));
@@ -1252,7 +1272,7 @@ brw_load_register_reg(struct brw_context *brw, uint32_t dest, uint32_t src)
 void
 brw_load_register_reg64(struct brw_context *brw, uint32_t dest, uint32_t src)
 {
-   assert(brw->screen->devinfo.ver >= 8 || brw->screen->devinfo.is_haswell);
+   assert(brw->screen->devinfo.verx10 >= 75);
 
    BEGIN_BATCH(6);
    OUT_BATCH(MI_LOAD_REGISTER_REG | (3 - 2));
@@ -1271,7 +1291,7 @@ void
 brw_store_data_imm32(struct brw_context *brw, struct brw_bo *bo,
                      uint32_t offset, uint32_t imm)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    assert(devinfo->ver >= 6);
 
@@ -1294,7 +1314,7 @@ void
 brw_store_data_imm64(struct brw_context *brw, struct brw_bo *bo,
                      uint32_t offset, uint64_t imm)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    assert(devinfo->ver >= 6);
 

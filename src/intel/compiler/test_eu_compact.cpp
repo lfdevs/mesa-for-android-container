@@ -26,7 +26,7 @@
 #include <stdbool.h>
 #include "util/ralloc.h"
 #include "brw_eu.h"
-#include "brw_gen_enum.h"
+#include "brw_gfx_ver_enum.h"
 
 static bool
 test_compact_instruction(struct brw_codegen *p, brw_inst src)
@@ -65,7 +65,7 @@ test_compact_instruction(struct brw_codegen *p, brw_inst src)
  * become meaningless once fuzzing twiddles a related bit.
  */
 static void
-clear_pad_bits(const struct gen_device_info *devinfo, brw_inst *inst)
+clear_pad_bits(const struct intel_device_info *devinfo, brw_inst *inst)
 {
    if (brw_inst_opcode(devinfo, inst) != BRW_OPCODE_SEND &&
        brw_inst_opcode(devinfo, inst) != BRW_OPCODE_SENDC &&
@@ -83,7 +83,7 @@ clear_pad_bits(const struct gen_device_info *devinfo, brw_inst *inst)
 }
 
 static bool
-skip_bit(const struct gen_device_info *devinfo, brw_inst *src, int bit)
+skip_bit(const struct intel_device_info *devinfo, brw_inst *src, int bit)
 {
    /* pad bit */
    if (bit == 7)
@@ -174,7 +174,7 @@ test_fuzz_compact_instruction(struct brw_codegen *p, brw_inst src)
 }
 
 static void
-gen_ADD_GRF_GRF_GRF(struct brw_codegen *p)
+test_ADD_GRF_GRF_GRF(struct brw_codegen *p)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -184,7 +184,7 @@ gen_ADD_GRF_GRF_GRF(struct brw_codegen *p)
 }
 
 static void
-gen_ADD_GRF_GRF_IMM(struct brw_codegen *p)
+test_ADD_GRF_GRF_IMM(struct brw_codegen *p)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -193,7 +193,7 @@ gen_ADD_GRF_GRF_IMM(struct brw_codegen *p)
 }
 
 static void
-gen_ADD_GRF_GRF_IMM_d(struct brw_codegen *p)
+test_ADD_GRF_GRF_IMM_d(struct brw_codegen *p)
 {
    struct brw_reg g0 = retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_D);
    struct brw_reg g2 = retype(brw_vec8_grf(2, 0), BRW_REGISTER_TYPE_D);
@@ -202,7 +202,7 @@ gen_ADD_GRF_GRF_IMM_d(struct brw_codegen *p)
 }
 
 static void
-gen_MOV_GRF_GRF(struct brw_codegen *p)
+test_MOV_GRF_GRF(struct brw_codegen *p)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -211,7 +211,7 @@ gen_MOV_GRF_GRF(struct brw_codegen *p)
 }
 
 static void
-gen_ADD_MRF_GRF_GRF(struct brw_codegen *p)
+test_ADD_MRF_GRF_GRF(struct brw_codegen *p)
 {
    struct brw_reg m6 = brw_vec8_reg(BRW_MESSAGE_REGISTER_FILE, 6, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -221,7 +221,7 @@ gen_ADD_MRF_GRF_GRF(struct brw_codegen *p)
 }
 
 static void
-gen_ADD_vec1_GRF_GRF_GRF(struct brw_codegen *p)
+test_ADD_vec1_GRF_GRF_GRF(struct brw_codegen *p)
 {
    struct brw_reg g0 = brw_vec1_grf(0, 0);
    struct brw_reg g2 = brw_vec1_grf(2, 0);
@@ -231,7 +231,7 @@ gen_ADD_vec1_GRF_GRF_GRF(struct brw_codegen *p)
 }
 
 static void
-gen_PLN_MRF_GRF_GRF(struct brw_codegen *p)
+test_PLN_MRF_GRF_GRF(struct brw_codegen *p)
 {
    struct brw_reg m6 = brw_vec8_reg(BRW_MESSAGE_REGISTER_FILE, 6, 0);
    struct brw_reg interp = brw_vec1_grf(2, 0);
@@ -241,7 +241,7 @@ gen_PLN_MRF_GRF_GRF(struct brw_codegen *p)
 }
 
 static void
-gen_f0_0_MOV_GRF_GRF(struct brw_codegen *p)
+test_f0_0_MOV_GRF_GRF(struct brw_codegen *p)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -257,7 +257,7 @@ gen_f0_0_MOV_GRF_GRF(struct brw_codegen *p)
  * interact with it.
  */
 static void
-gen_f0_1_MOV_GRF_GRF(struct brw_codegen *p)
+test_f0_1_MOV_GRF_GRF(struct brw_codegen *p)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -271,26 +271,26 @@ gen_f0_1_MOV_GRF_GRF(struct brw_codegen *p)
 
 struct {
    void (*func)(struct brw_codegen *p);
-   int gens;
+   int gfx_vers;
 } tests[] = {
-   { gen_MOV_GRF_GRF,          GFX_ALL      },
-   { gen_ADD_GRF_GRF_GRF,      GFX_ALL      },
-   { gen_ADD_GRF_GRF_IMM,      GFX_ALL      },
-   { gen_ADD_GRF_GRF_IMM_d,    GFX_ALL      },
-   { gen_ADD_MRF_GRF_GRF,      GFX_LE(GFX6) },
-   { gen_ADD_vec1_GRF_GRF_GRF, GFX_ALL      },
-   { gen_PLN_MRF_GRF_GRF,      GFX_LE(GFX6) },
-   { gen_f0_0_MOV_GRF_GRF,     GFX_ALL      },
-   { gen_f0_1_MOV_GRF_GRF,     GFX_ALL      },
+   { test_MOV_GRF_GRF,          GFX_ALL      },
+   { test_ADD_GRF_GRF_GRF,      GFX_ALL      },
+   { test_ADD_GRF_GRF_IMM,      GFX_ALL      },
+   { test_ADD_GRF_GRF_IMM_d,    GFX_ALL      },
+   { test_ADD_MRF_GRF_GRF,      GFX_LE(GFX6) },
+   { test_ADD_vec1_GRF_GRF_GRF, GFX_ALL      },
+   { test_PLN_MRF_GRF_GRF,      GFX_LE(GFX6) },
+   { test_f0_0_MOV_GRF_GRF,     GFX_ALL      },
+   { test_f0_1_MOV_GRF_GRF,     GFX_ALL      },
 };
 
 static bool
-run_tests(const struct gen_device_info *devinfo)
+run_tests(const struct intel_device_info *devinfo)
 {
    bool fail = false;
 
    for (unsigned i = 0; i < ARRAY_SIZE(tests); i++) {
-      if ((tests[i].gens & gen_from_devinfo(devinfo)) == 0)
+      if ((tests[i].gfx_vers & gfx_ver_from_devinfo(devinfo)) == 0)
          continue;
 
       for (int align_16 = 0; align_16 <= 1; align_16++) {
@@ -330,7 +330,7 @@ run_tests(const struct gen_device_info *devinfo)
 int
 main(UNUSED int argc, UNUSED char **argv)
 {
-   struct gen_device_info *devinfo = (struct gen_device_info *)calloc(1, sizeof(*devinfo));
+   struct intel_device_info *devinfo = (struct intel_device_info *)calloc(1, sizeof(*devinfo));
    bool fail = false;
 
    for (devinfo->ver = 5; devinfo->ver <= 12; devinfo->ver++) {

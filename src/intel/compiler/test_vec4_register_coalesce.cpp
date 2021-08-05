@@ -37,7 +37,7 @@ class register_coalesce_test : public ::testing::Test {
 
 public:
    struct brw_compiler *compiler;
-   struct gen_device_info *devinfo;
+   struct intel_device_info *devinfo;
    void *ctx;
    struct gl_shader_program *shader_prog;
    struct brw_vue_prog_data *prog_data;
@@ -95,7 +95,7 @@ void register_coalesce_test::SetUp()
 {
    ctx = ralloc_context(NULL);
    compiler = rzalloc(ctx, struct brw_compiler);
-   devinfo = rzalloc(ctx, struct gen_device_info);
+   devinfo = rzalloc(ctx, struct intel_device_info);
    compiler->devinfo = devinfo;
 
    prog_data = ralloc(ctx, struct brw_vue_prog_data);

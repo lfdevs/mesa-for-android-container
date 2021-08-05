@@ -1,5 +1,6 @@
-shaders@glsl-vs-loop
-spec@arb_framebuffer_srgb@blit renderbuffer srgb single_sampled enabled clear
 glx@glx-multi-window-single-context
-glx@glx_arb_sync_control@timing
+shaders@glsl-vs-loop
+shaders@glsl-vs-loop-nested
+spec@arb_framebuffer_srgb@blit renderbuffer srgb single_sampled enabled clear
 spec@egl_chromium_sync_control@conformance
+spec@ext_packed_depth_stencil@fbo-stencil-gl_depth24_stencil8-readpixels

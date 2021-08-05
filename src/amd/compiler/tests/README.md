@@ -17,3 +17,8 @@ Patterns can define variables which can be accessed in both python code and the 
 - A `$` in the pattern stores the output until the first whitespace character into a variable.
 - A `%` in the pattern followed by an identifier is the same as a `#` but it expects a `%` before the integer in the output. It basically matches a ACO temporary.
 - A `@` calls a variable as a function. It can be followed by an argument string wrapped in `(` and `)`.
+
+# Functions
+- `s64`, `s96`, `s128`, `v2`, `v3`, etc, expand to a pattern which matches a disassembled instruction's definition or operand. It later checks that the size and alignment is what's expected.
+- `match_func` expands to a sequence of `$` and inserts functions with expand to the extracted output
+- `search_re` consumes the rest of the line and fails the test if the pattern is not found

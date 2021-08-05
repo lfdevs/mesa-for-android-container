@@ -65,8 +65,14 @@ struct zwp_linux_dmabuf_v1;
 #ifdef HAVE_ANDROID_PLATFORM
 #define LOG_TAG "EGL-DRI2"
 
-#include <system/window.h>
 #include <hardware/gralloc.h>
+
+#if ANDROID_API_LEVEL >= 26
+#include <vndk/window.h>
+#else
+#include <system/window.h>
+#endif
+
 #endif /* HAVE_ANDROID_PLATFORM */
 
 #include "eglconfig.h"
@@ -247,6 +253,8 @@ struct dri2_egl_display
 
 #ifdef HAVE_ANDROID_PLATFORM
    const gralloc_module_t *gralloc;
+   /* gralloc vendor usage bit for front rendering */
+   uint32_t front_rendering_usage;
 #endif
 
    bool                      is_render_node;
@@ -338,6 +346,7 @@ struct dri2_egl_surface
       struct ANativeWindowBuffer *buffer;
       int age;
    } *color_buffers, *back;
+   uint32_t gralloc_usage;
 #endif
 
    /* surfaceless and device */

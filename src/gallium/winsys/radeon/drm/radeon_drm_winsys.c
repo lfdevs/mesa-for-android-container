@@ -314,13 +314,13 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
    }
 
    /* Check for UVD and VCE */
-   ws->info.has_hw_decode = false;
+   ws->info.has_video_hw.uvd_decode = false;
    ws->info.vce_fw_version = 0x00000000;
    if (ws->info.drm_minor >= 32) {
       uint32_t value = RADEON_CS_RING_UVD;
       if (radeon_get_drm_value(ws->fd, RADEON_INFO_RING_WORKING,
                                "UVD Ring working", &value)) {
-         ws->info.has_hw_decode = value;
+         ws->info.has_video_hw.uvd_decode = value;
          ws->info.num_rings[RING_UVD] = 1;
       }
 
@@ -938,7 +938,7 @@ radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
    ws->info.pte_fragment_size = 64 * 1024; /* GPUVM page size */
 
    if (ws->num_cpus > 1 && debug_get_option_thread())
-      util_queue_init(&ws->cs_queue, "rcs", 8, 1, 0);
+      util_queue_init(&ws->cs_queue, "rcs", 8, 1, 0, NULL);
 
    /* Create the screen at the end. The winsys must be initialized
     * completely.

@@ -158,6 +158,7 @@ extern void intelDestroyContext(__DRIcontext * driContextPriv);
 
 extern GLboolean intelUnbindContext(__DRIcontext * driContextPriv);
 
+const __DRIextension **__driDriverGetExtensions_i830(void);
 const __DRIextension **__driDriverGetExtensions_i915(void);
 extern const __DRI2fenceExtension intelFenceExtension;
 

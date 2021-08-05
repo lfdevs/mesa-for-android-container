@@ -25,6 +25,24 @@
 
 #include "codegen/nv50_ir_target_nv50.h"
 
+#define NV50_SU_INFO_SIZE_X   0x00
+#define NV50_SU_INFO_SIZE_Y   0x04
+#define NV50_SU_INFO_SIZE_Z   0x08
+#define NV50_SU_INFO_BSIZE    0x0c
+#define NV50_SU_INFO_STRIDE_Y 0x10
+#define NV50_SU_INFO_MS_X     0x18
+#define NV50_SU_INFO_MS_Y     0x1c
+#define NV50_SU_INFO_TILE_SHIFT_X 0x20
+#define NV50_SU_INFO_TILE_SHIFT_Y 0x24
+#define NV50_SU_INFO_TILE_SHIFT_Z 0x28
+#define NV50_SU_INFO_OFFSET_Z 0x2c
+
+#define NV50_SU_INFO__STRIDE 0x30
+
+#define NV50_SU_INFO_SIZE(i) (0x00 + (i) * 4)
+#define NV50_SU_INFO_MS(i)   (0x18 + (i) * 4)
+#define NV50_SU_INFO_TILE_SHIFT(i) (0x20 + (i) * 4)
+
 namespace nv50_ir {
 
 // nv50 doesn't support 32 bit integer multiplication
@@ -214,6 +232,8 @@ private:
 
    void handlePRERET(FlowInstruction *);
    void replaceZero(Instruction *);
+
+   BuildUtil bld;
 
    LValue *r63;
 };
@@ -627,6 +647,12 @@ private:
    bool handleEXPORT(Instruction *);
    bool handleLOAD(Instruction *);
    bool handleLDST(Instruction *);
+   bool handleMEMBAR(Instruction *);
+   bool handleSharedATOM(Instruction *);
+   bool handleSULDP(TexInstruction *);
+   bool handleSUREDP(TexInstruction *);
+   bool handleSUSTP(TexInstruction *);
+   Value *processSurfaceCoords(TexInstruction *);
 
    bool handleDIV(Instruction *);
    bool handleSQRT(Instruction *);
@@ -642,6 +668,8 @@ private:
    bool handleTXD(TexInstruction *); // these 3
    bool handleTXLQ(TexInstruction *);
    bool handleTXQ(TexInstruction *);
+   bool handleSUQ(TexInstruction *);
+   bool handleBUFQ(Instruction *);
 
    bool handleCALL(Instruction *);
    bool handlePRECONT(Instruction *);
@@ -650,6 +678,8 @@ private:
    void checkPredicate(Instruction *);
    void loadTexMsInfo(uint32_t off, Value **ms, Value **ms_x, Value **ms_y);
    void loadMsInfo(Value *ms, Value *s, Value **dx, Value **dy);
+   Value *loadSuInfo(int slot, uint32_t off);
+   Value *loadSuInfo16(int slot, uint32_t off);
 
 private:
    const Target *const targ;
@@ -722,6 +752,24 @@ void NV50LoweringPreSSA::loadMsInfo(Value *ms, Value *s, Value **dx, Value **dy)
    *dy = bld.mkLoadv(TYPE_U32, bld.mkSymbol(
                            FILE_MEMORY_CONST, b, TYPE_U32,
                            prog->driver->io.msInfoBase + 4), off);
+}
+
+Value *
+NV50LoweringPreSSA::loadSuInfo(int slot, uint32_t off)
+{
+   uint8_t b = prog->driver->io.auxCBSlot;
+   off += prog->driver->io.bufInfoBase + slot * NV50_SU_INFO__STRIDE;
+   return bld.mkLoadv(TYPE_U32, bld.mkSymbol(
+                            FILE_MEMORY_CONST, b, TYPE_U32, off), NULL);
+}
+
+Value *
+NV50LoweringPreSSA::loadSuInfo16(int slot, uint32_t off)
+{
+   uint8_t b = prog->driver->io.auxCBSlot;
+   off += prog->driver->io.bufInfoBase + slot * NV50_SU_INFO__STRIDE;
+   return bld.mkLoadv(TYPE_U16, bld.mkSymbol(
+                            FILE_MEMORY_CONST, b, TYPE_U16, off), NULL);
 }
 
 bool
@@ -1064,6 +1112,56 @@ NV50LoweringPreSSA::handleTXQ(TexInstruction *i)
    return true;
 }
 
+bool
+NV50LoweringPreSSA::handleSUQ(TexInstruction *suq)
+{
+   const int dim = suq->tex.target.getDim();
+   const int arg = dim + (suq->tex.target.isArray() || suq->tex.target.isCube());
+   int mask = suq->tex.mask;
+   int slot = suq->tex.r;
+   int c, d;
+
+   for (c = 0, d = 0; c < 3; ++c, mask >>= 1) {
+      if (c >= arg || !(mask & 1))
+         continue;
+
+      int offset;
+
+      if (c == 1 && suq->tex.target == TEX_TARGET_1D_ARRAY) {
+         offset = NV50_SU_INFO_SIZE(2);
+      } else {
+         offset = NV50_SU_INFO_SIZE(c);
+      }
+      bld.mkMov(suq->getDef(d++), loadSuInfo(slot, offset));
+      if (c == 2 && suq->tex.target.isCube())
+         bld.mkOp2(OP_DIV, TYPE_U32, suq->getDef(d - 1), suq->getDef(d - 1),
+                   bld.loadImm(NULL, 6));
+   }
+
+   if (mask & 1) {
+      if (suq->tex.target.isMS()) {
+         Value *ms_x = loadSuInfo(slot, NV50_SU_INFO_MS(0));
+         Value *ms_y = loadSuInfo(slot, NV50_SU_INFO_MS(1));
+         Value *ms = bld.mkOp2v(OP_ADD, TYPE_U32, bld.getScratch(), ms_x, ms_y);
+         bld.mkOp2(OP_SHL, TYPE_U32, suq->getDef(d++), bld.loadImm(NULL, 1), ms);
+      } else {
+         bld.mkMov(suq->getDef(d++), bld.loadImm(NULL, 1));
+      }
+   }
+
+   bld.remove(suq);
+   return true;
+}
+
+bool
+NV50LoweringPreSSA::handleBUFQ(Instruction *bufq)
+{
+   bufq->op = OP_MOV;
+   bufq->setSrc(0, loadSuInfo(bufq->getSrc(0)->reg.fileIndex, NV50_SU_INFO_SIZE_X));
+   bufq->setIndirect(0, 0, NULL);
+   bufq->setIndirect(0, 1, NULL);
+   return true;
+}
 
 bool
 NV50LoweringPreSSA::handleSET(Instruction *i)
@@ -1360,6 +1458,118 @@ NV50LoweringPreSSA::handleLOAD(Instruction *i)
 }
 
 bool
+NV50LoweringPreSSA::handleSharedATOM(Instruction *atom)
+{
+   assert(atom->src(0).getFile() == FILE_MEMORY_SHARED);
+
+   BasicBlock *currBB = atom->bb;
+   BasicBlock *tryLockBB = atom->bb->splitBefore(atom, false);
+   BasicBlock *joinBB = atom->bb->splitAfter(atom);
+   BasicBlock *setAndUnlockBB = new BasicBlock(func);
+   BasicBlock *failLockBB = new BasicBlock(func);
+
+   bld.setPosition(currBB, true);
+   assert(!currBB->joinAt);
+   currBB->joinAt = bld.mkFlow(OP_JOINAT, joinBB, CC_ALWAYS, NULL);
+
+   bld.mkFlow(OP_BRA, tryLockBB, CC_ALWAYS, NULL);
+   currBB->cfg.attach(&tryLockBB->cfg, Graph::Edge::TREE);
+
+   bld.setPosition(tryLockBB, true);
+
+   Instruction *ld =
+      bld.mkLoad(TYPE_U32, atom->getDef(0), atom->getSrc(0)->asSym(),
+                 atom->getIndirect(0, 0));
+   Value *locked = bld.getSSA(1, FILE_FLAGS);
+   if (prog->getTarget()->getChipset() >= 0xa0) {
+      ld->setFlagsDef(1, locked);
+      ld->subOp = NV50_IR_SUBOP_LOAD_LOCKED;
+   } else {
+      bld.mkMov(locked, bld.loadImm(NULL, 2))
+         ->flagsDef = 0;
+   }
+
+   bld.mkFlow(OP_BRA, setAndUnlockBB, CC_LT, locked);
+   bld.mkFlow(OP_BRA, failLockBB, CC_ALWAYS, NULL);
+   tryLockBB->cfg.attach(&failLockBB->cfg, Graph::Edge::CROSS);
+   tryLockBB->cfg.attach(&setAndUnlockBB->cfg, Graph::Edge::TREE);
+
+   tryLockBB->cfg.detach(&joinBB->cfg);
+   bld.remove(atom);
+
+   bld.setPosition(setAndUnlockBB, true);
+   Value *stVal;
+   if (atom->subOp == NV50_IR_SUBOP_ATOM_EXCH) {
+      // Read the old value, and write the new one.
+      stVal = atom->getSrc(1);
+   } else if (atom->subOp == NV50_IR_SUBOP_ATOM_CAS) {
+      CmpInstruction *set =
+         bld.mkCmp(OP_SET, CC_EQ, TYPE_U32, bld.getSSA(1, FILE_FLAGS),
+                   TYPE_U32, ld->getDef(0), atom->getSrc(1));
+
+      Instruction *selp =
+         bld.mkOp3(OP_SELP, TYPE_U32, bld.getSSA(), atom->getSrc(2),
+                   ld->getDef(0), set->getDef(0));
+      stVal = selp->getDef(0);
+
+      handleSELP(selp);
+   } else {
+      operation op;
+
+      switch (atom->subOp) {
+      case NV50_IR_SUBOP_ATOM_ADD:
+         op = OP_ADD;
+         break;
+      case NV50_IR_SUBOP_ATOM_AND:
+         op = OP_AND;
+         break;
+      case NV50_IR_SUBOP_ATOM_OR:
+         op = OP_OR;
+         break;
+      case NV50_IR_SUBOP_ATOM_XOR:
+         op = OP_XOR;
+         break;
+      case NV50_IR_SUBOP_ATOM_MIN:
+         op = OP_MIN;
+         break;
+      case NV50_IR_SUBOP_ATOM_MAX:
+         op = OP_MAX;
+         break;
+      default:
+         assert(0);
+         return false;
+      }
+
+      Instruction *i =
+         bld.mkOp2(op, atom->dType, bld.getSSA(), ld->getDef(0),
+                   atom->getSrc(1));
+
+      stVal = i->getDef(0);
+   }
+
+   Instruction *store = bld.mkStore(OP_STORE, TYPE_U32, atom->getSrc(0)->asSym(),
+               atom->getIndirect(0, 0), stVal);
+   if (prog->getTarget()->getChipset() >= 0xa0) {
+      store->subOp = NV50_IR_SUBOP_STORE_UNLOCKED;
+   }
+
+   bld.mkFlow(OP_BRA, failLockBB, CC_ALWAYS, NULL);
+   setAndUnlockBB->cfg.attach(&failLockBB->cfg, Graph::Edge::TREE);
+
+   // Loop until the lock is acquired.
+   bld.setPosition(failLockBB, true);
+   bld.mkFlow(OP_BRA, tryLockBB, CC_GEU, locked);
+   bld.mkFlow(OP_BRA, joinBB, CC_ALWAYS, NULL);
+   failLockBB->cfg.attach(&tryLockBB->cfg, Graph::Edge::BACK);
+   failLockBB->cfg.attach(&joinBB->cfg, Graph::Edge::TREE);
+
+   bld.setPosition(joinBB, false);
+   bld.mkFlow(OP_JOIN, NULL, CC_ALWAYS, NULL)->fixed = 1;
+
+   return true;
+}
+
+bool
 NV50LoweringPreSSA::handleLDST(Instruction *i)
 {
    ValueRef src = i->src(0);
@@ -1387,6 +1597,9 @@ NV50LoweringPreSSA::handleLDST(Instruction *i)
             i->setIndirect(0, 0, new_addr);
          }
       }
+
+      if (i->op == OP_ATOM)
+         handleSharedATOM(i);
    } else if (sym->inFile(FILE_MEMORY_GLOBAL)) {
       // All global access must be indirect. There are no instruction forms
       // with direct access.
@@ -1404,6 +1617,514 @@ NV50LoweringPreSSA::handleLDST(Instruction *i)
       sym->reg.data.offset = 0;
    }
 
+   return true;
+}
+
+bool
+NV50LoweringPreSSA::handleMEMBAR(Instruction *i)
+{
+   // For global memory, apparently doing a bunch of reads at different
+   // addresses forces things to get sufficiently flushed.
+   if (i->subOp & NV50_IR_SUBOP_MEMBAR_GL) {
+      uint8_t b = prog->driver->io.auxCBSlot;
+      Value *base =
+         bld.mkLoadv(TYPE_U32, bld.mkSymbol(FILE_MEMORY_CONST, b, TYPE_U32,
+                                            prog->driver->io.membarOffset), NULL);
+      Value *physid = bld.mkOp1v(OP_RDSV, TYPE_U32, bld.getSSA(), bld.mkSysVal(SV_PHYSID, 0));
+      Value *off = bld.mkOp2v(OP_SHL, TYPE_U32, bld.getSSA(),
+                              bld.mkOp2v(OP_AND, TYPE_U32, bld.getSSA(),
+                                         physid, bld.loadImm(NULL, 0x1f)),
+                              bld.loadImm(NULL, 2));
+      base = bld.mkOp2v(OP_ADD, TYPE_U32, bld.getSSA(), base, off);
+      Symbol *gmemMembar = bld.mkSymbol(FILE_MEMORY_GLOBAL, prog->driver->io.gmemMembar, TYPE_U32, 0);
+      for (int i = 0; i < 8; i++) {
+         if (i != 0) {
+            base = bld.mkOp2v(OP_ADD, TYPE_U32, bld.getSSA(), base, bld.loadImm(NULL, 0x100));
+         }
+         bld.mkLoad(TYPE_U32, bld.getSSA(), gmemMembar, base)
+            ->fixed = 1;
+      }
+   }
+
+   // Both global and shared memory barriers also need a regular control bar
+   // TODO: double-check this is the case
+   i->op = OP_BAR;
+   i->subOp = NV50_IR_SUBOP_BAR_SYNC;
+   i->setSrc(0, bld.mkImm(0u));
+   i->setSrc(1, bld.mkImm(0u));
+
+   return true;
+}
+
+// The type that bests represents how each component can be stored when packed.
+static DataType
+getPackedType(const TexInstruction::ImgFormatDesc *t, int c)
+{
+   switch (t->type) {
+   case FLOAT: return t->bits[c] == 16 ? TYPE_F16 : TYPE_F32;
+   case UNORM: return t->bits[c] == 8 ? TYPE_U8 : TYPE_U16;
+   case SNORM: return t->bits[c] == 8 ? TYPE_S8 : TYPE_S16;
+   case UINT:
+      return (t->bits[c] == 8 ? TYPE_U8 :
+              (t->bits[c] <= 16 ? TYPE_U16 : TYPE_U32));
+   case SINT:
+      return (t->bits[c] == 8 ? TYPE_S8 :
+              (t->bits[c] <= 16 ? TYPE_S16 : TYPE_S32));
+   }
+   return TYPE_NONE;
+}
+
+// The type that the rest of the shader expects to process this image type in.
+static DataType
+getShaderType(const ImgType type) {
+   switch (type) {
+   case FLOAT:
+   case UNORM:
+   case SNORM:
+      return TYPE_F32;
+   case UINT:
+      return TYPE_U32;
+   case SINT:
+      return TYPE_S32;
+   default:
+      assert(!"Impossible type");
+      return TYPE_NONE;
+   }
+}
+
+// Reads the raw coordinates out of the input instruction, and returns a
+// single-value coordinate which is what the hardware expects to receive in a
+// ld/st op.
+Value *
+NV50LoweringPreSSA::processSurfaceCoords(TexInstruction *su)
+{
+   const int slot = su->tex.r;
+   const int dim = su->tex.target.getDim();
+   const int arg = dim + (su->tex.target.isArray() || su->tex.target.isCube());
+
+   const TexInstruction::ImgFormatDesc *format = su->tex.format;
+   const uint16_t bytes = (format->bits[0] + format->bits[1] +
+                           format->bits[2] + format->bits[3]) / 8;
+   uint16_t shift = ffs(bytes) - 1;
+
+   // Buffer sizes don't necessarily fit in 16-bit values
+   if (su->tex.target == TEX_TARGET_BUFFER) {
+      return bld.mkOp2v(OP_SHL, TYPE_U32, bld.getSSA(),
+                        su->getSrc(0), bld.loadImm(NULL, (uint32_t)shift));
+   }
+
+   // For buffers, we just need the byte offset. And for 2d buffers we want
+   // the x coordinate in bytes as well.
+   Value *coords[3] = {};
+   for (int i = 0; i < arg; i++) {
+      Value *src[2];
+      bld.mkSplit(src, 2, su->getSrc(i));
+      coords[i] = src[0];
+      // For 1d-images, we want the y coord to be 0, which it will be here.
+      if (i == 0)
+         coords[1] = src[1];
+   }
+
+   coords[0] = bld.mkOp2v(OP_SHL, TYPE_U16, bld.getSSA(2),
+                          coords[0], bld.loadImm(NULL, shift));
+
+   if (su->tex.target.isMS()) {
+      Value *ms_x = loadSuInfo16(slot, NV50_SU_INFO_MS(0));
+      Value *ms_y = loadSuInfo16(slot, NV50_SU_INFO_MS(1));
+      coords[0] = bld.mkOp2v(OP_SHL, TYPE_U16, bld.getSSA(2), coords[0], ms_x);
+      coords[1] = bld.mkOp2v(OP_SHL, TYPE_U16, bld.getSSA(2), coords[1], ms_y);
+   }
+
+   // If there are more dimensions, we just want the y-offset. But that needs
+   // to be adjusted up by the y-stride for array images.
+   if (su->tex.target.isArray() || su->tex.target.isCube()) {
+      Value *index = coords[dim];
+      Value *height = loadSuInfo16(slot, NV50_SU_INFO_STRIDE_Y);
+      Instruction *mul = bld.mkOp2(OP_MUL, TYPE_U32, bld.getSSA(4), index, height);
+      mul->sType = TYPE_U16;
+      Value *muls[2];
+      bld.mkSplit(muls, 2, mul->getDef(0));
+      if (dim > 1)
+         coords[1] = bld.mkOp2v(OP_ADD, TYPE_U16, bld.getSSA(2), coords[1], muls[0]);
+      else
+         coords[1] = muls[0];
+   }
+
+   // 3d is special-cased. Note that a single "slice" of a 3d image may
+   // also be attached as 2d, so we have to do the same 3d processing for
+   // 2d as well, just in case. In order to remap a 3d image onto a 2d
+   // image, we have to retile it "by hand".
+   if (su->tex.target == TEX_TARGET_3D || su->tex.target == TEX_TARGET_2D) {
+      Value *z = loadSuInfo16(slot, NV50_SU_INFO_OFFSET_Z);
+      Value *y_size_aligned = loadSuInfo16(slot, NV50_SU_INFO_STRIDE_Y);
+      // Add the z coordinate for actual 3d-images
+      if (dim > 2)
+         coords[2] = bld.mkOp2v(OP_ADD, TYPE_U16, bld.getSSA(2), z, coords[2]);
+      else
+         coords[2] = z;
+
+      // Compute the surface parameters from tile shifts
+      Value *tile_shift[3];
+      Value *tile_size[3];
+      Value *tile_mask[3];
+      // We only ever use one kind of X-tiling.
+      tile_shift[0] = bld.loadImm(NULL, (uint16_t)6);
+      tile_size[0] = bld.loadImm(NULL, (uint16_t)64);
+      tile_mask[0] = bld.loadImm(NULL, (uint16_t)63);
+      // Fetch the "real" tiling parameters of the underlying surface
+      for (int i = 1; i < 3; i++) {
+         tile_shift[i] = loadSuInfo16(slot, NV50_SU_INFO_TILE_SHIFT(i));
+         tile_size[i] = bld.mkOp2v(OP_SHL, TYPE_U16, bld.getSSA(2), bld.loadImm(NULL, (uint16_t)1), tile_shift[i]);
+         tile_mask[i] = bld.mkOp2v(OP_ADD, TYPE_U16, bld.getSSA(2), tile_size[i], bld.loadImm(NULL, (uint16_t)-1));
+      }
+
+      // Compute the location of given coordinate, both inside the tile as
+      // well as which (linearly-laid out) tile it's in.
+      Value *coord_in_tile[3];
+      Value *tile[3];
+      for (int i = 0; i < 3; i++) {
+         coord_in_tile[i] = bld.mkOp2v(OP_AND, TYPE_U16, bld.getSSA(2), coords[i], tile_mask[i]);
+         tile[i] = bld.mkOp2v(OP_SHR, TYPE_U16, bld.getSSA(2), coords[i], tile_shift[i]);
+      }
+
+      // Based on the "real" tiling parameters, compute x/y coordinates in the
+      // larger surface with 2d tiling that was supplied to the hardware. This
+      // was determined and verified with the help of the tiling pseudocode in
+      // the envytools docs.
+      //
+      // adj_x = x_coord_in_tile + x_tile * x_tile_size * z_tile_size +
+      //         z_coord_in_tile * x_tile_size
+      // adj_y = y_coord_in_tile + y_tile * y_tile_size +
+      //         z_tile * y_tile_size * y_tiles
+      //
+      // Note: STRIDE_Y = y_tile_size * y_tiles
+
+      coords[0] = bld.mkOp2v(
+            OP_ADD, TYPE_U16, bld.getSSA(2),
+            bld.mkOp2v(OP_ADD, TYPE_U16, bld.getSSA(2),
+                       coord_in_tile[0],
+                       bld.mkOp2v(OP_SHL, TYPE_U16, bld.getSSA(2),
+                                  tile[0],
+                                  bld.mkOp2v(OP_ADD, TYPE_U16, bld.getSSA(2),
+                                             tile_shift[2], tile_shift[0]))),
+            bld.mkOp2v(OP_SHL, TYPE_U16, bld.getSSA(2),
+                       coord_in_tile[2], tile_shift[0]));
+
+      Instruction *mul = bld.mkOp2(OP_MUL, TYPE_U32, bld.getSSA(4),
+                                   tile[2], y_size_aligned);
+      mul->sType = TYPE_U16;
+      Value *muls[2];
+      bld.mkSplit(muls, 2, mul->getDef(0));
+
+      coords[1] = bld.mkOp2v(
+            OP_ADD, TYPE_U16, bld.getSSA(2),
+            muls[0],
+            bld.mkOp2v(OP_ADD, TYPE_U16, bld.getSSA(2),
+                       coord_in_tile[1],
+                       bld.mkOp2v(OP_SHL, TYPE_U16, bld.getSSA(2),
+                                  tile[1], tile_shift[1])));
+   }
+
+   return bld.mkOp2v(OP_MERGE, TYPE_U32, bld.getSSA(), coords[0], coords[1]);
+}
+
+// This is largely a copy of NVC0LoweringPass::convertSurfaceFormat, but
+// adjusted to make use of 16-bit math where possible.
+bool
+NV50LoweringPreSSA::handleSULDP(TexInstruction *su)
+{
+   const int slot = su->tex.r;
+   assert(!su->getIndirectR());
+
+   bld.setPosition(su, false);
+
+   const TexInstruction::ImgFormatDesc *format = su->tex.format;
+   const int bytes = (su->tex.format->bits[0] +
+                      su->tex.format->bits[1] +
+                      su->tex.format->bits[2] +
+                      su->tex.format->bits[3]) / 8;
+   DataType ty = typeOfSize(bytes);
+
+   Value *coord = processSurfaceCoords(su);
+
+   Value *untypedDst[4] = {};
+   Value *typedDst[4] = {};
+   int i;
+   for (i = 0; i < bytes / 4; i++)
+      untypedDst[i] = bld.getSSA();
+   if (bytes < 4)
+      untypedDst[0] = bld.getSSA();
+
+   for (i = 0; i < 4; i++)
+      typedDst[i] = su->getDef(i);
+
+   Instruction *load = bld.mkLoad(ty, NULL, bld.mkSymbol(FILE_MEMORY_GLOBAL, slot, ty, 0), coord);
+   for (i = 0; i < 4 && untypedDst[i]; i++)
+      load->setDef(i, untypedDst[i]);
+
+   // Unpack each component into the typed dsts
+   int bits = 0;
+   for (int i = 0; i < 4; bits += format->bits[i], i++) {
+      if (!typedDst[i])
+         continue;
+
+      if (i >= format->components) {
+         if (format->type == FLOAT ||
+             format->type == UNORM ||
+             format->type == SNORM)
+            bld.loadImm(typedDst[i], i == 3 ? 1.0f : 0.0f);
+         else
+            bld.loadImm(typedDst[i], i == 3 ? 1 : 0);
+         continue;
+      }
+
+      // Get just that component's data into the relevant place
+      if (format->bits[i] == 32)
+         bld.mkMov(typedDst[i], untypedDst[i]);
+      else if (format->bits[i] == 16) {
+         // We can always convert directly from the appropriate half of the
+         // loaded value into the typed result.
+         Value *src[2];
+         bld.mkSplit(src, 2, untypedDst[i / 2]);
+         bld.mkCvt(OP_CVT, getShaderType(format->type), typedDst[i],
+                   getPackedType(format, i), src[i & 1]);
+      }
+      else if (format->bits[i] == 8) {
+         // Same approach as for 16 bits, but we have to massage the value a
+         // bit more, since we have to get the appropriate 8 bits from the
+         // half-register. In all cases, we can CVT from a 8-bit source, so we
+         // only have to shift when we want the upper 8 bits.
+         Value *src[2], *shifted;
+         bld.mkSplit(src, 2, untypedDst[0]);
+         DataType packedType = getPackedType(format, i);
+         if (i & 1)
+            shifted = bld.mkOp2v(OP_SHR, TYPE_U16, bld.getSSA(2), src[!!(i & 2)], bld.loadImm(NULL, (uint16_t)8));
+         else
+            shifted = src[!!(i & 2)];
+
+         bld.mkCvt(OP_CVT, getShaderType(format->type), typedDst[i],
+                   packedType, shifted);
+      }
+      else {
+         // The options are 10, 11, and 2. Get it into a 32-bit reg, then
+         // shift/mask. That's where it'll have to end up anyways. For signed,
+         // we have to make sure to get sign-extension, so we actually have to
+         // shift *up* first, and then shift down. There's no advantage to
+         // AND'ing, so we don't.
+         DataType ty = TYPE_U32;
+         if (format->type == SNORM || format->type == SINT) {
+            ty = TYPE_S32;
+         }
+
+         // Poor man's EXTBF
+         bld.mkOp2(
+               OP_SHR, ty, typedDst[i],
+               bld.mkOp2v(OP_SHL, TYPE_U32, bld.getSSA(), untypedDst[0], bld.loadImm(NULL, 32 - bits - format->bits[i])),
+               bld.loadImm(NULL, 32 - format->bits[i]));
+
+         // If the stored data is already in the appropriate type, we don't
+         // have to do anything. Convert to float for the *NORM formats.
+         if (format->type == UNORM || format->type == SNORM)
+            bld.mkCvt(OP_CVT, TYPE_F32, typedDst[i], TYPE_U32, typedDst[i]);
+      }
+
+      // Normalize / convert as necessary
+      if (format->type == UNORM)
+         bld.mkOp2(OP_MUL, TYPE_F32, typedDst[i], typedDst[i], bld.loadImm(NULL, 1.0f / ((1 << format->bits[i]) - 1)));
+      else if (format->type == SNORM)
+         bld.mkOp2(OP_MUL, TYPE_F32, typedDst[i], typedDst[i], bld.loadImm(NULL, 1.0f / ((1 << (format->bits[i] - 1)) - 1)));
+      else if (format->type == FLOAT && format->bits[i] < 16) {
+         // We expect the value to be in the low bits of the register, so we
+         // have to shift back up.
+         bld.mkOp2(OP_SHL, TYPE_U32, typedDst[i], typedDst[i], bld.loadImm(NULL, 15 - format->bits[i]));
+         Value *src[2];
+         bld.mkSplit(src, 2, typedDst[i]);
+         bld.mkCvt(OP_CVT, TYPE_F32, typedDst[i], TYPE_F16, src[0]);
+      }
+   }
+
+   if (format->bgra) {
+      std::swap(typedDst[0], typedDst[2]);
+   }
+
+   bld.getBB()->remove(su);
+   return true;
+}
+
+bool
+NV50LoweringPreSSA::handleSUREDP(TexInstruction *su)
+{
+   const int slot = su->tex.r;
+   const int dim = su->tex.target.getDim();
+   const int arg = dim + (su->tex.target.isArray() || su->tex.target.isCube());
+   assert(!su->getIndirectR());
+
+   bld.setPosition(su, false);
+
+   Value *coord = processSurfaceCoords(su);
+
+   // This is guaranteed to be a 32-bit format. So there's nothing to
+   // pack/unpack.
+   Instruction *atom = bld.mkOp2(
+         OP_ATOM, su->dType, su->getDef(0),
+         bld.mkSymbol(FILE_MEMORY_GLOBAL, slot, TYPE_U32, 0), su->getSrc(arg));
+   if (su->subOp == NV50_IR_SUBOP_ATOM_CAS)
+      atom->setSrc(2, su->getSrc(arg + 1));
+   atom->setIndirect(0, 0, coord);
+   atom->subOp = su->subOp;
+
+   bld.getBB()->remove(su);
+   return true;
+}
+
+bool
+NV50LoweringPreSSA::handleSUSTP(TexInstruction *su)
+{
+   const int slot = su->tex.r;
+   const int dim = su->tex.target.getDim();
+   const int arg = dim + (su->tex.target.isArray() || su->tex.target.isCube());
+   assert(!su->getIndirectR());
+
+   bld.setPosition(su, false);
+
+   const TexInstruction::ImgFormatDesc *format = su->tex.format;
+   const int bytes = (su->tex.format->bits[0] +
+                      su->tex.format->bits[1] +
+                      su->tex.format->bits[2] +
+                      su->tex.format->bits[3]) / 8;
+   DataType ty = typeOfSize(bytes);
+
+   Value *coord = processSurfaceCoords(su);
+
+   // The packed values we will eventually store into memory
+   Value *untypedDst[4] = {};
+   // Each component's packed representation, in 16-bit registers (only used
+   // where appropriate)
+   Value *untypedDst16[4] = {};
+   // The original values that are being packed
+   Value *typedDst[4] = {};
+   int i;
+
+   for (i = 0; i < bytes / 4; i++)
+      untypedDst[i] = bld.getSSA();
+   for (i = 0; i < format->components; i++)
+      untypedDst16[i] = bld.getSSA(2);
+   // Make sure we get at least one of each value allocated for the
+   // super-narrow formats.
+   if (bytes < 4)
+      untypedDst[0] = bld.getSSA();
+   if (bytes < 2)
+      untypedDst16[0] = bld.getSSA(2);
+
+   for (i = 0; i < 4; i++) {
+      typedDst[i] = bld.getSSA();
+      bld.mkMov(typedDst[i], su->getSrc(arg + i));
+   }
+
+   if (format->bgra) {
+      std::swap(typedDst[0], typedDst[2]);
+   }
+
+   // Pack each component into the untyped dsts.
+   int bits = 0;
+   for (int i = 0; i < format->components; bits += format->bits[i], i++) {
+      // Un-normalize / convert as necessary
+      if (format->type == UNORM)
+         bld.mkOp2(OP_MUL, TYPE_F32, typedDst[i], typedDst[i], bld.loadImm(NULL, 1.0f * ((1 << format->bits[i]) - 1)));
+      else if (format->type == SNORM)
+         bld.mkOp2(OP_MUL, TYPE_F32, typedDst[i], typedDst[i], bld.loadImm(NULL, 1.0f * ((1 << (format->bits[i] - 1)) - 1)));
+
+      // There is nothing to convert/pack for 32-bit values
+      if (format->bits[i] == 32) {
+         bld.mkMov(untypedDst[i], typedDst[i]);
+         continue;
+      }
+
+      // The remainder of the cases will naturally want to deal in 16-bit
+      // registers. We will put these into untypedDst16 and then merge them
+      // together later.
+      if (format->type == FLOAT && format->bits[i] < 16) {
+         bld.mkCvt(OP_CVT, TYPE_F16, untypedDst16[i], TYPE_F32, typedDst[i]);
+         bld.mkOp2(OP_SHR, TYPE_U16, untypedDst16[i], untypedDst16[i], bld.loadImm(NULL, (uint16_t)(15 - format->bits[i])));
+
+         // For odd bit sizes, it's easier to pack it into the final
+         // destination directly.
+         Value *tmp = bld.getSSA();
+         bld.mkCvt(OP_CVT, TYPE_U32, tmp, TYPE_U16, untypedDst16[i]);
+         if (i == 0) {
+            untypedDst[0] = tmp;
+         } else {
+            bld.mkOp2(OP_SHL, TYPE_U32, tmp, tmp, bld.loadImm(NULL, bits));
+            bld.mkOp2(OP_OR, TYPE_U32, untypedDst[0], untypedDst[0], tmp);
+         }
+      } else if (format->bits[i] == 16) {
+         // We can always convert the shader value into the packed value
+         // directly here
+         bld.mkCvt(OP_CVT, getPackedType(format, i), untypedDst16[i],
+                   getShaderType(format->type), typedDst[i]);
+      } else if (format->bits[i] < 16) {
+         DataType packedType = getPackedType(format, i);
+         DataType shaderType = getShaderType(format->type);
+         // We can't convert F32 to U8/S8 directly, so go to U16/S16 first.
+         if (shaderType == TYPE_F32 && typeSizeof(packedType) == 1) {
+            packedType = format->type == SNORM ? TYPE_S16 : TYPE_U16;
+         }
+         bld.mkCvt(OP_CVT, packedType, untypedDst16[i], shaderType, typedDst[i]);
+         // TODO: clamp for 10- and 2-bit sizes. Also, due to the oddness of
+         // the size, it's easier to dump them into a 32-bit value and OR
+         // everything later.
+         if (format->bits[i] != 8) {
+            // Restrict value to the appropriate bits (although maybe supposed
+            // to clamp instead?)
+            bld.mkOp2(OP_AND, TYPE_U16, untypedDst16[i], untypedDst16[i], bld.loadImm(NULL, (uint16_t)((1 << format->bits[i]) - 1)));
+            // And merge into final packed value
+            Value *tmp = bld.getSSA();
+            bld.mkCvt(OP_CVT, TYPE_U32, tmp, TYPE_U16, untypedDst16[i]);
+            if (i == 0) {
+               untypedDst[0] = tmp;
+            } else {
+               bld.mkOp2(OP_SHL, TYPE_U32, tmp, tmp, bld.loadImm(NULL, bits));
+               bld.mkOp2(OP_OR, TYPE_U32, untypedDst[0], untypedDst[0], tmp);
+            }
+         } else if (i & 1) {
+            // Shift the 8-bit value up (so that it can be OR'd later)
+            bld.mkOp2(OP_SHL, TYPE_U16, untypedDst16[i], untypedDst16[i], bld.loadImm(NULL, (uint16_t)(bits % 16)));
+         } else if (packedType != TYPE_U8) {
+            // S8 (or the *16 if converted from float) will all have high bits
+            // set, so AND them out.
+            bld.mkOp2(OP_AND, TYPE_U16, untypedDst16[i], untypedDst16[i], bld.loadImm(NULL, (uint16_t)0xff));
+         }
+      }
+   }
+
+   // OR pairs of 8-bit values together (into the even value)
+   if (format->bits[0] == 8) {
+      for (i = 0; i < 2 && untypedDst16[2 * i] && untypedDst16[2 * i + 1]; i++)
+         bld.mkOp2(OP_OR, TYPE_U16, untypedDst16[2 * i], untypedDst16[2 * i], untypedDst16[2 * i + 1]);
+   }
+
+   // We'll always want to have at least a 32-bit source register for the store
+   Instruction *merge = bld.mkOp(OP_MERGE, bytes < 4 ? TYPE_U32 : ty, bld.getSSA(bytes < 4 ? 4 : bytes));
+   if (format->bits[0] == 32) {
+      for (i = 0; i < 4 && untypedDst[i]; i++)
+         merge->setSrc(i, untypedDst[i]);
+   } else if (format->bits[0] == 16) {
+      for (i = 0; i < 4 && untypedDst16[i]; i++)
+         merge->setSrc(i, untypedDst16[i]);
+      if (i == 1)
+         merge->setSrc(i, bld.getSSA(2));
+   } else if (format->bits[0] == 8) {
+      for (i = 0; i < 2 && untypedDst16[2 * i]; i++)
+         merge->setSrc(i, untypedDst16[2 * i]);
+      if (i == 1)
+         merge->setSrc(i, bld.getSSA(2));
+   } else {
+      merge->setSrc(0, untypedDst[0]);
+   }
+
+   bld.mkStore(OP_STORE, ty, bld.mkSymbol(FILE_MEMORY_GLOBAL, slot, TYPE_U32, 0), coord, merge->getDef(0));
+
+   bld.getBB()->remove(su);
    return true;
 }
 
@@ -1504,9 +2225,21 @@ NV50LoweringPreSSA::visit(Instruction *i)
       return handleEXPORT(i);
    case OP_LOAD:
       return handleLOAD(i);
+   case OP_MEMBAR:
+      return handleMEMBAR(i);
    case OP_ATOM:
    case OP_STORE:
       return handleLDST(i);
+   case OP_SULDP:
+      return handleSULDP(i->asTex());
+   case OP_SUSTP:
+      return handleSUSTP(i->asTex());
+   case OP_SUREDP:
+      return handleSUREDP(i->asTex());
+   case OP_SUQ:
+      return handleSUQ(i->asTex());
+   case OP_BUFQ:
+      return handleBUFQ(i);
    case OP_RDSV:
       return handleRDSV(i);
    case OP_WRSV:

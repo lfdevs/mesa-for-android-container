@@ -11,6 +11,7 @@
 #include "vn_wsi.h"
 
 #include "vn_device.h"
+#include "vn_image.h"
 #include "vn_queue.h"
 
 /* The common WSI support makes some assumptions about the driver.
@@ -88,6 +89,43 @@ vn_wsi_fini(struct vn_physical_device *physical_dev)
    const VkAllocationCallbacks *alloc =
       &physical_dev->instance->base.base.alloc;
    wsi_device_finish(&physical_dev->wsi_device, alloc);
+}
+
+VkResult
+vn_wsi_create_image(struct vn_device *dev,
+                    const VkImageCreateInfo *create_info,
+                    const struct wsi_image_create_info *wsi_info,
+                    const VkAllocationCallbacks *alloc,
+                    struct vn_image **out_img)
+{
+   /* TODO This is the legacy path used by wsi_create_native_image when there
+    * is no modifier support.  Instead of forcing VK_IMAGE_TILING_LINEAR, we
+    * should ask wsi to use wsi_create_prime_image instead.
+    *
+    * In fact, this is not enough when the image is truely used for scanout by
+    * the host compositor.  There can be requirements we fail to meet.  We
+    * should require modifier support at some point.
+    */
+   VkImageCreateInfo local_create_info;
+   if (wsi_info->scanout) {
+      local_create_info = *create_info;
+      local_create_info.tiling = VK_IMAGE_TILING_LINEAR;
+      create_info = &local_create_info;
+
+      if (VN_DEBUG(WSI))
+         vn_log(dev->instance, "forcing scanout image linear");
+   }
+
+   struct vn_image *img;
+   VkResult result = vn_image_create(dev, create_info, alloc, &img);
+   if (result != VK_SUCCESS)
+      return result;
+
+   img->is_wsi = true;
+   img->prime_blit_buffer = wsi_info->prime_blit_buffer;
+
+   *out_img = img;
+   return VK_SUCCESS;
 }
 
 /* surface commands */

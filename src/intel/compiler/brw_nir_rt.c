@@ -266,7 +266,7 @@ build_terminate_ray(nir_builder *b)
  */
 static bool
 lower_ray_walk_intrinsics(nir_shader *shader,
-                          const struct gen_device_info *devinfo)
+                          const struct intel_device_info *devinfo)
 {
    assert(shader->info.stage == MESA_SHADER_ANY_HIT ||
           shader->info.stage == MESA_SHADER_INTERSECTION);
@@ -352,7 +352,7 @@ brw_nir_lower_raygen(nir_shader *nir)
 }
 
 void
-brw_nir_lower_any_hit(nir_shader *nir, const struct gen_device_info *devinfo)
+brw_nir_lower_any_hit(nir_shader *nir, const struct intel_device_info *devinfo)
 {
    assert(nir->info.stage == MESA_SHADER_ANY_HIT);
    NIR_PASS_V(nir, brw_nir_lower_shader_returns);
@@ -387,7 +387,7 @@ brw_nir_lower_callable(nir_shader *nir)
 void
 brw_nir_lower_combined_intersection_any_hit(nir_shader *intersection,
                                             const nir_shader *any_hit,
-                                            const struct gen_device_info *devinfo)
+                                            const struct intel_device_info *devinfo)
 {
    assert(intersection->info.stage == MESA_SHADER_INTERSECTION);
    assert(any_hit == NULL || any_hit->info.stage == MESA_SHADER_ANY_HIT);
@@ -415,7 +415,7 @@ nir_shader *
 brw_nir_create_raygen_trampoline(const struct brw_compiler *compiler,
                                  void *mem_ctx)
 {
-   const struct gen_device_info *devinfo = compiler->devinfo;
+   const struct intel_device_info *devinfo = compiler->devinfo;
    const nir_shader_compiler_options *nir_options =
       compiler->glsl_compiler_options[MESA_SHADER_COMPUTE].NirOptions;
 
@@ -426,7 +426,7 @@ brw_nir_create_raygen_trampoline(const struct brw_compiler *compiler,
                                                   "RT Ray-Gen Trampoline");
    ralloc_steal(mem_ctx, b.shader);
 
-   b.shader->info.cs.local_size_variable = true;
+   b.shader->info.workgroup_size_variable = true;
 
    /* The RT global data and raygen BINDLESS_SHADER_RECORD addresses are
     * passed in as push constants in the first register.  We deal with the
@@ -438,7 +438,7 @@ brw_nir_create_raygen_trampoline(const struct brw_compiler *compiler,
    nir_ssa_def *local_shift =
       nir_u2u32(&b, load_trampoline_param(&b, local_group_size_log2, 3, 8));
 
-   nir_ssa_def *global_id = nir_load_work_group_id(&b, 32);
+   nir_ssa_def *global_id = nir_load_workgroup_id(&b, 32);
    nir_ssa_def *simd_channel = nir_load_subgroup_invocation(&b);
    nir_ssa_def *local_x =
       nir_ubfe(&b, simd_channel, nir_imm_int(&b, 0),

@@ -37,9 +37,9 @@ build_dcc_decompress_compute_shader(struct radv_device *dev)
       nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, NULL, "dcc_decompress_compute");
 
    /* We need at least 16/16/1 to cover an entire DCC block in a single workgroup. */
-   b.shader->info.cs.local_size[0] = 16;
-   b.shader->info.cs.local_size[1] = 16;
-   b.shader->info.cs.local_size[2] = 1;
+   b.shader->info.workgroup_size[0] = 16;
+   b.shader->info.workgroup_size[1] = 16;
+   b.shader->info.workgroup_size[2] = 1;
    nir_variable *input_img = nir_variable_create(b.shader, nir_var_uniform, img_type, "in_img");
    input_img->data.descriptor_set = 0;
    input_img->data.binding = 0;
@@ -49,10 +49,10 @@ build_dcc_decompress_compute_shader(struct radv_device *dev)
    output_img->data.binding = 1;
 
    nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
-   nir_ssa_def *wg_id = nir_load_work_group_id(&b, 32);
+   nir_ssa_def *wg_id = nir_load_workgroup_id(&b, 32);
    nir_ssa_def *block_size =
-      nir_imm_ivec4(&b, b.shader->info.cs.local_size[0], b.shader->info.cs.local_size[1],
-                    b.shader->info.cs.local_size[2], 0);
+      nir_imm_ivec4(&b, b.shader->info.workgroup_size[0], b.shader->info.workgroup_size[1],
+                    b.shader->info.workgroup_size[2], 0);
 
    nir_ssa_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
 
@@ -153,6 +153,7 @@ create_pass(struct radv_device *device)
    VkAttachmentDescription2 attachment;
 
    attachment.sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
+   attachment.pNext = NULL;
    attachment.format = VK_FORMAT_UNDEFINED;
    attachment.samples = 1;
    attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -626,7 +627,7 @@ radv_process_color_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *
    bool flush_cb = false;
    VkPipeline *pipeline;
 
-   if (decompress_dcc && radv_dcc_enabled(image, subresourceRange->baseMipLevel)) {
+   if (decompress_dcc) {
       pipeline = &device->meta_state.fast_clear_flush.dcc_decompress_pipeline;
    } else if (radv_image_has_fmask(image) && !image->tc_compatible_cmask) {
       pipeline = &device->meta_state.fast_clear_flush.fmask_decompress_pipeline;
@@ -701,7 +702,7 @@ radv_emit_color_decompress(struct radv_cmd_buffer *cmd_buffer, struct radv_image
 
    assert(cmd_buffer->queue_family_index == RADV_QUEUE_GENERAL);
 
-   if ((decompress_dcc && radv_dcc_enabled(image, subresourceRange->baseMipLevel)) ||
+   if (decompress_dcc ||
        (!(radv_image_has_fmask(image) && !image->tc_compatible_cmask) && image->fce_pred_offset)) {
       use_predication = true;
    }
@@ -756,11 +757,9 @@ radv_emit_color_decompress(struct radv_cmd_buffer *cmd_buffer, struct radv_image
       radv_update_fce_metadata(cmd_buffer, image, subresourceRange, false);
    }
 
-   if (radv_dcc_enabled(image, subresourceRange->baseMipLevel)) {
-      /* Mark the image as being decompressed. */
-      if (decompress_dcc)
-         radv_update_dcc_metadata(cmd_buffer, image, subresourceRange, false);
-   }
+   /* Mark the image as being decompressed. */
+   if (decompress_dcc)
+      radv_update_dcc_metadata(cmd_buffer, image, subresourceRange, false);
 }
 
 void
@@ -784,6 +783,7 @@ static void
 radv_decompress_dcc_gfx(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
                         const VkImageSubresourceRange *subresourceRange)
 {
+   assert(radv_dcc_enabled(image, subresourceRange->baseMipLevel));
    radv_emit_color_decompress(cmd_buffer, image, subresourceRange, true);
 }
 

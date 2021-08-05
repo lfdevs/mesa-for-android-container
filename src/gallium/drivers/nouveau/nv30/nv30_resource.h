@@ -58,6 +58,16 @@ nv30_miptree_surface_new(struct pipe_context *, struct pipe_resource *,
 void
 nv30_miptree_surface_del(struct pipe_context *, struct pipe_surface *);
 
+bool
+nv30_miptree_get_handle(struct pipe_screen *pscreen,
+                        struct pipe_context *context,
+                        struct pipe_resource *pt,
+                        struct winsys_handle *handle,
+                        unsigned usage);
+
+void
+nv30_miptree_destroy(struct pipe_screen *pscreen, struct pipe_resource *pt);
+
 void
 nv30_resource_copy_region(struct pipe_context *pipe,
                           struct pipe_resource *dst, unsigned dst_level,
@@ -72,5 +82,15 @@ nv30_blit(struct pipe_context *pipe,
 void
 nv30_flush_resource(struct pipe_context *pipe,
                     struct pipe_resource *resource);
+
+void *
+nv30_miptree_transfer_map(struct pipe_context *pipe, struct pipe_resource *pt,
+                          unsigned level, unsigned usage,
+                          const struct pipe_box *box,
+                          struct pipe_transfer **ptransfer);
+
+void
+nv30_miptree_transfer_unmap(struct pipe_context *pipe,
+                            struct pipe_transfer *ptx);
 
 #endif

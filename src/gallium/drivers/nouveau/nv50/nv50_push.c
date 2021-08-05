@@ -240,20 +240,20 @@ nv50_prim_gl(unsigned prim)
 void
 nv50_push_vbo(struct nv50_context *nv50, const struct pipe_draw_info *info,
               const struct pipe_draw_indirect_info *indirect,
-              const struct pipe_draw_start_count *draw)
+              const struct pipe_draw_start_count_bias *draw)
 {
    struct push_context ctx;
    unsigned i, index_size;
    unsigned inst_count = info->instance_count;
    unsigned vert_count = draw->count;
-   bool apply_bias = info->index_size && info->index_bias;
+   bool apply_bias = info->index_size && draw->index_bias;
 
    ctx.push = nv50->base.pushbuf;
    ctx.translate = nv50->vertex->translate;
 
    ctx.need_vertex_id = nv50->screen->base.class_3d >= NV84_3D_CLASS &&
       nv50->vertprog->vp.need_vertex_id && (nv50->vertex->num_elements < 32);
-   ctx.index_bias = info->index_size ? info->index_bias : 0;
+   ctx.index_bias = info->index_size ? draw->index_bias : 0;
    ctx.instance_id = 0;
 
    /* For indexed draws, gl_VertexID must be emitted for every vertex. */
@@ -276,7 +276,7 @@ nv50_push_vbo(struct nv50_context *nv50, const struct pipe_draw_info *info,
          data = vb->buffer.user;
 
       if (apply_bias && likely(!(nv50->vertex->instance_bufs & (1 << i))))
-         data += (ptrdiff_t)(info->index_size ? info->index_bias : 0) * vb->stride;
+         data += (ptrdiff_t)(info->index_size ? draw->index_bias : 0) * vb->stride;
 
       ctx.translate->set_buffer(ctx.translate, i, data, vb->stride, ~0);
    }

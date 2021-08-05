@@ -49,10 +49,22 @@ bifrost_get_quirks(unsigned product_id)
                 return BIFROST_NO_PRELOAD;
         case 0x70:
         case 0x72:
+        case 0x74:
                 return 0;
         default:
                 unreachable("Unknown Bifrost GPU ID");
         }
+}
+
+/* How many lanes per architectural warp (subgroup)? Used to lower divergent
+ * indirects. */
+
+static inline unsigned
+bifrost_lanes_per_warp(unsigned product_id)
+{
+        unsigned major = product_id >> 12;
+        assert(major == 6 || major == 7);
+        return (major == 7) ? 8 : 4;
 }
 
 #endif

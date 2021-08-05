@@ -40,6 +40,8 @@ enum instruction_scheduler_mode {
    SCHEDULE_POST,
 };
 
+#define UBO_START ((1 << 16) - 4)
+
 struct backend_shader {
 protected:
 
@@ -56,7 +58,7 @@ public:
    const struct brw_compiler *compiler;
    void *log_data; /* Passed to compiler->*_log functions */
 
-   const struct gen_device_info * const devinfo;
+   const struct intel_device_info * const devinfo;
    const nir_shader *nir;
    struct brw_stage_prog_data * const stage_prog_data;
 
@@ -96,7 +98,7 @@ struct backend_shader;
 enum brw_reg_type brw_type_for_base_type(const struct glsl_type *type);
 enum brw_conditional_mod brw_conditional_for_comparison(unsigned int op);
 uint32_t brw_math_function(enum opcode op);
-const char *brw_instruction_name(const struct gen_device_info *devinfo,
+const char *brw_instruction_name(const struct intel_device_info *devinfo,
                                  enum opcode op);
 bool brw_saturate_immediate(enum brw_reg_type type, struct brw_reg *reg);
 bool brw_negate_immediate(enum brw_reg_type type, struct brw_reg *reg);

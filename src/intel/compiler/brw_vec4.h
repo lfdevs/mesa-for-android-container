@@ -108,6 +108,8 @@ public:
    const char *current_annotation;
 
    int first_non_payload_grf;
+   unsigned ubo_push_start[4];
+   unsigned push_length;
    unsigned int max_grf;
    brw_analysis<brw::vec4_live_variables, backend_shader> live_analysis;
    brw_analysis<brw::performance, vec4_visitor> performance_analysis;
@@ -139,6 +141,7 @@ public:
    void move_push_constants_to_pull_constants();
    void split_uniform_registers();
    void pack_uniform_registers();
+   void setup_push_ranges();
    virtual void invalidate_analysis(brw::analysis_dependency_class c);
    void split_virtual_grfs();
    bool opt_vector_float();

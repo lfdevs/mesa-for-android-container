@@ -72,7 +72,6 @@ set_sampler_views(struct fd_texture_stateobj *tex, unsigned start, unsigned nr,
                   struct pipe_sampler_view **views)
 {
    unsigned i;
-   unsigned samplers = 0;
 
    for (i = 0; i < nr; i++) {
       struct pipe_sampler_view *view = views ? views[i] : NULL;
@@ -92,13 +91,6 @@ set_sampler_views(struct fd_texture_stateobj *tex, unsigned start, unsigned nr,
    }
 
    tex->num_textures = util_last_bit(tex->valid_textures);
-
-   for (i = 0; i < tex->num_textures; i++) {
-      uint nr_samples = fd_resource_nr_samples(tex->textures[i]->texture);
-      samplers |= (nr_samples >> 1) << (i * 2);
-   }
-
-   tex->samples = samplers;
 }
 
 void

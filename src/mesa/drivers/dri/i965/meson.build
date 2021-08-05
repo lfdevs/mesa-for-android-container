@@ -39,7 +39,6 @@ files_i965 = files(
   'brw_draw.h',
   'brw_draw_upload.c',
   'brw_ff_gs.c',
-  'brw_ff_gs_emit.c',
   'brw_ff_gs.h',
   'brw_formatquery.c',
   'brw_generate_mipmap.c',
@@ -130,10 +129,10 @@ files_i965 = files(
   'libdrm_macros.h',
 )
 
-i965_gen_libs = []
+i965_per_hw_ver_libs = []
 foreach v : ['40', '45', '50', '60', '70', '75', '80', '90', '110']
-  i965_gen_libs += static_library(
-    'i965_gen@0@'.format(v),
+  i965_per_hw_ver_libs += static_library(
+    'i965_per_hw_ver@0@'.format(v),
     ['genX_blorp_exec.c', 'genX_boilerplate.h', 'genX_pipe_control.c',
      'genX_state_upload.c', gen_xml_pack],
     include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_dri_common],
@@ -157,7 +156,7 @@ libi965 = static_library(
   cpp_args : [c_sse2_args],
   gnu_symbol_visibility : 'hidden',
   link_with : [
-    i965_gen_libs, libintel_dev, libisl, libintel_compiler, libblorp,
+    i965_per_hw_ver_libs, libintel_dev, libisl, libintel_compiler, libblorp,
     libintel_perf
   ],
   dependencies : [

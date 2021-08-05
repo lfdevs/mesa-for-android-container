@@ -57,6 +57,9 @@ struct lp_build_nir_context
    struct hash_table *regs;
    struct hash_table *vars;
 
+   /** Value range analysis hash table used in code generation. */
+   struct hash_table *range_ht;
+
    nir_shader *shader;
 
    void (*load_ubo)(struct lp_build_nir_context *bld_base,

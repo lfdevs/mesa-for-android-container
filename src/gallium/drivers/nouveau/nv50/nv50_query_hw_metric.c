@@ -102,7 +102,7 @@ nv50_hw_metric_end_query(struct nv50_context *nv50, struct nv50_hw_query *hq)
 }
 
 static uint64_t
-sm11_hw_metric_calc_result(struct nv50_hw_query *hq, uint64_t res64[8])
+sm11_hw_metric_calc_result(struct nv50_hw_query *hq, uint64_t res64[4])
 {
    switch (hq->base.type - NV50_HW_METRIC_QUERY(0)) {
    case NV50_HW_METRIC_QUERY_BRANCH_EFFICIENCY:

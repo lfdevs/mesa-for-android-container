@@ -69,7 +69,7 @@ static void brw_miptree_unmap_raw(struct brw_mipmap_tree *mt);
  * format variant for check for CCS_E compatibility.
  */
 static bool
-format_ccs_e_compat_with_miptree(const struct gen_device_info *devinfo,
+format_ccs_e_compat_with_miptree(const struct intel_device_info *devinfo,
                                  const struct brw_mipmap_tree *mt,
                                  enum isl_format access_format)
 {
@@ -146,7 +146,7 @@ needs_separate_stencil(const struct brw_context *brw,
                        struct brw_mipmap_tree *mt,
                        mesa_format format)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (_mesa_get_format_base_format(format) != GL_DEPTH_STENCIL)
       return false;
@@ -195,7 +195,7 @@ brw_miptree_choose_aux_usage(struct brw_context *brw,
 mesa_format
 brw_lower_compressed_format(struct brw_context *brw, mesa_format format)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    /* No need to lower ETC formats on these platforms,
     * they are supported natively.
@@ -332,7 +332,7 @@ static bool
 need_to_retile_as_x(const struct brw_context *brw, uint64_t size,
                     enum isl_tiling tiling)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    /* If the BO is too large to fit in the aperture, we need to use the
     * BLT engine to support it.  Prior to Sandybridge, the BLT paths can't
@@ -478,7 +478,7 @@ miptree_create(struct brw_context *brw,
                GLuint num_samples,
                enum brw_miptree_create_flags flags)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const uint32_t alloc_flags =
       (flags & MIPTREE_CREATE_BUSY || num_samples > 1) ? BO_ALLOC_BUSY : 0;
    isl_tiling_flags_t tiling_flags = ISL_TILING_ANY_MASK;
@@ -585,7 +585,7 @@ brw_miptree_create_for_bo(struct brw_context *brw,
                           enum isl_tiling tiling,
                           enum brw_miptree_create_flags flags)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct brw_mipmap_tree *mt;
    const GLenum target = depth > 1 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D;
    const GLenum base_format = _mesa_get_format_base_format(format);
@@ -728,8 +728,8 @@ create_ccs_buf_for_image(struct brw_context *brw,
    /* We shouldn't already have a CCS */
    assert(!mt->aux_buf);
 
-   if (!isl_surf_get_ccs_surf(&brw->isl_dev, &mt->surf, &temp_ccs_surf, NULL,
-                              image->aux_pitch))
+   if (!isl_surf_get_ccs_surf(&brw->isl_dev, &mt->surf, NULL,
+                              &temp_ccs_surf, image->aux_pitch))
       return false;
 
    assert(image->aux_offset < image->bo->size);
@@ -848,7 +848,7 @@ brw_miptree_create_for_dri_image(struct brw_context *brw,
     * for EGL images from non-tile aligned sufaces in gfx4 hw and earlier which has
     * trouble resolving back to destination image due to alignment issues.
     */
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    if (!devinfo->has_surface_tile_offset) {
       uint32_t draw_x, draw_y;
       brw_miptree_get_tile_offsets(mt, 0, 0, &draw_x, &draw_y);
@@ -1132,7 +1132,7 @@ brw_miptree_get_image_offset(const struct brw_mipmap_tree *mt,
       return;
    }
 
-   uint32_t x_offset_sa, y_offset_sa;
+   uint32_t x_offset_sa, y_offset_sa, z_offset_sa, array_offset;
 
    /* Miptree itself can have an offset only if it represents a single
     * slice in an imported buffer object.
@@ -1150,10 +1150,13 @@ brw_miptree_get_image_offset(const struct brw_mipmap_tree *mt,
    const unsigned z = mt->surf.dim == ISL_SURF_DIM_3D ? slice : 0;
    slice = mt->surf.dim == ISL_SURF_DIM_3D ? 0 : slice;
    isl_surf_get_image_offset_el(&mt->surf, level, slice, z,
-                                &x_offset_sa, &y_offset_sa);
+                                &x_offset_sa, &y_offset_sa,
+                                &z_offset_sa, &array_offset);
 
    *x = x_offset_sa;
    *y = y_offset_sa;
+   assert(z_offset_sa == 0);
+   assert(array_offset == 0);
 }
 
 /**
@@ -1282,7 +1285,7 @@ brw_miptree_copy_slice(struct brw_context *brw,
                        struct brw_mipmap_tree *dst_mt,
                        unsigned dst_level, unsigned dst_layer)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    mesa_format format = src_mt->format;
    unsigned width = minify(src_mt->surf.phys_level0_sa.width,
                            src_level - src_mt->first_level);
@@ -1483,12 +1486,12 @@ brw_miptree_level_enable_hiz(struct brw_context *brw,
                              struct brw_mipmap_tree *mt,
                              uint32_t level)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    assert(mt->aux_buf);
    assert(mt->surf.size_B > 0);
 
-   if (devinfo->ver >= 8 || devinfo->is_haswell) {
+   if (devinfo->verx10 >= 75) {
       uint32_t width = minify(mt->surf.phys_level0_sa.width, level);
       uint32_t height = minify(mt->surf.phys_level0_sa.height, level);
 
@@ -1573,7 +1576,7 @@ brw_miptree_alloc_aux(struct brw_context *brw, struct brw_mipmap_tree *mt)
       initial_state = ISL_AUX_STATE_PASS_THROUGH;
       memset_value = 0;
       aux_surf_ok =
-         isl_surf_get_ccs_surf(&brw->isl_dev, &mt->surf, &aux_surf, NULL, 0);
+         isl_surf_get_ccs_surf(&brw->isl_dev, &mt->surf, NULL, &aux_surf, 0);
       break;
 
    default:
@@ -1620,7 +1623,7 @@ bool
 brw_miptree_sample_with_hiz(struct brw_context *brw,
                             struct brw_mipmap_tree *mt)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (!devinfo->has_sample_with_hiz) {
       return false;
@@ -1805,7 +1808,7 @@ brw_miptree_finish_write(struct brw_context *brw,
                          uint32_t start_layer, uint32_t num_layers,
                          enum isl_aux_usage aux_usage)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (mt->format == MESA_FORMAT_S_UINT8 && devinfo->ver <= 7) {
       mt->shadow_needs_update = true;
@@ -1896,7 +1899,7 @@ can_texture_with_ccs(struct brw_context *brw,
    if (!format_ccs_e_compat_with_miptree(&brw->screen->devinfo,
                                          mt, view_format)) {
       perf_debug("Incompatible sampling format (%s) for rbc (%s)\n",
-                 isl_format_get_layout(view_format)->name,
+                 isl_format_get_name(view_format),
                  _mesa_get_format_name(mt->format));
       return false;
    }
@@ -2013,7 +2016,7 @@ brw_miptree_render_aux_usage(struct brw_context *brw,
                              bool blend_enabled,
                              bool draw_aux_disabled)
 {
-   struct gen_device_info *devinfo = &brw->screen->devinfo;
+   struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (draw_aux_disabled)
       return ISL_AUX_USAGE_NONE;
@@ -2287,7 +2290,7 @@ void
 brw_update_r8stencil(struct brw_context *brw,
                        struct brw_mipmap_tree *mt)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    assert(devinfo->ver >= 7);
    struct brw_mipmap_tree *src =
@@ -2429,7 +2432,7 @@ brw_miptree_unmap_blit(struct brw_context *brw,
                        unsigned int level,
                        unsigned int slice)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
 
    brw_miptree_unmap_raw(map->linear_mt);
@@ -2607,7 +2610,7 @@ brw_miptree_map_blit(struct brw_context *brw,
                      struct brw_miptree_map *map,
                      unsigned int level, unsigned int slice)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    map->linear_mt = make_surface(brw, GL_TEXTURE_2D, mt->format,
                                  0, 0, map->w, map->h, 1, 1,
                                  ISL_TILING_LINEAR_BIT,
@@ -3027,7 +3030,7 @@ use_blitter_to_map(struct brw_context *brw,
                    struct brw_mipmap_tree *mt,
                    const struct brw_miptree_map *map)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (devinfo->has_llc &&
       /* It's probably not worth swapping to the blit ring because of
@@ -3076,7 +3079,7 @@ brw_miptree_map(struct brw_context *brw,
                 void **out_ptr,
                 ptrdiff_t *out_stride)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct brw_miptree_map *map;
 
    assert(mt->surf.samples == 1);
@@ -3163,7 +3166,7 @@ get_isl_surf_dim(GLenum target)
 }
 
 enum isl_dim_layout
-get_isl_dim_layout(const struct gen_device_info *devinfo,
+get_isl_dim_layout(const struct intel_device_info *devinfo,
                    enum isl_tiling tiling, GLenum target)
 {
    switch (target) {

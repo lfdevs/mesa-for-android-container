@@ -54,7 +54,7 @@
 static void
 upload_pipelined_state_pointers(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (devinfo->ver == 5) {
       /* Need to flush before changing clip max threads for errata. */
@@ -136,7 +136,7 @@ static bool
 rebase_depth_stencil(struct brw_context *brw, struct brw_renderbuffer *irb,
                      bool invalidate)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    uint32_t tile_mask_x = 0, tile_mask_y = 0;
 
@@ -198,7 +198,7 @@ void
 brw_workaround_depthstencil_alignment(struct brw_context *brw,
                                       GLbitfield clear_mask)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    struct gl_framebuffer *fb = ctx->DrawBuffer;
    struct brw_renderbuffer *depth_irb = brw_get_renderbuffer(fb, BUFFER_DEPTH);
@@ -286,7 +286,7 @@ brw_emit_depth_stencil_hiz(struct brw_context *brw,
       tiled_surface = depth_mt->surf.tiling != ISL_TILING_LINEAR;
    }
 
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const unsigned len = (devinfo->is_g4x || devinfo->ver == 5) ? 6 : 5;
 
    BEGIN_BATCH(len);
@@ -321,7 +321,7 @@ brw_emit_depth_stencil_hiz(struct brw_context *brw,
 void
 brw_emit_depthbuffer(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    struct gl_framebuffer *fb = ctx->DrawBuffer;
    /* _NEW_BUFFERS */
@@ -468,7 +468,7 @@ const struct brw_tracked_state brw_depthbuffer = {
 void
 brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const bool is_965 = devinfo->ver == 4 && !devinfo->is_g4x;
    const uint32_t _3DSTATE_PIPELINE_SELECT =
       is_965 ? CMD_PIPELINE_SELECT_965 : CMD_PIPELINE_SELECT_GM45;
@@ -561,7 +561,7 @@ brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
              (pipeline == BRW_COMPUTE_PIPELINE ? 2 : 0));
    ADVANCE_BATCH();
 
-   if (devinfo->ver == 7 && !devinfo->is_haswell &&
+   if (devinfo->verx10 == 70 &&
        pipeline == BRW_RENDER_PIPELINE) {
       /* From "BXML » GT » MI » vol1a GPU Overview » [Instruction]
        * PIPELINE_SELECT [DevBWR+]":
@@ -622,7 +622,7 @@ void
 brw_emit_hashing_mode(struct brw_context *brw, unsigned width,
                       unsigned height, unsigned scale)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (devinfo->ver == 9) {
       const uint32_t slice_hashing[] = {
@@ -697,7 +697,7 @@ brw_emit_hashing_mode(struct brw_context *brw, unsigned width,
 void
 brw_upload_invariant_state(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const bool is_965 = devinfo->ver == 4 && !devinfo->is_g4x;
 
    brw_emit_select_pipeline(brw, BRW_RENDER_PIPELINE);
@@ -740,7 +740,7 @@ brw_upload_invariant_state(struct brw_context *brw)
 void
 brw_upload_state_base_address(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (brw->batch.state_base_address_emitted)
       return;

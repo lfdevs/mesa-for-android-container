@@ -133,7 +133,7 @@ gfx6_upload_push_constants(struct brw_context *brw,
                            const struct brw_stage_prog_data *prog_data,
                            struct brw_stage_state *stage_state)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
 
    bool active = prog_data &&
@@ -156,7 +156,7 @@ gfx6_upload_push_constants(struct brw_context *brw,
       int i;
       const int size = prog_data->nr_params * sizeof(gl_constant_value);
       gl_constant_value *param;
-      if (devinfo->ver >= 8 || devinfo->is_haswell) {
+      if (devinfo->verx10 >= 75) {
          param = brw_upload_space(&brw->upload, size, 32,
                                   &stage_state->push_const_bo,
                                   &stage_state->push_const_offset);
@@ -308,9 +308,11 @@ brw_upload_cs_push_constants(struct brw_context *brw,
    /* XXX: Should this happen somewhere before to get our state flag set? */
    _mesa_load_state_parameters(ctx, prog->Parameters);
 
-   const struct brw_cs_parameters cs_params = brw_cs_get_parameters(brw);
+   const struct brw_cs_dispatch_info dispatch =
+      brw_cs_get_dispatch_info(&brw->screen->devinfo, cs_prog_data,
+                               brw->compute.group_size);
    const unsigned push_const_size =
-      brw_cs_push_const_total_size(cs_prog_data, cs_params.threads);
+      brw_cs_push_const_total_size(cs_prog_data, dispatch.threads);
 
    if (push_const_size == 0) {
       stage_state->push_const_size = 0;
@@ -337,7 +339,7 @@ brw_upload_cs_push_constants(struct brw_context *brw,
    }
 
    if (cs_prog_data->push.per_thread.size > 0) {
-      for (unsigned t = 0; t < cs_params.threads; t++) {
+      for (unsigned t = 0; t < dispatch.threads; t++) {
          unsigned dst =
             8 * (cs_prog_data->push.per_thread.regs * t +
                  cs_prog_data->push.cross_thread.regs);

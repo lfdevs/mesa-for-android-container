@@ -46,11 +46,25 @@ bool dxil_nir_lower_upcast_phis(nir_shader *shader, unsigned min_bit_size);
 bool dxil_nir_lower_fp16_casts(nir_shader *shader);
 bool dxil_nir_split_clip_cull_distance(nir_shader *shader);
 bool dxil_nir_lower_double_math(nir_shader *shader);
+bool dxil_nir_lower_system_values_to_zero(nir_shader *shader,
+                                          gl_system_value* system_value,
+                                          uint32_t count);
+bool dxil_nir_create_bare_samplers(nir_shader *shader);
 
 nir_ssa_def *
 build_load_ubo_dxil(nir_builder *b, nir_ssa_def *buffer,
                     nir_ssa_def *offset, unsigned num_components,
                     unsigned bit_size);
+
+uint64_t
+dxil_sort_by_driver_location(nir_shader* s, nir_variable_mode modes);
+
+void
+dxil_sort_ps_outputs(nir_shader* s);
+
+uint64_t
+dxil_reassign_driver_locations(nir_shader* s, nir_variable_mode modes,
+   uint64_t other_stage_mask);
 
 #ifdef __cplusplus
 }

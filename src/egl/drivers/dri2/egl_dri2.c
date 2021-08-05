@@ -62,26 +62,13 @@
 #include "egl_dri2.h"
 #include "GL/mesa_glinterop.h"
 #include "loader/loader.h"
+#include "util/libsync.h"
 #include "util/os_file.h"
 #include "util/u_atomic.h"
 #include "util/u_vector.h"
 #include "mapi/glapi/glapi.h"
 #include "util/bitscan.h"
 #include "util/u_math.h"
-
-/* Additional definitions not yet in the drm_fourcc.h.
- */
-#ifndef DRM_FORMAT_P010
-#define DRM_FORMAT_P010 	 fourcc_code('P', '0', '1', '0') /* 2x2 subsampled Cb:Cr plane 10 bits per channel */
-#endif
-
-#ifndef DRM_FORMAT_P012
-#define DRM_FORMAT_P012 	 fourcc_code('P', '0', '1', '2') /* 2x2 subsampled Cb:Cr plane 12 bits per channel */
-#endif
-
-#ifndef DRM_FORMAT_P016
-#define DRM_FORMAT_P016 	 fourcc_code('P', '0', '1', '6') /* 2x2 subsampled Cb:Cr plane 16 bits per channel */
-#endif
 
 #define NUM_ATTRIBS 12
 
@@ -2659,6 +2646,12 @@ dri2_num_fourcc_format_planes(EGLint format)
    case DRM_FORMAT_VYUY:
    case DRM_FORMAT_AYUV:
    case DRM_FORMAT_XYUV8888:
+   case DRM_FORMAT_Y210:
+   case DRM_FORMAT_Y212:
+   case DRM_FORMAT_Y216:
+   case DRM_FORMAT_Y410:
+   case DRM_FORMAT_Y412:
+   case DRM_FORMAT_Y416:
       return 1;
 
    case DRM_FORMAT_NV12:
@@ -3502,6 +3495,8 @@ dri2_dup_native_fence_fd(_EGLDisplay *disp, _EGLSync *sync)
       _eglError(EGL_BAD_PARAMETER, "eglDupNativeFenceFDANDROID");
       return EGL_NO_NATIVE_FENCE_FD_ANDROID;
    }
+
+   assert(sync_valid_fd(sync->SyncFd));
 
    return os_dupfd_cloexec(sync->SyncFd);
 }

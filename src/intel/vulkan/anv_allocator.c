@@ -104,7 +104,13 @@
  * We use it to indicate the free list is empty. */
 #define EMPTY UINT32_MAX
 
+/* On FreeBSD PAGE_SIZE is already defined in
+ * /usr/include/machine/param.h that is indirectly
+ * included here.
+ */
+#ifndef PAGE_SIZE
 #define PAGE_SIZE 4096
+#endif
 
 struct anv_mmap_cleanup {
    void *map;
@@ -325,7 +331,7 @@ anv_free_list_push(union anv_free_list *list,
    for (uint32_t i = 1; i < count; i++, last++)
       table->map[last].next = last + 1;
 
-   old = *list;
+   old.u64 = list->u64;
    do {
       current = old;
       table->map[last].next = current.offset;
@@ -1414,10 +1420,17 @@ anv_scratch_pool_init(struct anv_device *device, struct anv_scratch_pool *pool)
 void
 anv_scratch_pool_finish(struct anv_device *device, struct anv_scratch_pool *pool)
 {
-   for (unsigned s = 0; s < MESA_SHADER_STAGES; s++) {
+   for (unsigned s = 0; s < ARRAY_SIZE(pool->bos[0]); s++) {
       for (unsigned i = 0; i < 16; i++) {
          if (pool->bos[i][s] != NULL)
             anv_device_release_bo(device, pool->bos[i][s]);
+      }
+   }
+
+   for (unsigned i = 0; i < 16; i++) {
+      if (pool->surf_states[i].map != NULL) {
+         anv_state_pool_free(&device->surface_state_pool,
+                             pool->surf_states[i]);
       }
    }
 }
@@ -1432,12 +1445,22 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
    unsigned scratch_size_log2 = ffs(per_thread_scratch / 2048);
    assert(scratch_size_log2 < 16);
 
+   assert(stage < ARRAY_SIZE(pool->bos));
+
+   const struct intel_device_info *devinfo = &device->info;
+
+   /* On GFX version 12.5, scratch access changed to a surface-based model.
+    * Instead of each shader type having its own layout based on IDs passed
+    * from the relevant fixed-function unit, all scratch access is based on
+    * thread IDs like it always has been for compute.
+    */
+   if (devinfo->verx10 >= 125)
+      stage = MESA_SHADER_COMPUTE;
+
    struct anv_bo *bo = p_atomic_read(&pool->bos[scratch_size_log2][stage]);
 
    if (bo != NULL)
       return bo;
-
-   const struct gen_device_info *devinfo = &device->info;
 
    unsigned subslices = MAX2(device->physical->subslice_total, 1);
 
@@ -1455,7 +1478,9 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
     * For, Gfx11+, scratch space allocation is based on the number of threads
     * in the base configuration.
     */
-   if (devinfo->ver == 12)
+   if (devinfo->verx10 == 125)
+      subslices = 32;
+   else if (devinfo->ver == 12)
       subslices = (devinfo->is_dg1 || devinfo->gt == 2 ? 6 : 2);
    else if (devinfo->ver == 11)
       subslices = 8;
@@ -1534,7 +1559,8 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
     * so nothing will ever touch the top page.
     */
    VkResult result = anv_device_alloc_bo(device, "scratch", size,
-                                         ANV_BO_ALLOC_32BIT_ADDRESS,
+                                         ANV_BO_ALLOC_32BIT_ADDRESS |
+                                         ANV_BO_ALLOC_LOCAL_MEM,
                                          0 /* explicit_address */,
                                          &bo);
    if (result != VK_SUCCESS)
@@ -1547,6 +1573,50 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
       return current_bo;
    } else {
       return bo;
+   }
+}
+
+uint32_t
+anv_scratch_pool_get_surf(struct anv_device *device,
+                          struct anv_scratch_pool *pool,
+                          unsigned per_thread_scratch)
+{
+   if (per_thread_scratch == 0)
+      return 0;
+
+   unsigned scratch_size_log2 = ffs(per_thread_scratch / 2048);
+   assert(scratch_size_log2 < 16);
+
+   uint32_t surf = p_atomic_read(&pool->surfs[scratch_size_log2]);
+   if (surf > 0)
+      return surf;
+
+   struct anv_bo *bo =
+      anv_scratch_pool_alloc(device, pool, MESA_SHADER_COMPUTE,
+                             per_thread_scratch);
+   struct anv_address addr = { .bo = bo };
+
+   struct anv_state state =
+      anv_state_pool_alloc(&device->surface_state_pool,
+                           device->isl_dev.ss.size, 64);
+
+   isl_buffer_fill_state(&device->isl_dev, state.map,
+                         .address = anv_address_physical(addr),
+                         .size_B = bo->size,
+                         .mocs = anv_mocs(device, bo, 0),
+                         .format = ISL_FORMAT_RAW,
+                         .swizzle = ISL_SWIZZLE_IDENTITY,
+                         .stride_B = per_thread_scratch,
+                         .is_scratch = true);
+
+   uint32_t current = p_atomic_cmpxchg(&pool->surfs[scratch_size_log2],
+                                       0, state.offset);
+   if (current) {
+      anv_state_pool_free(&device->surface_state_pool, state);
+      return current;
+   } else {
+      pool->surf_states[scratch_size_log2] = state;
+      return state.offset;
    }
 }
 
@@ -1648,7 +1718,29 @@ anv_device_alloc_bo(struct anv_device *device,
       ccs_size = align_u64(DIV_ROUND_UP(size, INTEL_AUX_MAP_GFX12_CCS_SCALE), 4096);
    }
 
-   uint32_t gem_handle = anv_gem_create(device, size + ccs_size);
+   uint32_t gem_handle;
+
+   /* If we have vram size, we have multiple memory regions and should choose
+    * one of them.
+    */
+   if (device->physical->vram.size > 0) {
+      struct drm_i915_gem_memory_class_instance regions[2];
+      uint32_t nregions = 0;
+
+      if (alloc_flags & ANV_BO_ALLOC_LOCAL_MEM) {
+         /* For vram allocation, still use system memory as a fallback. */
+         regions[nregions++] = device->physical->vram.region;
+         regions[nregions++] = device->physical->sys.region;
+      } else {
+         regions[nregions++] = device->physical->sys.region;
+      }
+
+      gem_handle = anv_gem_create_regions(device, size + ccs_size,
+                                          nregions, regions);
+   } else {
+      gem_handle = anv_gem_create(device, size + ccs_size);
+   }
+
    if (gem_handle == 0)
       return vk_error(VK_ERROR_OUT_OF_DEVICE_MEMORY);
 

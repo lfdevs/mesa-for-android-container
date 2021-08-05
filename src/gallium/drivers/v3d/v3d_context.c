@@ -200,16 +200,16 @@ v3d_flag_dirty_sampler_state(struct v3d_context *v3d,
 {
         switch (shader) {
         case PIPE_SHADER_VERTEX:
-                v3d->dirty |= VC5_DIRTY_VERTTEX;
+                v3d->dirty |= V3D_DIRTY_VERTTEX;
                 break;
         case PIPE_SHADER_GEOMETRY:
-                v3d->dirty |= VC5_DIRTY_GEOMTEX;
+                v3d->dirty |= V3D_DIRTY_GEOMTEX;
                 break;
         case PIPE_SHADER_FRAGMENT:
-                v3d->dirty |= VC5_DIRTY_FRAGTEX;
+                v3d->dirty |= V3D_DIRTY_FRAGTEX;
                 break;
         case PIPE_SHADER_COMPUTE:
-                v3d->dirty |= VC5_DIRTY_COMPTEX;
+                v3d->dirty |= V3D_DIRTY_COMPTEX;
                 break;
         default:
                 unreachable("Unsupported shader stage");

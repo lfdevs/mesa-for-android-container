@@ -233,9 +233,21 @@ enum blorp_shader_type {
    BLORP_SHADER_TYPE_GFX4_SF,
 };
 
+struct brw_blorp_base_key
+{
+   char name[8];
+   enum blorp_shader_type shader_type;
+};
+
+#define BRW_BLORP_BASE_KEY_INIT(_type) \
+   (struct brw_blorp_base_key) {       \
+      .name = "blorp",                 \
+      .shader_type = _type,            \
+   }
+
 struct brw_blorp_blit_prog_key
 {
-   enum blorp_shader_type shader_type; /* Must be BLORP_SHADER_TYPE_BLIT */
+   struct brw_blorp_base_key base;
 
    /* Number of samples per pixel that have been configured in the surface
     * state for texturing from.

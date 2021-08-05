@@ -162,7 +162,7 @@ hsw_begin_transform_feedback(struct gl_context *ctx, GLenum mode,
    struct brw_context *brw = brw_context(ctx);
    struct brw_transform_feedback_object *brw_obj =
       (struct brw_transform_feedback_object *) obj;
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    brw_obj->primitive_mode = mode;
 
@@ -197,7 +197,7 @@ hsw_pause_transform_feedback(struct gl_context *ctx,
    struct brw_context *brw = brw_context(ctx);
    struct brw_transform_feedback_object *brw_obj =
       (struct brw_transform_feedback_object *) obj;
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (devinfo->is_haswell) {
       /* Flush any drawing so that the counters have the right values. */
@@ -227,7 +227,7 @@ hsw_resume_transform_feedback(struct gl_context *ctx,
    struct brw_context *brw = brw_context(ctx);
    struct brw_transform_feedback_object *brw_obj =
       (struct brw_transform_feedback_object *) obj;
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (devinfo->is_haswell) {
       /* Reload the SOL buffer offset registers. */

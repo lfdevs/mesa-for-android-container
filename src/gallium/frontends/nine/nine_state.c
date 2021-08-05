@@ -2355,7 +2355,7 @@ CSMT_ITEM_NO_WAIT(nine_context_clear_fb,
 
 static inline void
 init_draw_info(struct pipe_draw_info *info,
-               struct pipe_draw_start_count *draw,
+               struct pipe_draw_start_count_bias *draw,
                struct NineDevice9 *dev, D3DPRIMITIVETYPE type, UINT count)
 {
     info->mode = d3dprimitivetype_to_pipe_prim(type);
@@ -2376,19 +2376,19 @@ CSMT_ITEM_NO_WAIT(nine_context_draw_primitive,
 {
     struct nine_context *context = &device->context;
     struct pipe_draw_info info;
-    struct pipe_draw_start_count draw;
+    struct pipe_draw_start_count_bias draw;
 
     nine_update_state(device);
 
     init_draw_info(&info, &draw, device, PrimitiveType, PrimitiveCount);
     info.index_size = 0;
     draw.start = StartVertex;
-    info.index_bias = 0;
+    draw.index_bias = 0;
     info.min_index = draw.start;
     info.max_index = draw.start + draw.count - 1;
     info.index.resource = NULL;
 
-    context->pipe->draw_vbo(context->pipe, &info, NULL, &draw, 1);
+    context->pipe->draw_vbo(context->pipe, &info, 0, NULL, &draw, 1);
 }
 
 CSMT_ITEM_NO_WAIT(nine_context_draw_indexed_primitive,
@@ -2401,21 +2401,21 @@ CSMT_ITEM_NO_WAIT(nine_context_draw_indexed_primitive,
 {
     struct nine_context *context = &device->context;
     struct pipe_draw_info info;
-    struct pipe_draw_start_count draw;
+    struct pipe_draw_start_count_bias draw;
 
     nine_update_state(device);
 
     init_draw_info(&info, &draw, device, PrimitiveType, PrimitiveCount);
     info.index_size = context->index_size;
     draw.start = context->index_offset / context->index_size + StartIndex;
-    info.index_bias = BaseVertexIndex;
+    draw.index_bias = BaseVertexIndex;
     info.index_bounds_valid = true;
     /* These don't include index bias: */
     info.min_index = MinVertexIndex;
     info.max_index = MinVertexIndex + NumVertices - 1;
     info.index.resource = context->idxbuf;
 
-    context->pipe->draw_vbo(context->pipe, &info, NULL, &draw, 1);
+    context->pipe->draw_vbo(context->pipe, &info, 0, NULL, &draw, 1);
 }
 
 CSMT_ITEM_NO_WAIT(nine_context_draw_indexed_primitive_from_vtxbuf_idxbuf,
@@ -2431,14 +2431,14 @@ CSMT_ITEM_NO_WAIT(nine_context_draw_indexed_primitive_from_vtxbuf_idxbuf,
 {
     struct nine_context *context = &device->context;
     struct pipe_draw_info info;
-    struct pipe_draw_start_count draw;
+    struct pipe_draw_start_count_bias draw;
 
     nine_update_state(device);
 
     init_draw_info(&info, &draw, device, PrimitiveType, PrimitiveCount);
     info.index_size = index_size;
     draw.start = index_offset / info.index_size;
-    info.index_bias = 0;
+    draw.index_bias = 0;
     info.index_bounds_valid = true;
     info.min_index = MinVertexIndex;
     info.max_index = MinVertexIndex + NumVertices - 1;
@@ -2451,7 +2451,7 @@ CSMT_ITEM_NO_WAIT(nine_context_draw_indexed_primitive_from_vtxbuf_idxbuf,
     context->pipe->set_vertex_buffers(context->pipe, 0, 1, 0, false, vbuf);
     context->changed.vtxbuf |= 1;
 
-    context->pipe->draw_vbo(context->pipe, &info, NULL, &draw, 1);
+    context->pipe->draw_vbo(context->pipe, &info, 0, NULL, &draw, 1);
 }
 
 CSMT_ITEM_NO_WAIT(nine_context_resource_copy_region,
@@ -2571,7 +2571,7 @@ CSMT_ITEM_NO_WAIT_WITH_COUNTER(nine_context_box_upload,
             return;
     }
 
-    map = pipe->transfer_map(pipe,
+    map = pipe->texture_map(pipe,
                              res,
                              level,
                              PIPE_MAP_WRITE | PIPE_MAP_DISCARD_RANGE,
@@ -2592,7 +2592,7 @@ CSMT_ITEM_NO_WAIT_WITH_COUNTER(nine_context_box_upload,
                                     dst_box->width, dst_box->height,
                                     dst_box->depth);
 
-    pipe_transfer_unmap(pipe, transfer);
+    pipe_texture_unmap(pipe, transfer);
 }
 
 struct pipe_query *
@@ -3128,7 +3128,7 @@ update_vertex_buffers_sw(struct NineDevice9 *device, int start_vertice, int num_
                 u_box_1d(vtxbuf.buffer_offset + offset + start_vertice * vtxbuf.stride,
                          num_vertices * vtxbuf.stride, &box);
 
-                userbuf = pipe->transfer_map(pipe, buf, 0, PIPE_MAP_READ, &box,
+                userbuf = pipe->buffer_map(pipe, buf, 0, PIPE_MAP_READ, &box,
                                              &(sw_internal->transfers_so[i]));
                 vtxbuf.is_user_buffer = true;
                 vtxbuf.buffer.user = userbuf;
@@ -3290,7 +3290,7 @@ nine_state_after_draw_sw(struct NineDevice9 *device)
     for (i = 0; i < 4; i++) {
         pipe_sw->set_vertex_buffers(pipe_sw, i, 0, 1, false, NULL);
         if (sw_internal->transfers_so[i])
-            pipe->transfer_unmap(pipe, sw_internal->transfers_so[i]);
+            pipe->buffer_unmap(pipe, sw_internal->transfers_so[i]);
         sw_internal->transfers_so[i] = NULL;
     }
     nine_context_get_pipe_release(device);

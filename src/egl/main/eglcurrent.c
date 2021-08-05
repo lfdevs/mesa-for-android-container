@@ -32,6 +32,7 @@
 #include <stdarg.h>
 #include "c99_compat.h"
 #include "c11/threads.h"
+#include "util/u_thread.h"
 
 #include "egllog.h"
 #include "eglcurrent.h"
@@ -45,8 +46,7 @@ static tss_t _egl_TSD;
 static void _eglDestroyThreadInfo(_EGLThreadInfo *t);
 
 #ifdef USE_ELF_TLS
-static __thread const _EGLThreadInfo *_egl_TLS
-   __attribute__ ((tls_model("initial-exec")));
+static __THREAD_INITIAL_EXEC const _EGLThreadInfo *_egl_TLS;
 #endif
 
 static inline void _eglSetTSD(const _EGLThreadInfo *t)

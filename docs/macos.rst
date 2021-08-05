@@ -13,5 +13,12 @@ be aware of.
 -  macOS is picky about its build-time environment. Type `brew sh` before
    building to get the Homebrew dependencies in your path.
 
-At the moment, only the software rasterizers are supported on macOS. Stay tuned
-for updates here!
+Mesa's default builds with the Apple GLX uses Mesa as a front for the
+hardware-accelerated system OpenGL framework, to provide hardware acceleration
+to X11 applications on macOS running via XQuartz.
+
+Mesa's software rasterizers also work on macOS. To build, set the build options
+`-Dosmesa=true -Dglx=gallium-xlib` and select an appropriate Gallium software
+rasterizer.
+
+For native hardware, stay tuned for updates here!

@@ -26,6 +26,8 @@
 #include "compiler/brw_nir.h"
 #include "util/mesa-sha1.h"
 
+#define sizeof_field(type, field) sizeof(((type *)0)->field)
+
 void
 anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
                             bool robust_buffer_access,
@@ -35,7 +37,7 @@ anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
                             void *mem_ctx)
 {
    const struct brw_compiler *compiler = pdevice->compiler;
-   const struct gen_device_info *devinfo = compiler->devinfo;
+   const struct intel_device_info *devinfo = compiler->devinfo;
    memset(map->push_ranges, 0, sizeof(map->push_ranges));
 
    bool has_const_ubo = false;
@@ -65,6 +67,13 @@ anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
                break;
             }
 
+            case nir_intrinsic_load_desc_set_address_intel:
+               push_start = MIN2(push_start,
+                  offsetof(struct anv_push_constants, desc_sets));
+               push_end = MAX2(push_end, push_start +
+                  sizeof_field(struct anv_push_constants, desc_sets));
+               break;
+
             default:
                break;
             }
@@ -75,8 +84,9 @@ anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
    const bool has_push_intrinsic = push_start <= push_end;
 
    const bool push_ubo_ranges =
-      (pdevice->info.ver >= 8 || pdevice->info.is_haswell) &&
-      has_const_ubo && nir->info.stage != MESA_SHADER_COMPUTE;
+      pdevice->info.verx10 >= 75 &&
+      has_const_ubo && nir->info.stage != MESA_SHADER_COMPUTE &&
+      !brw_shader_stage_is_bindless(nir->info.stage);
 
    if (push_ubo_ranges && robust_buffer_access) {
       /* We can't on-the-fly adjust our push ranges because doing so would
@@ -129,6 +139,9 @@ anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
          if (!function->impl)
             continue;
 
+         nir_builder build, *b = &build;
+         nir_builder_init(b, function->impl);
+
          nir_foreach_block(block, function->impl) {
             nir_foreach_instr_safe(instr, block) {
                if (instr->type != nir_instr_type_intrinsic)
@@ -143,6 +156,17 @@ anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
                                          push_start);
                   break;
 
+               case nir_intrinsic_load_desc_set_address_intel: {
+                  b->cursor = nir_before_instr(&intrin->instr);
+                  nir_ssa_def *pc_load = nir_load_uniform(b, 1, 64,
+                     nir_imul_imm(b, intrin->src[0].ssa, sizeof(uint64_t)),
+                     .base = offsetof(struct anv_push_constants, desc_sets),
+                     .range = sizeof_field(struct anv_push_constants, desc_sets),
+                     .dest_type = nir_type_uint64);
+                  nir_ssa_def_rewrite_uses(&intrin->dest.ssa, pc_load);
+                  break;
+               }
+
                default:
                   break;
                }
@@ -154,17 +178,21 @@ anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
    if (push_ubo_ranges) {
       brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
 
-      /* We can push at most 64 registers worth of data.  The back-end
-       * compiler would do this fixup for us but we'd like to calculate
-       * the push constant layout ourselves.
+      /* The vec4 back-end pushes at most 32 regs while the scalar back-end
+       * pushes up to 64.  This is primarily because the scalar back-end has a
+       * massively more competent register allocator and so the risk of
+       * spilling due to UBO pushing isn't nearly as high.
        */
+      const unsigned max_push_regs =
+         compiler->scalar_stage[nir->info.stage] ? 64 : 32;
+
       unsigned total_push_regs = push_constant_range.length;
       for (unsigned i = 0; i < 4; i++) {
-         if (total_push_regs + prog_data->ubo_ranges[i].length > 64)
-            prog_data->ubo_ranges[i].length = 64 - total_push_regs;
+         if (total_push_regs + prog_data->ubo_ranges[i].length > max_push_regs)
+            prog_data->ubo_ranges[i].length = max_push_regs - total_push_regs;
          total_push_regs += prog_data->ubo_ranges[i].length;
       }
-      assert(total_push_regs <= 64);
+      assert(total_push_regs <= max_push_regs);
 
       int n = 0;
 

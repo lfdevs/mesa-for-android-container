@@ -87,7 +87,7 @@ struct dri_screen
    __DRI2bufferDamageExtension buffer_damage_extension;
 
    /* DRI exts on this screen. Populated at init time based on device caps. */
-   const __DRIextension *screen_extensions[13];
+   const __DRIextension *screen_extensions[14];
 
    /* OpenCL interop */
    mtx_t opencl_func_mutex;

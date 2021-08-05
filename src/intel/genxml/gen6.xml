@@ -360,15 +360,15 @@
   </struct>
 
   <struct name="SAMPLER_STATE" length="4">
-    <field name="Shadow Function" start="0" end="2" type="uint">
-      <value name="PREFILTEROP_ALWAYS" value="0"/>
-      <value name="PREFILTEROP_NEVER" value="1"/>
-      <value name="PREFILTEROP_LESS" value="2"/>
-      <value name="PREFILTEROP_EQUAL" value="3"/>
-      <value name="PREFILTEROP_LEQUAL" value="4"/>
-      <value name="PREFILTEROP_GREATER" value="5"/>
-      <value name="PREFILTEROP_NOTEQUAL" value="6"/>
-      <value name="PREFILTEROP_GEQUAL" value="7"/>
+    <field name="Shadow Function" start="0" end="2" type="uint" prefix="PREFILTEROP">
+      <value name="ALWAYS" value="0"/>
+      <value name="NEVER" value="1"/>
+      <value name="LESS" value="2"/>
+      <value name="EQUAL" value="3"/>
+      <value name="LEQUAL" value="4"/>
+      <value name="GREATER" value="5"/>
+      <value name="NOTEQUAL" value="6"/>
+      <value name="GEQUAL" value="7"/>
     </field>
     <field name="Texture LOD Bias" start="3" end="13" type="s4.6"/>
     <field name="Min Mode Filter" start="14" end="16" type="uint" prefix="MAPFILTER"/>
@@ -778,8 +778,8 @@
     </field>
   </instruction>
 
-  <instruction name="3DSTATE_GS_SVB_INDEX" bias="2" length="7" engine="render">
-    <field name="DWord Length" start="0" end="7" type="uint" default="5"/>
+  <instruction name="3DSTATE_GS_SVB_INDEX" bias="2" length="4" engine="render">
+    <field name="DWord Length" start="0" end="7" type="uint" default="2"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="11"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>

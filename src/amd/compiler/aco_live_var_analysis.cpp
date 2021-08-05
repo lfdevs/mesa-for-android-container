@@ -21,20 +21,18 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  *
- * Authors:
- *    Daniel Schürmann (daniel.schuermann@campus.tu-berlin.de)
- *    Bas Nieuwenhuizen (bas@basnieuwenhuizen.nl)
- *
  */
 
 #include "aco_ir.h"
+
 #include "util/u_math.h"
 
 #include <set>
 #include <vector>
 
 namespace aco {
-RegisterDemand get_live_changes(aco_ptr<Instruction>& instr)
+RegisterDemand
+get_live_changes(aco_ptr<Instruction>& instr)
 {
    RegisterDemand changes;
    for (const Definition& def : instr->definitions) {
@@ -52,7 +50,8 @@ RegisterDemand get_live_changes(aco_ptr<Instruction>& instr)
    return changes;
 }
 
-RegisterDemand get_temp_registers(aco_ptr<Instruction>& instr)
+RegisterDemand
+get_temp_registers(aco_ptr<Instruction>& instr)
 {
    RegisterDemand temp_registers;
 
@@ -71,7 +70,9 @@ RegisterDemand get_temp_registers(aco_ptr<Instruction>& instr)
    return temp_registers;
 }
 
-RegisterDemand get_demand_before(RegisterDemand demand, aco_ptr<Instruction>& instr, aco_ptr<Instruction>& instr_before)
+RegisterDemand
+get_demand_before(RegisterDemand demand, aco_ptr<Instruction>& instr,
+                  aco_ptr<Instruction>& instr_before)
 {
    demand -= get_live_changes(instr);
    demand -= get_temp_registers(instr);
@@ -81,9 +82,9 @@ RegisterDemand get_demand_before(RegisterDemand demand, aco_ptr<Instruction>& in
 }
 
 namespace {
-void process_live_temps_per_block(Program *program, live& lives, Block* block,
-                                  std::set<unsigned>& worklist, std::vector<uint16_t>& phi_sgpr_ops,
-                                  bool update_register_demand)
+void
+process_live_temps_per_block(Program* program, live& lives, Block* block,
+                             unsigned& worklist, std::vector<uint16_t>& phi_sgpr_ops)
 {
    std::vector<RegisterDemand>& register_demand = lives.register_demand[block->index];
    RegisterDemand new_demand;
@@ -99,8 +100,8 @@ void process_live_temps_per_block(Program *program, live& lives, Block* block,
 
    /* traverse the instructions backwards */
    int idx;
-   for (idx = block->instructions.size() -1; idx >= 0; idx--) {
-      Instruction *insn = block->instructions[idx].get();
+   for (idx = block->instructions.size() - 1; idx >= 0; idx--) {
+      Instruction* insn = block->instructions[idx].get();
       if (is_phi(insn))
          break;
 
@@ -136,8 +137,7 @@ void process_live_temps_per_block(Program *program, live& lives, Block* block,
          for (Operand& op : insn->operands)
             op.setKill(false);
 
-         for (unsigned i = 0; i < insn->operands.size(); ++i)
-         {
+         for (unsigned i = 0; i < insn->operands.size(); ++i) {
             Operand& operand = insn->operands[i];
             if (!operand.isTemp())
                continue;
@@ -148,7 +148,8 @@ void process_live_temps_per_block(Program *program, live& lives, Block* block,
             if (inserted) {
                operand.setFirstKill(true);
                for (unsigned j = i + 1; j < insn->operands.size(); ++j) {
-                  if (insn->operands[j].isTemp() && insn->operands[j].tempId() == operand.tempId()) {
+                  if (insn->operands[j].isTemp() &&
+                      insn->operands[j].tempId() == operand.tempId()) {
                      insn->operands[j].setFirstKill(false);
                      insn->operands[j].setKill(true);
                   }
@@ -165,14 +166,14 @@ void process_live_temps_per_block(Program *program, live& lives, Block* block,
 
    /* update block's register demand for a last time */
    block_register_demand.update(new_demand);
-   if (update_register_demand)
+   if (program->progress < CompilationProgress::after_ra)
       block->register_demand = block_register_demand;
 
    /* handle phi definitions */
    int phi_idx = idx;
    while (phi_idx >= 0) {
       register_demand[phi_idx] = new_demand;
-      Instruction *insn = block->instructions[phi_idx].get();
+      Instruction* insn = block->instructions[phi_idx].get();
 
       assert(is_phi(insn) && insn->definitions.size() == 1);
       if (!insn->definitions[0].isTemp()) {
@@ -201,27 +202,27 @@ void process_live_temps_per_block(Program *program, live& lives, Block* block,
 
 #ifndef NDEBUG
       if (preds.empty())
-         aco_err(program, "Temporary never defined or are defined after use: %%%d in BB%d", t, block->index);
+         aco_err(program, "Temporary never defined or are defined after use: %%%d in BB%d", t,
+                 block->index);
 #endif
 
       for (unsigned pred_idx : preds) {
          auto it = lives.live_out[pred_idx].insert(t);
          if (it.second)
-            worklist.insert(pred_idx);
+            worklist = std::max(worklist, pred_idx + 1);
       }
    }
 
    /* handle phi operands */
    phi_idx = idx;
    while (phi_idx >= 0) {
-      Instruction *insn = block->instructions[phi_idx].get();
+      Instruction* insn = block->instructions[phi_idx].get();
       assert(is_phi(insn));
       /* directly insert into the predecessors live-out set */
-      std::vector<unsigned>& preds = insn->opcode == aco_opcode::p_phi
-                                   ? block->logical_preds
-                                   : block->linear_preds;
+      std::vector<unsigned>& preds =
+         insn->opcode == aco_opcode::p_phi ? block->logical_preds : block->linear_preds;
       for (unsigned i = 0; i < preds.size(); ++i) {
-         Operand &operand = insn->operands[i];
+         Operand& operand = insn->operands[i];
          if (!operand.isTemp())
             continue;
          if (operand.isFixed() && operand.physReg() == vcc)
@@ -229,7 +230,7 @@ void process_live_temps_per_block(Program *program, live& lives, Block* block,
          /* check if we changed an already processed block */
          const bool inserted = lives.live_out[preds[i]].insert(operand.tempId()).second;
          if (inserted) {
-            worklist.insert(preds[i]);
+            worklist = std::max(worklist, preds[i] + 1);
             if (insn->opcode == aco_opcode::p_phi && operand.getTemp().type() == RegType::sgpr)
                phi_sgpr_ops[preds[i]] += operand.size();
          }
@@ -243,18 +244,19 @@ void process_live_temps_per_block(Program *program, live& lives, Block* block,
    assert(block->index != 0 || (new_demand == RegisterDemand() && live.empty()));
 }
 
-unsigned calc_waves_per_workgroup(Program *program)
+unsigned
+calc_waves_per_workgroup(Program* program)
 {
    /* When workgroup size is not known, just go with wave_size */
-   unsigned workgroup_size = program->workgroup_size == UINT_MAX
-                             ? program->wave_size
-                             : program->workgroup_size;
+   unsigned workgroup_size =
+      program->workgroup_size == UINT_MAX ? program->wave_size : program->workgroup_size;
 
    return align(workgroup_size, program->wave_size) / program->wave_size;
 }
 } /* end namespace */
 
-uint16_t get_extra_sgprs(Program *program)
+uint16_t
+get_extra_sgprs(Program* program)
 {
    if (program->chip_class >= GFX10) {
       assert(!program->needs_flat_scr);
@@ -280,26 +282,30 @@ uint16_t get_extra_sgprs(Program *program)
    }
 }
 
-uint16_t get_sgpr_alloc(Program *program, uint16_t addressable_sgprs)
+uint16_t
+get_sgpr_alloc(Program* program, uint16_t addressable_sgprs)
 {
    uint16_t sgprs = addressable_sgprs + get_extra_sgprs(program);
    uint16_t granule = program->dev.sgpr_alloc_granule;
    return ALIGN_NPOT(std::max(sgprs, granule), granule);
 }
 
-uint16_t get_vgpr_alloc(Program *program, uint16_t addressable_vgprs)
+uint16_t
+get_vgpr_alloc(Program* program, uint16_t addressable_vgprs)
 {
    assert(addressable_vgprs <= program->dev.vgpr_limit);
    uint16_t granule = program->dev.vgpr_alloc_granule;
    return align(std::max(addressable_vgprs, granule), granule);
 }
 
-unsigned round_down(unsigned a, unsigned b)
+unsigned
+round_down(unsigned a, unsigned b)
 {
    return a - (a % b);
 }
 
-uint16_t get_addr_sgpr_from_waves(Program *program, uint16_t waves)
+uint16_t
+get_addr_sgpr_from_waves(Program* program, uint16_t waves)
 {
    /* it's not possible to allocate more than 128 SGPRs */
    uint16_t sgprs = std::min(program->dev.physical_sgprs / waves, 128);
@@ -308,21 +314,24 @@ uint16_t get_addr_sgpr_from_waves(Program *program, uint16_t waves)
    return std::min(sgprs, program->dev.sgpr_limit);
 }
 
-uint16_t get_addr_vgpr_from_waves(Program *program, uint16_t waves)
+uint16_t
+get_addr_vgpr_from_waves(Program* program, uint16_t waves)
 {
    uint16_t vgprs = program->dev.physical_vgprs / waves & ~(program->dev.vgpr_alloc_granule - 1);
    vgprs -= program->config->num_shared_vgprs / 2;
    return std::min(vgprs, program->dev.vgpr_limit);
 }
 
-void calc_min_waves(Program* program)
+void
+calc_min_waves(Program* program)
 {
    unsigned waves_per_workgroup = calc_waves_per_workgroup(program);
    unsigned simd_per_cu_wgp = program->dev.simd_per_cu * (program->wgp_mode ? 2 : 1);
    program->min_waves = DIV_ROUND_UP(waves_per_workgroup, simd_per_cu_wgp);
 }
 
-void update_vgpr_sgpr_demand(Program* program, const RegisterDemand new_demand)
+void
+update_vgpr_sgpr_demand(Program* program, const RegisterDemand new_demand)
 {
    unsigned max_waves_per_simd = program->dev.max_wave64_per_simd * (64 / program->wave_size);
    unsigned simd_per_cu_wgp = program->dev.simd_per_cu * (program->wgp_mode ? 2 : 1);
@@ -338,8 +347,10 @@ void update_vgpr_sgpr_demand(Program* program, const RegisterDemand new_demand)
       program->max_reg_demand = new_demand;
    } else {
       program->num_waves = program->dev.physical_sgprs / get_sgpr_alloc(program, new_demand.sgpr);
-      uint16_t vgpr_demand = get_vgpr_alloc(program, new_demand.vgpr) + program->config->num_shared_vgprs / 2;
-      program->num_waves = std::min<uint16_t>(program->num_waves, program->dev.physical_vgprs / vgpr_demand);
+      uint16_t vgpr_demand =
+         get_vgpr_alloc(program, new_demand.vgpr) + program->config->num_shared_vgprs / 2;
+      program->num_waves =
+         std::min<uint16_t>(program->num_waves, program->dev.physical_vgprs / vgpr_demand);
       program->max_waves = max_waves_per_simd;
 
       /* adjust max_waves for workgroup and LDS limits */
@@ -351,12 +362,15 @@ void update_vgpr_sgpr_demand(Program* program, const RegisterDemand new_demand)
          workgroups_per_cu_wgp = std::min(workgroups_per_cu_wgp, lds_limit / lds);
       }
       if (waves_per_workgroup > 1 && program->chip_class < GFX10)
-         workgroups_per_cu_wgp = std::min(workgroups_per_cu_wgp, 16u); /* TODO: is this a SI-only limit? what about Navi? */
+         workgroups_per_cu_wgp = std::min(
+            workgroups_per_cu_wgp, 16u); /* TODO: is this a SI-only limit? what about Navi? */
 
       /* in cases like waves_per_workgroup=3 or lds=65536 and
        * waves_per_workgroup=1, we want the maximum possible number of waves per
        * SIMD and not the minimum. so DIV_ROUND_UP is used */
-      program->max_waves = std::min<uint16_t>(program->max_waves, DIV_ROUND_UP(workgroups_per_cu_wgp * waves_per_workgroup, simd_per_cu_wgp));
+      program->max_waves = std::min<uint16_t>(
+         program->max_waves,
+         DIV_ROUND_UP(workgroups_per_cu_wgp * waves_per_workgroup, simd_per_cu_wgp));
 
       /* incorporate max_waves and calculate max_reg_demand */
       program->num_waves = std::min<uint16_t>(program->num_waves, program->max_waves);
@@ -365,35 +379,32 @@ void update_vgpr_sgpr_demand(Program* program, const RegisterDemand new_demand)
    }
 }
 
-live live_var_analysis(Program* program, bool update_register_demand)
+live
+live_var_analysis(Program* program)
 {
    live result;
    result.live_out.resize(program->blocks.size());
    result.register_demand.resize(program->blocks.size());
-   std::set<unsigned> worklist;
+   unsigned worklist = program->blocks.size();
    std::vector<uint16_t> phi_sgpr_ops(program->blocks.size());
    RegisterDemand new_demand;
 
    program->needs_vcc = false;
 
-   /* this implementation assumes that the block idx corresponds to the block's position in program->blocks vector */
-   for (Block& block : program->blocks)
-      worklist.insert(block.index);
-   while (!worklist.empty()) {
-      std::set<unsigned>::reverse_iterator b_it = worklist.rbegin();
-      unsigned block_idx = *b_it;
-      worklist.erase(block_idx);
+   /* this implementation assumes that the block idx corresponds to the block's position in
+    * program->blocks vector */
+   while (worklist) {
+      unsigned block_idx = --worklist;
       process_live_temps_per_block(program, result, &program->blocks[block_idx], worklist,
-                                   phi_sgpr_ops, update_register_demand);
+                                   phi_sgpr_ops);
       new_demand.update(program->blocks[block_idx].register_demand);
    }
 
    /* calculate the program's register demand and number of waves */
-   if (update_register_demand)
+   if (program->progress < CompilationProgress::after_ra)
       update_vgpr_sgpr_demand(program, new_demand);
 
    return result;
 }
 
-}
-
+} // namespace aco

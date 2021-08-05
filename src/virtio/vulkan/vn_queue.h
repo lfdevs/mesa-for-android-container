@@ -21,10 +21,7 @@ struct vn_queue {
    uint32_t index;
    uint32_t flags;
 
-   uint32_t sync_queue_index;
-
-   struct vn_renderer_sync *idle_sync;
-   uint64_t idle_sync_value;
+   VkFence wait_fence;
 };
 VK_DEFINE_HANDLE_CASTS(vn_queue, base.base, VkQueue, VK_OBJECT_TYPE_QUEUE)
 
@@ -32,14 +29,7 @@ enum vn_sync_type {
    /* no payload */
    VN_SYNC_TYPE_INVALID,
 
-   /* When we signal or reset, we update both the device object and the
-    * renderer sync.  When we wait or query, we use the renderer sync only.
-    *
-    * TODO VkFence does not need the device object
-    */
-   VN_SYNC_TYPE_SYNC,
-
-   /* device object only; no renderer sync */
+   /* device object */
    VN_SYNC_TYPE_DEVICE_ONLY,
 
    /* already signaled by WSI */
@@ -48,7 +38,6 @@ enum vn_sync_type {
 
 struct vn_sync_payload {
    enum vn_sync_type type;
-   struct vn_renderer_sync *sync;
 };
 
 struct vn_fence {

@@ -20,9 +20,6 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 #
-# Authors:
-#    Daniel Schuermann (daniel.schuermann@campus.tu-berlin.de)
-
 
 # Class that represents all the information we have about the opcode
 # NOTE: this must be kept in sync with aco_op_info
@@ -183,7 +180,7 @@ class Format(Enum):
          for i in range(min(num_operands, 2)):
             res += 'instr->sel[{0}] = op{0}.op.bytes() == 2 ? sdwa_uword : (op{0}.op.bytes() == 1 ? sdwa_ubyte : sdwa_udword);\n'.format(i)
          res += 'instr->dst_sel = def0.bytes() == 2 ? sdwa_uword : (def0.bytes() == 1 ? sdwa_ubyte : sdwa_udword);\n'
-         res += 'instr->dst_preserve = true;'
+         res += 'if (def0.bytes() < 4) instr->dst_preserve = true;'
       return res
 
 
@@ -238,8 +235,10 @@ class Opcode(object):
       self.definition_size = def_dtype_sizes.get(def_dtype, self.operand_size)
 
       # exceptions for operands:
-      if 'sad_' in name:
+      if 'qsad_' in name:
         self.operand_size = 0
+      elif 'sad_' in name:
+        self.operand_size = 32
       elif name in ['v_mad_u64_u32', 'v_mad_i64_i32']:
         self.operand_size = 0
       elif self.operand_size == 24:
@@ -251,8 +250,10 @@ class Opcode(object):
         self.operand_size = 32
 
       # exceptions for definitions:
-      if 'sad_' in name:
+      if 'qsad_' in name:
         self.definition_size = 0
+      elif 'sad_' in name:
+        self.definition_size = 32
       elif '_pk' in name:
         self.definition_size = 32
 
@@ -319,6 +320,14 @@ opcode("p_exit_early_if")
 opcode("p_bpermute")
 
 opcode("p_constaddr")
+
+# These don't have to be pseudo-ops, but it makes optimization easier to only
+# have to consider two instructions.
+# (src0 >> (index * bits)) & ((1 << bits) - 1) with optional sign extension
+opcode("p_extract") # src1=index, src2=bits, src3=signext
+# (src0 & ((1 << bits) - 1)) << (index * bits)
+opcode("p_insert") # src1=index, src2=bits
+
 
 # SOP2 instructions: 2 scalar inputs, 1 scalar output (+optional scc)
 SOP2 = {
@@ -1196,14 +1205,14 @@ DS = {
    (0x51, 0x51, 0x51, 0x51, 0x51, "ds_cmpst_f64"),
    (0x52, 0x52, 0x52, 0x52, 0x52, "ds_min_f64"),
    (0x53, 0x53, 0x53, 0x53, 0x53, "ds_max_f64"),
-   (  -1,   -1, 0x54, 0x54, 0xa0, "ds_write_b8_d16_hi"),
-   (  -1,   -1, 0x55, 0x55, 0xa1, "ds_write_b16_d16_hi"),
-   (  -1,   -1, 0x56, 0x56, 0xa2, "ds_read_u8_d16"),
-   (  -1,   -1, 0x57, 0x57, 0xa3, "ds_read_u8_d16_hi"),
-   (  -1,   -1, 0x58, 0x58, 0xa4, "ds_read_i8_d16"),
-   (  -1,   -1, 0x59, 0x59, 0xa5, "ds_read_i8_d16_hi"),
-   (  -1,   -1, 0x5a, 0x5a, 0xa6, "ds_read_u16_d16"),
-   (  -1,   -1, 0x5b, 0x5b, 0xa7, "ds_read_u16_d16_hi"),
+   (  -1,   -1,   -1, 0x54, 0xa0, "ds_write_b8_d16_hi"),
+   (  -1,   -1,   -1, 0x55, 0xa1, "ds_write_b16_d16_hi"),
+   (  -1,   -1,   -1, 0x56, 0xa2, "ds_read_u8_d16"),
+   (  -1,   -1,   -1, 0x57, 0xa3, "ds_read_u8_d16_hi"),
+   (  -1,   -1,   -1, 0x58, 0xa4, "ds_read_i8_d16"),
+   (  -1,   -1,   -1, 0x59, 0xa5, "ds_read_i8_d16_hi"),
+   (  -1,   -1,   -1, 0x5a, 0xa6, "ds_read_u16_d16"),
+   (  -1,   -1,   -1, 0x5b, 0xa7, "ds_read_u16_d16_hi"),
    (0x60, 0x60, 0x60, 0x60, 0x60, "ds_add_rtn_u64"),
    (0x61, 0x61, 0x61, 0x61, 0x61, "ds_sub_rtn_u64"),
    (0x62, 0x62, 0x62, 0x62, 0x62, "ds_rsub_rtn_u64"),
@@ -1509,6 +1518,7 @@ IMAGE_GATHER4 = {
 for (code, name) in IMAGE_GATHER4:
    opcode(name, code, code, code, Format.MIMG, InstrClass.VMem)
 
+opcode("image_bvh64_intersect_ray", -1, -1, 231, Format.MIMG, InstrClass.VMem)
 
 FLAT = {
    #GFX7, GFX8_9, GFX10

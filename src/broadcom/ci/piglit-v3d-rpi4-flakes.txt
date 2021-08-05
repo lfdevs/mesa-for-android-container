@@ -1,3 +1,5 @@
-glx@glx_arb_sync_control@timing
+glx@glx_arb_sync_control@swapbuffersmsc-divisor-zero
+glx@glx_arb_sync_control@waitformsc
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-24_8 samples=4
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-float-and-ushort samples=4
+spec@egl_chromium_sync_control@conformance

@@ -40,15 +40,11 @@ struct zink_vertex_elements_state;
 struct zink_gfx_pipeline_state {
    struct zink_render_pass *render_pass;
 
-   struct zink_vertex_elements_hw_state *element_state;
-   uint8_t divisors_present;
-
+   uint8_t void_alpha_attachments:PIPE_MAX_COLOR_BUFS;
    uint32_t num_attachments;
    struct zink_blend_state *blend_state;
 
    struct zink_rasterizer_hw_state *rast_state;
-
-   struct zink_depth_stencil_alpha_hw_state *depth_stencil_alpha_state;
 
    VkSampleMask sample_mask;
    uint8_t rast_samples;
@@ -63,16 +59,27 @@ struct zink_gfx_pipeline_state {
    uint32_t hash;
    bool dirty;
 
+   struct zink_depth_stencil_alpha_hw_state *depth_stencil_alpha_state; //non-dynamic state
+   VkFrontFace front_face;
+
    VkShaderModule modules[PIPE_SHADER_TYPES - 1];
    uint32_t module_hash;
 
    uint32_t combined_hash;
    bool combined_dirty;
 
-   VkVertexInputBindingDivisorDescriptionEXT divisors[PIPE_MAX_ATTRIBS];
-   VkVertexInputBindingDescription bindings[PIPE_MAX_ATTRIBS]; // combination of element_state and stride
+   struct zink_vertex_elements_hw_state *element_state;
+   bool vertex_state_dirty;
+
+   uint32_t final_hash;
+
    uint32_t vertex_buffers_enabled_mask;
+   uint32_t vertex_strides[PIPE_MAX_ATTRIBS];
+   bool sample_locations_enabled;
    bool have_EXT_extended_dynamic_state;
+
+   VkPipeline pipeline;
+   enum pipe_prim_type mode : 8;
 };
 
 struct zink_compute_pipeline_state {
@@ -82,6 +89,8 @@ struct zink_compute_pipeline_state {
    bool dirty;
    bool use_local_size;
    uint32_t local_size[3];
+
+   VkPipeline pipeline;
 };
 
 VkPipeline

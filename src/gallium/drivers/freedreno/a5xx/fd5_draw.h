@@ -82,7 +82,7 @@ fd5_draw_emit(struct fd_batch *batch, struct fd_ringbuffer *ring,
               enum pc_di_primtype primtype, enum pc_di_vis_cull_mode vismode,
               const struct pipe_draw_info *info,
               const struct pipe_draw_indirect_info *indirect,
-              const struct pipe_draw_start_count *draw, unsigned index_offset)
+              const struct pipe_draw_start_count_bias *draw, unsigned index_offset)
 {
    struct pipe_resource *idx_buffer = NULL;
    enum a4xx_index_size idx_type;

@@ -437,7 +437,7 @@ fd6_texture_state(struct fd_context *ctx, enum pipe_shader_type type,
    /* NOTE: one ref for tex_cache, and second ref for returned state: */
    pipe_reference_init(&state->reference, 2);
    state->key = key;
-   state->stateobj = fd_ringbuffer_new_object(ctx->pipe, 0x1000);
+   state->stateobj = fd_ringbuffer_new_object(ctx->pipe, 32 * 4);
    state->needs_border = needs_border;
 
    fd6_emit_textures(ctx, state->stateobj, type, tex, key.bcolor_offset, NULL);

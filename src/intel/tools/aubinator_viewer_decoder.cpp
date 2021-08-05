@@ -31,7 +31,7 @@ void
 aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
                            struct aub_viewer_cfg *cfg,
                            struct aub_viewer_decode_cfg *decode_cfg,
-                           const struct gen_device_info *devinfo,
+                           const struct intel_device_info *devinfo,
                            struct intel_spec *spec,
                            struct intel_batch_decode_bo (*get_bo)(void *, bool, uint64_t),
                            unsigned (*get_state_size)(void *, uint32_t),

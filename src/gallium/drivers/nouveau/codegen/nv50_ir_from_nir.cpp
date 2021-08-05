@@ -1289,9 +1289,9 @@ Converter::parseNIR()
 
    switch(prog->getType()) {
    case Program::TYPE_COMPUTE:
-      info->prop.cp.numThreads[0] = nir->info.cs.local_size[0];
-      info->prop.cp.numThreads[1] = nir->info.cs.local_size[1];
-      info->prop.cp.numThreads[2] = nir->info.cs.local_size[2];
+      info->prop.cp.numThreads[0] = nir->info.workgroup_size[0];
+      info->prop.cp.numThreads[1] = nir->info.workgroup_size[1];
+      info->prop.cp.numThreads[2] = nir->info.workgroup_size[2];
       info_out->bin.smemSize = std::max(info_out->bin.smemSize, nir->info.shared_size);
       break;
    case Program::TYPE_FRAGMENT:
@@ -1566,11 +1566,11 @@ Converter::convert(nir_intrinsic_op intr)
       return SV_INSTANCE_ID;
    case nir_intrinsic_load_invocation_id:
       return SV_INVOCATION_ID;
-   case nir_intrinsic_load_local_group_size:
+   case nir_intrinsic_load_workgroup_size:
       return SV_NTID;
    case nir_intrinsic_load_local_invocation_id:
       return SV_TID;
-   case nir_intrinsic_load_num_work_groups:
+   case nir_intrinsic_load_num_workgroups:
       return SV_NCTAID;
    case nir_intrinsic_load_patch_vertices_in:
       return SV_VERTEX_COUNT;
@@ -1602,7 +1602,7 @@ Converter::convert(nir_intrinsic_op intr)
       return SV_TESS_OUTER;
    case nir_intrinsic_load_vertex_id:
       return SV_VERTEX_ID;
-   case nir_intrinsic_load_work_group_id:
+   case nir_intrinsic_load_workgroup_id:
       return SV_CTAID;
    case nir_intrinsic_load_work_dim:
       return SV_WORK_DIM;
@@ -1843,9 +1843,9 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_load_helper_invocation:
    case nir_intrinsic_load_instance_id:
    case nir_intrinsic_load_invocation_id:
-   case nir_intrinsic_load_local_group_size:
+   case nir_intrinsic_load_workgroup_size:
    case nir_intrinsic_load_local_invocation_id:
-   case nir_intrinsic_load_num_work_groups:
+   case nir_intrinsic_load_num_workgroups:
    case nir_intrinsic_load_patch_vertices_in:
    case nir_intrinsic_load_primitive_id:
    case nir_intrinsic_load_sample_id:
@@ -1861,7 +1861,7 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_load_tess_level_inner:
    case nir_intrinsic_load_tess_level_outer:
    case nir_intrinsic_load_vertex_id:
-   case nir_intrinsic_load_work_group_id:
+   case nir_intrinsic_load_workgroup_id:
    case nir_intrinsic_load_work_dim: {
       const DataType dType = getDType(insn);
       SVSemantic sv = convert(op);
@@ -3115,6 +3115,7 @@ Converter::run()
    struct nir_lower_subgroups_options subgroup_options = {};
    subgroup_options.subgroup_size = 32;
    subgroup_options.ballot_bit_size = 32;
+   subgroup_options.ballot_components = 1;
    subgroup_options.lower_elect = true;
 
    /* prepare for IO lowering */
@@ -3134,7 +3135,7 @@ Converter::run()
 
    NIR_PASS_V(nir, nir_lower_load_const_to_scalar);
    NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL, NULL);
-   NIR_PASS_V(nir, nir_lower_phis_to_scalar);
+   NIR_PASS_V(nir, nir_lower_phis_to_scalar, false);
 
    /*TODO: improve this lowering/optimisation loop so that we can use
     *      nir_opt_idiv_const effectively before this.
@@ -3265,6 +3266,8 @@ nvir_nir_shader_compiler_options(int chipset)
    op.lower_pack_split = false;
    op.lower_extract_byte = (chipset < NVISA_GM107_CHIPSET);
    op.lower_extract_word = (chipset < NVISA_GM107_CHIPSET);
+   op.lower_insert_byte = true;
+   op.lower_insert_word = true;
    op.lower_all_io_to_temps = false;
    op.lower_all_io_to_elements = false;
    op.vertex_id_zero_based = false;

@@ -26,7 +26,7 @@
 static void *
 iris_oa_bo_alloc(void *bufmgr, const char *name, uint64_t size)
 {
-   return iris_bo_alloc(bufmgr, name, size, IRIS_MEMZONE_OTHER);
+   return iris_bo_alloc(bufmgr, name, size, 1, IRIS_MEMZONE_OTHER, BO_ALLOC_SMEM);
 }
 
 static void
@@ -83,7 +83,7 @@ typedef void (*bo_wait_rendering_t)(void *bo);
 typedef int (*bo_busy_t)(void *bo);
 
 void
-iris_perf_init_vtbl(struct gen_perf_config *perf_cfg)
+iris_perf_init_vtbl(struct intel_perf_config *perf_cfg)
 {
    perf_cfg->vtbl.bo_alloc = iris_oa_bo_alloc;
    perf_cfg->vtbl.bo_unreference = (bo_unreference_t)iris_bo_unreference;

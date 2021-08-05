@@ -59,8 +59,6 @@ lvp_image_create(VkDevice _device,
       default:
       case VK_IMAGE_TYPE_2D:
          template.target = pCreateInfo->arrayLayers > 1 ? PIPE_TEXTURE_2D_ARRAY : PIPE_TEXTURE_2D;
-         if (pCreateInfo->flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)
-            template.target = pCreateInfo->arrayLayers == 6 ? PIPE_TEXTURE_CUBE : PIPE_TEXTURE_CUBE_ARRAY;
          break;
       case VK_IMAGE_TYPE_3D:
          template.target = PIPE_TEXTURE_3D;
@@ -92,6 +90,8 @@ lvp_image_create(VkDevice _device,
       image->bo = device->pscreen->resource_create_unbacked(device->pscreen,
                                                             &template,
                                                             &image->size);
+      if (!image->bo)
+         return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
    *pImage = lvp_image_to_handle(image);
 

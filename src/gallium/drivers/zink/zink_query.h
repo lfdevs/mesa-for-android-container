@@ -29,6 +29,9 @@ struct zink_context;
 struct zink_fence;
 struct zink_query;
 struct zink_screen;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void
 zink_suspend_queries(struct zink_context *ctx, struct zink_batch *batch);
@@ -47,4 +50,8 @@ zink_start_conditional_render(struct zink_context *ctx);
 
 void
 zink_stop_conditional_render(struct zink_context *ctx);
+#ifdef __cplusplus
+}
+#endif
+
 #endif

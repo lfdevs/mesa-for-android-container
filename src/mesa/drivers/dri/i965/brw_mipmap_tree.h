@@ -456,7 +456,7 @@ enum isl_surf_dim
 get_isl_surf_dim(GLenum target);
 
 enum isl_dim_layout
-get_isl_dim_layout(const struct gen_device_info *devinfo,
+get_isl_dim_layout(const struct intel_device_info *devinfo,
                    enum isl_tiling tiling, GLenum target);
 
 void
@@ -716,7 +716,7 @@ static inline bool
 brw_miptree_needs_fake_etc(struct brw_context *brw,
                              struct brw_mipmap_tree *mt)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    bool is_etc = _mesa_is_format_etc2(mt->format) ||
                  (mt->format == MESA_FORMAT_ETC1_RGB8);
 

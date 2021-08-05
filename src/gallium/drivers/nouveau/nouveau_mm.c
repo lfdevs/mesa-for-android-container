@@ -118,7 +118,7 @@ mm_default_slab_size(unsigned chunk_order)
 }
 
 static int
-mm_slab_new(struct nouveau_mman *cache, int chunk_order)
+mm_slab_new(struct nouveau_mman *cache, struct mm_bucket *bucket, int chunk_order)
 {
    struct mm_slab *slab;
    int words, ret;
@@ -148,7 +148,8 @@ mm_slab_new(struct nouveau_mman *cache, int chunk_order)
    slab->order = chunk_order;
    slab->count = slab->free = size >> chunk_order;
 
-   list_add(&slab->head, &mm_bucket_by_order(cache, chunk_order)->free);
+   assert(bucket == mm_bucket_by_order(cache, chunk_order));
+   list_add(&slab->head, &bucket->free);
 
    cache->allocated += size;
 
@@ -185,7 +186,7 @@ nouveau_mm_allocate(struct nouveau_mman *cache,
       slab = LIST_ENTRY(struct mm_slab, bucket->used.next, head);
    } else {
       if (list_is_empty(&bucket->free)) {
-         mm_slab_new(cache, MAX2(mm_get_order(size), MM_MIN_ORDER));
+         mm_slab_new(cache, bucket, MAX2(mm_get_order(size), MM_MIN_ORDER));
       }
       slab = LIST_ENTRY(struct mm_slab, bucket->free.next, head);
 
@@ -206,7 +207,6 @@ nouveau_mm_allocate(struct nouveau_mman *cache,
       list_add(&slab->head, &bucket->full);
    }
 
-   alloc->next = NULL;
    alloc->offset = *offset;
    alloc->priv = (void *)slab;
 

@@ -614,6 +614,7 @@ emit_instr(struct etna_compile *c, nir_instr * instr)
       break;
    case nir_instr_type_jump:
       assert(nir_instr_is_last(instr));
+      break;
    case nir_instr_type_load_const:
    case nir_instr_type_ssa_undef:
    case nir_instr_type_deref:

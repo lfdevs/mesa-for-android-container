@@ -44,7 +44,7 @@ anv_nir_add_base_work_group_id(nir_shader *shader)
                continue;
 
             nir_intrinsic_instr *load_id = nir_instr_as_intrinsic(instr);
-            if (load_id->intrinsic != nir_intrinsic_load_work_group_id)
+            if (load_id->intrinsic != nir_intrinsic_load_workgroup_id)
                continue;
 
             b.cursor = nir_after_instr(&load_id->instr);

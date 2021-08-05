@@ -26,6 +26,7 @@
  */
 
 #include "freedreno_query_acc.h"
+#include "freedreno_state.h"
 
 #include "fd6_blend.h"
 #include "fd6_blitter.h"
@@ -38,6 +39,7 @@
 #include "fd6_program.h"
 #include "fd6_query.h"
 #include "fd6_rasterizer.h"
+#include "fd6_resource.h"
 #include "fd6_texture.h"
 #include "fd6_zsa.h"
 
@@ -126,6 +128,32 @@ fd6_vertex_state_delete(struct pipe_context *pctx, void *hwcso)
    fd_ringbuffer_del(so->stateobj);
    FREE(hwcso);
 }
+
+static void
+validate_surface(struct pipe_context *pctx, struct pipe_surface *psurf)
+   assert_dt
+{
+   fd6_validate_format(fd_context(pctx), fd_resource(psurf->texture),
+                       psurf->format);
+}
+
+static void
+fd6_set_framebuffer_state(struct pipe_context *pctx,
+                          const struct pipe_framebuffer_state *pfb)
+   in_dt
+{
+   if (pfb->zsbuf)
+      validate_surface(pctx, pfb->zsbuf);
+
+   for (unsigned i = 0; i < pfb->nr_cbufs; i++) {
+      if (!pfb->cbufs[i])
+         continue;
+      validate_surface(pctx, pfb->cbufs[i]);
+   }
+
+   fd_set_framebuffer_state(pctx, pfb);
+}
+
 
 static void
 setup_state_map(struct fd_context *ctx)
@@ -221,6 +249,8 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
    if (!pctx)
       return NULL;
 
+   pctx->set_framebuffer_state = fd6_set_framebuffer_state;
+
    /* after fd_context_init() to override set_shader_images() */
    fd6_image_init(pctx);
 
@@ -241,7 +271,7 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
    fd6_ctx->vsc_prim_strm_pitch = 0x1040;
 
    fd6_ctx->control_mem =
-      fd_bo_new(screen->dev, 0x1000, DRM_FREEDRENO_GEM_TYPE_KMEM, "control");
+      fd_bo_new(screen->dev, 0x1000, 0, "control");
 
    memset(fd_bo_map(fd6_ctx->control_mem), 0, sizeof(struct fd6_control));
 

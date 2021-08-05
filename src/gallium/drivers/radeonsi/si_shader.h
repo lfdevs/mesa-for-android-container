@@ -402,6 +402,13 @@ struct si_shader_info {
     * fragment shader invocations if flat shading.
     */
    bool allow_flat_shading;
+
+   /* Optimization: if the texture bound to this texunit has been cleared to 1,
+    * then the draw can be skipped (see si_draw_vbo_skip_noop). Initially the
+    * value is 0xff (undetermined) and can be later changed to 0 (= false) or
+    * texunit + 1.
+    */
+   uint8_t writes_1_if_tex_is_1;
 };
 
 /* A shader selector is a gallium CSO and contains shader variants and
@@ -575,6 +582,7 @@ union si_shader_part_key {
       unsigned gs_fast_launch_tri_list : 1;  /* for NGG culling */
       unsigned gs_fast_launch_tri_strip : 1; /* for NGG culling */
       unsigned gs_fast_launch_index_size_packed : 2;
+      unsigned load_vgprs_after_culling : 1;
       /* Prologs for monolithic shaders shouldn't set EXEC. */
       unsigned is_monolithic : 1;
    } vs_prolog;
@@ -681,13 +689,9 @@ struct si_shader_key {
       unsigned cs_prim_type : 4;
       unsigned cs_indexed : 1;
       unsigned cs_instancing : 1;
-      unsigned cs_primitive_restart : 1;
       unsigned cs_provoking_vertex_first : 1;
-      unsigned cs_need_correct_orientation : 1;
       unsigned cs_cull_front : 1;
       unsigned cs_cull_back : 1;
-      unsigned cs_cull_z : 1;
-      unsigned cs_halfz_clip_space : 1;
 
       /* VS and TCS have the same number of patch vertices. */
       unsigned same_patch_vertices:1;

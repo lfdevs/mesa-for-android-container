@@ -30,7 +30,7 @@
 
 #include "vk_util.h"
 
-#include "drm-uapi/drm_fourcc.h"
+#include "ac_drm_fourcc.h"
 #include "util/format_r11g11b10f.h"
 #include "util/format_rgb9e5.h"
 #include "util/format_srgb.h"
@@ -179,11 +179,6 @@ radv_translate_tex_dataformat(VkFormat format, const struct util_format_descript
 
    case UTIL_FORMAT_COLORSPACE_YUV:
       goto out_unknown; /* TODO */
-
-   case UTIL_FORMAT_COLORSPACE_SRGB:
-      if (desc->nr_channels != 4 && desc->nr_channels != 1)
-         goto out_unknown;
-      break;
 
    default:
       break;
@@ -781,6 +776,16 @@ radv_physical_device_get_format_properties(struct radv_physical_device *physical
       break;
    }
 
+   switch (format) {
+   case VK_FORMAT_R32G32B32_SFLOAT:
+   case VK_FORMAT_R32G32B32A32_SFLOAT:
+   case VK_FORMAT_R16G16B16_SFLOAT:
+   case VK_FORMAT_R16G16B16A16_SFLOAT:
+      buffer |= VK_FORMAT_FEATURE_ACCELERATION_STRUCTURE_VERTEX_BUFFER_BIT_KHR;
+      break;
+   default:
+      break;
+   }
    /* addrlib does not support linear compressed textures. */
    if (vk_format_is_compressed(format))
       linear = 0;
@@ -1133,9 +1138,6 @@ radv_get_modifier_flags(struct radv_physical_device *dev, VkFormat format, uint6
       features = props->linearTilingFeatures;
    else
       features = props->optimalTilingFeatures;
-
-   if (modifier != DRM_FORMAT_MOD_LINEAR && vk_format_get_plane_count(format) > 1)
-      return 0;
 
    if (ac_modifier_has_dcc(modifier)) {
       features &= ~VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;

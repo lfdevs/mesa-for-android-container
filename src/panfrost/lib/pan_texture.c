@@ -200,23 +200,18 @@ panfrost_texture_num_elements(
 
 unsigned
 panfrost_estimate_texture_payload_size(const struct panfrost_device *dev,
-                                       unsigned first_level,
-                                       unsigned last_level,
-                                       unsigned first_layer,
-                                       unsigned last_layer,
-                                       unsigned nr_samples,
-                                       enum mali_texture_dimension dim,
-                                       uint64_t modifier)
+                                       const struct pan_image_view *iview)
 {
         /* Assume worst case */
         unsigned manual_stride = pan_is_bifrost(dev) ||
-                                 (modifier == DRM_FORMAT_MOD_LINEAR);
+                                 (iview->image->layout.modifier == DRM_FORMAT_MOD_LINEAR);
 
-        unsigned elements = panfrost_texture_num_elements(
-                        first_level, last_level,
-                        first_layer, last_layer,
-                        nr_samples,
-                        dim == MALI_TEXTURE_DIMENSION_CUBE, manual_stride);
+        unsigned elements =
+                panfrost_texture_num_elements(iview->first_level, iview->last_level,
+                                              iview->first_layer, iview->last_layer,
+                                              iview->image->layout.nr_samples,
+                                              iview->dim == MALI_TEXTURE_DIMENSION_CUBE,
+                                              manual_stride);
 
         return sizeof(mali_ptr) * elements;
 }
@@ -418,9 +413,6 @@ panfrost_new_texture(const struct panfrost_device *dev,
         enum pipe_format format = iview->format;
         unsigned swizzle;
 
-        if (drm_is_afbc(layout->modifier))
-                format = panfrost_afbc_format_fixup(dev, format);
-
         if (dev->arch == 7 && util_format_is_depth_or_stencil(format)) {
                 /* v7 doesn't have an _RRRR component order, combine the
                  * user swizzle with a .XXXX swizzle to emulate that.
@@ -524,11 +516,8 @@ panfrost_compute_checksum_size(
         unsigned width,
         unsigned height)
 {
-        unsigned aligned_width = ALIGN_POT(width, CHECKSUM_TILE_WIDTH);
-        unsigned aligned_height = ALIGN_POT(height, CHECKSUM_TILE_HEIGHT);
-
-        unsigned tile_count_x = aligned_width / CHECKSUM_TILE_WIDTH;
-        unsigned tile_count_y = aligned_height / CHECKSUM_TILE_HEIGHT;
+        unsigned tile_count_x = DIV_ROUND_UP(width, CHECKSUM_TILE_WIDTH);
+        unsigned tile_count_y = DIV_ROUND_UP(height, CHECKSUM_TILE_HEIGHT);
 
         slice->crc.stride = tile_count_x * CHECKSUM_BYTES_PER_TILE;
 

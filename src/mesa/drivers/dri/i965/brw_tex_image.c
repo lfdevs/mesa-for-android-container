@@ -184,7 +184,7 @@ brw_texsubimage_tiled_memcpy(struct gl_context * ctx,
                              const struct gl_pixelstore_attrib *packing)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct brw_texture_image *image = brw_texture_image(texImage);
    int src_pitch;
 
@@ -732,7 +732,7 @@ brw_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
                                 const struct gl_pixelstore_attrib *packing)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct brw_texture_image *image = brw_texture_image(texImage);
    int dst_pitch;
 
@@ -970,8 +970,10 @@ brw_compressedtexsubimage(struct gl_context *ctx, GLuint dims,
    bool is_linear_astc = _mesa_is_astc_format(gl_format) &&
                         !_mesa_is_srgb_format(gl_format);
    struct brw_context *brw = (struct brw_context*) ctx;
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   if (devinfo->ver == 9 && !gen_device_info_is_9lp(devinfo) && is_linear_astc)
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
+   if (devinfo->ver == 9 &&
+       !intel_device_info_is_9lp(devinfo) &&
+       is_linear_astc)
       flush_astc_denorms(ctx, dims, texImage,
                          xoffset, yoffset, zoffset,
                          width, height, depth);

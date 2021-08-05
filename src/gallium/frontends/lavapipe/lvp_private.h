@@ -35,6 +35,7 @@
 #include "compiler/shader_enums.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
+#include "cso_cache/cso_context.h"
 #include "nir.h"
 
 /* Pre-declarations needed for WSI entrypoints */
@@ -163,6 +164,7 @@ struct lvp_queue {
    VkDeviceQueueCreateFlags flags;
    struct lvp_device *                         device;
    struct pipe_context *ctx;
+   struct cso_context *cso;
    bool shutdown;
    thrd_t exec_thread;
    mtx_t m;
@@ -304,12 +306,15 @@ struct lvp_render_pass {
    uint32_t                                     subpass_count;
    struct lvp_subpass_attachment *              subpass_attachments;
    struct lvp_render_pass_attachment *          attachments;
+   bool has_color_attachment;
+   bool has_zs_attachment;
    struct lvp_subpass                           subpasses[0];
 };
 
 struct lvp_sampler {
    struct vk_object_base base;
    VkSamplerCreateInfo create_info;
+   union pipe_color_union border_color;
    VkSamplerReductionMode reduction_mode;
    uint32_t state[4];
 };
@@ -475,11 +480,19 @@ struct lvp_pipeline {
    void *shader_cso[PIPE_SHADER_TYPES];
    VkGraphicsPipelineCreateInfo graphics_create_info;
    VkComputePipelineCreateInfo compute_create_info;
+   uint32_t line_stipple_factor;
+   uint16_t line_stipple_pattern;
+   bool line_stipple_enable;
+   bool line_smooth;
+   bool disable_multisample;
+   bool line_rectangular;
+   bool gs_output_lines;
+   bool provoking_vertex_last;
 };
 
 struct lvp_event {
    struct vk_object_base base;
-   uint64_t event_storage;
+   volatile uint64_t event_storage;
 };
 
 struct lvp_fence {
@@ -661,6 +674,7 @@ enum lvp_cmds {
    LVP_CMD_DRAW_INDIRECT_BYTE_COUNT,
    LVP_CMD_BEGIN_CONDITIONAL_RENDERING,
    LVP_CMD_END_CONDITIONAL_RENDERING,
+   LVP_CMD_SET_VERTEX_INPUT,
    LVP_CMD_SET_CULL_MODE,
    LVP_CMD_SET_FRONT_FACE,
    LVP_CMD_SET_PRIMITIVE_TOPOLOGY,
@@ -670,6 +684,12 @@ enum lvp_cmds {
    LVP_CMD_SET_DEPTH_BOUNDS_TEST_ENABLE,
    LVP_CMD_SET_STENCIL_TEST_ENABLE,
    LVP_CMD_SET_STENCIL_OP,
+   LVP_CMD_SET_LINE_STIPPLE,
+   LVP_CMD_SET_DEPTH_BIAS_ENABLE,
+   LVP_CMD_SET_LOGIC_OP,
+   LVP_CMD_SET_PATCH_CONTROL_POINTS,
+   LVP_CMD_SET_PRIMITIVE_RESTART_ENABLE,
+   LVP_CMD_SET_RASTERIZER_DISCARD_ENABLE,
 };
 
 struct lvp_cmd_bind_pipeline {
@@ -742,16 +762,16 @@ struct lvp_cmd_draw {
    uint32_t instance_count;
    uint32_t first_instance;
    uint32_t draw_count;
-   struct pipe_draw_start_count draws[0];
+   struct pipe_draw_start_count_bias draws[0];
 };
 
 struct lvp_cmd_draw_indexed {
    uint32_t instance_count;
-   uint32_t vertex_offset;
    uint32_t first_instance;
    bool calc_start;
    uint32_t draw_count;
-   struct pipe_draw_start_count draws[0];
+   bool vertex_offset_changes;
+   struct pipe_draw_start_count_bias draws[0];
 };
 
 struct lvp_cmd_draw_indirect {
@@ -1003,6 +1023,14 @@ struct lvp_cmd_begin_conditional_rendering {
    bool inverted;
 };
 
+struct lvp_cmd_set_vertex_input {
+    uint32_t binding_count;
+    uint32_t attr_count;
+    uint8_t data[0];
+    //VkVertexInputBindingDescription2EXT bindings[binding_count];
+    //VkVertexInputAttributeDescription2EXT attrs[attr_count];
+};
+
 struct lvp_cmd_set_cull_mode {
    VkCullModeFlags cull_mode;
 };
@@ -1041,6 +1069,31 @@ struct lvp_cmd_set_stencil_op {
    VkStencilOp pass_op;
    VkStencilOp depth_fail_op;
    VkCompareOp compare_op;
+};
+
+struct lvp_cmd_set_line_stipple {
+   uint32_t line_stipple_factor;
+   uint16_t line_stipple_pattern;
+};
+
+struct lvp_cmd_set_depth_bias_enable {
+   bool enable;
+};
+
+struct lvp_cmd_set_logic_op {
+   VkLogicOp op;
+};
+
+struct lvp_cmd_set_patch_control_points {
+   uint32_t vertices_per_patch;
+};
+
+struct lvp_cmd_set_primitive_restart_enable {
+   bool enable;
+};
+
+struct lvp_cmd_set_rasterizer_discard_enable {
+   bool enable;
 };
 
 struct lvp_cmd_buffer_entry {
@@ -1090,6 +1143,7 @@ struct lvp_cmd_buffer_entry {
       struct lvp_cmd_end_transform_feedback end_transform_feedback;
       struct lvp_cmd_draw_indirect_byte_count draw_indirect_byte_count;
       struct lvp_cmd_begin_conditional_rendering begin_conditional_rendering;
+      struct lvp_cmd_set_vertex_input set_vertex_input;
       struct lvp_cmd_set_cull_mode set_cull_mode;
       struct lvp_cmd_set_front_face set_front_face;
       struct lvp_cmd_set_primitive_topology set_primitive_topology;
@@ -1099,6 +1153,12 @@ struct lvp_cmd_buffer_entry {
       struct lvp_cmd_set_depth_bounds_test_enable set_depth_bounds_test_enable;
       struct lvp_cmd_set_stencil_test_enable set_stencil_test_enable;
       struct lvp_cmd_set_stencil_op set_stencil_op;
+      struct lvp_cmd_set_line_stipple set_line_stipple;
+      struct lvp_cmd_set_depth_bias_enable set_depth_bias_enable;
+      struct lvp_cmd_set_logic_op set_logic_op;
+      struct lvp_cmd_set_patch_control_points set_patch_control_points;
+      struct lvp_cmd_set_primitive_restart_enable set_primitive_restart_enable;
+      struct lvp_cmd_set_rasterizer_discard_enable set_rasterizer_discard_enable;
    } u;
 };
 

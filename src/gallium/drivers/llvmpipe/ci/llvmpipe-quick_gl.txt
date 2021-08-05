@@ -1,5 +1,4 @@
 fast_color_clear/fcc-clear-tex: skip
-glx/extension string sanity: fail
 glx/glx-buffer-age: skip
 glx/glx-buffer-age vblank_mode=0: skip
 glx/glx-copy-sub-buffer: fail
@@ -29,7 +28,6 @@ glx/glx-visuals-stencil: fail
 glx/glx-visuals-stencil -pixmap: fail
 glx/glx_arb_create_context/invalid flag: fail
 glx/glx_arb_create_context_es2_profile/invalid opengl es version: fail
-glx/glx_arb_create_context_no_error/no error: skip
 glx/glx_arb_create_context_robustness/invalid reset notification strategy: skip
 glx/glx_arb_create_context_robustness/require gl_arb_robustness: skip
 glx/glx_arb_sync_control/glxgetmscrateoml: skip
@@ -59,7 +57,6 @@ glx/glx_ext_import_context/imported context has same context id: fail
 glx/glx_ext_import_context/make current, multi process: fail
 glx/glx_ext_import_context/make current, single process: fail
 glx/glx_ext_import_context/query context info: fail
-glx/glx_ext_no_config_context/no fbconfig: skip
 hiz/hiz-depth-read-fbo-d24-s8: skip
 hiz/hiz-depth-stencil-test-fbo-d24-s8: skip
 hiz/hiz-depth-test-fbo-d24-s8: skip
@@ -143,10 +140,6 @@ spec/!opengl 1.1/draw-pixels samples=6: skip
 spec/!opengl 1.1/draw-pixels samples=8: skip
 spec/!opengl 1.1/linestipple/line strip: fail
 spec/!opengl 1.1/polygon-mode-facing: fail
-spec/!opengl 1.1/polygon-mode-offset/config 0: expected white pixel on bottom edge: fail
-spec/!opengl 1.1/polygon-mode-offset/config 0: expected white pixel on left edge: fail
-spec/!opengl 1.1/polygon-mode-offset/config 0: expected white pixel on right edge: fail
-spec/!opengl 1.1/polygon-mode-offset/config 0: expected white pixel on top edge: fail
 spec/!opengl 1.1/polygon-mode-offset/config 3: expected white pixel on bottom edge: fail
 spec/!opengl 1.1/polygon-mode-offset/config 3: expected white pixel on left edge: fail
 spec/!opengl 1.1/polygon-mode-offset/config 3: expected white pixel on right edge: fail
@@ -207,7 +200,6 @@ spec/!opengl 1.4/copy-pixels samples=32: skip
 spec/!opengl 1.4/copy-pixels samples=4: skip
 spec/!opengl 1.4/copy-pixels samples=6: skip
 spec/!opengl 1.4/copy-pixels samples=8: skip
-spec/!opengl 1.4/gl-1.4-polygon-offset: fail
 spec/!opengl 1.4/gl-1.4-rgba-mipmap-texture-with-rgb-visual: skip
 spec/!opengl 2.0/vertex-program-two-side back back2/gs-out and fs: skip
 spec/!opengl 2.0/vertex-program-two-side back back2/tcs-out, tes and fs: skip
@@ -516,31 +508,6 @@ spec/arb_separate_shader_objects/programuniform coverage/double matrices: skip
 spec/arb_separate_shader_objects/programuniform coverage/double scalar and vectors: skip
 spec/arb_shader_atomic_counters/max-counters/combined test above maximum number of atomic counter buffers: skip
 spec/arb_shader_image_load_store/early-z/occlusion query test/early-z pass: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/r11f_g11f_b10f: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/r16: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/r16_snorm: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/r16f: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/r16i: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/r16ui: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/r32f: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/r32i: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/r32ui: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/r8: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/r8_snorm: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/r8i: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/r8ui: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/rg16: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/rg16_snorm: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/rg16f: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/rg16i: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/rg16ui: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/rg32f: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/rg32i: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/rg32ui: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/rg8: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/rg8_snorm: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/rg8i: fail
-spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image2d/rg8ui: fail
 spec/arb_shader_image_load_store/max-size/image2dmsarray max size test/4x16384x8x8: skip
 spec/arb_shader_image_load_store/max-size/image2dmsarray max size test/4x8x16384x8: skip
 spec/arb_shader_image_load_store/max-size/imagebuffer max size test/134217728x1x1x1: skip
@@ -794,22 +761,6 @@ spec/arb_texture_rg/multisample-formats 8 gl_arb_texture_rg: skip
 spec/arb_texture_rg/multisample-formats 8 gl_arb_texture_rg-float: skip
 spec/arb_texture_rg/multisample-formats 8 gl_arb_texture_rg-int: skip
 spec/arb_texture_stencil8/fbo-clear-formats/gl_stencil_index8 (fbo incomplete): skip
-spec/arb_texture_view/rendering-formats/clear gl_r8 as gl_r8_snorm: fail
-spec/arb_texture_view/rendering-formats/clear gl_r8 as gl_r8i: fail
-spec/arb_texture_view/rendering-formats/clear gl_rg8 as gl_r16_snorm: fail
-spec/arb_texture_view/rendering-formats/clear gl_rg8 as gl_r16f: fail
-spec/arb_texture_view/rendering-formats/clear gl_rg8 as gl_r16i: fail
-spec/arb_texture_view/rendering-formats/clear gl_rg8 as gl_rg8_snorm: fail
-spec/arb_texture_view/rendering-formats/clear gl_rg8 as gl_rg8i: fail
-spec/arb_texture_view/rendering-formats/clear gl_rgb8 as gl_rgb8_snorm: fail
-spec/arb_texture_view/rendering-formats/clear gl_rgb8 as gl_rgb8i: fail
-spec/arb_texture_view/rendering-formats/clear gl_rgba8 as gl_r32f: fail
-spec/arb_texture_view/rendering-formats/clear gl_rgba8 as gl_r32i: fail
-spec/arb_texture_view/rendering-formats/clear gl_rgba8 as gl_rg16_snorm: fail
-spec/arb_texture_view/rendering-formats/clear gl_rgba8 as gl_rg16f: fail
-spec/arb_texture_view/rendering-formats/clear gl_rgba8 as gl_rg16i: fail
-spec/arb_texture_view/rendering-formats/clear gl_rgba8 as gl_rgba8_snorm: fail
-spec/arb_texture_view/rendering-formats/clear gl_rgba8 as gl_rgba8i: fail
 spec/arb_timer_query/query gl_timestamp: fail
 spec/arb_vertex_attrib_64bit/get_double_attribs-display-lists: skip
 spec/arb_vertex_program/vp-address-02: skip
@@ -843,6 +794,14 @@ spec/egl_khr_fence_sync/conformance/eglcreatesynckhr_wrong_display_same_thread: 
 spec/egl_khr_gl_image/egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24: fail
 spec/egl_nok_swap_region/basic: skip
 spec/egl_nok_texture_from_pixmap/basic: skip
+spec/ext_clear_texture/ext_clear_texture-3d: skip
+spec/ext_clear_texture/ext_clear_texture-base-formats: skip
+spec/ext_clear_texture/ext_clear_texture-clear-max-level: skip
+spec/ext_clear_texture/ext_clear_texture-cube: skip
+spec/ext_clear_texture/ext_clear_texture-error: skip
+spec/ext_clear_texture/ext_clear_texture-multisample: skip
+spec/ext_clear_texture/ext_clear_texture-stencil: skip
+spec/ext_clear_texture/ext_clear_texture-texview: skip
 spec/ext_depth_bounds_test/depth_bounds: skip
 spec/ext_direct_state_access/indexed-state-queries 12/getdoublei_vext: skip
 spec/ext_direct_state_access/indexed-state-queries 12/getfloati_vext: skip
@@ -859,6 +818,9 @@ spec/ext_external_objects/vk-image-display: skip
 spec/ext_external_objects/vk-image-display-overwrite: skip
 spec/ext_external_objects/vk-image-overwrite: skip
 spec/ext_external_objects/vk-pix-buf-update-errors: skip
+spec/ext_external_objects/vk-semaphores: skip
+spec/ext_external_objects/vk-semaphores-2: skip
+spec/ext_external_objects/vk-stencil-display: skip
 spec/ext_external_objects/vk-vert-buf-reuse: skip
 spec/ext_external_objects/vk-vert-buf-update-errors: skip
 spec/ext_external_objects_fd/memory-object-api-errors: skip
@@ -1334,6 +1296,7 @@ spec/ext_image_dma_buf_import/ext_image_dma_buf_import-invalid_hints: skip
 spec/ext_image_dma_buf_import/ext_image_dma_buf_import-missing_attributes: skip
 spec/ext_image_dma_buf_import/ext_image_dma_buf_import-ownership_transfer: skip
 spec/ext_image_dma_buf_import/ext_image_dma_buf_import-refcount: skip
+spec/ext_image_dma_buf_import/ext_image_dma_buf_import-reimport-bug: skip
 spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_argb8888: skip
 spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_ayuv: skip
 spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_nv12: skip
@@ -1343,6 +1306,12 @@ spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_p016: skip
 spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_uyvy: skip
 spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_xrgb8888: skip
 spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_xyuv: skip
+spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_y210: skip
+spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_y212: skip
+spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_y216: skip
+spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_y410: skip
+spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_y412: skip
+spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_y416: skip
 spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_yuv420: skip
 spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_yuyv: skip
 spec/ext_image_dma_buf_import/ext_image_dma_buf_import-sample_yvu420: skip
@@ -1523,20 +1492,6 @@ spec/oes_texture_compression_astc/miptree-3d-gl srgb: skip
 spec/oes_texture_compression_astc/miptree-3d-gles hdr: skip
 spec/oes_texture_compression_astc/miptree-3d-gles ldr: skip
 spec/oes_texture_compression_astc/miptree-3d-gles srgb: skip
-spec/oes_texture_view/rendering-formats/clear gl_r8 as gl_r8_snorm: fail
-spec/oes_texture_view/rendering-formats/clear gl_r8 as gl_r8i: fail
-spec/oes_texture_view/rendering-formats/clear gl_rg8 as gl_r16_snorm: fail
-spec/oes_texture_view/rendering-formats/clear gl_rg8 as gl_r16f: fail
-spec/oes_texture_view/rendering-formats/clear gl_rg8 as gl_r16i: fail
-spec/oes_texture_view/rendering-formats/clear gl_rg8 as gl_rg8_snorm: fail
-spec/oes_texture_view/rendering-formats/clear gl_rg8 as gl_rg8i: fail
-spec/oes_texture_view/rendering-formats/clear gl_rgba8 as gl_r32f: fail
-spec/oes_texture_view/rendering-formats/clear gl_rgba8 as gl_r32i: fail
-spec/oes_texture_view/rendering-formats/clear gl_rgba8 as gl_rg16_snorm: fail
-spec/oes_texture_view/rendering-formats/clear gl_rgba8 as gl_rg16f: fail
-spec/oes_texture_view/rendering-formats/clear gl_rgba8 as gl_rg16i: fail
-spec/oes_texture_view/rendering-formats/clear gl_rgba8 as gl_rgba8_snorm: fail
-spec/oes_texture_view/rendering-formats/clear gl_rgba8 as gl_rgba8i: fail
 spec/oes_texture_view/rendering-formats/render to gl_rgb16 as gl_rgb16i: skip
 spec/oes_texture_view/rendering-formats/render to gl_rgb16 as gl_rgb16ui: skip
 spec/oes_texture_view/rendering-formats/render to gl_rgb16_snorm as gl_rgb16i: skip

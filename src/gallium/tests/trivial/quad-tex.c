@@ -177,12 +177,12 @@ static void init_prog(struct program *p)
 		box.height = 2;
 		box.depth = 1;
 
-		ptr = p->pipe->transfer_map(p->pipe, p->tex, 0, PIPE_MAP_WRITE, &box, &t);
+		ptr = p->pipe->texture_map(p->pipe, p->tex, 0, PIPE_MAP_WRITE, &box, &t);
 		ptr[0] = 0xffff0000;
 		ptr[1] = 0xff0000ff;
 		ptr[2] = 0xff00ff00;
 		ptr[3] = 0xffffff00;
-		p->pipe->transfer_unmap(p->pipe, t);
+		p->pipe->texture_unmap(p->pipe, t);
 
 		u_sampler_view_default_template(&v_tmplt, p->tex, p->tex->format);
 

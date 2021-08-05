@@ -76,7 +76,7 @@ extern void radeonEmitWait( r100ContextPtr rmesa, GLuint flags );
 
 extern void radeonFlushCmdBuf( r100ContextPtr rmesa, const char * );
 
-extern void radeonFlush( struct gl_context *ctx );
+extern void radeonFlush( struct gl_context *ctx, unsigned gallium_flush_flags );
 extern void radeonFinish( struct gl_context *ctx );
 extern void radeonInitIoctlFuncs( struct gl_context *ctx );
 extern void radeonGetAllParams( r100ContextPtr rmesa );

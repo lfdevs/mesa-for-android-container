@@ -32,7 +32,7 @@ brw_query_samples_for_format(struct gl_context *ctx, GLenum target,
                              GLenum internalFormat, int samples[16])
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    (void) target;
    (void) internalFormat;

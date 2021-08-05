@@ -339,15 +339,17 @@ nvc0_miptree_get_modifier(struct pipe_screen *pscreen, struct nv50_miptree *mt)
              NVC0_TILE_MODE_Y(config->nvc0.tile_mode));
 }
 
-static bool
+bool
 nvc0_miptree_get_handle(struct pipe_screen *pscreen,
+                        struct pipe_context *context,
                         struct pipe_resource *pt,
-                        struct winsys_handle *whandle)
+                        struct winsys_handle *whandle,
+                        unsigned usage)
 {
    struct nv50_miptree *mt = nv50_miptree(pt);
    bool ret;
 
-   ret = nv50_miptree_get_handle(pscreen, pt, whandle);
+   ret = nv50_miptree_get_handle(pscreen, context, pt, whandle, usage);
    if (!ret)
       return ret;
 
@@ -434,15 +436,6 @@ nvc0_miptree_select_best_modifier(struct pipe_screen *pscreen,
    return prio_supported_mods[top_mod_slot];
 }
 
-const struct u_resource_vtbl nvc0_miptree_vtbl =
-{
-   nvc0_miptree_get_handle,         /* get_handle */
-   nv50_miptree_destroy,            /* resource_destroy */
-   nvc0_miptree_transfer_map,       /* transfer_map */
-   u_default_transfer_flush_region, /* transfer_flush_region */
-   nvc0_miptree_transfer_unmap,     /* transfer_unmap */
-};
-
 struct pipe_resource *
 nvc0_miptree_create(struct pipe_screen *pscreen,
                     const struct pipe_resource *templ,
@@ -462,7 +455,6 @@ nvc0_miptree_create(struct pipe_screen *pscreen,
    if (!mt)
       return NULL;
 
-   mt->base.vtbl = &nvc0_miptree_vtbl;
    *pt = *templ;
    pipe_reference_init(&pt->reference, 1);
    pt->screen = pscreen;

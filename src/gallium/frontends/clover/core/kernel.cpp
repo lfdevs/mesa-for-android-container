@@ -247,7 +247,7 @@ kernel::exec_context::bind(intrusive_ptr<command_queue> _q,
       case module::argument::constant_buffer: {
          auto arg = argument::create(marg);
          cl_mem buf = kern._constant_buffers.at(&q->device()).get();
-         arg->set(q->device().address_bits() / 8, &buf);
+         arg->set(sizeof(buf), &buf);
          arg->bind(*this, marg);
          break;
       }
@@ -535,6 +535,9 @@ kernel::local_argument::bind(exec_context &ctx,
 
 void
 kernel::local_argument::unbind(exec_context &ctx) {
+}
+
+kernel::constant_argument::constant_argument() : buf(nullptr), st(nullptr) {
 }
 
 void

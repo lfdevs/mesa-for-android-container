@@ -348,6 +348,27 @@ static const char *SemanticStr[] =
    "(INVALID)"
 };
 
+static const char *TSStr[17] =
+{
+   "THREAD_STATE_ENUM0",
+   "THREAD_STATE_ENUM1",
+   "THREAD_STATE_ENUM2",
+   "THREAD_STATE_ENUM3",
+   "THREAD_STATE_ENUM4",
+   "TRAP_RETURN_PC_LO",
+   "TRAP_RETURN_PC_HI",
+   "TRAP_RETURN_MASK",
+   "MEXITED",
+   "MKILL",
+   "MACTIVE",
+   "MATEXIT",
+   "OPT_STACK",
+   "API_CALL_DEPTH",
+   "ATEXIT_PC_LO",
+   "ATEXIT_PC_HI",
+   "PQUAD_MACTIVE",
+};
+
 static const char *interpStr[16] =
 {
    "pass",
@@ -476,6 +497,9 @@ int LValue::print(char *buf, size_t size, DataType ty) const
    case FILE_ADDRESS:
       r = 'a'; col = TXT_REGISTER;
       break;
+   case FILE_BARRIER:
+      r = 'b'; col = TXT_REGISTER;
+      break;
    default:
       assert(!"invalid file for lvalue");
       r = '?';
@@ -537,6 +561,10 @@ int Symbol::print(char *buf, size_t size,
       }
       PRINT("%s]", colour[TXT_MEM]);
       return pos;
+   } else if (reg.file == FILE_THREAD_STATE) {
+      PRINT("%sts[%s%s%s]", colour[TXT_MEM], colour[TXT_REGISTER],
+            TSStr[reg.data.ts], colour[TXT_MEM]);
+      return pos;
    }
 
    switch (reg.file) {
@@ -547,6 +575,7 @@ int Symbol::print(char *buf, size_t size,
    case FILE_MEMORY_GLOBAL: c = 'g'; break;
    case FILE_MEMORY_SHARED: c = 's'; break;
    case FILE_MEMORY_LOCAL:  c = 'l'; break;
+   case FILE_BARRIER:       c = 'b'; break;
    default:
       assert(!"invalid file");
       c = '?';

@@ -78,6 +78,8 @@ class Opcode(object):
       assert 0 <= output_size <= 5 or (output_size == 8) or (output_size == 16)
       for size in input_sizes:
          assert 0 <= size <= 5 or (size == 8) or (size == 16)
+         if output_size == 0:
+            assert size == 0
          if output_size != 0:
             assert size != 0
       self.name = name
@@ -217,8 +219,6 @@ unop("isign", tint, "(src0 == 0) ? 0 : ((src0 > 0) ? 1 : -1)")
 unop("iabs", tint, "(src0 < 0) ? -src0 : src0")
 unop("fabs", tfloat, "fabs(src0)")
 unop("fsat", tfloat, ("fmin(fmax(src0, 0.0), 1.0)"))
-unop("fsat_signed", tfloat, ("fmin(fmax(src0, -1.0), 1.0)"))
-unop("fclamp_pos", tfloat, ("fmax(src0, 0.0)"))
 unop("frcp", tfloat, "bit_size == 64 ? 1.0 / src0 : 1.0f / src0")
 unop("frsq", tfloat, "bit_size == 64 ? 1.0 / sqrt(src0) : 1.0f / sqrtf(src0)")
 unop("fsqrt", tfloat, "bit_size == 64 ? sqrt(src0) : sqrtf(src0)")
@@ -514,7 +514,7 @@ for (unsigned bit = 0; bit < bit_size; bit++) {
 """)
 
 # AMD_gcn_shader extended instructions
-unop_horiz("cube_face_coord", 2, tfloat32, 3, tfloat32, """
+unop_horiz("cube_face_coord_amd", 2, tfloat32, 3, tfloat32, """
 dst.x = dst.y = 0.0;
 float absX = fabsf(src0.x);
 float absY = fabsf(src0.y);
@@ -536,7 +536,7 @@ dst.x = dst.x * (1.0f / ma) + 0.5f;
 dst.y = dst.y * (1.0f / ma) + 0.5f;
 """)
 
-unop_horiz("cube_face_index", 1, tfloat32, 3, tfloat32, """
+unop_horiz("cube_face_index_amd", 1, tfloat32, 3, tfloat32, """
 float absX = fabsf(src0.x);
 float absY = fabsf(src0.y);
 float absZ = fabsf(src0.z);
@@ -835,7 +835,7 @@ binop("seq", tfloat32, _2src_commutative, "(src0 == src1) ? 1.0f : 0.0f") # Set 
 binop("sne", tfloat32, _2src_commutative, "(src0 != src1) ? 1.0f : 0.0f") # Set on Not Equal
 
 # SPIRV shifts are undefined for shift-operands >= bitsize,
-# but SM5 shifts are defined to use the least significant bits, only
+# but SM5 shifts are defined to use only the least significant bits.
 # The NIR definition is according to the SM5 specification.
 opcode("ishl", 0, tint, [0, 0], [tint, tuint32], False, "",
        "(uint64_t)src0 << (src1 & (sizeof(src0) * 8 - 1))")
@@ -885,51 +885,6 @@ binop("fmax", tfloat, _2src_commutative + associative, "fmax(src0, src1)")
 binop("imax", tint, _2src_commutative + associative, "src1 > src0 ? src1 : src0")
 binop("umax", tuint, _2src_commutative + associative, "src1 > src0 ? src1 : src0")
 
-# Saturated vector add for 4 8bit ints.
-binop("usadd_4x8", tint32, _2src_commutative + associative, """
-dst = 0;
-for (int i = 0; i < 32; i += 8) {
-   dst |= MIN2(((src0 >> i) & 0xff) + ((src1 >> i) & 0xff), 0xff) << i;
-}
-""")
-
-# Saturated vector subtract for 4 8bit ints.
-binop("ussub_4x8", tint32, "", """
-dst = 0;
-for (int i = 0; i < 32; i += 8) {
-   int src0_chan = (src0 >> i) & 0xff;
-   int src1_chan = (src1 >> i) & 0xff;
-   if (src0_chan > src1_chan)
-      dst |= (src0_chan - src1_chan) << i;
-}
-""")
-
-# vector min for 4 8bit ints.
-binop("umin_4x8", tint32, _2src_commutative + associative, """
-dst = 0;
-for (int i = 0; i < 32; i += 8) {
-   dst |= MIN2((src0 >> i) & 0xff, (src1 >> i) & 0xff) << i;
-}
-""")
-
-# vector max for 4 8bit ints.
-binop("umax_4x8", tint32, _2src_commutative + associative, """
-dst = 0;
-for (int i = 0; i < 32; i += 8) {
-   dst |= MAX2((src0 >> i) & 0xff, (src1 >> i) & 0xff) << i;
-}
-""")
-
-# unorm multiply: (a * b) / 255.
-binop("umul_unorm_4x8", tint32, _2src_commutative + associative, """
-dst = 0;
-for (int i = 0; i < 32; i += 8) {
-   int src0_chan = (src0 >> i) & 0xff;
-   int src1_chan = (src1 >> i) & 0xff;
-   dst |= ((src0_chan * src1_chan) / 255) << i;
-}
-""")
-
 binop("fpow", tfloat, "", "bit_size == 64 ? powf(src0, src1) : pow(src0, src1)")
 
 binop_horiz("pack_half_2x16_split", 1, tuint32, 1, tfloat32, 1, tfloat32,
@@ -971,6 +926,10 @@ binop("extract_i8", tint, "", "(int8_t)(src0 >> (src1 * 8))")
 # Word extraction
 binop("extract_u16", tuint, "", "(uint16_t)(src0 >> (src1 * 16))")
 binop("extract_i16", tint, "", "(int16_t)(src0 >> (src1 * 16))")
+
+# Byte/word insertion
+binop("insert_u8", tuint, "", "(src0 & 0xff) << (src1 * 8)")
+binop("insert_u16", tuint, "", "(src0 & 0xffff) << (src1 * 16)")
 
 
 def triop(name, ty, alg_props, const_expr):
@@ -1091,6 +1050,24 @@ if (bits == 0) {
 } else {
    dst = (base << (32 - offset - bits)) >> offset; /* use sign-extending shift */
 }
+""")
+
+triop_horiz("sad_u8x4", 1, 1, 1, 1, """
+uint8_t s0_b0 = (src0.x & 0x000000ff) >> 0;
+uint8_t s0_b1 = (src0.x & 0x0000ff00) >> 8;
+uint8_t s0_b2 = (src0.x & 0x00ff0000) >> 16;
+uint8_t s0_b3 = (src0.x & 0xff000000) >> 24;
+
+uint8_t s1_b0 = (src1.x & 0x000000ff) >> 0;
+uint8_t s1_b1 = (src1.x & 0x0000ff00) >> 8;
+uint8_t s1_b2 = (src1.x & 0x00ff0000) >> 16;
+uint8_t s1_b3 = (src1.x & 0xff000000) >> 24;
+
+dst.x = src2.x +
+        (s0_b0 > s1_b0 ? (s0_b0 - s1_b0) : (s1_b0 - s0_b0)) +
+        (s0_b1 > s1_b1 ? (s0_b1 - s1_b1) : (s1_b1 - s0_b1)) +
+        (s0_b2 > s1_b2 ? (s0_b2 - s1_b2) : (s1_b2 - s0_b2)) +
+        (s0_b3 > s1_b3 ? (s0_b3 - s1_b3) : (s1_b3 - s0_b3));
 """)
 
 # Combines the first component of each input to make a 3-component vector.
@@ -1239,6 +1216,13 @@ unop_horiz("cube_r600", 4, tfloat32, 3, tfloat32, """
 unop("fsin_r600", tfloat32, "sinf(6.2831853 * src0)")
 unop("fcos_r600", tfloat32, "cosf(6.2831853 * src0)")
 
+# AGX specific sin with input expressed in quadrants. Used in the lowering for
+# fsin/fcos. This corresponds to a sequence of 3 ALU ops in the backend (where
+# the angle is further decomposed by quadrant, sinc is computed, and the angle
+# is multiplied back for sin). Lowering fsin/fcos to fsin_agx requires some
+# additional ALU that NIR may be able to optimize.
+unop("fsin_agx", tfloat, "sinf(src0 * (6.2831853/4.0))")
+
 # 24b multiply into 32b result (with sign extension)
 binop("imul24", tint32, _2src_commutative + associative,
       "(((int32_t)src0 << 8) >> 8) * (((int32_t)src1 << 8) >> 8)")
@@ -1251,8 +1235,64 @@ triop("umad24", tuint32, _2src_commutative,
 binop("umul24", tint32, _2src_commutative + associative,
       "(((uint32_t)src0 << 8) >> 8) * (((uint32_t)src1 << 8) >> 8)")
 
+# relaxed versions of the above, which assume input is in the 24bit range (no clamping)
+binop("imul24_relaxed", tint32, _2src_commutative + associative, "src0 * src1")
+triop("umad24_relaxed", tuint32, _2src_commutative, "src0 * src1 + src2")
+binop("umul24_relaxed", tuint32, _2src_commutative + associative, "src0 * src1")
+
 unop_convert("fisnormal", tbool1, tfloat, "isnormal(src0)")
 unop_convert("fisfinite", tbool1, tfloat, "isfinite(src0)")
+
+# vc4-specific opcodes
+
+# Saturated vector add for 4 8bit ints.
+binop("usadd_4x8_vc4", tint32, _2src_commutative + associative, """
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   dst |= MIN2(((src0 >> i) & 0xff) + ((src1 >> i) & 0xff), 0xff) << i;
+}
+""")
+
+# Saturated vector subtract for 4 8bit ints.
+binop("ussub_4x8_vc4", tint32, "", """
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   int src0_chan = (src0 >> i) & 0xff;
+   int src1_chan = (src1 >> i) & 0xff;
+   if (src0_chan > src1_chan)
+      dst |= (src0_chan - src1_chan) << i;
+}
+""")
+
+# vector min for 4 8bit ints.
+binop("umin_4x8_vc4", tint32, _2src_commutative + associative, """
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   dst |= MIN2((src0 >> i) & 0xff, (src1 >> i) & 0xff) << i;
+}
+""")
+
+# vector max for 4 8bit ints.
+binop("umax_4x8_vc4", tint32, _2src_commutative + associative, """
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   dst |= MAX2((src0 >> i) & 0xff, (src1 >> i) & 0xff) << i;
+}
+""")
+
+# unorm multiply: (a * b) / 255.
+binop("umul_unorm_4x8_vc4", tint32, _2src_commutative + associative, """
+dst = 0;
+for (int i = 0; i < 32; i += 8) {
+   int src0_chan = (src0 >> i) & 0xff;
+   int src1_chan = (src1 >> i) & 0xff;
+   dst |= ((src0_chan * src1_chan) / 255) << i;
+}
+""")
+
+# Mali-specific opcodes
+unop("fsat_signed_mali", tfloat, ("fmin(fmax(src0, -1.0), 1.0)"))
+unop("fclamp_pos_mali", tfloat, ("fmax(src0, 0.0)"))
 
 # DXIL specific double [un]pack
 # DXIL doesn't support generic [un]pack instructions, so we want those

@@ -341,7 +341,7 @@ genX(emit_l3_config)(struct anv_batch *batch,
                      const struct anv_device *device,
                      const struct intel_l3_config *cfg)
 {
-   UNUSED const struct gen_device_info *devinfo = &device->info;
+   UNUSED const struct intel_device_info *devinfo = &device->info;
 
 #if GFX_VER >= 8
 
@@ -576,8 +576,49 @@ genX(emit_sample_pattern)(struct anv_batch *batch, uint32_t samples,
 }
 #endif
 
+#if GFX_VER >= 11
+void
+genX(emit_shading_rate)(struct anv_batch *batch,
+                        const struct anv_graphics_pipeline *pipeline,
+                        struct anv_state cps_states,
+                        struct anv_dynamic_state *dynamic_state)
+{
+   const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
+   const bool cps_enable = wm_prog_data && wm_prog_data->per_coarse_pixel_dispatch;
+
+#if GFX_VER == 11
+   anv_batch_emit(batch, GENX(3DSTATE_CPS), cps) {
+      cps.CoarsePixelShadingMode = cps_enable ? CPS_MODE_CONSTANT : CPS_MODE_NONE;
+      if (cps_enable) {
+         cps.MinCPSizeX = dynamic_state->fragment_shading_rate.width;
+         cps.MinCPSizeY = dynamic_state->fragment_shading_rate.height;
+      }
+   }
+#elif GFX_VER == 12
+   for (uint32_t i = 0; i < dynamic_state->viewport.count; i++) {
+      uint32_t *cps_state_dwords =
+         cps_states.map + GENX(CPS_STATE_length) * 4 * i;
+      struct GENX(CPS_STATE) cps_state = {
+         .CoarsePixelShadingMode = cps_enable ? CPS_MODE_CONSTANT : CPS_MODE_NONE,
+      };
+
+      if (cps_enable) {
+         cps_state.MinCPSizeX = dynamic_state->fragment_shading_rate.width;
+         cps_state.MinCPSizeY = dynamic_state->fragment_shading_rate.height;
+      }
+
+      GENX(CPS_STATE_pack)(NULL, cps_state_dwords, &cps_state);
+   }
+
+   anv_batch_emit(batch, GENX(3DSTATE_CPS_POINTERS), cps) {
+      cps.CoarsePixelShadingStateArrayPointer = cps_states.offset;
+   }
+#endif
+}
+#endif /* GFX_VER >= 11 */
+
 static uint32_t
-vk_to_gen_tex_filter(VkFilter filter, bool anisotropyEnable)
+vk_to_intel_tex_filter(VkFilter filter, bool anisotropyEnable)
 {
    switch (filter) {
    default:
@@ -590,17 +631,17 @@ vk_to_gen_tex_filter(VkFilter filter, bool anisotropyEnable)
 }
 
 static uint32_t
-vk_to_gen_max_anisotropy(float ratio)
+vk_to_intel_max_anisotropy(float ratio)
 {
    return (anv_clamp_f(ratio, 2, 16) - 2) / 2;
 }
 
-static const uint32_t vk_to_gen_mipmap_mode[] = {
+static const uint32_t vk_to_intel_mipmap_mode[] = {
    [VK_SAMPLER_MIPMAP_MODE_NEAREST]          = MIPFILTER_NEAREST,
    [VK_SAMPLER_MIPMAP_MODE_LINEAR]           = MIPFILTER_LINEAR
 };
 
-static const uint32_t vk_to_gen_tex_address[] = {
+static const uint32_t vk_to_intel_tex_address[] = {
    [VK_SAMPLER_ADDRESS_MODE_REPEAT]          = TCM_WRAP,
    [VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT] = TCM_MIRROR,
    [VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE]   = TCM_CLAMP,
@@ -619,19 +660,19 @@ static const uint32_t vk_to_gen_tex_address[] = {
  * So, these look a bit strange because there's both a negation
  * and swapping of the arguments involved.
  */
-static const uint32_t vk_to_gen_shadow_compare_op[] = {
-   [VK_COMPARE_OP_NEVER]                        = PREFILTEROPALWAYS,
-   [VK_COMPARE_OP_LESS]                         = PREFILTEROPLEQUAL,
-   [VK_COMPARE_OP_EQUAL]                        = PREFILTEROPNOTEQUAL,
-   [VK_COMPARE_OP_LESS_OR_EQUAL]                = PREFILTEROPLESS,
-   [VK_COMPARE_OP_GREATER]                      = PREFILTEROPGEQUAL,
-   [VK_COMPARE_OP_NOT_EQUAL]                    = PREFILTEROPEQUAL,
-   [VK_COMPARE_OP_GREATER_OR_EQUAL]             = PREFILTEROPGREATER,
-   [VK_COMPARE_OP_ALWAYS]                       = PREFILTEROPNEVER,
+static const uint32_t vk_to_intel_shadow_compare_op[] = {
+   [VK_COMPARE_OP_NEVER]                        = PREFILTEROP_ALWAYS,
+   [VK_COMPARE_OP_LESS]                         = PREFILTEROP_LEQUAL,
+   [VK_COMPARE_OP_EQUAL]                        = PREFILTEROP_NOTEQUAL,
+   [VK_COMPARE_OP_LESS_OR_EQUAL]                = PREFILTEROP_LESS,
+   [VK_COMPARE_OP_GREATER]                      = PREFILTEROP_GEQUAL,
+   [VK_COMPARE_OP_NOT_EQUAL]                    = PREFILTEROP_EQUAL,
+   [VK_COMPARE_OP_GREATER_OR_EQUAL]             = PREFILTEROP_GREATER,
+   [VK_COMPARE_OP_ALWAYS]                       = PREFILTEROP_NEVER,
 };
 
 #if GFX_VER >= 9
-static const uint32_t vk_to_gen_sampler_reduction_mode[] = {
+static const uint32_t vk_to_intel_sampler_reduction_mode[] = {
    [VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE_EXT] = STD_FILTER,
    [VK_SAMPLER_REDUCTION_MODE_MIN_EXT]              = MINIMUM,
    [VK_SAMPLER_REDUCTION_MODE_MAX_EXT]              = MAXIMUM,
@@ -700,7 +741,7 @@ VkResult genX(CreateSampler)(
          VkSamplerReductionModeCreateInfo *sampler_reduction =
             (VkSamplerReductionModeCreateInfo *) ext;
          sampler_reduction_mode =
-            vk_to_gen_sampler_reduction_mode[sampler_reduction->reductionMode];
+            vk_to_intel_sampler_reduction_mode[sampler_reduction->reductionMode];
          enable_sampler_reduction = true;
          break;
       }
@@ -765,11 +806,15 @@ VkResult genX(CreateSampler)(
 
       const uint32_t mip_filter_mode =
          isl_format_is_planar_yuv ?
-         MIPFILTER_NONE : vk_to_gen_mipmap_mode[pCreateInfo->mipmapMode];
+         MIPFILTER_NONE : vk_to_intel_mipmap_mode[pCreateInfo->mipmapMode];
 
       struct GENX(SAMPLER_STATE) sampler_state = {
          .SamplerDisable = false,
          .TextureBorderColorMode = DX10OGL,
+
+#if GFX_VER >= 11
+         .CPSLODCompensationEnable = true,
+#endif
 
 #if GFX_VER >= 8
          .LODPreClampMode = CLAMP_MODE_OGL,
@@ -781,8 +826,8 @@ VkResult genX(CreateSampler)(
          .BaseMipLevel = 0.0,
 #endif
          .MipModeFilter = mip_filter_mode,
-         .MagModeFilter = vk_to_gen_tex_filter(mag_filter, pCreateInfo->anisotropyEnable),
-         .MinModeFilter = vk_to_gen_tex_filter(min_filter, pCreateInfo->anisotropyEnable),
+         .MagModeFilter = vk_to_intel_tex_filter(mag_filter, pCreateInfo->anisotropyEnable),
+         .MinModeFilter = vk_to_intel_tex_filter(min_filter, pCreateInfo->anisotropyEnable),
          .TextureLODBias = anv_clamp_f(pCreateInfo->mipLodBias, -16, 15.996),
          .AnisotropicAlgorithm =
             pCreateInfo->anisotropyEnable ? EWAApproximation : LEGACY,
@@ -792,7 +837,7 @@ VkResult genX(CreateSampler)(
          .ChromaKeyIndex = 0,
          .ChromaKeyMode = 0,
          .ShadowFunction =
-            vk_to_gen_shadow_compare_op[pCreateInfo->compareEnable ?
+            vk_to_intel_shadow_compare_op[pCreateInfo->compareEnable ?
                                         pCreateInfo->compareOp : VK_COMPARE_OP_NEVER],
          .CubeSurfaceControlMode = OVERRIDE,
 
@@ -802,7 +847,7 @@ VkResult genX(CreateSampler)(
          .LODClampMagnificationMode = MIPNONE,
 #endif
 
-         .MaximumAnisotropy = vk_to_gen_max_anisotropy(pCreateInfo->maxAnisotropy),
+         .MaximumAnisotropy = vk_to_intel_max_anisotropy(pCreateInfo->maxAnisotropy),
          .RAddressMinFilterRoundingEnable = enable_min_filter_addr_rounding,
          .RAddressMagFilterRoundingEnable = enable_mag_filter_addr_rounding,
          .VAddressMinFilterRoundingEnable = enable_min_filter_addr_rounding,
@@ -811,9 +856,9 @@ VkResult genX(CreateSampler)(
          .UAddressMagFilterRoundingEnable = enable_mag_filter_addr_rounding,
          .TrilinearFilterQuality = 0,
          .NonnormalizedCoordinateEnable = pCreateInfo->unnormalizedCoordinates,
-         .TCXAddressControlMode = vk_to_gen_tex_address[pCreateInfo->addressModeU],
-         .TCYAddressControlMode = vk_to_gen_tex_address[pCreateInfo->addressModeV],
-         .TCZAddressControlMode = vk_to_gen_tex_address[pCreateInfo->addressModeW],
+         .TCXAddressControlMode = vk_to_intel_tex_address[pCreateInfo->addressModeU],
+         .TCYAddressControlMode = vk_to_intel_tex_address[pCreateInfo->addressModeV],
+         .TCZAddressControlMode = vk_to_intel_tex_address[pCreateInfo->addressModeW],
 
 #if GFX_VER >= 9
          .ReductionType = sampler_reduction_mode,

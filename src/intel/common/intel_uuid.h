@@ -25,7 +25,7 @@
 #ifndef INTEL_UUID_H
 #define INTEL_UUID_H
 
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 #include "isl/isl.h"
 
 #ifdef __cplusplus
@@ -37,7 +37,7 @@ void intel_uuid_compute_device_id(uint8_t *uuid,
                                   size_t size);
 
 void intel_uuid_compute_driver_id(uint8_t *uuid,
-                                  const struct gen_device_info *devinfo,
+                                  const struct intel_device_info *devinfo,
                                   size_t size);
 
 #ifdef __cplusplus

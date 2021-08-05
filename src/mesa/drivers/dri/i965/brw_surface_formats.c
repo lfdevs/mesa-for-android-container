@@ -206,15 +206,11 @@ brw_isl_format_for_mesa_format(mesa_format mesa_format)
 void
 brw_screen_init_surface_formats(struct brw_screen *screen)
 {
-   const struct gen_device_info *devinfo = &screen->devinfo;
+   const struct intel_device_info *devinfo = &screen->devinfo;
    mesa_format format;
 
    memset(&screen->mesa_format_supports_texture, 0,
           sizeof(screen->mesa_format_supports_texture));
-
-   int gen = devinfo->ver * 10;
-   if (devinfo->is_g4x || devinfo->is_haswell)
-      gen += 5;
 
    for (format = MESA_FORMAT_NONE + 1; format < MESA_FORMAT_COUNT; format++) {
       if (!_mesa_get_format_name(format))
@@ -223,6 +219,12 @@ brw_screen_init_surface_formats(struct brw_screen *screen)
       bool is_integer = _mesa_is_format_integer_color(format);
 
       render = texture = brw_isl_format_for_mesa_format(format);
+
+      /* Only exposed with EXT_memory_object_* support which
+       * is not for older gens.
+       */
+      if (devinfo->ver < 7 && format == MESA_FORMAT_Z_UNORM16)
+         continue;
 
       if (texture == ISL_FORMAT_UNSUPPORTED)
          continue;
@@ -316,7 +318,7 @@ brw_screen_init_surface_formats(struct brw_screen *screen)
    screen->mesa_format_supports_render[MESA_FORMAT_S_UINT8] = true;
    screen->mesa_format_supports_render[MESA_FORMAT_Z_FLOAT32] = true;
    screen->mesa_format_supports_render[MESA_FORMAT_Z32_FLOAT_S8X24_UINT] = true;
-   if (gen >= 80)
+   if (devinfo->ver >= 8)
       screen->mesa_format_supports_render[MESA_FORMAT_Z_UNORM16] = true;
 
    /* We remap depth formats to a supported texturing format in
@@ -342,7 +344,7 @@ brw_screen_init_surface_formats(struct brw_screen *screen)
     * With the PMA stall workaround in place, Z16 is faster than Z24, as it
     * should be.
     */
-   if (gen >= 80)
+   if (devinfo->ver >= 8)
       screen->mesa_format_supports_texture[MESA_FORMAT_Z_UNORM16] = true;
 
    /* The RGBX formats are not renderable. Normally these get mapped
@@ -358,7 +360,7 @@ brw_screen_init_surface_formats(struct brw_screen *screen)
     * doesn't implement this swizzle override. We don't need to do this for
     * BGRX because that actually is supported natively on Gfx8+.
     */
-   if (gen >= 90) {
+   if (devinfo->ver >= 9) {
       static const mesa_format rgbx_formats[] = {
          MESA_FORMAT_R8G8B8X8_UNORM,
          MESA_FORMAT_R8G8B8X8_SRGB,
@@ -415,7 +417,7 @@ bool
 brw_render_target_supported(struct brw_context *brw,
                             struct gl_renderbuffer *rb)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    mesa_format format = rb->Format;
 
    /* Many integer formats are promoted to RGBA (like XRGB8888 is), which means
@@ -519,7 +521,7 @@ translate_tex_format(struct brw_context *brw,
 uint32_t
 brw_depth_format(struct brw_context *brw, mesa_format format)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    switch (format) {
    case MESA_FORMAT_Z_UNORM16:

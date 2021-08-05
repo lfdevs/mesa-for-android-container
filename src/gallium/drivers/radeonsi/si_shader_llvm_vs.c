@@ -95,6 +95,18 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
       return;
    }
 
+   /* Set can_speculate=false to help keep all loads grouped together
+    * for better latency hiding. If it was true, LLVM could move the loads forward
+    * and accidentally double memory latency by doing:
+    *
+    *    buffer_load_dword_xyzw
+    *    s_waitcnt vmcnt(0)
+    *    buffer_load_dword_xyzw
+    *    s_waitcnt vmcnt(0)
+    *
+    * ... which is what we must prevent at all cost.
+    */
+   const bool can_speculate = false;
    unsigned bit_size = info->input_fp16_lo_hi_valid[input_index] & 0x1 ? 16 : 32;
    LLVMTypeRef int_type = bit_size == 16 ? ctx->ac.i16 : ctx->ac.i32;
    LLVMTypeRef float_type = bit_size == 16 ? ctx->ac.f16 : ctx->ac.f32;
@@ -117,9 +129,6 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
    /* Use the open-coded implementation for all loads of doubles and
     * of dword-sized data that needs fixups. We need to insert conversion
     * code anyway, and the amd/common code does it for us.
-    *
-    * Note: On LLVM <= 8, we can only open-code formats with
-    * channel size >= 4 bytes.
     */
    bool opencode = ctx->shader->key.mono.vs_fetch_opencode & (1 << input_index);
    fix_fetch.bits = ctx->shader->key.mono.vs_fix_fetch[input_index].bits;
@@ -128,7 +137,7 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
       tmp = ac_build_opencoded_load_format(&ctx->ac, fix_fetch.u.log_size,
                                            fix_fetch.u.num_channels_m1 + 1, fix_fetch.u.format,
                                            fix_fetch.u.reverse, !opencode, vb_desc, vertex_index,
-                                           ctx->ac.i32_0, ctx->ac.i32_0, 0, true);
+                                           ctx->ac.i32_0, ctx->ac.i32_0, 0, can_speculate);
       for (unsigned i = 0; i < 4; ++i)
          out[i] =
             LLVMBuildExtractElement(ctx->ac.builder, tmp, LLVMConstInt(ctx->ac.i32, i, false), "");
@@ -174,7 +183,7 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
    for (unsigned i = 0; i < num_fetches; ++i) {
       LLVMValueRef voffset = LLVMConstInt(ctx->ac.i32, fetch_stride * i, 0);
       fetches[i] = ac_build_buffer_load_format(&ctx->ac, vb_desc, vertex_index, voffset,
-                                               channels_per_fetch, 0, true,
+                                               channels_per_fetch, 0, can_speculate,
                                                bit_size == 16, false);
    }
 
@@ -423,7 +432,7 @@ static void si_llvm_emit_clipvertex(struct si_shader_context *ctx, struct ac_exp
 }
 
 /* Initialize arguments for the shader export intrinsic */
-static void si_llvm_init_vs_export_args(struct si_shader_context *ctx, LLVMValueRef *values,
+static void si_llvm_init_vs_export_args(struct si_shader_context *ctx, const LLVMValueRef *values,
                                         unsigned target, struct ac_export_args *args)
 {
    args->enabled_channels = 0xf; /* writemask - default is 0xf */
@@ -435,16 +444,9 @@ static void si_llvm_init_vs_export_args(struct si_shader_context *ctx, LLVMValue
    memcpy(&args->out[0], values, sizeof(values[0]) * 4);
 }
 
-static void si_export_param(struct si_shader_context *ctx, unsigned index, LLVMValueRef *values)
-{
-   struct ac_export_args args;
-
-   si_llvm_init_vs_export_args(ctx, values, V_008DFC_SQ_EXP_PARAM + index, &args);
-   ac_build_export(&ctx->ac, &args);
-}
-
-static void si_build_param_exports(struct si_shader_context *ctx,
-                                   struct si_shader_output_values *outputs, unsigned noutput)
+static void si_prepare_param_exports(struct si_shader_context *ctx,
+                                     const struct si_shader_output_values *outputs, unsigned noutput,
+                                     struct ac_export_args exports[32])
 {
    struct si_shader *shader = ctx->shader;
    unsigned param_count = 0;
@@ -481,7 +483,8 @@ static void si_build_param_exports(struct si_shader_context *ctx,
              (1ull << si_shader_io_get_unique_index(semantic, true)))
          continue;
 
-      si_export_param(ctx, param_count, outputs[i].values);
+      si_llvm_init_vs_export_args(ctx, outputs[i].values, V_008DFC_SQ_EXP_PARAM + param_count,
+                                  &exports[param_count]);
 
       assert(i < ARRAY_SIZE(shader->info.vs_output_param_offset));
       shader->info.vs_output_param_offset[i] = param_count++;
@@ -572,6 +575,9 @@ void si_llvm_build_vs_exports(struct si_shader_context *ctx,
    int i;
 
    si_vertex_color_clamping(ctx, outputs, noutput);
+
+   struct ac_export_args param_exports[32];
+   si_prepare_param_exports(ctx, outputs, noutput, param_exports);
 
    /* Build position exports. */
    for (i = 0; i < noutput; i++) {
@@ -722,15 +728,28 @@ void si_llvm_build_vs_exports(struct si_shader_context *ctx,
       /* Specify the target we are exporting */
       pos_args[i].target = V_008DFC_SQ_EXP_POS + pos_idx++;
 
-      if (pos_idx == shader->info.nr_pos_exports)
+      if (pos_idx == shader->info.nr_pos_exports) {
          /* Specify that this is the last export */
          pos_args[i].done = 1;
+
+         /* If a shader has no param exports, rasterization can start before
+          * the shader finishes and thus memory stores might not finish before
+          * the pixel shader starts.
+          *
+          * VLOAD is for atomics with return.
+          */
+         if (ctx->screen->info.chip_class >= GFX10 &&
+             !shader->info.nr_param_exports &&
+             shader->selector->info.base.writes_memory)
+            ac_build_waitcnt(&ctx->ac, AC_WAIT_VLOAD | AC_WAIT_VSTORE);
+      }
 
       ac_build_export(&ctx->ac, &pos_args[i]);
    }
 
    /* Build parameter exports. */
-   si_build_param_exports(ctx, outputs, noutput);
+   for (unsigned i = 0; i < shader->info.nr_param_exports; i++)
+      ac_build_export(&ctx->ac, &param_exports[i]);
 }
 
 void si_llvm_emit_vs_epilogue(struct ac_shader_abi *abi, unsigned max_outputs, LLVMValueRef *addrs)
@@ -877,6 +896,19 @@ void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part
             input_vgprs[i + 1] = LLVMBuildSelect(ctx->ac.builder, has_hs_threads,
                                                  input_vgprs[i + 1], input_vgprs[i - 1], "");
          }
+      }
+   }
+
+   /* The culling code stored the LDS addresses of the VGPRs into those VGPRs. Load them. */
+   if (key->vs_prolog.load_vgprs_after_culling) {
+      for (i = 5; i <= 8; i++) {
+         bool is_tes_rel_patch_id = i == 7;
+         input_vgprs[i] = LLVMBuildIntToPtr(ctx->ac.builder, input_vgprs[i],
+                                            LLVMPointerType(is_tes_rel_patch_id ? ctx->ac.i8 : ctx->ac.i32,
+                                                            AC_ADDR_SPACE_LDS), "");
+         input_vgprs[i] = LLVMBuildLoad(ctx->ac.builder, input_vgprs[i], "");
+         if (is_tes_rel_patch_id)
+            input_vgprs[i] = LLVMBuildZExt(ctx->ac.builder, input_vgprs[i], ctx->ac.i32, "");
       }
    }
 

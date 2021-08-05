@@ -123,7 +123,7 @@ iris_upload_shader(struct iris_screen *screen,
                    unsigned num_cbufs,
                    const struct iris_binding_table *bt)
 {
-   const struct gen_device_info *devinfo = &screen->devinfo;
+   const struct intel_device_info *devinfo = &screen->devinfo;
 
    void *mem_ctx = ish ? NULL : (void *) driver_shaders;
    struct iris_compiled_shader *shader =
@@ -145,11 +145,11 @@ iris_upload_shader(struct iris_screen *screen,
 
    struct brw_shader_reloc_value reloc_values[] = {
       {
-         .id = IRIS_SHADER_RELOC_CONST_DATA_ADDR_LOW,
+         .id = BRW_SHADER_RELOC_CONST_DATA_ADDR_LOW,
          .value = shader_data_addr,
       },
       {
-         .id = IRIS_SHADER_RELOC_CONST_DATA_ADDR_HIGH,
+         .id = BRW_SHADER_RELOC_CONST_DATA_ADDR_HIGH,
          .value = shader_data_addr >> 32,
       },
    };
@@ -272,10 +272,12 @@ iris_init_program_cache(struct iris_context *ice)
 
    ice->shaders.uploader_driver =
       u_upload_create(&ice->ctx, 16384, PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
-                      IRIS_RESOURCE_FLAG_SHADER_MEMZONE);
+                      IRIS_RESOURCE_FLAG_SHADER_MEMZONE |
+                      IRIS_RESOURCE_FLAG_DEVICE_MEM);
    ice->shaders.uploader_unsync =
       u_upload_create(&ice->ctx, 16384, PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
-                      IRIS_RESOURCE_FLAG_SHADER_MEMZONE);
+                      IRIS_RESOURCE_FLAG_SHADER_MEMZONE |
+                      IRIS_RESOURCE_FLAG_DEVICE_MEM);
 }
 
 void

@@ -189,7 +189,9 @@ static void
 pandecode_dump_file_close(void)
 {
         if (pandecode_dump_stream && pandecode_dump_stream != stderr) {
-                fclose(pandecode_dump_stream);
+                if (fclose(pandecode_dump_stream))
+                        perror("pandecode: dump file");
+
                 pandecode_dump_stream = NULL;
         }
 }

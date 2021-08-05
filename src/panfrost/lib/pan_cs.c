@@ -257,7 +257,7 @@ pan_emit_zs_crc_ext(const struct panfrost_device *dev,
 static unsigned
 pan_bytes_per_pixel_tib(enum pipe_format format)
 {
-        if (panfrost_blend_format(format).internal) {
+        if (panfrost_blendable_formats_v7[format].internal) {
                 /* Blendable formats are always 32-bits in the tile buffer,
                  * extra bits are used as padding or to dither */
                 return 4;
@@ -331,8 +331,7 @@ pan_select_crc_rt(const struct panfrost_device *dev, const struct pan_fb_info *f
                     fb->rts[i].view->image->layout.crc_mode == PAN_IMAGE_CRC_NONE)
                         continue;
 
-                unsigned level = fb->rts[i].view->first_level;
-                bool valid = fb->rts[i].state->slices[level].crc_valid;
+                bool valid = *(fb->rts[i].crc_valid);
                 bool full = !fb->extent.minx && !fb->extent.miny &&
                             fb->extent.maxx == (fb->width - 1) &&
                             fb->extent.maxy == (fb->height - 1);
@@ -390,15 +389,10 @@ pan_rt_init_format(const struct panfrost_device *dev,
                    const struct pan_image_view *rt,
                    struct MALI_RENDER_TARGET *cfg)
 {
-        enum pipe_format format =
-                drm_is_afbc(rt->image->layout.modifier) ?
-                panfrost_afbc_format_fixup(dev, rt->format) :
-                rt->format;
-
         /* Explode details on the format */
 
         const struct util_format_description *desc =
-                util_format_description(format);
+                util_format_description(rt->format);
 
         /* The swizzle for rendering is inverted from texturing */
 
@@ -412,7 +406,7 @@ pan_rt_init_format(const struct panfrost_device *dev,
         if (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB)
                 cfg->srgb = true;
 
-        struct pan_blendable_format fmt = panfrost_blend_format(rt->format);
+        struct pan_blendable_format fmt = panfrost_blendable_formats_v7[rt->format];
 
         if (fmt.internal) {
                 cfg->internal_format = fmt.internal;
@@ -698,17 +692,13 @@ pan_emit_mfbd(const struct panfrost_device *dev,
         unsigned internal_cbuf_size = pan_internal_cbuf_size(fb, &tile_size);
         int crc_rt = pan_select_crc_rt(dev, fb);
         bool has_zs_crc_ext = pan_fbd_has_zs_crc_ext(dev, fb);
-        const struct pan_image_view *crc_view = crc_rt < 0 ? NULL : fb->rts[crc_rt].view;
-        struct pan_image_slice_state *crc_slice =
-                crc_rt < 0 ? NULL : &fb->rts[crc_rt].state->slices[crc_view->first_level];
 
         pan_section_pack(fbd, MULTI_TARGET_FRAMEBUFFER, PARAMETERS, cfg) {
                 cfg.width = fb->width;
                 cfg.height = fb->height;
-                cfg.bound_min_x = fb->extent.minx;
-                cfg.bound_min_y = fb->extent.miny;
-                cfg.bound_max_x = fb->extent.maxx;
-                cfg.bound_max_y = fb->extent.maxy;
+                cfg.bound_max_x = fb->width - 1;
+                cfg.bound_max_y = fb->height - 1;
+
                 cfg.effective_tile_size = tile_size;
                 cfg.tie_break_rule = MALI_TIE_BREAK_RULE_MINUS_180_IN_0_OUT;
                 cfg.render_target_count = MAX2(fb->rt_count, 1);
@@ -728,20 +718,20 @@ pan_emit_mfbd(const struct panfrost_device *dev,
                 cfg.s_write_enable = (fb->zs.view.s && !fb->zs.discard.s);
                 cfg.has_zs_crc_extension = has_zs_crc_ext;
 
-                if (crc_slice) {
-                        bool valid = crc_slice->crc_valid;
+                if (crc_rt >= 0) {
+                        bool *valid = fb->rts[crc_rt].crc_valid;
                         bool full = !fb->extent.minx && !fb->extent.miny &&
                                     fb->extent.maxx == (fb->width - 1) &&
                                     fb->extent.maxy == (fb->height - 1);
 
-                        cfg.crc_read_enable = valid;
+                        cfg.crc_read_enable = *valid;
 
                         /* If the data is currently invalid, still write CRC
                          * data if we are doing a full write, so that it is
                          * valid for next time. */
-                        cfg.crc_write_enable = valid || full;
+                        cfg.crc_write_enable = *valid || full;
 
-                        crc_slice->crc_valid |= full;
+                        *valid |= full;
                 }
         }
 
@@ -768,9 +758,8 @@ pan_emit_mfbd(const struct panfrost_device *dev,
                 cbuf_offset += pan_bytes_per_pixel_tib(fb->rts[i].view->format) *
                                tile_size * fb->rts[i].view->image->layout.nr_samples;
 
-                unsigned level = fb->rts[i].view->first_level;
-                if (crc_slice != &fb->rts[i].state->slices[level])
-                        fb->rts[i].state->slices[level].crc_valid = false;
+                if (i != crc_rt)
+                        *(fb->rts[i].crc_valid) = false;
         }
         tags |= MALI_POSITIVE(MAX2(fb->rt_count, 1)) << 2;
 
@@ -817,7 +806,7 @@ pan_emit_sfbd(const struct panfrost_device *dev,
                         panfrost_invert_swizzle(desc->swizzle, swizzle);
                         cfg.swizzle = panfrost_translate_swizzle_4(swizzle);
 
-                        struct pan_blendable_format fmt = panfrost_blend_format(rt->format);
+                        struct pan_blendable_format fmt = panfrost_blendable_formats_v7[rt->format];
                         if (fmt.internal) {
                                 cfg.internal_format = fmt.internal;
                                 cfg.color_writeback_format = fmt.writeback;
@@ -890,16 +879,13 @@ pan_emit_fbd(const struct panfrost_device *dev,
              const struct pan_tiler_context *tiler_ctx,
              void *out)
 {
-        unsigned tags = 0;
-
         if (dev->quirks & MIDGARD_SFBD) {
                 assert(fb->rt_count <= 1);
                 pan_emit_sfbd(dev, fb, tls, tiler_ctx, out);
+                return 0;
         } else {
-                tags = pan_emit_mfbd(dev, fb, tls, tiler_ctx, out);
+                return pan_emit_mfbd(dev, fb, tls, tiler_ctx, out);
         }
-
-        return tags;
 }
 
 void
@@ -921,8 +907,12 @@ pan_emit_bifrost_tiler(const struct panfrost_device *dev,
                        mali_ptr heap,
                        void *out)
 {
+        unsigned max_levels = dev->tiler_features.max_levels;
+        assert(max_levels >= 2);
+
         pan_pack(out, BIFROST_TILER, tiler) {
-                tiler.hierarchy_mask = 0x28;
+                /* TODO: Select hierarchy mask more effectively */
+                tiler.hierarchy_mask = (max_levels >= 8) ? 0xFF : 0x28;
                 tiler.fb_width = fb_width;
                 tiler.fb_height = fb_height;
                 tiler.heap = heap;
@@ -944,11 +934,10 @@ pan_emit_fragment_job(const struct panfrost_device *dev,
         pan_section_pack(out, FRAGMENT_JOB, PAYLOAD, payload) {
                 payload.bound_min_x = fb->extent.minx >> MALI_TILE_SHIFT;
                 payload.bound_min_y = fb->extent.miny >> MALI_TILE_SHIFT;
-
-                /* Batch max values are inclusive, we need to subtract 1. */
                 payload.bound_max_x = fb->extent.maxx >> MALI_TILE_SHIFT;
                 payload.bound_max_y = fb->extent.maxy >> MALI_TILE_SHIFT;
                 payload.framebuffer = fbd;
+
                 if (fb->tile_map.base) {
                         payload.has_tile_enable_map = true;
                         payload.tile_enable_map = fb->tile_map.base;

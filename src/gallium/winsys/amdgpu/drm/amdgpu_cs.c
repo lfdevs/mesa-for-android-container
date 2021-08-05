@@ -414,15 +414,9 @@ static bool amdgpu_cs_has_user_fence(struct amdgpu_cs_context *cs)
           cs->ib[IB_MAIN].ip_type != AMDGPU_HW_IP_VCN_JPEG;
 }
 
-static bool amdgpu_cs_has_chaining(struct amdgpu_cs *cs)
+static inline unsigned amdgpu_cs_epilog_dws(struct amdgpu_cs *cs)
 {
-   return cs->ws->info.chip_class >= GFX7 &&
-          (cs->ring_type == RING_GFX || cs->ring_type == RING_COMPUTE);
-}
-
-static unsigned amdgpu_cs_epilog_dws(struct amdgpu_cs *cs)
-{
-   if (amdgpu_cs_has_chaining(cs))
+   if (cs->has_chaining)
       return 4; /* for chaining */
 
    return 0;
@@ -431,7 +425,7 @@ static unsigned amdgpu_cs_epilog_dws(struct amdgpu_cs *cs)
 static int amdgpu_lookup_buffer(struct amdgpu_cs_context *cs, struct amdgpu_winsys_bo *bo,
                                 struct amdgpu_cs_buffer *buffers, unsigned num_buffers)
 {
-   unsigned hash = bo->unique_id & (ARRAY_SIZE(cs->buffer_indices_hashlist)-1);
+   unsigned hash = bo->unique_id & (BUFFER_HASHLIST_SIZE-1);
    int i = cs->buffer_indices_hashlist[hash];
 
    /* not found or found */
@@ -450,7 +444,7 @@ static int amdgpu_lookup_buffer(struct amdgpu_cs_context *cs, struct amdgpu_wins
           *         AAAAAAAAAAABBBBBBBBBBBBBBCCCCCCCC
           * will collide here: ^ and here:   ^,
           * meaning that we should get very few collisions in the end. */
-         cs->buffer_indices_hashlist[hash] = i;
+         cs->buffer_indices_hashlist[hash] = i & 0x7fff;
          return i;
       }
    }
@@ -528,8 +522,8 @@ amdgpu_lookup_or_add_real_buffer(struct radeon_cmdbuf *rcs, struct amdgpu_cs *ac
 
    idx = amdgpu_do_add_real_buffer(acs->ws, cs, bo);
 
-   hash = bo->unique_id & (ARRAY_SIZE(cs->buffer_indices_hashlist)-1);
-   cs->buffer_indices_hashlist[hash] = idx;
+   hash = bo->unique_id & (BUFFER_HASHLIST_SIZE-1);
+   cs->buffer_indices_hashlist[hash] = idx & 0x7fff;
 
    if (bo->base.placement & RADEON_DOMAIN_VRAM)
       rcs->used_vram_kb += bo->base.size / 1024;
@@ -583,8 +577,8 @@ static int amdgpu_lookup_or_add_slab_buffer(struct amdgpu_winsys *ws,
    buffer->u.slab.real_idx = real_idx;
    cs->num_slab_buffers++;
 
-   hash = bo->unique_id & (ARRAY_SIZE(cs->buffer_indices_hashlist)-1);
-   cs->buffer_indices_hashlist[hash] = idx;
+   hash = bo->unique_id & (BUFFER_HASHLIST_SIZE-1);
+   cs->buffer_indices_hashlist[hash] = idx & 0x7fff;
 
    return idx;
 }
@@ -627,8 +621,8 @@ static int amdgpu_lookup_or_add_sparse_buffer(struct amdgpu_winsys *ws,
    amdgpu_winsys_bo_reference(ws, &buffer->bo, bo);
    cs->num_sparse_buffers++;
 
-   hash = bo->unique_id & (ARRAY_SIZE(cs->buffer_indices_hashlist)-1);
-   cs->buffer_indices_hashlist[hash] = idx;
+   hash = bo->unique_id & (BUFFER_HASHLIST_SIZE-1);
+   cs->buffer_indices_hashlist[hash] = idx & 0x7fff;
 
    /* We delay adding the backing buffers until we really have to. However,
     * we cannot delay accounting for memory use.
@@ -721,10 +715,10 @@ static bool amdgpu_ib_new_buffer(struct amdgpu_winsys *ws,
     * is the largest power of two that fits into the size field of the
     * INDIRECT_BUFFER packet.
     */
-   if (amdgpu_cs_has_chaining(cs))
-      buffer_size = 4 *util_next_power_of_two(ib->max_ib_size);
+   if (cs->has_chaining)
+      buffer_size = 4 * util_next_power_of_two(ib->max_ib_size);
    else
-      buffer_size = 4 *util_next_power_of_two(4 * ib->max_ib_size);
+      buffer_size = 4 * util_next_power_of_two(4 * ib->max_ib_size);
 
    const unsigned min_size = MAX2(ib->max_check_space_size, 8 * 1024 * 4);
    const unsigned max_size = 512 * 1024 * 4;
@@ -803,7 +797,7 @@ static bool amdgpu_get_new_ib(struct amdgpu_winsys *ws,
     */
    ib_size = MAX2(ib_size, ib->max_check_space_size);
 
-   if (!amdgpu_cs_has_chaining(cs)) {
+   if (!cs->has_chaining) {
       ib_size = MAX2(ib_size,
                      4 * MIN2(util_next_power_of_two(ib->max_ib_size),
                               amdgpu_ib_max_submit_dwords(ib->ib_type)));
@@ -917,7 +911,6 @@ static bool amdgpu_init_cs_context(struct amdgpu_winsys *ws,
    cs->ib[IB_PARALLEL_COMPUTE].ip_type = AMDGPU_HW_IP_COMPUTE;
    cs->ib[IB_PARALLEL_COMPUTE].flags = AMDGPU_IB_FLAG_TC_WB_NOT_INVALIDATE;
 
-   memset(cs->buffer_indices_hashlist, -1, sizeof(cs->buffer_indices_hashlist));
    cs->last_added_bo = NULL;
    return true;
 }
@@ -952,8 +945,6 @@ static void amdgpu_cs_context_cleanup(struct amdgpu_winsys *ws, struct amdgpu_cs
    cs->num_slab_buffers = 0;
    cs->num_sparse_buffers = 0;
    amdgpu_fence_reference(&cs->fence, NULL);
-
-   memset(cs->buffer_indices_hashlist, -1, sizeof(cs->buffer_indices_hashlist));
    cs->last_added_bo = NULL;
 }
 
@@ -997,6 +988,8 @@ amdgpu_cs_create(struct radeon_cmdbuf *rcs,
    cs->ring_type = ring_type;
    cs->stop_exec_on_failure = stop_exec_on_failure;
    cs->noop = ctx->ws->noop_cs;
+   cs->has_chaining = ctx->ws->info.chip_class >= GFX7 &&
+                      (ring_type == RING_GFX || ring_type == RING_COMPUTE);
 
    struct amdgpu_cs_fence_info fence_info;
    fence_info.handle = cs->ctx->user_fence_bo;
@@ -1017,9 +1010,15 @@ amdgpu_cs_create(struct radeon_cmdbuf *rcs,
       return false;
    }
 
+   memset(cs->buffer_indices_hashlist, -1, sizeof(cs->buffer_indices_hashlist));
+
    /* Set the first submission context as current. */
    cs->csc = &cs->csc1;
    cs->cst = &cs->csc2;
+
+   /* Assign to both amdgpu_cs_context; only csc will use it. */
+   cs->csc1.buffer_indices_hashlist = cs->buffer_indices_hashlist;
+   cs->csc2.buffer_indices_hashlist = cs->buffer_indices_hashlist;
 
    cs->main.rcs = rcs;
    rcs->priv = cs;
@@ -1154,7 +1153,7 @@ static bool amdgpu_cs_check_space(struct radeon_cmdbuf *rcs, unsigned dw,
          return true;
    }
 
-   if (!amdgpu_cs_has_chaining(cs)) {
+   if (!cs->has_chaining) {
       assert(!force_chaining);
       return false;
    }
@@ -1455,7 +1454,7 @@ static bool amdgpu_add_sparse_backing_buffers(struct amdgpu_winsys *ws,
    return true;
 }
 
-static void amdgpu_cs_submit_ib(void *job, int thread_index)
+static void amdgpu_cs_submit_ib(void *job, void *gdata, int thread_index)
 {
    struct amdgpu_cs *acs = (struct amdgpu_cs*)job;
    struct amdgpu_winsys *ws = acs->ws;
@@ -1895,6 +1894,8 @@ static int amdgpu_cs_flush(struct radeon_cmdbuf *rcs,
          cs->csc->secure = !cs->csc->secure;
       amdgpu_cs_context_cleanup(ws, cs->csc);
    }
+
+   memset(cs->csc->buffer_indices_hashlist, -1, sizeof(cs->buffer_indices_hashlist));
 
    amdgpu_get_new_ib(ws, rcs, &cs->main, cs);
    if (cs->compute_ib.ib_mapped)

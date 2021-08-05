@@ -213,10 +213,10 @@ nv20_emit_tex_obj(struct gl_context *ctx, int emit)
 		| nvgl_filter_mode(sa->Attrib.MinFilter) << 16
 		| 2 << 12;
 
-	r = FLOAT_TO_UBYTE(sa->Attrib.BorderColor.f[0]);
-	g = FLOAT_TO_UBYTE(sa->Attrib.BorderColor.f[1]);
-	b = FLOAT_TO_UBYTE(sa->Attrib.BorderColor.f[2]);
-	a = FLOAT_TO_UBYTE(sa->Attrib.BorderColor.f[3]);
+	r = FLOAT_TO_UBYTE(sa->Attrib.state.border_color.f[0]);
+	g = FLOAT_TO_UBYTE(sa->Attrib.state.border_color.f[1]);
+	b = FLOAT_TO_UBYTE(sa->Attrib.state.border_color.f[2]);
+	a = FLOAT_TO_UBYTE(sa->Attrib.state.border_color.f[3]);
 	switch (ti->_BaseFormat) {
 	case GL_LUMINANCE:
 		a = 0xff;

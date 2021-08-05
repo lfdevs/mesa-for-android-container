@@ -313,6 +313,12 @@ CodeEmitterGV100::emitMOV()
          emitField(90,  1, 1);
          emitPRED (87, insn->src(0));
          break;
+      case FILE_BARRIER:
+      case FILE_THREAD_STATE:
+         emitInsn (0x355);
+         emitBTS  (24, insn->src(0));
+         emitGPR  (16, insn->def(0));
+         break;
       default:
          assert(!"bad src file");
          break;
@@ -328,6 +334,31 @@ CodeEmitterGV100::emitMOV()
       emitCond3(76, CC_NE);
       emitGPR  (24, insn->src(0));
       emitGPR  (32);
+      break;
+   case FILE_BARRIER:
+   case FILE_THREAD_STATE:
+      switch (insn->src(0).getFile()) {
+      case FILE_GPR:
+         emitInsn (0x356);
+         emitGPR  (32, insn->src(0));
+         emitBTS  (24, insn->def(0));
+         break;
+      case FILE_BARRIER:
+         emitInsn (0xf56);
+         emitBTS  (24, insn->def(0));
+         emitBTS  (16, insn->src(0));
+         break;
+      case FILE_THREAD_STATE:
+         assert(insn->def(0).getFile() == FILE_BARRIER);
+         emitInsn (0xf55);
+         emitBTS  (24, insn->src(0));
+         emitBTS  (16, insn->def(0));
+         break;
+      default:
+         assert(!"bad src file");
+         break;
+      }
+      emitField(84, 1, insn->getDef(0)->reg.data.ts == TS_PQUAD_MACTIVE ? 1 : 0);
       break;
    default:
       assert(!"bad dst file");
@@ -1753,7 +1784,11 @@ CodeEmitterGV100::emitInstruction(Instruction *i)
    case OP_FLOOR:
    case OP_TRUNC:
       if (insn->op == OP_CVT && (insn->def(0).getFile() == FILE_PREDICATE ||
-                                 insn->src(0).getFile() == FILE_PREDICATE)) {
+                                 insn->def(0).getFile() == FILE_BARRIER ||
+                                 insn->def(0).getFile() == FILE_THREAD_STATE ||
+                                 insn->src(0).getFile() == FILE_PREDICATE ||
+                                 insn->src(0).getFile() == FILE_BARRIER ||
+                                 insn->src(0).getFile() == FILE_THREAD_STATE)) {
          emitMOV();
       } else if (isFloatType(insn->dType)) {
          if (isFloatType(insn->sType)) {

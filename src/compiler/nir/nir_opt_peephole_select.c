@@ -61,9 +61,37 @@
 
 static bool
 block_check_for_allowed_instrs(nir_block *block, unsigned *count,
-                               bool alu_ok, bool indirect_load_ok,
+                               unsigned limit, bool indirect_load_ok,
                                bool expensive_alu_ok)
 {
+   bool alu_ok = limit != 0;
+
+   /* Used on non-control-flow HW to flatten all IFs. */
+   if (limit == ~0) {
+      nir_foreach_instr(instr, block) {
+         switch (instr->type) {
+         case nir_instr_type_alu:
+         case nir_instr_type_deref:
+         case nir_instr_type_load_const:
+         case nir_instr_type_phi:
+         case nir_instr_type_ssa_undef:
+         case nir_instr_type_tex:
+            break;
+
+         case nir_instr_type_intrinsic:
+            if (!nir_intrinsic_can_reorder(nir_instr_as_intrinsic(instr)))
+               return false;
+            break;
+
+         case nir_instr_type_call:
+         case nir_instr_type_jump:
+         case nir_instr_type_parallel_copy:
+            return false;
+         }
+      }
+      return true;
+   }
+
    nir_foreach_instr(instr, block) {
       switch (instr->type) {
       case nir_instr_type_intrinsic: {
@@ -106,8 +134,8 @@ block_check_for_allowed_instrs(nir_block *block, unsigned *count,
          case nir_intrinsic_load_base_instance:
          case nir_intrinsic_load_instance_id:
          case nir_intrinsic_load_draw_id:
-         case nir_intrinsic_load_num_work_groups:
-         case nir_intrinsic_load_work_group_id:
+         case nir_intrinsic_load_num_workgroups:
+         case nir_intrinsic_load_workgroup_id:
          case nir_intrinsic_load_local_invocation_id:
          case nir_intrinsic_load_local_invocation_index:
          case nir_intrinsic_load_subgroup_id:
@@ -379,9 +407,9 @@ nir_opt_peephole_select_block(nir_block *block, nir_shader *shader,
 
    /* ... and those blocks must only contain "allowed" instructions. */
    unsigned count = 0;
-   if (!block_check_for_allowed_instrs(then_block, &count, limit != 0,
+   if (!block_check_for_allowed_instrs(then_block, &count, limit,
                                        indirect_load_ok, expensive_alu_ok) ||
-       !block_check_for_allowed_instrs(else_block, &count, limit != 0,
+       !block_check_for_allowed_instrs(else_block, &count, limit,
                                        indirect_load_ok, expensive_alu_ok))
       return false;
 
@@ -433,7 +461,7 @@ nir_opt_peephole_select_block(nir_block *block, nir_shader *shader,
 
       nir_ssa_dest_init(&sel->instr, &sel->dest.dest,
                         phi->dest.ssa.num_components,
-                        phi->dest.ssa.bit_size, phi->dest.ssa.name);
+                        phi->dest.ssa.bit_size, NULL);
       sel->dest.write_mask = (1 << phi->dest.ssa.num_components) - 1;
 
       nir_ssa_def_rewrite_uses(&phi->dest.ssa,

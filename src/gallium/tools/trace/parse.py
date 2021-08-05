@@ -32,6 +32,7 @@ import sys
 import xml.parsers.expat as xpat
 import argparse
 
+import format
 from model import *
 
 
@@ -236,134 +237,151 @@ class TraceParser(XmlParser):
     def parse_arg(self):
         attrs = self.element_start('arg')
         name = attrs['name']
-        value = self.parse_value()
+        value = self.parse_value(name)
         self.element_end('arg')
 
         return name, value
 
     def parse_ret(self):
         attrs = self.element_start('ret')
-        value = self.parse_value()
+        value = self.parse_value('ret')
         self.element_end('ret')
 
         return value
 
     def parse_time(self):
         attrs = self.element_start('time')
-        time = self.parse_value();
+        time = self.parse_value('time');
         self.element_end('time')
         return time
 
-    def parse_value(self):
+    def parse_value(self, name):
         expected_tokens = ('null', 'bool', 'int', 'uint', 'float', 'string', 'enum', 'array', 'struct', 'ptr', 'bytes')
         if self.token.type == ELEMENT_START:
             if self.token.name_or_data in expected_tokens:
                 method = getattr(self, 'parse_' +  self.token.name_or_data)
-                return method()
+                return method(name)
         raise TokenMismatch(" or " .join(expected_tokens), self.token)
 
-    def parse_null(self):
+    def parse_null(self, pname):
         self.element_start('null')
         self.element_end('null')
         return Literal(None)
         
-    def parse_bool(self):
+    def parse_bool(self, pname):
         self.element_start('bool')
         value = int(self.character_data())
         self.element_end('bool')
         return Literal(value)
         
-    def parse_int(self):
+    def parse_int(self, pname):
         self.element_start('int')
         value = int(self.character_data())
         self.element_end('int')
         return Literal(value)
         
-    def parse_uint(self):
+    def parse_uint(self, pname):
         self.element_start('uint')
         value = int(self.character_data())
         self.element_end('uint')
         return Literal(value)
         
-    def parse_float(self):
+    def parse_float(self, pname):
         self.element_start('float')
         value = float(self.character_data())
         self.element_end('float')
         return Literal(value)
         
-    def parse_enum(self):
+    def parse_enum(self, pname):
         self.element_start('enum')
         name = self.character_data()
         self.element_end('enum')
         return NamedConstant(name)
         
-    def parse_string(self):
+    def parse_string(self, pname):
         self.element_start('string')
         value = self.character_data()
         self.element_end('string')
         return Literal(value)
         
-    def parse_bytes(self):
+    def parse_bytes(self, pname):
         self.element_start('bytes')
         value = self.character_data()
         self.element_end('bytes')
         return Blob(value)
         
-    def parse_array(self):
+    def parse_array(self, pname):
         self.element_start('array')
         elems = []
         while self.token.type != ELEMENT_END:
-            elems.append(self.parse_elem())
+            elems.append(self.parse_elem('array'))
         self.element_end('array')
         return Array(elems)
 
-    def parse_elem(self):
+    def parse_elem(self, pname):
         self.element_start('elem')
-        value = self.parse_value()
+        value = self.parse_value('elem')
         self.element_end('elem')
         return value
 
-    def parse_struct(self):
+    def parse_struct(self, pname):
         attrs = self.element_start('struct')
         name = attrs['name']
         members = []
         while self.token.type != ELEMENT_END:
-            members.append(self.parse_member())
+            members.append(self.parse_member(name))
         self.element_end('struct')
         return Struct(name, members)
 
-    def parse_member(self):
+    def parse_member(self, pname):
         attrs = self.element_start('member')
         name = attrs['name']
-        value = self.parse_value()
+        value = self.parse_value(name)
         self.element_end('member')
 
         return name, value
 
-    def parse_ptr(self):
+    def parse_ptr(self, pname):
         self.element_start('ptr')
         address = self.character_data()
         self.element_end('ptr')
 
-        return Pointer(address)
+        return Pointer(address, pname)
 
     def handle_call(self, call):
         pass
     
     
-class TraceDumper(TraceParser):
+class SimpleTraceDumper(TraceParser):
     
-    def __init__(self, fp, options, outStream = sys.stdout):
+    def __init__(self, fp, options, formatter):
         TraceParser.__init__(self, fp)
-        if options.plain:
-            self.formatter = format.Formatter(outStream)
-        else:
-            self.formatter = format.DefaultFormatter(outStream)
-        self.pretty_printer = PrettyPrinter(self.formatter)
+        self.options = options
+        self.formatter = formatter
+        self.pretty_printer = PrettyPrinter(self.formatter, options)
 
     def handle_call(self, call):
         call.visit(self.pretty_printer)
         self.formatter.newline()
+
+
+class TraceDumper(SimpleTraceDumper):
+
+    def __init__(self, fp, options, formatter):
+        SimpleTraceDumper.__init__(self, fp, options, formatter)
+        self.call_stack = []
+
+    def handle_call(self, call):
+        if self.options.named_ptrs:
+            self.call_stack.append(call)
+        else:
+            call.visit(self.pretty_printer)
+            self.formatter.newline()
+
+    def dump_calls(self):
+        for call in self.call_stack:
+            call.visit(self.pretty_printer)
+            self.formatter.newline()
         
 
 class Main:
@@ -400,11 +418,29 @@ class Main:
         optparser.add_argument("-p", "--plain",
             action="store_const", const=True, default=False,
             dest="plain", help="disable ANSI color etc. formatting")
+        optparser.add_argument("-S", "--suppress",
+            action="store_const", const=True, default=False,
+            dest="suppress_variants", help="suppress some variants in output for better diffability")
+        optparser.add_argument("-N", "--named",
+            action="store_const", const=True, default=False,
+            dest="named_ptrs", help="generate symbolic names for raw pointer values")
+        optparser.add_argument("-M", "--method-only",
+            action="store_const", const=True, default=False,
+            dest="method_only", help="output only call names without arguments")
+
         return optparser
 
     def process_arg(self, stream, options):
-        parser = TraceDumper(stream, options)
+        if options.plain:
+            formatter = format.Formatter(sys.stdout)
+        else:
+            formatter = format.DefaultFormatter(sys.stdout)
+
+        parser = TraceDumper(stream, options, formatter)
         parser.parse()
+
+        if options.named_ptrs:
+            parser.dump_calls()
 
 
 if __name__ == '__main__':

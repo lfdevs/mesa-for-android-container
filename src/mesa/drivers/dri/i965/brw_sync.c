@@ -41,9 +41,12 @@
 #include <libsync.h> /* Requires Android or libdrm-2.4.72 */
 
 #include "util/os_file.h"
+#include "util/u_memory.h"
+#include <xf86drm.h>
 
 #include "brw_context.h"
 #include "brw_batch.h"
+#include "mesa/main/externalobjects.h"
 
 struct brw_fence {
    struct brw_context *brw;
@@ -71,6 +74,90 @@ struct brw_gl_sync {
    struct gl_sync_object gl;
    struct brw_fence fence;
 };
+
+struct intel_semaphore_object {
+   struct gl_semaphore_object Base;
+   struct drm_syncobj_handle *syncobj;
+};
+
+static inline struct intel_semaphore_object *
+intel_semaphore_object(struct gl_semaphore_object *sem_obj) {
+   return (struct intel_semaphore_object*) sem_obj;
+}
+
+static struct gl_semaphore_object *
+intel_semaphoreobj_alloc(struct gl_context *ctx, GLuint name)
+{
+   struct intel_semaphore_object *is_obj = CALLOC_STRUCT(intel_semaphore_object);
+   if (!is_obj)
+      return NULL;
+
+   _mesa_initialize_semaphore_object(ctx, &is_obj->Base, name);
+   return &is_obj->Base;
+}
+
+static void
+intel_semaphoreobj_free(struct gl_context *ctx,
+                     struct gl_semaphore_object *semObj)
+{
+   _mesa_delete_semaphore_object(ctx, semObj);
+}
+
+static void
+intel_semaphoreobj_import(struct gl_context *ctx,
+                                struct gl_semaphore_object *semObj,
+                                int fd)
+{
+   struct brw_context *brw = brw_context(ctx);
+   struct brw_screen *screen = brw->screen;
+   struct intel_semaphore_object *iSemObj = intel_semaphore_object(semObj);
+   iSemObj->syncobj = CALLOC_STRUCT(drm_syncobj_handle);
+   iSemObj->syncobj->fd = fd;
+
+   if (drmIoctl(screen->fd, DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE, iSemObj->syncobj) < 0) {
+      fprintf(stderr, "DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE failed: %s\n",
+              strerror(errno));
+      free(iSemObj->syncobj);
+   }
+}
+
+static void
+intel_semaphoreobj_signal(struct gl_context *ctx,
+                                       struct gl_semaphore_object *semObj,
+                                       GLuint numBufferBarriers,
+                                       struct gl_buffer_object **bufObjs,
+                                       GLuint numTextureBarriers,
+                                       struct gl_texture_object **texObjs,
+                                       const GLenum *dstLayouts)
+{
+   struct brw_context *brw = brw_context(ctx);
+   struct intel_semaphore_object *iSemObj = intel_semaphore_object(semObj);
+   struct drm_i915_gem_exec_fence *fence =
+      util_dynarray_grow(&brw->batch.exec_fences, struct drm_i915_gem_exec_fence *, 1);
+   fence->flags = I915_EXEC_FENCE_SIGNAL;
+   fence->handle = iSemObj->syncobj->handle;
+   brw->batch.contains_fence_signal = true;
+}
+
+static void
+intel_semaphoreobj_wait(struct gl_context *ctx,
+                                     struct gl_semaphore_object *semObj,
+                                     GLuint numBufferBarriers,
+                                     struct gl_buffer_object **bufObjs,
+                                     GLuint numTextureBarriers,
+                                     struct gl_texture_object **texObjs,
+                                     const GLenum *srcLayouts)
+{
+   struct brw_context *brw = brw_context(ctx);
+   struct brw_screen *screen = brw->screen;
+   struct intel_semaphore_object *iSemObj = intel_semaphore_object(semObj);
+   struct drm_syncobj_wait args = {
+      .handles = (uintptr_t)&iSemObj->syncobj->handle,
+      .count_handles = 1,
+   };
+
+   drmIoctl(screen->fd, DRM_IOCTL_SYNCOBJ_WAIT, &args);
+}
 
 static void
 brw_fence_init(struct brw_context *brw, struct brw_fence *fence,
@@ -416,6 +503,11 @@ brw_init_syncobj_functions(struct dd_function_table *functions)
    functions->CheckSync = brw_gl_check_sync;
    functions->ClientWaitSync = brw_gl_client_wait_sync;
    functions->ServerWaitSync = brw_gl_server_wait_sync;
+   functions->NewSemaphoreObject = intel_semaphoreobj_alloc;
+   functions->DeleteSemaphoreObject = intel_semaphoreobj_free;
+   functions->ImportSemaphoreFd = intel_semaphoreobj_import;
+   functions->ServerSignalSemaphoreObject = intel_semaphoreobj_signal;
+   functions->ServerWaitSemaphoreObject = intel_semaphoreobj_wait;
 }
 
 static void *

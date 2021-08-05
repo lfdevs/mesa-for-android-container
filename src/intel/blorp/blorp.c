@@ -28,7 +28,7 @@
 #include "blorp_priv.h"
 #include "compiler/brw_compiler.h"
 #include "compiler/brw_nir.h"
-#include "dev/gen_debug.h"
+#include "dev/intel_debug.h"
 
 const char *
 blorp_shader_type_to_name(enum blorp_shader_type type)
@@ -267,8 +267,7 @@ blorp_compile_vs(struct blorp_context *blorp, void *mem_ctx,
 }
 
 struct blorp_sf_key {
-   enum blorp_shader_type shader_type; /* Must be BLORP_SHADER_TYPE_GFX4_SF */
-
+   struct brw_blorp_base_key base;
    struct brw_sf_prog_key key;
 };
 
@@ -285,7 +284,7 @@ blorp_ensure_sf_program(struct blorp_batch *batch,
       return true;
 
    struct blorp_sf_key key = {
-      .shader_type = BLORP_SHADER_TYPE_GFX4_SF,
+      .base = BRW_BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_GFX4_SF),
    };
 
    /* Everything gets compacted in vertex setup, so we just need a
@@ -335,7 +334,7 @@ blorp_hiz_op(struct blorp_batch *batch, struct blorp_surf *surf,
              uint32_t level, uint32_t start_layer, uint32_t num_layers,
              enum isl_aux_op op)
 {
-   const struct gen_device_info *devinfo = batch->blorp->isl_dev->info;
+   const struct intel_device_info *devinfo = batch->blorp->isl_dev->info;
 
    struct blorp_params params;
    blorp_params_init(&params);

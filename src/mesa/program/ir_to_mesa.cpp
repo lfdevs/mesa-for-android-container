@@ -1351,6 +1351,7 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
       break;
 
    case ir_unop_ssbo_unsized_array_length:
+   case ir_unop_implicitly_sized_array_length:
    case ir_quadop_vector:
       /* This operation should have already been handled.
        */

@@ -157,7 +157,7 @@ fallback_use_bypass(struct fd_batch *batch)
 
    /* Fallback logic if we have no historical data about the rendertarget: */
    if (batch->cleared || batch->gmem_reason ||
-       ((batch->num_draws > 5) && !batch->blit) || (pfb->samples > 1)) {
+       (batch->num_draws > 5) || (pfb->samples > 1)) {
       return false;
    }
 
@@ -251,7 +251,7 @@ fd_autotune_init(struct fd_autotune *at, struct fd_device *dev)
    list_inithead(&at->lru);
 
    at->results_mem = fd_bo_new(dev, sizeof(struct fd_autotune_results),
-                               DRM_FREEDRENO_GEM_TYPE_KMEM, "autotune");
+                               0, "autotune");
    at->results = fd_bo_map(at->results_mem);
 
    list_inithead(&at->pending_results);

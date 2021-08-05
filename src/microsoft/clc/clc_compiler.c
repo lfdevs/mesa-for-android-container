@@ -351,10 +351,10 @@ clc_lower_64bit_semantics(nir_shader *nir)
                case nir_intrinsic_load_global_invocation_id_zero_base:
                case nir_intrinsic_load_base_global_invocation_id:
                case nir_intrinsic_load_local_invocation_id:
-               case nir_intrinsic_load_work_group_id:
-               case nir_intrinsic_load_work_group_id_zero_base:
-               case nir_intrinsic_load_base_work_group_id:
-               case nir_intrinsic_load_num_work_groups:
+               case nir_intrinsic_load_workgroup_id:
+               case nir_intrinsic_load_workgroup_id_zero_base:
+               case nir_intrinsic_load_base_workgroup_id:
+               case nir_intrinsic_load_num_workgroups:
                   break;
                default:
                   continue;
@@ -653,11 +653,12 @@ add_kernel_inputs_var(struct clc_dxil_object *dxil, nir_shader *nir,
 
    size = align(size, 4);
 
+   const struct glsl_type *array_type = glsl_array_type(glsl_uint_type(), size / 4, 4);
+   const struct glsl_struct_field field = { array_type, "arr" };
    nir_variable *var =
       nir_variable_create(nir, nir_var_mem_ubo,
-                          glsl_array_type(glsl_uint_type(),
-                                          size / 4, 0),
-                          "kernel_inputs");
+         glsl_struct_type(&field, 1, "kernel_inputs", false),
+         "kernel_inputs");
    var->data.binding = (*cbv_id)++;
    var->data.how_declared = nir_var_hidden;
    return var;
@@ -668,12 +669,15 @@ add_work_properties_var(struct clc_dxil_object *dxil,
                            struct nir_shader *nir, unsigned *cbv_id)
 {
    struct clc_dxil_metadata *metadata = &dxil->metadata;
+   const struct glsl_type *array_type =
+      glsl_array_type(glsl_uint_type(),
+         sizeof(struct clc_work_properties_data) / sizeof(unsigned),
+         sizeof(unsigned));
+   const struct glsl_struct_field field = { array_type, "arr" };
    nir_variable *var =
       nir_variable_create(nir, nir_var_mem_ubo,
-                          glsl_array_type(glsl_uint_type(),
-                                          sizeof(struct clc_work_properties_data) / sizeof(unsigned),
-                                          0),
-                          "kernel_work_properies");
+         glsl_struct_type(&field, 1, "kernel_work_properties", false),
+         "kernel_work_properies");
    var->data.binding = (*cbv_id)++;
    var->data.how_declared = nir_var_hidden;
    return var;
@@ -1076,7 +1080,7 @@ clc_to_dxil(struct clc_context *ctx,
       clc_error(logger, "spirv_to_nir() failed");
       goto err_free_dxil;
    }
-   nir->info.cs.local_size_variable = true;
+   nir->info.workgroup_size_variable = true;
 
    NIR_PASS_V(nir, nir_lower_goto_ifs);
    NIR_PASS_V(nir, nir_opt_dead_cf);
@@ -1280,7 +1284,7 @@ clc_to_dxil(struct clc_context *ctx,
    }
 
    // Needs to come before lower_explicit_io
-   NIR_PASS_V(nir, nir_lower_cl_images_to_tex);
+   NIR_PASS_V(nir, nir_lower_readonly_images_to_tex, false);
    struct clc_image_lower_context image_lower_context = { metadata, &srv_id, &uav_id };
    NIR_PASS_V(nir, clc_lower_images, &image_lower_context);
    NIR_PASS_V(nir, clc_lower_nonnormalized_samplers, int_sampler_states);
@@ -1318,7 +1322,7 @@ clc_to_dxil(struct clc_context *ctx,
 
    nir_lower_compute_system_values_options compute_options = {
       .has_base_global_invocation_id = (conf && conf->support_global_work_id_offsets),
-      .has_base_work_group_id = (conf && conf->support_work_group_id_offsets),
+      .has_base_workgroup_id = (conf && conf->support_workgroup_id_offsets),
    };
    NIR_PASS_V(nir, nir_lower_compute_system_values, &compute_options);
 
@@ -1334,20 +1338,33 @@ clc_to_dxil(struct clc_context *ctx,
    nir_variable *work_properties_var =
       add_work_properties_var(dxil, nir, &cbv_id);
 
+   memcpy(metadata->local_size, nir->info.workgroup_size,
+          sizeof(metadata->local_size));
+   memcpy(metadata->local_size_hint, nir->info.cs.workgroup_size_hint,
+          sizeof(metadata->local_size));
+
    // Patch the localsize before calling clc_nir_lower_system_values().
    if (conf) {
-      for (unsigned i = 0; i < ARRAY_SIZE(nir->info.cs.local_size); i++) {
+      for (unsigned i = 0; i < ARRAY_SIZE(nir->info.workgroup_size); i++) {
          if (!conf->local_size[i] ||
-             conf->local_size[i] == nir->info.cs.local_size[i])
+             conf->local_size[i] == nir->info.workgroup_size[i])
             continue;
 
-         if (nir->info.cs.local_size[i] &&
-             nir->info.cs.local_size[i] != conf->local_size[i]) {
+         if (nir->info.workgroup_size[i] &&
+             nir->info.workgroup_size[i] != conf->local_size[i]) {
             debug_printf("D3D12: runtime local size does not match reqd_work_group_size() values\n");
             goto err_free_dxil;
          }
 
-         nir->info.cs.local_size[i] = conf->local_size[i];
+         nir->info.workgroup_size[i] = conf->local_size[i];
+      }
+      memcpy(metadata->local_size, nir->info.workgroup_size,
+            sizeof(metadata->local_size));
+   } else {
+      /* Make sure there's at least one thread that's set to run */
+      for (unsigned i = 0; i < ARRAY_SIZE(nir->info.workgroup_size); i++) {
+         if (nir->info.workgroup_size[i] == 0)
+            nir->info.workgroup_size[i] = 1;
       }
    }
 
@@ -1421,11 +1438,6 @@ clc_to_dxil(struct clc_context *ctx,
       debug_printf("D3D12: nir_to_dxil failed\n");
       goto err_free_dxil;
    }
-
-   memcpy(metadata->local_size, nir->info.cs.local_size,
-          sizeof(metadata->local_size));
-   memcpy(metadata->local_size_hint, nir->info.cs.local_size_hint,
-          sizeof(metadata->local_size));
 
    nir_foreach_variable_with_modes(var, nir, nir_var_mem_ssbo) {
       if (var->constant_initializer) {

@@ -196,15 +196,6 @@ TEST_F(glXCreateContextAttribARB_test, NULL_display_returns_None)
    EXPECT_EQ(0, fake_glx_context::contexts_allocated);
 }
 
-TEST_F(glXCreateContextAttribARB_test, NULL_fbconfig_returns_None)
-{
-   GLXContext ctx =
-      glXCreateContextAttribsARB(this->dpy, NULL, 0, False, NULL);
-
-   EXPECT_EQ(None, ctx);
-   EXPECT_EQ(0, fake_glx_context::contexts_allocated);
-}
-
 TEST_F(glXCreateContextAttribARB_test, NULL_screen_returns_None)
 {
    delete (fake_glx_screen *)psc;

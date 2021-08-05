@@ -26,15 +26,14 @@
 #ifndef PAN_RESOURCE_H
 #define PAN_RESOURCE_H
 
-#include <midgard_pack.h>
 #include "pan_screen.h"
-#include "pan_pool.h"
 #include "pan_minmax_cache.h"
 #include "pan_texture.h"
 #include "drm-uapi/drm.h"
 #include "util/u_range.h"
 
 #define LAYOUT_CONVERT_THRESHOLD 8
+#define PAN_MAX_BATCHES 32
 
 struct panfrost_resource {
         struct pipe_resource base;
@@ -48,6 +47,11 @@ struct panfrost_resource {
                 } tile_map;
         } damage;
 
+        struct {
+                struct panfrost_batch *writer;
+                BITSET_DECLARE(users, PAN_MAX_BATCHES);
+        } track;
+
         struct renderonly_scanout *scanout;
 
         struct panfrost_resource *separate_stencil;
@@ -57,8 +61,14 @@ struct panfrost_resource {
         /* Description of the resource layout */
         struct pan_image image;
 
-        /* Image state */
-        struct pan_image_state state;
+        struct {
+                /* Is the checksum for this image valid? Implicitly refers to
+                 * the first slice; we only checksum non-mipmapped 2D images */
+                bool crc;
+
+                /* Has anything been written to this slice? */
+                BITSET_DECLARE(data, MAX_MIP_LEVELS);
+        } valid;
 
         /* Whether the modifier can be changed */
         bool modifier_constant;

@@ -285,7 +285,7 @@ brw_is_color_fast_clear_compatible(struct brw_context *brw,
                                    const struct brw_mipmap_tree *mt,
                                    const union gl_color_union *color)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const struct gl_context *ctx = &brw->ctx;
 
    /* If we're mapping the render format to a different format than the

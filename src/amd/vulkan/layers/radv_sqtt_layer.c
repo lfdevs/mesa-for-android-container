@@ -363,8 +363,7 @@ radv_handle_thread_trace(VkQueue _queue)
       radv_QueueWaitIdle(_queue);
 
       if (radv_get_thread_trace(queue, &thread_trace)) {
-         ac_dump_thread_trace(&queue->device->physical_device->rad_info, &thread_trace,
-                              &queue->device->thread_trace);
+         ac_dump_rgp_capture(&queue->device->physical_device->rad_info, &thread_trace);
       } else {
          /* Trigger a new capture if the driver failed to get
           * the trace because the buffer was too small.

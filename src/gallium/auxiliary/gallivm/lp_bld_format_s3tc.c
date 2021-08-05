@@ -2365,6 +2365,9 @@ lp_build_gather_rgtc(struct gallivm_state *gallivm,
                                              lp_build_const_int32(gallivm, 2), "");
          *green_hi = LLVMBuildExtractElement(builder, elem,
                                              lp_build_const_int32(gallivm, 3), "");
+      } else {
+         *green_lo = NULL;
+         *green_hi = NULL;
       }
    } else {
       LLVMValueRef tmp[4];

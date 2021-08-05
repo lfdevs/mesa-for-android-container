@@ -62,7 +62,7 @@
 static void
 gfx7_allocate_push_constants(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    /* BRW_NEW_GEOMETRY_PROGRAM */
    bool gs_present = brw->programs[MESA_SHADER_GEOMETRY];
@@ -115,7 +115,7 @@ gfx7_emit_push_constant_state(struct brw_context *brw, unsigned vs_size,
                               unsigned hs_size, unsigned ds_size,
                               unsigned gs_size, unsigned fs_size)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    unsigned offset = 0;
 
    /* From the SKL PRM, Workarounds section (#878):
@@ -173,7 +173,7 @@ gfx7_emit_push_constant_state(struct brw_context *brw, unsigned vs_size,
     *
     * No such restriction exists for Haswell or Baytrail.
     */
-   if (devinfo->ver < 8 && !devinfo->is_haswell && !devinfo->is_baytrail)
+   if (devinfo->verx10 <= 70 && !devinfo->is_baytrail)
       gfx7_emit_cs_stall_flush(brw);
 }
 
@@ -207,7 +207,7 @@ void
 gfx7_upload_urb(struct brw_context *brw, unsigned vs_size,
                 bool gs_present, bool tess_present)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    /* BRW_NEW_{VS,TCS,TES,GS}_PROG_DATA */
    struct brw_vue_prog_data *prog_data[4] = {
@@ -252,7 +252,7 @@ gfx7_upload_urb(struct brw_context *brw, unsigned vs_size,
                         tess_present, gs_present, entry_size,
                         entries, start, NULL, &constrained);
 
-   if (devinfo->ver == 7 && !devinfo->is_haswell && !devinfo->is_baytrail)
+   if (devinfo->verx10 == 70 && !devinfo->is_baytrail)
       gfx7_emit_vs_workaround_flush(brw);
 
    BEGIN_BATCH(8);

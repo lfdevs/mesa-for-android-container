@@ -357,10 +357,24 @@ try_setup_line( struct lp_setup_context *setup,
    info.v2 = v2;
 
   
-   /* X-MAJOR LINE */
-   if (fabsf(dx) >= fabsf(dy)) {
+   if (setup->rectangular_lines) {
+      float scale = (setup->line_width * 0.5f) / sqrtf(area);
+      int tx = subpixel_snap(-dy * scale);
+      int ty = subpixel_snap(+dx * scale);
+
+      x[0] = subpixel_snap(v1[0][0] - pixel_offset) - tx;
+      x[1] = subpixel_snap(v2[0][0] - pixel_offset) - tx;
+      x[2] = subpixel_snap(v2[0][0] - pixel_offset) + tx;
+      x[3] = subpixel_snap(v1[0][0] - pixel_offset) + tx;
+
+      y[0] = subpixel_snap(v1[0][1] - pixel_offset) - ty;
+      y[1] = subpixel_snap(v2[0][1] - pixel_offset) - ty;
+      y[2] = subpixel_snap(v2[0][1] - pixel_offset) + ty;
+      y[3] = subpixel_snap(v1[0][1] - pixel_offset) + ty;
+   } else if (fabsf(dx) >= fabsf(dy)) {
       float dydx = dy / dx;
 
+      /* X-MAJOR LINE */
       x1diff = v1[0][0] - floorf(v1[0][0]) - 0.5f;
       y1diff = v1[0][1] - floorf(v1[0][1]) - 0.5f;
       x2diff = v2[0][0] - floorf(v2[0][0]) - 0.5f;

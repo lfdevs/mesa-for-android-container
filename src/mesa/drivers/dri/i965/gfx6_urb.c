@@ -52,7 +52,7 @@ gfx6_upload_urb(struct brw_context *brw, unsigned vs_size,
 {
    int nr_vs_entries, nr_gs_entries;
    int total_urb_size = brw->urb.size * 1024; /* in bytes */
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    /* Calculate how many entries fit in each stage's section of the URB */
    if (gs_present) {

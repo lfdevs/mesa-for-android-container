@@ -322,6 +322,8 @@ lima_resource_from_handle(struct pipe_screen *pscreen,
       return NULL;
    }
 
+   res->modifier_constant = true;
+
    switch (handle->modifier) {
    case DRM_FORMAT_MOD_LINEAR:
       res->tiled = false;
@@ -368,9 +370,9 @@ lima_resource_from_handle(struct pipe_screen *pscreen,
          goto err_out;
       }
 
-      if (res->bo->size < size) {
+      if ((res->bo->size - res->levels[0].offset) < size) {
          fprintf(stderr, "imported bo size is smaller than expected: %d (BO) < %d (expected)\n",
-                 res->bo->size, size);
+                 (res->bo->size - res->levels[0].offset), size);
          goto err_out;
       }
 
@@ -412,9 +414,10 @@ lima_resource_get_handle(struct pipe_screen *pscreen,
    else
       handle->modifier = DRM_FORMAT_MOD_LINEAR;
 
-   if (handle->type == WINSYS_HANDLE_TYPE_KMS && screen->ro &&
-       renderonly_get_handle(res->scanout, handle))
-      return true;
+   res->modifier_constant = true;
+
+   if (handle->type == WINSYS_HANDLE_TYPE_KMS && screen->ro)
+      return renderonly_get_handle(res->scanout, handle);
 
    if (!lima_bo_export(res->bo, handle))
       return false;
@@ -686,6 +689,38 @@ lima_transfer_flush_region(struct pipe_context *pctx,
 
 }
 
+static bool
+lima_should_convert_linear(struct lima_resource *res,
+                           struct pipe_transfer *ptrans)
+{
+   if (res->modifier_constant)
+          return false;
+
+   /* Overwriting the entire resource indicates streaming, for which
+    * linear layout is most efficient due to the lack of expensive
+    * conversion.
+    *
+    * For now we just switch to linear after a number of complete
+    * overwrites to keep things simple, but we could do better.
+    */
+
+   unsigned depth = res->base.target == PIPE_TEXTURE_3D ?
+                    res->base.depth0 : res->base.array_size;
+   bool entire_overwrite =
+          res->base.last_level == 0 &&
+          ptrans->box.width == res->base.width0 &&
+          ptrans->box.height == res->base.height0 &&
+          ptrans->box.depth == depth &&
+          ptrans->box.x == 0 &&
+          ptrans->box.y == 0 &&
+          ptrans->box.z == 0;
+
+   if (entire_overwrite)
+          ++res->full_updates;
+
+   return res->full_updates >= LAYOUT_CONVERT_THRESHOLD;
+}
+
 static void
 lima_transfer_unmap_inner(struct lima_context *ctx,
                           struct pipe_transfer *ptrans)
@@ -699,15 +734,36 @@ lima_transfer_unmap_inner(struct lima_context *ctx,
       pres = &res->base;
       if (trans->base.usage & PIPE_MAP_WRITE) {
          unsigned i;
-         for (i = 0; i < trans->base.box.depth; i++)
-            panfrost_store_tiled_image(
-               bo->map + res->levels[trans->base.level].offset + (i + trans->base.box.z) * res->levels[trans->base.level].layer_stride,
-               trans->staging + i * ptrans->stride * ptrans->box.height,
-               ptrans->box.x, ptrans->box.y,
-               ptrans->box.width, ptrans->box.height,
-               res->levels[ptrans->level].stride,
-               ptrans->stride,
-               pres->format);
+         if (lima_should_convert_linear(res, ptrans)) {
+            /* It's safe to re-use the same BO since tiled BO always has
+             * aligned dimensions */
+            for (i = 0; i < trans->base.box.depth; i++) {
+               util_copy_rect(bo->map + res->levels[0].offset +
+                                 (i + trans->base.box.z) * res->levels[0].stride,
+                              res->base.format,
+                              res->levels[0].stride,
+                              0, 0,
+                              ptrans->box.width,
+                              ptrans->box.height,
+                              trans->staging + i * ptrans->stride * ptrans->box.height,
+                              ptrans->stride,
+                              0, 0);
+            }
+            res->tiled = false;
+            res->modifier_constant = true;
+            /* Update texture descriptor */
+            ctx->dirty |= LIMA_CONTEXT_DIRTY_TEXTURES;
+         } else {
+            for (i = 0; i < trans->base.box.depth; i++)
+               panfrost_store_tiled_image(
+                  bo->map + res->levels[trans->base.level].offset + (i + trans->base.box.z) * res->levels[trans->base.level].layer_stride,
+                  trans->staging + i * ptrans->stride * ptrans->box.height,
+                  ptrans->box.x, ptrans->box.y,
+                  ptrans->box.width, ptrans->box.height,
+                  res->levels[ptrans->level].stride,
+                  ptrans->stride,
+                  pres->format);
+         }
       }
    }
 }
@@ -846,9 +902,11 @@ lima_resource_context_init(struct lima_context *ctx)
 
    ctx->base.blit = lima_blit;
 
-   ctx->base.transfer_map = lima_transfer_map;
+   ctx->base.buffer_map = lima_transfer_map;
+   ctx->base.texture_map = lima_transfer_map;
    ctx->base.transfer_flush_region = lima_transfer_flush_region;
-   ctx->base.transfer_unmap = lima_transfer_unmap;
+   ctx->base.buffer_unmap = lima_transfer_unmap;
+   ctx->base.texture_unmap = lima_transfer_unmap;
 
    ctx->base.flush_resource = lima_flush_resource;
 }

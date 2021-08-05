@@ -30,6 +30,13 @@
 
 #include "util/u_queue.h"
 
+#include "pipe/p_context.h"
+#include "pipe/p_state.h"
+
+#ifdef  __cplusplus
+extern "C" {
+#endif
+
 /* A trace mechanism (very) loosely inspired by the linux kernel tracepoint
  * mechanism, in that it allows for defining driver specific (or common)
  * tracepoints, which generate 'trace_$name()' functions that can be
@@ -121,6 +128,11 @@ struct u_trace_context {
     */
    struct util_queue queue;
 
+#ifdef HAVE_PERFETTO
+   /* node in global list of trace contexts. */
+   struct list_head node;
+#endif
+
    /* State to accumulate time across N chunks associated with a single
     * batch (u_trace).
     */
@@ -179,6 +191,15 @@ void u_trace_fini(struct u_trace *ut);
  */
 void u_trace_flush(struct u_trace *ut);
 
+#ifdef HAVE_PERFETTO
+extern int ut_perfetto_enabled;
+
+void u_trace_perfetto_start(void);
+void u_trace_perfetto_stop(void);
+#else
+#  define ut_perfetto_enabled 0
+#endif
+
 /*
  * TODO in some cases it is useful to have composite tracepoints like this,
  * to log more complex data structures.. but this is probably not where they
@@ -204,5 +225,9 @@ trace_framebuffer_state(struct u_trace *ut, const struct pipe_framebuffer_state 
       __trace_surface(ut, pfb->zsbuf);
    }
 }
+
+#ifdef  __cplusplus
+}
+#endif
 
 #endif  /* _U_TRACE_H */

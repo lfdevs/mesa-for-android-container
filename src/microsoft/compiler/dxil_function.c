@@ -48,7 +48,7 @@ static struct  predefined_func_descr predefined_funcs[] = {
 {"dx.op.unaryBits", "i", "iO", DXIL_ATTR_KIND_READ_NONE},
 {"dx.op.isSpecialFloat", "b", "iO", DXIL_ATTR_KIND_READ_NONE},
 {"dx.op.binary", "O", "iOO", DXIL_ATTR_KIND_READ_NONE},
-{"dx.op.bufferStore", "v", "i@iiiiiic", DXIL_ATTR_KIND_NONE},
+{"dx.op.bufferStore", "v", "i@iiOOOOc", DXIL_ATTR_KIND_NONE},
 {"dx.op.bufferLoad", "R", "i@ii", DXIL_ATTR_KIND_READ_ONLY},
 {"dx.op.attributeAtVertex", "O", "iiicc", DXIL_ATTR_KIND_READ_NONE},
 {"dx.op.sample", "R", "i@@ffffiiif", DXIL_ATTR_KIND_READ_ONLY},

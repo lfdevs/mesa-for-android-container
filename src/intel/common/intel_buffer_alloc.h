@@ -37,7 +37,7 @@ struct intel_buffer {
    void *driver_bo;
 };
 
-struct gen_mapped_pinned_buffer_alloc {
+struct intel_mapped_pinned_buffer_alloc {
    struct intel_buffer * (*alloc)(void *driver_ctx, uint32_t size);
    void (*free)(void *driver_ctx, struct intel_buffer *buffer);
 };

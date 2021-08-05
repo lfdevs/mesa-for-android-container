@@ -137,6 +137,6 @@ radeon_bo_is_referenced_by_any_cs(struct radeon_bo *bo)
 
 void radeon_drm_cs_sync_flush(struct radeon_cmdbuf *rcs);
 void radeon_drm_cs_init_functions(struct radeon_drm_winsys *ws);
-void radeon_drm_cs_emit_ioctl_oneshot(void *job, int thread_index);
+void radeon_drm_cs_emit_ioctl_oneshot(void *job, void *gdata, int thread_index);
 
 #endif

@@ -53,7 +53,7 @@ vlVaHandleVAEncPictureParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *cont
    context->coded_buf = coded_buf;
 
    _mesa_hash_table_insert(context->desc.h264enc.frame_idx,
-		       UINT_TO_PTR(h264->CurrPic.picture_id),
+		       UINT_TO_PTR(h264->CurrPic.picture_id + 1),
 		       UINT_TO_PTR(h264->frame_num));
 
    if (h264->pic_fields.bits.idr_pic_flag == 1)
@@ -84,12 +84,12 @@ vlVaHandleVAEncSliceParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *contex
       if (h264->RefPicList0[i].picture_id != VA_INVALID_ID) {
          if (context->desc.h264enc.ref_idx_l0 == VA_INVALID_ID)
             context->desc.h264enc.ref_idx_l0 = PTR_TO_UINT(util_hash_table_get(context->desc.h264enc.frame_idx,
-									       UINT_TO_PTR(h264->RefPicList0[i].picture_id)));
+									       UINT_TO_PTR(h264->RefPicList0[i].picture_id + 1)));
       }
       if (h264->RefPicList1[i].picture_id != VA_INVALID_ID && h264->slice_type == 1) {
          if (context->desc.h264enc.ref_idx_l1 == VA_INVALID_ID)
             context->desc.h264enc.ref_idx_l1 = PTR_TO_UINT(util_hash_table_get(context->desc.h264enc.frame_idx,
-									       UINT_TO_PTR(h264->RefPicList1[i].picture_id)));
+									       UINT_TO_PTR(h264->RefPicList1[i].picture_id + 1)));
       }
    }
 

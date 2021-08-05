@@ -86,7 +86,7 @@ void trace_dump_shader_buffer(const struct pipe_shader_buffer *buffer);
 
 void trace_dump_draw_info(const struct pipe_draw_info *state);
 
-void trace_dump_draw_start_count(const struct pipe_draw_start_count *state);
+void trace_dump_draw_start_count(const struct pipe_draw_start_count_bias *state);
 
 void trace_dump_draw_indirect_info(const struct pipe_draw_indirect_info *state);
 
@@ -99,4 +99,5 @@ void trace_dump_grid_info(const struct pipe_grid_info *state);
 
 void trace_dump_image_view(const struct pipe_image_view *view);
 
+void trace_dump_memory_info(const struct pipe_memory_info *state);
 #endif /* TR_STATE_H */

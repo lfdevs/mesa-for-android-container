@@ -72,10 +72,10 @@
 #include "brw_defines.h"
 #include "brw_batch.h"
 
-#include "perf/gen_perf.h"
-#include "perf/gen_perf_regs.h"
-#include "perf/gen_perf_mdapi.h"
-#include "perf/gen_perf_query.h"
+#include "perf/intel_perf.h"
+#include "perf/intel_perf_regs.h"
+#include "perf/intel_perf_mdapi.h"
+#include "perf/intel_perf_query.h"
 
 #define FILE_DEBUG_FLAG DEBUG_PERFMON
 
@@ -89,7 +89,7 @@
 
 struct brw_perf_query_object {
    struct gl_perf_query_object base;
-   struct gen_perf_query_object *query;
+   struct intel_perf_query_object *query;
 };
 
 /** Downcasting convenience macro. */
@@ -114,23 +114,23 @@ static void
 dump_perf_query_callback(void *query_void, void *brw_void)
 {
    struct brw_context *ctx = brw_void;
-   struct gen_perf_context *perf_ctx = ctx->perf_ctx;
+   struct intel_perf_context *perf_ctx = ctx->perf_ctx;
    struct gl_perf_query_object *o = query_void;
    struct brw_perf_query_object * brw_query = brw_perf_query(o);
-   struct gen_perf_query_object *obj = brw_query->query;
+   struct intel_perf_query_object *obj = brw_query->query;
 
    DBG("%4d: %-6s %-8s ",
        o->Id,
        o->Used ? "Dirty," : "New,",
        o->Active ? "Active," : (o->Ready ? "Ready," : "Pending,"));
-   gen_perf_dump_query(perf_ctx, obj, &ctx->batch);
+   intel_perf_dump_query(perf_ctx, obj, &ctx->batch);
 }
 
 static void
 dump_perf_queries(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
-   gen_perf_dump_query_count(brw->perf_ctx);
+   intel_perf_dump_query_count(brw->perf_ctx);
    _mesa_HashWalk(ctx->PerfQuery.Objects, dump_perf_query_callback, brw);
 }
 
@@ -146,40 +146,40 @@ brw_get_perf_query_info(struct gl_context *ctx,
                         GLuint *n_active)
 {
    struct brw_context *brw = brw_context(ctx);
-   struct gen_perf_context *perf_ctx = brw->perf_ctx;
-   struct gen_perf_config *perf_cfg = gen_perf_config(perf_ctx);
-   const struct gen_perf_query_info *query = &perf_cfg->queries[query_index];
+   struct intel_perf_context *perf_ctx = brw->perf_ctx;
+   struct intel_perf_config *perf_cfg = intel_perf_config(perf_ctx);
+   const struct intel_perf_query_info *query = &perf_cfg->queries[query_index];
 
    *name = query->name;
    *data_size = query->data_size;
    *n_counters = query->n_counters;
-   *n_active = gen_perf_active_queries(perf_ctx, query);
+   *n_active = intel_perf_active_queries(perf_ctx, query);
 }
 
 static GLuint
-intel_counter_type_enum_to_gl_type(enum gen_perf_counter_type type)
+intel_counter_type_enum_to_gl_type(enum intel_perf_counter_type type)
 {
    switch (type) {
-   case GEN_PERF_COUNTER_TYPE_EVENT: return GL_PERFQUERY_COUNTER_EVENT_INTEL;
-   case GEN_PERF_COUNTER_TYPE_DURATION_NORM: return GL_PERFQUERY_COUNTER_DURATION_NORM_INTEL;
-   case GEN_PERF_COUNTER_TYPE_DURATION_RAW: return GL_PERFQUERY_COUNTER_DURATION_RAW_INTEL;
-   case GEN_PERF_COUNTER_TYPE_THROUGHPUT: return GL_PERFQUERY_COUNTER_THROUGHPUT_INTEL;
-   case GEN_PERF_COUNTER_TYPE_RAW: return GL_PERFQUERY_COUNTER_RAW_INTEL;
-   case GEN_PERF_COUNTER_TYPE_TIMESTAMP: return GL_PERFQUERY_COUNTER_TIMESTAMP_INTEL;
+   case INTEL_PERF_COUNTER_TYPE_EVENT: return GL_PERFQUERY_COUNTER_EVENT_INTEL;
+   case INTEL_PERF_COUNTER_TYPE_DURATION_NORM: return GL_PERFQUERY_COUNTER_DURATION_NORM_INTEL;
+   case INTEL_PERF_COUNTER_TYPE_DURATION_RAW: return GL_PERFQUERY_COUNTER_DURATION_RAW_INTEL;
+   case INTEL_PERF_COUNTER_TYPE_THROUGHPUT: return GL_PERFQUERY_COUNTER_THROUGHPUT_INTEL;
+   case INTEL_PERF_COUNTER_TYPE_RAW: return GL_PERFQUERY_COUNTER_RAW_INTEL;
+   case INTEL_PERF_COUNTER_TYPE_TIMESTAMP: return GL_PERFQUERY_COUNTER_TIMESTAMP_INTEL;
    default:
       unreachable("Unknown counter type");
    }
 }
 
 static GLuint
-gen_counter_data_type_to_gl_type(enum gen_perf_counter_data_type type)
+intel_counter_data_type_to_gl_type(enum intel_perf_counter_data_type type)
 {
    switch (type) {
-   case GEN_PERF_COUNTER_DATA_TYPE_BOOL32: return GL_PERFQUERY_COUNTER_DATA_BOOL32_INTEL;
-   case GEN_PERF_COUNTER_DATA_TYPE_UINT32: return GL_PERFQUERY_COUNTER_DATA_UINT32_INTEL;
-   case GEN_PERF_COUNTER_DATA_TYPE_UINT64: return GL_PERFQUERY_COUNTER_DATA_UINT64_INTEL;
-   case GEN_PERF_COUNTER_DATA_TYPE_FLOAT: return GL_PERFQUERY_COUNTER_DATA_FLOAT_INTEL;
-   case GEN_PERF_COUNTER_DATA_TYPE_DOUBLE: return GL_PERFQUERY_COUNTER_DATA_DOUBLE_INTEL;
+   case INTEL_PERF_COUNTER_DATA_TYPE_BOOL32: return GL_PERFQUERY_COUNTER_DATA_BOOL32_INTEL;
+   case INTEL_PERF_COUNTER_DATA_TYPE_UINT32: return GL_PERFQUERY_COUNTER_DATA_UINT32_INTEL;
+   case INTEL_PERF_COUNTER_DATA_TYPE_UINT64: return GL_PERFQUERY_COUNTER_DATA_UINT64_INTEL;
+   case INTEL_PERF_COUNTER_DATA_TYPE_FLOAT: return GL_PERFQUERY_COUNTER_DATA_FLOAT_INTEL;
+   case INTEL_PERF_COUNTER_DATA_TYPE_DOUBLE: return GL_PERFQUERY_COUNTER_DATA_DOUBLE_INTEL;
    default:
       unreachable("Unknown counter data type");
    }
@@ -201,18 +201,18 @@ brw_get_perf_counter_info(struct gl_context *ctx,
                           GLuint64 *raw_max)
 {
    struct brw_context *brw = brw_context(ctx);
-   struct gen_perf_config *perf_cfg = gen_perf_config(brw->perf_ctx);
-   const struct gen_perf_query_info *query =
+   struct intel_perf_config *perf_cfg = intel_perf_config(brw->perf_ctx);
+   const struct intel_perf_query_info *query =
       &perf_cfg->queries[query_index];
-   const struct gen_perf_query_counter *counter =
+   const struct intel_perf_query_counter *counter =
       &query->counters[counter_index];
 
    *name = counter->name;
    *desc = counter->desc;
    *offset = counter->offset;
-   *data_size = gen_perf_query_counter_get_size(counter);
+   *data_size = intel_perf_query_counter_get_size(counter);
    *type_enum = intel_counter_type_enum_to_gl_type(counter->type);
-   *data_type_enum = gen_counter_data_type_to_gl_type(counter->data_type);
+   *data_type_enum = intel_counter_data_type_to_gl_type(counter->data_type);
    *raw_max = counter->raw_max;
 }
 
@@ -233,8 +233,8 @@ brw_begin_perf_query(struct gl_context *ctx,
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_perf_query_object *brw_query = brw_perf_query(o);
-   struct gen_perf_query_object *obj = brw_query->query;
-   struct gen_perf_context *perf_ctx = brw->perf_ctx;
+   struct intel_perf_query_object *obj = brw_query->query;
+   struct intel_perf_context *perf_ctx = brw->perf_ctx;
 
    /* We can assume the frontend hides mistaken attempts to Begin a
     * query object multiple times before its End. Similarly if an
@@ -247,7 +247,7 @@ brw_begin_perf_query(struct gl_context *ctx,
 
    DBG("Begin(%d)\n", o->Id);
 
-   bool ret = gen_perf_begin_query(perf_ctx, obj);
+   bool ret = intel_perf_begin_query(perf_ctx, obj);
 
    if (INTEL_DEBUG & DEBUG_PERFMON)
       dump_perf_queries(brw);
@@ -264,11 +264,11 @@ brw_end_perf_query(struct gl_context *ctx,
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_perf_query_object *brw_query = brw_perf_query(o);
-   struct gen_perf_query_object *obj = brw_query->query;
-   struct gen_perf_context *perf_ctx = brw->perf_ctx;
+   struct intel_perf_query_object *obj = brw_query->query;
+   struct intel_perf_context *perf_ctx = brw->perf_ctx;
 
    DBG("End(%d)\n", o->Id);
-   gen_perf_end_query(perf_ctx, obj);
+   intel_perf_end_query(perf_ctx, obj);
 }
 
 static void
@@ -276,11 +276,11 @@ brw_wait_perf_query(struct gl_context *ctx, struct gl_perf_query_object *o)
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_perf_query_object *brw_query = brw_perf_query(o);
-   struct gen_perf_query_object *obj = brw_query->query;
+   struct intel_perf_query_object *obj = brw_query->query;
 
    assert(!o->Ready);
 
-   gen_perf_wait_query(brw->perf_ctx, obj, &brw->batch);
+   intel_perf_wait_query(brw->perf_ctx, obj, &brw->batch);
 }
 
 static bool
@@ -289,12 +289,12 @@ brw_is_perf_query_ready(struct gl_context *ctx,
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_perf_query_object *brw_query = brw_perf_query(o);
-   struct gen_perf_query_object *obj = brw_query->query;
+   struct intel_perf_query_object *obj = brw_query->query;
 
    if (o->Ready)
       return true;
 
-   return gen_perf_is_query_ready(brw->perf_ctx, obj, &brw->batch);
+   return intel_perf_is_query_ready(brw->perf_ctx, obj, &brw->batch);
 }
 
 /**
@@ -309,7 +309,7 @@ brw_get_perf_query_data(struct gl_context *ctx,
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_perf_query_object *brw_query = brw_perf_query(o);
-   struct gen_perf_query_object *obj = brw_query->query;
+   struct intel_perf_query_object *obj = brw_query->query;
 
    assert(brw_is_perf_query_ready(ctx, o));
 
@@ -323,7 +323,7 @@ brw_get_perf_query_data(struct gl_context *ctx,
     */
    assert(o->Ready);
 
-   gen_perf_get_query_data(brw->perf_ctx, obj, &brw->batch,
+   intel_perf_get_query_data(brw->perf_ctx, obj, &brw->batch,
                            data_size, data, bytes_written);
 
    return true;
@@ -333,14 +333,14 @@ static struct gl_perf_query_object *
 brw_new_perf_query_object(struct gl_context *ctx, unsigned query_index)
 {
    struct brw_context *brw = brw_context(ctx);
-   struct gen_perf_context *perf_ctx = brw->perf_ctx;
-   struct gen_perf_query_object * obj = gen_perf_new_query(perf_ctx, query_index);
+   struct intel_perf_context *perf_ctx = brw->perf_ctx;
+   struct intel_perf_query_object * obj = intel_perf_new_query(perf_ctx, query_index);
    if (unlikely(!obj))
       return NULL;
 
    struct brw_perf_query_object *brw_query = calloc(1, sizeof(struct brw_perf_query_object));
    if (unlikely(!brw_query)) {
-      gen_perf_delete_query(perf_ctx, obj);
+      intel_perf_delete_query(perf_ctx, obj);
       return NULL;
    }
 
@@ -357,8 +357,8 @@ brw_delete_perf_query(struct gl_context *ctx,
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_perf_query_object *brw_query = brw_perf_query(o);
-   struct gen_perf_query_object *obj = brw_query->query;
-   struct gen_perf_context *perf_ctx = brw->perf_ctx;
+   struct intel_perf_query_object *obj = brw_query->query;
+   struct intel_perf_context *perf_ctx = brw->perf_ctx;
 
    /* We can assume that the frontend waits for a query to complete
     * before ever calling into here, so we don't have to worry about
@@ -369,16 +369,16 @@ brw_delete_perf_query(struct gl_context *ctx,
 
    DBG("Delete(%d)\n", o->Id);
 
-   gen_perf_delete_query(perf_ctx, obj);
+   intel_perf_delete_query(perf_ctx, obj);
    free(brw_query);
 }
 
 /******************************************************************************/
-/* gen_device_info will have incorrect default topology values for unsupported kernels.
- * verify kernel support to ensure OA metrics are accurate.
+/* intel_device_info will have incorrect default topology values for unsupported
+ * kernels. Verify kernel support to ensure OA metrics are accurate.
  */
 static bool
-oa_metrics_kernel_support(int fd, const struct gen_device_info *devinfo)
+oa_metrics_kernel_support(int fd, const struct intel_device_info *devinfo)
 {
    if (devinfo->ver >= 10) {
       /* topology uAPI required for CNL+ (kernel 4.17+) make a call to the api
@@ -478,10 +478,10 @@ static unsigned
 brw_init_perf_query_info(struct gl_context *ctx)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
-   struct gen_perf_context *perf_ctx = brw->perf_ctx;
-   struct gen_perf_config *perf_cfg = gen_perf_config(perf_ctx);
+   struct intel_perf_context *perf_ctx = brw->perf_ctx;
+   struct intel_perf_config *perf_cfg = intel_perf_config(perf_ctx);
 
    if (perf_cfg)
       return perf_cfg->n_queries;
@@ -489,7 +489,7 @@ brw_init_perf_query_info(struct gl_context *ctx)
    if (!oa_metrics_kernel_support(brw->screen->fd, devinfo))
       return 0;
 
-   perf_cfg = gen_perf_new(brw->mem_ctx);
+   perf_cfg = intel_perf_new(brw->mem_ctx);
 
    perf_cfg->vtbl.bo_alloc = brw_oa_bo_alloc;
    perf_cfg->vtbl.bo_unreference = (bo_unreference_t)brw_bo_unreference;
@@ -506,10 +506,11 @@ brw_init_perf_query_info(struct gl_context *ctx)
    perf_cfg->vtbl.bo_wait_rendering = (bo_wait_rendering_t)brw_bo_wait_rendering;
    perf_cfg->vtbl.bo_busy = (bo_busy_t)brw_bo_busy;
 
-   gen_perf_init_context(perf_ctx, perf_cfg, brw->mem_ctx, brw, brw->bufmgr,
+   intel_perf_init_metrics(perf_cfg, devinfo, brw->screen->fd,
+                           true /* pipeline stats */,
+                           true /* register snapshots */);
+   intel_perf_init_context(perf_ctx, perf_cfg, brw->mem_ctx, brw, brw->bufmgr,
                          devinfo, brw->hw_ctx, brw->screen->fd);
-   gen_perf_init_metrics(perf_cfg, devinfo, brw->screen->fd,
-                         true /* pipeline stats */);
 
    return perf_cfg->n_queries;
 }

@@ -115,13 +115,13 @@ Programming Hints
 -  Use the built-in library functions whenever possible. For example,
    instead of writing this:
 
-   ::
+   .. code-block:: glsl
 
       float x = 1.0 / sqrt(y);
 
    Write this:
 
-   ::
+   .. code-block:: glsl
 
       float x = inversesqrt(y);
 
@@ -143,7 +143,7 @@ src/compiler/glsl/glsl_compiler
 Here's an example of using the compiler to compile a vertex shader and
 emit GL_ARB_vertex_program-style instructions:
 
-::
+.. code-block:: console
 
        src/compiler/glsl/glsl_compiler --version XXX --dump-ast myshader.vert
 

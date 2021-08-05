@@ -50,26 +50,30 @@ enum pipe_error
 util_translate_prim_restart_ib(struct pipe_context *context,
                                const struct pipe_draw_info *info,
                                const struct pipe_draw_indirect_info *indirect,
-                               const struct pipe_draw_start_count *draw,
+                               const struct pipe_draw_start_count_bias *draw,
                                struct pipe_resource **dst_buffer);
+
+struct pipe_draw_start_count_bias *
+util_prim_restart_convert_to_direct(const void *index_map,
+                                    const struct pipe_draw_info *info,
+                                    const struct pipe_draw_start_count_bias *draw,
+                                    unsigned *num_draws,
+                                    unsigned *min_index,
+                                    unsigned *max_index,
+                                    unsigned *total_index_count);
 
 enum pipe_error
 util_draw_vbo_without_prim_restart(struct pipe_context *context,
                                    const struct pipe_draw_info *info,
+                                   unsigned drawid_offset,
                                    const struct pipe_draw_indirect_info *indirect,
-                                   const struct pipe_draw_start_count *draw);
+                                   const struct pipe_draw_start_count_bias *draw);
 
 static inline unsigned
 util_prim_restart_index_from_size(unsigned index_size)
 {
-   if (index_size == 1)
-      return 0xff;
-   if (index_size == 2)
-      return 0xffff;
-   if (index_size == 4)
-      return 0xffffffff;
-   unreachable("unknown index size passed");
-   return 0;
+   /* 1 -> 0xff, 2 -> 0xffff, 4 -> 0xffffffff */
+   return 0xffffffffu >> 8 * (4 - index_size);
 }
 
 #ifdef __cplusplus

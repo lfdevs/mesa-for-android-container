@@ -24,6 +24,8 @@ private:
 protected:
    void handlePFETCH(Instruction *);
    void handleLOAD(Instruction *);
+   void handleQUADON(Instruction *);
+   void handleQUADPOP(Instruction *);
 };
 
 } // namespace nv50_ir

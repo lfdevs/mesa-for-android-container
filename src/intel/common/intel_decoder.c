@@ -507,16 +507,6 @@ character_data(void *data, const XML_Char *s, int len)
 {
 }
 
-static int
-devinfo_to_gen(const struct gen_device_info *devinfo, bool x10)
-{
-   if (devinfo->is_baytrail || devinfo->is_haswell) {
-      return devinfo->ver * 10 + 5;
-   }
-
-   return x10 ? devinfo->ver * 10 : devinfo->ver;
-}
-
 static uint32_t zlib_inflate(const void *compressed_data,
                              uint32_t compressed_len,
                              void **out_ptr)
@@ -595,17 +585,17 @@ intel_spec_init(void)
 }
 
 struct intel_spec *
-intel_spec_load(const struct gen_device_info *devinfo)
+intel_spec_load(const struct intel_device_info *devinfo)
 {
    struct parser_context ctx;
    void *buf;
    uint8_t *text_data = NULL;
    uint32_t text_offset = 0, text_length = 0;
    ASSERTED uint32_t total_length;
-   uint32_t gen_10 = devinfo_to_gen(devinfo, true);
+   uint32_t ver_10 = devinfo->verx10;
 
    for (int i = 0; i < ARRAY_SIZE(genxml_files_table); i++) {
-      if (genxml_files_table[i].gen_10 == gen_10) {
+      if (genxml_files_table[i].ver_10 == ver_10) {
          text_offset = genxml_files_table[i].offset;
          text_length = genxml_files_table[i].length;
          break;
@@ -613,7 +603,7 @@ intel_spec_load(const struct gen_device_info *devinfo)
    }
 
    if (text_length == 0) {
-      fprintf(stderr, "unable to find gen (%u) data\n", gen_10);
+      fprintf(stderr, "unable to find gen (%u) data\n", ver_10);
       return NULL;
    }
 
@@ -735,14 +725,14 @@ intel_spec_load_filename(const char *filename)
 }
 
 struct intel_spec *
-intel_spec_load_from_path(const struct gen_device_info *devinfo,
+intel_spec_load_from_path(const struct intel_device_info *devinfo,
                           const char *path)
 {
    size_t filename_len = strlen(path) + 20;
    char *filename = malloc(filename_len);
 
    ASSERTED size_t len = snprintf(filename, filename_len, "%s/gen%i.xml",
-                  path, devinfo_to_gen(devinfo, false));
+                  path, devinfo->ver);
    assert(len < filename_len);
 
    struct intel_spec *spec = intel_spec_load_filename(filename);

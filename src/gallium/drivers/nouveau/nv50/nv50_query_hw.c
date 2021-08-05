@@ -146,8 +146,7 @@ nv50_hw_begin_query(struct nv50_context *nv50, struct nv50_query *q)
       hq->data[4] = hq->sequence + 1; /* for comparison COND_MODE */
       hq->data[5] = 0;
    }
-   if (!hq->is64bit)
-      hq->data[0] = hq->sequence++; /* the previously used one */
+   hq->sequence++;
 
    switch (q->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
@@ -164,24 +163,25 @@ nv50_hw_begin_query(struct nv50_context *nv50, struct nv50_query *q)
       }
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:
-      nv50_hw_query_get(push, q, 0x10, 0x06805002);
+      nv50_hw_query_get(push, q, 0x20, 0x06805002);
       break;
    case PIPE_QUERY_PRIMITIVES_EMITTED:
-      nv50_hw_query_get(push, q, 0x10, 0x05805002);
+      nv50_hw_query_get(push, q, 0x20, 0x05805002);
       break;
    case PIPE_QUERY_SO_STATISTICS:
-      nv50_hw_query_get(push, q, 0x20, 0x05805002);
-      nv50_hw_query_get(push, q, 0x30, 0x06805002);
+      nv50_hw_query_get(push, q, 0x30, 0x05805002);
+      nv50_hw_query_get(push, q, 0x40, 0x06805002);
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS:
-      nv50_hw_query_get(push, q, 0x80, 0x00801002); /* VFETCH, VERTICES */
-      nv50_hw_query_get(push, q, 0x90, 0x01801002); /* VFETCH, PRIMS */
-      nv50_hw_query_get(push, q, 0xa0, 0x02802002); /* VP, LAUNCHES */
-      nv50_hw_query_get(push, q, 0xb0, 0x03806002); /* GP, LAUNCHES */
-      nv50_hw_query_get(push, q, 0xc0, 0x04806002); /* GP, PRIMS_OUT */
-      nv50_hw_query_get(push, q, 0xd0, 0x07804002); /* RAST, PRIMS_IN */
-      nv50_hw_query_get(push, q, 0xe0, 0x08804002); /* RAST, PRIMS_OUT */
-      nv50_hw_query_get(push, q, 0xf0, 0x0980a002); /* ROP, PIXELS */
+      nv50_hw_query_get(push, q, 0x90, 0x00801002); /* VFETCH, VERTICES */
+      nv50_hw_query_get(push, q, 0xa0, 0x01801002); /* VFETCH, PRIMS */
+      nv50_hw_query_get(push, q, 0xb0, 0x02802002); /* VP, LAUNCHES */
+      nv50_hw_query_get(push, q, 0xc0, 0x03806002); /* GP, LAUNCHES */
+      nv50_hw_query_get(push, q, 0xd0, 0x04806002); /* GP, PRIMS_OUT */
+      nv50_hw_query_get(push, q, 0xe0, 0x07804002); /* RAST, PRIMS_IN */
+      nv50_hw_query_get(push, q, 0xf0, 0x08804002); /* RAST, PRIMS_OUT */
+      nv50_hw_query_get(push, q, 0x100, 0x0980a002); /* ROP, PIXELS */
+      ((uint64_t *)hq->data)[2 * 0x11] = nv50->compute_invocations;
       break;
    case PIPE_QUERY_TIME_ELAPSED:
       nv50_hw_query_get(push, q, 0x10, 0x00005002);
@@ -219,14 +219,17 @@ nv50_hw_end_query(struct nv50_context *nv50, struct nv50_query *q)
       }
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:
-      nv50_hw_query_get(push, q, 0, 0x06805002);
+      nv50_hw_query_get(push, q, 0x10, 0x06805002);
+      nv50_hw_query_get(push, q, 0x00, 0x00005010);
       break;
    case PIPE_QUERY_PRIMITIVES_EMITTED:
-      nv50_hw_query_get(push, q, 0, 0x05805002);
+      nv50_hw_query_get(push, q, 0x10, 0x05805002);
+      nv50_hw_query_get(push, q, 0x00, 0x00005010);
       break;
    case PIPE_QUERY_SO_STATISTICS:
-      nv50_hw_query_get(push, q, 0x00, 0x05805002);
-      nv50_hw_query_get(push, q, 0x10, 0x06805002);
+      nv50_hw_query_get(push, q, 0x10, 0x05805002);
+      nv50_hw_query_get(push, q, 0x20, 0x06805002);
+      nv50_hw_query_get(push, q, 0x00, 0x00005010);
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS:
       nv50_hw_query_get(push, q, 0x00, 0x00801002); /* VFETCH, VERTICES */
@@ -237,6 +240,7 @@ nv50_hw_end_query(struct nv50_context *nv50, struct nv50_query *q)
       nv50_hw_query_get(push, q, 0x50, 0x07804002); /* RAST, PRIMS_IN */
       nv50_hw_query_get(push, q, 0x60, 0x08804002); /* RAST, PRIMS_OUT */
       nv50_hw_query_get(push, q, 0x70, 0x0980a002); /* ROP, PIXELS */
+      ((uint64_t *)hq->data)[2 * 0x8] = nv50->compute_invocations;
       break;
    case PIPE_QUERY_TIMESTAMP:
       hq->sequence++;
@@ -308,15 +312,16 @@ nv50_hw_get_query_result(struct nv50_context *nv50, struct nv50_query *q,
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED: /* u64 count, u64 time */
    case PIPE_QUERY_PRIMITIVES_EMITTED: /* u64 count, u64 time */
-      res64[0] = data64[0] - data64[2];
+      res64[0] = data64[2] - data64[4];
       break;
    case PIPE_QUERY_SO_STATISTICS:
-      res64[0] = data64[0] - data64[4];
-      res64[1] = data64[2] - data64[6];
+      res64[0] = data64[2] - data64[6];
+      res64[1] = data64[4] - data64[8];
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS:
       for (i = 0; i < 8; ++i)
-         res64[i] = data64[i * 2] - data64[16 + i * 2];
+         res64[i] = data64[i * 2] - data64[18 + i * 2];
+      result->pipeline_statistics.cs_invocations = data64[i * 2] - data64[18 + i * 2];
       break;
    case PIPE_QUERY_TIMESTAMP:
       res64[0] = data64[1];
@@ -351,6 +356,7 @@ nv50_hw_create_query(struct nv50_context *nv50, unsigned type, unsigned index)
 {
    struct nv50_hw_query *hq;
    struct nv50_query *q;
+   unsigned space = NV50_HW_QUERY_ALLOC_SPACE;
 
    hq = nv50_hw_sm_create_query(nv50, type);
    if (hq) {
@@ -380,15 +386,23 @@ nv50_hw_create_query(struct nv50_context *nv50, unsigned type, unsigned index)
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:
    case PIPE_QUERY_PRIMITIVES_EMITTED:
+      space = 32 + 16; /* separate fence value written here */
+      break;
    case PIPE_QUERY_SO_STATISTICS:
+      space = 64 + 16; /* separate fence value written here */
+      break;
    case PIPE_QUERY_PIPELINE_STATISTICS:
       hq->is64bit = true;
+      space = 9 * 2 * 16; /* 9 values, start/end, 16-bytes each */
       break;
    case PIPE_QUERY_TIME_ELAPSED:
    case PIPE_QUERY_TIMESTAMP:
    case PIPE_QUERY_TIMESTAMP_DISJOINT:
    case PIPE_QUERY_GPU_FINISHED:
+      space = 32;
+      break;
    case NVA0_HW_QUERY_STREAM_OUTPUT_BUFFER_OFFSET:
+      space = 16;
       break;
    default:
       debug_printf("invalid query type: %u\n", type);
@@ -396,7 +410,7 @@ nv50_hw_create_query(struct nv50_context *nv50, unsigned type, unsigned index)
       return NULL;
    }
 
-   if (!nv50_hw_query_allocate(nv50, q, NV50_HW_QUERY_ALLOC_SPACE)) {
+   if (!nv50_hw_query_allocate(nv50, q, space)) {
       FREE(hq);
       return NULL;
    }
@@ -405,7 +419,9 @@ nv50_hw_create_query(struct nv50_context *nv50, unsigned type, unsigned index)
       /* we advance before query_begin ! */
       hq->offset -= hq->rotate;
       hq->data -= hq->rotate / sizeof(*hq->data);
-   }
+   } else
+   if (!hq->is64bit)
+      hq->data[0] = 0; /* initialize sequence */
 
    return q;
 }
@@ -450,6 +466,8 @@ nv84_hw_query_fifo_wait(struct nouveau_pushbuf *push, struct nv50_query *q)
 {
    struct nv50_hw_query *hq = nv50_hw_query(q);
    unsigned offset = hq->offset;
+
+   assert(!hq->is64bit);
 
    PUSH_SPACE(push, 5);
    PUSH_REFN (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);

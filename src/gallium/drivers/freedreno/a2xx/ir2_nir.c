@@ -47,6 +47,8 @@ static const nir_shader_compiler_options options = {
    .lower_fdph = true,
    .has_fsub = true,
    .has_isub = true,
+   .lower_insert_byte = true,
+   .lower_insert_word = true,
 };
 
 const nir_shader_compiler_options *

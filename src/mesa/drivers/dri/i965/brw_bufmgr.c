@@ -46,9 +46,9 @@
 
 #include "errno.h"
 #include "common/intel_clflush.h"
-#include "dev/gen_debug.h"
+#include "dev/intel_debug.h"
 #include "common/intel_gem.h"
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 #include "libdrm_macros.h"
 #include "main/macros.h"
 #include "util/macros.h"
@@ -95,7 +95,13 @@
 #define VG_DEFINED(ptr, size) VG(VALGRIND_MAKE_MEM_DEFINED(ptr, size))
 #define VG_NOACCESS(ptr, size) VG(VALGRIND_MAKE_MEM_NOACCESS(ptr, size))
 
+/* On FreeBSD PAGE_SIZE is already defined in
+ * /usr/include/machine/param.h that is indirectly
+ * included here.
+ */
+#ifndef PAGE_SIZE
 #define PAGE_SIZE 4096
+#endif
 
 #define FILE_DEBUG_FLAG DEBUG_BUFMGR
 
@@ -1112,7 +1118,7 @@ brw_bo_map_cpu(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
        * LLC entirely requiring us to keep dirty pixels for the scanout
        * out of any cache.)
        */
-      gen_invalidate_range(bo->map_cpu, bo->size);
+      intel_invalidate_range(bo->map_cpu, bo->size);
    }
 
    return bo->map_cpu;
@@ -1836,7 +1842,7 @@ brw_bufmgr_ref(struct brw_bufmgr *bufmgr)
  * \param fd File descriptor of the opened DRM device.
  */
 static struct brw_bufmgr *
-brw_bufmgr_create(struct gen_device_info *devinfo, int fd, bool bo_reuse)
+brw_bufmgr_create(struct intel_device_info *devinfo, int fd, bool bo_reuse)
 {
    struct brw_bufmgr *bufmgr;
 
@@ -1922,7 +1928,7 @@ brw_bufmgr_create(struct gen_device_info *devinfo, int fd, bool bo_reuse)
 }
 
 struct brw_bufmgr *
-brw_bufmgr_get_for_fd(struct gen_device_info *devinfo, int fd, bool bo_reuse)
+brw_bufmgr_get_for_fd(struct intel_device_info *devinfo, int fd, bool bo_reuse)
 {
    struct stat st;
 

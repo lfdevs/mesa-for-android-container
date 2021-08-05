@@ -40,6 +40,7 @@ vk_extensions_gen = files('vk_extensions_gen.py')
 vk_icd_gen = files('vk_icd_gen.py')
 
 files_vulkan_util = files(
+  'vk_alloc.c',
   'vk_alloc.h',
   'vk_cmd_copy.c',
   'vk_debug_report.c',

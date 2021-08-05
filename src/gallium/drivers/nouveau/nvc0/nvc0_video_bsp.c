@@ -78,7 +78,7 @@ nvc0_decoder_bsp_next(struct nouveau_vp3_decoder *dec,
       ret = nouveau_bo_new(dec->client->device, NOUVEAU_BO_VRAM, 0, bsp_size, &cfg, &tmp_bo);
       if (ret) {
          debug_printf("reallocating bsp %u -> %u failed with %i\n",
-                      bsp_bo ? (unsigned)bsp_bo->size : 0, bsp_size, ret);
+                      (unsigned)bsp_bo->size, bsp_size, ret);
          return -1;
       }
 

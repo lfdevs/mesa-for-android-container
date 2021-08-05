@@ -36,7 +36,6 @@
 #include "v3d_screen.h"
 #include "v3d_context.h"
 #include "v3d_resource.h"
-#include "v3d_tiling.h"
 #include "broadcom/cle/v3d_packet_v33_pack.h"
 
 static void
@@ -59,12 +58,12 @@ v3d_debug_resource_layout(struct v3d_resource *rsc, const char *caller)
         }
 
         static const char *const tiling_descriptions[] = {
-                [VC5_TILING_RASTER] = "R",
-                [VC5_TILING_LINEARTILE] = "LT",
-                [VC5_TILING_UBLINEAR_1_COLUMN] = "UB1",
-                [VC5_TILING_UBLINEAR_2_COLUMN] = "UB2",
-                [VC5_TILING_UIF_NO_XOR] = "UIF",
-                [VC5_TILING_UIF_XOR] = "UIF^",
+                [V3D_TILING_RASTER] = "R",
+                [V3D_TILING_LINEARTILE] = "LT",
+                [V3D_TILING_UBLINEAR_1_COLUMN] = "UB1",
+                [V3D_TILING_UBLINEAR_2_COLUMN] = "UB2",
+                [V3D_TILING_UIF_NO_XOR] = "UIF",
+                [V3D_TILING_UIF_XOR] = "UIF^",
         };
 
         for (int i = 0; i <= prsc->last_level; i++) {
@@ -184,9 +183,9 @@ v3d_map_usage_prep(struct pipe_context *pctx,
                          * or uniforms.
                          */
                         if (prsc->bind & PIPE_BIND_VERTEX_BUFFER)
-                                v3d->dirty |= VC5_DIRTY_VTXBUF;
+                                v3d->dirty |= V3D_DIRTY_VTXBUF;
                         if (prsc->bind & PIPE_BIND_CONSTANT_BUFFER)
-                                v3d->dirty |= VC5_DIRTY_CONSTBUF;
+                                v3d->dirty |= V3D_DIRTY_CONSTBUF;
                         if (prsc->bind & PIPE_BIND_SAMPLER_VIEW)
                                 rebind_sampler_views(v3d, rsc);
                 } else {
@@ -421,8 +420,8 @@ v3d_resource_get_handle(struct pipe_screen *pscreen,
                 /* A shared tiled buffer should always be allocated as UIF,
                  * not UBLINEAR or LT.
                  */
-                assert(rsc->slices[0].tiling == VC5_TILING_UIF_XOR ||
-                       rsc->slices[0].tiling == VC5_TILING_UIF_NO_XOR);
+                assert(rsc->slices[0].tiling == V3D_TILING_UIF_XOR ||
+                       rsc->slices[0].tiling == V3D_TILING_UIF_NO_XOR);
                 whandle->modifier = DRM_FORMAT_MOD_BROADCOM_UIF;
         } else {
                 whandle->modifier = DRM_FORMAT_MOD_LINEAR;
@@ -433,10 +432,11 @@ v3d_resource_get_handle(struct pipe_screen *pscreen,
                 return v3d_bo_flink(bo, &whandle->handle);
         case WINSYS_HANDLE_TYPE_KMS:
                 if (screen->ro) {
-                        assert(rsc->scanout);
-                        bool ok = renderonly_get_handle(rsc->scanout, whandle);
-                        whandle->stride = rsc->slices[0].stride;
-                        return ok;
+                        if (renderonly_get_handle(rsc->scanout, whandle)) {
+                                whandle->stride = rsc->slices[0].stride;
+                                return true;
+                        }
+                        return false;
                 }
                 whandle->handle = bo->handle;
                 return true;
@@ -448,9 +448,9 @@ v3d_resource_get_handle(struct pipe_screen *pscreen,
         return false;
 }
 
-#define PAGE_UB_ROWS (VC5_UIFCFG_PAGE_SIZE / VC5_UIFBLOCK_ROW_SIZE)
+#define PAGE_UB_ROWS (V3D_UIFCFG_PAGE_SIZE / V3D_UIFBLOCK_ROW_SIZE)
 #define PAGE_UB_ROWS_TIMES_1_5 ((PAGE_UB_ROWS * 3) >> 1)
-#define PAGE_CACHE_UB_ROWS (VC5_PAGE_CACHE_SIZE / VC5_UIFBLOCK_ROW_SIZE)
+#define PAGE_CACHE_UB_ROWS (V3D_PAGE_CACHE_SIZE / V3D_UIFBLOCK_ROW_SIZE)
 #define PAGE_CACHE_MINUS_1_5_UB_ROWS (PAGE_CACHE_UB_ROWS - PAGE_UB_ROWS_TIMES_1_5)
 
 /**
@@ -555,24 +555,24 @@ v3d_setup_slices(struct v3d_resource *rsc, uint32_t winsys_stride,
                 level_height = DIV_ROUND_UP(level_height, block_height);
 
                 if (!rsc->tiled) {
-                        slice->tiling = VC5_TILING_RASTER;
+                        slice->tiling = V3D_TILING_RASTER;
                         if (prsc->target == PIPE_TEXTURE_1D)
                                 level_width = align(level_width, 64 / rsc->cpp);
                 } else {
                         if ((i != 0 || !uif_top) &&
                             (level_width <= utile_w ||
                              level_height <= utile_h)) {
-                                slice->tiling = VC5_TILING_LINEARTILE;
+                                slice->tiling = V3D_TILING_LINEARTILE;
                                 level_width = align(level_width, utile_w);
                                 level_height = align(level_height, utile_h);
                         } else if ((i != 0 || !uif_top) &&
                                    level_width <= uif_block_w) {
-                                slice->tiling = VC5_TILING_UBLINEAR_1_COLUMN;
+                                slice->tiling = V3D_TILING_UBLINEAR_1_COLUMN;
                                 level_width = align(level_width, uif_block_w);
                                 level_height = align(level_height, uif_block_h);
                         } else if ((i != 0 || !uif_top) &&
                                    level_width <= 2 * uif_block_w) {
-                                slice->tiling = VC5_TILING_UBLINEAR_2_COLUMN;
+                                slice->tiling = V3D_TILING_UBLINEAR_2_COLUMN;
                                 level_width = align(level_width, 2 * uif_block_w);
                                 level_height = align(level_height, uif_block_h);
                         } else {
@@ -595,11 +595,11 @@ v3d_setup_slices(struct v3d_resource *rsc, uint32_t winsys_stride,
                                  * perfectly misaligned
                                  */
                                 if ((level_height / uif_block_h) %
-                                    (VC5_PAGE_CACHE_SIZE /
-                                     VC5_UIFBLOCK_ROW_SIZE) == 0) {
-                                        slice->tiling = VC5_TILING_UIF_XOR;
+                                    (V3D_PAGE_CACHE_SIZE /
+                                     V3D_UIFBLOCK_ROW_SIZE) == 0) {
+                                        slice->tiling = V3D_TILING_UIF_XOR;
                                 } else {
-                                        slice->tiling = VC5_TILING_UIF_NO_XOR;
+                                        slice->tiling = V3D_TILING_UIF_NO_XOR;
                                 }
                         }
                 }
@@ -623,7 +623,7 @@ v3d_setup_slices(struct v3d_resource *rsc, uint32_t winsys_stride,
                     level_width > 4 * uif_block_w &&
                     level_height > PAGE_CACHE_MINUS_1_5_UB_ROWS * uif_block_h) {
                         slice_total_size = align(slice_total_size,
-                                                 VC5_UIFCFG_PAGE_SIZE);
+                                                 V3D_UIFCFG_PAGE_SIZE);
                 }
 
                 offset += slice_total_size;
@@ -929,10 +929,6 @@ v3d_resource_from_handle(struct pipe_screen *pscreen,
                         renderonly_create_gpu_import_for_resource(prsc,
                                                                   screen->ro,
                                                                   NULL);
-                if (!rsc->scanout) {
-                        fprintf(stderr, "Failed to create scanout resource.\n");
-                        goto fail;
-                }
         }
 
         if (rsc->tiled && whandle->stride != slice->stride) {
@@ -1076,8 +1072,8 @@ v3d_create_surface(struct pipe_context *pctx,
                 surface->internal_bpp = bpp;
         }
 
-        if (surface->tiling == VC5_TILING_UIF_NO_XOR ||
-            surface->tiling == VC5_TILING_UIF_XOR) {
+        if (surface->tiling == V3D_TILING_UIF_NO_XOR ||
+            surface->tiling == V3D_TILING_UIF_XOR) {
                 surface->padded_height_of_output_image_in_uif_blocks =
                         (slice->padded_height /
                          (2 * v3d_utile_height(rsc->cpp)));
@@ -1161,9 +1157,11 @@ v3d_resource_screen_init(struct pipe_screen *pscreen)
 void
 v3d_resource_context_init(struct pipe_context *pctx)
 {
-        pctx->transfer_map = u_transfer_helper_transfer_map;
+        pctx->buffer_map = u_transfer_helper_transfer_map;
+        pctx->texture_map = u_transfer_helper_transfer_map;
         pctx->transfer_flush_region = u_transfer_helper_transfer_flush_region;
-        pctx->transfer_unmap = u_transfer_helper_transfer_unmap;
+        pctx->buffer_unmap = u_transfer_helper_transfer_unmap;
+        pctx->texture_unmap = u_transfer_helper_transfer_unmap;
         pctx->buffer_subdata = u_default_buffer_subdata;
         pctx->texture_subdata = v3d_texture_subdata;
         pctx->create_surface = v3d_create_surface;

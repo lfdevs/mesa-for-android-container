@@ -29,7 +29,7 @@ TRACEPOINTS = {}
 class Tracepoint(object):
     """Class that represents all the information about a tracepoint
     """
-    def __init__(self, name, args=[], tp_struct=None, tp_print=None):
+    def __init__(self, name, args=[], tp_struct=None, tp_print=None, tp_perfetto=None):
         """Parameters:
 
         - name: the tracepoint name, a tracepoint function with the given
@@ -41,6 +41,8 @@ class Tracepoint(object):
           convert from tracepoint args to trace payload.  If not specified
           it will be generated from `args` (ie, [type, name, name])
         - tp_print: (optional) array of format string followed by expressions
+        - tp_perfetto: (optional) driver provided callback which can generate
+          perfetto events
         """
         assert isinstance(name, str)
         assert isinstance(args, list)
@@ -54,6 +56,7 @@ class Tracepoint(object):
                 tp_struct.append([arg[0], arg[1], arg[1]])
         self.tp_struct = tp_struct
         self.tp_print = tp_print
+        self.tp_perfetto = tp_perfetto
 
         TRACEPOINTS[name] = self
 
@@ -105,7 +108,35 @@ hdr_template = """\
 
 #include "util/u_trace.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 % for trace_name, trace in TRACEPOINTS.items():
+/*
+ * ${trace_name}
+ */
+struct trace_${trace_name} {
+%    for member in trace.tp_struct:
+         ${member[0]} ${member[1]};
+%    endfor
+%    if len(trace.tp_struct) == 0:
+#ifdef  __cplusplus
+     /* avoid warnings about empty struct size mis-match in C vs C++..
+      * the size mis-match is harmless because (a) nothing will deref
+      * the empty struct, and (b) the code that cares about allocating
+      * sizeof(struct trace_${trace_name}) (and wants this to be zero
+      * if there is no payload) is C
+      */
+     uint8_t dummy;
+#endif
+%    endif
+};
+%    if trace.tp_perfetto is not None:
+#ifdef HAVE_PERFETTO
+void ${trace.tp_perfetto}(struct pipe_context *pctx, uint64_t ts_ns, const struct trace_${trace_name} *payload);
+#endif
+%    endif
 void __trace_${trace_name}(struct u_trace *ut
 %    for arg in trace.args:
      , ${arg[0]} ${arg[1]}
@@ -116,7 +147,11 @@ static inline void trace_${trace_name}(struct u_trace *ut
      , ${arg[0]} ${arg[1]}
 %    endfor
 ) {
-   if (likely(!ut->enabled))
+%    if trace.tp_perfetto is not None:
+   if (!unlikely(ut->enabled || ut_perfetto_enabled))
+%    else:
+   if (!unlikely(ut->enabled))
+%    endif
       return;
    __trace_${trace_name}(ut
 %    for arg in trace.args:
@@ -125,6 +160,10 @@ static inline void trace_${trace_name}(struct u_trace *ut
    );
 }
 % endfor
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ${guard_name} */
 """
@@ -165,15 +204,10 @@ src_template = """\
 /*
  * ${trace_name}
  */
-struct __payload_${trace_name} {
-%    for member in trace.tp_struct:
-         ${member[0]} ${member[1]};
-%    endfor
-};
 %    if trace.tp_print is not None:
 static void __print_${trace_name}(FILE *out, const void *arg) {
-   const struct __payload_${trace_name} *__entry =
-      (const struct __payload_${trace_name} *)arg;
+   const struct trace_${trace_name} *__entry =
+      (const struct trace_${trace_name} *)arg;
    fprintf(out, "${trace.tp_print[0]}\\n"
 %       for arg in trace.tp_print[1:]:
            , ${arg}
@@ -184,17 +218,22 @@ static void __print_${trace_name}(FILE *out, const void *arg) {
 #define __print_${trace_name} NULL
 %    endif
 static const struct u_tracepoint __tp_${trace_name} = {
-    ALIGN_POT(sizeof(struct __payload_${trace_name}), 8),   /* keep size 64b aligned */
+    ALIGN_POT(sizeof(struct trace_${trace_name}), 8),   /* keep size 64b aligned */
     "${trace_name}",
     __print_${trace_name},
+%    if trace.tp_perfetto is not None:
+#ifdef HAVE_PERFETTO
+    (void (*)(struct pipe_context *, uint64_t, const void *))${trace.tp_perfetto},
+#endif
+%    endif
 };
 void __trace_${trace_name}(struct u_trace *ut
 %    for arg in trace.args:
      , ${arg[0]} ${arg[1]}
 %    endfor
 ) {
-   struct __payload_${trace_name} *__entry =
-      (struct __payload_${trace_name} *)u_trace_append(ut, &__tp_${trace_name});
+   struct trace_${trace_name} *__entry =
+      (struct trace_${trace_name} *)u_trace_append(ut, &__tp_${trace_name});
    (void)__entry;
 %    for member in trace.tp_struct:
         __entry->${member[1]} = ${member[2]};

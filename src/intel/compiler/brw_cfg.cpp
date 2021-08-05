@@ -63,7 +63,7 @@ push_stack(exec_list *list, void *mem_ctx, bblock_t *block)
 }
 
 bblock_t::bblock_t(cfg_t *cfg) :
-   cfg(cfg), start_ip(0), end_ip(0), num(0)
+   cfg(cfg), start_ip(0), end_ip(0), end_ip_delta(0), num(0)
 {
    instructions.make_empty();
    parents.make_empty();

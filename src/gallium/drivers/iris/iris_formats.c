@@ -35,7 +35,7 @@
 #include "iris_screen.h"
 
 struct iris_format_info
-iris_format_for_usage(const struct gen_device_info *devinfo,
+iris_format_for_usage(const struct intel_device_info *devinfo,
                       enum pipe_format pformat,
                       isl_surf_usage_flags_t usage)
 {
@@ -111,7 +111,7 @@ iris_is_format_supported(struct pipe_screen *pscreen,
                          unsigned usage)
 {
    struct iris_screen *screen = (struct iris_screen *) pscreen;
-   const struct gen_device_info *devinfo = &screen->devinfo;
+   const struct intel_device_info *devinfo = &screen->devinfo;
    uint32_t max_samples = devinfo->ver == 8 ? 8 : 16;
 
    if (sample_count > max_samples ||

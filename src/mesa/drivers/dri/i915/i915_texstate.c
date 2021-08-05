@@ -366,10 +366,10 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
    }
 
    /* convert border color from float to ubyte */
-   CLAMPED_FLOAT_TO_UBYTE(border[0], sampler->Attrib.BorderColor.f[0]);
-   CLAMPED_FLOAT_TO_UBYTE(border[1], sampler->Attrib.BorderColor.f[1]);
-   CLAMPED_FLOAT_TO_UBYTE(border[2], sampler->Attrib.BorderColor.f[2]);
-   CLAMPED_FLOAT_TO_UBYTE(border[3], sampler->Attrib.BorderColor.f[3]);
+   CLAMPED_FLOAT_TO_UBYTE(border[0], sampler->Attrib.state.border_color.f[0]);
+   CLAMPED_FLOAT_TO_UBYTE(border[1], sampler->Attrib.state.border_color.f[1]);
+   CLAMPED_FLOAT_TO_UBYTE(border[2], sampler->Attrib.state.border_color.f[2]);
+   CLAMPED_FLOAT_TO_UBYTE(border[3], sampler->Attrib.state.border_color.f[3]);
 
    if (firstImage->_BaseFormat == GL_DEPTH_COMPONENT) {
       /* GL specs that border color for depth textures is taken from the

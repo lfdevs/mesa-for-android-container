@@ -2,14 +2,14 @@ traces-db:
   download-url: "https://minio-packet.freedesktop.org/mesa-tracie-public/"
 
 traces:
-  - path: glmark2/desktop-blur-radius=5:effect=blur:passes=1:separable=true:windows=4.rdc
+  - path: glmark2/desktop:windows=4:effect=blur:blur-radius=5:passes=1:separable=true.trace
     expectations:
       - device: gl-vmware-llvmpipe
-        checksum: 8867f3a41f180626d0d4b7661ff5c0f4
-  - path: glmark2/jellyfish.rdc
+        checksum: 26080879ac8eb63c2c5da3de5fc732f4
+  - path: glmark2/jellyfish.trace
     expectations:
       - device: gl-vmware-llvmpipe
-        checksum: ebaa1e2d04d7dfe5a91499510722c46e
+        checksum: 91dbe94735a132aeb192ae5c618ddc06
   - path: glxgears/glxgears-2.trace
     expectations:
       - device: gl-vmware-llvmpipe
@@ -169,7 +169,7 @@ traces:
   - path: bgfx/39-assao.rdc
     expectations:
       - device: gl-vmware-llvmpipe
-        checksum: dfe7796f4bd2b758baf253714e92c8da
+        checksum: e10e7a0e3a604e0bf6a77b4a01d81f54
   - path: bgfx/40-svt.rdc
     expectations:
       - device: gl-vmware-llvmpipe

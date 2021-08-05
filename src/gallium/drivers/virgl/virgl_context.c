@@ -382,6 +382,7 @@ static struct pipe_surface *virgl_create_surface(struct pipe_context *ctx,
    surf->base.u.tex.level = templ->u.tex.level;
    surf->base.u.tex.first_layer = templ->u.tex.first_layer;
    surf->base.u.tex.last_layer = templ->u.tex.last_layer;
+   surf->base.nr_samples = templ->nr_samples;
 
    virgl_encoder_create_surface(vctx, handle, res, &surf->base);
    surf->handle = handle;
@@ -860,12 +861,13 @@ static void virgl_clear_texture(struct pipe_context *ctx,
 
 static void virgl_draw_vbo(struct pipe_context *ctx,
                            const struct pipe_draw_info *dinfo,
+                           unsigned drawid_offset,
                            const struct pipe_draw_indirect_info *indirect,
-                           const struct pipe_draw_start_count *draws,
+                           const struct pipe_draw_start_count_bias *draws,
                            unsigned num_draws)
 {
    if (num_draws > 1) {
-      util_draw_multi(ctx, dinfo, indirect, draws, num_draws);
+      util_draw_multi(ctx, dinfo, drawid_offset, indirect, draws, num_draws);
       return;
    }
 
@@ -884,7 +886,7 @@ static void virgl_draw_vbo(struct pipe_context *ctx,
 
    if (!(rs->caps.caps.v1.prim_mask & (1 << dinfo->mode))) {
       util_primconvert_save_rasterizer_state(vctx->primconvert, &vctx->rs_state.rs);
-      util_primconvert_draw_vbo(vctx->primconvert, dinfo, indirect, draws, num_draws);
+      util_primconvert_draw_vbo(vctx->primconvert, dinfo, drawid_offset, indirect, draws, num_draws);
       return;
    }
    if (info.index_size) {
@@ -912,7 +914,7 @@ static void virgl_draw_vbo(struct pipe_context *ctx,
    if (info.index_size)
       virgl_hw_set_index_buffer(vctx, &ib);
 
-   virgl_encoder_draw_vbo(vctx, &info, indirect, &draws[0]);
+   virgl_encoder_draw_vbo(vctx, &info, drawid_offset, indirect, &draws[0]);
 
    pipe_resource_reference(&ib.buffer, NULL);
 
@@ -1167,8 +1169,8 @@ static void virgl_resource_copy_region(struct pipe_context *ctx,
    struct virgl_resource *dres = virgl_resource(dst);
    struct virgl_resource *sres = virgl_resource(src);
 
-   if (dres->u.b.target == PIPE_BUFFER)
-      util_range_add(&dres->u.b, &dres->valid_buffer_range, dstx, dstx + src_box->width);
+   if (dres->b.target == PIPE_BUFFER)
+      util_range_add(&dres->b, &dres->valid_buffer_range, dstx, dstx + src_box->width);
    virgl_resource_dirty(dres, dst_level);
 
    virgl_encode_resource_copy_region(vctx, dres,

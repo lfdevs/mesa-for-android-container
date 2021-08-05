@@ -42,7 +42,8 @@ brw_drawbuffer(struct gl_context *ctx)
        * time, invalidate our DRI drawable so we'll ask for new buffers
        * (including the fake front) before we start rendering again.
        */
-      dri2InvalidateDrawable(brw->driContext->driDrawablePriv);
+      if (brw->driContext->driDrawablePriv)
+          dri2InvalidateDrawable(brw->driContext->driDrawablePriv);
       brw_prepare_render(brw);
    }
 }
@@ -58,7 +59,8 @@ brw_readbuffer(struct gl_context * ctx, GLenum mode)
        * time, invalidate our DRI drawable so we'll ask for new buffers
        * (including the fake front) before we start reading again.
        */
-      dri2InvalidateDrawable(brw->driContext->driReadablePriv);
+      if (brw->driContext->driDrawablePriv)
+          dri2InvalidateDrawable(brw->driContext->driReadablePriv);
       brw_prepare_render(brw);
    }
 }

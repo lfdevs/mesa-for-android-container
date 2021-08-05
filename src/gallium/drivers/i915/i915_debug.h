@@ -1,5 +1,5 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,7 +22,7 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 /* Authors:  Keith Whitwell <keithw@vmware.com>
@@ -44,10 +44,10 @@ struct i915_winsys_batchbuffer;
 #define DBG_FLUSH     0x8
 #define DBG_TEXTURE   0x10
 #define DBG_CONSTANTS 0x20
+#define DBG_FS        0x40
 
 extern unsigned i915_debug;
 
-#ifdef DEBUG
 static inline bool
 I915_DBG_ON(unsigned flags)
 {
@@ -58,17 +58,13 @@ static inline void
 I915_DBG(unsigned flags, const char *fmt, ...)
 {
    if (I915_DBG_ON(flags)) {
-      va_list  args;
+      va_list args;
 
       va_start(args, fmt);
       debug_vprintf(fmt, args);
       va_end(args);
    }
 }
-#else
-#define I915_DBG_ON(flags) (0)
-static inline void I915_DBG(unsigned flags, const char *fmt, ...) {}
-#endif
 
 void i915_debug_init(struct i915_screen *i915);
 

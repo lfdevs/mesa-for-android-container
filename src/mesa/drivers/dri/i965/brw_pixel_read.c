@@ -73,7 +73,7 @@ brw_readpixels_tiled_memcpy(struct gl_context *ctx,
 {
    struct brw_context *brw = brw_context(ctx);
    struct gl_renderbuffer *rb = ctx->ReadBuffer->_ColorReadBuffer;
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    /* This path supports reading from color buffers only */
    if (rb == NULL)

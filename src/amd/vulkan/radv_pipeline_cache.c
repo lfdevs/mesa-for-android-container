@@ -31,8 +31,6 @@
 #include "radv_private.h"
 #include "radv_shader.h"
 
-#include "ac_nir_to_llvm.h"
-
 struct cache_entry {
    union {
       unsigned char sha1[20];

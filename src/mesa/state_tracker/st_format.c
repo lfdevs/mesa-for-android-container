@@ -110,10 +110,24 @@ st_mesa_format_to_pipe_format(const struct st_context *st,
    }
 
    if (st_astc_format_fallback(st, mesaFormat)) {
-      if (_mesa_is_format_srgb(mesaFormat))
-         return PIPE_FORMAT_R8G8B8A8_SRGB;
-      else
-         return PIPE_FORMAT_R8G8B8A8_UNORM;
+      const struct util_format_description *desc =
+         util_format_description(mesaFormat);
+
+      if (_mesa_is_format_srgb(mesaFormat)) {
+         if (!st->transcode_astc)
+            return PIPE_FORMAT_R8G8B8A8_SRGB;
+         else if (desc->block.width * desc->block.height < 32)
+            return PIPE_FORMAT_DXT5_SRGBA;
+         else
+            return PIPE_FORMAT_DXT1_SRGBA;
+      } else {
+         if (!st->transcode_astc)
+            return PIPE_FORMAT_R8G8B8A8_UNORM;
+         else if (desc->block.width * desc->block.height < 32)
+            return PIPE_FORMAT_DXT5_RGBA;
+         else
+            return PIPE_FORMAT_DXT1_RGBA;
+      }
    }
 
    return mesaFormat;
@@ -1378,6 +1392,7 @@ st_QuerySamplesForFormat(struct gl_context *ctx, GLenum target,
    struct st_context *st = st_context(ctx);
    enum pipe_format format;
    unsigned i, bind, num_sample_counts = 0;
+   unsigned min_max_samples;
 
    (void) target;
 
@@ -1385,6 +1400,13 @@ st_QuerySamplesForFormat(struct gl_context *ctx, GLenum target,
       bind = PIPE_BIND_DEPTH_STENCIL;
    else
       bind = PIPE_BIND_RENDER_TARGET;
+
+   if (_mesa_is_enum_format_integer(internalFormat))
+      min_max_samples = ctx->Const.MaxIntegerSamples;
+   else if (_mesa_is_depth_or_stencil_format(internalFormat))
+      min_max_samples = ctx->Const.MaxDepthTextureSamples;
+   else
+      min_max_samples = ctx->Const.MaxColorTextureSamples;
 
    /* If an sRGB framebuffer is unsupported, sRGB formats behave like linear
     * formats.
@@ -1399,7 +1421,7 @@ st_QuerySamplesForFormat(struct gl_context *ctx, GLenum target,
                                 PIPE_TEXTURE_2D, i, i, bind,
                                 false, false);
 
-      if (format != PIPE_FORMAT_NONE) {
+      if (format != PIPE_FORMAT_NONE || i == min_max_samples) {
          samples[num_sample_counts++] = i;
       }
    }
@@ -1463,6 +1485,15 @@ st_QueryInternalFormat(struct gl_context *ctx, GLenum target,
          params[0] = internalFormat;
       break;
    }
+   case GL_TEXTURE_REDUCTION_MODE_ARB: {
+      mesa_format format = st_ChooseTextureFormat(ctx, target, internalFormat, GL_NONE, GL_NONE);
+      enum pipe_format pformat = st_mesa_format_to_pipe_format(st, format);
+      struct pipe_screen *screen = st->screen;
+      params[0] = pformat != PIPE_FORMAT_NONE &&
+                  screen->is_format_supported(screen, pformat, PIPE_TEXTURE_2D,
+                                              0, 0, PIPE_BIND_SAMPLER_REDUCTION_MINMAX);
+      break;
+   }
    default:
       /* For the rest of the pnames, we call back the Mesa's default
        * function for drivers that don't implement ARB_internalformat_query2.
@@ -1482,94 +1513,71 @@ st_QueryInternalFormat(struct gl_context *ctx, GLenum target,
  * Similarly for texture border colors.
  */
 void
-st_translate_color(const union gl_color_union *colorIn,
-                   union pipe_color_union *colorOut,
+st_translate_color(union pipe_color_union *color,
                    GLenum baseFormat, GLboolean is_integer)
 {
    if (is_integer) {
-      const int *in = colorIn->i;
-      int *out = colorOut->i;
+      int *ci = color->i;
 
       switch (baseFormat) {
       case GL_RED:
-         out[0] = in[0];
-         out[1] = 0;
-         out[2] = 0;
-         out[3] = 1;
+         ci[1] = 0;
+         ci[2] = 0;
+         ci[3] = 1;
          break;
       case GL_RG:
-         out[0] = in[0];
-         out[1] = in[1];
-         out[2] = 0;
-         out[3] = 1;
+         ci[2] = 0;
+         ci[3] = 1;
          break;
       case GL_RGB:
-         out[0] = in[0];
-         out[1] = in[1];
-         out[2] = in[2];
-         out[3] = 1;
+         ci[3] = 1;
          break;
       case GL_ALPHA:
-         out[0] = out[1] = out[2] = 0;
-         out[3] = in[3];
+         ci[0] = ci[1] = ci[2] = 0;
          break;
       case GL_LUMINANCE:
-         out[0] = out[1] = out[2] = in[0];
-         out[3] = 1;
+         ci[1] = ci[2] = ci[0];
+         ci[3] = 1;
          break;
       case GL_LUMINANCE_ALPHA:
-         out[0] = out[1] = out[2] = in[0];
-         out[3] = in[3];
+         ci[1] = ci[2] = ci[0];
          break;
       case GL_INTENSITY:
-         out[0] = out[1] = out[2] = out[3] = in[0];
+         ci[1] = ci[2] = ci[3] = ci[0];
          break;
-      default:
-         COPY_4V(out, in);
       }
    }
    else {
-      const float *in = colorIn->f;
-      float *out = colorOut->f;
+      float *cf = color->f;
 
       switch (baseFormat) {
       case GL_RED:
-         out[0] = in[0];
-         out[1] = 0.0F;
-         out[2] = 0.0F;
-         out[3] = 1.0F;
+         cf[1] = 0.0F;
+         cf[2] = 0.0F;
+         cf[3] = 1.0F;
          break;
       case GL_RG:
-         out[0] = in[0];
-         out[1] = in[1];
-         out[2] = 0.0F;
-         out[3] = 1.0F;
+         cf[2] = 0.0F;
+         cf[3] = 1.0F;
          break;
       case GL_RGB:
-         out[0] = in[0];
-         out[1] = in[1];
-         out[2] = in[2];
-         out[3] = 1.0F;
+         cf[3] = 1.0F;
          break;
       case GL_ALPHA:
-         out[0] = out[1] = out[2] = 0.0F;
-         out[3] = in[3];
+         cf[0] = cf[1] = cf[2] = 0.0F;
          break;
       case GL_LUMINANCE:
-         out[0] = out[1] = out[2] = in[0];
-         out[3] = 1.0F;
+         cf[1] = cf[2] = cf[0];
+         cf[3] = 1.0F;
          break;
       case GL_LUMINANCE_ALPHA:
-         out[0] = out[1] = out[2] = in[0];
-         out[3] = in[3];
+         cf[1] = cf[2] = cf[0];
          break;
       /* Stencil border is tricky on some hw. Help drivers a little here. */
       case GL_STENCIL_INDEX:
       case GL_INTENSITY:
-         out[0] = out[1] = out[2] = out[3] = in[0];
+         cf[1] = cf[2] = cf[3] = cf[0];
          break;
-      default:
-         COPY_4V(out, in);
       }
    }
 }

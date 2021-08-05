@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
-<metrics version="1599482527" merge_md5="">
-  <set name="Render Metrics Basic Gen9"
+<metrics version="1619078710" merge_md5="">
+  <set name="Render Metrics Basic set"
        chipset="CFLGT2"
        symbol_name="RenderBasic"
        underscore_name="render_basic"
@@ -812,7 +812,7 @@
     </register_config>
   </set>
 
-  <set name="Compute Metrics Basic Gen9"
+  <set name="Compute Metrics Basic set"
        chipset="CFLGT2"
        symbol_name="ComputeBasic"
        underscore_name="compute_basic"
@@ -1443,7 +1443,7 @@
     </register_config>
   </set>
 
-  <set name="Render Metrics for 3D Pipeline Profile Gen9"
+  <set name="Render Metrics set for 3D Pipeline Profile"
        chipset="CFLGT2"
        symbol_name="RenderPipeProfile"
        underscore_name="render_pipe_profile"
@@ -2188,7 +2188,7 @@
     </register_config>
   </set>
 
-  <set name="Memory Reads Distribution Gen9"
+  <set name="Memory Reads Distribution metrics set"
        chipset="CFLGT2"
        symbol_name="MemoryReads"
        underscore_name="memory_reads"
@@ -2828,7 +2828,7 @@
     </register_config>
   </set>
 
-  <set name="Memory Writes Distribution Gen9"
+  <set name="Memory Writes Distribution metrics set"
        chipset="CFLGT2"
        symbol_name="MemoryWrites"
        underscore_name="memory_writes"
@@ -3469,7 +3469,7 @@
     </register_config>
   </set>
 
-  <set name="Compute Metrics Extended Gen9"
+  <set name="Compute Metrics Extended set"
        chipset="CFLGT2"
        symbol_name="ComputeExtended"
        underscore_name="compute_extended"
@@ -4090,7 +4090,7 @@
     </register_config>
   </set>
 
-  <set name="Compute Metrics L3 Cache Gen9"
+  <set name="Compute Metrics L3 Cache set"
        chipset="CFLGT2"
        symbol_name="ComputeL3Cache"
        underscore_name="compute_l3_cache"
@@ -10032,7 +10032,7 @@
     </register_config>
   </set>
 
-  <set name="Compute Metrics Extra Gen9"
+  <set name="Compute Metrics Extra set"
        chipset="CFLGT2"
        symbol_name="ComputeExtra"
        underscore_name="compute_extra"
@@ -10160,7 +10160,7 @@
     </register_config>
   </set>
 
-  <set name="Media Vme Pipe Gen9"
+  <set name="Media Vme Pipe metrics set"
        chipset="CFLGT2"
        symbol_name="VMEPipe"
        underscore_name="vme_pipe"
@@ -10393,7 +10393,7 @@
     </register_config>
   </set>
 
-  <set name="Gpu Rings Busyness"
+  <set name="Gpu Rings Busyness metrics set"
        chipset="CFLGT2"
        symbol_name="GpuBusyness"
        underscore_name="gpu_busyness"
@@ -10557,12 +10557,12 @@
     </register_config>
   </set>
 
-  <set name="MDAPI testing set Gen9.5"
+  <set name="MDAPI testing set"
        chipset="CFLGT2"
        symbol_name="TestOa"
        underscore_name="test_oa"
        mdapi_supported_apis="VK OGL OCL IO BB"
-       hw_config_guid="74fb4902-d3d3-4237-9e90-cbdc68d0a446"
+       hw_config_guid="d3c99326-e161-4e44-9745-7772bdc579c5"
        >
     <counter name="GPU Time Elapsed"
              symbol_name="GpuTime"
@@ -10760,6 +10760,9 @@
         <register type="OA" address="0x000027A8" value="0x00100001" />
         <register type="OA" address="0x000027AC" value="0x0000FFE7" />
     </register_config>
+    <register_config type="FLEX">
+        <register type="FLEX" address="0x0000E65C" value="0x00222222" />
+    </register_config>
   </set>
 
   <set name="Metric set PMA Stall"
@@ -10863,12 +10866,12 @@
     </register_config>
   </set>
 
-  <set name="AsyncCompute"
+  <set name="AsyncCompute metrics set"
        chipset="CFLGT2"
        symbol_name="AsyncCompute"
        underscore_name="async_compute"
        mdapi_supported_apis="VK OGL OGL4 OCL MEDIA IO BB"
-       hw_config_guid="d642768d-65a2-458d-9233-d15ff6f717e9"
+       hw_config_guid="9802484e-5e21-4ad3-8060-12b7f3bb81fe"
        >
     <counter name="GPU Time Elapsed"
              symbol_name="GpuTime"
@@ -11170,6 +11173,7 @@
         <register type="FLEX" address="0x0000E758" value="0x00011010" />
         <register type="FLEX" address="0x0000E45C" value="0x00061060" />
         <register type="FLEX" address="0x0000E55C" value="0x00000008" />
+        <register type="FLEX" address="0x0000E65C" value="0x00222222" />
     </register_config>
   </set>
 

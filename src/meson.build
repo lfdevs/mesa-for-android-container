@@ -25,6 +25,9 @@ inc_gallium = include_directories('gallium/include')
 inc_gallium_aux = include_directories('gallium/auxiliary')
 inc_amd_common = include_directories('amd/common')
 inc_amd_common_llvm = include_directories('amd/llvm')
+inc_tool = include_directories('tool')
+pps_datasources = []
+pps_includes = []
 
 libglsl_util = static_library(
   'glsl_util',
@@ -83,7 +86,7 @@ endif
 if with_gallium_freedreno or with_freedreno_vk
   subdir('freedreno')
 endif
-if with_gallium_panfrost or with_gallium_lima
+if with_gallium_panfrost or with_gallium_lima or with_panfrost_vk
   subdir('panfrost')
 endif
 if with_gallium_virgl or with_virtio_vk
@@ -97,6 +100,9 @@ if with_microsoft_clc or with_gallium_d3d12 or with_spirv_to_dxil
 endif
 if with_gallium_nouveau
   subdir('nouveau')
+endif
+if with_gallium_asahi or with_tools.contains('asahi')
+  subdir('asahi')
 endif
 subdir('mesa')
 subdir('loader')
@@ -136,3 +142,5 @@ if with_glx != 'disabled' and not with_glvnd
     variables : ['glx_tls=@0@'.format(use_elf_tls ? 'yes' : 'no')],
   )
 endif
+
+subdir('tool')

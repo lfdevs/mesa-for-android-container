@@ -189,6 +189,15 @@ fs_visitor::emit_interpolation_setup_gfx4()
       abld.ADD(offset(delta_xy, abld, 1), this->pixel_y, ystart);
    }
 
+   this->pixel_z = fetch_payload_reg(bld, payload.source_depth_reg);
+
+   /* The SF program automatically handles doing the perspective correction or
+    * not based on wm_prog_data::interp_mode[] so we can use the same pixel
+    * offsets for both perspective and non-perspective.
+    */
+   this->delta_xy[BRW_BARYCENTRIC_NONPERSPECTIVE_PIXEL] =
+      this->delta_xy[BRW_BARYCENTRIC_PERSPECTIVE_PIXEL];
+
    abld = bld.annotate("compute pos.w and 1/pos.w");
    /* Compute wpos.w.  It's always in our setup, since it's needed to
     * interpolate the other attributes.
@@ -274,11 +283,129 @@ fs_visitor::emit_interpolation_setup_gfx6()
    this->pixel_x = vgrf(glsl_type::float_type);
    this->pixel_y = vgrf(glsl_type::float_type);
 
+   struct brw_wm_prog_data *wm_prog_data = brw_wm_prog_data(prog_data);
+
+   fs_reg int_pixel_offset_x, int_pixel_offset_y; /* Used on Gen12HP+ */
+   fs_reg int_pixel_offset_xy; /* Used on Gen8+ */
+   fs_reg half_int_pixel_offset_x, half_int_pixel_offset_y;
+   if (!wm_prog_data->per_coarse_pixel_dispatch) {
+      /* The thread payload only delivers subspan locations (ss0, ss1,
+       * ss2, ...). Since subspans covers 2x2 pixels blocks, we need to
+       * generate 4 pixel coordinates out of each subspan location. We do this
+       * by replicating a subspan coordinate 4 times and adding an offset of 1
+       * in each direction from the initial top left (tl) location to generate
+       * top right (tr = +1 in x), bottom left (bl = +1 in y) and bottom right
+       * (br = +1 in x, +1 in y).
+       *
+       * The locations we build look like this in SIMD8 :
+       *
+       *    ss0.tl ss0.tr ss0.bl ss0.br ss1.tl ss1.tr ss1.bl ss1.br
+       *
+       * The value 0x11001010 is a vector of 8 half byte vector. It adds
+       * following to generate the 4 pixels coordinates out of the subspan0:
+       *
+       *  0x
+       *    1 : ss0.y + 1 -> ss0.br.y
+       *    1 : ss0.y + 1 -> ss0.bl.y
+       *    0 : ss0.y + 0 -> ss0.tr.y
+       *    0 : ss0.y + 0 -> ss0.tl.y
+       *    1 : ss0.x + 1 -> ss0.br.x
+       *    0 : ss0.x + 0 -> ss0.bl.x
+       *    1 : ss0.x + 1 -> ss0.tr.x
+       *    0 : ss0.x + 0 -> ss0.tl.x
+       *
+       * By doing a SIMD16 add in a SIMD8 shader, we can generate the 8 pixels
+       * coordinates out of 2 subspans coordinates in a single ADD instruction
+       * (twice the operation above).
+       */
+      int_pixel_offset_xy = fs_reg(brw_imm_v(0x11001010));
+      half_int_pixel_offset_x = fs_reg(brw_imm_uw(0));
+      half_int_pixel_offset_y = fs_reg(brw_imm_uw(0));
+      /* On Gfx12.5, because of regioning restrictions, the interpolation code
+       * is slightly different and works off X & Y only inputs. The ordering
+       * of the half bytes here is a bit odd, with each subspan replicated
+       * twice and every other element is discarded :
+       *
+       *             ss0.tl ss0.tl ss0.tr ss0.tr ss0.bl ss0.bl ss0.br ss0.br
+       *  X offset:    0      0      1      0      0      0      1      0
+       *  Y offset:    0      0      0      0      1      0      1      0
+       */
+      int_pixel_offset_x = fs_reg(brw_imm_v(0x01000100));
+      int_pixel_offset_y = fs_reg(brw_imm_v(0x01010000));
+   } else {
+      /* In coarse pixel dispatch we have to do the same ADD instruction that
+       * we do in normal per pixel dispatch, except this time we're not adding
+       * 1 in each direction, but instead the coarse pixel size.
+       *
+       * The coarse pixel size is delivered as 2 u8 in r1.0
+       */
+      struct brw_reg r1_0 = retype(brw_vec1_reg(BRW_GENERAL_REGISTER_FILE, 1, 0), BRW_REGISTER_TYPE_UB);
+
+      const fs_builder dbld =
+         abld.exec_all().group(MIN2(16, dispatch_width) * 2, 0);
+
+      if (devinfo->verx10 >= 125) {
+         /* To build the array of half bytes we do and AND operation with the
+          * right mask in X.
+          */
+         int_pixel_offset_x = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+         dbld.AND(int_pixel_offset_x, byte_offset(r1_0, 0), brw_imm_v(0x0f000f00));
+
+         /* And the right mask in Y. */
+         int_pixel_offset_y = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+         dbld.AND(int_pixel_offset_y, byte_offset(r1_0, 1), brw_imm_v(0x0f0f0000));
+      } else {
+         /* To build the array of half bytes we do and AND operation with the
+          * right mask in X.
+          */
+         int_pixel_offset_x = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+         dbld.AND(int_pixel_offset_x, byte_offset(r1_0, 0), brw_imm_v(0x0000f0f0));
+
+         /* And the right mask in Y. */
+         int_pixel_offset_y = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+         dbld.AND(int_pixel_offset_y, byte_offset(r1_0, 1), brw_imm_v(0xff000000));
+
+         /* Finally OR the 2 registers. */
+         int_pixel_offset_xy = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+         dbld.OR(int_pixel_offset_xy, int_pixel_offset_x, int_pixel_offset_y);
+      }
+
+      /* Also compute the half pixel size used to center pixels. */
+      half_int_pixel_offset_x = bld.vgrf(BRW_REGISTER_TYPE_UW);
+      half_int_pixel_offset_y = bld.vgrf(BRW_REGISTER_TYPE_UW);
+
+      bld.SHR(half_int_pixel_offset_x, suboffset(r1_0, 0), brw_imm_ud(1));
+      bld.SHR(half_int_pixel_offset_y, suboffset(r1_0, 1), brw_imm_ud(1));
+   }
+
    for (unsigned i = 0; i < DIV_ROUND_UP(dispatch_width, 16); i++) {
       const fs_builder hbld = abld.group(MIN2(16, dispatch_width), i);
       struct brw_reg gi_uw = retype(brw_vec1_grf(1 + i, 0), BRW_REGISTER_TYPE_UW);
 
-      if (devinfo->ver >= 8 || dispatch_width == 8) {
+      if (devinfo->verx10 >= 125) {
+         const fs_builder dbld =
+            abld.exec_all().group(hbld.dispatch_width() * 2, 0);
+         const fs_reg int_pixel_x = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+         const fs_reg int_pixel_y = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+
+         dbld.ADD(int_pixel_x,
+                  fs_reg(stride(suboffset(gi_uw, 4), 2, 8, 0)),
+                  int_pixel_offset_x);
+         dbld.ADD(int_pixel_y,
+                  fs_reg(stride(suboffset(gi_uw, 5), 2, 8, 0)),
+                  int_pixel_offset_y);
+
+         if (wm_prog_data->per_coarse_pixel_dispatch) {
+            dbld.ADD(int_pixel_x, int_pixel_x,
+                     horiz_stride(half_int_pixel_offset_x, 0));
+            dbld.ADD(int_pixel_y, int_pixel_y,
+                     horiz_stride(half_int_pixel_offset_y, 0));
+         }
+
+         hbld.MOV(offset(pixel_x, hbld, i), horiz_stride(int_pixel_x, 2));
+         hbld.MOV(offset(pixel_y, hbld, i), horiz_stride(int_pixel_y, 2));
+
+      } else if (devinfo->ver >= 8 || dispatch_width == 8) {
          /* The "Register Region Restrictions" page says for BDW (and newer,
           * presumably):
           *
@@ -295,10 +422,12 @@ fs_visitor::emit_interpolation_setup_gfx6()
 
          dbld.ADD(int_pixel_xy,
                   fs_reg(stride(suboffset(gi_uw, 4), 1, 4, 0)),
-                  fs_reg(brw_imm_v(0x11001010)));
+                  int_pixel_offset_xy);
 
-         hbld.emit(FS_OPCODE_PIXEL_X, offset(pixel_x, hbld, i), int_pixel_xy);
-         hbld.emit(FS_OPCODE_PIXEL_Y, offset(pixel_y, hbld, i), int_pixel_xy);
+         hbld.emit(FS_OPCODE_PIXEL_X, offset(pixel_x, hbld, i), int_pixel_xy,
+                                      horiz_stride(half_int_pixel_offset_x, 0));
+         hbld.emit(FS_OPCODE_PIXEL_Y, offset(pixel_y, hbld, i), int_pixel_xy,
+                                      horiz_stride(half_int_pixel_offset_y, 0));
       } else {
          /* The "Register Region Restrictions" page says for SNB, IVB, HSW:
           *
@@ -327,12 +456,61 @@ fs_visitor::emit_interpolation_setup_gfx6()
       }
    }
 
-   abld = bld.annotate("compute pos.w");
-   this->pixel_w = fetch_payload_reg(abld, payload.source_w_reg);
-   this->wpos_w = vgrf(glsl_type::float_type);
-   abld.emit(SHADER_OPCODE_RCP, this->wpos_w, this->pixel_w);
+   abld = bld.annotate("compute pos.z");
+   if (wm_prog_data->uses_depth_w_coefficients) {
+      assert(!wm_prog_data->uses_src_depth);
+      /* In coarse pixel mode, the HW doesn't interpolate Z coordinate
+       * properly. In the same way we have to add the coarse pixel size to
+       * pixels locations, here we recompute the Z value with 2 coefficients
+       * in X & Y axis.
+       */
+      fs_reg coef_payload = fetch_payload_reg(abld, payload.depth_w_coef_reg, BRW_REGISTER_TYPE_F);
+      const fs_reg x_start = brw_vec1_grf(coef_payload.nr, 2);
+      const fs_reg y_start = brw_vec1_grf(coef_payload.nr, 6);
+      const fs_reg z_cx    = brw_vec1_grf(coef_payload.nr, 1);
+      const fs_reg z_cy    = brw_vec1_grf(coef_payload.nr, 0);
+      const fs_reg z_c0    = brw_vec1_grf(coef_payload.nr, 3);
 
-   struct brw_wm_prog_data *wm_prog_data = brw_wm_prog_data(prog_data);
+      const fs_reg float_pixel_x = abld.vgrf(BRW_REGISTER_TYPE_F);
+      const fs_reg float_pixel_y = abld.vgrf(BRW_REGISTER_TYPE_F);
+
+      abld.ADD(float_pixel_x, this->pixel_x, negate(x_start));
+      abld.ADD(float_pixel_y, this->pixel_y, negate(y_start));
+
+      /* r1.0 - 0:7 ActualCoarsePixelShadingSize.X */
+      const fs_reg u8_cps_width = fs_reg(retype(brw_vec1_grf(1, 0), BRW_REGISTER_TYPE_UB));
+      /* r1.0 - 15:8 ActualCoarsePixelShadingSize.Y */
+      const fs_reg u8_cps_height = byte_offset(u8_cps_width, 1);
+      const fs_reg u32_cps_width = abld.vgrf(BRW_REGISTER_TYPE_UD);
+      const fs_reg u32_cps_height = abld.vgrf(BRW_REGISTER_TYPE_UD);
+      abld.MOV(u32_cps_width, u8_cps_width);
+      abld.MOV(u32_cps_height, u8_cps_height);
+
+      const fs_reg f_cps_width = abld.vgrf(BRW_REGISTER_TYPE_F);
+      const fs_reg f_cps_height = abld.vgrf(BRW_REGISTER_TYPE_F);
+      abld.MOV(f_cps_width, u32_cps_width);
+      abld.MOV(f_cps_height, u32_cps_height);
+
+      /* Center in the middle of the coarse pixel. */
+      abld.MAD(float_pixel_x, float_pixel_x, brw_imm_f(0.5f), f_cps_width);
+      abld.MAD(float_pixel_y, float_pixel_y, brw_imm_f(0.5f), f_cps_height);
+
+      this->pixel_z = abld.vgrf(BRW_REGISTER_TYPE_F);
+      abld.MAD(this->pixel_z, z_c0, z_cx, float_pixel_x);
+      abld.MAD(this->pixel_z, this->pixel_z, z_cy, float_pixel_y);
+   }
+
+   if (wm_prog_data->uses_src_depth) {
+      assert(!wm_prog_data->uses_depth_w_coefficients);
+      this->pixel_z = fetch_payload_reg(bld, payload.source_depth_reg);
+   }
+
+   if (wm_prog_data->uses_src_w) {
+      abld = bld.annotate("compute pos.w");
+      this->pixel_w = fetch_payload_reg(abld, payload.source_w_reg);
+      this->wpos_w = vgrf(glsl_type::float_type);
+      abld.emit(SHADER_OPCODE_RCP, this->wpos_w, this->pixel_w);
+   }
 
    for (int i = 0; i < BRW_BARYCENTRIC_MODE_COUNT; ++i) {
       this->delta_xy[i] = fetch_barycentric_reg(
@@ -442,11 +620,18 @@ fs_visitor::emit_single_fb_write(const fs_builder &bld,
    const fs_reg dst_depth = fetch_payload_reg(bld, payload.dest_depth_reg);
    fs_reg src_depth, src_stencil;
 
-   if (source_depth_to_render_target) {
-      if (nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH))
-         src_depth = frag_depth;
-      else
-         src_depth = fetch_payload_reg(bld, payload.source_depth_reg);
+   if (nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH)) {
+      src_depth = frag_depth;
+   } else if (source_depth_to_render_target) {
+      /* If we got here, we're in one of those strange Gen4-5 cases where
+       * we're forced to pass the source depth, unmodified, to the FB write.
+       * In this case, we don't want to use pixel_z because we may not have
+       * set up interpolation.  It's also perfectly safe because it only
+       * happens on old hardware (no coarse interpolation) and this is
+       * explicitly the pass-through case.
+       */
+      assert(devinfo->ver <= 5);
+      src_depth = fetch_payload_reg(bld, payload.source_depth_reg);
    }
 
    if (nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL))

@@ -3992,6 +3992,14 @@ draw_tes_llvm_generate(struct draw_llvm *llvm,
    system_values.view_index = view_index;
 
    system_values.vertices_in = lp_build_broadcast_scalar(&bldvec, patch_vertices_in);
+
+   if (variant->key.primid_needed) {
+      int slot = variant->key.primid_output;
+      for (unsigned i = 0; i < 4; i++) {
+         outputs[slot][i] = lp_build_alloca(gallivm, lp_build_int_vec_type(gallivm, tes_type), "primid");
+         LLVMBuildStore(builder, system_values.prim_id, outputs[slot][i]);
+      }
+   }
    struct lp_build_loop_state lp_loop;
    lp_build_loop_begin(&lp_loop, gallivm, bld.zero);
    {
@@ -4048,7 +4056,7 @@ draw_tes_llvm_generate(struct draw_llvm *llvm,
                                                      lp_int_type(tes_type), 0);
 
       convert_to_aos(gallivm, io, NULL, outputs, clipmask,
-                     params.info->num_outputs, tes_type, FALSE);
+                     draw_total_tes_outputs(llvm->draw), tes_type, FALSE);
    }
    lp_build_loop_end_cond(&lp_loop, num_tess_coord, step, LLVMIntUGE);
    sampler->destroy(sampler);
@@ -4161,6 +4169,12 @@ draw_tes_llvm_make_variant_key(struct draw_llvm *llvm, char *store)
 
    memset(key, 0, offsetof(struct draw_tes_llvm_variant_key, samplers[0]));
 
+   int primid_output = draw_find_shader_output(llvm->draw, TGSI_SEMANTIC_PRIMID, 0);
+   if (primid_output >= 0) {
+      key->primid_output = primid_output;
+      key->primid_needed = true;
+   }
+
    /* All variants of this shader will have the same value for
     * nr_samplers.  Not yet trying to compact away holes in the
     * sampler array.
@@ -4205,6 +4219,9 @@ draw_tes_llvm_dump_variant_key(struct draw_tes_llvm_variant_key *key)
    unsigned i;
    struct draw_sampler_static_state *sampler = key->samplers;
    struct draw_image_static_state *image = draw_tes_llvm_variant_key_images(key);
+
+   if (key->primid_needed)
+      debug_printf("prim id output %d\n", key->primid_output);
    for (i = 0 ; i < key->nr_sampler_views; i++) {
       debug_printf("sampler[%i].src_format = %s\n", i,
                    util_format_name(sampler[i].texture_state.format));

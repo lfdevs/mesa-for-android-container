@@ -62,18 +62,32 @@ EXTENSIONS = [
     Extension("VK_KHR_maintenance1",
         required=True),
     Extension("VK_KHR_maintenance2"),
+    Extension("VK_KHR_maintenance3"),
     Extension("VK_KHR_external_memory"),
     Extension("VK_KHR_external_memory_fd"),
+    Extension("VK_EXT_provoking_vertex",
+       alias="pv",
+       features=True,
+       properties=True,
+       conditions=["$feats.provokingVertexLast"]),
     Extension("VK_EXT_shader_viewport_index_layer"),
     Extension("VK_EXT_post_depth_coverage"),
     Extension("VK_KHR_driver_properties",
         alias="driver",
         properties=True),
+    Extension("VK_EXT_memory_budget"),
     Extension("VK_KHR_draw_indirect_count"),
     Extension("VK_EXT_fragment_shader_interlock",
        alias="interlock",
        features=True,
        conditions=["$feats.fragmentShaderSampleInterlock", "$feats.fragmentShaderPixelInterlock"]),
+    Extension("VK_EXT_sample_locations",
+       alias="sample_locations",
+       properties=True),
+    Extension("VK_EXT_conservative_rasterization",
+       alias="cons_raster",
+       properties=True,
+       conditions=["$props.fullyCoveredFragmentShaderInputVariable"]),
     Extension("VK_KHR_shader_draw_parameters"),
     Extension("VK_KHR_sampler_mirror_clamp_to_edge"),
     Extension("VK_EXT_conditional_rendering",
@@ -94,12 +108,21 @@ EXTENSIONS = [
         properties=True,
         features=True,
         conditions=["$feats.nullDescriptor"]),
+    Extension("VK_EXT_image_drm_format_modifier"),
     Extension("VK_EXT_vertex_attribute_divisor",
         alias="vdiv", 
         properties=True,
         features=True,
         conditions=["$feats.vertexAttributeInstanceRateDivisor"]),
     Extension("VK_EXT_calibrated_timestamps"),
+    Extension("VK_KHR_shader_clock",
+       alias="shader_clock",
+       features=True,
+       conditions=["$feats.shaderSubgroupClock"]),
+    Extension("VK_EXT_shader_subgroup_ballot"),
+    Extension("VK_EXT_sampler_filter_minmax",
+        alias="reduction",
+	properties=True),
     Extension("VK_EXT_custom_border_color",
         alias="border_color",
         properties=True,
@@ -134,6 +157,24 @@ EXTENSIONS = [
         alias="scalar_block_layout",
         features=True,
         conditions=["$feats.scalarBlockLayout"]),
+    Extension("VK_KHR_swapchain"),
+    Extension("VK_KHR_shader_float16_int8",
+              alias="shader_float16_int8",
+              features=True),
+    Extension("VK_EXT_multi_draw",
+              alias="multidraw",
+	      features=True,
+	      properties=True,
+	      conditions=["$feats.multiDraw"]),
+    Extension("VK_KHR_push_descriptor",
+        alias="push",
+        properties=True),
+    Extension("VK_KHR_descriptor_update_template",
+        alias="template"),
+    Extension("VK_EXT_line_rasterization",
+        alias="line_rast",
+        properties=True,
+        features=True),
 ]
 
 # constructor: Versions(device_version(major, minor, patch), struct_version(major, minor))
@@ -186,12 +227,6 @@ header_code = """
 
 #include <vulkan/vulkan.h>
 
-#if defined(__APPLE__)
-// Source of MVK_VERSION
-// Source of VK_EXTX_PORTABILITY_SUBSET_EXTENSION_NAME
-#include "MoltenVK/vk_mvk_moltenvk.h"
-#endif
-
 struct zink_screen;
 
 struct zink_device_info {
@@ -235,6 +270,20 @@ struct zink_device_info {
 
 bool
 zink_get_physical_device_info(struct zink_screen *screen);
+
+void
+zink_verify_device_extensions(struct zink_screen *screen);
+
+/* stub functions that get inserted into the dispatch table if they are not
+ * properly loaded.
+ */
+%for ext in extensions:
+%if registry.in_registry(ext.name):
+%for cmd in registry.get_registry_entry(ext.name).device_commands:
+void zink_stub_${cmd.lstrip("vk")}(void);
+%endfor
+%endif
+%endfor
 
 #endif
 """
@@ -306,7 +355,7 @@ zink_get_physical_device_info(struct zink_screen *screen)
    }
 
    // get device features
-   if (screen->vk_GetPhysicalDeviceFeatures2) {
+   if (screen->vk.GetPhysicalDeviceFeatures2) {
       // check for device extension features
       info->feats.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 
@@ -331,14 +380,14 @@ zink_get_physical_device_info(struct zink_screen *screen)
 %endif
 %endfor
 
-      screen->vk_GetPhysicalDeviceFeatures2(screen->pdev, &info->feats);
+      screen->vk.GetPhysicalDeviceFeatures2(screen->pdev, &info->feats);
    } else {
       vkGetPhysicalDeviceFeatures(screen->pdev, &info->feats.features);
    }
 
    // check for device properties
-   if (screen->vk_GetPhysicalDeviceProperties2) {
-      VkPhysicalDeviceProperties2 props = {};
+   if (screen->vk.GetPhysicalDeviceProperties2) {
+      VkPhysicalDeviceProperties2 props = {0};
       props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
 
 %for version in versions:
@@ -362,11 +411,11 @@ zink_get_physical_device_info(struct zink_screen *screen)
 %endfor
 
       // note: setting up local VkPhysicalDeviceProperties2.
-      screen->vk_GetPhysicalDeviceProperties2(screen->pdev, &props);
+      screen->vk.GetPhysicalDeviceProperties2(screen->pdev, &props);
    }
 
    // enable the extensions if they match the conditions given by ext.enable_conds 
-   if (screen->vk_GetPhysicalDeviceProperties2) {
+   if (screen->vk.GetPhysicalDeviceProperties2) {
         %for ext in extensions:
 <%helpers:guard ext="${ext}">
 <%
@@ -407,6 +456,54 @@ zink_get_physical_device_info(struct zink_screen *screen)
 fail:
    return false;
 }
+
+void
+zink_verify_device_extensions(struct zink_screen *screen)
+{
+%for ext in extensions:
+%if registry.in_registry(ext.name):
+   if (screen->info.have_${ext.name_with_vendor()}) {
+%for cmd in registry.get_registry_entry(ext.name).device_commands:
+      if (!screen->vk.${cmd.lstrip("vk")}) {
+#ifndef NDEBUG
+         screen->vk.${cmd.lstrip("vk")} = (PFN_${cmd})zink_stub_${cmd.lstrip("vk")};
+#else
+         screen->vk.${cmd.lstrip("vk")} = (PFN_${cmd})zink_stub_function_not_loaded;
+#endif
+      }
+%endfor
+   }
+%endif
+%endfor
+}
+
+#ifndef NDEBUG
+/* generated stub functions */
+## remember the stub functions that are already generated
+<% generated_funcs = set() %>
+
+%for ext in extensions:
+%if registry.in_registry(ext.name):
+%for cmd in registry.get_registry_entry(ext.name).device_commands:
+##
+## some functions are added by multiple extensions, which creates duplication
+## and thus redefinition of stubs (eg. vkCmdPushDescriptorSetWithTemplateKHR)
+##
+%if cmd in generated_funcs:
+   <% continue %>
+%else:
+   <% generated_funcs.add(cmd) %>
+%endif
+void
+zink_stub_${cmd.lstrip("vk")}()
+{
+   mesa_loge("ZINK: ${cmd} is not loaded properly!");
+   abort();
+}
+%endfor
+%endif
+%endfor
+#endif
 """
 
 
@@ -477,11 +574,11 @@ if __name__ == "__main__":
     lookup.put_string("helpers", include_template)
 
     with open(header_path, "w") as header_file:
-        header = Template(header_code, lookup=lookup).render(extensions=extensions, versions=versions).strip()
+        header = Template(header_code, lookup=lookup).render(extensions=extensions, versions=versions, registry=registry).strip()
         header = replace_code(header, replacement)
         print(header, file=header_file)
 
     with open(impl_path, "w") as impl_file:
-        impl = Template(impl_code, lookup=lookup).render(extensions=extensions, versions=versions).strip()
+        impl = Template(impl_code, lookup=lookup).render(extensions=extensions, versions=versions, registry=registry).strip()
         impl = replace_code(impl, replacement)
         print(impl, file=impl_file)

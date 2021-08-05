@@ -17,12 +17,6 @@
 #include "util/os_misc.h"
 #include "vk_enum_to_str.h"
 
-#if __STDC_VERSION__ >= 201112L
-#define VN_MAX_ALIGN _Alignof(max_align_t)
-#else
-#define VN_MAX_ALIGN VN_DEFAULT_ALIGN
-#endif
-
 static const struct debug_control vn_debug_options[] = {
    { "init", VN_DEBUG_INIT },
    { "result", VN_DEBUG_RESULT },
@@ -65,44 +59,6 @@ vn_log_result(struct vn_instance *instance,
 {
    vn_log(instance, "%s: %s", where, vk_Result_to_str(result));
    return result;
-}
-
-static void *
-vn_default_alloc(void *pUserData,
-                 size_t size,
-                 size_t alignment,
-                 VkSystemAllocationScope allocationScope)
-{
-   assert(VN_MAX_ALIGN % alignment == 0);
-   return malloc(size);
-}
-
-static void *
-vn_default_realloc(void *pUserData,
-                   void *pOriginal,
-                   size_t size,
-                   size_t alignment,
-                   VkSystemAllocationScope allocationScope)
-{
-   assert(VN_MAX_ALIGN % alignment == 0);
-   return realloc(pOriginal, size);
-}
-
-static void
-vn_default_free(void *pUserData, void *pMemory)
-{
-   free(pMemory);
-}
-
-const VkAllocationCallbacks *
-vn_default_allocator(void)
-{
-   static const VkAllocationCallbacks allocator = {
-      .pfnAllocation = vn_default_alloc,
-      .pfnReallocation = vn_default_realloc,
-      .pfnFree = vn_default_free,
-   };
-   return &allocator;
 }
 
 void

@@ -105,8 +105,7 @@ upload_shader_variant(struct ir3_shader_variant *v)
    assert(!v->bo);
 
    v->bo =
-      fd_bo_new(compiler->dev, v->info.size,
-                DRM_FREEDRENO_GEM_CACHE_WCOMBINE | DRM_FREEDRENO_GEM_TYPE_KMEM,
+      fd_bo_new(compiler->dev, v->info.size, 0,
                 "%s:%s", ir3_shader_stage(v), info->name);
 
    /* Always include shaders in kernel crash dumps. */
@@ -241,7 +240,7 @@ create_initial_variants(struct ir3_shader_state *hwcso,
 }
 
 static void
-create_initial_variants_async(void *job, int thread_index)
+create_initial_variants_async(void *job, void *gdata, int thread_index)
 {
    struct ir3_shader_state *hwcso = job;
    struct pipe_debug_callback debug = {};
@@ -250,7 +249,7 @@ create_initial_variants_async(void *job, int thread_index)
 }
 
 static void
-create_initial_compute_variants_async(void *job, int thread_index)
+create_initial_compute_variants_async(void *job, void *gdata, int thread_index)
 {
    struct ir3_shader_state *hwcso = job;
    struct ir3_shader *shader = hwcso->shader;
@@ -415,10 +414,10 @@ ir3_get_shader(struct ir3_shader_state *hwcso)
       return NULL;
 
    struct ir3_shader *shader = hwcso->shader;
-   perf_time(1000, "waited for %s:%s:%s variants",
-             _mesa_shader_stage_to_abbrev(shader->type), shader->nir->info.name,
-             shader->nir->info.label)
-   {
+   perf_time (1000, "waited for %s:%s:%s variants",
+              _mesa_shader_stage_to_abbrev(shader->type),
+              shader->nir->info.name,
+              shader->nir->info.label) {
       /* wait for initial variants to compile: */
       util_queue_fence_wait(&hwcso->ready);
    }
@@ -466,6 +465,7 @@ ir3_screen_finalize_nir(struct pipe_screen *pscreen, void *nir, bool optimize)
 {
    struct fd_screen *screen = fd_screen(pscreen);
 
+   ir3_nir_lower_io_to_temporaries(nir);
    ir3_finalize_nir(screen->compiler, nir);
 }
 
@@ -515,7 +515,7 @@ ir3_screen_init(struct pipe_screen *pscreen)
 {
    struct fd_screen *screen = fd_screen(pscreen);
 
-   screen->compiler = ir3_compiler_create(screen->dev, screen->gpu_id);
+   screen->compiler = ir3_compiler_create(screen->dev, screen->gpu_id, false);
 
    /* TODO do we want to limit things to # of fast cores, or just limit
     * based on total # of both big and little cores.  The little cores
@@ -527,7 +527,7 @@ ir3_screen_init(struct pipe_screen *pscreen)
 
    util_queue_init(&screen->compile_queue, "ir3q", 64, num_threads,
                    UTIL_QUEUE_INIT_RESIZE_IF_FULL |
-                      UTIL_QUEUE_INIT_SET_FULL_THREAD_AFFINITY);
+                      UTIL_QUEUE_INIT_SET_FULL_THREAD_AFFINITY, NULL);
 
    pscreen->finalize_nir = ir3_screen_finalize_nir;
    pscreen->set_max_shader_compiler_threads =

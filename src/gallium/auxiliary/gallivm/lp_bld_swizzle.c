@@ -408,7 +408,9 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
             switch (swizzles[i]) {
             default:
                assert(0);
+#if defined(NDEBUG) || defined(DEBUG)
                FALLTHROUGH;
+#endif
             case PIPE_SWIZZLE_X:
             case PIPE_SWIZZLE_Y:
             case PIPE_SWIZZLE_Z:

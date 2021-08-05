@@ -187,7 +187,7 @@ static void offset_first_tri( struct draw_stage *stage,
       if (stage->draw->floating_point_depth) {
          offset->units = (float) rast->offset_units;
       } else {
-         offset->units = (float) (rast->offset_units * stage->draw->mrd);
+         offset->units = (float) (rast->offset_units * stage->draw->mrd * 2);
       }
    }
    else {

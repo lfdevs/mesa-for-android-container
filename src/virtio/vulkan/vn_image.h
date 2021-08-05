@@ -13,11 +13,34 @@
 
 #include "vn_common.h"
 
+/* changing this to VK_IMAGE_LAYOUT_PRESENT_SRC_KHR disables ownership
+ * transfers and can be useful for debugging
+ */
+#define VN_PRESENT_SRC_INTERNAL_LAYOUT VK_IMAGE_LAYOUT_GENERAL
+
+struct vn_image_create_deferred_info {
+   VkImageCreateInfo create;
+   VkImageFormatListCreateInfo list;
+   VkImageStencilUsageCreateInfo stencil;
+};
+
 struct vn_image {
    struct vn_object_base base;
 
+   VkSharingMode sharing_mode;
+
    VkMemoryRequirements2 memory_requirements[4];
    VkMemoryDedicatedRequirements dedicated_requirements[4];
+
+   bool is_wsi;
+   VkBuffer prime_blit_buffer;
+
+   /* For VK_ANDROID_native_buffer, the WSI image owns the memory, */
+   VkDeviceMemory private_memory;
+   /* For VK_ANDROID_external_memory_android_hardware_buffer, real image
+    * creation is deferred until bind image memory.
+    */
+   struct vn_image_create_deferred_info *deferred_info;
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(vn_image,
                                base.base,
@@ -26,6 +49,8 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(vn_image,
 
 struct vn_image_view {
    struct vn_object_base base;
+
+   const struct vn_image *image;
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(vn_image_view,
                                base.base,
@@ -47,5 +72,22 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(vn_sampler_ycbcr_conversion,
                                base.base,
                                VkSamplerYcbcrConversion,
                                VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION)
+
+VkResult
+vn_image_create(struct vn_device *dev,
+                const VkImageCreateInfo *create_info,
+                const VkAllocationCallbacks *alloc,
+                struct vn_image **out_img);
+
+VkResult
+vn_image_init_deferred(struct vn_device *dev,
+                       const VkImageCreateInfo *create_info,
+                       struct vn_image *img);
+
+VkResult
+vn_image_create_deferred(struct vn_device *dev,
+                         const VkImageCreateInfo *create_info,
+                         const VkAllocationCallbacks *alloc,
+                         struct vn_image **out_img);
 
 #endif /* VN_IMAGE_H */

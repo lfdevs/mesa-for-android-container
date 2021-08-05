@@ -120,7 +120,14 @@
 /* Alpha test ref value */
 #define NV50_CB_AUX_ALPHATEST_OFFSET 0x3c0
 #define NV50_CB_AUX_ALPHATEST_SIZE (4)
-/* next spot: 0x344 */
+/* Compute buffer info: 16 surfaces, 12 32-bit integers each */
+#define NV50_CB_AUX_BUF_INFO(i)   (0x3c4 + (i) * 12 * 4)
+#define NV50_CB_AUX_BUF_SIZE      (NV50_MAX_GLOBALS * 12 * 4)
+/* Compute membar mapped area */
+#define NV50_CB_AUX_MEMBAR_OFFSET 0x6c4
+/* next spot: 0x6c8 */
+/* 0x800 from the end for compute shader membars, reads only. */
+#define NV50_CB_AUX_MEMBAR        (NV50_CB_AUX_SIZE - 0x800)
 /* 4 32-bit floats for the vertex runout, put at the end */
 #define NV50_CB_AUX_RUNOUT_OFFSET (NV50_CB_AUX_SIZE - 0x10)
 
@@ -222,6 +229,8 @@ struct nv50_context {
    uint16_t images_valid;
 
    struct util_dynarray global_residents;
+
+   uint64_t compute_invocations;
 };
 
 static inline struct nv50_context *
@@ -326,9 +335,9 @@ nv50_cb_push(struct nouveau_context *nv,
              unsigned offset, unsigned words, const uint32_t *data);
 
 /* nv50_vbo.c */
-void nv50_draw_vbo(struct pipe_context *, const struct pipe_draw_info *,
+void nv50_draw_vbo(struct pipe_context *, const struct pipe_draw_info *, unsigned,
                    const struct pipe_draw_indirect_info *indirect,
-                   const struct pipe_draw_start_count *draws,
+                   const struct pipe_draw_start_count_bias *draws,
                    unsigned num_draws);
 
 void *
@@ -343,7 +352,7 @@ void nv50_vertex_arrays_validate(struct nv50_context *nv50);
 /* nv50_push.c */
 void nv50_push_vbo(struct nv50_context *, const struct pipe_draw_info *,
                    const struct pipe_draw_indirect_info *indirect,
-                   const struct pipe_draw_start_count *draw);
+                   const struct pipe_draw_start_count_bias *draw);
 
 /* nv84_video.c */
 struct pipe_video_codec *

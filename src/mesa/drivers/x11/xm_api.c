@@ -1300,6 +1300,26 @@ Display *XMesaGetCurrentDisplay(void)
 }
 
 
+/**
+ * Swap buffers notification callback.
+ *
+ * \param ctx GL context.
+ *
+ * Called by window system just before swapping buffers.
+ * We have to finish any pending rendering.
+ */
+static void
+XMesaNotifySwapBuffers(struct gl_context *ctx)
+{
+   if (MESA_VERBOSE & VERBOSE_SWAPBUFFERS)
+      _mesa_debug(ctx, "SwapBuffers\n");
+
+   FLUSH_VERTICES(ctx, 0, 0);
+   if (ctx->Driver.Flush) {
+      ctx->Driver.Flush(ctx, 0);
+   }
+}
+
 
 /*
  * Copy the back buffer to the front buffer.  If there's no back buffer
@@ -1319,7 +1339,7 @@ void XMesaSwapBuffers( XMesaBuffer b )
     * we have to flush any pending rendering commands first.
     */
    if (ctx && ctx->DrawBuffer == &(b->mesa_buffer))
-      _mesa_notifySwapBuffers(ctx);
+      XMesaNotifySwapBuffers(ctx);
 
    if (b->db_mode) {
       if (b->backxrb->ximage) {
@@ -1374,7 +1394,7 @@ void XMesaCopySubBuffer( XMesaBuffer b, int x, int y, int width, int height )
     * we have to flush any pending rendering commands first.
     */
    if (ctx && ctx->DrawBuffer == &(b->mesa_buffer))
-      _mesa_notifySwapBuffers(ctx);
+      XMesaNotifySwapBuffers(ctx);
 
    if (!b->backxrb) {
       /* single buffered */

@@ -114,7 +114,6 @@ spec/arb_tessellation_shader/execution/compatibility/tes-clip-vertex-different-f
 spec/arb_tessellation_shader/execution/compatibility/vs-tcs-tes-clip-vertex-different-from-position: skip
 spec/arb_tessellation_shader/execution/compatibility/vs-tcs-tes-clip-vertex-enables: skip
 spec/arb_tessellation_shader/execution/compatibility/vs-tcs-tes-gs-clip-vertex-different-from-position: skip
-spec/arb_tessellation_shader/execution/fs-primitiveid-instanced: fail
 spec/arb_tessellation_shader/execution/gs-primitiveid-instanced: fail
 spec/arb_tessellation_shader/execution/tcs-tes-vertex-dlist: skip
 spec/arb_tessellation_shader/execution/vs-tes-tessinner-tessouter-inputs-quads-dlist: skip
@@ -158,10 +157,6 @@ spec/ext_shader_framebuffer_fetch_non_coherent/execution/gles3/simple-ms8: skip
 spec/ext_shader_image_load_formatted/execution/image_checkerboard: skip
 spec/glsl-1.10/preprocessor/extension-defined-test: skip
 spec/glsl-1.10/preprocessor/extension-if-1: skip
-spec/glsl-1.20/execution/fs-nan-builtin-max: fail
-spec/glsl-1.20/execution/fs-nan-builtin-min: fail
-spec/glsl-1.20/execution/vs-nan-builtin-max: fail
-spec/glsl-1.20/execution/vs-nan-builtin-min: fail
 spec/glsl-1.50/execution/compatibility/clipping/gs-clip-vertex-const-accept: skip
 spec/glsl-1.50/execution/compatibility/clipping/gs-clip-vertex-const-reject: skip
 spec/glsl-1.50/execution/compatibility/clipping/gs-clip-vertex-different-from-position: skip

@@ -1,5 +1,6 @@
 #include "zink_context.h"
 #include "zink_helpers.h"
+#include "zink_query.h"
 #include "zink_resource.h"
 #include "zink_screen.h"
 
@@ -58,7 +59,7 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info)
 
    zink_resource_setup_transfer_layouts(ctx, src, dst);
 
-   VkImageResolve region = {};
+   VkImageResolve region = {0};
 
    region.srcSubresource.aspectMask = src->aspect;
    region.srcSubresource.mipLevel = info->src.level;
@@ -143,6 +144,12 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info)
        !(get_resource_features(screen, dst) & VK_FORMAT_FEATURE_BLIT_DST_BIT))
       return false;
 
+   if ((util_format_is_pure_sint(info->src.format) !=
+        util_format_is_pure_sint(info->dst.format)) ||
+       (util_format_is_pure_uint(info->src.format) !=
+        util_format_is_pure_uint(info->dst.format)))
+      return false;
+
    if (info->filter == PIPE_TEX_FILTER_LINEAR &&
        !(get_resource_features(screen, src) &
           VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
@@ -158,7 +165,7 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info)
    if (info->dst.resource->target == PIPE_BUFFER)
       util_range_add(info->dst.resource, &dst->valid_buffer_range,
                      info->dst.box.x, info->dst.box.x + info->dst.box.width);
-   VkImageBlit region = {};
+   VkImageBlit region = {0};
    region.srcSubresource.aspectMask = src->aspect;
    region.srcSubresource.mipLevel = info->src.level;
    region.srcOffsets[0].x = info->src.box.x;
@@ -327,12 +334,15 @@ zink_blit_begin(struct zink_context *ctx, enum zink_blit_flags flags)
 
    if (flags & ZINK_BLIT_SAVE_TEXTURES) {
       util_blitter_save_fragment_sampler_states(ctx->blitter,
-                                                ctx->num_samplers[PIPE_SHADER_FRAGMENT],
-                                                ctx->sampler_states[PIPE_SHADER_FRAGMENT]);
+                                                ctx->di.num_samplers[PIPE_SHADER_FRAGMENT],
+                                                (void**)ctx->sampler_states[PIPE_SHADER_FRAGMENT]);
       util_blitter_save_fragment_sampler_views(ctx->blitter,
-                                               ctx->num_sampler_views[PIPE_SHADER_FRAGMENT],
+                                               ctx->di.num_sampler_views[PIPE_SHADER_FRAGMENT],
                                                ctx->sampler_views[PIPE_SHADER_FRAGMENT]);
    }
+
+   if (flags & ZINK_BLIT_NO_COND_RENDER && ctx->render_condition_active)
+      zink_stop_conditional_render(ctx);
 }
 
 bool

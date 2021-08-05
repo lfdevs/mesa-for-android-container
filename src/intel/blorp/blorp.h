@@ -187,7 +187,7 @@ blorp_clear_depth_stencil(struct blorp_batch *batch,
                           bool clear_depth, float depth_value,
                           uint8_t stencil_mask, uint8_t stencil_value);
 bool
-blorp_can_hiz_clear_depth(const struct gen_device_info *devinfo,
+blorp_can_hiz_clear_depth(const struct intel_device_info *devinfo,
                           const struct isl_surf *surf,
                           enum isl_aux_usage aux_usage,
                           uint32_t level, uint32_t layer,

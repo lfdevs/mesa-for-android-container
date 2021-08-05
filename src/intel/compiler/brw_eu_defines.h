@@ -35,6 +35,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "util/macros.h"
+#include "dev/intel_device_info.h"
 
 /* The following hunk, up-to "Execution Unit" is used by both the
  * intel/compiler and i965 codebase. */
@@ -573,6 +574,7 @@ enum opcode {
    VEC4_OPCODE_SET_LOW_32BIT,
    VEC4_OPCODE_SET_HIGH_32BIT,
    VEC4_OPCODE_MOV_FOR_SCRATCH,
+   VEC4_OPCODE_ZERO_OOB_PUSH_REGS,
 
    FS_OPCODE_DDX_COARSE,
    FS_OPCODE_DDX_FINE,
@@ -1099,11 +1101,33 @@ operator|=(tgl_sbid_mode &x, tgl_sbid_mode y)
 #endif
 
 /**
+ * TGL+ SWSB RegDist synchronization pipeline.
+ *
+ * On TGL all instructions that use the RegDist synchronization mechanism are
+ * considered to be executed as a single in-order pipeline, therefore only the
+ * TGL_PIPE_FLOAT pipeline is applicable.  On XeHP+ platforms there are two
+ * additional asynchronous ALU pipelines (which still execute instructions
+ * in-order and use the RegDist synchronization mechanism).  TGL_PIPE_NONE
+ * doesn't provide any RegDist pipeline synchronization information and allows
+ * the hardware to infer the pipeline based on the source types of the
+ * instruction.  TGL_PIPE_ALL can be used when synchronization with all ALU
+ * pipelines is intended.
+ */
+enum tgl_pipe {
+   TGL_PIPE_NONE = 0,
+   TGL_PIPE_FLOAT,
+   TGL_PIPE_INT,
+   TGL_PIPE_LONG,
+   TGL_PIPE_ALL
+};
+
+/**
  * Logical representation of the SWSB scheduling information of a hardware
  * instruction.  The binary representation is slightly more compact.
  */
 struct tgl_swsb {
    unsigned regdist : 3;
+   enum tgl_pipe pipe : 3;
    unsigned sbid : 4;
    enum tgl_sbid_mode mode : 3;
 };
@@ -1116,7 +1140,7 @@ struct tgl_swsb {
 static inline struct tgl_swsb
 tgl_swsb_regdist(unsigned d)
 {
-   const struct tgl_swsb swsb = { d };
+   const struct tgl_swsb swsb = { d, d ? TGL_PIPE_ALL : TGL_PIPE_NONE };
    assert(swsb.regdist == d);
    return swsb;
 }
@@ -1128,7 +1152,7 @@ tgl_swsb_regdist(unsigned d)
 static inline struct tgl_swsb
 tgl_swsb_sbid(enum tgl_sbid_mode mode, unsigned sbid)
 {
-   const struct tgl_swsb swsb = { 0, sbid, mode };
+   const struct tgl_swsb swsb = { 0, TGL_PIPE_NONE, sbid, mode };
    assert(swsb.sbid == sbid);
    return swsb;
 }
@@ -1152,6 +1176,7 @@ tgl_swsb_dst_dep(struct tgl_swsb swsb, unsigned regdist)
 {
    swsb.regdist = regdist;
    swsb.mode = swsb.mode & TGL_SBID_SET;
+   swsb.pipe = (regdist ? TGL_PIPE_ALL : TGL_PIPE_NONE);
    return swsb;
 }
 
@@ -1171,10 +1196,15 @@ tgl_swsb_src_dep(struct tgl_swsb swsb)
  * SWSB annotation.
  */
 static inline uint8_t
-tgl_swsb_encode(struct tgl_swsb swsb)
+tgl_swsb_encode(const struct intel_device_info *devinfo, struct tgl_swsb swsb)
 {
    if (!swsb.mode) {
-      return swsb.regdist;
+      const unsigned pipe = devinfo->verx10 < 125 ? 0 :
+         swsb.pipe == TGL_PIPE_FLOAT ? 0x10 :
+         swsb.pipe == TGL_PIPE_INT ? 0x18 :
+         swsb.pipe == TGL_PIPE_LONG ? 0x50 :
+         swsb.pipe == TGL_PIPE_ALL ? 0x8 : 0;
+      return pipe | swsb.regdist;
    } else if (swsb.regdist) {
       return 0x80 | swsb.regdist << 4 | swsb.sbid;
    } else {
@@ -1188,10 +1218,12 @@ tgl_swsb_encode(struct tgl_swsb swsb)
  * tgl_swsb.
  */
 static inline struct tgl_swsb
-tgl_swsb_decode(enum opcode opcode, uint8_t x)
+tgl_swsb_decode(const struct intel_device_info *devinfo, const enum opcode opcode,
+                const uint8_t x)
 {
    if (x & 0x80) {
-      const struct tgl_swsb swsb = { (x & 0x70u) >> 4, x & 0xfu,
+      const struct tgl_swsb swsb = { (x & 0x70u) >> 4, TGL_PIPE_NONE,
+                                     x & 0xfu,
                                      (opcode == BRW_OPCODE_SEND ||
                                       opcode == BRW_OPCODE_SENDC ||
                                       opcode == BRW_OPCODE_MATH) ?
@@ -1204,7 +1236,14 @@ tgl_swsb_decode(enum opcode opcode, uint8_t x)
    } else if ((x & 0x70) == 0x40) {
       return tgl_swsb_sbid(TGL_SBID_SET, x & 0xfu);
    } else {
-      return tgl_swsb_regdist(x & 0x7u);
+      const struct tgl_swsb swsb = { x & 0x7u,
+                                     ((x & 0x78) == 0x10 ? TGL_PIPE_FLOAT :
+                                      (x & 0x78) == 0x18 ? TGL_PIPE_INT :
+                                      (x & 0x78) == 0x50 ? TGL_PIPE_LONG :
+                                      (x & 0x78) == 0x8 ? TGL_PIPE_ALL :
+                                      TGL_PIPE_NONE) };
+      assert(devinfo->verx10 >= 125 || swsb.pipe == TGL_PIPE_NONE);
+      return swsb;
    }
 }
 
@@ -1244,6 +1283,10 @@ enum brw_message_target {
    GFX7_SFID_PIXEL_INTERPOLATOR      = 11,
    HSW_SFID_DATAPORT_DATA_CACHE_1    = 12,
    HSW_SFID_CRE                      = 13,
+
+   GFX12_SFID_TGM                      = 13, /* Typed Global Memory */
+   GFX12_SFID_SLM                      = 14, /* Shared Local Memory */
+   GFX12_SFID_UGM                      = 15, /* Untyped Global Memory */
 
    GEN_RT_SFID_BINDLESS_THREAD_DISPATCH = 7,
    GEN_RT_SFID_RAY_TRACE_ACCELERATOR = 8,
@@ -1598,6 +1641,9 @@ enum brw_message_target {
 #define GFX7_MAX_HS_URB_ENTRY_SIZE_BYTES                (512*64)
 #define GFX7_MAX_VS_URB_ENTRY_SIZE_BYTES                (512*64)
 
+#define BRW_GS_EDGE_INDICATOR_0			(1 << 8)
+#define BRW_GS_EDGE_INDICATOR_1			(1 << 9)
+
 /* Gfx6 "GS URB Entry Allocation Size" is defined as a number of 1024-bit
  * (128 bytes) URB rows and the maximum allowed value is 5 rows.
  */
@@ -1660,5 +1706,275 @@ enum PACKED brw_rnd_mode {
 #define GEN_RT_BTD_SHADER_TYPE_CLOSEST_HIT    1
 #define GEN_RT_BTD_SHADER_TYPE_MISS           2
 #define GEN_RT_BTD_SHADER_TYPE_INTERSECTION   3
+
+/* Starting with Xe-HPG, the old dataport was massively reworked dataport.
+ * The new thing, called Load/Store Cache or LSC, has a significantly improved
+ * interface.  Instead of bespoke messages for every case, there's basically
+ * one or two messages with different bits to control things like address
+ * size, how much data is read/written, etc.  It's way nicer but also means we
+ * get to rewrite all our dataport encoding/decoding code.  This patch kicks
+ * off the party with all of the new enums.
+ */
+enum lsc_opcode {
+   LSC_OP_LOAD            = 0,
+   LSC_OP_LOAD_CMASK      = 2,
+   LSC_OP_STORE           = 4,
+   LSC_OP_STORE_CMASK     = 6,
+   LSC_OP_ATOMIC_INC      = 8,
+   LSC_OP_ATOMIC_DEC      = 9,
+   LSC_OP_ATOMIC_LOAD     = 10,
+   LSC_OP_ATOMIC_STORE    = 11,
+   LSC_OP_ATOMIC_ADD      = 12,
+   LSC_OP_ATOMIC_SUB      = 13,
+   LSC_OP_ATOMIC_MIN      = 14,
+   LSC_OP_ATOMIC_MAX      = 15,
+   LSC_OP_ATOMIC_UMIN     = 16,
+   LSC_OP_ATOMIC_UMAX     = 17,
+   LSC_OP_ATOMIC_CMPXCHG  = 18,
+   LSC_OP_ATOMIC_FADD     = 19,
+   LSC_OP_ATOMIC_FSUB     = 20,
+   LSC_OP_ATOMIC_FMIN     = 21,
+   LSC_OP_ATOMIC_FMAX     = 22,
+   LSC_OP_ATOMIC_FCMPXCHG = 23,
+   LSC_OP_ATOMIC_AND      = 24,
+   LSC_OP_ATOMIC_OR       = 25,
+   LSC_OP_ATOMIC_XOR      = 26,
+   LSC_OP_FENCE           = 31
+};
+
+/*
+ * Specifies the size of the dataport address payload in registers.
+ */
+enum PACKED lsc_addr_reg_size {
+   LSC_ADDR_REG_SIZE_1  = 1,
+   LSC_ADDR_REG_SIZE_2  = 2,
+   LSC_ADDR_REG_SIZE_3  = 3,
+   LSC_ADDR_REG_SIZE_4  = 4,
+   LSC_ADDR_REG_SIZE_6  = 6,
+   LSC_ADDR_REG_SIZE_8  = 8,
+};
+
+/*
+ * Specifies the size of the address payload item in a dataport message.
+ */
+enum PACKED lsc_addr_size {
+  LSC_ADDR_SIZE_A16 = 1,    /* 16-bit address offset */
+  LSC_ADDR_SIZE_A32 = 2,    /* 32-bit address offset */
+  LSC_ADDR_SIZE_A64 = 3,    /* 64-bit address offset */
+};
+
+/*
+ * Specifies the type of the address payload item in a dataport message. The
+ * address type specifies how the dataport message decodes the Extended
+ * Descriptor for the surface attributes and address calculation.
+ */
+enum PACKED lsc_addr_surface_type {
+   LSC_ADDR_SURFTYPE_FLAT = 0, /* Flat */
+   LSC_ADDR_SURFTYPE_BSS = 1,  /* Bindless surface state */
+   LSC_ADDR_SURFTYPE_SS = 2,   /* Surface state */
+   LSC_ADDR_SURFTYPE_BTI = 3,  /* Binding table index */
+};
+
+/*
+ * Specifies the dataport message override to the default L1 and L3 memory
+ * cache policies. Dataport L1 cache policies are uncached (UC), cached (C),
+ * cache streaming (S) and invalidate-after-read (IAR). Dataport L3 cache
+ * policies are uncached (UC) and cached (C).
+ */
+enum lsc_cache_load {
+   /* No override. Use the non-pipelined state or surface state cache settings
+    * for L1 and L3.
+    */
+   LSC_CACHE_LOAD_L1STATE_L3MOCS = 0,
+   /* Override to L1 uncached and L3 uncached */
+   LSC_CACHE_LOAD_L1UC_L3UC      = 1,
+   /* Override to L1 uncached and L3 cached */
+   LSC_CACHE_LOAD_L1UC_L3C       = 2,
+   /* Override to L1 cached and L3 uncached */
+   LSC_CACHE_LOAD_L1C_L3UC       = 3,
+   /* Override to cache at both L1 and L3 */
+   LSC_CACHE_LOAD_L1C_L3C        = 4,
+   /* Override to L1 streaming load and L3 uncached */
+   LSC_CACHE_LOAD_L1S_L3UC       = 5,
+   /* Override to L1 streaming load and L3 cached */
+   LSC_CACHE_LOAD_L1S_L3C        = 6,
+   /* For load messages, override to L1 invalidate-after-read, and L3 cached. */
+   LSC_CACHE_LOAD_L1IAR_L3C      = 7,
+};
+
+/*
+ * Specifies the dataport message override to the default L1 and L3 memory
+ * cache policies. Dataport L1 cache policies are uncached (UC), write-through
+ * (WT), write-back (WB) and streaming (S). Dataport L3 cache policies are
+ * uncached (UC) and cached (WB).
+ */
+enum PACKED lsc_cache_store {
+   /* No override. Use the non-pipelined or surface state cache settings for L1
+    * and L3.
+    */
+   LSC_CACHE_STORE_L1STATE_L3MOCS = 0,
+   /* Override to L1 uncached and L3 uncached */
+   LSC_CACHE_STORE_L1UC_L3UC = 1,
+   /* Override to L1 uncached and L3 cached */
+   LSC_CACHE_STORE_L1UC_L3WB = 2,
+   /* Override to L1 write-through and L3 uncached */
+   LSC_CACHE_STORE_L1WT_L3UC = 3,
+   /* Override to L1 write-through and L3 cached */
+   LSC_CACHE_STORE_L1WT_L3WB = 4,
+   /* Override to L1 streaming and L3 uncached */
+   LSC_CACHE_STORE_L1S_L3UC = 5,
+   /* Override to L1 streaming and L3 cached */
+   LSC_CACHE_STORE_L1S_L3WB = 6,
+   /* Override to L1 write-back, and L3 cached */
+   LSC_CACHE_STORE_L1WB_L3WB = 7,
+
+};
+
+/*
+ * Specifies which components of the data payload 4-element vector (X,Y,Z,W) is
+ * packed into the register payload.
+ */
+enum PACKED lsc_cmask {
+   LSC_CMASK_X = 0x1,
+   LSC_CMASK_Y = 0x2,
+   LSC_CMASK_XY = 0x3,
+   LSC_CMASK_Z = 0x4,
+   LSC_CMASK_XZ = 0x5,
+   LSC_CMASK_YZ = 0x6,
+   LSC_CMASK_XYZ = 0x7,
+   LSC_CMASK_W = 0x8,
+   LSC_CMASK_XW = 0x9,
+   LSC_CMASK_YW = 0xa,
+   LSC_CMASK_XYW = 0xb,
+   LSC_CMASK_ZW = 0xc,
+   LSC_CMASK_XZW = 0xd,
+   LSC_CMASK_YZW = 0xe,
+   LSC_CMASK_XYZW = 0xf,
+};
+
+/*
+ * Specifies the size of the data payload item in a dataport message.
+ */
+enum PACKED lsc_data_size {
+   /* 8-bit scalar data value in memory, packed into a 8-bit data value in
+    * register.
+    */
+   LSC_DATA_SIZE_D8 = 0,
+   /* 16-bit scalar data value in memory, packed into a 16-bit data value in
+    * register.
+    */
+   LSC_DATA_SIZE_D16 = 1,
+   /* 32-bit scalar data value in memory, packed into 32-bit data value in
+    * register.
+    */
+   LSC_DATA_SIZE_D32 = 2,
+   /* 64-bit scalar data value in memory, packed into 64-bit data value in
+    * register.
+    */
+   LSC_DATA_SIZE_D64 = 3,
+   /* 8-bit scalar data value in memory, packed into 32-bit unsigned data value
+    * in register.
+    */
+   LSC_DATA_SIZE_D8U32 = 4,
+   /* 16-bit scalar data value in memory, packed into 32-bit unsigned data
+    * value in register.
+    */
+   LSC_DATA_SIZE_D16U32 = 5,
+   /* 16-bit scalar BigFloat data value in memory, packed into 32-bit float
+    * value in register.
+    */
+   LSC_DATA_SIZE_D16BF32 = 6,
+};
+
+/*
+ *  Enum specifies the scope of the fence.
+ */
+enum PACKED lsc_fence_scope {
+   /* Wait until all previous memory transactions from this thread are observed
+    * within the local thread-group.
+    */
+   LSC_FENCE_THREADGROUP = 0,
+   /* Wait until all previous memory transactions from this thread are observed
+    * within the local sub-slice.
+    */
+   LSC_FENCE_LOCAL = 1,
+   /* Wait until all previous memory transactions from this thread are observed
+    * in the local tile.
+    */
+   LSC_FENCE_TILE = 2,
+   /* Wait until all previous memory transactions from this thread are observed
+    * in the local GPU.
+    */
+   LSC_FENCE_GPU = 3,
+   /* Wait until all previous memory transactions from this thread are observed
+    * across all GPUs in the system.
+    */
+   LSC_FENCE_ALL_GPU = 4,
+   /* Wait until all previous memory transactions from this thread are observed
+    * at the "system" level.
+    */
+   LSC_FENCE_SYSTEM_RELEASE = 5,
+   /* For GPUs that do not follow PCIe Write ordering for downstream writes
+    * targeting device memory, a fence message with scope=System_Acquire will
+    * commit to device memory all downstream and peer writes that have reached
+    * the device.
+    */
+   LSC_FENCE_SYSTEM_ACQUIRE = 6,
+};
+
+/*
+ * Specifies the type of cache flush operation to perform after a fence is
+ * complete.
+ */
+enum PACKED lsc_flush_type {
+   LSC_FLUSH_TYPE_NONE = 0,
+   /*
+    * For a R/W cache, evict dirty lines (M to I state) and invalidate clean
+    * lines. For a RO cache, invalidate clean lines.
+    */
+   LSC_FLUSH_TYPE_EVICT = 1,
+   /*
+    * For both R/W and RO cache, invalidate clean lines in the cache.
+    */
+   LSC_FLUSH_TYPE_INVALIDATE = 2,
+   /*
+    * For a R/W cache, invalidate dirty lines (M to I state), without
+    * write-back to next level. This opcode does nothing for a RO cache.
+    */
+   LSC_FLUSH_TYPE_DISCARD = 3,
+   /*
+    * For a R/W cache, write-back dirty lines to the next level, but kept in
+    * the cache as "clean" (M to V state). This opcode does nothing for a RO
+    * cache.
+    */
+   LSC_FLUSH_TYPE_CLEAN = 4,
+   /*
+    * Flush "RW" section of the L3 cache, but leave L1 and L2 caches untouched.
+    */
+   LSC_FLUSH_TYPE_L3ONLY = 5,
+};
+
+enum PACKED lsc_backup_fence_routing {
+   /* Normal routing: UGM fence is routed to UGM pipeline. */
+   LSC_NORMAL_ROUTING,
+   /* Route UGM fence to LSC unit. */
+   LSC_ROUTE_TO_LSC,
+};
+
+/*
+ * Specifies the size of the vector in a dataport message.
+ */
+enum PACKED lsc_vect_size {
+   LSC_VECT_SIZE_V1 = 0,    /* vector length 1 */
+   LSC_VECT_SIZE_V2 = 1,    /* vector length 2 */
+   LSC_VECT_SIZE_V3 = 2,    /* Vector length 3 */
+   LSC_VECT_SIZE_V4 = 3,    /* Vector length 4 */
+   LSC_VECT_SIZE_V8 = 4,    /* Vector length 8 */
+   LSC_VECT_SIZE_V16 = 5,   /* Vector length 16 */
+   LSC_VECT_SIZE_V32 = 6,   /* Vector length 32 */
+   LSC_VECT_SIZE_V64 = 7,   /* Vector length 64 */
+};
+
+#define LSC_ONE_ADDR_REG   1
 
 #endif /* BRW_EU_DEFINES_H */

@@ -29,8 +29,6 @@
 #include "radv_null_bo.h"
 #include "radv_null_cs.h"
 
-#include "ac_llvm_util.h"
-
 /* Hardcode some GPU info that are needed for the driver or for some tools. */
 static const struct {
    uint32_t pci_id;

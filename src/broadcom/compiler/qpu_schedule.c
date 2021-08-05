@@ -868,9 +868,9 @@ qpu_convert_add_to_mul(struct v3d_qpu_instr *inst)
         inst->flags.mc = inst->flags.ac;
         inst->flags.mpf = inst->flags.apf;
         inst->flags.muf = inst->flags.auf;
-        inst->flags.ac = V3D_QPU_PF_NONE;
+        inst->flags.ac = V3D_QPU_COND_NONE;
         inst->flags.apf = V3D_QPU_PF_NONE;
-        inst->flags.auf = V3D_QPU_PF_NONE;
+        inst->flags.auf = V3D_QPU_UF_NONE;
 }
 
 static bool

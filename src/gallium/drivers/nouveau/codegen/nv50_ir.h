@@ -385,7 +385,8 @@ enum DataFile
    FILE_PREDICATE,       // boolean predicate
    FILE_FLAGS,           // zero/sign/carry/overflow bits
    FILE_ADDRESS,
-   LAST_REGISTER_FILE = FILE_ADDRESS,
+   FILE_BARRIER,
+   LAST_REGISTER_FILE = FILE_BARRIER,
    FILE_IMMEDIATE,
    FILE_MEMORY_CONST,
    FILE_SHADER_INPUT,
@@ -395,6 +396,7 @@ enum DataFile
    FILE_MEMORY_SHARED,
    FILE_MEMORY_LOCAL,
    FILE_SYSTEM_VALUE,
+   FILE_THREAD_STATE,           // "special" barrier registers
    DATA_FILE_COUNT
 };
 
@@ -532,6 +534,29 @@ enum SVSemantic
    SV_LAST
 };
 
+enum TSSemantic
+{
+   // 0-15 are fixed ones on Volta/Turing
+   TS_THREAD_STATE_ENUM0 = 0,
+   TS_THREAD_STATE_ENUM1 = 1,
+   TS_THREAD_STATE_ENUM2 = 2,
+   TS_THREAD_STATE_ENUM3 = 3,
+   TS_THREAD_STATE_ENUM4 = 4,
+   TS_TRAP_RETURN_PC_LO  = 5,
+   TS_TRAP_RETURN_PC_HI  = 6,
+   TS_TRAP_RETURN_MASK   = 7,
+   TS_MEXITED            = 8,
+   TS_MKILL              = 9,
+   TS_MACTIVE            = 10,
+   TS_MATEXIT            = 11,
+   TS_OPT_STACK          = 12,
+   TS_API_CALL_DEPTH     = 13,
+   TS_ATEXIT_PC_LO       = 14,
+   TS_ATEXIT_PC_HI       = 15,
+   // special ones to make our life easier
+   TS_PQUAD_MACTIVE,
+};
+
 class Program;
 class Function;
 class BasicBlock;
@@ -571,6 +596,7 @@ struct Storage
          SVSemantic sv;
          int index;
       } sv;
+      TSSemantic ts;
    } data;
 };
 

@@ -249,7 +249,7 @@ static mesa_format
 brw_renderbuffer_format(struct gl_context * ctx, GLenum internalFormat)
 {
    struct brw_context *brw = brw_context(ctx);
-   ASSERTED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   ASSERTED const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    switch (internalFormat) {
    default:
@@ -647,7 +647,7 @@ static void
 brw_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct brw_renderbuffer *depthRb =
       brw_get_renderbuffer(fb, BUFFER_DEPTH);
    struct brw_renderbuffer *stencilRb =
@@ -895,7 +895,7 @@ brw_blit_framebuffer(struct gl_context *ctx,
                      GLbitfield mask, GLenum filter)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    /* Page 679 of OpenGL 4.4 spec says:
     *    "Added BlitFramebuffer to commands affected by conditional rendering in
@@ -1014,7 +1014,7 @@ brw_cache_sets_clear(struct brw_context *brw)
 static void
 flush_depth_and_render_caches(struct brw_context *brw, struct brw_bo *bo)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (devinfo->ver >= 6) {
       brw_emit_pipe_control_flush(brw,
@@ -1135,4 +1135,5 @@ brw_fbo_init(struct brw_context *brw)
                                                _mesa_key_pointer_equal);
    brw->depth_cache = _mesa_set_create(brw->mem_ctx, _mesa_hash_pointer,
                                        _mesa_key_pointer_equal);
+   util_dynarray_init(&brw->batch.exec_fences, NULL);
 }

@@ -91,6 +91,10 @@ anv_descriptor_data_for_type(const struct anv_physical_device *device,
       data = ANV_DESCRIPTOR_INLINE_UNIFORM;
       break;
 
+   case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+      data = ANV_DESCRIPTOR_ADDRESS_RANGE;
+      break;
+
    default:
       unreachable("Unsupported descriptor type");
    }
@@ -110,7 +114,7 @@ anv_descriptor_data_for_type(const struct anv_physical_device *device,
     * VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT because they already must
     * have identity swizzle.
     */
-   if (device->info.ver == 7 && !device->info.is_haswell &&
+   if (device->info.verx10 == 70 &&
        (type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
         type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER))
       data |= ANV_DESCRIPTOR_TEXTURE_SWIZZLE;
@@ -249,7 +253,7 @@ void anv_GetDescriptorSetLayoutSupport(
    ANV_FROM_HANDLE(anv_device, device, _device);
    const struct anv_physical_device *pdevice = device->physical;
 
-   uint32_t surface_count[MESA_SHADER_STAGES] = { 0, };
+   uint32_t surface_count[MESA_VULKAN_SHADER_STAGES] = { 0, };
    VkDescriptorType varying_desc_type = VK_DESCRIPTOR_TYPE_MAX_ENUM;
    bool needs_descriptor_buffer = false;
 
@@ -311,7 +315,7 @@ void anv_GetDescriptorSetLayoutSupport(
       }
    }
 
-   for (unsigned s = 0; s < MESA_SHADER_STAGES; s++) {
+   for (unsigned s = 0; s < ARRAY_SIZE(surface_count); s++) {
       if (needs_descriptor_buffer)
          surface_count[s] += 1;
    }
@@ -330,7 +334,7 @@ void anv_GetDescriptorSetLayoutSupport(
    }
 
    bool supported = true;
-   for (unsigned s = 0; s < MESA_SHADER_STAGES; s++) {
+   for (unsigned s = 0; s < ARRAY_SIZE(surface_count); s++) {
       /* Our maximum binding table size is 240 and we need to reserve 8 for
        * render targets.
        */
@@ -1075,6 +1079,11 @@ anv_descriptor_set_create(struct anv_device *device,
       set->desc_mem.alloc_size = descriptor_buffer_size;
       set->desc_mem.map = pool->bo->map + set->desc_mem.offset;
 
+      set->desc_addr = (struct anv_address) {
+         .bo = pool->bo,
+         .offset = set->desc_mem.offset,
+      };
+
       enum isl_format format =
          anv_isl_format_for_descriptor_type(device,
                                             VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
@@ -1082,13 +1091,11 @@ anv_descriptor_set_create(struct anv_device *device,
       set->desc_surface_state = anv_descriptor_pool_alloc_state(pool);
       anv_fill_buffer_surface_state(device, set->desc_surface_state, format,
                                     ISL_SURF_USAGE_CONSTANT_BUFFER_BIT,
-                                    (struct anv_address) {
-                                       .bo = pool->bo,
-                                       .offset = set->desc_mem.offset,
-                                    },
+                                    set->desc_addr,
                                     descriptor_buffer_size, 1);
    } else {
       set->desc_mem = ANV_STATE_NULL;
+      set->desc_addr = (struct anv_address) { .bo = NULL, .offset = 0 };
       set->desc_surface_state = ANV_STATE_NULL;
    }
 
@@ -1548,6 +1555,35 @@ anv_descriptor_set_write_inline_uniform_data(struct anv_device *device,
    memcpy(desc_map + offset, data, size);
 }
 
+void
+anv_descriptor_set_write_acceleration_structure(struct anv_device *device,
+                                                struct anv_descriptor_set *set,
+                                                struct anv_acceleration_structure *accel,
+                                                uint32_t binding,
+                                                uint32_t element)
+{
+   const struct anv_descriptor_set_binding_layout *bind_layout =
+      &set->layout->binding[binding];
+   struct anv_descriptor *desc =
+      &set->descriptors[bind_layout->descriptor_index + element];
+
+   assert(bind_layout->type == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR);
+   *desc = (struct anv_descriptor) {
+      .type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+   };
+
+   struct anv_address_range_descriptor desc_data = { };
+   if (accel != NULL) {
+      desc_data.address = anv_address_physical(accel->address);
+      desc_data.range = accel->size;
+   }
+   assert(anv_descriptor_size(bind_layout) == sizeof(desc_data));
+
+   void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset +
+                    element * sizeof(desc_data);
+   memcpy(desc_map, &desc_data, sizeof(desc_data));
+}
+
 void anv_UpdateDescriptorSets(
     VkDevice                                    _device,
     uint32_t                                    descriptorWriteCount,
@@ -1618,6 +1654,21 @@ void anv_UpdateDescriptorSets(
                                                       inline_write->pData,
                                                       write->dstArrayElement,
                                                       inline_write->dataSize);
+         break;
+      }
+
+      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: {
+         const VkWriteDescriptorSetAccelerationStructureKHR *accel_write =
+            vk_find_struct_const(write, WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR);
+         assert(accel_write->accelerationStructureCount ==
+                write->descriptorCount);
+         for (uint32_t j = 0; j < write->descriptorCount; j++) {
+            ANV_FROM_HANDLE(anv_acceleration_structure, accel,
+                            accel_write->pAccelerationStructures[j]);
+            anv_descriptor_set_write_acceleration_structure(device, set, accel,
+                                                            write->dstBinding,
+                                                            write->dstArrayElement + j);
+         }
          break;
       }
 

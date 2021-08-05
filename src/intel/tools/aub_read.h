@@ -27,7 +27,7 @@
 
 #include <stdint.h>
 
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 #include "drm-uapi/i915_drm.h"
 
 #ifdef __cplusplus
@@ -63,7 +63,7 @@ struct aub_read {
    uint32_t blitter_elsp[4];
    int blitter_elsp_index;
 
-   struct gen_device_info devinfo;
+   struct intel_device_info devinfo;
 };
 
 int aub_read_command(struct aub_read *read, const void *data, uint32_t data_len);

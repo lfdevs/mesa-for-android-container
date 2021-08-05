@@ -30,7 +30,7 @@
 #include "brw_nir.h"
 #include "brw_vec4_tcs.h"
 #include "brw_fs.h"
-#include "dev/gen_debug.h"
+#include "dev/intel_debug.h"
 
 namespace brw {
 
@@ -365,7 +365,7 @@ brw_compile_tcs(const struct brw_compiler *compiler,
                 struct brw_compile_stats *stats,
                 char **error_str)
 {
-   const struct gen_device_info *devinfo = compiler->devinfo;
+   const struct intel_device_info *devinfo = compiler->devinfo;
    struct brw_vue_prog_data *vue_prog_data = &prog_data->base;
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_TESS_CTRL];
    const bool debug_enabled = INTEL_DEBUG & DEBUG_TCS;

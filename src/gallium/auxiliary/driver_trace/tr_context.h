@@ -33,6 +33,7 @@
 #include "util/u_debug.h"
 #include "util/hash_table.h"
 #include "pipe/p_context.h"
+#include "util/u_threaded_context.h"
 
 #include "tr_screen.h"
 
@@ -52,15 +53,20 @@ struct trace_context
    struct hash_table depth_stencil_alpha_states;
 
    struct pipe_context *pipe;
+   tc_replace_buffer_storage_func replace_buffer_storage;
+   tc_create_fence_func create_fence;
 
    struct pipe_framebuffer_state unwrapped_state;
    bool seen_fb_state;
+
+   bool threaded;
 };
 
 
 void
 trace_context_check(const struct pipe_context *pipe);
-
+struct pipe_context *
+trace_get_possibly_threaded_context(struct pipe_context *pipe);
 
 static inline struct trace_context *
 trace_context(struct pipe_context *pipe)
@@ -77,7 +83,11 @@ struct pipe_context *
 trace_context_create(struct trace_screen *tr_scr,
                      struct pipe_context *pipe);
 
-
+struct pipe_context *
+trace_context_create_threaded(struct pipe_screen *screen, struct pipe_context *pipe,
+                              tc_replace_buffer_storage_func *replace_buffer,
+                              tc_create_fence_func *create_fence,
+                              tc_is_resource_busy *is_resource_busy);
 #ifdef __cplusplus
 }
 #endif

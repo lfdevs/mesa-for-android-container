@@ -72,6 +72,7 @@ i915_get_renderer_string(unsigned deviceID)
    switch (deviceID) {
 #undef CHIPSET
 #define CHIPSET(id, symbol, str) case id: chipset = str; break;
+#include "pci_ids/i830_pci_ids.h"
 #include "pci_ids/i915_pci_ids.h"
    default:
       chipset = "Unknown Intel Chipset";
@@ -354,7 +355,7 @@ _intel_flush(struct gl_context *ctx, const char *file, int line)
 }
 
 static void
-intel_glFlush(struct gl_context *ctx)
+intel_glFlush(struct gl_context *ctx, unsigned gallium_flush_flags)
 {
    struct intel_context *intel = intel_context(ctx);
 

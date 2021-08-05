@@ -192,7 +192,7 @@ radeonDRI2Flush(__DRIdrawable *drawable)
     radeonContextPtr rmesa;
 
     rmesa = (radeonContextPtr) drawable->driContextPriv->driverPrivate;
-    radeonFlush(&rmesa->glCtx);
+    radeonFlush(&rmesa->glCtx, 0);
 }
 
 static const struct __DRI2flushExtensionRec radeonFlushExtension = {

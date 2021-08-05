@@ -78,8 +78,6 @@ offset(const fs_reg &reg, const brw::fs_builder &bld, unsigned delta)
    return offset(reg, bld.dispatch_width(), delta);
 }
 
-#define UBO_START ((1 << 16) - 4)
-
 struct shader_stats {
    const char *scheduler_mode;
    unsigned promoted_constants;
@@ -196,6 +194,7 @@ public:
    bool lower_minmax();
    bool lower_simd_width();
    bool lower_barycentrics();
+   bool lower_derivatives();
    bool lower_scoreboard();
    bool lower_sub_sat();
    bool opt_combine_constants();
@@ -207,6 +206,7 @@ public:
    fs_reg *emit_samplepos_setup();
    fs_reg *emit_sampleid_setup();
    fs_reg *emit_samplemaskin_setup();
+   fs_reg *emit_shading_rate_setup();
    void emit_interpolation_setup_gfx4();
    void emit_interpolation_setup_gfx6();
    void compute_sample_position(fs_reg dst, fs_reg int_sample_pos);
@@ -395,6 +395,7 @@ public:
       uint8_t dest_depth_reg[2];
       uint8_t sample_pos_reg[2];
       uint8_t sample_mask_in_reg[2];
+      uint8_t depth_w_coef_reg[2];
       uint8_t barycentric_coord_reg[BRW_BARYCENTRIC_MODE_COUNT][2];
       uint8_t local_invocation_id_reg[2];
 
@@ -407,6 +408,7 @@ public:
 
    fs_reg pixel_x;
    fs_reg pixel_y;
+   fs_reg pixel_z;
    fs_reg wpos_w;
    fs_reg pixel_w;
    fs_reg delta_xy[BRW_BARYCENTRIC_MODE_COUNT];
@@ -476,6 +478,7 @@ public:
                      const brw::performance &perf,
                      struct brw_compile_stats *stats);
    void add_const_data(void *data, unsigned size);
+   void add_resume_sbt(unsigned num_resume_shaders, uint64_t *sbt);
    const unsigned *get_assembly();
 
 private:
@@ -566,7 +569,7 @@ private:
    const struct brw_compiler *compiler;
    void *log_data; /* Passed to compiler->*_log functions */
 
-   const struct gen_device_info *devinfo;
+   const struct intel_device_info *devinfo;
 
    struct brw_codegen *p;
    struct brw_stage_prog_data * const prog_data;
@@ -593,14 +596,14 @@ namespace brw {
          const fs_reg tmp = bld.vgrf(type);
          const brw::fs_builder hbld = bld.exec_all().group(16, 0);
          const unsigned m = bld.dispatch_width() / hbld.dispatch_width();
-         fs_reg *const components = new fs_reg[m];
+         fs_reg components[2];
+         assert(m <= 2);
 
          for (unsigned g = 0; g < m; g++)
                components[g] = retype(brw_vec8_grf(regs[g], 0), type);
 
          hbld.LOAD_PAYLOAD(tmp, components, m, 0);
 
-         delete[] components;
          return tmp;
 
       } else {

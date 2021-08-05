@@ -44,7 +44,6 @@
 #include "aub_mem.h"
 
 #define CSI "\e["
-#define BLUE_HEADER  CSI "0;44m"
 #define GREEN_HEADER CSI "1;42m"
 #define NORMAL       CSI "0m"
 
@@ -59,7 +58,7 @@ static enum { COLOR_AUTO, COLOR_ALWAYS, COLOR_NEVER } option_color;
 
 uint16_t pci_id = 0;
 char *input_file = NULL, *xml_path = NULL;
-struct gen_device_info devinfo;
+struct intel_device_info devinfo;
 struct intel_batch_decode_ctx batch_ctx;
 struct aub_mem mem;
 
@@ -78,7 +77,7 @@ aubinator_init(void *user_data, int aub_pci_id, const char *app_name)
 {
    pci_id = aub_pci_id;
 
-   if (!gen_get_device_info_from_pci_id(pci_id, &devinfo)) {
+   if (!intel_get_device_info_from_pci_id(pci_id, &devinfo)) {
       fprintf(stderr, "can't find device information: pci_id=0x%x\n", pci_id);
       exit(EXIT_FAILURE);
    }
@@ -123,7 +122,7 @@ aubinator_init(void *user_data, int aub_pci_id, const char *app_name)
 
    fprintf(outfile, "Application name: %s\n", app_name);
 
-   fprintf(outfile, "Decoding as:      %s\n", gen_get_device_name(pci_id));
+   fprintf(outfile, "Decoding as:      %s\n", intel_get_device_name(pci_id));
 
    /* Throw in a new line before the first batch */
    fprintf(outfile, "\n");
@@ -309,7 +308,7 @@ int main(int argc, char *argv[])
    while ((c = getopt_long(argc, argv, "", aubinator_opts, &i)) != -1) {
       switch (c) {
       case 'g': {
-         const int id = gen_device_name_to_pci_device_id(optarg);
+         const int id = intel_device_name_to_pci_device_id(optarg);
          if (id < 0) {
             fprintf(stderr, "can't parse gen: '%s', expected brw, g4x, ilk, "
                             "snb, ivb, hsw, byt, bdw, chv, skl, bxt, kbl, "

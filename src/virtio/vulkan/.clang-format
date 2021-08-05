@@ -35,3 +35,4 @@ PenaltyBreakBeforeFirstCallParameter: 1
 PenaltyExcessCharacter: 100
 SpaceAfterCStyleCast: false
 SpaceBeforeCpp11BracedList: false
+SpaceBeforeParens: ControlStatementsExceptForEachMacros

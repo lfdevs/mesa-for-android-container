@@ -86,7 +86,8 @@ const char *Graph::Edge::typeStr() const
 Graph::Node::Node(void *priv) : data(priv),
                                 in(0), out(0), graph(0),
                                 visited(0),
-                                inCount(0), outCount(0)
+                                inCount(0), outCount(0),
+                                tag(0)
 {
    // nothing to do
 }

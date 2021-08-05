@@ -175,7 +175,7 @@ _vbo_loopback_vertex_list(struct gl_context *ctx,
       append_attr(&nr, la, VERT_ATTRIB_POS, 0, vao);
    }
 
-   const GLuint wrap_count = node->wrap_count;
+   const GLuint wrap_count = node->cold->wrap_count;
    const GLuint stride = _vbo_save_get_stride(node);
    const GLubyte *buffer = NULL;
    if (0 < nr) {
@@ -200,8 +200,8 @@ _vbo_loopback_vertex_list(struct gl_context *ctx,
    }
 
    /* Replay the primitives */
-   const struct _mesa_prim *prims = node->prims;
-   const GLuint prim_count = node->prim_count;
+   const struct _mesa_prim *prims = node->cold->prims;
+   const GLuint prim_count = node->cold->prim_count;
    for (GLuint i = 0; i < prim_count; i++) {
       loopback_prim(ctx, buffer, &prims[i], wrap_count, stride, la, nr);
    }

@@ -37,6 +37,7 @@
 #include "util/debug.h"
 #include "util/simple_mtx.h"
 #include "util/slab.h"
+#include "util/u_idalloc.h"
 #include "util/u_memory.h"
 #include "util/u_queue.h"
 
@@ -90,7 +91,9 @@ struct fd_screen {
    bool has_robustness;
    bool has_syncobj;
 
-   struct freedreno_dev_info info;
+   const struct fd_dev_info *info;
+   uint32_t ccu_offset_gmem;
+   uint32_t ccu_offset_bypass;
 
    /* Bitmask of gmem_reasons that do not force GMEM path over bypass
     * for current generation.
@@ -137,16 +140,12 @@ struct fd_screen {
 
    uint16_t rsc_seqno;
    uint16_t ctx_seqno;
+   struct util_idalloc_mt buffer_ids;
 
    unsigned num_supported_modifiers;
    const uint64_t *supported_modifiers;
 
    struct renderonly *ro;
-
-   /* when BATCH_DEBUG is enabled, tracking for fd_batch's which are not yet
-    * freed:
-    */
-   struct set *live_batches;
 };
 
 static inline struct fd_screen *
@@ -224,12 +223,6 @@ static inline boolean
 is_a6xx(struct fd_screen *screen)
 {
    return (screen->gpu_id >= 600) && (screen->gpu_id < 700);
-}
-
-static inline boolean
-is_a650(struct fd_screen *screen)
-{
-   return screen->gpu_id == 650;
 }
 
 /* is it using the ir3 compiler (shader isa introduced with a3xx)? */

@@ -23,7 +23,7 @@
 
 #include "lvp_wsi.h"
 
-static PFN_vkVoidFunction VKAPI_CALL
+static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 lvp_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
 {
    LVP_FROM_HANDLE(lvp_physical_device, pdevice, physicalDevice);

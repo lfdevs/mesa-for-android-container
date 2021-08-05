@@ -169,6 +169,13 @@ fd_set_shader_buffers(struct pipe_context *pctx, enum pipe_shader_type shader,
          fd_resource_set_usage(buffers[i].buffer, FD_DIRTY_SSBO);
 
          so->enabled_mask |= BIT(n);
+
+         if (writable_bitmask & BIT(i)) {
+            struct fd_resource *rsc = fd_resource(buf->buffer);
+            util_range_add(&rsc->b.b, &rsc->valid_buffer_range,
+                           buf->buffer_offset,
+                           buf->buffer_offset + buf->buffer_size);
+         }
       } else {
          pipe_resource_reference(&buf->buffer, NULL);
       }
@@ -205,6 +212,15 @@ fd_set_shader_images(struct pipe_context *pctx, enum pipe_shader_type shader,
          if (buf->resource) {
             fd_resource_set_usage(buf->resource, FD_DIRTY_IMAGE);
             so->enabled_mask |= BIT(n);
+
+            if ((buf->access & PIPE_IMAGE_ACCESS_WRITE) &&
+                (buf->resource->target == PIPE_BUFFER)) {
+
+               struct fd_resource *rsc = fd_resource(buf->resource);
+               util_range_add(&rsc->b.b, &rsc->valid_buffer_range,
+                              buf->u.buf.offset,
+                              buf->u.buf.offset + buf->u.buf.size);
+            }
          } else {
             so->enabled_mask &= ~BIT(n);
          }
@@ -231,9 +247,9 @@ fd_set_shader_images(struct pipe_context *pctx, enum pipe_shader_type shader,
    fd_context_dirty_shader(ctx, shader, FD_DIRTY_SHADER_IMAGE);
 }
 
-static void
+void
 fd_set_framebuffer_state(struct pipe_context *pctx,
-                         const struct pipe_framebuffer_state *framebuffer) in_dt
+                         const struct pipe_framebuffer_state *framebuffer)
 {
    struct fd_context *ctx = fd_context(pctx);
    struct pipe_framebuffer_state *cso;
@@ -270,15 +286,6 @@ fd_set_framebuffer_state(struct pipe_context *pctx,
       fd_batch_reference(&ctx->batch, NULL);
       fd_context_all_dirty(ctx);
       ctx->update_active_queries = true;
-
-      if (old_batch && old_batch->blit && !old_batch->back_blit) {
-         /* for blits, there is not really much point in hanging on
-          * to the uncommitted batch (ie. you probably don't blit
-          * multiple times to the same surface), so we might as
-          * well go ahead and flush this one:
-          */
-         fd_batch_flush(old_batch);
-      }
 
       fd_batch_reference(&old_batch, NULL);
    } else if (ctx->batch) {

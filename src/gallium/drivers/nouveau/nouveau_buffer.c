@@ -20,6 +20,17 @@ struct nouveau_transfer {
    uint32_t offset;
 };
 
+static void *
+nouveau_user_ptr_transfer_map(struct pipe_context *pipe,
+                              struct pipe_resource *resource,
+                              unsigned level, unsigned usage,
+                              const struct pipe_box *box,
+                              struct pipe_transfer **ptransfer);
+
+static void
+nouveau_user_ptr_transfer_unmap(struct pipe_context *pipe,
+                                struct pipe_transfer *transfer);
+
 static inline struct nouveau_transfer *
 nouveau_transfer(struct pipe_transfer *transfer)
 {
@@ -112,11 +123,16 @@ nouveau_buffer_reallocate(struct nouveau_screen *screen,
    return nouveau_buffer_allocate(screen, buf, domain);
 }
 
-static void
+void
 nouveau_buffer_destroy(struct pipe_screen *pscreen,
                        struct pipe_resource *presource)
 {
    struct nv04_resource *res = nv04_resource(presource);
+
+   if (res->status & NOUVEAU_BUFFER_STATUS_USER_PTR) {
+      FREE(res);
+      return;
+   }
 
    nouveau_buffer_release_gpu_storage(res);
 
@@ -372,7 +388,7 @@ nouveau_buffer_should_discard(struct nv04_resource *buf, unsigned usage)
  * The strategy for determining what kind of memory area to return is complex,
  * see comments inside of the function.
  */
-static void *
+void *
 nouveau_buffer_transfer_map(struct pipe_context *pipe,
                             struct pipe_resource *resource,
                             unsigned level, unsigned usage,
@@ -381,6 +397,10 @@ nouveau_buffer_transfer_map(struct pipe_context *pipe,
 {
    struct nouveau_context *nv = nouveau_context(pipe);
    struct nv04_resource *buf = nv04_resource(resource);
+
+   if (buf->status & NOUVEAU_BUFFER_STATUS_USER_PTR)
+      return nouveau_user_ptr_transfer_map(pipe, resource, level, usage, box, ptransfer);
+
    struct nouveau_transfer *tx = MALLOC_STRUCT(nouveau_transfer);
    uint8_t *map;
    int ret;
@@ -506,7 +526,7 @@ nouveau_buffer_transfer_map(struct pipe_context *pipe,
 
 
 
-static void
+void
 nouveau_buffer_transfer_flush_region(struct pipe_context *pipe,
                                      struct pipe_transfer *transfer,
                                      const struct pipe_box *box)
@@ -528,13 +548,17 @@ nouveau_buffer_transfer_flush_region(struct pipe_context *pipe,
  *
  * Also marks vbo dirty based on the buffer's binding
  */
-static void
+void
 nouveau_buffer_transfer_unmap(struct pipe_context *pipe,
                               struct pipe_transfer *transfer)
 {
    struct nouveau_context *nv = nouveau_context(pipe);
-   struct nouveau_transfer *tx = nouveau_transfer(transfer);
    struct nv04_resource *buf = nv04_resource(transfer->resource);
+
+   if (buf->status & NOUVEAU_BUFFER_STATUS_USER_PTR)
+      return nouveau_user_ptr_transfer_unmap(pipe, transfer);
+
+   struct nouveau_transfer *tx = nouveau_transfer(transfer);
 
    if (tx->base.usage & PIPE_MAP_WRITE) {
       if (!(tx->base.usage & PIPE_MAP_FLUSH_EXPLICIT)) {
@@ -628,23 +652,6 @@ nouveau_resource_map_offset(struct nouveau_context *nv,
    return (uint8_t *)res->bo->map + res->offset + offset;
 }
 
-const struct u_resource_vtbl nouveau_buffer_vtbl =
-{
-   u_default_resource_get_handle,     /* get_handle */
-   nouveau_buffer_destroy,               /* resource_destroy */
-   nouveau_buffer_transfer_map,          /* transfer_map */
-   nouveau_buffer_transfer_flush_region, /* transfer_flush_region */
-   nouveau_buffer_transfer_unmap,        /* transfer_unmap */
-};
-
-static void
-nouveau_user_ptr_destroy(struct pipe_screen *pscreen,
-                         struct pipe_resource *presource)
-{
-   struct nv04_resource *res = nv04_resource(presource);
-   FREE(res);
-}
-
 static void *
 nouveau_user_ptr_transfer_map(struct pipe_context *pipe,
                               struct pipe_resource *resource,
@@ -668,15 +675,6 @@ nouveau_user_ptr_transfer_unmap(struct pipe_context *pipe,
    FREE(tx);
 }
 
-const struct u_resource_vtbl nouveau_user_ptr_buffer_vtbl =
-{
-   u_default_resource_get_handle,   /* get_handle */
-   nouveau_user_ptr_destroy,        /* resource_destroy */
-   nouveau_user_ptr_transfer_map,   /* transfer_map */
-   u_default_transfer_flush_region, /* transfer_flush_region */
-   nouveau_user_ptr_transfer_unmap, /* transfer_unmap */
-};
-
 struct pipe_resource *
 nouveau_buffer_create(struct pipe_screen *pscreen,
                       const struct pipe_resource *templ)
@@ -690,7 +688,6 @@ nouveau_buffer_create(struct pipe_screen *pscreen,
       return NULL;
 
    buffer->base = *templ;
-   buffer->vtbl = &nouveau_buffer_vtbl;
    pipe_reference_init(&buffer->base.reference, 1);
    buffer->base.screen = pscreen;
 
@@ -757,7 +754,6 @@ nouveau_buffer_create_from_user(struct pipe_screen *pscreen,
       return NULL;
 
    buffer->base = *templ;
-   buffer->vtbl = &nouveau_user_ptr_buffer_vtbl;
    /* set address and data to the same thing for higher compatibility with
     * existing code. It's correct nonetheless as the same pointer is equally
     * valid on the CPU and the GPU.
@@ -783,7 +779,6 @@ nouveau_user_buffer_create(struct pipe_screen *pscreen, void *ptr,
       return NULL;
 
    pipe_reference_init(&buffer->base.reference, 1);
-   buffer->vtbl = &nouveau_buffer_vtbl;
    buffer->base.screen = pscreen;
    buffer->base.format = PIPE_FORMAT_R8_UNORM;
    buffer->base.usage = PIPE_USAGE_IMMUTABLE;

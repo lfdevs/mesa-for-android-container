@@ -1,5 +1,5 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,7 +22,7 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 /* Authors:  Keith Whitwell <keithw@vmware.com>
@@ -32,7 +32,6 @@
 #define I915_STATE_H
 
 struct i915_context;
-
 
 struct i915_tracked_state {
    const char *name;
@@ -53,11 +52,8 @@ extern struct i915_tracked_state i915_hw_constants;
 
 void i915_update_derived(struct i915_context *i915);
 void i915_emit_hardware_state(struct i915_context *i915);
-struct pipe_sampler_view *
-i915_create_sampler_view_custom(struct pipe_context *pipe,
-                                struct pipe_resource *texture,
-                                const struct pipe_sampler_view *templ,
-                                unsigned width0,
-                                unsigned height0);
+struct pipe_sampler_view *i915_create_sampler_view_custom(
+   struct pipe_context *pipe, struct pipe_resource *texture,
+   const struct pipe_sampler_view *templ, unsigned width0, unsigned height0);
 
 #endif

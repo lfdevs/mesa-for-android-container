@@ -40,7 +40,7 @@
  * Exchange a protocol request for glXQueryServerString.
  */
 char *
-__glXQueryServerString(Display * dpy, int opcode, CARD32 screen, CARD32 name)
+__glXQueryServerString(Display * dpy, CARD32 screen, CARD32 name)
 {
    xcb_connection_t *c = XGetXCBConnection(dpy);
    xcb_glx_query_server_string_reply_t *reply =
@@ -67,7 +67,7 @@ __glXQueryServerString(Display * dpy, int opcode, CARD32 screen, CARD32 name)
  * Exchange a protocol request for glGetString.
  */
 char *
-__glXGetString(Display * dpy, int opcode, CARD32 contextTag, CARD32 name)
+__glXGetString(Display * dpy, CARD32 contextTag, CARD32 name)
 {
    xcb_connection_t *c = XGetXCBConnection(dpy);
    xcb_glx_get_string_reply_t *reply = xcb_glx_get_string_reply(c,

@@ -287,12 +287,13 @@ public:
 
    bool is_send_from_grf() const;
    unsigned size_read(unsigned arg) const;
-   bool can_reswizzle(const struct gen_device_info *devinfo, int dst_writemask,
+   bool can_reswizzle(const struct intel_device_info *devinfo,
+                      int dst_writemask,
                       int swizzle, int swizzle_mask);
    void reswizzle(int dst_writemask, int swizzle);
-   bool can_do_source_mods(const struct gen_device_info *devinfo);
+   bool can_do_source_mods(const struct intel_device_info *devinfo);
    bool can_do_cmod();
-   bool can_do_writemask(const struct gen_device_info *devinfo);
+   bool can_do_writemask(const struct intel_device_info *devinfo);
    bool can_change_types() const;
    bool has_source_and_destination_hazard() const;
    unsigned implied_mrf_writes() const;

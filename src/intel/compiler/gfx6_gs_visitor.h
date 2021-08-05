@@ -39,15 +39,13 @@ public:
                    void *log_data,
                    struct brw_gs_compile *c,
                    struct brw_gs_prog_data *prog_data,
-                   struct gl_program *prog,
                    const nir_shader *shader,
                    void *mem_ctx,
                    bool no_spills,
                    int shader_time_index,
                    bool debug_enabled) :
       vec4_gs_visitor(comp, log_data, c, prog_data, shader, mem_ctx, no_spills,
-                      shader_time_index, debug_enabled),
-      prog(prog)
+                      shader_time_index, debug_enabled)
       {
       }
 
@@ -66,10 +64,7 @@ protected:
 private:
    void xfb_write();
    void xfb_program(unsigned vertex, unsigned num_verts);
-   void xfb_setup();
    int get_vertex_output_offset_for_varying(int vertex, int varying);
-
-   const struct gl_program *prog;
 
    src_reg vertex_output;
    src_reg vertex_output_offset;

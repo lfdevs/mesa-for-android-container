@@ -268,10 +268,18 @@ si_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
       radeon_set_uconfig_reg(cs, R_030928_GE_INDX_OFFSET, 0);
       radeon_set_uconfig_reg(cs, R_03097C_GE_STEREO_CNTL, 0);
       radeon_set_uconfig_reg(cs, R_030988_GE_USER_VGPR_EN, 0);
+
+      radeon_set_context_reg(cs, R_028038_DB_DFSM_CONTROL,
+                             S_028038_PUNCHOUT_MODE(V_028038_FORCE_OFF) |
+                             S_028038_POPS_DRAIN_PS_ON_OVERLAP(1));
    } else if (physical_device->rad_info.chip_class == GFX9) {
       radeon_set_uconfig_reg(cs, R_030920_VGT_MAX_VTX_INDX, ~0);
       radeon_set_uconfig_reg(cs, R_030924_VGT_MIN_VTX_INDX, 0);
       radeon_set_uconfig_reg(cs, R_030928_VGT_INDX_OFFSET, 0);
+
+      radeon_set_context_reg(cs, R_028060_DB_DFSM_CONTROL,
+                             S_028060_PUNCHOUT_MODE(V_028060_FORCE_OFF) |
+                             S_028060_POPS_DRAIN_PS_ON_OVERLAP(1));
    } else {
       /* These registers, when written, also overwrite the
        * CLEAR_STATE context, so we can't rely on CLEAR_STATE setting
@@ -486,22 +494,22 @@ si_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
          radeon_emit(cs, EVENT_TYPE(V_028A90_SQ_NON_EVENT) | EVENT_INDEX(0));
       }
 
-      /* TODO: For culling, replace 128 with 256. */
+      /* When culling is enabled, this will be overwritten accordingly */
       radeon_set_uconfig_reg(cs, R_030980_GE_PC_ALLOC,
                              S_030980_OVERSUB_EN(physical_device->rad_info.use_late_alloc) |
-                                S_030980_NUM_PC_LINES(128 * physical_device->rad_info.max_se - 1));
+                             S_030980_NUM_PC_LINES(physical_device->rad_info.pc_lines / 4 - 1));
    }
 
    if (physical_device->rad_info.chip_class >= GFX9) {
       radeon_set_context_reg(cs, R_028B50_VGT_TESS_DISTRIBUTION,
                              S_028B50_ACCUM_ISOLINE(40) | S_028B50_ACCUM_TRI(30) |
-                                S_028B50_ACCUM_QUAD(24) | S_028B50_DONUT_SPLIT(24) |
+                                S_028B50_ACCUM_QUAD(24) | S_028B50_DONUT_SPLIT_GFX9(24) |
                                 S_028B50_TRAP_SPLIT(6));
    } else if (physical_device->rad_info.chip_class >= GFX8) {
       uint32_t vgt_tess_distribution;
 
       vgt_tess_distribution = S_028B50_ACCUM_ISOLINE(32) | S_028B50_ACCUM_TRI(11) |
-                              S_028B50_ACCUM_QUAD(11) | S_028B50_DONUT_SPLIT(16);
+                              S_028B50_ACCUM_QUAD(11) | S_028B50_DONUT_SPLIT_GFX81(16);
 
       if (physical_device->rad_info.family == CHIP_FIJI ||
           physical_device->rad_info.family >= CHIP_POLARIS10)
@@ -618,12 +626,12 @@ cik_create_gfx_config(struct radv_device *device)
          radeon_emit(cs, PKT3_NOP_PAD);
    }
 
-   device->gfx_init =
+   VkResult result =
       device->ws->buffer_create(device->ws, cs->cdw * 4, 4096, device->ws->cs_domain(device->ws),
                                 RADEON_FLAG_CPU_ACCESS | RADEON_FLAG_NO_INTERPROCESS_SHARING |
                                    RADEON_FLAG_READ_ONLY | RADEON_FLAG_GTT_WC,
-                                RADV_BO_PRIORITY_CS);
-   if (!device->gfx_init)
+                                RADV_BO_PRIORITY_CS, 0, &device->gfx_init);
+   if (result != VK_SUCCESS)
       goto fail;
 
    void *map = device->ws->buffer_map(device->gfx_init);
@@ -640,8 +648,8 @@ fail:
    device->ws->cs_destroy(cs);
 }
 
-static void
-get_viewport_xform(const VkViewport *viewport, float scale[3], float translate[3])
+void
+radv_get_viewport_xform(const VkViewport *viewport, float scale[3], float translate[3])
 {
    float x = viewport->x;
    float y = viewport->y;
@@ -670,7 +678,7 @@ si_write_viewport(struct radeon_cmdbuf *cs, int first_vp, int count, const VkVie
    for (i = 0; i < count; i++) {
       float scale[3], translate[3];
 
-      get_viewport_xform(&viewports[i], scale, translate);
+      radv_get_viewport_xform(&viewports[i], scale, translate);
       radeon_emit(cs, fui(scale[0]));
       radeon_emit(cs, fui(translate[0]));
       radeon_emit(cs, fui(scale[1]));
@@ -694,7 +702,7 @@ si_scissor_from_viewport(const VkViewport *viewport)
    float scale[3], translate[3];
    VkRect2D rect;
 
-   get_viewport_xform(viewport, scale, translate);
+   radv_get_viewport_xform(viewport, scale, translate);
 
    rect.offset.x = translate[0] - fabsf(scale[0]);
    rect.offset.y = translate[1] - fabsf(scale[1]);
@@ -732,7 +740,7 @@ si_write_scissors(struct radeon_cmdbuf *cs, int first, int count, const VkRect2D
       VkRect2D viewport_scissor = si_scissor_from_viewport(viewports + i);
       VkRect2D scissor = si_intersect_scissor(&scissors[i], &viewport_scissor);
 
-      get_viewport_xform(viewports + i, scale, translate);
+      radv_get_viewport_xform(viewports + i, scale, translate);
       scale[0] = fabsf(scale[0]);
       scale[1] = fabsf(scale[1]);
 
@@ -790,7 +798,7 @@ static const struct radv_prim_vertex_count prim_size_table[] = {
 uint32_t
 si_get_ia_multi_vgt_param(struct radv_cmd_buffer *cmd_buffer, bool instanced_draw,
                           bool indirect_draw, bool count_from_stream_output,
-                          uint32_t draw_vertex_count, unsigned topology)
+                          uint32_t draw_vertex_count, unsigned topology, bool prim_restart_enable)
 {
    enum chip_class chip_class = cmd_buffer->device->physical_device->rad_info.chip_class;
    enum radeon_family family = cmd_buffer->device->physical_device->rad_info.family;
@@ -829,7 +837,7 @@ si_get_ia_multi_vgt_param(struct radv_cmd_buffer *cmd_buffer, bool instanced_dra
       if (cmd_buffer->device->physical_device->rad_info.max_se < 4 ||
           topology == V_008958_DI_PT_POLYGON || topology == V_008958_DI_PT_LINELOOP ||
           topology == V_008958_DI_PT_TRIFAN || topology == V_008958_DI_PT_TRISTRIP_ADJ ||
-          (cmd_buffer->state.pipeline->graphics.prim_restart_enable &&
+          (prim_restart_enable &&
            (cmd_buffer->device->physical_device->rad_info.family < CHIP_POLARIS10 ||
             (topology != V_008958_DI_PT_POINTLIST && topology != V_008958_DI_PT_LINESTRIP))))
          wd_switch_on_eop = true;
@@ -897,7 +905,7 @@ si_get_ia_multi_vgt_param(struct radv_cmd_buffer *cmd_buffer, bool instanced_dra
    /* Workaround for a VGT hang when strip primitive types are used with
     * primitive restart.
     */
-   if (cmd_buffer->state.pipeline->graphics.prim_restart_enable &&
+   if (prim_restart_enable &&
        (topology == V_008958_DI_PT_LINESTRIP || topology == V_008958_DI_PT_TRISTRIP ||
         topology == V_008958_DI_PT_LINESTRIP_ADJ || topology == V_008958_DI_PT_TRISTRIP_ADJ)) {
       partial_vs_wave = true;

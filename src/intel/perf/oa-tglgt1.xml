@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
-<metrics version="1598354173" merge_md5="">
-  <set name="Render Metrics Basic Gen12"
+<metrics version="1619078711" merge_md5="">
+  <set name="Render Metrics Basic set"
        chipset="TGLGT1"
        symbol_name="RenderBasic"
        underscore_name="render_basic"
@@ -568,7 +568,7 @@
     </register_config>
   </set>
 
-  <set name="Compute Metrics Basic"
+  <set name="Compute Metrics Basic set"
        chipset="TGLGT1"
        symbol_name="ComputeBasic"
        underscore_name="compute_basic"
@@ -1026,7 +1026,7 @@
     </register_config>
   </set>
 
-  <set name="Render Metrics for 3D Pipeline Profile"
+  <set name="Render Metrics set for 3D Pipeline Profile"
        chipset="TGLGT1"
        symbol_name="RenderPipeProfile"
        underscore_name="render_pipe_profile"
@@ -2894,7 +2894,7 @@
     </register_config>
   </set>
 
-  <set name="Gen12LP L3_1"
+  <set name="L3_1"
        chipset="TGLGT1"
        symbol_name="L3_1"
        underscore_name="l3_1"
@@ -3169,7 +3169,7 @@
     </register_config>
   </set>
 
-  <set name="Gen12LP L3_2"
+  <set name="L3_2"
        chipset="TGLGT1"
        symbol_name="L3_2"
        underscore_name="l3_2"
@@ -3445,7 +3445,7 @@
     </register_config>
   </set>
 
-  <set name="Gen12LP L3_3"
+  <set name="L3_3"
        chipset="TGLGT1"
        symbol_name="L3_3"
        underscore_name="l3_3"
@@ -3683,7 +3683,7 @@
     </register_config>
   </set>
 
-  <set name="Gen12LP L3_4"
+  <set name="L3_4"
        chipset="TGLGT1"
        symbol_name="L3_4"
        underscore_name="l3_4"
@@ -3921,7 +3921,7 @@
     </register_config>
   </set>
 
-  <set name="Gen12LP L3_5"
+  <set name="L3_5"
        chipset="TGLGT1"
        symbol_name="L3_5"
        underscore_name="l3_5"
@@ -4159,7 +4159,7 @@
     </register_config>
   </set>
 
-  <set name="Gen12LP L3_6"
+  <set name="L3_6"
        chipset="TGLGT1"
        symbol_name="L3_6"
        underscore_name="l3_6"

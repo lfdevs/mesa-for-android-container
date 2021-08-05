@@ -271,7 +271,7 @@ hsw_result_to_gpr0(struct gl_context *ctx, struct brw_query_object *query,
                    GLenum pname, GLenum ptype)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    assert(query->bo);
    assert(pname != GL_QUERY_TARGET);
@@ -409,7 +409,7 @@ store_query_result_reg(struct brw_context *brw, struct brw_bo *bo,
                        uint32_t offset, GLenum ptype, uint32_t reg,
                        const bool pipelined)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    uint32_t cmd_size = devinfo->ver >= 8 ? 4 : 3;
    uint32_t dwords = (ptype == GL_INT || ptype == GL_UNSIGNED_INT) ? 1 : 2;
    assert(devinfo->ver >= 6);

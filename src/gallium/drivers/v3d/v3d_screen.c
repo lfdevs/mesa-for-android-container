@@ -368,9 +368,18 @@ v3d_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
         case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
                 return 0;
         case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
+                /* We don't currently support this in the backend, but that is
+                 * okay because our NIR compiler sets the option
+                 * lower_all_io_to_temps, which will eliminate indirect
+                 * indexing on all input/output variables by translating it to
+                 * indirect indexing on temporary variables instead, which we
+                 * will then lower to scratch. We prefer this over setting this
+                 * to 0, which would cause if-ladder injection to eliminate
+                 * indirect indexing on inputs.
+                 */
                 return 1;
         case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
-                return 0;
+                return 1;
         case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
                 return 1;
         case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
@@ -423,7 +432,8 @@ v3d_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
         case PIPE_SHADER_CAP_SUPPORTED_IRS:
                 return 1 << PIPE_SHADER_IR_NIR;
         case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
-                return 32;
+                /* We use NIR's loop unrolling */
+                return 0;
         case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
         case PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS:
                 return 0;
@@ -619,14 +629,64 @@ v3d_screen_is_format_supported(struct pipe_screen *pscreen,
         }
 
         if ((usage & PIPE_BIND_INDEX_BUFFER) &&
-            !(format == PIPE_FORMAT_I8_UINT ||
-              format == PIPE_FORMAT_I16_UINT ||
-              format == PIPE_FORMAT_I32_UINT)) {
+            !(format == PIPE_FORMAT_R8_UINT ||
+              format == PIPE_FORMAT_R16_UINT ||
+              format == PIPE_FORMAT_R32_UINT)) {
                 return false;
         }
 
         return true;
 }
+
+static const nir_shader_compiler_options v3d_nir_options = {
+        .lower_add_sat = true,
+        .lower_all_io_to_temps = true,
+        .lower_extract_byte = true,
+        .lower_extract_word = true,
+        .lower_insert_byte = true,
+        .lower_insert_word = true,
+        .lower_bitfield_insert_to_shifts = true,
+        .lower_bitfield_extract_to_shifts = true,
+        .lower_bitfield_reverse = true,
+        .lower_bit_count = true,
+        .lower_cs_local_id_from_index = true,
+        .lower_ffract = true,
+        .lower_fmod = true,
+        .lower_pack_unorm_2x16 = true,
+        .lower_pack_snorm_2x16 = true,
+        .lower_pack_unorm_4x8 = true,
+        .lower_pack_snorm_4x8 = true,
+        .lower_unpack_unorm_4x8 = true,
+        .lower_unpack_snorm_4x8 = true,
+        .lower_pack_half_2x16 = true,
+        .lower_unpack_half_2x16 = true,
+        .lower_fdiv = true,
+        .lower_find_lsb = true,
+        .lower_ffma16 = true,
+        .lower_ffma32 = true,
+        .lower_ffma64 = true,
+        .lower_flrp32 = true,
+        .lower_fpow = true,
+        .lower_fsat = true,
+        .lower_fsqrt = true,
+        .lower_ifind_msb = true,
+        .lower_isign = true,
+        .lower_ldexp = true,
+        .lower_mul_high = true,
+        .lower_wpos_pntc = true,
+        .lower_rotate = true,
+        .lower_to_scalar = true,
+        .has_fsub = true,
+        .has_isub = true,
+        .divergence_analysis_options =
+                nir_divergence_multiple_workgroup_per_compute_subgroup,
+        /* This will enable loop unrolling in the state tracker so we won't
+         * be able to selectively disable it in backend if it leads to
+         * lower thread counts or TMU spills. Choose a conservative maximum to
+         * limit register pressure impact.
+         */
+        .max_unroll_iterations = 16,
+};
 
 static const void *
 v3d_screen_get_compiler_options(struct pipe_screen *pscreen,

@@ -350,10 +350,10 @@ can_cut_index_handle_prims(struct gl_context *ctx,
                            unsigned restart_index)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    /* Otherwise Haswell can do it all. */
-   if (devinfo->ver >= 8 || devinfo->is_haswell)
+   if (devinfo->verx10 >= 75)
       return true;
 
    if (!can_cut_index_handle_restart_index(ctx, ib, restart_index)) {

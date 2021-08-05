@@ -60,7 +60,7 @@
  * \param[out] constrained - true if we wanted more space than we had
  */
 void
-intel_get_urb_config(const struct gen_device_info *devinfo,
+intel_get_urb_config(const struct intel_device_info *devinfo,
                      const struct intel_l3_config *l3_cfg,
                      bool tess_present, bool gs_present,
                      const unsigned entry_size[4],

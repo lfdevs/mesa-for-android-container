@@ -23,9 +23,11 @@
  * IN THE SOFTWARE.
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "vk_util.h"
+#include "util/debug.h"
 
 uint32_t vk_get_driver_version(void)
 {
@@ -66,4 +68,14 @@ uint32_t vk_get_version_override(void)
       return 0;
 
    return VK_MAKE_VERSION(major, minor, patch);
+}
+
+void
+vk_warn_non_conformant_implementation(const char *driver_name)
+{
+   if (env_var_as_boolean("MESA_VK_IGNORE_CONFORMANCE_WARNING", false))
+      return;
+
+   fprintf(stderr, "WARNING: %s is not a conformant Vulkan implementation, "
+                   "testing use only.\n", driver_name);
 }

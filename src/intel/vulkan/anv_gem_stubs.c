@@ -45,6 +45,14 @@ anv_gem_close(struct anv_device *device, uint32_t gem_handle)
    close(gem_handle);
 }
 
+uint32_t
+anv_gem_create_regions(struct anv_device *device, uint64_t anv_bo_size,
+                       uint32_t num_regions,
+                       struct drm_i915_gem_memory_class_instance *regions)
+{
+   return 0;
+}
+
 void*
 anv_gem_mmap(struct anv_device *device, uint32_t gem_handle,
              uint64_t offset, uint64_t size, uint32_t flags)

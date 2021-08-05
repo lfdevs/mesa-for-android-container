@@ -64,7 +64,7 @@ brw_get_program_binary_driver_sha1(struct gl_context *ctx, uint8_t *sha1)
 
 enum driver_cache_blob_part {
    END_PART,
-   GEN_PART,
+   INTEL_PART,
    NIR_PART,
 };
 
@@ -81,7 +81,7 @@ blob_parts_valid(void *blob, uint32_t size)
       if (part_type == END_PART)
          return reader.current == reader.end;
       switch ((enum driver_cache_blob_part)part_type) {
-      case GEN_PART:
+      case INTEL_PART:
       case NIR_PART:
          /* Read the uint32_t part-size and skip over it */
          blob_skip_bytes(&reader, blob_read_uint32(&reader));
@@ -112,14 +112,14 @@ blob_has_part(void *blob, uint32_t size, enum driver_cache_blob_part part)
 }
 
 static bool
-driver_blob_is_ready(void *blob, uint32_t size, bool with_gen_program)
+driver_blob_is_ready(void *blob, uint32_t size, bool with_intel_program)
 {
    if (!blob) {
       return false;
    } else if (!blob_parts_valid(blob, size)) {
       unreachable("Driver blob format is bad!");
       return false;
-   } else if (blob_has_part(blob, size, GEN_PART) == with_gen_program) {
+   } else if (blob_has_part(blob, size, INTEL_PART) == with_intel_program) {
       return true;
    } else {
       return false;
@@ -157,7 +157,7 @@ brw_program_serialize_nir(struct gl_context *ctx, struct gl_program *prog)
 }
 
 static bool
-deserialize_gen_program(struct blob_reader *reader, struct gl_context *ctx,
+deserialize_intel_program(struct blob_reader *reader, struct gl_context *ctx,
                         struct gl_program *prog, gl_shader_stage stage)
 {
    struct brw_context *brw = brw_context(ctx);
@@ -205,11 +205,11 @@ brw_program_deserialize_driver_blob(struct gl_context *ctx,
       if ((enum driver_cache_blob_part)part_type == END_PART)
          break;
       switch ((enum driver_cache_blob_part)part_type) {
-      case GEN_PART: {
+      case INTEL_PART: {
          ASSERTED uint32_t gen_size = blob_read_uint32(&reader);
          assert(!reader.overrun &&
                 (uintptr_t)(reader.end - reader.current) > gen_size);
-         deserialize_gen_program(&reader, ctx, prog, stage);
+         deserialize_intel_program(&reader, ctx, prog, stage);
          break;
       }
       case NIR_PART: {
@@ -244,7 +244,7 @@ brw_deserialize_program_binary(struct gl_context *ctx,
 }
 
 static void
-serialize_gen_part(struct blob *writer, struct gl_context *ctx,
+serialize_intel_part(struct blob *writer, struct gl_context *ctx,
                    struct gl_shader_program *sh_prog,
                    struct gl_program *prog)
 {
@@ -266,7 +266,7 @@ serialize_gen_part(struct blob *writer, struct gl_context *ctx,
        * use _mesa_streaming_load_memcpy to read from the program mapped
        * memory.
        */
-      blob_write_uint32(writer, GEN_PART);
+      blob_write_uint32(writer, INTEL_PART);
       intptr_t size_offset = blob_reserve_uint32(writer);
       size_t gen_start = writer->size;
       blob_write_bytes(writer, &key, brw_prog_key_size(stage));
@@ -297,7 +297,7 @@ brw_serialize_program_binary(struct gl_context *ctx,
    struct blob writer;
    blob_init(&writer);
    serialize_nir_part(&writer, prog);
-   serialize_gen_part(&writer, ctx, sh_prog, prog);
+   serialize_intel_part(&writer, ctx, sh_prog, prog);
    blob_write_uint32(&writer, END_PART);
    prog->driver_cache_blob = ralloc_size(NULL, writer.size);
    memcpy(prog->driver_cache_blob, writer.data, writer.size);

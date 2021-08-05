@@ -197,6 +197,7 @@ struct gfx9_meta_equation {
        * - resource type
        * - swizzle_mode
        * - bpp
+       * - number of samples
        * - number of fragments
        * - pipe_aligned
        * - rb_aligned
@@ -215,9 +216,12 @@ struct gfx9_meta_equation {
 
       /* The gfx10 DCC equation is chip-specific, it requires 64KB_R_X, and it varies with:
        * - bpp
+       * - number of samples
+       * - number of fragments
        * - pipe_aligned
        *
-       * The gfx10 HTILE equation is chip-specific.
+       * The gfx10 HTILE equation is chip-specific, it requires 64KB_Z_X, and it varies with:
+       * - number of samples
        */
       uint16_t gfx10_bits[60];
    } u;

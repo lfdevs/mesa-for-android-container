@@ -23,7 +23,6 @@
 
 #include "v3dv_private.h"
 
-#include "broadcom/cle/v3dx_pack.h"
 #include "drm-uapi/drm_fourcc.h"
 #include "util/format/u_format.h"
 #include "util/u_math.h"
@@ -135,21 +134,21 @@ v3d_setup_slices(struct v3dv_image *image)
       level_height = DIV_ROUND_UP(level_height, block_height);
 
       if (!image->tiled) {
-         slice->tiling = VC5_TILING_RASTER;
+         slice->tiling = V3D_TILING_RASTER;
          if (image->type == VK_IMAGE_TYPE_1D)
             level_width = align(level_width, 64 / image->cpp);
       } else {
          if ((i != 0 || !uif_top) &&
              (level_width <= utile_w || level_height <= utile_h)) {
-            slice->tiling = VC5_TILING_LINEARTILE;
+            slice->tiling = V3D_TILING_LINEARTILE;
             level_width = align(level_width, utile_w);
             level_height = align(level_height, utile_h);
          } else if ((i != 0 || !uif_top) && level_width <= uif_block_w) {
-            slice->tiling = VC5_TILING_UBLINEAR_1_COLUMN;
+            slice->tiling = V3D_TILING_UBLINEAR_1_COLUMN;
             level_width = align(level_width, uif_block_w);
             level_height = align(level_height, uif_block_h);
          } else if ((i != 0 || !uif_top) && level_width <= 2 * uif_block_w) {
-            slice->tiling = VC5_TILING_UBLINEAR_2_COLUMN;
+            slice->tiling = V3D_TILING_UBLINEAR_2_COLUMN;
             level_width = align(level_width, 2 * uif_block_w);
             level_height = align(level_height, uif_block_h);
          } else {
@@ -167,10 +166,10 @@ v3d_setup_slices(struct v3dv_image *image)
              * perfectly misaligned.
              */
             if ((level_height / uif_block_h) %
-                (VC5_PAGE_CACHE_SIZE / VC5_UIFBLOCK_ROW_SIZE) == 0) {
-               slice->tiling = VC5_TILING_UIF_XOR;
+                (V3D_PAGE_CACHE_SIZE / V3D_UIFBLOCK_ROW_SIZE) == 0) {
+               slice->tiling = V3D_TILING_UIF_XOR;
             } else {
-               slice->tiling = VC5_TILING_UIF_NO_XOR;
+               slice->tiling = V3D_TILING_UIF_NO_XOR;
             }
          }
       }
@@ -178,8 +177,8 @@ v3d_setup_slices(struct v3dv_image *image)
       slice->offset = offset;
       slice->stride = level_width * image->cpp;
       slice->padded_height = level_height;
-      if (slice->tiling == VC5_TILING_UIF_NO_XOR ||
-          slice->tiling == VC5_TILING_UIF_XOR) {
+      if (slice->tiling == V3D_TILING_UIF_NO_XOR ||
+          slice->tiling == V3D_TILING_UIF_XOR) {
          slice->padded_height_of_output_image_in_uif_blocks =
             slice->padded_height / (2 * v3d_utile_height(image->cpp));
       }
@@ -195,7 +194,7 @@ v3d_setup_slices(struct v3dv_image *image)
       if (i == 1 &&
           level_width > 4 * uif_block_w &&
           level_height > PAGE_CACHE_MINUS_1_5_UB_ROWS * uif_block_h) {
-         slice_total_size = align(slice_total_size, VC5_UIFCFG_PAGE_SIZE);
+         slice_total_size = align(slice_total_size, V3D_UIFCFG_PAGE_SIZE);
       }
 
       offset += slice_total_size;
@@ -245,13 +244,12 @@ v3dv_layer_offset(const struct v3dv_image *image, uint32_t level, uint32_t layer
       return image->mem_offset + slice->offset + layer * image->cube_map_stride;
 }
 
-VkResult
-v3dv_CreateImage(VkDevice _device,
-                 const VkImageCreateInfo *pCreateInfo,
-                 const VkAllocationCallbacks *pAllocator,
-                 VkImage *pImage)
+static VkResult
+create_image(struct v3dv_device *device,
+             const VkImageCreateInfo *pCreateInfo,
+             const VkAllocationCallbacks *pAllocator,
+             VkImage *pImage)
 {
-   V3DV_FROM_HANDLE(v3dv_device, device, _device);
    struct v3dv_image *image = NULL;
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
@@ -292,9 +290,12 @@ v3dv_CreateImage(VkDevice _device,
    } else {
       const struct wsi_image_create_info *wsi_info =
          vk_find_struct_const(pCreateInfo->pNext, WSI_IMAGE_CREATE_INFO_MESA);
-      if (wsi_info)
+      if (wsi_info && wsi_info->scanout)
          modifier = DRM_FORMAT_MOD_LINEAR;
    }
+
+   const VkExternalMemoryImageCreateInfo *external_info =
+      vk_find_struct_const(pCreateInfo->pNext, EXTERNAL_MEMORY_IMAGE_CREATE_INFO);
 
    /* 1D and 1D_ARRAY textures are always raster-order */
    VkImageTiling tiling;
@@ -307,7 +308,7 @@ v3dv_CreateImage(VkDevice _device,
    else
       tiling = VK_IMAGE_TILING_LINEAR;
 
-   const struct v3dv_format *format = v3dv_get_format(pCreateInfo->format);
+   const struct v3dv_format *format = v3dv_X(device, get_format)(pCreateInfo->format);
    v3dv_assert(format != NULL && format->supported);
 
    image = vk_object_zalloc(&device->vk, pAllocator, sizeof(*image),
@@ -332,6 +333,7 @@ v3dv_CreateImage(VkDevice _device,
    image->drm_format_mod = modifier;
    image->tiling = tiling;
    image->tiled = tiling == VK_IMAGE_TILING_OPTIMAL;
+   image->external = external_info != NULL;
 
    image->cpp = vk_format_get_blocksize(image->vk_format);
 
@@ -342,7 +344,71 @@ v3dv_CreateImage(VkDevice _device,
    return VK_SUCCESS;
 }
 
-void
+static VkResult
+create_image_from_swapchain(struct v3dv_device *device,
+                            const VkImageCreateInfo *pCreateInfo,
+                            const VkImageSwapchainCreateInfoKHR *swapchain_info,
+                            const VkAllocationCallbacks *pAllocator,
+                            VkImage *pImage)
+{
+   struct v3dv_image *swapchain_image =
+      v3dv_wsi_get_image_from_swapchain(swapchain_info->swapchain, 0);
+   assert(swapchain_image);
+
+   VkImageCreateInfo local_create_info = *pCreateInfo;
+   local_create_info.pNext = NULL;
+
+   /* Added by wsi code. */
+   local_create_info.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+   /* The spec requires TILING_OPTIMAL as input, but the swapchain image may
+    * privately use a different tiling.  See spec anchor
+    * #swapchain-wsi-image-create-info .
+    */
+   assert(local_create_info.tiling == VK_IMAGE_TILING_OPTIMAL);
+   local_create_info.tiling = swapchain_image->tiling;
+
+   VkImageDrmFormatModifierListCreateInfoEXT local_modifier_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT,
+      .drmFormatModifierCount = 1,
+      .pDrmFormatModifiers = &swapchain_image->drm_format_mod,
+   };
+
+   if (swapchain_image->drm_format_mod != DRM_FORMAT_MOD_INVALID)
+      __vk_append_struct(&local_create_info, &local_modifier_info);
+
+   assert(swapchain_image->type == local_create_info.imageType);
+   assert(swapchain_image->vk_format == local_create_info.format);
+   assert(swapchain_image->extent.width == local_create_info.extent.width);
+   assert(swapchain_image->extent.height == local_create_info.extent.height);
+   assert(swapchain_image->extent.depth == local_create_info.extent.depth);
+   assert(swapchain_image->array_size == local_create_info.arrayLayers);
+   assert(swapchain_image->samples == local_create_info.samples);
+   assert(swapchain_image->tiling == local_create_info.tiling);
+   assert((swapchain_image->usage & local_create_info.usage) ==
+          local_create_info.usage);
+
+   return create_image(device, &local_create_info, pAllocator, pImage);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_CreateImage(VkDevice _device,
+                 const VkImageCreateInfo *pCreateInfo,
+                 const VkAllocationCallbacks *pAllocator,
+                 VkImage *pImage)
+{
+   V3DV_FROM_HANDLE(v3dv_device, device, _device);
+
+   const VkImageSwapchainCreateInfoKHR *swapchain_info =
+      vk_find_struct_const(pCreateInfo->pNext, IMAGE_SWAPCHAIN_CREATE_INFO_KHR);
+   if (swapchain_info && swapchain_info->swapchain != VK_NULL_HANDLE)
+      return create_image_from_swapchain(device, pCreateInfo, swapchain_info,
+                                         pAllocator, pImage);
+
+   return create_image(device, pCreateInfo, pAllocator, pImage);
+}
+
+VKAPI_ATTR void VKAPI_CALL
 v3dv_GetImageSubresourceLayout(VkDevice device,
                                VkImage _image,
                                const VkImageSubresource *subresource,
@@ -377,7 +443,7 @@ v3dv_GetImageSubresourceLayout(VkDevice device,
    }
 }
 
-VkResult
+VKAPI_ATTR VkResult VKAPI_CALL
 v3dv_GetImageDrmFormatModifierPropertiesEXT(
    VkDevice device,
    VkImage _image,
@@ -393,7 +459,7 @@ v3dv_GetImageDrmFormatModifierPropertiesEXT(
    return VK_SUCCESS;
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 v3dv_DestroyImage(VkDevice _device,
                   VkImage _image,
                   const VkAllocationCallbacks* pAllocator)
@@ -417,132 +483,6 @@ v3dv_image_type_to_view_type(VkImageType type)
    default:
       unreachable("Invalid image type");
    }
-}
-
-/*
- * This method translates pipe_swizzle to the swizzle values used at the
- * packet TEXTURE_SHADER_STATE
- *
- * FIXME: C&P from v3d, common place?
- */
-static uint32_t
-translate_swizzle(unsigned char pipe_swizzle)
-{
-   switch (pipe_swizzle) {
-   case PIPE_SWIZZLE_0:
-      return 0;
-   case PIPE_SWIZZLE_1:
-      return 1;
-   case PIPE_SWIZZLE_X:
-   case PIPE_SWIZZLE_Y:
-   case PIPE_SWIZZLE_Z:
-   case PIPE_SWIZZLE_W:
-      return 2 + pipe_swizzle;
-   default:
-      unreachable("unknown swizzle");
-   }
-}
-
-/*
- * Packs and ensure bo for the shader state (the latter can be temporal).
- */
-static void
-pack_texture_shader_state_helper(struct v3dv_device *device,
-                                 struct v3dv_image_view *image_view,
-                                 bool for_cube_map_array_storage)
-{
-   assert(!for_cube_map_array_storage ||
-          image_view->type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY);
-   const uint32_t index = for_cube_map_array_storage ? 1 : 0;
-
-   assert(image_view->image);
-   const struct v3dv_image *image = image_view->image;
-
-   assert(image->samples == VK_SAMPLE_COUNT_1_BIT ||
-          image->samples == VK_SAMPLE_COUNT_4_BIT);
-   const uint32_t msaa_scale = image->samples == VK_SAMPLE_COUNT_1_BIT ? 1 : 2;
-
-   v3dv_pack(image_view->texture_shader_state[index], TEXTURE_SHADER_STATE, tex) {
-
-      tex.level_0_is_strictly_uif =
-         (image->slices[0].tiling == VC5_TILING_UIF_XOR ||
-          image->slices[0].tiling == VC5_TILING_UIF_NO_XOR);
-
-      tex.level_0_xor_enable = (image->slices[0].tiling == VC5_TILING_UIF_XOR);
-
-      if (tex.level_0_is_strictly_uif)
-         tex.level_0_ub_pad = image->slices[0].ub_pad;
-
-      /* FIXME: v3d never sets uif_xor_disable, but uses it on the following
-       * check so let's set the default value
-       */
-      tex.uif_xor_disable = false;
-      if (tex.uif_xor_disable ||
-          tex.level_0_is_strictly_uif) {
-         tex.extended = true;
-      }
-
-      tex.base_level = image_view->base_level;
-      tex.max_level = image_view->max_level;
-
-      tex.swizzle_r = translate_swizzle(image_view->swizzle[0]);
-      tex.swizzle_g = translate_swizzle(image_view->swizzle[1]);
-      tex.swizzle_b = translate_swizzle(image_view->swizzle[2]);
-      tex.swizzle_a = translate_swizzle(image_view->swizzle[3]);
-
-      tex.texture_type = image_view->format->tex_type;
-
-      if (image->type == VK_IMAGE_TYPE_3D) {
-         tex.image_depth = image->extent.depth;
-      } else {
-         tex.image_depth = (image_view->last_layer - image_view->first_layer) + 1;
-      }
-
-      /* Empirical testing with CTS shows that when we are sampling from cube
-       * arrays we want to set image depth to layers / 6, but not when doing
-       * image load/store.
-       */
-      if (image_view->type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY &&
-          !for_cube_map_array_storage) {
-         assert(tex.image_depth % 6 == 0);
-         tex.image_depth /= 6;
-      }
-
-      tex.image_height = image->extent.height * msaa_scale;
-      tex.image_width = image->extent.width * msaa_scale;
-
-      /* On 4.x, the height of a 1D texture is redefined to be the
-       * upper 14 bits of the width (which is only usable with txf).
-       */
-      if (image->type == VK_IMAGE_TYPE_1D) {
-         tex.image_height = tex.image_width >> 14;
-      }
-      tex.image_width &= (1 << 14) - 1;
-      tex.image_height &= (1 << 14) - 1;
-
-      tex.array_stride_64_byte_aligned = image->cube_map_stride / 64;
-
-      tex.srgb = vk_format_is_srgb(image_view->vk_format);
-
-      /* At this point we don't have the job. That's the reason the first
-       * parameter is NULL, to avoid a crash when cl_pack_emit_reloc tries to
-       * add the bo to the job. This also means that we need to add manually
-       * the image bo to the job using the texture.
-       */
-      const uint32_t base_offset =
-         image->mem->bo->offset +
-         v3dv_layer_offset(image, 0, image_view->first_layer);
-      tex.texture_base_pointer = v3dv_cl_address(NULL, base_offset);
-   }
-}
-
-static void
-pack_texture_shader_state(struct v3dv_device *device,
-                          struct v3dv_image_view *iview)
-{
-   pack_texture_shader_state_helper(device, iview, false);
-   if (iview->type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY)
-      pack_texture_shader_state_helper(device, iview, true);
 }
 
 static enum pipe_swizzle
@@ -570,7 +510,7 @@ vk_component_mapping_to_pipe_swizzle(VkComponentSwizzle comp,
    };
 }
 
-VkResult
+VKAPI_ATTR VkResult VKAPI_CALL
 v3dv_CreateImageView(VkDevice _device,
                      const VkImageViewCreateInfo *pCreateInfo,
                      const VkAllocationCallbacks *pAllocator,
@@ -667,30 +607,29 @@ v3dv_CreateImageView(VkDevice _device,
    }
 
    iview->vk_format = format;
-   iview->format = v3dv_get_format(format);
+   iview->format = v3dv_X(device, get_format)(format);
    assert(iview->format && iview->format->supported);
 
    if (vk_format_is_depth_or_stencil(iview->vk_format)) {
-      iview->internal_type = v3dv_get_internal_depth_type(iview->vk_format);
+      iview->internal_type = v3dv_X(device, get_internal_depth_type)(iview->vk_format);
    } else {
-      v3dv_get_internal_type_bpp_for_output_format(iview->format->rt_type,
-                                                   &iview->internal_type,
-                                                   &iview->internal_bpp);
+      v3dv_X(device, get_internal_type_bpp_for_output_format)
+         (iview->format->rt_type, &iview->internal_type, &iview->internal_bpp);
    }
 
-   const uint8_t *format_swizzle = v3dv_get_format_swizzle(format);
+   const uint8_t *format_swizzle = v3dv_get_format_swizzle(device, format);
    util_format_compose_swizzles(format_swizzle, image_view_swizzle,
                                 iview->swizzle);
    iview->swap_rb = iview->swizzle[0] == PIPE_SWIZZLE_Z;
 
-   pack_texture_shader_state(device, iview);
+   v3dv_X(device, pack_texture_shader_state)(device, iview);
 
    *pView = v3dv_image_view_to_handle(iview);
 
    return VK_SUCCESS;
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 v3dv_DestroyImageView(VkDevice _device,
                       VkImageView imageView,
                       const VkAllocationCallbacks* pAllocator)
@@ -704,49 +643,7 @@ v3dv_DestroyImageView(VkDevice _device,
    vk_object_free(&device->vk, pAllocator, image_view);
 }
 
-static void
-pack_texture_shader_state_from_buffer_view(struct v3dv_device *device,
-                                           struct v3dv_buffer_view *buffer_view)
-{
-   assert(buffer_view->buffer);
-   const struct v3dv_buffer *buffer = buffer_view->buffer;
-
-   v3dv_pack(buffer_view->texture_shader_state, TEXTURE_SHADER_STATE, tex) {
-      tex.swizzle_r = translate_swizzle(PIPE_SWIZZLE_X);
-      tex.swizzle_g = translate_swizzle(PIPE_SWIZZLE_Y);
-      tex.swizzle_b = translate_swizzle(PIPE_SWIZZLE_Z);
-      tex.swizzle_a = translate_swizzle(PIPE_SWIZZLE_W);
-
-      tex.image_depth = 1;
-
-      /* On 4.x, the height of a 1D texture is redefined to be the upper 14
-       * bits of the width (which is only usable with txf) (or in other words,
-       * we are providing a 28 bit field for size, but split on the usual
-       * 14bit height/width).
-       */
-      tex.image_width = buffer_view->num_elements;
-      tex.image_height = tex.image_width >> 14;
-      tex.image_width &= (1 << 14) - 1;
-      tex.image_height &= (1 << 14) - 1;
-
-      tex.texture_type = buffer_view->format->tex_type;
-      tex.srgb = vk_format_is_srgb(buffer_view->vk_format);
-
-      /* At this point we don't have the job. That's the reason the first
-       * parameter is NULL, to avoid a crash when cl_pack_emit_reloc tries to
-       * add the bo to the job. This also means that we need to add manually
-       * the image bo to the job using the texture.
-       */
-      const uint32_t base_offset =
-         buffer->mem->bo->offset +
-         buffer->mem_offset +
-         buffer_view->offset;
-
-      tex.texture_base_pointer = v3dv_cl_address(NULL, base_offset);
-   }
-}
-
-VkResult
+VKAPI_ATTR VkResult VKAPI_CALL
 v3dv_CreateBufferView(VkDevice _device,
                       const VkBufferViewCreateInfo *pCreateInfo,
                       const VkAllocationCallbacks *pAllocator,
@@ -754,7 +651,7 @@ v3dv_CreateBufferView(VkDevice _device,
 {
    V3DV_FROM_HANDLE(v3dv_device, device, _device);
 
-   const struct v3dv_buffer *buffer =
+   struct v3dv_buffer *buffer =
       v3dv_buffer_from_handle(pCreateInfo->buffer);
 
    struct v3dv_buffer_view *view =
@@ -777,22 +674,21 @@ v3dv_CreateBufferView(VkDevice _device,
    view->size = view->offset + range;
    view->num_elements = num_elements;
    view->vk_format = pCreateInfo->format;
-   view->format = v3dv_get_format(view->vk_format);
+   view->format = v3dv_X(device, get_format)(view->vk_format);
 
-   v3dv_get_internal_type_bpp_for_output_format(view->format->rt_type,
-                                                &view->internal_type,
-                                                &view->internal_bpp);
+   v3dv_X(device, get_internal_type_bpp_for_output_format)
+      (view->format->rt_type, &view->internal_type, &view->internal_bpp);
 
    if (buffer->usage & VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT ||
        buffer->usage & VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT)
-      pack_texture_shader_state_from_buffer_view(device, view);
+      v3dv_X(device, pack_texture_shader_state_from_buffer_view)(device, view);
 
    *pView = v3dv_buffer_view_to_handle(view);
 
    return VK_SUCCESS;
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 v3dv_DestroyBufferView(VkDevice _device,
                        VkBufferView bufferView,
                        const VkAllocationCallbacks *pAllocator)

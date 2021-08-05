@@ -127,4 +127,15 @@ brw_buffer_object(struct gl_buffer_object *obj)
    return (struct brw_buffer_object *) obj;
 }
 
+struct brw_memory_object {
+   struct gl_memory_object Base;
+   struct brw_bo *bo;
+};
+
+static inline struct brw_memory_object *
+brw_memory_object(struct gl_memory_object *obj)
+{
+   return (struct brw_memory_object *)obj;
+}
+
 #endif

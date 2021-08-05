@@ -211,10 +211,6 @@ load_foz_dbs(struct foz_db *foz_db, FILE *db_idx, uint8_t file_idx,
       if (err == -1)
          goto fail;
 
-      err = lock_file_with_timeout(db_idx, 100000000);
-      if (err == -1)
-         goto fail;
-
       /* Compute length again so we know nobody else did it in the meantime */
       fseek(db_idx, 0, SEEK_END);
       len = ftell(db_idx);
@@ -248,7 +244,6 @@ load_foz_dbs(struct foz_db *foz_db, FILE *db_idx, uint8_t file_idx,
          goto fail;
    }
 
-   flock(fileno(db_idx), LOCK_UN);
    flock(fileno(foz_db->file[file_idx]), LOCK_UN);
 
    update_foz_index(foz_db, db_idx, file_idx);
@@ -257,7 +252,6 @@ load_foz_dbs(struct foz_db *foz_db, FILE *db_idx, uint8_t file_idx,
    return true;
 
 fail:
-   flock(fileno(db_idx), LOCK_UN);
    flock(fileno(foz_db->file[file_idx]), LOCK_UN);
    foz_destroy(foz_db);
    return false;
@@ -442,10 +436,6 @@ foz_write_entry(struct foz_db *foz_db, const uint8_t *cache_key_160bit,
    if (err == -1)
       goto fail_file;
 
-   err = lock_file_with_timeout(foz_db->db_idx, 1000000000);
-   if (err == -1)
-      goto fail_file;
-
    simple_mtx_lock(&foz_db->mtx);
 
    update_foz_index(foz_db, foz_db->db_idx, 0);
@@ -515,7 +505,6 @@ foz_write_entry(struct foz_db *foz_db, const uint8_t *cache_key_160bit,
    _mesa_hash_table_u64_insert(foz_db->index_db, hash, entry);
 
    simple_mtx_unlock(&foz_db->mtx);
-   flock(fileno(foz_db->db_idx), LOCK_UN);
    flock(fileno(foz_db->file[0]), LOCK_UN);
 
    return true;
@@ -523,7 +512,6 @@ foz_write_entry(struct foz_db *foz_db, const uint8_t *cache_key_160bit,
 fail:
    simple_mtx_unlock(&foz_db->mtx);
 fail_file:
-   flock(fileno(foz_db->db_idx), LOCK_UN);
    flock(fileno(foz_db->file[0]), LOCK_UN);
    return false;
 }

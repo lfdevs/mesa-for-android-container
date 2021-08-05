@@ -26,7 +26,7 @@
 
 #include <stdio.h>
 
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 
 /**
  * Chunk of L3 cache reserved for some specific purpose.
@@ -73,21 +73,21 @@ struct intel_l3_weights {
 float intel_diff_l3_weights(struct intel_l3_weights w0, struct intel_l3_weights w1);
 
 struct intel_l3_weights
-intel_get_default_l3_weights(const struct gen_device_info *devinfo,
+intel_get_default_l3_weights(const struct intel_device_info *devinfo,
                              bool needs_dc, bool needs_slm);
 
 struct intel_l3_weights
 intel_get_l3_config_weights(const struct intel_l3_config *cfg);
 
 const struct intel_l3_config *
-intel_get_default_l3_config(const struct gen_device_info *devinfo);
+intel_get_default_l3_config(const struct intel_device_info *devinfo);
 
 const struct intel_l3_config *
-intel_get_l3_config(const struct gen_device_info *devinfo,
+intel_get_l3_config(const struct intel_device_info *devinfo,
                     struct intel_l3_weights w0);
 
 unsigned
-intel_get_l3_config_urb_size(const struct gen_device_info *devinfo,
+intel_get_l3_config_urb_size(const struct intel_device_info *devinfo,
                              const struct intel_l3_config *cfg);
 
 void intel_dump_l3_config(const struct intel_l3_config *cfg, FILE *fp);
@@ -98,7 +98,7 @@ enum intel_urb_deref_block_size {
    INTEL_URB_DEREF_BLOCK_SIZE_8          = 2,
 };
 
-void intel_get_urb_config(const struct gen_device_info *devinfo,
+void intel_get_urb_config(const struct intel_device_info *devinfo,
                           const struct intel_l3_config *l3_cfg,
                           bool tess_present, bool gs_present,
                           const unsigned entry_size[4],

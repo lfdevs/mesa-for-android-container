@@ -37,7 +37,7 @@ struct push_context {
 static void nvc0_push_upload_vertex_ids(struct push_context *,
                                         struct nvc0_context *,
                                         const struct pipe_draw_info *,
-                                        const struct pipe_draw_start_count *draw);
+                                        const struct pipe_draw_start_count_bias *draw);
 
 static void
 nvc0_push_context_init(struct nvc0_context *nvc0, struct push_context *ctx)
@@ -492,8 +492,9 @@ typedef struct {
 
 void
 nvc0_push_vbo_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *info,
+                       unsigned drawid_offset,
                        const struct pipe_draw_indirect_info *indirect,
-                       const struct pipe_draw_start_count *draw)
+                       const struct pipe_draw_start_count_bias *draw)
 {
    /* The strategy here is to just read the commands from the indirect buffer
     * and do the draws. This is suboptimal, but will only happen in the case
@@ -516,7 +517,7 @@ nvc0_push_vbo_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *i
    uint8_t *buf_data = nouveau_resource_map_offset(
             &nvc0->base, buf, indirect->offset, NOUVEAU_BO_RD);
    struct pipe_draw_info single = *info;
-   struct pipe_draw_start_count sdraw = *draw;
+   struct pipe_draw_start_count_bias sdraw = *draw;
    for (i = 0; i < draw_count; i++, buf_data += indirect->stride) {
       if (info->index_size) {
          DrawElementsIndirectCommand *cmd = (void *)buf_data;
@@ -524,7 +525,7 @@ nvc0_push_vbo_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *i
          sdraw.count = cmd->count;
          single.start_instance = cmd->baseInstance;
          single.instance_count = cmd->primCount;
-         single.index_bias = cmd->baseVertex;
+         sdraw.index_bias = cmd->baseVertex;
       } else {
          DrawArraysIndirectCommand *cmd = (void *)buf_data;
          sdraw.start = cmd->first;
@@ -541,9 +542,9 @@ nvc0_push_vbo_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *i
          PUSH_DATA (push, screen->uniform_bo->offset + NVC0_CB_AUX_INFO(0));
          BEGIN_1IC0(push, NVC0_3D(CB_POS), 1 + 3);
          PUSH_DATA (push, NVC0_CB_AUX_DRAW_INFO);
-         PUSH_DATA (push, single.index_bias);
+         PUSH_DATA (push, sdraw.index_bias);
          PUSH_DATA (push, single.start_instance);
-         PUSH_DATA (push, single.drawid + i);
+         PUSH_DATA (push, drawid_offset + i);
       }
 
       nvc0_push_vbo(nvc0, &single, NULL, &sdraw);
@@ -557,11 +558,11 @@ nvc0_push_vbo_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *i
 void
 nvc0_push_vbo(struct nvc0_context *nvc0, const struct pipe_draw_info *info,
               const struct pipe_draw_indirect_info *indirect,
-              const struct pipe_draw_start_count *draw)
+              const struct pipe_draw_start_count_bias *draw)
 {
    struct push_context ctx;
    unsigned i, index_size;
-   unsigned index_bias = info->index_size ? info->index_bias : 0;
+   unsigned index_bias = info->index_size ? draw->index_bias : 0;
    unsigned inst_count = info->instance_count;
    unsigned vert_count = draw->count;
    unsigned prim;
@@ -711,7 +712,7 @@ static void
 nvc0_push_upload_vertex_ids(struct push_context *ctx,
                             struct nvc0_context *nvc0,
                             const struct pipe_draw_info *info,
-                            const struct pipe_draw_start_count *draw)
+                            const struct pipe_draw_start_count_bias *draw)
 
 {
    struct nouveau_pushbuf *push = ctx->push;
@@ -723,7 +724,7 @@ nvc0_push_upload_vertex_ids(struct push_context *ctx,
    unsigned i;
    unsigned a = nvc0->vertex->num_elements;
 
-   if (!index_size || info->index_bias)
+   if (!index_size || draw->index_bias)
       index_size = 4;
    data = (uint32_t *)nouveau_scratch_get(&nvc0->base,
                                           draw->count * index_size, &va, &bo);
@@ -733,24 +734,24 @@ nvc0_push_upload_vertex_ids(struct push_context *ctx,
    nouveau_pushbuf_validate(push);
 
    if (info->index_size) {
-      if (!info->index_bias) {
+      if (!draw->index_bias) {
          memcpy(data, ctx->idxbuf, draw->count * index_size);
       } else {
          switch (info->index_size) {
          case 1:
-            copy_indices_u8(data, ctx->idxbuf, info->index_bias, draw->count);
+            copy_indices_u8(data, ctx->idxbuf, draw->index_bias, draw->count);
             break;
          case 2:
-            copy_indices_u16(data, ctx->idxbuf, info->index_bias, draw->count);
+            copy_indices_u16(data, ctx->idxbuf, draw->index_bias, draw->count);
             break;
          default:
-            copy_indices_u32(data, ctx->idxbuf, info->index_bias, draw->count);
+            copy_indices_u32(data, ctx->idxbuf, draw->index_bias, draw->count);
             break;
          }
       }
    } else {
       for (i = 0; i < draw->count; ++i)
-         data[i] = i + (draw->start + info->index_bias);
+         data[i] = i + (draw->start + draw->index_bias);
    }
 
    format = (1 << NVC0_3D_VERTEX_ATTRIB_FORMAT_BUFFER__SHIFT) |

@@ -36,8 +36,8 @@ bi_liveness_ins_update(uint16_t *live, bi_instr *ins, unsigned max)
 
         bi_foreach_src(ins, src) {
                 unsigned count = bi_count_read_registers(ins, src);
-                unsigned rmask = (1 << (4 * count)) - 1;
-                uint16_t mask = (rmask << (4 * ins->src[src].offset));
+                unsigned rmask = BITFIELD_MASK(count);
+                uint16_t mask = (rmask << ins->src[src].offset);
 
                 unsigned node = bi_get_node(ins->src[src]);
                 pan_liveness_gen(live, node, max, mask);

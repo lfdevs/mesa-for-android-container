@@ -25,30 +25,9 @@ v3dv_entrypoints = custom_target(
   command : [
     prog_python, '@INPUT0@', '--xml', '@INPUT1@', '--proto', '--weak',
     '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@', '--prefix', 'v3dv',
+    '--device-prefix', 'ver42',
   ],
   depend_files : vk_entrypoints_gen_depend_files,
-)
-
-v3dv_extensions_c = custom_target(
-  'v3dv_extensions.c',
-  input : ['v3dv_extensions_gen.py', vk_api_xml],
-  output : 'v3dv_extensions.c',
-  command : [
-    prog_python, '@INPUT0@', '--xml', '@INPUT1@',
-    '--out-c', '@OUTPUT@',
-  ],
-  depend_files : [files('v3dv_extensions.py'), vk_extensions_gen],
-)
-
-v3dv_extensions_h = custom_target(
-  'v3dv_extensions.h',
-  input : ['v3dv_extensions_gen.py', vk_api_xml],
-  output : 'v3dv_extensions.h',
-  command : [
-    prog_python, '@INPUT0@', '--xml', '@INPUT1@',
-    '--out-h', '@OUTPUT@',
-  ],
-  depend_files : [files('v3dv_extensions.py'), vk_extensions_gen],
 )
 
 libv3dv_files = files(
@@ -73,13 +52,27 @@ libv3dv_files = files(
   'v3dv_uniforms.c',
   'v3dv_util.c',
   'v3dv_wsi.c',
-  'v3d_tiling.c',
+)
+
+files_per_version = files(
+  'v3dvx_cmd_buffer.c',
+  'v3dvx_descriptor_set.c',
+  'v3dvx_device.c',
+  'v3dvx_formats.c',
+  'v3dvx_image.c',
+  'v3dvx_pipeline.c',
+  'v3dvx_meta_clear.c',
+  'v3dvx_meta_copy.c',
+  'v3dvx_pipeline.c',
+  'v3dvx_queue.c',
 )
 
 # The vulkan driver only supports version >= 42, which is the version present in
 # Rpi4. We need to explicitly set it as we are reusing pieces from the GL v3d
 # driver.
-v3dv_flags = ['-DV3D_VERSION=42']
+v3d_versions = ['42']
+
+v3dv_flags = []
 
 dep_v3dv3 = dependency('v3dv3', required : false)
 if dep_v3dv3.found()
@@ -117,9 +110,24 @@ if system_has_kms_drm and not with_platform_android
  libv3dv_files += files('v3dv_wsi_display.c')
 endif
 
+per_version_libs = []
+foreach ver : v3d_versions
+  per_version_libs += static_library(
+    'v3dv-v' + ver,
+    [files_per_version, v3d_xml_pack, v3dv_entrypoints[0]],
+    include_directories : [
+      inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_broadcom,
+      inc_compiler, inc_util, inc_vulkan_wsi,
+    ],
+    c_args : [v3dv_flags, '-DV3D_VERSION=' + ver],
+    gnu_symbol_visibility : 'hidden',
+    dependencies : [v3dv_deps],
+)
+endforeach
+
 libvulkan_broadcom = shared_library(
   'vulkan_broadcom',
-  [libv3dv_files, v3dv_entrypoints, v3dv_extensions_c, v3dv_extensions_h, sha1_h],
+  [libv3dv_files, v3dv_entrypoints, sha1_h],
   include_directories : [
     inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_broadcom, inc_compiler, inc_util, inc_vulkan_wsi,
   ],
@@ -127,6 +135,7 @@ libvulkan_broadcom = shared_library(
     libbroadcom_cle,
     libbroadcom_v3d,
     libvulkan_wsi,
+    per_version_libs,
   ],
   dependencies : v3dv_deps,
   c_args : v3dv_flags,
@@ -150,14 +159,15 @@ endif
 
 broadcom_icd = custom_target(
   'broadcom_icd',
-  input : 'v3dv_icd.py',
+  input : [vk_icd_gen, vk_api_xml],
   output : 'broadcom_icd.@0@.json'.format(host_machine.cpu()),
   command : [
-    prog_python, '@INPUT@',
-    '--lib-path', join_paths(get_option('prefix'), get_option('libdir')),
+    prog_python, '@INPUT0@',
+    '--api-version', '1.0', '--xml', '@INPUT1@',
+    '--lib-path', join_paths(get_option('prefix'), get_option('libdir'),
+    		  	     'libvulkan_broadcom.so'),
     '--out', '@OUTPUT@',
   ],
-  depend_files : files('v3dv_extensions.py'),
   build_by_default : true,
   install_dir : with_vulkan_icd_dir,
   install : true,

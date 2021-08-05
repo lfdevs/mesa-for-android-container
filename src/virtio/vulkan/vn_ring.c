@@ -76,13 +76,13 @@ vn_ring_ge_seqno(const struct vn_ring *ring, uint32_t a, uint32_t b)
 static void
 vn_ring_retire_submits(struct vn_ring *ring, uint32_t seqno)
 {
-   list_for_each_entry_safe (struct vn_ring_submit, submit, &ring->submits,
-                             head) {
+   list_for_each_entry_safe(struct vn_ring_submit, submit, &ring->submits,
+                            head) {
       if (!vn_ring_ge_seqno(ring, seqno, submit->seqno))
          break;
 
-      for (uint32_t i = 0; i < submit->bo_count; i++)
-         vn_renderer_bo_unref(submit->bos[i]);
+      for (uint32_t i = 0; i < submit->shmem_count; i++)
+         vn_renderer_shmem_unref(ring->renderer, submit->shmems[i]);
 
       list_del(&submit->head);
       list_add(&submit->head, &ring->free_submits);
@@ -144,16 +144,19 @@ vn_ring_get_layout(size_t extra_size, struct vn_ring_layout *layout)
    layout->extra_offset = layout->buffer_offset + layout->buffer_size;
    layout->extra_size = extra_size;
 
-   layout->bo_size = layout->extra_offset + layout->extra_size;
+   layout->shmem_size = layout->extra_offset + layout->extra_size;
 }
 
 void
 vn_ring_init(struct vn_ring *ring,
+             struct vn_renderer *renderer,
              const struct vn_ring_layout *layout,
              void *shared)
 {
    memset(ring, 0, sizeof(*ring));
-   memset(shared, 0, layout->bo_size);
+   memset(shared, 0, layout->shmem_size);
+
+   ring->renderer = renderer;
 
    ring->shared.head = shared + layout->head_offset;
    ring->shared.tail = shared + layout->tail_offset;
@@ -171,25 +174,27 @@ vn_ring_fini(struct vn_ring *ring)
    vn_ring_retire_submits(ring, ring->cur);
    assert(list_is_empty(&ring->submits));
 
-   list_for_each_entry_safe (struct vn_ring_submit, submit,
-                             &ring->free_submits, head)
+   list_for_each_entry_safe(struct vn_ring_submit, submit,
+                            &ring->free_submits, head)
       free(submit);
 }
 
 struct vn_ring_submit *
-vn_ring_get_submit(struct vn_ring *ring, uint32_t bo_count)
+vn_ring_get_submit(struct vn_ring *ring, uint32_t shmem_count)
 {
-   const uint32_t min_bo_count = 2;
+   const uint32_t min_shmem_count = 2;
    struct vn_ring_submit *submit;
 
-   /* TODO this could be simplified if we could omit bo_count */
-   if (bo_count <= min_bo_count && !list_is_empty(&ring->free_submits)) {
+   /* TODO this could be simplified if we could omit shmem_count */
+   if (shmem_count <= min_shmem_count &&
+       !list_is_empty(&ring->free_submits)) {
       submit =
          list_first_entry(&ring->free_submits, struct vn_ring_submit, head);
       list_del(&submit->head);
    } else {
-      bo_count = MAX2(bo_count, min_bo_count);
-      submit = malloc(sizeof(*submit) + sizeof(submit->bos[0]) * bo_count);
+      shmem_count = MAX2(shmem_count, min_shmem_count);
+      submit =
+         malloc(sizeof(*submit) + sizeof(submit->shmems[0]) * shmem_count);
    }
 
    return submit;
@@ -223,13 +228,4 @@ void
 vn_ring_wait(const struct vn_ring *ring, uint32_t seqno)
 {
    vn_ring_wait_seqno(ring, seqno);
-}
-
-void
-vn_ring_wait_all(const struct vn_ring *ring)
-{
-   /* load from tail rather than ring->cur for atomicity */
-   const uint32_t pending_seqno =
-      atomic_load_explicit(ring->shared.tail, memory_order_relaxed);
-   vn_ring_wait(ring, pending_seqno);
 }

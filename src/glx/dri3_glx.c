@@ -395,6 +395,7 @@ dri3_create_drawable(struct glx_screen *base, XID xDrawable,
       return NULL;
    }
 
+   pdraw->loader_drawable.dri_screen_display_gpu = psc->driScreenDisplayGPU;
    return &pdraw->base;
 }
 
@@ -607,6 +608,13 @@ dri3_destroy_screen(struct glx_screen *base)
    struct dri3_screen *psc = (struct dri3_screen *) base;
 
    /* Free the direct rendering per screen data */
+   if (psc->is_different_gpu) {
+      if (psc->driScreenDisplayGPU) {
+         loader_dri3_close_screen(psc->driScreenDisplayGPU);
+         (*psc->core->destroyScreen) (psc->driScreenDisplayGPU);
+      }
+      close(psc->fd_display_gpu);
+   }
    loader_dri3_close_screen(psc->driScreen);
    (*psc->core->destroyScreen) (psc->driScreen);
    driDestroyConfigs(psc->driver_configs);
@@ -740,6 +748,7 @@ dri3_bind_extensions(struct dri3_screen *psc, struct glx_display * priv,
 
    __glXEnableDirectExtension(&psc->base, "GLX_ARB_create_context");
    __glXEnableDirectExtension(&psc->base, "GLX_ARB_create_context_profile");
+   __glXEnableDirectExtension(&psc->base, "GLX_EXT_no_config_context");
 
    if ((mask & ((1 << __DRI_API_GLES) |
                 (1 << __DRI_API_GLES2) |
@@ -833,7 +842,7 @@ dri3_create_screen(int screen, struct glx_display * priv)
    struct dri3_screen *psc;
    __GLXDRIscreen *psp;
    struct glx_config *configs = NULL, *visuals = NULL;
-   char *driverName, *tmp;
+   char *driverName, *driverNameDisplayGPU, *tmp;
    int i;
 
    psc = calloc(1, sizeof *psc);
@@ -841,6 +850,7 @@ dri3_create_screen(int screen, struct glx_display * priv)
       return NULL;
 
    psc->fd = -1;
+   psc->fd_display_gpu = -1;
 
    if (!glx_screen_init(&psc->base, screen, priv)) {
       free(psc);
@@ -861,7 +871,12 @@ dri3_create_screen(int screen, struct glx_display * priv)
       return NULL;
    }
 
+   psc->fd_display_gpu = fcntl(psc->fd, F_DUPFD_CLOEXEC, 3);
    psc->fd = loader_get_user_preferred_fd(psc->fd, &psc->is_different_gpu);
+   if (!psc->is_different_gpu) {
+      close(psc->fd_display_gpu);
+      psc->fd_display_gpu = -1;
+   }
 
    driverName = loader_get_driver_for_fd(psc->fd);
    if (!driverName) {
@@ -889,6 +904,27 @@ dri3_create_screen(int screen, struct glx_display * priv)
    if (psc->image_driver == NULL) {
       ErrorMessageF("image driver extension not found\n");
       goto handle_error;
+   }
+
+   if (psc->is_different_gpu) {
+      driverNameDisplayGPU = loader_get_driver_for_fd(psc->fd_display_gpu);
+      if (driverNameDisplayGPU) {
+
+         /* check if driver name is matching so that non mesa drivers
+          * will not crash. Also need this check since image extension
+          * pointer from render gpu is shared with display gpu. Image
+          * extension pointer is shared because it keeps things simple.
+          */
+         if (strcmp(driverName, driverNameDisplayGPU) == 0) {
+            psc->driScreenDisplayGPU =
+               psc->image_driver->createNewScreen2(screen, psc->fd_display_gpu,
+                                                   pdp->loader_extensions,
+                                                   extensions,
+                                                   &driver_configs, psc);
+         }
+
+         free(driverNameDisplayGPU);
+      }
    }
 
    psc->driScreen =
@@ -1010,8 +1046,13 @@ handle_error:
    if (psc->driScreen)
        psc->core->destroyScreen(psc->driScreen);
    psc->driScreen = NULL;
+   if (psc->driScreenDisplayGPU)
+       psc->core->destroyScreen(psc->driScreenDisplayGPU);
+   psc->driScreenDisplayGPU = NULL;
    if (psc->fd >= 0)
       close(psc->fd);
+   if (psc->fd_display_gpu >= 0)
+      close(psc->fd_display_gpu);
    if (psc->driver)
       dlclose(psc->driver);
 

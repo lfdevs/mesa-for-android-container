@@ -865,20 +865,21 @@
       <value name="DX10/OGL" value="0"/>
       <value name="DX9" value="1"/>
     </field>
+    <field name="CPS LOD Compensation Enable" start="30" end="30" type="bool"/>
     <field name="Sampler Disable" start="31" end="31" type="bool"/>
     <field name="Cube Surface Control Mode" start="32" end="32" type="uint">
       <value name="PROGRAMMED" value="0"/>
       <value name="OVERRIDE" value="1"/>
     </field>
-    <field name="Shadow Function" start="33" end="35" type="uint">
-      <value name="PREFILTEROP ALWAYS" value="0"/>
-      <value name="PREFILTEROP NEVER" value="1"/>
-      <value name="PREFILTEROP LESS" value="2"/>
-      <value name="PREFILTEROP EQUAL" value="3"/>
-      <value name="PREFILTEROP LEQUAL" value="4"/>
-      <value name="PREFILTEROP GREATER" value="5"/>
-      <value name="PREFILTEROP NOTEQUAL" value="6"/>
-      <value name="PREFILTEROP GEQUAL" value="7"/>
+    <field name="Shadow Function" start="33" end="35" type="uint" prefix="PREFILTEROP">
+      <value name="ALWAYS" value="0"/>
+      <value name="NEVER" value="1"/>
+      <value name="LESS" value="2"/>
+      <value name="EQUAL" value="3"/>
+      <value name="LEQUAL" value="4"/>
+      <value name="GREATER" value="5"/>
+      <value name="NOTEQUAL" value="6"/>
+      <value name="GEQUAL" value="7"/>
     </field>
     <field name="ChromaKey Mode" start="36" end="36" type="uint">
       <value name="KEYFILTER_KILL_ON_ANY_MATCH" value="0"/>
@@ -1564,6 +1565,34 @@
     <field name="Constant Body" start="32" end="351" type="3DSTATE_CONSTANT_BODY"/>
   </instruction>
 
+  <instruction name="3DSTATE_CPS" bias="2" length="9">
+    <field name="DWord Length" start="0" end="7" type="uint" default="7"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="34"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Min CP Size X" start="32" end="42" type="s3.7"/>
+    <field name="Statistics Enable" start="43" end="43" type="bool"/>
+    <field name="Coarse Pixel Shading Mode" start="44" end="45" type="uint">
+      <value name="CPS_MODE_NONE" value="0"/>
+      <value name="CPS_MODE_CONSTANT" value="1"/>
+      <value name="CPS_MODE_RADIAL" value="2"/>
+    </field>
+    <field name="Scale Axis" start="46" end="46" type="uint">
+      <value name="X axis" value="0"/>
+      <value name="Y axis" value="1"/>
+    </field>
+    <field name="Min CP Size Y" start="48" end="58" type="s3.7"/>
+    <field name="Max CP Size X " start="64" end="74" type="s3.7"/>
+    <field name="Max CP Size Y" start="80" end="90" type="s3.7"/>
+    <field name="Y Focal" start="96" end="111" type="int"/>
+    <field name="X Focal" start="128" end="143" type="int"/>
+    <field name="M y" start="160" end="191" type="float"/>
+    <field name="M x" start="192" end="223" type="float"/>
+    <field name="R min" start="224" end="255" type="float"/>
+    <field name="Aspect" start="256" end="287" type="float"/>
+  </instruction>
+
   <instruction name="3DSTATE_DEPTH_BUFFER" bias="2" length="8" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="6"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="5"/>
@@ -2101,6 +2130,7 @@
     </field>
     <field name="Pixel Shader Has UAV" start="34" end="34" type="bool"/>
     <field name="Pixel Shader Pulls Bary" start="35" end="35" type="bool"/>
+    <field name="Pixel Shader Is Per Coarse Pixel" start="36" end="36" type="bool"/>
     <field name="Pixel Shader Computes Stencil" start="37" end="37" type="bool"/>
     <field name="Pixel Shader Is Per Sample" start="38" end="38" type="bool"/>
     <field name="Pixel Shader Disables Alpha To Coverage" start="39" end="39" type="bool"/>
@@ -2110,6 +2140,7 @@
     <field name="Pixel Shader Requires Non-Perspective Bary Plane Coefficients" start="51" end="51" type="bool"/>
     <field name="Pixel Shader Requires Perspective Bary Plane Coefficients" start="52" end="52" type="bool"/>
     <field name="Pixel Shader Requires Source Depth and/or W Plane Coefficients" start="53" end="53" type="bool"/>
+    <field name="Pixel Shader Requires Requested Coarse Pixel Shading Size" start="54" end="54" type="bool"/>
     <field name="Pixel Shader Uses Source W" start="55" end="55" type="bool"/>
     <field name="Pixel Shader Uses Source Depth" start="56" end="56" type="bool"/>
     <field name="Force Computed Depth" start="57" end="57" type="bool"/>

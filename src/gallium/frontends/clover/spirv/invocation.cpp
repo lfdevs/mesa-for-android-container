@@ -330,9 +330,8 @@ namespace {
 
             const auto elem_size = types_iter->second.size;
             const auto elem_nbs = get<uint32_t>(inst, 3);
-            const auto size = elem_size * elem_nbs;
-            const auto align = elem_size * util_next_power_of_two(elem_nbs);
-            types[id] = { module::argument::scalar, size, size, align,
+            const auto size = elem_size * (elem_nbs != 3 ? elem_nbs : 4);
+            types[id] = { module::argument::scalar, size, size, size,
                           module::argument::zero_ext };
             types[id].info.address_qualifier = CL_KERNEL_ARG_ADDRESS_PRIVATE;
             break;

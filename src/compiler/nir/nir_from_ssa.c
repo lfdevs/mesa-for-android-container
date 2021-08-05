@@ -141,10 +141,7 @@ merge_set_dump(merge_set *set, FILE *fp)
       for (int i = 0; i <= dom_idx; i++)
          fprintf(fp, "  ");
 
-      if (node->def->name)
-         fprintf(fp, "ssa_%d /* %s */\n", node->def->index, node->def->name);
-      else
-         fprintf(fp, "ssa_%d\n", node->def->index);
+      fprintf(fp, "ssa_%d\n", node->def->index);
 
       dom[++dom_idx] = node->def;
    }
@@ -384,7 +381,7 @@ isolate_phi_nodes_block(nir_block *block, void *dead_ctx)
                                                   nir_parallel_copy_entry);
          nir_ssa_dest_init(&pcopy->instr, &entry->dest,
                            phi->dest.ssa.num_components,
-                           phi->dest.ssa.bit_size, src->src.ssa->name);
+                           phi->dest.ssa.bit_size, NULL);
          entry->dest.ssa.divergent = nir_src_is_divergent(src->src);
          exec_list_push_tail(&pcopy->entries, &entry->node);
 
@@ -399,7 +396,7 @@ isolate_phi_nodes_block(nir_block *block, void *dead_ctx)
                                                nir_parallel_copy_entry);
       nir_ssa_dest_init(&block_pcopy->instr, &entry->dest,
                         phi->dest.ssa.num_components, phi->dest.ssa.bit_size,
-                        phi->dest.ssa.name);
+                        NULL);
       entry->dest.ssa.divergent = phi->dest.ssa.divergent;
       exec_list_push_tail(&block_pcopy->entries, &entry->node);
 
@@ -504,7 +501,6 @@ create_reg_for_ssa_def(nir_ssa_def *def, nir_function_impl *impl)
 {
    nir_register *reg = nir_local_reg_create(impl);
 
-   reg->name = def->name;
    reg->num_components = def->num_components;
    reg->bit_size = def->bit_size;
    reg->num_array_elems = 0;
@@ -775,7 +771,6 @@ resolve_parallel_copy(nir_parallel_copy_instr *pcopy,
        */
       assert(num_vals < num_copies * 2);
       nir_register *reg = nir_local_reg_create(state->builder.impl);
-      reg->name = "copy_temp";
       reg->num_array_elems = 0;
       if (values[b].is_ssa) {
          reg->num_components = values[b].ssa->num_components;
@@ -937,10 +932,10 @@ place_phi_read(nir_builder *b, nir_register *reg,
    nir_store_reg(b, reg, def, ~0);
 }
 
-/** Lower all of the phi nodes in a block to imovs to and from a register
+/** Lower all of the phi nodes in a block to movs to and from a register
  *
  * This provides a very quick-and-dirty out-of-SSA pass that you can run on a
- * single block to convert all of its phis to a register and some imovs.
+ * single block to convert all of its phis to a register and some movs.
  * The code that is generated, while not optimal for actual codegen in a
  * back-end, is easy to generate, correct, and will turn into the same set of
  * phis after you call regs_to_ssa and do some copy propagation.

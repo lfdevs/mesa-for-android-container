@@ -167,7 +167,7 @@ main(int argc, char **argv)
       .gmemsize_bytes = gpu_info->gmemsize_bytes,
    };
 
-   freedreno_dev_info_init(&screen.info, gpu_info->gpu_id);
+   screen.info = fd_dev_info(gpu_info->gpu_id);
 
    /* And finally run thru all the GMEM keys: */
    for (int i = 0; i < ARRAY_SIZE(keys); i++) {
@@ -178,8 +178,8 @@ main(int argc, char **argv)
 
       assert((gmem->bin_w * gmem->nbins_x) >= key.width);
       assert((gmem->bin_h * gmem->nbins_y) >= key.height);
-      assert(gmem->bin_w < screen.info.tile_max_w);
-      assert(gmem->bin_h < screen.info.tile_max_h);
+      assert(gmem->bin_w < screen.info->tile_max_w);
+      assert(gmem->bin_h < screen.info->tile_max_h);
 
       ralloc_free(gmem);
    }

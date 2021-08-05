@@ -44,6 +44,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <assert.h>
+#include "glxclient.h"
 #include "apple_glx.h"
 #include "glxconfig.h"
 #include "apple_cgl.h"
@@ -210,10 +211,8 @@ get_max_size(int *widthresult, int *heightresult)
 
       err = apple_cgl.choose_pixel_format(attr, &pfobj, &vsref);
       if (kCGLNoError != err) {
-         if (env_var_as_boolean("LIBGL_DIAGNOSTIC", false)) {
-            printf("choose_pixel_format error in %s: %s\n", __func__,
-                   apple_cgl.error_string(err));
-         }
+            DebugMessageF("choose_pixel_format error in %s: %s\n", __func__,
+                          apple_cgl.error_string(err));
 
          return true;
       }
@@ -222,10 +221,8 @@ get_max_size(int *widthresult, int *heightresult)
       err = apple_cgl.create_context(pfobj, NULL, &newcontext);
 
       if (kCGLNoError != err) {
-         if (env_var_as_boolean("LIBGL_DIAGNOSTIC", false)) {
-            printf("create_context error in %s: %s\n", __func__,
-                   apple_cgl.error_string(err));
-         }
+         DebugMessageF("create_context error in %s: %s\n", __func__,
+                       apple_cgl.error_string(err));
 
          apple_cgl.destroy_pixel_format(pfobj);
 
@@ -235,8 +232,8 @@ get_max_size(int *widthresult, int *heightresult)
       err = apple_cgl.set_current_context(newcontext);
 
       if (kCGLNoError != err) {
-         printf("set_current_context error in %s: %s\n", __func__,
-                apple_cgl.error_string(err));
+         DebugMessageF("set_current_context error in %s: %s\n", __func__,
+                       apple_cgl.error_string(err));
          return true;
       }
 

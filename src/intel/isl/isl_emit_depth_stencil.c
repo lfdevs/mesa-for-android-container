@@ -39,7 +39,7 @@ __gen_combine_address(__attribute__((unused)) void *data,
 
 #include "isl_priv.h"
 
-static const uint32_t isl_to_gen_ds_surftype[] = {
+static const uint32_t isl_encode_ds_surftype[] = {
 #if GFX_VER >= 9
    /* From the SKL PRM, "3DSTATE_DEPTH_STENCIL::SurfaceType":
     *
@@ -67,14 +67,14 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
    };
 
    if (info->depth_surf) {
-      db.SurfaceType = isl_to_gen_ds_surftype[info->depth_surf->dim];
+      db.SurfaceType = isl_encode_ds_surftype[info->depth_surf->dim];
       db.SurfaceFormat = isl_surf_get_depth_format(dev, info->depth_surf);
       db.Width = info->depth_surf->logical_level0_px.width - 1;
       db.Height = info->depth_surf->logical_level0_px.height - 1;
       if (db.SurfaceType == SURFTYPE_3D)
          db.Depth = info->depth_surf->logical_level0_px.depth - 1;
    } else if (info->stencil_surf) {
-      db.SurfaceType = isl_to_gen_ds_surftype[info->stencil_surf->dim];
+      db.SurfaceType = isl_encode_ds_surftype[info->stencil_surf->dim];
       db.SurfaceFormat = D32_FLOAT;
       db.Width = info->stencil_surf->logical_level0_px.width - 1;
       db.Height = info->stencil_surf->logical_level0_px.height - 1;
@@ -304,7 +304,7 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
    GENX(3DSTATE_HIER_DEPTH_BUFFER_pack)(NULL, dw, &hiz);
    dw += GENX(3DSTATE_HIER_DEPTH_BUFFER_length);
 
-#if GFX_VER == 12
+#if GFX_VERx10 == 120
    /* Wa_14010455700
     *
     * To avoid sporadic corruptions “Set 0x7010[9] when Depth Buffer Surface

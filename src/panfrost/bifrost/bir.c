@@ -44,7 +44,7 @@ bi_has_arg(bi_instr *ins, bi_index arg)
  * 32-bit. Note auto reads to 32-bit registers even if the memory format is
  * 16-bit, so is considered as such here */
 
-static bool
+bool
 bi_is_regfmt_16(enum bi_register_format fmt)
 {
         switch  (fmt) {
@@ -93,23 +93,25 @@ bi_count_read_registers(bi_instr *ins, unsigned s)
 }
 
 unsigned
-bi_writemask(bi_instr *ins, unsigned d)
+bi_count_write_registers(bi_instr *ins, unsigned d)
 {
-        /* Assume we write a scalar */
-        unsigned mask = 0xF;
-
         if (d == 0 && bi_opcode_props[ins->op].sr_write) {
-                unsigned count = bi_count_staging_registers(ins);
-
                 /* TODO: this special case is even more special, TEXC has a
                  * generic write mask stuffed in the desc... */
                 if (ins->op == BI_OPCODE_TEXC)
-                        count = 4;
-
-                mask = (1 << (count * 4)) - 1;
+                        return 4;
+                else
+                        return bi_count_staging_registers(ins);
         }
 
-        unsigned shift = ins->dest[d].offset * 4; /* 32-bit words */
+        return 1;
+}
+
+unsigned
+bi_writemask(bi_instr *ins, unsigned d)
+{
+        unsigned mask = BITFIELD_MASK(bi_count_write_registers(ins, d));
+        unsigned shift = ins->dest[d].offset;
         return (mask << shift);
 }
 

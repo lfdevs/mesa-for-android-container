@@ -23,7 +23,7 @@
 
 #include "brw_reg.h"
 #include "brw_eu_defines.h"
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 
 #define INVALID (-1)
 
@@ -182,6 +182,24 @@ static const struct hw_type {
    [BRW_REGISTER_TYPE_UB] = { GFX12_HW_REG_TYPE_UINT(0),  INVALID                    },
    [BRW_REGISTER_TYPE_V]  = { INVALID,                    GFX12_HW_REG_TYPE_SINT(0)  },
    [BRW_REGISTER_TYPE_UV] = { INVALID,                    GFX12_HW_REG_TYPE_UINT(0)  },
+}, gfx125_hw_type[] = {
+   [0 ... BRW_REGISTER_TYPE_LAST] = {            INVALID, INVALID                    },
+
+   [BRW_REGISTER_TYPE_DF] = { GFX12_HW_REG_TYPE_FLOAT(3), GFX12_HW_REG_TYPE_FLOAT(3) },
+   [BRW_REGISTER_TYPE_F]  = { GFX12_HW_REG_TYPE_FLOAT(2), GFX12_HW_REG_TYPE_FLOAT(2) },
+   [BRW_REGISTER_TYPE_HF] = { GFX12_HW_REG_TYPE_FLOAT(1), GFX12_HW_REG_TYPE_FLOAT(1) },
+   [BRW_REGISTER_TYPE_VF] = { INVALID,                    GFX12_HW_REG_TYPE_FLOAT(0) },
+
+   [BRW_REGISTER_TYPE_Q]  = { GFX12_HW_REG_TYPE_SINT(3),  GFX12_HW_REG_TYPE_SINT(3)  },
+   [BRW_REGISTER_TYPE_UQ] = { GFX12_HW_REG_TYPE_UINT(3),  GFX12_HW_REG_TYPE_UINT(3)  },
+   [BRW_REGISTER_TYPE_D]  = { GFX12_HW_REG_TYPE_SINT(2),  GFX12_HW_REG_TYPE_SINT(2)  },
+   [BRW_REGISTER_TYPE_UD] = { GFX12_HW_REG_TYPE_UINT(2),  GFX12_HW_REG_TYPE_UINT(2)  },
+   [BRW_REGISTER_TYPE_W]  = { GFX12_HW_REG_TYPE_SINT(1),  GFX12_HW_REG_TYPE_SINT(1)  },
+   [BRW_REGISTER_TYPE_UW] = { GFX12_HW_REG_TYPE_UINT(1),  GFX12_HW_REG_TYPE_UINT(1)  },
+   [BRW_REGISTER_TYPE_B]  = { GFX12_HW_REG_TYPE_SINT(0),  INVALID                    },
+   [BRW_REGISTER_TYPE_UB] = { GFX12_HW_REG_TYPE_UINT(0),  INVALID                    },
+   [BRW_REGISTER_TYPE_V]  = { INVALID,                    GFX12_HW_REG_TYPE_SINT(0)  },
+   [BRW_REGISTER_TYPE_UV] = { INVALID,                    GFX12_HW_REG_TYPE_UINT(0)  },
 };
 
 /* SNB adds 3-src instructions (MAD and LRP) that only operate on floats, so
@@ -278,6 +296,21 @@ static const struct hw_3src_type {
    [BRW_REGISTER_TYPE_UW] = { GFX12_HW_REG_TYPE_UINT(1),     E(INT),  },
    [BRW_REGISTER_TYPE_B]  = { GFX12_HW_REG_TYPE_SINT(0),     E(INT),  },
    [BRW_REGISTER_TYPE_UB] = { GFX12_HW_REG_TYPE_UINT(0),     E(INT),  },
+}, gfx125_hw_3src_type[] = {
+   [0 ... BRW_REGISTER_TYPE_LAST] = { INVALID },
+
+   [BRW_REGISTER_TYPE_DF] = { GFX12_HW_REG_TYPE_UINT(3),     E(FLOAT), },
+   [BRW_REGISTER_TYPE_F]  = { GFX12_HW_REG_TYPE_UINT(2),     E(FLOAT), },
+   [BRW_REGISTER_TYPE_HF] = { GFX12_HW_REG_TYPE_UINT(1),     E(FLOAT), },
+
+   [BRW_REGISTER_TYPE_Q]  = { GFX12_HW_REG_TYPE_SINT(3),     E(INT),  },
+   [BRW_REGISTER_TYPE_UQ] = { GFX12_HW_REG_TYPE_UINT(3),     E(INT),  },
+   [BRW_REGISTER_TYPE_D]  = { GFX12_HW_REG_TYPE_SINT(2),     E(INT),  },
+   [BRW_REGISTER_TYPE_UD] = { GFX12_HW_REG_TYPE_UINT(2),     E(INT),  },
+   [BRW_REGISTER_TYPE_W]  = { GFX12_HW_REG_TYPE_SINT(1),     E(INT),  },
+   [BRW_REGISTER_TYPE_UW] = { GFX12_HW_REG_TYPE_UINT(1),     E(INT),  },
+   [BRW_REGISTER_TYPE_B]  = { GFX12_HW_REG_TYPE_SINT(0),     E(INT),  },
+   [BRW_REGISTER_TYPE_UB] = { GFX12_HW_REG_TYPE_UINT(0),     E(INT),  },
 #undef E
 };
 
@@ -287,13 +320,16 @@ static const struct hw_3src_type {
  * The hardware encoding may depend on whether the value is an immediate.
  */
 unsigned
-brw_reg_type_to_hw_type(const struct gen_device_info *devinfo,
+brw_reg_type_to_hw_type(const struct intel_device_info *devinfo,
                         enum brw_reg_file file,
                         enum brw_reg_type type)
 {
    const struct hw_type *table;
 
-   if (devinfo->ver >= 12) {
+   if (devinfo->verx10 >= 125) {
+      assert(type < ARRAY_SIZE(gfx125_hw_type));
+      table = gfx125_hw_type;
+   } else if (devinfo->ver >= 12) {
       assert(type < ARRAY_SIZE(gfx12_hw_type));
       table = gfx12_hw_type;
    } else if (devinfo->ver >= 11) {
@@ -328,12 +364,14 @@ brw_reg_type_to_hw_type(const struct gen_device_info *devinfo,
  * The hardware encoding may depend on whether the value is an immediate.
  */
 enum brw_reg_type
-brw_hw_type_to_reg_type(const struct gen_device_info *devinfo,
+brw_hw_type_to_reg_type(const struct intel_device_info *devinfo,
                         enum brw_reg_file file, unsigned hw_type)
 {
    const struct hw_type *table;
 
-   if (devinfo->ver >= 12) {
+   if (devinfo->verx10 >= 125) {
+      table = gfx125_hw_type;
+   } else if (devinfo->ver >= 12) {
       table = gfx12_hw_type;
    } else if (devinfo->ver >= 11) {
       table = gfx11_hw_type;
@@ -368,7 +406,7 @@ brw_hw_type_to_reg_type(const struct gen_device_info *devinfo,
  * for a 3-src align16 instruction
  */
 unsigned
-brw_reg_type_to_a16_hw_3src_type(const struct gen_device_info *devinfo,
+brw_reg_type_to_a16_hw_3src_type(const struct intel_device_info *devinfo,
                                  enum brw_reg_type type)
 {
    const struct hw_3src_type *table;
@@ -393,10 +431,13 @@ brw_reg_type_to_a16_hw_3src_type(const struct gen_device_info *devinfo,
  * for a 3-src align1 instruction
  */
 unsigned
-brw_reg_type_to_a1_hw_3src_type(const struct gen_device_info *devinfo,
+brw_reg_type_to_a1_hw_3src_type(const struct intel_device_info *devinfo,
                                 enum brw_reg_type type)
 {
-   if (devinfo->ver >= 12) {
+   if (devinfo->verx10 >= 125) {
+      assert(type < ARRAY_SIZE(gfx125_hw_3src_type));
+      return gfx125_hw_3src_type[type].reg_type;
+   } else if (devinfo->ver >= 12) {
       assert(type < ARRAY_SIZE(gfx12_hw_3src_type));
       return gfx12_hw_3src_type[type].reg_type;
    } else if (devinfo->ver >= 11) {
@@ -413,7 +454,7 @@ brw_reg_type_to_a1_hw_3src_type(const struct gen_device_info *devinfo,
  * brw_reg_type enumeration value.
  */
 enum brw_reg_type
-brw_a16_hw_3src_type_to_reg_type(const struct gen_device_info *devinfo,
+brw_a16_hw_3src_type_to_reg_type(const struct intel_device_info *devinfo,
                                  unsigned hw_type)
 {
    const struct hw_3src_type *table = NULL;
@@ -439,12 +480,14 @@ brw_a16_hw_3src_type_to_reg_type(const struct gen_device_info *devinfo,
  * brw_reg_type enumeration value.
  */
 enum brw_reg_type
-brw_a1_hw_3src_type_to_reg_type(const struct gen_device_info *devinfo,
+brw_a1_hw_3src_type_to_reg_type(const struct intel_device_info *devinfo,
                                 unsigned hw_type, unsigned exec_type)
 {
-   const struct hw_3src_type *table = (devinfo->ver >= 12 ? gfx12_hw_3src_type :
-                                       devinfo->ver >= 11 ? gfx11_hw_3src_type :
-                                       gfx10_hw_3src_align1_type);
+   const struct hw_3src_type *table =
+      (devinfo->verx10 >= 125 ? gfx125_hw_3src_type :
+       devinfo->ver >= 12 ? gfx12_hw_3src_type :
+       devinfo->ver >= 11 ? gfx11_hw_3src_type :
+       gfx10_hw_3src_align1_type);
 
    for (enum brw_reg_type i = 0; i <= BRW_REGISTER_TYPE_LAST; i++) {
       if (table[i].reg_type == hw_type &&

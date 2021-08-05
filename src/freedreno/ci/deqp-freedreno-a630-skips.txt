@@ -2,13 +2,6 @@
 # non-zero-length and not starting with '#', will regex match to
 # delete lines from the test list.  Be careful.
 
-# Skip the perf/stress tests to keep runtime manageable
-dEQP-GLES[0-9]*.performance.*
-dEQP-GLES[0-9]*.stress.*
-
-# These are really slow on tiling architectures (including llvmpipe).
-dEQP-GLES[0-9]*.functional.flush_finish.*
-
 # Timeouts, passes otherwise
 KHR-GL33.texture_swizzle.smoke
 
@@ -18,11 +11,9 @@ dEQP-VK.spirv_assembly.instruction.graphics.spirv_ids_abuse.lots_ids_tesse
 # Timeout, passes otherwise
 dEQP-VK.tessellation.invariance.outer_edge_division.quads_fractional_odd_spacing
 
-# Timeout (VK-GL-CTS 1.2.6.0)
-dEQP-VK.spirv_assembly.instruction.graphics.spirv_ids_abuse.lots_ids_geom
-dEQP-VK.tessellation.invariance.outer_edge_division.quads_equal_spacing
-dEQP-VK.tessellation.invariance.outer_triangle_set.quads_fractional_even_spacing
-dEQP-VK.tessellation.invariance.outer_triangle_set.triangles_fractional_odd_spacing
+# Timeout (VK-GL-CTS 1.2.6.1)
+dEQP-VK.tessellation.invariance.outer_edge_division.quads_fractional_even_spacing
+dEQP-VK.tessellation.invariance.outer_triangle_set.quads_equal_spacing
 dEQP-VK.ubo.random.all_out_of_order_offsets.45
 
 # Crashes likely caused by https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/2701

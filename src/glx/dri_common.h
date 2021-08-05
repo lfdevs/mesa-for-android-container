@@ -63,12 +63,6 @@ driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable);
 extern void
 driReleaseDrawables(struct glx_context *gc);
 
-extern void dri_message(int level, const char *f, ...) PRINTFLIKE(2, 3);
-
-#define InfoMessageF(...) dri_message(_LOADER_INFO, __VA_ARGS__)
-#define ErrorMessageF(...) dri_message(_LOADER_WARNING, __VA_ARGS__)
-#define CriticalErrorMessageF(...) dri_message(_LOADER_FATAL, __VA_ARGS__)
-
 extern const __DRIextension **driOpenDriver(const char *driverName,
                                             void **out_driver_handle);
 

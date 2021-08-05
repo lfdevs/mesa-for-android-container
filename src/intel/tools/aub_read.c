@@ -31,7 +31,7 @@
 #include "util/macros.h"
 
 #include "aub_read.h"
-#include "gen_context.h"
+#include "intel_context.h"
 #include "intel_aub.h"
 
 #define TYPE(dw)       (((dw) >> 29) & 7)
@@ -57,7 +57,7 @@
 #define SUBOPCODE_MEM_WRITE 0x06
 #define SUBOPCODE_VERSION   0x0e
 
-static void
+static PRINTFLIKE(3, 4) void
 parse_error(struct aub_read *read, const uint32_t *p, const char *fmt, ...)
 {
    if (!read->error)
@@ -85,7 +85,7 @@ handle_trace_header(struct aub_read *read, const uint32_t *p)
 
    if (end > &p[12] && p[12] > 0) {
       if (sscanf((char *)&p[13], "PCI-ID=%i", &aub_pci_id) > 0) {
-         if (!gen_get_device_info_from_pci_id(aub_pci_id, &read->devinfo)) {
+         if (!intel_get_device_info_from_pci_id(aub_pci_id, &read->devinfo)) {
             parse_error(read, p,
                         "can't find device information: pci_id=0x%x\n", aub_pci_id);
             return false;
@@ -116,7 +116,7 @@ handle_memtrace_version(struct aub_read *read, const uint32_t *p)
    app_name[app_name_len] = 0;
 
    if (sscanf(app_name, "PCI-ID=%i %n", &aub_pci_id, &pci_id_len) > 0) {
-      if (!gen_get_device_info_from_pci_id(aub_pci_id, &read->devinfo)) {
+      if (!intel_get_device_info_from_pci_id(aub_pci_id, &read->devinfo)) {
          parse_error(read, p, "can't find device information: pci_id=0x%x\n", aub_pci_id);
          return false;
       }
@@ -316,7 +316,7 @@ aub_read_command(struct aub_read *read, const void *data, uint32_t data_len)
 
    if (next > end) {
       parse_error(read, data,
-            "input ends unexpectedly (command length: %d, remaining bytes: %d)\n",
+            "input ends unexpectedly (command length: %zu, remaining bytes: %zu)\n",
             (uintptr_t)next - (uintptr_t)data,
             (uintptr_t)end  - (uintptr_t)data);
       return -1;

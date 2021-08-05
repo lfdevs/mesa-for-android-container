@@ -110,10 +110,10 @@ fd5_context_create(struct pipe_screen *pscreen, void *priv,
    util_blitter_set_texture_multisample(fd5_ctx->base.blitter, true);
 
    fd5_ctx->vsc_size_mem =
-      fd_bo_new(screen->dev, 0x1000, DRM_FREEDRENO_GEM_TYPE_KMEM, "vsc_size");
+      fd_bo_new(screen->dev, 0x1000, 0, "vsc_size");
 
    fd5_ctx->blit_mem =
-      fd_bo_new(screen->dev, 0x1000, DRM_FREEDRENO_GEM_TYPE_KMEM, "blit");
+      fd_bo_new(screen->dev, 0x1000, 0, "blit");
 
    fd_context_setup_common_vbos(&fd5_ctx->base);
 

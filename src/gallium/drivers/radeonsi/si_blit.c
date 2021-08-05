@@ -1276,50 +1276,14 @@ static void si_flush_resource(struct pipe_context *ctx, struct pipe_resource *re
    struct si_texture *tex = (struct si_texture *)res;
 
    assert(res->target != PIPE_BUFFER);
-   assert(!tex->dcc_separate_buffer || tex->dcc_gather_statistics);
-
-   /* st/dri calls flush twice per frame (not a bug), this prevents double
-    * decompression. */
-   if (tex->dcc_separate_buffer && !tex->separate_dcc_dirty)
-      return;
 
    if (!tex->is_depth && (tex->cmask_buffer || vi_dcc_enabled(tex, 0))) {
       si_blit_decompress_color(sctx, tex, 0, res->last_level, 0, util_max_layer(res, 0),
-                               tex->dcc_separate_buffer != NULL, false);
+                               false, false);
 
       if (tex->surface.display_dcc_offset && tex->displayable_dcc_dirty) {
          si_retile_dcc(sctx, tex);
          tex->displayable_dcc_dirty = false;
-      }
-   }
-
-   /* Always do the analysis even if DCC is disabled at the moment. */
-   if (tex->dcc_gather_statistics) {
-      bool separate_dcc_dirty = tex->separate_dcc_dirty;
-
-      /* If the color buffer hasn't been unbound and fast clear hasn't
-       * been used, separate_dcc_dirty is false, but there may have been
-       * new rendering. Check if the color buffer is bound and assume
-       * it's dirty.
-       *
-       * Note that DRI2 never unbinds window colorbuffers, which means
-       * the DCC pipeline statistics query would never be re-set and would
-       * keep adding new results until all free memory is exhausted if we
-       * didn't do this.
-       */
-      if (!separate_dcc_dirty) {
-         for (unsigned i = 0; i < sctx->framebuffer.state.nr_cbufs; i++) {
-            if (sctx->framebuffer.state.cbufs[i] &&
-                sctx->framebuffer.state.cbufs[i]->texture == res) {
-               separate_dcc_dirty = true;
-               break;
-            }
-         }
-      }
-
-      if (separate_dcc_dirty) {
-         tex->separate_dcc_dirty = false;
-         vi_separate_dcc_process_and_reset_stats(ctx, tex);
       }
    }
 }

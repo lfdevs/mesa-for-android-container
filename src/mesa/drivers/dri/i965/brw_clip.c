@@ -69,7 +69,7 @@ compile_clip_prog(struct brw_context *brw, struct brw_clip_prog_key *key)
 void
 brw_upload_clip_prog(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    struct brw_clip_prog_key key;
 

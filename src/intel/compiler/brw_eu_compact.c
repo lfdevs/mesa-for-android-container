@@ -81,7 +81,7 @@
 #include "brw_eu.h"
 #include "brw_shader.h"
 #include "brw_disasm_info.h"
-#include "dev/gen_debug.h"
+#include "dev/intel_debug.h"
 
 static const uint32_t g45_control_index_table[32] = {
    0b00000000000000000,
@@ -821,6 +821,44 @@ static const uint16_t gfx12_src1_index_table[16] = {
    0b100011010001, /*      -r<4;4,1> */
 };
 
+static const uint16_t xehp_src0_index_table[16] = {
+   0b000100000000, /*       r<1;1,0>  */
+   0b000000000000, /*       r<0;1,0>  */
+   0b000100000010, /*      -r<1;1,0>  */
+   0b000100000001, /*  (abs)r<1;1,0>  */
+   0b000000000010, /*      -r<0;1,0>  */
+   0b001000000000, /*       r<2;1,0>  */
+   0b001001000000, /*       r<2;4,0>  */
+   0b001101000000, /*       r<4;4,0>  */
+   0b001100000000, /*       r<4;1,0>  */
+   0b000100000011, /* -(abs)r<1;1,0>  */
+   0b000000000001, /*  (abs)r<0;1,0>  */
+   0b111100010000, /*       r[a]<1,0> */
+   0b010001100000, /*       r<8;8,0>  */
+   0b000101000000, /*       r<1;4,0>  */
+   0b010001001000, /*       r<8;4,2>  */
+   0b001000000010, /*      -r<2;1,0>  */
+};
+
+static const uint16_t xehp_src1_index_table[16] = {
+   0b000001000000, /*       r<1;1,0>    */
+   0b000000000000, /*       r<0;1,0>    */
+   0b100001000000, /*      -r<1;1,0>    */
+   0b100000000000, /*      -r<0;1,0>    */
+   0b010001000000, /*  (abs)r<1;1,0>    */
+   0b100011010000, /*      -r<4;4,0>    */
+   0b000010000000, /*       r<2;1,0>    */
+   0b000011010000, /*       r<4;4,0>    */
+   0b000011000000, /*       r<4;1,0>    */
+   0b110001000000, /* -(abs)r<1;1,0>    */
+   0b010000000000, /*  (abs)r<0;1,0>    */
+   0b110000000000, /* -(abs)r<0;1,0>    */
+   0b000100011000, /*       r<8;8,0>    */
+   0b100010000000, /*      -r<2;1,0>    */
+   0b100000001001, /*      -r<0;2,1>    */
+   0b100001000100, /*      -r[a]<1;1,0> */
+};
+
 /* This is actually the control index table for Cherryview (26 bits), but the
  * only difference from Broadwell (24 bits) is that it has two extra 0-bits at
  * the start.
@@ -883,6 +921,41 @@ static const uint64_t gfx12_3src_control_index_table[32] = {
    0b000001001000010101010000000000000011, /*      (8|M0)   (sat)arf<1>:f   :f  :f  :f */
 };
 
+static const uint64_t xehp_3src_control_index_table[32] = {
+   0b0000010010100010101000000000000000100, /*          (16|M0)       grf<1>:f   :f   :f   :f          */
+   0b0000010010100010101000000000000000011, /*          (8|M0)        grf<1>:f   :f   :f   :f          */
+   0b0000010010000010101000000000000000011, /*          (8|M0)        arf<1>:f   :f   :f   :f          */
+   0b0000010010100010101000010000000000011, /*     (W)  (8|M0)        grf<1>:f   :f   :f   :f          */
+   0b0000010010000010101000010000000000011, /*     (W)  (8|M0)        arf<1>:f   :f   :f   :f          */
+   0b0000010010000010101000000000000010011, /*          (8|M8)        arf<1>:f   :f   :f   :f          */
+   0b0000010010100010101000000000000010011, /*          (8|M8)        grf<1>:f   :f   :f   :f          */
+   0b0000010010000010101000010000000010011, /*     (W)  (8|M8)        arf<1>:f   :f   :f   :f          */
+   0b0000010010100010101000010000000010011, /*     (W)  (8|M8)        grf<1>:f   :f   :f   :f          */
+   0b0000010010100010101000010000000000100, /*     (W)  (16|M0)       grf<1>:f   :f   :f   :f          */
+   0b0000010010000010101000000000000000100, /*          (16|M0)       arf<1>:f   :f   :f   :f          */
+   0b0000010010100010101010000000000000100, /*          (16|M0)  (sat)grf<1>:f   :f   :f   :f          */
+   0b0000010010100010101000000000000100100, /*          (16|M16)      grf<1>:f   :f   :f   :f          */
+   0b0000010010000010101000010000000000100, /*     (W)  (16|M0)       arf<1>:f   :f   :f   :f          */
+   0b0000010010100010101000010000000000000, /*     (W)  (1|M0)        grf<1>:f   :f   :f   :f          */
+   0b0000010010100010101010000000000000011, /*          (8|M0)   (sat)grf<1>:f   :f   :f   :f          */
+   0b0000010010000010101000010000000100011, /*     (W)  (8|M16)       arf<1>:f   :f   :f   :f          */
+   0b0000010010000010101000010000000110011, /*     (W)  (8|M24)       arf<1>:f   :f   :f   :f          */
+   0b0000010010100010101000010000000100011, /*     (W)  (8|M16)       grf<1>:f   :f   :f   :f          */
+   0b0000010010100010101000010000000110011, /*     (W)  (8|M24)       grf<1>:f   :f   :f   :f          */
+   0b0000010010000010101000000000000110011, /*          (8|M24)       arf<1>:f   :f   :f   :f          */
+   0b0000010010000010101000000000000100011, /*          (8|M16)       arf<1>:f   :f   :f   :f          */
+   0b0000000100111110011000000000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d  :ub   :b          */
+   0b0000000000111110011000100000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d  :ub  :ub {Atomic} */
+   0b0000100100111110011000100000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d   :b   :b {Atomic} */
+   0b0000100000111110011000100000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d   :b  :ub {Atomic} */
+   0b0000100100111110011000000000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d   :b   :b          */
+   0b0000000000111110011000000000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d  :ub  :ub          */
+   0b0000000100111110011000100000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d  :ub   :b {Atomic} */
+   0b0000100000111110011000000000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d   :b  :ub          */
+   0b0000101101111010101000100000000000011, /* dpas.8x* (8|M0)        grf<1>:f   :f  :bf  :bf {Atomic} */
+   0b0000101101111010101000000000000000011, /* dpas.8x* (8|M0)        grf<1>:f   :f  :bf  :bf          */
+};
+
 static const uint32_t gfx12_3src_source_index_table[32] = {
    0b100101100001100000000, /*  grf<0;0>   grf<8;1>  grf<0> */
    0b100101100001001000010, /*  arf<4;1>   grf<8;1>  grf<0> */
@@ -916,6 +989,44 @@ static const uint32_t gfx12_3src_source_index_table[32] = {
    0b101101100101100000000, /*  grf<0;0>   grf<8;1> -grf<1> */
    0b100100000100101000011, /*  grf<8;1>   grf<0;0> -grf<0> */
    0b101001100101101000011, /*  grf<8;1>   arf<8;1> -grf<1> */
+};
+
+static const uint32_t xehp_3src_source_index_table[32] = {
+   0b100100000001100000000, /*           grf<0;0>   grf<1;0>     grf<0>      */
+   0b100100000001000000001, /*           arf<1;0>   grf<1;0>     grf<0>      */
+   0b101100000001100000001, /*           grf<1;0>   grf<1;0>     grf<1>      */
+   0b100100000001100000001, /*           grf<1;0>   grf<1;0>     grf<0>      */
+   0b101100000000100000001, /*           grf<1;0>   grf<0;0>     grf<1>      */
+   0b101100000001100001001, /*          -grf<1;0>   grf<1;0>     grf<1>      */
+   0b101000000001100000001, /*           grf<1;0>   arf<1;0>     grf<1>      */
+   0b101100000001100000000, /*           grf<0;0>   grf<1;0>     grf<1>      */
+   0b100000000001100000000, /*           grf<0;0>   arf<1;0>     grf<0>      */
+   0b101100000101100000001, /*           grf<1;0>   grf<1;0>    -grf<1>      */
+   0b101100010001100000001, /*           grf<1;0>  -grf<1;0>     grf<1>      */
+   0b101100000000100000000, /*           grf<0;0>   grf<0;0>     grf<1>      */
+   0b100000000001100000001, /*           grf<1;0>   arf<1;0>     grf<0>      */
+   0b100100010001100000000, /*           grf<0;0>  -grf<1;0>     grf<0>      */
+   0b100100010001100000001, /*           grf<1;0>  -grf<1;0>     grf<0>      */
+   0b100100000001100001001, /*          -grf<1;0>   grf<1;0>     grf<0>      */
+   0b100100000000100000001, /*           grf<1;0>   grf<0;0>     grf<0>      */
+   0b100100000001100001000, /*          -grf<0;0>   grf<1;0>     grf<0>      */
+   0b100100000000100000000, /*           grf<0;0>   grf<0;0>     grf<0>
+                             * dpas.*x1  grf:d      grf:[ub,b]   grf:[ub,b]
+                             * dpas.*x1  grf:f      grf:bf       grf:bf
+                             */
+   0b101100010001100000000, /*           grf<0;0>  -grf<1;0>     grf<1>      */
+   0b100100000101100000000, /*           grf<0;0>   grf<1;0>    -grf<0>      */
+   0b101000000001100000000, /*           grf<0;0>   arf<1;0>     grf<1>      */
+   0b100100000101100000001, /*           grf<1;0>   grf<1;0>    -grf<0>      */
+   0b101100000101100001001, /*          -grf<1;0>   grf<1;0>    -grf<1>      */
+   0b100100010000100000000, /* dpas.*x1  grf:d      grf:[u2,s2]  grf:[ub,b]  */
+   0b100100000100100000000, /* dpas.*x1  grf:d      grf:[ub,b]   grf:[u2,s2] */
+   0b100100010100100000000, /* dpas.*x1  grf:d      grf:[u2,s2]  grf:[u2,s2] */
+   0b100100001000100000000, /* dpas.*x1  grf:d      grf:[u4,s4]  grf:[ub,b]  */
+   0b100100001100100000000, /* dpas.*x1  grf:d      grf:[u4,s4]  grf:[u2,s2] */
+   0b100100000010100000000, /* dpas.*x1  grf:d      grf:[ub,b]   grf:[u4,s4] */
+   0b100100001010100000000, /* dpas.*x1  grf:d      grf:[u4,s4]  grf:[u4,s4] */
+   0b100100010010100000000, /* dpas.*x1  grf:d      grf:[u2,s2]  grf:[u4,s4] */
 };
 
 static const uint32_t gfx12_3src_subreg_table[32] = {
@@ -954,7 +1065,7 @@ static const uint32_t gfx12_3src_subreg_table[32] = {
 };
 
 struct compaction_state {
-   const struct gen_device_info *devinfo;
+   const struct intel_device_info *devinfo;
    const uint32_t *control_index_table;
    const uint32_t *datatype_table;
    const uint16_t *subreg_table;
@@ -963,13 +1074,13 @@ struct compaction_state {
 };
 
 static void compaction_state_init(struct compaction_state *c,
-                                  const struct gen_device_info *devinfo);
+                                  const struct intel_device_info *devinfo);
 
 static bool
 set_control_index(const struct compaction_state *c,
                   brw_compact_inst *dst, const brw_inst *src)
 {
-   const struct gen_device_info *devinfo = c->devinfo;
+   const struct intel_device_info *devinfo = c->devinfo;
    uint32_t uncompacted; /* 17b/G45; 19b/IVB+; 21b/TGL+ */
 
    if (devinfo->ver >= 12) {
@@ -1014,7 +1125,7 @@ static bool
 set_datatype_index(const struct compaction_state *c, brw_compact_inst *dst,
                    const brw_inst *src, bool is_immediate)
 {
-   const struct gen_device_info *devinfo = c->devinfo;
+   const struct intel_device_info *devinfo = c->devinfo;
    uint32_t uncompacted; /* 18b/G45+; 21b/BDW+; 20b/TGL+ */
 
    if (devinfo->ver >= 12) {
@@ -1057,7 +1168,7 @@ static bool
 set_subreg_index(const struct compaction_state *c, brw_compact_inst *dst,
                  const brw_inst *src, bool is_immediate)
 {
-   const struct gen_device_info *devinfo = c->devinfo;
+   const struct intel_device_info *devinfo = c->devinfo;
    uint16_t uncompacted; /* 15b */
 
    if (devinfo->ver >= 12) {
@@ -1088,7 +1199,7 @@ static bool
 set_src0_index(const struct compaction_state *c, brw_compact_inst *dst,
                const brw_inst *src)
 {
-   const struct gen_device_info *devinfo = c->devinfo;
+   const struct intel_device_info *devinfo = c->devinfo;
    uint16_t uncompacted; /* 12b */
    int table_len;
 
@@ -1118,7 +1229,7 @@ static bool
 set_src1_index(const struct compaction_state *c, brw_compact_inst *dst,
                const brw_inst *src, bool is_immediate, unsigned imm)
 {
-   const struct gen_device_info *devinfo = c->devinfo;
+   const struct intel_device_info *devinfo = c->devinfo;
    if (is_immediate) {
       if (devinfo->ver >= 12) {
          /* src1 index takes the low 4 bits of the 12-bit compacted value */
@@ -1156,12 +1267,39 @@ set_src1_index(const struct compaction_state *c, brw_compact_inst *dst,
 }
 
 static bool
-set_3src_control_index(const struct gen_device_info *devinfo,
+set_3src_control_index(const struct intel_device_info *devinfo,
                        brw_compact_inst *dst, const brw_inst *src)
 {
    assert(devinfo->ver >= 8);
 
-   if (devinfo->ver >= 12) {
+   if (devinfo->verx10 >= 125) {
+      uint64_t uncompacted =             /* 37b/XeHP+ */
+         (brw_inst_bits(src, 95, 92) << 33) | /*  4b */
+         (brw_inst_bits(src, 90, 88) << 30) | /*  3b */
+         (brw_inst_bits(src, 82, 80) << 27) | /*  3b */
+         (brw_inst_bits(src, 50, 50) << 26) | /*  1b */
+         (brw_inst_bits(src, 49, 48) << 24) | /*  2b */
+         (brw_inst_bits(src, 42, 40) << 21) | /*  3b */
+         (brw_inst_bits(src, 39, 39) << 20) | /*  1b */
+         (brw_inst_bits(src, 38, 36) << 17) | /*  3b */
+         (brw_inst_bits(src, 34, 34) << 16) | /*  1b */
+         (brw_inst_bits(src, 33, 33) << 15) | /*  1b */
+         (brw_inst_bits(src, 32, 32) << 14) | /*  1b */
+         (brw_inst_bits(src, 31, 31) << 13) | /*  1b */
+         (brw_inst_bits(src, 28, 28) << 12) | /*  1b */
+         (brw_inst_bits(src, 27, 24) <<  8) | /*  4b */
+         (brw_inst_bits(src, 23, 23) <<  7) | /*  1b */
+         (brw_inst_bits(src, 22, 22) <<  6) | /*  1b */
+         (brw_inst_bits(src, 21, 19) <<  3) | /*  3b */
+         (brw_inst_bits(src, 18, 16));        /*  3b */
+
+      for (unsigned i = 0; i < ARRAY_SIZE(xehp_3src_control_index_table); i++) {
+         if (xehp_3src_control_index_table[i] == uncompacted) {
+            brw_compact_inst_set_3src_control_index(devinfo, dst, i);
+            return true;
+         }
+      }
+   } else if (devinfo->ver >= 12) {
       uint64_t uncompacted =             /* 36b/TGL+ */
          (brw_inst_bits(src, 95, 92) << 32) | /*  4b */
          (brw_inst_bits(src, 90, 88) << 29) | /*  3b */
@@ -1210,7 +1348,7 @@ set_3src_control_index(const struct gen_device_info *devinfo,
 }
 
 static bool
-set_3src_source_index(const struct gen_device_info *devinfo,
+set_3src_source_index(const struct intel_device_info *devinfo,
                       brw_compact_inst *dst, const brw_inst *src)
 {
    assert(devinfo->ver >= 8);
@@ -1233,8 +1371,15 @@ set_3src_source_index(const struct gen_device_info *devinfo,
          (brw_inst_bits(src,  43,  43) <<  1) | /*  1b */
          (brw_inst_bits(src,  35,  35));        /*  1b */
 
-      for (unsigned i = 0; i < ARRAY_SIZE(gfx12_3src_source_index_table); i++) {
-         if (gfx12_3src_source_index_table[i] == uncompacted) {
+      const uint32_t *three_src_source_index_table =
+         devinfo->verx10 >= 125 ?
+         xehp_3src_source_index_table : gfx12_3src_source_index_table;
+      const uint32_t three_src_source_index_table_len =
+         devinfo->verx10 >= 125 ? ARRAY_SIZE(xehp_3src_source_index_table) :
+                                  ARRAY_SIZE(gfx12_3src_source_index_table);
+
+      for (unsigned i = 0; i < three_src_source_index_table_len; i++) {
+         if (three_src_source_index_table[i] == uncompacted) {
             brw_compact_inst_set_3src_source_index(devinfo, dst, i);
             return true;
          }
@@ -1270,7 +1415,7 @@ set_3src_source_index(const struct gen_device_info *devinfo,
 }
 
 static bool
-set_3src_subreg_index(const struct gen_device_info *devinfo,
+set_3src_subreg_index(const struct intel_device_info *devinfo,
                       brw_compact_inst *dst, const brw_inst *src)
 {
    assert(devinfo->ver >= 12);
@@ -1292,7 +1437,7 @@ set_3src_subreg_index(const struct gen_device_info *devinfo,
 }
 
 static bool
-has_unmapped_bits(const struct gen_device_info *devinfo, const brw_inst *src)
+has_unmapped_bits(const struct intel_device_info *devinfo, const brw_inst *src)
 {
    /* EOT can only be mapped on a send if the src1 is an immediate */
    if ((brw_inst_opcode(devinfo, src) == BRW_OPCODE_SENDC ||
@@ -1326,7 +1471,7 @@ has_unmapped_bits(const struct gen_device_info *devinfo, const brw_inst *src)
 }
 
 static bool
-has_3src_unmapped_bits(const struct gen_device_info *devinfo,
+has_3src_unmapped_bits(const struct intel_device_info *devinfo,
                        const brw_inst *src)
 {
    /* Check for three-source instruction bits that don't map to any of the
@@ -1354,7 +1499,7 @@ has_3src_unmapped_bits(const struct gen_device_info *devinfo,
 }
 
 static bool
-brw_try_compact_3src_instruction(const struct gen_device_info *devinfo,
+brw_try_compact_3src_instruction(const struct intel_device_info *devinfo,
                                  brw_compact_inst *dst, const brw_inst *src)
 {
    assert(devinfo->ver >= 8);
@@ -1420,7 +1565,7 @@ brw_try_compact_3src_instruction(const struct gen_device_info *devinfo,
  * Returns the compacted immediate, or -1 if immediate cannot be compacted
  */
 static int
-compact_immediate(const struct gen_device_info *devinfo,
+compact_immediate(const struct intel_device_info *devinfo,
                   enum brw_reg_type type, unsigned imm)
 {
    if (devinfo->ver >= 12) {
@@ -1491,7 +1636,7 @@ compact_immediate(const struct gen_device_info *devinfo,
 }
 
 static int
-uncompact_immediate(const struct gen_device_info *devinfo,
+uncompact_immediate(const struct intel_device_info *devinfo,
                     enum brw_reg_type type, unsigned compact_imm)
 {
    if (devinfo->ver >= 12) {
@@ -1532,7 +1677,7 @@ uncompact_immediate(const struct gen_device_info *devinfo,
 }
 
 static bool
-has_immediate(const struct gen_device_info *devinfo, const brw_inst *inst,
+has_immediate(const struct intel_device_info *devinfo, const brw_inst *inst,
               enum brw_reg_type *type)
 {
    if (brw_inst_src0_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
@@ -1551,7 +1696,7 @@ has_immediate(const struct gen_device_info *devinfo, const brw_inst *inst,
  * compaction.
  */
 static brw_inst
-precompact(const struct gen_device_info *devinfo, brw_inst inst)
+precompact(const struct intel_device_info *devinfo, brw_inst inst)
 {
    if (brw_inst_src0_reg_file(devinfo, &inst) != BRW_IMMEDIATE_VALUE)
       return inst;
@@ -1646,7 +1791,7 @@ static bool
 try_compact_instruction(const struct compaction_state *c,
                         brw_compact_inst *dst, const brw_inst *src)
 {
-   const struct gen_device_info *devinfo = c->devinfo;
+   const struct intel_device_info *devinfo = c->devinfo;
    brw_compact_inst temp;
 
    assert(brw_inst_cmpt_control(devinfo, src) == 0);
@@ -1750,7 +1895,7 @@ try_compact_instruction(const struct compaction_state *c,
 }
 
 bool
-brw_try_compact_instruction(const struct gen_device_info *devinfo,
+brw_try_compact_instruction(const struct intel_device_info *devinfo,
                             brw_compact_inst *dst, const brw_inst *src)
 {
    struct compaction_state c;
@@ -1762,7 +1907,7 @@ static void
 set_uncompacted_control(const struct compaction_state *c, brw_inst *dst,
                         brw_compact_inst *src)
 {
-   const struct gen_device_info *devinfo = c->devinfo;
+   const struct intel_device_info *devinfo = c->devinfo;
    uint32_t uncompacted =
       c->control_index_table[brw_compact_inst_control_index(devinfo, src)];
 
@@ -1796,7 +1941,7 @@ static void
 set_uncompacted_datatype(const struct compaction_state *c, brw_inst *dst,
                          brw_compact_inst *src)
 {
-   const struct gen_device_info *devinfo = c->devinfo;
+   const struct intel_device_info *devinfo = c->devinfo;
    uint32_t uncompacted =
       c->datatype_table[brw_compact_inst_datatype_index(devinfo, src)];
 
@@ -1825,7 +1970,7 @@ static void
 set_uncompacted_subreg(const struct compaction_state *c, brw_inst *dst,
                        brw_compact_inst *src)
 {
-   const struct gen_device_info *devinfo = c->devinfo;
+   const struct intel_device_info *devinfo = c->devinfo;
    uint16_t uncompacted =
       c->subreg_table[brw_compact_inst_subreg_index(devinfo, src)];
 
@@ -1844,7 +1989,7 @@ static void
 set_uncompacted_src0(const struct compaction_state *c, brw_inst *dst,
                      brw_compact_inst *src)
 {
-   const struct gen_device_info *devinfo = c->devinfo;
+   const struct intel_device_info *devinfo = c->devinfo;
    uint32_t compacted = brw_compact_inst_src0_index(devinfo, src);
    uint16_t uncompacted = c->src0_index_table[compacted];
 
@@ -1863,7 +2008,7 @@ static void
 set_uncompacted_src1(const struct compaction_state *c, brw_inst *dst,
                      brw_compact_inst *src)
 {
-   const struct gen_device_info *devinfo = c->devinfo;
+   const struct intel_device_info *devinfo = c->devinfo;
    uint16_t uncompacted =
       c->src1_index_table[brw_compact_inst_src1_index(devinfo, src)];
 
@@ -1882,10 +2027,33 @@ static void
 set_uncompacted_3src_control_index(const struct compaction_state *c,
                                    brw_inst *dst, brw_compact_inst *src)
 {
-   const struct gen_device_info *devinfo = c->devinfo;
+   const struct intel_device_info *devinfo = c->devinfo;
    assert(devinfo->ver >= 8);
 
-   if (devinfo->ver >= 12) {
+   if (devinfo->verx10 >= 125) {
+      uint64_t compacted = brw_compact_inst_3src_control_index(devinfo, src);
+      uint64_t uncompacted = xehp_3src_control_index_table[compacted];
+
+      brw_inst_set_bits(dst, 95, 92, (uncompacted >> 33));
+      brw_inst_set_bits(dst, 90, 88, (uncompacted >> 30) & 0x7);
+      brw_inst_set_bits(dst, 82, 80, (uncompacted >> 27) & 0x7);
+      brw_inst_set_bits(dst, 50, 50, (uncompacted >> 26) & 0x1);
+      brw_inst_set_bits(dst, 49, 48, (uncompacted >> 24) & 0x3);
+      brw_inst_set_bits(dst, 42, 40, (uncompacted >> 21) & 0x7);
+      brw_inst_set_bits(dst, 39, 39, (uncompacted >> 20) & 0x1);
+      brw_inst_set_bits(dst, 38, 36, (uncompacted >> 17) & 0x7);
+      brw_inst_set_bits(dst, 34, 34, (uncompacted >> 16) & 0x1);
+      brw_inst_set_bits(dst, 33, 33, (uncompacted >> 15) & 0x1);
+      brw_inst_set_bits(dst, 32, 32, (uncompacted >> 14) & 0x1);
+      brw_inst_set_bits(dst, 31, 31, (uncompacted >> 13) & 0x1);
+      brw_inst_set_bits(dst, 28, 28, (uncompacted >> 12) & 0x1);
+      brw_inst_set_bits(dst, 27, 24, (uncompacted >>  8) & 0xf);
+      brw_inst_set_bits(dst, 23, 23, (uncompacted >>  7) & 0x1);
+      brw_inst_set_bits(dst, 22, 22, (uncompacted >>  6) & 0x1);
+      brw_inst_set_bits(dst, 21, 19, (uncompacted >>  3) & 0x7);
+      brw_inst_set_bits(dst, 18, 16, (uncompacted >>  0) & 0x7);
+
+   } else if (devinfo->ver >= 12) {
       uint64_t compacted = brw_compact_inst_3src_control_index(devinfo, src);
       uint64_t uncompacted = gfx12_3src_control_index_table[compacted];
 
@@ -1920,7 +2088,7 @@ set_uncompacted_3src_control_index(const struct compaction_state *c,
 }
 
 static void
-set_uncompacted_3src_source_index(const struct gen_device_info *devinfo,
+set_uncompacted_3src_source_index(const struct intel_device_info *devinfo,
                                   brw_inst *dst, brw_compact_inst *src)
 {
    assert(devinfo->ver >= 8);
@@ -1928,7 +2096,10 @@ set_uncompacted_3src_source_index(const struct gen_device_info *devinfo,
    uint32_t compacted = brw_compact_inst_3src_source_index(devinfo, src);
 
    if (devinfo->ver >= 12) {
-      uint32_t uncompacted = gfx12_3src_source_index_table[compacted];
+      const uint32_t *three_src_source_index_table =
+         devinfo->verx10 >= 125 ?
+         xehp_3src_source_index_table : gfx12_3src_source_index_table;
+      uint32_t uncompacted = three_src_source_index_table[compacted];
 
       brw_inst_set_bits(dst, 114, 114, (uncompacted >> 20));
       brw_inst_set_bits(dst, 113, 112, (uncompacted >> 18) & 0x3);
@@ -1966,7 +2137,7 @@ set_uncompacted_3src_source_index(const struct gen_device_info *devinfo,
 }
 
 static void
-set_uncompacted_3src_subreg_index(const struct gen_device_info *devinfo,
+set_uncompacted_3src_subreg_index(const struct intel_device_info *devinfo,
                                   brw_inst *dst, brw_compact_inst *src)
 {
    assert(devinfo->ver >= 12);
@@ -1984,7 +2155,7 @@ static void
 brw_uncompact_3src_instruction(const struct compaction_state *c,
                                brw_inst *dst, brw_compact_inst *src)
 {
-   const struct gen_device_info *devinfo = c->devinfo;
+   const struct intel_device_info *devinfo = c->devinfo;
    assert(devinfo->ver >= 8);
 
 #define uncompact(field) \
@@ -2032,7 +2203,7 @@ static void
 uncompact_instruction(const struct compaction_state *c, brw_inst *dst,
                       brw_compact_inst *src)
 {
-   const struct gen_device_info *devinfo = c->devinfo;
+   const struct intel_device_info *devinfo = c->devinfo;
    memset(dst, 0, sizeof(*dst));
 
    if (devinfo->ver >= 8 &&
@@ -2092,15 +2263,15 @@ uncompact_instruction(const struct compaction_state *c, brw_inst *dst,
 }
 
 void
-brw_uncompact_instruction(const struct gen_device_info *devinfo, brw_inst *dst,
-                          brw_compact_inst *src)
+brw_uncompact_instruction(const struct intel_device_info *devinfo,
+                          brw_inst *dst, brw_compact_inst *src)
 {
    struct compaction_state c;
    compaction_state_init(&c, devinfo);
    uncompact_instruction(&c, dst, src);
 }
 
-void brw_debug_compact_uncompact(const struct gen_device_info *devinfo,
+void brw_debug_compact_uncompact(const struct intel_device_info *devinfo,
                                  brw_inst *orig,
                                  brw_inst *uncompacted)
 {
@@ -2137,7 +2308,7 @@ compacted_between(int old_ip, int old_target_ip, int *compacted_counts)
 }
 
 static void
-update_uip_jip(const struct gen_device_info *devinfo, brw_inst *insn,
+update_uip_jip(const struct intel_device_info *devinfo, brw_inst *insn,
                int this_old_ip, int *compacted_counts)
 {
    /* JIP and UIP are in units of:
@@ -2165,7 +2336,7 @@ update_uip_jip(const struct gen_device_info *devinfo, brw_inst *insn,
 }
 
 static void
-update_gfx4_jump_count(const struct gen_device_info *devinfo, brw_inst *insn,
+update_gfx4_jump_count(const struct intel_device_info *devinfo, brw_inst *insn,
                        int this_old_ip, int *compacted_counts)
 {
    assert(devinfo->ver == 5 || devinfo->is_g4x);
@@ -2189,7 +2360,7 @@ update_gfx4_jump_count(const struct gen_device_info *devinfo, brw_inst *insn,
 
 static void
 compaction_state_init(struct compaction_state *c,
-                      const struct gen_device_info *devinfo)
+                      const struct intel_device_info *devinfo)
 {
    assert(g45_control_index_table[ARRAY_SIZE(g45_control_index_table) - 1] != 0);
    assert(g45_datatype_table[ARRAY_SIZE(g45_datatype_table) - 1] != 0);
@@ -2213,6 +2384,8 @@ compaction_state_init(struct compaction_state *c,
    assert(gfx12_subreg_table[ARRAY_SIZE(gfx12_subreg_table) - 1] != 0);
    assert(gfx12_src0_index_table[ARRAY_SIZE(gfx12_src0_index_table) - 1] != 0);
    assert(gfx12_src1_index_table[ARRAY_SIZE(gfx12_src1_index_table) - 1] != 0);
+   assert(xehp_src0_index_table[ARRAY_SIZE(xehp_src0_index_table) - 1] != 0);
+   assert(xehp_src1_index_table[ARRAY_SIZE(xehp_src1_index_table) - 1] != 0);
 
    c->devinfo = devinfo;
    switch (devinfo->ver) {
@@ -2220,8 +2393,13 @@ compaction_state_init(struct compaction_state *c,
       c->control_index_table = gfx12_control_index_table;;
       c->datatype_table = gfx12_datatype_table;
       c->subreg_table = gfx12_subreg_table;
-      c->src0_index_table = gfx12_src0_index_table;
-      c->src1_index_table = gfx12_src1_index_table;
+      if (devinfo->verx10 >= 125) {
+         c->src0_index_table = xehp_src0_index_table;
+         c->src1_index_table = xehp_src1_index_table;
+      } else {
+         c->src0_index_table = gfx12_src0_index_table;
+         c->src1_index_table = gfx12_src1_index_table;
+      }
       break;
    case 11:
       c->control_index_table = gfx8_control_index_table;
@@ -2272,7 +2450,7 @@ brw_compact_instructions(struct brw_codegen *p, int start_offset,
    if (INTEL_DEBUG & DEBUG_NO_COMPACTION)
       return;
 
-   const struct gen_device_info *devinfo = p->devinfo;
+   const struct intel_device_info *devinfo = p->devinfo;
    void *store = p->store + start_offset / 16;
    /* For an instruction at byte offset 16*i before compaction, this is the
     * number of compacted instructions minus the number of padding NOP/NENOPs

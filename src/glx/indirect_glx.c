@@ -90,7 +90,7 @@ SendMakeCurrentRequest(Display * dpy, GLXContextID gc_id,
        * not the SGI extension.
        */
 
-      if ((priv->majorVersion > 1) || (priv->minorVersion >= 3)) {
+      if (priv->minorVersion >= 3) {
          xGLXMakeContextCurrentReq *req;
 
          GetReq(GLXMakeContextCurrent, req);

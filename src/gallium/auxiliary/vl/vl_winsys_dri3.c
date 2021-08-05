@@ -55,6 +55,7 @@ struct vl_dri3_buffer
    struct pipe_resource *linear_texture;
 
    uint32_t pixmap;
+   uint32_t region;
    uint32_t sync_fence;
    struct xshmfence *shm_fence;
 
@@ -107,6 +108,8 @@ static void
 dri3_free_back_buffer(struct vl_dri3_screen *scrn,
                         struct vl_dri3_buffer *buffer)
 {
+   if (buffer->region)
+      xcb_xfixes_destroy_region(scrn->conn, buffer->region);
    xcb_free_pixmap(scrn->conn, buffer->pixmap);
    xcb_sync_destroy_fence(scrn->conn, buffer->sync_fence);
    xshmfence_unmap_shm(buffer->shm_fence);
@@ -564,7 +567,6 @@ vl_dri3_flush_frontbuffer(struct pipe_screen *screen,
    uint32_t options = XCB_PRESENT_OPTION_NONE;
    struct vl_dri3_buffer *back;
    struct pipe_box src_box;
-   xcb_xfixes_region_t region;
    xcb_rectangle_t rectangle;
 
    back = scrn->back_buffers[scrn->cur_back];
@@ -580,8 +582,11 @@ vl_dri3_flush_frontbuffer(struct pipe_screen *screen,
    rectangle.width = (scrn->output_texture) ? scrn->clip_width : scrn->width;
    rectangle.height = (scrn->output_texture) ? scrn->clip_height : scrn->height;
 
-   region = xcb_generate_id(scrn->conn);
-   xcb_xfixes_create_region(scrn->conn, region, 2, &rectangle);
+   if (!back->region) {
+      back->region = xcb_generate_id(scrn->conn);
+      xcb_xfixes_create_region(scrn->conn, back->region, 0, NULL);
+   }
+   xcb_xfixes_set_region(scrn->conn, back->region, 1, &rectangle);
 
    if (scrn->is_different_gpu) {
       u_box_origin_2d(back->width, back->height, &src_box);
@@ -600,7 +605,7 @@ vl_dri3_flush_frontbuffer(struct pipe_screen *screen,
                       scrn->drawable,
                       back->pixmap,
                       (uint32_t)(++scrn->send_sbc),
-                      0, region, 0, 0,
+                      0, back->region, 0, 0,
                       None, None,
                       back->sync_fence,
                       options,
@@ -847,6 +852,9 @@ vl_dri3_screen_create(Display *display, int screen)
    scrn->base.set_back_texture_from_output = vl_dri3_screen_set_back_texture_from_output;
 
    scrn->next_back = 1;
+
+   close(fd);
+   
    return &scrn->base;
 
 no_context:

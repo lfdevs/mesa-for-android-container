@@ -22,25 +22,27 @@
  *
  */
 
-#include <algorithm>
-
-#include "aco_ir.h"
 #include "aco_builder.h"
-#include <stack>
-#include <functional>
+#include "aco_ir.h"
 
-#include <time.h>
+#include <algorithm>
+#include <bitset>
+#include <stack>
+#include <vector>
 
 namespace aco {
 namespace {
 
 struct NOP_ctx_gfx6 {
-   void join(const NOP_ctx_gfx6 &other) {
-      set_vskip_mode_then_vector = MAX2(set_vskip_mode_then_vector, other.set_vskip_mode_then_vector);
+   void join(const NOP_ctx_gfx6& other)
+   {
+      set_vskip_mode_then_vector =
+         MAX2(set_vskip_mode_then_vector, other.set_vskip_mode_then_vector);
       valu_wr_vcc_then_vccz = MAX2(valu_wr_vcc_then_vccz, other.valu_wr_vcc_then_vccz);
       valu_wr_exec_then_execz = MAX2(valu_wr_exec_then_execz, other.valu_wr_exec_then_execz);
       valu_wr_vcc_then_div_fmas = MAX2(valu_wr_vcc_then_div_fmas, other.valu_wr_vcc_then_div_fmas);
-      salu_wr_m0_then_gds_msg_ttrace = MAX2(salu_wr_m0_then_gds_msg_ttrace, other.salu_wr_m0_then_gds_msg_ttrace);
+      salu_wr_m0_then_gds_msg_ttrace =
+         MAX2(salu_wr_m0_then_gds_msg_ttrace, other.salu_wr_m0_then_gds_msg_ttrace);
       valu_wr_exec_then_dpp = MAX2(valu_wr_exec_then_dpp, other.valu_wr_exec_then_dpp);
       salu_wr_m0_then_lds = MAX2(salu_wr_m0_then_lds, other.salu_wr_m0_then_lds);
       salu_wr_m0_then_moverel = MAX2(salu_wr_m0_then_moverel, other.salu_wr_m0_then_moverel);
@@ -54,23 +56,21 @@ struct NOP_ctx_gfx6 {
       }
    }
 
-   bool operator==(const NOP_ctx_gfx6 &other)
+   bool operator==(const NOP_ctx_gfx6& other)
    {
-      return
-         set_vskip_mode_then_vector == other.set_vskip_mode_then_vector &&
-         valu_wr_vcc_then_vccz == other.valu_wr_vcc_then_vccz &&
-         valu_wr_exec_then_execz == other.valu_wr_exec_then_execz &&
-         valu_wr_vcc_then_div_fmas == other.valu_wr_vcc_then_div_fmas &&
-         vmem_store_then_wr_data == other.vmem_store_then_wr_data &&
-         salu_wr_m0_then_gds_msg_ttrace == other.salu_wr_m0_then_gds_msg_ttrace &&
-         valu_wr_exec_then_dpp == other.valu_wr_exec_then_dpp &&
-         salu_wr_m0_then_lds == other.salu_wr_m0_then_lds &&
-         salu_wr_m0_then_moverel == other.salu_wr_m0_then_moverel &&
-         setreg_then_getsetreg == other.setreg_then_getsetreg &&
-         smem_clause == other.smem_clause &&
-         smem_write == other.smem_write &&
-         BITSET_EQUAL(smem_clause_read_write, other.smem_clause_read_write) &&
-         BITSET_EQUAL(smem_clause_write, other.smem_clause_write);
+      return set_vskip_mode_then_vector == other.set_vskip_mode_then_vector &&
+             valu_wr_vcc_then_vccz == other.valu_wr_vcc_then_vccz &&
+             valu_wr_exec_then_execz == other.valu_wr_exec_then_execz &&
+             valu_wr_vcc_then_div_fmas == other.valu_wr_vcc_then_div_fmas &&
+             vmem_store_then_wr_data == other.vmem_store_then_wr_data &&
+             salu_wr_m0_then_gds_msg_ttrace == other.salu_wr_m0_then_gds_msg_ttrace &&
+             valu_wr_exec_then_dpp == other.valu_wr_exec_then_dpp &&
+             salu_wr_m0_then_lds == other.salu_wr_m0_then_lds &&
+             salu_wr_m0_then_moverel == other.salu_wr_m0_then_moverel &&
+             setreg_then_getsetreg == other.setreg_then_getsetreg &&
+             smem_clause == other.smem_clause && smem_write == other.smem_write &&
+             BITSET_EQUAL(smem_clause_read_write, other.smem_clause_read_write) &&
+             BITSET_EQUAL(smem_clause_write, other.smem_clause_write);
    }
 
    void add_wait_states(unsigned amount)
@@ -155,7 +155,8 @@ struct NOP_ctx_gfx10 {
    std::bitset<128> sgprs_read_by_VMEM;
    std::bitset<128> sgprs_read_by_SMEM;
 
-   void join(const NOP_ctx_gfx10 &other) {
+   void join(const NOP_ctx_gfx10& other)
+   {
       has_VOPC |= other.has_VOPC;
       has_nonVALU_exec_read |= other.has_nonVALU_exec_read;
       has_VMEM |= other.has_VMEM;
@@ -168,23 +169,19 @@ struct NOP_ctx_gfx10 {
       sgprs_read_by_SMEM |= other.sgprs_read_by_SMEM;
    }
 
-   bool operator==(const NOP_ctx_gfx10 &other)
+   bool operator==(const NOP_ctx_gfx10& other)
    {
-      return
-         has_VOPC == other.has_VOPC &&
-         has_nonVALU_exec_read == other.has_nonVALU_exec_read &&
-         has_VMEM == other.has_VMEM &&
-         has_branch_after_VMEM == other.has_branch_after_VMEM &&
-         has_DS == other.has_DS &&
-         has_branch_after_DS == other.has_branch_after_DS &&
-         has_NSA_MIMG == other.has_NSA_MIMG &&
-         has_writelane == other.has_writelane &&
-         sgprs_read_by_VMEM == other.sgprs_read_by_VMEM &&
-         sgprs_read_by_SMEM == other.sgprs_read_by_SMEM;
+      return has_VOPC == other.has_VOPC && has_nonVALU_exec_read == other.has_nonVALU_exec_read &&
+             has_VMEM == other.has_VMEM && has_branch_after_VMEM == other.has_branch_after_VMEM &&
+             has_DS == other.has_DS && has_branch_after_DS == other.has_branch_after_DS &&
+             has_NSA_MIMG == other.has_NSA_MIMG && has_writelane == other.has_writelane &&
+             sgprs_read_by_VMEM == other.sgprs_read_by_VMEM &&
+             sgprs_read_by_SMEM == other.sgprs_read_by_SMEM;
    }
 };
 
-int get_wait_states(aco_ptr<Instruction>& instr)
+int
+get_wait_states(aco_ptr<Instruction>& instr)
 {
    if (instr->opcode == aco_opcode::s_nop)
       return instr->sopp().imm + 1;
@@ -194,16 +191,16 @@ int get_wait_states(aco_ptr<Instruction>& instr)
       return 1;
 }
 
-bool regs_intersect(PhysReg a_reg, unsigned a_size, PhysReg b_reg, unsigned b_size)
+bool
+regs_intersect(PhysReg a_reg, unsigned a_size, PhysReg b_reg, unsigned b_size)
 {
-   return a_reg > b_reg ?
-          (a_reg - b_reg < b_size) :
-          (b_reg - a_reg < a_size);
+   return a_reg > b_reg ? (a_reg - b_reg < b_size) : (b_reg - a_reg < a_size);
 }
 
 template <bool Valu, bool Vintrp, bool Salu>
-int handle_raw_hazard_internal(Program *program, Block *block,
-                               int nops_needed, PhysReg reg, uint32_t mask)
+int
+handle_raw_hazard_internal(Program* program, Block* block, int nops_needed, PhysReg reg,
+                           uint32_t mask)
 {
    unsigned mask_size = util_last_bit(mask);
    for (int pred_idx = block->instructions.size() - 1; pred_idx >= 0; pred_idx--) {
@@ -218,10 +215,8 @@ int handle_raw_hazard_internal(Program *program, Block *block,
          }
       }
 
-      bool is_hazard = writemask != 0 &&
-                       ((pred->isVALU() && Valu) ||
-                        (pred->isVINTRP() && Vintrp) ||
-                        (pred->isSALU() && Salu));
+      bool is_hazard = writemask != 0 && ((pred->isVALU() && Valu) ||
+                                          (pred->isVINTRP() && Vintrp) || (pred->isSALU() && Salu));
       if (is_hazard)
          return nops_needed;
 
@@ -239,17 +234,19 @@ int handle_raw_hazard_internal(Program *program, Block *block,
     * huge value. */
    for (unsigned lin_pred : block->linear_preds) {
       res = std::max(res, handle_raw_hazard_internal<Valu, Vintrp, Salu>(
-         program, &program->blocks[lin_pred], nops_needed, reg, mask));
+                             program, &program->blocks[lin_pred], nops_needed, reg, mask));
    }
    return res;
 }
 
 template <bool Valu, bool Vintrp, bool Salu>
-void handle_raw_hazard(Program *program, Block *cur_block, int *NOPs, int min_states, Operand op)
+void
+handle_raw_hazard(Program* program, Block* cur_block, int* NOPs, int min_states, Operand op)
 {
    if (*NOPs >= min_states)
       return;
-   int res = handle_raw_hazard_internal<Valu, Vintrp, Salu>(program, cur_block, min_states, op.physReg(), u_bit_consecutive(0, op.size()));
+   int res = handle_raw_hazard_internal<Valu, Vintrp, Salu>(
+      program, cur_block, min_states, op.physReg(), u_bit_consecutive(0, op.size()));
    *NOPs = MAX2(*NOPs, res);
 }
 
@@ -257,7 +254,9 @@ static auto handle_valu_then_read_hazard = handle_raw_hazard<true, true, false>;
 static auto handle_vintrp_then_read_hazard = handle_raw_hazard<false, true, false>;
 static auto handle_valu_salu_then_read_hazard = handle_raw_hazard<true, true, true>;
 
-void set_bitset_range(BITSET_WORD *words, unsigned start, unsigned size) {
+void
+set_bitset_range(BITSET_WORD* words, unsigned start, unsigned size)
+{
    unsigned end = start + size - 1;
    unsigned start_mod = start % BITSET_WORDBITS;
    if (start_mod + size <= BITSET_WORDBITS) {
@@ -269,7 +268,9 @@ void set_bitset_range(BITSET_WORD *words, unsigned start, unsigned size) {
    }
 }
 
-bool test_bitset_range(BITSET_WORD *words, unsigned start, unsigned size) {
+bool
+test_bitset_range(BITSET_WORD* words, unsigned start, unsigned size)
+{
    unsigned end = start + size - 1;
    unsigned start_mod = start % BITSET_WORDBITS;
    if (start_mod + size <= BITSET_WORDBITS) {
@@ -292,18 +293,21 @@ bool test_bitset_range(BITSET_WORD *words, unsigned start, unsigned size) {
  *
  * SMEM clauses are only present on GFX8+, and only matter when XNACK is set.
  */
-void handle_smem_clause_hazards(Program *program, NOP_ctx_gfx6 &ctx,
-                                aco_ptr<Instruction>& instr, int *NOPs)
+void
+handle_smem_clause_hazards(Program* program, NOP_ctx_gfx6& ctx, aco_ptr<Instruction>& instr,
+                           int* NOPs)
 {
    /* break off from previous SMEM clause if needed */
    if (!*NOPs & (ctx.smem_clause || ctx.smem_write)) {
       /* Don't allow clauses with store instructions since the clause's
        * instructions may use the same address. */
-      if (ctx.smem_write || instr->definitions.empty() || instr_info.is_atomic[(unsigned)instr->opcode]) {
+      if (ctx.smem_write || instr->definitions.empty() ||
+          instr_info.is_atomic[(unsigned)instr->opcode]) {
          *NOPs = 1;
       } else if (program->dev.xnack_enabled) {
          for (Operand op : instr->operands) {
-            if (!op.isConstant() && test_bitset_range(ctx.smem_clause_write, op.physReg(), op.size())) {
+            if (!op.isConstant() &&
+                test_bitset_range(ctx.smem_clause_write, op.physReg(), op.size())) {
                *NOPs = 1;
                break;
             }
@@ -317,8 +321,10 @@ void handle_smem_clause_hazards(Program *program, NOP_ctx_gfx6 &ctx,
 }
 
 /* TODO: we don't handle accessing VCC using the actual SGPR instead of using the alias */
-void handle_instruction_gfx6(Program *program, Block *cur_block, NOP_ctx_gfx6 &ctx,
-                             aco_ptr<Instruction>& instr, std::vector<aco_ptr<Instruction>>& new_instructions)
+void
+handle_instruction_gfx6(Program* program, Block* cur_block, NOP_ctx_gfx6& ctx,
+                        aco_ptr<Instruction>& instr,
+                        std::vector<aco_ptr<Instruction>>& new_instructions)
 {
    /* check hazards */
    int NOPs = 0;
@@ -344,14 +350,17 @@ void handle_instruction_gfx6(Program *program, Block *cur_block, NOP_ctx_gfx6 &c
 
       handle_smem_clause_hazards(program, ctx, instr, &NOPs);
    } else if (instr->isSALU()) {
-      if (instr->opcode == aco_opcode::s_setreg_b32 || instr->opcode == aco_opcode::s_setreg_imm32_b32 ||
+      if (instr->opcode == aco_opcode::s_setreg_b32 ||
+          instr->opcode == aco_opcode::s_setreg_imm32_b32 ||
           instr->opcode == aco_opcode::s_getreg_b32) {
          NOPs = MAX2(NOPs, ctx.setreg_then_getsetreg);
       }
 
       if (program->chip_class == GFX9) {
-         if (instr->opcode == aco_opcode::s_movrels_b32 || instr->opcode == aco_opcode::s_movrels_b64 ||
-             instr->opcode == aco_opcode::s_movreld_b32 || instr->opcode == aco_opcode::s_movreld_b64) {
+         if (instr->opcode == aco_opcode::s_movrels_b32 ||
+             instr->opcode == aco_opcode::s_movrels_b64 ||
+             instr->opcode == aco_opcode::s_movreld_b32 ||
+             instr->opcode == aco_opcode::s_movreld_b64) {
             NOPs = MAX2(NOPs, ctx.salu_wr_m0_then_moverel);
          }
       }
@@ -399,7 +408,8 @@ void handle_instruction_gfx6(Program *program, Block *cur_block, NOP_ctx_gfx6 &c
          handle_vintrp_then_read_hazard(program, cur_block, &NOPs, 1, instr->operands[0]);
       }
 
-      if (instr->opcode == aco_opcode::v_div_fmas_f32 || instr->opcode == aco_opcode::v_div_fmas_f64)
+      if (instr->opcode == aco_opcode::v_div_fmas_f32 ||
+          instr->opcode == aco_opcode::v_div_fmas_f64)
          NOPs = MAX2(NOPs, ctx.valu_wr_vcc_then_div_fmas);
    } else if (instr->isVMEM() || instr->isFlatLike()) {
       /* If the VALU writes the SGPR that is used by a VMEM, the user must add five wait states. */
@@ -413,13 +423,11 @@ void handle_instruction_gfx6(Program *program, Block *cur_block, NOP_ctx_gfx6 &c
       NOPs = MAX2(NOPs, ctx.set_vskip_mode_then_vector);
 
    if (program->chip_class == GFX9) {
-      bool lds_scratch_global = (instr->isScratch() || instr->isGlobal()) &&
-                                instr->flatlike().lds;
-      if (instr->isVINTRP() ||
+      bool lds_scratch_global = (instr->isScratch() || instr->isGlobal()) && instr->flatlike().lds;
+      if (instr->isVINTRP() || lds_scratch_global ||
           instr->opcode == aco_opcode::ds_read_addtid_b32 ||
           instr->opcode == aco_opcode::ds_write_addtid_b32 ||
-          instr->opcode == aco_opcode::buffer_store_lds_dword ||
-          lds_scratch_global) {
+          instr->opcode == aco_opcode::buffer_store_lds_dword) {
          NOPs = MAX2(NOPs, ctx.salu_wr_m0_then_lds);
       }
    }
@@ -429,7 +437,8 @@ void handle_instruction_gfx6(Program *program, Block *cur_block, NOP_ctx_gfx6 &c
    // TODO: try to schedule the NOP-causing instruction up to reduce the number of stall cycles
    if (NOPs) {
       /* create NOP */
-      aco_ptr<SOPP_instruction> nop{create_instruction<SOPP_instruction>(aco_opcode::s_nop, Format::SOPP, 0, 0)};
+      aco_ptr<SOPP_instruction> nop{
+         create_instruction<SOPP_instruction>(aco_opcode::s_nop, Format::SOPP, 0, 0)};
       nop->imm = NOPs - 1;
       nop->block = -1;
       new_instructions.emplace_back(std::move(nop));
@@ -486,7 +495,8 @@ void handle_instruction_gfx6(Program *program, Block *cur_block, NOP_ctx_gfx6 &c
             ctx.salu_wr_m0_then_lds = 1;
             ctx.salu_wr_m0_then_moverel = 1;
          }
-      } else if (instr->opcode == aco_opcode::s_setreg_b32 || instr->opcode == aco_opcode::s_setreg_imm32_b32) {
+      } else if (instr->opcode == aco_opcode::s_setreg_b32 ||
+                 instr->opcode == aco_opcode::s_setreg_imm32_b32) {
          SOPK_instruction& sopk = instr->sopk();
          unsigned offset = (sopk.imm >> 6) & 0x1f;
          unsigned size = ((sopk.imm >> 11) & 0x1f) + 1;
@@ -498,19 +508,16 @@ void handle_instruction_gfx6(Program *program, Block *cur_block, NOP_ctx_gfx6 &c
       }
    } else if (instr->isVMEM() || instr->isFlatLike()) {
       /* >64-bit MUBUF/MTBUF store with a constant in SOFFSET */
-      bool consider_buf = (instr->isMUBUF() || instr->isMTBUF()) &&
-                          instr->operands.size() == 4 &&
-                          instr->operands[3].size() > 2 &&
-                          instr->operands[2].physReg() >= 128;
-      /* MIMG store with a 128-bit T# with more than two bits set in dmask (making it a >64-bit store) */
+      bool consider_buf = (instr->isMUBUF() || instr->isMTBUF()) && instr->operands.size() == 4 &&
+                          instr->operands[3].size() > 2 && instr->operands[2].physReg() >= 128;
+      /* MIMG store with a 128-bit T# with more than two bits set in dmask (making it a >64-bit
+       * store) */
       bool consider_mimg = instr->isMIMG() &&
                            instr->operands[1].regClass().type() == RegType::vgpr &&
-                           instr->operands[1].size() > 2 &&
-                           instr->operands[0].size() == 4;
+                           instr->operands[1].size() > 2 && instr->operands[0].size() == 4;
       /* FLAT/GLOBAL/SCRATCH store with >64-bit data */
-      bool consider_flat = instr->isFlatLike() &&
-                           instr->operands.size() == 3 &&
-                           instr->operands[2].size() > 2;
+      bool consider_flat =
+         instr->isFlatLike() && instr->operands.size() == 3 && instr->operands[2].size() > 2;
       if (consider_buf || consider_mimg || consider_flat) {
          PhysReg wrdata = instr->operands[consider_flat ? 2 : 3].physReg();
          unsigned size = instr->operands[consider_flat ? 2 : 3].size();
@@ -521,22 +528,26 @@ void handle_instruction_gfx6(Program *program, Block *cur_block, NOP_ctx_gfx6 &c
 }
 
 template <std::size_t N>
-bool check_written_regs(const aco_ptr<Instruction> &instr, const std::bitset<N> &check_regs)
+bool
+check_written_regs(const aco_ptr<Instruction>& instr, const std::bitset<N>& check_regs)
 {
-   return std::any_of(instr->definitions.begin(), instr->definitions.end(), [&check_regs](const Definition &def) -> bool {
-      bool writes_any = false;
-      for (unsigned i = 0; i < def.size(); i++) {
-         unsigned def_reg = def.physReg() + i;
-         writes_any |= def_reg < check_regs.size() && check_regs[def_reg];
-      }
-      return writes_any;
-   });
+   return std::any_of(instr->definitions.begin(), instr->definitions.end(),
+                      [&check_regs](const Definition& def) -> bool
+                      {
+                         bool writes_any = false;
+                         for (unsigned i = 0; i < def.size(); i++) {
+                            unsigned def_reg = def.physReg() + i;
+                            writes_any |= def_reg < check_regs.size() && check_regs[def_reg];
+                         }
+                         return writes_any;
+                      });
 }
 
 template <std::size_t N>
-void mark_read_regs(const aco_ptr<Instruction> &instr, std::bitset<N> &reg_reads)
+void
+mark_read_regs(const aco_ptr<Instruction>& instr, std::bitset<N>& reg_reads)
 {
-   for (const Operand &op : instr->operands) {
+   for (const Operand& op : instr->operands) {
       for (unsigned i = 0; i < op.size(); i++) {
          unsigned reg = op.physReg() + i;
          if (reg < reg_reads.size())
@@ -545,7 +556,8 @@ void mark_read_regs(const aco_ptr<Instruction> &instr, std::bitset<N> &reg_reads
    }
 }
 
-bool VALU_writes_sgpr(aco_ptr<Instruction>& instr)
+bool
+VALU_writes_sgpr(aco_ptr<Instruction>& instr)
 {
    if (instr->isVOPC())
       return true;
@@ -558,24 +570,26 @@ bool VALU_writes_sgpr(aco_ptr<Instruction>& instr)
    return false;
 }
 
-bool instr_writes_exec(const aco_ptr<Instruction>& instr)
+bool
+instr_writes_exec(const aco_ptr<Instruction>& instr)
 {
-   return std::any_of(instr->definitions.begin(), instr->definitions.end(), [](const Definition &def) -> bool {
-      return def.physReg() == exec_lo || def.physReg() == exec_hi;
-   });
+   return std::any_of(instr->definitions.begin(), instr->definitions.end(),
+                      [](const Definition& def) -> bool
+                      { return def.physReg() == exec_lo || def.physReg() == exec_hi; });
 }
 
-bool instr_writes_sgpr(const aco_ptr<Instruction>& instr)
+bool
+instr_writes_sgpr(const aco_ptr<Instruction>& instr)
 {
-   return std::any_of(instr->definitions.begin(), instr->definitions.end(), [](const Definition &def) -> bool {
-      return def.getTemp().type() == RegType::sgpr;
-   });
+   return std::any_of(instr->definitions.begin(), instr->definitions.end(),
+                      [](const Definition& def) -> bool
+                      { return def.getTemp().type() == RegType::sgpr; });
 }
 
-inline bool instr_is_branch(const aco_ptr<Instruction>& instr)
+inline bool
+instr_is_branch(const aco_ptr<Instruction>& instr)
 {
-   return instr->opcode == aco_opcode::s_branch ||
-          instr->opcode == aco_opcode::s_cbranch_scc0 ||
+   return instr->opcode == aco_opcode::s_branch || instr->opcode == aco_opcode::s_cbranch_scc0 ||
           instr->opcode == aco_opcode::s_cbranch_scc1 ||
           instr->opcode == aco_opcode::s_cbranch_vccz ||
           instr->opcode == aco_opcode::s_cbranch_vccnz ||
@@ -587,19 +601,20 @@ inline bool instr_is_branch(const aco_ptr<Instruction>& instr)
           instr->opcode == aco_opcode::s_cbranch_cdbgsys_and_user ||
           instr->opcode == aco_opcode::s_subvector_loop_begin ||
           instr->opcode == aco_opcode::s_subvector_loop_end ||
-          instr->opcode == aco_opcode::s_setpc_b64 ||
-          instr->opcode == aco_opcode::s_swappc_b64 ||
-          instr->opcode == aco_opcode::s_getpc_b64 ||
-          instr->opcode == aco_opcode::s_call_b64;
+          instr->opcode == aco_opcode::s_setpc_b64 || instr->opcode == aco_opcode::s_swappc_b64 ||
+          instr->opcode == aco_opcode::s_getpc_b64 || instr->opcode == aco_opcode::s_call_b64;
 }
 
-void handle_instruction_gfx10(Program *program, Block *cur_block, NOP_ctx_gfx10 &ctx,
-                              aco_ptr<Instruction>& instr, std::vector<aco_ptr<Instruction>>& new_instructions)
+void
+handle_instruction_gfx10(Program* program, Block* cur_block, NOP_ctx_gfx10& ctx,
+                         aco_ptr<Instruction>& instr,
+                         std::vector<aco_ptr<Instruction>>& new_instructions)
 {
-   //TODO: s_dcache_inv needs to be in it's own group on GFX10
+   // TODO: s_dcache_inv needs to be in it's own group on GFX10
 
    /* VMEMtoScalarWriteHazard
-    * Handle EXEC/M0/SGPR write following a VMEM instruction without a VALU or "waitcnt vmcnt(0)" in-between.
+    * Handle EXEC/M0/SGPR write following a VMEM instruction without a VALU or "waitcnt vmcnt(0)"
+    * in-between.
     */
    if (instr->isVMEM() || instr->isFlatLike() || instr->isDS()) {
       /* Remember all SGPRs that are read by the VMEM instruction */
@@ -625,7 +640,8 @@ void handle_instruction_gfx10(Program *program, Block *cur_block, NOP_ctx_gfx10 
          ctx.sgprs_read_by_VMEM.reset();
 
          /* Insert s_waitcnt_depctr instruction with magic imm to mitigate the problem */
-         aco_ptr<SOPP_instruction> depctr{create_instruction<SOPP_instruction>(aco_opcode::s_waitcnt_depctr, Format::SOPP, 0, 0)};
+         aco_ptr<SOPP_instruction> depctr{
+            create_instruction<SOPP_instruction>(aco_opcode::s_waitcnt_depctr, Format::SOPP, 0, 0)};
          depctr->imm = 0xffe3;
          depctr->block = -1;
          new_instructions.emplace_back(std::move(depctr));
@@ -640,13 +656,13 @@ void handle_instruction_gfx10(Program *program, Block *cur_block, NOP_ctx_gfx10 
     */
    if (instr->isVOPC()) {
       ctx.has_VOPC = true;
-   } else if (ctx.has_VOPC &&
-              (instr->opcode == aco_opcode::v_permlane16_b32 ||
-               instr->opcode == aco_opcode::v_permlanex16_b32)) {
+   } else if (ctx.has_VOPC && (instr->opcode == aco_opcode::v_permlane16_b32 ||
+                               instr->opcode == aco_opcode::v_permlanex16_b32)) {
       ctx.has_VOPC = false;
 
       /* v_nop would be discarded by SQ, so use v_mov with the first operand of the permlane */
-      aco_ptr<VOP1_instruction> v_mov{create_instruction<VOP1_instruction>(aco_opcode::v_mov_b32, Format::VOP1, 1, 1)};
+      aco_ptr<VOP1_instruction> v_mov{
+         create_instruction<VOP1_instruction>(aco_opcode::v_mov_b32, Format::VOP1, 1, 1)};
       v_mov->definitions[0] = Definition(instr->operands[0].physReg(), v1);
       v_mov->operands[0] = Operand(instr->operands[0].physReg(), v1);
       new_instructions.emplace_back(std::move(v_mov));
@@ -664,7 +680,8 @@ void handle_instruction_gfx10(Program *program, Block *cur_block, NOP_ctx_gfx10 
          ctx.has_nonVALU_exec_read = false;
 
          /* Insert s_waitcnt_depctr instruction with magic imm to mitigate the problem */
-         aco_ptr<SOPP_instruction> depctr{create_instruction<SOPP_instruction>(aco_opcode::s_waitcnt_depctr, Format::SOPP, 0, 0)};
+         aco_ptr<SOPP_instruction> depctr{
+            create_instruction<SOPP_instruction>(aco_opcode::s_waitcnt_depctr, Format::SOPP, 0, 0)};
          depctr->imm = 0xfffe;
          depctr->block = -1;
          new_instructions.emplace_back(std::move(depctr));
@@ -690,9 +707,10 @@ void handle_instruction_gfx10(Program *program, Block *cur_block, NOP_ctx_gfx10 
          ctx.sgprs_read_by_SMEM.reset();
 
          /* Insert s_mov to mitigate the problem */
-         aco_ptr<SOP1_instruction> s_mov{create_instruction<SOP1_instruction>(aco_opcode::s_mov_b32, Format::SOP1, 1, 1)};
+         aco_ptr<SOP1_instruction> s_mov{
+            create_instruction<SOP1_instruction>(aco_opcode::s_mov_b32, Format::SOP1, 1, 1)};
          s_mov->definitions[0] = Definition(sgpr_null, s1);
-         s_mov->operands[0] = Operand(0u);
+         s_mov->operands[0] = Operand::zero();
          new_instructions.emplace_back(std::move(s_mov));
       }
    } else if (instr->isSALU()) {
@@ -739,14 +757,16 @@ void handle_instruction_gfx10(Program *program, Block *cur_block, NOP_ctx_gfx10 
       ctx.has_VMEM = ctx.has_branch_after_VMEM = ctx.has_DS = ctx.has_branch_after_DS = false;
 
       /* Insert s_waitcnt_vscnt to mitigate the problem */
-      aco_ptr<SOPK_instruction> wait{create_instruction<SOPK_instruction>(aco_opcode::s_waitcnt_vscnt, Format::SOPK, 0, 1)};
+      aco_ptr<SOPK_instruction> wait{
+         create_instruction<SOPK_instruction>(aco_opcode::s_waitcnt_vscnt, Format::SOPK, 0, 1)};
       wait->definitions[0] = Definition(sgpr_null, s1);
       wait->imm = 0;
       new_instructions.emplace_back(std::move(wait));
    }
 
    /* NSAToVMEMBug
-    * Handles NSA MIMG (4 or more dwords) immediately followed by MUBUF/MTBUF (with offset[2:1] != 0).
+    * Handles NSA MIMG (4 or more dwords) immediately followed by MUBUF/MTBUF (with offset[2:1] !=
+    * 0).
     */
    if (instr->isMIMG() && get_mimg_nsa_dwords(instr.get()) > 1) {
       ctx.has_NSA_MIMG = true;
@@ -773,11 +793,12 @@ void handle_instruction_gfx10(Program *program, Block *cur_block, NOP_ctx_gfx10 
 }
 
 template <typename Ctx>
-using HandleInstr = void (*)(Program *, Block *block, Ctx&, aco_ptr<Instruction>&,
+using HandleInstr = void (*)(Program*, Block* block, Ctx&, aco_ptr<Instruction>&,
                              std::vector<aco_ptr<Instruction>>&);
 
 template <typename Ctx, HandleInstr<Ctx> Handle>
-void handle_block(Program *program, Ctx& ctx, Block& block)
+void
+handle_block(Program* program, Ctx& ctx, Block& block)
 {
    if (block.instructions.empty())
       return;
@@ -794,14 +815,15 @@ void handle_block(Program *program, Ctx& ctx, Block& block)
 }
 
 template <typename Ctx, HandleInstr<Ctx> Handle>
-void mitigate_hazards(Program *program)
+void
+mitigate_hazards(Program* program)
 {
    std::vector<Ctx> all_ctx(program->blocks.size());
    std::stack<unsigned> loop_header_indices;
 
    for (unsigned i = 0; i < program->blocks.size(); i++) {
       Block& block = program->blocks[i];
-      Ctx &ctx = all_ctx[i];
+      Ctx& ctx = all_ctx[i];
 
       if (block.kind & block_kind_loop_header) {
          loop_header_indices.push(i);
@@ -833,7 +855,8 @@ void mitigate_hazards(Program *program)
 
 } /* end namespace */
 
-void insert_NOPs(Program* program)
+void
+insert_NOPs(Program* program)
 {
    if (program->chip_class >= GFX10_3)
       ; /* no hazards/bugs to mitigate */
@@ -843,4 +866,4 @@ void insert_NOPs(Program* program)
       mitigate_hazards<NOP_ctx_gfx6, handle_instruction_gfx6>(program);
 }
 
-}
+} // namespace aco

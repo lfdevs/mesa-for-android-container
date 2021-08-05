@@ -73,9 +73,9 @@ lower_load_local_group_size(nir_builder *b, nir_intrinsic_instr *intr)
    b->cursor = nir_after_instr(&intr->instr);
 
    nir_const_value v[3] = {
-      nir_const_value_for_int(b->shader->info.cs.local_size[0], 32),
-      nir_const_value_for_int(b->shader->info.cs.local_size[1], 32),
-      nir_const_value_for_int(b->shader->info.cs.local_size[2], 32)
+      nir_const_value_for_int(b->shader->info.workgroup_size[0], 32),
+      nir_const_value_for_int(b->shader->info.workgroup_size[1], 32),
+      nir_const_value_for_int(b->shader->info.workgroup_size[2], 32)
    };
    nir_ssa_def *size = nir_build_imm(b, 3, 32, v);
    nir_ssa_def_rewrite_uses(&intr->dest.ssa, size);
@@ -84,8 +84,8 @@ lower_load_local_group_size(nir_builder *b, nir_intrinsic_instr *intr)
 }
 
 static bool
-lower_load_num_work_groups(nir_builder *b, nir_intrinsic_instr *intr,
-                           nir_variable *var)
+lower_load_num_workgroups(nir_builder *b, nir_intrinsic_instr *intr,
+                          nir_variable *var)
 {
    b->cursor = nir_after_instr(&intr->instr);
 
@@ -102,7 +102,7 @@ lower_load_num_work_groups(nir_builder *b, nir_intrinsic_instr *intr,
 }
 
 static bool
-lower_load_base_work_group_id(nir_builder *b, nir_intrinsic_instr *intr,
+lower_load_base_workgroup_id(nir_builder *b, nir_intrinsic_instr *intr,
                              nir_variable *var)
 {
    b->cursor = nir_after_instr(&intr->instr);
@@ -146,14 +146,14 @@ clc_nir_lower_system_values(nir_shader *nir, nir_variable *var)
             case nir_intrinsic_load_work_dim:
                progress |= lower_load_work_dim(&b, intr, var);
                break;
-            case nir_intrinsic_load_local_group_size:
+            case nir_intrinsic_load_workgroup_size:
                lower_load_local_group_size(&b, intr);
                break;
-            case nir_intrinsic_load_num_work_groups:
-               lower_load_num_work_groups(&b, intr, var);
+            case nir_intrinsic_load_num_workgroups:
+               lower_load_num_workgroups(&b, intr, var);
                break;
-            case nir_intrinsic_load_base_work_group_id:
-               lower_load_base_work_group_id(&b, intr, var);
+            case nir_intrinsic_load_base_workgroup_id:
+               lower_load_base_workgroup_id(&b, intr, var);
                break;
             default: break;
             }

@@ -335,7 +335,7 @@ static boolean immd_is_good_idea(struct r300_context *r300,
 
 static void r300_draw_arrays_immediate(struct r300_context *r300,
                                        const struct pipe_draw_info *info,
-                                       const struct pipe_draw_start_count *draw)
+                                       const struct pipe_draw_start_count_bias *draw)
 {
     struct pipe_vertex_element* velem;
     struct pipe_vertex_buffer* vbuf;
@@ -499,7 +499,7 @@ static void r300_emit_draw_elements(struct r300_context *r300,
 
 static void r300_draw_elements_immediate(struct r300_context *r300,
                                          const struct pipe_draw_info *info,
-                                         const struct pipe_draw_start_count *draw)
+                                         const struct pipe_draw_start_count_bias *draw)
 {
     const uint8_t *ptr1;
     const uint16_t *ptr2;
@@ -512,7 +512,7 @@ static void r300_draw_elements_immediate(struct r300_context *r300,
     /* 19 dwords for r300_draw_elements_immediate. Give up if the function fails. */
     if (!r300_prepare_for_rendering(r300,
             PREP_EMIT_STATES | PREP_VALIDATE_VBOS | PREP_EMIT_VARRAYS |
-            PREP_INDEXED, NULL, 2+count_dwords, 0, info->index_bias, -1))
+            PREP_INDEXED, NULL, 2+count_dwords, 0, draw->index_bias, -1))
         return;
 
     r300_emit_draw_init(r300, info->mode, info->max_index);
@@ -528,13 +528,13 @@ static void r300_draw_elements_immediate(struct r300_context *r300,
         OUT_CS(R300_VAP_VF_CNTL__PRIM_WALK_INDICES | (draw->count << 16) |
                r300_translate_primitive(info->mode));
 
-        if (info->index_bias && !r300->screen->caps.is_r500) {
+        if (draw->index_bias && !r300->screen->caps.is_r500) {
             for (i = 0; i < draw->count-1; i += 2)
-                OUT_CS(((ptr1[i+1] + info->index_bias) << 16) |
-                        (ptr1[i]   + info->index_bias));
+                OUT_CS(((ptr1[i+1] + draw->index_bias) << 16) |
+                        (ptr1[i]   + draw->index_bias));
 
             if (draw->count & 1)
-                OUT_CS(ptr1[i] + info->index_bias);
+                OUT_CS(ptr1[i] + draw->index_bias);
         } else {
             for (i = 0; i < draw->count-1; i += 2)
                 OUT_CS(((ptr1[i+1]) << 16) |
@@ -552,13 +552,13 @@ static void r300_draw_elements_immediate(struct r300_context *r300,
         OUT_CS(R300_VAP_VF_CNTL__PRIM_WALK_INDICES | (draw->count << 16) |
                r300_translate_primitive(info->mode));
 
-        if (info->index_bias && !r300->screen->caps.is_r500) {
+        if (draw->index_bias && !r300->screen->caps.is_r500) {
             for (i = 0; i < draw->count-1; i += 2)
-                OUT_CS(((ptr2[i+1] + info->index_bias) << 16) |
-                        (ptr2[i]   + info->index_bias));
+                OUT_CS(((ptr2[i+1] + draw->index_bias) << 16) |
+                        (ptr2[i]   + draw->index_bias));
 
             if (draw->count & 1)
-                OUT_CS(ptr2[i] + info->index_bias);
+                OUT_CS(ptr2[i] + draw->index_bias);
         } else {
             OUT_CS_TABLE(ptr2, count_dwords);
         }
@@ -572,9 +572,9 @@ static void r300_draw_elements_immediate(struct r300_context *r300,
                R300_VAP_VF_CNTL__INDEX_SIZE_32bit |
                r300_translate_primitive(info->mode));
 
-        if (info->index_bias && !r300->screen->caps.is_r500) {
+        if (draw->index_bias && !r300->screen->caps.is_r500) {
             for (i = 0; i < draw->count; i++)
-                OUT_CS(ptr4[i] + info->index_bias);
+                OUT_CS(ptr4[i] + draw->index_bias);
         } else {
             OUT_CS_TABLE(ptr4, count_dwords);
         }
@@ -585,7 +585,7 @@ static void r300_draw_elements_immediate(struct r300_context *r300,
 
 static void r300_draw_elements(struct r300_context *r300,
                                const struct pipe_draw_info *info,
-                               const struct pipe_draw_start_count *draw,
+                               const struct pipe_draw_start_count_bias *draw,
                                int instance_id)
 {
     struct pipe_resource *indexBuffer =
@@ -600,8 +600,8 @@ static void r300_draw_elements(struct r300_context *r300,
     int buffer_offset = 0, index_offset = 0; /* for index bias emulation */
     uint16_t indices3[3];
 
-    if (info->index_bias && !r300->screen->caps.is_r500) {
-        r300_split_index_bias(r300, info->index_bias, &buffer_offset,
+    if (draw->index_bias && !r300->screen->caps.is_r500) {
+        r300_split_index_bias(r300, draw->index_bias, &buffer_offset,
                               &index_offset);
     }
 
@@ -635,7 +635,7 @@ static void r300_draw_elements(struct r300_context *r300,
     /* 19 dwords for emit_draw_elements. Give up if the function fails. */
     if (!r300_prepare_for_rendering(r300,
             PREP_EMIT_STATES | PREP_VALIDATE_VBOS | PREP_EMIT_VARRAYS |
-            PREP_INDEXED, indexBuffer, 19, buffer_offset, info->index_bias,
+            PREP_INDEXED, indexBuffer, 19, buffer_offset, draw->index_bias,
             instance_id))
         goto done;
 
@@ -662,7 +662,7 @@ static void r300_draw_elements(struct r300_context *r300,
             if (count) {
                 if (!r300_prepare_for_rendering(r300,
                         PREP_VALIDATE_VBOS | PREP_EMIT_VARRAYS | PREP_INDEXED,
-                        indexBuffer, 19, buffer_offset, info->index_bias,
+                        indexBuffer, 19, buffer_offset, draw->index_bias,
                         instance_id))
                     goto done;
             }
@@ -677,7 +677,7 @@ done:
 
 static void r300_draw_arrays(struct r300_context *r300,
                              const struct pipe_draw_info *info,
-                             const struct pipe_draw_start_count *draw,
+                             const struct pipe_draw_start_count_bias *draw,
                              int instance_id)
 {
     boolean alt_num_verts = r300->screen->caps.is_r500 &&
@@ -719,7 +719,7 @@ static void r300_draw_arrays(struct r300_context *r300,
 
 static void r300_draw_arrays_instanced(struct r300_context *r300,
                                        const struct pipe_draw_info *info,
-                                       const struct pipe_draw_start_count *draw)
+                                       const struct pipe_draw_start_count_bias *draw)
 {
     int i;
 
@@ -729,7 +729,7 @@ static void r300_draw_arrays_instanced(struct r300_context *r300,
 
 static void r300_draw_elements_instanced(struct r300_context *r300,
                                          const struct pipe_draw_info *info,
-                                         const struct pipe_draw_start_count *draw)
+                                         const struct pipe_draw_start_count_bias *draw)
 {
     int i;
 
@@ -788,18 +788,19 @@ static unsigned r300_max_vertex_count(struct r300_context *r300)
 
 static void r300_draw_vbo(struct pipe_context* pipe,
                           const struct pipe_draw_info *dinfo,
+                          unsigned drawid_offset,
                           const struct pipe_draw_indirect_info *indirect,
-                          const struct pipe_draw_start_count *draws,
+                          const struct pipe_draw_start_count_bias *draws,
                           unsigned num_draws)
 {
    if (num_draws > 1) {
-      util_draw_multi(pipe, dinfo, indirect, draws, num_draws);
+      util_draw_multi(pipe, dinfo, drawid_offset, indirect, draws, num_draws);
       return;
    }
 
     struct r300_context* r300 = r300_context(pipe);
     struct pipe_draw_info info = *dinfo;
-    struct pipe_draw_start_count draw = draws[0];
+    struct pipe_draw_start_count_bias draw = draws[0];
 
     if (r300->skip_rendering ||
         !u_trim_pipe_prim(info.mode, &draw.count)) {
@@ -855,17 +856,18 @@ static void r300_draw_vbo(struct pipe_context* pipe,
 /* SW TCL elements, using Draw. */
 static void r300_swtcl_draw_vbo(struct pipe_context* pipe,
                                 const struct pipe_draw_info *info,
+                                unsigned drawid_offset,
                                 const struct pipe_draw_indirect_info *indirect,
-                                const struct pipe_draw_start_count *draws,
+                                const struct pipe_draw_start_count_bias *draws,
                                 unsigned num_draws)
 {
    if (num_draws > 1) {
-      util_draw_multi(pipe, info, indirect, draws, num_draws);
+      util_draw_multi(pipe, info, drawid_offset, indirect, draws, num_draws);
       return;
    }
 
     struct r300_context* r300 = r300_context(pipe);
-    struct pipe_draw_start_count draw = draws[0];
+    struct pipe_draw_start_count_bias draw = draws[0];
 
     if (r300->skip_rendering) {
         return;
@@ -884,7 +886,7 @@ static void r300_swtcl_draw_vbo(struct pipe_context* pipe,
 
     r300_update_derived_state(r300);
 
-    draw_vbo(r300->draw, info, NULL, &draw, 1);
+    draw_vbo(r300->draw, info, drawid_offset, NULL, &draw, 1);
     draw_flush(r300->draw);
 }
 

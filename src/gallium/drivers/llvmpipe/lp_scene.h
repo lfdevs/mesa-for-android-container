@@ -119,6 +119,15 @@ struct resource_ref;
 
 struct shader_ref;
 
+struct lp_scene_surface {
+   uint8_t *map;
+   unsigned stride;
+   unsigned layer_stride;
+   unsigned format_bytes;
+   unsigned sample_stride;
+   unsigned nr_samples;
+};
+
 /**
  * All bins and bin data are contained here.
  * Per-bin data goes into the 'tile' bins.
@@ -140,14 +149,7 @@ struct lp_scene {
    /* Framebuffer mappings - valid only between begin_rasterization()
     * and end_rasterization().
     */
-   struct {
-      uint8_t *map;
-      unsigned stride;
-      unsigned layer_stride;
-      unsigned format_bytes;
-      unsigned sample_stride;
-      unsigned nr_samples;
-   } zsbuf, cbufs[PIPE_MAX_COLOR_BUFS];
+   struct lp_scene_surface zsbuf, cbufs[PIPE_MAX_COLOR_BUFS];
 
    /* The amount of layers in the fb (minimum of all attachments) */
    unsigned fb_max_layer;

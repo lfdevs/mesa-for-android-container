@@ -838,6 +838,8 @@ nv84_screen_get_video_param(struct pipe_screen *pscreen,
          debug_printf("unknown video profile: %d\n", profile);
          return 0;
       }
+   case PIPE_VIDEO_CAP_MAX_MACROBLOCKS:
+      return 8192; /* vc-1 actually has 8190, but this is not supported */
    default:
       debug_printf("unknown video param: %d\n", param);
       return 0;

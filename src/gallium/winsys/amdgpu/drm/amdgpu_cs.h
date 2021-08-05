@@ -104,7 +104,7 @@ struct amdgpu_cs_context {
    unsigned                    max_sparse_buffers;
    struct amdgpu_cs_buffer     *sparse_buffers;
 
-   int                         buffer_indices_hashlist[4096];
+   int16_t                     *buffer_indices_hashlist;
 
    struct amdgpu_winsys_bo     *last_added_bo;
    unsigned                    last_added_bo_index;
@@ -128,6 +128,8 @@ struct amdgpu_cs_context {
    bool secure;
 };
 
+#define BUFFER_HASHLIST_SIZE 4096
+
 struct amdgpu_cs {
    struct amdgpu_ib main; /* must be first because this is inherited */
    struct amdgpu_ib compute_ib;      /* optional parallel compute IB */
@@ -145,12 +147,20 @@ struct amdgpu_cs {
    struct amdgpu_cs_context *csc;
    /* The CS being currently-owned by the other thread. */
    struct amdgpu_cs_context *cst;
+   /* buffer_indices_hashlist[hash(bo)] returns -1 if the bo
+    * isn't part of any buffer lists or the index where the bo could be found.
+    * Since 1) hash collisions of 2 different bo can happen and 2) we use a
+    * single hashlist for the 3 buffer list, this is only a hint.
+    * amdgpu_lookup_buffer uses this hint to speed up buffers look up.
+    */
+   int16_t buffer_indices_hashlist[BUFFER_HASHLIST_SIZE];
 
    /* Flush CS. */
    void (*flush_cs)(void *ctx, unsigned flags, struct pipe_fence_handle **fence);
    void *flush_data;
    bool stop_exec_on_failure;
    bool noop;
+   bool has_chaining;
 
    struct util_queue_fence flush_completed;
    struct pipe_fence_handle *next_fence;

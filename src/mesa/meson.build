@@ -167,6 +167,7 @@ files_libmesa_common = files(
   'main/glthread_bufferobj.c',
   'main/glthread_draw.c',
   'main/glthread_get.c',
+  'main/glthread_list.c',
   'main/glthread_marshal.h',
   'main/glthread_shaderobj.c',
   'main/glthread_varray.c',
@@ -667,8 +668,7 @@ get_hash_h = custom_target(
   capture : true,
 )
 
-foreach x : [['format_info.h', 'format_info.py'],
-             ['format_pack.c', 'format_pack.py']]
+foreach x : [['format_info.h', 'format_info.py']]
   files_libmesa_common += custom_target(
     x[0],
     input : ['main/@0@'.format(x[1]), 'main/formats.csv'],

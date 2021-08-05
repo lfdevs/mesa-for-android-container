@@ -468,7 +468,8 @@ anv_format_has_npot_plane(const struct anv_format *anv_format) {
  * _cannot_ check for compatibility).
  */
 struct anv_format_plane
-anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
+anv_get_format_plane(const struct intel_device_info *devinfo,
+                     VkFormat vk_format,
                      VkImageAspectFlagBits aspect, VkImageTiling tiling)
 {
    const struct anv_format *format = anv_get_format(vk_format);
@@ -506,7 +507,7 @@ anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
     * can reliably do texture upload with BLORP so just don't claim support
     * for any of them.
     */
-   if (devinfo->ver == 7 && !devinfo->is_haswell &&
+   if (devinfo->verx10 == 70 &&
        (isl_layout->bpb == 24 || isl_layout->bpb == 48))
       return unsupported;
 
@@ -542,7 +543,7 @@ anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
 // Format capabilities
 
 VkFormatFeatureFlags
-anv_get_image_format_features(const struct gen_device_info *devinfo,
+anv_get_image_format_features(const struct intel_device_info *devinfo,
                               VkFormat vk_format,
                               const struct anv_format *anv_format,
                               VkImageTiling vk_tiling,
@@ -635,7 +636,7 @@ anv_get_image_format_features(const struct gen_device_info *devinfo,
    /* Load/store is determined based on base format.  This prevents RGB
     * formats from showing up as load/store capable.
     */
-   if (isl_is_storage_image_format(base_isl_format))
+   if (isl_format_supports_typed_writes(devinfo, base_isl_format))
       flags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
 
    if (base_isl_format == ISL_FORMAT_R32_SINT ||
@@ -724,16 +725,16 @@ anv_get_image_format_features(const struct gen_device_info *devinfo,
       switch (isl_layout->colorspace) {
       case ISL_COLORSPACE_LINEAR:
       case ISL_COLORSPACE_SRGB:
-         /* Each DRM_FORMAT in in the rgb/srgb space uses unorm (if the DRM
-          * format name has no type suffix) or sfloat (if it has suffix F). No
-          * format contains mixed types. (as of 2020-10-16)
+         /* Each DRM_FORMAT that we support uses unorm (if the DRM format name
+          * has no type suffix) or sfloat (if it has suffix F). No format
+          * contains mixed types. (as of 2021-06-14)
           */
          if (isl_layout->uniform_channel_type != ISL_UNORM &&
              isl_layout->uniform_channel_type != ISL_SFLOAT)
             return 0;
          break;
       case ISL_COLORSPACE_YUV:
-         anv_finishme("support YUV formats with DRM format modifiers");
+         anv_finishme("support YUV colorspace with DRM format modifiers");
          return 0;
       case ISL_COLORSPACE_NONE:
          return 0;
@@ -753,8 +754,26 @@ anv_get_image_format_features(const struct gen_device_info *devinfo,
          return 0;
 
       if (anv_format->n_planes > 1) {
-         anv_finishme("support multi-planar formats with DRM format modifiers");
-         return 0;
+         /* For simplicity, keep DISJOINT disabled for multi-planar format. */
+         flags &= ~VK_FORMAT_FEATURE_DISJOINT_BIT;
+
+         /* VK_ANDROID_external_memory_android_hardware_buffer in Virtio-GPU
+          * Venus driver layers on top of VK_EXT_image_drm_format_modifier of
+          * the host Vulkan driver, and VK_FORMAT_G8_B8R8_2PLANE_420_UNORM is
+          * required to support camera/media interop in Android.
+          */
+         if (vk_format != VK_FORMAT_G8_B8R8_2PLANE_420_UNORM) {
+            anv_finishme("support more multi-planar formats with DRM modifiers");
+            return 0;
+         }
+
+         /* Currently there is no way to properly map memory planes to format
+          * planes and aux planes due to the lack of defined ABI for external
+          * multi-planar images.
+          */
+         if (isl_mod_info->aux_usage != ISL_AUX_USAGE_NONE) {
+            return 0;
+         }
       }
 
       if (isl_mod_info->aux_usage == ISL_AUX_USAGE_CCS_E &&
@@ -782,7 +801,7 @@ anv_get_image_format_features(const struct gen_device_info *devinfo,
 }
 
 static VkFormatFeatureFlags
-get_buffer_format_features(const struct gen_device_info *devinfo,
+get_buffer_format_features(const struct intel_device_info *devinfo,
                            VkFormat vk_format,
                            const struct anv_format *anv_format)
 {
@@ -826,7 +845,7 @@ get_drm_format_modifier_properties_list(const struct anv_physical_device *physic
                                         VkFormat vk_format,
                                         VkDrmFormatModifierPropertiesListEXT *list)
 {
-   const struct gen_device_info *devinfo = &physical_device->info;
+   const struct intel_device_info *devinfo = &physical_device->info;
    const struct anv_format *anv_format = anv_get_format(vk_format);
 
    VK_OUTARRAY_MAKE(out, list->pDrmFormatModifierProperties,
@@ -860,7 +879,7 @@ void anv_GetPhysicalDeviceFormatProperties(
     VkFormatProperties*                         pFormatProperties)
 {
    ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
-   const struct gen_device_info *devinfo = &physical_device->info;
+   const struct intel_device_info *devinfo = &physical_device->info;
    const struct anv_format *anv_format = anv_get_format(vk_format);
 
    *pFormatProperties = (VkFormatProperties) {
@@ -911,7 +930,7 @@ anv_get_image_format_properties(
    uint32_t maxArraySize;
    VkSampleCountFlags sampleCounts;
    struct anv_instance *instance = physical_device->instance;
-   const struct gen_device_info *devinfo = &physical_device->info;
+   const struct intel_device_info *devinfo = &physical_device->info;
    const struct anv_format *format = anv_get_format(info->format);
    const struct isl_drm_modifier_info *isl_mod_info = NULL;
    const VkImageFormatListCreateInfo *format_list_info =
@@ -1374,6 +1393,15 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
        */
       switch (external_info->handleType) {
       case VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT:
+
+         /* Disable stencil export, there are issues. */
+         if (vk_format_aspects(base_info->format) & VK_IMAGE_ASPECT_STENCIL_BIT) {
+            result = vk_errorfi(instance, &physical_device->vk.base,
+                                VK_ERROR_FORMAT_NOT_SUPPORTED,
+                                "External stencil buffers are not supported yet");
+            goto fail;
+         }
+
          if (external_props) {
             if (tiling_has_explicit_layout) {
                /* With an explicit memory layout, we don't care which type of fd

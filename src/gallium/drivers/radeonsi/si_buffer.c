@@ -48,7 +48,7 @@ void si_init_resource_fields(struct si_screen *sscreen, struct si_resource *res,
    struct si_texture *tex = (struct si_texture *)res;
 
    res->bo_size = size;
-   res->bo_alignment = alignment;
+   res->bo_alignment_log2 = util_logbase2(alignment);
    res->flags = 0;
    res->texture_handle_allocated = false;
    res->image_handle_allocated = false;
@@ -177,8 +177,8 @@ bool si_alloc_resource(struct si_screen *sscreen, struct si_resource *res)
    struct pb_buffer *old_buf, *new_buf;
 
    /* Allocate a new resource. */
-   new_buf = sscreen->ws->buffer_create(sscreen->ws, res->bo_size, res->bo_alignment, res->domains,
-                                        res->flags);
+   new_buf = sscreen->ws->buffer_create(sscreen->ws, res->bo_size, 1 << res->bo_alignment_log2,
+                                        res->domains, res->flags);
    if (!new_buf) {
       return false;
    }
@@ -218,14 +218,34 @@ bool si_alloc_resource(struct si_screen *sscreen, struct si_resource *res)
    return true;
 }
 
-static void si_buffer_destroy(struct pipe_screen *screen, struct pipe_resource *buf)
+static void si_resource_destroy(struct pipe_screen *screen, struct pipe_resource *buf)
 {
-   struct si_resource *buffer = si_resource(buf);
+   if (buf->target == PIPE_BUFFER) {
+      struct si_screen *sscreen = (struct si_screen *)screen;
+      struct si_resource *buffer = si_resource(buf);
 
-   threaded_resource_deinit(buf);
-   util_range_destroy(&buffer->valid_buffer_range);
-   radeon_bo_reference(((struct si_screen*)screen)->ws, &buffer->buf, NULL);
-   FREE(buffer);
+      threaded_resource_deinit(buf);
+      util_range_destroy(&buffer->valid_buffer_range);
+      radeon_bo_reference(((struct si_screen*)screen)->ws, &buffer->buf, NULL);
+      util_idalloc_mt_free(&sscreen->buffer_ids, buffer->b.buffer_id_unique);
+      FREE(buffer);
+   } else if (buf->flags & SI_RESOURCE_AUX_PLANE) {
+      struct si_auxiliary_texture *tex = (struct si_auxiliary_texture *)buf;
+
+      radeon_bo_reference(((struct si_screen*)screen)->ws, &tex->buffer, NULL);
+      FREE(tex);
+   } else {
+      struct si_texture *tex = (struct si_texture *)buf;
+      struct si_resource *resource = &tex->buffer;
+
+      si_texture_reference(&tex->flushed_depth_texture, NULL);
+
+      if (tex->cmask_buffer != &tex->buffer) {
+         si_resource_reference(&tex->cmask_buffer, NULL);
+      }
+      radeon_bo_reference(((struct si_screen*)screen)->ws, &resource->buf, NULL);
+      FREE(tex);
+   }
 }
 
 /* Reallocate the buffer a update all resource bindings where the buffer is
@@ -265,7 +285,8 @@ static bool si_invalidate_buffer(struct si_context *sctx, struct si_resource *bu
 
 /* Replace the storage of dst with src. */
 void si_replace_buffer_storage(struct pipe_context *ctx, struct pipe_resource *dst,
-                               struct pipe_resource *src)
+                               struct pipe_resource *src, unsigned num_rebinds, uint32_t rebind_mask,
+                               uint32_t delete_buffer_id)
 {
    struct si_context *sctx = (struct si_context *)ctx;
    struct si_resource *sdst = si_resource(dst);
@@ -281,10 +302,12 @@ void si_replace_buffer_storage(struct pipe_context *ctx, struct pipe_resource *d
    assert(sdst->vram_usage_kb == ssrc->vram_usage_kb);
    assert(sdst->gart_usage_kb == ssrc->gart_usage_kb);
    assert(sdst->bo_size == ssrc->bo_size);
-   assert(sdst->bo_alignment == ssrc->bo_alignment);
+   assert(sdst->bo_alignment_log2 == ssrc->bo_alignment_log2);
    assert(sdst->domains == ssrc->domains);
 
    si_rebind_buffer(sctx, dst);
+
+   util_idalloc_mt_free(&sctx->screen->buffer_ids, delete_buffer_id);
 }
 
 static void si_invalidate_resource(struct pipe_context *ctx, struct pipe_resource *resource)
@@ -319,8 +342,8 @@ static void *si_buffer_get_transfer(struct pipe_context *ctx, struct pipe_resour
    transfer->b.b.box = *box;
    transfer->b.b.stride = 0;
    transfer->b.b.layer_stride = 0;
+   transfer->b.b.offset = offset;
    transfer->b.staging = NULL;
-   transfer->offset = offset;
    transfer->staging = staging;
    *ptransfer = &transfer->b.b;
    return data;
@@ -480,7 +503,7 @@ static void si_buffer_do_flush_region(struct pipe_context *ctx, struct pipe_tran
 
    if (stransfer->staging) {
       unsigned src_offset =
-         stransfer->offset + transfer->box.x % SI_MAP_BUFFER_ALIGNMENT + (box->x - transfer->box.x);
+         stransfer->b.b.offset + transfer->box.x % SI_MAP_BUFFER_ALIGNMENT + (box->x - transfer->box.x);
 
       /* Copy the staging buffer into the original one. */
       si_copy_buffer(sctx, transfer->resource, &stransfer->staging->b.b, box->x, src_offset,
@@ -550,14 +573,6 @@ static void si_buffer_subdata(struct pipe_context *ctx, struct pipe_resource *bu
    si_buffer_transfer_unmap(ctx, transfer);
 }
 
-static const struct u_resource_vtbl si_buffer_vtbl = {
-   NULL,                     /* get_handle */
-   si_buffer_destroy,        /* resource_destroy */
-   si_buffer_transfer_map,   /* transfer_map */
-   si_buffer_flush_region,   /* transfer_flush_region */
-   si_buffer_transfer_unmap, /* transfer_unmap */
-};
-
 static struct si_resource *si_alloc_buffer_struct(struct pipe_screen *screen,
                                                   const struct pipe_resource *templ)
 {
@@ -570,7 +585,6 @@ static struct si_resource *si_alloc_buffer_struct(struct pipe_screen *screen,
    pipe_reference_init(&buf->b.b.reference, 1);
    buf->b.b.screen = screen;
 
-   buf->b.vtbl = &si_buffer_vtbl;
    threaded_resource_init(&buf->b.b);
 
    buf->buf = NULL;
@@ -595,9 +609,12 @@ static struct pipe_resource *si_buffer_create(struct pipe_screen *screen,
       buf->flags |= RADEON_FLAG_SPARSE;
 
    if (!si_alloc_resource(sscreen, buf)) {
+      threaded_resource_deinit(&buf->b.b);
       FREE(buf);
       return NULL;
    }
+
+   buf->b.buffer_id_unique = util_idalloc_mt_alloc(&sscreen->buffer_ids);
    return &buf->b.b;
 }
 
@@ -642,6 +659,7 @@ static struct pipe_resource *si_buffer_from_user_memory(struct pipe_screen *scre
    /* Convert a user pointer to a buffer. */
    buf->buf = ws->buffer_from_ptr(ws, user_memory, templ->width0);
    if (!buf->buf) {
+      threaded_resource_deinit(&buf->b.b);
       FREE(buf);
       return NULL;
    }
@@ -649,7 +667,7 @@ static struct pipe_resource *si_buffer_from_user_memory(struct pipe_screen *scre
    buf->gpu_address = ws->buffer_get_virtual_address(buf->buf);
    buf->vram_usage_kb = 0;
    buf->gart_usage_kb = templ->width0 / 1024;
-
+   buf->b.buffer_id_unique = util_idalloc_mt_alloc(&sscreen->buffer_ids);
    return &buf->b.b;
 }
 
@@ -667,7 +685,7 @@ struct pipe_resource *si_buffer_from_winsys_buffer(struct pipe_screen *screen,
    res->buf = imported_buf;
    res->gpu_address = sscreen->ws->buffer_get_virtual_address(res->buf);
    res->bo_size = imported_buf->size;
-   res->bo_alignment = 1 << imported_buf->alignment_log2;
+   res->bo_alignment_log2 = imported_buf->alignment_log2;
    res->domains = sscreen->ws->buffer_get_initial_domain(res->buf);
 
    if (res->domains & RADEON_DOMAIN_VRAM)
@@ -683,6 +701,7 @@ struct pipe_resource *si_buffer_from_winsys_buffer(struct pipe_screen *screen,
       res->flags |= RADEON_FLAG_SPARSE;
    }
 
+   res->b.buffer_id_unique = util_idalloc_mt_alloc(&sscreen->buffer_ids);
    return &res->b.b;
 }
 
@@ -723,16 +742,16 @@ static bool si_resource_commit(struct pipe_context *pctx, struct pipe_resource *
 void si_init_screen_buffer_functions(struct si_screen *sscreen)
 {
    sscreen->b.resource_create = si_resource_create;
-   sscreen->b.resource_destroy = u_resource_destroy_vtbl;
+   sscreen->b.resource_destroy = si_resource_destroy;
    sscreen->b.resource_from_user_memory = si_buffer_from_user_memory;
 }
 
 void si_init_buffer_functions(struct si_context *sctx)
 {
    sctx->b.invalidate_resource = si_invalidate_resource;
-   sctx->b.transfer_map = u_transfer_map_vtbl;
-   sctx->b.transfer_flush_region = u_transfer_flush_region_vtbl;
-   sctx->b.transfer_unmap = u_transfer_unmap_vtbl;
+   sctx->b.buffer_map = si_buffer_transfer_map;
+   sctx->b.transfer_flush_region = si_buffer_flush_region;
+   sctx->b.buffer_unmap = si_buffer_transfer_unmap;
    sctx->b.texture_subdata = u_default_texture_subdata;
    sctx->b.buffer_subdata = si_buffer_subdata;
    sctx->b.resource_commit = si_resource_commit;

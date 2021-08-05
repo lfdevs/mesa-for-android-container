@@ -80,11 +80,19 @@ void finish_program(aco::Program *program);
 void finish_validator_test();
 void finish_opt_test();
 void finish_ra_test(aco::ra_test_policy);
+void finish_optimizer_postRA_test();
 void finish_to_hw_instr_test();
 void finish_insert_nops_test();
+void finish_form_hard_clause_test();
 void finish_assembler_test();
 
 void writeout(unsigned i, aco::Temp tmp=aco::Temp(0, aco::s1));
+void writeout(unsigned i, aco::Builder::Result res);
+void writeout(unsigned i, aco::Operand op);
+void writeout(unsigned i, aco::Operand op0, aco::Operand op1);
+
+aco::Temp fneg(aco::Temp src);
+aco::Temp fabs(aco::Temp src);
 
 /* vulkan helpers */
 VkDevice get_vk_device(enum chip_class chip_class);

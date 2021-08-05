@@ -107,13 +107,13 @@ fd4_context_create(struct pipe_screen *pscreen, void *priv,
    fd_hw_query_init(pctx);
 
    fd4_ctx->vs_pvt_mem =
-      fd_bo_new(screen->dev, 0x2000, DRM_FREEDRENO_GEM_TYPE_KMEM, "vs_pvt");
+      fd_bo_new(screen->dev, 0x2000, 0, "vs_pvt");
 
    fd4_ctx->fs_pvt_mem =
-      fd_bo_new(screen->dev, 0x2000, DRM_FREEDRENO_GEM_TYPE_KMEM, "fs_pvt");
+      fd_bo_new(screen->dev, 0x2000, 0, "fs_pvt");
 
    fd4_ctx->vsc_size_mem =
-      fd_bo_new(screen->dev, 0x1000, DRM_FREEDRENO_GEM_TYPE_KMEM, "vsc_size");
+      fd_bo_new(screen->dev, 0x1000, 0, "vsc_size");
 
    fd_context_setup_common_vbos(&fd4_ctx->base);
 

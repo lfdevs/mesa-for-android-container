@@ -161,7 +161,7 @@ DECLARE_L3_LIST(dg1);
  * specified device.
  */
 static const struct intel_l3_list *
-get_l3_list(const struct gen_device_info *devinfo)
+get_l3_list(const struct intel_device_info *devinfo)
 {
    switch (devinfo->ver) {
    case 7:
@@ -257,7 +257,7 @@ intel_diff_l3_weights(struct intel_l3_weights w0, struct intel_l3_weights w1)
  * is intended to approximately resemble the hardware defaults.
  */
 struct intel_l3_weights
-intel_get_default_l3_weights(const struct gen_device_info *devinfo,
+intel_get_default_l3_weights(const struct intel_device_info *devinfo,
                              bool needs_dc, bool needs_slm)
 {
    struct intel_l3_weights w = {{ 0 }};
@@ -279,7 +279,7 @@ intel_get_default_l3_weights(const struct gen_device_info *devinfo,
  * Get the default L3 configuration
  */
 const struct intel_l3_config *
-intel_get_default_l3_config(const struct gen_device_info *devinfo)
+intel_get_default_l3_config(const struct intel_device_info *devinfo)
 {
    /* For efficiency assume that the first entry of the array matches the
     * default configuration.
@@ -301,7 +301,7 @@ intel_get_default_l3_config(const struct gen_device_info *devinfo)
  * weight vector.
  */
 const struct intel_l3_config *
-intel_get_l3_config(const struct gen_device_info *devinfo,
+intel_get_l3_config(const struct intel_device_info *devinfo,
                     struct intel_l3_weights w0)
 {
    const struct intel_l3_list *const list = get_l3_list(devinfo);
@@ -327,7 +327,7 @@ intel_get_l3_config(const struct gen_device_info *devinfo,
  * Return the size of an L3 way in KB.
  */
 static unsigned
-get_l3_way_size(const struct gen_device_info *devinfo)
+get_l3_way_size(const struct intel_device_info *devinfo)
 {
    const unsigned way_size_per_bank =
       (devinfo->ver >= 9 && devinfo->l3_banks == 1) || devinfo->ver >= 11 ?
@@ -339,16 +339,16 @@ get_l3_way_size(const struct gen_device_info *devinfo)
 
 /**
  * Return the unit brw_context::urb::size is expressed in, in KB.  \sa
- * gen_device_info::urb::size.
+ * intel_device_info::urb::size.
  */
 static unsigned
-get_urb_size_scale(const struct gen_device_info *devinfo)
+get_urb_size_scale(const struct intel_device_info *devinfo)
 {
    return (devinfo->ver >= 8 ? devinfo->num_slices : 1);
 }
 
 unsigned
-intel_get_l3_config_urb_size(const struct gen_device_info *devinfo,
+intel_get_l3_config_urb_size(const struct intel_device_info *devinfo,
                              const struct intel_l3_config *cfg)
 {
    /* We don't have to program the URB size in DG1, it's a fixed value. */

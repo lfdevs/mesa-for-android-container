@@ -488,7 +488,7 @@ static void ac_parse_packet3(FILE *f, uint32_t header, struct ac_ib_parser *ib,
       ac_ib_get(ib);
 
    if (ib->cur_dw > first_dw + count + 1)
-      fprintf(f, COLOR_RED "\n!!!!! count in header too low !!!!!" COLOR_RESET "\n");
+      fprintf(f, COLOR_RED " !!!!! count in header too low !!!!!" COLOR_RESET "\n");
 }
 
 /**

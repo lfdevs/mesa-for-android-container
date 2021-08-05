@@ -674,11 +674,11 @@ v3d_spec_load(const struct v3d_device_info *devinfo)
 
         for (int i = 0; i < ARRAY_SIZE(genxml_files_table); i++) {
                 if (i != 0) {
-                        assert(genxml_files_table[i - 1].gen_10 <
-                               genxml_files_table[i].gen_10);
+                        assert(genxml_files_table[i - 1].ver_10 <
+                               genxml_files_table[i].ver_10);
                 }
 
-                if (genxml_files_table[i].gen_10 <= devinfo->ver) {
+                if (genxml_files_table[i].ver_10 <= devinfo->ver) {
                         text_offset = genxml_files_table[i].offset;
                         text_length = genxml_files_table[i].length;
                 }

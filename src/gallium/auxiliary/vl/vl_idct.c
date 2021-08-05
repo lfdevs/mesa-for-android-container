@@ -718,7 +718,7 @@ vl_idct_upload_matrix(struct pipe_context *pipe, float scale)
    if (!matrix)
       goto error_matrix;
 
-   f = pipe->transfer_map(pipe, matrix, 0,
+   f = pipe->texture_map(pipe, matrix, 0,
                                      PIPE_MAP_WRITE |
                                      PIPE_MAP_DISCARD_RANGE,
                                      &rect, &buf_transfer);
@@ -732,7 +732,7 @@ vl_idct_upload_matrix(struct pipe_context *pipe, float scale)
          // transpose and scale
          f[i * pitch + j] = ((const float (*)[8])const_matrix)[j][i] * scale;
 
-   pipe->transfer_unmap(pipe, buf_transfer);
+   pipe->texture_unmap(pipe, buf_transfer);
 
    memset(&sv_templ, 0, sizeof(sv_templ));
    u_sampler_view_default_template(&sv_templ, matrix, matrix->format);

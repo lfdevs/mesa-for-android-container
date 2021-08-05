@@ -437,8 +437,15 @@ anv_create_ahw_memory(VkDevice device_h,
    if (AHardwareBuffer_allocate(&desc, &ahw) != 0)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-   mem->ahw = ahw;
-   return VK_SUCCESS;
+   const VkImportAndroidHardwareBufferInfoANDROID import_info = {
+      .buffer = ahw,
+   };
+   VkResult result = anv_import_ahw_memory(device_h, mem, &import_info);
+
+   /* Release a reference to avoid leak for AHB allocation. */
+   AHardwareBuffer_release(ahw);
+
+   return result;
 #else
    return VK_ERROR_EXTENSION_NOT_PRESENT;
 #endif
@@ -813,7 +820,7 @@ anv_AcquireImageANDROID(
          }
       } else if (semaphore_h != VK_NULL_HANDLE) {
          semaphore_fd = nativeFenceFd;
-      } else if (fence_h == VK_NULL_HANDLE) {
+      } else if (fence_h != VK_NULL_HANDLE) {
          fence_fd = nativeFenceFd;
       } else {
          /* Nothing to import into so we have to close the file */

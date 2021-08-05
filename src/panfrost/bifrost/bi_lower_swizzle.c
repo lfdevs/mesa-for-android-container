@@ -35,11 +35,19 @@ bi_lower_swizzle_16(bi_context *ctx, bi_instr *ins, unsigned src)
 {
         /* TODO: Use the opcode table and be a lot more methodical about this... */
         switch (ins->op) {
+        /* Some instructions used with 16-bit data never have swizzles */
         case BI_OPCODE_CSEL_V2F16:
         case BI_OPCODE_CSEL_V2I16:
         case BI_OPCODE_CSEL_V2S16:
         case BI_OPCODE_CSEL_V2U16:
+
+        /* Despite ostensibly being 32-bit instructions, CLPER does not
+         * inherently interpret the data, so it can be used for v2f16
+         * derivatives, which might require swizzle lowering */
+        case BI_OPCODE_CLPER_V6_I32:
+        case BI_OPCODE_CLPER_V7_I32:
             break;
+
         case BI_OPCODE_IADD_V2S16:
         case BI_OPCODE_IADD_V2U16:
         case BI_OPCODE_ISUB_V2S16:
@@ -65,6 +73,14 @@ bi_lower_swizzle_16(bi_context *ctx, bi_instr *ins, unsigned src)
         /* Identity is ok (TODO: what about replicate only?) */
         if (ins->src[src].swizzle == BI_SWIZZLE_H01)
                 return;
+
+        /* If the instruction is scalar we can ignore the other component */
+        if (ins->dest[0].swizzle == BI_SWIZZLE_H00 &&
+                        ins->src[src].swizzle == BI_SWIZZLE_H00)
+        {
+                ins->src[src].swizzle = BI_SWIZZLE_H01;
+                return;
+        }
 
         /* Lower it away */
         bi_builder b = bi_init_builder(ctx, bi_before_instr(ins));

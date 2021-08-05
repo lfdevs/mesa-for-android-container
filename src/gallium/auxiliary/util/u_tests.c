@@ -231,10 +231,10 @@ util_probe_rect_rgba_multi(struct pipe_context *ctx, struct pipe_resource *tex,
    unsigned x,y,e,c;
    bool pass = true;
 
-   map = pipe_transfer_map(ctx, tex, 0, 0, PIPE_MAP_READ,
+   map = pipe_texture_map(ctx, tex, 0, 0, PIPE_MAP_READ,
                            offx, offy, w, h, &transfer);
    pipe_get_tile_rgba(transfer, map, 0, 0, w, h, tex->format, pixels);
-   pipe_transfer_unmap(ctx, transfer);
+   pipe_texture_unmap(ctx, transfer);
 
    for (e = 0; e < num_expected_colors; e++) {
       for (y = 0; y < h; y++) {

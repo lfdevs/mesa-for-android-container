@@ -33,13 +33,11 @@ namespace nv50_ir {
 class CodeEmitterNV50 : public CodeEmitter
 {
 public:
-   CodeEmitterNV50(const TargetNV50 *);
+   CodeEmitterNV50(Program::Type, const TargetNV50 *);
 
    virtual bool emitInstruction(Instruction *);
 
    virtual uint32_t getMinEncodingSize(const Instruction *) const;
-
-   inline void setProgramType(Program::Type pType) { progType = pType; }
 
    virtual void prepareEmission(Function *);
 
@@ -2300,8 +2298,8 @@ CodeEmitterNV50::prepareEmission(Function *func)
    replaceExitWithModifier(func);
 }
 
-CodeEmitterNV50::CodeEmitterNV50(const TargetNV50 *target) :
-   CodeEmitter(target), targNV50(target)
+CodeEmitterNV50::CodeEmitterNV50(Program::Type type, const TargetNV50 *target) :
+   CodeEmitter(target), progType(type), targNV50(target)
 {
    targ = target; // specialized
    code = NULL;
@@ -2312,8 +2310,7 @@ CodeEmitterNV50::CodeEmitterNV50(const TargetNV50 *target) :
 CodeEmitter *
 TargetNV50::getCodeEmitter(Program::Type type)
 {
-   CodeEmitterNV50 *emit = new CodeEmitterNV50(this);
-   emit->setProgramType(type);
+   CodeEmitterNV50 *emit = new CodeEmitterNV50(type, this);
    return emit;
 }
 

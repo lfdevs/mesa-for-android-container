@@ -27,8 +27,7 @@ Requirements
 
    See ``/proc/cpuinfo`` to know what your CPU supports.
 
--  Unless otherwise stated, LLVM version 3.4 is recommended; 3.3 or
-   later is required.
+-  Unless otherwise stated, LLVM version 3.9 or later is required.
 
    For Linux, on a recent Debian based distribution do:
 

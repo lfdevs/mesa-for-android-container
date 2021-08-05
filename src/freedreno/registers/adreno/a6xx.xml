@@ -978,8 +978,7 @@ to upconvert to 32b float internally?
 	<reg32 offset="0x0821" name="CP_HW_FAULT"/>
 	<reg32 offset="0x0823" name="CP_INTERRUPT_STATUS"/>
 	<reg32 offset="0x0824" name="CP_PROTECT_STATUS"/>
-	<reg32 offset="0x0830" name="CP_SQE_INSTR_BASE_LO"/>
-	<reg32 offset="0x0831" name="CP_SQE_INSTR_BASE_HI"/>
+	<reg64 offset="0x0830" name="CP_SQE_INSTR_BASE"/>
 	<reg32 offset="0x0840" name="CP_MISC_CNTL"/>
 	<reg32 offset="0x0844" name="CP_APRIV_CNTL"/>
 	<!-- all the threshold values seem to be in units of quad-dwords: -->
@@ -1094,6 +1093,8 @@ to upconvert to 32b float internally?
 	<reg32 offset="0x098D" name="CP_AHB_CNTL"/>
 	<reg32 offset="0x0A00" name="CP_APERTURE_CNTL_HOST"/>
 	<reg32 offset="0x0A03" name="CP_APERTURE_CNTL_CD"/>
+	<reg32 offset="0x0B34" name="CP_LPAC_PROG_FIFO_SIZE"/>
+	<reg64 offset="0x0b82" name="CP_LPAC_SQE_INSTR_BASE"/>
 	<reg32 offset="0x0C01" name="VSC_ADDR_MODE_CNTL" type="a5xx_address_mode"/>
 	<reg32 offset="0x0201" name="RBBM_INT_0_STATUS" type="A6XX_RBBM_INT_0_MASK"/>
 	<reg32 offset="0x0210" name="RBBM_STATUS">
@@ -1378,6 +1379,8 @@ to upconvert to 32b float internally?
 		<bitfield high="7" low="0" name="PERFSEL"/>
 	</reg32>
 	<array offset="0x0E1C" name="UCHE_PERFCTR_UCHE_SEL" stride="1" length="12"/>
+	<reg32 offset="0x0e3c" name="UCHE_CMDQ_CONFIG"/>
+
 	<reg32 offset="0x3000" name="VBIF_VERSION"/>
 	<reg32 offset="0x3001" name="VBIF_CLKON">
 		<bitfield pos="1" name="FORCE_ON_TESTBUS" type="boolean"/>
@@ -1417,6 +1420,7 @@ to upconvert to 32b float internally?
 	<reg32 offset="0x3119" name="VBIF_PERF_PWR_CNT_HIGH1"/>
 	<reg32 offset="0x311a" name="VBIF_PERF_PWR_CNT_HIGH2"/>
 
+	<reg32 offset="0x3c01" name="GBIF_SCACHE_CNTL0"/>
 	<reg32 offset="0x3c02" name="GBIF_SCACHE_CNTL1"/>
 	<reg32 offset="0x3c03" name="GBIF_QSB_SIDE0"/>
 	<reg32 offset="0x3c04" name="GBIF_QSB_SIDE1"/>
@@ -1698,7 +1702,8 @@ to upconvert to 32b float internally?
 		<bitfield name="FC_ENABLE" pos="3" type="boolean"/>
 		<!-- set when depth-test + depth-write enabled -->
 		<bitfield name="Z_TEST_ENABLE" pos="4" type="boolean"/>
-		<bitfield name="UNK5" low="5" high="9"/>
+		<bitfield name="Z_BOUNDS_ENABLE" pos="5" type="boolean"/>
+		<bitfield name="UNK6" low="6" high="9"/>
 	</reg32>
 	<reg32 offset="0x8101" name="GRAS_UNKNOWN_8101" low="0" high="2"/>
 	<reg32 offset="0x8102" name="GRAS_2D_BLIT_INFO">
@@ -2224,18 +2229,18 @@ to upconvert to 32b float internally?
 	<reg32 offset="0x8e05" name="RB_ADDR_MODE_CNTL" pos="0" type="a5xx_address_mode"/>
 	<!-- 0x8e06 invalid -->
 	<reg32 offset="0x8e07" name="RB_CCU_CNTL">
-		<!-- offset into GMEM for something.
-			important for sysmem path
-			BLIT_OP_SCALE also writes to GMEM at this offset for GMEM store
-			blob values for GMEM path (note: close to GMEM size):
-			a618: 0x7c000 a630/a640: 0xf8000 a650: 0x114000
-			SYSMEM path values:
-			a618: 0x10000 a630/a640: 0x20000 a650: 0x30000
-			TODO: valid mask 0xfffffc1f
+		<!-- GMEM offset of CCU color cache
+			CCU depth cache starts at zero, so this should be the size
+			of the depth cache for direct rendering
+			for GMEM rendering, we set it to GMEM size minus the minimum
+			CCU color cache size. CCU color cache will be needed in some
+			resolve cases, and in those cases we need to reserve the end
+			of GMEM for color cache.
 		-->
-		<bitfield name="OFFSET" low="23" high="31" shr="12" type="hex"/>
+		<bitfield name="COLOR_OFFSET" low="23" high="31" shr="12" type="hex"/>
 		<bitfield name="GMEM" pos="22" type="boolean"/> <!-- set for GMEM path -->
 		<bitfield name="UNK2" pos="2" type="boolean"/> <!-- sometimes set with GMEM? -->
+		<!--TODO: valid mask 0xfffffc1f -->
 	</reg32>
 	<reg32 offset="0x8e08" name="RB_NC_MODE_CNTL">
 		<bitfield name="MODE" pos="0" type="boolean"/>
@@ -2487,6 +2492,13 @@ to upconvert to 32b float internally?
 		<bitfield name="EVENT" low="0" high="6" type="vgt_event_type"/>
 	</reg32>
 
+	<!--
+		0x9880 written in a lot of places by SQE, same value gets written
+		to control reg 0x12a.  Set by CP_SET_MARKER, so lets name it after
+		that
+	 -->
+	<reg32 offset="0x9880" name="PC_MARKER"/>
+
 	<!-- 0x9843-0x997f invalid -->
 
 	<reg32 offset="0x9981" name="PC_POLYGON_MODE">
@@ -2575,7 +2587,19 @@ to upconvert to 32b float internally?
 	<!-- TODO: 0x9e00-0xa000 range incomplete -->
 	<reg32 offset="0x9e00" name="PC_DBG_ECO_CNTL"/>
 	<reg32 offset="0x9e01" name="PC_ADDR_MODE_CNTL" type="a5xx_address_mode"/>
+	<reg64 offset="0x9e04" name="PC_DRAW_INDX_BASE"/>
+	<reg32 offset="0x9e06" name="PC_DRAW_FIRST_INDX" type="uint"/>
+	<reg32 offset="0x9e07" name="PC_DRAW_MAX_INDICES" type="uint"/>
 	<reg64 offset="0x9e08" name="PC_TESSFACTOR_ADDR" type="waddress" align="32"/>
+
+	<reg32 offset="0x9e0b" name="PC_DRAW_INITIATOR" type="vgt_draw_initiator_a4xx">
+		<doc>
+			Possibly not really "initiating" the draw but the layout is similar
+			to VGT_DRAW_INITIATOR on older gens
+		</doc>
+	</reg32>
+	<reg32 offset="0x9e0c" name="PC_DRAW_NUM_INSTANCES" type="uint"/>
+	<reg32 offset="0x9e0d" name="PC_DRAW_NUM_INDICES" type="uint"/>
 
 	<!-- These match the contents of CP_SET_BIN_DATA (not written directly) -->
 	<reg32 offset="0x9e11" name="PC_VSTREAM_CONTROL">
@@ -2585,6 +2609,11 @@ to upconvert to 32b float internally?
 	</reg32>
 	<reg64 offset="0x9e12" name="PC_BIN_PRIM_STRM" type="waddress" align="32"/>
 	<reg64 offset="0x9e14" name="PC_BIN_DRAW_STRM" type="waddress" align="32"/>
+
+	<reg32 offset="0x9e1c" name="PC_VISIBILITY_OVERRIDE">
+		<doc>Written by CP_SET_VISIBILITY_OVERRIDE handler</doc>
+		<bitfield name="OVERRIDE" pos="0" type="boolean"/>
+	</reg32>
 
 	<array offset="0x9e34" name="PC_PERFCTR_PC_SEL" stride="1" length="8"/>
 
@@ -2829,6 +2858,17 @@ to upconvert to 32b float internally?
 		</bitfield>
 	</bitset>
 
+	<bitset name="a6xx_sp_xs_pvt_mem_hw_stack_offset" inline="yes">
+		<doc>
+			This seems to be be the equivalent of HWSTACKOFFSET in
+			a3xx. The ldp/stp offset formula above isn't affected by
+			HWSTACKSIZEPERTHREAD at all, so the HW return address
+			stack seems to be after all the normal per-SP private
+			memory.
+		</doc>
+		<bitfield name="OFFSET" low="0" high="18" shr="11"/>
+	</bitset>
+
 	<reg32 offset="0xa81b" name="SP_VS_OBJ_FIRST_EXEC_OFFSET" type="uint"/>
 	<reg64 offset="0xa81c" name="SP_VS_OBJ_START" type="address" align="32"/>
 	<reg32 offset="0xa81e" name="SP_VS_PVT_MEM_PARAM" type="a6xx_sp_xs_pvt_mem_param"/>
@@ -2837,7 +2877,7 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xa822" name="SP_VS_TEX_COUNT" low="0" high="7" type="uint"/>
 	<reg32 offset="0xa823" name="SP_VS_CONFIG" type="a6xx_sp_xs_config"/>
 	<reg32 offset="0xa824" name="SP_VS_INSTRLEN" low="0" high="27" type="uint"/>
-	<reg32 offset="0xa825" name="SP_VS_PVT_MEM_HW_STACK_OFFSET" low="0" high="18" shr="11"/>
+	<reg32 offset="0xa825" name="SP_VS_PVT_MEM_HW_STACK_OFFSET" type="a6xx_sp_xs_pvt_mem_hw_stack_offset"/>
 
 	<reg32 offset="0xa830" name="SP_HS_CTRL_REG0" type="a6xx_sp_xs_ctrl_reg0">
 		<!--
@@ -2864,7 +2904,7 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xa83a" name="SP_HS_TEX_COUNT" low="0" high="7" type="uint"/>
 	<reg32 offset="0xa83b" name="SP_HS_CONFIG" type="a6xx_sp_xs_config"/>
 	<reg32 offset="0xa83c" name="SP_HS_INSTRLEN" low="0" high="27" type="uint"/>
-	<reg32 offset="0xa83d" name="SP_HS_PVT_MEM_HW_STACK_OFFSET" low="0" high="18" shr="11"/>
+	<reg32 offset="0xa83d" name="SP_HS_PVT_MEM_HW_STACK_OFFSET" type="a6xx_sp_xs_pvt_mem_hw_stack_offset"/>
 
 	<reg32 offset="0xa840" name="SP_DS_CTRL_REG0" type="a6xx_sp_xs_ctrl_reg0">
 		<bitfield name="MERGEDREGS" pos="20" type="boolean"/>
@@ -2899,7 +2939,7 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xa862" name="SP_DS_TEX_COUNT" low="0" high="7" type="uint"/>
 	<reg32 offset="0xa863" name="SP_DS_CONFIG" type="a6xx_sp_xs_config"/>
 	<reg32 offset="0xa864" name="SP_DS_INSTRLEN" low="0" high="27" type="uint"/>
-	<reg32 offset="0xa865" name="SP_DS_PVT_MEM_HW_STACK_OFFSET" low="0" high="18" shr="11"/>
+	<reg32 offset="0xa865" name="SP_DS_PVT_MEM_HW_STACK_OFFSET" type="a6xx_sp_xs_pvt_mem_hw_stack_offset"/>
 
 	<reg32 offset="0xa870" name="SP_GS_CTRL_REG0" type="a6xx_sp_xs_ctrl_reg0">
 		<!--
@@ -2908,7 +2948,20 @@ to upconvert to 32b float internally?
 		-->
 		<bitfield name="UNK20" pos="20" type="boolean"/>
 	</reg32>
-	<reg32 offset="0xa871" name="SP_GS_PRIM_SIZE" low="0" high="7" type="uint"/> <!-- size of output of previous stage -->
+	<reg32 offset="0xa871" name="SP_GS_PRIM_SIZE" low="0" high="7" type="uint">
+		<doc>
+			Normally the size of the output of the last stage in
+			dwords. It should be programmed as follows:
+
+			size less than 63    - size
+			size of 63 (?) or 64 - 63
+			size greater than 64 - 64
+
+			What to program when the size is 61-63 is a guess, but
+			both the blob and ir3 align the size to 4 dword's so it
+			doesn't matter in practice.
+		</doc>
+	</reg32>
 	<reg32 offset="0xa872" name="SP_GS_BRANCH_COND" type="hex"/>
 
 	<!-- TODO: exact same layout as 0xa802-0xa81a -->
@@ -2940,7 +2993,7 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xa893" name="SP_GS_TEX_COUNT" low="0" high="7" type="uint"/>
 	<reg32 offset="0xa894" name="SP_GS_CONFIG" type="a6xx_sp_xs_config"/>
 	<reg32 offset="0xa895" name="SP_GS_INSTRLEN" low="0" high="27" type="uint"/>
-	<reg32 offset="0xa896" name="SP_GS_PVT_MEM_HW_STACK_OFFSET" low="0" high="18" shr="11"/>
+	<reg32 offset="0xa896" name="SP_GS_PVT_MEM_HW_STACK_OFFSET" type="a6xx_sp_xs_pvt_mem_hw_stack_offset"/>
 
 	<reg64 offset="0xa8a0" name="SP_VS_TEX_SAMP" type="address" align="16"/>
 	<reg64 offset="0xa8a2" name="SP_HS_TEX_SAMP" type="address" align="16"/>
@@ -2973,7 +3026,8 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xa988" name="SP_FS_PVT_MEM_SIZE" type="a6xx_sp_xs_pvt_mem_size"/>
 
 	<reg32 offset="0xa989" name="SP_BLEND_CNTL">
-		<bitfield name="ENABLED" pos="0" type="boolean"/>
+		<!-- per-mrt enable bit -->
+		<bitfield name="ENABLE_BLEND" low="0" high="7"/>
 		<bitfield name="UNK8" pos="8" type="boolean"/>
 		<bitfield name="DUAL_COLOR_IN_ENABLE" pos="9" type="boolean"/>
 		<bitfield name="ALPHA_TO_COVERAGE" pos="10" type="boolean"/>
@@ -3060,7 +3114,7 @@ to upconvert to 32b float internally?
 	</array>
 	<reg32 offset="0xa9a7" name="SP_FS_TEX_COUNT" low="0" high="7" type="uint"/>
 	<reg32 offset="0xa9a8" name="SP_UNKNOWN_A9A8" low="0" high="16" /> <!-- always 0x0 ? -->
-	<reg32 offset="0xa9a9" name="SP_FS_PVT_MEM_HW_STACK_OFFSET" low="0" high="18" shr="11"/>
+	<reg32 offset="0xa9a9" name="SP_FS_PVT_MEM_HW_STACK_OFFSET" type="a6xx_sp_xs_pvt_mem_hw_stack_offset"/>
 
 	<!-- TODO: unknown bool register at 0xa9aa, likely same as 0xa8c0-0xa8c3 but for FS -->
 
@@ -3103,15 +3157,7 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xa9ba" name="SP_CS_TEX_COUNT" low="0" high="7" type="uint"/>
 	<reg32 offset="0xa9bb" name="SP_CS_CONFIG" type="a6xx_sp_xs_config"/>
 	<reg32 offset="0xa9bc" name="SP_CS_INSTRLEN" low="0" high="27" type="uint"/>
-	<reg32 offset="0xa9bd" name="SP_CS_PVT_MEM_HW_STACK_OFFSET" low="0" high="18" shr="11">
-		<doc>
-			This seems to be be the equivalent of HWSTACKOFFSET in
-			a3xx. The offset formula isn't affected by
-			HWSTACKOFFSETPERTHREAD at all, so the HW return address
-			stack seems to be after all the normal per-SP private
-			memory.
-		</doc>
-	</reg32>
+	<reg32 offset="0xa9bd" name="SP_CS_PVT_MEM_HW_STACK_OFFSET" type="a6xx_sp_xs_pvt_mem_hw_stack_offset"/>
 
 	<!-- TODO: two 64kb aligned addresses at a9d0/a9d2 -->
 

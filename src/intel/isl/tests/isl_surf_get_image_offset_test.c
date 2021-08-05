@@ -26,7 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 #include "isl/isl.h"
 #include "isl/isl_priv.h"
 
@@ -85,9 +85,9 @@ t_assert_offset_el(const struct isl_surf *surf,
                    uint32_t expected_x_offset_el,
                    uint32_t expected_y_offset_el)
 {
-   uint32_t x, y;
+   uint32_t x, y, z, a;
    isl_surf_get_image_offset_el(surf, level, logical_array_layer,
-                                logical_z_offset_px, &x, &y);
+                                logical_z_offset_px, &x, &y, &z, &a);
 
    t_assert(x == expected_x_offset_el);
    t_assert(y == expected_y_offset_el);
@@ -124,8 +124,8 @@ test_bdw_2d_r8g8b8a8_unorm_512x512_array01_samples01_noaux_tiley0(void)
 {
    bool ok;
 
-   struct gen_device_info devinfo;
-   t_assert(gen_get_device_info_from_pci_id(BDW_GT2_DEVID, &devinfo));
+   struct intel_device_info devinfo;
+   t_assert(intel_get_device_info_from_pci_id(BDW_GT2_DEVID, &devinfo));
 
    struct isl_device dev;
    isl_device_init(&dev, &devinfo, /*bit6_swizzle*/ false);
@@ -172,8 +172,8 @@ test_bdw_2d_r8g8b8a8_unorm_1024x1024_array06_samples01_noaux_tiley0(void)
 {
    bool ok;
 
-   struct gen_device_info devinfo;
-   t_assert(gen_get_device_info_from_pci_id(BDW_GT2_DEVID, &devinfo));
+   struct intel_device_info devinfo;
+   t_assert(intel_get_device_info_from_pci_id(BDW_GT2_DEVID, &devinfo));
 
    struct isl_device dev;
    isl_device_init(&dev, &devinfo, /*bit6_swizzle*/ false);
@@ -233,8 +233,8 @@ test_bdw_3d_r8g8b8a8_unorm_256x256x256_levels09_tiley0(void)
 {
    bool ok;
 
-   struct gen_device_info devinfo;
-   t_assert(gen_get_device_info_from_pci_id(BDW_GT2_DEVID, &devinfo));
+   struct intel_device_info devinfo;
+   t_assert(intel_get_device_info_from_pci_id(BDW_GT2_DEVID, &devinfo));
 
    struct isl_device dev;
    isl_device_init(&dev, &devinfo, /*bit6_swizzle*/ false);

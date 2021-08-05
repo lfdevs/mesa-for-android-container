@@ -13,6 +13,7 @@
 #include <xf86drm.h>
 
 #include "drm-uapi/virtgpu_drm.h"
+#include "util/sparse_array.h"
 #define VIRGL_RENDERER_UNSTABLE_APIS
 #include "virtio-gpu/virglrenderer_hw.h"
 
@@ -51,20 +52,19 @@ struct drm_virtgpu_context_init {
 
 struct virtgpu;
 
+struct virtgpu_shmem {
+   struct vn_renderer_shmem base;
+   uint32_t gem_handle;
+};
+
 struct virtgpu_bo {
    struct vn_renderer_bo base;
-   struct virtgpu *gpu;
-
-   uint32_t blob_flags;
-   VkDeviceSize size;
-
    uint32_t gem_handle;
-   void *gem_ptr;
+   uint32_t blob_flags;
 };
 
 struct virtgpu_sync {
    struct vn_renderer_sync base;
-   struct virtgpu *gpu;
 
    /*
     * drm_syncobj is in one of these states
@@ -100,6 +100,15 @@ struct virtgpu {
       uint32_t version;
       struct virgl_renderer_capset_venus data;
    } capset;
+
+   /* note that we use gem_handle instead of res_id to index because
+    * res_id is monotonically increasing by default (see
+    * virtio_gpu_resource_id_get)
+    */
+   struct util_sparse_array shmem_array;
+   struct util_sparse_array bo_array;
+
+   mtx_t dma_buf_import_mutex;
 };
 
 #ifdef SIMULATE_SYNCOBJ
@@ -144,8 +153,7 @@ sim_syncobj_create(struct virtgpu *gpu, bool signaled)
          return 0;
       }
 
-      util_idalloc_init(&sim.ida);
-      util_idalloc_resize(&sim.ida, 32);
+      util_idalloc_init(&sim.ida, 32);
 
       struct drm_virtgpu_execbuffer args = {
          .flags = VIRTGPU_EXECBUF_FENCE_FD_OUT,
@@ -533,6 +541,17 @@ sim_submit(struct virtgpu *gpu, const struct vn_renderer_submit *submit)
       }
    }
 
+   if (!submit->batch_count && submit->bo_count) {
+      struct drm_virtgpu_execbuffer args = {
+         .bo_handles = (uintptr_t)gem_handles,
+         .num_bo_handles = submit->bo_count,
+      };
+
+      ret = drmIoctl(gpu->fd, DRM_IOCTL_VIRTGPU_EXECBUFFER, &args);
+      if (ret)
+         vn_log(gpu->instance, "failed to execbuffer: %s", strerror(errno));
+   }
+
    free(gem_handles);
 
    return ret;
@@ -657,7 +676,7 @@ virtgpu_ioctl_gem_close(struct virtgpu *gpu, uint32_t gem_handle)
       .handle = gem_handle,
    };
 
-   const int ret = virtgpu_ioctl(gpu, DRM_IOCTL_GEM_CLOSE, &args);
+   ASSERTED const int ret = virtgpu_ioctl(gpu, DRM_IOCTL_GEM_CLOSE, &args);
    assert(!ret);
 }
 
@@ -731,7 +750,8 @@ virtgpu_ioctl_syncobj_destroy(struct virtgpu *gpu, uint32_t syncobj_handle)
       .handle = syncobj_handle,
    };
 
-   const int ret = virtgpu_ioctl(gpu, DRM_IOCTL_SYNCOBJ_DESTROY, &args);
+   ASSERTED const int ret =
+      virtgpu_ioctl(gpu, DRM_IOCTL_SYNCOBJ_DESTROY, &args);
    assert(!ret);
 }
 
@@ -884,10 +904,12 @@ virtgpu_ioctl_submit(struct virtgpu *gpu,
 }
 
 static VkResult
-virtgpu_sync_write(struct vn_renderer_sync *_sync, uint64_t val)
+virtgpu_sync_write(struct vn_renderer *renderer,
+                   struct vn_renderer_sync *_sync,
+                   uint64_t val)
 {
+   struct virtgpu *gpu = (struct virtgpu *)renderer;
    struct virtgpu_sync *sync = (struct virtgpu_sync *)_sync;
-   struct virtgpu *gpu = (struct virtgpu *)sync->gpu;
 
    const int ret =
       virtgpu_ioctl_syncobj_timeline_signal(gpu, sync->syncobj_handle, val);
@@ -896,10 +918,12 @@ virtgpu_sync_write(struct vn_renderer_sync *_sync, uint64_t val)
 }
 
 static VkResult
-virtgpu_sync_read(struct vn_renderer_sync *_sync, uint64_t *val)
+virtgpu_sync_read(struct vn_renderer *renderer,
+                  struct vn_renderer_sync *_sync,
+                  uint64_t *val)
 {
+   struct virtgpu *gpu = (struct virtgpu *)renderer;
    struct virtgpu_sync *sync = (struct virtgpu_sync *)_sync;
-   struct virtgpu *gpu = (struct virtgpu *)sync->gpu;
 
    const int ret =
       virtgpu_ioctl_syncobj_query(gpu, sync->syncobj_handle, val);
@@ -908,10 +932,12 @@ virtgpu_sync_read(struct vn_renderer_sync *_sync, uint64_t *val)
 }
 
 static VkResult
-virtgpu_sync_reset(struct vn_renderer_sync *_sync, uint64_t initial_val)
+virtgpu_sync_reset(struct vn_renderer *renderer,
+                   struct vn_renderer_sync *_sync,
+                   uint64_t initial_val)
 {
+   struct virtgpu *gpu = (struct virtgpu *)renderer;
    struct virtgpu_sync *sync = (struct virtgpu_sync *)_sync;
-   struct virtgpu *gpu = (struct virtgpu *)sync->gpu;
 
    int ret = virtgpu_ioctl_syncobj_reset(gpu, sync->syncobj_handle);
    if (!ret) {
@@ -923,34 +949,36 @@ virtgpu_sync_reset(struct vn_renderer_sync *_sync, uint64_t initial_val)
 }
 
 static int
-virtgpu_sync_export_syncobj(struct vn_renderer_sync *_sync, bool sync_file)
+virtgpu_sync_export_syncobj(struct vn_renderer *renderer,
+                            struct vn_renderer_sync *_sync,
+                            bool sync_file)
 {
+   struct virtgpu *gpu = (struct virtgpu *)renderer;
    struct virtgpu_sync *sync = (struct virtgpu_sync *)_sync;
-   struct virtgpu *gpu = (struct virtgpu *)sync->gpu;
 
    return virtgpu_ioctl_syncobj_handle_to_fd(gpu, sync->syncobj_handle,
                                              sync_file);
 }
 
 static void
-virtgpu_sync_release(struct vn_renderer_sync *_sync)
+virtgpu_sync_destroy(struct vn_renderer *renderer,
+                     struct vn_renderer_sync *_sync)
 {
+   struct virtgpu *gpu = (struct virtgpu *)renderer;
    struct virtgpu_sync *sync = (struct virtgpu_sync *)_sync;
-   struct virtgpu *gpu = (struct virtgpu *)sync->gpu;
 
    virtgpu_ioctl_syncobj_destroy(gpu, sync->syncobj_handle);
 
-   sync->syncobj_handle = 0;
-   sync->base.sync_id = 0;
+   free(sync);
 }
 
 static VkResult
-virtgpu_sync_init_syncobj(struct vn_renderer_sync *_sync,
-                          int fd,
-                          bool sync_file)
+virtgpu_sync_create_from_syncobj(struct vn_renderer *renderer,
+                                 int fd,
+                                 bool sync_file,
+                                 struct vn_renderer_sync **out_sync)
 {
-   struct virtgpu_sync *sync = (struct virtgpu_sync *)_sync;
-   struct virtgpu *gpu = (struct virtgpu *)sync->gpu;
+   struct virtgpu *gpu = (struct virtgpu *)renderer;
 
    uint32_t syncobj_handle;
    if (sync_file) {
@@ -967,19 +995,27 @@ virtgpu_sync_init_syncobj(struct vn_renderer_sync *_sync,
          return VK_ERROR_INVALID_EXTERNAL_HANDLE;
    }
 
+   struct virtgpu_sync *sync = calloc(1, sizeof(*sync));
+   if (!sync) {
+      virtgpu_ioctl_syncobj_destroy(gpu, syncobj_handle);
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
    sync->syncobj_handle = syncobj_handle;
    sync->base.sync_id = 0; /* TODO */
+
+   *out_sync = &sync->base;
 
    return VK_SUCCESS;
 }
 
 static VkResult
-virtgpu_sync_init(struct vn_renderer_sync *_sync,
-                  uint64_t initial_val,
-                  uint32_t flags)
+virtgpu_sync_create(struct vn_renderer *renderer,
+                    uint64_t initial_val,
+                    uint32_t flags,
+                    struct vn_renderer_sync **out_sync)
 {
-   struct virtgpu_sync *sync = (struct virtgpu_sync *)_sync;
-   struct virtgpu *gpu = (struct virtgpu *)sync->gpu;
+   struct virtgpu *gpu = (struct virtgpu *)renderer;
 
    /* TODO */
    if (flags & VN_RENDERER_SYNC_SHAREABLE)
@@ -987,62 +1023,39 @@ virtgpu_sync_init(struct vn_renderer_sync *_sync,
 
    /* always false because we don't use binary drm_syncobjs */
    const bool signaled = false;
-   sync->syncobj_handle = virtgpu_ioctl_syncobj_create(gpu, signaled);
-   if (!sync->syncobj_handle)
+   const uint32_t syncobj_handle =
+      virtgpu_ioctl_syncobj_create(gpu, signaled);
+   if (!syncobj_handle)
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
    /* add a signaled fence chain with seqno initial_val */
-   const int ret = virtgpu_ioctl_syncobj_timeline_signal(
-      gpu, sync->syncobj_handle, initial_val);
+   const int ret =
+      virtgpu_ioctl_syncobj_timeline_signal(gpu, syncobj_handle, initial_val);
    if (ret) {
-      virtgpu_sync_release(&sync->base);
+      virtgpu_ioctl_syncobj_destroy(gpu, syncobj_handle);
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
    }
 
+   struct virtgpu_sync *sync = calloc(1, sizeof(*sync));
+   if (!sync) {
+      virtgpu_ioctl_syncobj_destroy(gpu, syncobj_handle);
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   sync->syncobj_handle = syncobj_handle;
    /* we will have a sync_id when shareable is true and virtio-gpu associates
     * a host sync object with guest drm_syncobj
     */
    sync->base.sync_id = 0;
 
+   *out_sync = &sync->base;
+
    return VK_SUCCESS;
 }
 
 static void
-virtgpu_sync_destroy(struct vn_renderer_sync *_sync)
-{
-   struct virtgpu_sync *sync = (struct virtgpu_sync *)_sync;
-
-   if (sync->syncobj_handle)
-      virtgpu_sync_release(&sync->base);
-
-   free(sync);
-}
-
-static struct vn_renderer_sync *
-virtgpu_sync_create(struct vn_renderer *renderer)
-{
-   struct virtgpu *gpu = (struct virtgpu *)renderer;
-
-   struct virtgpu_sync *sync = calloc(1, sizeof(*sync));
-   if (!sync)
-      return NULL;
-
-   sync->gpu = gpu;
-
-   sync->base.ops.destroy = virtgpu_sync_destroy;
-   sync->base.ops.init = virtgpu_sync_init;
-   sync->base.ops.init_syncobj = virtgpu_sync_init_syncobj;
-   sync->base.ops.release = virtgpu_sync_release;
-   sync->base.ops.export_syncobj = virtgpu_sync_export_syncobj;
-   sync->base.ops.reset = virtgpu_sync_reset;
-   sync->base.ops.read = virtgpu_sync_read;
-   sync->base.ops.write = virtgpu_sync_write;
-
-   return &sync->base;
-}
-
-static void
-virtgpu_bo_invalidate(struct vn_renderer_bo *bo,
+virtgpu_bo_invalidate(struct vn_renderer *renderer,
+                      struct vn_renderer_bo *bo,
                       VkDeviceSize offset,
                       VkDeviceSize size)
 {
@@ -1050,7 +1063,8 @@ virtgpu_bo_invalidate(struct vn_renderer_bo *bo,
 }
 
 static void
-virtgpu_bo_flush(struct vn_renderer_bo *bo,
+virtgpu_bo_flush(struct vn_renderer *renderer,
+                 struct vn_renderer_bo *bo,
                  VkDeviceSize offset,
                  VkDeviceSize size)
 {
@@ -1058,30 +1072,61 @@ virtgpu_bo_flush(struct vn_renderer_bo *bo,
 }
 
 static void *
-virtgpu_bo_map(struct vn_renderer_bo *_bo)
+virtgpu_bo_map(struct vn_renderer *renderer, struct vn_renderer_bo *_bo)
 {
+   struct virtgpu *gpu = (struct virtgpu *)renderer;
    struct virtgpu_bo *bo = (struct virtgpu_bo *)_bo;
-   struct virtgpu *gpu = bo->gpu;
    const bool mappable = bo->blob_flags & VIRTGPU_BLOB_FLAG_USE_MAPPABLE;
 
    /* not thread-safe but is fine */
-   if (!bo->gem_ptr && mappable)
-      bo->gem_ptr = virtgpu_ioctl_map(gpu, bo->gem_handle, bo->size);
+   if (!bo->base.mmap_ptr && mappable) {
+      bo->base.mmap_ptr =
+         virtgpu_ioctl_map(gpu, bo->gem_handle, bo->base.mmap_size);
+   }
 
-   return bo->gem_ptr;
+   return bo->base.mmap_ptr;
 }
 
 static int
-virtgpu_bo_export_dmabuf(struct vn_renderer_bo *_bo)
+virtgpu_bo_export_dma_buf(struct vn_renderer *renderer,
+                          struct vn_renderer_bo *_bo)
 {
+   struct virtgpu *gpu = (struct virtgpu *)renderer;
    struct virtgpu_bo *bo = (struct virtgpu_bo *)_bo;
-   struct virtgpu *gpu = bo->gpu;
    const bool mappable = bo->blob_flags & VIRTGPU_BLOB_FLAG_USE_MAPPABLE;
    const bool shareable = bo->blob_flags & VIRTGPU_BLOB_FLAG_USE_SHAREABLE;
 
    return shareable
              ? virtgpu_ioctl_prime_handle_to_fd(gpu, bo->gem_handle, mappable)
              : -1;
+}
+
+static bool
+virtgpu_bo_destroy(struct vn_renderer *renderer, struct vn_renderer_bo *_bo)
+{
+   struct virtgpu *gpu = (struct virtgpu *)renderer;
+   struct virtgpu_bo *bo = (struct virtgpu_bo *)_bo;
+
+   mtx_lock(&gpu->dma_buf_import_mutex);
+
+   /* Check the refcount again after the import lock is grabbed.  Yes, we use
+    * the double-checked locking anti-pattern.
+    */
+   if (atomic_load_explicit(&bo->base.refcount, memory_order_relaxed) > 0) {
+      mtx_unlock(&gpu->dma_buf_import_mutex);
+      return false;
+   }
+
+   if (bo->base.mmap_ptr)
+      munmap(bo->base.mmap_ptr, bo->base.mmap_size);
+   virtgpu_ioctl_gem_close(gpu, bo->gem_handle);
+
+   /* set gem_handle to 0 to indicate that the bo is invalid */
+   bo->gem_handle = 0;
+
+   mtx_unlock(&gpu->dma_buf_import_mutex);
+
+   return true;
 }
 
 static uint32_t
@@ -1100,107 +1145,166 @@ virtgpu_bo_blob_flags(VkMemoryPropertyFlags flags,
 }
 
 static VkResult
-virtgpu_bo_init_dmabuf(struct vn_renderer_bo *_bo,
-                       VkDeviceSize size,
-                       int fd,
-                       VkMemoryPropertyFlags flags,
-                       VkExternalMemoryHandleTypeFlags external_handles)
+virtgpu_bo_create_from_dma_buf(struct vn_renderer *renderer,
+                               VkDeviceSize size,
+                               int fd,
+                               VkMemoryPropertyFlags flags,
+                               struct vn_renderer_bo **out_bo)
 {
-   struct virtgpu_bo *bo = (struct virtgpu_bo *)_bo;
-   struct virtgpu *gpu = bo->gpu;
-
-   const uint32_t gem_handle = virtgpu_ioctl_prime_fd_to_handle(gpu, fd);
-   if (!gem_handle)
-      return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-
+   struct virtgpu *gpu = (struct virtgpu *)renderer;
    struct drm_virtgpu_resource_info info;
-   if (virtgpu_ioctl_resource_info(gpu, gem_handle, &info) ||
-       info.blob_mem != VIRTGPU_BLOB_MEM_HOST3D || info.size < size) {
-      virtgpu_ioctl_gem_close(gpu, gem_handle);
-      return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+   uint32_t gem_handle = 0;
+   struct virtgpu_bo *bo = NULL;
+
+   mtx_lock(&gpu->dma_buf_import_mutex);
+
+   gem_handle = virtgpu_ioctl_prime_fd_to_handle(gpu, fd);
+   if (!gem_handle)
+      goto fail;
+   bo = util_sparse_array_get(&gpu->bo_array, gem_handle);
+
+   if (virtgpu_ioctl_resource_info(gpu, gem_handle, &info))
+      goto fail;
+
+   uint32_t blob_flags;
+   size_t mmap_size;
+   if (info.blob_mem) {
+      /* must be VIRTGPU_BLOB_MEM_HOST3D */
+      if (info.blob_mem != VIRTGPU_BLOB_MEM_HOST3D)
+         goto fail;
+
+      if (info.size < size)
+         goto fail;
+
+      /* blob_flags is not passed to the kernel and is only for internal use
+       * on imports.  Set it to what works best for us.
+       */
+      blob_flags = virtgpu_bo_blob_flags(flags, 0);
+      blob_flags |= VIRTGPU_BLOB_FLAG_USE_SHAREABLE;
+      mmap_size = size;
+   } else {
+      /* must be classic resource here
+       * set blob_flags to 0 to fail virtgpu_bo_map
+       * set mmap_size to 0 since mapping is not allowed
+       */
+      blob_flags = 0;
+      mmap_size = 0;
    }
 
-   bo->blob_flags = virtgpu_bo_blob_flags(flags, external_handles);
-   bo->size = size ? size : info.size;
-   bo->gem_handle = gem_handle;
-   bo->base.res_id = info.res_handle;
+   /* we check bo->gem_handle instead of bo->refcount because bo->refcount
+    * might only be memset to 0 and is not considered initialized in theory
+    */
+   if (bo->gem_handle == gem_handle) {
+      if (bo->base.mmap_size < mmap_size)
+         goto fail;
+      if (blob_flags & ~bo->blob_flags)
+         goto fail;
+
+      /* we can't use vn_renderer_bo_ref as the refcount may drop to 0
+       * temporarily before virtgpu_bo_destroy grabs the lock
+       */
+      atomic_fetch_add_explicit(&bo->base.refcount, 1, memory_order_relaxed);
+   } else {
+      *bo = (struct virtgpu_bo){
+         .base = {
+            .refcount = 1,
+            .res_id = info.res_handle,
+            .mmap_size = mmap_size,
+         },
+         .gem_handle = gem_handle,
+         .blob_flags = blob_flags,
+      };
+   }
+
+   mtx_unlock(&gpu->dma_buf_import_mutex);
+
+   *out_bo = &bo->base;
+
+   return VK_SUCCESS;
+
+fail:
+   if (gem_handle && bo->gem_handle != gem_handle)
+      virtgpu_ioctl_gem_close(gpu, gem_handle);
+   mtx_unlock(&gpu->dma_buf_import_mutex);
+   return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+}
+
+static VkResult
+virtgpu_bo_create_from_device_memory(
+   struct vn_renderer *renderer,
+   VkDeviceSize size,
+   vn_object_id mem_id,
+   VkMemoryPropertyFlags flags,
+   VkExternalMemoryHandleTypeFlags external_handles,
+   struct vn_renderer_bo **out_bo)
+{
+   struct virtgpu *gpu = (struct virtgpu *)renderer;
+   const uint32_t blob_flags = virtgpu_bo_blob_flags(flags, external_handles);
+
+   uint32_t res_id;
+   uint32_t gem_handle = virtgpu_ioctl_resource_create_blob(
+      gpu, VIRTGPU_BLOB_MEM_HOST3D, blob_flags, size, mem_id, &res_id);
+   if (!gem_handle)
+      return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+
+   struct virtgpu_bo *bo = util_sparse_array_get(&gpu->bo_array, gem_handle);
+   *bo = (struct virtgpu_bo){
+      .base = {
+         .refcount = 1,
+         .res_id = res_id,
+         .mmap_size = size,
+      },
+      .gem_handle = gem_handle,
+      .blob_flags = blob_flags,
+   };
+
+   *out_bo = &bo->base;
 
    return VK_SUCCESS;
 }
 
-static VkResult
-virtgpu_bo_init_gpu(struct vn_renderer_bo *_bo,
-                    VkDeviceSize size,
-                    vn_object_id mem_id,
-                    VkMemoryPropertyFlags flags,
-                    VkExternalMemoryHandleTypeFlags external_handles)
-{
-   struct virtgpu_bo *bo = (struct virtgpu_bo *)_bo;
-   struct virtgpu *gpu = bo->gpu;
-
-   bo->blob_flags = virtgpu_bo_blob_flags(flags, external_handles);
-   bo->size = size;
-
-   /* TODO work around KVM_SET_USER_MEMORY_REGION slot limit */
-   bo->gem_handle = virtgpu_ioctl_resource_create_blob(
-      gpu, VIRTGPU_BLOB_MEM_HOST3D, bo->blob_flags, bo->size, mem_id,
-      &bo->base.res_id);
-
-   return bo->gem_handle ? VK_SUCCESS : VK_ERROR_OUT_OF_DEVICE_MEMORY;
-}
-
-static VkResult
-virtgpu_bo_init_cpu(struct vn_renderer_bo *_bo, VkDeviceSize size)
-{
-   struct virtgpu_bo *bo = (struct virtgpu_bo *)_bo;
-   struct virtgpu *gpu = bo->gpu;
-
-   bo->blob_flags = VIRTGPU_BLOB_FLAG_USE_MAPPABLE;
-   bo->size = size;
-
-   bo->gem_handle = virtgpu_ioctl_resource_create_blob(
-      gpu, VIRTGPU_BLOB_MEM_GUEST, bo->blob_flags, bo->size, 0,
-      &bo->base.res_id);
-
-   return bo->gem_handle ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
-}
-
 static void
-virtgpu_bo_destroy(struct vn_renderer_bo *_bo)
+virtgpu_shmem_destroy(struct vn_renderer *renderer,
+                      struct vn_renderer_shmem *_shmem)
 {
-   struct virtgpu_bo *bo = (struct virtgpu_bo *)_bo;
-   struct virtgpu *gpu = bo->gpu;
+   struct virtgpu *gpu = (struct virtgpu *)renderer;
+   struct virtgpu_shmem *shmem = (struct virtgpu_shmem *)_shmem;
 
-   if (bo->gem_handle) {
-      if (bo->gem_ptr)
-         munmap(bo->gem_ptr, bo->size);
-      virtgpu_ioctl_gem_close(gpu, bo->gem_handle);
-   }
-
-   free(bo);
+   munmap(shmem->base.mmap_ptr, shmem->base.mmap_size);
+   virtgpu_ioctl_gem_close(gpu, shmem->gem_handle);
 }
 
-static struct vn_renderer_bo *
-virtgpu_bo_create(struct vn_renderer *renderer)
+static struct vn_renderer_shmem *
+virtgpu_shmem_create(struct vn_renderer *renderer, size_t size)
 {
    struct virtgpu *gpu = (struct virtgpu *)renderer;
 
-   struct virtgpu_bo *bo = calloc(1, sizeof(*bo));
-   if (!bo)
+   uint32_t res_id;
+   uint32_t gem_handle = virtgpu_ioctl_resource_create_blob(
+      gpu, VIRTGPU_BLOB_MEM_GUEST, VIRTGPU_BLOB_FLAG_USE_MAPPABLE, size, 0,
+      &res_id);
+   if (!gem_handle)
       return NULL;
 
-   bo->gpu = gpu;
+   void *ptr = virtgpu_ioctl_map(gpu, gem_handle, size);
+   if (!ptr) {
+      virtgpu_ioctl_gem_close(gpu, gem_handle);
+      return NULL;
+   }
 
-   bo->base.ops.destroy = virtgpu_bo_destroy;
-   bo->base.ops.init_cpu = virtgpu_bo_init_cpu;
-   bo->base.ops.init_gpu = virtgpu_bo_init_gpu;
-   bo->base.ops.init_dmabuf = virtgpu_bo_init_dmabuf;
-   bo->base.ops.export_dmabuf = virtgpu_bo_export_dmabuf;
-   bo->base.ops.map = virtgpu_bo_map;
-   bo->base.ops.flush = virtgpu_bo_flush;
-   bo->base.ops.invalidate = virtgpu_bo_invalidate;
+   struct virtgpu_shmem *shmem =
+      util_sparse_array_get(&gpu->shmem_array, gem_handle);
+   *shmem = (struct virtgpu_shmem){
+      .base = {
+         .refcount = 1,
+         .res_id = res_id,
+         .mmap_size = size,
+         .mmap_ptr = ptr,
+      },
+      .gem_handle = gem_handle,
+   };
 
-   return &bo->base;
+   return &shmem->base;
 }
 
 static VkResult
@@ -1242,14 +1346,15 @@ virtgpu_get_info(struct vn_renderer *renderer, struct vn_renderer_info *info)
    info->pci.device = gpu->bus_info.dev;
    info->pci.function = gpu->bus_info.func;
 
-   info->has_dmabuf_import = true;
+   info->has_dma_buf_import = true;
    /* Kernel makes every mapping coherent.  We are better off filtering
     * incoherent memory types out than silently making them coherent.
     */
    info->has_cache_management = false;
    /* TODO drm_syncobj */
-   info->has_timeline_sync = false;
    info->has_external_sync = false;
+
+   info->has_implicit_fencing = false;
 
    info->max_sync_queue_count = gpu->max_sync_queue_count;
 
@@ -1270,6 +1375,11 @@ virtgpu_destroy(struct vn_renderer *renderer,
 
    if (gpu->fd >= 0)
       close(gpu->fd);
+
+   mtx_destroy(&gpu->dma_buf_import_mutex);
+
+   util_sparse_array_finish(&gpu->shmem_array);
+   util_sparse_array_finish(&gpu->bo_array);
 
    vk_free(alloc, gpu);
 }
@@ -1426,6 +1536,12 @@ virtgpu_open(struct virtgpu *gpu)
 static VkResult
 virtgpu_init(struct virtgpu *gpu)
 {
+   util_sparse_array_init(&gpu->shmem_array, sizeof(struct virtgpu_shmem),
+                          1024);
+   util_sparse_array_init(&gpu->bo_array, sizeof(struct virtgpu_bo), 1024);
+
+   mtx_init(&gpu->dma_buf_import_mutex, mtx_plain);
+
    VkResult result = virtgpu_open(gpu);
    if (result == VK_SUCCESS)
       result = virtgpu_init_params(gpu);
@@ -1440,8 +1556,26 @@ virtgpu_init(struct virtgpu *gpu)
    gpu->base.ops.get_info = virtgpu_get_info;
    gpu->base.ops.submit = virtgpu_submit;
    gpu->base.ops.wait = virtgpu_wait;
-   gpu->base.ops.bo_create = virtgpu_bo_create;
-   gpu->base.ops.sync_create = virtgpu_sync_create;
+
+   gpu->base.shmem_ops.create = virtgpu_shmem_create;
+   gpu->base.shmem_ops.destroy = virtgpu_shmem_destroy;
+
+   gpu->base.bo_ops.create_from_device_memory =
+      virtgpu_bo_create_from_device_memory;
+   gpu->base.bo_ops.create_from_dma_buf = virtgpu_bo_create_from_dma_buf;
+   gpu->base.bo_ops.destroy = virtgpu_bo_destroy;
+   gpu->base.bo_ops.export_dma_buf = virtgpu_bo_export_dma_buf;
+   gpu->base.bo_ops.map = virtgpu_bo_map;
+   gpu->base.bo_ops.flush = virtgpu_bo_flush;
+   gpu->base.bo_ops.invalidate = virtgpu_bo_invalidate;
+
+   gpu->base.sync_ops.create = virtgpu_sync_create;
+   gpu->base.sync_ops.create_from_syncobj = virtgpu_sync_create_from_syncobj;
+   gpu->base.sync_ops.destroy = virtgpu_sync_destroy;
+   gpu->base.sync_ops.export_syncobj = virtgpu_sync_export_syncobj;
+   gpu->base.sync_ops.reset = virtgpu_sync_reset;
+   gpu->base.sync_ops.read = virtgpu_sync_read;
+   gpu->base.sync_ops.write = virtgpu_sync_write;
 
    return VK_SUCCESS;
 }

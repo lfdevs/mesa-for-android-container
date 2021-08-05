@@ -442,9 +442,6 @@ write_register(write_ctx *ctx, const nir_register *reg)
    blob_write_uint32(ctx->blob, reg->bit_size);
    blob_write_uint32(ctx->blob, reg->num_array_elems);
    blob_write_uint32(ctx->blob, reg->index);
-   blob_write_uint32(ctx->blob, !ctx->strip && reg->name);
-   if (!ctx->strip && reg->name)
-      blob_write_string(ctx->blob, reg->name);
 }
 
 static nir_register *
@@ -456,13 +453,6 @@ read_register(read_ctx *ctx)
    reg->bit_size = blob_read_uint32(ctx->blob);
    reg->num_array_elems = blob_read_uint32(ctx->blob);
    reg->index = blob_read_uint32(ctx->blob);
-   bool has_name = blob_read_uint32(ctx->blob);
-   if (has_name) {
-      const char *name = blob_read_string(ctx->blob);
-      reg->name = ralloc_strdup(reg, name);
-   } else {
-      reg->name = NULL;
-   }
 
    list_inithead(&reg->uses);
    list_inithead(&reg->defs);
@@ -573,9 +563,9 @@ union packed_dest {
    uint8_t u8;
    struct {
       uint8_t is_ssa:1;
-      uint8_t has_name:1;
       uint8_t num_components:3;
       uint8_t bit_size:3;
+      uint8_t _pad:1;
    } ssa;
    struct {
       uint8_t is_ssa:1;
@@ -699,7 +689,6 @@ write_dest(write_ctx *ctx, const nir_dest *dst, union packed_instr header,
 
    dest.ssa.is_ssa = dst->is_ssa;
    if (dst->is_ssa) {
-      dest.ssa.has_name = !ctx->strip && dst->ssa.name;
       dest.ssa.num_components =
          encode_num_components_in_3bits(dst->ssa.num_components);
       dest.ssa.bit_size = encode_bit_size_3bits(dst->ssa.bit_size);
@@ -753,8 +742,6 @@ write_dest(write_ctx *ctx, const nir_dest *dst, union packed_instr header,
 
    if (dst->is_ssa) {
       write_add_object(ctx, &dst->ssa);
-      if (dest.ssa.has_name)
-         blob_write_string(ctx->blob, dst->ssa.name);
    } else {
       blob_write_uint32(ctx->blob, write_lookup_object(ctx, dst->reg.reg));
       blob_write_uint32(ctx->blob, dst->reg.base_offset);
@@ -777,8 +764,7 @@ read_dest(read_ctx *ctx, nir_dest *dst, nir_instr *instr,
          num_components = blob_read_uint32(ctx->blob);
       else
          num_components = decode_num_components_in_3bits(dest.ssa.num_components);
-      char *name = dest.ssa.has_name ? blob_read_string(ctx->blob) : NULL;
-      nir_ssa_dest_init(instr, dst, num_components, bit_size, name);
+      nir_ssa_dest_init(instr, dst, num_components, bit_size, NULL);
       read_add_object(ctx, &dst->ssa);
    } else {
       dst->reg.reg = read_object(ctx);

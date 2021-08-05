@@ -1,5 +1,1 @@
-spec@nv_primitive_restart@primitive-restart-disable_vbo
-spec@nv_primitive_restart@primitive-restart-vbo_combined_vertex_and_index
-spec@nv_primitive_restart@primitive-restart-vbo_index_only
-spec@nv_primitive_restart@primitive-restart-vbo_separate_vertex_and_index
-spec@nv_primitive_restart@primitive-restart-vbo_vertex_only
+spec@khr_debug@push-pop-group_gl.*

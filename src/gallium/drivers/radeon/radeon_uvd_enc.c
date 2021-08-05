@@ -351,5 +351,5 @@ error:
 
 bool si_radeon_uvd_enc_supported(struct si_screen *sscreen)
 {
-   return (sscreen->info.uvd_enc_supported);
+   return (sscreen->info.has_video_hw.uvd_encode);
 }

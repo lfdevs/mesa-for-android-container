@@ -55,6 +55,7 @@ TEMPLATE_H = Template(COPYRIGHT + """\
 
 /* Windows api conflict */
 #ifdef _WIN32
+#include <windows.h>
 #ifdef CreateSemaphore
 #undef CreateSemaphore
 #endif
@@ -67,8 +68,7 @@ TEMPLATE_H = Template(COPYRIGHT + """\
 extern "C" {
 #endif
 
-<%def name="dispatch_table(type, entrypoints)">
-struct vk_${type}_dispatch_table {
+<%def name="dispatch_table(entrypoints)">
 % for e in entrypoints:
   % if e.alias:
     <% continue %>
@@ -101,8 +101,9 @@ struct vk_${type}_dispatch_table {
 #endif
   % endif
 % endfor
-};
+</%def>
 
+<%def name="entrypoint_table(type, entrypoints)">
 struct vk_${type}_entrypoint_table {
 % for e in entrypoints:
   % if e.guard is not None:
@@ -118,9 +119,37 @@ struct vk_${type}_entrypoint_table {
 };
 </%def>
 
-${dispatch_table('instance', instance_entrypoints)}
-${dispatch_table('physical_device', physical_device_entrypoints)}
-${dispatch_table('device', device_entrypoints)}
+struct vk_instance_dispatch_table {
+  ${dispatch_table(instance_entrypoints)}
+};
+
+struct vk_physical_device_dispatch_table {
+  ${dispatch_table(physical_device_entrypoints)}
+};
+
+struct vk_device_dispatch_table {
+  ${dispatch_table(device_entrypoints)}
+};
+
+struct vk_dispatch_table {
+    union {
+        struct {
+            struct vk_instance_dispatch_table instance;
+            struct vk_physical_device_dispatch_table physical_device;
+            struct vk_device_dispatch_table device;
+        };
+
+        struct {
+            ${dispatch_table(instance_entrypoints)}
+            ${dispatch_table(physical_device_entrypoints)}
+            ${dispatch_table(device_entrypoints)}
+        };
+    };
+};
+
+${entrypoint_table('instance', instance_entrypoints)}
+${entrypoint_table('physical_device', physical_device_entrypoints)}
+${entrypoint_table('device', device_entrypoints)}
 
 void
 vk_instance_dispatch_table_load(struct vk_instance_dispatch_table *table,

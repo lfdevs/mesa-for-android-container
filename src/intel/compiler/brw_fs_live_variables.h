@@ -138,7 +138,7 @@ protected:
    void compute_live_variables();
    void compute_start_end();
 
-   const struct gen_device_info *devinfo;
+   const struct intel_device_info *devinfo;
    const cfg_t *cfg;
    void *mem_ctx;
 };

@@ -142,6 +142,9 @@ nv50_ir_prog_info_out_serialize(struct blob *blob,
       case PIPE_SHADER_FRAGMENT:
          blob_write_bytes(blob, &info_out->prop.fp, sizeof(info_out->prop.fp));
          break;
+      case PIPE_SHADER_COMPUTE:
+         blob_write_bytes(blob, &info_out->prop.cp, sizeof(info_out->prop.cp));
+         break;
       default:
          break;
    }
@@ -258,6 +261,9 @@ nv50_ir_prog_info_out_deserialize(void *data, size_t size, size_t offset,
          break;
       case PIPE_SHADER_FRAGMENT:
          blob_copy_bytes(&reader, &info_out->prop.fp, sizeof(info_out->prop.fp));
+         break;
+      case PIPE_SHADER_COMPUTE:
+         blob_copy_bytes(&reader, &info_out->prop.cp, sizeof(info_out->prop.cp));
          break;
       default:
          break;

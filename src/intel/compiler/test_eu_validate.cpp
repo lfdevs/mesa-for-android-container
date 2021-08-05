@@ -27,9 +27,9 @@
 #include "util/bitset.h"
 #include "util/ralloc.h"
 
-static const struct gen_info {
+static const struct intel_gfx_info {
    const char *name;
-} gens[] = {
+} gfx_names[] = {
    { "brw", },
    { "g4x", },
    { "ilk", },
@@ -50,7 +50,7 @@ static const struct gen_info {
    { "tgl", },
 };
 
-class validation_test: public ::testing::TestWithParam<struct gen_info> {
+class validation_test: public ::testing::TestWithParam<struct intel_gfx_info> {
    virtual void SetUp();
 
 public:
@@ -58,7 +58,7 @@ public:
    virtual ~validation_test();
 
    struct brw_codegen *p;
-   struct gen_device_info devinfo;
+   struct intel_device_info devinfo;
 };
 
 validation_test::validation_test()
@@ -74,15 +74,15 @@ validation_test::~validation_test()
 
 void validation_test::SetUp()
 {
-   struct gen_info info = GetParam();
-   int devid = gen_device_name_to_pci_device_id(info.name);
+   struct intel_gfx_info info = GetParam();
+   int devid = intel_device_name_to_pci_device_id(info.name);
 
-   gen_get_device_info_from_pci_id(devid, &devinfo);
+   intel_get_device_info_from_pci_id(devid, &devinfo);
 
    brw_init_codegen(&devinfo, p, p);
 }
 
-struct gen_name {
+struct gfx_name {
    template <class ParamType>
    std::string
    operator()(const ::testing::TestParamInfo<ParamType>& info) const {
@@ -91,8 +91,8 @@ struct gen_name {
 };
 
 INSTANTIATE_TEST_CASE_P(eu_assembly, validation_test,
-                        ::testing::ValuesIn(gens),
-                        gen_name());
+                        ::testing::ValuesIn(gfx_names),
+                        gfx_name());
 
 static bool
 validate(struct brw_codegen *p)
@@ -833,7 +833,7 @@ TEST_P(validation_test, vstride_on_align16_must_be_0_or_4)
    } vstride[] = {
       { BRW_VERTICAL_STRIDE_0, true },
       { BRW_VERTICAL_STRIDE_1, false },
-      { BRW_VERTICAL_STRIDE_2, devinfo.is_haswell || devinfo.ver >= 8 },
+      { BRW_VERTICAL_STRIDE_2, devinfo.verx10 >= 75 },
       { BRW_VERTICAL_STRIDE_4, true },
       { BRW_VERTICAL_STRIDE_8, false },
       { BRW_VERTICAL_STRIDE_16, false },
@@ -2312,7 +2312,7 @@ TEST_P(validation_test, qword_low_power_align1_regioning_restrictions)
       brw_inst_set_src0_width(&devinfo, last_inst, inst[i].src_width);
       brw_inst_set_src0_hstride(&devinfo, last_inst, inst[i].src_hstride);
 
-      if (devinfo.is_cherryview || gen_device_info_is_9lp(&devinfo)) {
+      if (devinfo.is_cherryview || intel_device_info_is_9lp(&devinfo)) {
          EXPECT_EQ(inst[i].expected_result, validate(p));
       } else {
          EXPECT_TRUE(validate(p));
@@ -2444,7 +2444,7 @@ TEST_P(validation_test, qword_low_power_no_indirect_addressing)
       brw_inst_set_src0_width(&devinfo, last_inst, inst[i].src_width);
       brw_inst_set_src0_hstride(&devinfo, last_inst, inst[i].src_hstride);
 
-      if (devinfo.is_cherryview || gen_device_info_is_9lp(&devinfo)) {
+      if (devinfo.is_cherryview || intel_device_info_is_9lp(&devinfo)) {
          EXPECT_EQ(inst[i].expected_result, validate(p));
       } else {
          EXPECT_TRUE(validate(p));
@@ -2591,7 +2591,7 @@ TEST_P(validation_test, qword_low_power_no_64bit_arf)
       brw_inst_set_src0_width(&devinfo, last_inst, inst[i].src_width);
       brw_inst_set_src0_hstride(&devinfo, last_inst, inst[i].src_hstride);
 
-      if (devinfo.is_cherryview || gen_device_info_is_9lp(&devinfo)) {
+      if (devinfo.is_cherryview || intel_device_info_is_9lp(&devinfo)) {
          EXPECT_EQ(inst[i].expected_result, validate(p));
       } else {
          EXPECT_TRUE(validate(p));
@@ -2607,7 +2607,7 @@ TEST_P(validation_test, qword_low_power_no_64bit_arf)
    brw_MAC(p, retype(g0, BRW_REGISTER_TYPE_DF),
               retype(stride(g0, 4, 4, 1), BRW_REGISTER_TYPE_DF),
               retype(stride(g0, 4, 4, 1), BRW_REGISTER_TYPE_DF));
-   if (devinfo.is_cherryview || gen_device_info_is_9lp(&devinfo)) {
+   if (devinfo.is_cherryview || intel_device_info_is_9lp(&devinfo)) {
       EXPECT_FALSE(validate(p));
    } else {
       EXPECT_TRUE(validate(p));
@@ -2809,7 +2809,7 @@ TEST_P(validation_test, qword_low_power_no_depctrl)
       brw_inst_set_no_dd_check(&devinfo, last_inst, inst[i].no_dd_check);
       brw_inst_set_no_dd_clear(&devinfo, last_inst, inst[i].no_dd_clear);
 
-      if (devinfo.is_cherryview || gen_device_info_is_9lp(&devinfo)) {
+      if (devinfo.is_cherryview || intel_device_info_is_9lp(&devinfo)) {
          EXPECT_EQ(inst[i].expected_result, validate(p));
       } else {
          EXPECT_TRUE(validate(p));
@@ -2833,14 +2833,14 @@ TEST_P(validation_test, gfx11_no_byte_src_1_2)
          unsigned hstride;
       } srcs[3];
 
-      int  gen;
+      int  gfx_ver;
       bool expected_result;
    } inst[] = {
 #define INST(opcode, access_mode, dst_type,                             \
              src0_type, src0_vstride, src0_width, src0_hstride,         \
              src1_type, src1_vstride, src1_width, src1_hstride,         \
              src2_type,                                                 \
-             gen, expected_result)                                      \
+             gfx_ver, expected_result)                                  \
       {                                                                 \
          BRW_OPCODE_##opcode,                                           \
          BRW_ALIGN_##access_mode,                                       \
@@ -2862,7 +2862,7 @@ TEST_P(validation_test, gfx11_no_byte_src_1_2)
                BRW_REGISTER_TYPE_##src2_type,                           \
             },                                                          \
          },                                                             \
-         gen,                                                           \
+         gfx_ver,                                                       \
          expected_result,                                               \
       }
 
@@ -2886,8 +2886,8 @@ TEST_P(validation_test, gfx11_no_byte_src_1_2)
 
 
    for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
-      /* Skip instruction not meant for this gen. */
-      if (devinfo.ver != inst[i].gen)
+      /* Skip instruction not meant for this gfx_ver. */
+      if (devinfo.ver != inst[i].gfx_ver)
          continue;
 
       brw_push_insn_state(p);

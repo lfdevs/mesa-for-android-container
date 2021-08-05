@@ -441,7 +441,19 @@ fd5_blitter_blit(struct fd_context *ctx,
       return false;
    }
 
-   batch = fd_bc_alloc_batch(&ctx->screen->batch_cache, ctx, true);
+   struct fd_resource *src = fd_resource(info->src.resource);
+   struct fd_resource *dst = fd_resource(info->dst.resource);
+
+   batch = fd_bc_alloc_batch(ctx, true);
+
+   fd_screen_lock(ctx->screen);
+
+   fd_batch_resource_read(batch, src);
+   fd_batch_resource_write(batch, dst);
+
+   fd_screen_unlock(ctx->screen);
+
+   DBG_BLIT(info, batch);
 
    fd_batch_update_queries(batch);
 
@@ -459,7 +471,6 @@ fd5_blitter_blit(struct fd_context *ctx,
       emit_blit(batch->draw, info);
    }
 
-   fd_resource(info->dst.resource)->valid = true;
    fd_batch_needs_flush(batch);
 
    fd_batch_flush(batch);

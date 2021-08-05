@@ -39,7 +39,7 @@ brw_codegen_tes_prog(struct brw_context *brw,
                      struct brw_tes_prog_key *key)
 {
    const struct brw_compiler *compiler = brw->screen->compiler;
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct brw_stage_state *stage_state = &brw->tes.base;
    struct brw_tes_prog_data prog_data;
    bool start_busy = false;
@@ -57,8 +57,10 @@ brw_codegen_tes_prog(struct brw_context *brw,
    brw_nir_setup_glsl_uniforms(mem_ctx, nir, &tep->program,
                                &prog_data.base.base,
                                compiler->scalar_stage[MESA_SHADER_TESS_EVAL]);
-   brw_nir_analyze_ubo_ranges(compiler, nir, NULL,
-                              prog_data.base.base.ubo_ranges);
+   if (brw->can_push_ubos) {
+      brw_nir_analyze_ubo_ranges(compiler, nir, NULL,
+                                 prog_data.base.base.ubo_ranges);
+   }
 
    int st_index = -1;
    if (INTEL_DEBUG & DEBUG_SHADER_TIME)
@@ -187,7 +189,7 @@ brw_tes_populate_default_key(const struct brw_compiler *compiler,
                              struct gl_shader_program *sh_prog,
                              struct gl_program *prog)
 {
-   const struct gen_device_info *devinfo = compiler->devinfo;
+   const struct intel_device_info *devinfo = compiler->devinfo;
    struct brw_program *btep = brw_program(prog);
 
    memset(key, 0, sizeof(*key));

@@ -55,7 +55,7 @@ extern "C" {
 #define SI_DRAW_ID_UNKNOWN        ((unsigned)INT_MIN)
 #define SI_RESTART_INDEX_UNKNOWN  ((unsigned)INT_MIN)
 #define SI_INSTANCE_COUNT_UNKNOWN ((unsigned)INT_MIN)
-#define SI_NUM_SMOOTH_AA_SAMPLES  8
+#define SI_NUM_SMOOTH_AA_SAMPLES  4
 #define SI_MAX_POINT_SIZE         2048
 #define SI_GS_PER_ES              128
 /* Alignment for optimal CP DMA performance. */
@@ -64,7 +64,8 @@ extern "C" {
 /* Tunables for compute-based clear_buffer and copy_buffer: */
 #define SI_COMPUTE_CLEAR_DW_PER_THREAD 4
 #define SI_COMPUTE_COPY_DW_PER_THREAD  4
-#define SI_COMPUTE_DST_CACHE_POLICY    L2_STREAM
+/* L2 LRU is recommended because the compute shader can finish sooner due to fewer L2 evictions. */
+#define SI_COMPUTE_DST_CACHE_POLICY    L2_LRU
 
 /* Pipeline & streamout query controls. */
 #define SI_CONTEXT_START_PIPELINE_STATS  (1 << 0)
@@ -137,6 +138,7 @@ extern "C" {
    (((x) >> SI_RESOURCE_FLAG_MICRO_TILE_MODE_SHIFT) & 0x3)
 #define SI_RESOURCE_FLAG_UNCACHED          (PIPE_RESOURCE_FLAG_DRV_PRIV << 12)
 #define SI_RESOURCE_FLAG_DRIVER_INTERNAL   (PIPE_RESOURCE_FLAG_DRV_PRIV << 13)
+#define SI_RESOURCE_AUX_PLANE              (PIPE_RESOURCE_FLAG_DRV_PRIV << 14)
 
 enum si_has_gs {
    GS_OFF,
@@ -168,7 +170,6 @@ enum si_clear_code
    DCC_UNCOMPRESSED = 0xFFFFFFFF,
 };
 
-#define SI_IMAGE_ACCESS_AS_BUFFER (1 << 7)
 #define SI_IMAGE_ACCESS_DCC_OFF   (1 << 8)
 #define SI_IMAGE_ACCESS_DCC_WRITE (1 << 9)
 
@@ -228,9 +229,7 @@ enum
    DBG_SWITCH_ON_EOP,
    DBG_NO_OUT_OF_ORDER,
    DBG_NO_DPBB,
-   DBG_NO_DFSM,
    DBG_DPBB,
-   DBG_DFSM,
    DBG_NO_HYPERZ,
    DBG_NO_2D_TILING,
    DBG_NO_TILING,
@@ -298,9 +297,9 @@ struct si_resource {
 
    /* Resource properties. */
    uint64_t bo_size;
-   unsigned bo_alignment;
-   enum radeon_bo_domain domains;
-   enum radeon_bo_flag flags;
+   uint8_t bo_alignment_log2;
+   enum radeon_bo_domain domains:8;
+   enum radeon_bo_flag flags:16;
    unsigned bind_history;
    int max_forced_staging_uploads;
 
@@ -331,13 +330,12 @@ struct si_resource {
    bool image_handle_allocated;
 
    /* Whether the resource has been exported via resource_get_handle. */
-   unsigned external_usage; /* PIPE_HANDLE_USAGE_* */
+   uint8_t external_usage; /* PIPE_HANDLE_USAGE_* */
 };
 
 struct si_transfer {
    struct threaded_transfer b;
    struct si_resource *staging;
-   unsigned offset;
 };
 
 struct si_texture {
@@ -368,7 +366,8 @@ struct si_texture {
    /* Depth buffer compression and fast clear. */
    float depth_clear_value[RADEON_SURF_MAX_LEVELS];
    uint8_t stencil_clear_value[RADEON_SURF_MAX_LEVELS];
-   uint16_t depth_cleared_level_mask;   /* if it was cleared at least once */
+   uint16_t depth_cleared_level_mask_once; /* if it was cleared at least once */
+   uint16_t depth_cleared_level_mask;     /* track if it was cleared (not 100% accurate) */
    uint16_t stencil_cleared_level_mask; /* if it was cleared at least once */
    uint16_t dirty_level_mask;         /* each bit says if that mipmap is compressed */
    uint16_t stencil_dirty_level_mask; /* each bit says if that mipmap is compressed */
@@ -385,37 +384,32 @@ struct si_texture {
 
    /* We need to track DCC dirtiness, because st/dri usually calls
     * flush_resource twice per frame (not a bug) and we don't wanna
-    * decompress DCC twice. Also, the dirty tracking must be done even
-    * if DCC isn't used, because it's required by the DCC usage analysis
-    * for a possible future enablement.
+    * decompress DCC twice.
     */
-   bool separate_dcc_dirty : 1;
    bool displayable_dcc_dirty : 1;
 
-   /* Statistics gathering for the DCC enablement heuristic. */
-   bool dcc_gather_statistics : 1;
    /* Counter that should be non-zero if the texture is bound to a
     * framebuffer.
     */
    unsigned framebuffers_bound;
-   /* Whether the texture is a displayable back buffer and needs DCC
-    * decompression, which is expensive. Therefore, it's enabled only
-    * if statistics suggest that it will pay off and it's allocated
-    * separately. It can't be bound as a sampler by apps. Limited to
-    * target == 2D and last_level == 0. If enabled, dcc_offset contains
-    * the absolute GPUVM address, not the relative one.
-    */
-   struct si_resource *dcc_separate_buffer;
-   /* When DCC is temporarily disabled, the separate buffer is here. */
-   struct si_resource *last_dcc_separate_buffer;
-   /* Estimate of how much this color buffer is written to in units of
-    * full-screen draws: ps_invocations / (width * height)
-    * Shader kills, late Z, and blending with trivial discards make it
-    * inaccurate (we need to count CB updates, not PS invocations).
-    */
-   unsigned ps_draw_ratio;
-   /* The number of clears since the last DCC usage analysis. */
-   unsigned num_slow_clears;
+};
+
+/* State trackers create separate textures in a next-chain for extra planes
+ * even if those are planes created purely for modifiers. Because the linking
+ * of the chain happens outside of the driver, and NULL is interpreted as
+ * failure, let's create some dummy texture structs. We could use these
+ * later to use the offsets for linking if we really wanted to.
+ *
+ * For now just create a dummy struct and completely ignore it.
+ *
+ * Potentially in the future we could store stride/offset and use it during
+ * creation, though we might want to change how linking is done first.
+ */
+struct si_auxiliary_texture {
+   struct threaded_resource b;
+   struct pb_buffer *buffer;
+   uint32_t offset;
+   uint32_t stride;
 };
 
 struct si_surface {
@@ -551,9 +545,8 @@ struct si_screen {
    bool has_out_of_order_rast;
    bool assume_no_z_fights;
    bool commutative_blend_add;
+   bool allow_draw_out_of_order;
    bool dpbb_allowed;
-   bool dfsm_allowed;
-   bool llvm_has_working_vgpr_indexing;
    bool use_ngg;
    bool use_ngg_culling;
    bool use_ngg_streamout;
@@ -671,6 +664,9 @@ struct si_screen {
    unsigned compute_wave_size;
    unsigned ps_wave_size;
    unsigned ge_wave_size;
+   unsigned ngg_subgroup_size;
+
+   struct util_idalloc_mt buffer_ids;
 };
 
 struct si_sampler_view {
@@ -909,8 +905,9 @@ struct si_small_prim_cull_info {
 
 typedef void (*pipe_draw_vbo_func)(struct pipe_context *pipe,
                                    const struct pipe_draw_info *info,
+                                   unsigned drawid_offset,
                                    const struct pipe_draw_indirect_info *indirect,
-                                   const struct pipe_draw_start_count *draws,
+                                   const struct pipe_draw_start_count_bias *draws,
                                    unsigned num_draws);
 
 struct si_context {
@@ -993,16 +990,15 @@ struct si_context {
    uint32_t vram_kb;
    uint32_t gtt_kb;
 
-   /* Compute-based primitive discard. */
-   unsigned prim_discard_vertex_count_threshold;
+   /* NGG streamout. */
    struct pb_buffer *gds;
    struct pb_buffer *gds_oa;
+   /* Compute-based primitive discard. */
+   unsigned prim_discard_vertex_count_threshold;
    struct radeon_cmdbuf prim_discard_compute_cs;
-   unsigned compute_gds_offset;
    struct si_shader *compute_ib_last_shader;
    uint32_t compute_rewind_va;
    unsigned compute_num_prims_in_batch;
-   bool preserve_prim_restart_gds_at_flush;
    /* index_ring is divided into 2 halves for doublebuffering. */
    struct si_resource *index_ring;
    unsigned index_ring_base;        /* offset of a per-IB portion */
@@ -1281,25 +1277,6 @@ struct si_context {
 
    bool force_cb_shader_coherent;
 
-   /* Statistics gathering for the DCC enablement heuristic. It can't be
-    * in si_texture because si_texture can be shared by multiple
-    * contexts. This is for back buffers only. We shouldn't get too many
-    * of those.
-    *
-    * X11 DRI3 rotates among a finite set of back buffers. They should
-    * all fit in this array. If they don't, separate DCC might never be
-    * enabled by DCC stat gathering.
-    */
-   struct {
-      struct si_texture *tex;
-      /* Query queue: 0 = usually active, 1 = waiting, 2 = readback. */
-      struct pipe_query *ps_stats[3];
-      /* If all slots are used and another slot is needed,
-       * the least recently used slot is evicted based on this. */
-      int64_t last_use_timestamp;
-      bool query_active;
-   } dcc_stats[5];
-
    struct si_tracked_regs tracked_regs;
 
    /* Resources that need to be flushed, but will not get an explicit
@@ -1308,7 +1285,9 @@ struct si_context {
     */
    struct hash_table *dirty_implicit_resources;
 
-   pipe_draw_vbo_func draw_vbo[NUM_GFX_VERSIONS - GFX6][2][2][2][2];
+   pipe_draw_vbo_func draw_vbo[2][2][2][2];
+   /* When b.draw_vbo is a wrapper, real_draw_vbo is the real draw_vbo function */
+   pipe_draw_vbo_func real_draw_vbo;
 
    /* SQTT */
    struct ac_thread_trace_data *thread_trace;
@@ -1346,6 +1325,9 @@ void si_resource_copy_region(struct pipe_context *ctx, struct pipe_resource *dst
 void si_decompress_dcc(struct si_context *sctx, struct si_texture *tex);
 void si_flush_implicit_resources(struct si_context *sctx);
 
+/* si_nir_optim.c */
+bool si_nir_is_output_const_if_tex_is_const(nir_shader *shader, float *in, float *out, int *texunit);
+
 /* si_buffer.c */
 bool si_cs_is_buffer_referenced(struct si_context *sctx, struct pb_buffer *buf,
                                 enum radeon_bo_usage usage);
@@ -1359,7 +1341,8 @@ struct pipe_resource *pipe_aligned_buffer_create(struct pipe_screen *screen, uns
 struct si_resource *si_aligned_buffer_create(struct pipe_screen *screen, unsigned flags,
                                              unsigned usage, unsigned size, unsigned alignment);
 void si_replace_buffer_storage(struct pipe_context *ctx, struct pipe_resource *dst,
-                               struct pipe_resource *src);
+                               struct pipe_resource *src, unsigned num_rebinds,
+                               uint32_t rebind_mask, uint32_t delete_buffer_id);
 void si_init_screen_buffer_functions(struct si_screen *sscreen);
 void si_init_buffer_functions(struct si_context *sctx);
 
@@ -1497,10 +1480,16 @@ void si_allocate_gds(struct si_context *ctx);
 void si_set_tracked_regs_to_clear_state(struct si_context *ctx);
 void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs);
 void si_need_gfx_cs_space(struct si_context *ctx, unsigned num_draws);
+void si_trace_emit(struct si_context *sctx);
+void si_prim_discard_signal_next_compute_ib_start(struct si_context *sctx);
 void si_emit_surface_sync(struct si_context *sctx, struct radeon_cmdbuf *cs,
                           unsigned cp_coher_cntl);
 void gfx10_emit_cache_flush(struct si_context *sctx, struct radeon_cmdbuf *cs);
 void si_emit_cache_flush(struct si_context *sctx, struct radeon_cmdbuf *cs);
+/* Replace the sctx->b.draw_vbo function with a wrapper. This can be use to implement
+ * optimizations without affecting the normal draw_vbo functions perf.
+ */
+void si_install_draw_wrapper(struct si_context *sctx, pipe_draw_vbo_func wrapper);
 
 /* si_gpu_load.c */
 void si_gpu_load_kill_thread(struct si_screen *sscreen);
@@ -1523,15 +1512,16 @@ enum si_prim_discard_outcome
 void si_build_prim_discard_compute_shader(struct si_shader_context *ctx);
 enum si_prim_discard_outcome
 si_prepare_prim_discard_or_split_draw(struct si_context *sctx, const struct pipe_draw_info *info,
-                                      const struct pipe_draw_start_count *draws,
-                                      unsigned num_draws, bool primitive_restart,
-                                      unsigned total_count);
+                                      unsigned drawid_offset,
+                                      const struct pipe_draw_start_count_bias *draws,
+                                      unsigned num_draws, unsigned total_count);
 void si_compute_signal_gfx(struct si_context *sctx);
 void si_dispatch_prim_discard_cs_and_draw(struct si_context *sctx,
                                           const struct pipe_draw_info *info,
-                                          unsigned count, unsigned index_size,
-                                          unsigned base_vertex, uint64_t input_indexbuf_va,
-                                          unsigned input_indexbuf_max_elements);
+                                          const struct pipe_draw_start_count_bias *draws,
+                                          unsigned num_draws, unsigned index_size,
+                                          unsigned total_count, uint64_t input_indexbuf_va,
+                                          unsigned index_max_size);
 void si_initialize_prim_discard_tunables(struct si_screen *sscreen, bool is_aux_context,
                                          unsigned *prim_discard_vertex_count_threshold,
                                          unsigned *index_ring_size_per_ib);
@@ -1587,6 +1577,10 @@ struct pipe_video_codec *si_uvd_create_decoder(struct pipe_context *context,
 
 struct pipe_video_buffer *si_video_buffer_create(struct pipe_context *pipe,
                                                  const struct pipe_video_buffer *tmpl);
+struct pipe_video_buffer *si_video_buffer_create_with_modifiers(struct pipe_context *pipe,
+                                                                const struct pipe_video_buffer *tmpl,
+                                                                const uint64_t *modifiers,
+                                                                unsigned int modifiers_count);
 
 /* si_viewport.c */
 void si_get_small_prim_cull_info(struct si_context *sctx, struct si_small_prim_cull_info *out);
@@ -1613,10 +1607,6 @@ struct pipe_surface *si_create_surface_custom(struct pipe_context *pipe,
                                               const struct pipe_surface *templ, unsigned width0,
                                               unsigned height0, unsigned width, unsigned height);
 unsigned si_translate_colorswap(enum pipe_format format, bool do_endian_swap);
-void vi_separate_dcc_try_enable(struct si_context *sctx, struct si_texture *tex);
-void vi_separate_dcc_start_query(struct si_context *sctx, struct si_texture *tex);
-void vi_separate_dcc_stop_query(struct si_context *sctx, struct si_texture *tex);
-void vi_separate_dcc_process_and_reset_stats(struct pipe_context *ctx, struct si_texture *tex);
 bool si_texture_disable_dcc(struct si_context *sctx, struct si_texture *tex);
 void si_init_screen_texture_functions(struct si_screen *sscreen);
 void si_init_context_texture_functions(struct si_context *sctx);
@@ -1698,7 +1688,7 @@ static inline unsigned si_get_minimum_num_gfx_cs_dwords(struct si_context *sctx,
     * Also reserve space for stopping queries at the end of IB, because
     * the number of active queries is unlimited in theory.
     */
-   return 2048 + sctx->num_cs_dw_queries_suspend + num_draws * 9;
+   return 2048 + sctx->num_cs_dw_queries_suspend + num_draws * 10;
 }
 
 static inline void si_context_add_resource_size(struct si_context *sctx, struct pipe_resource *r)
@@ -2031,12 +2021,25 @@ static inline unsigned si_get_shader_wave_size(struct si_shader *shader)
 
 static inline void si_select_draw_vbo(struct si_context *sctx)
 {
-   sctx->b.draw_vbo = sctx->draw_vbo[sctx->chip_class - GFX6]
-                                    [!!sctx->shader.tes.cso]
-                                    [!!sctx->shader.gs.cso]
-                                    [sctx->ngg]
-                                    [si_compute_prim_discard_enabled(sctx)];
-   assert(sctx->b.draw_vbo);
+   bool has_prim_discard_cs = si_compute_prim_discard_enabled(sctx) &&
+                              !sctx->shader.tes.cso && !sctx->shader.gs.cso;
+   pipe_draw_vbo_func draw_vbo = sctx->draw_vbo[!!sctx->shader.tes.cso]
+                                               [!!sctx->shader.gs.cso]
+                                               [sctx->ngg]
+                                               [has_prim_discard_cs];
+   assert(draw_vbo);
+   if (unlikely(sctx->real_draw_vbo))
+      sctx->real_draw_vbo = draw_vbo;
+   else
+      sctx->b.draw_vbo = draw_vbo;
+
+   if (!has_prim_discard_cs) {
+      /* Reset this to false if prim discard CS is disabled because draw_vbo doesn't reset it. */
+      if (sctx->prim_discard_cs_instancing) {
+         sctx->do_update_shaders = true;
+         sctx->prim_discard_cs_instancing = false;
+      }
+   }
 }
 
 /* Return the number of samples that the rasterizer uses. */

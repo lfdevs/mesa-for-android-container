@@ -147,7 +147,10 @@ _eglPointerIsDereferencable(void *p)
    /* align addr to page_size */
    addr &= ~(page_size - 1);
 
-   if (mincore((void *) addr, page_size, &valid) < 0) {
+   /* mincore expects &valid to be unsigned char* on Linux but char* on BSD:
+    * we cast pointers to void, to fix type mismatch warnings in all systems
+    */
+   if (mincore((void *) addr, page_size, (void*)&valid) < 0) {
       return EGL_FALSE;
    }
 

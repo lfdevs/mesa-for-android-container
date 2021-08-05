@@ -24,13 +24,13 @@
 #ifndef INTEL_DISASM_H
 #define INTEL_DISASM_H
 
-#include "intel/dev/gen_device_info.h"
+#include "intel/dev/intel_device_info.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void intel_disassemble(const struct gen_device_info *devinfo,
+void intel_disassemble(const struct intel_device_info *devinfo,
                        const void *assembly, int start, FILE *out);
 
 #ifdef __cplusplus

@@ -86,6 +86,8 @@ endif
 
 if with_platform_android
   libvn_files += files('vn_android.c')
+  vn_deps += dep_android
+  vn_flags += '-DVK_USE_PLATFORM_ANDROID_KHR'
 endif
 
 libvulkan_virtio = shared_library(

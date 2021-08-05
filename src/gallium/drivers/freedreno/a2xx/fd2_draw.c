@@ -78,7 +78,7 @@ emit_vertexbufs(struct fd_context *ctx) assert_dt
 
 static void
 draw_impl(struct fd_context *ctx, const struct pipe_draw_info *info,
-          const struct pipe_draw_start_count *draw, struct fd_ringbuffer *ring,
+          const struct pipe_draw_start_count_bias *draw, struct fd_ringbuffer *ring,
           unsigned index_offset, bool binning) assert_dt
 {
    OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -153,8 +153,9 @@ draw_impl(struct fd_context *ctx, const struct pipe_draw_info *info,
 
 static bool
 fd2_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *pinfo,
+			 unsigned drawid_offset,
              const struct pipe_draw_indirect_info *indirect,
-             const struct pipe_draw_start_count *pdraw,
+             const struct pipe_draw_start_count_bias *pdraw,
              unsigned index_offset) assert_dt
 {
    if (!ctx->prog.fs || !ctx->prog.vs)
@@ -190,7 +191,7 @@ fd2_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *pinfo,
       };
       /* clang-format on */
 
-      struct pipe_draw_start_count draw = *pdraw;
+		struct pipe_draw_start_count_bias draw = *pdraw;
       unsigned count = draw.count;
       unsigned step = step_tbl[pinfo->mode];
       unsigned num_vertices = ctx->batch->num_vertices;

@@ -23,37 +23,28 @@
  *
  **************************************************************************/
 
-
-#include "i915_reg.h"
 #include "i915_context.h"
+#include "i915_reg.h"
 #include "i915_state.h"
-
-
 
 /***********************************************************************
  */
-static void update_hw_constants(struct i915_context *i915)
+static void
+update_hw_constants(struct i915_context *i915)
 {
    i915->hardware_dirty |= I915_HW_CONSTANTS;
 }
 
 struct i915_tracked_state i915_hw_constants = {
-   "hw_constants",
-   update_hw_constants,
-   I915_NEW_FS_CONSTANTS | I915_NEW_FS
-};
-
-
+   "hw_constants", update_hw_constants, I915_NEW_FS_CONSTANTS | I915_NEW_FS};
 
 /***********************************************************************
  */
-static void update_fs(struct i915_context *i915)
+static void
+update_fs(struct i915_context *i915)
 {
    i915->hardware_dirty |= I915_HW_PROGRAM;
 }
 
-struct i915_tracked_state i915_hw_fs = {
-   "fs",
-   update_fs,
-   I915_NEW_FS
-};
+struct i915_tracked_state i915_hw_fs = {"fs", update_fs,
+                                        I915_NEW_FS | I915_NEW_COLOR_SWIZZLE};

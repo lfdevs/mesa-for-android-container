@@ -278,7 +278,7 @@ TEST(MesaFormatsTest, PackUbyteRGBARounding)
    for (int i = 0; i <= 255; i++) {
       uint8_t val[4] = {(uint8_t)i, 0, 0, 0};
       uint16_t result;
-      _mesa_pack_ubyte_rgba_row(MESA_FORMAT_R5G6B5_UNORM, 1, &val, &result);
+      _mesa_pack_ubyte_rgba_row(MESA_FORMAT_R5G6B5_UNORM, 1, val, &result);
       EXPECT_EQ(result, (i * 31 + 127) / 255);
    }
 }

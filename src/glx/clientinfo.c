@@ -96,7 +96,7 @@ __glX_send_client_info(struct glx_display *glx_dpy)
    /* There are three possible flavors of the client info structure that the
     * client could send to the server.  The version sent depends on the
     * combination of GLX versions and extensions supported by the client and
-    * the server.
+    * the server. This client only supports GLX major version 1.
     *
     * Server supports                  Client sends
     * ----------------------------------------------------------------------
@@ -117,7 +117,7 @@ __glX_send_client_info(struct glx_display *glx_dpy)
     * requirement in this case does not seem like a limitation.
     */
 
-   if (glx_dpy->majorVersion == 1 && glx_dpy->minorVersion == 0)
+   if (glx_dpy->minorVersion == 0)
       return;
 
    /* Determine whether any screen on the server supports either of the
@@ -170,7 +170,7 @@ __glX_send_client_info(struct glx_display *glx_dpy)
     * THE ORDER IS IMPORTANT.  We want to send the most recent version of the
     * protocol that the server can support.
     */
-   if (glx_dpy->majorVersion == 1 && glx_dpy->minorVersion == 4
+   if (glx_dpy->minorVersion == 4
        && any_screen_has_ARB_create_context_profile) {
       xcb_glx_set_client_info_2arb(c,
 				  GLX_MAJOR_VERSION, GLX_MINOR_VERSION,
@@ -181,7 +181,7 @@ __glX_send_client_info(struct glx_display *glx_dpy)
 				  gl_versions_profiles,
 				  gl_extension_string,
 				  glx_extensions);
-   } else if (glx_dpy->majorVersion == 1 && glx_dpy->minorVersion == 4
+   } else if (glx_dpy->minorVersion == 4
 	      && any_screen_has_ARB_create_context) {
       xcb_glx_set_client_info_arb(c,
 				  GLX_MAJOR_VERSION, GLX_MINOR_VERSION,

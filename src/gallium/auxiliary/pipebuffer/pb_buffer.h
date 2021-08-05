@@ -64,13 +64,13 @@ enum pb_usage_flags {
    PB_USAGE_CPU_WRITE = (1 << 1),
    PB_USAGE_GPU_READ = (1 << 2),
    PB_USAGE_GPU_WRITE = (1 << 3),
-   PB_USAGE_DONTBLOCK = (1 << 9),
-   PB_USAGE_UNSYNCHRONIZED = (1 << 10),
+   PB_USAGE_DONTBLOCK = (1 << 4),
+   PB_USAGE_UNSYNCHRONIZED = (1 << 5),
    /* Persistent mappings may remain across a flush. Note that contrary
     * to OpenGL persistent maps, there is no requirement at the pipebuffer
     * api level to explicitly enforce coherency by barriers or range flushes.
     */
-   PB_USAGE_PERSISTENT = (1 << 13)
+   PB_USAGE_PERSISTENT = (1 << 8)
 };
 
 /* For error checking elsewhere */
@@ -288,7 +288,7 @@ pb_reference_with_winsys(void *winsys,
  * the requested or not.
  */
 static inline boolean
-pb_check_alignment(pb_size requested, pb_size provided)
+pb_check_alignment(uint32_t requested, uint32_t provided)
 {
    if (!requested)
       return TRUE;

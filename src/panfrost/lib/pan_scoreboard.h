@@ -64,9 +64,9 @@ panfrost_add_job(
                 const struct panfrost_ptr *job,
                 bool inject);
 
-void panfrost_scoreboard_initialize_tiler(
-                struct pan_pool *pool,
-                struct pan_scoreboard *scoreboard,
-                mali_ptr polygon_list);
+struct panfrost_ptr
+panfrost_scoreboard_initialize_tiler(struct pan_pool *pool,
+                                     struct pan_scoreboard *scoreboard,
+                                     mali_ptr polygon_list);
 
 #endif

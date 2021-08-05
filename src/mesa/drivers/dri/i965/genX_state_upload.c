@@ -25,7 +25,7 @@
 
 #include "main/samplerobj.h"
 
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 #include "common/intel_sample_positions.h"
 #include "genxml/gen_macros.h"
 #include "common/intel_guardband.h"
@@ -457,7 +457,7 @@ vf_invalidate_for_ib_48bit_transition(UNUSED struct brw_context *brw)
 static void
 genX(emit_vertices)(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    uint32_t *dw;
 
    brw_prepare_vertices(brw);
@@ -1636,7 +1636,7 @@ genX(upload_sf)(struct brw_context *brw)
 
       /* _NEW_LINE */
 #if GFX_VER == 8
-      const struct gen_device_info *devinfo = &brw->screen->devinfo;
+      const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
       if (devinfo->is_cherryview)
          sf.CHVLineWidth = brw_get_line_width(brw);
@@ -1795,7 +1795,7 @@ genX(upload_wm)(struct brw_context *brw)
    UNUSED bool writes_depth =
       wm_prog_data->computed_depth_mode != BRW_PSCDEPTH_OFF;
    UNUSED struct brw_stage_state *stage_state = &brw->wm.base;
-   UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   UNUSED const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
 #if GFX_VER == 6
    /* We can't fold this into gfx6_upload_wm_push_constants(), because
@@ -2121,7 +2121,7 @@ static void
 genX(upload_vs_state)(struct brw_context *brw)
 {
    UNUSED struct gl_context *ctx = &brw->ctx;
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct brw_stage_state *stage_state = &brw->vs.base;
 
    /* BRW_NEW_VS_PROG_DATA */
@@ -2554,7 +2554,7 @@ static void
 genX(upload_gs_state)(struct brw_context *brw)
 {
    UNUSED struct gl_context *ctx = &brw->ctx;
-   UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   UNUSED const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const struct brw_stage_state *stage_state = &brw->gs.base;
    const struct gl_program *gs_prog = brw->programs[MESA_SHADER_GEOMETRY];
    /* BRW_NEW_GEOMETRY_PROGRAM */
@@ -3079,7 +3079,7 @@ UNUSED static const uint32_t push_constant_opcodes[] = {
 static void
 genX(upload_push_constant_packets)(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
 
    UNUSED uint32_t mocs = GFX_VER < 8 ? GFX7_MOCS_L3 : 0;
@@ -3850,7 +3850,7 @@ static void
 genX(upload_ps)(struct brw_context *brw)
 {
    UNUSED const struct gl_context *ctx = &brw->ctx;
-   UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   UNUSED const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    /* BRW_NEW_FS_PROG_DATA */
    const struct brw_wm_prog_data *prog_data =
@@ -4013,7 +4013,7 @@ static const struct brw_tracked_state genX(ps_state) = {
 static void
 genX(upload_hs_state)(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct brw_stage_state *stage_state = &brw->tcs.base;
    struct brw_stage_prog_data *stage_prog_data = stage_state->prog_data;
    const struct brw_vue_prog_data *vue_prog_data =
@@ -4056,7 +4056,7 @@ static const struct brw_tracked_state genX(hs_state) = {
 static void
 genX(upload_ds_state)(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const struct brw_stage_state *stage_state = &brw->tes.base;
    struct brw_stage_prog_data *stage_prog_data = stage_state->prog_data;
 
@@ -4268,9 +4268,10 @@ genX(upload_cs_state)(struct brw_context *brw)
    struct brw_stage_state *stage_state = &brw->cs.base;
    struct brw_stage_prog_data *prog_data = stage_state->prog_data;
    struct brw_cs_prog_data *cs_prog_data = brw_cs_prog_data(prog_data);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
-   const struct brw_cs_parameters cs_params = brw_cs_get_parameters(brw);
+   const struct brw_cs_dispatch_info dispatch =
+      brw_cs_get_dispatch_info(devinfo, cs_prog_data, brw->compute.group_size);
 
    if (INTEL_DEBUG & DEBUG_SHADER_TIME) {
       brw_emit_buffer_surface_state(
@@ -4362,13 +4363,13 @@ genX(upload_cs_state)(struct brw_context *brw)
       vfe.URBEntryAllocationSize = GFX_VER >= 8 ? 2 : 0;
 
       const uint32_t vfe_curbe_allocation =
-         ALIGN(cs_prog_data->push.per_thread.regs * cs_params.threads +
+         ALIGN(cs_prog_data->push.per_thread.regs * dispatch.threads +
                cs_prog_data->push.cross_thread.regs, 2);
       vfe.CURBEAllocationSize = vfe_curbe_allocation;
    }
 
    const unsigned push_const_size =
-      brw_cs_push_const_total_size(cs_prog_data, cs_params.threads);
+      brw_cs_push_const_total_size(cs_prog_data, dispatch.threads);
    if (push_const_size > 0) {
       brw_batch_emit(brw, GENX(MEDIA_CURBE_LOAD), curbe) {
          curbe.CURBETotalDataLength = ALIGN(push_const_size, 64);
@@ -4381,7 +4382,7 @@ genX(upload_cs_state)(struct brw_context *brw)
           prog_data->binding_table.size_bytes);
    const uint64_t ksp = brw->cs.base.prog_offset +
                         brw_cs_prog_data_prog_offset(cs_prog_data,
-                                                     cs_params.simd_size);
+                                                     dispatch.simd_size);
    const struct GENX(INTERFACE_DESCRIPTOR_DATA) idd = {
       .KernelStartPointer = ksp,
       .SamplerStatePointer = stage_state->sampler_offset,
@@ -4390,7 +4391,7 @@ genX(upload_cs_state)(struct brw_context *brw)
                       DIV_ROUND_UP(CLAMP(stage_state->sampler_count, 0, 16), 4),
       .BindingTablePointer = stage_state->bind_bo_offset,
       .ConstantURBEntryReadLength = cs_prog_data->push.per_thread.regs,
-      .NumberofThreadsinGPGPUThreadGroup = cs_params.threads,
+      .NumberofThreadsinGPGPUThreadGroup = dispatch.threads,
       .SharedLocalMemorySize = encode_slm_size(GFX_VER,
                                                prog_data->total_shared),
       .BarrierEnable = cs_prog_data->uses_barrier,
@@ -4493,22 +4494,22 @@ genX(emit_gpgpu_walker)(struct brw_context *brw)
    if (indirect)
       prepare_indirect_gpgpu_walker(brw);
 
-   const struct brw_cs_parameters cs_params = brw_cs_get_parameters(brw);
-
-   const uint32_t right_mask =
-      brw_cs_right_mask(cs_params.group_size, cs_params.simd_size);
+   const struct brw_cs_dispatch_info dispatch =
+      brw_cs_get_dispatch_info(&brw->screen->devinfo,
+                               brw_cs_prog_data(brw->cs.base.prog_data),
+                               brw->compute.group_size);
 
    brw_batch_emit(brw, GENX(GPGPU_WALKER), ggw) {
       ggw.IndirectParameterEnable      = indirect;
       ggw.PredicateEnable              = GFX_VER <= 7 && indirect;
-      ggw.SIMDSize                     = cs_params.simd_size / 16;
+      ggw.SIMDSize                     = dispatch.simd_size / 16;
       ggw.ThreadDepthCounterMaximum    = 0;
       ggw.ThreadHeightCounterMaximum   = 0;
-      ggw.ThreadWidthCounterMaximum    = cs_params.threads - 1;
+      ggw.ThreadWidthCounterMaximum    = dispatch.threads - 1;
       ggw.ThreadGroupIDXDimension      = num_groups[0];
       ggw.ThreadGroupIDYDimension      = num_groups[1];
       ggw.ThreadGroupIDZDimension      = num_groups[2];
-      ggw.RightExecutionMask           = right_mask;
+      ggw.RightExecutionMask           = dispatch.right_mask;
       ggw.BottomExecutionMask          = 0xffffffff;
    }
 
@@ -4966,40 +4967,40 @@ genX(upload_default_color)(struct brw_context *brw,
        * R channel, while the hardware uses A.  Spam R into all the
        * channels for safety.
        */
-      color.ui[0] = sampler->Attrib.BorderColor.ui[0];
-      color.ui[1] = sampler->Attrib.BorderColor.ui[0];
-      color.ui[2] = sampler->Attrib.BorderColor.ui[0];
-      color.ui[3] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[0] = sampler->Attrib.state.border_color.ui[0];
+      color.ui[1] = sampler->Attrib.state.border_color.ui[0];
+      color.ui[2] = sampler->Attrib.state.border_color.ui[0];
+      color.ui[3] = sampler->Attrib.state.border_color.ui[0];
       break;
    case GL_ALPHA:
       color.ui[0] = 0u;
       color.ui[1] = 0u;
       color.ui[2] = 0u;
-      color.ui[3] = sampler->Attrib.BorderColor.ui[3];
+      color.ui[3] = sampler->Attrib.state.border_color.ui[3];
       break;
    case GL_INTENSITY:
-      color.ui[0] = sampler->Attrib.BorderColor.ui[0];
-      color.ui[1] = sampler->Attrib.BorderColor.ui[0];
-      color.ui[2] = sampler->Attrib.BorderColor.ui[0];
-      color.ui[3] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[0] = sampler->Attrib.state.border_color.ui[0];
+      color.ui[1] = sampler->Attrib.state.border_color.ui[0];
+      color.ui[2] = sampler->Attrib.state.border_color.ui[0];
+      color.ui[3] = sampler->Attrib.state.border_color.ui[0];
       break;
    case GL_LUMINANCE:
-      color.ui[0] = sampler->Attrib.BorderColor.ui[0];
-      color.ui[1] = sampler->Attrib.BorderColor.ui[0];
-      color.ui[2] = sampler->Attrib.BorderColor.ui[0];
+      color.ui[0] = sampler->Attrib.state.border_color.ui[0];
+      color.ui[1] = sampler->Attrib.state.border_color.ui[0];
+      color.ui[2] = sampler->Attrib.state.border_color.ui[0];
       color.ui[3] = float_as_int(1.0);
       break;
    case GL_LUMINANCE_ALPHA:
-      color.ui[0] = sampler->Attrib.BorderColor.ui[0];
-      color.ui[1] = sampler->Attrib.BorderColor.ui[0];
-      color.ui[2] = sampler->Attrib.BorderColor.ui[0];
-      color.ui[3] = sampler->Attrib.BorderColor.ui[3];
+      color.ui[0] = sampler->Attrib.state.border_color.ui[0];
+      color.ui[1] = sampler->Attrib.state.border_color.ui[0];
+      color.ui[2] = sampler->Attrib.state.border_color.ui[0];
+      color.ui[3] = sampler->Attrib.state.border_color.ui[3];
       break;
    default:
-      color.ui[0] = sampler->Attrib.BorderColor.ui[0];
-      color.ui[1] = sampler->Attrib.BorderColor.ui[1];
-      color.ui[2] = sampler->Attrib.BorderColor.ui[2];
-      color.ui[3] = sampler->Attrib.BorderColor.ui[3];
+      color.ui[0] = sampler->Attrib.state.border_color.ui[0];
+      color.ui[1] = sampler->Attrib.state.border_color.ui[1];
+      color.ui[2] = sampler->Attrib.state.border_color.ui[2];
+      color.ui[3] = sampler->Attrib.state.border_color.ui[3];
       break;
    }
 

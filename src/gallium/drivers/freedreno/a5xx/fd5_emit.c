@@ -366,7 +366,7 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
          OUT_RING(ring, sampler->texsamp0);
          OUT_RING(ring, sampler->texsamp1);
          OUT_RING(ring, sampler->texsamp2 |
-                           A5XX_TEX_SAMP_2_BCOLOR_OFFSET(bcolor_offset));
+                           A5XX_TEX_SAMP_2_BCOLOR_OFFSET(bcolor_offset + i));
          OUT_RING(ring, sampler->texsamp3);
 
          needs_border |= sampler->needs_border;

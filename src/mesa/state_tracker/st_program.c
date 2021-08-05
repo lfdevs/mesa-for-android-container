@@ -774,6 +774,8 @@ st_create_common_variant(struct st_context *st,
 
       state.type = PIPE_SHADER_IR_NIR;
       state.ir.nir = get_nir_shader(st, stp);
+      const nir_shader_compiler_options *options = ((nir_shader *)state.ir.nir)->options;
+
       if (key->clamp_color) {
          NIR_PASS_V(state.ir.nir, nir_lower_clamp_color_outputs);
          finalize = true;
@@ -806,6 +808,7 @@ st_create_common_variant(struct st_context *st,
       }
 
       if (key->lower_ucp) {
+         assert(!options->unify_interfaces);
          lower_ucp(st, state.ir.nir, key->lower_ucp, params);
          finalize = true;
       }
@@ -823,9 +826,18 @@ st_create_common_variant(struct st_context *st,
          st_finalize_nir(st, &stp->Base, stp->shader_program, state.ir.nir,
                          true, false);
 
-         /* Some of the lowering above may have introduced new varyings */
-         nir_shader_gather_info(state.ir.nir,
-                                nir_shader_get_entrypoint(state.ir.nir));
+         /* Clip lowering and edgeflags may have introduced new varyings, so
+          * update the inputs_read/outputs_written. However, with
+          * unify_interfaces set (aka iris) the non-SSO varyings layout is
+          * decided at link time with outputs_written updated so the two line
+          * up.  A driver with this flag set may not use any of the lowering
+          * passes that would change the varyings, so skip to make sure we don't
+          * break its linkage.
+          */
+         if (!options->unify_interfaces) {
+            nir_shader_gather_info(state.ir.nir,
+                                   nir_shader_get_entrypoint(state.ir.nir));
+         }
       }
 
       if (key->is_draw_shader)
@@ -1450,10 +1462,13 @@ st_create_fp_variant(struct st_context *st,
          finalize = true;
       }
 
+      bool need_lower_tex_src_plane = false;
+
       if (unlikely(key->external.lower_nv12 || key->external.lower_iyuv ||
                    key->external.lower_xy_uxvx || key->external.lower_yx_xuxv ||
                    key->external.lower_ayuv || key->external.lower_xyuv ||
-                   key->external.lower_yuv)) {
+                   key->external.lower_yuv || key->external.lower_yu_yv ||
+                   key->external.lower_y41x)) {
 
          st_nir_lower_samplers(st->screen, state.ir.nir,
                                stfp->shader_program, &stfp->Base);
@@ -1466,8 +1481,11 @@ st_create_fp_variant(struct st_context *st,
          options.lower_ayuv_external = key->external.lower_ayuv;
          options.lower_xyuv_external = key->external.lower_xyuv;
          options.lower_yuv_external = key->external.lower_yuv;
+         options.lower_yu_yv_external = key->external.lower_yu_yv;
+         options.lower_y41x_external = key->external.lower_y41x;
          NIR_PASS_V(state.ir.nir, nir_lower_tex, &options);
          finalize = true;
+         need_lower_tex_src_plane = true;
       }
 
       if (finalize || !st->allow_st_finalize_nir_twice) {
@@ -1476,10 +1494,7 @@ st_create_fp_variant(struct st_context *st,
       }
 
       /* This pass needs to happen *after* nir_lower_sampler */
-      if (unlikely(key->external.lower_nv12 || key->external.lower_iyuv ||
-                   key->external.lower_xy_uxvx || key->external.lower_yx_xuxv ||
-                   key->external.lower_ayuv || key->external.lower_xyuv ||
-                   key->external.lower_yuv)) {
+      if (unlikely(need_lower_tex_src_plane)) {
          NIR_PASS_V(state.ir.nir, st_nir_lower_tex_src_plane,
                     ~stfp->Base.SamplersUsed,
                     key->external.lower_nv12 | key->external.lower_xy_uxvx |

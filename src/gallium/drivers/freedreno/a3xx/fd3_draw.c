@@ -69,14 +69,14 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
    OUT_PKT0(ring, REG_A3XX_VFD_INDEX_MIN, 4);
    OUT_RING(ring, info->index_bounds_valid
                      ? add_sat(info->min_index,
-                               info->index_size ? info->index_bias : 0)
+                               info->index_size ? emit->draw->index_bias : 0)
                      : 0); /* VFD_INDEX_MIN */
    OUT_RING(ring, info->index_bounds_valid
                      ? add_sat(info->max_index,
-                               info->index_size ? info->index_bias : 0)
+                               info->index_size ? emit->draw->index_bias : 0)
                      : ~0);              /* VFD_INDEX_MAX */
    OUT_RING(ring, info->start_instance); /* VFD_INSTANCEID_OFFSET */
-   OUT_RING(ring, info->index_size ? info->index_bias
+   OUT_RING(ring, info->index_size ? emit->draw->index_bias
                                    : emit->draw->start); /* VFD_INDEX_OFFSET */
 
    OUT_PKT0(ring, REG_A3XX_PC_RESTART_INDEX, 1);
@@ -96,14 +96,16 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 static bool
 fd3_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
+             unsigned drawid_offset,
              const struct pipe_draw_indirect_info *indirect,
-             const struct pipe_draw_start_count *draw,
+             const struct pipe_draw_start_count_bias *draw,
              unsigned index_offset) in_dt
 {
    struct fd3_emit emit = {
       .debug = &ctx->debug,
       .vtx = &ctx->vtx,
       .info = info,
+		.drawid_offset = drawid_offset,
       .indirect = indirect,
       .draw = draw,
       .key = {

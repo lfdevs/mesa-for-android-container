@@ -153,19 +153,24 @@ get_additional_semantic_info(nir_shader *s, nir_variable *var, struct semantic_i
    return next_row;
 }
 
-typedef void (*semantic_info_proc)(nir_variable *var, struct semantic_info *info);
+typedef void (*semantic_info_proc)(nir_variable *var, struct semantic_info *info, bool vulkan);
 
 static void
-get_semantic_vs_in_name(nir_variable *var, struct semantic_info *info)
+get_semantic_vs_in_name(nir_variable *var, struct semantic_info *info, bool vulkan)
 {
-   const char *name = dxil_vs_attr_index_to_name(var->data.driver_location);
-   assert(strlen(name) < 63);
-   strcpy(info->name, name);
+   strcpy(info->name, "TEXCOORD");
+   if (vulkan) {
+      info->index = var->data.location >= VERT_ATTRIB_GENERIC0 ?
+         var->data.location - VERT_ATTRIB_GENERIC0 :
+         var->data.location;
+   } else {
+      info->index = var->data.driver_location;
+   }
    info->kind = DXIL_SEM_ARBITRARY;
 }
 
 static void
-get_semantic_sv_name(nir_variable *var, struct semantic_info *info)
+get_semantic_sv_name(nir_variable *var, struct semantic_info *info, bool _vulkan)
 {
    switch (var->data.location) {
    case SYSTEM_VALUE_VERTEX_ID_ZERO_BASE:
@@ -231,7 +236,7 @@ get_semantic_ps_outname(nir_variable *var, struct semantic_info *info)
 
 static void
 get_semantic_name(nir_variable *var, struct semantic_info *info,
-                  const struct glsl_type *type)
+                  const struct glsl_type *type, bool vulkan)
 {
    info->kind = DXIL_SEM_INVALID;
    info->interpolation = get_interpolation(var);
@@ -265,31 +270,30 @@ get_semantic_name(nir_variable *var, struct semantic_info *info,
       break;
 
    default: {
-         int index = var->data.location - VARYING_SLOT_POS;
-         const char idx1 = 'A' + (char)(index >> 4);
-         const char idx2 = 'A' + (char)(index & 0xf);
-         snprintf(info->name, 64, "VARYING%c%c", idx1, idx2);
+         info->index = var->data.location -
+            (vulkan ? VARYING_SLOT_VAR0 : VARYING_SLOT_POS);
+         strcpy(info->name, "TEXCOORD");
          info->kind = DXIL_SEM_ARBITRARY;
       }
    }
 }
 
 static void
-get_semantic_in_name(nir_variable *var, struct semantic_info *info)
+get_semantic_in_name(nir_variable *var, struct semantic_info *info, bool vulkan)
 {
-   get_semantic_name(var, info, var->type);
+   get_semantic_name(var, info, var->type, vulkan);
    info->sysvalue_name = in_sysvalue_name(var);
 }
 
 static void
-get_semantic_gs_in_name(nir_variable *var, struct semantic_info *info)
+get_semantic_gs_in_name(nir_variable *var, struct semantic_info *info, bool vulkan)
 {
    /* geometry shader input varyings come as arrays, but we want to use
     * the element type */
    const struct glsl_type *type =
          glsl_type_is_array(var->type) ? glsl_without_array(var->type) : var->type;
 
-   get_semantic_name(var, info, type);
+   get_semantic_name(var, info, type, vulkan);
    info->sysvalue_name = in_sysvalue_name(var);
 }
 
@@ -460,11 +464,11 @@ get_input_signature_group(struct dxil_module *mod, const struct dxil_mdnode **in
                           unsigned num_inputs,
                           nir_shader *s, nir_variable_mode modes,
                           semantic_info_proc get_semantics, unsigned *row_iter,
-                          bool is_gs_shader)
+                          bool is_gs_shader, bool vulkan)
 {
    nir_foreach_variable_with_modes(var, s, modes) {
       struct semantic_info semantic = {0};
-      get_semantics(var, &semantic);
+      get_semantics(var, &semantic, vulkan);
       mod->inputs[num_inputs].sysvalue = semantic.sysvalue_name;
       *row_iter = get_additional_semantic_info(s, var, &semantic, *row_iter, is_gs_shader);
 
@@ -485,7 +489,7 @@ get_input_signature_group(struct dxil_module *mod, const struct dxil_mdnode **in
 }
 
 static const struct dxil_mdnode *
-get_input_signature(struct dxil_module *mod, nir_shader *s)
+get_input_signature(struct dxil_module *mod, nir_shader *s, bool vulkan)
 {
    if (s->info.stage == MESA_SHADER_KERNEL)
       return NULL;
@@ -500,12 +504,14 @@ get_input_signature(struct dxil_module *mod, nir_shader *s)
                                                       get_semantic_vs_in_name :
                                                       (s->info.stage == MESA_SHADER_GEOMETRY ?
                                                          get_semantic_gs_in_name : get_semantic_in_name),
-                                                   &next_row, is_gs_shader);
+                                                   &next_row, is_gs_shader,
+                                                   vulkan);
 
    mod->num_sig_inputs = get_input_signature_group(mod, inputs, mod->num_sig_inputs,
                                                    s, nir_var_system_value,
                                                    get_semantic_sv_name,
-                                                   &next_row, is_gs_shader);
+                                                   &next_row, is_gs_shader,
+                                                   vulkan);
 
    if (!mod->num_sig_inputs && !mod->num_sig_inputs)
       return NULL;
@@ -536,7 +542,7 @@ static const char *out_sysvalue_name(nir_variable *var)
 }
 
 static const struct dxil_mdnode *
-get_output_signature(struct dxil_module *mod, nir_shader *s)
+get_output_signature(struct dxil_module *mod, nir_shader *s, bool vulkan)
 {
    const struct dxil_mdnode *outputs[VARYING_SLOT_MAX];
    unsigned num_outputs = 0;
@@ -548,7 +554,7 @@ get_output_signature(struct dxil_module *mod, nir_shader *s)
          get_semantic_ps_outname(var, &semantic);
          mod->outputs[num_outputs].sysvalue = "TARGET";
       } else {
-         get_semantic_name(var, &semantic, var->type);
+         get_semantic_name(var, &semantic, var->type, vulkan);
          mod->outputs[num_outputs].sysvalue = out_sysvalue_name(var);
       }
       next_row = get_additional_semantic_info(s, var, &semantic, next_row, false);
@@ -588,14 +594,14 @@ get_output_signature(struct dxil_module *mod, nir_shader *s)
 }
 
 const struct dxil_mdnode *
-get_signatures(struct dxil_module *mod, nir_shader *s)
+get_signatures(struct dxil_module *mod, nir_shader *s, bool vulkan)
 {
    /* DXC does the same: Add an empty string before everything else */
    mod->sem_string_table = _mesa_string_buffer_create(mod->ralloc_ctx, 1024);
    copy_semantic_name_to_string(mod->sem_string_table, "");
 
-   const struct dxil_mdnode *input_signature = get_input_signature(mod, s);
-   const struct dxil_mdnode *output_signature = get_output_signature(mod, s);
+   const struct dxil_mdnode *input_signature = get_input_signature(mod, s, vulkan);
+   const struct dxil_mdnode *output_signature = get_output_signature(mod, s, vulkan);
 
    const struct dxil_mdnode *SV_nodes[3] = {
       input_signature,

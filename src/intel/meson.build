@@ -37,3 +37,6 @@ endif
 if with_intel_vk
   subdir('vulkan')
 endif
+if with_perfetto and (with_datasources.contains('intel') or with_datasources.contains('auto'))
+  subdir('ds')
+endif

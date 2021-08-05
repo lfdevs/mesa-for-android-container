@@ -27,7 +27,7 @@
 
 #include <gtest/gtest.h>
 
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 #include "drm-uapi/i915_drm.h"
 #include "genxml/gen_macros.h"
 #include "util/macros.h"
@@ -128,7 +128,7 @@ public:
 
    int fd;
    int ctx_id;
-   gen_device_info devinfo;
+   intel_device_info devinfo;
 
    uint32_t batch_bo_handle;
 #if GFX_VER >= 8
@@ -193,7 +193,7 @@ mi_builder_test::SetUp()
          ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GETPARAM,
                             (void *)&getparam), 0) << strerror(errno);
 
-         ASSERT_TRUE(gen_get_device_info_from_pci_id(device_id, &devinfo));
+         ASSERT_TRUE(intel_get_device_info_from_pci_id(device_id, &devinfo));
          if (devinfo.ver != GFX_VER || devinfo.is_haswell != (GFX_VERx10 == 75)) {
             close(fd);
             fd = -1;
@@ -958,7 +958,7 @@ TEST_F(mi_builder_test, store_if)
 #if GFX_VERx10 >= 125
 
 /*
- * Indirect load/store tests.  Only available on GFX 12.5+
+ * Indirect load/store tests.  Only available on XE_HP+
  */
 
 TEST_F(mi_builder_test, load_mem64_offset)
@@ -1018,7 +1018,7 @@ TEST_F(mi_builder_test, store_mem64_offset)
 }
 
 /*
- * Control-flow tests.  Only available on GFX 12.5+
+ * Control-flow tests.  Only available on XE_HP+
  */
 
 TEST_F(mi_builder_test, goto)

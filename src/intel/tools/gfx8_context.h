@@ -24,7 +24,7 @@
 #ifndef GFX8_CONTEXT_H
 #define GFX8_CONTEXT_H
 
-static inline void gfx8_render_context_init(const struct gen_context_parameters *params,
+static inline void gfx8_render_context_init(const struct intel_context_parameters *params,
                                             uint32_t *data, uint32_t *size)
 {
    *size = CONTEXT_RENDER_SIZE;
@@ -73,7 +73,7 @@ static inline void gfx8_render_context_init(const struct gen_context_parameters 
    *data++ = MI_BATCH_BUFFER_END;
 }
 
-static inline void gfx8_blitter_context_init(const struct gen_context_parameters *params,
+static inline void gfx8_blitter_context_init(const struct intel_context_parameters *params,
                                              uint32_t *data, uint32_t *size)
 {
    *size = CONTEXT_OTHER_SIZE;
@@ -115,7 +115,7 @@ static inline void gfx8_blitter_context_init(const struct gen_context_parameters
    *data++ = MI_BATCH_BUFFER_END;
 }
 
-static inline void gfx8_video_context_init(const struct gen_context_parameters *params,
+static inline void gfx8_video_context_init(const struct intel_context_parameters *params,
                                            uint32_t *data, uint32_t *size)
 {
    *size = CONTEXT_OTHER_SIZE;

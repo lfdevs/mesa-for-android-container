@@ -36,7 +36,7 @@
 
 #include "brw_eu_defines.h"
 #include "brw_reg_type.h"
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,7 +55,7 @@ static inline void brw_inst_set_bits(brw_inst *inst,
 
 #define FC(name, hi4, lo4, hi12, lo12, assertions)            \
 static inline void                                            \
-brw_inst_set_##name(const struct gen_device_info *devinfo,    \
+brw_inst_set_##name(const struct intel_device_info *devinfo,  \
                     brw_inst *inst, uint64_t v)               \
 {                                                             \
    assert(assertions);                                        \
@@ -65,7 +65,7 @@ brw_inst_set_##name(const struct gen_device_info *devinfo,    \
       brw_inst_set_bits(inst, hi4, lo4, v);                   \
 }                                                             \
 static inline uint64_t                                        \
-brw_inst_##name(const struct gen_device_info *devinfo,        \
+brw_inst_##name(const struct intel_device_info *devinfo,      \
                 const brw_inst *inst)                         \
 {                                                             \
    assert(assertions);                                        \
@@ -107,7 +107,7 @@ brw_inst_##name(const struct gen_device_info *devinfo,        \
 #define FF(name, hi4, lo4, hi45, lo45, hi5, lo5, hi6, lo6,                    \
            hi7, lo7, hi8, lo8, hi12, lo12)                                    \
 static inline void                                                            \
-brw_inst_set_##name(const struct gen_device_info *devinfo,                    \
+brw_inst_set_##name(const struct intel_device_info *devinfo,                  \
                     brw_inst *inst, uint64_t value)                           \
 {                                                                             \
    BOUNDS(hi4, lo4, hi45, lo45, hi5, lo5, hi6, lo6,                           \
@@ -115,7 +115,7 @@ brw_inst_set_##name(const struct gen_device_info *devinfo,                    \
    brw_inst_set_bits(inst, high, low, value);                                 \
 }                                                                             \
 static inline uint64_t                                                        \
-brw_inst_##name(const struct gen_device_info *devinfo, const brw_inst *inst)  \
+brw_inst_##name(const struct intel_device_info *devinfo, const brw_inst *inst)\
 {                                                                             \
    BOUNDS(hi4, lo4, hi45, lo45, hi5, lo5, hi6, lo6,                           \
           hi7, lo7, hi8, lo8, hi12, lo12)                                     \
@@ -140,7 +140,7 @@ FF(name,                                                   \
 #define FFDC(name, hi4, lo4, hi45, lo45, hi5, lo5, hi6, lo6,                  \
              hi7, lo7, hi8, lo8, hi12ex, lo12ex, hi12, lo12, assertions)      \
 static inline void                                                            \
-brw_inst_set_##name(const struct gen_device_info *devinfo,                    \
+brw_inst_set_##name(const struct intel_device_info *devinfo,                  \
                     brw_inst *inst, uint64_t value)                           \
 {                                                                             \
    assert(assertions);                                                        \
@@ -156,7 +156,7 @@ brw_inst_set_##name(const struct gen_device_info *devinfo,                    \
    }                                                                          \
 }                                                                             \
 static inline uint64_t                                                        \
-brw_inst_##name(const struct gen_device_info *devinfo, const brw_inst *inst)  \
+brw_inst_##name(const struct intel_device_info *devinfo, const brw_inst *inst)\
 {                                                                             \
    assert(assertions);                                                        \
    if (devinfo->ver >= 12) {                                                  \
@@ -190,7 +190,7 @@ brw_inst_##name(const struct gen_device_info *devinfo, const brw_inst *inst)  \
  */
 #define FI(name, hi4, lo4, hi8, lo8, hi12, lo12)                              \
 static inline void                                                            \
-brw_inst_set_##name(const struct gen_device_info *devinfo,                    \
+brw_inst_set_##name(const struct intel_device_info *devinfo,                  \
                     brw_inst *inst, uint64_t value)                           \
 {                                                                             \
    if (devinfo->ver >= 12) {                                                  \
@@ -204,7 +204,7 @@ brw_inst_set_##name(const struct gen_device_info *devinfo,                    \
    }                                                                          \
 }                                                                             \
 static inline uint64_t                                                        \
-brw_inst_##name(const struct gen_device_info *devinfo, const brw_inst *inst)  \
+brw_inst_##name(const struct intel_device_info *devinfo, const brw_inst *inst)\
 {                                                                             \
    if (devinfo->ver >= 12) {                                                  \
       return (brw_inst_bits(inst, hi12, hi12) << 1) |                         \
@@ -222,7 +222,7 @@ brw_inst_##name(const struct gen_device_info *devinfo, const brw_inst *inst)  \
  */
 #define FK(name, hi4, lo4, const12)                           \
 static inline void                                            \
-brw_inst_set_##name(const struct gen_device_info *devinfo,    \
+brw_inst_set_##name(const struct intel_device_info *devinfo,  \
                     brw_inst *inst, uint64_t v)               \
 {                                                             \
    if (devinfo->ver >= 12)                                    \
@@ -231,7 +231,7 @@ brw_inst_set_##name(const struct gen_device_info *devinfo,    \
       brw_inst_set_bits(inst, hi4, lo4, v);                   \
 }                                                             \
 static inline uint64_t                                        \
-brw_inst_##name(const struct gen_device_info *devinfo,        \
+brw_inst_##name(const struct intel_device_info *devinfo,      \
                 const brw_inst *inst)                         \
 {                                                             \
    if (devinfo->ver >= 12)                                    \
@@ -379,7 +379,7 @@ F(3src_hw_opcode,           /* 4+ */ 6,  0,    /* 12+ */ 6, 0)
 
 #define REG_TYPE(reg)                                                         \
 static inline void                                                            \
-brw_inst_set_3src_a16_##reg##_type(const struct gen_device_info *devinfo,     \
+brw_inst_set_3src_a16_##reg##_type(const struct intel_device_info *devinfo,   \
                                    brw_inst *inst, enum brw_reg_type type)    \
 {                                                                             \
    unsigned hw_type = brw_reg_type_to_a16_hw_3src_type(devinfo, type);        \
@@ -387,7 +387,7 @@ brw_inst_set_3src_a16_##reg##_type(const struct gen_device_info *devinfo,     \
 }                                                                             \
                                                                               \
 static inline enum brw_reg_type                                               \
-brw_inst_3src_a16_##reg##_type(const struct gen_device_info *devinfo,         \
+brw_inst_3src_a16_##reg##_type(const struct intel_device_info *devinfo,       \
                                const brw_inst *inst)                          \
 {                                                                             \
    unsigned hw_type = brw_inst_3src_a16_##reg##_hw_type(devinfo, inst);       \
@@ -441,7 +441,7 @@ FC(3src_a1_exec_type,       /* 4+ */    35,  35, /* 12+ */ 39, 39, devinfo->ver 
 
 #define REG_TYPE(reg)                                                         \
 static inline void                                                            \
-brw_inst_set_3src_a1_##reg##_type(const struct gen_device_info *devinfo,      \
+brw_inst_set_3src_a1_##reg##_type(const struct intel_device_info *devinfo,    \
                                   brw_inst *inst, enum brw_reg_type type)     \
 {                                                                             \
    UNUSED enum gfx10_align1_3src_exec_type exec_type =                        \
@@ -457,7 +457,7 @@ brw_inst_set_3src_a1_##reg##_type(const struct gen_device_info *devinfo,      \
 }                                                                             \
                                                                               \
 static inline enum brw_reg_type                                               \
-brw_inst_3src_a1_##reg##_type(const struct gen_device_info *devinfo,          \
+brw_inst_3src_a1_##reg##_type(const struct intel_device_info *devinfo,        \
                               const brw_inst *inst)                           \
 {                                                                             \
    enum gfx10_align1_3src_exec_type exec_type =                               \
@@ -478,7 +478,7 @@ REG_TYPE(src2)
  *  @{
  */
 static inline uint16_t
-brw_inst_3src_a1_src0_imm(ASSERTED const struct gen_device_info *devinfo,
+brw_inst_3src_a1_src0_imm(ASSERTED const struct intel_device_info *devinfo,
                           const brw_inst *insn)
 {
    assert(devinfo->ver >= 10);
@@ -489,7 +489,7 @@ brw_inst_3src_a1_src0_imm(ASSERTED const struct gen_device_info *devinfo,
 }
 
 static inline uint16_t
-brw_inst_3src_a1_src2_imm(ASSERTED const struct gen_device_info *devinfo,
+brw_inst_3src_a1_src2_imm(ASSERTED const struct intel_device_info *devinfo,
                           const brw_inst *insn)
 {
    assert(devinfo->ver >= 10);
@@ -500,7 +500,7 @@ brw_inst_3src_a1_src2_imm(ASSERTED const struct gen_device_info *devinfo,
 }
 
 static inline void
-brw_inst_set_3src_a1_src0_imm(ASSERTED const struct gen_device_info *devinfo,
+brw_inst_set_3src_a1_src0_imm(ASSERTED const struct intel_device_info *devinfo,
                               brw_inst *insn, uint16_t value)
 {
    assert(devinfo->ver >= 10);
@@ -511,7 +511,7 @@ brw_inst_set_3src_a1_src0_imm(ASSERTED const struct gen_device_info *devinfo,
 }
 
 static inline void
-brw_inst_set_3src_a1_src2_imm(ASSERTED const struct gen_device_info *devinfo,
+brw_inst_set_3src_a1_src2_imm(ASSERTED const struct intel_device_info *devinfo,
                               brw_inst *insn, uint16_t value)
 {
    assert(devinfo->ver >= 10);
@@ -527,7 +527,7 @@ brw_inst_set_3src_a1_src2_imm(ASSERTED const struct gen_device_info *devinfo,
  *  @{
  */
 static inline void
-brw_inst_set_uip(const struct gen_device_info *devinfo,
+brw_inst_set_uip(const struct intel_device_info *devinfo,
                  brw_inst *inst, int32_t value)
 {
    assert(devinfo->ver >= 6);
@@ -545,7 +545,7 @@ brw_inst_set_uip(const struct gen_device_info *devinfo,
 }
 
 static inline int32_t
-brw_inst_uip(const struct gen_device_info *devinfo, const brw_inst *inst)
+brw_inst_uip(const struct intel_device_info *devinfo, const brw_inst *inst)
 {
    assert(devinfo->ver >= 6);
 
@@ -557,7 +557,7 @@ brw_inst_uip(const struct gen_device_info *devinfo, const brw_inst *inst)
 }
 
 static inline void
-brw_inst_set_jip(const struct gen_device_info *devinfo,
+brw_inst_set_jip(const struct intel_device_info *devinfo,
                  brw_inst *inst, int32_t value)
 {
    assert(devinfo->ver >= 6);
@@ -575,7 +575,7 @@ brw_inst_set_jip(const struct gen_device_info *devinfo,
 }
 
 static inline int32_t
-brw_inst_jip(const struct gen_device_info *devinfo, const brw_inst *inst)
+brw_inst_jip(const struct intel_device_info *devinfo, const brw_inst *inst)
 {
    assert(devinfo->ver >= 6);
 
@@ -589,14 +589,14 @@ brw_inst_jip(const struct gen_device_info *devinfo, const brw_inst *inst)
 /** Like FC, but using int16_t to handle negative jump targets. */
 #define FJ(name, high, low, assertions)                                       \
 static inline void                                                            \
-brw_inst_set_##name(const struct gen_device_info *devinfo, brw_inst *inst, int16_t v) \
+brw_inst_set_##name(const struct intel_device_info *devinfo, brw_inst *inst, int16_t v) \
 {                                                                             \
    assert(assertions);                                                        \
    (void) devinfo;                                                            \
    brw_inst_set_bits(inst, high, low, (uint16_t) v);                          \
 }                                                                             \
 static inline int16_t                                                         \
-brw_inst_##name(const struct gen_device_info *devinfo, const brw_inst *inst)  \
+brw_inst_##name(const struct intel_device_info *devinfo, const brw_inst *inst)\
 {                                                                             \
    assert(assertions);                                                        \
    (void) devinfo;                                                            \
@@ -640,7 +640,7 @@ FC(send_dst_reg_file,         /* 4+ */ 35, 35, /* 12+ */  50,  50, devinfo->ver 
  * separately.
  */
 static inline void
-brw_inst_set_send_desc(const struct gen_device_info *devinfo,
+brw_inst_set_send_desc(const struct intel_device_info *devinfo,
                        brw_inst *inst, uint32_t value)
 {
    if (devinfo->ver >= 12) {
@@ -667,7 +667,8 @@ brw_inst_set_send_desc(const struct gen_device_info *devinfo,
  * \sa brw_inst_set_send_desc().
  */
 static inline uint32_t
-brw_inst_send_desc(const struct gen_device_info *devinfo, const brw_inst *inst)
+brw_inst_send_desc(const struct intel_device_info *devinfo,
+                   const brw_inst *inst)
 {
    if (devinfo->ver >= 12) {
       return (brw_inst_bits(inst, 123, 122) << 30 |
@@ -694,7 +695,7 @@ brw_inst_send_desc(const struct gen_device_info *devinfo, const brw_inst *inst)
  * separately.
  */
 static inline void
-brw_inst_set_send_ex_desc(const struct gen_device_info *devinfo,
+brw_inst_set_send_ex_desc(const struct intel_device_info *devinfo,
                           brw_inst *inst, uint32_t value)
 {
    if (devinfo->ver >= 12) {
@@ -724,7 +725,7 @@ brw_inst_set_send_ex_desc(const struct gen_device_info *devinfo,
  * separately.
  */
 static inline void
-brw_inst_set_sends_ex_desc(const struct gen_device_info *devinfo,
+brw_inst_set_sends_ex_desc(const struct intel_device_info *devinfo,
                            brw_inst *inst, uint32_t value)
 {
    if (devinfo->ver >= 12) {
@@ -743,7 +744,7 @@ brw_inst_set_sends_ex_desc(const struct gen_device_info *devinfo,
  * \sa brw_inst_set_send_ex_desc().
  */
 static inline uint32_t
-brw_inst_send_ex_desc(const struct gen_device_info *devinfo,
+brw_inst_send_ex_desc(const struct intel_device_info *devinfo,
                       const brw_inst *inst)
 {
    if (devinfo->ver >= 12) {
@@ -767,7 +768,7 @@ brw_inst_send_ex_desc(const struct gen_device_info *devinfo,
  * \sa brw_inst_set_send_ex_desc().
  */
 static inline uint32_t
-brw_inst_sends_ex_desc(const struct gen_device_info *devinfo,
+brw_inst_sends_ex_desc(const struct intel_device_info *devinfo,
                        const brw_inst *inst)
 {
    if (devinfo->ver >= 12) {
@@ -1052,21 +1053,21 @@ F(pi_message_data,     /* 4+ */ MD(7),   MD(0),  /* 12+ */  MD12(7), MD12(0))
  *  @{
  */
 static inline int
-brw_inst_imm_d(const struct gen_device_info *devinfo, const brw_inst *insn)
+brw_inst_imm_d(const struct intel_device_info *devinfo, const brw_inst *insn)
 {
    (void) devinfo;
    return brw_inst_bits(insn, 127, 96);
 }
 
 static inline unsigned
-brw_inst_imm_ud(const struct gen_device_info *devinfo, const brw_inst *insn)
+brw_inst_imm_ud(const struct intel_device_info *devinfo, const brw_inst *insn)
 {
    (void) devinfo;
    return brw_inst_bits(insn, 127, 96);
 }
 
 static inline uint64_t
-brw_inst_imm_uq(ASSERTED const struct gen_device_info *devinfo,
+brw_inst_imm_uq(ASSERTED const struct intel_device_info *devinfo,
                 const brw_inst *insn)
 {
    assert(devinfo->ver >= 8);
@@ -1074,7 +1075,7 @@ brw_inst_imm_uq(ASSERTED const struct gen_device_info *devinfo,
 }
 
 static inline float
-brw_inst_imm_f(const struct gen_device_info *devinfo, const brw_inst *insn)
+brw_inst_imm_f(const struct intel_device_info *devinfo, const brw_inst *insn)
 {
    union {
       float f;
@@ -1086,7 +1087,7 @@ brw_inst_imm_f(const struct gen_device_info *devinfo, const brw_inst *insn)
 }
 
 static inline double
-brw_inst_imm_df(const struct gen_device_info *devinfo, const brw_inst *insn)
+brw_inst_imm_df(const struct intel_device_info *devinfo, const brw_inst *insn)
 {
    union {
       double d;
@@ -1098,7 +1099,7 @@ brw_inst_imm_df(const struct gen_device_info *devinfo, const brw_inst *insn)
 }
 
 static inline void
-brw_inst_set_imm_d(const struct gen_device_info *devinfo,
+brw_inst_set_imm_d(const struct intel_device_info *devinfo,
                    brw_inst *insn, int value)
 {
    (void) devinfo;
@@ -1106,7 +1107,7 @@ brw_inst_set_imm_d(const struct gen_device_info *devinfo,
 }
 
 static inline void
-brw_inst_set_imm_ud(const struct gen_device_info *devinfo,
+brw_inst_set_imm_ud(const struct intel_device_info *devinfo,
                     brw_inst *insn, unsigned value)
 {
    (void) devinfo;
@@ -1114,7 +1115,7 @@ brw_inst_set_imm_ud(const struct gen_device_info *devinfo,
 }
 
 static inline void
-brw_inst_set_imm_f(const struct gen_device_info *devinfo,
+brw_inst_set_imm_f(const struct intel_device_info *devinfo,
                    brw_inst *insn, float value)
 {
    union {
@@ -1127,7 +1128,7 @@ brw_inst_set_imm_f(const struct gen_device_info *devinfo,
 }
 
 static inline void
-brw_inst_set_imm_df(const struct gen_device_info *devinfo,
+brw_inst_set_imm_df(const struct intel_device_info *devinfo,
                     brw_inst *insn, double value)
 {
    union {
@@ -1146,7 +1147,7 @@ brw_inst_set_imm_df(const struct gen_device_info *devinfo,
 }
 
 static inline void
-brw_inst_set_imm_uq(const struct gen_device_info *devinfo,
+brw_inst_set_imm_uq(const struct intel_device_info *devinfo,
                     brw_inst *insn, uint64_t value)
 {
    (void) devinfo;
@@ -1162,7 +1163,7 @@ brw_inst_set_imm_uq(const struct gen_device_info *devinfo,
 
 #define REG_TYPE(reg)                                                         \
 static inline void                                                            \
-brw_inst_set_##reg##_file_type(const struct gen_device_info *devinfo,         \
+brw_inst_set_##reg##_file_type(const struct intel_device_info *devinfo,       \
                                brw_inst *inst, enum brw_reg_file file,        \
                                enum brw_reg_type type)                        \
 {                                                                             \
@@ -1173,7 +1174,7 @@ brw_inst_set_##reg##_file_type(const struct gen_device_info *devinfo,         \
 }                                                                             \
                                                                               \
 static inline enum brw_reg_type                                               \
-brw_inst_##reg##_type(const struct gen_device_info *devinfo,                  \
+brw_inst_##reg##_type(const struct intel_device_info *devinfo,                \
                       const brw_inst *inst)                                   \
 {                                                                             \
    unsigned file = __builtin_strcmp("dst", #reg) == 0 ?                       \
@@ -1193,7 +1194,8 @@ REG_TYPE(src1)
 #define BRW_IA1_ADDR_IMM(reg, g4_high, g4_low, g8_nine, g8_high, g8_low, \
                          g12_high, g12_low)                              \
 static inline void                                                       \
-brw_inst_set_##reg##_ia1_addr_imm(const struct gen_device_info *devinfo, \
+brw_inst_set_##reg##_ia1_addr_imm(const struct                           \
+                                  intel_device_info *devinfo,            \
                                   brw_inst *inst,                        \
                                   unsigned value)                        \
 {                                                                        \
@@ -1208,7 +1210,7 @@ brw_inst_set_##reg##_ia1_addr_imm(const struct gen_device_info *devinfo, \
    }                                                                     \
 }                                                                        \
 static inline unsigned                                                   \
-brw_inst_##reg##_ia1_addr_imm(const struct gen_device_info *devinfo,     \
+brw_inst_##reg##_ia1_addr_imm(const struct intel_device_info *devinfo,   \
                               const brw_inst *inst)                      \
 {                                                                        \
    if (devinfo->ver >= 12) {                                             \
@@ -1229,7 +1231,8 @@ BRW_IA1_ADDR_IMM(dst,   57, 48,  47,  56, 48,  59, 50)
 
 #define BRW_IA16_ADDR_IMM(reg, g4_high, g4_low, g8_nine, g8_high, g8_low) \
 static inline void                                                        \
-brw_inst_set_##reg##_ia16_addr_imm(const struct gen_device_info *devinfo, \
+brw_inst_set_##reg##_ia16_addr_imm(const struct                           \
+                                   intel_device_info *devinfo,            \
                                    brw_inst *inst, unsigned value)        \
 {                                                                         \
    assert(devinfo->ver < 12);                                             \
@@ -1243,7 +1246,7 @@ brw_inst_set_##reg##_ia16_addr_imm(const struct gen_device_info *devinfo, \
    }                                                                      \
 }                                                                         \
 static inline unsigned                                                    \
-brw_inst_##reg##_ia16_addr_imm(const struct gen_device_info *devinfo,     \
+brw_inst_##reg##_ia16_addr_imm(const struct intel_device_info *devinfo,   \
                                const brw_inst *inst)                      \
 {                                                                         \
    assert(devinfo->ver < 12);                                             \
@@ -1356,7 +1359,8 @@ brw_compact_inst_set_bits(brw_compact_inst *inst, unsigned high, unsigned low,
 
 #define FC(name, high, low, gfx12_high, gfx12_low, assertions)     \
 static inline void                                                 \
-brw_compact_inst_set_##name(const struct gen_device_info *devinfo, \
+brw_compact_inst_set_##name(const struct                           \
+                            intel_device_info *devinfo,            \
                             brw_compact_inst *inst, unsigned v)    \
 {                                                                  \
    assert(assertions);                                             \
@@ -1366,7 +1370,7 @@ brw_compact_inst_set_##name(const struct gen_device_info *devinfo, \
       brw_compact_inst_set_bits(inst, high, low, v);               \
 }                                                                  \
 static inline unsigned                                             \
-brw_compact_inst_##name(const struct gen_device_info *devinfo,     \
+brw_compact_inst_##name(const struct intel_device_info *devinfo,   \
                         const brw_compact_inst *inst)              \
 {                                                                  \
    assert(assertions);                                             \
@@ -1400,7 +1404,7 @@ F(debug_control,    /* 4+ */  7,  7, /* 12+ */  7,  7)
 F(hw_opcode,        /* 4+ */  6,  0, /* 12+ */  6,  0) /* Same location as brw_inst */
 
 static inline unsigned
-brw_compact_inst_imm(const struct gen_device_info *devinfo,
+brw_compact_inst_imm(const struct intel_device_info *devinfo,
                      const brw_compact_inst *inst)
 {
    if (devinfo->ver >= 12) {

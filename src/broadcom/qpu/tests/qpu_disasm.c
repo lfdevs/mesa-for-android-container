@@ -162,6 +162,7 @@ main(int argc, char **argv)
                                          &instr.alu.add.b);
                                 swap_pack(&instr.alu.add.a_unpack,
                                           &instr.alu.add.b_unpack);
+                                break;
                         default:
                                 break;
                         }

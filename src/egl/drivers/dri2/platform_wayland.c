@@ -40,6 +40,7 @@
 #include <sys/mman.h>
 
 #include "egl_dri2.h"
+#include "loader_dri_helper.h"
 #include "loader.h"
 #include "util/u_vector.h"
 #include "util/anon_file.h"
@@ -588,28 +589,16 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
        dri2_surf->back->linear_copy == NULL) {
       /* The LINEAR modifier should be a perfect alias of the LINEAR use
        * flag; try the new interface first before the old, then fall back. */
-      if (dri2_dpy->image->base.version >= 15 &&
-           dri2_dpy->image->createImageWithModifiers) {
-         uint64_t linear_mod = DRM_FORMAT_MOD_LINEAR;
+      uint64_t linear_mod = DRM_FORMAT_MOD_LINEAR;
 
-         dri2_surf->back->linear_copy =
-            dri2_dpy->image->createImageWithModifiers(dri2_dpy->dri_screen,
-                                                      dri2_surf->base.Width,
-                                                      dri2_surf->base.Height,
-                                                      linear_dri_image_format,
-                                                      &linear_mod,
-                                                      1,
-                                                      NULL);
-      } else {
-         dri2_surf->back->linear_copy =
-            dri2_dpy->image->createImage(dri2_dpy->dri_screen,
-                                         dri2_surf->base.Width,
-                                         dri2_surf->base.Height,
-                                         linear_dri_image_format,
-                                         use_flags |
-                                         __DRI_IMAGE_USE_LINEAR,
-                                         NULL);
-      }
+      dri2_surf->back->linear_copy =
+            loader_dri_create_image(dri2_dpy->dri_screen, dri2_dpy->image,
+                                    dri2_surf->base.Width,
+                                    dri2_surf->base.Height,
+                                    linear_dri_image_format,
+                                    use_flags | __DRI_IMAGE_USE_LINEAR,
+                                    &linear_mod, 1, NULL);
+
       if (dri2_surf->back->linear_copy == NULL)
           return -1;
    }
@@ -619,26 +608,13 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
        * createImageWithModifiers, then fall back to the old createImage,
        * and hope it allocates an image which is acceptable to the winsys.
         */
-      if (num_modifiers && dri2_dpy->image->base.version >= 15 &&
-          dri2_dpy->image->createImageWithModifiers) {
-         dri2_surf->back->dri_image =
-           dri2_dpy->image->createImageWithModifiers(dri2_dpy->dri_screen,
-                                                     dri2_surf->base.Width,
-                                                     dri2_surf->base.Height,
-                                                     dri_image_format,
-                                                     modifiers,
-                                                     num_modifiers,
-                                                     NULL);
-      } else {
-         dri2_surf->back->dri_image =
-            dri2_dpy->image->createImage(dri2_dpy->dri_screen,
-                                         dri2_surf->base.Width,
-                                         dri2_surf->base.Height,
-                                         dri_image_format,
-                                         dri2_dpy->is_different_gpu ?
-                                              0 : use_flags,
-                                         NULL);
-      }
+      dri2_surf->back->dri_image =
+            loader_dri_create_image(dri2_dpy->dri_screen, dri2_dpy->image,
+                                    dri2_surf->base.Width,
+                                    dri2_surf->base.Height,
+                                    dri_image_format,
+                                    dri2_dpy->is_different_gpu ? 0 : use_flags,
+                                    modifiers, num_modifiers, NULL);
 
       dri2_surf->back->age = 0;
    }

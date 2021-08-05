@@ -2415,14 +2415,100 @@ NVC0LoweringPass::processSurfaceCoordsNVC0(TexInstruction *su)
    // calculate pixel offset
    if (su->op == OP_SULDP || su->op == OP_SUREDP) {
       v = loadSuInfo32(ind, slot, NVC0_SU_INFO_BSIZE, su->tex.bindless);
-      su->setSrc(0, bld.mkOp2v(OP_MUL, TYPE_U32, bld.getSSA(), src[0], v));
+      su->setSrc(0, (src[0] = bld.mkOp2v(OP_SHL, TYPE_U32, bld.getSSA(), src[0], v)));
    }
 
    // add array layer offset
    if (su->tex.target.isArray() || su->tex.target.isCube()) {
       v = loadSuInfo32(ind, slot, NVC0_SU_INFO_ARRAY, su->tex.bindless);
       assert(dim > 1);
-      su->setSrc(2, bld.mkOp2v(OP_MUL, TYPE_U32, bld.getSSA(), src[2], v));
+      su->setSrc(2, (src[2] = bld.mkOp2v(OP_MUL, TYPE_U32, bld.getSSA(), src[2], v)));
+   }
+
+   // 3d is special-cased. Note that a single "slice" of a 3d image may
+   // also be attached as 2d, so we have to do the same 3d processing for
+   // 2d as well, just in case. In order to remap a 3d image onto a 2d
+   // image, we have to retile it "by hand".
+   if (su->tex.target == TEX_TARGET_3D || su->tex.target == TEX_TARGET_2D) {
+      Value *z = loadSuInfo32(ind, slot, NVC0_SU_INFO_UNK1C, su->tex.bindless);
+      Value *y_size_aligned =
+         bld.mkOp2v(OP_AND, TYPE_U32, bld.getSSA(),
+                    loadSuInfo32(ind, slot, NVC0_SU_INFO_DIM_Y, su->tex.bindless),
+                    bld.loadImm(NULL, 0x0000ffff));
+      // Add the z coordinate for actual 3d-images
+      if (dim > 2)
+         src[2] = bld.mkOp2v(OP_ADD, TYPE_U32, bld.getSSA(), z, src[2]);
+      else
+         src[2] = z;
+
+      // Compute the surface parameters from tile shifts
+      Value *tile_shift[3];
+      Value *tile_extbf[3];
+      // Fetch the "real" tiling parameters of the underlying surface
+      for (int i = 0; i < 3; i++) {
+         tile_extbf[i] =
+            bld.mkOp2v(OP_SHR, TYPE_U32, bld.getSSA(),
+                       loadSuInfo32(ind, slot, NVC0_SU_INFO_DIM(i), su->tex.bindless),
+                       bld.loadImm(NULL, 16));
+         tile_shift[i] =
+            bld.mkOp2v(OP_SHR, TYPE_U32, bld.getSSA(),
+                       loadSuInfo32(ind, slot, NVC0_SU_INFO_DIM(i), su->tex.bindless),
+                       bld.loadImm(NULL, 24));
+      }
+
+      // However for load/atomics, we use byte-indexing. And for byte
+      // indexing, the X tile size is always the same. This leads to slightly
+      // better code.
+      if (su->op == OP_SULDP || su->op == OP_SUREDP) {
+         tile_extbf[0] = bld.loadImm(NULL, 0x600);
+         tile_shift[0] = bld.loadImm(NULL, 6);
+      }
+
+      // Compute the location of given coordinate, both inside the tile as
+      // well as which (linearly-laid out) tile it's in.
+      Value *coord_in_tile[3];
+      Value *tile[3];
+      for (int i = 0; i < 3; i++) {
+         coord_in_tile[i] = bld.mkOp2v(OP_EXTBF, TYPE_U32, bld.getSSA(), src[i], tile_extbf[i]);
+         tile[i] = bld.mkOp2v(OP_SHR, TYPE_U32, bld.getSSA(), src[i], tile_shift[i]);
+      }
+
+      // Based on the "real" tiling parameters, compute x/y coordinates in the
+      // larger surface with 2d tiling that was supplied to the hardware. This
+      // was determined and verified with the help of the tiling pseudocode in
+      // the envytools docs.
+      //
+      // adj_x = x_coord_in_tile + x_tile * x_tile_size * z_tile_size +
+      //         z_coord_in_tile * x_tile_size
+      // adj_y = y_coord_in_tile + y_tile * y_tile_size +
+      //         z_tile * y_tile_size * y_tiles
+      //
+      // Note: STRIDE_Y = y_tile_size * y_tiles
+
+      su->setSrc(0, bld.mkOp2v(
+            OP_ADD, TYPE_U32, bld.getSSA(),
+            bld.mkOp2v(OP_ADD, TYPE_U32, bld.getSSA(),
+                       coord_in_tile[0],
+                       bld.mkOp2v(OP_SHL, TYPE_U32, bld.getSSA(),
+                                  tile[0],
+                                  bld.mkOp2v(OP_ADD, TYPE_U32, bld.getSSA(),
+                                             tile_shift[2], tile_shift[0]))),
+            bld.mkOp2v(OP_SHL, TYPE_U32, bld.getSSA(),
+                       coord_in_tile[2], tile_shift[0])));
+
+      su->setSrc(1, bld.mkOp2v(
+            OP_ADD, TYPE_U32, bld.getSSA(),
+            bld.mkOp2v(OP_MUL, TYPE_U32, bld.getSSA(),
+                       tile[2], y_size_aligned),
+            bld.mkOp2v(OP_ADD, TYPE_U32, bld.getSSA(),
+                       coord_in_tile[1],
+                       bld.mkOp2v(OP_SHL, TYPE_U32, bld.getSSA(),
+                                  tile[1], tile_shift[1]))));
+
+      if (su->tex.target == TEX_TARGET_3D) {
+         su->moveSources(3, -1);
+         su->tex.target = TEX_TARGET_2D;
+      }
    }
 
    // prevent read fault when the image is not actually bound
@@ -2438,7 +2524,7 @@ NVC0LoweringPass::processSurfaceCoordsNVC0(TexInstruction *su)
       assert(format->components != 0);
       // make sure that the format doesn't mismatch when it's not FMT_NONE
       bld.mkCmp(OP_SET_OR, CC_NE, TYPE_U32, pred->getDef(0),
-                TYPE_U32, bld.loadImm(NULL, blockwidth / 8),
+                TYPE_U32, bld.loadImm(NULL, ffs(blockwidth / 8) - 1),
                 loadSuInfo32(ind, slot, NVC0_SU_INFO_BSIZE, su->tex.bindless),
                 pred->getDef(0));
    }

@@ -85,7 +85,6 @@ static struct gl_framebuffer DummyFramebuffer = {
    .Delete = delete_dummy_framebuffer,
 };
 static struct gl_renderbuffer DummyRenderbuffer = {
-   .Mutex = _SIMPLE_MTX_INITIALIZER_NP,
    .Delete = delete_dummy_renderbuffer,
 };
 

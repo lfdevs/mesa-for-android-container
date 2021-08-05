@@ -89,6 +89,12 @@ struct dri3_screen {
    __DRIscreen *driScreen;
    __GLXDRIscreen vtable;
 
+   /* DRI screen is created for display GPU in case of prime.
+    * This screen is used to allocate linear_buffer from
+    * display GPU space in dri3_alloc_render_buffer() function.
+    */
+   __DRIscreen *driScreenDisplayGPU;
+
    const __DRIimageExtension *image;
    const __DRIimageDriverExtension *image_driver;
    const __DRIcoreExtension *core;
@@ -102,6 +108,9 @@ struct dri3_screen {
    void *driver;
    int fd;
    bool is_different_gpu;
+
+   /* fd for display GPU in case of prime */
+   int fd_display_gpu;
 
    int show_fps_interval;
 

@@ -73,6 +73,15 @@ gl_shader_stage_is_compute(gl_shader_stage stage)
 }
 
 static inline bool
+gl_shader_stage_uses_workgroup(gl_shader_stage stage)
+{
+   return stage == MESA_SHADER_COMPUTE ||
+          stage == MESA_SHADER_KERNEL ||
+          stage == MESA_SHADER_TASK ||
+          stage == MESA_SHADER_MESH;
+}
+
+static inline bool
 gl_shader_stage_is_callable(gl_shader_stage stage)
 {
    return stage == MESA_SHADER_ANY_HIT ||
@@ -231,7 +240,7 @@ const char *gl_vert_attrib_name(gl_vert_attrib attrib);
 #define VERT_BIT_POINT_SIZE      BITFIELD_BIT(VERT_ATTRIB_POINT_SIZE)
 #define VERT_BIT_GENERIC0        BITFIELD_BIT(VERT_ATTRIB_GENERIC0)
 
-#define VERT_BIT(i)              BITFIELD64_BIT(i)
+#define VERT_BIT(i)              BITFIELD_BIT(i)
 #define VERT_BIT_ALL             BITFIELD_RANGE(0, VERT_ATTRIB_MAX)
 
 #define VERT_BIT_FF(i)           VERT_BIT(i)
@@ -710,9 +719,9 @@ typedef enum
    SYSTEM_VALUE_GLOBAL_INVOCATION_ID,
    SYSTEM_VALUE_BASE_GLOBAL_INVOCATION_ID,
    SYSTEM_VALUE_GLOBAL_INVOCATION_INDEX,
-   SYSTEM_VALUE_WORK_GROUP_ID,
-   SYSTEM_VALUE_NUM_WORK_GROUPS,
-   SYSTEM_VALUE_LOCAL_GROUP_SIZE,
+   SYSTEM_VALUE_WORKGROUP_ID,
+   SYSTEM_VALUE_NUM_WORKGROUPS,
+   SYSTEM_VALUE_WORKGROUP_SIZE,
    SYSTEM_VALUE_GLOBAL_GROUP_SIZE,
    SYSTEM_VALUE_WORK_DIM,
    SYSTEM_VALUE_USER_DATA_AMD,

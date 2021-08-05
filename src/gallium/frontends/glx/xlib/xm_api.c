@@ -894,7 +894,6 @@ XMesaVisual XMesaCreateVisual( Display *display,
       PIPE_FORMAT_R16G16B16A16_SNORM : PIPE_FORMAT_NONE;
 
    v->stvis.samples = num_samples;
-   v->stvis.render_buffer = ST_ATTACHMENT_INVALID;
 
    return v;
 }
@@ -1496,7 +1495,7 @@ XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
 
       internal_format = choose_pixel_format(drawable->xm_visual);
 
-      map = pipe_transfer_map(pipe, res,
+      map = pipe_texture_map(pipe, res,
                               0, 0,    /* level, layer */
                               PIPE_MAP_WRITE,
                               x, y,
@@ -1513,7 +1512,7 @@ XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
                       ZPixmap);
 
       if (!img) {
-         pipe_transfer_unmap(pipe, tex_xfer);
+         pipe_texture_unmap(pipe, tex_xfer);
          return;
       }
 
@@ -1525,7 +1524,7 @@ XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
                 &img->data[line * img->bytes_per_line],
                 byte_width);
 
-      pipe_transfer_unmap(pipe, tex_xfer);
+      pipe_texture_unmap(pipe, tex_xfer);
 
       st->teximage(st,
                    ST_TEXTURE_2D,

@@ -29,11 +29,8 @@ struct _glapi_table;
 
 #ifdef USE_ELF_TLS
 
-extern __thread struct _glapi_table *u_current_table
-    __attribute__((tls_model("initial-exec")));
-
-extern __thread void *u_current_context
-    __attribute__((tls_model("initial-exec")));
+extern __THREAD_INITIAL_EXEC struct _glapi_table *u_current_table;
+extern __THREAD_INITIAL_EXEC void *u_current_context;
 
 #else /* USE_ELF_TLS */
 

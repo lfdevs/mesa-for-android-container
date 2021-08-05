@@ -20,22 +20,22 @@
 # IN THE SOFTWARE.
 
 BUILT_SOURCES += \
-	$(GEN_PERF_GENERATED_FILES)
+	$(INTEL_PERF_GENERATED_FILES)
 
 noinst_LTLIBRARIES += perf/libintel_perf.la
 
-perf_libintel_perf_la_SOURCES = $(GEN_PERF_FILES) $(GEN_PERF_GENERATED_FILES)
+perf_libintel_perf_la_SOURCES = $(INTEL_PERF_FILES) $(INTEL_PERF_GENERATED_FILES)
 perf_libintel_perf_la_CFLAGS = $(AM_CFLAGS)
 
-perf/gen_perf_metrics.c: perf/gen_perf.py $(GEN_PERF_XML_FILES)
+perf/intel_perf_metrics.c: perf/gen_perf.py $(INTEL_PERF_XML_FILES)
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) $(PYTHON_FLAGS) $(srcdir)/perf/gen_perf.py \
-	--code=$(builddir)/perf/gen_perf_metrics.c \
-	--header=$(builddir)/perf/gen_perf_metrics.h \
-	$(GEN_PERF_XML_FILES:%=$(srcdir)/%)
+	--code=$(builddir)/perf/intel_perf_metrics.c \
+	--header=$(builddir)/perf/intel_perf_metrics.h \
+	$(INTEL_PERF_XML_FILES:%=$(srcdir)/%)
 
-perf/gen_perf_metrics.h: perf/gen_perf_metrics.c
+perf/intel_perf_metrics.h: perf/intel_perf_metrics.c
 
 EXTRA_DIST += \
-	$(GEN_PERF_XML_FILES) \
+	$(INTEL_PERF_XML_FILES) \
 	perf/gen_perf.py

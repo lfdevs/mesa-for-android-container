@@ -71,7 +71,7 @@ i915_drm_batchbuffer_create(struct i915_winsys *iws)
    return &batch->base;
 }
 
-static boolean
+static bool
 i915_drm_batchbuffer_validate_buffers(struct i915_winsys_batchbuffer *batch,
 				      struct i915_winsys_buffer **buffer,
 				      int num_of_buffers)
@@ -86,16 +86,16 @@ i915_drm_batchbuffer_validate_buffers(struct i915_winsys_batchbuffer *batch,
 
    ret = drm_intel_bufmgr_check_aperture_space(bos, num_of_buffers);
    if (ret != 0)
-      return FALSE;
+      return false;
 
-   return TRUE;
+   return true;
 }
 
 static int
 i915_drm_batchbuffer_reloc(struct i915_winsys_batchbuffer *ibatch,
                             struct i915_winsys_buffer *buffer,
                             enum i915_winsys_buffer_usage usage,
-                            unsigned pre_add, boolean fenced)
+                            unsigned pre_add, bool fenced)
 {
    struct i915_drm_batchbuffer *batch = i915_drm_batchbuffer(ibatch);
    unsigned write_domain = 0;

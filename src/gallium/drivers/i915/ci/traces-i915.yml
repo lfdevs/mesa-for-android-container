@@ -1,0 +1,63 @@
+traces-db:
+  download-url: "https://minio-packet.freedesktop.org/mesa-tracie-public/"
+
+# glmark2 looks like maybe it fails due to wanting an xserver, but we don't have
+# Xorg in the x86 docker images we're using.
+
+traces:
+  - path: glxgears/glxgears-2.trace
+    expectations:
+      - device: i915-g33
+        checksum: 83b1a41392bec71f7aeea6f1170cc23d
+  - path: gputest/plot3d.trace
+    expectations:
+      - device: i915-g33
+        checksum: dc187485584bc45b9050e88163e72c34
+  - path: gputest/triangle.trace
+    expectations:
+      # Weird white bar behind Tux's head.
+      - device: i915-g33
+        checksum: ef9b19e9a6dcd928d3bd44e7eee95029
+  # Requires GLSL 1.30
+  #- path: humus/AmbientAperture.trace
+  #  expectations:
+  #    - device: i915-g33
+  #      checksum: 8d4c52f0af9c09710d358f24c73fae3c
+  - path: humus/CelShading.trace
+    # The cel shading is pretty chunky, but maybe that's just precision stuff.
+    expectations:
+      - device: i915-g33
+        checksum: 86094ef6a40bfe48d4b7d66871af97a5
+  # Requires GLSL 1.30
+  #- path: humus/DynamicBranching3.trace
+  #  expectations:
+  #    - device: i915-g33
+  #      checksum: 765fa742b87e411763921c6f988b2573
+  # Requires GLSL 1.30
+  #- path: humus/HDR.trace
+  #  expectations:
+  #    - device: i915-g33
+  #      checksum: 80b164e85e96a413568d18ce308caae3
+  - path: humus/Portals.trace
+    expectations:
+      - device: i915-g33
+        checksum: 46a5f3c04ef40f275e1d330c2ac965c8
+  # The shadow raytracing shader fails to compile
+  #- path: humus/RaytracedShadows.trace
+  #  expectations:
+  #    - device: i915-g33
+  #      checksum: 5dc0af9fead0102a791784d0f6122096
+  # Requires GLSL 1.30
+  #- path: humus/VolumetricFogging2.trace
+  #  expectations:
+  #    - device: i915-g33
+  #      checksum: aec880cec7ba460f3144b789bc517891
+  - path: neverball/neverball.trace
+    expectations:
+      - device: i915-g33
+        checksum: e621fd97320f24ea4451565390f9b1ac
+  - path: valve/counterstrike-v2.trace
+    # Tree foliage rendering is extra aliased.
+    expectations:
+      - device: i915-g33
+        checksum: 4a693fcd3b2fbe388ba847ca3a93f079

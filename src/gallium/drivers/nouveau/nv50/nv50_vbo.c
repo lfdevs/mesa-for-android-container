@@ -758,12 +758,13 @@ nv50_draw_vbo_kick_notify(struct nouveau_pushbuf *chan)
 
 void
 nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
+              unsigned drawid_offset,
               const struct pipe_draw_indirect_info *indirect,
-              const struct pipe_draw_start_count *draws,
+              const struct pipe_draw_start_count_bias *draws,
               unsigned num_draws)
 {
    if (num_draws > 1) {
-      util_draw_multi(pipe, info, indirect, draws, num_draws);
+      util_draw_multi(pipe, info, drawid_offset, indirect, draws, num_draws);
       return;
    }
 
@@ -788,7 +789,7 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
 
    /* NOTE: caller must ensure that (min_index + index_bias) is >= 0 */
    if (info->index_bounds_valid) {
-      nv50->vb_elt_first = info->min_index + (info->index_size ? info->index_bias : 0);
+      nv50->vb_elt_first = info->min_index + (info->index_size ? draws->index_bias : 0);
       nv50->vb_elt_limit = info->max_index - info->min_index;
    } else {
       nv50->vb_elt_first = 0;
@@ -912,7 +913,7 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
 
       nv50_draw_elements(nv50, shorten, info,
                          info->mode, draws[0].start, draws[0].count,
-                         info->instance_count, info->index_bias, info->index_size);
+                         info->instance_count, draws->index_bias, info->index_size);
    } else
    if (unlikely(indirect && indirect->count_from_stream_output)) {
       nva0_draw_stream_output(nv50, info, indirect);

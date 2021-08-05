@@ -258,3 +258,9 @@ isl_aux_usage_has_fast_clears(enum isl_aux_usage usage)
 {
    return info[usage].fast_clear;
 }
+
+bool
+isl_aux_usage_has_compression(enum isl_aux_usage usage)
+{
+   return info[usage].compressed;
+}

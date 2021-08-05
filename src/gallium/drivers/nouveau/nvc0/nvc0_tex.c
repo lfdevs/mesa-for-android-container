@@ -1102,19 +1102,27 @@ nvc0_set_surface_info(struct nouveau_pushbuf *push,
 
    /* Stick the blockwidth (ie. number of bytes per pixel) to calculate pixel
     * offset and to check if the format doesn't mismatch. */
-   info[12] = util_format_get_blocksize(view->format);
+   info[12] = ffs(util_format_get_blocksize(view->format)) - 1;
 
    if (res->base.target == PIPE_BUFFER) {
       info[0]  = address >> 8;
       info[2]  = width;
    } else {
       struct nv50_miptree *mt = nv50_miptree(&res->base);
+      struct nv50_miptree_level *lvl = &mt->level[view->u.tex.level];
+      unsigned z = mt->layout_3d ? view->u.tex.first_layer : 0;
+      unsigned nby = align(util_format_get_nblocksy(view->format, height),
+                           NVC0_TILE_SIZE_Y(lvl->tile_mode));
 
+      /* NOTE: this does not precisely match nve4; the values are made to be
+       * easier for the shader to consume.
+       */
       info[0]  = address >> 8;
-      info[2]  = width;
-      info[4]  = height;
+      info[2]  = (NVC0_TILE_SHIFT_X(lvl->tile_mode) - info[12]) << 24;
+      info[4]  = NVC0_TILE_SHIFT_Y(lvl->tile_mode) << 24 | nby;
       info[5]  = mt->layer_stride >> 8;
-      info[6]  = depth;
+      info[6]  = NVC0_TILE_SHIFT_Z(lvl->tile_mode) << 24;
+      info[7]  = z;
       info[14] = mt->ms_x;
       info[15] = mt->ms_y;
    }
@@ -1167,24 +1175,31 @@ nvc0_validate_suf(struct nvc0_context *nvc0, int s)
          } else {
             struct nv50_miptree *mt = nv50_miptree(view->resource);
             struct nv50_miptree_level *lvl = &mt->level[view->u.tex.level];
-            const unsigned z = view->u.tex.first_layer;
+            unsigned adjusted_width = width, adjusted_height = height;
 
             if (mt->layout_3d) {
-               address += nvc0_mt_zslice_offset(mt, view->u.tex.level, z);
-               if (depth >= 1) {
-                  pipe_debug_message(&nvc0->base.debug, CONFORMANCE,
-                                     "3D images are not supported!");
-                  debug_printf("3D images are not supported!\n");
-               }
+               // We have to adjust the size of the 3d surface to be
+               // accessible within 2d limits. The size of each z tile goes
+               // into the x direction, while the number of z tiles goes into
+               // the y direction.
+               const unsigned nbx = util_format_get_nblocksx(view->format, width);
+               const unsigned nby = util_format_get_nblocksy(view->format, height);
+               const unsigned tsx = NVC0_TILE_SIZE_X(lvl->tile_mode);
+               const unsigned tsy = NVC0_TILE_SIZE_Y(lvl->tile_mode);
+               const unsigned tsz = NVC0_TILE_SIZE_Z(lvl->tile_mode);
+
+               adjusted_width = align(nbx, tsx / util_format_get_blocksize(view->format)) * tsz;
+               adjusted_height = align(nby, tsy) * align(depth, tsz) >> NVC0_TILE_SHIFT_Z(lvl->tile_mode);
             } else {
+               const unsigned z = view->u.tex.first_layer;
                address += mt->layer_stride * z;
             }
             address += lvl->offset;
 
             PUSH_DATAh(push, address);
             PUSH_DATA (push, address);
-            PUSH_DATA (push, width << mt->ms_x);
-            PUSH_DATA (push, height << mt->ms_y);
+            PUSH_DATA (push, adjusted_width << mt->ms_x);
+            PUSH_DATA (push, adjusted_height << mt->ms_y);
             PUSH_DATA (push, rt);
             PUSH_DATA (push, lvl->tile_mode & 0xff); /* mask out z-tiling */
          }

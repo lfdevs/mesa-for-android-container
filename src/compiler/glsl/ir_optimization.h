@@ -118,7 +118,6 @@ bool do_dead_functions(exec_list *instructions);
 bool opt_flip_matrices(exec_list *instructions);
 bool do_function_inlining(exec_list *instructions);
 bool do_lower_jumps(exec_list *instructions, bool pull_out_jumps = true, bool lower_sub_return = true, bool lower_main_return = false, bool lower_continue = false, bool lower_break = false);
-bool do_lower_texture_projection(exec_list *instructions);
 bool do_if_simplification(exec_list *instructions);
 bool opt_flatten_nested_if_blocks(exec_list *instructions);
 bool do_discard_simplification(exec_list *instructions);
@@ -177,7 +176,7 @@ bool lower_blend_equation_advanced(gl_linked_shader *shader, bool coherent);
 
 bool lower_builtins(exec_list *instructions);
 bool lower_subroutine(exec_list *instructions, struct _mesa_glsl_parse_state *state);
-void propagate_invariance(exec_list *instructions);
+bool propagate_invariance(exec_list *instructions);
 
 namespace ir_builder { class ir_factory; };
 

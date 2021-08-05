@@ -24,7 +24,7 @@
 #include "brw_compiler.h"
 #include "brw_shader.h"
 #include "brw_eu.h"
-#include "dev/gen_debug.h"
+#include "dev/intel_debug.h"
 #include "compiler/nir/nir.h"
 #include "main/errors.h"
 #include "util/debug.h"
@@ -38,13 +38,14 @@
    .lower_bitfield_insert = true,                                             \
    .lower_uadd_carry = true,                                                  \
    .lower_usub_borrow = true,                                                 \
-   .lower_fdiv = true,                                                        \
    .lower_flrp64 = true,                                                      \
    .lower_isign = true,                                                       \
    .lower_ldexp = true,                                                       \
    .lower_device_index_to_zero = true,                                        \
    .vectorize_io = true,                                                      \
    .use_interpolated_input_intrinsics = true,                                 \
+   .lower_insert_byte = true,                                                 \
+   .lower_insert_word = true,                                                 \
    .vertex_id_zero_based = true,                                              \
    .lower_base_vertex = true,                                                 \
    .use_scoped_barrier = true,                                                \
@@ -94,7 +95,7 @@ static const struct nir_shader_compiler_options vector_nir_options = {
 };
 
 struct brw_compiler *
-brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
+brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
 {
    struct brw_compiler *compiler = rzalloc(mem_ctx, struct brw_compiler);
 
@@ -274,7 +275,7 @@ brw_prog_key_size(gl_shader_stage stage)
 }
 
 void
-brw_write_shader_relocs(const struct gen_device_info *devinfo,
+brw_write_shader_relocs(const struct intel_device_info *devinfo,
                         void *program,
                         const struct brw_stage_prog_data *prog_data,
                         struct brw_shader_reloc_value *values,
@@ -282,10 +283,20 @@ brw_write_shader_relocs(const struct gen_device_info *devinfo,
 {
    for (unsigned i = 0; i < prog_data->num_relocs; i++) {
       assert(prog_data->relocs[i].offset % 8 == 0);
-      brw_inst *inst = (brw_inst *)(program + prog_data->relocs[i].offset);
+      void *dst = program + prog_data->relocs[i].offset;
       for (unsigned j = 0; j < num_values; j++) {
          if (prog_data->relocs[i].id == values[j].id) {
-            brw_update_reloc_imm(devinfo, inst, values[j].value);
+            uint32_t value = values[j].value + prog_data->relocs[i].delta;
+            switch (prog_data->relocs[i].type) {
+            case BRW_SHADER_RELOC_TYPE_U32:
+               *(uint32_t *)dst = value;
+               break;
+            case BRW_SHADER_RELOC_TYPE_MOV_IMM:
+               brw_update_reloc_imm(devinfo, dst, value);
+               break;
+            default:
+               unreachable("Invalid relocation type");
+            }
             break;
          }
       }

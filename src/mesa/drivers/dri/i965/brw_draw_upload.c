@@ -252,9 +252,9 @@ brw_get_vertex_surface_type(struct brw_context *brw,
                             const struct gl_vertex_format *glformat)
 {
    int size = glformat->Size;
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const bool is_ivybridge_or_older =
-      devinfo->ver <= 7 && !devinfo->is_baytrail && !devinfo->is_haswell;
+      devinfo->verx10 <= 70 && !devinfo->is_baytrail;
 
    if (INTEL_DEBUG & DEBUG_VERTS)
       fprintf(stderr, "type %s size %d normalized %d\n",
@@ -315,7 +315,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
             return ubyte_types_norm[size];
          }
       case GL_FIXED:
-         if (devinfo->ver >= 8 || devinfo->is_haswell)
+         if (devinfo->verx10 >= 75)
             return fixed_point_types[size];
 
          /* This produces GL_FIXED inputs as values between INT32_MIN and
@@ -329,7 +329,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
        */
       case GL_INT_2_10_10_10_REV:
          assert(size == 4);
-         if (devinfo->ver >= 8 || devinfo->is_haswell) {
+         if (devinfo->verx10 >= 75) {
             return glformat->Format == GL_BGRA
                ? ISL_FORMAT_B10G10R10A2_SNORM
                : ISL_FORMAT_R10G10B10A2_SNORM;
@@ -337,7 +337,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
          return ISL_FORMAT_R10G10B10A2_UINT;
       case GL_UNSIGNED_INT_2_10_10_10_REV:
          assert(size == 4);
-         if (devinfo->ver >= 8 || devinfo->is_haswell) {
+         if (devinfo->verx10 >= 75) {
             return glformat->Format == GL_BGRA
                ? ISL_FORMAT_B10G10R10A2_UNORM
                : ISL_FORMAT_R10G10B10A2_UNORM;
@@ -354,7 +354,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
        */
       if (glformat->Type == GL_INT_2_10_10_10_REV) {
          assert(size == 4);
-         if (devinfo->ver >= 8 || devinfo->is_haswell) {
+         if (devinfo->verx10 >= 75) {
             return glformat->Format == GL_BGRA
                ? ISL_FORMAT_B10G10R10A2_SSCALED
                : ISL_FORMAT_R10G10B10A2_SSCALED;
@@ -362,7 +362,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
          return ISL_FORMAT_R10G10B10A2_UINT;
       } else if (glformat->Type == GL_UNSIGNED_INT_2_10_10_10_REV) {
          assert(size == 4);
-         if (devinfo->ver >= 8 || devinfo->is_haswell) {
+         if (devinfo->verx10 >= 75) {
             return glformat->Format == GL_BGRA
                ? ISL_FORMAT_B10G10R10A2_USCALED
                : ISL_FORMAT_R10G10B10A2_USCALED;
@@ -386,7 +386,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
       case GL_UNSIGNED_SHORT: return ushort_types_scale[size];
       case GL_UNSIGNED_BYTE: return ubyte_types_scale[size];
       case GL_FIXED:
-         if (devinfo->ver >= 8 || devinfo->is_haswell)
+         if (devinfo->verx10 >= 75)
             return fixed_point_types[size];
 
          /* This produces GL_FIXED inputs as values between INT32_MIN and
@@ -436,7 +436,7 @@ copy_array_to_vbo_array(struct brw_context *brw,
 void
 brw_prepare_vertices(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_VERTEX_PROGRAM */
    const struct gl_program *vp = brw->programs[MESA_SHADER_VERTEX];

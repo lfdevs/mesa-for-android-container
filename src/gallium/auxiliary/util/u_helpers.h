@@ -58,7 +58,7 @@ void util_set_shader_buffers_mask(struct pipe_shader_buffer *dst,
 
 bool util_upload_index_buffer(struct pipe_context *pipe,
                               const struct pipe_draw_info *info,
-                              const struct pipe_draw_start_count *draw,
+                              const struct pipe_draw_start_count_bias *draw,
                               struct pipe_resource **out_buffer,
                               unsigned *out_offset, unsigned alignment);
 
@@ -87,6 +87,12 @@ void
 util_end_pipestat_query(struct pipe_context *ctx, struct pipe_query *q,
                         FILE *f);
 
+struct pipe_query *
+util_begin_time_query(struct pipe_context *ctx);
+void
+util_end_time_query(struct pipe_context *ctx, struct pipe_query *q, FILE *f,
+                    const char *name);
+
 void
 util_wait_for_idle(struct pipe_context *ctx);
 
@@ -106,6 +112,9 @@ void util_throttle_init(struct util_throttle *t, uint64_t max_mem_usage);
 void util_throttle_deinit(struct pipe_screen *screen, struct util_throttle *t);
 void util_throttle_memory_usage(struct pipe_context *pipe,
                                 struct util_throttle *t, uint64_t memory_size);
+
+bool
+util_lower_clearsize_to_dword(const void *clearValue, int *clearValueSize, uint32_t *clamped);
 
 #ifdef __cplusplus
 }

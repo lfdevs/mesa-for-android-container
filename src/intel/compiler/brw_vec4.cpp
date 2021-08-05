@@ -28,7 +28,7 @@
 #include "brw_vec4_builder.h"
 #include "brw_vec4_vs.h"
 #include "brw_dead_control_flow.h"
-#include "dev/gen_debug.h"
+#include "dev/intel_debug.h"
 #include "program/prog_parameter.h"
 #include "util/u_math.h"
 
@@ -236,7 +236,7 @@ vec4_instruction::size_read(unsigned arg) const
 }
 
 bool
-vec4_instruction::can_do_source_mods(const struct gen_device_info *devinfo)
+vec4_instruction::can_do_source_mods(const struct intel_device_info *devinfo)
 {
    if (devinfo->ver == 6 && is_math())
       return false;
@@ -271,7 +271,7 @@ vec4_instruction::can_do_cmod()
 }
 
 bool
-vec4_instruction::can_do_writemask(const struct gen_device_info *devinfo)
+vec4_instruction::can_do_writemask(const struct intel_device_info *devinfo)
 {
    switch (opcode) {
    case SHADER_OPCODE_GFX4_SCRATCH_READ:
@@ -593,7 +593,7 @@ vec4_visitor::split_uniform_registers()
     */
    foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
       for (int i = 0 ; i < 3; i++) {
-	 if (inst->src[i].file != UNIFORM)
+         if (inst->src[i].file != UNIFORM || inst->src[i].nr >= UBO_START)
 	    continue;
 
 	 assert(!inst->src[i].reladdr);
@@ -672,7 +672,7 @@ vec4_visitor::pack_uniform_registers()
       }
 
       for (int i = 0 ; i < 3; i++) {
-         if (inst->src[i].file != UNIFORM)
+         if (inst->src[i].file != UNIFORM || inst->src[i].nr >= UBO_START)
             continue;
 
          assert(type_sz(inst->src[i].type) % 4 == 0);
@@ -775,13 +775,14 @@ vec4_visitor::pack_uniform_registers()
 
    ralloc_free(param);
    this->uniforms = new_uniform_count;
+   stage_prog_data->nr_params = new_uniform_count * 4;
 
    /* Now, update the instructions for our repacked uniforms. */
    foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
       for (int i = 0 ; i < 3; i++) {
          int src = inst->src[i].nr;
 
-         if (inst->src[i].file != UNIFORM)
+         if (inst->src[i].file != UNIFORM || inst->src[i].nr >= UBO_START)
             continue;
 
          int chan = new_chan[src] / channel_sizes[src];
@@ -919,15 +920,17 @@ vec4_visitor::move_push_constants_to_pull_constants()
 {
    int pull_constant_loc[this->uniforms];
 
-   /* Only allow 32 registers (256 uniform components) as push constants,
-    * which is the limit on gfx6.
-    *
-    * If changing this value, note the limitation about total_regs in
-    * brw_curbe.c.
-    */
-   int max_uniform_components = 32 * 8;
+   const int max_uniform_components = push_length * 8;
+
    if (this->uniforms * 4 <= max_uniform_components)
       return;
+
+   assert(compiler->supports_pull_constants);
+   assert(compiler->compact_params);
+
+   /* If we got here, we also can't have any push ranges */
+   for (unsigned i = 0; i < 4; i++)
+      assert(prog_data->base.ubo_ranges[i].length == 0);
 
    /* Make some sort of choice as to which uniforms get sent to pull
     * constants.  We could potentially do something clever here like
@@ -974,7 +977,7 @@ vec4_visitor::move_push_constants_to_pull_constants()
     */
    foreach_block_and_inst_safe(block, vec4_instruction, inst, cfg) {
       for (int i = 0 ; i < 3; i++) {
-         if (inst->src[i].file != UNIFORM ||
+         if (inst->src[i].file != UNIFORM || inst->src[i].nr >= UBO_START ||
              pull_constant_loc[inst->src[i].nr] == -1)
             continue;
 
@@ -1124,7 +1127,7 @@ vec4_visitor::opt_set_dependency_control()
 }
 
 bool
-vec4_instruction::can_reswizzle(const struct gen_device_info *devinfo,
+vec4_instruction::can_reswizzle(const struct intel_device_info *devinfo,
                                 int dst_writemask,
                                 int swizzle,
                                 int swizzle_mask)
@@ -1807,36 +1810,64 @@ vec4_vs_visitor::setup_attributes(int payload_reg)
    return payload_reg + vs_prog_data->nr_attribute_slots;
 }
 
+void
+vec4_visitor::setup_push_ranges()
+{
+   /* Only allow 32 registers (256 uniform components) as push constants,
+    * which is the limit on gfx6.
+    *
+    * If changing this value, note the limitation about total_regs in
+    * brw_curbe.c.
+    */
+   const unsigned max_push_length = 32;
+
+   push_length = DIV_ROUND_UP(prog_data->base.nr_params, 8);
+   push_length = MIN2(push_length, max_push_length);
+
+   /* Shrink UBO push ranges so it all fits in max_push_length */
+   for (unsigned i = 0; i < 4; i++) {
+      struct brw_ubo_range *range = &prog_data->base.ubo_ranges[i];
+
+      if (push_length + range->length > max_push_length)
+         range->length = max_push_length - push_length;
+
+      push_length += range->length;
+   }
+   assert(push_length <= max_push_length);
+}
+
 int
 vec4_visitor::setup_uniforms(int reg)
 {
-   prog_data->base.dispatch_grf_start_reg = reg;
+   /* It's possible that uniform compaction will shrink further than expected
+    * so we re-compute the layout and set up our UBO push starts.
+    */
+   const unsigned old_push_length = push_length;
+   push_length = DIV_ROUND_UP(prog_data->base.nr_params, 8);
+   for (unsigned i = 0; i < 4; i++) {
+      ubo_push_start[i] = push_length;
+      push_length += stage_prog_data->ubo_ranges[i].length;
+   }
+   assert(push_length <= old_push_length);
+   if (push_length < old_push_length)
+      assert(compiler->compact_params);
 
    /* The pre-gfx6 VS requires that some push constants get loaded no
     * matter what, or the GPU would hang.
     */
-   if (devinfo->ver < 6 && this->uniforms == 0) {
+   if (devinfo->ver < 6 && push_length == 0) {
       brw_stage_prog_data_add_params(stage_prog_data, 4);
       for (unsigned int i = 0; i < 4; i++) {
 	 unsigned int slot = this->uniforms * 4 + i;
 	 stage_prog_data->param[slot] = BRW_PARAM_BUILTIN_ZERO;
       }
-
-      this->uniforms++;
-      reg++;
-   } else {
-      reg += ALIGN(uniforms, 2) / 2;
+      push_length = 1;
    }
 
-   for (int i = 0; i < 4; i++)
-      reg += stage_prog_data->ubo_ranges[i].length;
+   prog_data->base.dispatch_grf_start_reg = reg;
+   prog_data->base.curb_read_length = push_length;
 
-   stage_prog_data->nr_params = this->uniforms * 4;
-
-   prog_data->base.curb_read_length =
-      reg - prog_data->base.dispatch_grf_start_reg;
-
-   return reg;
+   return reg + push_length;
 }
 
 void
@@ -2047,11 +2078,19 @@ vec4_visitor::convert_to_hw_regs()
          }
 
          case UNIFORM: {
-            reg = stride(byte_offset(brw_vec4_grf(
-                                        prog_data->base.dispatch_grf_start_reg +
-                                        src.nr / 2, src.nr % 2 * 4),
-                                     src.offset),
-                         0, 4, 1);
+            if (src.nr >= UBO_START) {
+               reg = byte_offset(brw_vec4_grf(
+                                    prog_data->base.dispatch_grf_start_reg +
+                                    ubo_push_start[src.nr - UBO_START] +
+                                    src.offset / 32, 0),
+                                 src.offset % 32);
+            } else {
+               reg = byte_offset(brw_vec4_grf(
+                                    prog_data->base.dispatch_grf_start_reg +
+                                    src.nr / 2, src.nr % 2 * 4),
+                                 src.offset);
+            }
+            reg = stride(reg, 0, 4, 1);
             reg.type = src.type;
             reg.abs = src.abs;
             reg.negate = src.negate;
@@ -2173,7 +2212,7 @@ stage_uses_interleaved_attributes(unsigned stage,
  * instruction's original execution size.
  */
 static unsigned
-get_lowered_simd_width(const struct gen_device_info *devinfo,
+get_lowered_simd_width(const struct intel_device_info *devinfo,
                        enum shader_dispatch_mode dispatch_mode,
                        unsigned stage, const vec4_instruction *inst)
 {
@@ -2227,7 +2266,7 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
     * compressed instruction bug in gfx7, which is another reason to enforce
     * this limit).
     */
-   if (devinfo->ver == 7 && !devinfo->is_haswell &&
+   if (devinfo->verx10 == 70 &&
        (get_exec_type_size(inst) == 8 || type_sz(inst->dst.type) == 8))
       lowered_width = MIN2(lowered_width, 4);
 
@@ -2665,6 +2704,22 @@ vec4_visitor::run()
    if (shader_time_index >= 0)
       emit_shader_time_begin();
 
+   setup_push_ranges();
+
+   if (prog_data->base.zero_push_reg) {
+      /* push_reg_mask_param is in uint32 params and UNIFORM is in vec4s */
+      const unsigned mask_param = stage_prog_data->push_reg_mask_param;
+      src_reg mask = src_reg(dst_reg(UNIFORM, mask_param / 4));
+      assert(mask_param % 2 == 0); /* Should be 64-bit-aligned */
+      mask.swizzle = BRW_SWIZZLE4((mask_param + 0) % 4,
+                                  (mask_param + 1) % 4,
+                                  (mask_param + 0) % 4,
+                                  (mask_param + 1) % 4);
+
+      emit(VEC4_OPCODE_ZERO_OOB_PUSH_REGS,
+           dst_reg(VGRF, alloc.allocate(3)), mask);
+   }
+
    emit_prolog();
 
    emit_nir_code();
@@ -2847,25 +2902,10 @@ brw_compile_vs(const struct brw_compiler *compiler,
 
    const unsigned *assembly = NULL;
 
-   if (prog_data->base.vue_map.varying_to_slot[VARYING_SLOT_EDGE] != -1) {
-      /* If the output VUE map contains VARYING_SLOT_EDGE then we need to copy
-       * the edge flag from VERT_ATTRIB_EDGEFLAG.  This will be done
-       * automatically by brw_vec4_visitor::emit_urb_slot but we need to
-       * ensure that prog_data->inputs_read is accurate.
-       *
-       * In order to make late NIR passes aware of the change, we actually
-       * whack shader->info.inputs_read instead.  This is safe because we just
-       * made a copy of the shader.
-       */
-      assert(!is_scalar);
-      assert(key->copy_edgeflag);
-      nir->info.inputs_read |= VERT_BIT_EDGEFLAG;
-   }
-
    prog_data->inputs_read = nir->info.inputs_read;
    prog_data->double_inputs_read = nir->info.vs.double_inputs;
 
-   brw_nir_lower_vs_inputs(nir, key->gl_attrib_wa_flags);
+   brw_nir_lower_vs_inputs(nir, params->edgeflag_is_last, key->gl_attrib_wa_flags);
    brw_nir_lower_vue_outputs(nir);
    brw_postprocess_nir(nir, compiler, is_scalar, debug_enabled,
                        key->base.robust_buffer_access);

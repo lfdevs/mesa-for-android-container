@@ -44,6 +44,18 @@ is written in the GCN3 reference guide:
 D.u = CountOneBits(S0.u) + S1.u.
 ```
 
+## `v_alignbyte_b32`
+
+All versions of the ISA document are vague about it, but after some trial and
+error we discovered that only 2 bits of the 3rd operand are used.
+Therefore, this instruction can't shift more than 24 bits.
+
+The correct description of `v_alignbyte_b32` is probably the following:
+
+```
+D.u = ({S0, S1} >> (8 * S2.u[1:0])) & 0xffffffff
+```
+
 ## SMEM stores
 
 The Vega ISA references doesn't say this (or doesn't make it clear), but

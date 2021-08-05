@@ -24,7 +24,7 @@
 /**
  * @file v3dx_simulator.c
  *
- * Implements the actual HW interaction betweeh the GL driver's VC5 simulator and the simulator.
+ * Implements the actual HW interaction betweeh the GL driver's V3D simulator and the simulator.
  *
  * The register headers between V3D versions will have conflicting defines, so
  * all register interactions appear in this file and are compiled per V3D version
@@ -41,6 +41,7 @@
 #include "v3d_simulator_wrapper.h"
 
 #include "util/macros.h"
+#include "util/bitscan.h"
 #include "drm-uapi/v3d_drm.h"
 
 #define HW_REGISTER_RO(x) (x)
@@ -57,9 +58,6 @@
 static void
 v3d_invalidate_l3(struct v3d_hw *v3d)
 {
-        if (!v3d_hw_has_gca(v3d))
-                return;
-
 #if V3D_VERSION < 40
         uint32_t gca_ctrl = V3D_READ(V3D_GCA_CACHE_CTRL);
 
@@ -80,6 +78,12 @@ v3d_invalidate_l2c(struct v3d_hw *v3d)
                   V3D_CTL_0_L2CACTL_L2CENA_SET);
 }
 
+enum v3d_l2t_cache_flush_mode {
+        V3D_CACHE_FLUSH_MODE_FLUSH,
+        V3D_CACHE_FLUSH_MODE_CLEAR,
+        V3D_CACHE_FLUSH_MODE_CLEAN,
+};
+
 /* Invalidates texture L2 cachelines */
 static void
 v3d_invalidate_l2t(struct v3d_hw *v3d)
@@ -88,7 +92,23 @@ v3d_invalidate_l2t(struct v3d_hw *v3d)
         V3D_WRITE(V3D_CTL_0_L2TFLEND, ~0);
         V3D_WRITE(V3D_CTL_0_L2TCACTL,
                   V3D_CTL_0_L2TCACTL_L2TFLS_SET |
-                  (0 << V3D_CTL_0_L2TCACTL_L2TFLM_LSB));
+                  (V3D_CACHE_FLUSH_MODE_FLUSH << V3D_CTL_0_L2TCACTL_L2TFLM_LSB));
+}
+
+/*
+ * Wait for l2tcactl, used for flushes.
+ *
+ * FIXME: for a multicore scenario we should pass here the core. All wrapper
+ * assumes just one core, so would be better to handle that on that case.
+ */
+static UNUSED void v3d_core_wait_l2tcactl(struct v3d_hw *v3d,
+                                          uint32_t ctrl)
+{
+   assert(!(ctrl & ~(V3D_CTL_0_L2TCACTL_TMUWCF_SET | V3D_CTL_0_L2TCACTL_L2TFLS_SET)));
+
+   while (V3D_READ(V3D_CTL_0_L2TCACTL) & ctrl) {
+           v3d_hw_tick(v3d);
+   }
 }
 
 /* Flushes dirty texture cachelines from the L1 write combiner */
@@ -98,7 +118,13 @@ v3d_flush_l1td(struct v3d_hw *v3d)
         V3D_WRITE(V3D_CTL_0_L2TCACTL,
                   V3D_CTL_0_L2TCACTL_TMUWCF_SET);
 
-        assert(!(V3D_READ(V3D_CTL_0_L2TCACTL) & V3D_CTL_0_L2TCACTL_L2TFLS_SET));
+        /* Note: here the kernel (and previous versions of the simulator
+         * wrapper) is using V3D_CTL_0_L2TCACTL_L2TFLS_SET, as with l2t. We
+         * understand that it makes more sense to do like this. We need to
+         * confirm which one is doing it correctly. So far things work fine on
+         * the simulator this way.
+         */
+        v3d_core_wait_l2tcactl(v3d, V3D_CTL_0_L2TCACTL_TMUWCF_SET);
 }
 
 /* Flushes dirty texture L2 cachelines */
@@ -109,9 +135,9 @@ v3d_flush_l2t(struct v3d_hw *v3d)
         V3D_WRITE(V3D_CTL_0_L2TFLEND, ~0);
         V3D_WRITE(V3D_CTL_0_L2TCACTL,
                   V3D_CTL_0_L2TCACTL_L2TFLS_SET |
-                  (2 << V3D_CTL_0_L2TCACTL_L2TFLM_LSB));
+                  (V3D_CACHE_FLUSH_MODE_CLEAN << V3D_CTL_0_L2TCACTL_L2TFLM_LSB));
 
-        assert(!(V3D_READ(V3D_CTL_0_L2TCACTL) & V3D_CTL_0_L2TCACTL_L2TFLS_SET));
+        v3d_core_wait_l2tcactl(v3d, V3D_CTL_0_L2TCACTL_L2TFLS_SET);
 }
 
 /* Invalidates the slice caches.  These are read-only caches. */
@@ -184,6 +210,8 @@ v3dX(simulator_submit_csd_ioctl)(struct v3d_hw *v3d,
                                  struct drm_v3d_submit_csd *args,
                                  uint32_t gmp_ofs)
 {
+        int last_completed_jobs = (V3D_READ(V3D_CSD_0_STATUS) &
+                                   V3D_CSD_0_STATUS_NUM_COMPLETED_JOBS_SET);
         g_gmp_ofs = gmp_ofs;
         v3d_reload_gmp(v3d);
 
@@ -198,9 +226,13 @@ v3dX(simulator_submit_csd_ioctl)(struct v3d_hw *v3d,
         /* CFG0 kicks off the job */
         V3D_WRITE(V3D_CSD_0_QUEUED_CFG0, args->cfg[0]);
 
-        while (V3D_READ(V3D_CSD_0_STATUS) &
-               (V3D_CSD_0_STATUS_HAVE_CURRENT_DISPATCH_SET |
-                V3D_CSD_0_STATUS_HAVE_QUEUED_DISPATCH_SET)) {
+        /* Now we wait for the dispatch to finish. The safest way is to check
+         * if NUM_COMPLETED_JOBS has increased. Note that in spite of that
+         * name that register field is about the number of completed
+         * dispatches.
+         */
+        while ((V3D_READ(V3D_CSD_0_STATUS) &
+                V3D_CSD_0_STATUS_NUM_COMPLETED_JOBS_SET) == last_completed_jobs) {
                 v3d_hw_tick(v3d);
         }
 
@@ -241,44 +273,139 @@ v3dX(simulator_get_param_ioctl)(struct v3d_hw *v3d,
                 return 0;
         }
 
-        fprintf(stderr, "Unknown DRM_IOCTL_VC5_GET_PARAM(%lld)\n",
+        fprintf(stderr, "Unknown DRM_IOCTL_V3D_GET_PARAM(%lld)\n",
                 (long long)args->value);
         abort();
 }
 
 static struct v3d_hw *v3d_isr_hw;
 
+
+static void
+v3d_isr_core(struct v3d_hw *v3d,
+             unsigned core)
+{
+        /* FIXME: so far we are assuming just one core, and using only the _0_
+         * registers. If we add multiple-core on the simulator, we would need
+         * to pass core as a parameter, and chose the proper registers.
+         */
+        assert(core == 0);
+        uint32_t core_status = V3D_READ(V3D_CTL_0_INT_STS);
+        V3D_WRITE(V3D_CTL_0_INT_CLR, core_status);
+
+        if (core_status & V3D_CTL_0_INT_STS_INT_OUTOMEM_SET) {
+                uint32_t size = 256 * 1024;
+                uint32_t offset = v3d_simulator_get_spill(size);
+
+                v3d_reload_gmp(v3d);
+
+                V3D_WRITE(V3D_PTB_0_BPOA, offset);
+                V3D_WRITE(V3D_PTB_0_BPOS, size);
+                return;
+        }
+
+        if (core_status & V3D_CTL_0_INT_STS_INT_GMPV_SET) {
+                fprintf(stderr, "GMP violation at 0x%08x\n",
+                        V3D_READ(V3D_GMP_VIO_ADDR));
+                abort();
+        } else {
+                fprintf(stderr,
+                        "Unexpected ISR with core status 0x%08x\n",
+                        core_status);
+        }
+        abort();
+}
+
+static void
+handle_mmu_interruptions(struct v3d_hw *v3d,
+                         uint32_t hub_status)
+{
+        bool wrv = hub_status & V3D_HUB_CTL_INT_STS_INT_MMU_WRV_SET;
+        bool pti = hub_status & V3D_HUB_CTL_INT_STS_INT_MMU_PTI_SET;
+        bool cap = hub_status & V3D_HUB_CTL_INT_STS_INT_MMU_CAP_SET;
+
+        if (!(pti || cap || wrv))
+                return;
+
+        const char *client = "?";
+        uint32_t axi_id = V3D_READ(V3D_MMU_VIO_ID);
+        uint32_t va_width = 30;
+
+#if V3D_VERSION >= 41
+        static const char *const v3d41_axi_ids[] = {
+                "L2T",
+                "PTB",
+                "PSE",
+                "TLB",
+                "CLE",
+                "TFU",
+                "MMU",
+                "GMP",
+        };
+
+        axi_id = axi_id >> 5;
+        if (axi_id < ARRAY_SIZE(v3d41_axi_ids))
+                client = v3d41_axi_ids[axi_id];
+
+        uint32_t mmu_debug = V3D_READ(V3D_MMU_DEBUG_INFO);
+
+        va_width += ((mmu_debug & V3D_MMU_DEBUG_INFO_VA_WIDTH_SET)
+                     >> V3D_MMU_DEBUG_INFO_VA_WIDTH_LSB);
+#endif
+        /* Only the top bits (final number depends on the gen) of the virtual
+         * address are reported in the MMU VIO_ADDR register.
+         */
+        uint64_t vio_addr = ((uint64_t)V3D_READ(V3D_MMU_VIO_ADDR) <<
+                             (va_width - 32));
+
+        /* Difference with the kernal: here were are going to abort after
+         * logging, so we don't bother with some stuff that the kernel does,
+         * like restoring the MMU ctrl bits
+         */
+
+        fprintf(stderr, "MMU error from client %s (%d) at 0x%llx%s%s%s\n",
+                client, axi_id, (long long) vio_addr,
+                wrv ? ", write violation" : "",
+                pti ? ", pte invalid" : "",
+                cap ? ", cap exceeded" : "");
+
+        abort();
+}
+
+static void
+v3d_isr_hub(struct v3d_hw *v3d)
+{
+        uint32_t hub_status = V3D_READ(V3D_HUB_CTL_INT_STS);
+
+        /* Acknowledge the interrupts we're handling here */
+        V3D_WRITE(V3D_HUB_CTL_INT_CLR, hub_status);
+
+        if (hub_status & V3D_HUB_CTL_INT_STS_INT_TFUC_SET) {
+                /* FIXME: we were not able to raise this exception. We let the
+                 * unreachable here, so we could get one if it is raised on
+                 * the future. In any case, note that for this case we would
+                 * only be doing debugging log.
+                 */
+                unreachable("TFU Conversion Complete interrupt not handled");
+        }
+
+        handle_mmu_interruptions(v3d, hub_status);
+}
+
 static void
 v3d_isr(uint32_t hub_status)
 {
         struct v3d_hw *v3d = v3d_isr_hw;
+        uint32_t mask = hub_status;
 
-        /* Check the per-core bits */
-        if (hub_status & (1 << 0)) {
-                uint32_t core_status = V3D_READ(V3D_CTL_0_INT_STS);
-                V3D_WRITE(V3D_CTL_0_INT_CLR, core_status);
+        /* Check the hub_status bits */
+        while (mask) {
+                unsigned core = u_bit_scan(&mask);
 
-                if (core_status & V3D_CTL_0_INT_STS_INT_OUTOMEM_SET) {
-                        uint32_t size = 256 * 1024;
-                        uint32_t offset = v3d_simulator_get_spill(size);
-
-                        v3d_reload_gmp(v3d);
-
-                        V3D_WRITE(V3D_PTB_0_BPOA, offset);
-                        V3D_WRITE(V3D_PTB_0_BPOS, size);
-                        return;
-                }
-
-                if (core_status & V3D_CTL_0_INT_STS_INT_GMPV_SET) {
-                        fprintf(stderr, "GMP violation at 0x%08x\n",
-                                V3D_READ(V3D_GMP_VIO_ADDR));
-                        abort();
-                } else {
-                        fprintf(stderr,
-                                "Unexpected ISR with core status 0x%08x\n",
-                                core_status);
-                }
-                abort();
+                if (core == v3d_hw_get_hub_core())
+                        v3d_isr_hub(v3d);
+                else
+                        v3d_isr_core(v3d, core);
         }
 
         return;
@@ -299,10 +426,23 @@ v3dX(simulator_init_regs)(struct v3d_hw *v3d)
         V3D_WRITE(V3D_CTL_0_MISCCFG, V3D_CTL_1_MISCCFG_OVRTMUOUT_SET);
 #endif
 
+        /* FIXME: the kernel captures some additional core interrupts here,
+         * for tracing. Perhaps we should evaluate to do the same here and add
+         * some debug options.
+         */
         uint32_t core_interrupts = (V3D_CTL_0_INT_STS_INT_GMPV_SET |
                                     V3D_CTL_0_INT_STS_INT_OUTOMEM_SET);
         V3D_WRITE(V3D_CTL_0_INT_MSK_SET, ~core_interrupts);
         V3D_WRITE(V3D_CTL_0_INT_MSK_CLR, core_interrupts);
+
+        uint32_t hub_interrupts =
+           (V3D_HUB_CTL_INT_STS_INT_MMU_WRV_SET |  /* write violation */
+            V3D_HUB_CTL_INT_STS_INT_MMU_PTI_SET |  /* page table invalid */
+            V3D_HUB_CTL_INT_STS_INT_MMU_CAP_SET |  /* CAP exceeded */
+            V3D_HUB_CTL_INT_STS_INT_TFUC_SET); /* TFU conversion */
+
+        V3D_WRITE(V3D_HUB_CTL_INT_MSK_SET, ~hub_interrupts);
+        V3D_WRITE(V3D_HUB_CTL_INT_MSK_CLR, hub_interrupts);
 
         v3d_isr_hw = v3d;
         v3d_hw_set_isr(v3d, v3d_isr);
@@ -313,6 +453,12 @@ v3dX(simulator_submit_cl_ioctl)(struct v3d_hw *v3d,
                                 struct drm_v3d_submit_cl *submit,
                                 uint32_t gmp_ofs)
 {
+        int last_bfc = (V3D_READ(V3D_CLE_0_BFC) &
+                        V3D_CLE_0_BFC_BMFCT_SET);
+
+        int last_rfc = (V3D_READ(V3D_CLE_0_RFC) &
+                        V3D_CLE_0_RFC_RMFCT_SET);
+
         g_gmp_ofs = gmp_ofs;
         v3d_reload_gmp(v3d);
 
@@ -336,8 +482,8 @@ v3dX(simulator_submit_cl_ioctl)(struct v3d_hw *v3d,
          * scheduler implements this using the GPU scheduler blocking on the
          * bin fence completing.  (We don't use HW semaphores).
          */
-        while (V3D_READ(V3D_CLE_0_CT0CA) !=
-               V3D_READ(V3D_CLE_0_CT0EA)) {
+        while ((V3D_READ(V3D_CLE_0_BFC) &
+                V3D_CLE_0_BFC_BMFCT_SET) == last_bfc) {
                 v3d_hw_tick(v3d);
         }
 
@@ -346,10 +492,8 @@ v3dX(simulator_submit_cl_ioctl)(struct v3d_hw *v3d,
         V3D_WRITE(V3D_CLE_0_CT1QBA, submit->rcl_start);
         V3D_WRITE(V3D_CLE_0_CT1QEA, submit->rcl_end);
 
-        while (V3D_READ(V3D_CLE_0_CT1CA) !=
-               V3D_READ(V3D_CLE_0_CT1EA) ||
-               V3D_READ(V3D_CLE_1_CT1CA) !=
-               V3D_READ(V3D_CLE_1_CT1EA)) {
+        while ((V3D_READ(V3D_CLE_0_RFC) &
+                V3D_CLE_0_RFC_RMFCT_SET) == last_rfc) {
                 v3d_hw_tick(v3d);
         }
 }

@@ -38,6 +38,7 @@ libradv_files = files(
   'winsys/null/radv_null_cs.h',
   'winsys/null/radv_null_winsys.c',
   'winsys/null/radv_null_winsys_public.h',
+  'radv_acceleration_structure.c',
   'radv_android.c',
   'radv_cmd_buffer.c',
   'radv_cs.h',
@@ -101,7 +102,7 @@ if not with_platform_windows
 endif
 
 radv_deps = []
-radv_flags = cc.get_supported_arguments(['-Wimplicit-fallthrough', '-Wshadow'])
+radv_flags = cc.get_supported_arguments(['-Wimplicit-fallthrough', '-Wshadow', '-Wpointer-arith'])
 
 if with_platform_x11
   radv_deps += dep_xcb_dri3

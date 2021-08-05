@@ -52,8 +52,9 @@
  */
 static void
 llvmpipe_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
+                  unsigned drawid_offset,
                   const struct pipe_draw_indirect_info *indirect,
-                  const struct pipe_draw_start_count *draws,
+                  const struct pipe_draw_start_count_bias *draws,
                   unsigned num_draws)
 {
    if (!indirect && (!draws[0].count || !info->instance_count))
@@ -145,7 +146,7 @@ llvmpipe_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
                                      !lp->queries_disabled);
 
    /* draw! */
-   draw_vbo(draw, info, indirect, draws, num_draws);
+   draw_vbo(draw, info, drawid_offset, indirect, draws, num_draws);
 
    /*
     * unmap vertex/index buffers
@@ -164,6 +165,16 @@ llvmpipe_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
          draw_vs_reset_so(lp->vs);
       }
    }
+
+   llvmpipe_cleanup_stage_sampling(lp, PIPE_SHADER_VERTEX);
+   llvmpipe_cleanup_stage_sampling(lp, PIPE_SHADER_GEOMETRY);
+   llvmpipe_cleanup_stage_sampling(lp, PIPE_SHADER_TESS_CTRL);
+   llvmpipe_cleanup_stage_sampling(lp, PIPE_SHADER_TESS_EVAL);
+
+   llvmpipe_cleanup_stage_images(lp, PIPE_SHADER_VERTEX);
+   llvmpipe_cleanup_stage_images(lp, PIPE_SHADER_GEOMETRY);
+   llvmpipe_cleanup_stage_images(lp, PIPE_SHADER_TESS_CTRL);
+   llvmpipe_cleanup_stage_images(lp, PIPE_SHADER_TESS_EVAL);
 
    /*
     * TODO: Flush only when a user vertex/index buffer is present

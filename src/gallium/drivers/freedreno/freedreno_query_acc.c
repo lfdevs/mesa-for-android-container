@@ -60,7 +60,7 @@ realloc_query_bo(struct fd_context *ctx, struct fd_acc_query *aq)
    /* don't assume the buffer is zero-initialized: */
    rsc = fd_resource(aq->prsc);
 
-   fd_bo_cpu_prep(rsc->bo, ctx->pipe, DRM_FREEDRENO_PREP_WRITE);
+   fd_bo_cpu_prep(rsc->bo, ctx->pipe, FD_BO_PREP_WRITE);
 
    map = fd_bo_map(rsc->bo);
    memset(map, 0, aq->size);
@@ -75,6 +75,7 @@ fd_acc_query_pause(struct fd_acc_query *aq) assert_dt
    if (!aq->batch)
       return;
 
+   fd_batch_needs_flush(aq->batch);
    p->pause(aq, aq->batch);
    aq->batch = NULL;
 }
@@ -85,6 +86,7 @@ fd_acc_query_resume(struct fd_acc_query *aq, struct fd_batch *batch) assert_dt
    const struct fd_acc_sample_provider *p = aq->provider;
 
    aq->batch = batch;
+   fd_batch_needs_flush(aq->batch);
    p->resume(aq, aq->batch);
 
    fd_screen_lock(batch->ctx->screen);
@@ -145,38 +147,14 @@ fd_acc_get_query_result(struct fd_context *ctx, struct fd_query *q, bool wait,
 
    assert(list_is_empty(&aq->node));
 
-   /* if !wait, then check the last sample (the one most likely to
-    * not be ready yet) and bail if it is not ready:
+   /* ARB_occlusion_query says:
+    *
+    *     "Querying the state for a given occlusion query forces that
+    *      occlusion query to complete within a finite amount of time."
+    *
+    * So, regardless of whether we are supposed to wait or not, we do need to
+    * flush now.
     */
-   if (!wait) {
-      int ret;
-
-      if (pending(rsc, false)) {
-         assert(!q->base.flushed);
-         tc_assert_driver_thread(ctx->tc);
-
-         /* piglit spec@arb_occlusion_query@occlusion_query_conform
-          * test, and silly apps perhaps, get stuck in a loop trying
-          * to get  query result forever with wait==false..  we don't
-          * wait to flush unnecessarily but we also don't want to
-          * spin forever:
-          */
-         if (aq->no_wait_cnt++ > 5) {
-            fd_context_access_begin(ctx);
-            fd_batch_flush(rsc->track->write_batch);
-            fd_context_access_end(ctx);
-         }
-         return false;
-      }
-
-      ret = fd_resource_wait(
-         ctx, rsc, DRM_FREEDRENO_PREP_READ | DRM_FREEDRENO_PREP_NOSYNC);
-      if (ret)
-         return false;
-
-      fd_bo_cpu_fini(rsc->bo);
-   }
-
    if (rsc->track->write_batch) {
       tc_assert_driver_thread(ctx->tc);
       fd_context_access_begin(ctx);
@@ -184,8 +162,14 @@ fd_acc_get_query_result(struct fd_context *ctx, struct fd_query *q, bool wait,
       fd_context_access_end(ctx);
    }
 
-   /* get the result: */
-   fd_resource_wait(ctx, rsc, DRM_FREEDRENO_PREP_READ);
+   if (!wait) {
+      int ret = fd_resource_wait(
+         ctx, rsc, FD_BO_PREP_READ | FD_BO_PREP_NOSYNC | FD_BO_PREP_FLUSH);
+      if (ret)
+         return false;
+   } else {
+      fd_resource_wait(ctx, rsc, FD_BO_PREP_READ);
+   }
 
    void *ptr = fd_bo_map(rsc->bo);
    p->result(aq, ptr, result);

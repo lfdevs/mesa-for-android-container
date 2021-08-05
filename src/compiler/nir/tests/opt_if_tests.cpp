@@ -141,3 +141,52 @@ TEST_F(nir_opt_if_test, opt_if_simplification_single_source_phi_after_if)
    ASSERT_TRUE(nir_block_ends_in_jump(nir_if_last_then_block(nif)));
    ASSERT_TRUE(exec_list_is_empty((&nir_if_first_else_block(nif)->instr_list)));
 }
+
+TEST_F(nir_opt_if_test, opt_if_alu_of_phi_progress)
+{
+   nir_ssa_def *two = nir_imm_int(&bld, 2);
+   nir_ssa_def *x = nir_imm_int(&bld, 0);
+
+   nir_phi_instr *phi = nir_phi_instr_create(bld.shader);
+
+   nir_loop *loop = nir_push_loop(&bld);
+   {
+      nir_ssa_dest_init(&phi->instr, &phi->dest,
+                        x->num_components, x->bit_size, NULL);
+
+      nir_phi_src *phi_src_x = ralloc(phi, nir_phi_src);
+      phi_src_x->pred = x->parent_instr->block;
+      phi_src_x->src = nir_src_for_ssa(x);
+      exec_list_push_tail(&phi->srcs, &phi_src_x->node);
+
+      nir_ssa_def *y = nir_iadd(&bld, &phi->dest.ssa, two);
+      nir_store_var(&bld, out_var,
+                    nir_imul(&bld, &phi->dest.ssa, two), 1);
+
+      nir_phi_src *phi_src_y = ralloc(phi, nir_phi_src);
+      phi_src_y->pred = nir_cursor_current_block(bld.cursor);
+      phi_src_y->src = nir_src_for_ssa(y);
+      exec_list_push_tail(&phi->srcs, &phi_src_y->node);
+   }
+   nir_pop_loop(&bld, loop);
+
+   bld.cursor = nir_before_block(nir_loop_first_block(loop));
+   nir_builder_instr_insert(&bld, &phi->instr);
+
+   nir_validate_shader(bld.shader, "input");
+
+   bool progress;
+
+   int progress_count = 0;
+   for (int i = 0; i < 10; i++) {
+      progress = nir_opt_if(bld.shader, false);
+      if (progress)
+         progress_count++;
+      else
+         break;
+      nir_opt_constant_folding(bld.shader);
+   }
+
+   EXPECT_LE(progress_count, 2);
+   ASSERT_FALSE(progress);
+}

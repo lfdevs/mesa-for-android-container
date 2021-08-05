@@ -19,7 +19,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-SKIP = set(["lane", "lanes", "lanes", "replicate", "swz", "widen", "swap", "neg", "abs", "not", "sign", "extend", "divzero", "clamp", "sem", "not_result", "skip"])
+SKIP = set(["lane", "lane_dest", "lanes", "lanes", "replicate", "swz", "widen", "swap", "neg", "abs", "not", "sign", "extend", "divzero", "clamp", "sem", "not_result", "skip"])
 
 TEMPLATE = """
 #ifndef _BI_BUILDER_H_
@@ -28,6 +28,11 @@ TEMPLATE = """
 #include "compiler.h"
 
 <%
+# For <32-bit loads/stores, the default extend `none` with a natural sized
+# input is not encodeable! To avoid a footgun, swap the default to `zext` which
+# will work as expected
+ZEXT_DEFAULT = set(["LOAD.i8", "LOAD.i16", "LOAD.i24", "STORE.i8", "STORE.i16", "STORE.i24"])
+
 def nirtypes(opcode):
     split = opcode.split('.', 1)
     if len(split) < 2:
@@ -52,19 +57,6 @@ def nirtypes(opcode):
         return ['nir_type_uint', 'nir_type_int']
     else:
         return None
-
-def typesize(opcode):
-    if opcode[-3:] == '128':
-        return 128
-    if opcode[-2:] == '48':
-        return 48
-    elif opcode[-1] == '8':
-        return 8
-    else:
-        try:
-            return int(opcode[-2:])
-        except:
-            return None
 
 def condition(opcode, typecheck, sizecheck):
     cond = ''
@@ -114,6 +106,9 @@ bi_instr * bi_${opcode.replace('.', '_').lower()}${to_suffix(ops[opcode])}(${sig
 % for imm in ops[opcode]["immediates"]:
     I->${imm} = ${imm};
 % endfor
+% if opcode in ZEXT_DEFAULT:
+    I->extend = BI_EXTEND_ZEXT;
+% endif
     bi_builder_insert(&b->cursor, I);
     return I;
 }
@@ -203,4 +198,4 @@ def arguments(op, temp_dest = True):
         modifier_signature(op) +
         op["immediates"])
 
-print(Template(COPYRIGHT + TEMPLATE).render(ops = ir_instructions, modifiers = modifier_lists, signature = signature, arguments = arguments, src_count = src_count, SKIP = SKIP))
+print(Template(COPYRIGHT + TEMPLATE).render(ops = ir_instructions, modifiers = modifier_lists, signature = signature, arguments = arguments, src_count = src_count, typesize = typesize, SKIP = SKIP))

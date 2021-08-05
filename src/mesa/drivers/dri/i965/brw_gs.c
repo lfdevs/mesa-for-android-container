@@ -36,7 +36,7 @@
 #include "compiler/glsl/ir_uniform.h"
 
 static void
-assign_gs_binding_table_offsets(const struct gen_device_info *devinfo,
+assign_gs_binding_table_offsets(const struct intel_device_info *devinfo,
                                 const struct gl_program *prog,
                                 struct brw_gs_prog_data *prog_data)
 {
@@ -49,13 +49,45 @@ assign_gs_binding_table_offsets(const struct gen_device_info *devinfo,
                                            &prog_data->base.base, reserved);
 }
 
+static void
+brw_gfx6_xfb_setup(const struct gl_transform_feedback_info *linked_xfb_info,
+                   struct brw_gs_prog_data *gs_prog_data)
+{
+   static const unsigned swizzle_for_offset[4] = {
+      BRW_SWIZZLE4(0, 1, 2, 3),
+      BRW_SWIZZLE4(1, 2, 3, 3),
+      BRW_SWIZZLE4(2, 3, 3, 3),
+      BRW_SWIZZLE4(3, 3, 3, 3)
+   };
+
+   int i;
+
+   /* Make sure that the VUE slots won't overflow the unsigned chars in
+    * prog_data->transform_feedback_bindings[].
+    */
+   STATIC_ASSERT(BRW_VARYING_SLOT_COUNT <= 256);
+
+   /* Make sure that we don't need more binding table entries than we've
+    * set aside for use in transform feedback.  (We shouldn't, since we
+    * set aside enough binding table entries to have one per component).
+    */
+   assert(linked_xfb_info->NumOutputs <= BRW_MAX_SOL_BINDINGS);
+
+   gs_prog_data->num_transform_feedback_bindings = linked_xfb_info->NumOutputs;
+   for (i = 0; i < gs_prog_data->num_transform_feedback_bindings; i++) {
+      gs_prog_data->transform_feedback_bindings[i] =
+         linked_xfb_info->Outputs[i].OutputRegister;
+      gs_prog_data->transform_feedback_swizzles[i] =
+         swizzle_for_offset[linked_xfb_info->Outputs[i].ComponentOffset];
+   }
+}
 static bool
 brw_codegen_gs_prog(struct brw_context *brw,
                     struct brw_program *gp,
                     struct brw_gs_prog_key *key)
 {
    struct brw_compiler *compiler = brw->screen->compiler;
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct brw_stage_state *stage_state = &brw->gs.base;
    struct brw_gs_prog_data prog_data;
    bool start_busy = false;
@@ -72,14 +104,20 @@ brw_codegen_gs_prog(struct brw_context *brw,
    brw_nir_setup_glsl_uniforms(mem_ctx, nir, &gp->program,
                                &prog_data.base.base,
                                compiler->scalar_stage[MESA_SHADER_GEOMETRY]);
-   brw_nir_analyze_ubo_ranges(compiler, nir, NULL,
-                              prog_data.base.base.ubo_ranges);
+   if (brw->can_push_ubos) {
+      brw_nir_analyze_ubo_ranges(compiler, nir, NULL,
+                                 prog_data.base.base.ubo_ranges);
+   }
 
    uint64_t outputs_written = nir->info.outputs_written;
 
    brw_compute_vue_map(devinfo,
                        &prog_data.base.vue_map, outputs_written,
                        gp->program.info.separate_shader, 1);
+
+   if (devinfo->ver == 6)
+      brw_gfx6_xfb_setup(gp->program.sh.LinkedTransformFeedback,
+                         &prog_data);
 
    int st_index = -1;
    if (INTEL_DEBUG & DEBUG_SHADER_TIME)
@@ -93,7 +131,7 @@ brw_codegen_gs_prog(struct brw_context *brw,
    char *error_str;
    const unsigned *program =
       brw_compile_gs(brw->screen->compiler, brw, mem_ctx, key,
-                     &prog_data, nir, &gp->program, st_index,
+                     &prog_data, nir, st_index,
                      NULL, &error_str);
    if (program == NULL) {
       ralloc_strcat(&gp->program.sh.data->InfoLog, error_str);
@@ -188,7 +226,7 @@ brw_gs_populate_default_key(const struct brw_compiler *compiler,
                             struct brw_gs_prog_key *key,
                             struct gl_program *prog)
 {
-   const struct gen_device_info *devinfo = compiler->devinfo;
+   const struct intel_device_info *devinfo = compiler->devinfo;
 
    memset(key, 0, sizeof(*key));
 

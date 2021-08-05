@@ -83,7 +83,7 @@ void
 genX(emit_raw_pipe_control)(struct brw_context *brw, uint32_t flags,
                             struct brw_bo *bo, uint32_t offset, uint64_t imm)
 {
-   UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   UNUSED const struct intel_device_info *devinfo = &brw->screen->devinfo;
    enum pipe_control_flags post_sync_flags = get_post_sync_flags(flags);
    enum pipe_control_flags non_lri_post_sync_flags =
       post_sync_flags & ~PIPE_CONTROL_LRI_POST_SYNC_OP;

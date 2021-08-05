@@ -30,8 +30,6 @@ static void
 setup_lrz(struct fd_resource *rsc)
 {
    struct fd_screen *screen = fd_screen(rsc->b.b.screen);
-   const uint32_t flags =
-      DRM_FREEDRENO_GEM_CACHE_WCOMBINE | DRM_FREEDRENO_GEM_TYPE_KMEM; /* TODO */
    unsigned lrz_pitch = align(DIV_ROUND_UP(rsc->b.b.width0, 8), 64);
    unsigned lrz_height = DIV_ROUND_UP(rsc->b.b.height0, 8);
 
@@ -51,7 +49,7 @@ setup_lrz(struct fd_resource *rsc)
    rsc->lrz_height = lrz_height;
    rsc->lrz_width = lrz_pitch;
    rsc->lrz_pitch = lrz_pitch;
-   rsc->lrz = fd_bo_new(screen->dev, size, flags, "lrz");
+   rsc->lrz = fd_bo_new(screen->dev, size, 0, "lrz");
 }
 
 uint32_t

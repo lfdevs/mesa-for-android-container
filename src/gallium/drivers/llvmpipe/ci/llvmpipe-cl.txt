@@ -6,7 +6,6 @@ api/clenqueuemigratememobjects: skip
 api/clgetextensionfunctionaddressforplatform: skip
 api/clgetkernelarginfo: skip
 api/cllinkprogram: skip
-api/clsetkernelarg/set kernel argument for cl_int3: fail
 interop/egl_khr_cl_event2: skip
 program/build/include-directories: fail
 program/build/math-intrinsics: fail

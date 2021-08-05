@@ -50,7 +50,7 @@ struct stipple_stage {
    float counter;
    ushort pattern;
    ushort factor;
-   bool smooth;
+   bool rectangular;
 };
 
 
@@ -141,7 +141,7 @@ stipple_line(struct draw_stage *stage, struct prim_header *header)
    if (header->flags & DRAW_PIPE_RESET_STIPPLE)
       stipple->counter = 0;
 
-   if (stipple->smooth) {
+   if (stipple->rectangular) {
       float dx = x1 - x0;
       float dy = y1 - y0;
       length = sqrtf(dx*dx + dy*dy);
@@ -216,7 +216,7 @@ stipple_first_line(struct draw_stage *stage,
 
    stipple->pattern = draw->rasterizer->line_stipple_pattern;
    stipple->factor = draw->rasterizer->line_stipple_factor + 1;
-   stipple->smooth = draw->rasterizer->line_smooth;
+   stipple->rectangular = draw->rasterizer->line_rectangular;
 
    stage->line = stipple_line;
    stage->line(stage, header);

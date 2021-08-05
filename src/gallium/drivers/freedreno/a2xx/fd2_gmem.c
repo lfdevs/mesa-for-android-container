@@ -584,7 +584,7 @@ fd2_emit_tile_init(struct fd_batch *batch) assert_dt
          if (cf->opc == ALLOC)
             cf++;
          assert(cf->opc == EXEC);
-         assert(cf[ctx->screen->info.num_vsc_pipes * 2 - 2].opc == EXEC_END);
+         assert(cf[ctx->screen->info->num_vsc_pipes * 2 - 2].opc == EXEC_END);
          cf[2 * (gmem->num_vsc_pipes - 1)].opc = EXEC_END;
       }
 
@@ -602,8 +602,7 @@ fd2_emit_tile_init(struct fd_batch *batch) assert_dt
             if (ctx->vsc_pipe_bo[i])
                fd_bo_del(ctx->vsc_pipe_bo[i]);
             ctx->vsc_pipe_bo[i] =
-               fd_bo_new(ctx->dev, bo_size, DRM_FREEDRENO_GEM_TYPE_KMEM,
-                         "vsc_pipe[%u]", i);
+               fd_bo_new(ctx->dev, bo_size, 0, "vsc_pipe[%u]", i);
             assert(ctx->vsc_pipe_bo[i]);
          }
 

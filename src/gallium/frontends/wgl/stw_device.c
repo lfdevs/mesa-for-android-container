@@ -228,6 +228,8 @@ stw_cleanup(void)
 
    stw_tls_cleanup();
 
+   util_dynarray_fini(&stw_dev->pixelformats);
+
    stw_dev = NULL;
 }
 

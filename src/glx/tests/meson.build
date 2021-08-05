@@ -43,9 +43,9 @@ if with_shared_glapi
     executable(
       'glx-test',
       [files_glx_test, glx_indirect_size_h, main_dispatch_h],
-      link_with : [libglx, libglapi],
+      link_with : [libglx, libglapi, libloader],
       include_directories : [
-        inc_src, inc_include, inc_mesa, inc_mapi, inc_glx,
+        inc_src, inc_include, inc_mesa, inc_mapi, inc_glx, inc_loader,
       ],
       dependencies : [dep_libdrm, dep_glproto, dep_thread, idep_gtest]
     ),

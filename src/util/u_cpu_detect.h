@@ -56,7 +56,23 @@ enum cpu_family {
 typedef uint32_t util_affinity_mask[UTIL_MAX_CPUS / 32];
 
 struct util_cpu_caps_t {
-   int nr_cpus;
+   /**
+    * Number of CPUs available to the process.
+    *
+    * This will be less than or equal to \c max_cpus.  This is the number of
+    * CPUs that are online and available to the process.
+    */
+   int16_t nr_cpus;
+
+   /**
+    * Maximum number of CPUs that can be online in the system.
+    *
+    * This will be greater than or equal to \c nr_cpus.  This is the number of
+    * CPUs installed in the system.  \c nr_cpus will be less if some CPUs are
+    * offline.
+    */
+   int16_t max_cpus;
+
    enum cpu_family family;
 
    /* Feature flags */

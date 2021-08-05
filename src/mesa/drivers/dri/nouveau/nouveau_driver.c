@@ -64,7 +64,7 @@ nouveau_get_string(struct gl_context *ctx, GLenum name)
 }
 
 static void
-nouveau_flush(struct gl_context *ctx)
+nouveau_flush(struct gl_context *ctx, unsigned gallium_flush_flags)
 {
 	struct nouveau_context *nctx = to_nouveau_context(ctx);
 	struct nouveau_pushbuf *push = context_push(ctx);
@@ -90,7 +90,7 @@ nouveau_finish(struct gl_context *ctx)
 	struct nouveau_pushbuf_refn refn =
 		{ nctx->fence, NOUVEAU_BO_VRAM | NOUVEAU_BO_RDWR };
 
-	nouveau_flush(ctx);
+	nouveau_flush(ctx, 0);
 
 	if (!nouveau_pushbuf_space(push, 16, 0, 0) &&
 	    !nouveau_pushbuf_refn(push, &refn, 1)) {

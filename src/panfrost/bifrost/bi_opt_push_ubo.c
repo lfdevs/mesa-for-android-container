@@ -30,10 +30,16 @@
  * structure returned back to the command stream. */
 
 static bool
-bi_is_direct_aligned_ubo(bi_instr *ins)
+bi_is_ubo(bi_instr *ins)
 {
         return (bi_opcode_props[ins->op].message == BIFROST_MESSAGE_LOAD) &&
-                (ins->seg == BI_SEG_UBO) &&
+                (ins->seg == BI_SEG_UBO);
+}
+
+static bool
+bi_is_direct_aligned_ubo(bi_instr *ins)
+{
+        return bi_is_ubo(ins) &&
                 (ins->src[0].type == BI_INDEX_CONSTANT) &&
                 (ins->src[1].type == BI_INDEX_CONSTANT) &&
                 ((ins->src[0].value & 0x3) == 0);
@@ -118,8 +124,11 @@ bi_pick_ubo(struct panfrost_ubo_push *push, struct bi_ubo_analysis *analysis)
 void
 bi_opt_push_ubo(bi_context *ctx)
 {
-        if (ctx->inputs->no_ubo_to_push)
+        if (ctx->inputs->no_ubo_to_push) {
+                /* If nothing is pushed, all UBOs need to be uploaded */
+                ctx->ubo_mask = ~0;
                 return;
+        }
 
         /* This pass only runs once */
         assert(ctx->info->push.count == 0);
@@ -127,15 +136,31 @@ bi_opt_push_ubo(bi_context *ctx)
         struct bi_ubo_analysis analysis = bi_analyze_ranges(ctx);
         bi_pick_ubo(&ctx->info->push, &analysis);
 
+        ctx->ubo_mask = 0;
+
         bi_foreach_instr_global_safe(ctx, ins) {
-                if (!bi_is_direct_aligned_ubo(ins)) continue;
+                if (!bi_is_ubo(ins)) continue;
 
                 unsigned ubo = ins->src[1].value;
                 unsigned offset = ins->src[0].value;
 
+                if (!bi_is_direct_aligned_ubo(ins)) {
+                        /* The load can't be pushed, so this UBO needs to be
+                         * uploaded conventionally */
+                        if (ins->src[1].type == BI_INDEX_CONSTANT)
+                                ctx->ubo_mask |= BITSET_BIT(ubo);
+                        else
+                                ctx->ubo_mask = ~0;
+
+                        continue;
+                }
+
                 /* Check if we decided to push this */
                 assert(ubo < analysis.nr_blocks);
-                if (!BITSET_TEST(analysis.blocks[ubo].pushed, offset / 4)) continue;
+                if (!BITSET_TEST(analysis.blocks[ubo].pushed, offset / 4)) {
+                        ctx->ubo_mask |= BITSET_BIT(ubo);
+                        continue;
+                }
 
                 /* Replace the UBO load with moves from FAU */
                 bi_builder b = bi_init_builder(ctx, bi_after_instr(ins));

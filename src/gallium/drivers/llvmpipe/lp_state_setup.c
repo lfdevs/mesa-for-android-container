@@ -335,12 +335,7 @@ lp_do_offset_tri(struct gallivm_state *gallivm,
    z0z1z2 = LLVMBuildShuffleVector(b, z0z1, attribv[2], LLVMConstVector(shuffles, 4), "");
    zoffset = lp_build_broadcast_scalar(bld, zoffset);
 
-   /* clamp and do offset */
-   /*
-    * FIXME I suspect the clamp (is that even right to always clamp to fixed
-    * 0.0/1.0?) should really be per fragment?
-    */
-   z0z1z2 = lp_build_clamp(bld, LLVMBuildFAdd(b, z0z1z2, zoffset, ""), bld->zero, bld->one);
+   z0z1z2 = LLVMBuildFAdd(b, z0z1z2, zoffset, "");
 
    /* insert into args->a0.z, a1.z, a2.z:
     */
@@ -864,7 +859,7 @@ lp_make_setup_variant_key(struct llvmpipe_context *lp,
       key->pgon_offset_units = (float) lp->rasterizer->offset_units;
    } else {
       key->pgon_offset_units =
-         (float) (lp->rasterizer->offset_units * lp->mrd);
+         (float) (lp->rasterizer->offset_units * lp->mrd * 2);
    }
 
    key->pgon_offset_scale = lp->rasterizer->offset_scale;

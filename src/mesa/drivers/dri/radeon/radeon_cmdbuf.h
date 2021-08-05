@@ -101,7 +101,7 @@ void rcommonBeginBatch(radeonContextPtr rmesa,
 static inline void radeon_firevertices(radeonContextPtr radeon)
 {
    if (radeon->cmdbuf.cs->cdw || radeon->dma.flush )
-      radeon->glCtx.Driver.Flush(&radeon->glCtx); /* +r6/r7 */
+      radeon->glCtx.Driver.Flush(&radeon->glCtx, 0); /* +r6/r7 */
 }
 
 #endif

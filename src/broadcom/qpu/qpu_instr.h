@@ -191,6 +191,8 @@ enum v3d_qpu_add_op {
         V3D_QPU_A_TMUWT,
         V3D_QPU_A_VPMSETUP,
         V3D_QPU_A_VPMWT,
+        V3D_QPU_A_FLAFIRST,
+        V3D_QPU_A_FLNAFIRST,
         V3D_QPU_A_LDVPMV_IN,
         V3D_QPU_A_LDVPMV_OUT,
         V3D_QPU_A_LDVPMD_IN,

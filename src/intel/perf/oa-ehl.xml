@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
-<metrics version="1582124706" merge_md5="">
-  <set name="Render Metrics Basic Gen11"
+<metrics version="1619078711" merge_md5="">
+  <set name="Render Metrics Basic set"
        chipset="EHL"
        symbol_name="RenderBasic"
        underscore_name="render_basic"
        mdapi_supported_apis="VK OGL OCL IO BB"
-       hw_config_guid="a95112cc-804a-4c80-b57b-2870e56cc240"
+       hw_config_guid="c693e665-867f-4362-91b6-85337f932010"
        >
     <counter name="GPU Time Elapsed"
              symbol_name="GpuTime"
@@ -638,21 +638,21 @@
         <register type="OA" address="0x00002724" value="0x00800000" />
     </register_config>
     <register_config type="FLEX">
-        <register type="FLEX" address="0x0000E65C" value="0xFFFFFFFF" />
         <register type="FLEX" address="0x0000E458" value="0x00005004" />
         <register type="FLEX" address="0x0000E558" value="0x00010003" />
         <register type="FLEX" address="0x0000E658" value="0x00012011" />
         <register type="FLEX" address="0x0000E758" value="0x00051050" />
         <register type="FLEX" address="0x0000E45C" value="0x00000052" />
+        <register type="FLEX" address="0x0000E65C" value="0xFFFFFFFF" />
     </register_config>
   </set>
 
-  <set name="Compute Metrics Basic Gen11"
+  <set name="Compute Metrics Basic set"
        chipset="EHL"
        symbol_name="ComputeBasic"
        underscore_name="compute_basic"
        mdapi_supported_apis="VK OGL OCL IO BB"
-       hw_config_guid="54449e8a-196b-4c43-8ecd-540b0504b5c1"
+       hw_config_guid="ae4d01a9-fe55-453c-8c7a-036acd5eacff"
        >
     <counter name="GPU Time Elapsed"
              symbol_name="GpuTime"
@@ -1320,10 +1320,11 @@
         <register type="FLEX" address="0x0000E558" value="0x00000003" />
         <register type="FLEX" address="0x0000E658" value="0x00002001" />
         <register type="FLEX" address="0x0000E758" value="0x00000008" />
+        <register type="FLEX" address="0x0000E65C" value="0xFFFFFFFF" />
     </register_config>
   </set>
 
-  <set name="ComputeExtended Gen11"
+  <set name="ComputeExtended metrics set"
        chipset="EHL"
        symbol_name="ComputeExtended"
        underscore_name="compute_extended"
@@ -1758,7 +1759,7 @@
     </register_config>
   </set>
 
-  <set name="Compute Metrics L3 Cache Gen11"
+  <set name="Compute Metrics L3 Cache set"
        chipset="EHL"
        symbol_name="ComputeL3Cache"
        underscore_name="compute_l3_cache"
@@ -2626,7 +2627,7 @@
     </register_config>
   </set>
 
-  <set name="Render Metrics for 3D Pipeline Profile Gen11"
+  <set name="Render Metrics set for 3D Pipeline Profile"
        chipset="EHL"
        symbol_name="RenderPipeProfile"
        underscore_name="render_pipe_profile"
@@ -3824,6 +3825,7 @@
              units="percent"
              semantic_type="duration"
              equation="C 0 READ B 7 READ FSUB 100 UMUL $GpuCoreClocks FDIV"
+             availability="$SubsliceMask 3 AND"
              mdapi_group="GPU/Data Port"
              mdapi_usage_flags="Tier3 Frame Batch Draw"
              mdapi_supported_apis=""
@@ -3838,6 +3840,7 @@
              units="percent"
              semantic_type="duration"
              equation="C 2 READ C 1 READ FSUB 100 UMUL $GpuCoreClocks FDIV"
+             availability="$SubsliceMask 12 AND"
              mdapi_group="GPU/Data Port"
              mdapi_usage_flags="Tier3 Frame Batch Draw"
              mdapi_supported_apis=""
@@ -3852,6 +3855,7 @@
              units="percent"
              semantic_type="duration"
              equation="C 4 READ C 3 READ FSUB 100 UMUL $GpuCoreClocks FDIV"
+             availability="$SubsliceMask 48 AND"
              mdapi_group="GPU/Data Port"
              mdapi_usage_flags="Tier3 Frame Batch Draw"
              mdapi_supported_apis=""
@@ -3866,6 +3870,7 @@
              units="percent"
              semantic_type="duration"
              equation="C 6 READ C 5 READ FSUB 100 UMUL $GpuCoreClocks FDIV"
+             availability="$SubsliceMask 192 AND"
              mdapi_group="GPU/Data Port"
              mdapi_usage_flags="Tier3 Frame Batch Draw"
              mdapi_supported_apis=""
@@ -5406,7 +5411,7 @@
     </register_config>
   </set>
 
-  <set name="Gen11 L2Bank0 stalled metric set"
+  <set name="L2Bank0 stalled metric set"
        chipset="EHL"
        symbol_name="L3_2"
        underscore_name="l3_2"
@@ -5859,7 +5864,7 @@
     </register_config>
   </set>
 
-  <set name="Gen11 L2Bank1 stalled metric set"
+  <set name="L2Bank1 stalled metric set"
        chipset="EHL"
        symbol_name="L3_3"
        underscore_name="l3_3"
@@ -6312,7 +6317,7 @@
     </register_config>
   </set>
 
-  <set name="Gen11 L2Bank4 stalled metric set"
+  <set name="L2Bank4 stalled metric set"
        chipset="EHL"
        symbol_name="L3_4"
        underscore_name="l3_4"
@@ -6794,7 +6799,7 @@
     </register_config>
   </set>
 
-  <set name="Gen11 L2Bank5 stalled metric set"
+  <set name="L2Bank5 stalled metric set"
        chipset="EHL"
        symbol_name="L3_5"
        underscore_name="l3_5"
@@ -11585,7 +11590,7 @@
        symbol_name="TestOa"
        underscore_name="test_oa"
        mdapi_supported_apis="VK OGL OCL IO BB"
-       hw_config_guid="9dace73d-0364-45bc-9a22-f27c2acda706"
+       hw_config_guid="4cbcfaf7-3c0c-42b8-a324-b1e58329c732"
        >
     <counter name="GPU Time Elapsed"
              symbol_name="GpuTime"
@@ -11782,6 +11787,9 @@
         <register type="OA" address="0x000027A4" value="0x0000FFE7" />
         <register type="OA" address="0x000027A8" value="0x00100001" />
         <register type="OA" address="0x000027AC" value="0x0000FFE7" />
+    </register_config>
+    <register_config type="FLEX">
+        <register type="FLEX" address="0x0000E65C" value="0xFFFFFFFF" />
     </register_config>
   </set>
 

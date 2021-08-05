@@ -58,7 +58,7 @@ class Engine(object):
     def __init__(self, xml):
         self.cname = cname('engine')
         self.engine_name_match = xml.attrib['engine_name_match']
-        self.engine_versions = xml.attrib['engine_versions']
+        self.engine_versions = xml.attrib.get('engine_versions', None)
         self.options = []
 
         for option in xml.findall('option'):
@@ -156,7 +156,9 @@ static const struct driconf_option ${cname}[] = {
 static const struct driconf_engine ${device.cname}_engines[] = {
 %    for engine in device.engines:
     { .engine_name_match = "${engine.engine_name_match}",
+%        if engine.engine_versions:
       .engine_versions = "${engine.engine_versions}",
+%        endif
       .num_options = ${len(engine.options)},
       .options = ${engine.cname + '_options'},
     },

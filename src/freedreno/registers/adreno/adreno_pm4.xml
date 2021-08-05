@@ -831,18 +831,18 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 		<reg64 offset="3" name="INDIRECT" type="address"/>
 		<reg32 offset="5" name="STRIDE" type="uint"/>
 	</stripe>
-	<stripe varset="a6xx_draw_indirect_opcode" variants="INDIRECT_OP_INDEXED">
+	<stripe varset="a6xx_draw_indirect_opcode" variants="INDIRECT_OP_INDEXED" prefix="INDEXED">
 		<reg64 offset="3" name="INDEX" type="address"/>
 		<reg32 offset="5" name="MAX_INDICES" type="uint"/>
 		<reg64 offset="6" name="INDIRECT" type="address"/>
 		<reg32 offset="8" name="STRIDE" type="uint"/>
 	</stripe>
-	<stripe varset="a6xx_draw_indirect_opcode" variants="INDIRECT_OP_INDIRECT_COUNT">
+	<stripe varset="a6xx_draw_indirect_opcode" variants="INDIRECT_OP_INDIRECT_COUNT" prefix="INDIRECT">
 		<reg64 offset="3" name="INDIRECT" type="address"/>
 		<reg64 offset="5" name="INDIRECT_COUNT" type="address"/>
 		<reg32 offset="7" name="STRIDE" type="uint"/>
 	</stripe>
-	<stripe varset="a6xx_draw_indirect_opcode" variants="INDIRECT_OP_INDIRECT_COUNT_INDEXED">
+	<stripe varset="a6xx_draw_indirect_opcode" variants="INDIRECT_OP_INDIRECT_COUNT_INDEXED" prefix="INDIRECT_INDEXED">
 		<reg64 offset="3" name="INDEX" type="address"/>
 		<reg32 offset="5" name="MAX_INDICES" type="uint"/>
 		<reg64 offset="6" name="INDIRECT" type="address"/>

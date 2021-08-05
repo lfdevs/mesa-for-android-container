@@ -219,6 +219,7 @@ static struct pipe_sampler_view **
 vl_video_buffer_sampler_view_planes(struct pipe_video_buffer *buffer)
 {
    struct vl_video_buffer *buf = (struct vl_video_buffer *)buffer;
+   unsigned num_planes = util_format_get_num_planes(buffer->buffer_format);
    struct pipe_sampler_view sv_templ;
    struct pipe_context *pipe;
    unsigned i;
@@ -227,7 +228,7 @@ vl_video_buffer_sampler_view_planes(struct pipe_video_buffer *buffer)
 
    pipe = buf->base.context;
 
-   for (i = 0; i < buf->num_planes; ++i ) {
+   for (i = 0; i < num_planes; ++i ) {
       if (!buf->sampler_view_planes[i]) {
          memset(&sv_templ, 0, sizeof(sv_templ));
          u_sampler_view_default_template(&sv_templ, buf->resources[i], buf->resources[i]->format);
@@ -244,7 +245,7 @@ vl_video_buffer_sampler_view_planes(struct pipe_video_buffer *buffer)
    return buf->sampler_view_planes;
 
 error:
-   for (i = 0; i < buf->num_planes; ++i )
+   for (i = 0; i < num_planes; ++i )
       pipe_sampler_view_reference(&buf->sampler_view_planes[i], NULL);
 
    return NULL;

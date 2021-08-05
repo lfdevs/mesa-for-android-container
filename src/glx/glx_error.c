@@ -51,13 +51,13 @@ __glXSendError(Display * dpy, int_fast8_t errorCode, uint_fast32_t resourceID,
       error.errorCode = errorCode;
    }
    else {
-      error.errorCode = glx_dpy->codes->first_error + errorCode;
+      error.errorCode = glx_dpy->codes.first_error + errorCode;
    }
 
    error.sequenceNumber = dpy->request;
    error.resourceID = resourceID;
    error.minorCode = minorCode;
-   error.majorCode = glx_dpy->majorOpcode;
+   error.majorCode = glx_dpy->codes.major_opcode;
 
    _XError(dpy, &error);
 

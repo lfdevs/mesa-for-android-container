@@ -53,7 +53,8 @@
 #include "glxconfig.h"
 #include "glxhash.h"
 #include "util/macros.h"
-
+#include "util/u_thread.h"
+#include "loader.h"
 #include "glxextensions.h"
 
 #if defined(USE_LIBGLVND)
@@ -66,11 +67,16 @@
 extern "C" {
 #endif
 
+extern void glx_message(int level, const char *f, ...) PRINTFLIKE(2, 3);
+
+#define DebugMessageF(...) glx_message(_LOADER_DEBUG, __VA_ARGS__)
+#define InfoMessageF(...) glx_message(_LOADER_INFO, __VA_ARGS__)
+#define ErrorMessageF(...) glx_message(_LOADER_WARNING, __VA_ARGS__)
+#define CriticalErrorMessageF(...) glx_message(_LOADER_FATAL, __VA_ARGS__)
+
 
 #define GLX_MAJOR_VERSION 1       /* current version numbers */
 #define GLX_MINOR_VERSION 4
-
-#define __GLX_MAX_TEXTURE_UNITS 32
 
 struct glx_display;
 struct glx_context;
@@ -498,9 +504,13 @@ struct glx_screen
    const struct glx_screen_vtable *vtable;
 
     /**
-     * GLX extension string reported by the X-server.
+     * \name Storage for the GLX vendor, version, and extension strings
      */
+   /*@{ */
    const char *serverGLXexts;
+   const char *serverGLXvendor;
+   const char *serverGLXversion;
+   /*@} */
 
     /**
      * GLX extension string to be reported to applications.  This is the
@@ -551,9 +561,10 @@ struct glx_screen
  */
 struct glx_display
 {
-   /* The extension protocol codes */
-   XExtCodes *codes;
    struct glx_display *next;
+
+   /* The extension protocol codes */
+   XExtCodes codes;
 
     /**
      * Back pointer to the display
@@ -561,29 +572,13 @@ struct glx_display
    Display *dpy;
 
     /**
-     * The \c majorOpcode is common to all connections to the same server.
-     * It is also copied into the context structure.
-     */
-   int majorOpcode;
-
-    /**
-     * \name Server Version
+     * \name Minor Version
      *
-     * Major and minor version returned by the server during initialization.
+     * Minor version returned by the server during initialization. The major
+     * version is asserted to be 1 during extension setup.
      */
    /*@{ */
-   int majorVersion, minorVersion;
-   /*@} */
-
-    /**
-     * \name Storage for the servers GLX vendor and versions strings.
-     *
-     * These are the same for all screens on this display. These fields will
-     * be filled in on demand.
-     */
-   /*@{ */
-   const char *serverGLXvendor;
-   const char *serverGLXversion;
+   int minorVersion;
    /*@} */
 
     /**
@@ -651,8 +646,7 @@ extern void __glXSetCurrentContext(struct glx_context * c);
 
 # if defined( USE_ELF_TLS )
 
-extern __thread void *__glX_tls_Context
-   __attribute__ ((tls_model("initial-exec")));
+extern __THREAD_INITIAL_EXEC void *__glX_tls_Context;
 
 #  define __glXGetCurrentContext() __glX_tls_Context
 
@@ -736,12 +730,6 @@ extern void __glEmptyImage(struct glx_context *, GLint, GLint, GLint, GLint, GLe
 extern void __glXInitVertexArrayState(struct glx_context *);
 extern void __glXFreeVertexArrayState(struct glx_context *);
 
-/*
-** Inform the Server of the major and minor numbers and of the client
-** libraries extension string.
-*/
-extern void __glXClientInfo(Display * dpy, int opcode);
-
 _X_HIDDEN void
 __glX_send_client_info(struct glx_display *glx_dpy);
 
@@ -763,13 +751,8 @@ extern void __glXInitializeVisualConfigFromTags(struct glx_config * config,
                                                 Bool tagged_only,
                                                 Bool fbconfig_style_tags);
 
-extern char *__glXQueryServerString(Display * dpy, int opcode,
-                                    CARD32 screen, CARD32 name);
-extern char *__glXGetString(Display * dpy, int opcode,
-                            CARD32 screen, CARD32 name);
-
-extern const char __glXGLClientVersion[];
-extern const char __glXGLClientExtensions[];
+extern char *__glXQueryServerString(Display *dpy, CARD32 screen, CARD32 name);
+extern char *__glXGetString(Display *dpy, CARD32 screen, CARD32 name);
 
 extern GLboolean __glXGetMscRateOML(Display * dpy, GLXDrawable drawable,
                                     int32_t * numerator,

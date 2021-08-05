@@ -542,39 +542,6 @@ d3d12_lower_state_vars(nir_shader *nir, struct d3d12_shader *shader)
    return progress;
 }
 
-static const struct glsl_type *
-get_bare_samplers_for_type(const struct glsl_type *type)
-{
-   if (glsl_type_is_sampler(type)) {
-      if (glsl_sampler_type_is_shadow(type))
-         return glsl_bare_shadow_sampler_type();
-      else
-         return glsl_bare_sampler_type();
-   } else if (glsl_type_is_array(type)) {
-      return glsl_array_type(
-         get_bare_samplers_for_type(glsl_get_array_element(type)),
-         glsl_get_length(type),
-         0 /*explicit size*/);
-   }
-   assert(!"Unexpected type");
-   return NULL;
-}
-
-void
-d3d12_create_bare_samplers(nir_shader *nir)
-{
-   nir_foreach_variable_with_modes_safe(var, nir, nir_var_uniform) {
-      const struct glsl_type *type = glsl_without_array(var->type);
-      if (glsl_type_is_sampler(type) && glsl_get_sampler_result_type(type) != GLSL_TYPE_VOID) {
-         /* Since samplers are already lowered to be accessed by index, all we need to do
-          * here is create a bare sampler with the same binding */
-         nir_variable *clone = nir_variable_clone(var, nir);
-         clone->type = get_bare_samplers_for_type(var->type);
-         nir_shader_add_variable(nir, clone);
-      }
-   }
-}
-
 static bool
 lower_bool_input_filter(const nir_instr *instr,
                         UNUSED const void *_options)
@@ -621,73 +588,6 @@ d3d12_lower_bool_input(struct nir_shader *s)
 {
    return nir_shader_lower_instructions(s, lower_bool_input_filter,
                                         lower_bool_input_impl, NULL);
-}
-
-static bool
-lower_color_write(nir_builder *b, struct nir_instr *instr, unsigned nr_cbufs)
-{
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   if (intr->intrinsic != nir_intrinsic_store_deref)
-      return false;
-
-   nir_deref_instr *deref = nir_instr_as_deref(intr->src[0].ssa->parent_instr);
-   nir_variable *var = nir_deref_instr_get_variable(deref);
-
-   if (var->data.mode != nir_var_shader_out ||
-       var->data.location != FRAG_RESULT_COLOR)
-      return false;
-
-   /* lower the original write to data #0 */
-   var->name = ralloc_strdup(var, "gl_FragData[0]");
-   var->data.location = FRAG_RESULT_DATA0;
-   var->data.driver_location = 0;
-
-   b->cursor = nir_after_instr(&intr->instr);
-
-   /* Then create new variables and write them as well */
-   nir_ssa_def *value = nir_ssa_for_src(b, intr->src[1],
-                                        nir_src_num_components(intr->src[1]));
-   unsigned writemask = nir_intrinsic_write_mask(intr);
-   for (int i = 1; i < nr_cbufs; ++i) {
-      char name[256];
-      snprintf(name, sizeof(name), "gl_FragData[%d]", i);
-      nir_variable *new_var = nir_variable_create(b->shader,
-                                                  nir_var_shader_out,
-                                                  var->type, name);
-      new_var->data.location = FRAG_RESULT_DATA0 + i;
-      new_var->data.driver_location = i;
-      nir_store_var(b, new_var, value, writemask);
-   }
-
-   return true;
-}
-
-bool
-d3d12_lower_frag_result(struct nir_shader *nir, unsigned nr_cbufs)
-{
-   bool progress = false;
-   if (nir->info.stage != MESA_SHADER_FRAGMENT)
-      return false;
-
-   nir_foreach_function(function, nir) {
-      if (function->impl) {
-         nir_builder b;
-         nir_builder_init(&b, function->impl);
-
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr_safe(instr, block) {
-               progress |= lower_color_write(&b, instr, nr_cbufs);
-            }
-         }
-
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
-      }
-   }
-   return progress;
 }
 
 void

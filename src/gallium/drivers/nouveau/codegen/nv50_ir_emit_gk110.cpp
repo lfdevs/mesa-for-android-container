@@ -29,13 +29,11 @@ namespace nv50_ir {
 class CodeEmitterGK110 : public CodeEmitter
 {
 public:
-   CodeEmitterGK110(const TargetNVC0 *);
+   CodeEmitterGK110(const TargetNVC0 *, Program::Type);
 
    virtual bool emitInstruction(Instruction *);
    virtual uint32_t getMinEncodingSize(const Instruction *) const;
    virtual void prepareEmission(Function *);
-
-   inline void setProgramType(Program::Type pType) { progType = pType; }
 
 private:
    const TargetNVC0 *targNVC0;
@@ -2793,9 +2791,10 @@ CodeEmitterGK110::prepareEmission(Function *func)
       calculateSchedDataNVC0(targ, func);
 }
 
-CodeEmitterGK110::CodeEmitterGK110(const TargetNVC0 *target)
+CodeEmitterGK110::CodeEmitterGK110(const TargetNVC0 *target, Program::Type type)
    : CodeEmitter(target),
      targNVC0(target),
+     progType(type),
      writeIssueDelays(target->hasSWSched)
 {
    code = NULL;
@@ -2806,8 +2805,7 @@ CodeEmitterGK110::CodeEmitterGK110(const TargetNVC0 *target)
 CodeEmitter *
 TargetNVC0::createCodeEmitterGK110(Program::Type type)
 {
-   CodeEmitterGK110 *emit = new CodeEmitterGK110(this);
-   emit->setProgramType(type);
+   CodeEmitterGK110 *emit = new CodeEmitterGK110(this, type);
    return emit;
 }
 

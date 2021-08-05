@@ -330,9 +330,11 @@ fs_visitor::register_coalesce()
    if (progress) {
       foreach_block_and_inst_safe (block, backend_instruction, inst, cfg) {
          if (inst->opcode == BRW_OPCODE_NOP) {
-            inst->remove(block);
+            inst->remove(block, true);
          }
       }
+
+      cfg->adjust_block_ips();
 
       invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
    }

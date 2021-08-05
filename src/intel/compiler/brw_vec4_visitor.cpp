@@ -1219,20 +1219,6 @@ vec4_visitor::emit_urb_slot(dst_reg reg, int varying)
       if (output_reg[VARYING_SLOT_POS][0].file != BAD_FILE)
          emit(MOV(reg, src_reg(output_reg[VARYING_SLOT_POS][0])));
       break;
-   case VARYING_SLOT_EDGE: {
-      /* This is present when doing unfilled polygons.  We're supposed to copy
-       * the edge flag from the user-provided vertex array
-       * (glEdgeFlagPointer), or otherwise we'll copy from the current value
-       * of that attribute (starts as 1.0f).  This is then used in clipping to
-       * determine which edges should be drawn as wireframe.
-       */
-      current_annotation = "edge flag";
-      int edge_attr = util_bitcount64(nir->info.inputs_read &
-                                        BITFIELD64_MASK(VERT_ATTRIB_EDGEFLAG));
-      emit(MOV(reg, src_reg(dst_reg(ATTR, edge_attr,
-                                    glsl_type::float_type, WRITEMASK_XYZW))));
-      break;
-   }
    case BRW_VARYING_SLOT_PAD:
       /* No need to write to this slot */
       break;
@@ -1245,7 +1231,8 @@ vec4_visitor::emit_urb_slot(dst_reg reg, int varying)
 }
 
 static unsigned
-align_interleaved_urb_mlen(const struct gen_device_info *devinfo, unsigned mlen)
+align_interleaved_urb_mlen(const struct intel_device_info *devinfo,
+                           unsigned mlen)
 {
    if (devinfo->ver >= 6) {
       /* URB data written (does not include the message header reg) must
@@ -1771,6 +1758,8 @@ vec4_visitor::vec4_visitor(const struct brw_compiler *compiler,
      prog_data(prog_data),
      fail_msg(NULL),
      first_non_payload_grf(0),
+     ubo_push_start(),
+     push_length(0),
      live_analysis(this), performance_analysis(this),
      need_all_constants_in_pull_buffer(false),
      no_spills(no_spills),

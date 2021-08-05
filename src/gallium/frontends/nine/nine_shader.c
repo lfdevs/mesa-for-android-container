@@ -1010,7 +1010,7 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
     struct ureg_dst tmp;
 
     assert(!param->rel || (IS_VS && param->file == D3DSPR_CONST) ||
-        (D3DSPR_ADDR && tx->version.major == 3));
+        (param->file == D3DSPR_INPUT && tx->version.major == 3));
 
     switch (param->file)
     {
@@ -3866,7 +3866,7 @@ static void
 nine_pipe_nir_shader_state_from_tgsi(struct pipe_shader_state *state, const struct tgsi_token *tgsi_tokens,
                                      struct pipe_screen *screen)
 {
-    struct nir_shader *nir = tgsi_to_nir(tgsi_tokens, screen, true);
+    struct nir_shader *nir = tgsi_to_nir(tgsi_tokens, screen, screen->get_disk_shader_cache != NULL);
 
     if (unlikely(nine_shader_get_debug_flag(NINE_SHADER_DEBUG_OPTION_DUMP_NIR))) {
         nir_print_shader(nir, stdout);

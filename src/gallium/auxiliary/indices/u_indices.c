@@ -59,6 +59,39 @@ static void translate_byte_to_ushort( const void *in,
    }
 }
 
+enum pipe_prim_type
+u_index_prim_type_convert(unsigned hw_mask, enum pipe_prim_type prim, bool pv_matches)
+{
+   if ((hw_mask & (1<<prim)) && pv_matches)
+      return prim;
+
+   switch (prim) {
+   case PIPE_PRIM_POINTS:
+      return PIPE_PRIM_POINTS;
+   case PIPE_PRIM_LINES:
+   case PIPE_PRIM_LINE_STRIP:
+   case PIPE_PRIM_LINE_LOOP:
+      return PIPE_PRIM_LINES;
+   case PIPE_PRIM_TRIANGLES:
+   case PIPE_PRIM_TRIANGLE_STRIP:
+   case PIPE_PRIM_TRIANGLE_FAN:
+   case PIPE_PRIM_QUADS:
+   case PIPE_PRIM_QUAD_STRIP:
+   case PIPE_PRIM_POLYGON:
+      return PIPE_PRIM_TRIANGLES;
+   case PIPE_PRIM_LINES_ADJACENCY:
+   case PIPE_PRIM_LINE_STRIP_ADJACENCY:
+      return PIPE_PRIM_LINES_ADJACENCY;
+   case PIPE_PRIM_TRIANGLES_ADJACENCY:
+   case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      return PIPE_PRIM_TRIANGLES_ADJACENCY;
+   default:
+      assert(0);
+      break;
+   }
+   return PIPE_PRIM_POINTS;
+}
+
 /**
  * Translate indexes when a driver can't support certain types
  * of drawing.  Example include:
@@ -107,7 +140,7 @@ u_index_translator(unsigned hw_mask,
    u_index_init();
 
    in_idx = in_size_idx(in_index_size);
-   *out_index_size = (in_index_size == 4) ? 4 : 2;
+   *out_index_size = u_index_size_convert(in_index_size);
    out_idx = out_size_idx(*out_index_size);
 
    if ((hw_mask & (1<<prim)) &&
@@ -125,89 +158,53 @@ u_index_translator(unsigned hw_mask,
 
       return U_TRANSLATE_MEMCPY;
    }
-   else {
-      *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
-
-      switch (prim) {
-      case PIPE_PRIM_POINTS:
-         *out_prim = PIPE_PRIM_POINTS;
-         *out_nr = nr;
-         break;
-
-      case PIPE_PRIM_LINES:
-         *out_prim = PIPE_PRIM_LINES;
-         *out_nr = nr;
-         break;
-
-      case PIPE_PRIM_LINE_STRIP:
-         *out_prim = PIPE_PRIM_LINES;
-         *out_nr = (nr - 1) * 2;
-         break;
-
-      case PIPE_PRIM_LINE_LOOP:
-         *out_prim = PIPE_PRIM_LINES;
-         *out_nr = nr * 2;
-         break;
-
-      case PIPE_PRIM_TRIANGLES:
-         *out_prim = PIPE_PRIM_TRIANGLES;
-         *out_nr = nr;
-         break;
-
-      case PIPE_PRIM_TRIANGLE_STRIP:
-         *out_prim = PIPE_PRIM_TRIANGLES;
-         *out_nr = (nr - 2) * 3;
-         break;
-
-      case PIPE_PRIM_TRIANGLE_FAN:
-         *out_prim = PIPE_PRIM_TRIANGLES;
-         *out_nr = (nr - 2) * 3;
-         break;
-
-      case PIPE_PRIM_QUADS:
-         *out_prim = PIPE_PRIM_TRIANGLES;
-         *out_nr = (nr / 4) * 6;
-         break;
-
-      case PIPE_PRIM_QUAD_STRIP:
-         *out_prim = PIPE_PRIM_TRIANGLES;
-         *out_nr = (nr - 2) * 3;
-         break;
-
-      case PIPE_PRIM_POLYGON:
-         *out_prim = PIPE_PRIM_TRIANGLES;
-         *out_nr = (nr - 2) * 3;
-         break;
-
-      case PIPE_PRIM_LINES_ADJACENCY:
-         *out_prim = PIPE_PRIM_LINES_ADJACENCY;
-         *out_nr = nr;
-         break;
-
-      case PIPE_PRIM_LINE_STRIP_ADJACENCY:
-         *out_prim = PIPE_PRIM_LINES_ADJACENCY;
-         *out_nr = (nr - 3) * 4;
-         break;
-
-      case PIPE_PRIM_TRIANGLES_ADJACENCY:
-         *out_prim = PIPE_PRIM_TRIANGLES_ADJACENCY;
-         *out_nr = nr;
-         break;
-
-      case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
-         *out_prim = PIPE_PRIM_TRIANGLES_ADJACENCY;
-         *out_nr = ((nr - 4) / 2) * 6;
-         break;
-
-      default:
-         assert(0);
-         *out_prim = PIPE_PRIM_POINTS;
-         *out_nr = nr;
-         return U_TRANSLATE_ERROR;
-      }
-   }
+   *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
+   *out_prim = u_index_prim_type_convert(hw_mask, prim, in_pv == out_pv);
+   *out_nr = u_index_count_converted_indices(hw_mask, in_pv == out_pv, prim, nr);
 
    return ret;
+}
+
+unsigned
+u_index_count_converted_indices(unsigned hw_mask, bool pv_matches, enum pipe_prim_type prim, unsigned nr)
+{
+   if ((hw_mask & (1<<prim)) && pv_matches)
+      return nr;
+
+   switch (prim) {
+   case PIPE_PRIM_POINTS:
+      return nr;
+   case PIPE_PRIM_LINES:
+      return nr;
+   case PIPE_PRIM_LINE_STRIP:
+      return (nr - 1) * 2;
+   case PIPE_PRIM_LINE_LOOP:
+      return nr * 2;
+   case PIPE_PRIM_TRIANGLES:
+      return nr;
+   case PIPE_PRIM_TRIANGLE_STRIP:
+      return (nr - 2) * 3;
+   case PIPE_PRIM_TRIANGLE_FAN:
+      return (nr - 2) * 3;
+   case PIPE_PRIM_QUADS:
+      return (nr / 4) * 6;
+   case PIPE_PRIM_QUAD_STRIP:
+      return (nr - 2) * 3;
+   case PIPE_PRIM_POLYGON:
+      return (nr - 2) * 3;
+   case PIPE_PRIM_LINES_ADJACENCY:
+      return nr;
+   case PIPE_PRIM_LINE_STRIP_ADJACENCY:
+      return (nr - 3) * 4;
+   case PIPE_PRIM_TRIANGLES_ADJACENCY:
+      return nr;
+   case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      return ((nr - 4) / 2) * 6;
+   default:
+      assert(0);
+      break;
+   }
+   return nr;
 }
 
 
@@ -251,95 +248,15 @@ u_index_generator(unsigned hw_mask,
 
    *out_index_size = ((start + nr) > 0xfffe) ? 4 : 2;
    out_idx = out_size_idx(*out_index_size);
+   *out_prim = u_index_prim_type_convert(hw_mask, prim, in_pv == out_pv);
+   *out_nr = u_index_count_converted_indices(hw_mask, in_pv == out_pv, prim, nr);
 
    if ((hw_mask & (1<<prim)) && 
        (in_pv == out_pv)) {
        
       *out_generate = generate[out_idx][in_pv][out_pv][PIPE_PRIM_POINTS];
-      *out_prim = prim;
-      *out_nr = nr;
       return U_GENERATE_LINEAR;
    }
-   else {
-      *out_generate = generate[out_idx][in_pv][out_pv][prim];
-
-      switch (prim) {
-      case PIPE_PRIM_POINTS:
-         *out_prim = PIPE_PRIM_POINTS;
-         *out_nr = nr;
-         return U_GENERATE_REUSABLE;
-
-      case PIPE_PRIM_LINES:
-         *out_prim = PIPE_PRIM_LINES;
-         *out_nr = nr;
-         return U_GENERATE_REUSABLE;
-
-      case PIPE_PRIM_LINE_STRIP:
-         *out_prim = PIPE_PRIM_LINES;
-         *out_nr = (nr - 1) * 2;
-         return U_GENERATE_REUSABLE;
-
-      case PIPE_PRIM_LINE_LOOP:
-         *out_prim = PIPE_PRIM_LINES;
-         *out_nr = nr * 2;
-         return U_GENERATE_ONE_OFF;
-
-      case PIPE_PRIM_TRIANGLES:
-         *out_prim = PIPE_PRIM_TRIANGLES;
-         *out_nr = nr;
-         return U_GENERATE_REUSABLE;
-
-      case PIPE_PRIM_TRIANGLE_STRIP:
-         *out_prim = PIPE_PRIM_TRIANGLES;
-         *out_nr = (nr - 2) * 3;
-         return U_GENERATE_REUSABLE;
-
-      case PIPE_PRIM_TRIANGLE_FAN:
-         *out_prim = PIPE_PRIM_TRIANGLES;
-         *out_nr = (nr - 2) * 3;
-         return U_GENERATE_REUSABLE;
-
-      case PIPE_PRIM_QUADS:
-         *out_prim = PIPE_PRIM_TRIANGLES;
-         *out_nr = (nr / 4) * 6;
-         return U_GENERATE_REUSABLE;
-
-      case PIPE_PRIM_QUAD_STRIP:
-         *out_prim = PIPE_PRIM_TRIANGLES;
-         *out_nr = (nr - 2) * 3;
-         return U_GENERATE_REUSABLE;
-
-      case PIPE_PRIM_POLYGON:
-         *out_prim = PIPE_PRIM_TRIANGLES;
-         *out_nr = (nr - 2) * 3;
-         return U_GENERATE_REUSABLE;
-
-      case PIPE_PRIM_LINES_ADJACENCY:
-         *out_prim = PIPE_PRIM_LINES_ADJACENCY;
-         *out_nr = nr;
-         return U_GENERATE_REUSABLE;
-
-      case PIPE_PRIM_LINE_STRIP_ADJACENCY:
-         *out_prim = PIPE_PRIM_LINES_ADJACENCY;
-         *out_nr = (nr - 3) * 4;
-         return U_GENERATE_REUSABLE;
-
-      case PIPE_PRIM_TRIANGLES_ADJACENCY:
-         *out_prim = PIPE_PRIM_TRIANGLES_ADJACENCY;
-         *out_nr = nr;
-         return U_GENERATE_REUSABLE;
-
-      case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
-         *out_prim = PIPE_PRIM_TRIANGLES_ADJACENCY;
-         *out_nr = ((nr - 4) / 2) * 6;
-         return U_GENERATE_REUSABLE;
-
-      default:
-         assert(0);
-         *out_generate = generate[out_idx][in_pv][out_pv][PIPE_PRIM_POINTS];
-         *out_prim = PIPE_PRIM_POINTS;
-         *out_nr = nr;
-         return U_TRANSLATE_ERROR;
-      }
-   }
+   *out_generate = generate[out_idx][in_pv][out_pv][prim];
+   return prim == PIPE_PRIM_LINE_LOOP ? U_GENERATE_ONE_OFF : U_GENERATE_REUSABLE;
 }

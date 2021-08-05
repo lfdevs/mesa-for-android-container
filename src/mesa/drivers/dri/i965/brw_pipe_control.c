@@ -36,7 +36,7 @@
 void
 brw_emit_pipe_control_flush(struct brw_context *brw, uint32_t flags)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (devinfo->ver >= 6 &&
        (flags & PIPE_CONTROL_CACHE_FLUSH_BITS) &&
@@ -90,7 +90,7 @@ brw_emit_pipe_control_write(struct brw_context *brw, uint32_t flags,
 void
 brw_emit_depth_stall_flushes(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    assert(devinfo->ver >= 6);
 
@@ -118,7 +118,7 @@ brw_emit_depth_stall_flushes(struct brw_context *brw)
 void
 gfx7_emit_vs_workaround_flush(struct brw_context *brw)
 {
-   ASSERTED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   ASSERTED const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    assert(devinfo->ver == 7);
    brw_emit_pipe_control_write(brw,
@@ -272,7 +272,7 @@ brw_emit_post_sync_nonzero_flush(struct brw_context *brw)
 void
 brw_emit_end_of_pipe_sync(struct brw_context *brw, uint32_t flags)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (devinfo->ver >= 6) {
       /* From Sandybridge PRM, volume 2, "1.7.3.1 Writing a Value to Memory":
@@ -356,7 +356,7 @@ brw_emit_end_of_pipe_sync(struct brw_context *brw, uint32_t flags)
 void
 brw_emit_mi_flush(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    int flags = PIPE_CONTROL_RENDER_TARGET_FLUSH;
    if (devinfo->ver >= 6) {
@@ -394,7 +394,7 @@ init_identifier_bo(struct brw_context *brw)
 
 int
 brw_init_pipe_control(struct brw_context *brw,
-                      const struct gen_device_info *devinfo)
+                      const struct intel_device_info *devinfo)
 {
    switch (devinfo->ver) {
    case 11:

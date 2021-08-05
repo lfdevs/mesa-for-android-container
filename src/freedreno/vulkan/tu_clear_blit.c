@@ -380,7 +380,9 @@ r3d_common(struct tu_cmd_buffer *cmd, struct tu_cs *cs, bool blit, uint32_t num_
            bool layered_clear, bool z_scale)
 {
    struct ir3_const_state dummy_const_state = {};
-   struct ir3_shader dummy_shader = {};
+   struct ir3_shader dummy_shader = {
+      .compiler = cmd->device->compiler,
+   };
 
    struct ir3_shader_variant vs = {
       .type = MESA_SHADER_VERTEX,
@@ -467,16 +469,20 @@ r3d_common(struct tu_cmd_buffer *cmd, struct tu_cs *cs, bool blit, uint32_t num_
          .gfx_bindless = 0x1f,
          .cs_bindless = 0x1f));
 
+   tu6_emit_xs_config(cs, MESA_SHADER_VERTEX, &vs);
+   tu6_emit_xs_config(cs, MESA_SHADER_TESS_CTRL, NULL);
+   tu6_emit_xs_config(cs, MESA_SHADER_TESS_EVAL, NULL);
+   tu6_emit_xs_config(cs, MESA_SHADER_GEOMETRY, NULL);
+   tu6_emit_xs_config(cs, MESA_SHADER_FRAGMENT, &fs);
+
    struct tu_pvtmem_config pvtmem = {};
-   tu6_emit_xs_config(cs, MESA_SHADER_VERTEX, &vs, &pvtmem, global_iova(cmd, shaders[GLOBAL_SH_VS]));
-   tu6_emit_xs_config(cs, MESA_SHADER_TESS_CTRL, NULL, &pvtmem, 0);
-   tu6_emit_xs_config(cs, MESA_SHADER_TESS_EVAL, NULL, &pvtmem, 0);
-   tu6_emit_xs_config(cs, MESA_SHADER_GEOMETRY, NULL, &pvtmem, 0);
-   tu6_emit_xs_config(cs, MESA_SHADER_FRAGMENT, &fs, &pvtmem, global_iova(cmd, shaders[fs_id]));
+   tu6_emit_xs(cs, MESA_SHADER_VERTEX, &vs, &pvtmem, global_iova(cmd, shaders[GLOBAL_SH_VS]));
+   tu6_emit_xs(cs, MESA_SHADER_FRAGMENT, &fs, &pvtmem, global_iova(cmd, shaders[fs_id]));
 
    tu_cs_emit_regs(cs, A6XX_PC_PRIMITIVE_CNTL_0());
    tu_cs_emit_regs(cs, A6XX_VFD_CONTROL_0());
 
+   if (cmd->device->physical_device->info->a6xx.has_cp_reg_write) {
    /* Copy what the blob does here. This will emit an extra 0x3f
     * CP_EVENT_WRITE when multiview is disabled. I'm not exactly sure what
     * this is working around yet.
@@ -485,9 +491,12 @@ r3d_common(struct tu_cmd_buffer *cmd, struct tu_cs *cs, bool blit, uint32_t num_
    tu_cs_emit(cs, CP_REG_WRITE_0_TRACKER(UNK_EVENT_WRITE));
    tu_cs_emit(cs, REG_A6XX_PC_MULTIVIEW_CNTL);
    tu_cs_emit(cs, 0);
+   } else {
+      tu_cs_emit_regs(cs, A6XX_PC_MULTIVIEW_CNTL());
+   }
    tu_cs_emit_regs(cs, A6XX_VFD_MULTIVIEW_CNTL());
 
-   tu6_emit_vpc(cs, &vs, NULL, NULL, NULL, &fs, 0, false);
+   tu6_emit_vpc(cs, &vs, NULL, NULL, NULL, &fs, 0);
 
    /* REPL_MODE for varying with RECTLIST (2 vertices only) */
    tu_cs_emit_regs(cs, A6XX_VPC_VARYING_INTERP_MODE(0, 0));
@@ -937,6 +946,11 @@ coords(const struct blit_ops *ops,
    ops->coords(cs, (const VkOffset2D*) dst, (const VkOffset2D*) src, (const VkExtent2D*) extent);
 }
 
+/* Decides the VK format to treat our data as for a memcpy-style blit. We have
+ * to be a bit careful because we have to pick a format with matching UBWC
+ * compression behavior, so no just returning R8_UINT/R16_UINT/R32_UINT for
+ * everything.
+ */
 static VkFormat
 copy_format(VkFormat format, VkImageAspectFlags aspect_mask, bool copy_buffer)
 {
@@ -953,25 +967,63 @@ copy_format(VkFormat format, VkImageAspectFlags aspect_mask, bool copy_buffer)
    }
 
    switch (format) {
+   /* For SNORM formats, copy them as the equivalent UNORM format.  If we treat
+    * them as snorm then the 0x80 (-1.0 snorm8) value will get clamped to 0x81
+    * (also -1.0), when we're supposed to be memcpying the bits. See
+    * https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/2917 for discussion.
+    */
+   case VK_FORMAT_R8_SNORM:
+      return VK_FORMAT_R8_UNORM;
+   case VK_FORMAT_R8G8_SNORM:
+      return VK_FORMAT_R8G8_UNORM;
+   case VK_FORMAT_R8G8B8_SNORM:
+      return VK_FORMAT_R8G8B8_UNORM;
+   case VK_FORMAT_B8G8R8_SNORM:
+      return VK_FORMAT_B8G8R8_UNORM;
+   case VK_FORMAT_R8G8B8A8_SNORM:
+      return VK_FORMAT_R8G8B8A8_UNORM;
+   case VK_FORMAT_B8G8R8A8_SNORM:
+      return VK_FORMAT_B8G8R8A8_UNORM;
+   case VK_FORMAT_A8B8G8R8_SNORM_PACK32:
+      return VK_FORMAT_A8B8G8R8_UNORM_PACK32;
+   case VK_FORMAT_A2R10G10B10_SNORM_PACK32:
+      return VK_FORMAT_A2R10G10B10_UNORM_PACK32;
+   case VK_FORMAT_A2B10G10R10_SNORM_PACK32:
+      return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
+   case VK_FORMAT_R16_SNORM:
+      return VK_FORMAT_R16_UNORM;
+   case VK_FORMAT_R16G16_SNORM:
+      return VK_FORMAT_R16G16_UNORM;
+   case VK_FORMAT_R16G16B16_SNORM:
+      return VK_FORMAT_R16G16B16_UNORM;
+   case VK_FORMAT_R16G16B16A16_SNORM:
+      return VK_FORMAT_R16G16B16A16_UNORM;
+
+   case VK_FORMAT_E5B9G9R9_UFLOAT_PACK32:
+      return VK_FORMAT_R32_UINT;
+
    case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
       if (aspect_mask == VK_IMAGE_ASPECT_PLANE_1_BIT)
          return VK_FORMAT_R8G8_UNORM;
-      FALLTHROUGH;
+      else
+         return VK_FORMAT_R8_UNORM;
    case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
       return VK_FORMAT_R8_UNORM;
+
    case VK_FORMAT_D24_UNORM_S8_UINT:
       if (aspect_mask == VK_IMAGE_ASPECT_STENCIL_BIT && copy_buffer)
          return VK_FORMAT_R8_UNORM;
-      FALLTHROUGH;
-   default:
-      return format;
-   case VK_FORMAT_E5B9G9R9_UFLOAT_PACK32:
-      return VK_FORMAT_R32_UINT;
+      else
+         return format;
+
    case VK_FORMAT_D32_SFLOAT_S8_UINT:
       if (aspect_mask == VK_IMAGE_ASPECT_STENCIL_BIT)
          return VK_FORMAT_S8_UINT;
       assert(aspect_mask == VK_IMAGE_ASPECT_DEPTH_BIT);
       return VK_FORMAT_D32_SFLOAT;
+
+   default:
+      return format;
    }
 }
 
@@ -1170,7 +1222,7 @@ tu6_blit_image(struct tu_cmd_buffer *cmd,
    ops->teardown(cmd, cs);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 tu_CmdBlitImage(VkCommandBuffer commandBuffer,
                 VkImage srcImage,
                 VkImageLayout srcImageLayout,
@@ -1292,7 +1344,7 @@ tu_copy_buffer_to_image(struct tu_cmd_buffer *cmd,
    ops->teardown(cmd, cs);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 tu_CmdCopyBufferToImage(VkCommandBuffer commandBuffer,
                         VkBuffer srcBuffer,
                         VkImage dstImage,
@@ -1364,7 +1416,7 @@ tu_copy_image_to_buffer(struct tu_cmd_buffer *cmd,
    ops->teardown(cmd, cs);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 tu_CmdCopyImageToBuffer(VkCommandBuffer commandBuffer,
                         VkImage srcImage,
                         VkImageLayout srcImageLayout,
@@ -1425,6 +1477,7 @@ tu_copy_image_to_image(struct tu_cmd_buffer *cmd,
    VkOffset3D src_offset = info->srcOffset;
    VkOffset3D dst_offset = info->dstOffset;
    VkExtent3D extent = info->extent;
+   uint32_t layers_to_copy = MAX2(info->extent.depth, info->srcSubresource.layerCount);
 
    /* From the Vulkan 1.2.140 spec, section 19.3 "Copying Data Between
     * Images":
@@ -1535,7 +1588,7 @@ tu_copy_image_to_image(struct tu_cmd_buffer *cmd,
       ops->setup(cmd, cs, src_format, VK_IMAGE_ASPECT_COLOR_BIT, 0, false, false);
       coords(ops, cs, &staging_offset, &src_offset, &extent);
 
-      for (uint32_t i = 0; i < info->extent.depth; i++) {
+      for (uint32_t i = 0; i < layers_to_copy; i++) {
          ops->src(cmd, cs, &src, i, VK_FILTER_NEAREST);
          ops->dst(cs, &staging, i);
          ops->run(cmd, cs);
@@ -1554,7 +1607,7 @@ tu_copy_image_to_image(struct tu_cmd_buffer *cmd,
                  0, false, dst_image->layout[0].ubwc);
       coords(ops, cs, &dst_offset, &staging_offset, &extent);
 
-      for (uint32_t i = 0; i < info->extent.depth; i++) {
+      for (uint32_t i = 0; i < layers_to_copy; i++) {
          ops->src(cmd, cs, &staging, i, VK_FILTER_NEAREST);
          ops->dst(cs, &dst, i);
          ops->run(cmd, cs);
@@ -1567,7 +1620,7 @@ tu_copy_image_to_image(struct tu_cmd_buffer *cmd,
                  0, false, dst_image->layout[0].ubwc);
       coords(ops, cs, &dst_offset, &src_offset, &extent);
 
-      for (uint32_t i = 0; i < info->extent.depth; i++) {
+      for (uint32_t i = 0; i < layers_to_copy; i++) {
          ops->src(cmd, cs, &src, i, VK_FILTER_NEAREST);
          ops->dst(cs, &dst, i);
          ops->run(cmd, cs);
@@ -1577,7 +1630,7 @@ tu_copy_image_to_image(struct tu_cmd_buffer *cmd,
    ops->teardown(cmd, cs);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 tu_CmdCopyImage(VkCommandBuffer commandBuffer,
                 VkImage srcImage,
                 VkImageLayout srcImageLayout,
@@ -1637,7 +1690,7 @@ copy_buffer(struct tu_cmd_buffer *cmd,
    ops->teardown(cmd, cs);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 tu_CmdCopyBuffer(VkCommandBuffer commandBuffer,
                  VkBuffer srcBuffer,
                  VkBuffer dstBuffer,
@@ -1656,7 +1709,7 @@ tu_CmdCopyBuffer(VkCommandBuffer commandBuffer,
    }
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 tu_CmdUpdateBuffer(VkCommandBuffer commandBuffer,
                    VkBuffer dstBuffer,
                    VkDeviceSize dstOffset,
@@ -1667,7 +1720,7 @@ tu_CmdUpdateBuffer(VkCommandBuffer commandBuffer,
    TU_FROM_HANDLE(tu_buffer, buffer, dstBuffer);
 
    struct tu_cs_memory tmp;
-   VkResult result = tu_cs_alloc(&cmd->sub_cs, DIV_ROUND_UP(dataSize, 64), 64, &tmp);
+   VkResult result = tu_cs_alloc(&cmd->sub_cs, DIV_ROUND_UP(dataSize, 64), 64 / 4, &tmp);
    if (result != VK_SUCCESS) {
       cmd->record_result = result;
       return;
@@ -1677,7 +1730,7 @@ tu_CmdUpdateBuffer(VkCommandBuffer commandBuffer,
    copy_buffer(cmd, tu_buffer_iova(buffer) + dstOffset, tmp.iova, dataSize, 4);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 tu_CmdFillBuffer(VkCommandBuffer commandBuffer,
                  VkBuffer dstBuffer,
                  VkDeviceSize dstOffset,
@@ -1713,7 +1766,7 @@ tu_CmdFillBuffer(VkCommandBuffer commandBuffer,
    ops->teardown(cmd, cs);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 tu_CmdResolveImage(VkCommandBuffer commandBuffer,
                    VkImage srcImage,
                    VkImageLayout srcImageLayout,
@@ -1866,7 +1919,7 @@ clear_image(struct tu_cmd_buffer *cmd,
    ops->teardown(cmd, cs);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 tu_CmdClearColorImage(VkCommandBuffer commandBuffer,
                       VkImage image_h,
                       VkImageLayout imageLayout,
@@ -1881,7 +1934,7 @@ tu_CmdClearColorImage(VkCommandBuffer commandBuffer,
       clear_image(cmd, image, (const VkClearValue*) pColor, pRanges + i, VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 tu_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer,
                              VkImage image_h,
                              VkImageLayout imageLayout,
@@ -2233,7 +2286,7 @@ tu_clear_gmem_attachments(struct tu_cmd_buffer *cmd,
    }
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 tu_CmdClearAttachments(VkCommandBuffer commandBuffer,
                        uint32_t attachmentCount,
                        const VkClearAttachment *pAttachments,
@@ -2548,9 +2601,9 @@ tu_store_gmem_attachment(struct tu_cmd_buffer *cmd,
       y2 != iview->extent.height || iview->need_y2_align;
 
    bool unaligned =
-      x1 % phys_dev->info.gmem_align_w ||
-      (x2 % phys_dev->info.gmem_align_w && x2 != iview->extent.width) ||
-      y1 % phys_dev->info.gmem_align_h || (y2 % phys_dev->info.gmem_align_h && need_y2_align);
+      x1 % phys_dev->info->gmem_align_w ||
+      (x2 % phys_dev->info->gmem_align_w && x2 != iview->extent.width) ||
+      y1 % phys_dev->info->gmem_align_h || (y2 % phys_dev->info->gmem_align_h && need_y2_align);
 
    /* D32_SFLOAT_S8_UINT is quite special format: it has two planes,
     * one for depth and other for stencil. When resolving a MSAA

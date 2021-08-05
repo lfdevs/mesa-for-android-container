@@ -31,6 +31,15 @@ nvc0_resource_create_with_modifiers(struct pipe_screen *screen,
 }
 
 static void
+nvc0_resource_destroy(struct pipe_screen *pscreen, struct pipe_resource *res)
+{
+   if (res->target == PIPE_BUFFER)
+      nouveau_buffer_destroy(pscreen, res);
+   else
+      nv50_miptree_destroy(pscreen, res);
+}
+
+static void
 nvc0_query_dmabuf_modifiers(struct pipe_screen *screen,
                             enum pipe_format format, int max,
                             uint64_t *modifiers, unsigned int *external_only,
@@ -113,8 +122,6 @@ nvc0_resource_from_handle(struct pipe_screen * screen,
    } else {
       struct pipe_resource *res = nv50_miptree_from_handle(screen,
                                                            templ, whandle);
-      if (res)
-         nv04_resource(res)->vtbl = &nvc0_miptree_vtbl;
       return res;
    }
 }
@@ -145,9 +152,11 @@ nvc0_resource_from_user_memory(struct pipe_screen *pipe,
 void
 nvc0_init_resource_functions(struct pipe_context *pcontext)
 {
-   pcontext->transfer_map = u_transfer_map_vtbl;
-   pcontext->transfer_flush_region = u_transfer_flush_region_vtbl;
-   pcontext->transfer_unmap = u_transfer_unmap_vtbl;
+   pcontext->buffer_map = nouveau_buffer_transfer_map;
+   pcontext->texture_map = nvc0_miptree_transfer_map;
+   pcontext->transfer_flush_region = nouveau_buffer_transfer_flush_region;
+   pcontext->buffer_unmap = nouveau_buffer_transfer_unmap;
+   pcontext->texture_unmap = nvc0_miptree_transfer_unmap;
    pcontext->buffer_subdata = u_default_buffer_subdata;
    pcontext->texture_subdata = u_default_texture_subdata;
    pcontext->create_surface = nvc0_surface_create;
@@ -163,7 +172,7 @@ nvc0_screen_init_resource_functions(struct pipe_screen *pscreen)
    pscreen->query_dmabuf_modifiers = nvc0_query_dmabuf_modifiers;
    pscreen->is_dmabuf_modifier_supported = nvc0_is_dmabuf_modifier_supported;
    pscreen->resource_from_handle = nvc0_resource_from_handle;
-   pscreen->resource_get_handle = u_resource_get_handle_vtbl;
-   pscreen->resource_destroy = u_resource_destroy_vtbl;
+   pscreen->resource_get_handle = nvc0_miptree_get_handle;
+   pscreen->resource_destroy = nvc0_resource_destroy;
    pscreen->resource_from_user_memory = nvc0_resource_from_user_memory;
 }

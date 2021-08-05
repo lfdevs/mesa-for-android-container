@@ -76,10 +76,28 @@ GM107LegalizeSSA::handleLOAD(Instruction *i)
    i->op = OP_MOV;
 }
 
+void
+GM107LegalizeSSA::handleQUADON(Instruction *i)
+{
+   i->setDef(0, NULL);
+}
+
+void
+GM107LegalizeSSA::handleQUADPOP(Instruction *i)
+{
+   i->setSrc(0, NULL);
+}
+
 bool
 GM107LegalizeSSA::visit(Instruction *i)
 {
    switch (i->op) {
+   case OP_QUADON:
+      handleQUADON(i);
+      break;
+   case OP_QUADPOP:
+      handleQUADPOP(i);
+      break;
    case OP_PFETCH:
       handlePFETCH(i);
       break;
@@ -118,9 +136,10 @@ GM107LoweringPass::handleManualTXD(TexInstruction *i)
    tmp = bld.getScratch();
 
    for (l = 0; l < 4; ++l) {
+      Value *bar = bld.getSSA(4, FILE_BARRIER);
       Value *src[3], *val;
       Value *lane = bld.mkImm(l);
-      bld.mkOp(OP_QUADON, TYPE_NONE, NULL);
+      bld.mkOp(OP_QUADON, TYPE_U32, bar);
       // Make sure lane 0 has the appropriate array/depth compare values
       if (l != 0) {
          if (array)
@@ -179,7 +198,7 @@ GM107LoweringPass::handleManualTXD(TexInstruction *i)
       if (l != 0)
          for (c = 0; i->defExists(c); ++c)
             bld.mkOp3(OP_SHFL, TYPE_F32, tex->getDef(c), tex->getDef(c), bld.mkImm(0), quad);
-      bld.mkOp(OP_QUADPOP, TYPE_NONE, NULL);
+      bld.mkOp1(OP_QUADPOP, TYPE_U32, NULL, bar)->fixed = 1;
 
       // save results
       for (c = 0; i->defExists(c); ++c) {

@@ -61,12 +61,23 @@ TEMPLATE = template.Template(future_imports=['division'],
 
 #include "isl/isl.h"
 
+const uint16_t isl_format_name_offsets[] = { <% offset = 0 %>
+% for format in formats:
+    [ISL_FORMAT_${format.name}] = ${offset}, <% offset += 11 + len(format.name) + 1 %>
+% endfor
+};
+
+const char isl_format_names[] = {
+% for format in formats:
+  "ISL_FORMAT_${format.name}\\0"
+% endfor
+};
+
 const struct isl_format_layout
 isl_format_layouts[] = {
 % for format in formats:
   [ISL_FORMAT_${format.name}] = {
     .format = ISL_FORMAT_${format.name},
-    .name = "ISL_FORMAT_${format.name}",
     .bpb = ${format.bpb},
     .bw = ${format.bw},
     .bh = ${format.bh},
@@ -94,7 +105,12 @@ isl_format_is_valid(enum isl_format format)
 {
     if (format >= sizeof(isl_format_layouts) / sizeof(isl_format_layouts[0]))
         return false;
-    return isl_format_layouts[format].name;
+
+    /* Only ISL_FORMAT_R32G32B32A32_FLOAT == 0 but that's a valid format.
+     * For all others, if this doesn't match then the entry in the table
+     * must not exist.
+     */
+    return isl_format_layouts[format].format == format;
 }
 
 enum isl_format

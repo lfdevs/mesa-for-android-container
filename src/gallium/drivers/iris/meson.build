@@ -57,10 +57,10 @@ files_libiris = files(
   'iris_disk_cache.c',
 )
 
-iris_gen_libs = []
+iris_per_hw_ver_libs = []
 foreach v : ['80', '90', '110', '120', '125']
-  iris_gen_libs += static_library(
-    'iris_gen@0@'.format(v),
+  iris_per_hw_ver_libs += static_library(
+    'iris_per_hw_ver@0@'.format(v),
     ['iris_blorp.c', 'iris_query.c', 'iris_state.c', gen_xml_pack],
     include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_intel],
     c_args : [
@@ -86,7 +86,7 @@ libiris = static_library(
   gnu_symbol_visibility : 'hidden',
   dependencies : [dep_libdrm, dep_valgrind, idep_genxml, idep_libintel_common, idep_nir_headers],
   link_with : [
-    iris_gen_libs, libintel_compiler, libintel_dev, libisl,
+    iris_per_hw_ver_libs, libintel_compiler, libintel_dev, libisl,
     libblorp, libintel_perf
   ],
 )

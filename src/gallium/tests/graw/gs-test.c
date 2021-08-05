@@ -421,7 +421,7 @@ static void init_tex( void )
    {
       struct pipe_transfer *t;
       uint32_t *ptr;
-      ptr = pipe_transfer_map(ctx, samptex,
+      ptr = pipe_texture_map(ctx, samptex,
                               0, 0, /* level, layer */
                               PIPE_MAP_READ,
                               0, 0, SIZE, SIZE, &t); /* x, y, width, height */
@@ -431,7 +431,7 @@ static void init_tex( void )
          exit(9);
       }
 
-      ctx->transfer_unmap(ctx, t);
+      ctx->texture_unmap(ctx, t);
    }
 
    memset(&sv_template, 0, sizeof sv_template);

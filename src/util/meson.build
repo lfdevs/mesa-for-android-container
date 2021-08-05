@@ -79,6 +79,8 @@ files_mesa_util = files(
   'os_socket.h',
   'u_process.c',
   'u_process.h',
+  'u_qsort.cpp',
+  'u_qsort.h',
   'rwlock.h',
   'sha1/sha1.c',
   'sha1/sha1.h',
@@ -202,6 +204,14 @@ if with_platform_haiku
   deps_for_libmesa_util += dep_network
 endif
 
+if with_perfetto
+  files_mesa_util += files(
+    'u_perfetto.cc',
+    'u_perfetto.h',
+  )
+  deps_for_libmesa_util += dep_perfetto
+endif
+
 _libmesa_util = static_library(
   'mesa_util',
   [files_mesa_util, files_debug_stack, format_srgb],
@@ -215,7 +225,7 @@ _libmesa_util = static_library(
 
 idep_mesautil = declare_dependency(
   link_with : _libmesa_util,
-  include_directories : inc_util,
+  include_directories : [inc_util, inc_gallium],
   dependencies : [dep_zlib, dep_clock, dep_thread, dep_atomic, dep_m, dep_valgrind],
 )
 
@@ -334,28 +344,18 @@ if with_tests
     )
   endif
 
-  test(
-    'bitset',
-    executable(
-       'bitset_test',
-       files('bitset_test.cpp'),
-       include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
-       dependencies : [idep_mesautil, idep_gtest],
-     ),
-     suite : ['util'],
-  )
-
-  test(
-    'u_debug_stack',
-    executable(
-      'u_debug_stack_test',
-      files('u_debug_stack_test.cpp'),
-      include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
-      dependencies : [idep_mesautil, idep_gtest],
-      c_args : [c_msvc_compat_args],
-    ),
-     suite : ['util'],
-  )
+  foreach t: ['bitset', 'register_allocate', 'u_debug_stack', 'u_qsort']
+    test(
+      t,
+      executable(
+        t + '_test',
+        files(t + '_test.cpp'),
+        include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
+        dependencies : [idep_mesautil, idep_gtest],
+      ),
+      suite : ['util'],
+    )
+  endforeach
 
   process_test_exe = executable(
     'process_test',

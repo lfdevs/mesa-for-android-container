@@ -368,7 +368,7 @@ void r200TexUpdateParameters(struct gl_context *ctx, GLuint unit)
    r200SetTexMaxAnisotropy(t , samp->Attrib.MaxAnisotropy);
    r200SetTexFilter(t, samp->Attrib.MinFilter, samp->Attrib.MagFilter);
    r200SetTexWrap(t, samp->Attrib.WrapS, samp->Attrib.WrapT, samp->Attrib.WrapR);
-   r200SetTexBorderColor(t, samp->Attrib.BorderColor.f);
+   r200SetTexBorderColor(t, samp->Attrib.state.border_color.f);
 }
 
 /**
@@ -483,7 +483,7 @@ static struct gl_texture_object *r200NewTextureObject(struct gl_context * ctx,
    r200SetTexWrap( t, t->base.Sampler.Attrib.WrapS, t->base.Sampler.Attrib.WrapT, t->base.Sampler.Attrib.WrapR );
    r200SetTexMaxAnisotropy( t, t->base.Sampler.Attrib.MaxAnisotropy );
    r200SetTexFilter(t, t->base.Sampler.Attrib.MinFilter, t->base.Sampler.Attrib.MagFilter);
-   r200SetTexBorderColor(t, t->base.Sampler.Attrib.BorderColor.f);
+   r200SetTexBorderColor(t, t->base.Sampler.Attrib.state.border_color.f);
 
    return &t->base;
 }

@@ -368,15 +368,15 @@
   </struct>
 
   <struct name="SAMPLER_STATE" length="4">
-    <field name="Shadow Function" start="0" end="2" type="uint">
-      <value name="PREFILTEROP_ALWAYS" value="0"/>
-      <value name="PREFILTEROP_NEVER" value="1"/>
-      <value name="PREFILTEROP_LESS" value="2"/>
-      <value name="PREFILTEROP_EQUAL" value="3"/>
-      <value name="PREFILTEROP_LEQUAL" value="4"/>
-      <value name="PREFILTEROP_GREATER" value="5"/>
-      <value name="PREFILTEROP_NOTEQUAL" value="6"/>
-      <value name="PREFILTEROP_GEQUAL" value="7"/>
+    <field name="Shadow Function" start="0" end="2" type="uint" prefix="PREFILTEROP">
+      <value name="ALWAYS" value="0"/>
+      <value name="NEVER" value="1"/>
+      <value name="LESS" value="2"/>
+      <value name="EQUAL" value="3"/>
+      <value name="LEQUAL" value="4"/>
+      <value name="GREATER" value="5"/>
+      <value name="NOTEQUAL" value="6"/>
+      <value name="GEQUAL" value="7"/>
     </field>
     <field name="Texture LOD Bias" start="3" end="13" type="s4.6"/>
     <field name="Min Mode Filter" start="14" end="16" type="uint" prefix="MAPFILTER"/>
@@ -974,8 +974,7 @@
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="Physical Start Address Extension" start="32" end="35" type="address"/>
     <field name="Address" start="66" end="95" type="address"/>
-    <field name="Data DWord 0" start="96" end="127" type="uint"/>
-    <field name="Data DWord 1" start="128" end="159" type="uint"/>
+    <field name="Immediate Data" start="96" end="159" type="uint"/>
   </instruction>
 
   <instruction name="MI_STORE_REGISTER_MEM" bias="2" length="3">
@@ -1081,14 +1080,14 @@
     <field name="CS Fence" start="84" end="94" type="uint"/>
   </instruction>
 
-  <instruction name="XY_COLOR_BLT" bias="2" length="6" engine="blitter">
+  <instruction name="XY_COLOR_BLT" bias="2" length="6" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="4"/>
     <field name="Tiling Enable" start="11" end="11" type="bool"/>
     <field name="32bpp Byte Mask" start="20" end="21" type="uint"/>
     <field name="2D Command Opcode" start="22" end="28" type="uint" default="80"/>
     <field name="Command Type" start="29" end="31" type="uint" default="2"/>
     <field name="Destination Pitch" start="32" end="47" type="int"/>
-    <field name="Raster Operation" start="48" end="55" type="int"/>
+    <field name="Raster Operation" start="48" end="55" type="uint"/>
     <field name="Color Depth" start="56" end="58" type="uint" prefix="COLOR_DEPTH">
       <value name="8 bit" value="0"/>
       <value name="565" value="1"/>
@@ -1130,7 +1129,7 @@
     <field name="Pattern Base Address" start="224" end="255" type="uint"/>
   </instruction>
 
-  <instruction name="XY_SRC_COPY_BLT" bias="2" length="8" engine="blitter">
+  <instruction name="XY_SRC_COPY_BLT" bias="2" length="8" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="6"/>
     <field name="Destination Tiling Enable" start="11" end="11" type="bool"/>
     <field name="Source Tiling Enable" start="15" end="15" type="bool"/>
@@ -1138,7 +1137,7 @@
     <field name="2D Command Opcode" start="22" end="28" type="uint" default="83"/>
     <field name="Command Type" start="29" end="31" type="uint" default="2"/>
     <field name="Destination Pitch" start="32" end="47" type="int"/>
-    <field name="Raster Operation" start="48" end="55" type="int"/>
+    <field name="Raster Operation" start="48" end="55" type="uint"/>
     <field name="Color Depth" start="56" end="58" type="uint" prefix="COLOR_DEPTH">
       <value name="8 bit" value="0"/>
       <value name="565" value="1"/>
@@ -1157,7 +1156,7 @@
     <field name="Source Base Address" start="224" end="255" type="address"/>
   </instruction>
 
-  <instruction name="XY_TEXT_IMMEDIATE_BLT" bias="2" length="3" engine="blitter">
+  <instruction name="XY_TEXT_IMMEDIATE_BLT" bias="2" length="3" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="1"/>
     <field name="Tiling Enable" start="11" end="11" type="bool"/>
     <field name="Packing" start="16" end="16" type="uint">

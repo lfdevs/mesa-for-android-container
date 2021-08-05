@@ -2630,6 +2630,7 @@ static const struct {
    ADD_HOOK(CreateInstance),
    ADD_HOOK(DestroyInstance),
 #undef ADD_HOOK
+#undef ADD_ALIAS_HOOK
 };
 
 static void *find_ptr(const char *name)

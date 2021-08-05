@@ -24,6 +24,7 @@
 
 #include "c11/threads.h"
 #include "util/bitscan.h"
+#include "util/compiler.h"
 #include "util/list.h"
 #include "util/macros.h"
 #include "util/os_time.h"
@@ -41,7 +42,7 @@
 
 #define VN_DEFAULT_ALIGN 8
 
-#define VN_DEBUG(category) unlikely(vn_debug & VN_DEBUG_##category)
+#define VN_DEBUG(category) (unlikely(vn_debug & VN_DEBUG_##category))
 
 #define vn_error(instance, error)                                            \
    (VN_DEBUG(RESULT) ? vn_log_result((instance), (error), __func__) : (error))
@@ -78,7 +79,9 @@ struct vn_command_buffer;
 
 struct vn_cs_encoder;
 struct vn_cs_decoder;
+
 struct vn_renderer;
+struct vn_renderer_shmem;
 struct vn_renderer_bo;
 struct vn_renderer_sync;
 
@@ -128,9 +131,6 @@ VkResult
 vn_log_result(struct vn_instance *instance,
               VkResult result,
               const char *where);
-
-const VkAllocationCallbacks *
-vn_default_allocator(void);
 
 void
 vn_relax(uint32_t *iter);

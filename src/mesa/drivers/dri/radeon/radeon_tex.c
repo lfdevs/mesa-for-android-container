@@ -318,7 +318,7 @@ void radeonTexUpdateParameters(struct gl_context *ctx, GLuint unit)
    radeonSetTexMaxAnisotropy(t , samp->Attrib.MaxAnisotropy);
    radeonSetTexFilter(t, samp->Attrib.MinFilter, samp->Attrib.MagFilter);
    radeonSetTexWrap(t, samp->Attrib.WrapS, samp->Attrib.WrapT);
-   radeonSetTexBorderColor(t, samp->Attrib.BorderColor.f);
+   radeonSetTexBorderColor(t, samp->Attrib.state.border_color.f);
 }
 
 
@@ -422,7 +422,7 @@ radeonNewTextureObject( struct gl_context *ctx, GLuint name, GLenum target )
    radeonSetTexWrap( t, t->base.Sampler.Attrib.WrapS, t->base.Sampler.Attrib.WrapT );
    radeonSetTexMaxAnisotropy( t, t->base.Sampler.Attrib.MaxAnisotropy );
    radeonSetTexFilter( t, t->base.Sampler.Attrib.MinFilter, t->base.Sampler.Attrib.MagFilter );
-   radeonSetTexBorderColor( t, t->base.Sampler.Attrib.BorderColor.f );
+   radeonSetTexBorderColor( t, t->base.Sampler.Attrib.state.border_color.f );
    return &t->base;
 }
 

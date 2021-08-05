@@ -37,16 +37,26 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
    if (stage == MESA_SHADER_NONE || stage == MESA_SHADER_KERNEL)
       return false;
 
-   struct spirv_to_nir_options spirv_opts = {0};
-   spirv_opts.ubo_addr_format = nir_address_format_32bit_index_offset;
-   spirv_opts.ssbo_addr_format = nir_address_format_32bit_index_offset;
+   struct spirv_to_nir_options spirv_opts = {
+      .ubo_addr_format = nir_address_format_32bit_index_offset,
+      .ssbo_addr_format = nir_address_format_32bit_index_offset,
+      // use_deref_buffer_array_length + nir_lower_explicit_io force
+      //  get_ssbo_size to take in the return from load_vulkan_descriptor
+      //  instead of vulkan_resource_index. This makes it much easier to
+      //  get the DXIL handle for the SSBO.
+      .use_deref_buffer_array_length = true
+   };
 
    glsl_type_singleton_init_or_ref();
+
+   struct nir_shader_compiler_options nir_options = *dxil_get_nir_compiler_options();
+   // We will manually handle base_vertex
+   nir_options.lower_base_vertex = false;
 
    nir_shader *nir = spirv_to_nir(
       words, word_count, (struct nir_spirv_specialization *)specializations,
       num_specializations, (gl_shader_stage)stage, entry_point_name,
-      &spirv_opts, dxil_get_nir_compiler_options());
+      &spirv_opts, &nir_options);
    if (!nir) {
       glsl_type_singleton_decref();
       return false;
@@ -54,6 +64,18 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
 
    nir_validate_shader(nir,
                        "Validate before feeding NIR to the DXIL compiler");
+
+   NIR_PASS_V(nir, nir_lower_system_values);
+
+   // vertex_id and instance_id should have already been transformed to base
+   //  zero before spirv_to_dxil was called. Also, WebGPU does not support
+   //  base/firstVertex/Instance.
+   gl_system_value system_values[] = {
+      SYSTEM_VALUE_FIRST_VERTEX,
+      SYSTEM_VALUE_BASE_VERTEX,
+      SYSTEM_VALUE_BASE_INSTANCE
+   };
+   NIR_PASS_V(nir, dxil_nir_lower_system_values_to_zero, system_values, ARRAY_SIZE(system_values));
 
    NIR_PASS_V(nir, nir_split_per_member_structs);
 
@@ -108,7 +130,22 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
       } while (progress);
    }
 
+   NIR_PASS_V(nir, nir_lower_readonly_images_to_tex, true);
    NIR_PASS_V(nir, dxil_nir_split_clip_cull_distance);
+   NIR_PASS_V(nir, dxil_nir_lower_loads_stores_to_dxil);
+   NIR_PASS_V(nir, dxil_nir_create_bare_samplers);
+
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+
+   nir->info.inputs_read =
+      dxil_reassign_driver_locations(nir, nir_var_shader_in, 0);
+
+   if (stage != MESA_SHADER_FRAGMENT) {
+      nir->info.outputs_written =
+         dxil_reassign_driver_locations(nir, nir_var_shader_out, 0);
+   } else {
+      dxil_sort_ps_outputs(nir);
+   }
 
    struct nir_to_dxil_options opts = {.vulkan_environment = true};
 

@@ -76,12 +76,12 @@ union tgsi_exec_channel
    float    f[TGSI_QUAD_SIZE];
    int      i[TGSI_QUAD_SIZE];
    unsigned u[TGSI_QUAD_SIZE];
-};
+} ALIGN16;
 
 /**
   * A vector[RGBA] of channels[4 pixels]
   */
-struct tgsi_exec_vector
+struct ALIGN16 tgsi_exec_vector
 {
    union tgsi_exec_channel xyzw[TGSI_NUM_CHANNELS];
 };
@@ -286,7 +286,7 @@ typedef void (* apply_sample_offset_func)(
 /**
  * Run-time virtual machine state for executing TGSI shader.
  */
-struct tgsi_exec_machine
+struct ALIGN16 tgsi_exec_machine
 {
    /* Total = program temporaries + internal temporaries
     */

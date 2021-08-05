@@ -343,8 +343,8 @@ tu_render_pass_gmem_config(struct tu_render_pass *pass,
                            const struct tu_physical_device *phys_dev)
 {
    uint32_t block_align_shift = 3; /* log2(gmem_align/(tile_align_w*tile_align_h)) */
-   uint32_t tile_align_w = phys_dev->info.tile_align_w;
-   uint32_t gmem_align = (1 << block_align_shift) * tile_align_w * phys_dev->info.tile_align_h;
+   uint32_t tile_align_w = phys_dev->info->tile_align_w;
+   uint32_t gmem_align = (1 << block_align_shift) * tile_align_w * phys_dev->info->tile_align_h;
 
    /* calculate total bytes per pixel */
    uint32_t cpp_total = 0;
@@ -386,7 +386,7 @@ tu_render_pass_gmem_config(struct tu_render_pass *pass,
     * result:  nblocks = {12, 52}, pixels = 196608
     * optimal: nblocks = {13, 51}, pixels = 208896
     */
-   uint32_t gmem_blocks = phys_dev->info.a6xx.ccu_offset_gmem / gmem_align;
+   uint32_t gmem_blocks = phys_dev->ccu_offset_gmem / gmem_align;
    uint32_t offset = 0, pixels = ~0u, i;
    for (i = 0; i < pass->attachment_count; i++) {
       struct tu_render_pass_attachment *att = &pass->attachments[i];
@@ -486,7 +486,7 @@ is_depth_stencil_resolve_enabled(const VkSubpassDescriptionDepthStencilResolve *
    return false;
 }
 
-VkResult
+VKAPI_ATTR VkResult VKAPI_CALL
 tu_CreateRenderPass2(VkDevice _device,
                      const VkRenderPassCreateInfo2KHR *pCreateInfo,
                      const VkAllocationCallbacks *pAllocator,
@@ -667,7 +667,7 @@ tu_CreateRenderPass2(VkDevice _device,
    return VK_SUCCESS;
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 tu_DestroyRenderPass(VkDevice _device,
                      VkRenderPass _pass,
                      const VkAllocationCallbacks *pAllocator)
@@ -682,14 +682,14 @@ tu_DestroyRenderPass(VkDevice _device,
    vk_object_free(&device->vk, pAllocator, pass);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 tu_GetRenderAreaGranularity(VkDevice _device,
                             VkRenderPass renderPass,
                             VkExtent2D *pGranularity)
 {
    TU_FROM_HANDLE(tu_device, device, _device);
-   pGranularity->width = device->physical_device->info.gmem_align_w;
-   pGranularity->height = device->physical_device->info.gmem_align_h;
+   pGranularity->width = device->physical_device->info->gmem_align_w;
+   pGranularity->height = device->physical_device->info->gmem_align_h;
 }
 
 uint32_t

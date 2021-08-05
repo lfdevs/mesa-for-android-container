@@ -39,27 +39,16 @@
 
 #include "panfrost/util/pan_ir.h"
 #include "pan_pool.h"
+#include "pan_util.h"
 
 #include <midgard_pack.h>
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 /* Driver limits */
 #define PAN_MAX_CONST_BUFFERS 16
-
-/* Transient slab size. This is a balance between fragmentation against cache
- * locality and ease of bookkeeping */
-
-#define TRANSIENT_SLAB_PAGES (16) /* 64kb */
-#define TRANSIENT_SLAB_SIZE (4096 * TRANSIENT_SLAB_PAGES)
-
-/* Maximum number of transient slabs so we don't need dynamic arrays. Most
- * interesting Mali boards are 4GB RAM max, so if the entire RAM was filled
- * with transient slabs, you could never exceed (4GB / TRANSIENT_SLAB_SIZE)
- * allocations anyway. By capping, we can use a fixed-size bitset for tracking
- * free slabs, eliminating quite a bit of complexity. We can pack the free
- * state of 8 slabs into a single byte, so for 128kb transient slabs the bitset
- * occupies a cheap 4kb of memory */
-
-#define MAX_TRANSIENT_SLABS (1024*1024 / TRANSIENT_SLAB_PAGES)
 
 /* How many power-of-two levels in the BO cache do we want? 2^12
  * minimum chosen as it is the page size that all allocations are
@@ -73,13 +62,13 @@
 
 struct pan_blitter {
         struct {
-                struct pan_pool pool;
+                struct pan_pool *pool;
                 struct hash_table *blit;
                 struct hash_table *blend;
                 pthread_mutex_t lock;
         } shaders;
         struct {
-                struct pan_pool pool;
+                struct pan_pool *pool;
                 struct hash_table *rsds;
                 pthread_mutex_t lock;
         } rsds;
@@ -125,7 +114,7 @@ struct pan_indirect_draw_shaders {
          * is not trivial, and changes to the compiler might influence this
          * estimation.
          */
-        struct pan_pool bin_pool;
+        struct pan_pool *bin_pool;
 
         /* BO containing all renderer states attached to the compute shaders.
          * Those are built at shader compilation time and re-used every time
@@ -139,11 +128,20 @@ struct pan_indirect_draw_shaders {
         struct panfrost_bo *varying_heap;
 };
 
-typedef uint32_t mali_pixel_format;
+struct pan_indirect_dispatch {
+        struct panfrost_ubo_push push;
+        struct panfrost_bo *bin;
+        struct panfrost_bo *descs;
+};
 
-struct panfrost_format {
-        mali_pixel_format hw;
-        unsigned bind;
+/** Implementation-defined tiler features */
+struct panfrost_tiler_features {
+        /** Number of bytes per tiler bin */
+        unsigned bin_size;
+
+        /** Maximum number of levels that may be simultaneously enabled.
+         * Invariant: bitcount(hierarchy_mask) <= max_levels */
+        unsigned max_levels;
 };
 
 struct panfrost_device {
@@ -157,6 +155,7 @@ struct panfrost_device {
         unsigned gpu_id;
         unsigned core_count;
         unsigned thread_tls_alloc;
+        struct panfrost_tiler_features tiler_features;
         unsigned quirks;
 
         /* Table of formats, indexed by a PIPE format */
@@ -195,6 +194,7 @@ struct panfrost_device {
         struct pan_blitter blitter;
         struct pan_blend_shaders blend_shaders;
         struct pan_indirect_draw_shaders indirect_draw_shaders;
+        struct pan_indirect_dispatch indirect_dispatch;
 
         /* Tiler heap shared across all tiler jobs, allocated against the
          * device since there's only a single tiler. Since this is invisible to
@@ -243,7 +243,7 @@ panfrost_query_sample_position(
 static inline struct panfrost_bo *
 pan_lookup_bo(struct panfrost_device *dev, uint32_t gem_handle)
 {
-        return util_sparse_array_get(&dev->bo_map, gem_handle);
+        return (struct panfrost_bo *)util_sparse_array_get(&dev->bo_map, gem_handle);
 }
 
 static inline bool
@@ -251,5 +251,9 @@ pan_is_bifrost(const struct panfrost_device *dev)
 {
         return dev->arch >= 6 && dev->arch <= 7;
 }
+
+#if defined(__cplusplus)
+} // extern "C"
+#endif
 
 #endif

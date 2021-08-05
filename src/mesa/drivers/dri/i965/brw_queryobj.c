@@ -76,7 +76,7 @@ brw_raw_timestamp_delta(struct brw_context *brw, uint64_t time0, uint64_t time1)
 void
 brw_write_timestamp(struct brw_context *brw, struct brw_bo *query_bo, int idx)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (devinfo->ver == 6) {
       /* Emit Sandybridge workaround flush: */
@@ -100,7 +100,7 @@ brw_write_timestamp(struct brw_context *brw, struct brw_bo *query_bo, int idx)
 void
 brw_write_depth_count(struct brw_context *brw, struct brw_bo *query_bo, int idx)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    uint32_t flags = PIPE_CONTROL_WRITE_DEPTH_COUNT | PIPE_CONTROL_DEPTH_STALL;
 
    if (devinfo->ver == 9 && devinfo->gt == 4)
@@ -126,7 +126,7 @@ brw_queryobj_get_results(struct gl_context *ctx,
                          struct brw_query_object *query)
 {
    struct brw_context *brw = brw_context(ctx);
-   UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   UNUSED const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    int i;
    uint64_t *results;
@@ -156,12 +156,12 @@ brw_queryobj_get_results(struct gl_context *ctx,
        * Subtract the two and convert to nanoseconds.
        */
       query->Base.Result = brw_raw_timestamp_delta(brw, results[0], results[1]);
-      query->Base.Result = gen_device_info_timebase_scale(devinfo, query->Base.Result);
+      query->Base.Result = intel_device_info_timebase_scale(devinfo, query->Base.Result);
       break;
 
    case GL_TIMESTAMP:
       /* The query BO contains a single timestamp value in results[0]. */
-      query->Base.Result = gen_device_info_timebase_scale(devinfo, results[0]);
+      query->Base.Result = intel_device_info_timebase_scale(devinfo, results[0]);
 
       /* Ensure the scaled timestamp overflows according to
        * GL_QUERY_COUNTER_BITS
@@ -253,7 +253,7 @@ brw_begin_query(struct gl_context *ctx, struct gl_query_object *q)
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_query_object *query = (struct brw_query_object *)q;
-   UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   UNUSED const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    assert(devinfo->ver < 6);
 
@@ -326,7 +326,7 @@ brw_end_query(struct gl_context *ctx, struct gl_query_object *q)
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_query_object *query = (struct brw_query_object *)q;
-   UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   UNUSED const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    assert(devinfo->ver < 6);
 
@@ -379,7 +379,7 @@ brw_end_query(struct gl_context *ctx, struct gl_query_object *q)
 static void brw_wait_query(struct gl_context *ctx, struct gl_query_object *q)
 {
    struct brw_query_object *query = (struct brw_query_object *)q;
-   UNUSED const struct gen_device_info *devinfo =
+   UNUSED const struct intel_device_info *devinfo =
       &brw_context(ctx)->screen->devinfo;
 
    assert(devinfo->ver < 6);
@@ -398,7 +398,7 @@ static void brw_check_query(struct gl_context *ctx, struct gl_query_object *q)
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_query_object *query = (struct brw_query_object *)q;
-   UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   UNUSED const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    assert(devinfo->ver < 6);
 
@@ -428,7 +428,7 @@ static void
 ensure_bo_has_space(struct gl_context *ctx, struct brw_query_object *query)
 {
    struct brw_context *brw = brw_context(ctx);
-   UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   UNUSED const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    assert(devinfo->ver < 6);
 
@@ -538,7 +538,7 @@ static uint64_t
 brw_get_timestamp(struct gl_context *ctx)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    uint64_t result = 0;
 
    switch (brw->screen->hw_has_timestamp) {
@@ -555,7 +555,7 @@ brw_get_timestamp(struct gl_context *ctx)
    }
 
    /* Scale to nanosecond units */
-   result = gen_device_info_timebase_scale(devinfo, result);
+   result = intel_device_info_timebase_scale(devinfo, result);
 
    /* Ensure the scaled timestamp overflows according to
     * GL_QUERY_COUNTER_BITS.  Technically this isn't required if

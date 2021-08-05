@@ -33,14 +33,14 @@
 #include <sys/un.h>
 
 #include "common/intel_gem.h"
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 #include "drm-uapi/i915_drm.h"
 #include "drm-shim/drm_shim.h"
 #include "util/macros.h"
 #include "util/vma.h"
 
 struct i915_device {
-   struct gen_device_info devinfo;
+   struct intel_device_info devinfo;
    uint32_t device_id;
 };
 
@@ -367,8 +367,8 @@ drm_shim_driver_init(void)
    const char *user_platform = getenv("INTEL_STUB_GPU_PLATFORM");
 
    /* Use SKL if nothing is specified. */
-   i915.device_id = gen_device_name_to_pci_device_id(user_platform ?: "skl");
-   if (!gen_get_device_info_from_pci_id(i915.device_id, &i915.devinfo))
+   i915.device_id = intel_device_name_to_pci_device_id(user_platform ?: "skl");
+   if (!intel_get_device_info_from_pci_id(i915.device_id, &i915.devinfo))
       return;
 
    shim_device.bus_type = DRM_BUS_PCI;

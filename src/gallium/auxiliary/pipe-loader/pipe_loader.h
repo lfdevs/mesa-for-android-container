@@ -86,6 +86,15 @@ pipe_loader_probe(struct pipe_loader_device **devs, int ndev);
  * Create a pipe_screen for the specified device.
  *
  * \param dev Device the screen will be created for.
+ * \param sw_vk Device is for software vulkan
+ */
+struct pipe_screen *
+pipe_loader_create_screen_vk(struct pipe_loader_device *dev, bool sw_vk);
+
+/**
+ * Create a pipe_screen for the specified device.
+ *
+ * \param dev Device the screen will be created for.
  */
 struct pipe_screen *
 pipe_loader_create_screen(struct pipe_loader_device *dev);

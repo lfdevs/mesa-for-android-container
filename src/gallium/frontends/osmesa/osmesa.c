@@ -200,7 +200,7 @@ osmesa_read_buffer(OSMesaContext osmesa, struct pipe_resource *res, void *dst,
    u_box_2d(0, 0, res->width0, res->height0, &box);
 
    struct pipe_transfer *transfer = NULL;
-   ubyte *src = pipe->transfer_map(pipe, res, 0, PIPE_MAP_READ, &box,
+   ubyte *src = pipe->texture_map(pipe, res, 0, PIPE_MAP_READ, &box,
                                    &transfer);
 
    /*
@@ -221,7 +221,7 @@ osmesa_read_buffer(OSMesaContext osmesa, struct pipe_resource *res, void *dst,
       src += transfer->stride;
    }
 
-   pipe->transfer_unmap(pipe, transfer);
+   pipe->texture_unmap(pipe, transfer);
 }
 
 
@@ -338,7 +338,6 @@ osmesa_init_st_visual(struct st_visual *vis,
    vis->depth_stencil_format = ds_format;
    vis->accum_format = accum_format;
    vis->samples = 1;
-   vis->render_buffer = ST_ATTACHMENT_FRONT_LEFT;
 }
 
 
@@ -366,6 +365,9 @@ osmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
    struct pipe_resource *res = osbuffer->textures[statt];
    unsigned bpp;
    int dst_stride;
+
+   if (statt != ST_ATTACHMENT_FRONT_LEFT)
+      return false;
 
    if (osmesa->pp) {
       struct pipe_resource *zsbuf = NULL;

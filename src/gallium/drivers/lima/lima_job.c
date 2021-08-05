@@ -375,7 +375,8 @@ lima_pack_reload_plbu_cmd(struct lima_job *job, struct pipe_surface *psurf)
 
    if (util_format_is_depth_or_stencil(psurf->format)) {
       reload_render_state.alpha_blend &= 0x0fffffff;
-      reload_render_state.depth_test |= 0x400;
+      if (psurf->format != PIPE_FORMAT_Z16_UNORM)
+         reload_render_state.depth_test |= 0x400;
       if (surf->reload & PIPE_CLEAR_DEPTH)
          reload_render_state.depth_test |= 0x801;
       if (surf->reload & PIPE_CLEAR_STENCIL) {
@@ -439,6 +440,9 @@ lima_pack_reload_plbu_cmd(struct lima_job *job, struct pipe_surface *psurf)
    PLBU_CMD_DRAW_ELEMENTS(0xf, 0, 3);
 
    PLBU_CMD_END();
+
+   lima_dump_command_stream_print(job->dump, cpu, lima_reload_buffer_size,
+                                  false, "reload plbu cmd at va %x\n", va);
 }
 
 static void

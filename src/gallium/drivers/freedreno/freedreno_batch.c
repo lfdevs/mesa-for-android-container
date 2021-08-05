@@ -77,7 +77,14 @@ batch_init(struct fd_batch *batch)
    }
 
    batch->in_fence_fd = -1;
-   batch->fence = fd_fence_create(batch);
+   batch->fence = NULL;
+
+   /* Work around problems on earlier gens with submit merging, etc,
+    * by always creating a fence to request that the submit is flushed
+    * immediately:
+    */
+   if (ctx->screen->gpu_id < 600)
+      batch->fence = fd_fence_create(batch);
 
    batch->cleared = 0;
    batch->fast_cleared = 0;
@@ -133,11 +140,6 @@ fd_batch_create(struct fd_context *ctx, bool nondraw)
       _mesa_set_create(NULL, _mesa_hash_pointer, _mesa_key_pointer_equal);
 
    batch_init(batch);
-
-   fd_screen_assert_locked(ctx->screen);
-   if (BATCH_DEBUG) {
-      _mesa_set_add(ctx->screen->live_batches, batch);
-   }
 
    return batch;
 }
@@ -197,7 +199,8 @@ batch_fini(struct fd_batch *batch)
       close(batch->in_fence_fd);
 
    /* in case batch wasn't flushed but fence was created: */
-   fd_fence_populate(batch->fence, 0, -1);
+   if (batch->fence)
+      fd_fence_set_batch(batch->fence, NULL);
 
    fd_fence_ref(&batch->fence, NULL);
 
@@ -252,7 +255,7 @@ batch_reset_dependencies(struct fd_batch *batch)
 }
 
 static void
-batch_reset_resources_locked(struct fd_batch *batch)
+batch_reset_resources(struct fd_batch *batch)
 {
    fd_screen_assert_locked(batch->ctx->screen);
 
@@ -267,20 +270,15 @@ batch_reset_resources_locked(struct fd_batch *batch)
 }
 
 static void
-batch_reset_resources(struct fd_batch *batch) assert_dt
-{
-   fd_screen_lock(batch->ctx->screen);
-   batch_reset_resources_locked(batch);
-   fd_screen_unlock(batch->ctx->screen);
-}
-
-static void
 batch_reset(struct fd_batch *batch) assert_dt
 {
    DBG("%p", batch);
 
    batch_reset_dependencies(batch);
+
+   fd_screen_lock(batch->ctx->screen);
    batch_reset_resources(batch);
+   fd_screen_unlock(batch->ctx->screen);
 
    batch_fini(batch);
    batch_init(batch);
@@ -302,13 +300,9 @@ __fd_batch_destroy(struct fd_batch *batch)
 
    fd_screen_assert_locked(batch->ctx->screen);
 
-   if (BATCH_DEBUG) {
-      _mesa_set_remove_key(ctx->screen->live_batches, batch);
-   }
-
    fd_bc_invalidate_batch(batch, true);
 
-   batch_reset_resources_locked(batch);
+   batch_reset_resources(batch);
    debug_assert(batch->resources->entries == 0);
    _mesa_set_destroy(batch->resources, NULL);
 
@@ -321,6 +315,7 @@ __fd_batch_destroy(struct fd_batch *batch)
 
    simple_mtx_destroy(&batch->submit_lock);
 
+   free(batch->key);
    free(batch);
    fd_screen_lock(ctx->screen);
 }
@@ -358,25 +353,28 @@ batch_flush(struct fd_batch *batch) assert_dt
 
    batch_flush_dependencies(batch);
 
-   batch->flushed = true;
-   if (batch == batch->ctx->batch)
-      fd_batch_reference(&batch->ctx->batch, NULL);
-
-   fd_fence_ref(&batch->ctx->last_fence, batch->fence);
-
-   fd_gmem_render_tiles(batch);
-   batch_reset_resources(batch);
-
-   debug_assert(batch->reference.count > 0);
-
    fd_screen_lock(batch->ctx->screen);
-   /* NOTE: remove=false removes the patch from the hashtable, so future
+   batch_reset_resources(batch);
+   /* NOTE: remove=false removes the batch from the hashtable, so future
     * lookups won't cache-hit a flushed batch, but leaves the weak reference
     * to the batch to avoid having multiple batches with same batch->idx, as
     * that causes all sorts of hilarity.
     */
    fd_bc_invalidate_batch(batch, false);
+   batch->flushed = true;
+
+   if (batch == batch->ctx->batch)
+      fd_batch_reference_locked(&batch->ctx->batch, NULL);
+
    fd_screen_unlock(batch->ctx->screen);
+
+   if (batch->fence)
+      fd_fence_ref(&batch->ctx->last_fence, batch->fence);
+
+   fd_gmem_render_tiles(batch);
+
+   debug_assert(batch->reference.count > 0);
+
    cleanup_submit(batch);
    fd_batch_unlock_submit(batch);
 }
@@ -529,8 +527,6 @@ fd_batch_resource_read_slowpath(struct fd_batch *batch, struct fd_resource *rsc)
 void
 fd_batch_check_size(struct fd_batch *batch)
 {
-   debug_assert(!batch->flushed);
-
    if (FD_DBG(FLUSH)) {
       fd_batch_flush(batch);
       return;
@@ -544,11 +540,7 @@ fd_batch_check_size(struct fd_batch *batch)
       return;
    }
 
-   if (fd_device_version(batch->ctx->screen->dev) >= FD_VERSION_UNLIMITED_CMDS)
-      return;
-
-   struct fd_ringbuffer *ring = batch->draw;
-   if ((ring->cur - ring->start) > (ring->size / 4 - 0x1000))
+   if (!fd_ringbuffer_check_size(batch->draw))
       fd_batch_flush(batch);
 }
 

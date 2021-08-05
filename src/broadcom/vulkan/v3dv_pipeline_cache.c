@@ -324,6 +324,14 @@ v3dv_pipeline_shared_data_destroy(struct v3dv_device *device,
    for (uint8_t stage = 0; stage < BROADCOM_SHADER_STAGES; stage++) {
       if (shared_data->variants[stage] != NULL)
          v3dv_shader_variant_destroy(device, shared_data->variants[stage]);
+
+      /* We don't free binning descriptor maps as we are sharing them
+       * with the render shaders.
+       */
+      if (shared_data->maps[stage] != NULL &&
+          !broadcom_shader_stage_is_binning(stage)) {
+         vk_free(&device->vk.alloc, shared_data->maps[stage]);
+      }
    }
 
    if (shared_data->assembly_bo)
@@ -335,11 +343,8 @@ v3dv_pipeline_shared_data_destroy(struct v3dv_device *device,
 static struct v3dv_pipeline_shared_data *
 v3dv_pipeline_shared_data_new(struct v3dv_pipeline_cache *cache,
                               const unsigned char sha1_key[20],
+                              struct v3dv_descriptor_maps **maps,
                               struct v3dv_shader_variant **variants,
-                              const struct v3dv_descriptor_map *ubo_map,
-                              const struct v3dv_descriptor_map *ssbo_map,
-                              const struct v3dv_descriptor_map *sampler_map,
-                              const struct v3dv_descriptor_map *texture_map,
                               const uint64_t *total_assembly,
                               const uint32_t total_assembly_size)
 {
@@ -359,13 +364,10 @@ v3dv_pipeline_shared_data_new(struct v3dv_pipeline_cache *cache,
    new_entry->ref_cnt = 1;
    memcpy(new_entry->sha1_key, sha1_key, 20);
 
-   memcpy(&new_entry->ubo_map, ubo_map, sizeof(struct v3dv_descriptor_map));
-   memcpy(&new_entry->ssbo_map, ssbo_map, sizeof(struct v3dv_descriptor_map));
-   memcpy(&new_entry->sampler_map, sampler_map, sizeof(struct v3dv_descriptor_map));
-   memcpy(&new_entry->texture_map, texture_map, sizeof(struct v3dv_descriptor_map));
-
-   for (uint8_t stage = 0; stage < BROADCOM_SHADER_STAGES; stage++)
+   for (uint8_t stage = 0; stage < BROADCOM_SHADER_STAGES; stage++) {
+      new_entry->maps[stage] = maps[stage];
       new_entry->variants[stage] = variants[stage];
+   }
 
    struct v3dv_bo *bo = v3dv_bo_alloc(cache->device, total_assembly_size,
                                       "pipeline shader assembly", true);
@@ -490,7 +492,7 @@ shader_variant_create_from_blob(struct v3dv_device *device,
 {
    VkResult result;
 
-   broadcom_shader_stage stage = blob_read_uint32(blob);
+   enum broadcom_shader_stage stage = blob_read_uint32(blob);
 
    uint32_t prog_data_size = blob_read_uint32(blob);
    /* FIXME: as we include the stage perhaps we can avoid prog_data_size? */
@@ -541,17 +543,32 @@ v3dv_pipeline_shared_data_create_from_blob(struct v3dv_pipeline_cache *cache,
 {
    const unsigned char *sha1_key = blob_read_bytes(blob, 20);
 
-   const struct v3dv_descriptor_map *ubo_map =
-      blob_read_bytes(blob, sizeof(struct v3dv_descriptor_map));
-   const struct v3dv_descriptor_map *ssbo_map =
-      blob_read_bytes(blob, sizeof(struct v3dv_descriptor_map));
-   const struct v3dv_descriptor_map *sampler_map =
-      blob_read_bytes(blob, sizeof(struct v3dv_descriptor_map));
-   const struct v3dv_descriptor_map *texture_map =
-      blob_read_bytes(blob, sizeof(struct v3dv_descriptor_map));
+   struct v3dv_descriptor_maps *maps[BROADCOM_SHADER_STAGES] = { 0 };
 
-   if (blob->overrun)
-      return NULL;
+   uint8_t descriptor_maps_count = blob_read_uint8(blob);
+   for (uint8_t count = 0; count < descriptor_maps_count; count++) {
+      uint8_t stage = blob_read_uint8(blob);
+
+      const struct v3dv_descriptor_maps *current_maps =
+         blob_read_bytes(blob, sizeof(struct v3dv_descriptor_maps));
+
+      if (blob->overrun)
+         return NULL;
+
+      maps[stage] = vk_zalloc2(&cache->device->vk.alloc, NULL,
+                               sizeof(struct v3dv_descriptor_maps), 8,
+                               VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+      if (maps[stage] == NULL)
+         return NULL;
+
+      memcpy(maps[stage], current_maps, sizeof(struct v3dv_descriptor_maps));
+      if (broadcom_shader_stage_is_render_with_binning(stage)) {
+         enum broadcom_shader_stage bin_stage =
+            broadcom_binning_shader_stage_for_render_stage(stage);
+            maps[bin_stage] = maps[stage];
+      }
+   }
 
    uint8_t variant_count = blob_read_uint8(blob);
 
@@ -571,8 +588,7 @@ v3dv_pipeline_shared_data_create_from_blob(struct v3dv_pipeline_cache *cache,
    if (blob->overrun)
       return NULL;
 
-   return v3dv_pipeline_shared_data_new(cache, sha1_key, variants,
-                                        ubo_map, ssbo_map, sampler_map, texture_map,
+   return v3dv_pipeline_shared_data_new(cache, sha1_key, maps, variants,
                                         total_assembly, total_assembly_size);
 }
 
@@ -643,7 +659,7 @@ pipeline_cache_load(struct v3dv_pipeline_cache *cache,
    }
 }
 
-VkResult
+VKAPI_ATTR VkResult VKAPI_CALL
 v3dv_CreatePipelineCache(VkDevice _device,
                          const VkPipelineCacheCreateInfo *pCreateInfo,
                          const VkAllocationCallbacks *pAllocator,
@@ -702,7 +718,7 @@ v3dv_pipeline_cache_finish(struct v3dv_pipeline_cache *cache)
    }
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 v3dv_DestroyPipelineCache(VkDevice _device,
                           VkPipelineCache _cache,
                           const VkAllocationCallbacks *pAllocator)
@@ -718,7 +734,7 @@ v3dv_DestroyPipelineCache(VkDevice _device,
    vk_object_free(&device->vk, pAllocator, cache);
 }
 
-VkResult
+VKAPI_ATTR VkResult VKAPI_CALL
 v3dv_MergePipelineCaches(VkDevice device,
                          VkPipelineCache dstCache,
                          uint32_t srcCacheCount,
@@ -820,14 +836,33 @@ v3dv_pipeline_shared_data_write_to_blob(const struct v3dv_pipeline_shared_data *
 {
    blob_write_bytes(blob, cache_entry->sha1_key, 20);
 
-   blob_write_bytes(blob, &cache_entry->ubo_map,
-                    sizeof(struct v3dv_descriptor_map));
-   blob_write_bytes(blob, &cache_entry->ssbo_map,
-                    sizeof(struct v3dv_descriptor_map));
-   blob_write_bytes(blob, &cache_entry->sampler_map,
-                    sizeof(struct v3dv_descriptor_map));
-   blob_write_bytes(blob, &cache_entry->texture_map,
-                    sizeof(struct v3dv_descriptor_map));
+   uint8_t descriptor_maps_count = 0;
+   for (uint8_t stage = 0; stage < BROADCOM_SHADER_STAGES; stage++) {
+      if (broadcom_shader_stage_is_binning(stage))
+         continue;
+      if (cache_entry->maps[stage] == NULL)
+         continue;
+      descriptor_maps_count++;
+   }
+
+   /* Compute pipelines only have one descriptor map,
+    * graphics pipelines may have 2 (VS+FS) or 3 (VS+GS+FS), since the binning
+    * stages take the descriptor map from the render stage.
+    */
+   assert((descriptor_maps_count >= 2 && descriptor_maps_count <= 3) ||
+          (descriptor_maps_count == 1 && cache_entry->variants[BROADCOM_SHADER_COMPUTE]));
+   blob_write_uint8(blob, descriptor_maps_count);
+
+   for (uint8_t stage = 0; stage < BROADCOM_SHADER_STAGES; stage++) {
+      if (cache_entry->maps[stage] == NULL)
+         continue;
+      if (broadcom_shader_stage_is_binning(stage))
+         continue;
+
+      blob_write_uint8(blob, stage);
+      blob_write_bytes(blob, cache_entry->maps[stage],
+                       sizeof(struct v3dv_descriptor_maps));
+   }
 
    uint8_t variant_count = 0;
    for (uint8_t stage = 0; stage < BROADCOM_SHADER_STAGES; stage++) {
@@ -836,10 +871,10 @@ v3dv_pipeline_shared_data_write_to_blob(const struct v3dv_pipeline_shared_data *
       variant_count++;
    }
 
-   /* Right now we only support compute pipeline, or graphics pipeline with
-    * vertex, vertex bin, and fragment shader.
+   /* Graphics pipelines with VS+FS have 3 variants, VS+GS+FS will have 5 and
+    * compute pipelines only have 1.
     */
-   assert(variant_count == 3 ||
+   assert((variant_count == 5  || variant_count == 3) ||
           (variant_count == 1 && cache_entry->variants[BROADCOM_SHADER_COMPUTE]));
    blob_write_uint8(blob, variant_count);
 
@@ -864,7 +899,7 @@ v3dv_pipeline_shared_data_write_to_blob(const struct v3dv_pipeline_shared_data *
 }
 
 
-VkResult
+VKAPI_ATTR VkResult VKAPI_CALL
 v3dv_GetPipelineCacheData(VkDevice _device,
                           VkPipelineCache _cache,
                           size_t *pDataSize,
@@ -881,7 +916,7 @@ v3dv_GetPipelineCacheData(VkDevice _device,
    }
 
    struct v3dv_physical_device *pdevice = &device->instance->physicalDevice;
-   VkResult result = VK_SUCCESS;
+   VkResult result = VK_INCOMPLETE;
 
    pthread_mutex_lock(&cache->mutex);
 
@@ -898,9 +933,7 @@ v3dv_GetPipelineCacheData(VkDevice _device,
    intptr_t nir_count_offset = blob_reserve_uint32(&blob);
    if (nir_count_offset < 0) {
       *pDataSize = 0;
-      blob_finish(&blob);
-      pthread_mutex_unlock(&cache->mutex);
-      return VK_INCOMPLETE;
+      goto done;
    }
 
    if (cache->nir_cache) {
@@ -915,9 +948,7 @@ v3dv_GetPipelineCacheData(VkDevice _device,
 
          if (blob.out_of_memory) {
             blob.size = save_size;
-            pthread_mutex_unlock(&cache->mutex);
-            result = VK_INCOMPLETE;
-            break;
+            goto done;
          }
 
          nir_count++;
@@ -929,9 +960,7 @@ v3dv_GetPipelineCacheData(VkDevice _device,
    intptr_t count_offset = blob_reserve_uint32(&blob);
    if (count_offset < 0) {
       *pDataSize = 0;
-      blob_finish(&blob);
-      pthread_mutex_unlock(&cache->mutex);
-      return VK_INCOMPLETE;
+      goto done;
    }
 
    if (cache->cache) {
@@ -942,9 +971,7 @@ v3dv_GetPipelineCacheData(VkDevice _device,
          if (!v3dv_pipeline_shared_data_write_to_blob(cache_entry, &blob)) {
             /* If it fails reset to the previous size and bail */
             blob.size = save_size;
-            pthread_mutex_unlock(&cache->mutex);
-            result = VK_INCOMPLETE;
-            break;
+            goto done;
          }
 
          count++;
@@ -955,7 +982,7 @@ v3dv_GetPipelineCacheData(VkDevice _device,
 
    *pDataSize = blob.size;
 
-   blob_finish(&blob);
+   result = VK_SUCCESS;
 
    if (debug_cache) {
       assert(count <= cache->stats.count);
@@ -964,6 +991,9 @@ v3dv_GetPipelineCacheData(VkDevice _device,
               "%i entries, %u DataSize\n",
               cache, nir_count, count, (uint32_t) *pDataSize);
    }
+
+ done:
+   blob_finish(&blob);
 
    pthread_mutex_unlock(&cache->mutex);
 

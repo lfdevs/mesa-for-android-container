@@ -173,8 +173,6 @@ lp_build_lerp_3d(struct lp_build_context *bld,
 enum gallivm_nan_behavior {
    /* Results are undefined with NaN. Results in fastest code */
    GALLIVM_NAN_BEHAVIOR_UNDEFINED,
-   /* If one of the inputs is NaN, NaN is returned */
-   GALLIVM_NAN_RETURN_NAN,
    /* If one of the inputs is NaN, the other operand is returned */
    GALLIVM_NAN_RETURN_OTHER,
    /* If one of the inputs is NaN, the other operand is returned,

@@ -89,8 +89,9 @@ struct fd6_emit {
    struct fd_context *ctx;
    const struct fd_vertex_state *vtx;
    const struct pipe_draw_info *info;
+	unsigned drawid_offset;
    const struct pipe_draw_indirect_info *indirect;
-   const struct pipe_draw_start_count *draw;
+	const struct pipe_draw_start_count_bias *draw;
    struct ir3_cache_key key;
    enum fd_dirty_3d_state dirty;
    uint32_t dirty_groups;
@@ -169,6 +170,8 @@ fd6_event_write(struct fd_batch *batch, struct fd_ringbuffer *ring,
 static inline void
 fd6_cache_inv(struct fd_batch *batch, struct fd_ringbuffer *ring)
 {
+   fd6_event_write(batch, ring, PC_CCU_INVALIDATE_COLOR, false);
+   fd6_event_write(batch, ring, PC_CCU_INVALIDATE_DEPTH, false);
    fd6_event_write(batch, ring, CACHE_INVALIDATE, false);
 }
 

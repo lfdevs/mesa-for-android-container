@@ -66,6 +66,7 @@ public:
    Instruction *mkMov(Value *, Value *, DataType = TYPE_U32);
    Instruction *mkMovToReg(int id, Value *);
    Instruction *mkMovFromReg(Value *, int id);
+   inline Instruction *mkBMov(Value *, Value *);
 
    Instruction *mkInterp(unsigned mode, Value *, int32_t offset, Value *rel);
    Instruction *mkFetch(Value *, DataType, DataFile, int32_t offset,
@@ -178,6 +179,7 @@ public:
                     DataType ty, uint32_t baseAddress);
 
    Symbol *mkSysVal(SVSemantic svName, uint32_t svIndex);
+   Symbol *mkTSVal(TSSemantic tsName);
 
 private:
    void init(Program *);
@@ -302,6 +304,12 @@ BuildUtil::mkLoadv(DataType ty, Symbol *mem, Value *ptr)
    LValue *dst = getScratch(typeSizeof(ty));
    mkLoad(ty, dst, mem, ptr);
    return dst;
+}
+
+inline Instruction *
+BuildUtil::mkBMov(Value *dst, Value *src)
+{
+   return mkCvt(OP_CVT, TYPE_U32, dst, TYPE_U32, src);
 }
 
 bool

@@ -29,7 +29,7 @@
 #include "vk_util.h"
 #include "wsi_common.h"
 
-static PFN_vkVoidFunction
+static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 v3dv_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
 {
    V3DV_FROM_HANDLE(v3dv_physical_device, pdevice, physicalDevice);
@@ -44,6 +44,31 @@ v3dv_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
       return func;
 
    return vk_device_dispatch_table_get(&vk_device_trampolines, pName);
+}
+
+static bool
+v3dv_wsi_can_present_on_device(VkPhysicalDevice _pdevice, int fd)
+{
+   V3DV_FROM_HANDLE(v3dv_physical_device, pdevice, _pdevice);
+
+   drmDevicePtr fd_devinfo, display_devinfo;
+   int ret;
+
+   ret = drmGetDevice2(fd, 0, &fd_devinfo);
+   if (ret)
+      return false;
+
+   ret = drmGetDevice2(pdevice->display_fd, 0, &display_devinfo);
+   if (ret) {
+      drmFreeDevice(&fd_devinfo);
+      return false;
+   }
+
+   bool result = drmDevicesEqual(fd_devinfo, display_devinfo);
+
+   drmFreeDevice(&fd_devinfo);
+   drmFreeDevice(&display_devinfo);
+   return result;
 }
 
 VkResult
@@ -61,6 +86,8 @@ v3dv_wsi_init(struct v3dv_physical_device *physical_device)
       return result;
 
    physical_device->wsi_device.supports_modifiers = true;
+   physical_device->wsi_device.can_present_on_device =
+      v3dv_wsi_can_present_on_device;
 
    return VK_SUCCESS;
 }
@@ -72,7 +99,8 @@ v3dv_wsi_finish(struct v3dv_physical_device *physical_device)
                      &physical_device->vk.instance->alloc);
 }
 
-void v3dv_DestroySurfaceKHR(
+VKAPI_ATTR void VKAPI_CALL
+v3dv_DestroySurfaceKHR(
     VkInstance                                   _instance,
     VkSurfaceKHR                                 _surface,
     const VkAllocationCallbacks*                 pAllocator)
@@ -86,7 +114,8 @@ void v3dv_DestroySurfaceKHR(
    vk_free2(&instance->vk.alloc, pAllocator, surface);
 }
 
-VkResult v3dv_GetPhysicalDeviceSurfaceSupportKHR(
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_GetPhysicalDeviceSurfaceSupportKHR(
     VkPhysicalDevice                            physicalDevice,
     uint32_t                                    queueFamilyIndex,
     VkSurfaceKHR                                surface,
@@ -114,7 +143,8 @@ constraint_surface_capabilities(VkSurfaceCapabilitiesKHR *caps)
    caps->supportedUsageFlags &= ~VK_IMAGE_USAGE_SAMPLED_BIT;
 }
 
-VkResult v3dv_GetPhysicalDeviceSurfaceCapabilitiesKHR(
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_GetPhysicalDeviceSurfaceCapabilitiesKHR(
     VkPhysicalDevice                            physicalDevice,
     VkSurfaceKHR                                surface,
     VkSurfaceCapabilitiesKHR*                   pSurfaceCapabilities)
@@ -129,7 +159,8 @@ VkResult v3dv_GetPhysicalDeviceSurfaceCapabilitiesKHR(
    return result;
 }
 
-VkResult v3dv_GetPhysicalDeviceSurfaceCapabilities2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_GetPhysicalDeviceSurfaceCapabilities2KHR(
     VkPhysicalDevice                            physicalDevice,
     const VkPhysicalDeviceSurfaceInfo2KHR*      pSurfaceInfo,
     VkSurfaceCapabilities2KHR*                  pSurfaceCapabilities)
@@ -144,7 +175,8 @@ VkResult v3dv_GetPhysicalDeviceSurfaceCapabilities2KHR(
    return result;
 }
 
-VkResult v3dv_GetPhysicalDeviceSurfaceFormatsKHR(
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_GetPhysicalDeviceSurfaceFormatsKHR(
     VkPhysicalDevice                            physicalDevice,
     VkSurfaceKHR                                surface,
     uint32_t*                                   pSurfaceFormatCount,
@@ -156,7 +188,8 @@ VkResult v3dv_GetPhysicalDeviceSurfaceFormatsKHR(
                                          pSurfaceFormatCount, pSurfaceFormats);
 }
 
-VkResult v3dv_GetPhysicalDeviceSurfaceFormats2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_GetPhysicalDeviceSurfaceFormats2KHR(
     VkPhysicalDevice                            physicalDevice,
     const VkPhysicalDeviceSurfaceInfo2KHR*      pSurfaceInfo,
     uint32_t*                                   pSurfaceFormatCount,
@@ -168,7 +201,8 @@ VkResult v3dv_GetPhysicalDeviceSurfaceFormats2KHR(
                                           pSurfaceFormatCount, pSurfaceFormats);
 }
 
-VkResult v3dv_GetPhysicalDeviceSurfacePresentModesKHR(
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_GetPhysicalDeviceSurfacePresentModesKHR(
     VkPhysicalDevice                            physicalDevice,
     VkSurfaceKHR                                surface,
     uint32_t*                                   pPresentModeCount,
@@ -181,7 +215,8 @@ VkResult v3dv_GetPhysicalDeviceSurfacePresentModesKHR(
                                                pPresentModes);
 }
 
-VkResult v3dv_CreateSwapchainKHR(
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_CreateSwapchainKHR(
     VkDevice                                     _device,
     const VkSwapchainCreateInfoKHR*              pCreateInfo,
     const VkAllocationCallbacks*                 pAllocator,
@@ -208,7 +243,8 @@ VkResult v3dv_CreateSwapchainKHR(
                                       pCreateInfo, alloc, pSwapchain);
 }
 
-void v3dv_DestroySwapchainKHR(
+VKAPI_ATTR void VKAPI_CALL
+v3dv_DestroySwapchainKHR(
     VkDevice                                     _device,
     VkSwapchainKHR                               swapchain,
     const VkAllocationCallbacks*                 pAllocator)
@@ -224,7 +260,8 @@ void v3dv_DestroySwapchainKHR(
    wsi_common_destroy_swapchain(_device, swapchain, alloc);
 }
 
-VkResult v3dv_GetSwapchainImagesKHR(
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_GetSwapchainImagesKHR(
     VkDevice                                     device,
     VkSwapchainKHR                               swapchain,
     uint32_t*                                    pSwapchainImageCount,
@@ -235,7 +272,26 @@ VkResult v3dv_GetSwapchainImagesKHR(
                                 pSwapchainImages);
 }
 
-VkResult v3dv_AcquireNextImageKHR(
+struct v3dv_image *
+v3dv_wsi_get_image_from_swapchain(VkSwapchainKHR swapchain, uint32_t index)
+{
+   uint32_t n_images = index + 1;
+   VkImage *images = malloc(sizeof(*images) * n_images);
+   VkResult result = wsi_common_get_images(swapchain, &n_images, images);
+
+   if (result != VK_SUCCESS && result != VK_INCOMPLETE) {
+      free(images);
+      return NULL;
+   }
+
+   V3DV_FROM_HANDLE(v3dv_image, image, images[index]);
+   free(images);
+
+   return image;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_AcquireNextImageKHR(
     VkDevice                                     device,
     VkSwapchainKHR                               swapchain,
     uint64_t                                     timeout,
@@ -255,7 +311,8 @@ VkResult v3dv_AcquireNextImageKHR(
    return v3dv_AcquireNextImage2KHR(device, &acquire_info, pImageIndex);
 }
 
-VkResult v3dv_AcquireNextImage2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_AcquireNextImage2KHR(
     VkDevice                                     _device,
     const VkAcquireNextImageInfoKHR*             pAcquireInfo,
     uint32_t*                                    pImageIndex)
@@ -280,7 +337,8 @@ VkResult v3dv_AcquireNextImage2KHR(
    return result;
 }
 
-VkResult v3dv_QueuePresentKHR(
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_QueuePresentKHR(
     VkQueue                                  _queue,
     const VkPresentInfoKHR*                  pPresentInfo)
 {
@@ -294,7 +352,8 @@ VkResult v3dv_QueuePresentKHR(
                                    pPresentInfo);
 }
 
-VkResult v3dv_GetDeviceGroupPresentCapabilitiesKHR(
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_GetDeviceGroupPresentCapabilitiesKHR(
     VkDevice                                    device,
     VkDeviceGroupPresentCapabilitiesKHR*        pCapabilities)
 {
@@ -306,7 +365,8 @@ VkResult v3dv_GetDeviceGroupPresentCapabilitiesKHR(
    return VK_SUCCESS;
 }
 
-VkResult v3dv_GetDeviceGroupSurfacePresentModesKHR(
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_GetDeviceGroupSurfacePresentModesKHR(
     VkDevice                                    device,
     VkSurfaceKHR                                surface,
     VkDeviceGroupPresentModeFlagsKHR*           pModes)
@@ -316,7 +376,8 @@ VkResult v3dv_GetDeviceGroupSurfacePresentModesKHR(
    return VK_SUCCESS;
 }
 
-VkResult v3dv_GetPhysicalDevicePresentRectanglesKHR(
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_GetPhysicalDevicePresentRectanglesKHR(
     VkPhysicalDevice                            physicalDevice,
     VkSurfaceKHR                                surface,
     uint32_t*                                   pRectCount,

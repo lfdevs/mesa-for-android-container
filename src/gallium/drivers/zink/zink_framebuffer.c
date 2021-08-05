@@ -31,34 +31,6 @@
 #include "util/u_memory.h"
 #include "util/u_string.h"
 
-static struct pipe_surface *
-framebuffer_null_surface_init(struct zink_context *ctx, struct zink_framebuffer_state *state)
-{
-   struct pipe_surface surf_templ = {};
-   unsigned idx = util_logbase2_ceil(MAX2(state->samples, 1));
-
-   if (!ctx->null_buffers[idx]) {
-      struct pipe_resource *pres;
-      struct pipe_resource templ = {};
-      templ.width0 = state->width;
-      templ.height0 = state->height;
-      templ.depth0 = 1;
-      templ.format = PIPE_FORMAT_R8_UINT;
-      templ.target = PIPE_TEXTURE_2D;
-      templ.bind = PIPE_BIND_RENDER_TARGET;
-      templ.nr_samples = state->samples;
-
-      pres = ctx->base.screen->resource_create(ctx->base.screen, &templ);
-      if (!pres)
-         return NULL;
-
-      ctx->null_buffers[idx] = pres;
-   }
-   surf_templ.format = PIPE_FORMAT_R8_UINT;
-   surf_templ.nr_samples = state->samples;
-   return ctx->base.create_surface(&ctx->base, ctx->null_buffers[idx], &surf_templ);
-}
-
 void
 zink_destroy_framebuffer(struct zink_screen *screen,
                          struct zink_framebuffer *fb)
@@ -72,6 +44,8 @@ zink_destroy_framebuffer(struct zink_screen *screen,
 #endif
    }
 
+   if (fb->null_surface)
+      pipe_resource_reference(&fb->null_surface->texture, NULL);
    zink_surface_reference(screen, (struct zink_surface**)&fb->null_surface, NULL);
 
    ralloc_free(fb);
@@ -98,7 +72,7 @@ zink_init_framebuffer(struct zink_screen *screen, struct zink_framebuffer *fb, s
       goto out;
    }
 
-   VkFramebufferCreateInfo fci = {};
+   VkFramebufferCreateInfo fci = {0};
    fci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
    fci.renderPass = rp->render_pass;
    fci.attachmentCount = fb->state.num_attachments;
@@ -145,7 +119,7 @@ zink_create_framebuffer(struct zink_context *ctx,
          num_attachments++;
       } else {
          if (!fb->null_surface)
-            fb->null_surface = framebuffer_null_surface_init(ctx, state);
+            fb->null_surface = zink_surface_create_null(ctx, PIPE_TEXTURE_2D, state->width, state->height, state->samples);
          surf = zink_surface(fb->null_surface);
          state->attachments[i] = zink_surface(fb->null_surface)->image_view;
       }

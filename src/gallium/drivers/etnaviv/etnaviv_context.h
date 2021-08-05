@@ -206,6 +206,9 @@ struct etna_context {
    struct set *used_resources_read;
    struct set *used_resources_write;
 
+   /* resources that must be flushed implicitly at the context flush time */
+   struct set *flush_resources;
+
    mtx_t lock;
 };
 

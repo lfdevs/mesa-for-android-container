@@ -52,12 +52,14 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
     */
    fd_batch_reference(&batch, ctx->batch);
 
-   DBG("%p: flush: flags=%x", batch, flags);
+   DBG("%p: flush: flags=%x, fencep=%p", batch, flags, fencep);
 
    if (fencep && !batch) {
       batch = fd_context_batch(ctx);
    } else if (!batch) {
-      fd_bc_dump(ctx->screen, "%p: NULL batch, remaining:\n", ctx);
+      if (ctx->screen->reorder)
+         fd_bc_flush(ctx, flags & PIPE_FLUSH_DEFERRED);
+      fd_bc_dump(ctx, "%p: NULL batch, remaining:\n", ctx);
       return;
    }
 
@@ -77,17 +79,23 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
       fd_fence_set_batch(*fencep, batch);
       fd_fence_ref(&batch->fence, *fencep);
 
-      /* We (a) cannot substitute the provided fence with last_fence,
-       * and (b) need fd_fence_populate() to be eventually called on
-       * the fence that was pre-created in frontend-thread:
+      /* If we have nothing to flush, update the pre-created unflushed
+       * fence with the current state of the last-fence:
        */
-      fd_fence_ref(&ctx->last_fence, NULL);
+      if (ctx->last_fence) {
+         fd_fence_repopulate(*fencep, ctx->last_fence);
+         fd_fence_ref(&fence, *fencep);
+         fd_bc_dump(ctx, "%p: (deferred) reuse last_fence, remaining:\n", ctx);
+         goto out;
+      }
 
       /* async flush is not compatible with deferred flush, since
        * nothing triggers the batch flush which fence_flush() would
        * be waiting for
        */
       flags &= ~PIPE_FLUSH_DEFERRED;
+   } else if (!batch->fence) {
+      batch->fence = fd_fence_create(batch);
    }
 
    /* In some sequence of events, we can end up with a last_fence that is
@@ -103,7 +111,7 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
     */
    if (ctx->last_fence) {
       fd_fence_ref(&fence, ctx->last_fence);
-      fd_bc_dump(ctx->screen, "%p: reuse last_fence, remaining:\n", ctx);
+      fd_bc_dump(ctx, "%p: reuse last_fence, remaining:\n", ctx);
       goto out;
    }
 
@@ -111,20 +119,23 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
    fd_fence_ref(&fence, batch->fence);
 
    if (flags & PIPE_FLUSH_FENCE_FD)
-      batch->needs_out_fence_fd = true;
+      fence->submit_fence.use_fence_fd = true;
 
-   fd_bc_dump(ctx->screen, "%p: flushing %p<%u>, flags=0x%x, pending:\n", ctx,
+   fd_bc_dump(ctx, "%p: flushing %p<%u>, flags=0x%x, pending:\n", ctx,
               batch, batch->seqno, flags);
+
+   /* If we get here, we need to flush for a fence, even if there is
+    * no rendering yet:
+    */
+   batch->needs_flush = true;
 
    if (!ctx->screen->reorder) {
       fd_batch_flush(batch);
-   } else if (flags & PIPE_FLUSH_DEFERRED) {
-      fd_bc_flush_deferred(&ctx->screen->batch_cache, ctx);
    } else {
-      fd_bc_flush(&ctx->screen->batch_cache, ctx);
+      fd_bc_flush(ctx, flags & PIPE_FLUSH_DEFERRED);
    }
 
-   fd_bc_dump(ctx->screen, "%p: remaining:\n", ctx);
+   fd_bc_dump(ctx, "%p: remaining:\n", ctx);
 
 out:
    if (fencep)
@@ -224,6 +235,8 @@ fd_emit_string_marker(struct pipe_context *pctx, const char *string,
 {
    struct fd_context *ctx = fd_context(pctx);
 
+   DBG("%.*s", len, string);
+
    if (!ctx->batch)
       return;
 
@@ -284,7 +297,7 @@ fd_context_batch(struct fd_context *ctx)
 
    if (unlikely(!batch)) {
       batch =
-         fd_batch_from_fb(&ctx->screen->batch_cache, ctx, &ctx->framebuffer);
+         fd_batch_from_fb(ctx, &ctx->framebuffer);
       util_copy_framebuffer_state(&batch->framebuffer, &ctx->framebuffer);
       fd_batch_reference(&ctx->batch, batch);
       fd_context_all_dirty(ctx);
@@ -339,7 +352,9 @@ fd_context_destroy(struct pipe_context *pctx)
 
    util_copy_framebuffer_state(&ctx->framebuffer, NULL);
    fd_batch_reference(&ctx->batch, NULL); /* unref current batch */
-   fd_bc_invalidate_context(ctx);
+
+   /* Make sure nothing in the batch cache references our context any more. */
+   fd_bc_flush(ctx, false);
 
    fd_prog_fini(pctx);
 
@@ -366,6 +381,7 @@ fd_context_destroy(struct pipe_context *pctx)
    }
 
    fd_device_del(ctx->dev);
+   fd_pipe_purge(ctx->pipe);
    fd_pipe_del(ctx->pipe);
 
    simple_mtx_destroy(&ctx->gmem_lock);
@@ -465,7 +481,12 @@ fd_trace_read_ts(struct u_trace_context *utctx,
 
    /* Only need to stall on results for the first entry: */
    if (idx == 0) {
-      int ret = fd_bo_cpu_prep(ts_bo, ctx->pipe, DRM_FREEDRENO_PREP_READ);
+      /* Avoid triggering deferred submits from flushing, since that
+       * changes the behavior of what we are trying to measure:
+       */
+      while (fd_bo_cpu_prep(ts_bo, ctx->pipe, FD_BO_PREP_NOSYNC))
+         usleep(10000);
+      int ret = fd_bo_cpu_prep(ts_bo, ctx->pipe, FD_BO_PREP_READ);
       if (ret)
          return U_TRACE_NO_TIMESTAMP;
    }
@@ -678,8 +699,12 @@ fd_context_init_tc(struct pipe_context *pctx, unsigned flags)
       return pctx;
 
    struct pipe_context *tc = threaded_context_create(
-      pctx, &ctx->screen->transfer_pool, fd_replace_buffer_storage,
-      fd_fence_create_unflushed, &ctx->tc);
+      pctx, &ctx->screen->transfer_pool,
+      fd_replace_buffer_storage,
+      fd_fence_create_unflushed,
+      fd_resource_busy,
+      false,
+      &ctx->tc);
 
    uint64_t total_ram;
    if (tc && tc != pctx && os_get_total_physical_memory(&total_ram)) {

@@ -27,9 +27,8 @@ using namespace aco;
 
 void create_mubuf(unsigned offset)
 {
-   bld.mubuf(aco_opcode::buffer_load_dword, Definition(PhysReg(256), v1),
-             Operand(PhysReg(0), s4), Operand(PhysReg(256), v1),
-             Operand(0u), offset, true);
+   bld.mubuf(aco_opcode::buffer_load_dword, Definition(PhysReg(256), v1), Operand(PhysReg(0), s4),
+             Operand(PhysReg(256), v1), Operand::zero(), offset, true);
 }
 
 void create_mimg(bool nsa, unsigned addrs, unsigned instr_dwords)
@@ -58,7 +57,7 @@ BEGIN_TEST(insert_nops.nsa_to_vmem_bug)
    //>> p_unit_test 0
    //! v1: %0:v[0] = image_sample %0:s[0-7], %0:s[0-3],  v1: undef, %0:v[0], %0:v[2], %0:v[4], %0:v[6], %0:v[8], %0:v[10] 2d storage: semantics: scope:invocation
    //! v1: %0:v[0] = buffer_load_dword %0:s[0-3], %0:v[0], 0 offset:8 offen storage: semantics: scope:invocation
-   bld.pseudo(aco_opcode::p_unit_test, Operand(0u));
+   bld.pseudo(aco_opcode::p_unit_test, Operand::zero());
    create_mimg(true, 6, 4);
    create_mubuf(8);
 
@@ -67,7 +66,7 @@ BEGIN_TEST(insert_nops.nsa_to_vmem_bug)
    //! v1: %0:v[0] = image_sample %0:s[0-7], %0:s[0-3],  v1: undef, %0:v[0], %0:v[2], %0:v[4], %0:v[6], %0:v[8], %0:v[10] 2d storage: semantics: scope:invocation
    //! s_nop
    //! v1: %0:v[0] = buffer_load_dword %0:s[0-3], %0:v[0], 0 offset:4 offen storage: semantics: scope:invocation
-   bld.pseudo(aco_opcode::p_unit_test, Operand(1u));
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1u));
    create_mimg(true, 6, 4);
    create_mubuf(4);
 
@@ -75,7 +74,7 @@ BEGIN_TEST(insert_nops.nsa_to_vmem_bug)
    //! p_unit_test 2
    //! v1: %0:v[0] = image_sample %0:s[0-7], %0:s[0-3],  v1: undef, %0:v[0], %0:v[1], %0:v[2], %0:v[3], %0:v[4], %0:v[5] 2d storage: semantics: scope:invocation
    //! v1: %0:v[0] = buffer_load_dword %0:s[0-3], %0:v[0], 0 offset:4 offen storage: semantics: scope:invocation
-   bld.pseudo(aco_opcode::p_unit_test, Operand(2u));
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2u));
    create_mimg(false, 6, 2);
    create_mubuf(4);
 
@@ -84,7 +83,7 @@ BEGIN_TEST(insert_nops.nsa_to_vmem_bug)
    //! v1: %0:v[0] = image_sample %0:s[0-7], %0:s[0-3],  v1: undef, %0:v[0], %0:v[2], %0:v[4], %0:v[6], %0:v[8], %0:v[10] 2d storage: semantics: scope:invocation
    //! v_nop
    //! v1: %0:v[0] = buffer_load_dword %0:s[0-3], %0:v[0], 0 offset:4 offen storage: semantics: scope:invocation
-   bld.pseudo(aco_opcode::p_unit_test, Operand(3u));
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3u));
    create_mimg(true, 6, 4);
    bld.vop1(aco_opcode::v_nop);
    create_mubuf(4);
@@ -93,7 +92,7 @@ BEGIN_TEST(insert_nops.nsa_to_vmem_bug)
    //! p_unit_test 4
    //! v1: %0:v[0] = image_sample %0:s[0-7], %0:s[0-3],  v1: undef, %0:v[0], %0:v[2] 2d storage: semantics: scope:invocation
    //! v1: %0:v[0] = buffer_load_dword %0:s[0-3], %0:v[0], 0 offset:4 offen storage: semantics: scope:invocation
-   bld.pseudo(aco_opcode::p_unit_test, Operand(4u));
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4u));
    create_mimg(true, 2, 3);
    create_mubuf(4);
 
@@ -104,7 +103,7 @@ BEGIN_TEST(insert_nops.nsa_to_vmem_bug)
    //! /* logical preds: / linear preds: BB0, / kind: uniform, */
    //! s_nop
    //! v1: %0:v[0] = buffer_load_dword %0:s[0-3], %0:v[0], 0 offset:4 offen storage: semantics: scope:invocation
-   bld.pseudo(aco_opcode::p_unit_test, Operand(5u));
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5u));
    create_mimg(true, 6, 4);
    bld.reset(program->create_and_insert_block());
    create_mubuf(4);
@@ -123,16 +122,18 @@ BEGIN_TEST(insert_nops.writelane_to_nsa_bug)
    //! v1: %0:v[255] = v_writelane_b32_e64 0, 0, %0:v[255]
    //! s_nop
    //! v1: %0:v[0] = image_sample %0:s[0-7], %0:s[0-3],  v1: undef, %0:v[0], %0:v[2] 2d storage: semantics: scope:invocation
-   bld.pseudo(aco_opcode::p_unit_test, Operand(0u));
-   bld.writelane(Definition(PhysReg(511), v1), Operand(0u), Operand(0u), Operand(PhysReg(511), v1));
+   bld.pseudo(aco_opcode::p_unit_test, Operand::zero());
+   bld.writelane(Definition(PhysReg(511), v1), Operand::zero(), Operand::zero(),
+                 Operand(PhysReg(511), v1));
    create_mimg(true, 2, 3);
 
    /* no nop needed because the MIMG is not NSA */
    //! p_unit_test 1
    //! v1: %0:v[255] = v_writelane_b32_e64 0, 0, %0:v[255]
    //! v1: %0:v[0] = image_sample %0:s[0-7], %0:s[0-3],  v1: undef, %0:v[0], %0:v[1] 2d storage: semantics: scope:invocation
-   bld.pseudo(aco_opcode::p_unit_test, Operand(1u));
-   bld.writelane(Definition(PhysReg(511), v1), Operand(0u), Operand(0u), Operand(PhysReg(511), v1));
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1u));
+   bld.writelane(Definition(PhysReg(511), v1), Operand::zero(), Operand::zero(),
+                 Operand(PhysReg(511), v1));
    create_mimg(false, 2, 2);
 
    /* no nop needed because there's already an instruction in-between */
@@ -140,8 +141,9 @@ BEGIN_TEST(insert_nops.writelane_to_nsa_bug)
    //! v1: %0:v[255] = v_writelane_b32_e64 0, 0, %0:v[255]
    //! v_nop
    //! v1: %0:v[0] = image_sample %0:s[0-7], %0:s[0-3],  v1: undef, %0:v[0], %0:v[2] 2d storage: semantics: scope:invocation
-   bld.pseudo(aco_opcode::p_unit_test, Operand(2u));
-   bld.writelane(Definition(PhysReg(511), v1), Operand(0u), Operand(0u), Operand(PhysReg(511), v1));
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2u));
+   bld.writelane(Definition(PhysReg(511), v1), Operand::zero(), Operand::zero(),
+                 Operand(PhysReg(511), v1));
    bld.vop1(aco_opcode::v_nop);
    create_mimg(true, 2, 3);
 
@@ -152,8 +154,9 @@ BEGIN_TEST(insert_nops.writelane_to_nsa_bug)
    //! /* logical preds: / linear preds: BB0, / kind: uniform, */
    //! s_nop
    //! v1: %0:v[0] = image_sample %0:s[0-7], %0:s[0-3],  v1: undef, %0:v[0], %0:v[2] 2d storage: semantics: scope:invocation
-   bld.pseudo(aco_opcode::p_unit_test, Operand(3u));
-   bld.writelane(Definition(PhysReg(511), v1), Operand(0u), Operand(0u), Operand(PhysReg(511), v1));
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3u));
+   bld.writelane(Definition(PhysReg(511), v1), Operand::zero(), Operand::zero(),
+                 Operand(PhysReg(511), v1));
    bld.reset(program->create_and_insert_block());
    create_mimg(true, 2, 3);
    program->blocks[0].linear_succs.push_back(1);

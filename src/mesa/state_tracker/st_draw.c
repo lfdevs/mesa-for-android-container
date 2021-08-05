@@ -133,7 +133,7 @@ prepare_indexed_draw(/* pass both st and ctx to reduce dereferences */
                      struct st_context *st,
                      struct gl_context *ctx,
                      struct pipe_draw_info *info,
-                     const struct pipe_draw_start_count *draws,
+                     const struct pipe_draw_start_count_bias *draws,
                      unsigned num_draws)
 {
    if (info->index_size) {
@@ -173,7 +173,8 @@ prepare_indexed_draw(/* pass both st and ctx to reduce dereferences */
 static void
 st_draw_gallium(struct gl_context *ctx,
                 struct pipe_draw_info *info,
-                const struct pipe_draw_start_count *draws,
+                unsigned drawid_offset,
+                const struct pipe_draw_start_count_bias *draws,
                 unsigned num_draws)
 {
    struct st_context *st = st_context(ctx);
@@ -183,15 +184,15 @@ st_draw_gallium(struct gl_context *ctx,
    if (!prepare_indexed_draw(st, ctx, info, draws, num_draws))
       return;
 
-   cso_multi_draw(st->cso_context, info, draws, num_draws);
+   cso_multi_draw(st->cso_context, info, drawid_offset, draws, num_draws);
 }
 
 static void
-st_draw_gallium_complex(struct gl_context *ctx,
+st_draw_gallium_multimode(struct gl_context *ctx,
                         struct pipe_draw_info *info,
-                        const struct pipe_draw_start_count *draws,
+                        unsigned drawid_offset,
+                        const struct pipe_draw_start_count_bias *draws,
                         const unsigned char *mode,
-                        const int *base_vertex,
                         unsigned num_draws)
 {
    struct st_context *st = st_context(ctx);
@@ -201,67 +202,21 @@ st_draw_gallium_complex(struct gl_context *ctx,
    if (!prepare_indexed_draw(st, ctx, info, draws, num_draws))
       return;
 
-   enum {
-      MODE = 1,
-      BASE_VERTEX = 2,
-   };
-   unsigned mask = (mode ? MODE : 0) | (base_vertex ? BASE_VERTEX : 0);
    unsigned i, first;
    struct cso_context *cso = st->cso_context;
 
-   /* Find consecutive draws where mode and base_vertex don't vary. */
-   switch (mask) {
-   case MODE:
-      for (i = 0, first = 0; i <= num_draws; i++) {
-         if (i == num_draws || mode[i] != mode[first]) {
-            info->mode = mode[first];
-            cso_multi_draw(cso, info, &draws[first], i - first);
-            first = i;
+   /* Find consecutive draws where mode doesn't vary. */
+   for (i = 0, first = 0; i <= num_draws; i++) {
+      if (i == num_draws || mode[i] != mode[first]) {
+         info->mode = mode[first];
+         cso_multi_draw(cso, info, drawid_offset, &draws[first], i - first);
+         first = i;
 
-            /* We can pass the reference only once. st_buffer_object keeps
-             * the reference alive for later draws.
-             */
-            info->take_index_buffer_ownership = false;
-         }
+         /* We can pass the reference only once. st_buffer_object keeps
+          * the reference alive for later draws.
+          */
+         info->take_index_buffer_ownership = false;
       }
-      break;
-
-   case BASE_VERTEX:
-      for (i = 0, first = 0; i <= num_draws; i++) {
-         if (i == num_draws || base_vertex[i] != base_vertex[first]) {
-            info->index_bias = base_vertex[first];
-            cso_multi_draw(cso, info, &draws[first], i - first);
-            first = i;
-
-            /* We can pass the reference only once. st_buffer_object keeps
-             * the reference alive for later draws.
-             */
-            info->take_index_buffer_ownership = false;
-         }
-      }
-      break;
-
-   case MODE | BASE_VERTEX:
-      for (i = 0, first = 0; i <= num_draws; i++) {
-         if (i == num_draws ||
-             mode[i] != mode[first] ||
-             base_vertex[i] != base_vertex[first]) {
-            info->mode = mode[first];
-            info->index_bias = base_vertex[first];
-            cso_multi_draw(cso, info, &draws[first], i - first);
-            first = i;
-
-            /* We can pass the reference only once. st_buffer_object keeps
-             * the reference alive for later draws.
-             */
-            info->take_index_buffer_ownership = false;
-         }
-      }
-      break;
-
-   default:
-      assert(!"invalid parameters in DrawGalliumComplex");
-      break;
    }
 }
 
@@ -281,7 +236,7 @@ st_indirect_draw_vbo(struct gl_context *ctx,
    struct st_context *st = st_context(ctx);
    struct pipe_draw_info info;
    struct pipe_draw_indirect_info indirect;
-   struct pipe_draw_start_count draw = {0};
+   struct pipe_draw_start_count_bias draw = {0};
 
    assert(stride);
    prepare_draw(st, ctx);
@@ -315,8 +270,7 @@ st_indirect_draw_vbo(struct gl_context *ctx,
       assert(!indirect_draw_count);
       indirect.draw_count = 1;
       for (i = 0; i < draw_count; i++) {
-         info.drawid = i;
-         cso_draw_vbo(st->cso_context, &info, &indirect, draw);
+         cso_draw_vbo(st->cso_context, &info, i, &indirect, draw);
          indirect.offset += stride;
       }
    } else {
@@ -327,7 +281,7 @@ st_indirect_draw_vbo(struct gl_context *ctx,
             st_buffer_object(indirect_draw_count)->buffer;
          indirect.indirect_draw_count_offset = indirect_draw_count_offset;
       }
-      cso_draw_vbo(st->cso_context, &info, &indirect, draw);
+      cso_draw_vbo(st->cso_context, &info, 0, &indirect, draw);
    }
 }
 
@@ -339,7 +293,7 @@ st_draw_transform_feedback(struct gl_context *ctx, GLenum mode,
    struct st_context *st = st_context(ctx);
    struct pipe_draw_info info;
    struct pipe_draw_indirect_info indirect;
-   struct pipe_draw_start_count draw = {0};
+   struct pipe_draw_start_count_bias draw = {0};
 
    prepare_draw(st, ctx);
 
@@ -355,7 +309,7 @@ st_draw_transform_feedback(struct gl_context *ctx, GLenum mode,
    if (!st_transform_feedback_draw_init(tfb_vertcount, stream, &indirect))
       return;
 
-   cso_draw_vbo(st->cso_context, &info, &indirect, draw);
+   cso_draw_vbo(st->cso_context, &info, 0, &indirect, draw);
 }
 
 void
@@ -363,7 +317,7 @@ st_init_draw_functions(struct dd_function_table *functions)
 {
    functions->Draw = NULL;
    functions->DrawGallium = st_draw_gallium;
-   functions->DrawGalliumComplex = st_draw_gallium_complex;
+   functions->DrawGalliumMultiMode = st_draw_gallium_multimode;
    functions->DrawIndirect = st_indirect_draw_vbo;
    functions->DrawTransformFeedback = st_draw_transform_feedback;
 }

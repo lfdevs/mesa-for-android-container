@@ -67,25 +67,25 @@ struct nir_shader *brw_create_nir(struct brw_context *brw,
 void brw_nir_lower_resources(nir_shader *nir,
                              struct gl_shader_program *shader_prog,
                              struct gl_program *prog,
-                             const struct gen_device_info *devinfo);
+                             const struct intel_device_info *devinfo);
 
 void brw_shader_gather_info(nir_shader *nir, struct gl_program *prog);
 
-void brw_setup_tex_for_precompile(const struct gen_device_info *devinfo,
+void brw_setup_tex_for_precompile(const struct intel_device_info *devinfo,
                                   struct brw_sampler_prog_key_data *tex,
                                   const struct gl_program *prog);
 
 void brw_populate_base_prog_key(struct gl_context *ctx,
                                 const struct brw_program *prog,
                                 struct brw_base_prog_key *key);
-void brw_populate_default_base_prog_key(const struct gen_device_info *devinfo,
+void brw_populate_default_base_prog_key(const struct intel_device_info *devinfo,
                                         const struct brw_program *prog,
                                         struct brw_base_prog_key *key);
 void brw_debug_recompile(struct brw_context *brw, gl_shader_stage stage,
                          unsigned api_id, struct brw_base_prog_key *key);
 
 uint32_t
-brw_assign_common_binding_table_offsets(const struct gen_device_info *devinfo,
+brw_assign_common_binding_table_offsets(const struct intel_device_info *devinfo,
                                         const struct gl_program *prog,
                                         struct brw_stage_prog_data *stage_prog_data,
                                         uint32_t next_binding_table_offset);

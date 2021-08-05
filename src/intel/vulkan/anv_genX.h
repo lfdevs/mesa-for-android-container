@@ -36,15 +36,17 @@
 #error This file is included by means other than anv_private.h
 #endif
 
-extern const uint32_t genX(vk_to_gen_cullmode)[];
+extern const uint32_t genX(vk_to_intel_cullmode)[];
 
-extern const uint32_t genX(vk_to_gen_front_face)[];
+extern const uint32_t genX(vk_to_intel_front_face)[];
 
-extern const uint32_t genX(vk_to_gen_primitive_type)[];
+extern const uint32_t genX(vk_to_intel_primitive_type)[];
 
-extern const uint32_t genX(vk_to_gen_compare_op)[];
+extern const uint32_t genX(vk_to_intel_compare_op)[];
 
-extern const uint32_t genX(vk_to_gen_stencil_op)[];
+extern const uint32_t genX(vk_to_intel_stencil_op)[];
+
+extern const uint32_t genX(vk_to_intel_logic_op)[];
 
 void genX(init_physical_device_state)(struct anv_physical_device *device);
 
@@ -109,6 +111,11 @@ void genX(emit_multisample)(struct anv_batch *batch, uint32_t samples,
 void genX(emit_sample_pattern)(struct anv_batch *batch, uint32_t samples,
                                const VkSampleLocationEXT *locations);
 
+void genX(emit_shading_rate)(struct anv_batch *batch,
+                             const struct anv_graphics_pipeline *pipeline,
+                             struct anv_state cps_states,
+                             struct anv_dynamic_state *dynamic_state);
+
 void genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
                                 struct anv_address dst, struct anv_address src,
                                 uint32_t size);
@@ -119,3 +126,17 @@ void genX(blorp_exec)(struct blorp_batch *batch,
 void genX(cmd_emit_timestamp)(struct anv_batch *batch,
                               struct anv_bo *bo,
                               uint32_t offset);
+
+void
+genX(rasterization_mode)(VkPolygonMode raster_mode,
+                         VkLineRasterizationModeEXT line_mode,
+                         uint32_t *api_mode,
+                         bool *msaa_rasterization_enable);
+
+uint32_t
+genX(ms_rasterization_mode)(struct anv_graphics_pipeline *pipeline,
+                            VkPolygonMode raster_mode);
+
+VkPolygonMode
+genX(raster_polygon_mode)(struct anv_graphics_pipeline *pipeline,
+                          VkPrimitiveTopology primitive_topology);

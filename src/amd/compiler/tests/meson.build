@@ -24,10 +24,13 @@ aco_tests_files = files(
   'main.cpp',
   'test_assembler.cpp',
   'test_builder.cpp',
+  'test_hard_clause.cpp',
   'test_insert_nops.cpp',
   'test_isel.cpp',
   'test_optimizer.cpp',
   'test_regalloc.cpp',
+  'test_optimizer_postRA.cpp',
+  'test_sdwa.cpp',
   'test_to_hw_instr.cpp',
   'test_tests.cpp',
 )
@@ -52,13 +55,13 @@ test(
                 '-DACO_TEST_PYTHON_BIN="@0@"'.format(prog_python.path())] +
                cpp_args_aco,
     include_directories : [
-      inc_include, inc_src, inc_gallium, inc_compiler, inc_mesa, inc_mapi, inc_amd, inc_amd_common, inc_amd_common_llvm,
+      inc_include, inc_src, inc_compiler, inc_mesa, inc_mapi, inc_amd, inc_amd_common, inc_amd_common_llvm,
     ],
     link_with : [
       libamd_common, libamd_common_llvm, libvulkan_radeon,
     ],
     dependencies : [
-      dep_llvm, dep_thread, idep_aco, idep_nir, idep_mesautil
+      dep_llvm, dep_thread, idep_aco, idep_nir, idep_mesautil, idep_vulkan_util_headers,
     ],
     gnu_symbol_visibility : 'hidden',
     build_by_default : true,

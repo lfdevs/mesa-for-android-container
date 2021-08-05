@@ -23,7 +23,7 @@
 
 #include "brw_nir.h"
 #include "brw_shader.h"
-#include "dev/gen_debug.h"
+#include "dev/intel_debug.h"
 #include "compiler/glsl_types.h"
 #include "compiler/nir/nir_builder.h"
 #include "util/u_math.h"
@@ -160,6 +160,7 @@ remap_patch_urb_offsets(nir_block *block, nir_builder *b,
 
 void
 brw_nir_lower_vs_inputs(nir_shader *nir,
+                        bool edgeflag_is_last,
                         const uint8_t *vs_attrib_wa_flags)
 {
    /* Start with the location of the variable's base. */
@@ -270,8 +271,16 @@ brw_nir_lower_vs_inputs(nir_shader *nir,
                 * before it and counting the bits.
                 */
                int attr = nir_intrinsic_base(intrin);
-               int slot = util_bitcount64(nir->info.inputs_read &
-                                            BITFIELD64_MASK(attr));
+               uint64_t inputs_read = nir->info.inputs_read;
+               int slot = -1;
+               if (edgeflag_is_last) {
+                  inputs_read &= ~BITFIELD64_BIT(VERT_ATTRIB_EDGEFLAG);
+                  if (attr == VERT_ATTRIB_EDGEFLAG)
+                     slot = num_inputs - 1;
+               }
+               if (slot == -1)
+                  slot = util_bitcount64(inputs_read &
+                                         BITFIELD64_MASK(attr));
                nir_intrinsic_set_base(intrin, slot);
                break;
             }
@@ -404,7 +413,7 @@ lower_barycentric_at_offset(nir_builder *b, nir_instr *instr, void *data)
 
 void
 brw_nir_lower_fs_inputs(nir_shader *nir,
-                        const struct gen_device_info *devinfo,
+                        const struct intel_device_info *devinfo,
                         const struct brw_wm_prog_key *key)
 {
    nir_foreach_shader_in_variable(var, nir) {
@@ -515,7 +524,7 @@ static nir_variable_mode
 brw_nir_no_indirect_mask(const struct brw_compiler *compiler,
                          gl_shader_stage stage)
 {
-   const struct gen_device_info *devinfo = compiler->devinfo;
+   const struct intel_device_info *devinfo = compiler->devinfo;
    const bool is_scalar = compiler->scalar_stage[stage];
    nir_variable_mode indirect_mask = 0;
 
@@ -548,7 +557,7 @@ brw_nir_no_indirect_mask(const struct brw_compiler *compiler,
     * indirects as scratch all the time, we may easily exceed this limit
     * without having any fallback.
     */
-   if (is_scalar && devinfo->ver <= 7 && !devinfo->is_haswell)
+   if (is_scalar && devinfo->verx10 <= 70)
       indirect_mask |= nir_var_function_temp;
 
    return indirect_mask;
@@ -600,7 +609,7 @@ brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler,
       OPT(nir_copy_prop);
 
       if (is_scalar) {
-         OPT(nir_lower_phis_to_scalar);
+         OPT(nir_lower_phis_to_scalar, false);
       }
 
       OPT(nir_copy_prop);
@@ -679,7 +688,7 @@ static unsigned
 lower_bit_size_callback(const nir_instr *instr, UNUSED void *data)
 {
    const struct brw_compiler *compiler = (const struct brw_compiler *) data;
-   const struct gen_device_info *devinfo = compiler->devinfo;
+   const struct intel_device_info *devinfo = compiler->devinfo;
 
    switch (instr->type) {
    case nir_instr_type_alu: {
@@ -795,7 +804,7 @@ void
 brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
                    const nir_shader *softfp64)
 {
-   const struct gen_device_info *devinfo = compiler->devinfo;
+   const struct intel_device_info *devinfo = compiler->devinfo;
    UNUSED bool progress; /* Written by OPT */
 
    const bool is_scalar = compiler->scalar_stage[nir->info.stage];
@@ -817,12 +826,12 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
    if (devinfo->ver >= 12)
       OPT(brw_nir_clamp_image_1d_2d_array_sizes);
 
-   static const nir_lower_tex_options tex_options = {
+   const nir_lower_tex_options tex_options = {
       .lower_txp = ~0,
       .lower_txf_offset = true,
       .lower_rect_offset = true,
-      .lower_tex_without_implicit_lod = true,
       .lower_txd_cube_map = true,
+      .lower_txd_3d = devinfo->verx10 >= 125,
       .lower_txb_shadow_clamp = true,
       .lower_txd_shadow_clamp = true,
       .lower_txd_offset_clamp = true,
@@ -864,6 +873,7 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
 
    const nir_lower_subgroups_options subgroups_options = {
       .ballot_bit_size = 32,
+      .ballot_components = 1,
       .lower_to_scalar = true,
       .lower_vote_trivial = !is_scalar,
       .lower_shuffle = true,
@@ -1031,7 +1041,7 @@ brw_vectorize_lower_mem_access(nir_shader *nir,
                                bool is_scalar,
                                bool robust_buffer_access)
 {
-   const struct gen_device_info *devinfo = compiler->devinfo;
+   const struct intel_device_info *devinfo = compiler->devinfo;
    bool progress = false;
 
    if (is_scalar) {
@@ -1087,7 +1097,7 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
                     bool is_scalar, bool debug_enabled,
                     bool robust_buffer_access)
 {
-   const struct gen_device_info *devinfo = compiler->devinfo;
+   const struct intel_device_info *devinfo = compiler->devinfo;
 
    UNUSED bool progress; /* Written by OPT */
 
@@ -1100,6 +1110,14 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
       progress = false;
       OPT(nir_opt_algebraic_before_ffma);
    } while (progress);
+
+   if (devinfo->verx10 >= 125) {
+      const nir_lower_idiv_options options = {
+         .imprecise_32bit_lowering = false,
+         .allow_fp16 = false
+      };
+      OPT(nir_lower_idiv, &options);
+   }
 
    brw_nir_optimize(nir, compiler, is_scalar, false);
 
@@ -1228,7 +1246,7 @@ brw_nir_apply_sampler_key(nir_shader *nir,
                           const struct brw_compiler *compiler,
                           const struct brw_sampler_prog_key_data *key_tex)
 {
-   const struct gen_device_info *devinfo = compiler->devinfo;
+   const struct intel_device_info *devinfo = compiler->devinfo;
    nir_lower_tex_options tex_options = {
       .lower_txd_clamp_bindless_sampler = true,
       .lower_txd_clamp_if_sampler_index_not_lt_16 = true,
@@ -1256,7 +1274,7 @@ brw_nir_apply_sampler_key(nir_shader *nir,
    }
 
    /* Prior to Haswell, we have to lower gradients on shadow samplers */
-   tex_options.lower_txd_shadow = devinfo->ver < 8 && !devinfo->is_haswell;
+   tex_options.lower_txd_shadow = devinfo->verx10 <= 70;
 
    tex_options.lower_y_uv_external = key_tex->y_uv_image_mask;
    tex_options.lower_y_u_v_external = key_tex->y_u_v_image_mask;
@@ -1336,6 +1354,7 @@ brw_nir_apply_key(nir_shader *nir,
       .subgroup_size = get_subgroup_size(nir->info.stage, key,
                                          max_subgroup_size),
       .ballot_bit_size = 32,
+      .ballot_components = 1,
       .lower_subgroup_masks = true,
    };
    OPT(nir_lower_subgroups, &subgroups_options);
@@ -1460,7 +1479,8 @@ brw_aop_for_nir_intrinsic(const nir_intrinsic_instr *atomic)
 }
 
 enum brw_reg_type
-brw_type_for_nir_type(const struct gen_device_info *devinfo, nir_alu_type type)
+brw_type_for_nir_type(const struct intel_device_info *devinfo,
+                      nir_alu_type type)
 {
    switch (type) {
    case nir_type_uint:

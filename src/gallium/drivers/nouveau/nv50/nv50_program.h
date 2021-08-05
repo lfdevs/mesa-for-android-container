@@ -26,7 +26,6 @@
 struct nv50_context;
 
 #include "pipe/p_state.h"
-#include "pipe/p_shader_tokens.h"
 
 struct nv50_varying {
    uint8_t id; /* tgsi index */
@@ -47,6 +46,12 @@ struct nv50_stream_output_state
    uint8_t num_attribs[4];
    uint8_t map_size;
    uint8_t map[128];
+};
+
+struct nv50_gmem_state {
+   unsigned valid : 1; /* whether there's something there */
+   unsigned image : 1; /* buffer or image */
+   unsigned slot  : 6; /* slot in the relevant resource arrays */
 };
 
 struct nv50_program {
@@ -104,6 +109,7 @@ struct nv50_program {
    struct {
       uint32_t lmem_size; /* local memory (TGSI PRIVATE resource) size */
       uint32_t smem_size; /* shared memory (TGSI LOCAL resource) size */
+      struct nv50_gmem_state gmem[NV50_MAX_GLOBALS];
    } cp;
 
    bool mul_zero_wins;

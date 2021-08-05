@@ -33,11 +33,11 @@ get_global_ids(nir_builder *b, unsigned num_components)
    unsigned mask = BITFIELD_MASK(num_components);
 
    nir_ssa_def *local_ids = nir_channels(b, nir_load_local_invocation_id(b), mask);
-   nir_ssa_def *block_ids = nir_channels(b, nir_load_work_group_id(b, 32), mask);
+   nir_ssa_def *block_ids = nir_channels(b, nir_load_workgroup_id(b, 32), mask);
    nir_ssa_def *block_size = nir_channels(
       b,
-      nir_imm_ivec4(b, b->shader->info.cs.local_size[0], b->shader->info.cs.local_size[1],
-                    b->shader->info.cs.local_size[2], 0),
+      nir_imm_ivec4(b, b->shader->info.workgroup_size[0], b->shader->info.workgroup_size[1],
+                    b->shader->info.workgroup_size[2], 0),
       mask);
 
    return nir_iadd(b, nir_imul(b, block_ids, block_size), local_ids);
@@ -49,9 +49,9 @@ build_dcc_retile_compute_shader(struct radv_device *dev, struct radeon_surf *sur
    const struct glsl_type *buf_type = glsl_image_type(GLSL_SAMPLER_DIM_BUF, false, GLSL_TYPE_UINT);
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, NULL, "dcc_retile_compute");
 
-   b.shader->info.cs.local_size[0] = 8;
-   b.shader->info.cs.local_size[1] = 8;
-   b.shader->info.cs.local_size[2] = 1;
+   b.shader->info.workgroup_size[0] = 8;
+   b.shader->info.workgroup_size[1] = 8;
+   b.shader->info.workgroup_size[2] = 1;
 
    nir_ssa_def *src_dcc_size = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
    nir_ssa_def *src_dcc_pitch = nir_channels(&b, src_dcc_size, 1);

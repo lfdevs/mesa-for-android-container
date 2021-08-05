@@ -2,13 +2,6 @@
 # non-zero-length and not starting with '#', will regex match to
 # delete lines from the test list.  Be careful.
 
-# Skip the perf/stress tests to keep runtime manageable
-dEQP-GLES[0-9]*.performance.*
-dEQP-GLES[0-9]*.stress.*
-
-# These are really slow on tiling architectures (including llvmpipe).
-dEQP-GLES[0-9]*.functional.flush_finish.*
-
 # This is causing a binning memory overflow problem
 dEQP-GLES2.functional.fragment_ops.scissor.outside_render_line
 
@@ -26,3 +19,7 @@ dEQP-GLES2.functional.uniform_api.random.79
 # running simultaneously, so we can't even leave these in the flakes
 # list for tracking.
 dEQP-GLES2.functional.shaders.loops.*dynamic.*vertex
+
+# Timeout tests (> 1 minute to run)
+KHR-GLES2.texture_3d.filtering.sizes.3x7x5_linear_mipmap_linear
+KHR-GLES2.texture_3d.filtering.sizes.4x8x8_linear_mipmap_linear

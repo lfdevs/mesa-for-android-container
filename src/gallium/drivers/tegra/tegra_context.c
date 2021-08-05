@@ -48,12 +48,13 @@ tegra_destroy(struct pipe_context *pcontext)
 static void
 tegra_draw_vbo(struct pipe_context *pcontext,
                const struct pipe_draw_info *pinfo,
+               unsigned drawid_offset,
                const struct pipe_draw_indirect_info *pindirect,
-               const struct pipe_draw_start_count *draws,
+               const struct pipe_draw_start_count_bias *draws,
                unsigned num_draws)
 {
    if (num_draws > 1) {
-      util_draw_multi(pcontext, pinfo, pindirect, draws, num_draws);
+      util_draw_multi(pcontext, pinfo, drawid_offset, pindirect, draws, num_draws);
       return;
    }
 
@@ -80,7 +81,7 @@ tegra_draw_vbo(struct pipe_context *pcontext,
       pinfo = &info;
    }
 
-   context->gpu->draw_vbo(context->gpu, pinfo, pindirect, draws, num_draws);
+   context->gpu->draw_vbo(context->gpu, pinfo, drawid_offset, pindirect, draws, num_draws);
 }
 
 static void
@@ -915,9 +916,15 @@ tegra_transfer_map(struct pipe_context *pcontext,
    if (!transfer)
       return NULL;
 
-   transfer->map = context->gpu->transfer_map(context->gpu, resource->gpu,
-                                              level, usage, box,
-                                              &transfer->gpu);
+   if (presource->target == PIPE_BUFFER) {
+      transfer->map = context->gpu->buffer_map(context->gpu, resource->gpu,
+                                                 level, usage, box,
+                                                 &transfer->gpu);
+   } else {
+      transfer->map = context->gpu->texture_map(context->gpu, resource->gpu,
+                                                 level, usage, box,
+                                                 &transfer->gpu);
+   }
    memcpy(&transfer->base, transfer->gpu, sizeof(*transfer->gpu));
    transfer->base.resource = NULL;
    pipe_resource_reference(&transfer->base.resource, presource);
@@ -945,7 +952,10 @@ tegra_transfer_unmap(struct pipe_context *pcontext,
    struct tegra_transfer *transfer = to_tegra_transfer(ptransfer);
    struct tegra_context *context = to_tegra_context(pcontext);
 
-   context->gpu->transfer_unmap(context->gpu, transfer->gpu);
+   if (ptransfer->resource->target == PIPE_BUFFER)
+      context->gpu->buffer_unmap(context->gpu, transfer->gpu);
+   else
+      context->gpu->texture_unmap(context->gpu, transfer->gpu);
    pipe_resource_reference(&transfer->base.resource, NULL);
    free(transfer);
 }
@@ -1358,9 +1368,11 @@ tegra_screen_context_create(struct pipe_screen *pscreen, void *priv,
    context->base.create_surface = tegra_create_surface;
    context->base.surface_destroy = tegra_surface_destroy;
 
-   context->base.transfer_map = tegra_transfer_map;
+   context->base.buffer_map = tegra_transfer_map;
+   context->base.texture_map = tegra_transfer_map;
    context->base.transfer_flush_region = tegra_transfer_flush_region;
-   context->base.transfer_unmap = tegra_transfer_unmap;
+   context->base.buffer_unmap = tegra_transfer_unmap;
+   context->base.texture_unmap = tegra_transfer_unmap;
    context->base.buffer_subdata = tegra_buffer_subdata;
    context->base.texture_subdata = tegra_texture_subdata;
 

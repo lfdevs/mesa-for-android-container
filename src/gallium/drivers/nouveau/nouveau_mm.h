@@ -8,7 +8,6 @@ struct nouveau_mman;
  * them. This struct is linked with fences for delayed freeing of allocs.
  */
 struct nouveau_mm_allocation {
-   struct nouveau_mm_allocation *next;
    void *priv;
    uint32_t offset;
 };

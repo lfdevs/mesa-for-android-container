@@ -61,7 +61,7 @@ struct aub_file {
    uint32_t idx_reg_write;
 
    /* Device state */
-   struct gen_device_info devinfo;
+   struct intel_device_info devinfo;
    struct intel_spec *spec;
 };
 
@@ -125,7 +125,7 @@ handle_info(void *user_data, int pci_id, const char *app_name)
    file->pci_id = pci_id;
    snprintf(file->app_name, sizeof(app_name), "%s", app_name);
 
-   if (!gen_get_device_info_from_pci_id(file->pci_id, &file->devinfo)) {
+   if (!intel_get_device_info_from_pci_id(file->pci_id, &file->devinfo)) {
       fprintf(stderr, "can't find device information: pci_id=0x%x\n", file->pci_id);
       exit(EXIT_FAILURE);
    }
@@ -1006,7 +1006,7 @@ display_aubfile_window(struct window *win)
    ImGui::Text("Execbufs          %u", context.file->n_execs);
    ImGui::Text("PCI ID:           0x%x", context.file->pci_id);
    ImGui::Text("Application name: %s", context.file->app_name);
-   ImGui::Text("%s", gen_get_device_name(context.file->pci_id));
+   ImGui::Text("%s", intel_get_device_name(context.file->pci_id));
 
    ImGui::SetNextWindowContentWidth(500);
    if (ImGui::BeginPopupModal("Help", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {

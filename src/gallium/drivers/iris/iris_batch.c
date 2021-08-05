@@ -359,7 +359,8 @@ create_batch(struct iris_batch *batch)
    struct iris_bufmgr *bufmgr = screen->bufmgr;
 
    batch->bo = iris_bo_alloc(bufmgr, "command buffer",
-                             BATCH_SZ + BATCH_RESERVED, IRIS_MEMZONE_OTHER);
+                             BATCH_SZ + BATCH_RESERVED, 1,
+                             IRIS_MEMZONE_OTHER, 0);
    batch->bo->kflags |= EXEC_OBJECT_CAPTURE;
    batch->map = iris_bo_map(NULL, batch->bo, MAP_READ | MAP_WRITE);
    batch->map_next = batch->map;
@@ -541,6 +542,20 @@ finish_seqno(struct iris_batch *batch)
 static void
 iris_finish_batch(struct iris_batch *batch)
 {
+   const struct intel_device_info *devinfo = &batch->screen->devinfo;
+
+   if (devinfo->ver == 12 && batch->name == IRIS_BATCH_RENDER) {
+      /* We re-emit constants at the beginning of every batch as a hardware
+       * bug workaround, so invalidate indirect state pointers in order to
+       * save ourselves the overhead of restoring constants redundantly when
+       * the next render batch is executed.
+       */
+      iris_emit_pipe_control_flush(batch, "ISP invalidate at batch end",
+                                   PIPE_CONTROL_INDIRECT_STATE_POINTERS_DISABLE |
+                                   PIPE_CONTROL_STALL_AT_SCOREBOARD |
+                                   PIPE_CONTROL_CS_STALL);
+   }
+
    add_aux_map_bos_to_batch(batch);
 
    finish_seqno(batch);
@@ -584,7 +599,7 @@ iris_batch_check_for_reset(struct iris_batch *batch)
    enum pipe_reset_status status = PIPE_NO_RESET;
    struct drm_i915_reset_stats stats = { .ctx_id = batch->hw_ctx_id };
 
-   if (drmIoctl(screen->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats))
+   if (intel_ioctl(screen->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats))
       DBG("DRM_IOCTL_I915_GET_RESET_STATS failed: %s\n", strerror(errno));
 
    if (stats.batch_active != 0) {
@@ -741,8 +756,9 @@ _iris_batch_flush(struct iris_batch *batch, const char *file, int line)
     * with a new logical context, and inform iris_context that all state
     * has been lost and needs to be re-initialized.  If this succeeds,
     * dubiously claim success...
+    * Also handle ENOMEM here.
     */
-   if (ret == -EIO && replace_hw_ctx(batch)) {
+   if ((ret == -EIO || ret == -ENOMEM) && replace_hw_ctx(batch)) {
       if (batch->reset->reset) {
          /* Tell gallium frontends the device is lost and it was our fault. */
          batch->reset->reset(batch->reset->data, PIPE_GUILTY_CONTEXT_RESET);

@@ -1828,7 +1828,7 @@ static int si_get_driver_query_info(struct pipe_screen *screen, unsigned index,
    }
 
    if (info->group_id != ~(unsigned)0 && sscreen->perfcounters)
-      info->group_id += sscreen->perfcounters->num_groups;
+      info->group_id += sscreen->perfcounters->base.num_groups;
 
    return 1;
 }
@@ -1844,7 +1844,7 @@ static int si_get_driver_query_group_info(struct pipe_screen *screen, unsigned i
    unsigned num_pc_groups = 0;
 
    if (sscreen->perfcounters)
-      num_pc_groups = sscreen->perfcounters->num_groups;
+      num_pc_groups = sscreen->perfcounters->base.num_groups;
 
    if (!info)
       return num_pc_groups + SI_NUM_SW_QUERY_GROUPS;

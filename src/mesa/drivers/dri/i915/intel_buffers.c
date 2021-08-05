@@ -62,7 +62,8 @@ intelDrawBuffer(struct gl_context * ctx)
        * time, invalidate our DRI drawable so we'll ask for new buffers
        * (including the fake front) before we start rendering again.
        */
-      dri2InvalidateDrawable(intel->driContext->driDrawablePriv);
+      if (intel->driContext->driDrawablePriv)
+         dri2InvalidateDrawable(intel->driContext->driDrawablePriv);
    }
 
    intel_draw_buffer(ctx);
@@ -79,7 +80,8 @@ intelReadBuffer(struct gl_context * ctx, GLenum mode)
        * time, invalidate our DRI drawable so we'll ask for new buffers
        * (including the fake front) before we start reading again.
        */
-      dri2InvalidateDrawable(intel->driContext->driReadablePriv);
+      if (intel->driContext->driReadablePriv)
+         dri2InvalidateDrawable(intel->driContext->driReadablePriv);
    }
 }
 

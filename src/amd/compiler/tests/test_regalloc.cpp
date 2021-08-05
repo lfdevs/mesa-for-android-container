@@ -70,10 +70,80 @@ BEGIN_TEST(regalloc.32bit_partial_write)
 
    /* This test checks if this instruction uses SDWA. */
    //! v2b: %_:v[0][0:16] = v_not_b32 0 dst_preserve
-   Temp lo = bld.vop1(aco_opcode::v_not_b32, bld.def(v2b), Operand(0u));
+   Temp lo = bld.vop1(aco_opcode::v_not_b32, bld.def(v2b), Operand::zero());
 
    //! v1: %_:v[0] = p_create_vector %_:v[0][0:16], %_:v[0][16:32]
    bld.pseudo(aco_opcode::p_create_vector, bld.def(v1), lo, hi);
+
+   finish_ra_test(ra_test_policy());
+END_TEST
+
+BEGIN_TEST(regalloc.precolor.swap)
+   //>> s2: %op0:s[0-1] = p_startpgm
+   if (!setup_cs("s2", GFX10))
+      return;
+
+   program->dev.sgpr_limit = 4;
+
+   //! s2: %op1:s[2-3] = p_unit_test
+   Temp op1 = bld.pseudo(aco_opcode::p_unit_test, bld.def(s2));
+
+   //! s2: %op1_2:s[0-1], s2: %op0_2:s[2-3] = p_parallelcopy %op1:s[2-3], %op0:s[0-1]
+   //! p_unit_test %op0_2:s[2-3], %op1_2:s[0-1]
+   Operand op(inputs[0]);
+   op.setFixed(PhysReg(2));
+   bld.pseudo(aco_opcode::p_unit_test, op, op1);
+
+   finish_ra_test(ra_test_policy());
+END_TEST
+
+BEGIN_TEST(regalloc.precolor.blocking_vector)
+   //>> s2: %tmp0:s[0-1], s1: %tmp1:s[2] = p_startpgm
+   if (!setup_cs("s2 s1", GFX10))
+      return;
+
+   //! s2: %tmp0_2:s[2-3], s1: %tmp1_2:s[1] = p_parallelcopy %tmp0:s[0-1], %tmp1:s[2]
+   //! p_unit_test %tmp1_2:s[1]
+   Operand op(inputs[1]);
+   op.setFixed(PhysReg(1));
+   bld.pseudo(aco_opcode::p_unit_test, op);
+
+   //! p_unit_test %tmp0_2:s[2-3]
+   bld.pseudo(aco_opcode::p_unit_test, inputs[0]);
+
+   finish_ra_test(ra_test_policy());
+END_TEST
+
+BEGIN_TEST(regalloc.precolor.vector.test)
+   //>> s2: %tmp0:s[0-1], s1: %tmp1:s[2], s1: %tmp2:s[3] = p_startpgm
+   if (!setup_cs("s2 s1 s1", GFX10))
+      return;
+
+   //! s1: %tmp2_2:s[0], s2: %tmp0_2:s[2-3] = p_parallelcopy %tmp2:s[3], %tmp0:s[0-1]
+   //! p_unit_test %tmp0_2:s[2-3]
+   Operand op(inputs[0]);
+   op.setFixed(PhysReg(2));
+   bld.pseudo(aco_opcode::p_unit_test, op);
+
+   //! p_unit_test %tmp2_2:s[0]
+   bld.pseudo(aco_opcode::p_unit_test, inputs[2]);
+
+   finish_ra_test(ra_test_policy());
+END_TEST
+
+BEGIN_TEST(regalloc.precolor.vector.collect)
+   //>> s2: %tmp0:s[0-1], s1: %tmp1:s[2], s1: %tmp2:s[3] = p_startpgm
+   if (!setup_cs("s2 s1 s1", GFX10))
+      return;
+
+   //! s1: %tmp2_2:s[0], s1: %tmp1_2:s[1], s2: %tmp0_2:s[2-3] = p_parallelcopy %tmp2:s[3], %tmp1:s[2], %tmp0:s[0-1]
+   //! p_unit_test %tmp0_2:s[2-3]
+   Operand op(inputs[0]);
+   op.setFixed(PhysReg(2));
+   bld.pseudo(aco_opcode::p_unit_test, op);
+
+   //! p_unit_test %tmp1_2:s[1], %tmp2_2:s[0]
+   bld.pseudo(aco_opcode::p_unit_test, inputs[1], inputs[2]);
 
    finish_ra_test(ra_test_policy());
 END_TEST

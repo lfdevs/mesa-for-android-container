@@ -196,7 +196,7 @@ static const GLfloat fixed_plane[6][4] = {
 static void
 brw_upload_constant_buffer(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_PUSH_CONSTANT_ALLOCATION */
    const GLuint sz = brw->curbe.total_size;

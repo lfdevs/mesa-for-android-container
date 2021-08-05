@@ -295,7 +295,7 @@ VkResult anv_QueuePresentKHR(
    if (device->debug_frame_desc) {
       device->debug_frame_desc->frame_id++;
       if (!device->info.has_llc) {
-         gen_clflush_range(device->debug_frame_desc,
+         intel_clflush_range(device->debug_frame_desc,
                            sizeof(*device->debug_frame_desc));
       }
    }

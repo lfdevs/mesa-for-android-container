@@ -28,6 +28,7 @@ libintel_compiler_files = files(
   'brw_clip_unfilled.c',
   'brw_clip_util.c',
   'brw_compile_clip.c',
+  'brw_compile_ff_gs.c',
   'brw_compile_sf.c',
   'brw_compiler.c',
   'brw_compiler.h',

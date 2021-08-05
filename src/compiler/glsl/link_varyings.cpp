@@ -2106,7 +2106,8 @@ varying_matches::assign_locations(struct gl_shader_program *prog,
       } else {
          if ((this->disable_varying_packing &&
               !is_varying_packing_safe(type, var)) ||
-              (this->disable_xfb_packing && var->data.is_xfb) ||
+              (this->disable_xfb_packing && var->data.is_xfb &&
+               !(type->is_array() || type->is_struct() || type->is_matrix())) ||
              var->data.must_be_shader_input) {
             num_components = type->count_attribute_slots(false) * 4;
          } else {
@@ -2934,17 +2935,15 @@ assign_varying_locations(struct gl_context *ctx,
       /* There are two situations where a new output varying is needed:
        *
        *  - If varying packing is disabled for xfb and the current declaration
-       *    is not aligned within the top level varying (e.g. vec3_arr[1]).
+       *    is subscripting an array, whether the subscript is aligned or not.
+       *    to preserve the rest of the array for the consumer.
        *
        *  - If a builtin variable needs to be copied to a new variable
        *    before its content is modified by another lowering pass (e.g.
        *    \c gl_Position is transformed by \c nir_lower_viewport_transform).
        */
-      const unsigned dmul =
-         matched_candidate->type->without_array()->is_64bit() ? 2 : 1;
       const bool lowered =
-         (disable_xfb_packing &&
-          !tfeedback_decls[i].is_aligned(dmul, matched_candidate->struct_offset_floats)) ||
+         (disable_xfb_packing && tfeedback_decls[i].subscripted()) ||
          (matched_candidate->toplevel_var->data.explicit_location &&
           matched_candidate->toplevel_var->data.location < VARYING_SLOT_VAR0 &&
           (!consumer || consumer->Stage == MESA_SHADER_FRAGMENT) &&

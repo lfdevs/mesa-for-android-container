@@ -22,7 +22,7 @@
  * also venus commands that facilitate polling or waiting for ongoing works.
  */
 
-/* the layout of a ring in a BO */
+/* the layout of a ring in a shmem */
 struct vn_ring_layout {
    size_t head_offset;
    size_t tail_offset;
@@ -34,7 +34,7 @@ struct vn_ring_layout {
    size_t extra_offset;
    size_t extra_size;
 
-   size_t bo_size;
+   size_t shmem_size;
 };
 
 static_assert(ATOMIC_INT_LOCK_FREE == 2 && sizeof(atomic_uint) == 4,
@@ -54,12 +54,14 @@ struct vn_ring_submit {
 
    struct list_head head;
 
-   /* BOs to keep alive (TODO make sure BOs are pinned) */
-   uint32_t bo_count;
-   struct vn_renderer_bo *bos[];
+   /* BOs to keep alive (TODO make sure shmems are pinned) */
+   uint32_t shmem_count;
+   struct vn_renderer_shmem *shmems[];
 };
 
 struct vn_ring {
+   struct vn_renderer *renderer;
+
    struct vn_ring_shared shared;
    uint32_t cur;
 
@@ -72,6 +74,7 @@ vn_ring_get_layout(size_t extra_size, struct vn_ring_layout *layout);
 
 void
 vn_ring_init(struct vn_ring *ring,
+             struct vn_renderer *renderer,
              const struct vn_ring_layout *layout,
              void *shared);
 
@@ -79,7 +82,7 @@ void
 vn_ring_fini(struct vn_ring *ring);
 
 struct vn_ring_submit *
-vn_ring_get_submit(struct vn_ring *ring, uint32_t bo_count);
+vn_ring_get_submit(struct vn_ring *ring, uint32_t shmem_count);
 
 bool
 vn_ring_submit(struct vn_ring *ring,
@@ -90,8 +93,5 @@ vn_ring_submit(struct vn_ring *ring,
 
 void
 vn_ring_wait(const struct vn_ring *ring, uint32_t seqno);
-
-void
-vn_ring_wait_all(const struct vn_ring *ring);
 
 #endif /* VN_RING_H */

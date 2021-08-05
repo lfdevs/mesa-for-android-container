@@ -447,6 +447,8 @@ _mesa_update_framebuffer_visual(struct gl_context *ctx,
 
    fb->Visual.floatMode = GL_FALSE;
    for (unsigned i = 0; i < BUFFER_COUNT; i++) {
+      if (i == BUFFER_DEPTH)
+         continue;
       if (fb->Attachment[i].Renderbuffer) {
          const struct gl_renderbuffer *rb = fb->Attachment[i].Renderbuffer;
          const mesa_format fmt = rb->Format;

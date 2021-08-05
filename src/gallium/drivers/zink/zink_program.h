@@ -33,6 +33,9 @@
 #include "zink_context.h"
 #include "zink_compiler.h"
 #include "zink_shader_keys.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct zink_screen;
 struct zink_shader;
@@ -61,36 +64,44 @@ struct zink_cs_push_constant {
  * allowing us to skip going through shader keys
  */
 struct zink_shader_module {
-   struct pipe_reference reference;
    VkShaderModule shader;
-};
-
-/* the shader cache stores a mapping of zink_shader_key::VkShaderModule */
-struct zink_shader_cache {
-   struct pipe_reference reference;
-   struct hash_table *shader_cache;
+   bool default_variant;
 };
 
 struct zink_program {
    struct pipe_reference reference;
-   struct zink_batch_usage batch_uses;
+   unsigned char sha1[20];
+   struct util_queue_fence cache_fence;
+   VkPipelineCache pipeline_cache;
+   size_t pipeline_cache_size;
+   struct zink_batch_usage *batch_uses;
    bool is_compute;
 
-   struct zink_descriptor_pool *pool[ZINK_DESCRIPTOR_TYPES];
-   struct zink_descriptor_set *last_set[ZINK_DESCRIPTOR_TYPES];
+   struct zink_program_descriptor_data *dd;
 
    VkPipelineLayout layout;
+   VkDescriptorSetLayout dsl[ZINK_DESCRIPTOR_TYPES + 1]; // one for each type + push
+   unsigned num_dsl;
+
+   /* the shader cache stores a mapping of zink_shader_key::VkShaderModule */
+   struct hash_table shader_cache[ZINK_SHADER_COUNT];
 };
 
 struct zink_gfx_program {
    struct zink_program base;
 
+   uint32_t stages_present; //mask of stages present in this program
+   struct nir_shader *nir[ZINK_SHADER_COUNT];
+
    struct zink_shader_module *modules[ZINK_SHADER_COUNT]; // compute stage doesn't belong here
+
+   struct zink_shader_module *default_variants[ZINK_SHADER_COUNT][2]; //[default, no streamout]
+   const void *default_variant_key[ZINK_SHADER_COUNT];
+   struct zink_shader *last_vertex_stage;
+
    struct zink_shader *shaders[ZINK_SHADER_COUNT];
-   struct zink_shader_cache *shader_cache;
-   unsigned char shader_slot_map[VARYING_SLOT_MAX];
-   unsigned char shader_slots_reserved;
    struct hash_table *pipelines[11]; // number of draw modes we support
+   uint32_t default_variant_hash;
 };
 
 struct zink_compute_program {
@@ -98,7 +109,6 @@ struct zink_compute_program {
 
    struct zink_shader_module *module;
    struct zink_shader *shader;
-   struct zink_shader_cache *shader_cache;
    struct hash_table *pipelines;
 };
 
@@ -120,22 +130,12 @@ zink_desc_type_from_vktype(VkDescriptorType type)
    default:
       unreachable("unhandled descriptor type");
    }
-   return 0;
-   
 }
 
-static inline bool
-zink_program_has_descriptors(const struct zink_program *pg)
-{
-   for (unsigned i = 0; i < ARRAY_SIZE(pg->pool); i++) {
-      if (pg->pool[i])
-         return true;
-   }
-   return false;
-}
-
-unsigned
-zink_program_num_descriptors(const struct zink_program *pg);
+void
+zink_delete_shader_state(struct pipe_context *pctx, void *cso);
+void *
+zink_create_gfx_shader_state(struct pipe_context *pctx, const struct pipe_shader_state *shader);
 
 unsigned
 zink_program_num_bindings_typed(const struct zink_program *pg, enum zink_descriptor_type type, bool is_compute);
@@ -158,7 +158,7 @@ zink_destroy_gfx_program(struct zink_screen *screen,
                          struct zink_gfx_program *prog);
 
 VkPipeline
-zink_get_gfx_pipeline(struct zink_screen *screen,
+zink_get_gfx_pipeline(struct zink_context *ctx,
                       struct zink_gfx_program *prog,
                       struct zink_gfx_pipeline_state *state,
                       enum pipe_prim_type mode);
@@ -215,6 +215,9 @@ zink_compute_program_reference(struct zink_screen *screen,
    return ret;
 }
 
+VkPipelineLayout
+zink_pipeline_layout_create(struct zink_screen *screen, struct zink_program *pg);
+
 void
 zink_program_update_compute_pipeline_state(struct zink_context *ctx, struct zink_compute_program *comp, const uint block[3]);
 
@@ -222,5 +225,14 @@ VkPipeline
 zink_get_compute_pipeline(struct zink_screen *screen,
                       struct zink_compute_program *comp,
                       struct zink_compute_pipeline_state *state);
+
+static inline bool
+zink_program_has_descriptors(const struct zink_program *pg)
+{
+   return pg->num_dsl > 0;
+}
+#ifdef __cplusplus
+}
+#endif
 
 #endif

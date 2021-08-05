@@ -3,10 +3,6 @@ dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail
 dEQP-GLES2.functional.clipping.point.wide_point_clip,Fail
 dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_center,Fail
 dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_corner,Fail
-dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_alpha,Fail
-dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_luminance,Fail
-dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_rgba,Fail
-dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_rgb,Fail
 dEQP-GLES31.functional.image_load_store.early_fragment_tests.early_fragment_tests_stencil,Crash
 dEQP-GLES31.functional.image_load_store.early_fragment_tests.early_fragment_tests_stencil_fbo,Crash
 dEQP-GLES31.functional.image_load_store.early_fragment_tests.early_fragment_tests_stencil_fbo_with_no_stencil,Crash
@@ -141,8 +137,6 @@ dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler2ds
 dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_fixed_vertex,Fail
 dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_float_vertex,Fail
 dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler2dshadow_vertex,Fail
-dEQP-GLES3.functional.texture.specification.basic_copytexsubimage2d.2d_alpha,Fail
-dEQP-GLES3.functional.texture.specification.basic_copytexsubimage2d.2d_rgba,Fail
 dEQP-GLES3.functional.transform_feedback.array_element.interleaved.lines.highp_float,Fail
 dEQP-GLES3.functional.transform_feedback.array_element.interleaved.lines.highp_ivec2,Fail
 dEQP-GLES3.functional.transform_feedback.array_element.interleaved.lines.highp_ivec4,Fail

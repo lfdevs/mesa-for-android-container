@@ -23,7 +23,7 @@
 
 
 #include "brw_vec4_vs.h"
-#include "dev/gen_debug.h"
+#include "dev/intel_debug.h"
 
 namespace brw {
 

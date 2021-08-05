@@ -59,6 +59,15 @@ nv30_resource_create(struct pipe_screen *pscreen,
    }
 }
 
+static void
+nv30_resource_destroy(struct pipe_screen *pscreen, struct pipe_resource *res)
+{
+   if (res->target == PIPE_BUFFER)
+      nouveau_buffer_destroy(pscreen, res);
+   else
+      nv30_miptree_destroy(pscreen, res);
+}
+
 static struct pipe_resource *
 nv30_resource_from_handle(struct pipe_screen *pscreen,
                           const struct pipe_resource *tmpl,
@@ -76,16 +85,18 @@ nv30_resource_screen_init(struct pipe_screen *pscreen)
 {
    pscreen->resource_create = nv30_resource_create;
    pscreen->resource_from_handle = nv30_resource_from_handle;
-   pscreen->resource_get_handle = u_resource_get_handle_vtbl;
-   pscreen->resource_destroy = u_resource_destroy_vtbl;
+   pscreen->resource_get_handle = nv30_miptree_get_handle;
+   pscreen->resource_destroy = nv30_resource_destroy;
 }
 
 void
 nv30_resource_init(struct pipe_context *pipe)
 {
-   pipe->transfer_map = u_transfer_map_vtbl;
-   pipe->transfer_flush_region = u_transfer_flush_region_vtbl;
-   pipe->transfer_unmap = u_transfer_unmap_vtbl;
+   pipe->buffer_map = nouveau_buffer_transfer_map;
+   pipe->texture_map = nv30_miptree_transfer_map;
+   pipe->transfer_flush_region = nouveau_buffer_transfer_flush_region;
+   pipe->buffer_unmap = nouveau_buffer_transfer_unmap;
+   pipe->texture_unmap = nv30_miptree_transfer_unmap;
    pipe->buffer_subdata = u_default_buffer_subdata;
    pipe->texture_subdata = u_default_texture_subdata;
    pipe->create_surface = nv30_miptree_surface_new;

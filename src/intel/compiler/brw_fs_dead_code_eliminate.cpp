@@ -121,7 +121,7 @@ fs_visitor::dead_code_eliminate()
             flag_live[0] &= ~inst->flags_written();
 
          if (inst->opcode == BRW_OPCODE_NOP) {
-            inst->remove(block);
+            inst->remove(block, true);
             continue;
          }
 
@@ -138,6 +138,8 @@ fs_visitor::dead_code_eliminate()
          flag_live[0] |= inst->flags_read(devinfo);
       }
    }
+
+   cfg->adjust_block_ips();
 
    ralloc_free(live);
    ralloc_free(flag_live);

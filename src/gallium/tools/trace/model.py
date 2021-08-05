@@ -44,8 +44,8 @@ class Node:
 
     def __str__(self):
         stream = StringIO()
-        formatter = format.DefaultFormatter(stream)
-        pretty_printer = PrettyPrinter(formatter)
+        formatter = format.Formatter(stream)
+        pretty_printer = PrettyPrinter(formatter, {})
         self.visit(pretty_printer)
         return stream.getvalue()
 
@@ -105,8 +105,40 @@ class Struct(Node):
         
 class Pointer(Node):
     
-    def __init__(self, address):
+    ptr_list = {}
+    ptr_type_list = {}
+    ptr_types_list = {}
+    ptr_ignore_list = ["ret", "elem"]
+
+    def __init__(self, address, pname):
         self.address = address
+
+        # Check if address exists in list and if it is a return value address
+        t1 = address in self.ptr_list
+        if t1:
+            rname = self.ptr_type_list[address]
+            t2 = rname in self.ptr_ignore_list and pname not in self.ptr_ignore_list
+        else:
+            rname = pname
+            t2 = False
+
+        # If address does NOT exist (add it), OR IS a ret value (update with new type)
+        if not t1 or t2:
+            # If previously set to ret value, remove one from count
+            if t1 and t2:
+                self.adjust_ptr_type_count(rname, -1)
+
+            # Add / update
+            self.adjust_ptr_type_count(pname, 1)
+            tmp = "{}_{}".format(pname, self.ptr_types_list[pname])
+            self.ptr_list[address] = tmp
+            self.ptr_type_list[address] = pname
+
+    def adjust_ptr_type_count(self, pname, delta):
+        if pname not in self.ptr_types_list:
+            self.ptr_types_list[pname] = 0
+
+        self.ptr_types_list[pname] += delta
 
     def visit(self, visitor):
         visitor.visit_pointer(self)
@@ -164,9 +196,10 @@ class Visitor:
 
 class PrettyPrinter:
 
-    def __init__(self, formatter):
+    def __init__(self, formatter, options):
         self.formatter = formatter
-    
+        self.options = options
+
     def visit_literal(self, node):
         if node.value is None:
             self.formatter.literal('NULL')
@@ -205,27 +238,35 @@ class PrettyPrinter:
         self.formatter.text('}')
     
     def visit_pointer(self, node):
-        self.formatter.address(node.address)
-    
+        if "named_ptrs" in self.options and self.options.named_ptrs:
+            self.formatter.address(node.ptr_list[node.address])
+        else:
+            self.formatter.address(node.address)
+
     def visit_call(self, node):
-        self.formatter.text('%s ' % node.no)
+        if not self.options.suppress_variants:
+            self.formatter.text('%s ' % node.no)
+
         if node.klass is not None:
             self.formatter.function(node.klass + '::' + node.method)
         else:
             self.formatter.function(node.method)
-        self.formatter.text('(')
-        sep = ''
-        for name, value in node.args:
-            self.formatter.text(sep)
-            self.formatter.variable(name)
-            self.formatter.text(' = ')
-            value.visit(self) 
-            sep = ', '
-        self.formatter.text(')')
-        if node.ret is not None:
-            self.formatter.text(' = ')
-            node.ret.visit(self)
-        if node.time is not None:
+
+        if not self.options.method_only:
+            self.formatter.text('(')
+            sep = ''
+            for name, value in node.args:
+                self.formatter.text(sep)
+                self.formatter.variable(name)
+                self.formatter.text(' = ')
+                value.visit(self)
+                sep = ', '
+            self.formatter.text(')')
+            if node.ret is not None:
+                self.formatter.text(' = ')
+                node.ret.visit(self)
+
+        if not self.options.suppress_variants and node.time is not None:
             self.formatter.text(' // time ')
             node.time.visit(self)
 

@@ -386,7 +386,7 @@ unsigned r100_blit(struct gl_context *ctx,
     }
 
     /* Flush is needed to make sure that source buffer has correct data */
-    radeonFlush(ctx);
+    radeonFlush(ctx, 0);
 
     rcommonEnsureCmdBufSpace(&r100->radeon, 59, __func__);
 
@@ -406,7 +406,7 @@ unsigned r100_blit(struct gl_context *ctx,
                      reg_width, reg_height,
                      flip_y);
 
-    radeonFlush(ctx);
+    radeonFlush(ctx, 0);
 
     /* We submitted those packets outside our state atom mechanism. Thus
      * make sure they are all resubmitted the next time. */

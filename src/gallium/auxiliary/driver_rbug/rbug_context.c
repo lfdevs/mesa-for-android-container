@@ -115,8 +115,9 @@ rbug_draw_block_locked(struct rbug_context *rb_pipe, int flag)
 
 static void
 rbug_draw_vbo(struct pipe_context *_pipe, const struct pipe_draw_info *_info,
+              unsigned _drawid_offset,
               const struct pipe_draw_indirect_info *_indirect,
-              const struct pipe_draw_start_count *draws,
+              const struct pipe_draw_start_count_bias *draws,
               unsigned num_draws)
 {
    struct rbug_context *rb_pipe = rbug_context(_pipe);
@@ -135,7 +136,7 @@ rbug_draw_vbo(struct pipe_context *_pipe, const struct pipe_draw_info *_info,
    if (!(rb_pipe->curr.shader[PIPE_SHADER_FRAGMENT] && rb_pipe->curr.shader[PIPE_SHADER_FRAGMENT]->disabled) &&
        !(rb_pipe->curr.shader[PIPE_SHADER_GEOMETRY] && rb_pipe->curr.shader[PIPE_SHADER_GEOMETRY]->disabled) &&
        !(rb_pipe->curr.shader[PIPE_SHADER_VERTEX] && rb_pipe->curr.shader[PIPE_SHADER_VERTEX]->disabled))
-      pipe->draw_vbo(pipe, &info, _indirect, draws, num_draws);
+      pipe->draw_vbo(pipe, &info, _drawid_offset, _indirect, draws, num_draws);
    mtx_unlock(&rb_pipe->call_mutex);
 
    rbug_draw_block_locked(rb_pipe, RBUG_BLOCK_AFTER);
@@ -1106,7 +1107,7 @@ rbug_context_surface_destroy(struct pipe_context *_pipe,
 
 
 static void *
-rbug_context_transfer_map(struct pipe_context *_context,
+rbug_context_buffer_map(struct pipe_context *_context,
                           struct pipe_resource *_resource,
                           unsigned level,
                           unsigned usage,
@@ -1121,7 +1122,34 @@ rbug_context_transfer_map(struct pipe_context *_context,
    void *map;
 
    mtx_lock(&rb_pipe->call_mutex);
-   map = context->transfer_map(context,
+   map = context->buffer_map(context,
+                               resource,
+                               level,
+                               usage,
+                               box, &result);
+   mtx_unlock(&rb_pipe->call_mutex);
+
+   *transfer = rbug_transfer_create(rb_pipe, rb_resource, result);
+   return *transfer ? map : NULL;
+}
+
+static void *
+rbug_context_texture_map(struct pipe_context *_context,
+                          struct pipe_resource *_resource,
+                          unsigned level,
+                          unsigned usage,
+                          const struct pipe_box *box,
+                          struct pipe_transfer **transfer)
+{
+   struct rbug_context *rb_pipe = rbug_context(_context);
+   struct rbug_resource *rb_resource = rbug_resource(_resource);
+   struct pipe_context *context = rb_pipe->pipe;
+   struct pipe_resource *resource = rb_resource->resource;
+   struct pipe_transfer *result;
+   void *map;
+
+   mtx_lock(&rb_pipe->call_mutex);
+   map = context->texture_map(context,
                                resource,
                                level,
                                usage,
@@ -1151,7 +1179,7 @@ rbug_context_transfer_flush_region(struct pipe_context *_context,
 
 
 static void
-rbug_context_transfer_unmap(struct pipe_context *_context,
+rbug_context_buffer_unmap(struct pipe_context *_context,
                             struct pipe_transfer *_transfer)
 {
    struct rbug_context *rb_pipe = rbug_context(_context);
@@ -1160,7 +1188,24 @@ rbug_context_transfer_unmap(struct pipe_context *_context,
    struct pipe_transfer *transfer = rb_transfer->transfer;
 
    mtx_lock(&rb_pipe->call_mutex);
-   context->transfer_unmap(context,
+   context->buffer_unmap(context,
+                           transfer);
+   rbug_transfer_destroy(rb_pipe,
+                         rb_transfer);
+   mtx_unlock(&rb_pipe->call_mutex);
+}
+
+static void
+rbug_context_texture_unmap(struct pipe_context *_context,
+                            struct pipe_transfer *_transfer)
+{
+   struct rbug_context *rb_pipe = rbug_context(_context);
+   struct rbug_transfer *rb_transfer = rbug_transfer(_transfer);
+   struct pipe_context *context = rb_pipe->pipe;
+   struct pipe_transfer *transfer = rb_transfer->transfer;
+
+   mtx_lock(&rb_pipe->call_mutex);
+   context->texture_unmap(context,
                            transfer);
    rbug_transfer_destroy(rb_pipe,
                          rb_transfer);
@@ -1307,8 +1352,10 @@ rbug_context_create(struct pipe_screen *_screen, struct pipe_context *pipe)
    rb_pipe->base.sampler_view_destroy = rbug_context_sampler_view_destroy;
    rb_pipe->base.create_surface = rbug_context_create_surface;
    rb_pipe->base.surface_destroy = rbug_context_surface_destroy;
-   rb_pipe->base.transfer_map = rbug_context_transfer_map;
-   rb_pipe->base.transfer_unmap = rbug_context_transfer_unmap;
+   rb_pipe->base.buffer_map = rbug_context_buffer_map;
+   rb_pipe->base.buffer_unmap = rbug_context_buffer_unmap;
+   rb_pipe->base.texture_map = rbug_context_texture_map;
+   rb_pipe->base.texture_unmap = rbug_context_texture_unmap;
    rb_pipe->base.transfer_flush_region = rbug_context_transfer_flush_region;
    rb_pipe->base.buffer_subdata = rbug_context_buffer_subdata;
    rb_pipe->base.texture_subdata = rbug_context_texture_subdata;

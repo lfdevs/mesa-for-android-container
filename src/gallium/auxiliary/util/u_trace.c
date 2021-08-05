@@ -40,6 +40,18 @@
 #define TIMESTAMP_BUF_SIZE 0x1000
 #define TRACES_PER_CHUNK   (TIMESTAMP_BUF_SIZE / sizeof(uint64_t))
 
+#ifdef HAVE_PERFETTO
+int ut_perfetto_enabled;
+
+/**
+ * Global list of contexts, so we can defer starting the queue until
+ * perfetto tracing is started.
+ *
+ * TODO locking
+ */
+struct list_head ctx_list = { &ctx_list, &ctx_list };
+#endif
+
 struct u_trace_event {
    const struct u_tracepoint *tp;
    const void *payload;
@@ -164,6 +176,21 @@ get_tracefile(void)
    return tracefile;
 }
 
+static void
+queue_init(struct u_trace_context *utctx)
+{
+   if (utctx->queue.jobs)
+      return;
+
+   bool ret = util_queue_init(&utctx->queue, "traceq", 256, 1,
+                              UTIL_QUEUE_INIT_USE_MINIMUM_PRIORITY |
+                              UTIL_QUEUE_INIT_RESIZE_IF_FULL, NULL);
+   assert(ret);
+
+   if (!ret)
+      utctx->out = NULL;
+}
+
 void
 u_trace_context_init(struct u_trace_context *utctx,
       struct pipe_context *pctx,
@@ -182,21 +209,22 @@ u_trace_context_init(struct u_trace_context *utctx,
 
    utctx->out = get_tracefile();
 
-   if (!utctx->out)
+#ifdef HAVE_PERFETTO
+   list_add(&utctx->node, &ctx_list);
+#endif
+
+   if (!(utctx->out || ut_perfetto_enabled))
       return;
 
-   bool ret = util_queue_init(&utctx->queue, "traceq", 256, 1,
-         UTIL_QUEUE_INIT_USE_MINIMUM_PRIORITY |
-         UTIL_QUEUE_INIT_RESIZE_IF_FULL);
-   assert(ret);
-
-   if (!ret)
-      utctx->out = NULL;
+   queue_init(utctx);
 }
 
 void
 u_trace_context_fini(struct u_trace_context *utctx)
 {
+#ifdef HAVE_PERFETTO
+   list_del(&utctx->node);
+#endif
    if (!utctx->out)
       return;
    util_queue_finish(&utctx->queue);
@@ -205,14 +233,31 @@ u_trace_context_fini(struct u_trace_context *utctx)
    free_chunks(&utctx->flushed_trace_chunks);
 }
 
+#ifdef HAVE_PERFETTO
+void
+u_trace_perfetto_start(void)
+{
+   list_for_each_entry (struct u_trace_context, utctx, &ctx_list, node)
+      queue_init(utctx);
+   ut_perfetto_enabled++;
+}
+
+void
+u_trace_perfetto_stop(void)
+{
+   assert(ut_perfetto_enabled > 0);
+   ut_perfetto_enabled--;
+}
+#endif
+
 static void
-process_chunk(void *job, int thread_index)
+process_chunk(void *job, void *gdata, int thread_index)
 {
    struct u_trace_chunk *chunk = job;
    struct u_trace_context *utctx = chunk->utctx;
 
    /* For first chunk of batch, accumulated times will be zerod: */
-   if (!utctx->last_time_ns) {
+   if (utctx->out && !utctx->last_time_ns) {
       fprintf(utctx->out, "+----- NS -----+ +-- Δ --+  +----- MSG -----\n");
    }
 
@@ -236,29 +281,38 @@ process_chunk(void *job, int thread_index)
          delta = 0;
       }
 
-      if (evt->tp->print) {
-         fprintf(utctx->out, "%016"PRIu64" %+9d: %s: ", ns, delta, evt->tp->name);
-         evt->tp->print(utctx->out, evt->payload);
-      } else {
-         fprintf(utctx->out, "%016"PRIu64" %+9d: %s\n", ns, delta, evt->tp->name);
+      if (utctx->out) {
+         if (evt->tp->print) {
+            fprintf(utctx->out, "%016"PRIu64" %+9d: %s: ", ns, delta, evt->tp->name);
+            evt->tp->print(utctx->out, evt->payload);
+         } else {
+            fprintf(utctx->out, "%016"PRIu64" %+9d: %s\n", ns, delta, evt->tp->name);
+         }
       }
+#ifdef HAVE_PERFETTO
+      if (evt->tp->perfetto) {
+         evt->tp->perfetto(utctx->pctx, ns, evt->payload);
+      }
+#endif
    }
 
    if (chunk->last) {
-      uint64_t elapsed = utctx->last_time_ns - utctx->first_time_ns;
-      fprintf(utctx->out, "ELAPSED: %"PRIu64" ns\n", elapsed);
+      if (utctx->out) {
+         uint64_t elapsed = utctx->last_time_ns - utctx->first_time_ns;
+         fprintf(utctx->out, "ELAPSED: %"PRIu64" ns\n", elapsed);
+      }
 
       utctx->last_time_ns = 0;
       utctx->first_time_ns = 0;
    }
 
-   if (chunk->eof) {
+   if (utctx->out && chunk->eof) {
       fprintf(utctx->out, "END OF FRAME %u\n", utctx->frame_nr++);
    }
 }
 
 static void
-cleanup_chunk(void *job, int thread_index)
+cleanup_chunk(void *job, void *gdata, int thread_index)
 {
    ralloc_free(job);
 }

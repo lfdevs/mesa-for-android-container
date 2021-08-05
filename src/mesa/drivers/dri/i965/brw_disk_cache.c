@@ -32,7 +32,7 @@
 #include "util/mesa-sha1.h"
 
 #include "compiler/brw_eu.h"
-#include "dev/gen_debug.h"
+#include "dev/intel_debug.h"
 
 #include "brw_context.h"
 #include "brw_program.h"
@@ -53,7 +53,7 @@ debug_enabled_for_stage(gl_shader_stage stage)
 }
 
 static void
-gen_shader_sha1(struct gl_program *prog, gl_shader_stage stage,
+intel_shader_sha1(struct gl_program *prog, gl_shader_stage stage,
                 void *key, unsigned char *out_sha1)
 {
    char sha1_buf[41];
@@ -120,7 +120,7 @@ read_and_upload(struct brw_context *brw, struct disk_cache *cache,
     */
    prog_key.base.program_string_id = 0;
 
-   gen_shader_sha1(prog, stage, &prog_key, binary_sha1);
+   intel_shader_sha1(prog, stage, &prog_key, binary_sha1);
 
    size_t buffer_size;
    uint8_t *buffer = disk_cache_get(cache, binary_sha1, &buffer_size);
@@ -280,7 +280,7 @@ write_program_data(struct brw_context *brw, struct gl_program *prog,
 
    unsigned char sha1[20];
    char buf[41];
-   gen_shader_sha1(prog, stage, key, sha1);
+   intel_shader_sha1(prog, stage, key, sha1);
    _mesa_sha1_format(buf, sha1);
    if (brw->ctx._Shader->Flags & GLSL_CACHE_INFO) {
       fprintf(stderr, "putting binary in cache: %s\n", buf);

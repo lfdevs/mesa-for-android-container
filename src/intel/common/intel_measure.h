@@ -158,8 +158,8 @@ void intel_measure_frame_transition(unsigned frame);
 
 bool intel_measure_ready(struct intel_measure_batch *batch);
 
-struct gen_device_info;
+struct intel_device_info;
 void intel_measure_gather(struct intel_measure_device *device,
-                          struct gen_device_info *info);
+                          struct intel_device_info *info);
 
 #endif /* INTEL_MEASURE_H */

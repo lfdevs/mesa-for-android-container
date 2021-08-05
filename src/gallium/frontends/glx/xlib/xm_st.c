@@ -268,6 +268,9 @@ xmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
    struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
    bool ret;
 
+   if (statt != ST_ATTACHMENT_FRONT_LEFT)
+      return false;
+
    ret = xmesa_st_framebuffer_display(stfbi, stctx, statt, NULL);
 
    if (ret && xmesa_strict_invalidate)

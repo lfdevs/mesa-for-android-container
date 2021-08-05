@@ -100,7 +100,7 @@ private:
    };
    struct Limits
    {
-      Limits() { }
+      Limits() : min(0), max(0) { }
       Limits(int min, int max) : min(min), max(max) { }
       int min, max;
    };

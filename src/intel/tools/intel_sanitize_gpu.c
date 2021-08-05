@@ -96,7 +96,7 @@ bo_size(int fd, uint32_t handle)
    if (!t)
       return UINT64_MAX;
    struct hash_entry *e = _mesa_hash_table_search(t, (void*)(uintptr_t)handle);
-   return e ? (uint64_t)e->data : UINT64_MAX;
+   return e ? (uint64_t)(uintptr_t)e->data : UINT64_MAX;
 }
 
 static inline bool
@@ -189,7 +189,7 @@ padding_is_good(int fd, uint32_t handle)
     * if the bo is not cache coherent we likely need to
     * invalidate the cache lines to get it.
     */
-   gen_invalidate_range(mapped, PADDING_SIZE);
+   intel_invalidate_range(mapped, PADDING_SIZE);
 
    expected_value = handle & 0xFF;
    for (uint32_t i = 0; i < PADDING_SIZE; ++i) {

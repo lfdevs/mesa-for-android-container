@@ -25,7 +25,7 @@
 #define BLORP_GENX_EXEC_H
 
 #include "blorp_priv.h"
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 #include "common/intel_sample_positions.h"
 #include "common/intel_l3_config.h"
 #include "genxml/gen_macros.h"
@@ -378,6 +378,10 @@ blorp_fill_vertex_buffer_state(struct GENX(VERTEX_BUFFER_STATE) *vb,
 #elif GFX_VER == 4
    vb[idx].BufferAccessType = stride > 0 ? VERTEXDATA : INSTANCEDATA;
    vb[idx].MaxIndex = stride > 0 ? size / stride : 0;
+#endif
+
+#if GFX_VER >= 12
+   vb[idx].L3BypassDisable = true;
 #endif
 }
 
@@ -1075,8 +1079,7 @@ static uint32_t
 blorp_emit_blend_state(struct blorp_batch *batch,
                        const struct blorp_params *params)
 {
-   struct GENX(BLEND_STATE) blend;
-   memset(&blend, 0, sizeof(blend));
+   struct GENX(BLEND_STATE) blend = { };
 
    uint32_t offset;
    int size = GENX(BLEND_STATE_length) * 4;
@@ -1591,9 +1594,6 @@ blorp_emit_surface_states(struct blorp_batch *batch,
        */
       blorp_emit(batch, GENX(PIPE_CONTROL), pipe) {
          pipe.StateCacheInvalidationEnable = true;
-#if GFX_VER >= 12
-         pipe.TileCacheFlushEnable = true;
-#endif
       }
    }
 #endif

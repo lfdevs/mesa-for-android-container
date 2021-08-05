@@ -52,7 +52,7 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
       fd5_emit_vertex_bufs(ring, emit);
 
    OUT_PKT4(ring, REG_A5XX_VFD_INDEX_OFFSET, 2);
-   OUT_RING(ring, info->index_size ? info->index_bias
+   OUT_RING(ring, info->index_size ? emit->draw->index_bias
                                    : emit->draw->start); /* VFD_INDEX_OFFSET */
    OUT_RING(ring, info->start_instance); /* VFD_INSTANCE_START_OFFSET */
 
@@ -69,8 +69,9 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 static bool
 fd5_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
+             unsigned drawid_offset,
              const struct pipe_draw_indirect_info *indirect,
-             const struct pipe_draw_start_count *draw,
+             const struct pipe_draw_start_count_bias *draw,
              unsigned index_offset) in_dt
 {
    struct fd5_context *fd5_ctx = fd5_context(ctx);
@@ -78,6 +79,7 @@ fd5_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
       .debug = &ctx->debug,
       .vtx = &ctx->vtx,
       .info = info,
+		.drawid_offset = drawid_offset,
       .indirect = indirect,
       .draw = draw,
       .key = {
@@ -94,16 +96,6 @@ fd5_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
       .sprite_coord_enable = ctx->rasterizer->sprite_coord_enable,
       .sprite_coord_mode = ctx->rasterizer->sprite_coord_mode,
    };
-
-   /* Technically a5xx should not require this, but it avoids a crash in
-    * piglit 'spec@!opengl 1.1@ppgtt_memory_alignment' due to a draw with
-    * no VBO bound but a VS that expects an input.  The draw is a single
-    * vertex with PIPE_PRIM_TRIANGLES so the u_trim_pipe_prim() causes it
-    * to be skipped.
-    */
-   if (info->mode != PIPE_PRIM_MAX && !indirect && !info->primitive_restart &&
-       !u_trim_pipe_prim(info->mode, (unsigned *)&draw->count))
-      return false;
 
    ir3_fixup_shader_state(&ctx->base, &emit.key.key);
 

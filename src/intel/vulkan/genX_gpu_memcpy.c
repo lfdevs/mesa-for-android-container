@@ -92,6 +92,9 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
          .BufferStartingAddress = src,
          .BufferPitch = bs,
          .MOCS = anv_mocs(cmd_buffer->device, src.bo, 0),
+#if GFX_VER >= 12
+         .L3BypassDisable = true,
+#endif
 #if (GFX_VER >= 8)
          .BufferSize = size,
 #else

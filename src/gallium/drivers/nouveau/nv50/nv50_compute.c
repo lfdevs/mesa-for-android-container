@@ -276,37 +276,6 @@ nv50_compute_validate_constbufs(struct nv50_context *nv50)
 }
 
 static void
-nv50_compute_validate_buffers(struct nv50_context *nv50)
-{
-   struct nouveau_pushbuf *push = nv50->base.pushbuf;
-   int i;
-
-   for (i = 0; i < 7; i++) {
-      BEGIN_NV04(push, NV50_CP(GLOBAL(i)), 5);
-      if (nv50->buffers[i].buffer) {
-         struct nv04_resource *res =
-            nv04_resource(nv50->buffers[i].buffer);
-         PUSH_DATAh(push, res->address + nv50->buffers[i].buffer_offset);
-         PUSH_DATA (push, res->address + nv50->buffers[i].buffer_offset);
-         PUSH_DATA (push, 0); /* pitch? */
-         PUSH_DATA (push, ALIGN(nv50->buffers[i].buffer_size, 256) - 1);
-         PUSH_DATA (push, NV50_COMPUTE_GLOBAL_MODE_LINEAR);
-         BCTX_REFN(nv50->bufctx_cp, CP_BUF, res, RDWR);
-         util_range_add(&res->base, &res->valid_buffer_range,
-                        nv50->buffers[i].buffer_offset,
-                        nv50->buffers[i].buffer_offset +
-                        nv50->buffers[i].buffer_size);
-      } else {
-         PUSH_DATA (push, 0);
-         PUSH_DATA (push, 0);
-         PUSH_DATA (push, 0);
-         PUSH_DATA (push, 0);
-         PUSH_DATA (push, 0);
-      }
-   }
-}
-
-static void
 nv50_get_surface_dims(const struct pipe_image_view *view,
                       int *width, int *height, int *depth)
 {
@@ -354,19 +323,87 @@ nv50_mark_image_range_valid(const struct pipe_image_view *view)
                   view->u.buf.offset + view->u.buf.size);
 }
 
+static inline void
+nv50_set_surface_info(struct nouveau_pushbuf *push,
+                      const struct pipe_image_view *view,
+                      int width, int height, int depth)
+{
+   struct nv04_resource *res;
+   uint32_t *const info = push->cur;
+
+   push->cur += 12;
+
+   /* Make sure to always initialize the surface information area because it's
+    * used to check if the given image is bound or not. */
+   memset(info, 0, 12 * sizeof(*info));
+
+   if (!view || !view->resource)
+      return;
+   res = nv04_resource(view->resource);
+
+   /* Stick the image dimensions for the imageSize() builtin. */
+   info[0] = width;
+   info[1] = height;
+   info[2] = depth;
+
+   /* Stick the blockwidth (ie. number of bytes per pixel) to calculate pixel
+    * offset and to check if the format doesn't mismatch. */
+   info[3] = util_format_get_blocksize(view->format);
+
+   if (res->base.target != PIPE_BUFFER) {
+      struct nv50_miptree *mt = nv50_miptree(&res->base);
+      struct nv50_miptree_level *lvl = &mt->level[view->u.tex.level];
+      unsigned nby = align(util_format_get_nblocksy(view->format, height),
+                           NV50_TILE_SIZE_Y(lvl->tile_mode));
+
+      if (mt->layout_3d) {
+         info[4] = nby;
+         info[11] = view->u.tex.first_layer;
+      } else {
+         info[4] = mt->layer_stride / lvl->pitch;
+      }
+      info[6] = mt->ms_x;
+      info[7] = mt->ms_y;
+      info[8] = NV50_TILE_SHIFT_X(lvl->tile_mode);
+      info[9] = NV50_TILE_SHIFT_Y(lvl->tile_mode);
+      info[10] = NV50_TILE_SHIFT_Z(lvl->tile_mode);
+   }
+}
+
 static void
 nv50_compute_validate_surfaces(struct nv50_context *nv50)
 {
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
    int i;
 
-   for (i = 0; i < 8; i++) {
-      struct pipe_image_view *view = &nv50->images[i];
+   for (i = 0; i < NV50_MAX_GLOBALS - 1; i++) {
+      struct nv50_gmem_state *gmem = &nv50->compprog->cp.gmem[i];
       int width, height, depth;
       uint64_t address = 0;
 
-      BEGIN_NV04(push, NV50_CP(GLOBAL(7 + i)), 5);
-      if (view->resource) {
+      BEGIN_NV04(push, NV50_CP(GLOBAL(i)), 5);
+
+      if (gmem->valid && !gmem->image && nv50->buffers[gmem->slot].buffer) {
+         struct pipe_shader_buffer *buffer = &nv50->buffers[gmem->slot];
+         struct nv04_resource *res = nv04_resource(buffer->buffer);
+         PUSH_DATAh(push, res->address + buffer->buffer_offset);
+         PUSH_DATA (push, res->address + buffer->buffer_offset);
+         PUSH_DATA (push, 0); /* pitch? */
+         PUSH_DATA (push, ALIGN(buffer->buffer_size, 256) - 1);
+         PUSH_DATA (push, NV50_COMPUTE_GLOBAL_MODE_LINEAR);
+         BCTX_REFN(nv50->bufctx_cp, CP_BUF, res, RDWR);
+         util_range_add(&res->base, &res->valid_buffer_range,
+                        buffer->buffer_offset,
+                        buffer->buffer_offset +
+                        buffer->buffer_size);
+
+         PUSH_SPACE(push, 1 + 3);
+         BEGIN_NV04(push, NV50_CP(CB_ADDR), 1);
+         PUSH_DATA (push, NV50_CB_AUX_BUF_INFO(i) << (8 - 2) | NV50_CB_AUX);
+         BEGIN_NI04(push, NV50_CP(CB_DATA(0)), 1);
+         PUSH_DATA (push, buffer->buffer_size);
+      } else if (gmem->valid && gmem->image && nv50->images[gmem->slot].resource) {
+         struct pipe_image_view *view = &nv50->images[gmem->slot];
          struct nv04_resource *res = nv04_resource(view->resource);
 
          /* get surface dimensions based on the target. */
@@ -389,29 +426,36 @@ nv50_compute_validate_surfaces(struct nv50_context *nv50)
             struct nv50_miptree *mt = nv50_miptree(view->resource);
             struct nv50_miptree_level *lvl = &mt->level[view->u.tex.level];
             const unsigned z = view->u.tex.first_layer;
+            unsigned max_size;
 
             if (mt->layout_3d) {
-               address += nv50_mt_zslice_offset(mt, view->u.tex.level, z);
-               if (depth >= 1) {
-                  pipe_debug_message(&nv50->base.debug, CONFORMANCE,
-                                     "3D images are not supported!");
-                  debug_printf("3D images are not supported!\n");
-               }
+               address += nv50_mt_zslice_offset(mt, view->u.tex.level, 0);
+               max_size = mt->total_size;
             } else {
                address += mt->layer_stride * z;
+               max_size = mt->layer_stride * (view->u.tex.last_layer - view->u.tex.first_layer + 1);
             }
             address += lvl->offset;
 
             PUSH_DATAh(push, address);
             PUSH_DATA (push, address);
-            if (nouveau_bo_memtype(res->bo)) {
-               unsigned h = height << mt->ms_y;
-               unsigned nby = util_format_get_nblocksy(view->format, h);
-               unsigned tsy = NV50_TILE_SIZE_Y(lvl->tile_mode) * depth;
-
-               PUSH_DATA (push, lvl->pitch * tsy);
-               PUSH_DATA (push, (align(nby, tsy) - 1) << 16 | (lvl->pitch - 1));
-               PUSH_DATA (push, (lvl->tile_mode & 0xff) << 4); /* mask out z-tiling */
+            if (mt->layout_3d) {
+               // We have to adjust the size of the 3d surface to be
+               // accessible within 2d limits. The size of each z tile goes
+               // into the x direction, while the number of z tiles goes into
+               // the y direction.
+               const unsigned nby = util_format_get_nblocksy(view->format, height);
+               const unsigned tsy = NV50_TILE_SIZE_Y(lvl->tile_mode);
+               const unsigned tsz = NV50_TILE_SIZE_Z(lvl->tile_mode);
+               const unsigned pitch = lvl->pitch * tsz;
+               const unsigned maxy = align(nby, tsy) * align(depth, tsz) >> NV50_TILE_SHIFT_Z(lvl->tile_mode);
+               PUSH_DATA (push, pitch * tsy);
+               PUSH_DATA (push, (maxy - 1) << 16 | (pitch - 1));
+               PUSH_DATA (push, (lvl->tile_mode & 0xff) << 4);
+            } else if (nouveau_bo_memtype(res->bo)) {
+               PUSH_DATA (push, lvl->pitch * NV50_TILE_SIZE_Y(lvl->tile_mode));
+               PUSH_DATA (push, (max_size / lvl->pitch - 1) << 16 | (lvl->pitch - 1));
+               PUSH_DATA (push, (lvl->tile_mode & 0xff) << 4);
             } else {
                PUSH_DATA (push, lvl->pitch);
                PUSH_DATA (push, align(lvl->pitch * height, 0x100) - 1);
@@ -420,6 +464,12 @@ nv50_compute_validate_surfaces(struct nv50_context *nv50)
          }
 
          BCTX_REFN(nv50->bufctx_cp, CP_SUF, res, RDWR);
+
+         PUSH_SPACE(push, 12 + 3);
+         BEGIN_NV04(push, NV50_CP(CB_ADDR), 1);
+         PUSH_DATA (push, NV50_CB_AUX_BUF_INFO(i) << (8 - 2) | NV50_CB_AUX);
+         BEGIN_NI04(push, NV50_CP(CB_DATA(0)), 12);
+         nv50_set_surface_info(push, view, width, height, depth);
       } else {
          PUSH_DATA (push, 0);
          PUSH_DATA (push, 0);
@@ -449,8 +499,9 @@ static struct nv50_state_validate
 validate_list_cp[] = {
    { nv50_compprog_validate,              NV50_NEW_CP_PROGRAM     },
    { nv50_compute_validate_constbufs,     NV50_NEW_CP_CONSTBUF    },
-   { nv50_compute_validate_buffers,       NV50_NEW_CP_BUFFERS     },
-   { nv50_compute_validate_surfaces,      NV50_NEW_CP_SURFACES    },
+   { nv50_compute_validate_surfaces,      NV50_NEW_CP_SURFACES |
+                                          NV50_NEW_CP_BUFFERS  |
+                                          NV50_NEW_CP_PROGRAM     },
    { nv50_compute_validate_textures,      NV50_NEW_CP_TEXTURES    },
    { nv50_compute_validate_samplers,      NV50_NEW_CP_SAMPLERS    },
    { nv50_compute_validate_globals,       NV50_NEW_CP_GLOBALS     },
@@ -532,6 +583,15 @@ nv50_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
    BEGIN_NV04(push, NV50_CP(CP_REG_ALLOC_TEMP), 1);
    PUSH_DATA (push, cp->max_gpr);
 
+   /* no indirect support - just read the parameters out */
+   uint32_t grid[3];
+   if (unlikely(info->indirect)) {
+      pipe_buffer_read(pipe, info->indirect, info->indirect_offset,
+                       sizeof(grid), grid);
+   } else {
+      memcpy(grid, info->grid, sizeof(grid));
+   }
+
    /* grid/block setup */
    BEGIN_NV04(push, NV50_CP(BLOCKDIM_XY), 2);
    PUSH_DATA (push, info->block[1] << 16 | info->block[0]);
@@ -541,13 +601,13 @@ nv50_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
    BEGIN_NV04(push, NV50_CP(BLOCKDIM_LATCH), 1);
    PUSH_DATA (push, 1);
    BEGIN_NV04(push, NV50_CP(GRIDDIM), 1);
-   PUSH_DATA (push, info->grid[1] << 16 | info->grid[0]);
+   PUSH_DATA (push, grid[1] << 16 | grid[0]);
    BEGIN_NV04(push, NV50_CP(GRIDID), 1);
    PUSH_DATA (push, 1);
 
-   for (int i = 0; i < info->grid[2]; i++) {
+   for (int i = 0; i < grid[2]; i++) {
       BEGIN_NV04(push, NV50_CP(USER_PARAM(0)), 1);
-      PUSH_DATA (push, info->grid[2] | i << 16);
+      PUSH_DATA (push, grid[2] | i << 16);
 
       /* kernel launching */
       BEGIN_NV04(push, NV50_CP(LAUNCH), 1);
@@ -559,4 +619,7 @@ nv50_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
 
    /* bind a compute shader clobbers fragment shader state */
    nv50->dirty_3d |= NV50_NEW_3D_FRAGPROG;
+
+   nv50->compute_invocations += info->block[0] * info->block[1] * info->block[2] *
+      grid[0] * grid[1] * grid[2];
 }

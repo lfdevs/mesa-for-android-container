@@ -177,7 +177,7 @@ blorp_alloc_vertex_buffer(struct blorp_batch *blorp_batch,
    struct iris_bo *bo;
    uint32_t offset;
 
-   void *map = stream_state(batch, ice->ctx.stream_uploader, size, 64,
+   void *map = stream_state(batch, ice->ctx.const_uploader, size, 64,
                             &offset, &bo);
 
    *addr = (struct blorp_address) {
@@ -290,15 +290,13 @@ iris_blorp_exec(struct blorp_batch *blorp_batch,
    }
 #endif
 
-   /* Flush the render cache in cases where the same surface is reinterpreted
-    * with a different format, which blorp does for stencil and depth data
-    * among other things.  Invalidation of sampler caches and flushing of any
-    * caches which had previously written the source surfaces should already
-    * have been handled by the caller.
+   /* Flush the render cache in cases where the same surface is used with
+    * different aux modes, which can lead to GPU hangs.  Invalidation of
+    * sampler caches and flushing of any caches which had previously written
+    * the source surfaces should already have been handled by the caller.
     */
    if (params->dst.enabled) {
       iris_cache_flush_for_render(batch, params->dst.addr.buffer,
-                                  params->dst.view.format,
                                   params->dst.aux_usage);
    }
 

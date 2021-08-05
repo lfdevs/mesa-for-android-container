@@ -49,7 +49,7 @@
 void
 brw_enable_obj_preemption(struct brw_context *brw, bool enable)
 {
-   ASSERTED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   ASSERTED const struct intel_device_info *devinfo = &brw->screen->devinfo;
    assert(devinfo->ver >= 9);
 
    if (enable == brw->object_preemption)
@@ -71,7 +71,7 @@ brw_enable_obj_preemption(struct brw_context *brw, bool enable)
 static void
 brw_upload_gfx11_slice_hashing_state(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    int subslices_delta =
       devinfo->ppipe_subslices[0] - devinfo->ppipe_subslices[1];
    if (subslices_delta == 0)
@@ -151,7 +151,7 @@ brw_upload_gfx11_slice_hashing_state(struct brw_context *brw)
 static void
 brw_upload_initial_gpu_state(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const struct brw_compiler *compiler = brw->screen->compiler;
 
    /* On platforms with hardware contexts, we can set our initial GPU state
@@ -302,7 +302,7 @@ brw_copy_pipeline_atoms(struct brw_context *brw,
 void brw_init_state( struct brw_context *brw )
 {
    struct gl_context *ctx = &brw->ctx;
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    /* Force the first brw_select_pipeline to emit pipeline select */
    brw->last_pipeline = BRW_NUM_PIPELINES;
@@ -527,7 +527,7 @@ brw_upload_programs(struct brw_context *brw,
                     enum brw_pipeline pipeline)
 {
    struct gl_context *ctx = &brw->ctx;
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (pipeline == BRW_RENDER_PIPELINE) {
       brw_upload_vs_prog(brw);
@@ -606,7 +606,7 @@ static inline void
 brw_upload_pipeline_state(struct brw_context *brw,
                           enum brw_pipeline pipeline)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    int i;
    static int dirty_count = 0;

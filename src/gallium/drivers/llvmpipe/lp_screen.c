@@ -378,11 +378,8 @@ llvmpipe_get_shader_param(struct pipe_screen *screen,
          else
             return PIPE_SHADER_IR_NIR;
       }
-      switch (param) {
-      default:
-         return gallivm_get_shader_param(param);
-      }
-      FALLTHROUGH;
+
+      return gallivm_get_shader_param(param);
    case PIPE_SHADER_TESS_CTRL:
    case PIPE_SHADER_TESS_EVAL:
       /* Tessellation shader needs llvm coroutines support */
@@ -581,6 +578,8 @@ static const struct nir_shader_compiler_options gallivm_nir_options = {
    .lower_unpack_half_2x16 = true,
    .lower_extract_byte = true,
    .lower_extract_word = true,
+   .lower_insert_byte = true,
+   .lower_insert_word = true,
    .lower_rotate = true,
    .lower_uadd_carry = true,
    .lower_usub_borrow = true,
@@ -593,6 +592,7 @@ static const struct nir_shader_compiler_options gallivm_nir_options = {
    .lower_uniforms_to_ubo = true,
    .lower_vector_cmp = true,
    .lower_device_index_to_zero = true,
+   .support_16bit_alu = true,
 };
 
 static void
@@ -650,7 +650,7 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
    if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
       return false;
 
-   if (bind & PIPE_BIND_RENDER_TARGET) {
+   if (bind & (PIPE_BIND_RENDER_TARGET | PIPE_BIND_SHADER_IMAGE)) {
       if (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB) {
          /* this is a lie actually other formats COULD exist where we would fail */
          if (format_desc->nr_channels < 3)
@@ -672,6 +672,54 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
       if (!format_desc->is_array && !format_desc->is_bitmask &&
           format != PIPE_FORMAT_R11G11B10_FLOAT)
          return false;
+   }
+
+   if (bind & PIPE_BIND_SHADER_IMAGE) {
+      switch (format) {
+         case PIPE_FORMAT_R32G32B32A32_FLOAT:
+         case PIPE_FORMAT_R16G16B16A16_FLOAT:
+         case PIPE_FORMAT_R32G32_FLOAT:
+         case PIPE_FORMAT_R16G16_FLOAT:
+         case PIPE_FORMAT_R11G11B10_FLOAT:
+         case PIPE_FORMAT_R32_FLOAT:
+         case PIPE_FORMAT_R16_FLOAT:
+         case PIPE_FORMAT_R32G32B32A32_UINT:
+         case PIPE_FORMAT_R16G16B16A16_UINT:
+         case PIPE_FORMAT_R10G10B10A2_UINT:
+         case PIPE_FORMAT_R8G8B8A8_UINT:
+         case PIPE_FORMAT_R32G32_UINT:
+         case PIPE_FORMAT_R16G16_UINT:
+         case PIPE_FORMAT_R8G8_UINT:
+         case PIPE_FORMAT_R32_UINT:
+         case PIPE_FORMAT_R16_UINT:
+         case PIPE_FORMAT_R8_UINT:
+         case PIPE_FORMAT_R32G32B32A32_SINT:
+         case PIPE_FORMAT_R16G16B16A16_SINT:
+         case PIPE_FORMAT_R8G8B8A8_SINT:
+         case PIPE_FORMAT_R32G32_SINT:
+         case PIPE_FORMAT_R16G16_SINT:
+         case PIPE_FORMAT_R8G8_SINT:
+         case PIPE_FORMAT_R32_SINT:
+         case PIPE_FORMAT_R16_SINT:
+         case PIPE_FORMAT_R8_SINT:
+         case PIPE_FORMAT_R16G16B16A16_UNORM:
+         case PIPE_FORMAT_R10G10B10A2_UNORM:
+         case PIPE_FORMAT_R8G8B8A8_UNORM:
+         case PIPE_FORMAT_R16G16_UNORM:
+         case PIPE_FORMAT_R8G8_UNORM:
+         case PIPE_FORMAT_R16_UNORM:
+         case PIPE_FORMAT_R8_UNORM:
+         case PIPE_FORMAT_R16G16B16A16_SNORM:
+         case PIPE_FORMAT_R8G8B8A8_SNORM:
+         case PIPE_FORMAT_R16G16_SNORM:
+         case PIPE_FORMAT_R8G8_SNORM:
+         case PIPE_FORMAT_R16_SNORM:
+         case PIPE_FORMAT_R8_SNORM:
+            break;
+
+         default:
+            return false;
+      }
    }
 
    if ((bind & (PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW)) &&
@@ -890,6 +938,36 @@ void lp_disk_cache_insert_shader(struct llvmpipe_screen *screen,
    disk_cache_compute_key(screen->disk_shader_cache, ir_sha1_cache_key, 20, sha1);
    disk_cache_put(screen->disk_shader_cache, sha1, cache->data, cache->data_size, NULL);
 }
+
+bool
+llvmpipe_screen_late_init(struct llvmpipe_screen *screen)
+{
+   bool ret = true;
+   mtx_lock(&screen->late_mutex);
+
+   if (screen->late_init_done)
+      goto out;
+
+   screen->rast = lp_rast_create(screen->num_threads);
+   if (!screen->rast) {
+      ret = false;
+      goto out;
+   }
+
+   screen->cs_tpool = lp_cs_tpool_create(screen->num_threads);
+   if (!screen->cs_tpool) {
+      lp_rast_destroy(screen->rast);
+      ret = false;
+      goto out;
+   }
+
+   lp_disk_cache_create(screen);
+   screen->late_init_done = true;
+out:
+   mtx_unlock(&screen->late_mutex);
+   return ret;
+}
+
 /**
  * Create a new pipe_screen object
  * Note: we're not presently subclassing pipe_screen (no llvmpipe_screen).
@@ -953,23 +1031,10 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
    screen->num_threads = debug_get_num_option("LP_NUM_THREADS", screen->num_threads);
    screen->num_threads = MIN2(screen->num_threads, LP_MAX_THREADS);
 
-   screen->rast = lp_rast_create(screen->num_threads);
-   if (!screen->rast) {
-      lp_jit_screen_cleanup(screen);
-      FREE(screen);
-      return NULL;
-   }
+   (void) mtx_init(&screen->cs_mutex, mtx_plain);
    (void) mtx_init(&screen->rast_mutex, mtx_plain);
 
-   screen->cs_tpool = lp_cs_tpool_create(screen->num_threads);
-   if (!screen->cs_tpool) {
-      lp_rast_destroy(screen->rast);
-      lp_jit_screen_cleanup(screen);
-      FREE(screen);
-      return NULL;
-   }
-   (void) mtx_init(&screen->cs_mutex, mtx_plain);
+   (void) mtx_init(&screen->late_mutex, mtx_plain);
 
-   lp_disk_cache_create(screen);
    return &screen->base;
 }

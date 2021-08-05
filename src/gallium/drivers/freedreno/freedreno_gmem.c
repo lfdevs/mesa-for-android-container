@@ -178,13 +178,13 @@ layout_gmem(struct gmem_key *key, uint32_t nbins_x, uint32_t nbins_y,
       return false;
 
    uint32_t bin_w, bin_h;
-   bin_w = div_align(key->width, nbins_x, screen->info.tile_align_w);
-   bin_h = div_align(key->height, nbins_y, screen->info.tile_align_h);
+   bin_w = div_align(key->width, nbins_x, screen->info->tile_align_w);
+   bin_h = div_align(key->height, nbins_y, screen->info->tile_align_h);
 
-   if (bin_w > screen->info.tile_max_w)
+   if (bin_w > screen->info->tile_max_w)
       return false;
 
-   if (bin_h > screen->info.tile_max_h)
+   if (bin_h > screen->info->tile_max_h)
       return false;
 
    gmem->bin_w = bin_w;
@@ -221,8 +221,8 @@ calc_nbins(struct gmem_key *key, struct fd_gmem_stateobj *gmem)
 {
    struct fd_screen *screen = gmem->screen;
    uint32_t nbins_x = 1, nbins_y = 1;
-   uint32_t max_width = screen->info.tile_max_w;
-   uint32_t max_height = screen->info.tile_max_h;
+   uint32_t max_width = screen->info->tile_max_w;
+   uint32_t max_height = screen->info->tile_max_h;
 
    if (FD_DBG(MSGS)) {
       debug_printf("binning input: cbuf cpp:");
@@ -235,12 +235,12 @@ calc_nbins(struct gmem_key *key, struct fd_gmem_stateobj *gmem)
    /* first, find a bin size that satisfies the maximum width/
     * height restrictions:
     */
-   while (div_align(key->width, nbins_x, screen->info.tile_align_w) >
+   while (div_align(key->width, nbins_x, screen->info->tile_align_w) >
           max_width) {
       nbins_x++;
    }
 
-   while (div_align(key->height, nbins_y, screen->info.tile_align_h) >
+   while (div_align(key->height, nbins_y, screen->info->tile_align_h) >
           max_height) {
       nbins_y++;
    }
@@ -282,7 +282,7 @@ gmem_stateobj_init(struct fd_screen *screen, struct gmem_key *key)
    gmem->key = key;
    list_inithead(&gmem->node);
 
-   const unsigned npipes = screen->info.num_vsc_pipes;
+   const unsigned npipes = screen->info->num_vsc_pipes;
    uint32_t i, j, t, xoff, yoff;
    uint32_t tpp_x, tpp_y;
    int tile_n[npipes];
@@ -504,8 +504,8 @@ gmem_key_init(struct fd_batch *batch, bool assume_zs, bool no_scis_opt)
       }
 
       /* round down to multiple of alignment: */
-      key->minx = scissor->minx & ~(screen->info.gmem_align_w - 1);
-      key->miny = scissor->miny & ~(screen->info.gmem_align_h - 1);
+      key->minx = scissor->minx & ~(screen->info->gmem_align_w - 1);
+      key->miny = scissor->miny & ~(screen->info->gmem_align_h - 1);
       key->width = scissor->maxx - key->minx;
       key->height = scissor->maxy - key->miny;
    }
@@ -516,7 +516,7 @@ gmem_key_init(struct fd_batch *batch, bool assume_zs, bool no_scis_opt)
        */
       key->gmem_page_align = 8;
    } else if (is_a6xx(screen)) {
-      key->gmem_page_align = is_a650(screen) ? 3 : 1;
+      key->gmem_page_align = (screen->info->tile_align_w == 96) ? 3 : 1;
    } else {
       // TODO re-check this across gens.. maybe it should only
       // be a single page in some cases:
@@ -654,17 +654,14 @@ render_sysmem(struct fd_batch *batch) assert_dt
 static void
 flush_ring(struct fd_batch *batch)
 {
-   uint32_t timestamp = 0;
-   int out_fence_fd = -1;
-
    if (FD_DBG(NOHW))
       return;
 
    fd_submit_flush(batch->submit, batch->in_fence_fd,
-                   batch->needs_out_fence_fd ? &out_fence_fd : NULL,
-                   &timestamp);
+                   batch->fence ? &batch->fence->submit_fence : NULL);
 
-   fd_fence_populate(batch->fence, timestamp, out_fence_fd);
+   if (batch->fence)
+      fd_fence_set_batch(batch->fence, NULL);
 }
 
 void
@@ -674,7 +671,16 @@ fd_gmem_render_tiles(struct fd_batch *batch)
    struct pipe_framebuffer_state *pfb = &batch->framebuffer;
    bool sysmem = false;
 
+   ctx->submit_count++;
+
    if (!batch->nondraw) {
+#if HAVE_PERFETTO
+      /* For non-draw batches, we don't really have a good place to
+       * match up the api event submit-id to the on-gpu rendering,
+       * so skip this for non-draw batches.
+       */
+      fd_perfetto_submit(ctx);
+#endif
       trace_flush_batch(&batch->trace, batch, batch->cleared,
                         batch->gmem_reason, batch->num_draws);
       trace_framebuffer_state(&batch->trace, pfb);
@@ -721,18 +727,29 @@ fd_gmem_render_tiles(struct fd_batch *batch)
       ctx->stats.batch_nondraw++;
    } else if (sysmem) {
       trace_render_sysmem(&batch->trace);
+      trace_start_render_pass(
+         &batch->trace, ctx->submit_count, pipe_surface_format(pfb->cbufs[0]),
+         pipe_surface_format(pfb->zsbuf), pfb->width, pfb->height,
+         pfb->nr_cbufs, pfb->samples, 0, 0, 0);
       if (ctx->query_prepare)
          ctx->query_prepare(batch, 1);
       render_sysmem(batch);
+      trace_end_render_pass(&batch->trace);
       ctx->stats.batch_sysmem++;
    } else {
       struct fd_gmem_stateobj *gmem = lookup_gmem_state(batch, false, false);
       batch->gmem_state = gmem;
       trace_render_gmem(&batch->trace, gmem->nbins_x, gmem->nbins_y,
                         gmem->bin_w, gmem->bin_h);
+      trace_start_render_pass(
+         &batch->trace, ctx->submit_count, pipe_surface_format(pfb->cbufs[0]),
+         pipe_surface_format(pfb->zsbuf), pfb->width, pfb->height,
+         pfb->nr_cbufs, pfb->samples, gmem->nbins_x * gmem->nbins_y,
+         gmem->bin_w, gmem->bin_h);
       if (ctx->query_prepare)
          ctx->query_prepare(batch, gmem->nbins_x * gmem->nbins_y);
       render_tiles(batch, gmem);
+      trace_end_render_pass(&batch->trace);
       batch->gmem_state = NULL;
 
       fd_screen_lock(ctx->screen);

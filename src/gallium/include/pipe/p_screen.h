@@ -550,7 +550,7 @@ struct pipe_screen {
    /**
     * Bind memory to a resource.
     */
-   void (*resource_bind_backing)(struct pipe_screen *screen,
+   bool (*resource_bind_backing)(struct pipe_screen *screen,
                                  struct pipe_resource *pt,
                                  struct pipe_memory_allocation *pmem,
                                  uint64_t offset);

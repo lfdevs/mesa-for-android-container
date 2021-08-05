@@ -130,7 +130,7 @@ lower_any_hit_for_intersection(nir_shader *any_hit)
 void
 brw_nir_lower_intersection_shader(nir_shader *intersection,
                                   const nir_shader *any_hit,
-                                  const struct gen_device_info *devinfo)
+                                  const struct intel_device_info *devinfo)
 {
    void *dead_ctx = ralloc_context(intersection);
 

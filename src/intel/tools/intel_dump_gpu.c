@@ -43,8 +43,8 @@
 #include "intel_aub.h"
 #include "aub_write.h"
 
-#include "dev/gen_debug.h"
-#include "dev/gen_device_info.h"
+#include "dev/intel_debug.h"
+#include "dev/intel_device_info.h"
 #include "util/macros.h"
 
 static int close_init_helper(int fd);
@@ -112,7 +112,7 @@ align_u32(uint32_t v, uint32_t a)
    return (v + a - 1) & ~(a - 1);
 }
 
-static struct gen_device_info devinfo = {0};
+static struct intel_device_info devinfo = {0};
 static int device = 0;
 static struct aub_file aub_file;
 
@@ -121,11 +121,11 @@ ensure_device_info(int fd)
 {
    /* We can't do this at open time as we're not yet authenticated. */
    if (device == 0) {
-      fail_if(!gen_get_device_info_from_fd(fd, &devinfo),
+      fail_if(!intel_get_device_info_from_fd(fd, &devinfo),
               "failed to identify chipset.\n");
       device = devinfo.chipset_id;
    } else if (devinfo.ver == 0) {
-      fail_if(!gen_get_device_info_from_pci_id(device, &devinfo),
+      fail_if(!intel_get_device_info_from_pci_id(device, &devinfo),
               "failed to identify chipset.\n");
    }
 }
@@ -275,9 +275,9 @@ dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
          /* Check against frame_id requirements. */
          if (memcmp(bo->map, intel_debug_identifier(),
                     intel_debug_identifier_size()) == 0) {
-            const struct gen_debug_block_frame *frame_desc =
+            const struct intel_debug_block_frame *frame_desc =
                intel_debug_get_identifier_block(bo->map, bo->size,
-                                                GEN_DEBUG_BLOCK_TYPE_FRAME);
+                                                INTEL_DEBUG_BLOCK_TYPE_FRAME);
 
             current_frame_id = frame_desc ? frame_desc->frame_id : 0;
             break;
@@ -455,10 +455,13 @@ maybe_init(int fd)
          device_override = true;
       } else if (!strcmp(key, "platform")) {
          fail_if(device != 0, "Device/Platform override specified multiple times.\n");
-         device = gen_device_name_to_pci_device_id(value);
+         device = intel_device_name_to_pci_device_id(value);
          fail_if(device == -1, "Unknown platform '%s'\n", value);
          device_override = true;
       } else if (!strcmp(key, "file")) {
+         free(output_filename);
+         if (output_file)
+            fclose(output_file);
          output_filename = strdup(value);
          output_file = fopen(output_filename, "w+");
          fail_if(output_file == NULL,

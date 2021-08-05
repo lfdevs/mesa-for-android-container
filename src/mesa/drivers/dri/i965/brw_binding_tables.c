@@ -56,7 +56,7 @@ brw_upload_binding_table(struct brw_context *brw,
                          const struct brw_stage_prog_data *prog_data,
                          struct brw_stage_state *stage_state)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (prog_data->binding_table.size_bytes == 0) {
       /* There are no surfaces; skip making the binding table altogether. */

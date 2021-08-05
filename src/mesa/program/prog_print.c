@@ -962,6 +962,7 @@ _mesa_print_parameter_list(const struct gl_program_parameter_list *list)
 void
 _mesa_write_shader_to_file(const struct gl_shader *shader)
 {
+#ifndef CUSTOM_SHADER_REPLACEMENT
    const char *type = "????";
    char filename[100];
    FILE *f;
@@ -1012,6 +1013,7 @@ _mesa_write_shader_to_file(const struct gl_shader *shader)
    }
 
    fclose(f);
+#endif
 }
 
 

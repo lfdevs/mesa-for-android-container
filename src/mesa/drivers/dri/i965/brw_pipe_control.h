@@ -25,7 +25,7 @@
 #define BRW_PIPE_CONTROL_DOT_H
 
 struct brw_context;
-struct gen_device_info;
+struct intel_device_info;
 struct brw_bo;
 
 /** @{
@@ -77,7 +77,7 @@ enum pipe_control_flags
 /** @} */
 
 int brw_init_pipe_control(struct brw_context *brw,
-                          const struct gen_device_info *info);
+                          const struct intel_device_info *info);
 void brw_fini_pipe_control(struct brw_context *brw);
 
 void brw_emit_pipe_control_flush(struct brw_context *brw, uint32_t flags);

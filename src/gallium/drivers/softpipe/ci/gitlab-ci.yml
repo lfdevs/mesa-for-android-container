@@ -6,6 +6,7 @@ softpipe-gles2:
     GPU_VERSION: softpipe
     GALLIUM_DRIVER: "softpipe"
     DEQP_EXPECTED_RENDERER: softpipe
+    FLAKES_CHANNEL: "#mesa-swrast-ci"
 
 softpipe-gles3:
   variables:
@@ -18,6 +19,21 @@ softpipe-gles31:
     DEQP_VER: gles31
   extends: softpipe-gles2
 
+softpipe-khr-gles2:
+  variables:
+    DEQP_VER: gles2-khr
+  extends: softpipe-gles2
+
+softpipe-khr-gles3:
+  variables:
+    DEQP_VER: gles3-khr
+  extends: softpipe-gles2
+
+softpipe-khr-gles31:
+  variables:
+    DEQP_VER: gles31-khr
+  extends: softpipe-gles2
+
 softpipe-asan-gles31:
   variables:
     GPU_VERSION: softpipe-asan
@@ -26,8 +42,8 @@ softpipe-asan-gles31:
     TEST_LD_PRELOAD: libasan.so.6
   extends: softpipe-gles2
   needs:
-    - x86_test-gl
-    - meson-testing-asan
+    - debian/x86_test-gl
+    - debian-testing-asan
 
 softpipe-piglit-quick:
   extends:
@@ -67,6 +83,7 @@ softpipe-piglit-quick:
       -x glsl-4.50
       -x gpu_shader4
       -x gpu_shader5
+      -x glsl-uniform-interstage-limits
     PIGLIT_PROFILES: quick_gl quick_shader
     PIGLIT_RESULTS: softpipe-quick
 

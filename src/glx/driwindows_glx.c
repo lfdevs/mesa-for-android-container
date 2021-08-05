@@ -200,7 +200,7 @@ driwindows_create_context_attribs(struct glx_screen *base,
      identical values, so far
    */
 
-   if (!psc->base.driScreen)
+   if (!psc->base.driScreen || !config_base)
       return NULL;
 
    /* Check the renderType value */

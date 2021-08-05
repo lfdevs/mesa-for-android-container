@@ -33,7 +33,7 @@ vn_cs_encoder_sanity_check(struct vn_cs_encoder *enc)
 
 static void
 vn_cs_encoder_add_buffer(struct vn_cs_encoder *enc,
-                         struct vn_renderer_bo *bo,
+                         struct vn_renderer_shmem *shmem,
                          size_t offset,
                          void *base,
                          size_t size)
@@ -41,8 +41,8 @@ vn_cs_encoder_add_buffer(struct vn_cs_encoder *enc,
    /* add a buffer and make it current */
    assert(enc->buffer_count < enc->buffer_max);
    struct vn_cs_encoder_buffer *cur_buf = &enc->buffers[enc->buffer_count++];
-   /* bo ownership transferred */
-   cur_buf->bo = bo;
+   /* shmem ownership transferred */
+   cur_buf->shmem = shmem;
    cur_buf->offset = offset;
    cur_buf->base = base;
    cur_buf->committed_size = 0;
@@ -75,12 +75,12 @@ vn_cs_encoder_gc_buffers(struct vn_cs_encoder *enc)
    struct vn_cs_encoder_buffer *cur_buf =
       &enc->buffers[enc->buffer_count - 1];
    for (uint32_t i = 0; i < enc->buffer_count - 1; i++)
-      vn_renderer_bo_unref(enc->buffers[i].bo);
+      vn_renderer_shmem_unref(enc->instance->renderer, enc->buffers[i].shmem);
 
    /* move the current buffer to the beginning, skipping the used part */
    const size_t used = cur_buf->offset + cur_buf->committed_size;
    enc->buffer_count = 0;
-   vn_cs_encoder_add_buffer(enc, cur_buf->bo, used,
+   vn_cs_encoder_add_buffer(enc, cur_buf->shmem, used,
                             cur_buf->base + cur_buf->committed_size,
                             enc->current_buffer_size - used);
 
@@ -105,7 +105,7 @@ vn_cs_encoder_fini(struct vn_cs_encoder *enc)
       return;
 
    for (uint32_t i = 0; i < enc->buffer_count; i++)
-      vn_renderer_bo_unref(enc->buffers[i].bo);
+      vn_renderer_shmem_unref(enc->instance->renderer, enc->buffers[i].shmem);
    if (enc->buffers)
       free(enc->buffers);
 }
@@ -190,26 +190,19 @@ vn_cs_encoder_reserve_internal(struct vn_cs_encoder *enc, size_t size)
          return false;
    }
 
-   struct vn_renderer_bo *bo;
-   VkResult result =
-      vn_renderer_bo_create_cpu(enc->instance->renderer, buf_size, &bo);
-   if (result != VK_SUCCESS)
+   struct vn_renderer_shmem *shmem =
+      vn_renderer_shmem_create(enc->instance->renderer, buf_size);
+   if (!shmem)
       return false;
-
-   void *base = vn_renderer_bo_map(bo);
-   if (!base) {
-      vn_renderer_bo_unref(bo);
-      return false;
-   }
 
    uint32_t roundtrip;
-   result = vn_instance_submit_roundtrip(enc->instance, &roundtrip);
+   VkResult result = vn_instance_submit_roundtrip(enc->instance, &roundtrip);
    if (result != VK_SUCCESS) {
-      vn_renderer_bo_unref(bo);
+      vn_renderer_shmem_unref(enc->instance->renderer, shmem);
       return false;
    }
 
-   vn_cs_encoder_add_buffer(enc, bo, 0, base, buf_size);
+   vn_cs_encoder_add_buffer(enc, shmem, 0, shmem->mmap_ptr, buf_size);
    enc->current_buffer_size = buf_size;
    enc->current_buffer_roundtrip = roundtrip;
 

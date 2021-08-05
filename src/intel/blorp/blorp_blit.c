@@ -894,7 +894,7 @@ bit_cast_color(struct nir_builder *b, nir_ssa_def *color,
          if (src_fmtl->channels_array[c].type == ISL_UNORM)
             chan = nir_format_float_to_unorm(b, chan, &chan_bits);
 
-         packed = nir_ior(b, packed, nir_shift(b, chan, chan_start_bit));
+         packed = nir_ior(b, packed, nir_shift_imm(b, chan, chan_start_bit));
       }
 
       nir_ssa_def *chans[4] = { };
@@ -906,7 +906,7 @@ bit_cast_color(struct nir_builder *b, nir_ssa_def *color,
 
          const unsigned chan_start_bit = dst_fmtl->channels_array[c].start_bit;
          const unsigned chan_bits = dst_fmtl->channels_array[c].bits;
-         chans[c] = nir_iand(b, nir_shift(b, packed, -(int)chan_start_bit),
+         chans[c] = nir_iand(b, nir_shift_imm(b, packed, -(int)chan_start_bit),
                                 nir_imm_int(b, BITFIELD_MASK(chan_bits)));
 
          if (dst_fmtl->channels_array[c].type == ISL_UNORM)
@@ -1165,7 +1165,7 @@ static nir_shader *
 brw_blorp_build_nir_shader(struct blorp_context *blorp, void *mem_ctx,
                            const struct brw_blorp_blit_prog_key *key)
 {
-   const struct gen_device_info *devinfo = blorp->isl_dev->info;
+   const struct intel_device_info *devinfo = blorp->isl_dev->info;
    nir_ssa_def *src_pos, *dst_pos, *color;
 
    /* Sanity checks */
@@ -1490,7 +1490,8 @@ brw_blorp_get_blit_kernel(struct blorp_batch *batch,
    struct brw_wm_prog_data prog_data;
 
    nir_shader *nir = brw_blorp_build_nir_shader(blorp, mem_ctx, prog_key);
-   nir->info.name = ralloc_strdup(nir, blorp_shader_type_to_name(prog_key->shader_type));
+   nir->info.name =
+      ralloc_strdup(nir, blorp_shader_type_to_name(prog_key->base.shader_type));
 
    struct brw_wm_prog_key wm_key;
    brw_blorp_init_wm_prog_key(&wm_key);
@@ -1695,7 +1696,7 @@ can_shrink_surface(const struct brw_blorp_surface_info *surf)
 }
 
 static unsigned
-get_max_surface_size(const struct gen_device_info *devinfo,
+get_max_surface_size(const struct intel_device_info *devinfo,
                      const struct brw_blorp_surface_info *surf)
 {
    const unsigned max = devinfo->ver >= 7 ? 16384 : 8192;
@@ -1803,7 +1804,7 @@ try_blorp_blit(struct blorp_batch *batch,
                struct brw_blorp_blit_prog_key *wm_prog_key,
                struct blt_coords *coords)
 {
-   const struct gen_device_info *devinfo = batch->blorp->isl_dev->info;
+   const struct intel_device_info *devinfo = batch->blorp->isl_dev->info;
 
    if (params->dst.surf.usage & ISL_SURF_USAGE_DEPTH_BIT) {
       if (devinfo->ver >= 7) {
@@ -2074,7 +2075,7 @@ try_blorp_blit(struct blorp_batch *batch,
       params->dst.view.format = ISL_FORMAT_R32_UINT;
    }
 
-   if (devinfo->ver <= 7 && !devinfo->is_haswell &&
+   if (devinfo->verx10 <= 70 &&
        !isl_swizzle_is_identity(params->src.view.swizzle)) {
       wm_prog_key->src_swizzle = params->src.view.swizzle;
       params->src.view.swizzle = ISL_SWIZZLE_IDENTITY;
@@ -2194,11 +2195,15 @@ shrink_surface_params(const struct isl_device *dev,
     */
    x_offset_sa = (uint32_t)*x0 * px_size_sa.w + info->tile_x_sa;
    y_offset_sa = (uint32_t)*y0 * px_size_sa.h + info->tile_y_sa;
+   uint32_t tile_z_sa, tile_a;
    isl_tiling_get_intratile_offset_sa(info->surf.tiling,
                                       info->surf.format, info->surf.row_pitch_B,
-                                      x_offset_sa, y_offset_sa,
+                                      info->surf.array_pitch_el_rows,
+                                      x_offset_sa, y_offset_sa, 0, 0,
                                       &byte_offset,
-                                      &info->tile_x_sa, &info->tile_y_sa);
+                                      &info->tile_x_sa, &info->tile_y_sa,
+                                      &tile_z_sa, &tile_a);
+   assert(tile_z_sa == 0 && tile_a == 0);
 
    info->addr.offset += byte_offset;
 
@@ -2360,7 +2365,7 @@ blorp_blit(struct blorp_batch *batch,
       isl_format_get_layout(params.src.view.format);
 
    struct brw_blorp_blit_prog_key wm_prog_key = {
-      .shader_type = BLORP_SHADER_TYPE_BLIT,
+      .base = BRW_BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_BLIT),
       .filter = filter,
       .sint32_to_uint = src_fmtl->channels.r.bits == 32 &&
                         isl_format_has_sint_channel(params.src.view.format) &&
@@ -2584,22 +2589,16 @@ blorp_surf_convert_to_uncompressed(const struct isl_device *isl_dev,
 
    assert(fmtl->bw > 1 || fmtl->bh > 1);
 
-   /* This is a compressed surface.  We need to convert it to a single
-    * slice (because compressed layouts don't perfectly match uncompressed
-    * ones with the same bpb) and divide x, y, width, and height by the
-    * block size.
-    */
-   blorp_surf_convert_to_single_slice(isl_dev, info);
+   /* This should be the first modification made to the surface */
+   assert(info->tile_x_sa == 0 && info->tile_y_sa == 0);
 
    if (width && height) {
-#ifndef NDEBUG
-      uint32_t right_edge_px = info->tile_x_sa + *x + *width;
-      uint32_t bottom_edge_px = info->tile_y_sa + *y + *height;
-      assert(*width % fmtl->bw == 0 ||
-             right_edge_px == info->surf.logical_level0_px.width);
-      assert(*height % fmtl->bh == 0 ||
-             bottom_edge_px == info->surf.logical_level0_px.height);
-#endif
+      ASSERTED const uint32_t level_width =
+         minify(info->surf.logical_level0_px.width, info->view.base_level);
+      ASSERTED const uint32_t level_height =
+         minify(info->surf.logical_level0_px.height, info->view.base_level);
+      assert(*width % fmtl->bw == 0 || *x + *width == level_width);
+      assert(*height % fmtl->bh == 0 || *y + *height == level_height);
       *width = DIV_ROUND_UP(*width, fmtl->bw);
       *height = DIV_ROUND_UP(*height, fmtl->bh);
    }
@@ -2611,16 +2610,33 @@ blorp_surf_convert_to_uncompressed(const struct isl_device *isl_dev,
       *y /= fmtl->bh;
    }
 
-   info->surf.logical_level0_px = isl_surf_get_logical_level0_el(&info->surf);
-   info->surf.phys_level0_sa = isl_surf_get_phys_level0_el(&info->surf);
+   /* We only want one level and slice */
+   info->view.levels = 1;
+   info->view.array_len = 1;
 
-   assert(info->tile_x_sa % fmtl->bw == 0);
-   assert(info->tile_y_sa % fmtl->bh == 0);
-   info->tile_x_sa /= fmtl->bw;
-   info->tile_y_sa /= fmtl->bh;
+   if (info->surf.dim == ISL_SURF_DIM_3D) {
+      /* Roll the Z offset into the image view */
+      info->view.base_array_layer += info->z_offset;
+      info->z_offset = 0;
+   }
 
-   /* It's now an uncompressed surface so we need an uncompressed format */
-   info->surf.format = get_copy_format_for_bpb(isl_dev, fmtl->bpb);
+   uint32_t offset_B;
+   ASSERTED bool ok =
+      isl_surf_get_uncompressed_surf(isl_dev, &info->surf, &info->view,
+                                     &info->surf, &info->view, &offset_B,
+                                     &info->tile_x_sa, &info->tile_y_sa);
+   assert(ok);
+   info->addr.offset += offset_B;
+
+   /* BLORP doesn't use the actual intratile offsets.  Instead, it needs the
+    * surface to be a bit bigger and we offset the vertices instead.
+    */
+   assert(info->surf.dim == ISL_SURF_DIM_2D);
+   assert(info->surf.logical_level0_px.array_len == 1);
+   info->surf.logical_level0_px.w += info->tile_x_sa;
+   info->surf.logical_level0_px.h += info->tile_y_sa;
+   info->surf.phys_level0_sa.w += info->tile_x_sa;
+   info->surf.phys_level0_sa.h += info->tile_y_sa;
 }
 
 void
@@ -2647,7 +2663,7 @@ blorp_copy(struct blorp_batch *batch,
                                dst_layer, ISL_FORMAT_UNSUPPORTED, true);
 
    struct brw_blorp_blit_prog_key wm_prog_key = {
-      .shader_type = BLORP_SHADER_TYPE_COPY,
+      .base = BRW_BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_COPY),
       .filter = BLORP_FILTER_NONE,
       .need_src_offset = src_surf->tile_x_sa || src_surf->tile_y_sa,
       .need_dst_offset = dst_surf->tile_x_sa || dst_surf->tile_y_sa,
@@ -2846,7 +2862,7 @@ blorp_buffer_copy(struct blorp_batch *batch,
                   struct blorp_address dst,
                   uint64_t size)
 {
-   const struct gen_device_info *devinfo = batch->blorp->isl_dev->info;
+   const struct intel_device_info *devinfo = batch->blorp->isl_dev->info;
    uint64_t copy_size = size;
 
    /* This is maximum possible width/height our HW can handle */

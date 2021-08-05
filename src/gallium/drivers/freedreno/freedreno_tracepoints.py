@@ -69,8 +69,28 @@ Tracepoint('render_gmem',
 
 Tracepoint('render_sysmem')
 
-Tracepoint('start_binning_ib')
-Tracepoint('end_binning_ib')
+# Note that this doesn't include full information about all of the MRTs
+# but seems to roughly match what I see with a blob trace
+Tracepoint('start_render_pass',
+    args=[['uint32_t', 'submit_id'],
+          ['enum pipe_format', 'cbuf0_format'],
+          ['enum pipe_format', 'zs_format'],
+          ['uint16_t', 'width'],
+          ['uint16_t', 'height'],
+          ['uint8_t', 'mrts'],
+          ['uint8_t', 'samples'],
+          ['uint16_t', 'nbins'],
+          ['uint16_t', 'binw'],
+          ['uint16_t', 'binh']],
+    tp_perfetto='fd_start_render_pass'
+)
+Tracepoint('end_render_pass',
+    tp_perfetto='fd_end_render_pass')
+
+Tracepoint('start_binning_ib',
+    tp_perfetto='fd_start_binning_ib')
+Tracepoint('end_binning_ib',
+    tp_perfetto='fd_end_binning_ib')
 
 Tracepoint('start_vsc_overflow_test')
 Tracepoint('end_vsc_overflow_test')
@@ -81,12 +101,16 @@ Tracepoint('end_prologue')
 # For GMEM pass, where this could either be a clear or resolve
 Tracepoint('start_clear_restore',
     args=[['uint16_t', 'fast_cleared']],
-    tp_print=['fast_cleared: 0x%x', '__entry->fast_cleared']
+    tp_print=['fast_cleared: 0x%x', '__entry->fast_cleared'],
+    tp_perfetto='fd_start_clear_restore',
 )
-Tracepoint('end_clear_restore')
+Tracepoint('end_clear_restore',
+    tp_perfetto='fd_end_clear_restore')
 
-Tracepoint('start_resolve')
-Tracepoint('end_resolve')
+Tracepoint('start_resolve',
+    tp_perfetto='fd_start_resolve')
+Tracepoint('end_resolve',
+    tp_perfetto='fd_end_resolve')
 
 Tracepoint('start_tile',
     args=[['uint16_t', 'bin_h'],
@@ -97,18 +121,24 @@ Tracepoint('start_tile',
         '__entry->bin_h', '__entry->yoff', '__entry->bin_w', '__entry->xoff'],
 )
 
-Tracepoint('start_draw_ib')
-Tracepoint('end_draw_ib')
+Tracepoint('start_draw_ib',
+    tp_perfetto='fd_start_draw_ib')
+Tracepoint('end_draw_ib',
+    tp_perfetto='fd_end_draw_ib')
 
 Tracepoint('start_blit',
     args=[['enum pipe_texture_target', 'src_target'],
           ['enum pipe_texture_target', 'dst_target']],
     tp_print=['%s -> %s', 'util_str_tex_target(__entry->src_target, true)',
         'util_str_tex_target(__entry->dst_target, true)'],
+    tp_perfetto='fd_start_blit',
 )
-Tracepoint('end_blit')
+Tracepoint('end_blit',
+    tp_perfetto='fd_end_blit')
 
-Tracepoint('start_compute')
-Tracepoint('end_compute')
+Tracepoint('start_compute',
+    tp_perfetto='fd_start_compute')
+Tracepoint('end_compute',
+    tp_perfetto='fd_end_compute')
 
 utrace_generate(cpath=args.src, hpath=args.hdr)

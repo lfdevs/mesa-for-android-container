@@ -171,7 +171,7 @@ gfx8_write_pma_stall_bits(struct brw_context *brw, uint32_t pma_stall_bits)
 static void
 gfx8_emit_pma_stall_workaround(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    uint32_t bits = 0;
 
    if (devinfo->ver >= 9)

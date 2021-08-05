@@ -49,8 +49,8 @@ intel_icd = custom_target(
   install : true,
 )
 
-libanv_gen_libs = []
-anv_gen_files = files(
+libanv_per_hw_ver_libs = []
+anv_per_hw_ver_files = files(
   'genX_blorp_exec.c',
   'genX_cmd_buffer.c',
   'genX_gpu_memcpy.c',
@@ -62,16 +62,16 @@ foreach g : [['70', ['gfx7_cmd_buffer.c']], ['75', ['gfx7_cmd_buffer.c']],
              ['80', ['gfx8_cmd_buffer.c']], ['90', ['gfx8_cmd_buffer.c']],
              ['110', ['gfx8_cmd_buffer.c']], ['120', ['gfx8_cmd_buffer.c']],
              ['125', ['gfx8_cmd_buffer.c']]]
-  _gen = g[0]
-  libanv_gen_libs += static_library(
-    'anv_gen@0@'.format(_gen),
-    [anv_gen_files, g[1], anv_entrypoints[0]],
+  _gfx_ver = g[0]
+  libanv_per_hw_ver_libs += static_library(
+    'anv_per_hw_ver@0@'.format(_gfx_ver),
+    [anv_per_hw_ver_files, g[1], anv_entrypoints[0]],
     include_directories : [
       inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_compiler, inc_intel, inc_vulkan_wsi,
     ],
     c_args : [
       no_override_init_args, c_sse2_args,
-      '-DGFX_VERx10=@0@'.format(_gen),
+      '-DGFX_VERx10=@0@'.format(_gfx_ver),
     ],
     gnu_symbol_visibility : 'hidden',
     dependencies : [
@@ -81,6 +81,7 @@ foreach g : [['70', ['gfx7_cmd_buffer.c']], ['75', ['gfx7_cmd_buffer.c']],
 endforeach
 
 libanv_files = files(
+  'anv_acceleration_structure.c',
   'anv_allocator.c',
   'anv_android.h',
   'anv_batch_chain.c',
@@ -175,7 +176,7 @@ libvulkan_intel = shared_library(
   include_directories : [
     inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_compiler, inc_vulkan_wsi,
   ],
-  link_whole : [libanv_common, libanv_gen_libs],
+  link_whole : [libanv_common, libanv_per_hw_ver_libs],
   link_with : [
     libintel_compiler, libintel_dev, libisl, libblorp, libvulkan_wsi,
     libintel_perf,
@@ -212,7 +213,7 @@ if with_tests
     ],
     link_whole : libanv_common,
     link_with : [
-      libanv_gen_libs, libintel_compiler, libintel_common, libintel_dev,
+      libanv_per_hw_ver_libs, libintel_compiler, libintel_common, libintel_dev,
       libisl, libblorp, libvulkan_wsi, libintel_perf,
     ],
     dependencies : [

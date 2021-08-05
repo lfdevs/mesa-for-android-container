@@ -438,6 +438,7 @@ ir_expression::ir_expression(int op, ir_rvalue *op0)
 
    case ir_unop_get_buffer_size:
    case ir_unop_ssbo_unsized_array_length:
+   case ir_unop_implicitly_sized_array_length:
       this->type = glsl_type::int_type;
       break;
 

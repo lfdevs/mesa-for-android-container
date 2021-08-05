@@ -185,6 +185,10 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateRenderPass2(
       att->stencil_load_op = pCreateInfo->pAttachments[i].stencilLoadOp;
       att->final_layout = pCreateInfo->pAttachments[i].finalLayout;
       att->first_subpass_idx = UINT32_MAX;
+
+      bool is_zs = util_format_is_depth_or_stencil(lvp_vk_format_to_pipe_format(att->format));
+      pass->has_zs_attachment |= is_zs;
+      pass->has_color_attachment |= !is_zs;
    }
    uint32_t subpass_attachment_count = 0;
    for (uint32_t i = 0; i < pCreateInfo->subpassCount; i++) {

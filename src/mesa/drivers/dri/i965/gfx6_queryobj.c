@@ -34,7 +34,7 @@
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_state.h"
-#include "perf/gen_perf_regs.h"
+#include "perf/intel_perf_regs.h"
 #include "brw_batch.h"
 #include "brw_buffer_objects.h"
 
@@ -79,7 +79,7 @@ static void
 write_primitives_generated(struct brw_context *brw,
                            struct brw_bo *query_bo, int stream, int idx)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    brw_emit_mi_flush(brw);
 
@@ -97,7 +97,7 @@ static void
 write_xfb_primitives_written(struct brw_context *brw,
                              struct brw_bo *bo, int stream, int idx)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    brw_emit_mi_flush(brw);
 
@@ -116,7 +116,7 @@ write_xfb_overflow_streams(struct gl_context *ctx,
                            int idx)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    brw_emit_mi_flush(brw);
 
@@ -172,7 +172,7 @@ static void
 emit_pipeline_stat(struct brw_context *brw, struct brw_bo *bo,
                    int stream, int target, int idx)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    /* One source of confusion is the tessellation shader statistics. The
     * hardware has no statistics specific to the TE unit. Ideally we could have
@@ -223,7 +223,7 @@ gfx6_queryobj_get_results(struct gl_context *ctx,
                           struct brw_query_object *query)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (query->bo == NULL)
       return;
@@ -235,12 +235,12 @@ gfx6_queryobj_get_results(struct gl_context *ctx,
        * Subtract the two and convert to nanoseconds.
        */
       query->Base.Result = brw_raw_timestamp_delta(brw, results[0], results[1]);
-      query->Base.Result = gen_device_info_timebase_scale(devinfo, query->Base.Result);
+      query->Base.Result = intel_device_info_timebase_scale(devinfo, query->Base.Result);
       break;
 
    case GL_TIMESTAMP:
       /* The query BO contains a single timestamp value in results[0]. */
-      query->Base.Result = gen_device_info_timebase_scale(devinfo, results[0]);
+      query->Base.Result = intel_device_info_timebase_scale(devinfo, results[0]);
 
       /* Ensure the scaled timestamp overflows according to
        * GL_QUERY_COUNTER_BITS

@@ -66,11 +66,23 @@ blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
                     struct blorp_address address, uint32_t delta)
 {
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
+   VkResult result;
+
+   if (ANV_ALWAYS_SOFTPIN) {
+      result = anv_reloc_list_add_bo(&cmd_buffer->surface_relocs,
+                                     &cmd_buffer->pool->alloc,
+                                     address.buffer);
+      if (unlikely(result != VK_SUCCESS))
+         anv_batch_set_error(&cmd_buffer->batch, result);
+      return;
+   }
+
    uint64_t address_u64 = 0;
-   VkResult result =
-      anv_reloc_list_add(&cmd_buffer->surface_relocs, &cmd_buffer->pool->alloc,
-                         ss_offset, address.buffer, address.offset + delta,
-                         &address_u64);
+   result = anv_reloc_list_add(&cmd_buffer->surface_relocs,
+                               &cmd_buffer->pool->alloc,
+                               ss_offset, address.buffer,
+                               address.offset + delta,
+                               &address_u64);
    if (result != VK_SUCCESS)
       anv_batch_set_error(&cmd_buffer->batch, result);
 
@@ -83,8 +95,16 @@ static uint64_t
 blorp_get_surface_address(struct blorp_batch *blorp_batch,
                           struct blorp_address address)
 {
-   /* We'll let blorp_surface_reloc write the address. */
-   return 0ull;
+   if (ANV_ALWAYS_SOFTPIN) {
+      struct anv_address anv_addr = {
+         .bo = address.buffer,
+         .offset = address.offset,
+      };
+      return anv_address_physical(anv_addr);
+   } else {
+      /* We'll let blorp_surface_reloc write the address. */
+      return 0;
+   }
 }
 
 #if GFX_VER >= 7 && GFX_VER < 10
@@ -238,9 +258,10 @@ genX(blorp_exec)(struct blorp_batch *batch,
     *     is set due to new association of BTI, PS Scoreboard Stall bit must
     *     be set in this packet."
     */
-   cmd_buffer->state.pending_pipe_bits |=
-      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-      ANV_PIPE_STALL_AT_SCOREBOARD_BIT;
+   anv_add_pending_pipe_bits(cmd_buffer,
+                             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
+                             ANV_PIPE_STALL_AT_SCOREBOARD_BIT,
+                             "before blorp BTI change");
 #endif
 
 #if GFX_VERx10 == 120
@@ -265,8 +286,11 @@ genX(blorp_exec)(struct blorp_batch *batch,
     * See genX(cmd_buffer_mi_memcpy) for more details.
     */
    if (params->src.clear_color_addr.buffer ||
-       params->dst.clear_color_addr.buffer)
-      cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_CS_STALL_BIT;
+       params->dst.clear_color_addr.buffer) {
+      anv_add_pending_pipe_bits(cmd_buffer,
+                                ANV_PIPE_CS_STALL_BIT,
+                                "before blorp prep fast clear");
+   }
 #endif
 
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
@@ -291,9 +315,10 @@ genX(blorp_exec)(struct blorp_batch *batch,
     *     is set due to new association of BTI, PS Scoreboard Stall bit must
     *     be set in this packet."
     */
-   cmd_buffer->state.pending_pipe_bits |=
-      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-      ANV_PIPE_STALL_AT_SCOREBOARD_BIT;
+   anv_add_pending_pipe_bits(cmd_buffer,
+                             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
+                             ANV_PIPE_STALL_AT_SCOREBOARD_BIT,
+                             "after blorp BTI change");
 #endif
 
    cmd_buffer->state.gfx.vb_dirty = ~0;

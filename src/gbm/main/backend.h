@@ -33,4 +33,7 @@
 struct gbm_device *
 _gbm_create_device(int fd);
 
+void
+_gbm_device_destroy(struct gbm_device *gbm);
+
 #endif

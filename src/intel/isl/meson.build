@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-isl_gen_files = files(
+isl_per_hw_ver_files = files(
   'isl_emit_depth_stencil.c',
   'isl_surface_state.c',
 )
@@ -58,20 +58,20 @@ isl_gfx125_files = files(
   'isl_gfx12.h',
 )
 
-isl_gen_libs = []
+isl_per_hw_ver_libs = []
 foreach g : [['40', isl_gfx4_files], ['50', []], ['60', isl_gfx6_files],
              ['70', isl_gfx7_files], ['75', []], ['80', isl_gfx8_files],
              ['90', isl_gfx9_files], ['110', []], ['120', isl_gfx12_files],
              ['125', isl_gfx12_files]]
-  _gen = g[0]
-  isl_gen_libs += static_library(
-    'isl_gen@0@'.format(_gen),
-    [g[1], isl_gen_files, gen_xml_pack],
+  _gfx_ver = g[0]
+  isl_per_hw_ver_libs += static_library(
+    'isl_per_hw_ver@0@'.format(_gfx_ver),
+    [g[1], isl_per_hw_ver_files, gen_xml_pack],
     include_directories : [inc_include, inc_src, inc_gallium, inc_intel],
     dependencies : idep_mesautil,
     c_args : [
       no_override_init_args,
-      '-DGFX_VERx10=@0@'.format(_gen)
+      '-DGFX_VERx10=@0@'.format(_gfx_ver)
     ],
     gnu_symbol_visibility : 'hidden',
   )
@@ -136,7 +136,7 @@ libisl = static_library(
   'isl',
   [libisl_files, isl_format_layout_c, genX_bits_h],
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
-  link_with : [isl_gen_libs, isl_tiled_memcpy, isl_tiled_memcpy_sse41],
+  link_with : [isl_per_hw_ver_libs, isl_tiled_memcpy, isl_tiled_memcpy_sse41],
   dependencies : idep_mesautil,
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',

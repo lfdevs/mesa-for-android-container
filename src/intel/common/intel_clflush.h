@@ -28,7 +28,7 @@
 #define CACHELINE_MASK 63
 
 static inline void
-gen_clflush_range(void *start, size_t size)
+intel_clflush_range(void *start, size_t size)
 {
    void *p = (void *) (((uintptr_t) start) & ~CACHELINE_MASK);
    void *end = start + size;
@@ -43,13 +43,13 @@ static inline void
 intel_flush_range(void *start, size_t size)
 {
    __builtin_ia32_mfence();
-   gen_clflush_range(start, size);
+   intel_clflush_range(start, size);
 }
 
 static inline void
-gen_invalidate_range(void *start, size_t size)
+intel_invalidate_range(void *start, size_t size)
 {
-   gen_clflush_range(start, size);
+   intel_clflush_range(start, size);
 
    /* Modern Atom CPUs (Baytrail+) have issues with clflush serialization,
     * where mfence is not a sufficient synchronization barrier.  We must

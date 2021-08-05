@@ -96,7 +96,7 @@ draw_emit_indirect(struct fd_ringbuffer *ring,
 static void
 draw_emit(struct fd_ringbuffer *ring, struct CP_DRAW_INDX_OFFSET_0 *draw0,
           const struct pipe_draw_info *info,
-          const struct pipe_draw_start_count *draw, unsigned index_offset)
+          const struct pipe_draw_start_count_bias *draw, unsigned index_offset)
 {
    if (info->index_size) {
       assert(!info->has_user_indices);
@@ -132,8 +132,9 @@ fixup_draw_state(struct fd_context *ctx, struct fd6_emit *emit) assert_dt
 
 static bool
 fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
+             unsigned drawid_offset,
              const struct pipe_draw_indirect_info *indirect,
-             const struct pipe_draw_start_count *draw,
+             const struct pipe_draw_start_count_bias *draw,
              unsigned index_offset) assert_dt
 {
    struct fd6_context *fd6_ctx = fd6_context(ctx);
@@ -142,6 +143,7 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
       .ctx = ctx,
       .vtx = &ctx->vtx,
       .info = info,
+		.drawid_offset = drawid_offset,
       .indirect = indirect,
       .draw = draw,
       .key = {
@@ -302,7 +304,7 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
       }
    }
 
-   uint32_t index_start = info->index_size ? info->index_bias : draw->start;
+	uint32_t index_start = info->index_size ? draw->index_bias : draw->start;
    if (ctx->last.dirty || (ctx->last.index_start != index_start)) {
       OUT_PKT4(ring, REG_A6XX_VFD_INDEX_OFFSET, 1);
       OUT_RING(ring, index_start); /* VFD_INDEX_OFFSET */
@@ -378,8 +380,7 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 
    OUT_WFI5(ring);
 
-   OUT_REG(ring,
-           A6XX_RB_CCU_CNTL(.offset = screen->info.a6xx.ccu_offset_bypass));
+   OUT_REG(ring, A6XX_RB_CCU_CNTL(.color_offset = screen->ccu_offset_bypass));
 
    OUT_REG(ring,
            A6XX_HLSQ_INVALIDATE_CMD(.vs_state = true, .hs_state = true,
@@ -456,7 +457,7 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
    OUT_WFI5(ring);
 
    OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
-   OUT_RING(ring, screen->info.a6xx.magic.RB_UNKNOWN_8E04_blit);
+   OUT_RING(ring, screen->info->a6xx.magic.RB_UNKNOWN_8E04_blit);
 
    OUT_PKT7(ring, CP_BLIT, 1);
    OUT_RING(ring, CP_BLIT_0_OP(BLIT_OP_SCALE));

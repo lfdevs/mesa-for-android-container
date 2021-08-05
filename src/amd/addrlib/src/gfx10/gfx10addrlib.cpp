@@ -254,7 +254,7 @@ ADDR_E_RETURNCODE Gfx10Lib::HwlComputeHtileInfo(
         }
 
         // Get the HTILE address equation (copied from HtileAddrFromCoord).
-        // Note that HTILE doesn't depend on the number of samples.
+        // HTILE addressing depends on the number of samples, but this code doesn't support it yet.
         const UINT_32 index = m_xmaskBaseIndex;
         const UINT_8* patIdxTable = m_settings.supportRbPlus ? GFX10_HTILE_RBPLUS_PATIDX : GFX10_HTILE_PATIDX;
 
@@ -1045,6 +1045,12 @@ ChipFamily Gfx10Lib::HwlConvertChipFamily(
                 m_settings.supportRbPlus   = 1;
                 m_settings.dccUnsup3DSwDis = 0;
             }
+
+            if (ASICREV_IS_BEIGE_GOBY(chipRevision))
+            {
+                m_settings.supportRbPlus   = 1;
+                m_settings.dccUnsup3DSwDis = 0;
+            }
             break;
 
         case FAMILY_VGH:
@@ -1057,6 +1063,20 @@ ChipFamily Gfx10Lib::HwlConvertChipFamily(
             {
                 ADDR_ASSERT(!"Unknown chip revision");
             }
+
+            break;
+
+        case FAMILY_YC:
+            if (ASICREV_IS_YELLOW_CARP(chipRevision))
+            {
+                m_settings.supportRbPlus   = 1;
+                m_settings.dccUnsup3DSwDis = 0;
+            }
+            else
+            {
+                ADDR_ASSERT(!"Unknown chip revision");
+            }
+
             break;
 
         default:
@@ -1480,7 +1500,7 @@ VOID Gfx10Lib::ConvertSwizzlePatternToEquation(
         const UINT_32 blkXMask = dim.w - 1;
         const UINT_32 blkYMask = dim.h - 1;
 
-        ADDR_BIT_SETTING swizzle[ADDR_MAX_EQUATION_BIT];
+        ADDR_BIT_SETTING swizzle[ADDR_MAX_EQUATION_BIT] = {};
         UINT_32          xMask = 0;
         UINT_32          yMask = 0;
         UINT_32          bMask = (1 << elemLog2) - 1;
@@ -1683,7 +1703,7 @@ VOID Gfx10Lib::ConvertSwizzlePatternToEquation(
         const UINT_32 blkYMask = (1 << blkYLog2) - 1;
         const UINT_32 blkZMask = (1 << blkZLog2) - 1;
 
-        ADDR_BIT_SETTING swizzle[ADDR_MAX_EQUATION_BIT];
+        ADDR_BIT_SETTING swizzle[ADDR_MAX_EQUATION_BIT] = {};
         UINT_32          xMask = 0;
         UINT_32          yMask = 0;
         UINT_32          zMask = 0;
@@ -3186,7 +3206,10 @@ ADDR_E_RETURNCODE Gfx10Lib::HwlGetPreferredSurfaceSetting(
                             // Select the biggest allowed block type
                             minSizeBlk = Log2NonPow2(allowedBlockSet.value) + 1;
 
-                            minSizeBlk = (minSizeBlk == AddrBlockMaxTiledType) ? AddrBlockLinear : minSizeBlk;
+                            if (minSizeBlk == static_cast<UINT_32>(AddrBlockMaxTiledType))
+                            {
+                                minSizeBlk = AddrBlockLinear;
+                            }
                         }
 
                         switch (minSizeBlk)

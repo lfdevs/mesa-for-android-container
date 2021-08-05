@@ -32,7 +32,7 @@
 #include "brw_cfg.h"
 #include "brw_fs.h"
 #include "brw_nir.h"
-#include "dev/gen_debug.h"
+#include "dev/intel_debug.h"
 
 namespace brw {
 
@@ -588,7 +588,6 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
                const struct brw_gs_prog_key *key,
                struct brw_gs_prog_data *prog_data,
                nir_shader *nir,
-               struct gl_program *prog,
                int shader_time_index,
                struct brw_compile_stats *stats,
                char **error_str)
@@ -932,7 +931,7 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
                                     nir, mem_ctx, false /* no_spills */,
                                     shader_time_index, debug_enabled);
    else
-      gs = new brw::gfx6_gs_visitor(compiler, log_data, &c, prog_data, prog,
+      gs = new brw::gfx6_gs_visitor(compiler, log_data, &c, prog_data,
                                     nir, mem_ctx, false /* no_spills */,
                                     shader_time_index, debug_enabled);
 

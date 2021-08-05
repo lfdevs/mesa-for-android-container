@@ -81,7 +81,7 @@ convert_to_soa(struct gallivm_state *gallivm,
 void
 lp_build_format_swizzle_soa(const struct util_format_description *format_desc,
                             struct lp_build_context *bld,
-                            const LLVMValueRef *unswizzled,
+                            const LLVMValueRef unswizzled[4],
                             LLVMValueRef swizzled_out[4])
 {
    if (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS) {

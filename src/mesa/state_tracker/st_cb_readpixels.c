@@ -59,7 +59,7 @@
  *     blits (because the smaller blits cannot be batched, and we have to wait
  *     for the GPU after each one).
  *
- * (2) transfer_map implicitly involves a blit as well (for de-tiling, copy
+ * (2) texture_map implicitly involves a blit as well (for de-tiling, copy
  *     from VRAM, etc.), so that it is beneficial to replace the
  *     _mesa_readpixels path as well when possible.
  *
@@ -533,7 +533,7 @@ st_ReadPixels(struct gl_context *ctx, GLint x, GLint y,
    /* map resources */
    pixels = _mesa_map_pbo_dest(ctx, pack, pixels);
 
-   map = pipe_transfer_map_3d(pipe, dst, 0, PIPE_MAP_READ,
+   map = pipe_texture_map_3d(pipe, dst, 0, PIPE_MAP_READ,
                               dst_x, dst_y, 0, width, height, 1, &tex_xfer);
    if (!map) {
       _mesa_unmap_pbo_dest(ctx, pack);
@@ -562,7 +562,7 @@ st_ReadPixels(struct gl_context *ctx, GLint x, GLint y,
       }
    }
 
-   pipe_transfer_unmap(pipe, tex_xfer);
+   pipe_texture_unmap(pipe, tex_xfer);
    _mesa_unmap_pbo_dest(ctx, pack);
    pipe_resource_reference(&dst, NULL);
    return;

@@ -212,7 +212,6 @@ clone_register(clone_state *state, const nir_register *reg)
    nreg->bit_size = reg->bit_size;
    nreg->num_array_elems = reg->num_array_elems;
    nreg->index = reg->index;
-   nreg->name = ralloc_strdup(nreg, reg->name);
 
    /* reconstructing uses/defs/if_uses handled by nir_instr_insert() */
    list_inithead(&nreg->uses);
@@ -258,7 +257,7 @@ __clone_dst(clone_state *state, nir_instr *ninstr,
    ndst->is_ssa = dst->is_ssa;
    if (dst->is_ssa) {
       nir_ssa_dest_init(ninstr, ndst, dst->ssa.num_components,
-                        dst->ssa.bit_size, dst->ssa.name);
+                        dst->ssa.bit_size, NULL);
       if (likely(state->remap_table))
          add_remap(state, &ndst->ssa, &dst->ssa);
    } else {

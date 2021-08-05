@@ -168,35 +168,17 @@ int MESA_DEBUG_FLAGS = 0;
 GLfloat _mesa_ubyte_to_float_color_tab[256];
 
 
-
-/**
- * Swap buffers notification callback.
- *
- * \param ctx GL context.
- *
- * Called by window system just before swapping buffers.
- * We have to finish any pending rendering.
- */
-void
-_mesa_notifySwapBuffers(struct gl_context *ctx)
-{
-   if (MESA_VERBOSE & VERBOSE_SWAPBUFFERS)
-      _mesa_debug(ctx, "SwapBuffers\n");
-   FLUSH_VERTICES(ctx, 0, 0);
-   if (ctx->Driver.Flush) {
-      ctx->Driver.Flush(ctx);
-   }
-}
-
-
 /**********************************************************************/
-/** \name GL Visual allocation/destruction                            */
+/** \name GL Visual initialization                                    */
 /**********************************************************************/
 /*@{*/
 
+
 /**
- * Allocates a struct gl_config structure and initializes it via
- * _mesa_initialize_visual().
+ * Makes some sanity checks and fills in the fields of the struct
+ * gl_config object with the given parameters.  If the caller needs to
+ * set additional fields, he should just probably init the whole
+ * gl_config object himself.
  *
  * \param dbFlag double buffering
  * \param stereoFlag stereo buffer
@@ -211,49 +193,12 @@ _mesa_notifySwapBuffers(struct gl_context *ctx)
  * \param greenBits same as above.
  * \param blueBits same as above.
  * \param alphaBits same as above.
- * \param numSamples not really used.
+ * \param numSamples number of samples per pixel.
  *
  * \return pointer to new struct gl_config or NULL if requested parameters
  * can't be met.
  *
- * \note Need to add params for level and numAuxBuffers (at least)
- */
-struct gl_config *
-_mesa_create_visual( GLboolean dbFlag,
-                     GLboolean stereoFlag,
-                     GLint redBits,
-                     GLint greenBits,
-                     GLint blueBits,
-                     GLint alphaBits,
-                     GLint depthBits,
-                     GLint stencilBits,
-                     GLint accumRedBits,
-                     GLint accumGreenBits,
-                     GLint accumBlueBits,
-                     GLint accumAlphaBits,
-                     GLuint numSamples )
-{
-   struct gl_config *vis = CALLOC_STRUCT(gl_config);
-   if (vis) {
-      _mesa_initialize_visual(vis, dbFlag, stereoFlag,
-                              redBits, greenBits, blueBits, alphaBits,
-                              depthBits, stencilBits,
-                              accumRedBits, accumGreenBits, accumBlueBits,
-                              accumAlphaBits, numSamples);
-   }
-   return vis;
-}
-
-
-/**
- * Makes some sanity checks and fills in the fields of the struct
- * gl_config object with the given parameters.  If the caller needs to
- * set additional fields, he should just probably init the whole
- * gl_config object himself.
- *
  * \return GL_TRUE on success, or GL_FALSE on failure.
- *
- * \sa _mesa_create_visual() above for the parameter description.
  */
 void
 _mesa_initialize_visual( struct gl_config *vis,
@@ -293,19 +238,6 @@ _mesa_initialize_visual( struct gl_config *vis,
    vis->samples = numSamples;
 }
 
-
-/**
- * Destroy a visual and free its memory.
- *
- * \param vis visual.
- *
- * Frees the visual structure.
- */
-void
-_mesa_destroy_visual( struct gl_config *vis )
-{
-   free(vis);
-}
 
 /*@}*/
 
@@ -1273,7 +1205,6 @@ _mesa_initialize_context(struct gl_context *ctx,
    }
 
    ctx->FirstTimeCurrent = GL_TRUE;
-   ctx->_PrimitiveIDIsUnused = true;
 
    return GL_TRUE;
 
@@ -1681,7 +1612,9 @@ _mesa_make_current( struct gl_context *newCtx,
        curCtx != newCtx &&
        curCtx->Const.ContextReleaseBehavior ==
        GL_CONTEXT_RELEASE_BEHAVIOR_FLUSH) {
-      _mesa_flush(curCtx);
+      FLUSH_VERTICES(curCtx, 0, 0);
+      if (curCtx->Driver.Flush)
+         curCtx->Driver.Flush(curCtx, 0);
    }
 
    /* Call this periodically to detect when the user has begun using
@@ -1838,7 +1771,9 @@ _mesa_flush(struct gl_context *ctx)
 {
    FLUSH_VERTICES(ctx, 0, 0);
    if (ctx->Driver.Flush) {
-      ctx->Driver.Flush(ctx);
+      bool async = !ctx->Shared->HasExternallySharedImages;
+
+      ctx->Driver.Flush(ctx, async ? PIPE_FLUSH_ASYNC : 0);
    }
 }
 

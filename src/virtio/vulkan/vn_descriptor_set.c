@@ -192,8 +192,8 @@ vn_DestroyDescriptorPool(VkDevice device,
    vn_async_vkDestroyDescriptorPool(dev->instance, device, descriptorPool,
                                     NULL);
 
-   list_for_each_entry_safe (struct vn_descriptor_set, set,
-                             &pool->descriptor_sets, head) {
+   list_for_each_entry_safe(struct vn_descriptor_set, set,
+                            &pool->descriptor_sets, head) {
       list_del(&set->head);
 
       vn_object_base_fini(&set->base);
@@ -217,8 +217,8 @@ vn_ResetDescriptorPool(VkDevice device,
    vn_async_vkResetDescriptorPool(dev->instance, device, descriptorPool,
                                   flags);
 
-   list_for_each_entry_safe (struct vn_descriptor_set, set,
-                             &pool->descriptor_sets, head) {
+   list_for_each_entry_safe(struct vn_descriptor_set, set,
+                            &pool->descriptor_sets, head) {
       list_del(&set->head);
 
       vn_object_base_fini(&set->base);

@@ -34,7 +34,7 @@
 #include "isl/isl.h"
 #include "dri_util.h"
 #include "brw_bufmgr.h"
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 #include "drm-uapi/i915_drm.h"
 #include "util/xmlconfig.h"
 
@@ -47,7 +47,7 @@ extern "C" {
 struct brw_screen
 {
    int deviceID;
-   struct gen_device_info devinfo;
+   struct intel_device_info devinfo;
 
    __DRIscreen *driScrnPriv;
 

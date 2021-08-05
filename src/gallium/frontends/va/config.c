@@ -56,7 +56,8 @@ vlVaQueryConfigProfiles(VADriverContextP ctx, VAProfile *profile_list, int *num_
       if (u_reduce_video_profile(p) == PIPE_VIDEO_FORMAT_MPEG4 && !debug_get_option_mpeg4())
          continue;
 
-      if (pscreen->get_video_param(pscreen, p, PIPE_VIDEO_ENTRYPOINT_BITSTREAM, PIPE_VIDEO_CAP_SUPPORTED)) {
+      if (pscreen->get_video_param(pscreen, p, PIPE_VIDEO_ENTRYPOINT_BITSTREAM, PIPE_VIDEO_CAP_SUPPORTED) ||
+          pscreen->get_video_param(pscreen, p, PIPE_VIDEO_ENTRYPOINT_ENCODE, PIPE_VIDEO_CAP_SUPPORTED)) {
          vap = PipeToProfile(p);
          if (vap != VAProfileNone)
             profile_list[(*num_profiles)++] = vap;
@@ -149,10 +150,10 @@ vlVaGetConfigAttributes(VADriverContextP ctx, VAProfile profile, VAEntrypoint en
             value = VA_RT_FORMAT_YUV420;
             if (pscreen->is_video_format_supported(pscreen, PIPE_FORMAT_P010,
                                                    ProfileToPipe(profile),
-                                                   PIPE_VIDEO_ENTRYPOINT_BITSTREAM) ||
+                                                   PIPE_VIDEO_ENTRYPOINT_ENCODE) ||
                 pscreen->is_video_format_supported(pscreen, PIPE_FORMAT_P016,
                                                    ProfileToPipe(profile),
-                                                   PIPE_VIDEO_ENTRYPOINT_BITSTREAM))
+                                                   PIPE_VIDEO_ENTRYPOINT_ENCODE))
                value |= VA_RT_FORMAT_YUV420_10BPP;
             break;
          case VAConfigAttribRateControl:

@@ -2348,7 +2348,7 @@ do_common_optimization(exec_list *ir, bool linked,
       OPT(do_dead_functions, ir);
       OPT(do_structure_splitting, ir);
    }
-   propagate_invariance(ir);
+   OPT(propagate_invariance, ir);
    OPT(do_if_simplification, ir);
    OPT(opt_flatten_nested_if_blocks, ir);
    OPT(opt_conditional_discard, ir);
@@ -2429,6 +2429,16 @@ do_common_optimization(exec_list *ir, bool linked,
       }
       delete ls;
    }
+
+   /* If the PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY cap is set, this pass will
+    * only be called once rather than repeatedly until no further progress is
+    * made.
+    *
+    * If an optimization pass fails to preserve the invariant flag, calling
+    * the pass only once may result in incorrect code generation. Always call
+    * propagate_invariance() last to avoid this possibility.
+    */
+   OPT(propagate_invariance, ir);
 
 #undef OPT
 

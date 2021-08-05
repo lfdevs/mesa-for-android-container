@@ -38,7 +38,7 @@
 #include "brw_state.h"
 #include "brw_buffer_objects.h"
 #include "brw_fbo.h"
-#include "dev/gen_debug.h"
+#include "dev/intel_debug.h"
 
 #define FILE_DEBUG_FLAG DEBUG_BLORP
 
@@ -70,7 +70,7 @@ brw_blorp_upload_shader(struct blorp_batch *batch, uint32_t stage,
 void
 brw_blorp_init(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    blorp_init(&brw->blorp, brw, &brw->isl_dev);
 
@@ -124,7 +124,7 @@ blorp_surf_for_miptree(struct brw_context *brw,
                        unsigned *level,
                        unsigned start_layer, unsigned num_layers)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (mt->surf.msaa_layout == ISL_MSAA_LAYOUT_ARRAY) {
       const unsigned num_samples = mt->surf.samples;
@@ -284,7 +284,7 @@ brw_blorp_blit_miptrees(struct brw_context *brw,
                         GLenum gl_filter, bool mirror_x, bool mirror_y,
                         bool decode_srgb, bool encode_srgb)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    DBG("%s from %dx %s mt %p %d %d (%f,%f) (%f,%f) "
        "to %dx %s mt %p %d %d (%f,%f) (%f,%f) (flip %d,%d)\n",
@@ -601,7 +601,7 @@ try_blorp_blit(struct brw_context *brw,
                GLfloat dstX0, GLfloat dstY0, GLfloat dstX1, GLfloat dstY1,
                GLenum filter, GLbitfield buffer_bit)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
 
    /* Sync up the state of window system buffers.  We need to do this before
@@ -1564,7 +1564,7 @@ brw_hiz_exec(struct brw_context *brw, struct brw_mipmap_tree *mt,
 {
    assert(brw_miptree_level_has_hiz(mt, level));
    assert(op != ISL_AUX_OP_NONE);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const char *opname = NULL;
 
    switch (op) {

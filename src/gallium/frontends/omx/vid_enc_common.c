@@ -147,7 +147,7 @@ void vid_enc_BufferEncoded_common(vid_enc_PrivateType * priv, OMX_BUFFERHEADERTY
    /* ------------- map result buffer ----------------- */
 
    if (outp->transfer)
-      pipe_transfer_unmap(priv->t_pipe, outp->transfer);
+      pipe_buffer_unmap(priv->t_pipe, outp->transfer);
 
    pipe_resource_reference(&outp->bitstream, task->bitstream);
    pipe_resource_reference(&task->bitstream, NULL);
@@ -156,7 +156,7 @@ void vid_enc_BufferEncoded_common(vid_enc_PrivateType * priv, OMX_BUFFERHEADERTY
    box.height = outp->bitstream->height0;
    box.depth = outp->bitstream->depth0;
 
-   output->pBuffer = priv->t_pipe->transfer_map(priv->t_pipe, outp->bitstream, 0,
+   output->pBuffer = priv->t_pipe->buffer_map(priv->t_pipe, outp->bitstream, 0,
                                                 PIPE_MAP_READ_WRITE,
                                                 &box, &outp->transfer);
 
@@ -425,7 +425,7 @@ OMX_ERRORTYPE enc_LoadImage_common(vid_enc_PrivateType * priv, OMX_VIDEO_PORTDEF
    } else {
       struct vl_video_buffer *dst_buf = (struct vl_video_buffer *)vbuf;
 
-      pipe_transfer_unmap(pipe, inp->transfer);
+      pipe_texture_unmap(pipe, inp->transfer);
 
       /* inp->resource uses PIPE_FORMAT_I8 and the layout looks like this:
        *
@@ -545,7 +545,7 @@ OMX_ERRORTYPE enc_LoadImage_common(vid_enc_PrivateType * priv, OMX_VIDEO_PORTDEF
       box.width = inp->resource->width0;
       box.height = inp->resource->height0;
       box.depth = inp->resource->depth0;
-      buf->pBuffer = pipe->transfer_map(pipe, inp->resource, 0,
+      buf->pBuffer = pipe->texture_map(pipe, inp->resource, 0,
                                         PIPE_MAP_WRITE, &box,
                                         &inp->transfer);
    }

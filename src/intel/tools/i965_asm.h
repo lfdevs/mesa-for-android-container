@@ -34,7 +34,7 @@
 #include "compiler/brw_eu_defines.h"
 #include "compiler/brw_inst.h"
 #include "compiler/brw_eu.h"
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 #include "util/list.h"
 
 /* glibc < 2.27 defines OVERFLOW in /usr/include/math.h. */

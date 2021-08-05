@@ -1,7 +1,7 @@
 .freedreno-test:
   extends:
     - .baremetal-test
-    - .use-arm_test
+    - .use-debian/arm_test
     - .freedreno-rules
   variables:
     MINIO_ARTIFACT_NAME: mesa-arm64
@@ -12,8 +12,8 @@
   script:
     - ./install/bare-metal/fastboot.sh
   needs:
-    - arm_test
-    - job: meson-arm64
+    - debian/arm_test
+    - job: debian-arm64
       artifacts: false
   tags:
     - google-freedreno-db410c
@@ -24,13 +24,14 @@
   variables:
     DEQP_VER: vk
     VK_DRIVER: freedreno
+    MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
 
 .freedreno-test-traces:
   extends:
     - .piglit-traces-test
   variables:
-    BARE_METAL_TEST_SCRIPT: "/install/piglit/run.sh"
-    BM_START_XORG: 1
+    HWCI_TEST_SCRIPT: "/install/piglit/run.sh"
+    HWCI_START_XORG: 1
     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-freedreno.yml"
   artifacts:
     reports:
@@ -119,24 +120,24 @@ a530_gles31:
     - .piglit-test
     - .a530-test
   variables:
-    BARE_METAL_TEST_SCRIPT: "/install/piglit/piglit-runner.sh"
-    BM_START_XORG: 1
+    HWCI_TEST_SCRIPT: "/install/piglit/piglit-runner.sh"
+    HWCI_START_XORG: 1
 
-# Run 1/2 of piglit_gl since it takes a bit under 20 minutes
+# piglit_gl since it takes a bit under 20 minutes and has a lot of flakes, so
+# leave it as manual.
 a530_piglit_gl:
   extends:
     - .a530_piglit
+    - .test-manual-mr
   variables:
     PIGLIT_PROFILES: quick_gl
-    PIGLIT_FRACTION: 2
 
-# Run 1/2 of piglit_shader since it takes a bit under 20 minutes
 a530_piglit_shader:
   extends:
     - .a530_piglit
+  parallel: 2
   variables:
     PIGLIT_PROFILES: quick_shader
-    PIGLIT_FRACTION: 2
 
 a530-traces:
   extends:
@@ -150,6 +151,7 @@ a530-traces:
   extends:
     - .freedreno-test
   variables:
+    DEQP_PARALLEL: 10
     BM_KERNEL: /baremetal-files/cheza-kernel
     BM_CMDLINE: "ip=dhcp console=ttyMSM0,115200n8 root=/dev/nfs rw nfsrootdebug nfsroot=,tcp,nfsvers=4.2 init=/init"
     GPU_VERSION: freedreno-a630
@@ -187,12 +189,21 @@ a630_gl:
   variables:
     DEQP_VER: gl33
 
+a630_egl:
+  extends:
+    - .baremetal-deqp-test
+    - .a630-test
+  variables:
+    DEQP_VER: egl
+    HWCI_START_XORG: 1
+    HWCI_TEST_SCRIPT: "/install/bare-metal/arm64_a630_egl.sh"
+
 a630_gles_others:
   extends:
     - .baremetal-deqp-test
     - .a630-test
   variables:
-    BARE_METAL_TEST_SCRIPT: "/install/bare-metal/arm64_a630_gles_others.sh"
+    HWCI_TEST_SCRIPT: "/install/bare-metal/arm64_a630_gles_others.sh"
 
 a630_gles_asan:
   extends:
@@ -248,25 +259,14 @@ a630_vk_sysmem:
     GPU_VERSION: freedreno-a630-bypass
     TU_DEBUG: sysmem
 
-.a630_piglit:
+a630_piglit:
   extends:
     - .piglit-test
     - .a630-test
   variables:
-    BARE_METAL_TEST_SCRIPT: "/install/piglit/piglit-runner.sh"
-    BM_START_XORG: 1
-
-a630_piglit_gl:
-  extends:
-    - .a630_piglit
-  variables:
-    PIGLIT_PROFILES: quick_gl
-
-a630_piglit_shader:
-  extends:
-    - .a630_piglit
-  variables:
-    PIGLIT_PROFILES: quick_shader
+    HWCI_TEST_SCRIPT: "/install/piglit/piglit-runner.sh"
+    HWCI_START_XORG: 1
+    PIGLIT_PROFILES: gpu
 
 a630-traces:
   extends:

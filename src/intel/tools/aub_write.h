@@ -32,7 +32,7 @@
 
 #include "drm-uapi/i915_drm.h"
 
-#include "dev/gen_device_info.h"
+#include "dev/intel_device_info.h"
 #include "common/intel_gem.h"
 
 #ifdef __cplusplus
@@ -86,7 +86,7 @@ struct aub_file {
    FILE *verbose_log_file;
 
    uint16_t pci_id;
-   struct gen_device_info devinfo;
+   struct intel_device_info devinfo;
 
    int addr_bits;
 
@@ -115,7 +115,7 @@ static inline bool aub_use_execlists(const struct aub_file *aub)
 uint32_t aub_gtt_size(struct aub_file *aub);
 
 static inline void
-aub_write_reloc(const struct gen_device_info *devinfo, void *p, uint64_t v)
+aub_write_reloc(const struct intel_device_info *devinfo, void *p, uint64_t v)
 {
    if (devinfo->ver >= 8) {
       *(uint64_t *)p = intel_canonical_address(v);

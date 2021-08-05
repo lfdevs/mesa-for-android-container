@@ -15,58 +15,21 @@
 #include "venus-protocol/vn_protocol_driver_sampler.h"
 #include "venus-protocol/vn_protocol_driver_sampler_ycbcr_conversion.h"
 
+#include "vn_android.h"
 #include "vn_device.h"
 #include "vn_device_memory.h"
 
-/* image commands */
-
-VkResult
-vn_CreateImage(VkDevice device,
-               const VkImageCreateInfo *pCreateInfo,
-               const VkAllocationCallbacks *pAllocator,
-               VkImage *pImage)
+static void
+vn_image_init_memory_requirements(struct vn_image *img,
+                                  struct vn_device *dev,
+                                  const VkImageCreateInfo *create_info)
 {
-   struct vn_device *dev = vn_device_from_handle(device);
-   const VkAllocationCallbacks *alloc =
-      pAllocator ? pAllocator : &dev->base.base.alloc;
-
-   /* TODO wsi_create_native_image uses modifiers or set wsi_info->scanout to
-    * true.  Instead of forcing VK_IMAGE_TILING_LINEAR, we should ask wsi to
-    * use wsi_create_prime_image instead.
-    */
-   const struct wsi_image_create_info *wsi_info =
-      vk_find_struct_const(pCreateInfo->pNext, WSI_IMAGE_CREATE_INFO_MESA);
-   VkImageCreateInfo local_create_info;
-   if (wsi_info && wsi_info->scanout) {
-      if (VN_DEBUG(WSI))
-         vn_log(dev->instance, "forcing scanout image linear");
-      local_create_info = *pCreateInfo;
-      local_create_info.tiling = VK_IMAGE_TILING_LINEAR;
-      pCreateInfo = &local_create_info;
-   }
-
-   struct vn_image *img = vk_zalloc(alloc, sizeof(*img), VN_DEFAULT_ALIGN,
-                                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-   if (!img)
-      return vn_error(dev->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   vn_object_base_init(&img->base, VK_OBJECT_TYPE_IMAGE, &dev->base);
-
-   VkImage img_handle = vn_image_to_handle(img);
-   /* TODO async */
-   VkResult result = vn_call_vkCreateImage(dev->instance, device, pCreateInfo,
-                                           NULL, &img_handle);
-   if (result != VK_SUCCESS) {
-      vk_free(alloc, img);
-      return vn_error(dev->instance, result);
-   }
-
    uint32_t plane_count = 1;
-   if (pCreateInfo->flags & VK_IMAGE_CREATE_DISJOINT_BIT) {
+   if (create_info->flags & VK_IMAGE_CREATE_DISJOINT_BIT) {
       /* TODO VkDrmFormatModifierPropertiesEXT::drmFormatModifierPlaneCount */
-      assert(pCreateInfo->tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT);
+      assert(create_info->tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT);
 
-      switch (pCreateInfo->format) {
+      switch (create_info->format) {
       case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
       case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
       case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
@@ -108,18 +71,26 @@ vn_CreateImage(VkDevice device,
       img->dedicated_requirements[i].pNext = NULL;
    }
 
+   VkDevice dev_handle = vn_device_to_handle(dev);
+   VkImage img_handle = vn_image_to_handle(img);
    if (plane_count == 1) {
       vn_call_vkGetImageMemoryRequirements2(
-         dev->instance, device,
+         dev->instance, dev_handle,
          &(VkImageMemoryRequirementsInfo2){
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2,
             .image = img_handle,
          },
          &img->memory_requirements[0]);
+
+      /* AHB backed image requires dedicated allocation */
+      if (img->deferred_info) {
+         img->dedicated_requirements[0].prefersDedicatedAllocation = VK_TRUE;
+         img->dedicated_requirements[0].requiresDedicatedAllocation = VK_TRUE;
+      }
    } else {
       for (uint32_t i = 0; i < plane_count; i++) {
          vn_call_vkGetImageMemoryRequirements2(
-            dev->instance, device,
+            dev->instance, dev_handle,
             &(VkImageMemoryRequirementsInfo2){
                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2,
                .pNext =
@@ -133,9 +104,178 @@ vn_CreateImage(VkDevice device,
             &img->memory_requirements[i]);
       }
    }
+}
 
-   *pImage = img_handle;
+static VkResult
+vn_image_store_deferred_create_info(
+   const VkImageCreateInfo *create_info,
+   const VkAllocationCallbacks *alloc,
+   struct vn_image_create_deferred_info **out_info)
+{
+   struct vn_image_create_deferred_info *info = NULL;
+   VkBaseOutStructure *dst = NULL;
 
+   info = vk_zalloc(alloc, sizeof(*info), VN_DEFAULT_ALIGN,
+                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!info)
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+   info->create = *create_info;
+   dst = (void *)&info->create;
+
+   vk_foreach_struct_const(src, create_info->pNext) {
+      void *pnext = NULL;
+      switch (src->sType) {
+      case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO:
+         memcpy(&info->list, src, sizeof(info->list));
+         pnext = &info->list;
+         break;
+      case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO:
+         memcpy(&info->stencil, src, sizeof(info->stencil));
+         pnext = &info->stencil;
+         break;
+      default:
+         break;
+      }
+
+      if (pnext) {
+         dst->pNext = pnext;
+         dst = pnext;
+      }
+   }
+   dst->pNext = NULL;
+
+   *out_info = info;
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+vn_image_init(struct vn_device *dev,
+              const VkImageCreateInfo *create_info,
+              struct vn_image *img)
+{
+   VkDevice device = vn_device_to_handle(dev);
+   VkImage image = vn_image_to_handle(img);
+   VkResult result = VK_SUCCESS;
+
+   img->sharing_mode = create_info->sharingMode;
+
+   /* TODO async */
+   result =
+      vn_call_vkCreateImage(dev->instance, device, create_info, NULL, &image);
+   if (result != VK_SUCCESS)
+      return result;
+
+   vn_image_init_memory_requirements(img, dev, create_info);
+
+   return VK_SUCCESS;
+}
+
+VkResult
+vn_image_create(struct vn_device *dev,
+                const VkImageCreateInfo *create_info,
+                const VkAllocationCallbacks *alloc,
+                struct vn_image **out_img)
+{
+   struct vn_image *img = NULL;
+   VkResult result = VK_SUCCESS;
+
+   img = vk_zalloc(alloc, sizeof(*img), VN_DEFAULT_ALIGN,
+                   VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!img)
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+   vn_object_base_init(&img->base, VK_OBJECT_TYPE_IMAGE, &dev->base);
+
+   result = vn_image_init(dev, create_info, img);
+   if (result != VK_SUCCESS) {
+      vk_free(alloc, img);
+      return result;
+   }
+
+   *out_img = img;
+
+   return VK_SUCCESS;
+}
+
+VkResult
+vn_image_init_deferred(struct vn_device *dev,
+                       const VkImageCreateInfo *create_info,
+                       struct vn_image *img)
+{
+   return vn_image_init(dev, create_info, img);
+}
+
+VkResult
+vn_image_create_deferred(struct vn_device *dev,
+                         const VkImageCreateInfo *create_info,
+                         const VkAllocationCallbacks *alloc,
+                         struct vn_image **out_img)
+{
+   struct vn_image *img = NULL;
+   VkResult result = VK_SUCCESS;
+
+   img = vk_zalloc(alloc, sizeof(*img), VN_DEFAULT_ALIGN,
+                   VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!img)
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+   vn_object_base_init(&img->base, VK_OBJECT_TYPE_IMAGE, &dev->base);
+
+   result = vn_image_store_deferred_create_info(create_info, alloc,
+                                                &img->deferred_info);
+   if (result != VK_SUCCESS) {
+      vk_free(alloc, img);
+      return result;
+   }
+
+   *out_img = img;
+
+   return VK_SUCCESS;
+}
+
+/* image commands */
+
+VkResult
+vn_CreateImage(VkDevice device,
+               const VkImageCreateInfo *pCreateInfo,
+               const VkAllocationCallbacks *pAllocator,
+               VkImage *pImage)
+{
+   struct vn_device *dev = vn_device_from_handle(device);
+   const VkAllocationCallbacks *alloc =
+      pAllocator ? pAllocator : &dev->base.base.alloc;
+   struct vn_image *img;
+   VkResult result;
+
+   const struct wsi_image_create_info *wsi_info =
+      vn_wsi_find_wsi_image_create_info(pCreateInfo);
+   const VkNativeBufferANDROID *anb_info =
+      vn_android_find_native_buffer(pCreateInfo);
+   const VkExternalMemoryImageCreateInfo *external_info =
+      vk_find_struct_const(pCreateInfo->pNext,
+                           EXTERNAL_MEMORY_IMAGE_CREATE_INFO);
+   const bool ahb_info =
+      external_info &&
+      external_info->handleTypes ==
+         VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
+
+   if (wsi_info) {
+      result = vn_wsi_create_image(dev, pCreateInfo, wsi_info, alloc, &img);
+   } else if (anb_info) {
+      result =
+         vn_android_image_from_anb(dev, pCreateInfo, anb_info, alloc, &img);
+   } else if (ahb_info) {
+      result = vn_android_image_from_ahb(dev, pCreateInfo, alloc, &img);
+   } else {
+      result = vn_image_create(dev, pCreateInfo, alloc, &img);
+   }
+
+   if (result != VK_SUCCESS)
+      return vn_error(dev->instance, result);
+
+   *pImage = vn_image_to_handle(img);
    return VK_SUCCESS;
 }
 
@@ -152,7 +292,13 @@ vn_DestroyImage(VkDevice device,
    if (!img)
       return;
 
+   if (img->private_memory != VK_NULL_HANDLE)
+      vn_FreeMemory(device, img->private_memory, pAllocator);
+
    vn_async_vkDestroyImage(dev->instance, device, image, NULL);
+
+   if (img->deferred_info)
+      vk_free(alloc, img->deferred_info);
 
    vn_object_base_fini(&img->base);
    vk_free(alloc, img);
@@ -353,6 +499,7 @@ vn_CreateImageView(VkDevice device,
       return vn_error(dev->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    vn_object_base_init(&view->base, VK_OBJECT_TYPE_IMAGE_VIEW, &dev->base);
+   view->image = vn_image_from_handle(pCreateInfo->image);
 
    VkImageView view_handle = vn_image_view_to_handle(view);
    vn_async_vkCreateImageView(dev->instance, device, pCreateInfo, NULL,
@@ -442,6 +589,24 @@ vn_CreateSamplerYcbcrConversion(
    struct vn_device *dev = vn_device_from_handle(device);
    const VkAllocationCallbacks *alloc =
       pAllocator ? pAllocator : &dev->base.base.alloc;
+   const VkExternalFormatANDROID *ext_info =
+      vk_find_struct_const(pCreateInfo->pNext, EXTERNAL_FORMAT_ANDROID);
+
+   VkSamplerYcbcrConversionCreateInfo local_info;
+   if (ext_info && ext_info->externalFormat) {
+      assert(pCreateInfo->format == VK_FORMAT_UNDEFINED);
+
+      local_info = *pCreateInfo;
+      local_info.format =
+         vn_android_drm_format_to_vk_format(ext_info->externalFormat);
+      local_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+      local_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+      local_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+      local_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+      pCreateInfo = &local_info;
+
+      assert(pCreateInfo->format != VK_FORMAT_UNDEFINED);
+   }
 
    struct vn_sampler_ycbcr_conversion *conv =
       vk_zalloc(alloc, sizeof(*conv), VN_DEFAULT_ALIGN,

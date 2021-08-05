@@ -31,6 +31,9 @@ struct pan_pool;
 struct pan_indirect_draw_info {
         mali_ptr draw_buf;
         mali_ptr index_buf;
+        mali_ptr first_vertex_sysval;
+        mali_ptr base_vertex_sysval;
+        mali_ptr base_instance_sysval;
         mali_ptr vertex_job;
         mali_ptr tiler_job;
         mali_ptr attrib_bufs;
@@ -50,7 +53,8 @@ panfrost_emit_indirect_draw(struct pan_pool *pool,
                             struct panfrost_ptr *ctx);
 
 void
-panfrost_init_indirect_draw_shaders(struct panfrost_device *dev);
+panfrost_init_indirect_draw_shaders(struct panfrost_device *dev,
+                                    struct pan_pool *bin_pool);
 
 void
 panfrost_cleanup_indirect_draw_shaders(struct panfrost_device *dev);

@@ -226,11 +226,7 @@ static LLVMValueRef si_scale_alpha_by_sample_mask(struct si_shader_context *ctx,
 
    /* alpha = alpha * popcount(coverage) / SI_NUM_SMOOTH_AA_SAMPLES */
    coverage = LLVMGetParam(ctx->main_fn, samplemask_param);
-   coverage = ac_to_integer(&ctx->ac, coverage);
-
-   coverage = ac_build_intrinsic(&ctx->ac, "llvm.ctpop.i32", ctx->ac.i32, &coverage, 1,
-                                 AC_FUNC_ATTR_READNONE);
-
+   coverage = ac_build_bit_count(&ctx->ac, ac_to_integer(&ctx->ac, coverage));
    coverage = LLVMBuildUIToFP(ctx->ac.builder, coverage, ctx->ac.f32, "");
 
    coverage = LLVMBuildFMul(ctx->ac.builder, coverage,

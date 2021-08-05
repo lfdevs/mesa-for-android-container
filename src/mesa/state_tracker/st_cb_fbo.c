@@ -906,7 +906,7 @@ st_MapRenderbuffer(struct gl_context *ctx,
    else
       y2 = y;
 
-    map = pipe_transfer_map(pipe,
+    map = pipe_texture_map(pipe,
                             strb->texture,
                             strb->surface->u.tex.level,
                             strb->surface->u.tex.first_layer,
@@ -944,7 +944,7 @@ st_UnmapRenderbuffer(struct gl_context *ctx,
       return;
    }
 
-   pipe_transfer_unmap(pipe, strb->transfer);
+   pipe_texture_unmap(pipe, strb->transfer);
    strb->transfer = NULL;
 }
 

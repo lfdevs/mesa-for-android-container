@@ -32,7 +32,7 @@ extern "C" {
 
 struct cfg_t;
 struct backend_instruction;
-struct gen_device_info;
+struct intel_device_info;
 
 struct inst_group {
    struct exec_node link;
@@ -56,7 +56,7 @@ struct inst_group {
 struct disasm_info {
    struct exec_list group_list;
 
-   const struct gen_device_info *devinfo;
+   const struct intel_device_info *devinfo;
    const struct cfg_t *cfg;
 
    /** Block index in the cfg. */
@@ -69,7 +69,7 @@ dump_assembly(void *assembly, int start_offset, int end_offset,
               struct disasm_info *disasm, const unsigned *block_latency);
 
 struct disasm_info *
-disasm_initialize(const struct gen_device_info *devinfo,
+disasm_initialize(const struct intel_device_info *devinfo,
                   const struct cfg_t *cfg);
 
 struct inst_group *

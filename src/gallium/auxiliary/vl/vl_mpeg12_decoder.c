@@ -628,7 +628,7 @@ vl_mpeg12_begin_frame(struct pipe_video_codec *decoder,
    rect.height = tex->height0;
 
    buf->texels =
-      dec->context->transfer_map(dec->context, tex, 0,
+      dec->context->texture_map(dec->context, tex, 0,
                                  PIPE_MAP_WRITE |
                                  PIPE_MAP_DISCARD_RANGE,
                                  &rect, &buf->tex_transfer);
@@ -770,7 +770,7 @@ vl_mpeg12_end_frame(struct pipe_video_codec *decoder,
    vl_vb_unmap(&buf->vertex_stream, dec->context);
 
    if (buf->tex_transfer)
-      dec->context->transfer_unmap(dec->context, buf->tex_transfer);
+      dec->context->texture_unmap(dec->context, buf->tex_transfer);
 
    vb[0] = dec->quads;
    vb[1] = dec->pos;

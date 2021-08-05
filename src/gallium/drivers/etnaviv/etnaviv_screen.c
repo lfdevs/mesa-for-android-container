@@ -558,8 +558,8 @@ etna_screen_is_format_supported(struct pipe_screen *pscreen,
 
    if (usage & PIPE_BIND_INDEX_BUFFER) {
       /* must be supported index format */
-      if (format == PIPE_FORMAT_I8_UINT || format == PIPE_FORMAT_I16_UINT ||
-          (format == PIPE_FORMAT_I32_UINT &&
+      if (format == PIPE_FORMAT_R8_UINT || format == PIPE_FORMAT_R16_UINT ||
+          (format == PIPE_FORMAT_R32_UINT &&
            VIV_FEATURE(screen, chipFeatures, 32_BIT_INDICES))) {
          allowed |= PIPE_BIND_INDEX_BUFFER;
       }
@@ -1067,6 +1067,8 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
       .lower_fmod = true,
       .lower_vector_cmp = true,
       .lower_fdph = true,
+      .lower_insert_byte = true,
+      .lower_insert_word = true,
       .lower_fdiv = true, /* !screen->specs.has_new_transcendentals */
       .lower_fsign = !screen->specs.has_sign_floor_ceil,
       .lower_ffloor = !screen->specs.has_sign_floor_ceil,

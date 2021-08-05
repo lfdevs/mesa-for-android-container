@@ -76,7 +76,7 @@ isl_is_storage_image_format(enum isl_format format)
 }
 
 enum isl_format
-isl_lower_storage_image_format(const struct gen_device_info *devinfo,
+isl_lower_storage_image_format(const struct intel_device_info *devinfo,
                                enum isl_format format)
 {
    switch (format) {
@@ -108,7 +108,7 @@ isl_lower_storage_image_format(const struct gen_device_info *devinfo,
    case ISL_FORMAT_R32G32_SINT:
    case ISL_FORMAT_R32G32_FLOAT:
       return (devinfo->ver >= 9 ? format :
-              devinfo->ver >= 8 || devinfo->is_haswell ?
+              devinfo->verx10 >= 75 ?
               ISL_FORMAT_R16G16B16A16_UINT :
               ISL_FORMAT_R32G32_UINT);
 
@@ -125,20 +125,20 @@ isl_lower_storage_image_format(const struct gen_device_info *devinfo,
    case ISL_FORMAT_R8G8B8A8_UINT:
    case ISL_FORMAT_R8G8B8A8_SINT:
       return (devinfo->ver >= 9 ? format :
-              devinfo->ver >= 8 || devinfo->is_haswell ?
+              devinfo->verx10 >= 75 ?
               ISL_FORMAT_R8G8B8A8_UINT : ISL_FORMAT_R32_UINT);
 
    case ISL_FORMAT_R16G16_UINT:
    case ISL_FORMAT_R16G16_SINT:
    case ISL_FORMAT_R16G16_FLOAT:
       return (devinfo->ver >= 9 ? format :
-              devinfo->ver >= 8 || devinfo->is_haswell ?
+              devinfo->verx10 >= 75 ?
               ISL_FORMAT_R16G16_UINT : ISL_FORMAT_R32_UINT);
 
    case ISL_FORMAT_R8G8_UINT:
    case ISL_FORMAT_R8G8_SINT:
       return (devinfo->ver >= 9 ? format :
-              devinfo->ver >= 8 || devinfo->is_haswell ?
+              devinfo->verx10 >= 75 ?
               ISL_FORMAT_R8G8_UINT : ISL_FORMAT_R16_UINT);
 
    case ISL_FORMAT_R16_UINT:
@@ -162,26 +162,26 @@ isl_lower_storage_image_format(const struct gen_device_info *devinfo,
    case ISL_FORMAT_R16G16B16A16_UNORM:
    case ISL_FORMAT_R16G16B16A16_SNORM:
       return (devinfo->ver >= 11 ? format :
-              devinfo->ver >= 8 || devinfo->is_haswell ?
+              devinfo->verx10 >= 75 ?
               ISL_FORMAT_R16G16B16A16_UINT :
               ISL_FORMAT_R32G32_UINT);
 
    case ISL_FORMAT_R8G8B8A8_UNORM:
    case ISL_FORMAT_R8G8B8A8_SNORM:
       return (devinfo->ver >= 11 ? format :
-              devinfo->ver >= 8 || devinfo->is_haswell ?
+              devinfo->verx10 >= 75 ?
               ISL_FORMAT_R8G8B8A8_UINT : ISL_FORMAT_R32_UINT);
 
    case ISL_FORMAT_R16G16_UNORM:
    case ISL_FORMAT_R16G16_SNORM:
       return (devinfo->ver >= 11 ? format :
-              devinfo->ver >= 8 || devinfo->is_haswell ?
+              devinfo->verx10 >= 75 ?
               ISL_FORMAT_R16G16_UINT : ISL_FORMAT_R32_UINT);
 
    case ISL_FORMAT_R8G8_UNORM:
    case ISL_FORMAT_R8G8_SNORM:
       return (devinfo->ver >= 11 ? format :
-              devinfo->ver >= 8 || devinfo->is_haswell ?
+              devinfo->verx10 >= 75 ?
               ISL_FORMAT_R8G8_UINT : ISL_FORMAT_R16_UINT);
 
    case ISL_FORMAT_R16_UNORM:
@@ -199,12 +199,12 @@ isl_lower_storage_image_format(const struct gen_device_info *devinfo,
 }
 
 bool
-isl_has_matching_typed_storage_image_format(const struct gen_device_info *devinfo,
+isl_has_matching_typed_storage_image_format(const struct intel_device_info *devinfo,
                                             enum isl_format fmt)
 {
    if (devinfo->ver >= 9) {
       return true;
-   } else if (devinfo->ver >= 8 || devinfo->is_haswell) {
+   } else if (devinfo->verx10 >= 75) {
       return isl_format_get_layout(fmt)->bpb <= 64;
    } else {
       return isl_format_get_layout(fmt)->bpb <= 32;
@@ -240,12 +240,16 @@ isl_surf_fill_image_param(const struct isl_device *dev,
                     view->array_len :
                     isl_minify(surf->logical_level0_px.d, view->base_level);
 
+   uint32_t tile_z_el, phys_array_layer;
    isl_surf_get_image_offset_el(surf, view->base_level,
                                 surf->dim == ISL_SURF_DIM_3D ?
                                    0 : view->base_array_layer,
                                 surf->dim == ISL_SURF_DIM_3D ?
                                    view->base_array_layer : 0,
-                                &param->offset[0],  &param->offset[1]);
+                                &param->offset[0],  &param->offset[1],
+                                &tile_z_el, &phys_array_layer);
+   assert(tile_z_el == 0);
+   assert(phys_array_layer == 0);
 
    const int cpp = isl_format_get_layout(surf->format)->bpb / 8;
    param->stride[0] = cpp;

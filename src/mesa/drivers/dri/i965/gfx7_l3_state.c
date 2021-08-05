@@ -70,7 +70,7 @@ get_pipeline_state_l3_weights(const struct brw_context *brw)
 static void
 setup_l3_config(struct brw_context *brw, const struct intel_l3_config *cfg)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const bool has_dc = cfg->n[INTEL_L3P_DC] || cfg->n[INTEL_L3P_ALL];
    const bool has_is = cfg->n[INTEL_L3P_IS] || cfg->n[INTEL_L3P_RO] ||
                        cfg->n[INTEL_L3P_ALL];
@@ -194,7 +194,7 @@ setup_l3_config(struct brw_context *brw, const struct intel_l3_config *cfg)
 static void
 update_urb_size(struct brw_context *brw, const struct intel_l3_config *cfg)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const unsigned sz = intel_get_l3_config_urb_size(devinfo, cfg);
 
    if (brw->urb.size != sz) {
@@ -300,7 +300,7 @@ const struct brw_tracked_state gfx7_l3_state = {
 void
 gfx7_restore_default_l3_config(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const struct intel_l3_config *const cfg = intel_get_default_l3_config(devinfo);
 
    if (cfg != brw->l3.config &&

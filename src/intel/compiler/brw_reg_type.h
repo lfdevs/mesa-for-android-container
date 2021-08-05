@@ -37,7 +37,7 @@ extern "C" {
 #endif
 
 enum brw_reg_file;
-struct gen_device_info;
+struct intel_device_info;
 
 /*
  * The ordering has been chosen so that no enum value is the same as a
@@ -45,24 +45,24 @@ struct gen_device_info;
  */
 enum PACKED brw_reg_type {
    /** Floating-point types: @{ */
-   BRW_REGISTER_TYPE_NF,
-   BRW_REGISTER_TYPE_DF,
-   BRW_REGISTER_TYPE_F,
-   BRW_REGISTER_TYPE_HF,
-   BRW_REGISTER_TYPE_VF,
+   BRW_REGISTER_TYPE_NF, /* >64-bit (accumulator-only) native float (gfx11+) */
+   BRW_REGISTER_TYPE_DF, /* 64-bit float (double float) */
+   BRW_REGISTER_TYPE_F,  /* 32-bit float */
+   BRW_REGISTER_TYPE_HF, /* 16-bit float (half float) */
+   BRW_REGISTER_TYPE_VF, /* 32-bit vector of 4 8-bit floats */
    /** @} */
 
    /** Integer types: @{ */
-   BRW_REGISTER_TYPE_Q,
-   BRW_REGISTER_TYPE_UQ,
-   BRW_REGISTER_TYPE_D,
-   BRW_REGISTER_TYPE_UD,
-   BRW_REGISTER_TYPE_W,
-   BRW_REGISTER_TYPE_UW,
-   BRW_REGISTER_TYPE_B,
-   BRW_REGISTER_TYPE_UB,
-   BRW_REGISTER_TYPE_V,
-   BRW_REGISTER_TYPE_UV,
+   BRW_REGISTER_TYPE_Q,  /* 64-bit   signed integer (quad word) */
+   BRW_REGISTER_TYPE_UQ, /* 64-bit unsigned integer (quad word) */
+   BRW_REGISTER_TYPE_D,  /* 32-bit   signed integer (double word) */
+   BRW_REGISTER_TYPE_UD, /* 32-bit unsigned integer (double word) */
+   BRW_REGISTER_TYPE_W,  /* 16-bit   signed integer (word) */
+   BRW_REGISTER_TYPE_UW, /* 16-bit unsigned integer (word) */
+   BRW_REGISTER_TYPE_B,  /*  8-bit   signed integer (byte) */
+   BRW_REGISTER_TYPE_UB, /*  8-bit unsigned integer (byte) */
+   BRW_REGISTER_TYPE_V,  /* vector of 8   signed 4-bit integers (treated as W) */
+   BRW_REGISTER_TYPE_UV, /* vector of 8 unsigned 4-bit integers (treated as UW) */
    /** @} */
 
    BRW_REGISTER_TYPE_LAST = BRW_REGISTER_TYPE_UV
@@ -164,27 +164,27 @@ brw_reg_type_from_bit_size(unsigned bit_size,
 #define INVALID_HW_REG_TYPE ((unsigned)-1)
 
 unsigned
-brw_reg_type_to_hw_type(const struct gen_device_info *devinfo,
+brw_reg_type_to_hw_type(const struct intel_device_info *devinfo,
                         enum brw_reg_file file, enum brw_reg_type type);
 
 enum brw_reg_type ATTRIBUTE_PURE
-brw_hw_type_to_reg_type(const struct gen_device_info *devinfo,
+brw_hw_type_to_reg_type(const struct intel_device_info *devinfo,
                         enum brw_reg_file file, unsigned hw_type);
 
 unsigned
-brw_reg_type_to_a16_hw_3src_type(const struct gen_device_info *devinfo,
+brw_reg_type_to_a16_hw_3src_type(const struct intel_device_info *devinfo,
                                  enum brw_reg_type type);
 
 unsigned
-brw_reg_type_to_a1_hw_3src_type(const struct gen_device_info *devinfo,
+brw_reg_type_to_a1_hw_3src_type(const struct intel_device_info *devinfo,
                                 enum brw_reg_type type);
 
 enum brw_reg_type
-brw_a16_hw_3src_type_to_reg_type(const struct gen_device_info *devinfo,
+brw_a16_hw_3src_type_to_reg_type(const struct intel_device_info *devinfo,
                                  unsigned hw_type);
 
 enum brw_reg_type
-brw_a1_hw_3src_type_to_reg_type(const struct gen_device_info *devinfo,
+brw_a1_hw_3src_type_to_reg_type(const struct intel_device_info *devinfo,
                                 unsigned hw_type, unsigned exec_type);
 
 unsigned

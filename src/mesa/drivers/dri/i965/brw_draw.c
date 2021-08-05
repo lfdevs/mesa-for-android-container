@@ -166,7 +166,7 @@ brw_emit_prim(struct brw_context *brw,
               bool is_indirect,
               GLsizeiptr indirect_offset)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    int verts_per_instance;
    int vertex_access_type;
    int indirect_flag;
@@ -333,10 +333,10 @@ static uint8_t get_wa_flags(const struct gl_vertex_format *glformat)
 static void
 brw_merge_inputs(struct brw_context *brw)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const struct gl_context *ctx = &brw->ctx;
 
-   if (devinfo->ver < 8 && !devinfo->is_haswell) {
+   if (devinfo->verx10 <= 70) {
       /* Prior to Haswell, the hardware can't natively support GL_FIXED or
        * 2_10_10_10_REV vertex formats.  Set appropriate workaround flags.
        */
@@ -929,7 +929,7 @@ gfx9_emit_preempt_wa(struct brw_context *brw,
                      const struct _mesa_prim *prim, GLuint num_instances)
 {
    bool object_preemption = true;
-   ASSERTED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   ASSERTED const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    /* Only apply these workarounds for gfx9 */
    assert(devinfo->ver == 9);
@@ -991,7 +991,7 @@ brw_draw_single_prim(struct gl_context *ctx,
                      GLsizeiptr indirect_offset)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    bool fail_next;
    bool is_indirect = brw->draw.draw_indirect_data != NULL;
 

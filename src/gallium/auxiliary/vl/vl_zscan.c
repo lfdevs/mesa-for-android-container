@@ -409,7 +409,7 @@ vl_zscan_layout(struct pipe_context *pipe, const int layout[64], unsigned blocks
    if (!res)
       goto error_resource;
 
-   f = pipe->transfer_map(pipe, res,
+   f = pipe->texture_map(pipe, res,
                           0, PIPE_MAP_WRITE | PIPE_MAP_DISCARD_RANGE,
                           &rect, &buf_transfer);
    if (!f)
@@ -428,7 +428,7 @@ vl_zscan_layout(struct pipe_context *pipe, const int layout[64], unsigned blocks
             f[i * VL_BLOCK_WIDTH + y * pitch + x] = addr;
          }
 
-   pipe->transfer_unmap(pipe, buf_transfer);
+   pipe->texture_unmap(pipe, buf_transfer);
 
    memset(&sv_tmpl, 0, sizeof(sv_tmpl));
    u_sampler_view_default_template(&sv_tmpl, res, res->format);
@@ -579,7 +579,7 @@ vl_zscan_upload_quant(struct vl_zscan *zscan, struct vl_zscan_buffer *buffer,
 
    rect.width *= zscan->blocks_per_line;
 
-   data = pipe->transfer_map(pipe, buffer->quant->texture,
+   data = pipe->texture_map(pipe, buffer->quant->texture,
                              0, PIPE_MAP_WRITE |
                              PIPE_MAP_DISCARD_RANGE,
                              &rect, &buf_transfer);
@@ -593,7 +593,7 @@ vl_zscan_upload_quant(struct vl_zscan *zscan, struct vl_zscan_buffer *buffer,
          for (x = 0; x < VL_BLOCK_WIDTH; ++x)
             data[i * VL_BLOCK_WIDTH + y * pitch + x] = matrix[x + y * VL_BLOCK_WIDTH];
 
-   pipe->transfer_unmap(pipe, buf_transfer);
+   pipe->texture_unmap(pipe, buf_transfer);
 }
 
 void

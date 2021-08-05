@@ -1220,7 +1220,12 @@ anv_queue_submit_add_cmd_buffer(struct anv_queue_submit *submit,
    }
 
    submit->cmd_buffers[submit->cmd_buffer_count++] = cmd_buffer;
-   submit->perf_query_pool = cmd_buffer->perf_query_pool;
+   /* Only update the perf_query_pool if there is one. We can decide to batch
+    * 2 command buffers if the second one doesn't use a query pool, but we
+    * can't drop the already chosen one.
+    */
+   if (cmd_buffer->perf_query_pool)
+      submit->perf_query_pool = cmd_buffer->perf_query_pool;
    submit->perf_query_pass = perf_pass;
 
    return VK_SUCCESS;

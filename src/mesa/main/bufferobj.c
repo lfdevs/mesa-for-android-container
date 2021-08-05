@@ -180,12 +180,12 @@ get_buffer_target(struct gl_context *ctx, GLenum target)
       }
       break;
    case GL_SHADER_STORAGE_BUFFER:
-      if (ctx->Extensions.ARB_shader_storage_buffer_object) {
+      if (ctx->Extensions.ARB_shader_storage_buffer_object || _mesa_is_gles31(ctx)) {
          return &ctx->ShaderStorageBuffer;
       }
       break;
    case GL_ATOMIC_COUNTER_BUFFER:
-      if (ctx->Extensions.ARB_shader_atomic_counters) {
+      if (ctx->Extensions.ARB_shader_atomic_counters || _mesa_is_gles31(ctx)) {
          return &ctx->AtomicBuffer;
       }
       break;

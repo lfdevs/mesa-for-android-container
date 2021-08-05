@@ -113,3 +113,34 @@ __vk_errorf(struct anv_instance *instance,
 
    return error;
 }
+
+void
+anv_dump_pipe_bits(enum anv_pipe_bits bits)
+{
+   if (bits & ANV_PIPE_DEPTH_CACHE_FLUSH_BIT)
+      fputs("+depth_flush ", stderr);
+   if (bits & ANV_PIPE_DATA_CACHE_FLUSH_BIT)
+      fputs("+dc_flush ", stderr);
+   if (bits & ANV_PIPE_HDC_PIPELINE_FLUSH_BIT)
+      fputs("+hdc_flush ", stderr);
+   if (bits & ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT)
+      fputs("+rt_flush ", stderr);
+   if (bits & ANV_PIPE_TILE_CACHE_FLUSH_BIT)
+      fputs("+tile_flush ", stderr);
+   if (bits & ANV_PIPE_STATE_CACHE_INVALIDATE_BIT)
+      fputs("+state_inval ", stderr);
+   if (bits & ANV_PIPE_CONSTANT_CACHE_INVALIDATE_BIT)
+      fputs("+const_inval ", stderr);
+   if (bits & ANV_PIPE_VF_CACHE_INVALIDATE_BIT)
+      fputs("+vf_inval ", stderr);
+   if (bits & ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT)
+      fputs("+tex_inval ", stderr);
+   if (bits & ANV_PIPE_INSTRUCTION_CACHE_INVALIDATE_BIT)
+      fputs("+ic_inval ", stderr);
+   if (bits & ANV_PIPE_STALL_AT_SCOREBOARD_BIT)
+      fputs("+pb_stall ", stderr);
+   if (bits & ANV_PIPE_DEPTH_STALL_BIT)
+      fputs("+depth_stall ", stderr);
+   if (bits & ANV_PIPE_CS_STALL_BIT)
+      fputs("+cs_stall ", stderr);
+}

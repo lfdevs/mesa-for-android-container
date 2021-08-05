@@ -59,6 +59,8 @@ static const nir_shader_compiler_options vs_nir_options = {
    .lower_rotate = true,
    .lower_sincos = true,
    .lower_fceil = true,
+   .lower_insert_byte = true,
+   .lower_insert_word = true,
 };
 
 static const nir_shader_compiler_options fs_nir_options = {
@@ -74,6 +76,8 @@ static const nir_shader_compiler_options fs_nir_options = {
    .lower_rotate = true,
    .lower_fdot = true,
    .lower_fdph = true,
+   .lower_insert_byte = true,
+   .lower_insert_word = true,
    .lower_bitops = true,
    .lower_vector_cmp = true,
 };
@@ -116,7 +120,7 @@ lima_program_optimize_vs_nir(struct nir_shader *s)
 
       NIR_PASS_V(s, nir_lower_vars_to_ssa);
       NIR_PASS(progress, s, nir_lower_alu_to_scalar, NULL, NULL);
-      NIR_PASS(progress, s, nir_lower_phis_to_scalar);
+      NIR_PASS(progress, s, nir_lower_phis_to_scalar, false);
       NIR_PASS(progress, s, nir_copy_prop);
       NIR_PASS(progress, s, nir_opt_remove_phis);
       NIR_PASS(progress, s, nir_opt_dce);

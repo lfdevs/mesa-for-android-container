@@ -219,6 +219,39 @@ brw_buffer_data(struct gl_context *ctx,
    return true;
 }
 
+static GLboolean
+brw_buffer_data_mem(struct gl_context *ctx,
+                    GLenum target,
+                    GLsizeiptrARB size,
+                    struct gl_memory_object *memObj,
+                    GLuint64 offset,
+                    GLenum usage,
+                    struct gl_buffer_object *bufObj)
+{
+   struct brw_buffer_object *intel_obj = brw_buffer_object(bufObj);
+   struct brw_memory_object *intel_memObj = brw_memory_object(memObj);
+
+   /* Part of the ABI, but this function doesn't use it.
+    */
+   (void) target;
+
+   intel_obj->Base.Size = size;
+   intel_obj->Base.Usage = usage;
+   intel_obj->Base.StorageFlags = 0;
+
+   assert(!bufObj->Mappings[MAP_USER].Pointer); /* Mesa should have unmapped it */
+   assert(!bufObj->Mappings[MAP_INTERNAL].Pointer);
+
+   if (intel_obj->buffer != NULL)
+      release_buffer(intel_obj);
+
+   if (size != 0) {
+      intel_obj->buffer = intel_memObj->bo;
+      mark_buffer_valid_data(intel_obj, 0, size);
+   }
+
+   return true;
+}
 
 /**
  * The BufferSubData() driver hook.
@@ -667,6 +700,7 @@ brw_init_buffer_object_functions(struct dd_function_table *functions)
    functions->NewBufferObject = brw_new_buffer_object;
    functions->DeleteBuffer = brw_delete_buffer;
    functions->BufferData = brw_buffer_data;
+   functions->BufferDataMem = brw_buffer_data_mem;
    functions->BufferSubData = brw_buffer_subdata;
    functions->GetBufferSubData = brw_get_buffer_subdata;
    functions->MapBufferRange = brw_map_buffer_range;

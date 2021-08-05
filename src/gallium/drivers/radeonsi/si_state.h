@@ -65,6 +65,7 @@ struct si_state_blend {
    bool alpha_to_one : 1;
    bool dual_src_blend : 1;
    bool logicop_enable : 1;
+   bool allows_noop_optimization : 1;
 };
 
 struct si_state_rasterizer {
@@ -290,7 +291,7 @@ enum si_tracked_reg
    SI_TRACKED_PA_CL_CLIP_CNTL,
 
    SI_TRACKED_PA_SC_BINNER_CNTL_0,
-   SI_TRACKED_DB_DFSM_CONTROL,
+
    SI_TRACKED_DB_VRS_OVERRIDE_CNTL,
 
    SI_TRACKED_PA_CL_GB_VERT_CLIP_ADJ, /* 4 consecutive registers */
@@ -490,7 +491,8 @@ struct si_buffer_resources {
 void si_set_mutable_tex_desc_fields(struct si_screen *sscreen, struct si_texture *tex,
                                     const struct legacy_surf_level *base_level_info,
                                     unsigned base_level, unsigned first_level, unsigned block_width,
-                                    bool is_stencil, uint16_t access, uint32_t *state);
+                                    /* restrict decreases overhead of si_set_sampler_view_desc ~8x. */
+                                    bool is_stencil, uint16_t access, uint32_t * restrict state);
 void si_update_ps_colorbuf0_slot(struct si_context *sctx);
 void si_get_pipe_constant_buffer(struct si_context *sctx, uint shader, uint slot,
                                  struct pipe_constant_buffer *cbuf);
@@ -587,9 +589,12 @@ unsigned si_get_input_prim(const struct si_shader_selector *gs);
 bool si_update_ngg(struct si_context *sctx);
 
 /* si_state_draw.c */
-void si_prim_discard_signal_next_compute_ib_start(struct si_context *sctx);
-void si_trace_emit(struct si_context *sctx);
-void si_init_draw_functions(struct si_context *sctx);
+void si_init_draw_functions_GFX6(struct si_context *sctx);
+void si_init_draw_functions_GFX7(struct si_context *sctx);
+void si_init_draw_functions_GFX8(struct si_context *sctx);
+void si_init_draw_functions_GFX9(struct si_context *sctx);
+void si_init_draw_functions_GFX10(struct si_context *sctx);
+void si_init_draw_functions_GFX10_3(struct si_context *sctx);
 
 /* si_state_msaa.c */
 void si_init_msaa_functions(struct si_context *sctx);

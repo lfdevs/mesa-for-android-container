@@ -23,7 +23,7 @@
 
 #include "util/format/u_format.h"
 #include "v3d_context.h"
-#include "v3d_tiling.h"
+#include "broadcom/common/v3d_tiling.h"
 #include "broadcom/common/v3d_macros.h"
 #include "broadcom/cle/v3dx_pack.h"
 
@@ -79,11 +79,11 @@ load_general(struct v3d_cl *cl, struct pipe_surface *psurf, int buffer,
                         load.input_image_format = surf->format;
                 load.r_b_swap = surf->swap_rb;
                 load.force_alpha_1 = util_format_has_alpha1(psurf->format);
-                if (surf->tiling == VC5_TILING_UIF_NO_XOR ||
-                    surf->tiling == VC5_TILING_UIF_XOR) {
+                if (surf->tiling == V3D_TILING_UIF_NO_XOR ||
+                    surf->tiling == V3D_TILING_UIF_XOR) {
                         load.height_in_ub_or_stride =
                                 surf->padded_height_of_output_image_in_uif_blocks;
-                } else if (surf->tiling == VC5_TILING_RASTER) {
+                } else if (surf->tiling == V3D_TILING_RASTER) {
                         struct v3d_resource_slice *slice =
                                 &rsc->slices[psurf->u.tex.level];
                         load.height_in_ub_or_stride = slice->stride;
@@ -149,11 +149,11 @@ store_general(struct v3d_job *job,
                 store.r_b_swap = surf->swap_rb;
                 store.memory_format = surf->tiling;
 
-                if (surf->tiling == VC5_TILING_UIF_NO_XOR ||
-                    surf->tiling == VC5_TILING_UIF_XOR) {
+                if (surf->tiling == V3D_TILING_UIF_NO_XOR ||
+                    surf->tiling == V3D_TILING_UIF_XOR) {
                         store.height_in_ub_or_stride =
                                 surf->padded_height_of_output_image_in_uif_blocks;
-                } else if (surf->tiling == VC5_TILING_RASTER) {
+                } else if (surf->tiling == V3D_TILING_RASTER) {
                         struct v3d_resource_slice *slice =
                                 &rsc->slices[psurf->u.tex.level];
                         store.height_in_ub_or_stride = slice->stride;
@@ -518,7 +518,7 @@ v3d_emit_z_stencil_config(struct v3d_job *job, struct v3d_surface *surf,
                 zs.padded_height_of_output_image_in_uif_blocks =
                         surf->padded_height_of_output_image_in_uif_blocks;
 
-                assert(surf->tiling != VC5_TILING_RASTER);
+                assert(surf->tiling != V3D_TILING_RASTER);
                 zs.memory_format = surf->tiling;
         }
 
@@ -531,6 +531,35 @@ v3d_emit_z_stencil_config(struct v3d_job *job, struct v3d_surface *surf,
 #endif /* V3D_VERSION < 40 */
 
 #define div_round_up(a, b) (((a) + (b) - 1) / b)
+
+static bool
+supertile_in_job_scissors(struct v3d_job *job,
+                          uint32_t x, uint32_t y, uint32_t w, uint32_t h)
+{
+   if (job->scissor.disabled || job->scissor.count == 0)
+      return true;
+
+   const uint32_t min_x = x * w;
+   const uint32_t min_y = y * h;
+   const uint32_t max_x = min_x + w - 1;
+   const uint32_t max_y = min_y + h - 1;
+
+   for (uint32_t i = 0; i < job->scissor.count; i++) {
+           const uint32_t min_s_x = job->scissor.rects[i].min_x;
+           const uint32_t min_s_y = job->scissor.rects[i].min_y;
+           const uint32_t max_s_x = job->scissor.rects[i].max_x;
+           const uint32_t max_s_y = job->scissor.rects[i].max_y;
+
+           if (max_x < min_s_x || min_x > max_s_x ||
+               max_y < min_s_y || min_y > max_s_y) {
+                   continue;
+           }
+
+           return true;
+   }
+
+   return false;
+}
 
 static void
 emit_render_layer(struct v3d_job *job, uint32_t layer)
@@ -641,9 +670,13 @@ emit_render_layer(struct v3d_job *job, uint32_t layer)
 
         for (int y = min_y_supertile; y <= max_y_supertile; y++) {
                 for (int x = min_x_supertile; x <= max_x_supertile; x++) {
-                        cl_emit(&job->rcl, SUPERTILE_COORDINATES, coords) {
-                                coords.column_number_in_supertiles = x;
-                                coords.row_number_in_supertiles = y;
+                        if (supertile_in_job_scissors(job, x, y,
+                                                      supertile_w_in_pixels,
+                                                      supertile_h_in_pixels)) {
+                                cl_emit(&job->rcl, SUPERTILE_COORDINATES, coords) {
+                                      coords.column_number_in_supertiles = x;
+                                      coords.row_number_in_supertiles = y;
+                                }
                         }
                 }
         }
@@ -679,18 +712,18 @@ v3dX(emit_rcl)(struct v3d_job *job)
                 /* XXX: Early D/S clear */
 
                 switch (job->first_ez_state) {
-                case VC5_EZ_UNDECIDED:
-                case VC5_EZ_LT_LE:
+                case V3D_EZ_UNDECIDED:
+                case V3D_EZ_LT_LE:
                         config.early_z_disable = false;
                         config.early_z_test_and_update_direction =
                                 EARLY_Z_DIRECTION_LT_LE;
                         break;
-                case VC5_EZ_GT_GE:
+                case V3D_EZ_GT_GE:
                         config.early_z_disable = false;
                         config.early_z_test_and_update_direction =
                                 EARLY_Z_DIRECTION_GT_GE;
                         break;
-                case VC5_EZ_DISABLED:
+                case V3D_EZ_DISABLED:
                         config.early_z_disable = true;
                 }
 
@@ -715,8 +748,8 @@ v3dX(emit_rcl)(struct v3d_job *job)
                 uint32_t clear_pad = 0;
 
                 /* XXX: Set the pad for raster. */
-                if (surf->tiling == VC5_TILING_UIF_NO_XOR ||
-                    surf->tiling == VC5_TILING_UIF_XOR) {
+                if (surf->tiling == V3D_TILING_UIF_NO_XOR ||
+                    surf->tiling == V3D_TILING_UIF_XOR) {
                         int uif_block_height = v3d_utile_height(rsc->cpp) * 2;
                         uint32_t implicit_padded_height = (align(job->draw_height, uif_block_height) /
                                                            uif_block_height);

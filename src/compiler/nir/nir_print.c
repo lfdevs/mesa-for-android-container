@@ -82,8 +82,6 @@ static void
 print_register(nir_register *reg, print_state *state)
 {
    FILE *fp = state->fp;
-   if (reg->name != NULL)
-      fprintf(fp, "/* %s */ ", reg->name);
    fprintf(fp, "r%u", reg->index);
 }
 
@@ -107,8 +105,6 @@ static void
 print_ssa_def(nir_ssa_def *def, print_state *state)
 {
    FILE *fp = state->fp;
-   if (def->name != NULL)
-      fprintf(fp, "/* %s */ ", def->name);
    fprintf(fp, "%s %u ssa_%u", sizes[def->num_components], def->bit_size,
            def->index);
 }
@@ -117,8 +113,6 @@ static void
 print_ssa_use(nir_ssa_def *def, print_state *state)
 {
    FILE *fp = state->fp;
-   if (def->name != NULL)
-      fprintf(fp, "/* %s */ ", def->name);
    fprintf(fp, "ssa_%u", def->index);
 }
 
@@ -1605,12 +1599,12 @@ nir_print_shader_annotated(nir_shader *shader, FILE *fp,
    if (shader->info.label)
       fprintf(fp, "label: %s\n", shader->info.label);
 
-   if (gl_shader_stage_is_compute(shader->info.stage)) {
-      fprintf(fp, "local-size: %u, %u, %u%s\n",
-              shader->info.cs.local_size[0],
-              shader->info.cs.local_size[1],
-              shader->info.cs.local_size[2],
-              shader->info.cs.local_size_variable ? " (variable)" : "");
+   if (gl_shader_stage_uses_workgroup(shader->info.stage)) {
+      fprintf(fp, "workgroup-size: %u, %u, %u%s\n",
+              shader->info.workgroup_size[0],
+              shader->info.workgroup_size[1],
+              shader->info.workgroup_size[2],
+              shader->info.workgroup_size_variable ? " (variable)" : "");
       fprintf(fp, "shared-size: %u\n", shader->info.shared_size);
    }
 
@@ -1653,14 +1647,14 @@ nir_print_shader(nir_shader *shader, FILE *fp)
 }
 
 char *
-nir_shader_as_str(nir_shader *nir, void *mem_ctx)
+nir_shader_as_str_annotated(nir_shader *nir, struct hash_table *annotations, void *mem_ctx)
 {
    char *stream_data = NULL;
    size_t stream_size = 0;
    struct u_memstream mem;
    if (u_memstream_open(&mem, &stream_data, &stream_size)) {
       FILE *const stream = u_memstream_get(&mem);
-      nir_print_shader(nir, stream);
+      nir_print_shader_annotated(nir, stream, annotations);
       u_memstream_close(&mem);
    }
 
@@ -1671,6 +1665,12 @@ nir_shader_as_str(nir_shader *nir, void *mem_ctx)
    free(stream_data);
 
    return str;
+}
+
+char *
+nir_shader_as_str(nir_shader *nir, void *mem_ctx)
+{
+   return nir_shader_as_str_annotated(nir, NULL, mem_ctx);
 }
 
 void
@@ -1695,4 +1695,12 @@ nir_print_deref(const nir_deref_instr *deref, FILE *fp)
       .fp = fp,
    };
    print_deref_link(deref, true, &state);
+}
+
+void nir_log_shader_annotated_tagged(enum mesa_log_level level, const char *tag,
+                                     nir_shader *shader, struct hash_table *annotations)
+{
+   char *str = nir_shader_as_str_annotated(shader, annotations, NULL);
+   _mesa_log_multiline(level, tag, str);
+   ralloc_free(str);
 }

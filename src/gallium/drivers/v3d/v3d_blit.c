@@ -26,7 +26,7 @@
 #include "util/u_blitter.h"
 #include "compiler/nir/nir_builder.h"
 #include "v3d_context.h"
-#include "v3d_tiling.h"
+#include "broadcom/common/v3d_tiling.h"
 
 void
 v3d_blitter_save(struct v3d_context *v3d)
@@ -245,7 +245,7 @@ v3d_tfu(struct pipe_context *pctx,
                 return false;
 
         /* Can't write to raster. */
-        if (dst_base_slice->tiling == VC5_TILING_RASTER)
+        if (dst_base_slice->tiling == V3D_TILING_RASTER)
                 return false;
 
         /* When using TFU for blit, we are doing exact copies (both input and
@@ -288,12 +288,12 @@ v3d_tfu(struct pipe_context *pctx,
         uint32_t src_offset = (src->bo->offset +
                                v3d_layer_offset(psrc, src_level, src_layer));
         tfu.iia |= src_offset;
-        if (src_base_slice->tiling == VC5_TILING_RASTER) {
+        if (src_base_slice->tiling == V3D_TILING_RASTER) {
                 tfu.icfg |= (V3D_TFU_ICFG_FORMAT_RASTER <<
                              V3D_TFU_ICFG_FORMAT_SHIFT);
         } else {
                 tfu.icfg |= ((V3D_TFU_ICFG_FORMAT_LINEARTILE +
-                              (src_base_slice->tiling - VC5_TILING_LINEARTILE)) <<
+                              (src_base_slice->tiling - V3D_TILING_LINEARTILE)) <<
                              V3D_TFU_ICFG_FORMAT_SHIFT);
         }
 
@@ -303,24 +303,24 @@ v3d_tfu(struct pipe_context *pctx,
         if (last_level != base_level)
                 tfu.ioa |= V3D_TFU_IOA_DIMTW;
         tfu.ioa |= ((V3D_TFU_IOA_FORMAT_LINEARTILE +
-                     (dst_base_slice->tiling - VC5_TILING_LINEARTILE)) <<
+                     (dst_base_slice->tiling - V3D_TILING_LINEARTILE)) <<
                     V3D_TFU_IOA_FORMAT_SHIFT);
 
         tfu.icfg |= tex_format << V3D_TFU_ICFG_TTYPE_SHIFT;
         tfu.icfg |= (last_level - base_level) << V3D_TFU_ICFG_NUMMM_SHIFT;
 
         switch (src_base_slice->tiling) {
-        case VC5_TILING_UIF_NO_XOR:
-        case VC5_TILING_UIF_XOR:
+        case V3D_TILING_UIF_NO_XOR:
+        case V3D_TILING_UIF_XOR:
                 tfu.iis |= (src_base_slice->padded_height /
                             (2 * v3d_utile_height(src->cpp)));
                 break;
-        case VC5_TILING_RASTER:
+        case V3D_TILING_RASTER:
                 tfu.iis |= src_base_slice->stride / src->cpp;
                 break;
-        case VC5_TILING_LINEARTILE:
-        case VC5_TILING_UBLINEAR_1_COLUMN:
-        case VC5_TILING_UBLINEAR_2_COLUMN:
+        case V3D_TILING_LINEARTILE:
+        case V3D_TILING_UBLINEAR_1_COLUMN:
+        case V3D_TILING_UBLINEAR_2_COLUMN:
                 break;
        }
 
@@ -329,8 +329,8 @@ v3d_tfu(struct pipe_context *pctx,
          * those necessary to cover the height).  When filling mipmaps, the
          * miplevel 1+ tiling state is inferred.
          */
-        if (dst_base_slice->tiling == VC5_TILING_UIF_NO_XOR ||
-            dst_base_slice->tiling == VC5_TILING_UIF_XOR) {
+        if (dst_base_slice->tiling == V3D_TILING_UIF_NO_XOR ||
+            dst_base_slice->tiling == V3D_TILING_UIF_XOR) {
                 int uif_block_h = 2 * v3d_utile_height(dst->cpp);
                 int implicit_padded_height = align(height, uif_block_h);
 
@@ -521,11 +521,19 @@ v3d_tlb_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         job->draw_min_y = info->dst.box.y;
         job->draw_max_x = info->dst.box.x + info->dst.box.width;
         job->draw_max_y = info->dst.box.y + info->dst.box.height;
-        job->draw_width = dst_surf->width;
-        job->draw_height = dst_surf->height;
-        job->draw_tiles_x = DIV_ROUND_UP(dst_surf->width,
+        job->scissor.disabled = false;
+
+        /* The simulator complains if we do a TLB load from a source with a
+         * stride that is smaller than the destination's, so we program the
+         * 'frame region' to match the smallest dimensions of the two surfaces.
+         * This should be fine because we only get here if the src and dst boxes
+         * match, so we know the blit involves the same tiles on both surfaces.
+         */
+        job->draw_width = MIN2(dst_surf->width, src_surf->width);
+        job->draw_height = MIN2(dst_surf->height, src_surf->height);
+        job->draw_tiles_x = DIV_ROUND_UP(job->draw_width,
                                          job->tile_width);
-        job->draw_tiles_y = DIV_ROUND_UP(dst_surf->height,
+        job->draw_tiles_y = DIV_ROUND_UP(job->draw_height,
                                          job->tile_height);
 
         job->needs_flush = true;

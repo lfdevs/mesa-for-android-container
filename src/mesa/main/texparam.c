@@ -285,6 +285,9 @@ set_tex_parameteri(struct gl_context *ctx,
       case GL_LINEAR:
          flush(ctx);
          texObj->Sampler.Attrib.MinFilter = params[0];
+         texObj->Sampler.Attrib.state.min_img_filter = filter_to_gallium(params[0]);
+         texObj->Sampler.Attrib.state.min_mip_filter = mipfilter_to_gallium(params[0]);
+         _mesa_lower_gl_clamp(ctx, &texObj->Sampler);
          return GL_TRUE;
       case GL_NEAREST_MIPMAP_NEAREST:
       case GL_LINEAR_MIPMAP_NEAREST:
@@ -294,6 +297,9 @@ set_tex_parameteri(struct gl_context *ctx,
              texObj->Target != GL_TEXTURE_EXTERNAL_OES) {
             flush(ctx);
             texObj->Sampler.Attrib.MinFilter = params[0];
+            texObj->Sampler.Attrib.state.min_img_filter = filter_to_gallium(params[0]);
+            texObj->Sampler.Attrib.state.min_mip_filter = mipfilter_to_gallium(params[0]);
+            _mesa_lower_gl_clamp(ctx, &texObj->Sampler);
             return GL_TRUE;
          }
          FALLTHROUGH;
@@ -313,6 +319,8 @@ set_tex_parameteri(struct gl_context *ctx,
       case GL_LINEAR:
          flush(ctx); /* does not effect completeness */
          texObj->Sampler.Attrib.MagFilter = params[0];
+         texObj->Sampler.Attrib.state.mag_img_filter = filter_to_gallium(params[0]);
+         _mesa_lower_gl_clamp(ctx, &texObj->Sampler);
          return GL_TRUE;
       default:
          goto invalid_param;
@@ -330,6 +338,8 @@ set_tex_parameteri(struct gl_context *ctx,
          if (is_wrap_gl_clamp(texObj->Sampler.Attrib.WrapS) != is_wrap_gl_clamp(params[0]))
             ctx->NewDriverState |= ctx->DriverFlags.NewSamplersWithClamp;
          texObj->Sampler.Attrib.WrapS = params[0];
+         texObj->Sampler.Attrib.state.wrap_s = wrap_to_gallium(params[0]);
+         _mesa_lower_gl_clamp(ctx, &texObj->Sampler);
          return GL_TRUE;
       }
       return GL_FALSE;
@@ -345,6 +355,8 @@ set_tex_parameteri(struct gl_context *ctx,
          if (is_wrap_gl_clamp(texObj->Sampler.Attrib.WrapT) != is_wrap_gl_clamp(params[0]))
             ctx->NewDriverState |= ctx->DriverFlags.NewSamplersWithClamp;
          texObj->Sampler.Attrib.WrapT = params[0];
+         texObj->Sampler.Attrib.state.wrap_t = wrap_to_gallium(params[0]);
+         _mesa_lower_gl_clamp(ctx, &texObj->Sampler);
          return GL_TRUE;
       }
       return GL_FALSE;
@@ -360,6 +372,8 @@ set_tex_parameteri(struct gl_context *ctx,
          if (is_wrap_gl_clamp(texObj->Sampler.Attrib.WrapR) != is_wrap_gl_clamp(params[0]))
             ctx->NewDriverState |= ctx->DriverFlags.NewSamplersWithClamp;
          texObj->Sampler.Attrib.WrapR = params[0];
+         texObj->Sampler.Attrib.state.wrap_r = wrap_to_gallium(params[0]);
+         _mesa_lower_gl_clamp(ctx, &texObj->Sampler);
          return GL_TRUE;
       }
       return GL_FALSE;
@@ -487,6 +501,7 @@ set_tex_parameteri(struct gl_context *ctx,
          case GL_NEVER:
             flush(ctx);
             texObj->Sampler.Attrib.CompareFunc = params[0];
+            texObj->Sampler.Attrib.state.compare_func = func_to_gallium(params[0]);
             return GL_TRUE;
          default:
             goto invalid_param;
@@ -601,7 +616,8 @@ set_tex_parameteri(struct gl_context *ctx,
       goto invalid_pname;
 
    case GL_TEXTURE_REDUCTION_MODE_EXT:
-      if (ctx->Extensions.EXT_texture_filter_minmax) {
+      if (ctx->Extensions.EXT_texture_filter_minmax ||
+          _mesa_has_ARB_texture_filter_minmax(ctx)) {
          GLenum mode = params[0];
 
          if (!_mesa_target_allows_setting_sampler_parameters(texObj->Target))
@@ -611,6 +627,7 @@ set_tex_parameteri(struct gl_context *ctx,
             if (texObj->Sampler.Attrib.ReductionMode != mode) {
                flush(ctx);
                texObj->Sampler.Attrib.ReductionMode = mode;
+               texObj->Sampler.Attrib.state.reduction_mode = reduction_to_gallium(mode);
             }
             return GL_TRUE;
          }
@@ -631,6 +648,7 @@ set_tex_parameteri(struct gl_context *ctx,
          if (param != texObj->Sampler.Attrib.CubeMapSeamless) {
             flush(ctx);
             texObj->Sampler.Attrib.CubeMapSeamless = param;
+            texObj->Sampler.Attrib.state.seamless_cube_map = param;
          }
          return GL_TRUE;
       }
@@ -710,6 +728,7 @@ set_tex_parameterf(struct gl_context *ctx,
          return GL_FALSE;
       flush(ctx);
       texObj->Sampler.Attrib.MinLod = params[0];
+      texObj->Sampler.Attrib.state.min_lod = MAX2(params[0], 0.0f); /* only positive vals */
       return GL_TRUE;
 
    case GL_TEXTURE_MAX_LOD:
@@ -723,6 +742,7 @@ set_tex_parameterf(struct gl_context *ctx,
          return GL_FALSE;
       flush(ctx);
       texObj->Sampler.Attrib.MaxLod = params[0];
+      texObj->Sampler.Attrib.state.max_lod = params[0];
       return GL_TRUE;
 
    case GL_TEXTURE_PRIORITY:
@@ -749,6 +769,9 @@ set_tex_parameterf(struct gl_context *ctx,
          /* clamp to max, that's what NVIDIA does */
          texObj->Sampler.Attrib.MaxAnisotropy = MIN2(params[0],
                                       ctx->Const.MaxTextureMaxAnisotropy);
+         texObj->Sampler.Attrib.state.max_anisotropy =
+            texObj->Sampler.Attrib.MaxAnisotropy == 1 ?
+                  0 : texObj->Sampler.Attrib.MaxAnisotropy; /* gallium sets 0 for 1 */
          return GL_TRUE;
       }
       else {
@@ -769,6 +792,7 @@ set_tex_parameterf(struct gl_context *ctx,
       if (texObj->Sampler.Attrib.LodBias != params[0]) {
 	 flush(ctx);
 	 texObj->Sampler.Attrib.LodBias = params[0];
+         texObj->Sampler.Attrib.state.lod_bias = util_quantize_lod_bias(params[0]);
 	 return GL_TRUE;
       }
       break;
@@ -792,16 +816,14 @@ set_tex_parameterf(struct gl_context *ctx,
       flush(ctx);
       /* ARB_texture_float disables clamping */
       if (ctx->Extensions.ARB_texture_float) {
-         texObj->Sampler.Attrib.BorderColor.f[RCOMP] = params[0];
-         texObj->Sampler.Attrib.BorderColor.f[GCOMP] = params[1];
-         texObj->Sampler.Attrib.BorderColor.f[BCOMP] = params[2];
-         texObj->Sampler.Attrib.BorderColor.f[ACOMP] = params[3];
+         memcpy(texObj->Sampler.Attrib.state.border_color.f, params, 4 * sizeof(float));
       } else {
-         texObj->Sampler.Attrib.BorderColor.f[RCOMP] = CLAMP(params[0], 0.0F, 1.0F);
-         texObj->Sampler.Attrib.BorderColor.f[GCOMP] = CLAMP(params[1], 0.0F, 1.0F);
-         texObj->Sampler.Attrib.BorderColor.f[BCOMP] = CLAMP(params[2], 0.0F, 1.0F);
-         texObj->Sampler.Attrib.BorderColor.f[ACOMP] = CLAMP(params[3], 0.0F, 1.0F);
+         texObj->Sampler.Attrib.state.border_color.f[RCOMP] = CLAMP(params[0], 0.0F, 1.0F);
+         texObj->Sampler.Attrib.state.border_color.f[GCOMP] = CLAMP(params[1], 0.0F, 1.0F);
+         texObj->Sampler.Attrib.state.border_color.f[BCOMP] = CLAMP(params[2], 0.0F, 1.0F);
+         texObj->Sampler.Attrib.state.border_color.f[ACOMP] = CLAMP(params[3], 0.0F, 1.0F);
       }
+      _mesa_update_is_border_color_nonzero(&texObj->Sampler);
       return GL_TRUE;
 
    case GL_TEXTURE_TILING_EXT:
@@ -1065,7 +1087,8 @@ _mesa_texture_parameterIiv(struct gl_context *ctx,
       }
       FLUSH_VERTICES(ctx, _NEW_TEXTURE_OBJECT, GL_TEXTURE_BIT);
       /* set the integer-valued border color */
-      COPY_4V(texObj->Sampler.Attrib.BorderColor.i, params);
+      COPY_4V(texObj->Sampler.Attrib.state.border_color.i, params);
+      _mesa_update_is_border_color_nonzero(&texObj->Sampler);
       break;
    default:
       _mesa_texture_parameteriv(ctx, texObj, pname, params, dsa);
@@ -1093,7 +1116,8 @@ _mesa_texture_parameterIuiv(struct gl_context *ctx,
       }
       FLUSH_VERTICES(ctx, _NEW_TEXTURE_OBJECT, GL_TEXTURE_BIT);
       /* set the unsigned integer-valued border color */
-      COPY_4V(texObj->Sampler.Attrib.BorderColor.ui, params);
+      COPY_4V(texObj->Sampler.Attrib.state.border_color.ui, params);
+      _mesa_update_is_border_color_nonzero(&texObj->Sampler);
       break;
    default:
       _mesa_texture_parameteriv(ctx, texObj, pname, (const GLint *) params,
@@ -2203,16 +2227,16 @@ get_tex_parameterfv(struct gl_context *ctx,
             goto invalid_pname;
 
          if (_mesa_get_clamp_fragment_color(ctx, ctx->DrawBuffer)) {
-            params[0] = CLAMP(obj->Sampler.Attrib.BorderColor.f[0], 0.0F, 1.0F);
-            params[1] = CLAMP(obj->Sampler.Attrib.BorderColor.f[1], 0.0F, 1.0F);
-            params[2] = CLAMP(obj->Sampler.Attrib.BorderColor.f[2], 0.0F, 1.0F);
-            params[3] = CLAMP(obj->Sampler.Attrib.BorderColor.f[3], 0.0F, 1.0F);
+            params[0] = CLAMP(obj->Sampler.Attrib.state.border_color.f[0], 0.0F, 1.0F);
+            params[1] = CLAMP(obj->Sampler.Attrib.state.border_color.f[1], 0.0F, 1.0F);
+            params[2] = CLAMP(obj->Sampler.Attrib.state.border_color.f[2], 0.0F, 1.0F);
+            params[3] = CLAMP(obj->Sampler.Attrib.state.border_color.f[3], 0.0F, 1.0F);
          }
          else {
-            params[0] = obj->Sampler.Attrib.BorderColor.f[0];
-            params[1] = obj->Sampler.Attrib.BorderColor.f[1];
-            params[2] = obj->Sampler.Attrib.BorderColor.f[2];
-            params[3] = obj->Sampler.Attrib.BorderColor.f[3];
+            params[0] = obj->Sampler.Attrib.state.border_color.f[0];
+            params[1] = obj->Sampler.Attrib.state.border_color.f[1];
+            params[2] = obj->Sampler.Attrib.state.border_color.f[2];
+            params[3] = obj->Sampler.Attrib.state.border_color.f[3];
          }
          break;
       case GL_TEXTURE_RESIDENT:
@@ -2381,7 +2405,8 @@ get_tex_parameterfv(struct gl_context *ctx,
          break;
 
       case GL_TEXTURE_REDUCTION_MODE_EXT:
-         if (!ctx->Extensions.EXT_texture_filter_minmax)
+         if (!ctx->Extensions.EXT_texture_filter_minmax &&
+             !_mesa_has_ARB_texture_filter_minmax(ctx))
             goto invalid_pname;
          *params = (GLfloat) obj->Sampler.Attrib.ReductionMode;
          break;
@@ -2448,10 +2473,10 @@ get_tex_parameteriv(struct gl_context *ctx,
 
          {
             GLfloat b[4];
-            b[0] = CLAMP(obj->Sampler.Attrib.BorderColor.f[0], 0.0F, 1.0F);
-            b[1] = CLAMP(obj->Sampler.Attrib.BorderColor.f[1], 0.0F, 1.0F);
-            b[2] = CLAMP(obj->Sampler.Attrib.BorderColor.f[2], 0.0F, 1.0F);
-            b[3] = CLAMP(obj->Sampler.Attrib.BorderColor.f[3], 0.0F, 1.0F);
+            b[0] = CLAMP(obj->Sampler.Attrib.state.border_color.f[0], 0.0F, 1.0F);
+            b[1] = CLAMP(obj->Sampler.Attrib.state.border_color.f[1], 0.0F, 1.0F);
+            b[2] = CLAMP(obj->Sampler.Attrib.state.border_color.f[2], 0.0F, 1.0F);
+            b[3] = CLAMP(obj->Sampler.Attrib.state.border_color.f[3], 0.0F, 1.0F);
             params[0] = FLOAT_TO_INT(b[0]);
             params[1] = FLOAT_TO_INT(b[1]);
             params[2] = FLOAT_TO_INT(b[2]);
@@ -2653,7 +2678,8 @@ get_tex_parameteriv(struct gl_context *ctx,
          break;
 
       case GL_TEXTURE_REDUCTION_MODE_EXT:
-         if (!ctx->Extensions.EXT_texture_filter_minmax)
+         if (!ctx->Extensions.EXT_texture_filter_minmax &&
+             !_mesa_has_ARB_texture_filter_minmax(ctx))
             goto invalid_pname;
          *params = obj->Sampler.Attrib.ReductionMode;
          break;
@@ -2697,7 +2723,7 @@ get_tex_parameterIiv(struct gl_context *ctx,
 {
    switch (pname) {
    case GL_TEXTURE_BORDER_COLOR:
-      COPY_4V(params, obj->Sampler.Attrib.BorderColor.i);
+      COPY_4V(params, obj->Sampler.Attrib.state.border_color.i);
       break;
    default:
       get_tex_parameteriv(ctx, obj, pname, params, dsa);

@@ -587,7 +587,7 @@ update_vsc_pipe(struct fd_batch *batch) assert_dt
    for (i = 0; i < 8; i++) {
       if (!ctx->vsc_pipe_bo[i]) {
          ctx->vsc_pipe_bo[i] = fd_bo_new(
-            ctx->dev, 0x40000, DRM_FREEDRENO_GEM_TYPE_KMEM, "vsc_pipe[%u]", i);
+            ctx->dev, 0x40000, 0, "vsc_pipe[%u]", i);
       }
       OUT_RELOC(ring, ctx->vsc_pipe_bo[i], 0, 0,
                 0); /* VSC_PIPE_DATA_ADDRESS[i] */

@@ -246,6 +246,8 @@ st_update_rasterizer(struct st_context *st)
                                  ctx->Const.MaxLineWidth);
    }
 
+   raster->line_rectangular = multisample || ctx->Line.SmoothFlag;
+
    /* When the pattern is all 1's, it means line stippling is disabled */
    raster->line_stipple_enable = ctx->Line.StippleFlag && ctx->Line.StipplePattern != 0xffff;
    raster->line_stipple_pattern = ctx->Line.StipplePattern;

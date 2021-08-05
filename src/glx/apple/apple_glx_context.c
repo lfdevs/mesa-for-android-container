@@ -183,8 +183,7 @@ apple_glx_create_context(void **ptr, Display * dpy, int screen,
          *x11errorptr = false;
       }
 
-      if (env_var_as_boolean("LIBGL_DIAGNOSTIC", false))
-         fprintf(stderr, "error: %s\n", apple_cgl.error_string(error));
+      DebugMessageF("error: %s\n", apple_cgl.error_string(error));
 
       return true;
    }

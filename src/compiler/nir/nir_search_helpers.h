@@ -442,6 +442,15 @@ is_ ## r (struct hash_table *ht, const nir_alu_instr *instr,            \
 {                                                                       \
    const struct ssa_result_range v = nir_analyze_range(ht, instr, src);  \
    return v.range == r;                                                 \
+}                                                                       \
+                                                                        \
+static inline bool                                                      \
+is_a_number_ ## r (struct hash_table *ht, const nir_alu_instr *instr,   \
+                   unsigned src, UNUSED unsigned num_components,        \
+                   UNUSED const uint8_t *swizzle)                       \
+{                                                                       \
+   const struct ssa_result_range v = nir_analyze_range(ht, instr, src); \
+   return v.is_a_number && v.range == r;                                \
 }
 
 RELATION(lt_zero)
@@ -459,6 +468,17 @@ is_not_negative(struct hash_table *ht, const nir_alu_instr *instr, unsigned src,
 }
 
 static inline bool
+is_a_number_not_negative(struct hash_table *ht, const nir_alu_instr *instr,
+                         unsigned src, UNUSED unsigned num_components,
+                         UNUSED const uint8_t *swizzle)
+{
+   const struct ssa_result_range v = nir_analyze_range(ht, instr, src);
+   return v.is_a_number &&
+          (v.range == ge_zero || v.range == gt_zero || v.range == eq_zero);
+}
+
+
+static inline bool
 is_not_positive(struct hash_table *ht, const nir_alu_instr *instr, unsigned src,
                 UNUSED unsigned num_components, UNUSED const uint8_t *swizzle)
 {
@@ -467,11 +487,31 @@ is_not_positive(struct hash_table *ht, const nir_alu_instr *instr, unsigned src,
 }
 
 static inline bool
+is_a_number_not_positive(struct hash_table *ht, const nir_alu_instr *instr,
+                         unsigned src, UNUSED unsigned num_components,
+                         UNUSED const uint8_t *swizzle)
+{
+   const struct ssa_result_range v = nir_analyze_range(ht, instr, src);
+   return v.is_a_number &&
+          (v.range == le_zero || v.range == lt_zero || v.range == eq_zero);
+}
+
+static inline bool
 is_not_zero(struct hash_table *ht, const nir_alu_instr *instr, unsigned src,
             UNUSED unsigned num_components, UNUSED const uint8_t *swizzle)
 {
    const struct ssa_result_range v = nir_analyze_range(ht, instr, src);
    return v.range == lt_zero || v.range == gt_zero || v.range == ne_zero;
+}
+
+static inline bool
+is_a_number_not_zero(struct hash_table *ht, const nir_alu_instr *instr,
+                     unsigned src, UNUSED unsigned num_components,
+                     UNUSED const uint8_t *swizzle)
+{
+   const struct ssa_result_range v = nir_analyze_range(ht, instr, src);
+   return v.is_a_number &&
+          (v.range == lt_zero || v.range == gt_zero || v.range == ne_zero);
 }
 
 static inline bool

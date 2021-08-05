@@ -299,7 +299,7 @@ is_align1_opcode(unsigned opcode)
 }
 
 static bool
-try_copy_propagate(const struct gen_device_info *devinfo,
+try_copy_propagate(const struct intel_device_info *devinfo,
                    vec4_instruction *inst, int arg,
                    const copy_entry *entry, int attributes_per_reg)
 {

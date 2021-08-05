@@ -32,38 +32,8 @@
 #include "brw_program.h"
 #include "compiler/glsl/ir_uniform.h"
 
-struct brw_cs_parameters
-brw_cs_get_parameters(const struct brw_context *brw)
-{
-   assert(brw->cs.base.prog_data);
-   struct brw_cs_prog_data *cs_prog_data =
-      brw_cs_prog_data(brw->cs.base.prog_data);
-
-   struct brw_cs_parameters params = {};
-
-   if (brw->compute.group_size) {
-      /* With ARB_compute_variable_group_size the group size is set at
-       * dispatch time, so we can't use the one provided by the compiler.
-       */
-      params.group_size = brw->compute.group_size[0] *
-                          brw->compute.group_size[1] *
-                          brw->compute.group_size[2];
-   } else {
-      params.group_size = cs_prog_data->local_size[0] *
-                          cs_prog_data->local_size[1] *
-                          cs_prog_data->local_size[2];
-   }
-
-   params.simd_size =
-      brw_cs_simd_size_for_group_size(&brw->screen->devinfo,
-                                      cs_prog_data, params.group_size);
-   params.threads = DIV_ROUND_UP(params.group_size, params.simd_size);
-
-   return params;
-}
-
 static void
-assign_cs_binding_table_offsets(const struct gen_device_info *devinfo,
+assign_cs_binding_table_offsets(const struct intel_device_info *devinfo,
                                 const struct gl_program *prog,
                                 struct brw_cs_prog_data *prog_data)
 {
@@ -82,7 +52,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
                     struct brw_program *cp,
                     struct brw_cs_prog_key *key)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
    const GLuint *program;
    void *mem_ctx = ralloc_context(NULL);
    struct brw_cs_prog_data prog_data;
@@ -223,7 +193,7 @@ brw_cs_populate_default_key(const struct brw_compiler *compiler,
                             struct brw_cs_prog_key *key,
                             struct gl_program *prog)
 {
-   const struct gen_device_info *devinfo = compiler->devinfo;
+   const struct intel_device_info *devinfo = compiler->devinfo;
    memset(key, 0, sizeof(*key));
    brw_populate_default_base_prog_key(devinfo, brw_program(prog), &key->base);
 }

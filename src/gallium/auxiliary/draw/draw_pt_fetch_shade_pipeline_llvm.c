@@ -719,12 +719,17 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
          opt |= PT_PIPELINE;
       }
    } else {
-      if (draw_prim_assembler_is_required(draw, prim_info, vert_info)) {
+      if (!tes_shader && draw_prim_assembler_is_required(draw, prim_info, vert_info)) {
          draw_prim_assembler_run(draw, prim_info, vert_info,
                                  &ia_prim_info, &ia_vert_info);
 
          if (ia_vert_info.count) {
             FREE(vert_info->verts);
+            if (free_prim_info) {
+               FREE(prim_info->primitive_lengths);
+               FREE(tes_elts_out);
+               tes_elts_out = NULL;
+            }
             vert_info = &ia_vert_info;
             prim_info = &ia_prim_info;
             free_prim_info = TRUE;

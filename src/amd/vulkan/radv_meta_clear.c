@@ -868,19 +868,52 @@ static uint32_t
 radv_get_htile_fast_clear_value(const struct radv_device *device, const struct radv_image *image,
                                 VkClearDepthStencilValue value)
 {
-   uint32_t clear_value;
+   uint32_t max_zval = 0x3fff; /* maximum 14-bit value. */
+   uint32_t zmask = 0, smem = 0;
+   uint32_t htile_value;
+   uint32_t zmin, zmax;
+
+   /* Convert the depth value to 14-bit zmin/zmax values. */
+   zmin = ((value.depth * max_zval) + 0.5f);
+   zmax = zmin;
 
    if (radv_image_tile_stencil_disabled(device, image)) {
-      clear_value = value.depth ? 0xfffffff0 : 0;
+      /* Z only (no stencil):
+       *
+       * |31     18|17      4|3     0|
+       * +---------+---------+-------+
+       * |  Max Z  |  Min Z  | ZMask |
+       */
+      htile_value = (((zmax  & 0x3fff) << 18) |
+                     ((zmin  & 0x3fff) <<  4) |
+                     ((zmask &    0xf) <<  0));
    } else {
+
+      /* Z and stencil:
+       *
+       * |31       12|11 10|9    8|7   6|5   4|3     0|
+       * +-----------+-----+------+-----+-----+-------+
+       * |  Z Range  |     | SMem | SR1 | SR0 | ZMask |
+       *
+       * Z, stencil, 4 bit VRS encoding:
+       * |31       12| 11      10 |9    8|7         6 |5   4|3     0|
+       * +-----------+------------+------+------------+-----+-------+
+       * |  Z Range  | VRS Y-rate | SMem | VRS X-rate | SR0 | ZMask |
+       */
+      uint32_t delta = 0;
+      uint32_t zrange = ((zmax << 6) | delta);
+      uint32_t sresults = 0xf; /* SR0/SR1 both as 0x3. */
+
       if (radv_image_has_vrs_htile(device, image))
-         clear_value = value.depth ? 0xfffc0030 : 0x30;
-      else {
-         clear_value = value.depth ? 0xfffc00f0 : 0xf0;
-      }
+         sresults = 0x3;
+
+      htile_value = (((zrange   & 0xfffff) << 12) |
+                     ((smem     & 0x3)     <<  8) |
+                     ((sresults & 0xf)     <<  4) |
+                     ((zmask    & 0xf)     <<  0));
    }
 
-   return clear_value;
+   return htile_value;
 }
 
 static uint32_t
@@ -942,9 +975,15 @@ radv_can_fast_clear_depth(struct radv_cmd_buffer *cmd_buffer, const struct radv_
    if (!view_mask && clear_rect->layerCount != iview->image->info.array_size)
       return false;
 
-   if (((aspects & VK_IMAGE_ASPECT_DEPTH_BIT) && !radv_is_fast_clear_depth_allowed(clear_value)) ||
-       ((aspects & VK_IMAGE_ASPECT_STENCIL_BIT) &&
-        !radv_is_fast_clear_stencil_allowed(clear_value)))
+   if (cmd_buffer->device->vk.enabled_extensions.EXT_depth_range_unrestricted &&
+       (aspects & VK_IMAGE_ASPECT_DEPTH_BIT) &&
+       (clear_value.depth < 0.0 || clear_value.depth > 1.0))
+      return false;
+
+   if (radv_image_is_tc_compat_htile(iview->image) &&
+       (((aspects & VK_IMAGE_ASPECT_DEPTH_BIT) && !radv_is_fast_clear_depth_allowed(clear_value)) ||
+        ((aspects & VK_IMAGE_ASPECT_STENCIL_BIT) &&
+         !radv_is_fast_clear_stencil_allowed(clear_value))))
       return false;
 
    return true;
@@ -1002,15 +1041,15 @@ build_clear_htile_mask_shader()
 {
    nir_builder b =
       nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, NULL, "meta_clear_htile_mask");
-   b.shader->info.cs.local_size[0] = 64;
-   b.shader->info.cs.local_size[1] = 1;
-   b.shader->info.cs.local_size[2] = 1;
+   b.shader->info.workgroup_size[0] = 64;
+   b.shader->info.workgroup_size[1] = 1;
+   b.shader->info.workgroup_size[2] = 1;
 
    nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
-   nir_ssa_def *wg_id = nir_load_work_group_id(&b, 32);
+   nir_ssa_def *wg_id = nir_load_workgroup_id(&b, 32);
    nir_ssa_def *block_size =
-      nir_imm_ivec4(&b, b.shader->info.cs.local_size[0], b.shader->info.cs.local_size[1],
-                    b.shader->info.cs.local_size[2], 0);
+      nir_imm_ivec4(&b, b.shader->info.workgroup_size[0], b.shader->info.workgroup_size[1],
+                    b.shader->info.workgroup_size[2], 0);
 
    nir_ssa_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
 
@@ -1350,10 +1389,10 @@ radv_clear_htile(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *im
 
          if (htile_mask == UINT_MAX) {
             /* Clear the whole HTILE buffer. */
-            flush_bits = radv_fill_buffer(cmd_buffer, image, image->bo, offset, size, value);
+            flush_bits |= radv_fill_buffer(cmd_buffer, image, image->bo, offset, size, value);
          } else {
             /* Only clear depth or stencil bytes in the HTILE buffer. */
-            flush_bits =
+            flush_bits |=
                clear_htile_mask(cmd_buffer, image, image->bo, offset, size, value, htile_mask);
          }
       }
@@ -1477,7 +1516,7 @@ radv_can_fast_clear_color(struct radv_cmd_buffer *cmd_buffer, const struct radv_
       return false;
 
    if (!radv_layout_can_fast_clear(
-          cmd_buffer->device, iview->image, image_layout, in_render_loop,
+          cmd_buffer->device, iview->image, iview->base_mip, image_layout, in_render_loop,
           radv_image_queue_family_mask(iview->image, cmd_buffer->queue_family_index,
                                        cmd_buffer->queue_family_index)))
       return false;
@@ -2041,9 +2080,16 @@ radv_cmd_clear_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *imag
          uint32_t queue_mask = radv_image_queue_family_mask(image, cmd_buffer->queue_family_index,
                                                             cmd_buffer->queue_family_index);
 
-         /* Don't use compressed image stores because they will use an incompatible format. */
-         if (radv_layout_dcc_compressed(cmd_buffer->device, image, image_layout, false, queue_mask))
-            disable_compression = cs;
+         for (uint32_t r = 0; r < range_count; r++) {
+            const VkImageSubresourceRange *range = &ranges[r];
+
+            /* Don't use compressed image stores because they will use an incompatible format. */
+            if (radv_layout_dcc_compressed(cmd_buffer->device, image, range->baseMipLevel,
+                                           image_layout, false, queue_mask)) {
+               disable_compression = cs;
+               break;
+            }
+         }
       }
    }
 

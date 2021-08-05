@@ -49,18 +49,6 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
       return false;
    }
 
-   /* LLVM 11 is required for GFX10.3. */
-   if (ws->info.chip_class == GFX10_3 && ws->use_llvm && LLVM_VERSION_MAJOR < 11) {
-      fprintf(stderr, "radv: GFX 10.3 requires LLVM 11 or higher\n");
-      return false;
-   }
-
-   /* LLVM 9.0 is required for GFX10. */
-   if (ws->info.chip_class == GFX10 && ws->use_llvm && LLVM_VERSION_MAJOR < 9) {
-      fprintf(stderr, "radv: Navi family support requires LLVM 9 or higher\n");
-      return false;
-   }
-
    ws->addrlib = ac_addrlib_create(&ws->info, &ws->info.max_alignment);
    if (!ws->addrlib) {
       fprintf(stderr, "amdgpu: Cannot create addrlib.\n");
@@ -182,6 +170,9 @@ radv_amdgpu_winsys_destroy(struct radeon_winsys *rws)
    u_rwlock_destroy(&ws->global_bo_list.lock);
    free(ws->global_bo_list.bos);
 
+   if (ws->reserve_vmid)
+      amdgpu_vm_unreserve_vmid(ws->dev, 0);
+
    pthread_mutex_destroy(&ws->syncobj_lock);
    u_rwlock_destroy(&ws->log_bo_list_lock);
    ac_addrlib_destroy(ws->addrlib);
@@ -190,7 +181,7 @@ radv_amdgpu_winsys_destroy(struct radeon_winsys *rws)
 }
 
 struct radeon_winsys *
-radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags)
+radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags, bool reserve_vmid)
 {
    uint32_t drm_major, drm_minor, r;
    amdgpu_device_handle dev;
@@ -235,9 +226,15 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags)
    if (debug_flags & RADV_DEBUG_NO_IBS)
       ws->use_ib_bos = false;
 
+   ws->reserve_vmid = reserve_vmid;
+   if (ws->reserve_vmid) {
+      r = amdgpu_vm_reserve_vmid(dev, 0);
+      if (r)
+         goto vmid_fail;
+   }
+
    ws->perftest = perftest_flags;
    ws->zero_all_vram_allocs = debug_flags & RADV_DEBUG_ZERO_VRAM;
-   ws->use_llvm = debug_flags & RADV_DEBUG_LLVM;
    u_rwlock_init(&ws->global_bo_list.lock);
    list_inithead(&ws->log_bo_list);
    u_rwlock_init(&ws->log_bo_list_lock);
@@ -256,6 +253,8 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags)
 
    return &ws->base;
 
+vmid_fail:
+   ac_addrlib_destroy(ws->addrlib);
 winsys_fail:
    free(ws);
 fail:

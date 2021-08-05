@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
-<metrics version="1599482526" merge_md5="">
-  <set name="Render Metrics Basic Gen8"
+<metrics version="1619078710" merge_md5="">
+  <set name="Render Metrics Basic set"
        chipset="BDW"
        symbol_name="RenderBasic"
        underscore_name="render_basic"
@@ -969,7 +969,7 @@
     </register_config>
   </set>
 
-  <set name="Compute Metrics Basic Gen8"
+  <set name="Compute Metrics Basic set"
        chipset="BDW"
        symbol_name="ComputeBasic"
        underscore_name="compute_basic"
@@ -2467,7 +2467,7 @@
     </register_config>
   </set>
 
-  <set name="Memory Reads Distribution Gen8"
+  <set name="Memory Reads Distribution metric set"
        chipset="BDW"
        symbol_name="MemoryReads"
        underscore_name="memory_reads"
@@ -3120,7 +3120,7 @@
     </register_config>
   </set>
 
-  <set name="Memory Writes Distribution Gen8"
+  <set name="Memory Writes Distribution metric set"
        chipset="BDW"
        symbol_name="MemoryWrites"
        underscore_name="memory_writes"
@@ -3759,7 +3759,7 @@
     </register_config>
   </set>
 
-  <set name="Compute Metrics Extended Gen8"
+  <set name="Compute Metrics Extended metric set"
        chipset="BDW"
        symbol_name="ComputeExtended"
        underscore_name="compute_extended"
@@ -4984,7 +4984,7 @@
     </register_config>
   </set>
 
-  <set name="Compute Metrics L3 Cache Gen8"
+  <set name="Compute Metrics L3 Cache metric set"
        chipset="BDW"
        symbol_name="ComputeL3Cache"
        underscore_name="compute_l3_cache"
@@ -5916,7 +5916,7 @@
     </register_config>
   </set>
 
-  <set name="Data Port Reads Coalescing Gen8"
+  <set name="Data Port Reads Coalescing metric set"
        chipset="BDW"
        symbol_name="DataPortReadsCoalescing"
        underscore_name="data_port_reads_coalescing"
@@ -6546,7 +6546,7 @@
     </register_config>
   </set>
 
-  <set name="Data Port Writes Coalescing Gen8"
+  <set name="Data Port Writes Coalescing metric set"
        chipset="BDW"
        symbol_name="DataPortWritesCoalescing"
        underscore_name="data_port_writes_coalescing"
@@ -14613,7 +14613,7 @@
     </register_config>
   </set>
 
-  <set name="Compute Metrics Extra Gen8"
+  <set name="Compute Metrics Extra set"
        chipset="BDW"
        symbol_name="ComputeExtra"
        underscore_name="compute_extra"
@@ -14802,7 +14802,7 @@
     </register_config>
   </set>
 
-  <set name="Media Vme Pipe Gen8"
+  <set name="Media Vme Pipe metric set"
        chipset="BDW"
        symbol_name="VMEPipe"
        underscore_name="vme_pipe"
@@ -15243,7 +15243,7 @@
     </register_config>
   </set>
 
-  <set name="MDAPI testing set Gen8"
+  <set name="MDAPI testing set"
        chipset="BDW"
        symbol_name="TestOa"
        underscore_name="test_oa"

@@ -12,7 +12,7 @@ void radeonScissor(struct gl_context *ctx);
 
 extern uint32_t radeonGetAge(radeonContextPtr radeon);
 
-void radeonFlush(struct gl_context *ctx);
+void radeonFlush(struct gl_context *ctx, unsigned gallium_flush_flags);
 void radeonFinish(struct gl_context * ctx);
 void radeonEmitState(radeonContextPtr radeon);
 GLuint radeonCountStateEmitSize(radeonContextPtr radeon);

@@ -28,7 +28,9 @@ files_gbm = files(
   'main/gbmint.h',
 )
 deps_gbm = []
-args_gbm = []
+args_gbm = [
+  '-DDEFAULT_BACKENDS_PATH="@0@"'.format(gbm_backends_path),
+]
 deps_gbm = []
 incs_gbm = [
   include_directories('main'), inc_include, inc_src, inc_loader,
@@ -56,6 +58,11 @@ libgbm = shared_library(
   install : true,
 )
 
+if with_tests
+  abi_check = executable('gbm_abi_check', 'main/gbm_abi_check.c')
+  test('gbm-abi-check', abi_check, suite : ['gbm'])
+endif
+
 install_headers('main/gbm.h')
 
 pkg.generate(
@@ -65,6 +72,7 @@ pkg.generate(
   version : meson.project_version(),
   libraries : libgbm,
   libraries_private : gbm_priv_libs,
+  variables : ['gbmbackendspath=' + gbm_backends_path],
 )
 
 if with_symbols_check

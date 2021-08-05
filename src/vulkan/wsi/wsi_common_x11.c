@@ -439,8 +439,10 @@ VkBool32 wsi_get_physical_device_xcb_presentation_support(
    if (!wsi_conn)
       return false;
 
-   if (!wsi_x11_check_for_dri3(wsi_conn))
-      return false;
+   if (!wsi_device->sw) {
+      if (!wsi_x11_check_for_dri3(wsi_conn))
+         return false;
+   }
 
    unsigned visual_depth;
    if (!connection_get_visualtype(connection, visual_id, &visual_depth))
@@ -484,9 +486,11 @@ x11_surface_get_support(VkIcdSurfaceBase *icd_surface,
    if (!wsi_conn)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-   if (!wsi_x11_check_for_dri3(wsi_conn)) {
-      *pSupported = false;
-      return VK_SUCCESS;
+   if (!wsi_device->sw) {
+      if (!wsi_x11_check_for_dri3(wsi_conn)) {
+         *pSupported = false;
+         return VK_SUCCESS;
+      }
    }
 
    unsigned visual_depth;
@@ -785,8 +789,10 @@ struct x11_image {
    struct wsi_image                          base;
    xcb_pixmap_t                              pixmap;
    bool                                      busy;
+   bool                                      present_queued;
    struct xshmfence *                        shm_fence;
    uint32_t                                  sync_fence;
+   uint32_t                                  serial;
 };
 
 struct x11_swapchain {
@@ -810,7 +816,7 @@ struct x11_swapchain {
    bool                                         has_present_queue;
    bool                                         has_acquire_queue;
    VkResult                                     status;
-   xcb_present_complete_mode_t                  last_present_mode;
+   bool                                         copy_is_suboptimal;
    struct wsi_queue                             present_queue;
    struct wsi_queue                             acquire_queue;
    pthread_t                                    queue_manager;
@@ -891,7 +897,7 @@ x11_handle_dri3_present_event(struct x11_swapchain *chain,
 
       if (config->width != chain->extent.width ||
           config->height != chain->extent.height)
-         return VK_ERROR_OUT_OF_DATE_KHR;
+         return VK_SUBOPTIMAL_KHR;
 
       break;
    }
@@ -915,29 +921,41 @@ x11_handle_dri3_present_event(struct x11_swapchain *chain,
 
    case XCB_PRESENT_EVENT_COMPLETE_NOTIFY: {
       xcb_present_complete_notify_event_t *complete = (void *) event;
-      if (complete->kind == XCB_PRESENT_COMPLETE_KIND_PIXMAP)
+      if (complete->kind == XCB_PRESENT_COMPLETE_KIND_PIXMAP) {
+         unsigned i;
+         for (i = 0; i < chain->base.image_count; i++) {
+            struct x11_image *image = &chain->images[i];
+            if (image->present_queued && image->serial == complete->serial)
+               image->present_queued = false;
+         }
          chain->last_present_msc = complete->msc;
+      }
 
       VkResult result = VK_SUCCESS;
-
-      /* The winsys is now trying to flip directly and cannot due to our
-       * configuration. Request the user reallocate.
-       */
+      switch (complete->mode) {
+      case XCB_PRESENT_COMPLETE_MODE_COPY:
+         if (chain->copy_is_suboptimal)
+            result = VK_SUBOPTIMAL_KHR;
+         break;
+      case XCB_PRESENT_COMPLETE_MODE_FLIP:
+         /* If we ever go from flipping to copying, the odds are very likely
+          * that we could reallocate in a more optimal way if we didn't have
+          * to care about scanout, so we always do this.
+          */
+         chain->copy_is_suboptimal = true;
+         break;
 #ifdef HAVE_DRI3_MODIFIERS
-      if (complete->mode == XCB_PRESENT_COMPLETE_MODE_SUBOPTIMAL_COPY &&
-          chain->last_present_mode != XCB_PRESENT_COMPLETE_MODE_SUBOPTIMAL_COPY)
+      case XCB_PRESENT_COMPLETE_MODE_SUBOPTIMAL_COPY:
+         /* The winsys is now trying to flip directly and cannot due to our
+          * configuration. Request the user reallocate.
+          */
          result = VK_SUBOPTIMAL_KHR;
+         break;
 #endif
+      default:
+         break;
+      }
 
-      /* When we go from flipping to copying, the odds are very likely that
-       * we could reallocate in a more optimal way if we didn't have to care
-       * about scanout, so we always do this.
-       */
-      if (complete->mode == XCB_PRESENT_COMPLETE_MODE_COPY &&
-          chain->last_present_mode == XCB_PRESENT_COMPLETE_MODE_FLIP)
-         result = VK_SUBOPTIMAL_KHR;
-
-      chain->last_present_mode = complete->mode;
       return result;
    }
 
@@ -1096,12 +1114,14 @@ x11_present_to_x11_dri3(struct x11_swapchain *chain, uint32_t image_index,
    assert(chain->sent_image_count <= chain->base.image_count);
 
    ++chain->send_sbc;
+   image->present_queued = true;
+   image->serial = (uint32_t) chain->send_sbc;
 
    xcb_void_cookie_t cookie =
       xcb_present_pixmap(chain->conn,
                          chain->window,
                          image->pixmap,
-                         (uint32_t) chain->send_sbc,
+                         image->serial,
                          0,                                    /* valid */
                          0,                                    /* update */
                          0,                                    /* x_off */
@@ -1252,7 +1272,7 @@ x11_manage_fifo_queues(void *state)
           * image that can be acquired by the client afterwards. This ensures we
           * can pull on the present-queue on the next loop.
           */
-         while (chain->last_present_msc < target_msc ||
+         while (chain->images[image_index].present_queued ||
                 chain->sent_image_count == chain->base.image_count) {
             xcb_generic_event_t *event =
                xcb_wait_for_special_event(chain->conn, chain->special_event);
@@ -1580,6 +1600,8 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    if (geometry == NULL)
       return VK_ERROR_SURFACE_LOST_KHR;
    const uint32_t bit_depth = geometry->depth;
+   const uint16_t cur_width = geometry->width;
+   const uint16_t cur_height = geometry->height;
    free(geometry);
 
    size_t size = sizeof(*chain) + num_images * sizeof(chain->images[0]);
@@ -1611,17 +1633,18 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    chain->status = VK_SUCCESS;
    chain->has_dri3_modifiers = wsi_conn->has_dri3_modifiers;
 
-   /* If we are reallocating from an old swapchain, then we inherit its
-    * last completion mode, to ensure we don't get into reallocation
-    * cycles. If we are starting anew, we set 'COPY', as that is the only
-    * mode which provokes reallocation when anything changes, to make
-    * sure we have the most optimal allocation.
+   if (chain->extent.width != cur_width || chain->extent.height != cur_height)
+       chain->status = VK_SUBOPTIMAL_KHR;
+
+   /* We used to inherit copy_is_suboptimal from pCreateInfo->oldSwapchain.
+    * When it was true, and when the next present was completed with copying,
+    * we would return VK_SUBOPTIMAL_KHR and hint the app to reallocate again
+    * for no good reason.  If all following presents on the surface were
+    * completed with copying because of some surface state change, we would
+    * always return VK_SUBOPTIMAL_KHR no matter how many times the app had
+    * reallocated.
     */
-   VK_FROM_HANDLE(x11_swapchain, old_chain, pCreateInfo->oldSwapchain);
-   if (old_chain)
-      chain->last_present_mode = old_chain->last_present_mode;
-   else
-      chain->last_present_mode = XCB_PRESENT_COMPLETE_MODE_COPY;
+   chain->copy_is_suboptimal = false;
 
    if (!wsi_device->sw)
       if (!wsi_x11_check_dri3_compatible(wsi_device, conn))

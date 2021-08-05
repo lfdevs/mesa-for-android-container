@@ -454,8 +454,6 @@ st_context_free_zombie_objects(struct st_context *st)
 static void
 st_destroy_context_priv(struct st_context *st, bool destroy_pipe)
 {
-   uint i;
-
    st_destroy_atoms(st);
    st_destroy_draw(st);
    st_destroy_clear(st);
@@ -466,11 +464,6 @@ st_destroy_context_priv(struct st_context *st, bool destroy_pipe)
    st_destroy_pbo_helpers(st);
    st_destroy_bound_texture_handles(st);
    st_destroy_bound_image_handles(st);
-
-   for (i = 0; i < ARRAY_SIZE(st->state.frag_sampler_views); i++) {
-      pipe_sampler_view_reference(&st->state.vert_sampler_views[i], NULL);
-      pipe_sampler_view_reference(&st->state.frag_sampler_views[i], NULL);
-   }
 
    /* free glReadPixels cache data */
    st_invalidate_readpix_cache(st);
@@ -681,6 +674,10 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
                        screen->is_format_supported(screen, PIPE_FORMAT_DXT1_SRGBA,
                                                    PIPE_TEXTURE_2D, 0, 0,
                                                    PIPE_BIND_SAMPLER_VIEW);
+   st->transcode_astc = options->transcode_astc &&
+                        screen->is_format_supported(screen, PIPE_FORMAT_DXT5_SRGBA,
+                                                    PIPE_TEXTURE_2D, 0, 0,
+                                                    PIPE_BIND_SAMPLER_VIEW);
    st->has_astc_2d_ldr =
       screen->is_format_supported(screen, PIPE_FORMAT_ASTC_4x4_SRGB,
                                   PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_SAMPLER_VIEW);

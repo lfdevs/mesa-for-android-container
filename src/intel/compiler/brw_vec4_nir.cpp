@@ -282,7 +282,7 @@ vec4_visitor::get_indirect_offset(nir_intrinsic_instr *instr)
 static src_reg
 setup_imm_df(const vec4_builder &bld, double v)
 {
-   const gen_device_info *devinfo = bld.shader->devinfo;
+   const intel_device_info *devinfo = bld.shader->devinfo;
    assert(devinfo->ver == 7);
 
    /* gfx7.5 does not support DF immediates straighforward but the DIM
@@ -624,8 +624,6 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    case nir_intrinsic_load_ubo: {
       src_reg surf_index;
 
-      prog_data->base.has_ubo_pull = true;
-
       dest = get_nir_dest(instr->dest);
 
       if (nir_src_is_const(instr->src[0])) {
@@ -647,10 +645,31 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
          surf_index = emit_uniformize(surf_index);
       }
 
+      src_reg push_reg;
       src_reg offset_reg;
       if (nir_src_is_const(instr->src[1])) {
          unsigned load_offset = nir_src_as_uint(instr->src[1]);
-         offset_reg = brw_imm_ud(load_offset & ~15);
+         unsigned aligned_offset = load_offset & ~15;
+         offset_reg = brw_imm_ud(aligned_offset);
+
+         /* See if we've selected this as a push constant candidate */
+         if (nir_src_is_const(instr->src[0])) {
+            const unsigned ubo_block = nir_src_as_uint(instr->src[0]);
+            const unsigned offset_256b = aligned_offset / 32;
+
+            for (int i = 0; i < 4; i++) {
+               const struct brw_ubo_range *range = &prog_data->base.ubo_ranges[i];
+               if (range->block == ubo_block &&
+                   offset_256b >= range->start &&
+                   offset_256b < range->start + range->length) {
+
+                  push_reg = src_reg(dst_reg(UNIFORM, UBO_START + i));
+                  push_reg.type = dest.type;
+                  push_reg.offset = aligned_offset - 32 * range->start;
+                  break;
+               }
+            }
+         }
       } else {
          offset_reg = src_reg(this, glsl_type::uint_type);
          emit(MOV(dst_reg(offset_reg),
@@ -658,12 +677,15 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       }
 
       src_reg packed_consts;
-      if (nir_dest_bit_size(instr->dest) == 32) {
+      if (push_reg.file != BAD_FILE) {
+         packed_consts = push_reg;
+      } else if (nir_dest_bit_size(instr->dest) == 32) {
          packed_consts = src_reg(this, glsl_type::vec4_type);
          emit_pull_constant_load_reg(dst_reg(packed_consts),
                                      surf_index,
                                      offset_reg,
                                      NULL, NULL /* before_block/inst */);
+         prog_data->base.has_ubo_pull = true;
       } else {
          src_reg temp = src_reg(this, glsl_type::dvec4_type);
          src_reg temp_float = retype(temp, BRW_REGISTER_TYPE_F);
@@ -676,6 +698,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
             emit(ADD(dst_reg(offset_reg), offset_reg, brw_imm_ud(16u)));
          emit_pull_constant_load_reg(dst_reg(byte_offset(temp_float, REG_SIZE)),
                                      surf_index, offset_reg, NULL, NULL);
+         prog_data->base.has_ubo_pull = true;
 
          packed_consts = src_reg(this, glsl_type::dvec4_type);
          shuffle_64bit_data(dst_reg(packed_consts), temp, false);
@@ -2055,7 +2078,7 @@ vec4_visitor::nir_emit_texture(nir_tex_instr *instr)
       }
 
       case nir_tex_src_projector:
-         unreachable("Should be lowered by do_lower_texture_projection");
+         unreachable("Should be lowered by nir_lower_tex");
 
       case nir_tex_src_bias:
          unreachable("LOD bias is not valid for vertex shaders.\n");

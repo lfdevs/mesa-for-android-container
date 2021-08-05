@@ -255,9 +255,6 @@ prepare_shader_sampling(
          }
          else {
             /* display target texture/surface */
-            /*
-             * XXX: Where should this be unmapped?
-             */
             struct softpipe_screen *screen = softpipe_screen(tex->screen);
             struct sw_winsys *winsys = screen->winsys;
             addr = winsys->displaytarget_map(winsys, sp_tex->dt,
@@ -278,6 +275,20 @@ prepare_shader_sampling(
    }
 }
 
+static void
+sp_sampler_view_display_target_unmap(struct softpipe_context *sp,
+                                     struct pipe_sampler_view *view)
+{
+   if (view) {
+      struct pipe_resource *tex = view->texture;
+      struct softpipe_resource *sp_tex = softpipe_resource(tex);
+      if (sp_tex->dt) {
+         struct softpipe_screen *screen = softpipe_screen(tex->screen);
+         struct sw_winsys *winsys = screen->winsys;
+         winsys->displaytarget_unmap(winsys, sp_tex->dt);
+      }
+   }
+}
 
 /**
  * Called during state validation when SP_NEW_TEXTURE is set.
@@ -296,6 +307,8 @@ softpipe_cleanup_vertex_sampling(struct softpipe_context *ctx)
 {
    unsigned i;
    for (i = 0; i < ARRAY_SIZE(ctx->mapped_vs_tex); i++) {
+      sp_sampler_view_display_target_unmap(
+         ctx, ctx->sampler_views[PIPE_SHADER_VERTEX][i]);
       pipe_resource_reference(&ctx->mapped_vs_tex[i], NULL);
    }
 }
@@ -318,6 +331,8 @@ softpipe_cleanup_geometry_sampling(struct softpipe_context *ctx)
 {
    unsigned i;
    for (i = 0; i < ARRAY_SIZE(ctx->mapped_gs_tex); i++) {
+      sp_sampler_view_display_target_unmap(
+         ctx, ctx->sampler_views[PIPE_SHADER_GEOMETRY][i]);
       pipe_resource_reference(&ctx->mapped_gs_tex[i], NULL);
    }
 }

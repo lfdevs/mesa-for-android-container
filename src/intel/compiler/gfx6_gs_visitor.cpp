@@ -96,7 +96,7 @@ gfx6_gs_visitor::emit_prolog()
    this->prim_count = src_reg(this, glsl_type::uint_type);
    emit(MOV(dst_reg(this->prim_count), brw_imm_ud(0u)));
 
-   if (prog->info.has_transform_feedback_varyings) {
+   if (gs_prog_data->num_transform_feedback_bindings) {
       /* Create a virtual register to hold destination indices in SOL */
       this->destination_indices = src_reg(this, glsl_type::uvec4_type);
       /* Create a virtual register to hold number of written primitives */
@@ -107,8 +107,6 @@ gfx6_gs_visitor::emit_prolog()
       this->max_svbi = src_reg(this, glsl_type::uvec4_type);
       emit(MOV(dst_reg(this->max_svbi),
                src_reg(retype(brw_vec1_grf(1, 4), BRW_REGISTER_TYPE_UD))));
-
-      xfb_setup();
    }
 
    /* PrimitveID is delivered in r0.1 of the thread payload. If the program
@@ -353,7 +351,7 @@ gfx6_gs_visitor::emit_thread_end()
    this->current_annotation = "gfx6 thread end: ff_sync";
 
    vec4_instruction *inst = NULL;
-   if (prog->info.has_transform_feedback_varyings) {
+   if (gs_prog_data->num_transform_feedback_bindings) {
       src_reg sol_temp(this, glsl_type::uvec4_type);
       emit(GS_OPCODE_FF_SYNC_SET_PRIMITIVES,
            dst_reg(this->svbi),
@@ -446,7 +444,7 @@ gfx6_gs_visitor::emit_thread_end()
       }
       emit(BRW_OPCODE_WHILE);
 
-      if (prog->info.has_transform_feedback_varyings)
+      if (gs_prog_data->num_transform_feedback_bindings)
          xfb_write();
    }
    emit(BRW_OPCODE_ENDIF);
@@ -468,7 +466,7 @@ gfx6_gs_visitor::emit_thread_end()
     */
    this->current_annotation = "gfx6 thread end: EOT";
 
-   if (prog->info.has_transform_feedback_varyings) {
+   if (gs_prog_data->num_transform_feedback_bindings) {
       /* When emitting EOT, set SONumPrimsWritten Increment Value. */
       src_reg data(this, glsl_type::uint_type);
       emit(AND(dst_reg(data), this->sol_prim_written, brw_imm_ud(0xffffu)));
@@ -522,46 +520,9 @@ gfx6_gs_visitor::setup_payload()
 }
 
 void
-gfx6_gs_visitor::xfb_setup()
-{
-   static const unsigned swizzle_for_offset[4] = {
-      BRW_SWIZZLE4(0, 1, 2, 3),
-      BRW_SWIZZLE4(1, 2, 3, 3),
-      BRW_SWIZZLE4(2, 3, 3, 3),
-      BRW_SWIZZLE4(3, 3, 3, 3)
-   };
-
-   const struct gl_transform_feedback_info *linked_xfb_info =
-      this->prog->sh.LinkedTransformFeedback;
-   int i;
-
-   /* Make sure that the VUE slots won't overflow the unsigned chars in
-    * prog_data->transform_feedback_bindings[].
-    */
-   STATIC_ASSERT(BRW_VARYING_SLOT_COUNT <= 256);
-
-   /* Make sure that we don't need more binding table entries than we've
-    * set aside for use in transform feedback.  (We shouldn't, since we
-    * set aside enough binding table entries to have one per component).
-    */
-   assert(linked_xfb_info->NumOutputs <= BRW_MAX_SOL_BINDINGS);
-
-   gs_prog_data->num_transform_feedback_bindings = linked_xfb_info->NumOutputs;
-   for (i = 0; i < gs_prog_data->num_transform_feedback_bindings; i++) {
-      gs_prog_data->transform_feedback_bindings[i] =
-         linked_xfb_info->Outputs[i].OutputRegister;
-      gs_prog_data->transform_feedback_swizzles[i] =
-         swizzle_for_offset[linked_xfb_info->Outputs[i].ComponentOffset];
-   }
-}
-
-void
 gfx6_gs_visitor::xfb_write()
 {
    unsigned num_verts;
-
-   if (!gs_prog_data->num_transform_feedback_bindings)
-      return;
 
    switch (gs_prog_data->output_topology) {
    case _3DPRIM_POINTLIST:

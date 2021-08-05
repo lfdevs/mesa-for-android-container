@@ -31,12 +31,11 @@
 
 #include "pipe/p_compiler.h"
 #include "util/u_handle_table.h"
+#include "util/u_dynarray.h"
 #include <GL/gl.h>
 #include "gldrv.h"
 #include "stw_pixelformat.h"
 
-
-#define STW_MAX_PIXELFORMATS   256
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,9 +62,8 @@ struct stw_device
 
    LUID AdapterLuid;
 
-   struct stw_pixelformat_info pixelformats[STW_MAX_PIXELFORMATS];
+   struct util_dynarray pixelformats;
    unsigned pixelformat_count;
-   unsigned pixelformat_extended_count;
 
    struct WGLCALLBACKS callbacks;
 

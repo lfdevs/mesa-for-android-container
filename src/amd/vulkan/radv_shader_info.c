@@ -158,16 +158,16 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr,
    case nir_intrinsic_load_instance_id:
       info->vs.needs_instance_id = true;
       break;
-   case nir_intrinsic_load_num_work_groups:
+   case nir_intrinsic_load_num_workgroups:
       info->cs.uses_grid_size = true;
       break;
    case nir_intrinsic_load_local_invocation_id:
-   case nir_intrinsic_load_work_group_id: {
+   case nir_intrinsic_load_workgroup_id: {
       unsigned mask = nir_ssa_def_components_read(&instr->dest.ssa);
       while (mask) {
          unsigned i = u_bit_scan(&mask);
 
-         if (instr->intrinsic == nir_intrinsic_load_work_group_id)
+         if (instr->intrinsic == nir_intrinsic_load_workgroup_id)
             info->cs.uses_block_id[i] = true;
          else
             info->cs.uses_thread_id[i] = true;
@@ -266,6 +266,9 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr,
    case nir_intrinsic_store_output:
       gather_intrinsic_store_output_info(nir, instr, info);
       break;
+   case nir_intrinsic_load_sbt_amd:
+      info->cs.uses_sbt = true;
+      break;
    default:
       break;
    }
@@ -310,10 +313,6 @@ gather_info_input_decl_vs(const nir_shader *nir, const nir_variable *var,
                           struct radv_shader_info *info, const struct radv_shader_variant_key *key)
 {
    unsigned attrib_count = glsl_count_attribute_slots(var->type, true);
-   int idx = var->data.location;
-
-   if (idx >= VERT_ATTRIB_GENERIC0 && idx < VERT_ATTRIB_GENERIC0 + MAX_VERTEX_ATTRIBS)
-      info->vs.has_vertex_buffers = true;
 
    for (unsigned i = 0; i < attrib_count; ++i) {
       unsigned attrib_index = var->data.location + i - VERT_ATTRIB_GENERIC0;
@@ -322,6 +321,11 @@ gather_info_input_decl_vs(const nir_shader *nir, const nir_variable *var,
          info->vs.needs_instance_id = true;
          info->vs.needs_base_instance = true;
       }
+
+      if (info->vs.use_per_attribute_vb_descs)
+         info->vs.vb_desc_usage_mask |= 1u << attrib_index;
+      else
+         info->vs.vb_desc_usage_mask |= 1u << key->vs.vertex_attribute_bindings[attrib_index];
    }
 }
 
@@ -539,7 +543,8 @@ radv_nir_shader_info_init(struct radv_shader_info *info)
 }
 
 void
-radv_nir_shader_info_pass(const struct nir_shader *nir, const struct radv_pipeline_layout *layout,
+radv_nir_shader_info_pass(struct radv_device *device, const struct nir_shader *nir,
+                          const struct radv_pipeline_layout *layout,
                           const struct radv_shader_variant_key *key, struct radv_shader_info *info)
 {
    struct nir_function *func = (struct nir_function *)exec_list_get_head_const(&nir->functions);
@@ -548,6 +553,13 @@ radv_nir_shader_info_pass(const struct nir_shader *nir, const struct radv_pipeli
        (layout->dynamic_shader_stages & mesa_to_vk_shader_stage(nir->info.stage))) {
       info->loads_push_constants = true;
       info->loads_dynamic_offsets = true;
+   }
+
+   if (nir->info.stage == MESA_SHADER_VERTEX) {
+      /* Use per-attribute vertex descriptors to prevent faults and
+       * for correct bounds checking.
+       */
+      info->vs.use_per_attribute_vb_descs = device->robust_buffer_access;
    }
 
    nir_foreach_shader_in_variable (variable, nir)
@@ -637,7 +649,7 @@ radv_nir_shader_info_pass(const struct nir_shader *nir, const struct radv_pipeli
    switch (nir->info.stage) {
    case MESA_SHADER_COMPUTE:
       for (int i = 0; i < 3; ++i)
-         info->cs.block_size[i] = nir->info.cs.local_size[i];
+         info->cs.block_size[i] = nir->info.workgroup_size[i];
       break;
    case MESA_SHADER_FRAGMENT:
       info->ps.can_discard = nir->info.fs.uses_discard;

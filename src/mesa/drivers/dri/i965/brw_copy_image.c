@@ -42,7 +42,7 @@ copy_miptrees(struct brw_context *brw,
               int dst_x, int dst_y, int dst_z, unsigned dst_level,
               int src_width, int src_height)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
    if (devinfo->ver <= 5) {
       /* On gfx4-5, try BLT first.

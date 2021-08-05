@@ -22,6 +22,13 @@
  */
 
 #include "v3dv_private.h"
+
+/* We don't expect that the packets we use in this file change across hw
+ * versions, so we just explicitly set the V3D_VERSION and include v3dx_pack
+ * here
+ */
+#define V3D_VERSION 33
+#include "broadcom/common/v3d_macros.h"
 #include "broadcom/cle/v3dx_pack.h"
 
 void
@@ -72,9 +79,9 @@ cl_alloc_bo(struct v3dv_cl *cl, uint32_t space, bool use_branch)
       cl_emit(cl, BRANCH, branch) {
          branch.address = v3dv_cl_address(bo, 0);
       }
+   } else {
+      v3dv_job_add_bo_unchecked(cl->job, bo);
    }
-
-   v3dv_job_add_bo(cl->job, bo);
 
    cl->bo = bo;
    cl->base = cl->bo->map;

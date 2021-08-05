@@ -226,7 +226,7 @@ batch_draw_tracking(struct fd_batch *batch, const struct pipe_draw_info *info,
 
 static void
 update_draw_stats(struct fd_context *ctx, const struct pipe_draw_info *info,
-                  const struct pipe_draw_start_count *draws,
+                  const struct pipe_draw_start_count_bias *draws,
                   unsigned num_draws) assert_dt
 {
    ctx->stats.draw_calls++;
@@ -265,8 +265,9 @@ update_draw_stats(struct fd_context *ctx, const struct pipe_draw_info *info,
 
 static void
 fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
+		unsigned drawid_offset,
             const struct pipe_draw_indirect_info *indirect,
-            const struct pipe_draw_start_count *draws, unsigned num_draws) in_dt
+            const struct pipe_draw_start_count_bias *draws, unsigned num_draws) in_dt
 {
    struct fd_context *ctx = fd_context(pctx);
 
@@ -290,7 +291,7 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
       if (ctx->streamout.num_targets > 0)
          mesa_loge("stream-out with emulated prims");
       util_primconvert_save_rasterizer_state(ctx->primconvert, ctx->rasterizer);
-      util_primconvert_draw_vbo(ctx->primconvert, info, indirect, draws,
+      util_primconvert_draw_vbo(ctx->primconvert, info, drawid_offset, indirect, draws,
                                 num_draws);
       return;
    }
@@ -302,7 +303,7 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
    if (info->index_size) {
       if (info->has_user_indices) {
          if (num_draws > 1) {
-            util_draw_multi(pctx, info, indirect, draws, num_draws);
+				util_draw_multi(pctx, info, drawid_offset, indirect, draws, num_draws);
             return;
          }
          if (!util_upload_index_buffer(pctx, info, &draws[0], &indexbuf,
@@ -318,16 +319,11 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
    }
 
    if ((ctx->streamout.num_targets > 0) && (num_draws > 1)) {
-      util_draw_multi(pctx, info, indirect, draws, num_draws);
+		util_draw_multi(pctx, info, drawid_offset, indirect, draws, num_draws);
       return;
    }
 
    struct fd_batch *batch = fd_context_batch(ctx);
-
-   if (ctx->in_discard_blit) {
-      fd_batch_reset(batch);
-      fd_context_all_dirty(ctx);
-   }
 
    batch_draw_tracking(batch, info, indirect);
 
@@ -342,8 +338,6 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
       assert(ctx->batch == batch);
    }
 
-   batch->blit = ctx->in_discard_blit;
-   batch->back_blit = ctx->in_shadow;
    batch->num_draws++;
 
    /* Marking the batch as needing flush must come after the batch
@@ -361,7 +355,7 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
    batch->cost += ctx->draw_cost;
 
    for (unsigned i = 0; i < num_draws; i++) {
-      ctx->draw_vbo(ctx, info, indirect, &draws[i], index_offset);
+      ctx->draw_vbo(ctx, info, drawid_offset, indirect, &draws[i], index_offset);
 
       batch->num_vertices += draws[i].count * info->instance_count;
    }
@@ -376,6 +370,8 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
 
    if (FD_DBG(DDRAW))
       fd_context_all_dirty(ctx);
+
+   debug_assert(!batch->flushed);
 
    fd_batch_unlock_submit(batch);
    fd_batch_check_size(batch);
@@ -447,11 +443,6 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
 
    struct fd_batch *batch = fd_context_batch(ctx);
 
-   if (ctx->in_discard_blit) {
-      fd_batch_reset(batch);
-      fd_context_all_dirty(ctx);
-   }
-
    batch_clear_tracking(batch, buffers);
 
    while (unlikely(!fd_batch_lock_submit(batch))) {
@@ -493,6 +484,8 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
       }
    }
 
+   debug_assert(!batch->flushed);
+
    fd_batch_unlock_submit(batch);
    fd_batch_check_size(batch);
 
@@ -531,7 +524,7 @@ fd_launch_grid(struct pipe_context *pctx,
       &ctx->shaderbuf[PIPE_SHADER_COMPUTE];
    struct fd_batch *batch, *save_batch = NULL;
 
-   batch = fd_bc_alloc_batch(&ctx->screen->batch_cache, ctx, true);
+   batch = fd_bc_alloc_batch(ctx, true);
    fd_batch_reference(&save_batch, ctx->batch);
    fd_batch_reference(&ctx->batch, batch);
    fd_context_all_dirty(ctx);
@@ -571,6 +564,11 @@ fd_launch_grid(struct pipe_context *pctx,
       resource_read(batch, info->indirect);
 
    fd_screen_unlock(ctx->screen);
+
+   DBG("%p: work_dim=%u, block=%ux%ux%u, grid=%ux%ux%u",
+       batch, info->work_dim,
+       info->block[0], info->block[1], info->block[2],
+       info->grid[0], info->grid[1], info->grid[2]);
 
    fd_batch_needs_flush(batch);
    ctx->launch_grid(ctx, info);

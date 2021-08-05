@@ -2,9 +2,13 @@
 # non-zero-length and not starting with '#', will regex match to
 # delete lines from the test list.  Be careful.
 
-# Skip the perf/stress tests to keep runtime manageable
-dEQP-GLES[0-9]*.performance.*
-dEQP-GLES[0-9]*.stress.*
+# Some compute jobs take more 0.5s, the maximum allowed by the
+# kernel driver
+dEQP-GLES31.functional.draw_indirect.compute_interop.large.*
 
-# These are really slow on tiling architectures (including llvmpipe).
-dEQP-GLES[0-9]*.functional.flush_finish.*
+# Numerical instability causes failures with FP16. Forcing highp in the GLSL
+# compiler is one workaround, but these tests are suspected to be buggy with a
+# fix pending upstream. See
+# https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/10394
+dEQP-GLES3.functional.shaders.matrix.inverse.dynamic.mediump_mat2_float_vertex
+dEQP-GLES3.functional.shaders.matrix.inverse.dynamic.lowp_mat2_float_vertex

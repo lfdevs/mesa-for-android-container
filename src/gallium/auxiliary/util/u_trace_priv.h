@@ -43,6 +43,12 @@ struct u_tracepoint {
    unsigned payload_sz;
    const char *name;
    void (*print)(FILE *out, const void *payload);
+#ifdef HAVE_PERFETTO
+   /**
+    * Callback to emit a perfetto event, such as render-stage trace
+    */
+   void (*perfetto)(struct pipe_context *pctx, uint64_t ts_ns, const void *payload);
+#endif
 };
 
 /**

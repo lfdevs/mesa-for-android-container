@@ -830,6 +830,14 @@ dxil_module_get_res_type(struct dxil_module *m, enum dxil_resource_kind kind,
       return dxil_module_get_struct_type(m, class_name, &vec_type, 1);
    }
 
+   case DXIL_RESOURCE_KIND_RAW_BUFFER:
+   {
+      const struct dxil_type *component_type = dxil_module_get_int_type(m, 32);
+      char class_name[64] = { 0 };
+      snprintf(class_name, 64, "struct.%sByteAddressBuffer", readwrite ? "RW" : "");
+      return dxil_module_get_struct_type(m, class_name, &component_type, 1);
+   }
+
    default:
       unreachable("resource type not supported");
    }

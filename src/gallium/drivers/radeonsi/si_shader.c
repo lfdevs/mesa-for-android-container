@@ -218,10 +218,10 @@ unsigned si_get_max_workgroup_size(const struct si_shader *shader)
    }
 
    /* Compile a variable block size using the maximum variable size. */
-   if (shader->selector->info.base.cs.local_size_variable)
+   if (shader->selector->info.base.workgroup_size_variable)
       return SI_MAX_VARIABLE_THREADS_PER_BLOCK;
 
-   uint16_t *local_size = shader->selector->info.base.cs.local_size;
+   uint16_t *local_size = shader->selector->info.base.workgroup_size;
    unsigned max_work_group_size = (uint32_t)local_size[0] *
                                   (uint32_t)local_size[1] *
                                   (uint32_t)local_size[2];
@@ -793,9 +793,6 @@ static bool si_shader_binary_open(struct si_screen *screen, struct si_shader *sh
 
    if (sel && screen->info.chip_class >= GFX9 && !shader->is_gs_copy_shader &&
        (sel->info.stage == MESA_SHADER_GEOMETRY || shader->key.as_ngg)) {
-      /* We add this symbol even on LLVM <= 8 to ensure that
-       * shader->config.lds_size is set correctly below.
-       */
       struct ac_rtld_symbol *sym = &lds_symbols[num_lds_symbols++];
       sym->name = "esgs_ring";
       sym->size = shader->gs_info.esgs_ring_size * 4;
@@ -1190,13 +1187,9 @@ static void si_dump_shader_key(const struct si_shader *shader, FILE *f)
       fprintf(f, "  opt.cs_prim_type = %s\n", tgsi_primitive_names[key->opt.cs_prim_type]);
       fprintf(f, "  opt.cs_indexed = %u\n", key->opt.cs_indexed);
       fprintf(f, "  opt.cs_instancing = %u\n", key->opt.cs_instancing);
-      fprintf(f, "  opt.cs_primitive_restart = %u\n", key->opt.cs_primitive_restart);
       fprintf(f, "  opt.cs_provoking_vertex_first = %u\n", key->opt.cs_provoking_vertex_first);
-      fprintf(f, "  opt.cs_need_correct_orientation = %u\n", key->opt.cs_need_correct_orientation);
       fprintf(f, "  opt.cs_cull_front = %u\n", key->opt.cs_cull_front);
       fprintf(f, "  opt.cs_cull_back = %u\n", key->opt.cs_cull_back);
-      fprintf(f, "  opt.cs_cull_z = %u\n", key->opt.cs_cull_z);
-      fprintf(f, "  opt.cs_halfz_clip_space = %u\n", key->opt.cs_halfz_clip_space);
       break;
 
    case MESA_SHADER_TESS_CTRL:
@@ -1298,6 +1291,9 @@ bool si_vs_needs_prolog(const struct si_shader_selector *sel,
     * VS prolog. */
    return sel->vs_needs_prolog || prolog_key->ls_vgpr_fix ||
           prolog_key->unpack_instance_id_from_vertex_id ||
+          /* The 2nd VS prolog loads input VGPRs from LDS */
+          (key->opt.ngg_culling && !ngg_cull_shader) ||
+          /* The 1st VS prolog generates input VGPRs for fast launch. */
           (ngg_cull_shader && key->opt.ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_ALL);
 }
 
@@ -1332,6 +1328,8 @@ void si_get_vs_prolog_key(const struct si_shader_info *info, unsigned num_input_
          !!(shader_out->key.opt.ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_TRI_STRIP);
       key->vs_prolog.gs_fast_launch_index_size_packed =
          SI_GET_NGG_CULL_GS_FAST_LAUNCH_INDEX_SIZE_PACKED(shader_out->key.opt.ngg_culling);
+   } else if (shader_out->key.opt.ngg_culling) {
+      key->vs_prolog.load_vgprs_after_culling = 1;
    }
 
    if (shader_out->selector->info.stage == MESA_SHADER_TESS_CTRL) {
@@ -1465,9 +1463,7 @@ bool si_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compi
    if (!si_llvm_compile_shader(sscreen, compiler, shader, debug, nir, free_nir))
       return false;
 
-   /* Validate SGPR and VGPR usage for compute to detect compiler bugs.
-    * LLVM 3.9svn has this bug.
-    */
+   /* Validate SGPR and VGPR usage for compute to detect compiler bugs. */
    if (sel->info.stage == MESA_SHADER_COMPUTE) {
       unsigned wave_size = sscreen->compute_wave_size;
       unsigned max_vgprs =

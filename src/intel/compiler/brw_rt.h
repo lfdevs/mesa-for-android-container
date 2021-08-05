@@ -192,13 +192,13 @@ struct brw_rt_raygen_trampoline_params {
 
 static inline void
 brw_rt_compute_scratch_layout(struct brw_rt_scratch_layout *layout,
-                              const struct gen_device_info *devinfo,
+                              const struct intel_device_info *devinfo,
                               uint32_t stack_ids_per_dss,
                               uint32_t sw_stack_size)
 {
    layout->stack_ids_per_dss = stack_ids_per_dss;
 
-   const uint32_t dss_count = gen_device_info_num_dual_subslices(devinfo);
+   const uint32_t dss_count = intel_device_info_num_dual_subslices(devinfo);
    const uint32_t num_stack_ids = dss_count * stack_ids_per_dss;
 
    uint64_t size = 0;

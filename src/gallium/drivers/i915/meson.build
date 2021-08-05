@@ -67,6 +67,7 @@ libi915 = static_library(
   files_i915,
   gnu_symbol_visibility : 'hidden',
   include_directories : [inc_include, inc_src, inc_gallium, inc_gallium_aux],
+  dependencies : idep_nir,
 )
 
 driver_i915 = declare_dependency(

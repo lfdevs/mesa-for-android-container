@@ -484,7 +484,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_CmdDraw(
    LVP_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
    struct lvp_cmd_buffer_entry *cmd;
 
-   uint32_t cmd_size = sizeof(struct pipe_draw_start_count);
+   uint32_t cmd_size = sizeof(struct pipe_draw_start_count_bias);
    cmd = cmd_buf_entry_alloc_size(cmd_buffer, cmd_size, LVP_CMD_DRAW);
    if (!cmd)
       return;
@@ -494,6 +494,36 @@ VKAPI_ATTR void VKAPI_CALL lvp_CmdDraw(
    cmd->u.draw.draw_count = 1;
    cmd->u.draw.draws[0].start = firstVertex;
    cmd->u.draw.draws[0].count = vertexCount;
+
+   cmd_buf_queue(cmd_buffer, cmd);
+}
+
+VKAPI_ATTR void VKAPI_CALL lvp_CmdDrawMultiEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    drawCount,
+    const VkMultiDrawInfoEXT                   *pVertexInfo,
+    uint32_t                                    instanceCount,
+    uint32_t                                    firstInstance,
+    uint32_t                                    stride)
+{
+   LVP_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
+   struct lvp_cmd_buffer_entry *cmd;
+
+   uint32_t cmd_size = drawCount * sizeof(struct pipe_draw_start_count_bias);
+   cmd = cmd_buf_entry_alloc_size(cmd_buffer, cmd_size, LVP_CMD_DRAW);
+   if (!cmd)
+      return;
+
+   cmd->u.draw.instance_count = instanceCount;
+   cmd->u.draw.first_instance = firstInstance;
+   cmd->u.draw.draw_count = drawCount;
+   if (stride == sizeof(struct pipe_draw_start_count_bias))
+      memcpy(cmd->u.draw.draws, pVertexInfo, cmd_size);
+   else {
+      unsigned i = 0;
+      vk_foreach_multi_draw(draw, i, pVertexInfo, drawCount, stride)
+         memcpy(&cmd->u.draw.draws[i], draw, sizeof(struct VkMultiDrawInfoEXT));
+   }
 
    cmd_buf_queue(cmd_buffer, cmd);
 }
@@ -736,17 +766,53 @@ VKAPI_ATTR void VKAPI_CALL lvp_CmdDrawIndexed(
    LVP_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
    struct lvp_cmd_buffer_entry *cmd;
 
-   uint32_t cmd_size = sizeof(struct pipe_draw_start_count);
+   uint32_t cmd_size = sizeof(struct pipe_draw_start_count_bias);
    cmd = cmd_buf_entry_alloc_size(cmd_buffer, cmd_size, LVP_CMD_DRAW_INDEXED);
    if (!cmd)
       return;
 
    cmd->u.draw_indexed.instance_count = instanceCount;
-   cmd->u.draw_indexed.vertex_offset = vertexOffset;
    cmd->u.draw_indexed.first_instance = firstInstance;
    cmd->u.draw_indexed.draw_count = 1;
    cmd->u.draw_indexed.draws[0].start = firstIndex;
    cmd->u.draw_indexed.draws[0].count = indexCount;
+   cmd->u.draw_indexed.draws[0].index_bias = vertexOffset;
+   cmd->u.draw_indexed.calc_start = true;
+
+   cmd_buf_queue(cmd_buffer, cmd);
+}
+
+VKAPI_ATTR void VKAPI_CALL lvp_CmdDrawMultiIndexedEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    drawCount,
+    const VkMultiDrawIndexedInfoEXT            *pIndexInfo,
+    uint32_t                                    instanceCount,
+    uint32_t                                    firstInstance,
+    uint32_t                                    stride,
+    const int32_t                              *pVertexOffset)
+{
+   LVP_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
+   struct lvp_cmd_buffer_entry *cmd;
+
+   uint32_t cmd_size = drawCount * sizeof(struct pipe_draw_start_count_bias);
+   cmd = cmd_buf_entry_alloc_size(cmd_buffer, cmd_size, LVP_CMD_DRAW_INDEXED);
+   if (!cmd)
+      return;
+
+   cmd->u.draw_indexed.instance_count = instanceCount;
+   cmd->u.draw_indexed.first_instance = firstInstance;
+   cmd->u.draw_indexed.draw_count = drawCount;
+   cmd->u.draw_indexed.vertex_offset_changes = !pVertexOffset;
+   if (stride == sizeof(struct pipe_draw_start_count_bias))
+      memcpy(cmd->u.draw_indexed.draws, pIndexInfo, cmd_size);
+   else {
+      unsigned i = 0;
+      vk_foreach_multi_draw_indexed(draw, i, pIndexInfo, drawCount, stride)
+         memcpy(&cmd->u.draw_indexed.draws[i], draw, sizeof(struct pipe_draw_start_count_bias));
+   }
+   /* only the first member is read if vertex_offset_changes is true */
+   if (pVertexOffset)
+      cmd->u.draw_indexed.draws[0].index_bias = *pVertexOffset;
    cmd->u.draw_indexed.calc_start = true;
 
    cmd_buf_queue(cmd_buffer, cmd);
@@ -1681,7 +1747,10 @@ VKAPI_ATTR void VKAPI_CALL lvp_CmdBindTransformFeedbackBuffersEXT(
    for (unsigned i = 0; i < bindingCount; i++) {
       cmd->u.bind_transform_feedback_buffers.buffers[i] = lvp_buffer_from_handle(pBuffers[i]);
       cmd->u.bind_transform_feedback_buffers.offsets[i] = pOffsets[i];
-      cmd->u.bind_transform_feedback_buffers.sizes[i] = pSizes[i];
+      if (pSizes && pSizes[i] != VK_WHOLE_SIZE)
+         cmd->u.bind_transform_feedback_buffers.sizes[i] = pSizes[i];
+      else
+         cmd->u.bind_transform_feedback_buffers.sizes[i] = cmd->u.bind_transform_feedback_buffers.buffers[i]->size - pOffsets[i];
    }
    cmd_buf_queue(cmd_buffer, cmd);
 }
@@ -1856,6 +1925,29 @@ VKAPI_ATTR void VKAPI_CALL lvp_CmdSetCullModeEXT(
    cmd_buf_queue(cmd_buffer, cmd);
 }
 
+VKAPI_ATTR void VKAPI_CALL lvp_CmdSetVertexInputEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    vertexBindingDescriptionCount,
+    const VkVertexInputBindingDescription2EXT*  pVertexBindingDescriptions,
+    uint32_t                                    vertexAttributeDescriptionCount,
+    const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions)
+{
+   LVP_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
+   struct lvp_cmd_buffer_entry *cmd;
+
+   size_t binding_size = vertexBindingDescriptionCount * sizeof(VkVertexInputBindingDescription2EXT);
+   size_t attr_size = vertexAttributeDescriptionCount * sizeof(VkVertexInputAttributeDescription2EXT);
+   cmd = cmd_buf_entry_alloc_size(cmd_buffer, binding_size + attr_size, LVP_CMD_SET_VERTEX_INPUT);
+   if (!cmd)
+      return;
+
+   cmd->u.set_vertex_input.binding_count = vertexBindingDescriptionCount;
+   cmd->u.set_vertex_input.attr_count = vertexAttributeDescriptionCount;
+   memcpy(cmd->u.set_vertex_input.data, pVertexBindingDescriptions, binding_size);
+   memcpy(cmd->u.set_vertex_input.data + binding_size, pVertexAttributeDescriptions, attr_size);
+   cmd_buf_queue(cmd_buffer, cmd);
+}
+
 VKAPI_ATTR void VKAPI_CALL lvp_CmdSetFrontFaceEXT(
     VkCommandBuffer                             commandBuffer,
     VkFrontFace                                 frontFace)
@@ -1868,6 +1960,23 @@ VKAPI_ATTR void VKAPI_CALL lvp_CmdSetFrontFaceEXT(
       return;
 
    cmd->u.set_front_face.front_face = frontFace;
+   cmd_buf_queue(cmd_buffer, cmd);
+}
+
+VKAPI_ATTR void VKAPI_CALL lvp_CmdSetLineStippleEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    lineStippleFactor,
+    uint16_t                                    lineStipplePattern)
+{
+   LVP_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
+   struct lvp_cmd_buffer_entry *cmd;
+
+   cmd = cmd_buf_entry_alloc(cmd_buffer, LVP_CMD_SET_LINE_STIPPLE);
+   if (!cmd)
+      return;
+
+   cmd->u.set_line_stipple.line_stipple_factor = lineStippleFactor;
+   cmd->u.set_line_stipple.line_stipple_pattern = lineStipplePattern;
    cmd_buf_queue(cmd_buffer, cmd);
 }
 
@@ -2072,5 +2181,80 @@ VKAPI_ATTR void VKAPI_CALL lvp_CmdSetStencilOpEXT(
    cmd->u.set_stencil_op.pass_op = passOp;
    cmd->u.set_stencil_op.depth_fail_op = depthFailOp;
    cmd->u.set_stencil_op.compare_op = compareOp;
+   cmd_buf_queue(cmd_buffer, cmd);
+}
+
+VKAPI_ATTR void VKAPI_CALL lvp_CmdSetDepthBiasEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthBiasEnable)
+{
+   LVP_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
+   struct lvp_cmd_buffer_entry *cmd;
+
+   cmd = cmd_buf_entry_alloc(cmd_buffer, LVP_CMD_SET_DEPTH_BIAS_ENABLE);
+   if (!cmd)
+      return;
+
+   cmd->u.set_depth_bias_enable.enable = depthBiasEnable == VK_TRUE;
+   cmd_buf_queue(cmd_buffer, cmd);
+}
+
+VKAPI_ATTR void VKAPI_CALL lvp_CmdSetLogicOpEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkLogicOp                                   logicOp)
+{
+   LVP_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
+   struct lvp_cmd_buffer_entry *cmd;
+
+   cmd = cmd_buf_entry_alloc(cmd_buffer, LVP_CMD_SET_LOGIC_OP);
+   if (!cmd)
+      return;
+
+   cmd->u.set_logic_op.op = logicOp;
+   cmd_buf_queue(cmd_buffer, cmd);
+}
+
+VKAPI_ATTR void VKAPI_CALL lvp_CmdSetPatchControlPointsEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    patchControlPoints)
+{
+   LVP_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
+   struct lvp_cmd_buffer_entry *cmd;
+
+   cmd = cmd_buf_entry_alloc(cmd_buffer, LVP_CMD_SET_PATCH_CONTROL_POINTS);
+   if (!cmd)
+      return;
+
+   cmd->u.set_patch_control_points.vertices_per_patch = patchControlPoints;
+   cmd_buf_queue(cmd_buffer, cmd);
+}
+
+VKAPI_ATTR void VKAPI_CALL lvp_CmdSetPrimitiveRestartEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    primitiveRestartEnable)
+{
+   LVP_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
+   struct lvp_cmd_buffer_entry *cmd;
+
+   cmd = cmd_buf_entry_alloc(cmd_buffer, LVP_CMD_SET_PRIMITIVE_RESTART_ENABLE);
+   if (!cmd)
+      return;
+
+   cmd->u.set_primitive_restart_enable.enable = primitiveRestartEnable == VK_TRUE;
+   cmd_buf_queue(cmd_buffer, cmd);
+}
+
+VKAPI_ATTR void VKAPI_CALL lvp_CmdSetRasterizerDiscardEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    rasterizerDiscardEnable)
+{
+   LVP_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
+   struct lvp_cmd_buffer_entry *cmd;
+
+   cmd = cmd_buf_entry_alloc(cmd_buffer, LVP_CMD_SET_RASTERIZER_DISCARD_ENABLE);
+   if (!cmd)
+      return;
+
+   cmd->u.set_rasterizer_discard_enable.enable = rasterizerDiscardEnable == VK_TRUE;
    cmd_buf_queue(cmd_buffer, cmd);
 }

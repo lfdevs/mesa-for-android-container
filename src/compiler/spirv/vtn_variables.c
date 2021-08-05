@@ -914,16 +914,16 @@ vtn_get_builtin_location(struct vtn_builder *b,
       set_mode_system_value(b, mode);
       break;
    case SpvBuiltInNumWorkgroups:
-      *location = SYSTEM_VALUE_NUM_WORK_GROUPS;
+      *location = SYSTEM_VALUE_NUM_WORKGROUPS;
       set_mode_system_value(b, mode);
       break;
    case SpvBuiltInWorkgroupSize:
    case SpvBuiltInEnqueuedWorkgroupSize:
-      *location = SYSTEM_VALUE_LOCAL_GROUP_SIZE;
+      *location = SYSTEM_VALUE_WORKGROUP_SIZE;
       set_mode_system_value(b, mode);
       break;
    case SpvBuiltInWorkgroupId:
-      *location = SYSTEM_VALUE_WORK_GROUP_ID;
+      *location = SYSTEM_VALUE_WORKGROUP_ID;
       set_mode_system_value(b, mode);
       break;
    case SpvBuiltInLocalInvocationId:
@@ -1282,11 +1282,11 @@ apply_var_decoration(struct vtn_builder *b,
 
 static void
 var_is_patch_cb(struct vtn_builder *b, struct vtn_value *val, int member,
-                const struct vtn_decoration *dec, void *out_is_patch)
+                const struct vtn_decoration *dec, void *void_var)
 {
-   if (dec->decoration == SpvDecorationPatch) {
-      *((bool *) out_is_patch) = true;
-   }
+   struct vtn_variable *vtn_var = void_var;
+   if (dec->decoration == SpvDecorationPatch)
+      vtn_var->var->data.patch = true;
 }
 
 static void
@@ -1308,7 +1308,7 @@ var_decoration_cb(struct vtn_builder *b, struct vtn_value *val, int member,
       vtn_var->input_attachment_index = dec->operands[0];
       return;
    case SpvDecorationPatch:
-      vtn_var->patch = true;
+      vtn_var->var->data.patch = true;
       break;
    case SpvDecorationOffset:
       vtn_var->offset = dec->operands[0];
@@ -1353,7 +1353,7 @@ var_decoration_cb(struct vtn_builder *b, struct vtn_value *val, int member,
          location += VERT_ATTRIB_GENERIC0;
       } else if (vtn_var->mode == vtn_variable_mode_input ||
                  vtn_var->mode == vtn_variable_mode_output) {
-         location += vtn_var->patch ? VARYING_SLOT_PATCH0 : VARYING_SLOT_VAR0;
+         location += vtn_var->var->data.patch ? VARYING_SLOT_PATCH0 : VARYING_SLOT_VAR0;
       } else if (vtn_var->mode == vtn_variable_mode_call_data ||
                  vtn_var->mode == vtn_variable_mode_ray_payload) {
          /* This location is fine as-is */
@@ -1842,6 +1842,7 @@ vtn_create_variable(struct vtn_builder *b, struct vtn_value *val,
       var->var->data.mode = nir_mode;
       var->var->data.location = -1;
       var->var->data.driver_location = 0;
+      var->var->data.access = var->type->access;
       break;
 
    case vtn_variable_mode_workgroup:
@@ -1855,6 +1856,11 @@ vtn_create_variable(struct vtn_builder *b, struct vtn_value *val,
 
    case vtn_variable_mode_input:
    case vtn_variable_mode_output: {
+      var->var = rzalloc(b->shader, nir_variable);
+      var->var->name = ralloc_strdup(var->var, val->name);
+      var->var->type = vtn_type_get_nir_type(b, var->type, var->mode);
+      var->var->data.mode = nir_mode;
+
       /* In order to know whether or not we're a per-vertex inout, we need
        * the patch qualifier.  This means walking the variable decorations
        * early before we actually create any variables.  Not a big deal.
@@ -1871,23 +1877,16 @@ vtn_create_variable(struct vtn_builder *b, struct vtn_value *val,
        * it to be all or nothing, we'll call it patch if any of the members
        * are declared patch.
        */
-      var->patch = false;
-      vtn_foreach_decoration(b, val, var_is_patch_cb, &var->patch);
+      vtn_foreach_decoration(b, val, var_is_patch_cb, var);
       if (glsl_type_is_array(var->type->type) &&
           glsl_type_is_struct_or_ifc(without_array->type)) {
          vtn_foreach_decoration(b, vtn_value(b, without_array->id,
                                              vtn_value_type_type),
-                                var_is_patch_cb, &var->patch);
+                                var_is_patch_cb, var);
       }
 
-      var->var = rzalloc(b->shader, nir_variable);
-      var->var->name = ralloc_strdup(var->var, val->name);
-      var->var->type = vtn_type_get_nir_type(b, var->type, var->mode);
-      var->var->data.mode = nir_mode;
-      var->var->data.patch = var->patch;
-
       struct vtn_type *per_vertex_type = var->type;
-      if (nir_is_per_vertex_io(var->var, b->shader->info.stage))
+      if (nir_is_arrayed_io(var->var, b->shader->info.stage))
          per_vertex_type = var->type->array_element;
 
       /* Figure out the interface block type. */
@@ -1924,7 +1923,7 @@ vtn_create_variable(struct vtn_builder *b, struct vtn_value *val,
 
          for (unsigned i = 0; i < var->var->num_members; i++) {
             var->var->members[i].mode = nir_mode;
-            var->var->members[i].patch = var->patch;
+            var->var->members[i].patch = var->var->data.patch;
             var->var->members[i].location = -1;
          }
       }
@@ -1958,7 +1957,7 @@ vtn_create_variable(struct vtn_builder *b, struct vtn_value *val,
                      "as initializer, but have %u instead",
                      vtn_id_for_value(b, val),
                      vtn_id_for_value(b, initializer));
-         b->shader->info.cs.zero_initialize_shared_memory = true;
+         b->shader->info.zero_initialize_shared_memory = true;
          break;
 
       case SpvStorageClassUniformConstant:

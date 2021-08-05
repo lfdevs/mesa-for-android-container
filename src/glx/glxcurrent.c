@@ -76,8 +76,7 @@ _X_HIDDEN pthread_mutex_t __glXmutex = PTHREAD_MUTEX_INITIALIZER;
  * \b never be \c NULL.  This is important!  Because of this
  * \c __glXGetCurrentContext can be implemented as trivial macro.
  */
-__thread void *__glX_tls_Context __attribute__ ((tls_model("initial-exec")))
-   = &dummyContext;
+__THREAD_INITIAL_EXEC void *__glX_tls_Context = &dummyContext;
 
 _X_HIDDEN void
 __glXSetCurrentContext(struct glx_context * c)
@@ -172,7 +171,8 @@ glXGetCurrentDrawable(void)
  */
 static Bool
 MakeContextCurrent(Display * dpy, GLXDrawable draw,
-                   GLXDrawable read, GLXContext gc_user)
+                   GLXDrawable read, GLXContext gc_user,
+                   int opcode)
 {
    struct glx_context *gc = (struct glx_context *) gc_user;
    struct glx_context *oldGC = __glXGetCurrentContext();
@@ -197,7 +197,7 @@ MakeContextCurrent(Display * dpy, GLXDrawable draw,
    /* can't have only one be 0 */
    if (!!draw != !!read) {
       __glXUnlock();
-      __glXSendError(dpy, BadMatch, None, X_GLXMakeContextCurrent, True);
+      __glXSendError(dpy, BadMatch, None, opcode, True);
       return False;
    }
 
@@ -220,8 +220,7 @@ MakeContextCurrent(Display * dpy, GLXDrawable draw,
       if (gc->vtable->bind(gc, oldGC, draw, read) != Success) {
          __glXSetCurrentContextNull();
          __glXUnlock();
-         __glXSendError(dpy, GLXBadContext, None, X_GLXMakeContextCurrent,
-                        False);
+         __glXSendError(dpy, GLXBadContext, None, opcode, False);
          return GL_FALSE;
       }
 
@@ -248,19 +247,22 @@ MakeContextCurrent(Display * dpy, GLXDrawable draw,
    return GL_TRUE;
 }
 
-
 _GLX_PUBLIC Bool
 glXMakeCurrent(Display * dpy, GLXDrawable draw, GLXContext gc)
 {
-   return MakeContextCurrent(dpy, draw, draw, gc);
+   return MakeContextCurrent(dpy, draw, draw, gc, X_GLXMakeCurrent);
 }
 
-_GLX_PUBLIC
-GLX_ALIAS(Bool, glXMakeCurrentReadSGI,
-          (Display * dpy, GLXDrawable d, GLXDrawable r, GLXContext ctx),
-          (dpy, d, r, ctx), MakeContextCurrent)
+_GLX_PUBLIC Bool
+glXMakeContextCurrent(Display *dpy, GLXDrawable d, GLXDrawable r,
+                      GLXContext ctx)
+{
+   return MakeContextCurrent(dpy, d, r, ctx, X_GLXMakeContextCurrent);
+}
 
-_GLX_PUBLIC
-GLX_ALIAS(Bool, glXMakeContextCurrent,
-          (Display * dpy, GLXDrawable d, GLXDrawable r,
-           GLXContext ctx), (dpy, d, r, ctx), MakeContextCurrent)
+_GLX_PUBLIC Bool
+glXMakeCurrentReadSGI(Display *dpy, GLXDrawable d, GLXDrawable r,
+                      GLXContext ctx)
+{
+   return MakeContextCurrent(dpy, d, r, ctx, X_GLXvop_MakeCurrentReadSGI);
+}

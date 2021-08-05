@@ -51,7 +51,7 @@
 using namespace brw;
 
 static bool
-cmod_propagate_cmp_to_add(const gen_device_info *devinfo, bblock_t *block,
+cmod_propagate_cmp_to_add(const intel_device_info *devinfo, bblock_t *block,
                           fs_inst *inst)
 {
    bool read_flag = false;
@@ -135,7 +135,7 @@ cmod_propagate_cmp_to_add(const gen_device_info *devinfo, bblock_t *block,
              ((!read_flag && scan_inst->conditional_mod == BRW_CONDITIONAL_NONE) ||
               scan_inst->conditional_mod == cond)) {
             scan_inst->conditional_mod = cond;
-            inst->remove(block);
+            inst->remove(block, true);
             return true;
          }
          break;
@@ -166,7 +166,7 @@ cmod_propagate_cmp_to_add(const gen_device_info *devinfo, bblock_t *block,
  *    or.z.f0(8)      g78<8,8,1>      g76<8,8,1>UD    g77<8,8,1>UD
  */
 static bool
-cmod_propagate_not(const gen_device_info *devinfo, bblock_t *block,
+cmod_propagate_not(const intel_device_info *devinfo, bblock_t *block,
                    fs_inst *inst)
 {
    const enum brw_conditional_mod cond = brw_negate_cmod(inst->conditional_mod);
@@ -203,7 +203,7 @@ cmod_propagate_not(const gen_device_info *devinfo, bblock_t *block,
              ((!read_flag && scan_inst->conditional_mod == BRW_CONDITIONAL_NONE) ||
               scan_inst->conditional_mod == cond)) {
             scan_inst->conditional_mod = cond;
-            inst->remove(block);
+            inst->remove(block, true);
             return true;
          }
          break;
@@ -220,7 +220,7 @@ cmod_propagate_not(const gen_device_info *devinfo, bblock_t *block,
 }
 
 static bool
-opt_cmod_propagation_local(const gen_device_info *devinfo, bblock_t *block)
+opt_cmod_propagation_local(const intel_device_info *devinfo, bblock_t *block)
 {
    bool progress = false;
    int ip = block->end_ip + 1;
@@ -309,7 +309,7 @@ opt_cmod_propagation_local(const gen_device_info *devinfo, bblock_t *block)
             if (inst->conditional_mod == BRW_CONDITIONAL_NZ &&
                 scan_inst->opcode == BRW_OPCODE_CMP &&
                 brw_reg_type_is_integer(inst->dst.type)) {
-               inst->remove(block);
+               inst->remove(block, true);
                progress = true;
                break;
             }
@@ -403,17 +403,17 @@ opt_cmod_propagation_local(const gen_device_info *devinfo, bblock_t *block)
                        inst->src[0].type == BRW_REGISTER_TYPE_UD) ||
                       (inst->conditional_mod == BRW_CONDITIONAL_L &&
                        inst->src[0].type == BRW_REGISTER_TYPE_D)) {
-                     inst->remove(block);
+                     inst->remove(block, true);
                      progress = true;
                      break;
                   }
                } else if (scan_inst->conditional_mod == inst->conditional_mod) {
-                  inst->remove(block);
+                  inst->remove(block, true);
                   progress = true;
                   break;
                } else if (!read_flag) {
                   scan_inst->conditional_mod = inst->conditional_mod;
-                  inst->remove(block);
+                  inst->remove(block, true);
                   progress = true;
                   break;
                }
@@ -499,7 +499,7 @@ opt_cmod_propagation_local(const gen_device_info *devinfo, bblock_t *block)
                  scan_inst->conditional_mod == cond)) {
                scan_inst->conditional_mod = cond;
                scan_inst->flag_subreg = inst->flag_subreg;
-               inst->remove(block);
+               inst->remove(block, true);
                progress = true;
             }
             break;
@@ -513,6 +513,9 @@ opt_cmod_propagation_local(const gen_device_info *devinfo, bblock_t *block)
       }
    }
 
+   /* There is progress if and only if instructions were removed. */
+   assert(progress == (block->end_ip_delta != 0));
+
    return progress;
 }
 
@@ -525,8 +528,11 @@ fs_visitor::opt_cmod_propagation()
       progress = opt_cmod_propagation_local(devinfo, block) || progress;
    }
 
-   if (progress)
+   if (progress) {
+      cfg->adjust_block_ips();
+
       invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
+   }
 
    return progress;
 }

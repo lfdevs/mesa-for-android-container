@@ -25,6 +25,7 @@
  *
  */
 
+#include "brw_eu.h"
 #include "brw_fs.h"
 #include "brw_fs_live_variables.h"
 #include "brw_vec4.h"
@@ -66,6 +67,7 @@ public:
    void set_latency_gfx4();
    void set_latency_gfx7(bool is_haswell);
 
+   const struct intel_device_info *devinfo;
    backend_instruction *inst;
    schedule_node **children;
    int *child_latency;
@@ -398,7 +400,7 @@ schedule_node::set_latency_gfx7(bool is_haswell)
       }
 
       case GFX6_SFID_DATAPORT_RENDER_CACHE:
-         switch ((inst->desc >> 14) & 0x1f) {
+         switch (brw_fb_desc_msg_type(devinfo, inst->desc)) {
          case GFX7_DATAPORT_RC_TYPED_SURFACE_WRITE:
          case GFX7_DATAPORT_RC_TYPED_SURFACE_READ:
             /* See also SHADER_OPCODE_TYPED_SURFACE_READ */
@@ -523,6 +525,43 @@ schedule_node::set_latency_gfx7(bool is_haswell)
 
          default:
             unreachable("Unknown data cache message");
+         }
+         break;
+
+      case GFX12_SFID_UGM:
+      case GFX12_SFID_TGM:
+      case GFX12_SFID_SLM:
+         switch (lsc_msg_desc_opcode(devinfo, inst->desc)) {
+         case LSC_OP_LOAD:
+         case LSC_OP_STORE:
+         case LSC_OP_LOAD_CMASK:
+         case LSC_OP_STORE_CMASK:
+            latency = 300;
+            break;
+         case LSC_OP_FENCE:
+         case LSC_OP_ATOMIC_INC:
+         case LSC_OP_ATOMIC_DEC:
+         case LSC_OP_ATOMIC_LOAD:
+         case LSC_OP_ATOMIC_STORE:
+         case LSC_OP_ATOMIC_ADD:
+         case LSC_OP_ATOMIC_SUB:
+         case LSC_OP_ATOMIC_MIN:
+         case LSC_OP_ATOMIC_MAX:
+         case LSC_OP_ATOMIC_UMIN:
+         case LSC_OP_ATOMIC_UMAX:
+         case LSC_OP_ATOMIC_CMPXCHG:
+         case LSC_OP_ATOMIC_FADD:
+         case LSC_OP_ATOMIC_FSUB:
+         case LSC_OP_ATOMIC_FMIN:
+         case LSC_OP_ATOMIC_FMAX:
+         case LSC_OP_ATOMIC_FCMPXCHG:
+         case LSC_OP_ATOMIC_AND:
+         case LSC_OP_ATOMIC_OR:
+         case LSC_OP_ATOMIC_XOR:
+            latency = 1400;
+            break;
+         default:
+            unreachable("unsupported new data port message instruction");
          }
          break;
 
@@ -916,8 +955,9 @@ vec4_instruction_scheduler::get_register_pressure_benefit(backend_instruction *)
 schedule_node::schedule_node(backend_instruction *inst,
                              instruction_scheduler *sched)
 {
-   const struct gen_device_info *devinfo = sched->bs->devinfo;
+   const struct intel_device_info *devinfo = sched->bs->devinfo;
 
+   this->devinfo = devinfo;
    this->inst = inst;
    this->child_array_size = 0;
    this->children = NULL;
@@ -1706,7 +1746,7 @@ vec4_instruction_scheduler::issue_time(backend_instruction *)
 void
 instruction_scheduler::schedule_instructions(bblock_t *block)
 {
-   const struct gen_device_info *devinfo = bs->devinfo;
+   const struct intel_device_info *devinfo = bs->devinfo;
    int time = 0;
    int instructions_to_schedule = block->end_ip - block->start_ip + 1;
 

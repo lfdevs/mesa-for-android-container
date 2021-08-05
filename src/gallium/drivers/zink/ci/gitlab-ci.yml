@@ -18,6 +18,7 @@
     GALLIUM_DRIVER: "zink" # move here due to bad xvfb-run interactions
     VK_DRIVER: lvp # Don't move to the top level, piglit runs do funny stuff with VK_DRIVER set
     DEQP_EXPECTED_RENDERER: "zink.*llvmpipe"
+    DEQP_RUNNER_OPTIONS: "--timeout 180"
 
 zink-piglit-quick_gl:
   extends:
@@ -26,6 +27,7 @@ zink-piglit-quick_gl:
   variables:
     PIGLIT_PROFILES: quick_gl
     PIGLIT_NO_WINDOW: 1
+    PIGLIT_RUNNER_OPTIONS: "--timeout 180"
   script:
     - xvfb-run --server-args='-noreset' sh -c "GALLIUM_DRIVER=zink VK_DRIVER=lvp install/piglit/piglit-runner.sh"
 
