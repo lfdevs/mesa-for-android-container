@@ -2892,6 +2892,9 @@ isl_surf_get_uncompressed_surf(const struct isl_device *dev,
       *ucompr_surf = *surf;
       ucompr_surf->levels = 1;
 
+      /* The surface mostly stays as-is; there is no offset */
+      *offset_B = 0;
+
       /* The view remains the same */
       *ucompr_view = *view;
    } else {

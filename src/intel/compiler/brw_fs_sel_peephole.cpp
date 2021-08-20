@@ -63,13 +63,14 @@ using namespace brw;
  *    returns 3.
  */
 static int
-count_movs_from_if(fs_inst *then_mov[MAX_MOVS], fs_inst *else_mov[MAX_MOVS],
+count_movs_from_if(const intel_device_info *devinfo,
+                   fs_inst *then_mov[MAX_MOVS], fs_inst *else_mov[MAX_MOVS],
                    bblock_t *then_block, bblock_t *else_block)
 {
    int then_movs = 0;
    foreach_inst_in_block(fs_inst, inst, then_block) {
       if (then_movs == MAX_MOVS || inst->opcode != BRW_OPCODE_MOV ||
-          inst->flags_written())
+          inst->flags_written(devinfo))
          break;
 
       then_mov[then_movs] = inst;
@@ -79,7 +80,7 @@ count_movs_from_if(fs_inst *then_mov[MAX_MOVS], fs_inst *else_mov[MAX_MOVS],
    int else_movs = 0;
    foreach_inst_in_block(fs_inst, inst, else_block) {
       if (else_movs == MAX_MOVS || inst->opcode != BRW_OPCODE_MOV ||
-          inst->flags_written())
+          inst->flags_written(devinfo))
          break;
 
       else_mov[else_movs] = inst;
@@ -152,7 +153,7 @@ fs_visitor::opt_peephole_sel()
       if (else_block == NULL)
          continue;
 
-      int movs = count_movs_from_if(then_mov, else_mov, then_block, else_block);
+      int movs = count_movs_from_if(devinfo, then_mov, else_mov, then_block, else_block);
 
       if (movs == 0)
          continue;

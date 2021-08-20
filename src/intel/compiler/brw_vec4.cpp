@@ -1141,7 +1141,7 @@ vec4_instruction::can_reswizzle(const struct intel_device_info *devinfo,
    /* If we write to the flag register changing the swizzle would change
     * what channels are written to the flag register.
     */
-   if (writes_flag())
+   if (writes_flag(devinfo))
       return false;
 
    /* We can't swizzle implicit accumulator access.  We'd have to

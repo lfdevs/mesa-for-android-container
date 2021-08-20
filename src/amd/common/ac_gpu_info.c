@@ -136,76 +136,76 @@ struct amdgpu_gpu_info {
    uint32_t vce_harvest_config;
    uint32_t pci_rev_id;
 };
-int drmGetCap(int fd, uint64_t capability, uint64_t *value)
+static int drmGetCap(int fd, uint64_t capability, uint64_t *value)
 {
    return -EINVAL;
 }
-void drmFreeDevice(drmDevicePtr *device)
+static void drmFreeDevice(drmDevicePtr *device)
 {
 }
-int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device)
+static int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device)
 {
    return -ENODEV;
 }
-int amdgpu_bo_alloc(amdgpu_device_handle dev,
+static int amdgpu_bo_alloc(amdgpu_device_handle dev,
    struct amdgpu_bo_alloc_request *alloc_buffer,
    amdgpu_bo_handle *buf_handle)
 {
    return -EINVAL;
 }
-int amdgpu_bo_free(amdgpu_bo_handle buf_handle)
+static int amdgpu_bo_free(amdgpu_bo_handle buf_handle)
 {
    return -EINVAL;
 }
-int amdgpu_query_buffer_size_alignment(amdgpu_device_handle dev,
+static int amdgpu_query_buffer_size_alignment(amdgpu_device_handle dev,
    struct amdgpu_buffer_size_alignments
    *info)
 {
    return -EINVAL;
 }
-int amdgpu_query_firmware_version(amdgpu_device_handle dev, unsigned fw_type,
+static int amdgpu_query_firmware_version(amdgpu_device_handle dev, unsigned fw_type,
    unsigned ip_instance, unsigned index,
    uint32_t *version, uint32_t *feature)
 {
    return -EINVAL;
 }
-int amdgpu_query_hw_ip_info(amdgpu_device_handle dev, unsigned type,
+static int amdgpu_query_hw_ip_info(amdgpu_device_handle dev, unsigned type,
    unsigned ip_instance,
    struct drm_amdgpu_info_hw_ip *info)
 {
    return -EINVAL;
 }
-int amdgpu_query_heap_info(amdgpu_device_handle dev, uint32_t heap,
+static int amdgpu_query_heap_info(amdgpu_device_handle dev, uint32_t heap,
    uint32_t flags, struct amdgpu_heap_info *info)
 {
    return -EINVAL;
 }
-int amdgpu_query_gpu_info(amdgpu_device_handle dev,
+static int amdgpu_query_gpu_info(amdgpu_device_handle dev,
    struct amdgpu_gpu_info *info)
 {
    return -EINVAL;
 }
-int amdgpu_query_info(amdgpu_device_handle dev, unsigned info_id,
+static int amdgpu_query_info(amdgpu_device_handle dev, unsigned info_id,
    unsigned size, void *value)
 {
    return -EINVAL;
 }
-int amdgpu_query_sw_info(amdgpu_device_handle dev, enum amdgpu_sw_info info,
+static int amdgpu_query_sw_info(amdgpu_device_handle dev, enum amdgpu_sw_info info,
    void *value)
 {
    return -EINVAL;
 }
-int amdgpu_query_gds_info(amdgpu_device_handle dev,
+static int amdgpu_query_gds_info(amdgpu_device_handle dev,
    struct amdgpu_gds_resource_info *gds_info)
 {
    return -EINVAL;
 }
-int amdgpu_query_video_caps_info(amdgpu_device_handle dev, unsigned cap_type,
+static int amdgpu_query_video_caps_info(amdgpu_device_handle dev, unsigned cap_type,
                                  unsigned size, void *value)
 {
    return -EINVAL;
 }
-const char *amdgpu_get_marketing_name(amdgpu_device_handle dev)
+static const char *amdgpu_get_marketing_name(amdgpu_device_handle dev)
 {
    return NULL;
 }

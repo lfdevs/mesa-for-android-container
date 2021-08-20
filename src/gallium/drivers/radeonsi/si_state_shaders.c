@@ -2243,10 +2243,31 @@ current_not_ready:
 
    simple_mtx_lock(&sel->mutex);
 
+   /* Compute the size of the key without the uniform values. */
+   size_t s = (void*)&key->opt.inlined_uniform_values - (void*)key;
+   int variant_count = 0;
+   const int max_inline_uniforms_variants = 5;
+
    /* Find the shader variant. */
    for (iter = sel->first_variant; iter; iter = iter->next_variant) {
-      /* Don't check the "current" shader. We checked it above. */
-      if (current != iter && memcmp(&iter->key, key, sizeof(*key)) == 0) {
+      if (memcmp(&iter->key, key, s) == 0) {
+         /* Check the inlined uniform values separatly, and count
+          * the number of variants based on them.
+          */
+         if (key->opt.inline_uniforms &&
+             memcmp(iter->key.opt.inlined_uniform_values,
+                    key->opt.inlined_uniform_values,
+                    MAX_INLINABLE_UNIFORMS * 4) != 0) {
+            if (variant_count++ > max_inline_uniforms_variants) {
+               /* Too many variants. Disable inlining for this shader. */
+               key->opt.inline_uniforms = 0;
+               memset(key->opt.inlined_uniform_values, 0, MAX_INLINABLE_UNIFORMS * 4);
+               simple_mtx_unlock(&sel->mutex);
+               goto again;
+            }
+            continue;
+         }
+
          simple_mtx_unlock(&sel->mutex);
 
          if (unlikely(!util_queue_fence_is_signalled(&iter->ready))) {

@@ -1170,6 +1170,9 @@ public:
 
 protected:
    void test_to_hir(exec_list *, struct _mesa_glsl_parse_state *);
+   void eval_test_expression(exec_list *instructions,
+                             struct _mesa_glsl_parse_state *state);
+   ir_rvalue *test_val;
 };
 
 class ast_iteration_statement : public ast_node {

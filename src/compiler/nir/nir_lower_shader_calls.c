@@ -1108,6 +1108,8 @@ nir_lower_shader_calls(nir_shader *shader,
    NIR_PASS_V(shader, spill_ssa_defs_and_lower_shader_calls,
               num_calls, address_format, stack_alignment);
 
+   nir_opt_remove_phis(shader);
+
    /* Make N copies of our shader */
    nir_shader **resume_shaders = ralloc_array(mem_ctx, nir_shader *, num_calls);
    for (unsigned i = 0; i < num_calls; i++)
@@ -1117,6 +1119,7 @@ nir_lower_shader_calls(nir_shader *shader,
    for (unsigned i = 0; i < num_calls; i++) {
       nir_instr *resume_instr = lower_resume(resume_shaders[i], i);
       replace_resume_with_halt(resume_shaders[i], resume_instr);
+      nir_opt_remove_phis(resume_shaders[i]);
    }
 
    *resume_shaders_out = resume_shaders;

@@ -418,6 +418,9 @@ static void
 shm_handle_format(void *data, struct wl_shm *shm, uint32_t format)
 {
    struct wsi_wl_display *display = data;
+   if (display->swrast.formats.element_size == 0)
+      return;
+
    wsi_wl_display_add_wl_shm_format(display, &display->swrast.formats, format);
 }
 

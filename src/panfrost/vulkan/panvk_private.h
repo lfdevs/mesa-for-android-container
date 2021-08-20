@@ -164,7 +164,6 @@ struct panvk_physical_device {
    struct wsi_device wsi_device;
    struct panvk_meta meta;
 
-   int local_fd;
    int master_fd;
 };
 

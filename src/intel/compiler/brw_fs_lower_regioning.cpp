@@ -355,7 +355,7 @@ namespace {
       if (!has_inconsistent_cmod(inst))
          inst->conditional_mod = BRW_CONDITIONAL_NONE;
 
-      assert(!inst->flags_written() || !mov->predicate);
+      assert(!inst->flags_written(v->devinfo) || !mov->predicate);
       return true;
    }
 

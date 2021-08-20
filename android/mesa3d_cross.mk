@@ -272,12 +272,13 @@ $(MESON_OUT_DIR)/install/.install.timestamp: $(MESON_OUT_DIR)/.build.timestamp
 	touch $@
 
 $($(M_TARGET_PREFIX)MESA3D_LIBGBM_BIN) $(MESA3D_GLES_BINS): $(MESON_OUT_DIR)/install/.install.timestamp
-	echo "Build $@"\
+	echo "Build $@"
+	touch $@
 
 define vulkan_target
 $(M_TARGET_PREFIX)MESA3D_VULKAN_$1_BIN := $(MESON_OUT_DIR)/install/usr/local/lib/libvulkan_$(MESA_VK_LIB_SUFFIX_$1).so
 $(MESON_OUT_DIR)/install/usr/local/lib/libvulkan_$(MESA_VK_LIB_SUFFIX_$1).so: $(MESON_OUT_DIR)/install/.install.timestamp
-	echo $@
+	touch $(MESON_OUT_DIR)/install/usr/local/lib/libvulkan_$(MESA_VK_LIB_SUFFIX_$1).so
 
 endef
 
@@ -292,3 +293,4 @@ $($(M_TARGET_PREFIX)TARGET_OUT_VENDOR_SHARED_LIBRARIES)/dri/.symlinks.timestamp:
 
 $($(M_TARGET_PREFIX)MESA3D_GALLIUM_DRI_BIN): $(TARGET_OUT_VENDOR)/$(MESA3D_LIB_DIR)/dri/.symlinks.timestamp
 	echo "Build $@"
+	touch $@

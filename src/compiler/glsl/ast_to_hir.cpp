@@ -6678,6 +6678,13 @@ key_contents(const void *key)
    return ((struct case_label *) key)->value;
 }
 
+void
+ast_switch_statement::eval_test_expression(exec_list *instructions,
+                                           struct _mesa_glsl_parse_state *state)
+{
+   if (test_val == NULL)
+      test_val = this->test_expression->hir(instructions, state);
+}
 
 ir_rvalue *
 ast_switch_statement::hir(exec_list *instructions,
@@ -6685,16 +6692,15 @@ ast_switch_statement::hir(exec_list *instructions,
 {
    void *ctx = state;
 
-   ir_rvalue *const test_expression =
-      this->test_expression->hir(instructions, state);
+   this->eval_test_expression(instructions, state);
 
    /* From page 66 (page 55 of the PDF) of the GLSL 1.50 spec:
     *
     *    "The type of init-expression in a switch statement must be a
     *     scalar integer."
     */
-   if (!test_expression->type->is_scalar() ||
-       !test_expression->type->is_integer_32()) {
+   if (!test_val->type->is_scalar() ||
+       !test_val->type->is_integer_32()) {
       YYLTYPE loc = this->test_expression->get_location();
 
       _mesa_glsl_error(& loc,
@@ -6807,7 +6813,7 @@ ast_switch_statement::test_to_hir(exec_list *instructions,
     */
    test_expression->set_is_lhs(true);
    /* Cache value of test expression. */
-   ir_rvalue *const test_val = test_expression->hir(instructions, state);
+   this->eval_test_expression(instructions, state);
 
    state->switch_state.test_var = new(ctx) ir_variable(test_val->type,
                                                        "switch_test_tmp",

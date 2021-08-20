@@ -261,9 +261,9 @@ vec4_visitor::opt_cse_local(bblock_t *block, const vec4_live_variables &live)
          /* Kill all AEB entries that write a different value to or read from
           * the flag register if we just wrote it.
           */
-         if (inst->writes_flag()) {
+         if (inst->writes_flag(devinfo)) {
             if (entry->generator->reads_flag() ||
-                (entry->generator->writes_flag() &&
+                (entry->generator->writes_flag(devinfo) &&
                  !instructions_match(inst, entry->generator))) {
                entry->remove();
                ralloc_free(entry);

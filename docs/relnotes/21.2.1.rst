@@ -1,0 +1,218 @@
+Mesa 21.2.1 Release Notes / 2021-08-19
+======================================
+
+Mesa 21.2.1 is a bug fix release which fixes bugs found since the 21.2.0 release.
+
+Mesa 21.2.1 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 21.2.1 implements the Vulkan 1.2 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA256 checksum
+---------------
+
+::
+
+    TBD.
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- Possible miscompilation of a comparison with unsigned zero
+- dEQP-VK.wsi.android.swapchain.create#image_swapchain_create_info crash on Android R
+- Nine Regression with util: Switch the non-block formats to unpacking rgba rows instead of rects.
+- panfrost G31 Unreal Tournament - various glitches (apitrace)
+- Miscompilation of a switch case
+- [radeonsi][regression] CPU is being used ~10 times more than usual after c5478f9067f.
+- dEQP-VK.wsi.android.swapchain.create#image_swapchain_create_info crash on Android R
+
+
+Changes
+-------
+
+Alyssa Rosenzweig (5):
+
+- nir/lower_mediump_io: Don't remap base unless needed
+- nir/lower_mediump: Fix metadata in all passes
+- drm-shim: Support kernels with >4k pages
+- panfrost: Fix leak of render node fd
+- panfrost: Rewrite the clear colour packing code
+
+Axel Davy (1):
+
+- util: Fix translate from block compressed to rgba
+
+Bas Nieuwenhuizen (10):
+
+- util/fossilize_db: Update parsed_offset correctly.
+- util/fossilize_db: Reset file position to parsed_offset on cache_offset read failure.
+- util/fossilize_db: Flush files after header write.
+- util/fossilize_db: Be conservative about header length check for locking.
+- util/fossilize_db: Only allocate entries after full read.
+- util/fossilize_db: Use uint64_t for file size.
+- util/fossilize_db: Unlock the cache file if the entry already exists.
+- util/fossilize_db: Add extra flock mutex.
+- radv: Allocate space for inline push constants.
+- radv: Use correct signedness in misalign test.
+
+Boris Brezillon (1):
+
+- panfrost: Fix pan_blitter_emit_bifrost_blend()
+
+Charmaine Lee (1):
+
+- aux/draw: Check for preferred IR to take nir-to-tgsi path in draw module
+
+Chia-I Wu (2):
+
+- iris, crocus: add idep_genxml to per_hw target dependencies
+- venus: free queues after vkDestroyDevice is emitted
+
+Dave Airlie (7):
+
+- virgl: disable anisotropic filtering.
+- wl/shm: don't fetch formats if not requested.
+- crocus/blt: add pitch/offset checks to fix blt corruption
+- crocus: align staging resource pitch on gen4/5 to allow BLT usage.
+- intel/vec4: sel.cond writes the flags on Gfx4 and Gfx5
+- crocus/blt: add pitch/offset checks to fix blt corruption
+- crocus: align staging resource pitch on gen4/5 to allow BLT usage.
+
+Dylan Baker (15):
+
+- docs: Add sha256 sum for 21.2.0
+- .pick_status.json: Update to 8918a809ced3551f822abb45d751d31b54ad67da
+- .pick_status.json: Update to 6ccf11ac2b951963407601b5b1109b45a972e48e
+- bin/gen_release_notes: Add basic tests for parsing issues
+- bin/gen_release_notes: Don't consider issues for other projects
+- bin/gen_release_notes: Fix commits with multiple Closes:
+- .pick_status.json: Update to 0165fde82c41f94c5d6f432f9f444871405a7d49
+- .pick_status.json: Update to 7ae3881a4bf989436b602b30b9a91602435e47a6
+- .pick_status.json: Update to 0dd0a92b243487e83d8d96532873f319719248e5
+- .pick_status.json: Update to 01b0935d315347cfd06bb5d8bb1a6b59913f94cc
+- .pick_status.json: Update to 688d11e4e821ec3934abe571de9899390beceb54
+- .pick_status.json: Update to 04bd2a12451160609b6f163e1a86437948a48fcd
+- .pick_status.json: Update to 441e490f5a13d96255810f38260445437033be63
+- .pick_status.json: Update to 726fdf3385428b52b773e9049ce6033d02c631c1
+- .pick_status.json: Update to 35c3f5f08b7b11f3896412fb5778f127be329615
+
+Eric Engestrom (5):
+
+- pick-ui: drop assert that optional argument is passed
+- pick-ui: show nomination type in the UI
+- pick-ui: show commit date
+- Revert "python: Explicitly add the 'L' suffix on Python 3"
+- isl: drop left-over comment
+
+Ian Romanick (3):
+
+- intel/fs: sel.cond writes the flags on Gfx4 and Gfx5
+- Revert "nir/algebraic: Convert some f2u to f2i"
+- intel/fs: sel.cond writes the flags on Gfx4 and Gfx5
+
+Icecream95 (2):
+
+- pan/bi: Use the computed scale for fexp NaN propagation
+- panfrost: Only allow colour blit shaders to be killed
+
+Jason Ekstrand (2):
+
+- intel/isl: Explicitly set offset_B = 0 in get_uncomp_surf for arrays
+- intel/isl: Add a missing assert in isl_tiling_get_intratile_offset_sa
+
+Jesse Natalie (1):
+
+- CI: Update Windows quick_gl baseline for mysterious new passes
+
+Lionel Landwerlin (3):
+
+- anv: don't try to access Android swapchains
+- nir/lower_shader_calls: remove empty phis
+- anv/android: handle image bindings from gralloc buffers
+
+Lucas Stach (2):
+
+- renderonly: don't complain when GPU import fails
+- etnaviv: always try to create KMS side handles for imported resources
+
+Marcin Ślusarz (3):
+
+- glsl: evaluate switch expression once
+- nir/builder: invalidate metadata per function
+- glsl/opt_algebraic: disable invalid optimization
+
+Michel Dänzer (1):
+
+- ci: Drop "success" job
+
+Michel Zou (1):
+
+- radv: fix build with mingw
+
+Mike Blumenkrantz (2):
+
+- zink: sum available memory heaps instead of assigning
+- zink: simplify else clause for mem info gathering
+
+Neha Bhende (1):
+
+- aux/draw: use nir_to_tgsi for draw shader in llvm path
+
+Pierre-Eric Pelloux-Prayer (3):
+
+- st/pbo: only use x coord when reading a PIPE_TEXTURE_1D
+- st/pbo: set nir_tex_instr::is_array field
+- radeonsi: don't create an infinite number of variants
+
+Rhys Perry (1):
+
+- nir/algebraic: fix imod by negative power-of-two
+
+Roland Scheidegger (1):
+
+- aux/cso: try harder to keep cso state in sync on cso context unbind
+
+Roman Stratiienko (3):
+
+- AOSP: Extract version from libdrm instead of hardcoding it.
+- AOSP: Update timestamps of target binaries
+- lima: Implement lima_resource_get_param() callback
+
+Samuel Pitoiset (2):
+
+- radv: fix initializing the DS clear metadata value for separate aspects
+- radv: flush caches before performing separate depth/stencil aspect init
+
+Tapani Pälli (2):
+
+- crocus: take a reference to memobj bo in crocus_resource_from_memobj
+- crocus: disable depth and d+s formats with memory objects
+
+Thong Thai (3):
+
+- gallium/auxiliary/vl: Add additional deinterlace enum and tracking
+- gallium/util: add half texel offset param to util_compute_blit
+- frontends/va/postproc: Keep track of deinterlacing method being used
+
+Timur Kristóf (2):
+
+- aco: Use Navi 10 empty NGG output workaround on NGG culling shaders.
+- radv: Write RSRC2_GS for NGGC when pipeline is dirty but not emitted.
+
+Vinson Lee (2):
+
+- meson: Remove duplicate xvmc in build summary.
+- nir: Initialize evaluate_cube_face_index_amd dst.x.

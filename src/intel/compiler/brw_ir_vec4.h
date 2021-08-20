@@ -330,9 +330,9 @@ public:
       }
    }
 
-   bool writes_flag() const
+   bool writes_flag(const intel_device_info *devinfo) const
    {
-      return (conditional_mod && (opcode != BRW_OPCODE_SEL &&
+      return (conditional_mod && ((opcode != BRW_OPCODE_SEL || devinfo->ver <= 5) &&
                                   opcode != BRW_OPCODE_CSEL &&
                                   opcode != BRW_OPCODE_IF &&
                                   opcode != BRW_OPCODE_WHILE));

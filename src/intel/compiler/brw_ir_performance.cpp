@@ -1375,7 +1375,7 @@ namespace {
                   st, reg_dependency_id(devinfo, brw_acc_reg(8), j));
          }
 
-         if (const unsigned mask = inst->flags_written()) {
+         if (const unsigned mask = inst->flags_written(devinfo)) {
             for (unsigned i = 0; i < sizeof(mask) * CHAR_BIT; i++) {
                if (mask & (1 << i))
                   stall_on_dependency(st, flag_dependency_id(i));
@@ -1425,7 +1425,7 @@ namespace {
                                   reg_dependency_id(devinfo, brw_acc_reg(8), j));
       }
 
-      if (const unsigned mask = inst->flags_written()) {
+      if (const unsigned mask = inst->flags_written(devinfo)) {
          for (unsigned i = 0; i < sizeof(mask) * CHAR_BIT; i++) {
             if (mask & (1 << i))
                mark_write_dependency(st, perf, flag_dependency_id(i));
@@ -1492,7 +1492,7 @@ namespace {
                   st, reg_dependency_id(devinfo, brw_acc_reg(8), j));
          }
 
-         if (inst->writes_flag())
+         if (inst->writes_flag(devinfo))
             stall_on_dependency(st, dependency_id_flag0);
       }
 
@@ -1530,7 +1530,7 @@ namespace {
                                   reg_dependency_id(devinfo, brw_acc_reg(8), j));
       }
 
-      if (inst->writes_flag())
+      if (inst->writes_flag(devinfo))
          mark_write_dependency(st, perf, dependency_id_flag0);
    }
 

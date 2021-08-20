@@ -119,7 +119,7 @@ vec4_live_variables::setup_def_use()
                }
             }
          }
-         if (inst->writes_flag()) {
+         if (inst->writes_flag(devinfo)) {
             for (unsigned c = 0; c < 4; c++) {
                if ((inst->dst.writemask & (1 << c)) &&
                    !BITSET_TEST(bd->flag_use, c)) {
@@ -228,6 +228,8 @@ vec4_live_variables::vec4_live_variables(const backend_shader *s)
       start[i] = MAX_INSTRUCTION;
       end[i] = -1;
    }
+
+   devinfo = s->compiler->devinfo;
 
    block_data = rzalloc_array(mem_ctx, struct block_data, cfg->num_blocks);
 

@@ -740,7 +740,7 @@ util_format_translate(enum pipe_format dst_format,
       unsigned tmp_stride;
       uint8_t *tmp_row;
 
-      if (!unpack->unpack_rgba_8unorm ||
+      if ((!unpack->unpack_rgba_8unorm && !unpack->unpack_rgba_8unorm_rect) ||
           !pack->pack_rgba_8unorm) {
          return FALSE;
       }
@@ -802,7 +802,7 @@ util_format_translate(enum pipe_format dst_format,
       unsigned tmp_stride;
       unsigned int *tmp_row;
 
-      if (!unpack->unpack_rgba ||
+      if ((!unpack->unpack_rgba && !unpack->unpack_rgba_rect) ||
           !pack->pack_rgba_uint) {
          return FALSE;
       }
@@ -832,7 +832,7 @@ util_format_translate(enum pipe_format dst_format,
       unsigned tmp_stride;
       float *tmp_row;
 
-      if (!unpack->unpack_rgba ||
+      if ((!unpack->unpack_rgba && !unpack->unpack_rgba_rect) ||
           !pack->pack_rgba_float) {
          return FALSE;
       }

@@ -55,7 +55,7 @@ cmod_propagate_cmp_to_add(const intel_device_info *devinfo, bblock_t *block,
                           fs_inst *inst)
 {
    bool read_flag = false;
-   const unsigned flags_written = inst->flags_written();
+   const unsigned flags_written = inst->flags_written(devinfo);
 
    foreach_inst_in_block_reverse_starting_from(fs_inst, scan_inst, inst) {
       if (scan_inst->opcode == BRW_OPCODE_ADD &&
@@ -89,8 +89,8 @@ cmod_propagate_cmp_to_add(const intel_device_info *devinfo, bblock_t *block,
           * Perhaps (scan_inst->flags_written() & flags_written) !=
           * flags_written?
           */
-         if (scan_inst->flags_written() != 0 &&
-             scan_inst->flags_written() != flags_written)
+         if (scan_inst->flags_written(devinfo) != 0 &&
+             scan_inst->flags_written(devinfo) != flags_written)
             goto not_match;
 
          /* From the Kaby Lake PRM Vol. 7 "Assigning Conditional Flags":
@@ -142,7 +142,7 @@ cmod_propagate_cmp_to_add(const intel_device_info *devinfo, bblock_t *block,
       }
 
    not_match:
-      if ((scan_inst->flags_written() & flags_written) != 0)
+      if ((scan_inst->flags_written(devinfo) & flags_written) != 0)
          break;
 
       read_flag = read_flag ||
@@ -171,7 +171,7 @@ cmod_propagate_not(const intel_device_info *devinfo, bblock_t *block,
 {
    const enum brw_conditional_mod cond = brw_negate_cmod(inst->conditional_mod);
    bool read_flag = false;
-   const unsigned flags_written = inst->flags_written();
+   const unsigned flags_written = inst->flags_written(devinfo);
 
    if (cond != BRW_CONDITIONAL_Z && cond != BRW_CONDITIONAL_NZ)
       return false;
@@ -195,8 +195,8 @@ cmod_propagate_not(const intel_device_info *devinfo, bblock_t *block,
           * Perhaps (scan_inst->flags_written() & flags_written) !=
           * flags_written?
           */
-         if (scan_inst->flags_written() != 0 &&
-             scan_inst->flags_written() != flags_written)
+         if (scan_inst->flags_written(devinfo) != 0 &&
+             scan_inst->flags_written(devinfo) != flags_written)
             break;
 
          if (scan_inst->can_do_cmod() &&
@@ -209,7 +209,7 @@ cmod_propagate_not(const intel_device_info *devinfo, bblock_t *block,
          break;
       }
 
-      if ((scan_inst->flags_written() & flags_written) != 0)
+      if ((scan_inst->flags_written(devinfo) & flags_written) != 0)
          break;
 
       read_flag = read_flag ||
@@ -285,7 +285,7 @@ opt_cmod_propagation_local(const intel_device_info *devinfo, bblock_t *block)
       }
 
       bool read_flag = false;
-      const unsigned flags_written = inst->flags_written();
+      const unsigned flags_written = inst->flags_written(devinfo);
       foreach_inst_in_block_reverse_starting_from(fs_inst, scan_inst, inst) {
          if (regions_overlap(scan_inst->dst, scan_inst->size_written,
                              inst->src[0], inst->size_read(0))) {
@@ -296,8 +296,8 @@ opt_cmod_propagation_local(const intel_device_info *devinfo, bblock_t *block)
              * Perhaps (scan_inst->flags_written() & flags_written) !=
              * flags_written?
              */
-            if (scan_inst->flags_written() != 0 &&
-                scan_inst->flags_written() != flags_written)
+            if (scan_inst->flags_written(devinfo) != 0 &&
+                scan_inst->flags_written(devinfo) != flags_written)
                break;
 
             if (scan_inst->is_partial_write() ||
@@ -396,7 +396,7 @@ opt_cmod_propagation_local(const intel_device_info *devinfo, bblock_t *block)
              *   between scan_inst and inst.
              */
             if (!inst->src[0].negate &&
-                scan_inst->flags_written()) {
+                scan_inst->flags_written(devinfo)) {
                if (scan_inst->opcode == BRW_OPCODE_CMP) {
                   if ((inst->conditional_mod == BRW_CONDITIONAL_NZ) ||
                       (inst->conditional_mod == BRW_CONDITIONAL_G &&
@@ -408,8 +408,18 @@ opt_cmod_propagation_local(const intel_device_info *devinfo, bblock_t *block)
                      break;
                   }
                } else if (scan_inst->conditional_mod == inst->conditional_mod) {
-                  inst->remove(block, true);
-                  progress = true;
+                  /* On Gfx4 and Gfx5 sel.cond will dirty the flags, but the
+                   * flags value is not based on the result stored in the
+                   * destination.  On all other platforms sel.cond will not
+                   * write the flags, so execution will not get to this point.
+                   */
+                  if (scan_inst->opcode == BRW_OPCODE_SEL) {
+                     assert(devinfo->ver <= 5);
+                  } else {
+                     inst->remove(block, true);
+                     progress = true;
+                  }
+
                   break;
                } else if (!read_flag) {
                   scan_inst->conditional_mod = inst->conditional_mod;
@@ -505,7 +515,7 @@ opt_cmod_propagation_local(const intel_device_info *devinfo, bblock_t *block)
             break;
          }
 
-         if ((scan_inst->flags_written() & flags_written) != 0)
+         if ((scan_inst->flags_written(devinfo) & flags_written) != 0)
             break;
 
          read_flag = read_flag ||

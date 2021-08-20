@@ -981,6 +981,8 @@ radv_emit_inline_push_consts(struct radv_cmd_buffer *cmd_buffer, struct radv_pip
 
    assert(loc->num_sgprs == count);
 
+   radeon_check_space(cmd_buffer->device->ws, cmd_buffer->cs, 2 + count);
+
    radeon_set_sh_reg_seq(cmd_buffer->cs, base_reg + loc->sgpr_idx * 4, count);
    radeon_emit_array(cmd_buffer->cs, values, count);
 }
@@ -5838,8 +5840,11 @@ radv_emit_ngg_culling_state(struct radv_cmd_buffer *cmd_buffer, const struct rad
             rsrc2 = (rsrc2 & C_00B22C_LDS_SIZE) | S_00B22C_LDS_SIZE(v->info.num_lds_blocks_when_not_culling);
       }
 
-      /* When the pipeline is dirty, radv_emit_graphics_pipeline will write this register. */
-      if (!(cmd_buffer->state.dirty & RADV_CMD_DIRTY_PIPELINE)) {
+      /* When the pipeline is dirty and not yet emitted, don't write it here
+       * because radv_emit_graphics_pipeline will overwrite this register.
+       */
+      if (!(cmd_buffer->state.dirty & RADV_CMD_DIRTY_PIPELINE) ||
+          cmd_buffer->state.emitted_pipeline == pipeline) {
          radeon_set_sh_reg(cmd_buffer->cs, R_00B22C_SPI_SHADER_PGM_RSRC2_GS, rsrc2);
       }
 
@@ -6596,7 +6601,6 @@ static void
 radv_initialize_htile(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
                       const VkImageSubresourceRange *range)
 {
-   VkImageAspectFlags aspects = VK_IMAGE_ASPECT_DEPTH_BIT;
    struct radv_cmd_state *state = &cmd_buffer->state;
    uint32_t htile_value = radv_get_htile_initial_value(cmd_buffer->device, image);
    VkClearDepthStencilValue value = {0};
@@ -6610,12 +6614,17 @@ radv_initialize_htile(struct radv_cmd_buffer *cmd_buffer, struct radv_image *ima
    state->flush_bits |=
       radv_src_access_flush(cmd_buffer, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, image);
 
+   if (image->planes[0].surface.has_stencil &&
+       !(range->aspectMask == (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))) {
+      /* Flush caches before performing a separate aspect initialization because it's a
+       * read-modify-write operation.
+       */
+      state->flush_bits |= radv_dst_access_flush(cmd_buffer, VK_ACCESS_SHADER_READ_BIT, image);
+   }
+
    state->flush_bits |= radv_clear_htile(cmd_buffer, image, range, htile_value);
 
-   if (vk_format_has_stencil(image->vk_format))
-      aspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
-
-   radv_set_ds_clear_metadata(cmd_buffer, image, range, value, aspects);
+   radv_set_ds_clear_metadata(cmd_buffer, image, range, value, range->aspectMask);
 
    if (radv_image_is_tc_compat_htile(image) && (range->aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT)) {
       /* Initialize the TC-compat metada value to 0 because by

@@ -201,7 +201,6 @@ panvk_physical_device_finish(struct panvk_physical_device *device)
 
    panvk_meta_cleanup(device);
    panfrost_close_device(&device->pdev);
-   close(device->local_fd);
    if (device->master_fd != -1)
       close(device->master_fd);
 
@@ -297,7 +296,6 @@ panvk_physical_device_init(struct panvk_physical_device *device,
    }
 
    device->master_fd = master_fd;
-   device->local_fd = fd;
    device->pdev.debug = PAN_DBG_TRACE;
    panfrost_open_device(NULL, fd, &device->pdev);
 

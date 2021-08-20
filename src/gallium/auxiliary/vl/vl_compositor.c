@@ -571,6 +571,8 @@ vl_compositor_set_buffer_layer(struct vl_compositor_state *s,
    if (buffer->interlaced) {
       float half_a_line = 0.5f / s->layers[layer].zw.y;
       switch(deinterlace) {
+      case VL_COMPOSITOR_NONE:
+      case VL_COMPOSITOR_MOTION_ADAPTIVE:
       case VL_COMPOSITOR_WEAVE:
          if (c->pipe_cs_composit_supported)
             s->layers[layer].cs = c->cs_weave_rgb;
@@ -776,6 +778,8 @@ vl_compositor_init(struct vl_compositor *c, struct pipe_context *pipe)
 
    c->pipe_gfx_supported = pipe->screen->get_param(pipe->screen, PIPE_CAP_GRAPHICS);
    c->pipe = pipe;
+
+   c->deinterlace = VL_COMPOSITOR_NONE;
 
    if (!init_pipe_state(c)) {
       return false;

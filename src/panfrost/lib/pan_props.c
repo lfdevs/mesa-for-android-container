@@ -291,5 +291,5 @@ panfrost_close_device(struct panfrost_device *dev)
         pthread_mutex_destroy(&dev->bo_cache.lock);
         drmFreeVersion(dev->kernel_version);
         util_sparse_array_finish(&dev->bo_map);
-
+        close(dev->fd);
 }

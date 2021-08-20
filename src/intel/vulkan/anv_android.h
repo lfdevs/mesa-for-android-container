@@ -41,6 +41,10 @@ VkResult anv_image_from_gralloc(VkDevice device_h,
                                 const VkAllocationCallbacks *alloc,
                                 VkImage *pImage);
 
+VkResult anv_image_bind_from_gralloc(struct anv_device *device,
+                                     struct anv_image *image,
+                                     const VkNativeBufferANDROID *gralloc_info);
+
 VkResult anv_image_from_external(VkDevice device_h,
                                  const VkImageCreateInfo *base_info,
                                  const VkExternalMemoryImageCreateInfo *create_info,

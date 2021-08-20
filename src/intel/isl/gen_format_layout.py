@@ -175,7 +175,6 @@ class Format(object):
         # pylint: disable=invalid-name
         self.name = line[0].strip()
 
-        # Future division makes this work in python 2.
         self.bpb = int(line[1])
         self.bw = line[2].strip()
         self.bh = line[3].strip()

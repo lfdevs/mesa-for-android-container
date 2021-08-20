@@ -61,7 +61,7 @@ foreach v : ['40', '45', '50', '60', '70', '75', '80']
       '-DGFX_VERx10=@0@'.format(v),
     ],
     gnu_symbol_visibility : 'hidden',
-    dependencies : [dep_libdrm, dep_valgrind, idep_nir_headers],
+    dependencies : [dep_libdrm, dep_valgrind, idep_genxml, idep_nir_headers],
   )
 endforeach
 

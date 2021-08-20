@@ -54,7 +54,7 @@ vec4_visitor::dead_code_eliminate()
 
       foreach_inst_in_block_reverse_safe(vec4_instruction, inst, block) {
          if ((inst->dst.file == VGRF && !inst->has_side_effects()) ||
-             (inst->dst.is_null() && inst->writes_flag())){
+             (inst->dst.is_null() && inst->writes_flag(devinfo))){
             bool result_live[4] = { false };
             if (inst->dst.file == VGRF) {
                for (unsigned i = 0; i < DIV_ROUND_UP(inst->size_written, 16); i++) {
@@ -80,7 +80,7 @@ vec4_visitor::dead_code_eliminate()
                result_live[3] = result;
             }
 
-            if (inst->writes_flag()) {
+            if (inst->writes_flag(devinfo)) {
                /* Independently calculate the usage of the flag components and
                 * the destination value components.
                 */
@@ -126,7 +126,7 @@ vec4_visitor::dead_code_eliminate()
             }
          }
 
-         if (inst->dst.is_null() && inst->writes_flag()) {
+         if (inst->dst.is_null() && inst->writes_flag(devinfo)) {
             bool combined_live = false;
             for (unsigned c = 0; c < 4; c++)
                combined_live |= BITSET_TEST(flag_live, c);
@@ -149,7 +149,7 @@ vec4_visitor::dead_code_eliminate()
             }
          }
 
-         if (inst->writes_flag() && !inst->predicate && inst->exec_size == 8) {
+         if (inst->writes_flag(devinfo) && !inst->predicate && inst->exec_size == 8) {
             for (unsigned c = 0; c < 4; c++)
                BITSET_CLEAR(flag_live, c);
          }

@@ -26,6 +26,8 @@ ifneq ($(filter true, $(BOARD_MESA3D_USES_MESON_BUILD)),)
 LOCAL_PATH := $(call my-dir)
 MESA3D_TOP := $(dir $(LOCAL_PATH))
 
+LIBDRM_VERSION = $(shell cat external/libdrm/meson.build | grep -o "\<version\>\s*:\s*'\w*\.\w*\.\w*'" | grep -o "\w*\.\w*\.\w*" | head -1)
+
 MESA_VK_LIB_SUFFIX_amd := radeon
 MESA_VK_LIB_SUFFIX_intel := intel
 MESA_VK_LIB_SUFFIX_freedreno := freedreno
@@ -38,7 +40,7 @@ include $(CLEAR_VARS)
 LOCAL_SHARED_LIBRARIES := libc libdl libdrm libm liblog libcutils libz libc++ libnativewindow libsync libhardware
 LOCAL_STATIC_LIBRARIES := libexpat libarect libelf
 LOCAL_HEADER_LIBRARIES := libnativebase_headers hwvulkan_headers libbacktrace_headers
-MESON_GEN_PKGCONFIGS := backtrace cutils expat hardware libdrm:2.4.105 nativewindow sync zlib:1.2.11 libelf
+MESON_GEN_PKGCONFIGS := backtrace cutils expat hardware libdrm:$(LIBDRM_VERSION) nativewindow sync zlib:1.2.11 libelf
 
 ifneq ($(filter swr swrast,$(BOARD_MESA3D_GALLIUM_DRIVERS) $(BOARD_MESA3D_VULKAN_DRIVERS)),)
 MESON_GEN_LLVM_STUB := true
@@ -51,24 +53,24 @@ endif
 
 ifneq ($(filter iris,$(BOARD_MESA3D_GALLIUM_DRIVERS)),)
 LOCAL_SHARED_LIBRARIES += libdrm_intel
-MESON_GEN_PKGCONFIGS += libdrm_intel:2.4.105
+MESON_GEN_PKGCONFIGS += libdrm_intel:$(LIBDRM_VERSION)
 endif
 
 ifneq ($(filter radeonsi amd,$(BOARD_MESA3D_GALLIUM_DRIVERS) $(BOARD_MESA3D_VULKAN_DRIVERS)),)
 MESON_GEN_LLVM_STUB := true
 LOCAL_CFLAGS += -DFORCE_BUILD_AMDGPU   # instructs LLVM to declare LLVMInitializeAMDGPU* functions
 LOCAL_SHARED_LIBRARIES += libdrm_amdgpu
-MESON_GEN_PKGCONFIGS += libdrm_amdgpu:2.4.105
+MESON_GEN_PKGCONFIGS += libdrm_amdgpu:$(LIBDRM_VERSION)
 endif
 
 ifneq ($(filter radeonsi r300 r600,$(BOARD_MESA3D_GALLIUM_DRIVERS)),)
 LOCAL_SHARED_LIBRARIES += libdrm_radeon
-MESON_GEN_PKGCONFIGS += libdrm_radeon:2.4.105
+MESON_GEN_PKGCONFIGS += libdrm_radeon:$(LIBDRM_VERSION)
 endif
 
 ifneq ($(filter nouveau,$(BOARD_MESA3D_GALLIUM_DRIVERS)),)
 LOCAL_SHARED_LIBRARIES += libdrm_nouveau
-MESON_GEN_PKGCONFIGS += libdrm_nouveau:2.4.105
+MESON_GEN_PKGCONFIGS += libdrm_nouveau:$(LIBDRM_VERSION)
 endif
 
 ifneq ($(MESON_GEN_LLVM_STUB),)

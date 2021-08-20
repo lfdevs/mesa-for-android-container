@@ -228,6 +228,14 @@ crocus_resource_configure_main(const struct crocus_screen *screen,
    const enum isl_format format =
       crocus_format_for_usage(&screen->devinfo, templ->format, usage).fmt;
 
+   if (row_pitch_B == 0 && templ->usage == PIPE_USAGE_STAGING &&
+       templ->target == PIPE_TEXTURE_2D &&
+       devinfo->ver < 6) {
+      /* align row pitch to 4 so we can keep using BLT engine */
+      row_pitch_B = util_format_get_stride(templ->format, templ->width0);
+      row_pitch_B = ALIGN(row_pitch_B, 4);
+   }
+
    const struct isl_surf_init_info init_info = {
       .dim = crocus_target_to_isl_surf_dim(templ->target),
       .format = format,
@@ -891,6 +899,10 @@ crocus_resource_from_memobj(struct pipe_screen *pscreen,
    if (!res)
       return NULL;
 
+   /* Disable Depth, and combined Depth+Stencil for now. */
+   if (util_format_has_depth(util_format_description(templ->format)))
+      return NULL;
+
    if (templ->flags & PIPE_RESOURCE_FLAG_TEXTURING_MORE_LIKELY) {
       UNUSED const bool isl_surf_created_successfully =
          crocus_resource_configure_main(screen, res, templ, DRM_FORMAT_MOD_INVALID, 0);
@@ -900,6 +912,8 @@ crocus_resource_from_memobj(struct pipe_screen *pscreen,
    res->bo = memobj->bo;
    res->offset = offset;
    res->external_format = memobj->format;
+
+   crocus_bo_reference(memobj->bo);
 
    return &res->base.b;
 }
@@ -1948,8 +1962,6 @@ crocus_memobj_create_from_handle(struct pipe_screen *pscreen,
    memobj->bo = bo;
    memobj->format = whandle->format;
    memobj->stride = whandle->stride;
-
-   crocus_bo_reference(memobj->bo);
 
    return &memobj->b;
 }

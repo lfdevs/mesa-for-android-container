@@ -1262,7 +1262,7 @@ fs_instruction_scheduler::calculate_deps()
          }
       }
 
-      if (const unsigned mask = inst->flags_written()) {
+      if (const unsigned mask = inst->flags_written(v->devinfo)) {
          assert(mask < (1 << ARRAY_SIZE(last_conditional_mod)));
 
          for (unsigned i = 0; i < ARRAY_SIZE(last_conditional_mod); i++) {
@@ -1384,7 +1384,7 @@ fs_instruction_scheduler::calculate_deps()
          }
       }
 
-      if (const unsigned mask = inst->flags_written()) {
+      if (const unsigned mask = inst->flags_written(v->devinfo)) {
          assert(mask < (1 << ARRAY_SIZE(last_conditional_mod)));
 
          for (unsigned i = 0; i < ARRAY_SIZE(last_conditional_mod); i++) {
@@ -1489,7 +1489,7 @@ vec4_instruction_scheduler::calculate_deps()
          }
       }
 
-      if (inst->writes_flag()) {
+      if (inst->writes_flag(v->devinfo)) {
          add_dep(last_conditional_mod, n, 0);
          last_conditional_mod = n;
       }
@@ -1565,7 +1565,7 @@ vec4_instruction_scheduler::calculate_deps()
          }
       }
 
-      if (inst->writes_flag()) {
+      if (inst->writes_flag(v->devinfo)) {
          last_conditional_mod = n;
       }
 

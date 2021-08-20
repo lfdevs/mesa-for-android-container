@@ -698,6 +698,9 @@ struct si_shader_key {
 
       unsigned inline_uniforms:1;
 
+      /* This must be kept last to limit the number of variants
+       * depending only on the uniform values.
+       */
       uint32_t inlined_uniform_values[MAX_INLINABLE_UNIFORMS];
    } opt;
 };

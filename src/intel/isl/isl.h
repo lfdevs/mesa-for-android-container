@@ -2722,6 +2722,7 @@ isl_tiling_get_intratile_offset_sa(enum isl_tiling tiling,
     */
    assert(total_x_offset_sa % fmtl->bw == 0);
    assert(total_y_offset_sa % fmtl->bh == 0);
+   assert(total_z_offset_sa % fmtl->bd == 0);
    const uint32_t total_x_offset_el = total_x_offset_sa / fmtl->bw;
    const uint32_t total_y_offset_el = total_y_offset_sa / fmtl->bh;
    const uint32_t total_z_offset_el = total_z_offset_sa / fmtl->bd;

@@ -28,7 +28,11 @@
 #ifndef PAN_UTIL_H
 #define PAN_UTIL_H
 
-/* 0x0001 unused */
+#include <stdint.h>
+#include <stdbool.h>
+#include "util/format/u_format.h"
+
+#define PAN_DBG_PERF            0x0001
 #define PAN_DBG_TRACE           0x0002
 #define PAN_DBG_DEQP            0x0004
 #define PAN_DBG_DIRTY           0x0008
@@ -41,6 +45,8 @@
 #define PAN_DBG_MSAA16          0x0400
 #define PAN_DBG_NOINDIRECT      0x0800
 
+struct panfrost_device;
+
 unsigned
 panfrost_translate_swizzle_4(const unsigned char swizzle[4]);
 
@@ -50,5 +56,8 @@ panfrost_invert_swizzle(const unsigned char *in, unsigned char *out);
 unsigned
 panfrost_format_to_bifrost_blend(const struct panfrost_device *dev,
                                  enum pipe_format format);
+
+void
+pan_pack_color(uint32_t *packed, const union pipe_color_union *color, enum pipe_format format);
 
 #endif /* PAN_UTIL_H */

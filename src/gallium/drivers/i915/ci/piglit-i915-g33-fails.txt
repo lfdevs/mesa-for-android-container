@@ -20,15 +20,8 @@ spec@!opengl 1.0@gl-1.0-drawbuffer-modes,Fail
 spec@!opengl 1.0@gl-1.0-long-line-loop,Crash
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 spec@!opengl 1.0@gl-1.0-ortho-pos,Crash
-spec@!opengl 1.0@gl-1.0-rendermode-feedback,Crash
 spec@!opengl 1.0@gl-1.0-scissor-offscreen,Fail
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
-
-# mesa/st draw path doesn't do nir-to-tgsi, so gallivm NIR fails
-# to handle our vector-y, non-native-integers shaders.  We could extend
-# gallivm NIR to handle it, or disentangle per-stage native integers on the
-# frontend.
-spec@!opengl 1.0@rasterpos,Crash
 
 spec@!opengl 1.1@clipflat,Fail
 spec@!opengl 1.1@clipflat@glBegin/End(GL_TRIANGLE_FAN)- glFrontFace(GL_CCW)- glPolygonMode(GL_FILL)- quadrant: center middle PV: FIRST,Fail
@@ -54,11 +47,6 @@ spec@!opengl 1.1@getteximage-formats,Crash
 spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 varray gl_quad_strip,Crash
 spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 vbo gl_quad_strip,Crash
 spec@!opengl 1.1@gl-1.2-texture-base-level,Fail
-spec@!opengl 1.1@gl_select - alpha-test enabled,Crash
-spec@!opengl 1.1@gl_select - depth-test enabled,Crash
-spec@!opengl 1.1@gl_select - no test function,Crash
-spec@!opengl 1.1@gl_select - scissor-test enabled,Crash
-spec@!opengl 1.1@gl_select - stencil-test enabled,Crash
 spec@!opengl 1.1@line-flat-clip-color,Fail
 spec@!opengl 1.1@linestipple,Fail
 spec@!opengl 1.1@linestipple@Factor 2x,Fail

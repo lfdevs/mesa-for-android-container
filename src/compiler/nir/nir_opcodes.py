@@ -537,6 +537,7 @@ dst.y = dst.y * (1.0f / ma) + 0.5f;
 """)
 
 unop_horiz("cube_face_index_amd", 1, tfloat32, 3, tfloat32, """
+dst.x = 0.0;
 float absX = fabsf(src0.x);
 float absY = fabsf(src0.y);
 float absZ = fabsf(src0.z);

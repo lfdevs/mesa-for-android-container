@@ -103,17 +103,19 @@ nir_shader_instructions_pass(nir_shader *shader,
       if (!function->impl)
          continue;
 
+      bool func_progress = false;
       nir_builder b;
       nir_builder_init(&b, function->impl);
 
       nir_foreach_block_safe(block, function->impl) {
          nir_foreach_instr_safe(instr, block) {
-            progress |= pass(&b, instr, cb_data);
+            func_progress |= pass(&b, instr, cb_data);
          }
       }
 
-      if (progress) {
+      if (func_progress) {
          nir_metadata_preserve(function->impl, preserved);
+         progress = true;
       } else {
          nir_metadata_preserve(function->impl, nir_metadata_all);
       }

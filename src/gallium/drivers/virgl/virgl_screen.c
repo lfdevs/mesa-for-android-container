@@ -82,7 +82,7 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_SHADER_SATURATE:
       return 1;
    case PIPE_CAP_ANISOTROPIC_FILTER:
-      return 1;
+      return 0;
    case PIPE_CAP_POINT_SPRITE:
       return 1;
    case PIPE_CAP_MAX_RENDER_TARGETS:

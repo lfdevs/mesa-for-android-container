@@ -114,9 +114,9 @@ optimizations = [
    (('idiv', a, '#b(is_neg_power_of_two)'), ('ineg', ('imul', ('isign', a), ('ushr', ('iabs', a), ('find_lsb', ('iabs', b))))), '!options->lower_bitops'),
    (('umod', a, '#b(is_pos_power_of_two)'),    ('iand', a, ('isub', b, 1))),
    (('imod', a, '#b(is_pos_power_of_two)'),    ('iand', a, ('isub', b, 1))),
-   (('imod', a, '#b(is_neg_power_of_two)'),    ('ior', a, b)),
-   (('irem', a, '#b(is_pos_power_of_two)'),    ('bcsel', ('ige', a, 0), ('iand', a, ('isub', b, 1)), ('ior', a, ('ineg', b)))),
-   (('irem', a, '#b(is_neg_power_of_two)'),    ('bcsel', ('ige', a, 0), ('iand', a, ('inot', b)), ('ior', a, b))),
+   (('imod', a, '#b(is_neg_power_of_two)'),    ('bcsel', ('ieq', ('ior', a, b), b), 0, ('ior', a, b))),
+   (('irem', a, '#b(is_pos_power_of_two)'),    ('bcsel', ('ige', a, 0), ('iand', a, ('isub', b, 1)), ('imod', a, ('ineg', b)))),
+   (('irem', a, '#b(is_neg_power_of_two)'),    ('bcsel', ('ige', a, 0), ('iand', a, ('inot', b)), ('imod', a, b))),
 
    (('~fneg', ('fneg', a)), a),
    (('ineg', ('ineg', a)), a),
@@ -1154,19 +1154,6 @@ optimizations.extend([
    (('fabs', 'a(is_not_negative)'), a),
    (('iabs', 'a(is_not_negative)'), a),
    (('fsat', 'a(is_not_positive)'), 0.0),
-
-   # Section 5.4.1 (Conversion and Scalar Constructors) of the GLSL 4.60 spec
-   # says:
-   #
-   #    It is undefined to convert a negative floating-point value to an
-   #    uint.
-   #
-   # Assuming that (uint)some_float behaves like (uint)(int)some_float allows
-   # some optimizations in the i965 backend to proceed.
-   (('ige', ('f2u', a), b), ('ige', ('f2i', a), b)),
-   (('ige', b, ('f2u', a)), ('ige', b, ('f2i', a))),
-   (('ilt', ('f2u', a), b), ('ilt', ('f2i', a), b)),
-   (('ilt', b, ('f2u', a)), ('ilt', b, ('f2i', a))),
 
    (('~fmin', 'a(is_not_negative)', 1.0), ('fsat', a), '!options->lower_fsat'),
 

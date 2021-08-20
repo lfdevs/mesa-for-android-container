@@ -138,7 +138,7 @@ fs_live_variables::setup_def_use()
 	 }
 
          if (!inst->predicate && inst->exec_size >= 8)
-            bd->flag_def[0] |= inst->flags_written() & ~bd->flag_use[0];
+            bd->flag_def[0] |= inst->flags_written(devinfo) & ~bd->flag_use[0];
 
 	 ip++;
       }

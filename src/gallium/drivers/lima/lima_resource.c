@@ -427,6 +427,35 @@ lima_resource_get_handle(struct pipe_screen *pscreen,
    return true;
 }
 
+static bool
+lima_resource_get_param(struct pipe_screen *pscreen,
+                        struct pipe_context *pctx,
+                        struct pipe_resource *pres,
+                        unsigned plane, unsigned layer, unsigned level,
+                        enum pipe_resource_param param,
+                        unsigned usage, uint64_t *value)
+{
+   struct lima_resource *res = lima_resource(pres);
+
+   switch (param) {
+   case PIPE_RESOURCE_PARAM_STRIDE:
+      *value = res->levels[level].stride;
+      return true;
+   case PIPE_RESOURCE_PARAM_OFFSET:
+      *value = res->levels[level].offset;
+      return true;
+   case PIPE_RESOURCE_PARAM_MODIFIER:
+      if (res->tiled)
+         *value = DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED;
+      else
+         *value = DRM_FORMAT_MOD_LINEAR;
+
+      return true;
+   default:
+      return false;
+   }
+}
+
 static void
 get_scissor_from_box(struct pipe_scissor_state *s,
                      const struct pipe_box *b, int h)
@@ -522,6 +551,7 @@ lima_resource_screen_init(struct lima_screen *screen)
    screen->base.resource_from_handle = lima_resource_from_handle;
    screen->base.resource_destroy = lima_resource_destroy;
    screen->base.resource_get_handle = lima_resource_get_handle;
+   screen->base.resource_get_param = lima_resource_get_param;
    screen->base.set_damage_region = lima_resource_set_damage_region;
 }
 

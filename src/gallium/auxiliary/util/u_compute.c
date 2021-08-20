@@ -76,7 +76,7 @@ static void *blit_compute_shader(struct pipe_context *ctx)
 }
 
 void util_compute_blit(struct pipe_context *ctx, struct pipe_blit_info *blit_info,
-                       void **compute_state)
+                       void **compute_state, bool half_texel_offset)
 {
    if (blit_info->src.box.width == 0 || blit_info->src.box.height == 0 ||
        blit_info->dst.box.width == 0 || blit_info->dst.box.height == 0)
@@ -91,9 +91,10 @@ void util_compute_blit(struct pipe_context *ctx, struct pipe_blit_info *blit_inf
    float x_scale = blit_info->src.box.width / (float)blit_info->dst.box.width;
    float y_scale = blit_info->src.box.height / (float)blit_info->dst.box.height;
    float z_scale = blit_info->src.box.depth / (float)blit_info->dst.box.depth;
+   float offset = half_texel_offset ? 0.5 : 0.0;
 
-   unsigned data[] = {u_bitcast_f2u(blit_info->src.box.x / (float)src->width0),
-                      u_bitcast_f2u(blit_info->src.box.y / (float)src->height0),
+   unsigned data[] = {u_bitcast_f2u((blit_info->src.box.x + offset) / (float)src->width0),
+                      u_bitcast_f2u((blit_info->src.box.y + offset) / (float)src->height0),
                       u_bitcast_f2u(blit_info->src.box.z),
                       u_bitcast_f2u(0),
                       u_bitcast_f2u(x_scale / src->width0),

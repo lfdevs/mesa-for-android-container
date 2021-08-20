@@ -112,7 +112,7 @@ update_foz_index(struct foz_db *foz_db, FILE *db_idx, unsigned file_idx)
 {
    uint64_t offset = ftell(db_idx);
    fseek(db_idx, 0, SEEK_END);
-   size_t len = ftell(db_idx);
+   uint64_t len = ftell(db_idx);
    uint64_t parsed_offset = offset;
 
    if (offset == len)
@@ -120,8 +120,6 @@ update_foz_index(struct foz_db *foz_db, FILE *db_idx, unsigned file_idx)
 
    fseek(db_idx, offset, SEEK_SET);
    while (offset < len) {
-      parsed_offset = offset;
-
       char bytes_to_read[FOSSILIZE_BLOB_HASH_LENGTH + sizeof(struct foz_payload_header)];
       struct foz_payload_header *header;
 
@@ -149,28 +147,30 @@ update_foz_index(struct foz_db *foz_db, FILE *db_idx, unsigned file_idx)
       char hash_str[FOSSILIZE_BLOB_HASH_LENGTH + 1] = {0};
       memcpy(hash_str, bytes_to_read, FOSSILIZE_BLOB_HASH_LENGTH);
 
-      struct foz_db_entry *entry = ralloc(foz_db->mem_ctx,
-                                          struct foz_db_entry);
-      entry->header = *header;
-      entry->file_idx = file_idx;
-      _mesa_sha1_hex_to_sha1(entry->key, hash_str);
-
       /* read cache item offset from index file */
       uint64_t cache_offset;
       if (fread(&cache_offset, 1, sizeof(cache_offset), db_idx) !=
           sizeof(cache_offset))
-         return;
+         break;
 
-      entry->offset = cache_offset;
+      offset += header->payload_size;
+      parsed_offset = offset;
 
       /* Truncate the entry's hash string to a 64bit hash for use with a
        * 64bit hash table for looking up file offsets.
        */
       hash_str[16] = '\0';
       uint64_t key = strtoull(hash_str, NULL, 16);
-      _mesa_hash_table_u64_insert(foz_db->index_db, key, entry);
 
-      offset += header->payload_size;
+      struct foz_db_entry *entry = ralloc(foz_db->mem_ctx,
+                                          struct foz_db_entry);
+      entry->header = *header;
+      entry->file_idx = file_idx;
+      _mesa_sha1_hex_to_sha1(entry->key, hash_str);
+
+      entry->offset = cache_offset;
+
+      _mesa_hash_table_u64_insert(foz_db->index_db, key, entry);
    }
 
 
@@ -204,8 +204,9 @@ load_foz_dbs(struct foz_db *foz_db, FILE *db_idx, uint8_t file_idx,
    size_t len = ftell(db_idx);
    rewind(db_idx);
 
-   /* Try not to take the lock if len > 0, but if it is 0 we take the lock to initialize the files. */
-   if (len == 0) {
+   /* Try not to take the lock if len >= the size of the header, but if it is smaller we take the
+    * lock to potentially initialize the files. */
+   if (len < sizeof(stream_reference_magic_and_version)) {
       /* Wait for 100 ms in case of contention, after that we prioritize getting the app started. */
       int err = lock_file_with_timeout(foz_db->file[file_idx], 100000000);
       if (err == -1)
@@ -242,6 +243,9 @@ load_foz_dbs(struct foz_db *foz_db, FILE *db_idx, uint8_t file_idx,
                  sizeof(stream_reference_magic_and_version), db_idx) !=
           sizeof(stream_reference_magic_and_version))
          goto fail;
+
+      fflush(foz_db->file[file_idx]);
+      fflush(db_idx);
    }
 
    flock(fileno(foz_db->file[file_idx]), LOCK_UN);
@@ -282,6 +286,7 @@ foz_prepare(struct foz_db *foz_db, char *cache_path)
       return false;
 
    simple_mtx_init(&foz_db->mtx, mtx_plain);
+   simple_mtx_init(&foz_db->flock_mtx, mtx_plain);
    foz_db->mem_ctx = ralloc_context(NULL);
    foz_db->index_db = _mesa_hash_table_u64_create(NULL);
 
@@ -344,6 +349,7 @@ foz_destroy(struct foz_db *foz_db)
    if (foz_db->mem_ctx) {
       _mesa_hash_table_u64_destroy(foz_db->index_db);
       ralloc_free(foz_db->mem_ctx);
+      simple_mtx_destroy(&foz_db->flock_mtx);
       simple_mtx_destroy(&foz_db->mtx);
    }
 }
@@ -430,7 +436,12 @@ foz_write_entry(struct foz_db *foz_db, const uint8_t *cache_key_160bit,
    if (!foz_db->alive)
       return false;
 
-   /* Wait for 1 second. This is done outside of the mutex as I believe there is more potential
+   /* The flock is per-fd, not per thread, we do it outside of the main mutex to avoid having to
+    * wait in the mutex potentially blocking reads. We use the secondary flock_mtx to stop race
+    * conditions between the write threads sharing the same file descriptor. */
+   simple_mtx_lock(&foz_db->flock_mtx);
+
+   /* Wait for 1 second. This is done outside of the main mutex as I believe there is more potential
     * for file contention than mtx contention of significant length. */
    int err = lock_file_with_timeout(foz_db->file[0], 1000000000);
    if (err == -1)
@@ -444,6 +455,8 @@ foz_write_entry(struct foz_db *foz_db, const uint8_t *cache_key_160bit,
       _mesa_hash_table_u64_search(foz_db->index_db, hash);
    if (entry) {
       simple_mtx_unlock(&foz_db->mtx);
+      flock(fileno(foz_db->file[0]), LOCK_UN);
+      simple_mtx_unlock(&foz_db->flock_mtx);
       return NULL;
    }
 
@@ -506,6 +519,7 @@ foz_write_entry(struct foz_db *foz_db, const uint8_t *cache_key_160bit,
 
    simple_mtx_unlock(&foz_db->mtx);
    flock(fileno(foz_db->file[0]), LOCK_UN);
+   simple_mtx_unlock(&foz_db->flock_mtx);
 
    return true;
 
@@ -513,6 +527,7 @@ fail:
    simple_mtx_unlock(&foz_db->mtx);
 fail_file:
    flock(fileno(foz_db->file[0]), LOCK_UN);
+   simple_mtx_unlock(&foz_db->flock_mtx);
    return false;
 }
 #else

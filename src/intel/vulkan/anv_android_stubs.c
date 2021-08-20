@@ -33,6 +33,13 @@ anv_image_from_gralloc(VkDevice device_h,
    return VK_ERROR_EXTENSION_NOT_PRESENT;
 }
 
+VkResult anv_image_bind_from_gralloc(struct anv_device *device,
+                                     struct anv_image *image,
+                                     const VkNativeBufferANDROID *gralloc_info)
+{
+   return VK_ERROR_EXTENSION_NOT_PRESENT;
+}
+
 uint64_t
 anv_ahw_usage_from_vk_usage(const VkImageCreateFlags vk_create,
                             const VkImageUsageFlags vk_usage)

@@ -3425,9 +3425,14 @@ vn_DestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator)
 
    for (uint32_t i = 0; i < dev->queue_count; i++)
       vn_queue_fini(&dev->queues[i]);
-   vk_free(alloc, dev->queues);
 
+   /* We must emit vkDestroyDevice before freeing dev->queues.  Otherwise,
+    * another thread might reuse their object ids while they still refer to
+    * the queues in the renderer.
+    */
    vn_async_vkDestroyDevice(dev->instance, device, NULL);
+
+   vk_free(alloc, dev->queues);
 
    vn_device_base_fini(&dev->base);
    vk_free(alloc, dev);

@@ -109,7 +109,7 @@ void cmod_propagation_test::SetUp()
 
    v = new cmod_propagation_vec4_visitor(compiler, ctx, shader, prog_data);
 
-   devinfo->ver = 4;
+   devinfo->ver = 7;
    devinfo->verx10 = devinfo->ver * 10;
 }
 
@@ -902,6 +902,152 @@ TEST_F(cmod_propagation_test, add_cmp_different_dst_writemask)
    ASSERT_EQ(1, block0->end_ip);
    EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
    EXPECT_EQ(BRW_CONDITIONAL_NONE, instruction(block0, 0)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 1)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, prop_across_sel_gfx7)
+{
+   const vec4_builder bld = vec4_builder(v).at_end();
+   dst_reg dest1 = dst_reg(v, glsl_type::float_type);
+   dst_reg dest2 = dst_reg(v, glsl_type::float_type);
+   src_reg src0 = src_reg(v, glsl_type::float_type);
+   src_reg src1 = src_reg(v, glsl_type::float_type);
+   src_reg src2 = src_reg(v, glsl_type::float_type);
+   src_reg src3 = src_reg(v, glsl_type::float_type);
+   src_reg zero(brw_imm_f(0.0f));
+   dst_reg dest_null = bld.null_reg_f();
+   dest_null.writemask = WRITEMASK_X;
+
+   bld.ADD(dest1, src0, src1);
+   bld.SEL(dest2, src2, src3)
+      ->conditional_mod = BRW_CONDITIONAL_GE;
+   bld.CMP(dest_null, src_reg(dest1), zero, BRW_CONDITIONAL_GE);
+
+   /* = Before =
+    *
+    * 0: add        dest1.x src0.xxxx  src1.xxxx
+    * 1: sel.ge.f0  dest2.x src2.xxxx  src3.xxxx
+    * 2: cmp.ge.f0  null.x  dest.xxxx  0.0f
+    *
+    * = After =
+    * 0: add.ge.f0  dest.x  src0.xxxx  src1.xxxx
+    * 1: sel.ge.f0  dest2.x src2.xxxx  src3.xxxx
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(2, block0->end_ip);
+
+   EXPECT_TRUE(cmod_propagation(v));
+
+   ASSERT_EQ(0, block0->start_ip);
+   ASSERT_EQ(1, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 0)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_SEL, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 1)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, prop_across_sel_gfx5)
+{
+   devinfo->ver = 5;
+   devinfo->verx10 = devinfo->ver * 10;
+
+   const vec4_builder bld = vec4_builder(v).at_end();
+   dst_reg dest1 = dst_reg(v, glsl_type::float_type);
+   dst_reg dest2 = dst_reg(v, glsl_type::float_type);
+   src_reg src0 = src_reg(v, glsl_type::float_type);
+   src_reg src1 = src_reg(v, glsl_type::float_type);
+   src_reg src2 = src_reg(v, glsl_type::float_type);
+   src_reg src3 = src_reg(v, glsl_type::float_type);
+   src_reg zero(brw_imm_f(0.0f));
+   dst_reg dest_null = bld.null_reg_f();
+   dest_null.writemask = WRITEMASK_X;
+
+   bld.ADD(dest1, src0, src1);
+   bld.SEL(dest2, src2, src3)
+      ->conditional_mod = BRW_CONDITIONAL_GE;
+   bld.CMP(dest_null, src_reg(dest1), zero, BRW_CONDITIONAL_GE);
+
+   /* = Before =
+    *
+    * 0: add        dest1.x src0.xxxx  src1.xxxx
+    * 1: sel.ge.f0  dest2.x src2.xxxx  src3.xxxx
+    * 2: cmp.ge.f0  null.x  dest.xxxx  0.0f
+    *
+    * = After =
+    * (no changes)
+    *
+    * On Gfx4 and Gfx5, sel.l (for min) and sel.ge (for max) are implemented
+    * using a separate cmpn and sel instruction.  This lowering occurs in
+    * fs_vistor::lower_minmax which is called a long time after the first
+    * calls to cmod_propagation.
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(2, block0->end_ip);
+
+   EXPECT_FALSE(cmod_propagation(v));
+
+   ASSERT_EQ(0, block0->start_ip);
+   ASSERT_EQ(2, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NONE, instruction(block0, 0)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_SEL, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 1)->conditional_mod);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 2)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 2)->conditional_mod);
+}
+
+TEST_F(cmod_propagation_test, prop_into_sel_gfx5)
+{
+   devinfo->ver = 5;
+   devinfo->verx10 = devinfo->ver * 10;
+
+   const vec4_builder bld = vec4_builder(v).at_end();
+   dst_reg dest = dst_reg(v, glsl_type::float_type);
+   src_reg src0 = src_reg(v, glsl_type::float_type);
+   src_reg src1 = src_reg(v, glsl_type::float_type);
+   src_reg zero(brw_imm_f(0.0f));
+   dst_reg dest_null = bld.null_reg_f();
+   dest_null.writemask = WRITEMASK_X;
+
+   bld.SEL(dest, src0, src1)
+      ->conditional_mod = BRW_CONDITIONAL_GE;
+   bld.CMP(dest_null, src_reg(dest), zero, BRW_CONDITIONAL_GE);
+
+   /* = Before =
+    *
+    * 0: sel.ge.f0  dest.x  src2.xxxx  src3.xxxx
+    * 1: cmp.ge.f0  null.x  dest.xxxx  0.0f
+    *
+    * = After =
+    * (no changes)
+    *
+    * Do not copy propagate into a sel.cond instruction.  While it does modify
+    * the flags, the flags are not based on the result compared with zero (as
+    * with most other instructions).  The result is based on the sources
+    * compared with each other (like cmp.cond).
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   EXPECT_FALSE(cmod_propagation(v));
+
+   ASSERT_EQ(0, block0->start_ip);
+   ASSERT_EQ(1, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_SEL, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 0)->conditional_mod);
    EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 1)->opcode);
    EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 1)->conditional_mod);
 }

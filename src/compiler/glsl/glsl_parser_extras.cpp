@@ -1595,6 +1595,7 @@ ast_switch_statement::ast_switch_statement(ast_expression *test_expression,
 {
    this->test_expression = test_expression;
    this->body = body;
+   this->test_val = NULL;
 }
 
 

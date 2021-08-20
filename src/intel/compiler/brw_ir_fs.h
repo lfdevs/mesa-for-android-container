@@ -378,7 +378,7 @@ public:
     * Return the subset of flag registers updated by the instruction (either
     * partially or fully) as a bitset with byte granularity.
     */
-   unsigned flags_written() const;
+   unsigned flags_written(const intel_device_info *devinfo) const;
 
    fs_reg dst;
    fs_reg *src;

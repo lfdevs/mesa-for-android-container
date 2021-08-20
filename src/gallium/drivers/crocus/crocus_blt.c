@@ -188,6 +188,13 @@ static bool emit_copy_blt(struct crocus_batch *batch,
       }
    }
 
+   /* Blit pitch must be dword-aligned.  Otherwise, the hardware appears to drop
+    * the low bits.  Offsets must be naturally aligned.
+    */
+   if (src_pitch % 4 != 0 || src_offset % cpp != 0 ||
+       dst_pitch % 4 != 0 || dst_offset % cpp != 0)
+     return false;
+
    /* For tiled source and destination, pitch value should be specified
     * as a number of Dwords.
     */
