@@ -1,3 +1,10 @@
+mesa (21.2.1-2) unstable; urgency=medium
+
+  [ Adrian Bunk ]
+  * Fix armel FTBFS
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 01 Sep 2021 14:02:18 +0300
+
 mesa (21.2.1-1) unstable; urgency=medium
 
   * New upstream release.

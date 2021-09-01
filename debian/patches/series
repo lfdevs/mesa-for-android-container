@@ -2,3 +2,4 @@
 fix-python-shebang.diff
 path_max.diff
 src_glx_dri_common.h.diff
+0001-util-format-NEON-is-not-available-with-the-soft-floa.patch
