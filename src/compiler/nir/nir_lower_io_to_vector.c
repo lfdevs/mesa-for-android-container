@@ -632,6 +632,7 @@ nir_vectorize_tess_levels_impl(nir_function_impl *impl)
          } else {
             b.cursor = nir_after_instr(instr);
             nir_ssa_def *val = &intrin->dest.ssa;
+            val->num_components = intrin->num_components;
             nir_ssa_def *comp = nir_channel(&b, val, index);
             nir_ssa_def_rewrite_uses_after(val, comp, comp->parent_instr);
          }

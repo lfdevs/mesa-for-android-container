@@ -1,3 +1,14 @@
+mesa (21.2.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * control: Add riscv64 to mesa-opencl-icd archs. (LP: #1942764)
+  * control: Drop libxdamage-dev from build-depends. (Closes: #979515)
+  * 0001-util-format-NEON-is-not-available-with-the-soft-floa.patch:
+    Dropped, upstream.
+  * control: Bump libdrm-dev build-dep.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 22 Sep 2021 14:33:55 +0300
+
 mesa (21.2.1-2) unstable; urgency=medium
 
   [ Adrian Bunk ]

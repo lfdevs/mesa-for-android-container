@@ -1051,7 +1051,6 @@ void vir_set_unpack(struct qinst *inst, int src,
 void vir_set_pack(struct qinst *inst, enum v3d_qpu_output_pack pack);
 
 struct qreg vir_get_temp(struct v3d_compile *c);
-void vir_emit_last_thrsw(struct v3d_compile *c);
 void vir_calculate_live_intervals(struct v3d_compile *c);
 int vir_get_nsrc(struct qinst *inst);
 bool vir_has_side_effects(struct v3d_compile *c, struct qinst *inst);

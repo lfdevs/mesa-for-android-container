@@ -130,8 +130,8 @@ struct panfrost_batch {
         mali_ptr uniform_buffers[PIPE_SHADER_TYPES];
         mali_ptr push_uniforms[PIPE_SHADER_TYPES];
 
-        /* Referenced resources for cleanup */
-        struct util_dynarray resources;
+        /* Referenced resources */
+        struct set *resources;
 };
 
 /* Functions for managing the above */

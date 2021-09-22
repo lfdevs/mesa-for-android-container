@@ -3132,6 +3132,8 @@ teximage(struct gl_context *ctx, GLboolean compressed, GLuint dims,
 
       _mesa_lock_texture(ctx, texObj);
       {
+         texObj->External = GL_FALSE;
+
          texImage = _mesa_get_tex_image(ctx, texObj, target, level);
 
          if (!texImage) {
@@ -3437,6 +3439,8 @@ egl_image_target_texture(struct gl_context *ctx,
       _mesa_error(ctx, GL_OUT_OF_MEMORY, "%s", caller);
    } else {
       ctx->Driver.FreeTextureImageBuffer(ctx, texImage);
+
+      texObj->External = GL_TRUE;
 
       if (tex_storage) {
          ctx->Driver.EGLImageTargetTexStorage(ctx, target, texObj, texImage,
@@ -4410,6 +4414,7 @@ copyteximage(struct gl_context *ctx, GLuint dims, struct gl_texture_object *texO
 
    _mesa_lock_texture(ctx, texObj);
    {
+      texObj->External = GL_FALSE;
       texImage = _mesa_get_tex_image(ctx, texObj, target, level);
 
       if (!texImage) {
@@ -6907,6 +6912,7 @@ texture_image_multisample(struct gl_context *ctx, GLuint dims,
          }
       }
 
+      texObj->External = GL_FALSE;
       texObj->Immutable |= immutable;
 
       if (immutable) {

@@ -282,7 +282,7 @@ static void
 split_32bit_copy(struct copy_ctx *ctx, struct copy_entry *entry)
 {
    assert(!entry->done);
-   assert(!(entry->flags & (IR3_REG_IMMED | IR3_REG_CONST)));
+   assert(!(entry->src.flags & (IR3_REG_IMMED | IR3_REG_CONST)));
    assert(copy_entry_size(entry) == 2);
    struct copy_entry *new_entry = &ctx->entries[ctx->entry_count++];
 
@@ -362,7 +362,7 @@ _handle_copies(struct ir3_compiler *compiler, struct ir3_instruction *instr,
 
          if (((ctx->physreg_use_count[entry->dst] == 0 ||
                ctx->physreg_use_count[entry->dst + 1] == 0)) &&
-             !(entry->flags & (IR3_REG_IMMED | IR3_REG_CONST))) {
+             !(entry->src.flags & (IR3_REG_IMMED | IR3_REG_CONST))) {
             split_32bit_copy(ctx, entry);
             progress = true;
          }
@@ -451,6 +451,8 @@ _handle_copies(struct ir3_compiler *compiler, struct ir3_instruction *instr,
                entry->src.reg + (blocking->src.reg - entry->dst);
          }
       }
+
+      entry->done = true;
    }
 }
 

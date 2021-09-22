@@ -398,7 +398,7 @@ emit_marker(struct fd_ringbuffer *ring, int scratch_idx)
    if (reg == HW_QUERY_BASE_REG)
       return;
    if (__EMIT_MARKER) {
-      OUT_WFI5(ring);
+      OUT_WFI(ring);
       OUT_PKT0(ring, reg, 1);
       OUT_RING(ring, p_atomic_inc_return(&marker_cnt));
    }

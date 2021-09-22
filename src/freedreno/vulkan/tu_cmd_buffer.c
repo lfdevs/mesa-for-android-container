@@ -1497,10 +1497,6 @@ tu_BeginCommandBuffer(VkCommandBuffer commandBuffer,
    memset(&cmd_buffer->state, 0, sizeof(cmd_buffer->state));
    cmd_buffer->state.index_size = 0xff; /* dirty restart index */
 
-   cmd_buffer->state.last_vs_params.first_instance = -1;
-   cmd_buffer->state.last_vs_params.params_offset = -1;
-   cmd_buffer->state.last_vs_params.vertex_offset = -1;
-
    tu_cache_init(&cmd_buffer->state.cache);
    tu_cache_init(&cmd_buffer->state.renderpass_cache);
    cmd_buffer->usage_flags = pBeginInfo->flags;
@@ -2092,7 +2088,8 @@ tu_CmdBindPipeline(VkCommandBuffer commandBuffer,
    assert(pipelineBindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS);
 
    cmd->state.pipeline = pipeline;
-   cmd->state.dirty |= TU_CMD_DIRTY_DESC_SETS_LOAD | TU_CMD_DIRTY_SHADER_CONSTS | TU_CMD_DIRTY_LRZ;
+   cmd->state.dirty |= TU_CMD_DIRTY_DESC_SETS_LOAD | TU_CMD_DIRTY_SHADER_CONSTS |
+                       TU_CMD_DIRTY_LRZ | TU_CMD_DIRTY_VS_PARAMS;
 
    /* note: this also avoids emitting draw states before renderpass clears,
     * which may use the 3D clear path (for MSAA cases)
@@ -3854,13 +3851,16 @@ tu6_emit_vs_params(struct tu_cmd_buffer *cmd,
                    uint32_t vertex_offset,
                    uint32_t first_instance)
 {
-   uint32_t offset = vs_params_offset(cmd);
-
-   if (offset == cmd->state.last_vs_params.params_offset &&
+   /* Beside re-emitting params when they are changed, we should re-emit
+    * them after constants are invalidated via HLSQ_INVALIDATE_CMD.
+    */
+   if (!(cmd->state.dirty & (TU_CMD_DIRTY_DRAW_STATE | TU_CMD_DIRTY_VS_PARAMS)) &&
        vertex_offset == cmd->state.last_vs_params.vertex_offset &&
        first_instance == cmd->state.last_vs_params.first_instance) {
       return;
    }
+
+   uint32_t offset = vs_params_offset(cmd);
 
    struct tu_cs cs;
    VkResult result = tu_cs_begin_sub_stream(&cmd->sub_cs, 3 + (offset ? 8 : 0), &cs);
@@ -3889,7 +3889,6 @@ tu6_emit_vs_params(struct tu_cmd_buffer *cmd,
       tu_cs_emit(&cs, 0);
    }
 
-   cmd->state.last_vs_params.params_offset = offset;
    cmd->state.last_vs_params.vertex_offset = vertex_offset;
    cmd->state.last_vs_params.first_instance = first_instance;
 

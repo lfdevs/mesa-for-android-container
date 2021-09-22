@@ -861,6 +861,7 @@ AllocAndFetchScreenConfigs(Display * dpy, struct glx_display * priv)
  _X_HIDDEN struct glx_display *
 __glXInitialize(Display * dpy)
 {
+   XExtCodes *codes;
    struct glx_display *dpyPriv, *d;
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
    Bool glx_direct, glx_accel;
@@ -883,8 +884,13 @@ __glXInitialize(Display * dpy)
    if (!dpyPriv)
       return NULL;
 
-   dpyPriv->codes = *XInitExtension(dpy, __glXExtensionName);
+   codes = XInitExtension(dpy, __glXExtensionName);
+   if (!codes) {
+      free(dpyPriv);
+      return NULL;
+   }
 
+   dpyPriv->codes = *codes;
    dpyPriv->dpy = dpy;
 
    /* This GLX implementation requires X_GLXQueryExtensionsString

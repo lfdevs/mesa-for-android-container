@@ -430,6 +430,8 @@ ttn_emit_declaration(struct ttn_compile *c)
                if (var->data.location == VARYING_SLOT_FOGC ||
                    var->data.location == VARYING_SLOT_PSIZ) {
                   var->type = glsl_float_type();
+               } else if (var->data.location == VARYING_SLOT_LAYER) {
+                  var->type = glsl_int_type();
                }
             }
 
@@ -2220,8 +2222,9 @@ ttn_add_output_stores(struct ttn_compile *c)
          else if (var->data.location == FRAG_RESULT_SAMPLE_MASK)
             store_value = nir_channel(b, store_value, 0);
       } else {
-         /* FOGC and PSIZ are scalar values */
+         /* FOGC, LAYER, and PSIZ are scalar values */
          if (var->data.location == VARYING_SLOT_FOGC ||
+             var->data.location == VARYING_SLOT_LAYER ||
              var->data.location == VARYING_SLOT_PSIZ) {
             store_value = nir_channel(b, store_value, 0);
          }

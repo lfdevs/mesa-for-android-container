@@ -7653,7 +7653,7 @@
     </mod>
   </ins>
 
-  <ins name="+ST_TILE" staging="r=vecsize" mask="0xff800" exact="0xcb800" message="tile" dests="0">
+  <ins name="+ST_TILE" staging="r=format" mask="0xff800" exact="0xcb800" message="tile" dests="0">
     <src start="0"/>
     <src start="3"/>
     <src start="6" mask="0xf7"/>

@@ -1527,6 +1527,40 @@ mir_lower_ldst(compiler_context *ctx)
         }
 }
 
+/* Insert moves to ensure we can register allocate blend writeout */
+static void
+mir_lower_blend_input(compiler_context *ctx)
+{
+        mir_foreach_block(ctx, _blk) {
+                midgard_block *blk = (midgard_block *) _blk;
+
+                if (list_is_empty(&blk->base.instructions))
+                        continue;
+
+                midgard_instruction *I = mir_last_in_block(blk);
+
+                if (!I || I->type != TAG_ALU_4 || !I->writeout)
+                        continue;
+
+                mir_foreach_src(I, s) {
+                        unsigned src = I->src[s];
+
+                        if (src >= ctx->temp_count)
+                                continue;
+
+                        if (!_blk->live_out[src])
+                                continue;
+
+                        unsigned temp = make_compiler_temp(ctx);
+                        midgard_instruction mov = v_mov(src, temp);
+                        mov.mask = 0xF;
+                        mov.dest_type = nir_type_uint32;
+                        mir_insert_instruction_before(ctx, I, mov);
+                        I->src[s] = mov.dest;
+                }
+        }
+}
+
 void
 midgard_schedule_program(compiler_context *ctx)
 {
@@ -1536,6 +1570,13 @@ midgard_schedule_program(compiler_context *ctx)
         /* Must be lowered right before scheduling */
         mir_squeeze_index(ctx);
         mir_lower_special_reads(ctx);
+
+        if (ctx->stage == MESA_SHADER_FRAGMENT) {
+                mir_invalidate_liveness(ctx);
+                mir_compute_liveness(ctx);
+                mir_lower_blend_input(ctx);
+        }
+
         mir_squeeze_index(ctx);
 
         /* Lowering can introduce some dead moves */
@@ -1545,5 +1586,4 @@ midgard_schedule_program(compiler_context *ctx)
                 midgard_opt_dead_move_eliminate(ctx, block);
                 schedule_block(ctx, block);
         }
-
 }

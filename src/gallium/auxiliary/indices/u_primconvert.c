@@ -179,10 +179,12 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
       src = (const uint8_t *)src;
 
       /* if the resulting primitive type is not supported by the driver for primitive restart,
+       * or if the original primitive type was not supported by the driver,
        * the draw needs to be rewritten to not use primitive restart
        */
       if (info->primitive_restart &&
-          !(pc->cfg.restart_primtypes_mask & BITFIELD_BIT(mode))) {
+          (!(pc->cfg.restart_primtypes_mask & BITFIELD_BIT(mode)) ||
+           !(pc->cfg.primtypes_mask & BITFIELD_BIT(info->mode)))) {
          /* step 1: rewrite draw to not use primitive primitive restart;
           *         this pre-filters degenerate primitives
           */

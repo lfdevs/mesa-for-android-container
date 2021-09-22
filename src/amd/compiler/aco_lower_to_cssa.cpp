@@ -384,7 +384,7 @@ struct ltg_node {
 /* emit the copies in an order that does not
  * create interferences within a merge-set */
 void
-emit_copies_block(Builder bld, std::map<uint32_t, ltg_node>& ltg, RegType type)
+emit_copies_block(Builder& bld, std::map<uint32_t, ltg_node>& ltg, RegType type)
 {
    auto&& it = ltg.begin();
    while (it != ltg.end()) {
@@ -445,6 +445,9 @@ emit_parallelcopies(cssa_ctx& ctx)
          continue;
 
       std::map<uint32_t, ltg_node> ltg;
+      bool has_vgpr_copy = false;
+      bool has_sgpr_copy = false;
+
       /* first, try to coalesce all parallelcopies */
       for (const copy& cp : ctx.parallelcopies[i]) {
          if (try_coalesce_copy(ctx, cp, i)) {
@@ -459,6 +462,10 @@ emit_parallelcopies(cssa_ctx& ctx)
             uint32_t write_idx = ctx.merge_node_table[cp.def.tempId()].index;
             assert(write_idx != -1u);
             ltg[write_idx] = {cp, read_idx};
+
+            bool is_vgpr = cp.def.regClass().type() == RegType::vgpr;
+            has_vgpr_copy |= is_vgpr;
+            has_sgpr_copy |= !is_vgpr;
          }
       }
 
@@ -475,19 +482,23 @@ emit_parallelcopies(cssa_ctx& ctx)
       Builder bld(ctx.program);
       Block& block = ctx.program->blocks[i];
 
-      /* emit VGPR copies */
-      auto IsLogicalEnd = [](const aco_ptr<Instruction>& inst) -> bool
-      { return inst->opcode == aco_opcode::p_logical_end; };
-      auto it = std::find_if(block.instructions.rbegin(), block.instructions.rend(), IsLogicalEnd);
-      bld.reset(&block.instructions, std::prev(it.base()));
-      emit_copies_block(bld, ltg, RegType::vgpr);
+      if (has_vgpr_copy) {
+         /* emit VGPR copies */
+         auto IsLogicalEnd = [](const aco_ptr<Instruction>& inst) -> bool
+         { return inst->opcode == aco_opcode::p_logical_end; };
+         auto it = std::find_if(block.instructions.rbegin(), block.instructions.rend(), IsLogicalEnd);
+         bld.reset(&block.instructions, std::prev(it.base()));
+         emit_copies_block(bld, ltg, RegType::vgpr);
+      }
 
-      /* emit SGPR copies */
-      aco_ptr<Instruction> branch = std::move(block.instructions.back());
-      block.instructions.pop_back();
-      bld.reset(&block.instructions);
-      emit_copies_block(bld, ltg, RegType::sgpr);
-      bld.insert(std::move(branch));
+      if (has_sgpr_copy) {
+         /* emit SGPR copies */
+         aco_ptr<Instruction> branch = std::move(block.instructions.back());
+         block.instructions.pop_back();
+         bld.reset(&block.instructions);
+         emit_copies_block(bld, ltg, RegType::sgpr);
+         bld.insert(std::move(branch));
+      }
    }
 
    /* finally, rename coalesced phi operands */

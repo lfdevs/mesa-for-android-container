@@ -1947,7 +1947,8 @@ bi_lower_fau(bi_context *ctx)
         }
 }
 
-/* On v6, ATEST cannot be the first clause of a shader, add a NOP if needed */
+/* Only v7 allows specifying a dependency on the tilebuffer for the first
+ * clause of a shader. v6 requires adding a NOP clause with the depedency. */
 
 static void
 bi_add_nop_for_atest(bi_context *ctx)
@@ -1963,11 +1964,12 @@ bi_add_nop_for_atest(bi_context *ctx)
         pan_block *block = list_first_entry(&ctx->blocks, pan_block, link);
         bi_clause *clause = bi_next_clause(ctx, block, NULL);
 
-        if (!clause || clause->message_type != BIFROST_MESSAGE_ATEST)
+        if (!clause || !(clause->dependencies & ((1 << BIFROST_SLOT_ELDEST_DEPTH) |
+                                                 (1 << BIFROST_SLOT_ELDEST_COLOUR))))
                 return;
 
-        /* Add a NOP so we can wait for the dependencies required for ATEST to
-         * execute */
+        /* Add a NOP so we can wait for the dependencies required by the first
+         * clause */
 
         bi_instr *I = rzalloc(ctx, bi_instr);
         I->op = BI_OPCODE_NOP_I32;

@@ -854,7 +854,8 @@ radv_query_shader(struct radv_cmd_buffer *cmd_buffer, VkPipeline *pipeline,
    old_predicating = cmd_buffer->state.predicating;
    cmd_buffer->state.predicating = false;
 
-   struct radv_buffer dst_buffer = {.bo = dst_bo, .offset = dst_offset, .size = dst_stride * count};
+   uint64_t dst_buffer_size = count == 1 ? src_stride : dst_stride * count;
+   struct radv_buffer dst_buffer = {.bo = dst_bo, .offset = dst_offset, .size = dst_buffer_size};
 
    struct radv_buffer src_buffer = {
       .bo = src_bo,

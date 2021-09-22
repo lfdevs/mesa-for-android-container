@@ -74,13 +74,30 @@ lower_alu_instr(nir_builder *bld, nir_alu_instr *alu, unsigned bit_size)
    nir_ssa_def *lowered_dst = NULL;
    if (op == nir_op_imul_high || op == nir_op_umul_high) {
       assert(dst_bit_size * 2 <= bit_size);
-      nir_ssa_def *lowered_dst = nir_imul(bld, srcs[0], srcs[1]);
+      lowered_dst = nir_imul(bld, srcs[0], srcs[1]);
       if (nir_op_infos[op].output_type & nir_type_uint)
          lowered_dst = nir_ushr_imm(bld, lowered_dst, dst_bit_size);
       else
          lowered_dst = nir_ishr_imm(bld, lowered_dst, dst_bit_size);
    } else {
       lowered_dst = nir_build_alu_src_arr(bld, op, srcs);
+
+      /* The add_sat and sub_sat instructions need to clamp the result to the
+       * range of the original type.
+       */
+      if (op == nir_op_iadd_sat || op == nir_op_isub_sat) {
+         const int64_t int_max = u_intN_max(dst_bit_size);
+         const int64_t int_min = u_intN_min(dst_bit_size);
+
+         lowered_dst = nir_iclamp(bld, lowered_dst,
+                                  nir_imm_intN_t(bld, int_min, bit_size),
+                                  nir_imm_intN_t(bld, int_max, bit_size));
+      } else if (op == nir_op_uadd_sat || op == nir_op_usub_sat) {
+         const uint64_t uint_max = u_uintN_max(dst_bit_size);
+
+         lowered_dst = nir_umin(bld, lowered_dst,
+                                nir_imm_intN_t(bld, uint_max, bit_size));
+      }
    }
 
 

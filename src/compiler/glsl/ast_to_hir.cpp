@@ -1703,6 +1703,7 @@ ast_expression::do_hir(exec_list *instructions,
       if ((op[0]->type == glsl_type::error_type ||
            op[1]->type == glsl_type::error_type)) {
          error_emitted = true;
+         result = ir_rvalue::error_value(ctx);
          break;
       }
 
@@ -1740,6 +1741,14 @@ ast_expression::do_hir(exec_list *instructions,
       op[0] = this->subexpressions[0]->hir(instructions, state);
       op[1] = this->subexpressions[1]->hir(instructions, state);
 
+      /* Break out if operand types were not parsed successfully. */
+      if ((op[0]->type == glsl_type::error_type ||
+           op[1]->type == glsl_type::error_type)) {
+         error_emitted = true;
+         result = ir_rvalue::error_value(ctx);
+         break;
+      }
+
       orig_type = op[0]->type;
       type = modulus_result_type(op[0], op[1], state, &loc);
 
@@ -1770,6 +1779,15 @@ ast_expression::do_hir(exec_list *instructions,
       this->subexpressions[0]->set_is_lhs(true);
       op[0] = this->subexpressions[0]->hir(instructions, state);
       op[1] = this->subexpressions[1]->hir(instructions, state);
+
+      /* Break out if operand types were not parsed successfully. */
+      if ((op[0]->type == glsl_type::error_type ||
+           op[1]->type == glsl_type::error_type)) {
+         error_emitted = true;
+         result = ir_rvalue::error_value(ctx);
+         break;
+      }
+
       type = shift_result_type(op[0]->type, op[1]->type, this->oper, state,
                                &loc);
       ir_rvalue *temp_rhs = new(ctx) ir_expression(operations[this->oper],
@@ -1789,6 +1807,14 @@ ast_expression::do_hir(exec_list *instructions,
       this->subexpressions[0]->set_is_lhs(true);
       op[0] = this->subexpressions[0]->hir(instructions, state);
       op[1] = this->subexpressions[1]->hir(instructions, state);
+
+      /* Break out if operand types were not parsed successfully. */
+      if ((op[0]->type == glsl_type::error_type ||
+           op[1]->type == glsl_type::error_type)) {
+         error_emitted = true;
+         result = ir_rvalue::error_value(ctx);
+         break;
+      }
 
       orig_type = op[0]->type;
       type = bit_logic_result_type(op[0], op[1], this->oper, state, &loc);
@@ -6531,8 +6557,8 @@ ast_jump_statement::hir(exec_list *instructions,
          if (state->loop_nesting_ast != NULL &&
              mode == ast_continue && !state->switch_state.is_switch_innermost) {
             if (state->loop_nesting_ast->rest_expression) {
-               state->loop_nesting_ast->rest_expression->hir(instructions,
-                                                             state);
+               clone_ir_list(ctx, instructions,
+                             &state->loop_nesting_ast->rest_instructions);
             }
             if (state->loop_nesting_ast->mode ==
                 ast_iteration_statement::ast_do_while) {
@@ -6780,8 +6806,8 @@ ast_switch_statement::hir(exec_list *instructions,
 
       if (state->loop_nesting_ast != NULL) {
          if (state->loop_nesting_ast->rest_expression) {
-            state->loop_nesting_ast->rest_expression->hir(&irif->then_instructions,
-                                                          state);
+            clone_ir_list(ctx, &irif->then_instructions,
+                          &state->loop_nesting_ast->rest_instructions);
          }
          if (state->loop_nesting_ast->mode ==
              ast_iteration_statement::ast_do_while) {
@@ -6830,8 +6856,11 @@ ir_rvalue *
 ast_switch_body::hir(exec_list *instructions,
                      struct _mesa_glsl_parse_state *state)
 {
-   if (stmts != NULL)
+   if (stmts != NULL) {
+      state->symbols->push_scope();
       stmts->hir(instructions, state);
+      state->symbols->pop_scope();
+   }
 
    /* Switch bodies do not have r-values. */
    return NULL;
@@ -7135,11 +7164,21 @@ ast_iteration_statement::hir(exec_list *instructions,
    if (mode != ast_do_while)
       condition_to_hir(&stmt->body_instructions, state);
 
-   if (body != NULL)
+   if (rest_expression != NULL)
+      rest_expression->hir(&rest_instructions, state);
+
+   if (body != NULL) {
+      if (mode == ast_do_while)
+         state->symbols->push_scope();
+
       body->hir(& stmt->body_instructions, state);
 
+      if (mode == ast_do_while)
+         state->symbols->pop_scope();
+   }
+
    if (rest_expression != NULL)
-      rest_expression->hir(& stmt->body_instructions, state);
+      stmt->body_instructions.append_list(&rest_instructions);
 
    if (mode == ast_do_while)
       condition_to_hir(&stmt->body_instructions, state);

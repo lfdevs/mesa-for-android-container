@@ -1098,6 +1098,29 @@ static bool nir_instr_free_and_dce_is_live(nir_instr *instr)
    return live;
 }
 
+static bool
+nir_instr_dce_add_dead_srcs_cb(nir_src *src, void *state)
+{
+   nir_instr_worklist *wl = state;
+
+   if (src->is_ssa) {
+      list_del(&src->use_link);
+      if (!nir_instr_free_and_dce_is_live(src->ssa->parent_instr))
+         nir_instr_worklist_push_tail(wl, src->ssa->parent_instr);
+
+      /* Stop nir_instr_remove from trying to delete the link again. */
+      src->ssa = NULL;
+   }
+
+   return true;
+}
+
+static void
+nir_instr_dce_add_dead_ssa_srcs(nir_instr_worklist *wl, nir_instr *instr)
+{
+   nir_foreach_src(instr, nir_instr_dce_add_dead_srcs_cb, wl);
+}
+
 /**
  * Frees an instruction and any SSA defs that it used that are now dead,
  * returning a nir_cursor where the instruction previously was.
@@ -1107,7 +1130,7 @@ nir_instr_free_and_dce(nir_instr *instr)
 {
    nir_instr_worklist *worklist = nir_instr_worklist_create();
 
-   nir_instr_worklist_add_ssa_srcs(worklist, instr);
+   nir_instr_dce_add_dead_ssa_srcs(worklist, instr);
    nir_cursor c = nir_instr_remove(instr);
 
    struct exec_list to_free;
@@ -1115,20 +1138,18 @@ nir_instr_free_and_dce(nir_instr *instr)
 
    nir_instr *dce_instr;
    while ((dce_instr = nir_instr_worklist_pop_head(worklist))) {
-      if (!nir_instr_free_and_dce_is_live(dce_instr)) {
-         nir_instr_worklist_add_ssa_srcs(worklist, dce_instr);
+      nir_instr_dce_add_dead_ssa_srcs(worklist, dce_instr);
 
-         /* If we're removing the instr where our cursor is, then we have to
-          * point the cursor elsewhere.
-          */
-         if ((c.option == nir_cursor_before_instr ||
-              c.option == nir_cursor_after_instr) &&
-             c.instr == dce_instr)
-            c = nir_instr_remove(dce_instr);
-         else
-            nir_instr_remove(dce_instr);
-         exec_list_push_tail(&to_free, &dce_instr->node);
-      }
+      /* If we're removing the instr where our cursor is, then we have to
+       * point the cursor elsewhere.
+       */
+      if ((c.option == nir_cursor_before_instr ||
+           c.option == nir_cursor_after_instr) &&
+          c.instr == dce_instr)
+         c = nir_instr_remove(dce_instr);
+      else
+         nir_instr_remove(dce_instr);
+      exec_list_push_tail(&to_free, &dce_instr->node);
    }
 
    struct exec_node *node;

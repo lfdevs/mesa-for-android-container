@@ -185,8 +185,8 @@ convert_clear_color(enum pipe_format format,
          unsigned bits = util_format_get_component_bits(
             format, UTIL_FORMAT_COLORSPACE_RGB, i);
          if (bits > 0 && bits < 32) {
-            int32_t max = (1 << (bits - 1)) - 1;
-            int32_t min = -(1 << (bits - 1));
+            int32_t max = u_intN_max(bits);
+            int32_t min = u_intN_min(bits);
             override_color.i32[i] = CLAMP(override_color.i32[i], min, max);
          }
       }

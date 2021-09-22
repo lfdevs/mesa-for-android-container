@@ -2749,6 +2749,32 @@ nir_block_ends_in_jump(nir_block *block)
           nir_block_last_instr(block)->type == nir_instr_type_jump;
 }
 
+static inline bool
+nir_block_ends_in_return_or_halt(nir_block *block)
+{
+   if (exec_list_is_empty(&block->instr_list))
+      return false;
+
+   nir_instr *instr = nir_block_last_instr(block);
+   if (instr->type != nir_instr_type_jump)
+      return false;
+
+   nir_jump_instr *jump_instr = nir_instr_as_jump(instr);
+   return jump_instr->type == nir_jump_return ||
+          jump_instr->type == nir_jump_halt;
+}
+
+static inline bool
+nir_block_ends_in_break(nir_block *block)
+{
+   if (exec_list_is_empty(&block->instr_list))
+      return false;
+
+   nir_instr *instr = nir_block_last_instr(block);
+   return instr->type == nir_instr_type_jump &&
+      nir_instr_as_jump(instr)->type == nir_jump_break;
+}
+
 #define nir_foreach_instr(instr, block) \
    foreach_list_typed(nir_instr, instr, node, &(block)->instr_list)
 #define nir_foreach_instr_reverse(instr, block) \

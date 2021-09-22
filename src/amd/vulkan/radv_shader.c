@@ -1819,7 +1819,7 @@ radv_get_max_workgroup_size(enum chip_class chip_class, gl_shader_stage stage,
 }
 
 unsigned
-radv_get_max_waves(struct radv_device *device, struct radv_shader_variant *variant,
+radv_get_max_waves(const struct radv_device *device, struct radv_shader_variant *variant,
                    gl_shader_stage stage)
 {
    struct radeon_info *info = &device->physical_device->rad_info;

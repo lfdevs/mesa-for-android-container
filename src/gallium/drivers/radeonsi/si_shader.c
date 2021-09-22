@@ -832,7 +832,9 @@ static unsigned si_get_shader_binary_size(struct si_screen *screen, struct si_sh
 {
    struct ac_rtld_binary rtld;
    si_shader_binary_open(screen, shader, &rtld);
-   return rtld.exec_size;
+   uint64_t size = rtld.exec_size;
+   ac_rtld_close(&rtld);
+   return size;
 }
 
 static bool si_get_external_symbol(void *data, const char *name, uint64_t *value)

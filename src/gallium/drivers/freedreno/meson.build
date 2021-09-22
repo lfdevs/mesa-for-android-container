@@ -273,6 +273,7 @@ libfreedreno = static_library(
   cpp_args : [freedreno_cpp_args],
   gnu_symbol_visibility : 'hidden',
   dependencies : libfreedreno_dependencies,
+  override_options : ['cpp_std=c++17'],
 )
 
 driver_freedreno = declare_dependency(

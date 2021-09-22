@@ -202,10 +202,15 @@ struct iris_base_prog_key {
    unsigned program_string_id;
 };
 
+/**
+ * Note, we need to take care to have padding explicitly declared
+ * for key since we will directly memcmp the whole struct.
+ */
 struct iris_vue_prog_key {
    struct iris_base_prog_key base;
 
    unsigned nr_userclip_plane_consts:4;
+   unsigned padding:28;
 };
 
 struct iris_vs_prog_key {

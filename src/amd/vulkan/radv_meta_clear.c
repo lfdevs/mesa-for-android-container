@@ -986,6 +986,14 @@ radv_can_fast_clear_depth(struct radv_cmd_buffer *cmd_buffer, const struct radv_
          !radv_is_fast_clear_stencil_allowed(clear_value))))
       return false;
 
+   if (iview->image->info.levels > 1) {
+      uint32_t last_level = iview->base_mip + iview->level_count - 1;
+      if (last_level >= iview->image->planes[0].surface.num_meta_levels) {
+         /* Do not fast clears if one level can't be fast cleared. */
+         return false;
+      }
+   }
+
    return true;
 }
 

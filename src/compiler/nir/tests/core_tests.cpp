@@ -123,4 +123,23 @@ TEST_F(nir_core_test, nir_instr_free_and_dce_all_test)
    nir_validate_shader(b->shader, "after remove_and_dce");
 }
 
+TEST_F(nir_core_test, nir_instr_free_and_dce_multiple_src_test)
+{
+   nir_ssa_def *one = nir_imm_int(b, 1);
+   nir_ssa_def *add = nir_iadd(b, one, one);
+
+   /* This risks triggering removing add multiple times, which can segfault in
+    * nir_instr_remove for instructions with srcs. */
+   nir_ssa_def *add2 = nir_iadd(b, add, add);
+
+   nir_cursor c = nir_instr_free_and_dce(add2->parent_instr);
+   ASSERT_FALSE(shader_contains_def(add2));
+   ASSERT_FALSE(shader_contains_def(add));
+   ASSERT_FALSE(shader_contains_def(one));
+
+   ASSERT_TRUE(nir_cursors_equal(c, nir_before_block(nir_start_block(b->impl))));
+
+   nir_validate_shader(b->shader, "after remove_and_dce");
+}
+
 }

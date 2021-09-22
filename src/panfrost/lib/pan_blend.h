@@ -71,11 +71,12 @@ struct pan_blend_state {
 struct pan_blend_shader_key {
         enum pipe_format format;
         nir_alu_type src0_type, src1_type;
-        unsigned rt : 3;
-        unsigned has_constants : 1;
-        unsigned logicop_enable : 1;
-        unsigned logicop_func:4;
-        unsigned nr_samples : 5;
+        uint32_t rt : 3;
+        uint32_t has_constants : 1;
+        uint32_t logicop_enable : 1;
+        uint32_t logicop_func:4;
+        uint32_t nr_samples : 5;
+        uint32_t padding : 18;
         struct pan_blend_equation equation;
 };
 

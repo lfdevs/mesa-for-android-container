@@ -226,7 +226,7 @@ radv_use_dcc_for_image(struct radv_device *device, const struct radv_image *imag
     * decompressing a lot anyway we might as well not have DCC.
     */
    if ((pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
-       (!radv_image_use_dcc_image_stores(device, image) ||
+       (device->physical_device->rad_info.chip_class < GFX10 ||
         radv_formats_is_atomic_allowed(pCreateInfo->pNext, format, pCreateInfo->flags)))
       return false;
 
@@ -276,7 +276,20 @@ radv_use_dcc_for_image(struct radv_device *device, const struct radv_image *imag
 bool
 radv_image_use_dcc_image_stores(const struct radv_device *device, const struct radv_image *image)
 {
-   return device->physical_device->rad_info.chip_class >= GFX10;
+   /* DCC image stores is only available for GFX10+. */
+   if (device->physical_device->rad_info.chip_class < GFX10)
+      return false;
+
+   if ((device->physical_device->rad_info.family == CHIP_NAVI12 ||
+        device->physical_device->rad_info.family == CHIP_NAVI14) &&
+       !image->planes[0].surface.u.gfx9.color.dcc.independent_128B_blocks) {
+      /* Do not enable DCC image stores because INDEPENDENT_128B_BLOCKS is required, and 64B is used
+       * for displayable DCC on NAVI12-14.
+       */
+      return false;
+   }
+
+   return true;
 }
 
 /*

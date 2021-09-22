@@ -30,9 +30,6 @@
 
 #define RAND_TEST_ITERATIONS 100000
 
-#define MAX_UINT(bits) \
-   (((bits) == 64) ? UINT64_MAX : ((1ull << (bits)) - 1))
-
 static inline uint64_t
 utrunc(uint64_t x, unsigned num_bits)
 {
@@ -82,7 +79,7 @@ uadd_sat(uint64_t a, uint64_t b, unsigned num_bits)
       return sum < a ? UINT64_MAX : sum;
    } else {
       /* Check if sum is more than num_bits */
-      return (sum >> num_bits) ? MAX_UINT(num_bits) : sum;
+      return (sum >> num_bits) ? u_uintN_max(num_bits) : sum;
    }
 }
 
@@ -201,7 +198,7 @@ rand_uint(unsigned bits, unsigned min)
    if (k == 17) {
       return min + (rand() % 16);
    } else if (k == 42) {
-      return MAX_UINT(bits) - (rand() % 16);
+      return u_uintN_max(bits) - (rand() % 16);
    } else if (k == 9) {
       uint64_t r;
       do {
@@ -230,7 +227,7 @@ rand_sint(unsigned bits, unsigned min_abs)
 {
    /* Make sure we hit MIN_INT every once in a while */
    if (rand() % 64 == 37)
-      return INT64_MIN >> (64 - bits);
+      return u_intN_min(bits);
 
    int64_t s = rand_uint(bits - 1, min_abs);
    return rand() & 1 ? s : -s;

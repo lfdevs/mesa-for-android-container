@@ -2153,16 +2153,11 @@ lower_to_hw_instr(Program* program)
                   }
                } else {
                   assert(dst.regClass() == v2b);
-                  aco_ptr<SDWA_instruction> sdwa{create_instruction<SDWA_instruction>(
-                     aco_opcode::v_mov_b32,
-                     (Format)((uint16_t)Format::VOP1 | (uint16_t)Format::SDWA), 1, 1)};
-                  sdwa->operands[0] = op;
-                  sdwa->definitions[0] =
-                     Definition(dst.physReg().advance(-dst.physReg().byte()), v1);
-                  sdwa->sel[0] = sdwa_uword;
-                  sdwa->dst_sel = sdwa_ubyte0 + dst.physReg().byte() + index;
-                  sdwa->dst_preserve = 1;
-                  bld.insert(std::move(sdwa));
+                  Operand sdwa_op = Operand(op.physReg().advance(-op.physReg().byte()),
+                                            RegClass::get(op.regClass().type(), 4));
+                  bld.vop2_sdwa(aco_opcode::v_lshlrev_b32, dst, Operand::c32(offset), sdwa_op)
+                     .instr->sdwa()
+                     .sel[1] = sdwa_ubyte0 + op.physReg().byte();
                }
                break;
             }

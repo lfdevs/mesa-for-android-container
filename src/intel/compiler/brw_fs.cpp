@@ -4871,6 +4871,20 @@ lower_fb_read_logical_send(const fs_builder &bld, fs_inst *inst)
       }
    }
 
+   /* BSpec 12470 (Gfx8-11), BSpec 47842 (Gfx12+) :
+    *
+    *   "Must be zero for Render Target Read message."
+    *
+    * For bits :
+    *   - 14 : Stencil Present to Render Target
+    *   - 13 : Source Depth Present to Render Target
+    *   - 12 : oMask to Render Target
+    *   - 11 : Source0 Alpha Present to Render Target
+    */
+   ubld.group(1, 0).AND(component(header, 0),
+                        component(header, 0),
+                        brw_imm_ud(~INTEL_MASK(14, 11)));
+
    inst->resize_sources(1);
    inst->src[0] = header;
    inst->opcode = FS_OPCODE_FB_READ;

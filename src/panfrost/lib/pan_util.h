@@ -43,7 +43,9 @@
 #define PAN_DBG_GL3             0x0100
 #define PAN_DBG_NO_AFBC         0x0200
 #define PAN_DBG_MSAA16          0x0400
-#define PAN_DBG_NOINDIRECT      0x0800
+#define PAN_DBG_INDIRECT        0x0800
+#define PAN_DBG_LINEAR          0x1000
+#define PAN_DBG_NO_CACHE        0x2000
 
 struct panfrost_device;
 
@@ -58,6 +60,7 @@ panfrost_format_to_bifrost_blend(const struct panfrost_device *dev,
                                  enum pipe_format format);
 
 void
-pan_pack_color(uint32_t *packed, const union pipe_color_union *color, enum pipe_format format);
+pan_pack_color(uint32_t *packed, const union pipe_color_union *color,
+               enum pipe_format format, bool dithered);
 
 #endif /* PAN_UTIL_H */

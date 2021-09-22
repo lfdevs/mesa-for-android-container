@@ -52,13 +52,22 @@ pan_pack_color_32(uint32_t *packed, uint32_t v)
 }
 
 /* For m integer bits and n fractional bits, calculate the conversion factor,
- * multiply the source value, and convert to integer rounding to even */
+ * multiply the source value, and convert to integer rounding to even. When
+ * dithering, the fractional bits are used. When not dithered, only the integer
+ * bits are used and the fractional bits must remain zero. */
 
 static inline uint32_t
-float_to_fixed(float f, unsigned bits_int, unsigned bits_frac)
+float_to_fixed(float f, unsigned bits_int, unsigned bits_frac, bool dither)
 {
-        float factor = ((1 << bits_int) - 1) << bits_frac;
-        return _mesa_roundevenf(f * factor);
+        uint32_t m = (1 << bits_int) - 1;
+
+        if (dither) {
+                float factor = m << bits_frac;
+                return _mesa_roundevenf(f * factor);
+        } else {
+                uint32_t v = _mesa_roundevenf(f * (float) m);
+                return v << bits_frac;
+        }
 }
 
 /* These values are shared across hardware versions. Don't include GenXML. */
@@ -116,7 +125,8 @@ pan_pack_raw(uint32_t *packed, const union pipe_color_union *color, enum pipe_fo
 }
 
 void
-pan_pack_color(uint32_t *packed, const union pipe_color_union *color, enum pipe_format format)
+pan_pack_color(uint32_t *packed, const union pipe_color_union *color,
+               enum pipe_format format, bool dithered)
 {
         /* Set of blendable formats is common across versions. TODO: v9 */
         enum mali_color_buffer_internal_format internal =
@@ -157,10 +167,10 @@ pan_pack_color(uint32_t *packed, const union pipe_color_union *color, enum pipe_
         assert(count_a == 32);
 
         /* Convert the transformed float colour to the given layout */
-        uint32_t ur = float_to_fixed(r, l.int_r, l.frac_r) << 0;
-        uint32_t ug = float_to_fixed(g, l.int_g, l.frac_g) << count_r;
-        uint32_t ub = float_to_fixed(b, l.int_b, l.frac_b) << count_g;
-        uint32_t ua = float_to_fixed(a, l.int_a, l.frac_a) << count_b;
+        uint32_t ur = float_to_fixed(r, l.int_r, l.frac_r, dithered) << 0;
+        uint32_t ug = float_to_fixed(g, l.int_g, l.frac_g, dithered) << count_r;
+        uint32_t ub = float_to_fixed(b, l.int_b, l.frac_b, dithered) << count_g;
+        uint32_t ua = float_to_fixed(a, l.int_a, l.frac_a, dithered) << count_b;
 
         pan_pack_color_32(packed, ur | ug | ub | ua);
 }

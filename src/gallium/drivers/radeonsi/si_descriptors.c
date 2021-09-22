@@ -360,7 +360,10 @@ void si_set_mutable_tex_desc_fields(struct si_screen *sscreen, struct si_texture
 
          state[6] |= S_00A018_META_PIPE_ALIGNED(meta.pipe_aligned) |
                      S_00A018_META_DATA_ADDRESS_LO(meta_va >> 8) |
-                     S_00A018_WRITE_COMPRESS_ENABLE((access & SI_IMAGE_ACCESS_DCC_WRITE) != 0);
+                     /* DCC image stores require INDEPENDENT_128B_BLOCKS, which is not set
+                      * with displayable DCC on Navi12-14 due to DCN limitations. */
+                     S_00A018_WRITE_COMPRESS_ENABLE(tex->surface.u.gfx9.color.dcc.independent_128B_blocks &&
+                                                    access & SI_IMAGE_ACCESS_DCC_WRITE);
       }
 
       state[7] = meta_va >> 16;

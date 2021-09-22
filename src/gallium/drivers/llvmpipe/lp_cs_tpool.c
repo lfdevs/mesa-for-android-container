@@ -121,6 +121,7 @@ lp_cs_tpool_queue_task(struct lp_cs_tpool *pool,
       for (unsigned t = 0; t < num_iters; t++) {
          work(data, t, &lmem);
       }
+      FREE(lmem.local_mem_ptr);
       return NULL;
    }
    task = CALLOC_STRUCT(lp_cs_tpool_task);

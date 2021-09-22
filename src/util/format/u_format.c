@@ -1138,7 +1138,7 @@ static void
 util_format_unpack_table_init(void)
 {
    for (enum pipe_format format = PIPE_FORMAT_NONE; format < PIPE_FORMAT_COUNT; format++) {
-#if (defined(PIPE_ARCH_AARCH64) || defined(PIPE_ARCH_ARM)) && !defined NO_FORMAT_ASM
+#if (defined(PIPE_ARCH_AARCH64) || defined(PIPE_ARCH_ARM)) && !defined(NO_FORMAT_ASM) && !defined(__SOFTFP__)
       const struct util_format_unpack_description *unpack = util_format_unpack_description_neon(format);
       if (unpack) {
          util_format_unpack_table[format] = unpack;

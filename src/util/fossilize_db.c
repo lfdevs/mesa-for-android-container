@@ -156,17 +156,17 @@ update_foz_index(struct foz_db *foz_db, FILE *db_idx, unsigned file_idx)
       offset += header->payload_size;
       parsed_offset = offset;
 
-      /* Truncate the entry's hash string to a 64bit hash for use with a
-       * 64bit hash table for looking up file offsets.
-       */
-      hash_str[16] = '\0';
-      uint64_t key = strtoull(hash_str, NULL, 16);
-
       struct foz_db_entry *entry = ralloc(foz_db->mem_ctx,
                                           struct foz_db_entry);
       entry->header = *header;
       entry->file_idx = file_idx;
       _mesa_sha1_hex_to_sha1(entry->key, hash_str);
+
+      /* Truncate the entry's hash string to a 64bit hash for use with a
+       * 64bit hash table for looking up file offsets.
+       */
+      hash_str[16] = '\0';
+      uint64_t key = strtoull(hash_str, NULL, 16);
 
       entry->offset = cache_offset;
 

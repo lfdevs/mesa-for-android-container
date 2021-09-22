@@ -639,8 +639,7 @@ etna_resource_get_param(struct pipe_screen *pscreen,
                         enum pipe_resource_param param,
                         unsigned usage, uint64_t *value)
 {
-   switch (param) {
-   case PIPE_RESOURCE_PARAM_NPLANES: {
+   if (param == PIPE_RESOURCE_PARAM_NPLANES) {
       unsigned count = 0;
 
       for (struct pipe_resource *cur = prsc; cur; cur = cur->next)
@@ -648,6 +647,25 @@ etna_resource_get_param(struct pipe_screen *pscreen,
       *value = count;
       return true;
    }
+
+   struct pipe_resource *cur = prsc;
+   for (int i = 0; i < plane; i++) {
+      cur = cur->next;
+      if (!cur)
+         return false;
+   }
+   struct etna_resource *rsc = etna_resource(cur);
+
+   switch (param) {
+   case PIPE_RESOURCE_PARAM_STRIDE:
+      *value = rsc->levels[level].stride;
+      return true;
+   case PIPE_RESOURCE_PARAM_OFFSET:
+      *value = rsc->levels[level].offset;
+      return true;
+   case PIPE_RESOURCE_PARAM_MODIFIER:
+      *value = layout_to_modifier(rsc->layout);
+      return true;
    default:
       return false;
    }

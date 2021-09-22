@@ -67,7 +67,9 @@ static const struct debug_named_value panfrost_debug_options[] = {
         {"noafbc",    PAN_DBG_NO_AFBC,  "Disable AFBC support"},
         {"nocrc",     PAN_DBG_NO_CRC,   "Disable transaction elimination"},
         {"msaa16",    PAN_DBG_MSAA16,   "Enable MSAA 8x and 16x support"},
-        {"noindirect", PAN_DBG_NOINDIRECT, "Emulate indirect draws on the CPU"},
+        {"indirect",  PAN_DBG_INDIRECT, "Use experimental compute kernel for indirect draws"},
+        {"linear",    PAN_DBG_LINEAR,   "Force linear textures"},
+        {"nocache",   PAN_DBG_NO_CACHE, "Disable BO cache"},
         DEBUG_NAMED_VALUE_END
 };
 
@@ -216,11 +218,11 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
                 return 1;
 
         case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
-                return 4096;
+                return 1 << (MAX_MIP_LEVELS - 1);
+
         case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
-                return 13;
         case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
-                return 13;
+                return MAX_MIP_LEVELS;
 
         case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
                 /* Hardware is natively upper left */
@@ -699,7 +701,8 @@ panfrost_destroy_screen(struct pipe_screen *pscreen)
         panfrost_pool_cleanup(&screen->blitter.desc_pool);
         pan_blend_shaders_cleanup(dev);
 
-        screen->vtbl.screen_destroy(pscreen);
+        if (screen->vtbl.screen_destroy)
+                screen->vtbl.screen_destroy(pscreen);
 
         if (dev->ro)
                 dev->ro->destroy(dev->ro);
@@ -835,10 +838,6 @@ panfrost_create_screen(int fd, struct renderonly *ro)
          */
         if (dev->arch == 7)
                 dev->quirks |= MIDGARD_NO_AFBC;
-
-        /* XXX: Indirect draws on Midgard need debugging, emulate for now */
-        if (dev->arch < 6)
-                dev->debug |= PAN_DBG_NOINDIRECT;
 
         dev->ro = ro;
 

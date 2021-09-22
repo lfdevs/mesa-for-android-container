@@ -2082,7 +2082,7 @@ crocus_update_compiled_clip(struct crocus_context *ice)
       memcpy(key.interp_mode, wm_prog_data->interp_mode, sizeof(key.interp_mode));
    }
 
-   key.primitive = u_reduced_prim(ice->state.prim_mode);
+   key.primitive = ice->state.reduced_prim_mode;
    key.attrs = ice->shaders.last_vue_map->slots_valid;
 
    struct pipe_rasterizer_state *rs_state = crocus_get_rast_state(ice);
@@ -2230,7 +2230,7 @@ crocus_update_compiled_sf(struct crocus_context *ice)
 
    key.attrs = ice->shaders.last_vue_map->slots_valid;
 
-   switch (u_reduced_prim(ice->state.prim_mode)) {
+   switch (ice->state.reduced_prim_mode) {
    case GL_TRIANGLES:
    default:
       if (key.attrs & BITFIELD64_BIT(VARYING_SLOT_EDGE))

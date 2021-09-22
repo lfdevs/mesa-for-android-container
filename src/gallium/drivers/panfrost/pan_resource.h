@@ -48,8 +48,14 @@ struct panfrost_resource {
         } damage;
 
         struct {
-                struct panfrost_batch *writer;
-                BITSET_DECLARE(users, PAN_MAX_BATCHES);
+                /** Number of batches accessing this resource. Used to check if
+                 * a resource is in use. */
+                _Atomic unsigned nr_users;
+
+                /** Number of batches writing this resource. Note that only one
+                 * batch per context may write a resource, so this is the
+                 * number of contexts that have an active writer. */
+                _Atomic unsigned nr_writers;
         } track;
 
         struct renderonly_scanout *scanout;

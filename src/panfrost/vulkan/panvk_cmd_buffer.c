@@ -674,7 +674,8 @@ panvk_cmd_prepare_clear_values(struct panvk_cmd_buffer *cmdbuf,
              cmdbuf->state.clear[i].stencil = in[i].depthStencil.stencil;
           }
        } else if (attachment->load_op == VK_ATTACHMENT_LOAD_OP_CLEAR) {
-          panvk_pack_color(&cmdbuf->state.clear[i], &in[i].color, fmt);
+          union pipe_color_union *col = (union pipe_color_union *) &in[i].color;
+          pan_pack_color(cmdbuf->state.clear[i].color, col, fmt, false);
        }
    }
 }

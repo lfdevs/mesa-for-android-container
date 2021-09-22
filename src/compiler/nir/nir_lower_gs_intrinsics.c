@@ -302,6 +302,7 @@ append_set_vertex_and_primitive_count(nir_block *end_block, struct state *state)
          }
 
          nir_set_vertex_and_primitive_count(b, vtx_cnt, prim_cnt, stream);
+         state->progress = true;
       }
    }
 }

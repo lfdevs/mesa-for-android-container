@@ -996,6 +996,7 @@ struct gl_texture_object
    bool StencilSampling;       /**< Should we sample stencil instead of depth? */
 
    /** GL_OES_EGL_image_external */
+   GLboolean External;
    GLubyte RequiredTextureImageUnits;
 
    /** GL_EXT_memory_object */

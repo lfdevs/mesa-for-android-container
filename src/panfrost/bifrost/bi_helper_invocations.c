@@ -133,8 +133,9 @@ void
 bi_analyze_helper_terminate(bi_context *ctx)
 {
         /* Other shader stages do not have a notion of helper threads, so we
-         * can skip the analysis */
-        if (ctx->stage != MESA_SHADER_FRAGMENT)
+         * can skip the analysis. Don't run for blend shaders, either, since
+         * they run in the context of another shader that we don't see. */
+        if (ctx->stage != MESA_SHADER_FRAGMENT || ctx->inputs->is_blend)
                 return;
 
         /* Set blocks as directly requiring helpers, and if they do add them to

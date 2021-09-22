@@ -44,6 +44,7 @@
 #include "pipe/p_state.h"
 #include "util/u_blitter.h"
 #include "util/hash_table.h"
+#include "util/simple_mtx.h"
 
 #include "midgard/midgard_compile.h"
 #include "compiler/shader_enums.h"
@@ -140,7 +141,13 @@ struct panfrost_context {
         struct {
                 uint64_t seqnum;
                 struct panfrost_batch slots[PAN_MAX_BATCHES];
+
+                /** Set of active batches for faster traversal */
+                BITSET_DECLARE(active, PAN_MAX_BATCHES);
         } batches;
+
+        /* Map from resources to panfrost_batches */
+        struct hash_table *writers;
 
         /* Bound job batch */
         struct panfrost_batch *batch;
@@ -289,6 +296,9 @@ struct panfrost_shader_variants {
                 struct pipe_shader_state base;
                 struct pipe_compute_state cbase;
         };
+
+        /** Lock for the variants array */
+        simple_mtx_t lock;
 
         struct panfrost_shader_state *variants;
         unsigned variant_space;

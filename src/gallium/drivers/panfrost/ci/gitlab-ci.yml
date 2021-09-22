@@ -154,7 +154,7 @@ panfrost-g52-gles31:arm64:
     - .lava-meson-g12b-a311d-khadas-vim3
   variables:
     DEQP_VER: gles31
-    PAN_MESA_DEBUG: "deqp,sync"
+    PAN_MESA_DEBUG: "deqp,sync,indirect"
     DEQP_PARALLEL: 6
     DEQP_EXPECTED_RENDERER: G52
 

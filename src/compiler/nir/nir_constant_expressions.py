@@ -68,8 +68,6 @@ template = """\
 #include "util/bigmath.h"
 #include "nir_constant_expressions.h"
 
-#define MAX_UINT_FOR_SIZE(bits) (UINT64_MAX >> (64 - (bits)))
-
 /**
  * \brief Checks if the provided value is a denorm and flushes it to zero.
  */

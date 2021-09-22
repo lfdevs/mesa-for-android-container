@@ -2026,6 +2026,9 @@ crocus_create_rasterizer_state(struct pipe_context *ctx,
       sf.LineEndCapAntialiasingRegionWidth =
          state->line_smooth ? _10pixels : _05pixels;
       sf.LastPixelEnable = state->line_last_pixel;
+#if GFX_VER <= 7
+      sf.AntialiasingEnable = state->line_smooth;
+#endif
 #if GFX_VER == 8
       struct crocus_screen *screen = (struct crocus_screen *)ctx->screen;
       if (screen->devinfo.is_cherryview)
@@ -4774,7 +4777,7 @@ crocus_populate_fs_key(const struct crocus_context *ice,
 
    uint32_t line_aa = BRW_WM_AA_NEVER;
    if (rast->cso.line_smooth) {
-      int reduced_prim = u_reduced_prim(ice->state.prim_mode);
+      int reduced_prim = ice->state.reduced_prim_mode;
       if (reduced_prim == PIPE_PRIM_LINES)
          line_aa = BRW_WM_AA_ALWAYS;
       else if (reduced_prim == PIPE_PRIM_TRIANGLES) {
@@ -4939,7 +4942,7 @@ emit_surface_state(struct crocus_batch *batch,
                    struct crocus_resource *res,
                    const struct isl_surf *in_surf,
                    bool adjust_surf,
-                   struct isl_view *view,
+                   struct isl_view *in_view,
                    bool writeable,
                    enum isl_aux_usage aux_usage,
                    bool blend_enable,
@@ -4956,23 +4959,24 @@ emit_surface_state(struct crocus_batch *batch,
       reloc |= RELOC_WRITE;
 
    struct isl_surf surf = *in_surf;
+   struct isl_view view = *in_view;
    if (adjust_surf) {
-      if (res->base.b.target == PIPE_TEXTURE_3D && view->array_len == 1) {
+      if (res->base.b.target == PIPE_TEXTURE_3D && view.array_len == 1) {
          isl_surf_get_image_surf(isl_dev, in_surf,
-                                 view->base_level, 0,
-                                 view->base_array_layer,
+                                 view.base_level, 0,
+                                 view.base_array_layer,
                                  &surf, &offset,
                                  &tile_x_sa, &tile_y_sa);
-         view->base_array_layer = 0;
-         view->base_level = 0;
+         view.base_array_layer = 0;
+         view.base_level = 0;
       } else if (res->base.b.target == PIPE_TEXTURE_CUBE && devinfo->ver == 4) {
          isl_surf_get_image_surf(isl_dev, in_surf,
-                                 view->base_level, view->base_array_layer,
+                                 view.base_level, view.base_array_layer,
                                  0,
                                  &surf, &offset,
                                  &tile_x_sa, &tile_y_sa);
-         view->base_array_layer = 0;
-         view->base_level = 0;
+         view.base_array_layer = 0;
+         view.base_level = 0;
       } else if (res->base.b.target == PIPE_TEXTURE_1D_ARRAY)
          surf.dim = ISL_SURF_DIM_2D;
    }
@@ -4991,7 +4995,7 @@ emit_surface_state(struct crocus_batch *batch,
 
    isl_surf_fill_state(isl_dev, surf_state,
                        .surf = &surf,
-                       .view = view,
+                       .view = &view,
                        .address = crocus_state_reloc(batch,
                                                      addr_offset + isl_dev->ss.addr_offset,
                                                      res->bo, offset, reloc),
@@ -6785,6 +6789,22 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
 
       emit_push_constant_packets(ice, batch, MESA_SHADER_GEOMETRY, &push_bos);
 #endif
+#if GFX_VERx10 == 70
+   /**
+    * From Graphics BSpec: 3D-Media-GPGPU Engine > 3D Pipeline Stages >
+    * Geometry > Geometry Shader > State:
+    *
+    *     "Note: Because of corruption in IVB:GT2, software needs to flush the
+    *     whole fixed function pipeline when the GS enable changes value in
+    *     the 3DSTATE_GS."
+    *
+    * The hardware architects have clarified that in this context "flush the
+    * whole fixed function pipeline" means to emit a PIPE_CONTROL with the "CS
+    * Stall" bit set.
+    */
+   if (batch->screen->devinfo.gt == 2 && ice->state.gs_enabled != active)
+      gen7_emit_cs_stall_flush(batch);
+#endif
 #if GFX_VER >= 6
       crocus_emit_cmd(batch, GENX(3DSTATE_GS), gs)
 #else
@@ -6930,6 +6950,7 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
          gs.MaximumVPIndex = ice->state.num_viewports - 1;
 #endif
       }
+      ice->state.gs_enabled = active;
    }
 
 #if GFX_VER >= 7
@@ -7016,11 +7037,15 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
          sf.DestinationOriginHorizontalBias = 0.5;
          sf.DestinationOriginVerticalBias = 0.5;
 
+	 sf.LineEndCapAntialiasingRegionWidth =
+            cso_state->line_smooth ? _10pixels : _05pixels;
          sf.LastPixelEnable = cso_state->line_last_pixel;
+         sf.AntialiasingEnable = cso_state->line_smooth;
+
          sf.LineWidth = get_line_width(cso_state);
          sf.PointWidth = cso_state->point_size;
          sf.PointWidthSource = cso_state->point_size_per_vertex ? Vertex : State;
-#if GFX_VERx10 == 45 || GFX_VER >= 5
+#if GFX_VERx10 >= 45
          sf.AALineDistanceMode = AALINEDISTANCE_TRUE;
 #endif
          sf.ViewportTransformEnable = true;
@@ -9230,6 +9255,7 @@ genX(crocus_init_state)(struct crocus_context *ice)
    ice->state.sample_mask = 0xff;
    ice->state.num_viewports = 1;
    ice->state.prim_mode = PIPE_PRIM_MAX;
+   ice->state.reduced_prim_mode = PIPE_PRIM_MAX;
    ice->state.genx = calloc(1, sizeof(struct crocus_genx_state));
    ice->draw.derived_params.drawid = -1;
 

@@ -896,7 +896,6 @@ struct tu_lrz_state
 };
 
 struct tu_vs_params {
-   uint32_t params_offset;
    uint32_t vertex_offset;
    uint32_t first_instance;
 };

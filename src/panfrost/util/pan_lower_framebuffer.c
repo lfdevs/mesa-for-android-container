@@ -87,7 +87,7 @@ pan_unpacked_type_for_format(const struct util_format_description *desc)
         }
 }
 
-enum pan_format_class
+static enum pan_format_class
 pan_format_class_load(const struct util_format_description *desc, unsigned quirks)
 {
         /* Pure integers can be loaded via EXT_framebuffer_fetch and should be
@@ -124,7 +124,7 @@ pan_format_class_load(const struct util_format_description *desc, unsigned quirk
         return PAN_FORMAT_NATIVE;
 }
 
-enum pan_format_class
+static enum pan_format_class
 pan_format_class_store(const struct util_format_description *desc, unsigned quirks)
 {
         /* Check if we can do anything better than software architecturally */

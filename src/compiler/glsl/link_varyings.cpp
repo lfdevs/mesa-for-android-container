@@ -660,9 +660,11 @@ validate_explicit_variable_location(struct gl_context *ctx,
          glsl_struct_field *field = &type_without_array->fields.structure[i];
          unsigned field_location = field->location -
             (field->patch ? VARYING_SLOT_PATCH0 : VARYING_SLOT_VAR0);
+         unsigned field_slots = field->type->count_attribute_slots(false);
          if (!check_location_aliasing(explicit_locations, var,
                                       field_location,
-                                      0, field_location + 1,
+                                      0,
+                                      field_location + field_slots,
                                       field->type,
                                       field->interpolation,
                                       field->centroid,

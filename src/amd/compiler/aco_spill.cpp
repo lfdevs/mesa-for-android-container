@@ -193,14 +193,15 @@ next_uses_per_block(spill_ctx& ctx, unsigned block_idx, std::set<uint32_t>& work
       aco_ptr<Instruction>& instr = block->instructions[idx];
       assert(instr->opcode == aco_opcode::p_linear_phi || instr->opcode == aco_opcode::p_phi);
 
-      if (!instr->definitions[0].isTemp()) {
-         idx--;
-         continue;
+      std::pair<uint32_t, uint32_t> distance{block_idx, 0};
+
+      auto it = instr->definitions[0].isTemp() ? next_uses.find(instr->definitions[0].getTemp())
+                                               : next_uses.end();
+      if (it != next_uses.end()) {
+         distance = it->second;
+         next_uses.erase(it);
       }
 
-      auto it = next_uses.find(instr->definitions[0].getTemp());
-      std::pair<uint32_t, uint32_t> distance =
-         it == next_uses.end() ? std::make_pair(block_idx, 0u) : it->second;
       for (unsigned i = 0; i < instr->operands.size(); i++) {
          unsigned pred_idx =
             instr->opcode == aco_opcode::p_phi ? block->logical_preds[i] : block->linear_preds[i];
@@ -212,7 +213,6 @@ next_uses_per_block(spill_ctx& ctx, unsigned block_idx, std::set<uint32_t>& work
             ctx.next_use_distances_end[pred_idx][instr->operands[i].getTemp()] = distance;
          }
       }
-      next_uses.erase(instr->definitions[0].getTemp());
       idx--;
    }
 

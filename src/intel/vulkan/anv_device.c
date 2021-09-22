@@ -3203,6 +3203,15 @@ VkResult anv_CreateDevice(
       goto fail_fd;
    }
 
+   /* Here we tell the kernel not to attempt to recover our context but
+    * immediately (on the next batchbuffer submission) report that the
+    * context is lost, and we will do the recovery ourselves.  In the case
+    * of Vulkan, recovery means throwing VK_ERROR_DEVICE_LOST and letting
+    * the client clean up the pieces.
+    */
+   anv_gem_set_context_param(device->fd, device->context_id,
+                             I915_CONTEXT_PARAM_RECOVERABLE, false);
+
    device->has_thread_submit = physical_device->has_thread_submit;
 
    device->queues =

@@ -270,7 +270,9 @@ panfrost_bo_cache_put(struct panfrost_bo *bo)
         if (bo->flags & PAN_BO_SHARED)
                 return false;
 
+        /* Must be first */
         pthread_mutex_lock(&dev->bo_cache.lock);
+
         struct list_head *bucket = pan_bucket(dev, MAX2(bo->size, 4096));
         struct drm_panfrost_madvise madv;
         struct timespec time;
@@ -293,11 +295,12 @@ panfrost_bo_cache_put(struct panfrost_bo *bo)
          * lock.
          */
         panfrost_bo_cache_evict_stale_bos(dev);
-        pthread_mutex_unlock(&dev->bo_cache.lock);
 
         /* Update the label to help debug BO cache memory usage issues */
         bo->label = "Unused (BO cache)";
 
+        /* Must be last */
+        pthread_mutex_unlock(&dev->bo_cache.lock);
         return true;
 }
 

@@ -334,7 +334,11 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
         FMT(R32G32_UNORM,            RG32_UNORM,      RG01, L, VT__),
         FMT(R8G8B8_UNORM,            RGB8_UNORM,      RGB1, L, VTR_),
         FMT(R16G16B16_UNORM,         RGB16_UNORM,     RGB1, L, VT__),
+#if PAN_ARCH <= 6
         FMT(R32G32B32_UNORM,         RGB32_UNORM,     RGB1, L, VT__),
+#else
+        FMT(R32G32B32_UNORM,         RGB32_UNORM,     RGB1, L, V___),
+#endif
         FMT(R4G4B4A4_UNORM,          RGBA4_UNORM,     RGBA, L, VTR_),
         FMT(B4G4R4A4_UNORM,          RGBA4_UNORM,     BGRA, L, VTR_),
         FMT(R16G16B16A16_UNORM,      RGBA16_UNORM,    RGBA, L, VT__),

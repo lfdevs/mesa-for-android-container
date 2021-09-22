@@ -381,6 +381,17 @@ nir_opt_peephole_select_block(nir_block *block, nir_shader *shader,
    if (prev_node->type != nir_cf_node_if)
       return false;
 
+   nir_block *prev_block = nir_cf_node_as_block(nir_cf_node_prev(prev_node));
+
+   /* If the last instruction before this if/else block is a jump, we can't
+    * append stuff after it because it would break a bunch of assumption about
+    * control flow (nir_validate expects the successor of a return/halt jump
+    * to be the end of the function, which might not match the successor of
+    * the if/else blocks).
+    */
+   if (nir_block_ends_in_return_or_halt(prev_block))
+      return false;
+
    nir_if *if_stmt = nir_cf_node_as_if(prev_node);
 
    /* first, try to collapse the if */
@@ -421,8 +432,6 @@ nir_opt_peephole_select_block(nir_block *block, nir_shader *shader,
     * just remove that entire CF node and replace all of the phi nodes with
     * selects.
     */
-
-   nir_block *prev_block = nir_cf_node_as_block(nir_cf_node_prev(prev_node));
 
    /* First, we move the remaining instructions from the blocks to the
     * block before.  We have already guaranteed that this is safe by

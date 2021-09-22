@@ -1649,8 +1649,8 @@ blorp_surf_retile_w_to_y(const struct isl_device *isl_dev,
       blorp_surf_fake_interleaved_msaa(isl_dev, info);
    }
 
-   if (isl_dev->info->ver == 6) {
-      /* Gfx6 stencil buffers have a very large alignment coming in from the
+   if (isl_dev->info->ver == 6 || isl_dev->info->ver == 7) {
+      /* Gfx6-7 stencil buffers have a very large alignment coming in from the
        * miptree.  It's out-of-bounds for what the surface state can handle.
        * Since we have a single layer and level, it doesn't really matter as
        * long as we don't pass a bogus value into isl_surf_fill_state().

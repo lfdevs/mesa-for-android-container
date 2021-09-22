@@ -98,9 +98,7 @@ panfrost_get_quirks(unsigned gpu_id, unsigned gpu_revision)
                 return MIDGARD_QUIRKS | MIDGARD_NO_HIER_TILING;
 
         case 0x750:
-                /* Someone should investigate the broken loads? */
-                return MIDGARD_QUIRKS | MIDGARD_NO_TYPED_BLEND_LOADS
-                        | NO_BLEND_PACKS;
+                return MIDGARD_QUIRKS;
 
         case 0x860:
         case 0x880:

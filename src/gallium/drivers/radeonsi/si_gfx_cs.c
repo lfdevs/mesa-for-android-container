@@ -420,8 +420,8 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
                  SI_CONTEXT_INV_L2 | SI_CONTEXT_START_PIPELINE_STATS;
    ctx->pipeline_stats_enabled = -1;
 
-   /* We don't know if the last draw call used GS fast launch, so assume it didn't. */
-   if (ctx->chip_class == GFX10 && ctx->ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_ALL)
+   /* We don't know if the last draw used NGG. */
+   if (ctx->screen->info.has_vgt_flush_ngg_legacy_bug)
       ctx->flags |= SI_CONTEXT_VGT_FLUSH;
 
    if (ctx->border_color_buffer) {

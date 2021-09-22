@@ -1188,11 +1188,11 @@ pack_channel(const union isl_color_value *value, unsigned i,
       }
       break;
    case ISL_UINT:
-      packed = MIN(value->u32[i], MAX_UINT(layout->bits));
+      packed = MIN(value->u32[i], u_uintN_max(layout->bits));
       break;
    case ISL_SINT:
-      packed = MIN(MAX(value->u32[i], MIN_INT(layout->bits)),
-                   MAX_INT(layout->bits));
+      packed = MIN(MAX(value->u32[i], u_intN_min(layout->bits)),
+                   u_intN_max(layout->bits));
       break;
 
    default:
@@ -1202,7 +1202,7 @@ pack_channel(const union isl_color_value *value, unsigned i,
    unsigned dword = layout->start_bit / 32;
    unsigned bit = layout->start_bit % 32;
    assert(bit + layout->bits <= 32);
-   data_out[dword] |= (packed & MAX_UINT(layout->bits)) << bit;
+   data_out[dword] |= (packed & u_uintN_max(layout->bits)) << bit;
 }
 
 /**
@@ -1264,7 +1264,7 @@ unpack_channel(union isl_color_value *value,
    unsigned dword = layout->start_bit / 32;
    unsigned bit = layout->start_bit % 32;
    assert(bit + layout->bits <= 32);
-   uint32_t packed = (data_in[dword] >> bit) & MAX_UINT(layout->bits);
+   uint32_t packed = (data_in[dword] >> bit) & u_uintN_max(layout->bits);
 
    union {
       uint32_t u32;

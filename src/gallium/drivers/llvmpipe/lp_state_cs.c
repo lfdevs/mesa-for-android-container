@@ -1439,6 +1439,9 @@ lp_csctx_destroy(struct lp_cs_context *csctx)
    for (i = 0; i < ARRAY_SIZE(csctx->ssbos); i++) {
       pipe_resource_reference(&csctx->ssbos[i].current.buffer, NULL);
    }
+   for (i = 0; i < ARRAY_SIZE(csctx->images); i++) {
+      pipe_resource_reference(&csctx->images[i].current.resource, NULL);
+   }
    FREE(csctx);
 }
 

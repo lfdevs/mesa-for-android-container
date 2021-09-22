@@ -315,6 +315,7 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
 
    /* Check for UVD and VCE */
    ws->info.has_video_hw.uvd_decode = false;
+   ws->info.has_video_hw.vce_encode = false;
    ws->info.vce_fw_version = 0x00000000;
    if (ws->info.drm_minor >= 32) {
       uint32_t value = RADEON_CS_RING_UVD;
@@ -332,6 +333,7 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
                                   "VCE FW version", &value)) {
             ws->info.vce_fw_version = value;
             ws->info.num_rings[RING_VCE] = 1;
+            ws->info.has_video_hw.vce_encode = true;
          }
       }
    }

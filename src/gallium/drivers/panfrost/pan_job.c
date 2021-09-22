@@ -40,6 +40,9 @@
 #include "decode.h"
 #include "panfrost-quirks.h"
 
+#define foreach_batch(ctx, idx) \
+        BITSET_FOREACH_SET(idx, ctx->batches.active, PAN_MAX_BATCHES)
+
 static unsigned
 panfrost_batch_idx(struct panfrost_batch *batch)
 {
@@ -65,7 +68,8 @@ panfrost_batch_init(struct panfrost_context *ctx,
         batch->maxx = batch->maxy = 0;
 
         util_copy_framebuffer_state(&batch->key, key);
-        util_dynarray_init(&batch->resources, NULL);
+        batch->resources =_mesa_set_create(NULL, _mesa_hash_pointer,
+                                          _mesa_key_pointer_equal);
 
         /* Preallocate the main pool, since every batch has at least one job
          * structure so it will be used */
@@ -125,16 +129,20 @@ panfrost_batch_cleanup(struct panfrost_batch *batch)
                 panfrost_bo_unreference(bo);
         }
 
-        util_dynarray_foreach(&batch->resources, struct panfrost_resource *, rsrc) {
-                BITSET_CLEAR((*rsrc)->track.users, batch_idx);
+        set_foreach_remove(batch->resources, entry) {
+                struct panfrost_resource *rsrc = (void *) entry->key;
 
-                if ((*rsrc)->track.writer == batch)
-                        (*rsrc)->track.writer = NULL;
+                if (_mesa_hash_table_search(ctx->writers, rsrc)) {
+                        _mesa_hash_table_remove_key(ctx->writers, rsrc);
+                        rsrc->track.nr_writers--;
+                }
 
-                pipe_resource_reference((struct pipe_resource **) rsrc, NULL);
+                rsrc->track.nr_users--;
+
+                pipe_resource_reference((struct pipe_resource **) &rsrc, NULL);
         }
 
-        util_dynarray_fini(&batch->resources);
+        _mesa_set_destroy(batch->resources, NULL);
         panfrost_pool_cleanup(&batch->pool);
         panfrost_pool_cleanup(&batch->invisible_pool);
 
@@ -143,6 +151,7 @@ panfrost_batch_cleanup(struct panfrost_batch *batch)
         util_sparse_array_finish(&batch->bos);
 
         memset(batch, 0, sizeof(*batch));
+        BITSET_CLEAR(ctx->batches.active, batch_idx);
 }
 
 static void
@@ -176,6 +185,9 @@ panfrost_get_batch(struct panfrost_context *ctx,
                 panfrost_batch_submit(batch, 0, 0);
 
         panfrost_batch_init(ctx, key, batch);
+
+        unsigned batch_idx = panfrost_batch_idx(batch);
+        BITSET_SET(ctx->batches.active, batch_idx);
 
         return batch;
 }
@@ -262,33 +274,40 @@ panfrost_batch_update_access(struct panfrost_batch *batch,
 {
         struct panfrost_context *ctx = batch->ctx;
         uint32_t batch_idx = panfrost_batch_idx(batch);
-        struct panfrost_batch *writer = rsrc->track.writer;
+        struct hash_entry *entry = _mesa_hash_table_search(ctx->writers, rsrc);
+        struct panfrost_batch *writer = entry ? entry->data : NULL;
+        bool found = false;
 
-        if (unlikely(!BITSET_TEST(rsrc->track.users, batch_idx))) {
-                BITSET_SET(rsrc->track.users, batch_idx);
+        _mesa_set_search_or_add(batch->resources, rsrc, &found);
+
+        if (!found) {
+                /* Cache number of batches accessing a resource */
+                rsrc->track.nr_users++;
 
                 /* Reference the resource on the batch */
-                struct pipe_resource **dst = util_dynarray_grow(&batch->resources,
-                                struct pipe_resource *, 1);
-
-                *dst = NULL;
-                pipe_resource_reference(dst, &rsrc->base);
+                pipe_reference(NULL, &rsrc->base.reference);
         }
 
         /* Flush users if required */
         if (writes || ((writer != NULL) && (writer != batch))) {
                 unsigned i;
-                BITSET_FOREACH_SET(i, rsrc->track.users, PAN_MAX_BATCHES) {
+                foreach_batch(ctx, i) {
+                        struct panfrost_batch *batch = &ctx->batches.slots[i];
+
                         /* Skip the entry if this our batch. */
                         if (i == batch_idx)
                                 continue;
 
-                        panfrost_batch_submit(&ctx->batches.slots[i], 0, 0);
+                        /* Submit if it's a user */
+                        if (_mesa_set_search(batch->resources, rsrc))
+                                panfrost_batch_submit(batch, 0, 0);
                 }
         }
 
-        if (writes)
-                rsrc->track.writer = batch;
+        if (writes) {
+                _mesa_hash_table_insert(ctx->writers, rsrc, batch);
+                rsrc->track.nr_writers++;
+        }
 }
 
 static void
@@ -919,9 +938,10 @@ void
 panfrost_flush_writer(struct panfrost_context *ctx,
                       struct panfrost_resource *rsrc)
 {
-        if (rsrc->track.writer) {
-                panfrost_batch_submit(rsrc->track.writer, ctx->syncobj, ctx->syncobj);
-                rsrc->track.writer = NULL;
+        struct hash_entry *entry = _mesa_hash_table_search(ctx->writers, rsrc);
+
+        if (entry) {
+                panfrost_batch_submit(entry->data, ctx->syncobj, ctx->syncobj);
         }
 }
 
@@ -930,13 +950,14 @@ panfrost_flush_batches_accessing_rsrc(struct panfrost_context *ctx,
                                       struct panfrost_resource *rsrc)
 {
         unsigned i;
-        BITSET_FOREACH_SET(i, rsrc->track.users, PAN_MAX_BATCHES) {
-                panfrost_batch_submit(&ctx->batches.slots[i],
-                                      ctx->syncobj, ctx->syncobj);
-        }
+        foreach_batch(ctx, i) {
+                struct panfrost_batch *batch = &ctx->batches.slots[i];
 
-        assert(!BITSET_COUNT(rsrc->track.users));
-        rsrc->track.writer = NULL;
+                if (!_mesa_set_search(batch->resources, rsrc))
+                        continue;
+
+                panfrost_batch_submit(batch, ctx->syncobj, ctx->syncobj);
+        }
 }
 
 void
@@ -969,7 +990,7 @@ panfrost_batch_clear(struct panfrost_batch *batch,
                                 continue;
 
                         enum pipe_format format = ctx->pipe_framebuffer.cbufs[i]->format;
-                        pan_pack_color(batch->clear_color[i], color, format);
+                        pan_pack_color(batch->clear_color[i], color, format, false);
                 }
         }
 

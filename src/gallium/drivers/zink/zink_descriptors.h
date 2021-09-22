@@ -48,7 +48,7 @@ enum zink_descriptor_type {
    ZINK_DESCRIPTOR_TYPES,
 };
 
-#define ZINK_MAX_DESCRIPTORS_PER_TYPE 32
+#define ZINK_MAX_DESCRIPTORS_PER_TYPE (32 * ZINK_SHADER_COUNT)
 
 struct zink_descriptor_refs {
    struct util_dynarray refs;
