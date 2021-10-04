@@ -1429,7 +1429,9 @@ try_coalesce_copies(lower_context* ctx, std::map<PhysReg, copy_operation>& copy_
    if (copy.op.isConstant()) {
       uint64_t val =
          copy.op.constantValue64() | (other->second.op.constantValue64() << (copy.bytes * 8u));
-      if (!Operand::is_constant_representable(val, copy.bytes + other->second.bytes, true,
+      if (!util_is_power_of_two_or_zero(new_size))
+         return;
+      if (!Operand::is_constant_representable(val, new_size, true,
                                               copy.def.regClass().type() == RegType::vgpr))
          return;
       copy.op = Operand::get_const(ctx->program->chip_class, val, new_size);

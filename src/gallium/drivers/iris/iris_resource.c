@@ -97,6 +97,8 @@ modifier_is_supported(const struct intel_device_info *devinfo,
    case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC:
       if (devinfo->ver != 12)
          return false;
+      if (devinfo->display_ver != 12)
+         return false;
       break;
    case DRM_FORMAT_MOD_INVALID:
    default:

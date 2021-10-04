@@ -865,8 +865,8 @@ pan_emit_sfbd(const struct panfrost_device *dev,
 
                 cfg.sample_count = fb->nr_samples;
 
-                /* XXX: different behaviour from MFBD and probably wrong... */
-                cfg.msaa = mali_sampling_mode(fb->rts[0].view);
+                if (fb->rt_count)
+                        cfg.msaa = mali_sampling_mode(fb->rts[0].view);
         }
         pan_emit_sfbd_tiler(dev, fb, tiler_ctx, fbd);
         pan_section_pack(fbd, SINGLE_TARGET_FRAMEBUFFER, PADDING_2, padding);

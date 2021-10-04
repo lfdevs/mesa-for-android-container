@@ -61,7 +61,7 @@ test(
       libamd_common, libamd_common_llvm, libvulkan_radeon,
     ],
     dependencies : [
-      dep_llvm, dep_thread, idep_aco, idep_nir, idep_mesautil, idep_vulkan_util_headers,
+      dep_llvm, dep_thread, idep_aco, idep_nir, idep_mesautil, idep_vulkan_util_headers, idep_amdgfxregs_h,
     ],
     gnu_symbol_visibility : 'hidden',
     build_by_default : true,

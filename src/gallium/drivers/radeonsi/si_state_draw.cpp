@@ -2043,8 +2043,6 @@ static void si_draw_vbo(struct pipe_context *ctx,
                } else if (!primitive_restart) {
                   ngg_culling |= SI_NGG_CULL_GS_FAST_LAUNCH_TRI_STRIP |
                                  SI_NGG_CULL_GS_FAST_LAUNCH_INDEX_SIZE_PACKED(MIN2(index_size, 3));
-                  /* The index buffer will be emulated. */
-                  index_size = 0;
                }
             }
          }
@@ -2091,6 +2089,11 @@ static void si_draw_vbo(struct pipe_context *ctx,
          sctx->ngg_culling = ngg_culling;
       }
    }
+
+   /* ngg_culling can be changed after si_update_shaders above, so determine index_size here. */
+   if (GFX_VERSION >= GFX10 && NGG &&
+       sctx->ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_INDEX_SIZE_PACKED(~0))
+      index_size = 0; /* The index buffer will be emulated. */
 
    /* Since we've called si_context_add_resource_size for vertex buffers,
     * this must be called after si_need_cs_space, because we must let

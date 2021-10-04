@@ -2025,6 +2025,29 @@ instruction_restrictions(const struct intel_device_info *devinfo,
       }
    }
 
+   if (brw_inst_opcode(devinfo, inst) == BRW_OPCODE_MATH) {
+      unsigned math_function = brw_inst_math_function(devinfo, inst);
+      switch (math_function) {
+      case BRW_MATH_FUNCTION_INT_DIV_QUOTIENT_AND_REMAINDER:
+      case BRW_MATH_FUNCTION_INT_DIV_QUOTIENT:
+      case BRW_MATH_FUNCTION_INT_DIV_REMAINDER: {
+         /* Page 442 of the Broadwell PRM Volume 2a "Extended Math Function" says:
+          *    INT DIV function does not support source modifiers.
+          * Bspec 6647 extends it back to Ivy Bridge.
+          */
+         bool src0_valid = !brw_inst_src0_negate(devinfo, inst) &&
+                           !brw_inst_src0_abs(devinfo, inst);
+         bool src1_valid = !brw_inst_src1_negate(devinfo, inst) &&
+                           !brw_inst_src1_abs(devinfo, inst);
+         ERROR_IF(!src0_valid || !src1_valid,
+                  "INT DIV function does not support source modifiers.");
+         break;
+      }
+      default:
+         break;
+      }
+   }
+
    return error_msg;
 }
 

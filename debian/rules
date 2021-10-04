@@ -13,9 +13,9 @@ DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
 DEB_HOST_ARCH_CPU  ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
 
 # for finding the correct llvm-config when meson doesn't know about it yet
-export PATH:=/usr/lib/llvm-12/bin/:$(PATH)
+export PATH:=/usr/lib/llvm-13/bin/:$(PATH)
 
-ifeq (,$(filter $(DEB_HOST_ARCH), armhf sh3 sh4))
+ifeq (,$(filter $(DEB_HOST_ARCH), armhf ppc64el sh3 sh4))
 buildflags = \
 	$(shell DEB_CFLAGS_MAINT_APPEND=-Wall DEB_CXXFLAGS_MAINT_APPEND=-Wall dpkg-buildflags --export=configure)
 else
@@ -24,9 +24,15 @@ else
   buildflags = \
 	$(shell DEB_CFLAGS_MAINT_APPEND="-Wall -fno-optimize-sibling-calls" DEB_CXXFLAGS_MAINT_APPEND="-Wall -fno-optimize-sibling-calls" dpkg-buildflags --export=configure)
   else
-  # Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=83143
-  buildflags = \
+    ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
+    # Workaround for https://gitlab.freedesktop.org/mesa/mesa/-/issues/5315
+    buildflags = \
+	$(shell DEB_CFLAGS_MAINT_APPEND="-Wall -O2" DEB_CXXFLAGS_MAINT_APPEND="-Wall -O2" dpkg-buildflags --export=configure)
+    else
+    # Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=83143
+    buildflags = \
 	$(shell DEB_CFLAGS_MAINT_APPEND="-Wall -O1" DEB_CXXFLAGS_MAINT_APPEND="-Wall -O1" dpkg-buildflags --export=configure)
+    endif
   endif
 endif
 
@@ -54,7 +60,7 @@ else
 
   # radv/lavapipe needs LLVM and the Vulkan loader, so only build on the subset of
   # arches where we have LLVM enabled and where the Vulkan loader is built.
-  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el riscv64 s390x sparc64))
+  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64))
 	VULKAN_DRIVERS += amd swrast
   endif
 
@@ -105,7 +111,7 @@ else
 
   # LLVM is required for building r300g, radeonsi and llvmpipe drivers.
   # It's also required for building OpenCL support.
-  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el riscv64 s390x sparc64))
+  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64))
 	GALLIUM_DRIVERS += radeonsi
 	confflags_GALLIUM += -Dllvm=enabled
 	confflags_GALLIUM += -Dgallium-opencl=icd

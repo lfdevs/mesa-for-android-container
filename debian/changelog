@@ -1,3 +1,15 @@
+mesa (21.2.3-1) unstable; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+  * rules: Build with -O2 for ppc64el.
+  * Build with llvm 13.
+
+  [ Aurelien Jarno ]
+  * Disable LLVM support on riscv64, it doesn't have JIT. (Closes: #995618)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 04 Oct 2021 15:18:27 +0300
+
 mesa (21.2.2-1) unstable; urgency=medium
 
   * New upstream release.

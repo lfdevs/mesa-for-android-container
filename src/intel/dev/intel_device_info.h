@@ -49,6 +49,7 @@ struct intel_device_info
    /* Driver internal numbers used to differentiate platforms. */
    int ver;
    int verx10;
+   int display_ver;
    int revision;
    int gt;
 

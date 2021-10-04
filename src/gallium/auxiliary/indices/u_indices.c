@@ -85,6 +85,8 @@ u_index_prim_type_convert(unsigned hw_mask, enum pipe_prim_type prim, bool pv_ma
    case PIPE_PRIM_TRIANGLES_ADJACENCY:
    case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
       return PIPE_PRIM_TRIANGLES_ADJACENCY;
+   case PIPE_PRIM_PATCHES:
+      return PIPE_PRIM_PATCHES;
    default:
       assert(0);
       break;
@@ -173,6 +175,7 @@ u_index_count_converted_indices(unsigned hw_mask, bool pv_matches, enum pipe_pri
 
    switch (prim) {
    case PIPE_PRIM_POINTS:
+   case PIPE_PRIM_PATCHES:
       return nr;
    case PIPE_PRIM_LINES:
       return nr;

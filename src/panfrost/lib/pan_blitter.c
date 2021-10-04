@@ -1264,7 +1264,9 @@ pan_preload_emit_bifrost_pre_frame_dcd(struct pan_pool *desc_pool,
 
         pan_preload_emit_dcd(desc_pool, fb, zs, coords, tsd, rsd, dcd, always_write);
         if (zs) {
-                enum pipe_format fmt = fb->zs.view.zs->image->layout.format;
+                enum pipe_format fmt = fb->zs.view.zs ?
+                                       fb->zs.view.zs->image->layout.format :
+                                       fb->zs.view.s->image->layout.format;
                 bool always = false;
 
                 /* If we're dealing with a combined ZS resource and only one

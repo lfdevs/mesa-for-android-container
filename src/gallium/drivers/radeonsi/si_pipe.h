@@ -1856,7 +1856,19 @@ static inline bool si_htile_enabled(struct si_texture *tex, unsigned level, unsi
    if (zs_mask == PIPE_MASK_S && (tex->htile_stencil_disabled || !tex->surface.has_stencil))
       return false;
 
-   return tex->is_depth && tex->surface.meta_offset && level < tex->surface.num_meta_levels;
+   if (!tex->is_depth || !tex->surface.meta_offset)
+      return false;
+
+   struct si_screen *sscreen = (struct si_screen *)tex->buffer.b.b.screen;
+   if (sscreen->info.chip_class >= GFX8) {
+      return level < tex->surface.num_meta_levels;
+   } else {
+      /* GFX6-7 don't have TC-compatible HTILE, which means they have to run
+       * a decompression pass for every mipmap level before texturing, so compress
+       * only one level to reduce the number of decompression passes to a minimum.
+       */
+      return level == 0;
+   }
 }
 
 static inline bool vi_tc_compat_htile_enabled(struct si_texture *tex, unsigned level,

@@ -1,10 +1,3 @@
-KHR-GLES2.core.internalformat.copy_tex_image.alpha8_oes,Fail
-KHR-GLES2.core.internalformat.copy_tex_image.luminance4_alpha4_oes,Fail
-KHR-GLES2.core.internalformat.copy_tex_image.luminance8_alpha8_oes,Fail
-KHR-GLES2.core.internalformat.copy_tex_image.luminance8_oes,Fail
-KHR-GLES2.core.internalformat.copy_tex_image.rgb565,Fail
-KHR-GLES2.core.internalformat.copy_tex_image.rgb5_a1,Fail
-KHR-GLES2.core.internalformat.copy_tex_image.rgba4,Fail
 KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_component16,Fail
 KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_component24,Fail
 KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_short_depth_component16,Fail

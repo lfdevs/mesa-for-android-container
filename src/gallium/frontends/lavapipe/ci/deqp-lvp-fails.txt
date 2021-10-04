@@ -30,6 +30,7 @@ dEQP-VK.glsl.texture_functions.query.texturequerylod.sampler2dshadow_fragment,Fa
 dEQP-VK.glsl.texture_functions.query.texturequerylod.usampler1darray_fragment,Fail
 dEQP-VK.rasterization.primitives.static_stipple.rectangular_line_strip_wide,Fail
 dEQP-VK.rasterization.primitives_multisample_4_bit.dynamic_stipple.line_strip_wide,Fail
+dEQP-VK.rasterization.primitives_multisample_4_bit.static_stipple.bresenham_line_strip,Fail
 dEQP-VK.texture.filtering.2d.combinations.linear_mipmap_linear.linear.clamp_to_edge.repeat,Fail
 dEQP-VK.texture.filtering.2d.combinations.linear_mipmap_linear.linear.mirror_clamp_to_edge.repeat,Fail
 dEQP-VK.texture.filtering.2d.combinations.linear_mipmap_linear.linear.mirrored_repeat.mirror_clamp_to_edge,Fail

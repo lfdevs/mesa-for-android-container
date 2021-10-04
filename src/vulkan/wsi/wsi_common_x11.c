@@ -1033,9 +1033,11 @@ x11_acquire_next_image_poll_x11(struct x11_swapchain *chain,
        * in which case we need to update the status and continue.
        */
       VkResult result = x11_handle_dri3_present_event(chain, (void *)event);
+      /* Ensure that VK_SUBOPTIMAL_KHR is reported to the application */
+      result = x11_swapchain_result(chain, result);
       free(event);
       if (result < 0)
-         return x11_swapchain_result(chain, result);
+         return result;
    }
 }
 
@@ -1102,10 +1104,11 @@ x11_present_to_x11_dri3(struct x11_swapchain *chain, uint32_t image_index,
    xcb_generic_event_t *event;
    while ((event = xcb_poll_for_special_event(chain->conn, chain->special_event))) {
       VkResult result = x11_handle_dri3_present_event(chain, (void *)event);
+      /* Ensure that VK_SUBOPTIMAL_KHR is reported to the application */
+      result = x11_swapchain_result(chain, result);
       free(event);
       if (result < 0)
-         return x11_swapchain_result(chain, result);
-      x11_swapchain_result(chain, result);
+         return result;
    }
 
    xshmfence_reset(image->shm_fence);
@@ -1282,6 +1285,8 @@ x11_manage_fifo_queues(void *state)
             }
 
             result = x11_handle_dri3_present_event(chain, (void *)event);
+            /* Ensure that VK_SUBOPTIMAL_KHR is reported to the application */
+            result = x11_swapchain_result(chain, result);
             free(event);
             if (result < 0)
                goto fail;

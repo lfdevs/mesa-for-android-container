@@ -58,6 +58,15 @@ get_variable_io_mask(nir_variable *var, gl_shader_stage stage)
    return ((1ull << slots) - 1) << location;
 }
 
+static bool
+is_non_generic_patch_var(nir_variable *var)
+{
+   return var->data.location == VARYING_SLOT_TESS_LEVEL_INNER ||
+          var->data.location == VARYING_SLOT_TESS_LEVEL_OUTER ||
+          var->data.location == VARYING_SLOT_BOUNDING_BOX0 ||
+          var->data.location == VARYING_SLOT_BOUNDING_BOX1;
+}
+
 static uint8_t
 get_num_components(nir_variable *var)
 {
@@ -90,6 +99,9 @@ tcs_add_output_reads(nir_shader *shader, uint64_t *read, uint64_t *patches_read)
             nir_variable *var = nir_deref_instr_get_variable(deref);
             for (unsigned i = 0; i < get_num_components(var); i++) {
                if (var->data.patch) {
+                  if (is_non_generic_patch_var(var))
+                     continue;
+
                   patches_read[var->data.location_frac + i] |=
                      get_variable_io_mask(var, shader->info.stage);
                } else {
@@ -172,6 +184,9 @@ nir_remove_unused_varyings(nir_shader *producer, nir_shader *consumer)
    nir_foreach_shader_out_variable(var, producer) {
       for (unsigned i = 0; i < get_num_components(var); i++) {
          if (var->data.patch) {
+            if (is_non_generic_patch_var(var))
+               continue;
+
             patches_written[var->data.location_frac + i] |=
                get_variable_io_mask(var, producer->info.stage);
          } else {
@@ -184,6 +199,9 @@ nir_remove_unused_varyings(nir_shader *producer, nir_shader *consumer)
    nir_foreach_shader_in_variable(var, consumer) {
       for (unsigned i = 0; i < get_num_components(var); i++) {
          if (var->data.patch) {
+            if (is_non_generic_patch_var(var))
+               continue;
+
             patches_read[var->data.location_frac + i] |=
                get_variable_io_mask(var, consumer->info.stage);
          } else {

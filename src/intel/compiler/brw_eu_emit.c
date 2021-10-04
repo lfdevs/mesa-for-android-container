@@ -2102,6 +2102,13 @@ void gfx6_math(struct brw_codegen *p,
       assert(src1.type != BRW_REGISTER_TYPE_F);
       assert(src1.file == BRW_GENERAL_REGISTER_FILE ||
              (devinfo->ver >= 8 && src1.file == BRW_IMMEDIATE_VALUE));
+      /* From BSpec 6647/47428 "[Instruction] Extended Math Function":
+       *     INT DIV function does not support source modifiers.
+       */
+      assert(!src0.negate);
+      assert(!src0.abs);
+      assert(!src1.negate);
+      assert(!src1.abs);
    } else {
       assert(src0.type == BRW_REGISTER_TYPE_F ||
              (src0.type == BRW_REGISTER_TYPE_HF && devinfo->ver >= 9));

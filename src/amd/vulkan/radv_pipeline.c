@@ -3298,7 +3298,8 @@ radv_create_shaders(struct radv_pipeline *pipeline, struct radv_device *device,
    if (!keep_executable_info &&
        radv_create_shader_variants_from_pipeline_cache(device, cache, hash, pipeline->shaders,
                                                        &found_in_application_cache) &&
-       (!modules[MESA_SHADER_GEOMETRY] || pipeline->gs_copy_shader)) {
+       (!modules[MESA_SHADER_GEOMETRY] || pipeline->gs_copy_shader ||
+        pipeline->shaders[MESA_SHADER_GEOMETRY]->info.is_ngg)) {
       radv_stop_feedback(pipeline_feedback, found_in_application_cache);
       return VK_SUCCESS;
    }

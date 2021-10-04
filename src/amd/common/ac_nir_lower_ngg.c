@@ -744,31 +744,24 @@ save_reusable_variables(nir_builder *b, lower_ngg_nogs_state *nogs_state)
    ASSERTED int vec_ok = u_vector_init(&nogs_state->saved_uniforms, sizeof(saved_uniform), 4 * sizeof(saved_uniform));
    assert(vec_ok);
 
-   unsigned loop_depth = 0;
-
-   nir_foreach_block_safe(block, b->impl) {
-      /* Check whether we're in a loop. */
-      nir_cf_node *next_cf_node = nir_cf_node_next(&block->cf_node);
-      nir_cf_node *prev_cf_node = nir_cf_node_prev(&block->cf_node);
-      if (next_cf_node && next_cf_node->type == nir_cf_node_loop)
-         loop_depth++;
-      if (prev_cf_node && prev_cf_node->type == nir_cf_node_loop)
-         loop_depth--;
-
-      /* The following code doesn't make sense in loops, so just skip it then. */
-      if (loop_depth)
-         continue;
-
+   nir_block *block = nir_start_block(b->impl);
+   while (block) {
+      /* Process the instructions in the current block. */
       nir_foreach_instr_safe(instr, block) {
          /* Find instructions whose SSA definitions are used by both
-          * the top and bottom parts of the shader. In this case, it
-          * makes sense to try to reuse these from the top part.
+          * the top and bottom parts of the shader (before and after culling).
+          * Only in this case, it makes sense for the bottom part
+          * to try to reuse these from the top part.
           */
          if ((instr->pass_flags & nggc_passflag_used_by_both) != nggc_passflag_used_by_both)
             continue;
 
+         /* Determine if we can reuse the current SSA value.
+          * When vertex compaction is used, it is possible that the same shader invocation
+          * processes a different vertex in the top and bottom part of the shader.
+          * Therefore, we only reuse uniform values.
+          */
          nir_ssa_def *ssa = NULL;
-
          switch (instr->type) {
          case nir_instr_type_alu: {
             nir_alu_instr *alu = nir_instr_as_alu(instr);
@@ -802,6 +795,7 @@ save_reusable_variables(nir_builder *b, lower_ngg_nogs_state *nogs_state)
 
          assert(ssa);
 
+         /* Determine a suitable type for the SSA value. */
          enum glsl_base_type base_type = GLSL_TYPE_UINT;
          switch (ssa->bit_size) {
          case 8: base_type = GLSL_TYPE_UINT8; break;
@@ -818,6 +812,10 @@ save_reusable_variables(nir_builder *b, lower_ngg_nogs_state *nogs_state)
          saved_uniform *saved = (saved_uniform *) u_vector_add(&nogs_state->saved_uniforms);
          assert(saved);
 
+         /* Create a new NIR variable where we store the reusable value.
+          * Then, we reload the variable and replace the uses of the value
+          * with the reloaded variable.
+          */
          saved->var = nir_local_variable_create(b->impl, t, NULL);
          saved->ssa = ssa;
 
@@ -828,6 +826,35 @@ save_reusable_variables(nir_builder *b, lower_ngg_nogs_state *nogs_state)
          nir_ssa_def *reloaded = nir_load_var(b, saved->var);
          nir_ssa_def_rewrite_uses_after(ssa, reloaded, reloaded->parent_instr);
       }
+
+      /* Look at the next CF node. */
+      nir_cf_node *next_cf_node = nir_cf_node_next(&block->cf_node);
+      if (next_cf_node) {
+         /* It makes no sense to try to reuse things from within loops. */
+         bool next_is_loop = next_cf_node->type == nir_cf_node_loop;
+
+         /* Don't reuse if we're in divergent control flow.
+          *
+          * Thanks to vertex repacking, the same shader invocation may process a different vertex
+          * in the top and bottom part, and it's even possible that this different vertex was initially
+          * processed in a different wave. So the two parts may take a different divergent code path.
+          * Therefore, these variables in divergent control flow may stay undefined.
+          *
+          * Note that this problem doesn't exist if vertices are not repacked or if the
+          * workgroup only has a single wave.
+          */
+         bool next_is_divergent_if =
+            next_cf_node->type == nir_cf_node_if &&
+            nir_cf_node_as_if(next_cf_node)->condition.ssa->divergent;
+
+         if (next_is_loop || next_is_divergent_if) {
+            block = nir_cf_node_cf_tree_next(next_cf_node);
+            continue;
+         }
+      }
+
+      /* Go to the next block. */
+      block = nir_block_cf_tree_next(block);
    }
 }
 

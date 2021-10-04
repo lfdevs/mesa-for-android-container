@@ -367,6 +367,7 @@ BEGIN_TEST(to_hw_instr.subdword_constant)
    PhysReg v0_lo{256};
    PhysReg v0_hi{256};
    PhysReg v0_b1{256};
+   PhysReg v1_lo{257};
    PhysReg v1_hi{257};
    v0_hi.reg_b += 2;
    v0_b1.reg_b += 1;
@@ -454,6 +455,14 @@ BEGIN_TEST(to_hw_instr.subdword_constant)
       //! v1b: %_:v[0][0:8] = v_mul_u32_u24 2, 33 dst_preserve
       bld.pseudo(aco_opcode::p_unit_test, Operand::c32(11u));
       bld.pseudo(aco_opcode::p_parallelcopy, Definition(v0_lo, v1b), Operand::c8(0x42));
+
+      /* 32-bit and 8-bit copy */
+      //! p_unit_test 12
+      //! v1: %_:v[0] = v_mov_b32 0
+      //! v1b: %_:v[1][0:8] = v_mov_b32 0 dst_preserve
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(12u));
+      bld.pseudo(aco_opcode::p_parallelcopy, Definition(v0_lo, v1), Definition(v1_lo, v1b),
+                 Operand::zero(), Operand::zero(1));
 
       //! s_endpgm
 
