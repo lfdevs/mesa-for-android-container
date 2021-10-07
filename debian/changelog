@@ -1,3 +1,9 @@
+mesa (21.2.3-2) unstable; urgency=medium
+
+  * Revert back to llvm 12. (Closes: #995835)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 07 Oct 2021 12:30:07 +0300
+
 mesa (21.2.3-1) unstable; urgency=medium
 
   [ Timo Aaltonen ]
