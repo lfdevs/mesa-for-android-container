@@ -237,6 +237,27 @@ static void transform_texture(struct rc_instruction * dst, struct tgsi_instructi
             dst->U.I.TexShadow = 1;
             *shadowSamplers |= 1 << dst->U.I.TexSrcUnit;
             break;
+        case TGSI_TEXTURE_1D_ARRAY:
+            dst->U.I.TexSrcTarget = RC_TEXTURE_1D_ARRAY;
+            break;
+        case TGSI_TEXTURE_2D_ARRAY:
+            dst->U.I.TexSrcTarget = RC_TEXTURE_2D_ARRAY;
+            break;
+        case TGSI_TEXTURE_SHADOW1D_ARRAY:
+            dst->U.I.TexSrcTarget = RC_TEXTURE_1D_ARRAY;
+            dst->U.I.TexShadow = 1;
+            *shadowSamplers |= 1 << dst->U.I.TexSrcUnit;
+            break;
+        case TGSI_TEXTURE_SHADOW2D_ARRAY:
+            dst->U.I.TexSrcTarget = RC_TEXTURE_2D_ARRAY;
+            dst->U.I.TexShadow = 1;
+            *shadowSamplers |= 1 << dst->U.I.TexSrcUnit;
+            break;
+        case TGSI_TEXTURE_SHADOWCUBE:
+            dst->U.I.TexSrcTarget = RC_TEXTURE_CUBE;
+            dst->U.I.TexShadow = 1;
+            *shadowSamplers |= 1 << dst->U.I.TexSrcUnit;
+            break;
     }
     dst->U.I.TexSwizzle = RC_SWIZZLE_XYZW;
 }

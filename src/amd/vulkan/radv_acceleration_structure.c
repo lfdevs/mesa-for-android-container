@@ -1278,6 +1278,9 @@ radv_device_init_accel_struct_build_state(struct radv_device *device)
    if (result != VK_SUCCESS)
       goto fail;
 
+   ralloc_free(internal_cs);
+   ralloc_free(leaf_cs);
+
    return VK_SUCCESS;
 
 fail:

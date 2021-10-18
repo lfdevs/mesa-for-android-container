@@ -451,10 +451,13 @@ static LLVMValueRef fs_interp(const struct lp_build_fs_iface *iface,
 }
 
 static void fs_fb_fetch(const struct lp_build_fs_iface *iface,
-                                struct lp_build_context *bld,
-                                unsigned cbuf,
-                                LLVMValueRef result[4])
+                        struct lp_build_context *bld,
+                        int location,
+                        LLVMValueRef result[4])
 {
+   assert(location >= FRAG_RESULT_DATA0 && location <= FRAG_RESULT_DATA7);
+   const int cbuf = location - FRAG_RESULT_DATA0;
+
    struct lp_build_fs_llvm_iface *fs_iface = (struct lp_build_fs_llvm_iface *)iface;
    struct gallivm_state *gallivm = bld->gallivm;
    LLVMBuilderRef builder = gallivm->builder;

@@ -1,3 +1,9 @@
+mesa (21.2.4-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 18 Oct 2021 16:50:42 +0300
+
 mesa (21.2.3-2) unstable; urgency=medium
 
   * Revert back to llvm 12. (Closes: #995835)

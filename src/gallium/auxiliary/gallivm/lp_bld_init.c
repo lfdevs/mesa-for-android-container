@@ -347,6 +347,10 @@ init_gallivm_state(struct gallivm_state *gallivm, const char *name,
    if (!gallivm->module)
       goto fail;
 
+#if defined(PIPE_ARCH_X86)
+   lp_set_module_stack_alignment_override(gallivm->module, 4);
+#endif
+
    gallivm->builder = LLVMCreateBuilderInContext(gallivm->context);
    if (!gallivm->builder)
       goto fail;

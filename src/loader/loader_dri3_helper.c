@@ -317,6 +317,20 @@ dri3_update_max_num_back(struct loader_dri3_drawable *draw)
 void
 loader_dri3_set_swap_interval(struct loader_dri3_drawable *draw, int interval)
 {
+   /* Wait all previous swap done before changing swap interval.
+    *
+    * This is for preventing swap out of order in the following cases:
+    *   1. Change from sync swap mode (>0) to async mode (=0), so async swap occurs
+    *      before previous pending sync swap.
+    *   2. Change from value A to B and A > B, so the target_msc for the previous
+    *      pending swap may be bigger than newer swap.
+    *
+    * PS. changing from value A to B and A < B won't cause swap out of order but
+    * may still gets wrong target_msc value at the beginning.
+    */
+   if (draw->swap_interval != interval)
+      loader_dri3_swapbuffer_barrier(draw);
+
    draw->swap_interval = interval;
 }
 

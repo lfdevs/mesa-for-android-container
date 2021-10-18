@@ -52,7 +52,9 @@ get_interp_input(nir_intrinsic_op intrin, enum glsl_interp_mode interp)
          return S_0286CC_PERSP_SAMPLE_ENA(1);
       break;
    case INTERP_MODE_NOPERSPECTIVE:
-      if (intrin == nir_intrinsic_load_barycentric_pixel)
+      if (intrin == nir_intrinsic_load_barycentric_pixel ||
+          intrin == nir_intrinsic_load_barycentric_at_sample ||
+          intrin == nir_intrinsic_load_barycentric_at_offset)
          return S_0286CC_LINEAR_CENTER_ENA(1);
       else if (intrin == nir_intrinsic_load_barycentric_centroid)
          return S_0286CC_LINEAR_CENTROID_ENA(1);

@@ -1214,6 +1214,9 @@ radv_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool queryPoo
    uint64_t dest_va = radv_buffer_get_va(dst_buffer->bo);
    dest_va += dst_buffer->offset + dstOffset;
 
+   if (!queryCount)
+      return;
+
    radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, pool->bo);
    radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, dst_buffer->bo);
 

@@ -91,6 +91,9 @@ lp_is_function(LLVMValueRef v);
 
 void
 lp_free_objcache(void *objcache);
+
+void
+lp_set_module_stack_alignment_override(LLVMModuleRef M, unsigned align);
 #ifdef __cplusplus
 }
 #endif

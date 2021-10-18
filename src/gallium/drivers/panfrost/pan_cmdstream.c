@@ -2161,8 +2161,8 @@ panfrost_emit_varying_descs(
 
         /* Offsets within the general varying buffer, indexed by location */
         signed offsets[PIPE_MAX_ATTRIBS];
-        assert(producer_count < ARRAY_SIZE(offsets));
-        assert(consumer_count < ARRAY_SIZE(offsets));
+        assert(producer_count <= ARRAY_SIZE(offsets));
+        assert(consumer_count <= ARRAY_SIZE(offsets));
 
         /* Allocate enough descriptors for both shader stages */
         struct panfrost_ptr T =

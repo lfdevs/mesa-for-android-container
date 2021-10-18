@@ -731,6 +731,10 @@ struct vtn_pointer *
 vtn_pointer_from_ssa(struct vtn_builder *b, nir_ssa_def *ssa,
                      struct vtn_type *ptr_type);
 
+struct vtn_ssa_value *
+vtn_const_ssa_value(struct vtn_builder *b, nir_constant *constant,
+                    const struct glsl_type *type);
+
 static inline struct vtn_value *
 vtn_untyped_value(struct vtn_builder *b, uint32_t value_id)
 {
@@ -779,6 +783,35 @@ vtn_value(struct vtn_builder *b, uint32_t value_id,
    vtn_fail_if(val->value_type != value_type,
                "SPIR-V id %u is the wrong kind of value", value_id);
    return val;
+}
+
+static inline struct vtn_value *
+vtn_pointer_value(struct vtn_builder *b, uint32_t value_id)
+{
+   struct vtn_value *val = vtn_untyped_value(b, value_id);
+   vtn_fail_if(val->value_type != vtn_value_type_pointer &&
+               !val->is_null_constant,
+               "SPIR-V id %u is the wrong kind of value", value_id);
+   return val;
+}
+
+static inline struct vtn_pointer *
+vtn_value_to_pointer(struct vtn_builder *b, struct vtn_value *value)
+{
+   if (value->is_null_constant) {
+      vtn_assert(glsl_type_is_vector_or_scalar(value->type->type));
+      nir_ssa_def *const_ssa =
+         vtn_const_ssa_value(b, value->constant, value->type->type)->def;
+      return vtn_pointer_from_ssa(b, const_ssa, value->type);
+   }
+   vtn_assert(value->value_type == vtn_value_type_pointer);
+   return value->pointer;
+}
+
+static inline struct vtn_pointer *
+vtn_pointer(struct vtn_builder *b, uint32_t value_id)
+{
+   return vtn_value_to_pointer(b, vtn_pointer_value(b, value_id));
 }
 
 bool

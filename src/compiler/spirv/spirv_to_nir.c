@@ -225,7 +225,7 @@ vtn_undef_ssa_value(struct vtn_builder *b, const struct glsl_type *type)
    return val;
 }
 
-static struct vtn_ssa_value *
+struct vtn_ssa_value *
 vtn_const_ssa_value(struct vtn_builder *b, nir_constant *constant,
                     const struct glsl_type *type)
 {
@@ -3598,13 +3598,13 @@ vtn_handle_atomics(struct vtn_builder *b, SpvOp opcode,
    case SpvOpAtomicFAddEXT:
    case SpvOpAtomicFMinEXT:
    case SpvOpAtomicFMaxEXT:
-      ptr = vtn_value(b, w[3], vtn_value_type_pointer)->pointer;
+      ptr = vtn_pointer(b, w[3]);
       scope = vtn_constant_uint(b, w[4]);
       semantics = vtn_constant_uint(b, w[5]);
       break;
 
    case SpvOpAtomicStore:
-      ptr = vtn_value(b, w[1], vtn_value_type_pointer)->pointer;
+      ptr = vtn_pointer(b, w[1]);
       scope = vtn_constant_uint(b, w[2]);
       semantics = vtn_constant_uint(b, w[3]);
       break;

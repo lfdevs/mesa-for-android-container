@@ -6349,6 +6349,7 @@ texture_buffer_range(struct gl_context *ctx,
    GLintptr oldOffset = texObj->BufferOffset;
    GLsizeiptr oldSize = texObj->BufferSize;
    mesa_format format;
+   mesa_format old_format;
 
    /* NOTE: ARB_texture_buffer_object might not be supported in
     * the compatibility profile.
@@ -6386,6 +6387,7 @@ texture_buffer_range(struct gl_context *ctx,
    {
       _mesa_reference_buffer_object_shared(ctx, &texObj->BufferObject, bufObj);
       texObj->BufferObjectFormat = internalFormat;
+      old_format = texObj->_BufferObjectFormat;
       texObj->_BufferObjectFormat = format;
       texObj->BufferOffset = offset;
       texObj->BufferSize = size;
@@ -6393,11 +6395,15 @@ texture_buffer_range(struct gl_context *ctx,
    _mesa_unlock_texture(ctx, texObj);
 
    if (ctx->Driver.TexParameter) {
-      if (offset != oldOffset) {
-         ctx->Driver.TexParameter(ctx, texObj, GL_TEXTURE_BUFFER_OFFSET);
-      }
-      if (size != oldSize) {
-         ctx->Driver.TexParameter(ctx, texObj, GL_TEXTURE_BUFFER_SIZE);
+      if (old_format != format) {
+          ctx->Driver.TexParameter(ctx, texObj, GL_ALL_ATTRIB_BITS);
+      } else {
+          if (offset != oldOffset) {
+              ctx->Driver.TexParameter(ctx, texObj, GL_TEXTURE_BUFFER_OFFSET);
+          }
+          if (size != oldSize) {
+              ctx->Driver.TexParameter(ctx, texObj, GL_TEXTURE_BUFFER_SIZE);
+          }
       }
    }
 

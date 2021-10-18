@@ -1325,14 +1325,14 @@ anv_get_physical_device_features_1_2(struct anv_physical_device *pdevice,
    f->shaderInputAttachmentArrayDynamicIndexing          = false;
    f->shaderUniformTexelBufferArrayDynamicIndexing       = descIndexing;
    f->shaderStorageTexelBufferArrayDynamicIndexing       = descIndexing;
-   f->shaderUniformBufferArrayNonUniformIndexing         = false;
+   f->shaderUniformBufferArrayNonUniformIndexing         = descIndexing;
    f->shaderSampledImageArrayNonUniformIndexing          = descIndexing;
    f->shaderStorageBufferArrayNonUniformIndexing         = descIndexing;
    f->shaderStorageImageArrayNonUniformIndexing          = descIndexing;
    f->shaderInputAttachmentArrayNonUniformIndexing       = false;
    f->shaderUniformTexelBufferArrayNonUniformIndexing    = descIndexing;
    f->shaderStorageTexelBufferArrayNonUniformIndexing    = descIndexing;
-   f->descriptorBindingUniformBufferUpdateAfterBind      = false;
+   f->descriptorBindingUniformBufferUpdateAfterBind      = descIndexing;
    f->descriptorBindingSampledImageUpdateAfterBind       = descIndexing;
    f->descriptorBindingStorageImageUpdateAfterBind       = descIndexing;
    f->descriptorBindingStorageBufferUpdateAfterBind      = descIndexing;

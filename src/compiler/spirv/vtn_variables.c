@@ -518,7 +518,7 @@ _vtn_local_load_store(struct vtn_builder *b, bool load, nir_deref_instr *deref,
 nir_deref_instr *
 vtn_nir_deref(struct vtn_builder *b, uint32_t id)
 {
-   struct vtn_pointer *ptr = vtn_value(b, id, vtn_value_type_pointer)->pointer;
+   struct vtn_pointer *ptr = vtn_pointer(b, id);
    return vtn_pointer_to_deref(b, ptr);
 }
 
@@ -2334,8 +2334,8 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
       }
 
       struct vtn_type *ptr_type = vtn_get_type(b, w[1]);
-      struct vtn_pointer *base =
-         vtn_value(b, w[3], vtn_value_type_pointer)->pointer;
+
+      struct vtn_pointer *base = vtn_pointer(b, w[3]);
 
       /* Workaround for https://gitlab.freedesktop.org/mesa/mesa/-/issues/3406 */
       access |= base->access & ACCESS_NON_UNIFORM;
@@ -2348,10 +2348,10 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
    }
 
    case SpvOpCopyMemory: {
-      struct vtn_value *dest_val = vtn_value(b, w[1], vtn_value_type_pointer);
-      struct vtn_value *src_val = vtn_value(b, w[2], vtn_value_type_pointer);
-      struct vtn_pointer *dest = dest_val->pointer;
-      struct vtn_pointer *src = src_val->pointer;
+      struct vtn_value *dest_val = vtn_pointer_value(b, w[1]);
+      struct vtn_value *src_val = vtn_pointer_value(b, w[2]);
+      struct vtn_pointer *dest = vtn_value_to_pointer(b, dest_val);
+      struct vtn_pointer *src = vtn_value_to_pointer(b, src_val);
 
       vtn_assert_types_equal(b, opcode, dest_val->type->deref,
                                         src_val->type->deref);
@@ -2380,11 +2380,11 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
    }
 
    case SpvOpCopyMemorySized: {
-      struct vtn_value *dest_val = vtn_value(b, w[1], vtn_value_type_pointer);
-      struct vtn_value *src_val = vtn_value(b, w[2], vtn_value_type_pointer);
+      struct vtn_value *dest_val = vtn_pointer_value(b, w[1]);
+      struct vtn_value *src_val = vtn_pointer_value(b, w[2]);
       nir_ssa_def *size = vtn_get_nir_ssa(b, w[3]);
-      struct vtn_pointer *dest = dest_val->pointer;
-      struct vtn_pointer *src = src_val->pointer;
+      struct vtn_pointer *dest = vtn_value_to_pointer(b, dest_val);
+      struct vtn_pointer *src = vtn_value_to_pointer(b, src_val);
 
       unsigned idx = 4, dest_alignment, src_alignment;
       SpvMemoryAccessMask dest_access, src_access;
@@ -2415,7 +2415,7 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
    case SpvOpLoad: {
       struct vtn_type *res_type = vtn_get_type(b, w[1]);
       struct vtn_value *src_val = vtn_value(b, w[3], vtn_value_type_pointer);
-      struct vtn_pointer *src = src_val->pointer;
+      struct vtn_pointer *src = vtn_value_to_pointer(b, src_val);
 
       vtn_assert_types_equal(b, opcode, res_type, src_val->type->deref);
 
@@ -2432,8 +2432,8 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
    }
 
    case SpvOpStore: {
-      struct vtn_value *dest_val = vtn_value(b, w[1], vtn_value_type_pointer);
-      struct vtn_pointer *dest = dest_val->pointer;
+      struct vtn_value *dest_val = vtn_pointer_value(b, w[1]);
+      struct vtn_pointer *dest = vtn_value_to_pointer(b, dest_val);
       struct vtn_value *src_val = vtn_untyped_value(b, w[2]);
 
       /* OpStore requires us to actually have a storage type */
@@ -2475,8 +2475,7 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
    }
 
    case SpvOpArrayLength: {
-      struct vtn_pointer *ptr =
-         vtn_value(b, w[3], vtn_value_type_pointer)->pointer;
+      struct vtn_pointer *ptr = vtn_pointer(b, w[3]);
       const uint32_t field = w[4];
 
       vtn_fail_if(ptr->type->base_type != vtn_base_type_struct,

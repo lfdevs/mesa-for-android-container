@@ -1409,7 +1409,7 @@ ir3_output_conv_src_type(struct ir3_instruction *instr, type_t base_type)
       return TYPE_F32;
 
    default:
-      return (instr->dsts[1]->flags & IR3_REG_HALF) ? half_type(base_type)
+      return (instr->srcs[0]->flags & IR3_REG_HALF) ? half_type(base_type)
                                                     : full_type(base_type);
    }
 }

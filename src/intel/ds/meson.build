@@ -27,4 +27,6 @@ pps_intel_dep = declare_dependency(
 )
 
 pps_datasources += pps_intel_dep
-with_datasources += 'intel'
+if not with_datasources.contains('intel')
+  with_datasources += 'intel'
+endif

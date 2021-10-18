@@ -350,7 +350,7 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
     * friends for configuring code generation options, like stack alignment.
     */
    TargetOptions options;
-#if defined(PIPE_ARCH_X86)
+#if defined(PIPE_ARCH_X86) && LLVM_VERSION_MAJOR < 13
    options.StackAlignmentOverride = 4;
 #endif
 
@@ -595,4 +595,13 @@ extern "C" bool
 lp_is_function(LLVMValueRef v)
 {
 	return LLVMGetValueKind(v) == LLVMFunctionValueKind;
+}
+
+extern "C" void
+lp_set_module_stack_alignment_override(LLVMModuleRef MRef, unsigned align)
+{
+#if LLVM_VERSION_MAJOR >= 13
+   llvm::Module *M = llvm::unwrap(MRef);
+   M->setOverrideStackAlignment(align);
+#endif
 }

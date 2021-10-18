@@ -258,7 +258,7 @@ struct lp_build_fs_iface {
 
    void (*fb_fetch)(const struct lp_build_fs_iface *iface,
                     struct lp_build_context *bld,
-                    unsigned cbuf,
+                    int location,
                     LLVMValueRef result[4]);
 };
 

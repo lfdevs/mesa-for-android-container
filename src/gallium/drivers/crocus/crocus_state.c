@@ -5861,8 +5861,10 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
      bool ret = crocus_calculate_urb_fence(batch, ice->curbe.total_size,
                                            brw_vue_prog_data(ice->shaders.prog[MESA_SHADER_VERTEX]->prog_data)->urb_entry_size,
                                            ((struct brw_sf_prog_data *)ice->shaders.sf_prog->prog_data)->urb_entry_size);
-     if (ret)
-        dirty |= CROCUS_DIRTY_GEN5_PIPELINED_POINTERS;
+     if (ret) {
+	dirty |= CROCUS_DIRTY_GEN5_PIPELINED_POINTERS | CROCUS_DIRTY_RASTER | CROCUS_DIRTY_CLIP;
+	stage_dirty |= CROCUS_STAGE_DIRTY_GS | CROCUS_STAGE_DIRTY_VS;
+     }
    }
 #endif
    if (dirty & CROCUS_DIRTY_CC_VIEWPORT) {

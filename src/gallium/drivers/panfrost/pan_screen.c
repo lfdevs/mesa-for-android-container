@@ -225,12 +225,12 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
                 return MAX_MIP_LEVELS;
 
         case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
-                /* Hardware is natively upper left */
+        case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
+                /* Hardware is upper left. Pixel center at (0.5, 0.5) */
                 return 0;
 
         case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
         case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
-        case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
         case PIPE_CAP_TGSI_TEXCOORD:
                 return 1;
 

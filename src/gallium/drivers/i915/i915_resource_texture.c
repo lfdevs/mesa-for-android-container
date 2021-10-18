@@ -193,9 +193,6 @@ i9x5_scanout_layout(struct i915_texture *tex)
    if (pt->last_level > 0 || util_format_get_blocksize(pt->format) != 4)
       return false;
 
-   i915_texture_set_level_info(tex, 0, 1);
-   i915_texture_set_image_offset(tex, 0, 0, 0, 0);
-
    if (pt->width0 >= 240) {
       tex->stride = align(util_format_get_stride(pt->format, pt->width0), 64);
       tex->total_nblocksy = align_nblocksy(pt->format, pt->height0, 8);
@@ -207,6 +204,10 @@ i9x5_scanout_layout(struct i915_texture *tex)
    } else {
       return false;
    }
+
+   i915_texture_set_level_info(tex, 0, 1);
+   i915_texture_set_image_offset(tex, 0, 0, 0, 0);
+
 
 #if DEBUG_TEXTURE
    debug_printf("%s size: %d,%d,%d offset %d,%d (0x%x)\n", __FUNCTION__,
