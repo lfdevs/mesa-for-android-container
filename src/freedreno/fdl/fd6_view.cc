@@ -45,6 +45,7 @@ fdl6_format_swiz(enum pipe_format format, bool has_z24uint_s8uint,
    case PIPE_FORMAT_B8G8_R8G8_UNORM:
    case PIPE_FORMAT_G8_B8R8_420_UNORM:
    case PIPE_FORMAT_G8_B8_R8_420_UNORM:
+   case PIPE_FORMAT_X6G10_X6B10X6R10_420_UNORM:
       /* These formats are currently only used for Vulkan, and border colors
        * aren't allowed on these formats in Vulkan because, from the
        * description of VkImageViewCreateInfo:

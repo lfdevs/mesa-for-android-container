@@ -230,6 +230,9 @@ static const struct fd6_format formats[PIPE_FORMAT_COUNT] = {
    _TC(Z32_FLOAT_S8X24_UINT, 32_FLOAT,          WZYX),
    _TC(X32_S8X24_UINT,       8_UINT,            WZYX),
 
+   _TC(X6R10_UNORM,          P010_Y,            WZYX),
+   _TC(X6R10X6G10_UNORM,     P010_UV,           WZYX),
+
    /* special format for blits: */
    _TC(Z24_UNORM_S8_UINT_AS_R8G8B8A8, Z24_UNORM_S8_UINT_AS_R8G8B8A8, WZYX),
 
@@ -386,6 +389,7 @@ static const struct fd6_format formats[PIPE_FORMAT_COUNT] = {
    _T_(R8_G8B8_420_UNORM, R8_G8B8_2PLANE_420_UNORM, WZYX), /* Gallium NV12 */
    _T_(G8_B8R8_420_UNORM, R8_G8B8_2PLANE_420_UNORM, WZYX), /* Vulkan NV12 */
    _T_(G8_B8_R8_420_UNORM, R8_G8_B8_3PLANE_420_UNORM, WZYX),
+   _T_(X6G10_X6B10X6R10_420_UNORM,  P010,       WZYX),
 };
 /* clang-format on */
 
